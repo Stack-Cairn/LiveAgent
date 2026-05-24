@@ -5,7 +5,10 @@ import {
   truncateConversationFromMessage,
   type ConversationViewState,
 } from "../../lib/chat/conversation/conversationState";
-import { normalizeSystemToolSelection } from "../../lib/settings";
+import {
+  normalizeChatRuntimeControls,
+  normalizeSystemToolSelection,
+} from "../../lib/settings";
 import {
   createConversationRuntimeEntry,
   setConversationRuntimeCacheEntry,
@@ -225,6 +228,9 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
             clientRequestId: clientRequestId || undefined,
             startedAt: Date.now(),
             selectedModelOverride: event.payload.selectedModel,
+            runtimeControlsOverride: event.payload.runtimeControls
+              ? normalizeChatRuntimeControls(event.payload.runtimeControls)
+              : undefined,
             executionModeOverride: normalizeGatewayExecutionMode(event.payload.executionMode),
             workdirOverride: normalizeGatewayWorkdir(event.payload.workdir),
             selectedSystemToolIdsOverride: normalizeSystemToolSelection(
@@ -239,6 +245,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
             workdirOverride: gatewayBridgeRequest.workdirOverride,
             selectedSystemToolIdsOverride:
               gatewayBridgeRequest.selectedSystemToolIdsOverride,
+            runtimeControlsOverride: gatewayBridgeRequest.runtimeControlsOverride,
             gatewayBridgeRequestOverride: gatewayBridgeRequest,
           });
         } catch (error) {

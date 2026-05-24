@@ -1,4 +1,8 @@
-import { normalizeSettings, type AppSettings } from "./index";
+import {
+  normalizeChatRuntimeControls,
+  normalizeSettings,
+  type AppSettings,
+} from "./index";
 
 export type GatewayProviderApiKeyUpdates = Record<string, string>;
 export type GatewaySettingsSyncProvider = Omit<
@@ -17,6 +21,7 @@ export type GatewaySettingsSyncPayload = {
   cron: AppSettings["cron"];
   memory: AppSettings["memory"];
   skills: AppSettings["skills"];
+  chatRuntimeControls: AppSettings["chatRuntimeControls"];
   selectedModel: AppSettings["selectedModel"] | null;
   theme: AppSettings["theme"];
   locale: AppSettings["locale"];
@@ -134,6 +139,7 @@ export function buildGatewaySettingsSyncPayload(
     cron: settings.cron,
     memory: settings.memory,
     skills: settings.skills,
+    chatRuntimeControls: settings.chatRuntimeControls,
     selectedModel: settings.selectedModel ?? null,
     theme: settings.theme,
     locale: settings.locale,
@@ -176,6 +182,9 @@ export function applyGatewaySettingsSyncPayload(
     cron: (source.cron as AppSettings["cron"] | undefined) ?? current.cron,
     memory: memory as AppSettings["memory"],
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,
+    chatRuntimeControls: Object.prototype.hasOwnProperty.call(source, "chatRuntimeControls")
+      ? normalizeChatRuntimeControls(source.chatRuntimeControls)
+      : current.chatRuntimeControls,
     selectedModel,
     theme: (source.theme as AppSettings["theme"] | undefined) ?? current.theme,
     locale: (source.locale as AppSettings["locale"] | undefined) ?? current.locale,

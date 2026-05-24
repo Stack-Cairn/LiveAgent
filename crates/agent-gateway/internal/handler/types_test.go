@@ -57,6 +57,44 @@ func TestNormalizeChatSelectedModelAcceptsGemini(t *testing.T) {
 	}
 }
 
+func TestNormalizeChatRuntimeControlsDefaultsAndTrims(t *testing.T) {
+	t.Parallel()
+
+	got := NormalizeChatRuntimeControls(&ChatRuntimeControlsBody{
+		ThinkingEnabled: boolPtr(false),
+		Reasoning:       " xhigh ",
+	})
+	if got == nil {
+		t.Fatalf("NormalizeChatRuntimeControls() = nil")
+	}
+	if *got.ThinkingEnabled != false {
+		t.Fatalf("thinking enabled = %v, want false", *got.ThinkingEnabled)
+	}
+	if *got.NativeWebSearchEnabled != true {
+		t.Fatalf("web search enabled = %v, want true default", *got.NativeWebSearchEnabled)
+	}
+	if got.Reasoning != "xhigh" {
+		t.Fatalf("reasoning = %q, want xhigh", got.Reasoning)
+	}
+
+	invalid := NormalizeChatRuntimeControls(&ChatRuntimeControlsBody{
+		NativeWebSearchEnabled: boolPtr(false),
+		Reasoning:              "remote-xhigh",
+	})
+	if invalid == nil {
+		t.Fatalf("NormalizeChatRuntimeControls(invalid) = nil")
+	}
+	if *invalid.ThinkingEnabled != true {
+		t.Fatalf("invalid thinking enabled = %v, want true default", *invalid.ThinkingEnabled)
+	}
+	if *invalid.NativeWebSearchEnabled != false {
+		t.Fatalf("invalid web search enabled = %v, want false", *invalid.NativeWebSearchEnabled)
+	}
+	if invalid.Reasoning != "high" {
+		t.Fatalf("invalid reasoning = %q, want high", invalid.Reasoning)
+	}
+}
+
 func TestNormalizeChatUploadedFiles(t *testing.T) {
 	t.Parallel()
 

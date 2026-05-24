@@ -339,6 +339,11 @@ test("Gateway SharedWorker forwards chat metadata and uploaded files", async () 
           sizeBytes: 12,
         },
       ],
+      runtime_controls: {
+        thinkingEnabled: false,
+        nativeWebSearchEnabled: true,
+        reasoning: "medium",
+      },
     },
   });
 
@@ -373,6 +378,11 @@ test("Gateway SharedWorker forwards chat metadata and uploaded files", async () 
       },
     ],
     "client-submit-1",
+    {
+      thinkingEnabled: false,
+      nativeWebSearchEnabled: true,
+      reasoning: "medium",
+    },
   ]);
   assert.ok(chatCalls[0][4] instanceof AbortSignal);
 
@@ -1370,6 +1380,11 @@ test("GatewayWebSocketClient chat generator yields scoped stream events until do
       },
     ],
     "client-submit-1",
+    {
+      thinkingEnabled: false,
+      nativeWebSearchEnabled: true,
+      reasoning: "xhigh",
+    },
   );
   const firstEventPromise = stream.next();
   await waitFor(() => FakeWebSocket.instances.length === 1, "websocket construction");
@@ -1390,6 +1405,11 @@ test("GatewayWebSocketClient chat generator yields scoped stream events until do
     custom_provider_id: "claude-provider",
     model: "claude-test",
     provider_type: "claude_code",
+  });
+  assert.deepEqual(chatStart.payload.runtime_controls, {
+    thinking_enabled: false,
+    native_web_search_enabled: true,
+    reasoning: "xhigh",
   });
   assert.deepEqual(chatStart.payload.uploaded_files, [
     {

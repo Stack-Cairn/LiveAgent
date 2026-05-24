@@ -119,6 +119,169 @@ test("settings normalization drops stale selected models and preserves valid sel
   assert.deepEqual(valid.selectedModel, { customProviderId: "provider-1", model: "gpt-5" });
 });
 
+test("chat runtime controls default and follow provider reasoning support", () => {
+  const defaults = settings.getDefaultSettings();
+  assert.deepEqual(defaults.chatRuntimeControls, {
+    thinkingEnabled: true,
+    nativeWebSearchEnabled: true,
+    reasoning: "high",
+    reasoningByProvider: {
+      claude_code: "high",
+      codex_openai_responses: "high",
+      codex_openai_completions: "high",
+      gemini: "high",
+    },
+  });
+
+  assert.deepEqual(settings.getChatRuntimeReasoningLevelsForProvider({}), [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+  ]);
+  assert.deepEqual(settings.getChatRuntimeReasoningLevelsForProvider({ providerId: "claude_code" }), [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+  ]);
+  assert.deepEqual(
+    settings.getChatRuntimeReasoningLevelsForProvider({
+      providerId: "codex",
+      requestFormat: "openai-responses",
+    }),
+    ["minimal", "low", "medium", "high", "xhigh"],
+  );
+  assert.deepEqual(
+    settings.getChatRuntimeReasoningLevelsForProvider({
+      providerId: "codex",
+      requestFormat: "openai-completions",
+    }),
+    [],
+  );
+  assert.deepEqual(settings.getChatRuntimeReasoningLevelsForProvider({ providerId: "gemini" }), [
+    "minimal",
+    "low",
+    "medium",
+    "high",
+  ]);
+
+  assert.deepEqual(
+    settings.normalizeChatRuntimeControlsForProvider(
+      {
+        thinkingEnabled: false,
+        nativeWebSearchEnabled: false,
+        reasoning: "xhigh",
+        reasoningByProvider: {
+          gemini: "xhigh",
+        },
+      },
+      { providerId: "gemini" },
+    ),
+    {
+      thinkingEnabled: false,
+      nativeWebSearchEnabled: false,
+      reasoning: "high",
+      reasoningByProvider: {
+        claude_code: "xhigh",
+        codex_openai_responses: "xhigh",
+        codex_openai_completions: "high",
+        gemini: "high",
+      },
+    },
+  );
+  assert.deepEqual(
+    settings.normalizeChatRuntimeControlsForProvider(
+      {
+        thinkingEnabled: true,
+        nativeWebSearchEnabled: true,
+        reasoning: "xhigh",
+        reasoningByProvider: {
+          codex_openai_completions: "xhigh",
+        },
+      },
+      { providerId: "codex", requestFormat: "openai-completions" },
+    ),
+    {
+      thinkingEnabled: true,
+      nativeWebSearchEnabled: true,
+      reasoning: "high",
+      reasoningByProvider: {
+        claude_code: "xhigh",
+        codex_openai_responses: "xhigh",
+        codex_openai_completions: "high",
+        gemini: "high",
+      },
+    },
+  );
+
+  assert.deepEqual(
+    settings.updateChatRuntimeControlsForProvider(
+      defaults.chatRuntimeControls,
+      { reasoning: "xhigh" },
+      { providerId: "codex", requestFormat: "openai-responses" },
+    ),
+    {
+      thinkingEnabled: true,
+      nativeWebSearchEnabled: true,
+      reasoning: "xhigh",
+      reasoningByProvider: {
+        claude_code: "high",
+        codex_openai_responses: "xhigh",
+        codex_openai_completions: "high",
+        gemini: "high",
+      },
+    },
+  );
+  assert.equal(
+    settings.normalizeChatRuntimeControlsForProvider(
+      {
+        ...defaults.chatRuntimeControls,
+        reasoningByProvider: {
+          ...defaults.chatRuntimeControls.reasoningByProvider,
+          claude_code: "xhigh",
+          gemini: "low",
+        },
+      },
+      { providerId: "claude_code" },
+    ).reasoning,
+    "xhigh",
+  );
+  assert.equal(
+    settings.normalizeChatRuntimeControlsForProvider(
+      {
+        ...defaults.chatRuntimeControls,
+        reasoningByProvider: {
+          ...defaults.chatRuntimeControls.reasoningByProvider,
+          claude_code: "xhigh",
+          gemini: "low",
+        },
+      },
+      { providerId: "gemini" },
+    ).reasoning,
+    "low",
+  );
+
+  const normalized = settings.normalizeSettings({
+    chatRuntimeControls: {
+      thinkingEnabled: false,
+      nativeWebSearchEnabled: false,
+      reasoning: "invalid",
+    },
+  });
+  assert.deepEqual(normalized.chatRuntimeControls, {
+    thinkingEnabled: false,
+    nativeWebSearchEnabled: false,
+    reasoning: "high",
+    reasoningByProvider: {
+      claude_code: "high",
+      codex_openai_responses: "high",
+      codex_openai_completions: "high",
+      gemini: "high",
+    },
+  });
+});
+
 test("memory model settings only keep enabled provider models", () => {
   const customProviders = [
     {
@@ -246,12 +409,24 @@ test("gateway settings sync payload redacts provider api keys", () => {
         activeModels: ["gpt-5"],
       },
     ],
+    chatRuntimeControls: {
+      thinkingEnabled: false,
+      nativeWebSearchEnabled: false,
+      reasoning: "low",
+      reasoningByProvider: {
+        claude_code: "low",
+        codex_openai_responses: "minimal",
+        codex_openai_completions: "high",
+        gemini: "minimal",
+      },
+    },
   });
 
   const payload = sync.buildGatewaySettingsSyncPayload(appSettings);
   assert.equal(payload.customProviders[0].apiKey, undefined);
   assert.equal(payload.customProviders[0].apiKeyConfigured, true);
   assert.equal(payload.customProviders[0].nativeWebSearchEnabled, true);
+  assert.deepEqual(payload.chatRuntimeControls, appSettings.chatRuntimeControls);
   assert.equal(payload.providerApiKeyUpdates, undefined);
 
   const updatePayload = sync.buildGatewaySettingsSyncPayload(appSettings, {
@@ -291,10 +466,27 @@ test("gateway settings sync applies redacted providers without clearing local ap
         activeModels: ["gpt-5.4"],
       },
     ],
+    chatRuntimeControls: {
+      thinkingEnabled: false,
+      nativeWebSearchEnabled: false,
+      reasoning: "xhigh",
+      reasoningByProvider: {
+        claude_code: "xhigh",
+        codex_openai_responses: "minimal",
+        codex_openai_completions: "high",
+        gemini: "xhigh",
+      },
+    },
   });
   assert.equal(redacted.customProviders[0].name, "Renamed");
   assert.equal(redacted.customProviders[0].apiKey, "old-key");
   assert.equal(redacted.customProviders[0].nativeWebSearchEnabled, false);
+  assert.equal(redacted.chatRuntimeControls.thinkingEnabled, false);
+  assert.equal(redacted.chatRuntimeControls.nativeWebSearchEnabled, false);
+  assert.equal(redacted.chatRuntimeControls.reasoning, "xhigh");
+  assert.equal(redacted.chatRuntimeControls.reasoningByProvider.claude_code, "xhigh");
+  assert.equal(redacted.chatRuntimeControls.reasoningByProvider.codex_openai_responses, "minimal");
+  assert.equal(redacted.chatRuntimeControls.reasoningByProvider.gemini, "high");
 
   const updated = sync.applyGatewaySettingsSyncPayload(current, {
     customProviders: [

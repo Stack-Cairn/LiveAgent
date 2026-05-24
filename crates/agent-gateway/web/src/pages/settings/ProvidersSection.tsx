@@ -30,7 +30,6 @@ import {
   type CustomProvider,
   type ProviderId,
   type ProviderModelConfig,
-  type ReasoningLevel,
   updateCustomProviders,
 } from "../../lib/settings";
 import {
@@ -58,8 +57,6 @@ type ModelSettingsModalProps = {
   onSave: (model: ProviderModelConfig) => void;
 };
 
-type ThinkingReasoningLevel = Exclude<ReasoningLevel, "off" | "minimal">;
-
 const PROVIDER_TABS: ProviderId[] = ["claude_code", "codex", "gemini"];
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Claude Code",
@@ -77,33 +74,10 @@ function ProviderBrandIcon({ type }: { type: ProviderId }) {
   return <OpenaiChatgptIcon height="1em" className="fill-current dark:text-white" />;
 }
 
-const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
-  off: "settings.reasoning.off",
-  minimal: "settings.reasoning.minimal",
-  low: "settings.reasoning.low",
-  medium: "settings.reasoning.medium",
-  high: "settings.reasoning.high",
-  xhigh: "settings.reasoning.xhigh",
-};
-const REASONING_LEVELS = Object.keys(REASONING_I18N_KEYS) as ReasoningLevel[];
-const THINKING_REASONING_LEVELS = REASONING_LEVELS.filter(
-  (value): value is ThinkingReasoningLevel => value !== "off" && value !== "minimal",
-);
-const GEMINI_REASONING_LEVELS = REASONING_LEVELS.filter(
-  (value) => value !== "xhigh",
-);
 const REDACTED_API_KEY_DISPLAY = "API Key";
 
 function normalizeModelDomId(modelId: string) {
   return modelId.replace(/[^a-zA-Z0-9_-]+/g, "-");
-}
-
-function toThinkingReasoningLevel(value: ReasoningLevel | undefined): ThinkingReasoningLevel {
-  if (value === "low" || value === "medium" || value === "high" || value === "xhigh") {
-    return value;
-  }
-  if (value === "minimal") return "low";
-  return "high";
 }
 
 function parsePositiveInteger(input: string): number | null {
@@ -111,24 +85,6 @@ function parsePositiveInteger(input: string): number | null {
   if (!Number.isFinite(value)) return null;
   const normalized = Math.floor(value);
   return normalized > 0 ? normalized : null;
-}
-
-function ProviderToggleCard(props: {
-  checked: boolean;
-  label: string;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <label className="inline-flex h-full min-h-11 w-full items-center justify-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm">
-      <input
-        type="checkbox"
-        className="h-4 w-4 shrink-0 rounded border-border"
-        checked={props.checked}
-        onChange={(e) => props.onChange(e.currentTarget.checked)}
-      />
-      <span className="whitespace-nowrap font-medium leading-none">{props.label}</span>
-    </label>
-  );
 }
 
 function ModelSettingsModal({ model, onClose, onSave }: ModelSettingsModalProps) {
@@ -219,8 +175,6 @@ function ModelSettingsModal({ model, onClose, onSave }: ModelSettingsModalProps)
 function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProps) {
   const { t } = useLocale();
   const isGatewayWebui = isGatewayWebuiRuntime();
-  const initialReasoning =
-    initialData?.reasoning ?? (providerType === "claude_code" ? "high" : "off");
   const initialApiKey = initialData?.apiKey ?? "";
   const initialUsesRedactedApiKey =
     isGatewayWebui && initialApiKey.trim() === "" && initialData?.apiKeyConfigured === true;
@@ -237,17 +191,6 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   );
   const [requestFormat, setRequestFormat] = useState<CodexRequestFormat>(
     initialData?.requestFormat ?? "openai-responses",
-  );
-  const [reasoning, setReasoning] = useState<ReasoningLevel>(initialReasoning);
-  const [claudeThinkingEnabled, setClaudeThinkingEnabled] = useState(initialReasoning !== "off");
-  const [claudeThinkingLevel, setClaudeThinkingLevel] = useState<ThinkingReasoningLevel>(
-    toThinkingReasoningLevel(initialReasoning),
-  );
-  const [promptCachingEnabled, setPromptCachingEnabled] = useState(
-    initialData?.promptCachingEnabled ?? providerType === "claude_code",
-  );
-  const [nativeWebSearchEnabled, setNativeWebSearchEnabled] = useState(
-    initialData?.nativeWebSearchEnabled ?? true,
   );
   const [fetchingModels, setFetchingModels] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -375,25 +318,17 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       activeModels: Array.from(activeModels),
       requestFormat: providerType === "codex" ? requestFormat : undefined,
       reasoning:
-        providerType === "claude_code"
-          ? claudeThinkingEnabled
-            ? claudeThinkingLevel
-            : "off"
-          : providerType === "gemini" && reasoning === "xhigh"
-            ? "high"
-          : reasoning,
-      promptCachingEnabled: providerType === "claude_code" ? promptCachingEnabled : false,
-      nativeWebSearchEnabled,
+        providerType === "gemini" && initialData?.reasoning === "xhigh"
+          ? "high"
+          : initialData?.reasoning ?? "off",
+      promptCachingEnabled: initialData?.promptCachingEnabled ?? providerType === "claude_code",
+      nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
     });
     requestClose();
   }
 
   const isEditing = Boolean(initialData);
   const typeLabel = getProviderLabel(providerType);
-  const showCodexReasoning =
-    providerType === "codex" && requestFormat === "openai-responses";
-  const providerReasoningLevels =
-    providerType === "gemini" ? GEMINI_REASONING_LEVELS : REASONING_LEVELS;
   const allVisibleModelsSelected =
     models.length > 0 && models.every((model) => activeModels.has(model.id));
   const orderedModels = useMemo(
@@ -469,123 +404,24 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
             </div>
           </div>
 
-          {providerType === "claude_code" ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <ProviderToggleCard
-                  checked={promptCachingEnabled}
-                  label={t("settings.promptCaching")}
-                  onChange={setPromptCachingEnabled}
-                />
-                <ProviderToggleCard
-                  checked={claudeThinkingEnabled}
-                  label={t("settings.thinkingEnabled")}
-                  onChange={setClaudeThinkingEnabled}
-                />
-                <ProviderToggleCard
-                  checked={nativeWebSearchEnabled}
-                  label={t("settings.nativeWebSearch")}
-                  onChange={setNativeWebSearchEnabled}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>{t("settings.thinkingEffort")}</Label>
-                <Select
-                  value={claudeThinkingLevel}
-                  onValueChange={(value) =>
-                    setClaudeThinkingLevel(value as ThinkingReasoningLevel)
-                  }
-                  disabled={!claudeThinkingEnabled}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {THINKING_REASONING_LEVELS.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {t(REASONING_I18N_KEYS[value])}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          ) : null}
-
           {providerType === "codex" ? (
-            <div className="settings-form-grid grid gap-4 md:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label>{t("settings.requestFormat")}</Label>
-                <Select
-                  value={requestFormat}
-                  onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(CODEX_REQUEST_FORMAT_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {showCodexReasoning ? (
-                <div className="space-y-1.5">
-                  <Label>{t("settings.reasoning")}</Label>
-                  <Select
-                    value={reasoning}
-                    onValueChange={(value) => setReasoning(value as ReasoningLevel)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {providerReasoningLevels.map((value) => (
-                        <SelectItem key={value} value={value}>
-                          {t(REASONING_I18N_KEYS[value])}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-              <ProviderToggleCard
-                checked={nativeWebSearchEnabled}
-                label={t("settings.nativeWebSearch")}
-                onChange={setNativeWebSearchEnabled}
-              />
-            </div>
-          ) : null}
-
-          {providerType === "gemini" ? (
-            <div className="settings-form-grid grid gap-4 md:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>{t("settings.reasoning")}</Label>
-                <Select
-                  value={reasoning === "xhigh" ? "high" : reasoning}
-                  onValueChange={(value) => setReasoning(value as ReasoningLevel)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providerReasoningLevels.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {t(REASONING_I18N_KEYS[value])}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <ProviderToggleCard
-                checked={nativeWebSearchEnabled}
-                label={t("settings.nativeWebSearch")}
-                onChange={setNativeWebSearchEnabled}
-              />
+            <div className="space-y-1.5">
+              <Label>{t("settings.requestFormat")}</Label>
+              <Select
+                value={requestFormat}
+                onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CODEX_REQUEST_FORMAT_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           ) : null}
 

@@ -13,6 +13,12 @@ type ChatSelectedModelBody struct {
 	ProviderType     string `json:"provider_type"`
 }
 
+type ChatRuntimeControlsBody struct {
+	ThinkingEnabled        *bool  `json:"thinking_enabled,omitempty"`
+	NativeWebSearchEnabled *bool  `json:"native_web_search_enabled,omitempty"`
+	Reasoning              string `json:"reasoning"`
+}
+
 type ChatUploadedFileBody struct {
 	RelativePath string `json:"relative_path"`
 	AbsolutePath string `json:"absolute_path,omitempty"`
@@ -22,14 +28,15 @@ type ChatUploadedFileBody struct {
 }
 
 type ChatRequestBody struct {
-	ConversationID      string                 `json:"conversation_id"`
-	ClientRequestID     string                 `json:"client_request_id,omitempty"`
-	Message             string                 `json:"message"`
-	SelectedModel       *ChatSelectedModelBody `json:"selected_model,omitempty"`
-	ExecutionMode       string                 `json:"execution_mode,omitempty"`
-	Workdir             string                 `json:"workdir,omitempty"`
-	SelectedSystemTools []string               `json:"selected_system_tools,omitempty"`
-	UploadedFiles       []ChatUploadedFileBody `json:"uploaded_files,omitempty"`
+	ConversationID      string                   `json:"conversation_id"`
+	ClientRequestID     string                   `json:"client_request_id,omitempty"`
+	Message             string                   `json:"message"`
+	SelectedModel       *ChatSelectedModelBody   `json:"selected_model,omitempty"`
+	RuntimeControls     *ChatRuntimeControlsBody `json:"runtime_controls,omitempty"`
+	ExecutionMode       string                   `json:"execution_mode,omitempty"`
+	Workdir             string                   `json:"workdir,omitempty"`
+	SelectedSystemTools []string                 `json:"selected_system_tools,omitempty"`
+	UploadedFiles       []ChatUploadedFileBody   `json:"uploaded_files,omitempty"`
 }
 
 type CancelChatRequestBody struct {
@@ -51,6 +58,17 @@ type ProviderModelsRequestBody struct {
 	Type    string `json:"type"`
 	BaseURL string `json:"base_url"`
 	APIKey  string `json:"api_key"`
+}
+
+func boolPtr(value bool) *bool {
+	return &value
+}
+
+func boolValue(input *bool, fallback bool) bool {
+	if input == nil {
+		return fallback
+	}
+	return *input
 }
 
 var validSystemToolIDs = map[string]struct{}{
@@ -86,6 +104,27 @@ func NormalizeChatSelectedModel(
 		return nil, fmt.Errorf(
 			"selected_model.provider_type must be codex, claude_code, or gemini",
 		)
+	}
+}
+
+func NormalizeChatRuntimeControls(input *ChatRuntimeControlsBody) *ChatRuntimeControlsBody {
+	if input == nil {
+		return nil
+	}
+
+	return &ChatRuntimeControlsBody{
+		ThinkingEnabled:        boolPtr(boolValue(input.ThinkingEnabled, true)),
+		NativeWebSearchEnabled: boolPtr(boolValue(input.NativeWebSearchEnabled, true)),
+		Reasoning:              normalizeChatRuntimeReasoning(input.Reasoning),
+	}
+}
+
+func normalizeChatRuntimeReasoning(value string) string {
+	switch normalizeTrimmedText(value) {
+	case "minimal", "low", "medium", "high", "xhigh":
+		return normalizeTrimmedText(value)
+	default:
+		return "high"
 	}
 }
 
@@ -171,6 +210,18 @@ func ToProtoChatSelectedModel(input *ChatSelectedModelBody) *gatewayv1.ChatSelec
 		CustomProviderId: input.CustomProviderID,
 		Model:            input.Model,
 		ProviderType:     input.ProviderType,
+	}
+}
+
+func ToProtoChatRuntimeControls(input *ChatRuntimeControlsBody) *gatewayv1.ChatRuntimeControls {
+	if input == nil {
+		return nil
+	}
+
+	return &gatewayv1.ChatRuntimeControls{
+		ThinkingEnabled:        boolValue(input.ThinkingEnabled, true),
+		NativeWebSearchEnabled: boolValue(input.NativeWebSearchEnabled, true),
+		Reasoning:              normalizeChatRuntimeReasoning(input.Reasoning),
 	}
 }
 

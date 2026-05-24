@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Number, Value};
+use serde_json::{json, Map, Number, Value};
 use std::{
     collections::HashSet,
     fs,
@@ -1064,6 +1064,20 @@ pub(crate) fn load_gateway_settings_sync_snapshot(conn: &Connection) -> Result<V
         load_memory(conn)?.unwrap_or(Value::Object(Map::new())),
     );
     snapshot.insert("skills".to_string(), Value::Object(Map::new()));
+    snapshot.insert(
+        "chatRuntimeControls".to_string(),
+        json!({
+            "thinkingEnabled": true,
+            "nativeWebSearchEnabled": true,
+            "reasoning": "high",
+            "reasoningByProvider": {
+                "claude_code": "high",
+                "codex_openai_responses": "high",
+                "codex_openai_completions": "high",
+                "gemini": "high",
+            },
+        }),
+    );
     snapshot.insert("selectedModel".to_string(), Value::Null);
     snapshot.insert("theme".to_string(), Value::String("light".to_string()));
     snapshot.insert("locale".to_string(), Value::String("zh-CN".to_string()));

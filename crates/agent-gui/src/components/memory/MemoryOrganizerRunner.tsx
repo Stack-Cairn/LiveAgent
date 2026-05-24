@@ -6,6 +6,7 @@ import { createStreamDebugLogger } from "../../lib/debug/agentDebug";
 import { runAssistantWithTools } from "../../lib/chat/runner/agentRunner";
 import { assistantMessageToText } from "../../lib/providers/llm";
 import {
+  DEFAULT_CHAT_RUNTIME_CONTROLS,
   computeNextMemoryOrganizerRunAt,
   findProviderModelConfig,
   isAgentDevMode,
@@ -755,8 +756,9 @@ async function runOrganizerModelPrompt(params: {
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
       requestFormat: provider.requestFormat,
-      reasoning: provider.reasoning,
-      promptCachingEnabled: provider.promptCachingEnabled,
+      reasoning: DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning,
+      promptCachingEnabled: true,
+      nativeWebSearchEnabled: DEFAULT_CHAT_RUNTIME_CONTROLS.nativeWebSearchEnabled,
       modelConfig: findProviderModelConfig(provider, model),
     },
     context,

@@ -9,6 +9,7 @@ import type {
   GatewayHistoryEvent,
   CronManagePayload,
   CronManageResponse,
+  GatewayChatRuntimeControls,
   GatewayProviderSummary,
   GatewaySelectedModel,
   HistoryDetail,
@@ -362,6 +363,7 @@ export class GatewayWebSocketClient {
     signal?: AbortSignal,
     uploadedFiles?: PendingUploadedFile[],
     clientRequestId?: string,
+    runtimeControls?: GatewayChatRuntimeControls,
   ): AsyncGenerator<ChatEvent> {
     if (signal?.aborted) {
       return;
@@ -427,6 +429,13 @@ export class GatewayWebSocketClient {
                 custom_provider_id: selectedModel.customProviderId,
                 model: selectedModel.model,
                 provider_type: selectedModel.providerType,
+              }
+            : undefined,
+          runtime_controls: runtimeControls
+            ? {
+                thinking_enabled: runtimeControls.thinkingEnabled,
+                native_web_search_enabled: runtimeControls.nativeWebSearchEnabled,
+                reasoning: runtimeControls.reasoning,
               }
             : undefined,
         },
@@ -1368,6 +1377,7 @@ type GatewayWebSocketClientLike = {
     signal?: AbortSignal,
     uploadedFiles?: PendingUploadedFile[],
     clientRequestId?: string,
+    runtimeControls?: GatewayChatRuntimeControls,
   ): AsyncGenerator<ChatEvent>;
   attachChat(conversationId: string, options?: ChatAttachOptions): AsyncGenerator<ChatEvent>;
   cancelChat(conversationId: string): Promise<void>;
@@ -1490,6 +1500,7 @@ type SharedWorkerClientRequestMessage =
         conversation_id?: string;
         client_request_id?: string;
         selected_model?: GatewaySelectedModel;
+        runtime_controls?: GatewayChatRuntimeControls;
         system_settings?: GatewayChatSystemSettings;
         uploaded_files?: PendingUploadedFile[];
       };
@@ -1635,6 +1646,7 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     signal?: AbortSignal,
     uploadedFiles?: PendingUploadedFile[],
     clientRequestId?: string,
+    runtimeControls?: GatewayChatRuntimeControls,
   ): AsyncGenerator<ChatEvent> {
     if (signal?.aborted) {
       return;
@@ -1681,6 +1693,7 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
         conversation_id: conversationId ?? "",
         client_request_id: clientRequestId?.trim() ?? "",
         selected_model: selectedModel,
+        runtime_controls: runtimeControls,
         system_settings: systemSettings,
         uploaded_files: uploadedFiles,
       });

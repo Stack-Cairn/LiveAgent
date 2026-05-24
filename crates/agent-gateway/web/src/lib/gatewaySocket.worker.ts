@@ -7,6 +7,7 @@ import type {
   AgentStatus,
   ChatEvent,
   CronManagePayload,
+  GatewayChatRuntimeControls,
   GatewaySelectedModel,
   MemoryManagePayload,
 } from "./gatewayTypes";
@@ -34,6 +35,7 @@ type WorkerClientRequest =
         conversation_id?: string;
         client_request_id?: string;
         selected_model?: GatewaySelectedModel;
+        runtime_controls?: GatewayChatRuntimeControls;
         system_settings?: {
           executionMode?: string;
           workdir?: string;
@@ -376,6 +378,7 @@ function handleChatStart(
         controller.signal,
         message.payload.uploaded_files,
         message.payload.client_request_id,
+        message.payload.runtime_controls,
       );
       for await (const event of stream) {
         postToPort(port, {

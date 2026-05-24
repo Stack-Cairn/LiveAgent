@@ -154,6 +154,19 @@ export type ProviderModelConfig = {
   maxOutputToken: number;
 };
 
+export type ChatRuntimeControls = {
+  thinkingEnabled: boolean;
+  nativeWebSearchEnabled: boolean;
+  reasoning: ReasoningLevel;
+  reasoningByProvider: Partial<Record<ChatRuntimeReasoningProviderKey, ReasoningLevel>>;
+};
+
+export type ChatRuntimeReasoningProviderKey =
+  | "claude_code"
+  | "codex_openai_responses"
+  | "codex_openai_completions"
+  | "gemini";
+
 export type AgentPromptTemplate = {
   id: string;
   name: string;
@@ -200,6 +213,7 @@ export type AppSettings = {
   remote: RemoteSettings;
   memory: MemorySettings;
   skills: SkillsSettings;
+  chatRuntimeControls: ChatRuntimeControls;
   selectedModel?: SelectedModel;
   theme: Theme;
   locale: Locale;
@@ -269,6 +283,17 @@ const DEFAULT_CODEX_CONTEXT_WINDOW = 258_000;
 const DEFAULT_CODEX_MAX_OUTPUT_TOKEN = 142_000;
 const DEFAULT_GEMINI_CONTEXT_WINDOW = 1_048_576;
 const DEFAULT_GEMINI_MAX_OUTPUT_TOKEN = 65_536;
+export const DEFAULT_CHAT_RUNTIME_CONTROLS: ChatRuntimeControls = {
+  thinkingEnabled: true,
+  nativeWebSearchEnabled: true,
+  reasoning: "high",
+  reasoningByProvider: {
+    claude_code: "high",
+    codex_openai_responses: "high",
+    codex_openai_completions: "high",
+    gemini: "high",
+  },
+};
 
 function normalizeCodexRequestFormat(input: unknown): CodexRequestFormat | undefined {
   switch (input) {
@@ -384,6 +409,167 @@ export function normalizeReasoningLevel(input: unknown): ReasoningLevel {
     default:
       return "off";
   }
+}
+
+export function normalizeChatRuntimeReasoning(input: unknown): ReasoningLevel {
+  switch (input) {
+    case "minimal":
+    case "low":
+    case "medium":
+    case "high":
+    case "xhigh":
+      return input;
+    default:
+      return DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning;
+  }
+}
+
+const CHAT_RUNTIME_REASONING_PROVIDER_KEYS: ChatRuntimeReasoningProviderKey[] = [
+  "claude_code",
+  "codex_openai_responses",
+  "codex_openai_completions",
+  "gemini",
+];
+
+export function getChatRuntimeReasoningProviderKey(params: {
+  providerId?: ProviderId;
+  requestFormat?: CodexRequestFormat;
+}): ChatRuntimeReasoningProviderKey {
+  if (!params.providerId || params.providerId === "claude_code") {
+    return "claude_code";
+  }
+  if (params.providerId === "gemini") {
+    return "gemini";
+  }
+  if (params.providerId === "codex" && params.requestFormat === "openai-completions") {
+    return "codex_openai_completions";
+  }
+  return "codex_openai_responses";
+}
+
+function getChatRuntimeReasoningLevelsForProviderKey(
+  key: ChatRuntimeReasoningProviderKey,
+): ReasoningLevel[] {
+  if (key === "claude_code") {
+    return ["low", "medium", "high", "xhigh"];
+  }
+  if (key === "gemini") {
+    return ["minimal", "low", "medium", "high"];
+  }
+  if (key === "codex_openai_completions") {
+    return [];
+  }
+  return ["minimal", "low", "medium", "high", "xhigh"];
+}
+
+function normalizeChatRuntimeReasoningForLevels(
+  input: unknown,
+  levels: ReasoningLevel[],
+): ReasoningLevel {
+  if (levels.length === 0) {
+    return DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning;
+  }
+  const reasoning = normalizeChatRuntimeReasoning(input);
+  return levels.includes(reasoning) ? reasoning : DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning;
+}
+
+function normalizeChatRuntimeReasoningByProvider(
+  input: unknown,
+  fallbackReasoning: ReasoningLevel,
+): Partial<Record<ChatRuntimeReasoningProviderKey, ReasoningLevel>> {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const normalized: Partial<Record<ChatRuntimeReasoningProviderKey, ReasoningLevel>> = {
+    ...DEFAULT_CHAT_RUNTIME_CONTROLS.reasoningByProvider,
+  };
+  CHAT_RUNTIME_REASONING_PROVIDER_KEYS.forEach((key) => {
+    const levels = getChatRuntimeReasoningLevelsForProviderKey(key);
+    normalized[key] = normalizeChatRuntimeReasoningForLevels(
+      Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : fallbackReasoning,
+      levels,
+    );
+  });
+  return normalized;
+}
+
+export function normalizeChatRuntimeControls(input: unknown): ChatRuntimeControls {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const reasoning = normalizeChatRuntimeReasoning(obj.reasoning);
+  return {
+    thinkingEnabled: obj.thinkingEnabled !== false,
+    nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
+    reasoning,
+    reasoningByProvider: normalizeChatRuntimeReasoningByProvider(
+      obj.reasoningByProvider,
+      reasoning,
+    ),
+  };
+}
+
+export function getChatRuntimeReasoningLevelsForProvider(params: {
+  providerId?: ProviderId;
+  requestFormat?: CodexRequestFormat;
+}): ReasoningLevel[] {
+  return getChatRuntimeReasoningLevelsForProviderKey(
+    getChatRuntimeReasoningProviderKey(params),
+  );
+}
+
+export function normalizeChatRuntimeControlsForProvider(
+  input: unknown,
+  params: {
+    providerId?: ProviderId;
+    requestFormat?: CodexRequestFormat;
+  },
+): ChatRuntimeControls {
+  const controls = normalizeChatRuntimeControls(input);
+  const key = getChatRuntimeReasoningProviderKey(params);
+  const levels = getChatRuntimeReasoningLevelsForProviderKey(key);
+  const reasoningByProvider = {
+    ...DEFAULT_CHAT_RUNTIME_CONTROLS.reasoningByProvider,
+    ...controls.reasoningByProvider,
+  };
+  const reasoning = normalizeChatRuntimeReasoningForLevels(
+    reasoningByProvider[key] ?? controls.reasoning,
+    levels,
+  );
+  return {
+    ...controls,
+    reasoning,
+    reasoningByProvider: {
+      ...reasoningByProvider,
+      [key]: reasoning,
+    },
+  };
+}
+
+export function updateChatRuntimeControlsForProvider(
+  input: unknown,
+  patch: Partial<ChatRuntimeControls>,
+  params: {
+    providerId?: ProviderId;
+    requestFormat?: CodexRequestFormat;
+  },
+): ChatRuntimeControls {
+  const key = getChatRuntimeReasoningProviderKey(params);
+  const levels = getChatRuntimeReasoningLevelsForProviderKey(key);
+  const controls = normalizeChatRuntimeControls({
+    ...normalizeChatRuntimeControls(input),
+    ...patch,
+  });
+  const reasoningByProvider = {
+    ...DEFAULT_CHAT_RUNTIME_CONTROLS.reasoningByProvider,
+    ...controls.reasoningByProvider,
+  };
+  if (patch.reasoning !== undefined) {
+    reasoningByProvider[key] = normalizeChatRuntimeReasoningForLevels(patch.reasoning, levels);
+  }
+  return normalizeChatRuntimeControlsForProvider(
+    {
+      ...controls,
+      reasoningByProvider,
+    },
+    params,
+  );
 }
 
 function normalizeStringArray(input: unknown): string[] {
@@ -1007,6 +1193,7 @@ export function getDefaultSettings(): AppSettings {
       enabled: true,
       selected: mergeAlwaysEnabledSkillNames([]),
     },
+    chatRuntimeControls: DEFAULT_CHAT_RUNTIME_CONTROLS,
     selectedModel: undefined,
     theme: "light",
     locale: DEFAULT_LOCALE,
@@ -1034,6 +1221,9 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
     remote: normalizeRemoteSettings(obj.remote ?? defaults.remote),
     memory: normalizeMemorySettings(obj.memory ?? defaults.memory, customProviders),
     skills: normalizeSkillsSettings(obj.skills ?? defaults.skills),
+    chatRuntimeControls: normalizeChatRuntimeControls(
+      obj.chatRuntimeControls ?? defaults.chatRuntimeControls,
+    ),
     selectedModel,
     theme: normalizeTheme(obj.theme),
     locale: normalizeLocale(obj.locale),

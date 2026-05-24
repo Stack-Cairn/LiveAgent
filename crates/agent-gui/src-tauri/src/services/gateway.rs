@@ -27,7 +27,13 @@ pub mod proto {
     tonic::include_proto!("liveagent.gateway.v1");
 }
 
-const UI_ONLY_SETTINGS_SYNC_FIELDS: &[&str] = &["skills", "selectedModel", "theme", "locale"];
+const UI_ONLY_SETTINGS_SYNC_FIELDS: &[&str] = &[
+    "skills",
+    "chatRuntimeControls",
+    "selectedModel",
+    "theme",
+    "locale",
+];
 const GATEWAY_GRPC_MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,6 +60,14 @@ struct GatewaySelectedModelEvent {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct GatewayChatRuntimeControlsEvent {
+    thinking_enabled: bool,
+    native_web_search_enabled: bool,
+    reasoning: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GatewayUploadedFileEvent {
     relative_path: String,
     absolute_path: String,
@@ -71,6 +85,7 @@ struct GatewayChatRequestEvent {
     message: String,
     force_hydrate: bool,
     selected_model: Option<GatewaySelectedModelEvent>,
+    runtime_controls: Option<GatewayChatRuntimeControlsEvent>,
     execution_mode: String,
     workdir: String,
     selected_system_tools: Vec<String>,
@@ -493,6 +508,7 @@ impl GatewayController {
                     client_request_id,
                     message,
                     selected_model,
+                    runtime_controls,
                     execution_mode,
                     workdir,
                     selected_system_tools,
@@ -513,6 +529,12 @@ impl GatewayController {
                         model: selected_model.model,
                         provider_type: selected_model.provider_type,
                     });
+                let runtime_controls =
+                    runtime_controls.map(|runtime_controls| GatewayChatRuntimeControlsEvent {
+                        thinking_enabled: runtime_controls.thinking_enabled,
+                        native_web_search_enabled: runtime_controls.native_web_search_enabled,
+                        reasoning: runtime_controls.reasoning,
+                    });
                 self.app_handle
                     .emit(
                         "gateway:chat-request",
@@ -523,6 +545,7 @@ impl GatewayController {
                             message,
                             force_hydrate,
                             selected_model,
+                            runtime_controls,
                             execution_mode,
                             workdir,
                             selected_system_tools,
@@ -1276,12 +1299,22 @@ mod tests {
             "theme": "light",
             "locale": "zh-CN",
             "skills": {},
+            "chatRuntimeControls": {
+                "thinkingEnabled": true,
+                "nativeWebSearchEnabled": true,
+                "reasoning": "high"
+            },
             "selectedModel": null,
         });
         let cached_snapshot = json!({
             "theme": "dark",
             "locale": "en-US",
             "skills": { "enabled": true },
+            "chatRuntimeControls": {
+                "thinkingEnabled": false,
+                "nativeWebSearchEnabled": false,
+                "reasoning": "xhigh"
+            },
             "selectedModel": {
                 "customProviderId": "provider-a",
                 "model": "gpt-5.4"
@@ -1295,6 +1328,14 @@ mod tests {
         assert_eq!(merged["theme"], json!("dark"));
         assert_eq!(merged["locale"], json!("en-US"));
         assert_eq!(merged["skills"], json!({ "enabled": true }));
+        assert_eq!(
+            merged["chatRuntimeControls"],
+            json!({
+                "thinkingEnabled": false,
+                "nativeWebSearchEnabled": false,
+                "reasoning": "xhigh"
+            })
+        );
         assert_eq!(
             merged["selectedModel"],
             json!({

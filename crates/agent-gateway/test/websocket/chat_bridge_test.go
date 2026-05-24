@@ -146,6 +146,11 @@ func TestWebSocketChatStartForwardsNormalizedRequestAndStreamsEvents(t *testing.
 			"model":              " claude-test ",
 			"provider_type":      "claude_code",
 		},
+		"runtime_controls": map[string]any{
+			"thinking_enabled":          false,
+			"native_web_search_enabled": true,
+			"reasoning":                 " xhigh ",
+		},
 		"uploaded_files": []map[string]any{
 			{
 				"relative_path": " uploads/notes.txt ",
@@ -207,6 +212,11 @@ func TestWebSocketChatStartForwardsNormalizedRequestAndStreamsEvents(t *testing.
 		chatReq.GetSelectedModel().GetModel() != "claude-test" ||
 		chatReq.GetSelectedModel().GetProviderType() != "claude_code" {
 		t.Fatalf("selected model = %#v", chatReq.GetSelectedModel())
+	}
+	if chatReq.GetRuntimeControls().GetThinkingEnabled() ||
+		!chatReq.GetRuntimeControls().GetNativeWebSearchEnabled() ||
+		chatReq.GetRuntimeControls().GetReasoning() != "xhigh" {
+		t.Fatalf("runtime controls = %#v", chatReq.GetRuntimeControls())
 	}
 	files := chatReq.GetUploadedFiles()
 	if len(files) != 3 {

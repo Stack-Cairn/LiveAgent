@@ -77,10 +77,13 @@ type websocketConnection struct {
 
 	activeChatsMu sync.RWMutex
 	activeChats   map[string]*websocketChatState
+	recentChats   map[string]time.Time
 
 	activeChatAttachmentsMu sync.Mutex
 	activeChatAttachments   map[string]context.CancelFunc
 }
+
+const recentActiveChatRetention = 5 * time.Second
 
 func NewWebSocketServer(cfg *config.Config, sm *session.Manager) http.Handler {
 	server := &websocket.Server{
@@ -94,6 +97,7 @@ func NewWebSocketServer(cfg *config.Config, sm *session.Manager) http.Handler {
 				conn:                  conn,
 				done:                  make(chan struct{}),
 				activeChats:           make(map[string]*websocketChatState),
+				recentChats:           make(map[string]time.Time),
 				activeChatAttachments: make(map[string]context.CancelFunc),
 			}
 			defer state.close()
@@ -913,6 +917,7 @@ func (c *websocketConnection) handleChatStart(req websocketRequest) {
 	body.Workdir = handler.NormalizeWorkdir(body.Workdir)
 	body.SelectedSystemTools = handler.NormalizeSelectedSystemTools(body.SelectedSystemTools)
 	body.UploadedFiles = handler.NormalizeChatUploadedFiles(body.UploadedFiles)
+	body.RuntimeControls = handler.NormalizeChatRuntimeControls(body.RuntimeControls)
 	selectedModel, err := handler.NormalizeChatSelectedModel(body.SelectedModel)
 	if err != nil {
 		_ = c.writeError(req.ID, err.Error())
@@ -973,6 +978,7 @@ func (c *websocketConnection) handleChatStart(req websocketRequest) {
 					ClientRequestId:     body.ClientRequestID,
 					Message:             body.Message,
 					SelectedModel:       handler.ToProtoChatSelectedModel(body.SelectedModel),
+					RuntimeControls:     handler.ToProtoChatRuntimeControls(body.RuntimeControls),
 					ExecutionMode:       body.ExecutionMode,
 					Workdir:             body.Workdir,
 					SelectedSystemTools: body.SelectedSystemTools,
@@ -1945,13 +1951,17 @@ func (c *websocketConnection) registerActiveChat(
 	conversationID string,
 	cancel context.CancelFunc,
 ) {
+	requestID = strings.TrimSpace(requestID)
+	sourceRequestID = strings.TrimSpace(sourceRequestID)
 	c.activeChatsMu.Lock()
 	defer c.activeChatsMu.Unlock()
 	c.activeChats[requestID] = &websocketChatState{
 		cancel:          cancel,
 		conversationID:  strings.TrimSpace(conversationID),
-		sourceRequestID: strings.TrimSpace(sourceRequestID),
+		sourceRequestID: sourceRequestID,
 	}
+	delete(c.recentChats, requestID)
+	delete(c.recentChats, sourceRequestID)
 }
 
 func (c *websocketConnection) registerActiveChatAttachment(requestID string, cancel context.CancelFunc) {
@@ -2008,8 +2018,8 @@ func (c *websocketConnection) hasActiveChatRequest(requestID string) bool {
 	if requestID == "" {
 		return false
 	}
-	c.activeChatsMu.RLock()
-	defer c.activeChatsMu.RUnlock()
+	c.activeChatsMu.Lock()
+	defer c.activeChatsMu.Unlock()
 	if _, ok := c.activeChats[requestID]; ok {
 		return true
 	}
@@ -2017,6 +2027,15 @@ func (c *websocketConnection) hasActiveChatRequest(requestID string) bool {
 		if chat.sourceRequestID == requestID {
 			return true
 		}
+	}
+	now := time.Now()
+	for recentRequestID, expiresAt := range c.recentChats {
+		if now.After(expiresAt) {
+			delete(c.recentChats, recentRequestID)
+		}
+	}
+	if expiresAt, ok := c.recentChats[requestID]; ok && now.Before(expiresAt) {
+		return true
 	}
 	return false
 }
@@ -2034,6 +2053,13 @@ func (c *websocketConnection) releaseActiveChat(requestID string) *websocketChat
 	defer c.activeChatsMu.Unlock()
 	chat := c.activeChats[requestID]
 	delete(c.activeChats, requestID)
+	expiresAt := time.Now().Add(recentActiveChatRetention)
+	if strings.TrimSpace(requestID) != "" {
+		c.recentChats[strings.TrimSpace(requestID)] = expiresAt
+	}
+	if chat != nil && chat.sourceRequestID != "" {
+		c.recentChats[chat.sourceRequestID] = expiresAt
+	}
 	return chat
 }
 
@@ -2042,8 +2068,15 @@ func (c *websocketConnection) releaseAllActiveChats() []*websocketChatState {
 	defer c.activeChatsMu.Unlock()
 
 	chats := make([]*websocketChatState, 0, len(c.activeChats))
+	expiresAt := time.Now().Add(recentActiveChatRetention)
 	for requestID, chat := range c.activeChats {
 		delete(c.activeChats, requestID)
+		if strings.TrimSpace(requestID) != "" {
+			c.recentChats[strings.TrimSpace(requestID)] = expiresAt
+		}
+		if chat != nil && chat.sourceRequestID != "" {
+			c.recentChats[chat.sourceRequestID] = expiresAt
+		}
 		chats = append(chats, chat)
 	}
 	return chats
@@ -2057,9 +2090,16 @@ func (c *websocketConnection) cancelActiveChatsByConversation(conversationID str
 
 	c.activeChatsMu.Lock()
 	chats := make([]*websocketChatState, 0, len(c.activeChats))
+	expiresAt := time.Now().Add(recentActiveChatRetention)
 	for requestID, chat := range c.activeChats {
 		if chat.conversationID == conversationID {
 			delete(c.activeChats, requestID)
+			if strings.TrimSpace(requestID) != "" {
+				c.recentChats[strings.TrimSpace(requestID)] = expiresAt
+			}
+			if chat.sourceRequestID != "" {
+				c.recentChats[chat.sourceRequestID] = expiresAt
+			}
 			chats = append(chats, chat)
 		}
 	}

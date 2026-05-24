@@ -13,6 +13,7 @@ import {
   type SkillSummary,
 } from "../../lib/skills";
 import {
+  DEFAULT_CHAT_RUNTIME_CONTROLS,
   findProviderModelConfig,
   isAgentExecutionMode,
   isAgentDevMode,
@@ -239,8 +240,9 @@ async function executeCronPromptRun(
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
       requestFormat: provider.requestFormat,
-      reasoning: provider.reasoning,
-      promptCachingEnabled: provider.promptCachingEnabled,
+      reasoning: DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning,
+      promptCachingEnabled: true,
+      nativeWebSearchEnabled: DEFAULT_CHAT_RUNTIME_CONTROLS.nativeWebSearchEnabled,
       modelConfig: findProviderModelConfig(provider, request.model),
     },
     context,

@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { Loader2, Paperclip, Send, Square, X } from "../../components/icons";
+import { Brain, Globe2, Lightbulb, Loader2, Paperclip, Send, Square, X } from "../../components/icons";
 
 import {
   MentionComposer,
@@ -7,12 +7,33 @@ import {
   type MentionComposerSkill,
 } from "../../components/chat/MentionComposer";
 import { Button } from "../../components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { useLocale } from "../../i18n";
 import {
   formatUploadedFileSize,
   type PendingUploadedFile,
 } from "../../lib/chat/uploadedFiles";
 import { cn } from "../../lib/shared/utils";
+import {
+  DEFAULT_CHAT_RUNTIME_CONTROLS,
+  type ChatRuntimeControls,
+  type ReasoningLevel,
+} from "../../lib/settings";
+
+const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
+  off: "settings.reasoning.off",
+  minimal: "settings.reasoning.minimal",
+  low: "settings.reasoning.low",
+  medium: "settings.reasoning.medium",
+  high: "settings.reasoning.high",
+  xhigh: "settings.reasoning.xhigh",
+};
 
 export const ChatComposerBar = memo(function ChatComposerBar(props: {
   composerRef: MutableRefObject<MentionComposerHandle | null>;
@@ -23,9 +44,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   workdir: string;
   enabledSkills: MentionComposerSkill[];
   isAgentMode: boolean;
+  chatRuntimeControls: ChatRuntimeControls;
+  reasoningOptions: ReasoningLevel[];
   onSend: () => void;
   onStop: () => void;
   onComposerBusyChange: (isBusy: boolean) => void;
+  onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   onPickReadableFiles: () => void;
   onPasteFiles: (files: File[]) => void;
   pendingUploadedFiles: PendingUploadedFile[];
@@ -40,9 +64,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     workdir,
     enabledSkills,
     isAgentMode,
+    chatRuntimeControls,
+    reasoningOptions,
     onSend,
     onStop,
     onComposerBusyChange,
+    onChatRuntimeControlsChange,
     onPickReadableFiles,
     onPasteFiles,
     pendingUploadedFiles,
@@ -52,12 +79,33 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
   const composerLayerRef = useRef<HTMLDivElement | null>(null);
   const uploadDisabled = isInputDisabled || isSending || isUploadingFiles || !isAgentMode || !workdir;
+  const controlsDisabled = isInputDisabled || isSending;
+  const thinkingSupported = reasoningOptions.length > 0;
   const sendDisabled =
     isSending
       ? false
       : isInputDisabled ||
         isUploadingFiles ||
         (composerIsEmpty && pendingUploadedFiles.length === 0);
+  const selectedReasoning = reasoningOptions.includes(chatRuntimeControls.reasoning)
+    ? chatRuntimeControls.reasoning
+    : DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning;
+
+  useEffect(() => {
+    if (
+      reasoningOptions.length > 0 &&
+      reasoningOptions.includes(chatRuntimeControls.reasoning)
+    ) {
+      return;
+    }
+    if (
+      reasoningOptions.length === 0 &&
+      chatRuntimeControls.reasoning === DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning
+    ) {
+      return;
+    }
+    onChatRuntimeControlsChange({ reasoning: DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning });
+  }, [chatRuntimeControls.reasoning, onChatRuntimeControlsChange, reasoningOptions]);
 
   useEffect(() => {
     const composerLayer = composerLayerRef.current;
@@ -164,50 +212,154 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
           </div>
 
           <div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">
-            <button
-              type="button"
-              disabled={uploadDisabled}
-              onClick={onPickReadableFiles}
-              title={
-                isUploadingFiles
-                  ? t("chat.upload.uploading")
-                  : !isAgentMode
-                    ? t("chat.upload.onlyInTools")
-                    : !workdir
-                      ? t("chat.upload.requireWorkdir")
-                      : t("chat.upload.selectFiles")
-              }
-              aria-label={
-                isUploadingFiles
-                  ? t("chat.upload.uploading")
-                  : !isAgentMode
-                    ? t("chat.upload.onlyInTools")
-                    : !workdir
-                      ? t("chat.upload.requireWorkdir")
-                      : t("chat.upload.selectFiles")
-              }
-              className={cn(
-                "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-all",
-                "disabled:pointer-events-none disabled:opacity-40",
-                pendingUploadedFiles.length > 0
-                  ? "bg-sky-500/14 text-sky-600 hover:bg-sky-500/20 active:bg-sky-500/24 dark:bg-sky-400/15 dark:text-sky-300 dark:hover:bg-sky-400/22"
-                  : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground active:bg-foreground/[0.10] dark:hover:bg-white/[0.08] dark:active:bg-white/[0.12]",
-              )}
-            >
-              {isUploadingFiles ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Paperclip className="h-4 w-4" />
-              )}
-              {pendingUploadedFiles.length > 0 ? (
-                <span
-                  aria-hidden
-                  className="absolute -right-0.5 -top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-sky-500 px-[3px] text-[9px] font-semibold leading-none text-white shadow-[0_0_0_1.5px_rgba(255,255,255,0.95)] dark:bg-sky-400 dark:text-slate-900 dark:shadow-[0_0_0_1.5px_rgba(20,22,28,0.9)]"
+            <div className="flex min-w-0 items-center gap-1">
+              <button
+                type="button"
+                disabled={uploadDisabled}
+                onClick={onPickReadableFiles}
+                title={
+                  isUploadingFiles
+                    ? t("chat.upload.uploading")
+                    : !isAgentMode
+                      ? t("chat.upload.onlyInTools")
+                      : !workdir
+                        ? t("chat.upload.requireWorkdir")
+                        : t("chat.upload.selectFiles")
+                }
+                aria-label={
+                  isUploadingFiles
+                    ? t("chat.upload.uploading")
+                    : !isAgentMode
+                      ? t("chat.upload.onlyInTools")
+                      : !workdir
+                        ? t("chat.upload.requireWorkdir")
+                        : t("chat.upload.selectFiles")
+                }
+                className={cn(
+                  "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors",
+                  "disabled:pointer-events-none disabled:opacity-40",
+                  pendingUploadedFiles.length > 0
+                    ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
+                    : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                )}
+              >
+                {isUploadingFiles ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Paperclip className="h-4 w-4" />
+                )}
+                {pendingUploadedFiles.length > 0 ? (
+                  <span
+                    aria-hidden
+                    className="absolute -right-0.5 -top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-sky-500 px-[3px] text-[9px] font-semibold leading-none text-white shadow-[0_0_0_1.5px_rgba(255,255,255,0.95)] dark:bg-sky-400 dark:text-slate-900 dark:shadow-[0_0_0_1.5px_rgba(20,22,28,0.9)]"
+                  >
+                    {pendingUploadedFiles.length}
+                  </span>
+                ) : null}
+              </button>
+
+              <button
+                type="button"
+                disabled={controlsDisabled || !thinkingSupported}
+                onClick={() =>
+                  onChatRuntimeControlsChange({
+                    thinkingEnabled: !chatRuntimeControls.thinkingEnabled,
+                  })
+                }
+                title={
+                  !thinkingSupported
+                    ? t("chat.runtime.thinkingUnavailable")
+                    : chatRuntimeControls.thinkingEnabled
+                      ? t("chat.runtime.thinkingOn")
+                      : t("chat.runtime.thinkingOff")
+                }
+                aria-label={
+                  !thinkingSupported
+                    ? t("chat.runtime.thinkingUnavailable")
+                    : chatRuntimeControls.thinkingEnabled
+                      ? t("chat.runtime.thinkingOn")
+                      : t("chat.runtime.thinkingOff")
+                }
+                className={cn(
+                  "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors",
+                  "disabled:pointer-events-none disabled:opacity-40",
+                  chatRuntimeControls.thinkingEnabled && thinkingSupported
+                    ? "text-amber-600 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-200"
+                    : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                )}
+              >
+                <Lightbulb className="h-4 w-4" />
+              </button>
+
+              <button
+                type="button"
+                disabled={controlsDisabled}
+                onClick={() =>
+                  onChatRuntimeControlsChange({
+                    nativeWebSearchEnabled: !chatRuntimeControls.nativeWebSearchEnabled,
+                  })
+                }
+                title={
+                  chatRuntimeControls.nativeWebSearchEnabled
+                    ? t("chat.runtime.webSearchOn")
+                    : t("chat.runtime.webSearchOff")
+                }
+                aria-label={
+                  chatRuntimeControls.nativeWebSearchEnabled
+                    ? t("chat.runtime.webSearchOn")
+                    : t("chat.runtime.webSearchOff")
+                }
+                className={cn(
+                  "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors",
+                  "disabled:pointer-events-none disabled:opacity-40",
+                  chatRuntimeControls.nativeWebSearchEnabled
+                    ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200"
+                    : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                )}
+              >
+                <Globe2 className="h-4 w-4" />
+              </button>
+
+              {reasoningOptions.length > 0 ? (
+                <Select
+                  value={selectedReasoning}
+                  onValueChange={(value) =>
+                    onChatRuntimeControlsChange({ reasoning: value as ReasoningLevel })
+                  }
+                  disabled={controlsDisabled || !chatRuntimeControls.thinkingEnabled}
                 >
-                  {pendingUploadedFiles.length}
-                </span>
+                  <SelectTrigger
+                    className={cn(
+                      "composer-reasoning-trigger group/reasoning h-8 w-auto shrink-0 gap-0.5 rounded-full border pl-2 pr-1.5 text-xs font-medium shadow-none outline-hidden transition-colors disabled:opacity-45 [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:opacity-50",
+                      chatRuntimeControls.thinkingEnabled
+                        ? "border-violet-300/30 bg-violet-50/55 text-foreground hover:border-violet-300/45 hover:bg-violet-50/80 dark:border-violet-300/15 dark:bg-violet-400/[0.07] dark:text-foreground dark:hover:bg-violet-400/[0.13]"
+                        : "border-transparent bg-foreground/[0.04] text-muted-foreground hover:bg-foreground/[0.07] dark:bg-white/[0.04] dark:hover:bg-white/[0.08]",
+                    )}
+                    title={t("chat.runtime.reasoning")}
+                    aria-label={t("chat.runtime.reasoning")}
+                  >
+                    <span className="flex min-w-0 items-center gap-1">
+                      <Brain
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0 transition-colors",
+                          chatRuntimeControls.thinkingEnabled
+                            ? "text-violet-500 dark:text-violet-400"
+                            : "",
+                        )}
+                      />
+                      <SelectValue />
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {reasoningOptions.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {t(REASONING_I18N_KEYS[value])}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : null}
-            </button>
+            </div>
 
             <Button
               disabled={sendDisabled}

@@ -1,5 +1,6 @@
 import type {
   CodexRequestFormat,
+  ChatRuntimeControls,
   ProviderId,
   ProviderModelConfig,
   ReasoningLevel,
@@ -19,6 +20,11 @@ export type GatewaySelectedModel = {
   model: string;
   providerType: ProviderId;
 };
+
+export type GatewayChatRuntimeControls = Pick<
+  ChatRuntimeControls,
+  "thinkingEnabled" | "nativeWebSearchEnabled" | "reasoning"
+>;
 
 export type GatewayProviderSummary = {
   id: string;

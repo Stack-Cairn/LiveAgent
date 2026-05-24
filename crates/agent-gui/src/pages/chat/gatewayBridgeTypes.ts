@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import type { ChatHistorySummary } from "../../lib/chat/history/chatHistory";
 import type { ConversationViewState } from "../../lib/chat/conversation/conversationState";
 import type {
+  ChatRuntimeControls,
   ExecutionMode,
   ProviderId,
   SystemToolId,
@@ -16,6 +17,11 @@ export type GatewaySelectedModelEvent = {
   providerType: string;
 };
 
+export type GatewayChatRuntimeControlsEvent = Pick<
+  ChatRuntimeControls,
+  "thinkingEnabled" | "nativeWebSearchEnabled" | "reasoning"
+>;
+
 export type GatewayChatRequestEvent = {
   requestId: string;
   conversationId: string;
@@ -24,6 +30,7 @@ export type GatewayChatRequestEvent = {
   forceHydrate?: boolean;
   historyTruncationKey?: string;
   selectedModel?: GatewaySelectedModelEvent;
+  runtimeControls?: GatewayChatRuntimeControlsEvent;
   executionMode?: string;
   workdir?: string;
   selectedSystemTools?: string[];
@@ -52,6 +59,7 @@ export type ActiveGatewayBridgeRequest = {
   clientRequestId?: string;
   startedAt: number;
   selectedModelOverride?: GatewaySelectedModelEvent;
+  runtimeControlsOverride?: ChatRuntimeControls;
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
   selectedSystemToolIdsOverride?: SystemToolId[];
@@ -64,6 +72,7 @@ export type SendChatAction = (overrides?: {
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
   selectedSystemToolIdsOverride?: SystemToolId[];
+  runtimeControlsOverride?: ChatRuntimeControls;
   gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
   afterInitialHistoryPersist?: () => Promise<void>;
 }) => Promise<void>;

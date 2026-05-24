@@ -37,9 +37,13 @@ import { mergeAlwaysEnabledSkillNames } from "@/lib/skills";
 import { SettingsPage } from "@/pages/SettingsPage";
 import {
   findProviderModelConfig,
+  getChatRuntimeReasoningLevelsForProvider,
   isAgentDevMode,
+  normalizeChatRuntimeControlsForProvider,
   normalizeSettings,
+  updateChatRuntimeControlsForProvider,
   type AppSettings,
+  type ChatRuntimeControls,
   type CustomProvider,
   type SelectedModel,
 } from "@/lib/settings";
@@ -239,6 +243,7 @@ type SendChatOptions = {
   conversationId?: string;
   clientRequestId?: string;
   uploadedFiles?: PendingUploadedFile[];
+  runtimeControls?: ChatRuntimeControls;
 };
 
 type SendChatFn = (message: string, options?: SendChatOptions) => Promise<void>;
@@ -2959,6 +2964,13 @@ export default function App() {
     }
 
     let terminalEventSeen = false;
+    const runtimeControls = normalizeChatRuntimeControlsForProvider(
+      options?.runtimeControls ?? settings.chatRuntimeControls,
+      {
+        providerId: currentChatProvider?.type,
+        requestFormat: currentChatProvider?.requestFormat,
+      },
+    );
     try {
       for await (const event of api.chat(
         message,
@@ -2968,6 +2980,7 @@ export default function App() {
         controller.signal,
         uploadedFiles,
         clientRequestId,
+        runtimeControls,
       )) {
         if (event.conversation_id && event.conversation_id !== "") {
           const nextConversationId = event.conversation_id.trim();
@@ -3897,6 +3910,50 @@ export default function App() {
     }
     return findProviderModelConfig(provider, settings.selectedModel.model).contextWindow;
   }, [settings.customProviders, settings.selectedModel]);
+  const currentChatProvider = useMemo(() => {
+    if (!settings.selectedModel) {
+      return undefined;
+    }
+    return settings.customProviders.find(
+      (item) => item.id === settings.selectedModel?.customProviderId,
+    );
+  }, [settings.customProviders, settings.selectedModel]);
+  const chatRuntimeReasoningOptions = useMemo(
+    () =>
+      getChatRuntimeReasoningLevelsForProvider({
+        providerId: currentChatProvider?.type,
+        requestFormat: currentChatProvider?.requestFormat,
+      }),
+    [currentChatProvider?.requestFormat, currentChatProvider?.type],
+  );
+  const chatRuntimeControlsForCurrentProvider = useMemo(
+    () =>
+      normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
+        providerId: currentChatProvider?.type,
+        requestFormat: currentChatProvider?.requestFormat,
+      }),
+    [
+      currentChatProvider?.requestFormat,
+      currentChatProvider?.type,
+      settings.chatRuntimeControls,
+    ],
+  );
+  const handleChatRuntimeControlsChange = useCallback(
+    (patch: Partial<ChatRuntimeControls>) => {
+      setSettings((prev) => ({
+        ...prev,
+        chatRuntimeControls: updateChatRuntimeControlsForProvider(
+          prev.chatRuntimeControls,
+          patch,
+          {
+            providerId: currentChatProvider?.type,
+            requestFormat: currentChatProvider?.requestFormat,
+          },
+        ),
+      }));
+    },
+    [currentChatProvider?.requestFormat, currentChatProvider?.type, setSettings],
+  );
   const isAgentMode = settings.system.executionMode !== "text";
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
 
@@ -4644,6 +4701,8 @@ export default function App() {
                 workdir={settings.system.workdir}
                 enabledSkills={enabledComposerSkills}
                 isAgentMode={isAgentMode}
+                chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
+                reasoningOptions={chatRuntimeReasoningOptions}
                 onSend={() => {
                   if (
                     submitInFlightRef.current ||
@@ -4694,7 +4753,10 @@ export default function App() {
                       }
                       composerRef.current?.clear();
                       setPendingUploadedFiles([]);
-                      void sendChat(text, { uploadedFiles: files }).catch(() => {
+                      void sendChat(text, {
+                        uploadedFiles: files,
+                        runtimeControls: chatRuntimeControlsForCurrentProvider,
+                      }).catch(() => {
                         setPendingUploadedFiles((current) =>
                           mergePendingUploadedFiles(current, files),
                         );
@@ -4712,6 +4774,7 @@ export default function App() {
                   );
                 }}
                 onComposerBusyChange={handleComposerBusyChange}
+                onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
                 onPickReadableFiles={() => fileInputRef.current?.click()}
                 onPasteFiles={handleImportReadableFiles}
                 pendingUploadedFiles={pendingUploadedFiles}

@@ -53,13 +53,17 @@ import {
 } from "../lib/skills";
 import {
   type AppSettings,
+  type ChatRuntimeControls,
   type ExecutionMode,
   findProviderModelConfig,
+  getChatRuntimeReasoningLevelsForProvider,
   isAgentDevMode,
   isAgentExecutionMode,
+  normalizeChatRuntimeControlsForProvider,
   type ProviderId,
   type SelectedModel,
   type SystemToolId,
+  updateChatRuntimeControlsForProvider,
   updateMemorySettings,
   updateMcp,
   updateSkills,
@@ -361,14 +365,28 @@ function resolveMemorySummaryModelSelection(
 function buildProviderRuntimeConfig(
   provider: AppSettings["customProviders"][number],
   model: string,
+  controlsInput?: ChatRuntimeControls,
 ) {
+  const controls = normalizeChatRuntimeControlsForProvider(controlsInput, {
+    providerId: provider.type,
+    requestFormat: provider.requestFormat,
+  });
+  const reasoningSupported =
+    getChatRuntimeReasoningLevelsForProvider({
+      providerId: provider.type,
+      requestFormat: provider.requestFormat,
+    }).length > 0;
   return {
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey,
     requestFormat: provider.requestFormat,
-    reasoning: provider.reasoning,
-    promptCachingEnabled: provider.promptCachingEnabled,
-    nativeWebSearchEnabled: provider.nativeWebSearchEnabled,
+    reasoning: reasoningSupported
+      ? controls.thinkingEnabled
+        ? controls.reasoning
+        : "off"
+      : undefined,
+    promptCachingEnabled: true,
+    nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
     modelConfig: findProviderModelConfig(provider, model),
   };
 }
@@ -1360,6 +1378,7 @@ export function ChatPage(props: ChatPageProps) {
     executionModeOverride?: ExecutionMode;
     workdirOverride?: string;
     selectedSystemToolIdsOverride?: SystemToolId[];
+    runtimeControlsOverride?: ChatRuntimeControls;
     gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
     afterInitialHistoryPersist?: () => Promise<void>;
   }) {
@@ -1460,7 +1479,11 @@ export function ChatPage(props: ChatPageProps) {
     }
 
     const { selectedModel, provider, providerId, model } = effectiveSelectedModel;
-    const providerConfig = buildProviderRuntimeConfig(provider, model);
+    const runtimeControls =
+      gatewayBridgeRequest?.runtimeControlsOverride ??
+      overrides?.runtimeControlsOverride ??
+      settings.chatRuntimeControls;
+    const providerConfig = buildProviderRuntimeConfig(provider, model, runtimeControls);
     const memorySummaryModelSelection = resolveMemorySummaryModelSelection(settings);
     const memoryExtractionModel = memorySummaryModelSelection
       ? {
@@ -1469,6 +1492,7 @@ export function ChatPage(props: ChatPageProps) {
           runtime: buildProviderRuntimeConfig(
             memorySummaryModelSelection.provider,
             memorySummaryModelSelection.model,
+            runtimeControls,
           ),
           selectedModel: memorySummaryModelSelection.selectedModel,
         }
@@ -2759,6 +2783,47 @@ export function ChatPage(props: ChatPageProps) {
     if (!provider) return undefined;
     return findProviderModelConfig(provider, settings.selectedModel.model).contextWindow;
   })();
+  const currentChatProvider = settings.selectedModel
+    ? settings.customProviders.find(
+        (item) => item.id === settings.selectedModel?.customProviderId,
+      )
+    : undefined;
+  const chatRuntimeReasoningOptions = useMemo(
+    () =>
+      getChatRuntimeReasoningLevelsForProvider({
+        providerId: currentChatProvider?.type,
+        requestFormat: currentChatProvider?.requestFormat,
+      }),
+    [currentChatProvider?.requestFormat, currentChatProvider?.type],
+  );
+  const chatRuntimeControlsForCurrentProvider = useMemo(
+    () =>
+      normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
+        providerId: currentChatProvider?.type,
+        requestFormat: currentChatProvider?.requestFormat,
+      }),
+    [
+      currentChatProvider?.requestFormat,
+      currentChatProvider?.type,
+      settings.chatRuntimeControls,
+    ],
+  );
+  const handleChatRuntimeControlsChange = useCallback(
+    (patch: Partial<ChatRuntimeControls>) => {
+      setSettings((prev) => ({
+        ...prev,
+        chatRuntimeControls: updateChatRuntimeControlsForProvider(
+          prev.chatRuntimeControls,
+          patch,
+          {
+            providerId: currentChatProvider?.type,
+            requestFormat: currentChatProvider?.requestFormat,
+          },
+        ),
+      }));
+    },
+    [currentChatProvider?.requestFormat, currentChatProvider?.type, setSettings],
+  );
   const currentConversationWorkspaceRoot = (() => {
     const currentItem = historyItems.find((item) => item.id === currentConversationId);
     const persistedCwd = currentItem?.cwd?.trim();
@@ -3003,9 +3068,12 @@ export function ChatPage(props: ChatPageProps) {
           workdir={workdir}
           enabledSkills={enabledComposerSkills}
           isAgentMode={isAgentMode}
+          chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
+          reasoningOptions={chatRuntimeReasoningOptions}
           onSend={handleSend}
           onStop={handleStopSending}
           onComposerBusyChange={handleComposerBusyChange}
+          onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
           onPickReadableFiles={pickReadableFiles}
           onPasteFiles={importReadableFiles}
           pendingUploadedFiles={pendingUploadedFiles}

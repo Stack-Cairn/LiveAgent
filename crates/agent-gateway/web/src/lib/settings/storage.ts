@@ -5,6 +5,8 @@ import {
   getDefaultSettings,
   normalizeSelectedModel,
   normalizeSettings,
+  normalizeChatRuntimeControls,
+  type ChatRuntimeControls,
   normalizeSkillsSettings,
   normalizeTheme,
   type AppSettings,
@@ -30,6 +32,7 @@ type PersistedSettingsResponse = {
 
 type LocalUiSettings = {
   skills?: unknown;
+  chatRuntimeControls?: unknown;
   selectedModel?: unknown;
   theme?: unknown;
   locale?: unknown;
@@ -43,6 +46,7 @@ export type SettingsSaveState =
 
 function readLocalUiSettings(): {
   skills: SkillsSettings;
+  chatRuntimeControls: ChatRuntimeControls;
   selectedModel?: SelectedModel;
   theme: Theme;
   locale: Locale;
@@ -54,6 +58,7 @@ function readLocalUiSettings(): {
     if (!raw) {
       return {
         skills: defaults.skills,
+        chatRuntimeControls: defaults.chatRuntimeControls,
         selectedModel: defaults.selectedModel,
         theme: defaults.theme,
         locale: defaults.locale,
@@ -63,6 +68,9 @@ function readLocalUiSettings(): {
     const parsed = JSON.parse(raw) as LocalUiSettings | null;
     return {
       skills: normalizeSkillsSettings(parsed?.skills ?? defaults.skills),
+      chatRuntimeControls: normalizeChatRuntimeControls(
+        parsed?.chatRuntimeControls ?? defaults.chatRuntimeControls,
+      ),
       selectedModel: normalizeSelectedModel(parsed?.selectedModel),
       theme: normalizeTheme(parsed?.theme ?? defaults.theme),
       locale: normalizeLocale(parsed?.locale ?? defaults.locale),
@@ -70,6 +78,7 @@ function readLocalUiSettings(): {
   } catch {
     return {
       skills: defaults.skills,
+      chatRuntimeControls: defaults.chatRuntimeControls,
       selectedModel: defaults.selectedModel,
       theme: defaults.theme,
       locale: defaults.locale,
@@ -77,9 +86,10 @@ function readLocalUiSettings(): {
   }
 }
 
-function writeLocalUiSettings(settings: Pick<AppSettings, "skills" | "selectedModel" | "theme" | "locale">) {
+function writeLocalUiSettings(settings: Pick<AppSettings, "skills" | "chatRuntimeControls" | "selectedModel" | "theme" | "locale">) {
   const payload = {
     skills: settings.skills,
+    chatRuntimeControls: settings.chatRuntimeControls,
     selectedModel: settings.selectedModel,
     theme: settings.theme,
     locale: settings.locale,
@@ -136,6 +146,7 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     remote: (persisted?.remote ?? defaults.remote) as AppSettings["remote"],
     memory: (persisted?.memory ?? defaults.memory) as AppSettings["memory"],
     skills: localUi.skills,
+    chatRuntimeControls: localUi.chatRuntimeControls,
     selectedModel: localUi.selectedModel,
     theme: localUi.theme,
     locale: localUi.locale,
@@ -217,12 +228,14 @@ export async function persistSettings(prev: AppSettings, next: AppSettings): Pro
 
   if (
     hasChanged(prev.skills, next.skills) ||
+    hasChanged(prev.chatRuntimeControls, next.chatRuntimeControls) ||
     hasChanged(prev.selectedModel ?? null, next.selectedModel ?? null) ||
     hasChanged(prev.theme, next.theme) ||
     hasChanged(prev.locale, next.locale)
   ) {
     writeLocalUiSettings({
       skills: next.skills,
+      chatRuntimeControls: next.chatRuntimeControls,
       selectedModel: next.selectedModel,
       theme: next.theme,
       locale: next.locale,
