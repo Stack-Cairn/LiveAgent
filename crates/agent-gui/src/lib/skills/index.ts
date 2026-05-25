@@ -134,6 +134,10 @@ type SystemManageSkillResponse = {
     target: string;
     archive: string;
   } | null;
+  deleted?: {
+    name: string;
+    target: string;
+  } | null;
   seeded?: SystemBuiltinSkillSeedResponse[] | null;
   installJob?: SkillInstallJobSnapshot | null;
   clawhubResults?: ClawHubSkillCard[] | null;
@@ -645,6 +649,7 @@ export async function manageSkill(params: Record<string, unknown>): Promise<Syst
   if (
     action === "install" ||
     action === "create" ||
+    action === "delete" ||
     action === "clawhub_install" ||
     (action === "install_status" && response.installJob?.phase === "done")
   ) {
@@ -699,7 +704,7 @@ export function buildSkillsSystemPrompt(params: {
     "- Only when you determine that a metadata Skill is genuinely needed should you call SkillsManager with action=read to read the full Skill file and then follow its workflow exactly.",
     "- SkillsManager.path uses the skillFile below. It is relative to the fixed Skills root directory and may point to SKILL.md, skill.md, skill.json, or README.md.",
     '- For files referenced inside an enabled Skill, use file tools with root="skills" and a path relative to the fixed Skills root, for example Read(root="skills", path="<baseDir>/references/guide.md"), List, Glob, Grep, Write, Edit, or Delete.',
-    "- You may update files inside enabled Skills when the user asks you to optimize or maintain them. Create, install, search/install from ClawHub, validate, or package Skills through SkillsManager actions.",
+    "- You may update files inside enabled Skills when the user asks you to optimize or maintain them. Create, install, search/install from ClawHub, validate, package, or delete user Skills through SkillsManager actions.",
     "- Never expand the fixed Skills root into an absolute local path in any tool call. If a path belongs to a Skill, keep it root-relative and set root=\"skills\".",
     "- If Skill content contains absolute local paths, home-directory paths, drive-letter paths, or shell snippets that read Skill files with cat/ls/find/grep, treat those path fragments as non-portable examples and convert them to root=\"skills\" file-tool calls.",
     "- Do not guess a Skill's exact instructions or script paths before reading the Skill file.",

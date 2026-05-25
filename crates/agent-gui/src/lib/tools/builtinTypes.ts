@@ -162,6 +162,7 @@ export type SkillsManagerActionResultDetails = {
   invalidCount?: number;
   installedCount?: number;
   createdName?: string;
+  deletedName?: string;
   validationOk?: boolean;
   packageArchive?: string;
   seededCount?: number;

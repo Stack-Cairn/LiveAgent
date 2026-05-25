@@ -146,6 +146,13 @@ pub struct SystemSkillPackageResponse {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct SystemSkillDeleteResponse {
+    pub name: String,
+    pub target: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SystemBuiltinSkillSeedResponse {
     pub name: String,
     pub target: String,
@@ -216,6 +223,7 @@ pub struct SystemManageSkillResponse {
     pub created: Option<SystemSkillInstallResult>,
     pub validation: Option<SystemSkillValidationResponse>,
     pub package: Option<SystemSkillPackageResponse>,
+    pub deleted: Option<SystemSkillDeleteResponse>,
     pub seeded: Option<Vec<SystemBuiltinSkillSeedResponse>>,
     pub install_job: Option<SystemSkillInstallJobSnapshot>,
     pub clawhub_results: Option<Vec<SystemClawHubSkillCard>>,
@@ -2182,7 +2190,9 @@ fn action_from_payload(payload: &serde_json::Map<String, Value>) -> Result<Strin
     });
     match action {
         "read" | "list" | "install" | "install_start" | "install_status" | "create"
-        | "validate" | "package" | "clawhub_search" | "clawhub_install" => Ok(action.to_string()),
+        | "validate" | "package" | "delete" | "clawhub_search" | "clawhub_install" => {
+            Ok(action.to_string())
+        }
         _ => Err(format!("SkillsManager action is not supported: {action}")),
     }
 }
@@ -2762,6 +2772,36 @@ fn validate_installed_skill(
     })
 }
 
+fn delete_installed_skill(root: &Path, name: &str) -> Result<SystemSkillDeleteResponse, String> {
+    let name = sanitize_skill_name(name)?;
+    ensure_not_builtin_skill_management_target(&name, "delete")?;
+    let target = root.join(&name);
+    let metadata = fs::symlink_metadata(&target).map_err(|e| {
+        format!(
+            "Skill does not exist or cannot be inspected: {}: {e}",
+            target.display()
+        )
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(format!(
+            "SkillsManager action=delete refuses to delete symlink target: {}",
+            target.display()
+        ));
+    }
+    if !metadata.is_dir() {
+        return Err(format!(
+            "SkillsManager action=delete requires an installed Skill directory: {}",
+            target.display()
+        ));
+    }
+    fs::remove_dir_all(&target)
+        .map_err(|e| format!("Failed to delete Skill {}: {e}", target.display()))?;
+    Ok(SystemSkillDeleteResponse {
+        name,
+        target: display_path(&target),
+    })
+}
+
 fn package_installed_skill(root: &Path, name: &str) -> Result<SystemSkillPackageResponse, String> {
     let name = sanitize_skill_name(name)?;
     let target = root.join(&name);
@@ -2973,6 +3013,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: None,
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: None,
                 clawhub_results: None,
@@ -2997,6 +3038,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: None,
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: None,
                 clawhub_results: None,
@@ -3022,6 +3064,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: None,
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: None,
                 clawhub_results: Some(clawhub_results),
@@ -3046,6 +3089,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: None,
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: None,
                 clawhub_results: None,
@@ -3071,6 +3115,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: None,
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: None,
                 clawhub_results: None,
@@ -3095,6 +3140,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: None,
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: Some(install_job),
                 clawhub_results: None,
@@ -3122,6 +3168,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: None,
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: Some(install_job),
                 clawhub_results: None,
@@ -3146,6 +3193,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: Some(created),
                 validation: None,
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: None,
                 clawhub_results: None,
@@ -3172,6 +3220,7 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: Some(validation),
                 package: None,
+                deleted: None,
                 seeded: None,
                 install_job: None,
                 clawhub_results: None,
@@ -3198,6 +3247,34 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 created: None,
                 validation: None,
                 package: Some(package),
+                deleted: None,
+                seeded: None,
+                install_job: None,
+                clawhub_results: None,
+                clawhub_next_cursor: None,
+                clawhub_slug: None,
+                clawhub_download_url: None,
+            })
+        }
+        "delete" => {
+            let name = object_string(payload, "name")
+                .ok_or_else(|| "SkillsManager delete requires name".to_string())?;
+            let deleted = delete_installed_skill(&root, name)?;
+            Ok(SystemManageSkillResponse {
+                action,
+                root_dir,
+                path: None,
+                content: None,
+                truncated: None,
+                start_line: None,
+                num_lines: None,
+                skills: None,
+                invalid: None,
+                installed: None,
+                created: None,
+                validation: None,
+                package: None,
+                deleted: Some(deleted),
                 seeded: None,
                 install_job: None,
                 clawhub_results: None,
@@ -3640,6 +3717,65 @@ mod tests {
 
         let package = package_installed_skill(&root, "package-skill").expect("package skill");
         assert!(Path::new(&package.archive).exists());
+    }
+
+    #[test]
+    fn delete_installed_skill_removes_user_skill() {
+        let tmp = TempDir::new("liveagent-skill-delete-test").expect("temp dir");
+        let root = tmp.path().join("skills");
+        let skill_dir = write_skill(&root, "delete-skill", "Delete test");
+
+        let deleted = delete_installed_skill(&root, "delete-skill").expect("delete skill");
+
+        assert_eq!(deleted.name, "delete-skill");
+        assert_eq!(deleted.target, display_path(&skill_dir));
+        assert!(!skill_dir.exists());
+    }
+
+    #[test]
+    fn delete_installed_skill_rejects_builtin_skill() {
+        let tmp = TempDir::new("liveagent-skill-delete-builtin-test").expect("temp dir");
+        let root = tmp.path().join("skills");
+        write_skill(&root, "skills-installer", "Built-in replacement");
+
+        let error =
+            delete_installed_skill(&root, "skills-installer").expect_err("delete should fail");
+
+        assert!(
+            error.contains("cannot modify built-in Skill"),
+            "unexpected error: {error}"
+        );
+        assert!(root.join("skills-installer").exists());
+    }
+
+    #[test]
+    fn delete_installed_skill_rejects_missing_skill() {
+        let tmp = TempDir::new("liveagent-skill-delete-missing-test").expect("temp dir");
+        let root = tmp.path().join("skills");
+
+        let error = delete_installed_skill(&root, "missing-skill").expect_err("delete should fail");
+
+        assert!(
+            error.contains("does not exist") || error.contains("cannot be inspected"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn delete_installed_skill_rejects_non_directory_target() {
+        let tmp = TempDir::new("liveagent-skill-delete-file-test").expect("temp dir");
+        let root = tmp.path().join("skills");
+        fs::create_dir_all(&root).expect("create skills root");
+        let file = root.join("file-skill");
+        fs::write(&file, "not a directory").expect("write file target");
+
+        let error = delete_installed_skill(&root, "file-skill").expect_err("delete should fail");
+
+        assert!(
+            error.contains("requires an installed Skill directory"),
+            "unexpected error: {error}"
+        );
+        assert!(file.exists());
     }
 
     #[test]

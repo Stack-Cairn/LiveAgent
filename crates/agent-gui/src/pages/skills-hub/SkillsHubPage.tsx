@@ -14,16 +14,19 @@ import {
   RefreshCw,
   Search,
   Sparkles,
+  Trash2,
   X,
 } from "../../components/icons";
 import { GlassPanel, HubBackdrop, HubHeader } from "../../components/hub/HubChrome";
 import { Button } from "../../components/ui/button";
+import { ConfirmDeletePopover } from "../../components/ui/confirm-action-popover";
 import { useLocale } from "../../i18n";
 import {
   discoverSkills,
   getSkillInstallJobStatus,
   isAlwaysEnabledSkillName,
   isUserSelectableSkill,
+  manageSkill,
   mergeAlwaysEnabledSkillNames,
   notifySkillsDiscoveryUpdated,
   startSkillInstallJob,
@@ -138,6 +141,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const [storeError, setStoreError] = useState<string | null>(null);
   const [installJobs, setInstallJobs] = useState<Record<string, SkillInstallJobSnapshot>>({});
   const [installingBySlug, setInstallingBySlug] = useState<Record<string, string>>({});
+  const [deletingSkillName, setDeletingSkillName] = useState<string | null>(null);
   const discoverySignatureRef = useRef(
     buildSkillDiscoverySignature(initialRootDir ?? "", initialSkills ?? []),
   );
@@ -221,6 +225,28 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     }
     return installed;
   }, [skills]);
+  const completedInstallSlugs = useMemo(() => {
+    const slugs = new Set<string>();
+    for (const [slug, jobId] of Object.entries(installingBySlug)) {
+      const job = installJobs[jobId];
+      if (job?.phase === "done" && slug.trim()) {
+        slugs.add(slug.trim());
+      }
+    }
+    for (const job of Object.values(installJobs)) {
+      if (job.phase === "done" && job.slug?.trim()) {
+        slugs.add(job.slug.trim());
+      }
+    }
+    return slugs;
+  }, [installJobs, installingBySlug]);
+  const installedStoreSlugs = useMemo(() => {
+    const slugs = new Set(installedBySlug.keys());
+    for (const slug of completedInstallSlugs) {
+      slugs.add(slug);
+    }
+    return slugs;
+  }, [completedInstallSlugs, installedBySlug]);
 
   useEffect(() => {
     if (view !== "store" || lockedByChatMode) return;
@@ -323,7 +349,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
             if (TERMINAL_INSTALL_PHASES.has(next.phase)) {
               if (next.phase === "done") {
                 enableInstalledSkillsFromJob(next);
-                void refresh();
+                void refresh({ silent: true });
               }
             }
           })
@@ -375,7 +401,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     const existingJob = existingJobId ? installJobs[existingJobId] : undefined;
     if (
       lockedByChatMode ||
-      installedBySlug.has(skill.slug) ||
+      installedStoreSlugs.has(skill.slug) ||
       (existingJob && !TERMINAL_INSTALL_PHASES.has(existingJob.phase))
     ) {
       return;
@@ -394,6 +420,50 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setStoreError(msg || "Failed to start Skill install");
+    }
+  }
+
+  async function deleteSkill(skill: SkillSummary) {
+    if (lockedByChatMode || isAlwaysEnabledSkillName(skill.name) || deletingSkillName) return;
+    const skillName = skill.name;
+    const sourceSlug =
+      skill.source?.registry === "clawhub" ? skill.source.slug?.trim() || "" : "";
+    setLoadError(null);
+    setDeletingSkillName(skillName);
+    try {
+      await manageSkill({ action: "delete", name: skillName });
+      setSettings((prev) =>
+        updateSkills(prev, {
+          selected: prev.skills.selected.filter((name) => name !== skillName),
+        }),
+      );
+      setSkills((prev) => prev.filter((item) => item.name !== skillName));
+      if (sourceSlug) {
+        setInstallingBySlug((prev) => {
+          if (!(sourceSlug in prev)) return prev;
+          const next = { ...prev };
+          delete next[sourceSlug];
+          return next;
+        });
+        setInstallJobs((prev) => {
+          let changed = false;
+          const next = { ...prev };
+          for (const [jobId, job] of Object.entries(prev)) {
+            if (job.slug?.trim() === sourceSlug) {
+              delete next[jobId];
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
+        });
+      }
+      notifySkillsDiscoveryUpdated();
+      await refresh({ silent: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setLoadError(msg || "Failed to delete Skill");
+    } finally {
+      setDeletingSkillName(null);
     }
   }
 
@@ -699,6 +769,8 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                     {filtered.map((skill) => {
                       const alwaysEnabled = isAlwaysEnabledSkillName(skill.name);
                       const checked = alwaysEnabled || selected.has(skill.name);
+                      const deleting = deletingSkillName === skill.name;
+                      const deleteDisabled = deletingSkillName !== null;
                       const card = (
                         <>
                           <div className="flex items-start justify-between gap-2">
@@ -723,14 +795,47 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                               </div>
                             ) : (
                               <div
-                                className={cn(
-                                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all",
-                                  checked
-                                    ? "border-foreground/80 bg-foreground/85 text-background shadow-[0_2px_6px_-2px_rgba(15,23,42,0.35)]"
-                                    : "border-border bg-background group-hover:border-foreground/40",
-                                )}
+                                className="flex shrink-0 items-center gap-1.5"
+                                onClick={(event) => event.stopPropagation()}
+                                onKeyDown={(event) => event.stopPropagation()}
                               >
-                                {checked ? <Check className="h-3 w-3" /> : null}
+                                <ConfirmDeletePopover
+                                  name={skill.name}
+                                  onConfirm={() => void deleteSkill(skill)}
+                                >
+                                  {(open) => (
+                                    <button
+                                      type="button"
+                                      disabled={deleteDisabled}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        open();
+                                      }}
+                                      className={cn(
+                                        "flex h-6 w-6 items-center justify-center rounded-md border border-border/35 bg-background/65 text-muted-foreground transition-all",
+                                        "hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive",
+                                        "disabled:cursor-not-allowed disabled:opacity-60",
+                                      )}
+                                      title="删除 Skill"
+                                    >
+                                      {deleting ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      )}
+                                    </button>
+                                  )}
+                                </ConfirmDeletePopover>
+                                <div
+                                  className={cn(
+                                    "flex h-5 w-5 items-center justify-center rounded-md border transition-all",
+                                    checked
+                                      ? "border-foreground/80 bg-foreground/85 text-background shadow-[0_2px_6px_-2px_rgba(15,23,42,0.35)]"
+                                      : "border-border bg-background group-hover:border-foreground/40",
+                                  )}
+                                >
+                                  {checked ? <Check className="h-3 w-3" /> : null}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -766,20 +871,26 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                       }
 
                       return (
-                        <button
+                        <div
                           key={key}
-                          type="button"
+                          role="button"
+                          tabIndex={0}
                           onClick={() => toggleSkill(skill.name, !checked)}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") return;
+                            event.preventDefault();
+                            toggleSkill(skill.name, !checked);
+                          }}
                           className={cn(
                             "hub-skill-card skill-card-enter group flex h-full w-full flex-col rounded-2xl border p-3.5 text-left transition-all",
-                            "backdrop-blur-xl",
+                            "cursor-pointer backdrop-blur-xl focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-foreground/15",
                             checked
                               ? "border-border/55 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_4px_18px_-12px_rgba(15,23,42,0.18)]"
                               : "border-border/35 bg-background/55 hover:-translate-y-0.5 hover:border-border/55 hover:bg-background/70 hover:shadow-[0_4px_16px_-10px_rgba(15,23,42,0.18)]",
                           )}
                         >
                           {card}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -803,7 +914,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                     loadingMore={storeLoadingMore}
                     error={storeError}
                     cursor={storeCursor}
-                    installedBySlug={installedBySlug}
+                    installedSlugs={installedStoreSlugs}
                     installingBySlug={installingBySlug}
                     installJobs={installJobs}
                     onQueryChange={setStoreQuery}
@@ -830,7 +941,7 @@ function SkillsStoreView(props: {
   loadingMore: boolean;
   error: string | null;
   cursor: string | null;
-  installedBySlug: Map<string, SkillSummary>;
+  installedSlugs: Set<string>;
   installingBySlug: Record<string, string>;
   installJobs: Record<string, SkillInstallJobSnapshot>;
   onQueryChange: (value: string) => void;
@@ -846,7 +957,7 @@ function SkillsStoreView(props: {
     loadingMore,
     error,
     cursor,
-    installedBySlug,
+    installedSlugs,
     installingBySlug,
     installJobs,
     onQueryChange,
@@ -898,11 +1009,10 @@ function SkillsStoreView(props: {
   }, [previewSkill]);
 
   function getInstallState(skill: ClawHubSkillCard): StoreSkillInstallState {
-    const installed = installedBySlug.get(skill.slug);
     const jobId = installingBySlug[skill.slug];
     const job = jobId ? installJobs[jobId] : undefined;
     const terminalJob = Boolean(job && TERMINAL_INSTALL_PHASES.has(job.phase));
-    const done = Boolean(installed) || job?.phase === "done";
+    const done = installedSlugs.has(skill.slug) || job?.phase === "done";
     return {
       done,
       installing: Boolean(job && !terminalJob),

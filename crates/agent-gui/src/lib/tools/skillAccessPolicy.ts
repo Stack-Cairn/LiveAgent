@@ -185,7 +185,7 @@ export function assertSkillManagementAllowed(
   throw new Error(
     [
       `SkillsManager(action=${JSON.stringify(action)}) is blocked in this conversation.`,
-      "Create, install, validate, and package Skills from Settings > Skills or an explicit management flow.",
+      "Create, install, validate, package, and delete Skills from Settings > Skills or an explicit management flow.",
       "Ordinary chat runs may only use Skills that are enabled in the chat Skills selector.",
     ].join(" "),
   );

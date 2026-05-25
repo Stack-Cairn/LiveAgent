@@ -57,6 +57,7 @@ const SKILL_MANAGER_PARAMETERS = Type.Object({
         Type.Literal("create"),
         Type.Literal("validate"),
         Type.Literal("package"),
+        Type.Literal("delete"),
         Type.Literal("clawhub_search"),
         Type.Literal("clawhub_install"),
       ],
@@ -124,7 +125,7 @@ const SKILL_MANAGER_PARAMETERS = Type.Object({
   name: Type.Optional(
     Type.String({
       description:
-        "Skill name for create, validate, package, or single-skill install rename. Use lowercase letters, digits, and hyphens.",
+        "Skill name for create, validate, package, delete, or single-skill install rename. Use lowercase letters, digits, and hyphens.",
     }),
   ),
   description: Type.Optional(
@@ -371,7 +372,7 @@ function normalizeSkillManagerPayload(args: Record<string, unknown>, options: {
     return payload;
   }
 
-  if (action === "validate" || action === "package") {
+  if (action === "validate" || action === "package" || action === "delete") {
     const name = optionalString(args, "name");
     if (!name) throw new Error(`SkillsManager.name is required for action=${action}`);
     payload.name = name;
@@ -380,7 +381,7 @@ function normalizeSkillManagerPayload(args: Record<string, unknown>, options: {
 
   if (action === "list") return payload;
 
-  throw new Error(`SkillsManager.action must be one of: read, list, install, create, validate, package, clawhub_search, clawhub_install. Received: ${JSON.stringify(action)}`);
+  throw new Error(`SkillsManager.action must be one of: read, list, install, create, validate, package, delete, clawhub_search, clawhub_install. Received: ${JSON.stringify(action)}`);
 }
 
 function filterManageSkillResult(
@@ -412,9 +413,15 @@ function enforceSkillManagerAccessPolicy(
     assertSkillInventoryAllowed(policy);
     return;
   }
-  if (action === "validate" || action === "package") {
+  if (action === "validate" || action === "package" || action === "delete") {
     assertSkillManagementAllowed(policy, action);
-    assertSkillNameAllowedByPolicy(policy, String(payload.name ?? ""), `SkillsManager(action=${JSON.stringify(action)})`);
+    const name = String(payload.name ?? "");
+    assertSkillNameAllowedByPolicy(policy, name, `SkillsManager(action=${JSON.stringify(action)})`);
+    if (isAlwaysEnabledSkillName(name)) {
+      throw new Error(
+        `SkillsManager(action=${JSON.stringify(action)}) is blocked: built-in Skill "${name}" is protected and cannot be modified by the model. Create or update a separate user Skill instead.`,
+      );
+    }
     return;
   }
   if (action === "install" || action === "create" || action === "clawhub_install") {
@@ -435,7 +442,7 @@ function formatManageSkillResultText(
   const lines = [
     `SkillsManager action=${result.action}`,
     "root=skills",
-    'Use Read/List/Glob/Grep/Write/Edit/Delete with root="skills" and relative paths for files inside enabled Skills. Use SkillsManager actions for Skill creation, local/GitHub/ClawHub installation, validation, and packaging.',
+    'Use Read/List/Glob/Grep/Write/Edit/Delete with root="skills" and relative paths for files inside enabled Skills. Use SkillsManager actions for Skill creation, local/GitHub/ClawHub installation, validation, packaging, and deletion.',
   ];
 
   if (result.action === "list") {
@@ -502,6 +509,9 @@ function formatManageSkillResultText(
   } else if (result.action === "package" && result.package) {
     lines.push(`name=${result.package.name}`);
     lines.push(`archive=${displaySkillRootPath(result.rootDir, result.package.archive)}`);
+  } else if (result.action === "delete" && result.deleted) {
+    lines.push(`deleted=${result.deleted.name}`);
+    lines.push(`target=${displaySkillRootPath(result.rootDir, result.deleted.target)}`);
   }
 
   return lines.join("\n");
@@ -527,9 +537,10 @@ function buildActionDetails(result: Awaited<ReturnType<typeof manageSkill>>): Sk
     invalidCount: result.invalid?.length,
     installedCount: result.installed?.length,
     createdName: result.created?.name,
+    deletedName: result.deleted?.name,
     validationOk: result.validation?.ok,
     packageArchive: result.package?.archive,
-    target: result.created?.target ?? result.installed?.[0]?.target ?? result.validation?.target ?? result.package?.target,
+    target: result.created?.target ?? result.installed?.[0]?.target ?? result.validation?.target ?? result.package?.target ?? result.deleted?.target,
     backup,
     clawhubResultCount: result.clawhubResults?.length,
     clawhubNextCursor: result.clawhubNextCursor ?? undefined,
@@ -552,7 +563,7 @@ export function createSkillTools(params: {
   const toolSkillsManager: Tool = {
     name: "SkillsManager",
     description:
-      'Read and manage Skills in LiveAgent\'s fixed user Skills root. Use action=read to read a Skill entry file, action=list to inspect the enabled Skills visible to this chat, action=install to import a local directory/archive/HTTP(S) download/GitHub URL, action=clawhub_search to search or browse ClawHub, action=clawhub_install with a ClawHub slug to download and install a Skill from ClawHub, action=create to create a new Skill from a summarized workflow, action=validate to check an enabled managed Skill, and action=package to create a .skill archive. For files referenced inside an enabled Skill, use Read/List/Grep/Glob/Write/Edit/Delete with root="skills" and a root-relative path; this allows maintaining or optimizing enabled Skills. For legacy reads, omitting action and passing path is accepted.',
+      'Read and manage Skills in LiveAgent\'s fixed user Skills root. Use action=read to read a Skill entry file, action=list to inspect the enabled Skills visible to this chat, action=install to import a local directory/archive/HTTP(S) download/GitHub URL, action=clawhub_search to search or browse ClawHub, action=clawhub_install with a ClawHub slug to download and install a Skill from ClawHub, action=create to create a new Skill from a summarized workflow, action=validate to check an enabled managed Skill, action=package to create a .skill archive, and action=delete to permanently delete an installed user Skill. For files referenced inside an enabled Skill, use Read/List/Grep/Glob/Write/Edit/Delete with root="skills" and a root-relative path; this allows maintaining or optimizing enabled Skills. For legacy reads, omitting action and passing path is accepted.',
     parameters: SKILL_MANAGER_PARAMETERS,
   };
 
@@ -607,6 +618,9 @@ export function createSkillTools(params: {
             console.warn("Failed to auto-enable managed Skills", error);
           }
         }
+        notifySkillsDiscoveryUpdated();
+      }
+      if (result.action === "delete") {
         notifySkillsDiscoveryUpdated();
       }
 
