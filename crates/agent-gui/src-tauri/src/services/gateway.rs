@@ -1285,8 +1285,9 @@ fn serialize_settings_sync_payload(payload: &Value) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_chat_event_envelope, build_endpoint, build_local_settings_update_event_payload,
-        merge_settings_sync_snapshot, set_disconnected_status, GatewayStatusSnapshot,
+        build_chat_event_envelope, build_endpoint, build_grpc_url,
+        build_local_settings_update_event_payload, merge_settings_sync_snapshot,
+        set_disconnected_status, GatewayStatusSnapshot,
     };
     use crate::commands::settings::RemoteSettingsPayload;
     use serde_json::{json, Value};
@@ -1379,6 +1380,7 @@ mod tests {
             enabled: true,
             gateway_url: "https://gateway.example.com".to_string(),
             grpc_port: 50051,
+            grpc_endpoint: String::new(),
             token: "dev-token".to_string(),
             agent_id: "agent-new".to_string(),
             auto_reconnect: true,
@@ -1416,6 +1418,24 @@ mod tests {
     #[test]
     fn build_https_gateway_endpoint_initializes_tls_provider() {
         build_endpoint("https://agent.cnweb.org:443").expect("build https gateway endpoint");
+    }
+
+    #[test]
+    fn build_grpc_url_prefers_explicit_endpoint() {
+        let config = RemoteSettingsPayload {
+            enabled: true,
+            gateway_url: "https://gateway.example.com".to_string(),
+            grpc_port: 50051,
+            grpc_endpoint: "tcp.proxy.rlwy.net:12345".to_string(),
+            token: "dev-token".to_string(),
+            agent_id: "agent".to_string(),
+            auto_reconnect: true,
+            heartbeat_interval: 30,
+        };
+
+        let grpc_url = build_grpc_url(&config).expect("build explicit gRPC endpoint");
+
+        assert_eq!(grpc_url, "http://tcp.proxy.rlwy.net:12345");
     }
 
     #[test]
@@ -1669,6 +1689,25 @@ fn build_history_sync_envelope(
 }
 
 fn build_grpc_url(config: &RemoteSettingsPayload) -> Result<String, String> {
+    let grpc_endpoint = config.grpc_endpoint.trim();
+    if !grpc_endpoint.is_empty() {
+        let with_scheme =
+            if grpc_endpoint.starts_with("http://") || grpc_endpoint.starts_with("https://") {
+                grpc_endpoint.to_string()
+            } else {
+                format!("http://{grpc_endpoint}")
+            };
+        let mut url =
+            Url::parse(&with_scheme).map_err(|e| format!("invalid gateway gRPC endpoint: {e}"))?;
+        if url.scheme() != "http" && url.scheme() != "https" {
+            return Err("gateway gRPC endpoint must start with http:// or https://".to_string());
+        }
+        url.set_path("");
+        url.set_query(None);
+        url.set_fragment(None);
+        return Ok(url.to_string().trim_end_matches('/').to_string());
+    }
+
     let trimmed = config.gateway_url.trim();
     if trimmed.is_empty() {
         return Err("gateway URL is empty".to_string());

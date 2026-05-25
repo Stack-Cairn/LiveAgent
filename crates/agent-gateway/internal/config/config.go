@@ -28,7 +28,7 @@ func Load() *Config {
 
 	flag.StringVar(&cfg.Token, "token", getenv("LIVEAGENT_GATEWAY_TOKEN", ""), "shared authentication token")
 	flag.StringVar(&cfg.GRPCAddr, "grpc-addr", getenv("LIVEAGENT_GATEWAY_GRPC_ADDR", ":50051"), "gRPC listen address")
-	flag.StringVar(&cfg.HTTPAddr, "http-addr", getenv("LIVEAGENT_GATEWAY_HTTP_ADDR", ":443"), "HTTP listen address")
+	flag.StringVar(&cfg.HTTPAddr, "http-addr", getenv("LIVEAGENT_GATEWAY_HTTP_ADDR", defaultHTTPAddr()), "HTTP listen address")
 	flag.StringVar(&cfg.TLSCert, "tls-cert", getenv("LIVEAGENT_GATEWAY_TLS_CERT", ""), "TLS certificate path")
 	flag.StringVar(&cfg.TLSKey, "tls-key", getenv("LIVEAGENT_GATEWAY_TLS_KEY", ""), "TLS private key path")
 	flag.DurationVar(&cfg.RequestTimeout, "request-timeout", getenvDuration("LIVEAGENT_GATEWAY_REQUEST_TIMEOUT", 2*time.Minute), "request timeout for non-streaming API calls")
@@ -64,6 +64,17 @@ func getenv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func defaultHTTPAddr() string {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		return ":443"
+	}
+	if strings.HasPrefix(port, ":") {
+		return port
+	}
+	return ":" + port
 }
 
 func getenvDuration(key string, fallback time.Duration) time.Duration {

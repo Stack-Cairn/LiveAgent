@@ -125,6 +125,8 @@ pub struct RemoteSettingsPayload {
     #[serde(default = "default_remote_grpc_port")]
     pub grpc_port: u16,
     #[serde(default)]
+    pub grpc_endpoint: String,
+    #[serde(default)]
     pub token: String,
     #[serde(default)]
     pub agent_id: String,
@@ -152,6 +154,7 @@ impl Default for RemoteSettingsPayload {
             enabled: false,
             gateway_url: String::new(),
             grpc_port: default_remote_grpc_port(),
+            grpc_endpoint: String::new(),
             token: String::new(),
             agent_id: String::new(),
             auto_reconnect: default_remote_auto_reconnect(),
@@ -171,11 +174,23 @@ pub(crate) fn normalize_remote_settings_payload(
         } else {
             payload.grpc_port
         },
+        grpc_endpoint: normalize_grpc_endpoint_text(&payload.grpc_endpoint),
         token: payload.token.trim().to_string(),
         agent_id: payload.agent_id.trim().to_string(),
         auto_reconnect: payload.auto_reconnect,
         heartbeat_interval: payload.heartbeat_interval.max(1),
     }
+}
+
+fn normalize_grpc_endpoint_text(input: &str) -> String {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.starts_with("http:") || trimmed.starts_with("https:") {
+        return normalize_base_url_text(trimmed);
+    }
+    trimmed.trim_end_matches('/').to_string()
 }
 
 fn normalize_base_url_text(input: &str) -> String {
@@ -1779,6 +1794,7 @@ mod tests {
             enabled: true,
             gateway_url: " https:/agent.cnweb.org/ ".to_string(),
             grpc_port: 443,
+            grpc_endpoint: " tcp.proxy.rlwy.net:12345/ ".to_string(),
             token: " agent-token-dev ".to_string(),
             agent_id: " mac-mini ".to_string(),
             auto_reconnect: true,
@@ -1786,6 +1802,7 @@ mod tests {
         });
 
         assert_eq!(normalized.gateway_url, "https://agent.cnweb.org");
+        assert_eq!(normalized.grpc_endpoint, "tcp.proxy.rlwy.net:12345");
         assert_eq!(normalized.token, "agent-token-dev");
         assert_eq!(normalized.agent_id, "mac-mini");
     }

@@ -70,6 +70,15 @@ function createDefaultMocks() {
   };
 }
 
+function createIconMock(specifier) {
+  if (specifier.endsWith("?raw")) {
+    return "<svg aria-hidden=\"true\"></svg>";
+  }
+  return function Icon(props) {
+    return { type: specifier, props: props ?? {} };
+  };
+}
+
 function hasExtension(filePath) {
   return path.extname(filePath).length > 0;
 }
@@ -124,6 +133,7 @@ export function createWebModuleLoader(options = {}) {
 
   function resolveMock(specifier, parentDir) {
     if (mocks.has(specifier)) return mocks.get(specifier);
+    if (specifier.startsWith("~icons/")) return createIconMock(specifier);
     if (specifier.startsWith(".") || path.isAbsolute(specifier) || specifier.startsWith("@/")) {
       const resolved = resolveLocal(specifier, parentDir);
       if (mocks.has(resolved)) return mocks.get(resolved);

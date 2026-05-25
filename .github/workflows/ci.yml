@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22.17.1
+
+jobs:
+  gateway:
+    name: Gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: crates/agent-gateway/go.mod
+          cache-dependency-path: crates/agent-gateway/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install protobuf toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+          curl -fsSL -o "$RUNNER_TEMP/protoc.zip" \
+            https://github.com/protocolbuffers/protobuf/releases/download/v34.0/protoc-34.0-linux-x86_64.zip
+          unzip -q "$RUNNER_TEMP/protoc.zip" -d "$RUNNER_TEMP/protoc"
+          echo "$RUNNER_TEMP/protoc/bin" >> "$GITHUB_PATH"
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Build embedded Gateway WebUI
+        working-directory: crates/agent-gateway/web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Check generated protobuf
+        run: |
+          make proto
+          git diff --exit-code -- crates/agent-gateway/internal/proto/v1
+
+      - name: Test gateway
+        working-directory: crates/agent-gateway
+        run: go test ./...
+
+  gateway-docker:
+    name: Gateway Docker Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          tags: liveagent-gateway:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test container
+        run: |
+          set -euo pipefail
+          docker run --rm -d \
+            --name liveagent-gateway-smoke \
+            -p 18080:8080 \
+            -e LIVEAGENT_GATEWAY_TOKEN=ci-token \
+            liveagent-gateway:ci
+          trap 'docker rm -f liveagent-gateway-smoke >/dev/null 2>&1 || true' EXIT
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz | grep -q '"ok":true'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs liveagent-gateway-smoke
+          exit 1
+
+  webui:
+    name: Gateway WebUI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install dependencies
+        working-directory: crates/agent-gateway/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Build WebUI
+        working-directory: crates/agent-gateway/web
+        run: pnpm build
+
+      - name: Test WebUI modules
+        working-directory: crates/agent-gateway
+        run: node --test test/webui/*.test.mjs
+
+  gui:
+    name: GUI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      - name: Install dependencies
+        working-directory: crates/agent-gui
+        run: pnpm install --frozen-lockfile
+
+      - name: Test frontend modules
+        working-directory: crates/agent-gui
+        run: pnpm test:frontend
+
+  tauri-rust:
+    name: Tauri Rust Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            protobuf-compiler \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/agent-gui/src-tauri
+
+      - name: Check Tauri backend tests
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests
+
+  whitespace:
+    name: Diff Hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: git diff --check

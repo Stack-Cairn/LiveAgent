@@ -243,10 +243,12 @@ test("web remote settings normalize single-slash http gateway URLs", () => {
   const remote = settings.normalizeRemoteSettings({
     enabled: true,
     gatewayUrl: " https:/gateway.example/ ",
+    grpcEndpoint: " https:/grpc.example/ ",
     token: " token ",
   });
 
   assert.equal(remote.gatewayUrl, "https://gateway.example");
+  assert.equal(remote.grpcEndpoint, "https://grpc.example");
   assert.equal(remote.token, "token");
 });
 

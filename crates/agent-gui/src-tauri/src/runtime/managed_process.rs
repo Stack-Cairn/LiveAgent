@@ -429,6 +429,26 @@ mod tests {
             .unwrap_or(false)
     }
 
+    fn wait_for_log_content(
+        registry: &ManagedProcessRegistry,
+        process_id: &str,
+        expected: &str,
+    ) -> ManagedProcessLogResponse {
+        let mut last_log = registry
+            .read_log(process_id.to_string(), Some(1024))
+            .expect("log should be readable");
+        for _ in 0..50 {
+            if last_log.content.contains(expected) {
+                return last_log;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+            last_log = registry
+                .read_log(process_id.to_string(), Some(1024))
+                .expect("log should be readable");
+        }
+        last_log
+    }
+
     #[cfg(unix)]
     #[test]
     fn managed_process_runs_logs_and_stops() {
@@ -450,17 +470,13 @@ mod tests {
             .expect("process should start");
         let process_id = started.process.id.clone();
 
-        std::thread::sleep(Duration::from_millis(100));
-
         let status = registry
             .status(Some(process_id.clone()))
             .expect("status should work");
         assert_eq!(status.processes.len(), 1);
         assert!(status.processes[0].running);
 
-        let log = registry
-            .read_log(process_id.clone(), Some(1024))
-            .expect("log should be readable");
+        let log = wait_for_log_content(&registry, &process_id, "ready");
         assert!(log.content.contains("ready"));
 
         let stopped = registry

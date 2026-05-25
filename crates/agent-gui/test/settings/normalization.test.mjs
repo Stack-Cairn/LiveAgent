@@ -653,6 +653,7 @@ test("mcp and remote settings normalize transport, selection, ports, and tokens"
     enabled: true,
     gatewayUrl: " http:/127.0.0.1:8787/ ",
     grpcPort: "0",
+    grpcEndpoint: " tcp.proxy.rlwy.net:12345/ ",
     token: " secret ",
     autoReconnect: false,
     heartbeatInterval: "15.8",
@@ -660,6 +661,7 @@ test("mcp and remote settings normalize transport, selection, ports, and tokens"
 
   assert.equal(remote.gatewayUrl, "http://127.0.0.1:8787");
   assert.equal(remote.grpcPort, 50051);
+  assert.equal(remote.grpcEndpoint, "tcp.proxy.rlwy.net:12345");
   assert.equal(remote.token, "secret");
   assert.equal(remote.autoReconnect, false);
   assert.equal(remote.heartbeatInterval, 15);

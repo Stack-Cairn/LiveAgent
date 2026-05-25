@@ -197,6 +197,7 @@ export type RemoteSettings = {
   enabled: boolean;
   gatewayUrl: string;
   grpcPort: number;
+  grpcEndpoint: string;
   token: string;
   agentId: string;
   autoReconnect: boolean;
@@ -765,12 +766,20 @@ function normalizePositiveInteger(input: unknown, fallback: number): number {
   return value > 0 ? value : fallback;
 }
 
+function normalizeGrpcEndpoint(input: unknown): string {
+  const value = normalizeOptionalText(input);
+  if (!value) return "";
+  if (/^https?:/i.test(value)) return normalizeBaseUrl(value);
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
 export function normalizeRemoteSettings(input: unknown): RemoteSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     enabled: obj.enabled === true,
     gatewayUrl: normalizeBaseUrl(typeof obj.gatewayUrl === "string" ? obj.gatewayUrl : ""),
     grpcPort: normalizePositiveInteger(obj.grpcPort, 50051),
+    grpcEndpoint: normalizeGrpcEndpoint(obj.grpcEndpoint),
     token: normalizeApiKey(typeof obj.token === "string" ? obj.token : ""),
     agentId: normalizeOptionalText(obj.agentId),
     autoReconnect: obj.autoReconnect !== false,
@@ -1191,6 +1200,7 @@ export function getDefaultSettings(): AppSettings {
       enabled: false,
       gatewayUrl: "",
       grpcPort: 50051,
+      grpcEndpoint: "",
       token: "",
       agentId: "",
       autoReconnect: true,

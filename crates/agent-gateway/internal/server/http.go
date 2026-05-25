@@ -22,6 +22,7 @@ import (
 
 func NewHTTPServer(cfg *config.Config, sm *session.Manager) http.Handler {
 	rootMux := http.NewServeMux()
+	rootMux.HandleFunc("GET /healthz", handler.Health())
 	rootMux.Handle("/ws", NewWebSocketServer(cfg, sm))
 	rootMux.HandleFunc("GET /image-proxy", handler.ImageProxy(cfg.RequestTimeout))
 	rootMux.HandleFunc("GET /api/public/history-shares/{token}", publicHistoryShare(cfg, sm))

@@ -104,6 +104,14 @@ function updateRemoteSettings(
 }
 
 function buildGrpcEndpoint(settings: AppSettings["remote"]) {
+  const explicitEndpoint = settings.grpcEndpoint.trim();
+  if (explicitEndpoint) {
+    if (/^https?:\/\//i.test(explicitEndpoint)) {
+      return explicitEndpoint.replace(/\/$/, "");
+    }
+    return `http://${explicitEndpoint.replace(/\/$/, "")}`;
+  }
+
   const gatewayUrl = settings.gatewayUrl.trim();
   if (!gatewayUrl) return "";
 
@@ -263,6 +271,26 @@ export function RemoteSection(props: SettingsSectionProps) {
           <p className="text-[11px] leading-relaxed text-muted-foreground/70">
             {t("settings.remoteGatewayUrlHint")}
           </p>
+          <div className="space-y-1.5 pt-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Globe className="h-3 w-3" />
+              {t("settings.remoteGrpcEndpoint")}
+            </label>
+            <Input
+              type="text"
+              value={settings.remote.grpcEndpoint}
+              onChange={(e) =>
+                updateRemoteSettings(setSettings, {
+                  grpcEndpoint: e.target.value,
+                })
+              }
+              placeholder="http://tcp.proxy.rlwy.net:12345"
+              className="font-mono text-[13px]"
+            />
+            <p className="text-[11px] leading-relaxed text-muted-foreground/70">
+              {t("settings.remoteGrpcEndpointHint")}
+            </p>
+          </div>
           {grpcEndpoint ? (
             <div className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
               <Globe className="h-3.5 w-3.5 shrink-0" />

@@ -40,6 +40,23 @@ func TestAPIRoutesRequireBearerToken(t *testing.T) {
 	}
 }
 
+func TestHealthRouteIsPublic(t *testing.T) {
+	t.Parallel()
+
+	handler := newHTTPTestHandler(session.NewManager())
+
+	req := httptest.NewRequest(http.MethodGet, "http://gateway.test/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Fatalf("body = %q, want health payload", rec.Body.String())
+	}
+}
+
 func TestStatusRouteReturnsAuthenticatedSession(t *testing.T) {
 	t.Parallel()
 

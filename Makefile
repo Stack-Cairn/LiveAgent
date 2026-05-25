@@ -19,14 +19,17 @@ DESKTOP_LINUX_TARGET ?= x86_64-unknown-linux-gnu
 DESKTOP_LINUX_BUNDLES ?= appimage deb rpm
 DESKTOP_MACOS_APP_NAME ?= LiveAgent
 DESKTOP_MACOS_NOTARY_PROFILE ?= liveagent-notary
+DESKTOP_MACOS_TAURI_CONFIG ?= src-tauri/tauri.macos.conf.json
+DESKTOP_WINDOWS_TAURI_CONFIG ?= src-tauri/tauri.windows.conf.json
 
 DEV_GATEWAY_TOKEN ?= dev-token
 DEV_GATEWAY_HTTP_ADDR ?= :8080
 DEV_GATEWAY_GRPC_ADDR ?= :50051
+GATEWAY_DOCKER_IMAGE ?= liveagent-gateway:local
 
 .PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux help
 .PHONY: dev-gateway dev-webui
-.PHONY: proto webui gateway-build build-linux build-linux-amd build-linux-arm
+.PHONY: proto webui gateway-build gateway-docker-build gateway-docker-run gateway-docker-smoke build-linux build-linux-amd build-linux-arm
 .PHONY: clean check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
 
 all: build gateway-build
@@ -39,10 +42,10 @@ build:
 	pnpm --dir $(AGENT_GUI_DIR) tauri build
 
 desktop-build-macos: check-rust-target-$(DESKTOP_MACOS_TARGET)
-	pnpm --dir $(AGENT_GUI_DIR) tauri build --target $(DESKTOP_MACOS_TARGET)
+	pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_MACOS_TAURI_CONFIG) --target $(DESKTOP_MACOS_TARGET)
 
 desktop-build-macos-release: check-rust-target-$(DESKTOP_MACOS_TARGET) check-macos-signing-identity check-macos-notary-profile
-	env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_ISSUER -u APPLE_API_KEY -u APPLE_API_KEY_PATH APPLE_SIGNING_IDENTITY="$(APPLE_SIGNING_IDENTITY)" pnpm --dir $(AGENT_GUI_DIR) tauri build --target $(DESKTOP_MACOS_TARGET)
+	env -u APPLE_ID -u APPLE_PASSWORD -u APPLE_API_ISSUER -u APPLE_API_KEY -u APPLE_API_KEY_PATH APPLE_SIGNING_IDENTITY="$(APPLE_SIGNING_IDENTITY)" pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_MACOS_TAURI_CONFIG) --target $(DESKTOP_MACOS_TARGET)
 	@set -e; \
 	app_path="target/$(DESKTOP_MACOS_TARGET)/release/bundle/macos/$(DESKTOP_MACOS_APP_NAME).app"; \
 	dmg_path="$$(find "target/$(DESKTOP_MACOS_TARGET)/release/bundle/dmg" -maxdepth 1 -name '$(DESKTOP_MACOS_APP_NAME)_*.dmg' -print -quit)"; \
@@ -58,13 +61,13 @@ desktop-build-macos-release: check-rust-target-$(DESKTOP_MACOS_TARGET) check-mac
 	echo "macOS release dmg is ready: $$dmg_path"
 
 desktop-build-macos-intel: check-rust-target-$(DESKTOP_MACOS_INTEL_TARGET)
-	pnpm --dir $(AGENT_GUI_DIR) tauri build --target $(DESKTOP_MACOS_INTEL_TARGET)
+	pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_MACOS_TAURI_CONFIG) --target $(DESKTOP_MACOS_INTEL_TARGET)
 
 desktop-build-macos-m: check-rust-target-$(DESKTOP_MACOS_M_TARGET)
-	pnpm --dir $(AGENT_GUI_DIR) tauri build --target $(DESKTOP_MACOS_M_TARGET)
+	pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_MACOS_TAURI_CONFIG) --target $(DESKTOP_MACOS_M_TARGET)
 
 desktop-build-windows: check-rust-target-$(DESKTOP_WINDOWS_TARGET)
-	pnpm --dir $(AGENT_GUI_DIR) tauri build --target $(DESKTOP_WINDOWS_TARGET)
+	pnpm --dir $(AGENT_GUI_DIR) tauri build --config $(DESKTOP_WINDOWS_TAURI_CONFIG) --target $(DESKTOP_WINDOWS_TARGET)
 
 desktop-build-linux: check-rust-target-$(DESKTOP_LINUX_TARGET)
 	pnpm --dir $(AGENT_GUI_DIR) tauri build --target $(DESKTOP_LINUX_TARGET) --bundles $(DESKTOP_LINUX_BUNDLES)
@@ -95,6 +98,28 @@ webui:
 
 gateway-build: proto webui
 	CGO_ENABLED=0 go -C $(AGENT_GATEWAY_DIR) build -o bin/liveagent-gateway ./cmd/gateway
+
+gateway-docker-build:
+	docker build -t $(GATEWAY_DOCKER_IMAGE) .
+
+gateway-docker-run:
+	docker run --rm -p 8080:8080 -p 50051:50051 -e LIVEAGENT_GATEWAY_TOKEN=$(DEV_GATEWAY_TOKEN) $(GATEWAY_DOCKER_IMAGE)
+
+gateway-docker-smoke: gateway-docker-build
+	@set -e; \
+	name="liveagent-gateway-smoke"; \
+	docker rm -f "$$name" >/dev/null 2>&1 || true; \
+	docker run --rm -d --name "$$name" -p 18080:8080 -e LIVEAGENT_GATEWAY_TOKEN=$(DEV_GATEWAY_TOKEN) $(GATEWAY_DOCKER_IMAGE) >/dev/null; \
+	trap 'docker rm -f "$$name" >/dev/null 2>&1 || true' EXIT; \
+	for _ in $$(seq 1 30); do \
+		if curl -fsS http://127.0.0.1:18080/healthz | grep -q '"ok":true'; then \
+			echo "Gateway Docker smoke test passed: http://127.0.0.1:18080/healthz"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	docker logs "$$name"; \
+	exit 1
 
 build-linux: proto webui
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go -C $(AGENT_GATEWAY_DIR) build -o bin/liveagent-gateway-linux-amd64 ./cmd/gateway
@@ -173,6 +198,9 @@ help:
 	@printf "  %-34s %s\n" "make proto" "生成 agent-gateway protobuf 代码"
 	@printf "  %-34s %s\n" "make webui" "构建 agent-gateway Web UI"
 	@printf "  %-34s %s\n" "make gateway-build" "构建 agent-gateway 本地二进制"
+	@printf "  %-34s %s\n" "make gateway-docker-build" "构建 agent-gateway Docker 镜像"
+	@printf "  %-34s %s\n" "make gateway-docker-run" "本地运行 agent-gateway Docker 镜像"
+	@printf "  %-34s %s\n" "make gateway-docker-smoke" "构建并健康检查 agent-gateway Docker 镜像"
 	@printf "  %-34s %s\n" "make build-linux" "构建 agent-gateway Linux amd64 二进制"
 	@printf "  %-34s %s\n" "make build-linux-arm" "构建 agent-gateway Linux arm64 二进制"
 	@printf "  %-34s %s\n" "make build-windows" "构建 agent-gateway Windows amd64 二进制"
