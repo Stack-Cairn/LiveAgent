@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, BookOpen, Brain, Clock3, Cloud, Cpu, Settings2, Zap } from "../components/icons";
+import { ArrowLeft, BookOpen, Brain, Clock3, Cloud, Cpu, Info, Settings2, Zap } from "../components/icons";
 
 import { useLocale } from "../i18n";
 import { AgentsSection } from "./settings/AgentsSection";
+import { AboutSection } from "./settings/AboutSection";
 import { CronSection } from "./settings/CronSection";
 import { HooksSection } from "./settings/HooksSection";
 import { MemoryPanel } from "./settings/MemoryPanel";
@@ -102,6 +103,10 @@ const NAV_ITEMS_STATIC: Array<{ id: SectionId; icon: ReactNode }> = [
     id: "remote",
     icon: <Cloud className="h-4 w-4" />,
   },
+  {
+    id: "about",
+    icon: <Info className="h-4 w-4" />,
+  },
 ];
 
 export function SettingsPage(props: SettingsPageProps) {
@@ -124,6 +129,7 @@ export function SettingsPage(props: SettingsPageProps) {
     hooks: t("settings.navHooks"),
     cron: t("settings.navCron"),
     remote: t("settings.navRemote"),
+    about: t("settings.navAbout"),
   };
 
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
@@ -170,6 +176,8 @@ export function SettingsPage(props: SettingsPageProps) {
             setSettings={setSettings}
           />
         );
+      case "about":
+        return <AboutSection settings={settings} setSettings={setSettings} />;
       default: {
         const unreachable: never = section;
         return unreachable;

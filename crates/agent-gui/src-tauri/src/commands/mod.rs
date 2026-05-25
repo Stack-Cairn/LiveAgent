@@ -12,3 +12,4 @@ pub mod shell;
 pub mod subagent_history;
 pub mod system;
 pub mod system_tools;
+pub mod update;

@@ -99,6 +99,8 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_save_cron,
             commands::settings::settings_save_remote,
             commands::settings::settings_save_memory,
+            commands::update::app_update_check,
+            commands::update::app_update_install,
             // Hooks
             commands::hook::hook_run_script,
             commands::hook::hook_run_http_requests,
@@ -263,6 +265,7 @@ pub fn run() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_mcp_bridge::init())
         .manage(Arc::new(commands::mcp::McpRuntimeManager::default()))
         .manage(Arc::clone(&memory_store))

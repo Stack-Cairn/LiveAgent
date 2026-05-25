@@ -8,6 +8,7 @@ import {
   normalizeChatRuntimeControls,
   type ChatRuntimeControls,
   normalizeSkillsSettings,
+  normalizeUpdateSettings,
   normalizeTheme,
   type AppSettings,
   type SelectedModel,
@@ -34,6 +35,7 @@ type LocalUiSettings = {
   skills?: unknown;
   chatRuntimeControls?: unknown;
   customSettings?: unknown;
+  updates?: unknown;
   selectedModel?: unknown;
   theme?: unknown;
   locale?: unknown;
@@ -49,6 +51,7 @@ function readLocalUiSettings(): {
   skills: SkillsSettings;
   chatRuntimeControls: ChatRuntimeControls;
   customSettings: AppSettings["customSettings"];
+  updates: AppSettings["updates"];
   selectedModel?: SelectedModel;
   theme: Theme;
   locale: Locale;
@@ -69,6 +72,7 @@ function readLocalUiSettings(): {
         skills: defaults.skills,
         chatRuntimeControls: defaults.chatRuntimeControls,
         customSettings: defaults.customSettings,
+        updates: defaults.updates,
         selectedModel: defaults.selectedModel,
         theme: defaults.theme,
         locale: defaults.locale,
@@ -84,6 +88,7 @@ function readLocalUiSettings(): {
       customSettings: normalizeLocalCustomSettings(
         parsed?.customSettings ?? defaults.customSettings,
       ),
+      updates: normalizeUpdateSettings(parsed?.updates ?? defaults.updates),
       selectedModel: normalizeSelectedModel(parsed?.selectedModel),
       theme: normalizeTheme(parsed?.theme ?? defaults.theme),
       locale: normalizeLocale(parsed?.locale ?? defaults.locale),
@@ -93,6 +98,7 @@ function readLocalUiSettings(): {
       skills: defaults.skills,
       chatRuntimeControls: defaults.chatRuntimeControls,
       customSettings: defaults.customSettings,
+      updates: defaults.updates,
       selectedModel: defaults.selectedModel,
       theme: defaults.theme,
       locale: defaults.locale,
@@ -100,11 +106,12 @@ function readLocalUiSettings(): {
   }
 }
 
-function writeLocalUiSettings(settings: Pick<AppSettings, "skills" | "chatRuntimeControls" | "customSettings" | "selectedModel" | "theme" | "locale">) {
+function writeLocalUiSettings(settings: Pick<AppSettings, "skills" | "chatRuntimeControls" | "customSettings" | "updates" | "selectedModel" | "theme" | "locale">) {
   const payload = {
     skills: settings.skills,
     chatRuntimeControls: settings.chatRuntimeControls,
     customSettings: settings.customSettings,
+    updates: settings.updates,
     selectedModel: settings.selectedModel,
     theme: settings.theme,
     locale: settings.locale,
@@ -163,6 +170,7 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     skills: localUi.skills,
     chatRuntimeControls: localUi.chatRuntimeControls,
     customSettings: localUi.customSettings,
+    updates: localUi.updates,
     selectedModel: localUi.selectedModel,
     theme: localUi.theme,
     locale: localUi.locale,
@@ -246,6 +254,7 @@ export async function persistSettings(prev: AppSettings, next: AppSettings): Pro
     hasChanged(prev.skills, next.skills) ||
     hasChanged(prev.chatRuntimeControls, next.chatRuntimeControls) ||
     hasChanged(prev.customSettings, next.customSettings) ||
+    hasChanged(prev.updates, next.updates) ||
     hasChanged(prev.selectedModel ?? null, next.selectedModel ?? null) ||
     hasChanged(prev.theme, next.theme) ||
     hasChanged(prev.locale, next.locale)
@@ -254,6 +263,7 @@ export async function persistSettings(prev: AppSettings, next: AppSettings): Pro
       skills: next.skills,
       chatRuntimeControls: next.chatRuntimeControls,
       customSettings: next.customSettings,
+      updates: next.updates,
       selectedModel: next.selectedModel,
       theme: next.theme,
       locale: next.locale,

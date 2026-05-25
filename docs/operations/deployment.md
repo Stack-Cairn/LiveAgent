@@ -77,6 +77,9 @@ macOS signed/notarized release 需要这些 secrets：
 | `APPLE_ID` | Apple Developer 账号邮箱。 |
 | `APPLE_TEAM_ID` | `UU94JSVAA9`。 |
 | `APPLE_APP_SPECIFIC_PASSWORD` | Apple app-specific password。 |
+| `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater 私钥，用于生成 release 更新包签名。 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Tauri updater 私钥密码；无密码时可为空。 |
+| `TAURI_UPDATER_PUBLIC_KEY` | Tauri updater 公钥，会编译进桌面端用于校验更新包。 |
 
 脚本化写入 GitHub 配置：
 
@@ -109,9 +112,11 @@ Keychain 中必须是带私钥的 `Developer ID Application` identity。若 macO
 
 | 平台 | Runner | 产物 |
 |---|---|---|
-| macOS Intel | `macos-15-intel` | `LiveAgent-vX.Y.Z-macOS-x64.dmg`，Developer ID 签名、公证、staple。 |
-| macOS Apple Silicon | `macos-14` | `LiveAgent-vX.Y.Z-macOS-aarch64.dmg`，Developer ID 签名、公证、staple。 |
-| Windows x64 | `windows-latest` | `LiveAgent-vX.Y.Z-Windows-x64.msi` 与 `LiveAgent-vX.Y.Z-Windows-x64-Setup.exe`。 |
-| Linux x64 | `ubuntu-latest` | `LiveAgent-vX.Y.Z-Linux-x86_64.AppImage`、`.deb`、`.rpm`。 |
+| macOS Intel | `macos-15-intel` | `LiveAgent-vX.Y.Z-macOS-x64.dmg`，以及 updater 使用的 `.app.tar.gz` / `.sig`。 |
+| macOS Apple Silicon | `macos-14` | `LiveAgent-vX.Y.Z-macOS-aarch64.dmg`，以及 updater 使用的 `.app.tar.gz` / `.sig`。 |
+| Windows x64 | `windows-latest` | `LiveAgent-vX.Y.Z-Windows-x64.msi`、`LiveAgent-vX.Y.Z-Windows-x64-Setup.exe`，以及 updater 使用的 `.zip` / `.sig`。 |
+| Linux x64 | `ubuntu-latest` | `LiveAgent-vX.Y.Z-Linux-x86_64.AppImage`、`.deb`、`.rpm`，以及 updater 使用的 `.tar.gz` / `.sig`。 |
+
+发布 job 会在上传平台产物后生成并上传 `latest.json`。桌面端「设置 -> 关于」会根据用户是否允许预发布，从 GitHub Releases 中筛选带 `latest.json` 的正式 / 预发布版本；未允许预发布时只检查正式 Release。
 
 Windows 当前没有代码签名 secret，release workflow 会先自动发布 unsigned 包。接入 Windows `.p12/.pfx` 或 Trusted Signing 后再补签名步骤。

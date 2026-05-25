@@ -141,6 +141,10 @@ export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
 };
 
+export type UpdateSettings = {
+  includePrereleases: boolean;
+};
+
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
@@ -218,6 +222,7 @@ export type AppSettings = {
   remote: RemoteSettings;
   memory: MemorySettings;
   customSettings: CustomSettings;
+  updates: UpdateSettings;
   skills: SkillsSettings;
   chatRuntimeControls: ChatRuntimeControls;
   selectedModel?: SelectedModel;
@@ -1198,6 +1203,13 @@ export function normalizeCustomSettings(
   };
 }
 
+export function normalizeUpdateSettings(input: unknown): UpdateSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return {
+    includePrereleases: obj.includePrereleases === true,
+  };
+}
+
 export function getDefaultSettings(): AppSettings {
   const customProviders = getBuiltinCustomProviders();
   return {
@@ -1226,6 +1238,7 @@ export function getDefaultSettings(): AppSettings {
     },
     memory: normalizeMemorySettings({}, customProviders),
     customSettings: normalizeCustomSettings({}, customProviders),
+    updates: normalizeUpdateSettings({}),
     skills: {
       enabled: true,
       selected: mergeAlwaysEnabledSkillNames([]),
@@ -1261,6 +1274,7 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
       obj.customSettings ?? defaults.customSettings,
       customProviders,
     ),
+    updates: normalizeUpdateSettings(obj.updates ?? defaults.updates),
     skills: normalizeSkillsSettings(obj.skills ?? defaults.skills),
     chatRuntimeControls: normalizeChatRuntimeControls(
       obj.chatRuntimeControls ?? defaults.chatRuntimeControls,
@@ -1352,6 +1366,19 @@ export function updateCustomSettings(
     ...prev,
     customSettings: {
       ...prev.customSettings,
+      ...patch,
+    },
+  });
+}
+
+export function updateUpdateSettings(
+  prev: AppSettings,
+  patch: Partial<UpdateSettings>,
+): AppSettings {
+  return normalizeSettings({
+    ...prev,
+    updates: {
+      ...prev.updates,
       ...patch,
     },
   });

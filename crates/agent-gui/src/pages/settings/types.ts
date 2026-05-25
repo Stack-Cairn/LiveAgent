@@ -10,7 +10,8 @@ export type SectionId =
   | "memory"
   | "hooks"
   | "cron"
-  | "remote";
+  | "remote"
+  | "about";
 
 export type SettingsPageProps = {
   settings: AppSettings;

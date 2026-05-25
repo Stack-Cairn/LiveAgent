@@ -100,6 +100,10 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           DESKTOP_MACOS_TARGET: ${{ matrix.target }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          LIVEAGENT_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
         run: make desktop-build-macos-release
 
       - name: Stage macOS artifact
@@ -109,13 +113,18 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           dmg_path="$(find "target/${{ matrix.target }}/release/bundle/dmg" -maxdepth 1 -name 'LiveAgent_*.dmg' -print -quit)"
+          updater_path="$(find "target/${{ matrix.target }}/release/bundle/macos" -maxdepth 1 -name '*.app.tar.gz' -print -quit)"
           test -n "$dmg_path"
+          test -n "$updater_path"
+          test -f "$updater_path.sig"
           cp "$dmg_path" "dist/LiveAgent-${RELEASE_TAG}-macOS-${{ matrix.suffix }}.dmg"
+          cp "$updater_path" "dist/LiveAgent-${RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz"
+          cp "$updater_path.sig" "dist/LiveAgent-${RELEASE_TAG}-macOS-${{ matrix.suffix }}.app.tar.gz.sig"
 
       - uses: actions/upload-artifact@v7
         with:
           name: liveagent-macos-${{ matrix.suffix }}
-          path: dist/*.dmg
+          path: dist/*
           if-no-files-found: error
 
   windows:
@@ -150,7 +159,12 @@ jobs:
 
       - name: Build Windows bundles
         working-directory: crates/agent-gui
-        run: pnpm tauri build --config src-tauri/tauri.windows.conf.json --target x86_64-pc-windows-msvc
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          LIVEAGENT_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
+        run: pnpm tauri build --config src-tauri/tauri.windows.release.conf.json --target x86_64-pc-windows-msvc
 
       - name: Stage Windows artifacts
         shell: bash
@@ -161,10 +175,21 @@ jobs:
           mkdir -p dist
           msi_path="$(find target crates/agent-gui/src-tauri/target -type f -name '*.msi' -path '*bundle*' -print -quit 2>/dev/null || true)"
           exe_path="$(find target crates/agent-gui/src-tauri/target -type f -name '*.exe' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          nsis_zip_path="$(find target crates/agent-gui/src-tauri/target -type f -name '*.exe.zip' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          msi_zip_path="$(find target crates/agent-gui/src-tauri/target -type f -name '*.msi.zip' -path '*bundle*' -print -quit 2>/dev/null || true)"
           test -n "$msi_path"
           test -n "$exe_path"
+          test -n "$nsis_zip_path"
+          test -f "$nsis_zip_path.sig"
           cp "$msi_path" "dist/LiveAgent-${RELEASE_TAG}-Windows-x64.msi"
           cp "$exe_path" "dist/LiveAgent-${RELEASE_TAG}-Windows-x64-Setup.exe"
+          cp "$nsis_zip_path" "dist/LiveAgent-${RELEASE_TAG}-Windows-x64-nsis.zip"
+          cp "$nsis_zip_path.sig" "dist/LiveAgent-${RELEASE_TAG}-Windows-x64-nsis.zip.sig"
+          if [ -n "$msi_zip_path" ]; then
+            test -f "$msi_zip_path.sig"
+            cp "$msi_zip_path" "dist/LiveAgent-${RELEASE_TAG}-Windows-x64-msi.zip"
+            cp "$msi_zip_path.sig" "dist/LiveAgent-${RELEASE_TAG}-Windows-x64-msi.zip.sig"
+          fi
           test "$(find dist -type f | wc -l)" -gt 0
 
       - uses: actions/upload-artifact@v7
@@ -216,7 +241,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build Linux bundles
-        run: make desktop-build-linux
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          LIVEAGENT_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
+        run: pnpm --dir crates/agent-gui tauri build --config src-tauri/tauri.linux.release.conf.json --target x86_64-unknown-linux-gnu --bundles appimage deb rpm
 
       - name: Stage Linux artifacts
         env:
@@ -227,12 +257,27 @@ jobs:
           appimage_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.AppImage' -path '*bundle*' -print -quit 2>/dev/null || true)"
           deb_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.deb' -path '*bundle*' -print -quit 2>/dev/null || true)"
           rpm_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.rpm' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          appimage_updater_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.AppImage.tar.gz' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          deb_updater_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.deb.tar.gz' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          rpm_updater_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.rpm.tar.gz' -path '*bundle*' -print -quit 2>/dev/null || true)"
           test -n "$appimage_path"
           test -n "$deb_path"
           test -n "$rpm_path"
+          test -n "$appimage_updater_path"
+          test -n "$deb_updater_path"
+          test -n "$rpm_updater_path"
+          test -f "$appimage_updater_path.sig"
+          test -f "$deb_updater_path.sig"
+          test -f "$rpm_updater_path.sig"
           cp "$appimage_path" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.AppImage"
           cp "$deb_path" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.deb"
           cp "$rpm_path" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.rpm"
+          cp "$appimage_updater_path" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.AppImage.tar.gz"
+          cp "$appimage_updater_path.sig" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.AppImage.tar.gz.sig"
+          cp "$deb_updater_path" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.deb.tar.gz"
+          cp "$deb_updater_path.sig" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.deb.tar.gz.sig"
+          cp "$rpm_updater_path" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.rpm.tar.gz"
+          cp "$rpm_updater_path.sig" "dist/LiveAgent-${RELEASE_TAG}-Linux-x86_64.rpm.tar.gz.sig"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -248,6 +293,8 @@ jobs:
       - windows
       - linux
     steps:
+      - uses: actions/checkout@v6
+
       - uses: actions/download-artifact@v8
         with:
           path: release-artifacts
@@ -260,6 +307,12 @@ jobs:
           RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
+          prerelease_args=()
+          if [[ "$RELEASE_TAG" =~ -(alpha|beta|rc|pre|preview|next) ]]; then
+            prerelease_args+=(--prerelease)
+          fi
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
-            gh release create "$RELEASE_TAG" --title "LiveAgent $RELEASE_TAG" --notes "Automated LiveAgent release."
+            gh release create "$RELEASE_TAG" "${prerelease_args[@]}" --title "LiveAgent $RELEASE_TAG" --notes "Automated LiveAgent release."
           gh release upload "$RELEASE_TAG" release-artifacts/* --clobber
+          node scripts/release/create-tauri-updater-manifest.mjs release-artifacts release-artifacts/latest.json
+          gh release upload "$RELEASE_TAG" release-artifacts/latest.json --clobber
