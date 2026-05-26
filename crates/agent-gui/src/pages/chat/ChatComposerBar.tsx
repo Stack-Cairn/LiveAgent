@@ -47,7 +47,7 @@ function RuntimeControlTooltip(props: { label: string; children: ReactNode }) {
       {props.children}
       <span
         aria-hidden
-        className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/60 bg-popover px-2 py-1 text-[11px] font-medium text-popover-foreground opacity-0 shadow-md transition-opacity duration-150 group-focus-within/runtime-tooltip:opacity-100 group-hover/runtime-tooltip:opacity-100"
+        className="pointer-events-none invisible absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/60 bg-popover px-2 py-1 text-[11px] font-medium text-popover-foreground opacity-0 shadow-md transition-[opacity,visibility] duration-0 group-focus-within/runtime-tooltip:visible group-focus-within/runtime-tooltip:opacity-100 group-focus-within/runtime-tooltip:delay-150 group-focus-within/runtime-tooltip:duration-150 group-hover/runtime-tooltip:visible group-hover/runtime-tooltip:opacity-100 group-hover/runtime-tooltip:delay-150 group-hover/runtime-tooltip:duration-150"
       >
         {props.label}
       </span>
