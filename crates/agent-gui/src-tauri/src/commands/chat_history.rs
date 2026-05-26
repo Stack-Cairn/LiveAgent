@@ -3120,40 +3120,61 @@ pub(crate) async fn chat_history_share_resolve_inner(
     .map_err(|e| format!("chat_history_share_resolve join 失败：{e}"))?
 }
 
+fn delete_chat_history_sync(
+    conn: &mut Connection,
+    id: &str,
+) -> Result<subagent_history::SubagentRunPruneResult, String> {
+    let chat_id = id.trim().to_string();
+    if chat_id.is_empty() {
+        return Err("历史对话 id 不能为空".to_string());
+    }
+
+    let existing = conn
+        .query_row(
+            "SELECT id FROM chatHistory WHERE id = ?1",
+            params![chat_id.as_str()],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| format!("检查历史对话是否存在失败：{e}"))?;
+
+    if existing.is_none() {
+        return Err("未找到对应的历史对话".to_string());
+    }
+
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("开启删除历史事务失败：{e}"))?;
+    let subagent_prune_result =
+        subagent_history::delete_subagent_history_for_parent_conversation(&tx, chat_id.as_str())?;
+    delete_chat_history_conversation_fts(&tx, chat_id.as_str())?;
+    tx.execute(
+        "DELETE FROM chatHistorySegment WHERE conversation_id = ?1",
+        params![chat_id.as_str()],
+    )
+    .map_err(|e| format!("删除历史分段失败：{e}"))?;
+    tx.execute(
+        "DELETE FROM chatHistory WHERE id = ?1",
+        params![chat_id.as_str()],
+    )
+    .map_err(|e| format!("删除历史对话失败：{e}"))?;
+    tx.commit()
+        .map_err(|e| format!("提交删除历史事务失败：{e}"))?;
+    Ok(subagent_prune_result)
+}
+
 pub(crate) async fn chat_history_delete_inner(id: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let chat_id = id.trim().to_string();
-        if chat_id.is_empty() {
-            return Err("历史对话 id 不能为空".to_string());
-        }
-
         let mut conn = open_db()?;
-        let existing = conn
-            .query_row(
-                "SELECT id FROM chatHistory WHERE id = ?1",
-                params![chat_id],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(|e| format!("检查历史对话是否存在失败：{e}"))?;
-
-        if existing.is_none() {
-            return Err("未找到对应的历史对话".to_string());
+        let mut subagent_prune_result = delete_chat_history_sync(&mut conn, &chat_id)?;
+        subagent_history::cleanup_pruned_worktrees(&mut subagent_prune_result);
+        if !subagent_prune_result.worktree_cleanup_errors.is_empty() {
+            eprintln!(
+                "Failed to cleanup some deleted conversation subagent worktrees: {}",
+                subagent_prune_result.worktree_cleanup_errors.join("; ")
+            );
         }
-
-        let tx = conn
-            .transaction()
-            .map_err(|e| format!("开启删除历史事务失败：{e}"))?;
-        delete_chat_history_conversation_fts(&tx, id.trim())?;
-        tx.execute(
-            "DELETE FROM chatHistorySegment WHERE conversation_id = ?1",
-            params![id.trim()],
-        )
-        .map_err(|e| format!("删除历史分段失败：{e}"))?;
-        tx.execute("DELETE FROM chatHistory WHERE id = ?1", params![id.trim()])
-            .map_err(|e| format!("删除历史对话失败：{e}"))?;
-        tx.commit()
-            .map_err(|e| format!("提交删除历史事务失败：{e}"))?;
         Ok(())
     })
     .await
@@ -3740,6 +3761,170 @@ mod tests {
             })
             .expect("count share rows");
         assert_eq!(share_count, 0);
+    }
+
+    #[test]
+    fn delete_conversation_removes_subagent_history() {
+        let mut conn = open_test_db().expect("open test db");
+        let conversation = sample_conversation();
+        upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+        upsert_single_segment(
+            &conn,
+            "conv-1",
+            &ChatHistorySegmentInput {
+                segment_index: 0,
+                segment_id: "segment-0".to_string(),
+                summary_json: None,
+                messages_json: r#"[
+                  {"id":"m-user","role":"user","content":"start","timestamp":1700000000001},
+                  {"id":"m-agent","role":"toolResult","toolName":"Agent","toolCallId":"call-delete","content":"done","timestamp":1700000000002}
+                ]"#
+                .to_string(),
+                message_count: 2,
+                start_message_id: Some("m-user".to_string()),
+                end_message_id: Some("m-agent".to_string()),
+                created_at: 1_700_000_000_000,
+                updated_at: 1_700_000_000_002,
+            },
+        )
+        .expect("upsert segment");
+        insert_subagent_run_for_test(&conn, "run-delete", "call-delete", 0);
+        conn.execute(
+            "
+            INSERT INTO subagentRunSegment (
+                run_id,
+                segment_index,
+                segment_id,
+                messages_json,
+                message_count,
+                created_at,
+                updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ",
+            params![
+                "run-delete",
+                0,
+                "subagent-segment-0",
+                "[]",
+                0,
+                1_700_000_000_100_i64,
+                1_700_000_000_200_i64,
+            ],
+        )
+        .expect("insert subagent segment");
+        conn.execute(
+            "
+            INSERT INTO subagentRunEvent (
+                run_id,
+                event_type,
+                is_error,
+                created_at
+            ) VALUES (?1, ?2, ?3, ?4)
+            ",
+            params!["run-delete", "turn_start", 0, 1_700_000_000_200_i64],
+        )
+        .expect("insert subagent event");
+        conn.execute(
+            "
+            INSERT INTO subagentMessageBusEntry (
+                parent_conversation_id,
+                seq,
+                sender_agent_id,
+                recipient_agent_id,
+                channel,
+                body_markdown,
+                source_run_id,
+                source_tool_call_id,
+                created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            ",
+            params![
+                "conv-1",
+                1_i64,
+                "agent-0",
+                "parent",
+                "direct",
+                "message with run",
+                "run-delete",
+                "call-send-delete",
+                1_700_000_000_300_i64,
+            ],
+        )
+        .expect("insert run-scoped message");
+        conn.execute(
+            "
+            INSERT INTO subagentMessageBusEntry (
+                parent_conversation_id,
+                seq,
+                sender_agent_id,
+                recipient_agent_id,
+                channel,
+                body_markdown,
+                created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ",
+            params![
+                "conv-1",
+                2_i64,
+                "agent-0",
+                "parent",
+                "direct",
+                "message without run",
+                1_700_000_000_400_i64,
+            ],
+        )
+        .expect("insert parent-scoped message");
+        conn.execute(
+            "
+            INSERT INTO subagentIdentity (
+                parent_conversation_id,
+                logical_agent_id,
+                display_name,
+                role,
+                identity_prompt,
+                default_mode,
+                default_task_intent,
+                default_apply_policy,
+                created_parent_tool_call_id,
+                created_at,
+                updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ",
+            params![
+                "conv-1",
+                "agent-0",
+                "Deleted Agent",
+                "Reviewer",
+                "Stable identity",
+                "readonly",
+                "review",
+                "none",
+                "call-delete",
+                1_700_000_000_000_i64,
+                1_700_000_000_100_i64,
+            ],
+        )
+        .expect("insert subagent identity");
+
+        let result = delete_chat_history_sync(&mut conn, "conv-1").expect("delete conversation");
+
+        assert_eq!(result.deleted_run_count, 1);
+        for table_name in [
+            "chatHistory",
+            "chatHistorySegment",
+            "subagentRun",
+            "subagentRunSegment",
+            "subagentRunEvent",
+            "subagentMessageBusEntry",
+            "subagentIdentity",
+        ] {
+            let count: i64 = conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table_name}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap_or_else(|error| panic!("count {table_name}: {error}"));
+            assert_eq!(count, 0, "{table_name} should be empty after delete");
+        }
     }
 
     #[test]

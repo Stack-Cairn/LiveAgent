@@ -1286,6 +1286,89 @@ pub(crate) fn prune_subagent_runs_for_parent_tool_calls(
     })
 }
 
+pub(crate) fn delete_subagent_history_for_parent_conversation(
+    conn: &Connection,
+    parent_conversation_id: &str,
+) -> Result<SubagentRunPruneResult, String> {
+    let parent = parent_conversation_id.trim();
+    if parent.is_empty() {
+        return Err("parentConversationId 不能为空".to_string());
+    }
+
+    let mut stmt = conn
+        .prepare(
+            "
+            SELECT id, worktree_root, branch_name
+            FROM subagentRun
+            WHERE parent_conversation_id = ?1
+            ",
+        )
+        .map_err(|e| format!("准备子 agent 删除查询失败：{e}"))?;
+    let rows = stmt
+        .query_map(params![parent], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })
+        .map_err(|e| format!("查询子 agent 删除候选失败：{e}"))?;
+    let mut pruned_worktrees = Vec::new();
+    for row in rows {
+        let (run_id, worktree_root, branch_name) =
+            row.map_err(|e| format!("读取子 agent 删除候选失败：{e}"))?;
+        if let Some(worktree_root) = worktree_root.as_deref().map(str::trim) {
+            if !worktree_root.is_empty() {
+                pruned_worktrees.push(SubagentRunPrunedWorktree {
+                    run_id,
+                    worktree_root: worktree_root.to_string(),
+                    branch_name: branch_name
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|branch| !branch.is_empty())
+                        .map(str::to_string),
+                });
+            }
+        }
+    }
+    drop(stmt);
+
+    conn.execute(
+        "
+        DELETE FROM subagentMessageBusEntry
+        WHERE parent_conversation_id = ?1
+        ",
+        params![parent],
+    )
+    .map_err(|e| format!("删除子 agent message bus 记录失败：{e}"))?;
+    conn.execute(
+        "
+        DELETE FROM subagentIdentity
+        WHERE parent_conversation_id = ?1
+        ",
+        params![parent],
+    )
+    .map_err(|e| format!("删除子 agent 身份失败：{e}"))?;
+    let deleted_run_count = conn
+        .execute(
+            "
+            DELETE FROM subagentRun
+            WHERE parent_conversation_id = ?1
+            ",
+            params![parent],
+        )
+        .map_err(|e| format!("删除子 agent run 失败：{e}"))? as i64;
+
+    Ok(SubagentRunPruneResult {
+        parent_conversation_id: parent.to_string(),
+        kept_parent_tool_call_count: 0,
+        deleted_run_count,
+        pruned_worktrees,
+        worktree_cleanup_count: 0,
+        worktree_cleanup_errors: Vec::new(),
+    })
+}
+
 pub(crate) fn cleanup_pruned_worktrees(result: &mut SubagentRunPruneResult) {
     if result.pruned_worktrees.is_empty() {
         return;
