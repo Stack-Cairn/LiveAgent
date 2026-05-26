@@ -334,6 +334,8 @@ jobs:
       LIVEAGENT_RELEASE_TAG: ${{ needs.release-metadata.outputs.release_tag }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v8
         with:
@@ -345,16 +347,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.release-metadata.outputs.release_tag }}
+          PACKYCODE_API_KEY: ${{ secrets.PACKYCODE_API_KEY }}
+          AI_RELEASE_NOTES_API_KEY: ${{ secrets.AI_RELEASE_NOTES_API_KEY }}
+          AI_RELEASE_NOTES_BASE_URL: ${{ vars.AI_RELEASE_NOTES_BASE_URL }}
+          AI_RELEASE_NOTES_MODEL: ${{ vars.AI_RELEASE_NOTES_MODEL }}
         run: |
           set -euo pipefail
           is_prerelease="$LIVEAGENT_IS_PRERELEASE"
 
+          github_notes_path="$RUNNER_TEMP/liveagent-github-release-notes.md"
           notes_path="$RUNNER_TEMP/liveagent-release-notes.md"
           if ! gh api "repos/$GH_REPO/releases/generate-notes" \
             -f tag_name="$RELEASE_TAG" \
-            --jq ".body" > "$notes_path"; then
-            printf 'LiveAgent %s\n' "$RELEASE_TAG" > "$notes_path"
+            --jq ".body" > "$github_notes_path"; then
+            printf 'LiveAgent %s\n' "$RELEASE_TAG" > "$github_notes_path"
           fi
+          if [ ! -s "$github_notes_path" ]; then
+            printf 'LiveAgent %s\n' "$RELEASE_TAG" > "$github_notes_path"
+          fi
+
+          node scripts/release/create-ai-release-notes.mjs "$RELEASE_TAG" "$notes_path" "$github_notes_path"
           if [ ! -s "$notes_path" ]; then
             printf 'LiveAgent %s\n' "$RELEASE_TAG" > "$notes_path"
           fi
