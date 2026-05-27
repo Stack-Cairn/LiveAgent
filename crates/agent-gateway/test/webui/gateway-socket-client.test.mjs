@@ -698,12 +698,30 @@ test("GatewayWebSocketClient sends history list requests", async () => {
   socket.receive({
     id: socket.sent[1].id,
     type: "response",
-    payload: { conversations: [], total_count: 0, running_conversation_ids: [] },
+    payload: {
+      conversations: [],
+      total_count: 0,
+      running_conversation_ids: ["conversation-running"],
+      running_conversations: [
+        {
+          conversation_id: "conversation-running",
+          cwd: "/tmp/project-a",
+          updated_at: 123,
+        },
+      ],
+    },
   });
   assert.deepEqual(await listPromise, {
     conversations: [],
     total_count: 0,
-    running_conversation_ids: [],
+    running_conversation_ids: ["conversation-running"],
+    running_conversations: [
+      {
+        conversation_id: "conversation-running",
+        cwd: "/tmp/project-a",
+        updated_at: 123,
+      },
+    ],
   });
 
   const sharedListPromise = client.listSharedHistory(1, 25);
@@ -716,6 +734,85 @@ test("GatewayWebSocketClient sends history list requests", async () => {
     payload: { conversations: [], total_count: 0 },
   });
   assert.deepEqual(await sharedListPromise, { conversations: [], total_count: 0 });
+
+  resetGatewayWebSocketClient();
+});
+
+test("GatewayWebSocketClient sends project-aware history and fs requests", async () => {
+  installBrowser();
+  const loader = createWebModuleLoader();
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } = loader.loadModule("src/lib/gatewaySocket.ts");
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const filteredListPromise = client.listHistory(3, 25, { cwd: "/tmp/project-a" });
+  const socket = await connectAndAuth();
+  await waitFor(() => socket.sent.length >= 2, "filtered history list envelope");
+  assert.equal(socket.sent[1].type, "history.list");
+  assert.deepEqual(socket.sent[1].payload, {
+    page: 3,
+    page_size: 25,
+    cwd: "/tmp/project-a",
+  });
+  socket.receive({
+    id: socket.sent[1].id,
+    type: "response",
+    payload: { conversations: [], total_count: 0, running_conversation_ids: [] },
+  });
+  assert.deepEqual(await filteredListPromise, {
+    conversations: [],
+    total_count: 0,
+    running_conversation_ids: [],
+  });
+
+  const chatModeListPromise = client.listHistory(1, 80, { cwdEmpty: true });
+  await waitFor(() => socket.sent.length >= 3, "cwd empty history list envelope");
+  assert.equal(socket.sent[2].type, "history.list");
+  assert.deepEqual(socket.sent[2].payload, {
+    page: 1,
+    page_size: 80,
+    cwd_empty: true,
+  });
+  socket.receive({
+    id: socket.sent[2].id,
+    type: "response",
+    payload: { conversations: [], total_count: 0, running_conversation_ids: [] },
+  });
+  assert.deepEqual(await chatModeListPromise, {
+    conversations: [],
+    total_count: 0,
+    running_conversation_ids: [],
+  });
+
+  const workdirsPromise = client.listHistoryWorkdirs();
+  await waitFor(() => socket.sent.length >= 4, "history workdirs envelope");
+  assert.equal(socket.sent[3].type, "history.workdirs");
+  assert.deepEqual(socket.sent[3].payload, {});
+  socket.receive({
+    id: socket.sent[3].id,
+    type: "response",
+    payload: {
+      workdirs: [
+        { path: "/tmp/project-a", conversation_count: 2, updated_at: 1700000000300 },
+      ],
+    },
+  });
+  assert.deepEqual(await workdirsPromise, {
+    workdirs: [
+      { path: "/tmp/project-a", conversationCount: 2, updatedAt: 1700000000300 },
+    ],
+  });
+
+  const createPromise = client.createProjectFolder("/tmp", "Project A");
+  await waitFor(() => socket.sent.length >= 5, "create project folder envelope");
+  assert.equal(socket.sent[4].type, "fs.create_project_folder");
+  assert.deepEqual(socket.sent[4].payload, { parent: "/tmp", name: "Project A" });
+  socket.receive({
+    id: socket.sent[4].id,
+    type: "response",
+    payload: { path: "/tmp/Project A" },
+  });
+  assert.deepEqual(await createPromise, { path: "/tmp/Project A" });
 
   resetGatewayWebSocketClient();
 });

@@ -8,8 +8,9 @@ use crate::commands::{
     fs::fs_mention_list_sync,
     settings::{load_providers, open_db},
     system::{
-        system_import_uploaded_readable_files_sync, system_list_skill_files_sync,
-        system_manage_cron_task_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
+        system_create_project_folder_sync, system_import_uploaded_readable_files_sync,
+        system_list_skill_files_sync, system_manage_cron_task_sync,
+        system_read_skill_metadata_sync, system_read_skill_text_sync,
         system_read_uploaded_image_preview_sync, SystemReadableFileUploadInput,
     },
 };
@@ -103,8 +104,15 @@ pub async fn handle_history_list(
     } else {
         DEFAULT_HISTORY_LIST_PAGE_SIZE
     };
-    let page =
-        chat_history::chat_history_list(i64::from(page_number), i64::from(page_size)).await?;
+    let cwd = request.cwd.trim().to_string();
+    let cwd = if cwd.is_empty() { None } else { Some(cwd) };
+    let page = chat_history::chat_history_list(
+        i64::from(page_number),
+        i64::from(page_size),
+        cwd,
+        Some(request.cwd_empty),
+    )
+    .await?;
     Ok(build_proto_history_list_response(page))
 }
 
@@ -135,6 +143,21 @@ fn build_proto_history_list_response(
         conversations,
         total_count,
     }
+}
+
+pub async fn handle_history_workdirs() -> Result<proto::HistoryWorkdirsResponse, String> {
+    let response = chat_history::chat_history_workdirs().await?;
+    Ok(proto::HistoryWorkdirsResponse {
+        workdirs: response
+            .workdirs
+            .into_iter()
+            .map(|item| proto::HistoryWorkdirSummary {
+                path: item.path,
+                conversation_count: i32::try_from(item.conversation_count).unwrap_or(i32::MAX),
+                updated_at: item.updated_at,
+            })
+            .collect(),
+    })
 }
 
 pub async fn handle_history_get(
@@ -448,6 +471,19 @@ pub async fn handle_fs_list_dirs(
     })
     .await
     .map_err(|e| format!("gateway fs list dirs join failed: {e}"))?
+}
+
+pub async fn handle_fs_create_project_folder(
+    request: proto::FsCreateProjectFolderRequest,
+) -> Result<proto::FsCreateProjectFolderResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_create_project_folder_sync(request.parent, request.name)
+    })
+    .await
+    .map_err(|e| format!("gateway fs create project folder join failed: {e}"))?
+    .map(|response| proto::FsCreateProjectFolderResponse {
+        path: response.path,
+    })
 }
 
 pub async fn handle_upload_readable_files(

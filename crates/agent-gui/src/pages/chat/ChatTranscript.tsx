@@ -45,6 +45,7 @@ import { normalizeLiveToolStatus, VIBING_STATUS } from "../../lib/chat/page/chat
 import { cn } from "../../lib/shared/utils";
 import type { SectionId } from "../settings/types";
 import { AssistantAvatar, AssistantBubble, CompactingText, VibingText } from "./AssistantBubble";
+import { resolveNearestScrollViewport, resolveScrollViewport } from "./chatScrollViewport";
 
 type UploadedImagePreviewResponse = {
   mimeType: string;
@@ -76,14 +77,6 @@ function writeUploadedImagePreviewCache(cacheKey: string, value: string) {
     if (typeof oldestKey !== "string") break;
     uploadedImagePreviewCache.delete(oldestKey);
   }
-}
-
-function resolveNearestScrollViewport(element: HTMLElement | null) {
-  return element?.closest("[data-scroll-viewport]") as HTMLDivElement | null;
-}
-
-function resolveScrollAreaViewport(root: HTMLDivElement | null) {
-  return root?.querySelector("[data-scroll-viewport]") as HTMLDivElement | null;
 }
 
 async function loadUploadedImagePreview(params: { workspaceRoot: string; absolutePath: string }) {
@@ -989,7 +982,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
   const [scrollViewport, setScrollViewport] = useState<HTMLDivElement | null>(null);
 
   useLayoutEffect(() => {
-    const nextViewport = resolveScrollAreaViewport(scrollAreaRef.current);
+    const nextViewport = resolveScrollViewport(scrollAreaRef.current);
     setScrollViewport((current) => (current === nextViewport ? current : nextViewport));
   });
 

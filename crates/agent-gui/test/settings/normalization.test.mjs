@@ -480,6 +480,85 @@ test("gateway settings sync payload redacts provider api keys", () => {
   });
 });
 
+test("workspace project selection does not rewrite global system workdir or sync active project", () => {
+  const resolvedSystem = settings.resolveWorkspaceProjects(
+    {
+      ...settings.getDefaultSettings().system,
+      executionMode: "tools",
+      workdir: "/default-workdir",
+      workspaceProjects: [
+        {
+          id: "project-a",
+          name: "Project A",
+          path: "/project-a",
+          kind: "folder",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceProjectId: "project-a",
+    },
+    "/default-workdir",
+  );
+
+  assert.equal(resolvedSystem.workdir, "/default-workdir");
+  assert.equal(resolvedSystem.activeWorkspaceProjectId, "project-a");
+
+  const payload = sync.buildGatewaySettingsSyncPayload(
+    settings.normalizeSettings({
+      system: resolvedSystem,
+    }),
+  );
+  assert.equal(Object.hasOwn(payload.system, "activeWorkspaceProjectId"), false);
+  assert.equal(payload.system.workdir, "/default-workdir");
+});
+
+test("gateway settings sync keeps newer project conversation activity", () => {
+  const current = settings.normalizeSettings({
+    system: {
+      ...settings.getDefaultSettings().system,
+      workdir: "/default-workdir",
+      workspaceProjects: [
+        {
+          id: "project-a",
+          name: "Project A",
+          path: "/project-a",
+          kind: "folder",
+          createdAt: 1,
+          updatedAt: 1,
+          lastConversationAt: 1_700_000_000_900,
+        },
+      ],
+    },
+  });
+  const incoming = sync.buildGatewaySettingsSyncPayload(
+    settings.normalizeSettings({
+      system: {
+        ...settings.getDefaultSettings().system,
+        workdir: "/default-workdir",
+        workspaceProjects: [
+          {
+            id: "project-a",
+            name: "Project A",
+            path: "/project-a",
+            kind: "folder",
+            createdAt: 1,
+            updatedAt: 1,
+            lastConversationAt: 1_700_000_000_100,
+          },
+        ],
+      },
+    }),
+  );
+
+  const synced = sync.applyGatewaySettingsSyncPayload(current, incoming);
+
+  assert.equal(
+    synced.system.workspaceProjects.find((item) => item.id === "project-a")?.lastConversationAt,
+    1_700_000_000_900,
+  );
+});
+
 test("gateway settings sync applies redacted providers without clearing local api keys", () => {
   const current = settings.normalizeSettings({
     customProviders: [

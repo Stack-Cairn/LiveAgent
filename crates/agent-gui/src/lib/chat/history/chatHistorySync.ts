@@ -17,7 +17,7 @@ export type ChatHistorySyncEvent =
   | {
       kind: "running" | "idle";
       conversationId: string;
-      conversation?: undefined;
+      conversation?: Partial<ChatHistorySummary>;
     };
 
 export function applyChatHistorySyncEvent(

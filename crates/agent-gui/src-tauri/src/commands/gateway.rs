@@ -52,10 +52,15 @@ pub async fn gateway_send_chat_event(
 pub async fn gateway_publish_conversation_activity(
     conversation_id: String,
     running: bool,
+    workdir: Option<String>,
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
     gateway_controller
-        .publish_history_sync(build_history_sync_activity(conversation_id, running))
+        .publish_history_sync(build_history_sync_activity(
+            conversation_id,
+            running,
+            workdir,
+        ))
         .await;
     Ok(())
 }

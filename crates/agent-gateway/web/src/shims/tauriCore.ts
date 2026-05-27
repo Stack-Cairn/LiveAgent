@@ -158,6 +158,40 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
   switch (command) {
     case "system_pick_folder":
       return pickWorkdirInBrowser() as T;
+    case "chat_history_list": {
+      const response = await getGatewayWebSocketClient(loadToken().trim()).listHistory(
+        typeof args?.page === "number" ? args.page : 1,
+        typeof args?.pageSize === "number" ? args.pageSize : 80,
+        {
+          cwd: typeof args?.cwd === "string" ? args.cwd : undefined,
+          cwdEmpty: args?.cwdEmpty === true,
+        },
+      );
+      return {
+        items: response.conversations.map((item) => ({
+          id: item.id,
+          title: item.title,
+          providerId: item.provider_id ?? "",
+          model: item.model ?? "",
+          sessionId: item.session_id || undefined,
+          cwd: item.cwd || undefined,
+          messageCount: item.message_count,
+          createdAt: item.created_at,
+          updatedAt: item.updated_at,
+          isPinned: item.is_pinned,
+          pinnedAt: item.pinned_at,
+          isShared: item.is_shared,
+        })),
+        totalCount: response.total_count,
+      } as T;
+    }
+    case "chat_history_workdirs":
+      return (await getGatewayWebSocketClient(loadToken().trim()).listHistoryWorkdirs()) as T;
+    case "system_create_project_folder":
+      return (await getGatewayWebSocketClient(loadToken().trim()).createProjectFolder(
+        String(args?.parent ?? ""),
+        String(args?.name ?? ""),
+      )) as T;
     case "system_ensure_builtin_skills":
       return [] as T;
     case "fs_roots":

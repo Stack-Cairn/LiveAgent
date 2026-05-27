@@ -635,6 +635,21 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 500, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::HistoryWorkdirs(_request)) => {
+                match gateway_bridge::handle_history_workdirs().await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::HistoryWorkdirsResp(
+                                response,
+                            )),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 500, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::HistoryGet(request)) => {
                 match gateway_bridge::handle_history_get(request).await {
                     Ok(response) => {
@@ -915,6 +930,21 @@ impl GatewayController {
                             request_id,
                             timestamp: now_unix_seconds(),
                             payload: Some(proto::agent_envelope::Payload::FsListDirsResp(response)),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 500, error).await,
+                }
+            }
+            Some(proto::gateway_envelope::Payload::FsCreateProjectFolder(request)) => {
+                match gateway_bridge::handle_fs_create_project_folder(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(
+                                proto::agent_envelope::Payload::FsCreateProjectFolderResp(response),
+                            ),
                         })
                         .await
                     }
@@ -1221,15 +1251,34 @@ pub fn build_history_sync_delete(conversation_id: impl Into<String>) -> GatewayH
 pub fn build_history_sync_activity(
     conversation_id: impl Into<String>,
     running: bool,
+    cwd: impl Into<Option<String>>,
 ) -> GatewayHistorySyncEvent {
+    let conversation_id = conversation_id.into();
+    let cwd = cwd
+        .into()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     GatewayHistorySyncEvent {
         kind: if running {
             "running".to_string()
         } else {
             "idle".to_string()
         },
-        conversation_id: conversation_id.into(),
-        conversation: None,
+        conversation: cwd.map(|cwd| GatewayHistorySyncConversation {
+            id: conversation_id.clone(),
+            title: String::new(),
+            provider_id: None,
+            model: None,
+            session_id: None,
+            cwd: Some(cwd),
+            created_at: 0,
+            updated_at: chrono::Utc::now().timestamp_millis(),
+            message_count: 0,
+            is_pinned: false,
+            pinned_at: None,
+            is_shared: false,
+        }),
+        conversation_id,
     }
 }
 

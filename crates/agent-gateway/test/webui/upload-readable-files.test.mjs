@@ -34,7 +34,7 @@ test("importReadableFiles validates token and workdir before network calls", asy
   );
   await assert.rejects(
     () => upload.importReadableFiles("token", " ", [createNamedBlob("a.txt", "a")]),
-    /工作目录未配置，无法导入文件。/,
+    /项目目录未选择，无法导入文件。/,
   );
   assert.deepEqual(await upload.importReadableFiles("token", "/workspace", []), {
     files: [],

@@ -1556,7 +1556,7 @@ function NativeDisplayImageTile(props: {
   onPreview: () => void;
   readOnly?: boolean;
 }) {
-  const { source, alt, isGallery, isSvgImage, loading, onPreview, readOnly = false } = props;
+  const { source, alt, isGallery, isSvgImage, loading, onPreview } = props;
   const { t } = useLocale();
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageStatus, setImageStatus] = useState<ToolImageLoadState>(() =>

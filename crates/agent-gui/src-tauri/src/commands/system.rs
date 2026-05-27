@@ -133,6 +133,12 @@ pub struct SystemAddCronTaskResponse {
     pub selected_model: Option<SystemCronTaskSelectedModelResponse>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemCreateProjectFolderResponse {
+    pub path: String,
+}
+
 fn app_storage_dir() -> Result<PathBuf, String> {
     let home =
         dirs::home_dir().ok_or_else(|| "Failed to locate the user home directory".to_string())?;
@@ -165,7 +171,7 @@ fn sanitize_debug_file_stem(input: &str) -> Result<String, String> {
 fn canonicalize_upload_workdir(workdir: &str) -> Result<PathBuf, String> {
     let raw = workdir.trim();
     if raw.is_empty() {
-        return Err("工作目录未配置，无法导入文件".to_string());
+        return Err("项目目录未选择，无法导入文件".to_string());
     }
 
     let path = expand_tilde_path(raw);
@@ -1385,6 +1391,102 @@ fn resolve_pick_folder_initial_dir(initial_workdir: Option<String>) -> Option<Pa
         .map(Path::to_path_buf)
 }
 
+fn is_windows_reserved_project_name(name: &str) -> bool {
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or(name)
+        .trim()
+        .trim_end_matches(' ')
+        .to_ascii_uppercase();
+    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem[3..]
+                .parse::<u8>()
+                .is_ok_and(|value| (1..=9).contains(&value)))
+}
+
+fn validate_project_folder_name(name: &str) -> Result<&str, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("项目名不能为空".to_string());
+    }
+    if trimmed == "." || trimmed == ".." {
+        return Err("项目名不能是 . 或 ..".to_string());
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains(':') {
+        return Err("项目名不能包含路径分隔符".to_string());
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch == '\0' || ch.is_ascii_control())
+    {
+        return Err("项目名包含非法字符".to_string());
+    }
+    if Path::new(trimmed).components().count() != 1 {
+        return Err("项目名不能包含路径片段".to_string());
+    }
+    if is_windows_reserved_project_name(trimmed) {
+        return Err("项目名不能使用系统保留名称".to_string());
+    }
+    Ok(trimmed)
+}
+
+fn canonicalize_project_folder(path: &Path) -> String {
+    fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .into_owned()
+}
+
+pub(crate) fn system_create_project_folder_sync(
+    parent: String,
+    name: String,
+) -> Result<SystemCreateProjectFolderResponse, String> {
+    let parent_raw = parent.trim();
+    if parent_raw.is_empty() {
+        return Err("父目录不能为空".to_string());
+    }
+    let parent_path = expand_tilde_path(parent_raw);
+    if !parent_path.is_absolute() {
+        return Err(format!("父目录必须是绝对路径：{parent_raw}"));
+    }
+    let parent_meta =
+        fs::metadata(&parent_path).map_err(|_| format!("父目录不存在或不可访问：{parent_raw}"))?;
+    if !parent_meta.is_dir() {
+        return Err(format!("父目录不是文件夹：{parent_raw}"));
+    }
+    let parent_path = fs::canonicalize(&parent_path).map_err(|e| format!("无法解析父目录：{e}"))?;
+    let folder_name = validate_project_folder_name(&name)?;
+    let target = parent_path.join(folder_name);
+
+    match fs::metadata(&target) {
+        Ok(meta) if meta.is_dir() => {
+            return Ok(SystemCreateProjectFolderResponse {
+                path: canonicalize_project_folder(&target),
+            });
+        }
+        Ok(_) => {
+            return Err(format!("目标路径已存在且不是文件夹：{}", target.display()));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(format!("无法访问目标路径：{error}"));
+        }
+    }
+
+    match fs::create_dir(&target) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists && target.is_dir() => {}
+        Err(error) => return Err(format!("创建项目目录失败：{error}")),
+    }
+
+    Ok(SystemCreateProjectFolderResponse {
+        path: canonicalize_project_folder(&target),
+    })
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -1399,6 +1501,16 @@ pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Optio
     })
     .await
     .map_err(|e| format!("system_pick_folder join 失败：{e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_create_project_folder(
+    parent: String,
+    name: String,
+) -> Result<SystemCreateProjectFolderResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || system_create_project_folder_sync(parent, name))
+        .await
+        .map_err(|e| format!("system_create_project_folder join 失败：{e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -1656,6 +1768,75 @@ mod tests {
         assert!(root.exists(), "upload root should be created");
 
         let _ = fs::remove_dir_all(&workdir);
+    }
+
+    #[test]
+    fn create_project_folder_creates_new_directory() {
+        let temp = tempdir().expect("create temp dir");
+        let response = system_create_project_folder_sync(
+            temp.path().to_string_lossy().into_owned(),
+            "Project Alpha".to_string(),
+        )
+        .expect("create project folder");
+
+        let path = PathBuf::from(response.path);
+        assert!(path.is_dir());
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("Project Alpha")
+        );
+    }
+
+    #[test]
+    fn create_project_folder_reuses_existing_directory() {
+        let temp = tempdir().expect("create temp dir");
+        let existing = temp.path().join("Existing");
+        fs::create_dir(&existing).expect("create existing dir");
+
+        let response = system_create_project_folder_sync(
+            temp.path().to_string_lossy().into_owned(),
+            "Existing".to_string(),
+        )
+        .expect("reuse existing dir");
+
+        assert_eq!(
+            PathBuf::from(response.path),
+            existing.canonicalize().expect("canonicalize existing dir")
+        );
+    }
+
+    #[test]
+    fn create_project_folder_rejects_invalid_name_and_file_conflict() {
+        let temp = tempdir().expect("create temp dir");
+        let invalid = system_create_project_folder_sync(
+            temp.path().to_string_lossy().into_owned(),
+            "..".to_string(),
+        )
+        .expect_err("reject invalid project name");
+        assert!(invalid.contains("项目名"));
+
+        let file_path = temp.path().join("conflict");
+        fs::write(&file_path, b"not a directory").expect("write conflict file");
+        let conflict = system_create_project_folder_sync(
+            temp.path().to_string_lossy().into_owned(),
+            "conflict".to_string(),
+        )
+        .expect_err("reject file conflict");
+        assert!(conflict.contains("不是文件夹"));
+    }
+
+    #[test]
+    fn create_project_folder_rejects_missing_parent() {
+        let temp = tempdir().expect("create temp dir");
+        let missing_parent = temp.path().join("missing");
+
+        let error = system_create_project_folder_sync(
+            missing_parent.to_string_lossy().into_owned(),
+            "Project".to_string(),
+        )
+        .expect_err("reject missing parent");
+
+        assert!(error.contains("父目录不存在"));
     }
 
     #[test]

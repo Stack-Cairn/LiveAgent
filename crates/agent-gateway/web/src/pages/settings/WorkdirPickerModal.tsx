@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { AlertTriangle, FolderOpen, HardDrive, Home, Loader2, X } from "../../components/icons";
+import { AlertTriangle, FolderOpen, HardDrive, Home, Loader2, Plus, X } from "../../components/icons";
 import type { IndividualTreeViewState, TreeItem, TreeItemIndex, TreeViewState } from "react-complex-tree";
 import { ControlledTreeEnvironment, Tree } from "react-complex-tree";
 
@@ -110,6 +110,13 @@ function mergeTreeIndexes(
   return Array.from(new Set([...(current ?? []), ...additions]));
 }
 
+function basenameFromPath(path: string) {
+  const normalized = stripTrailingPathSeparators(path);
+  if (!normalized) return "";
+  const parts = normalized.split(/[\\/]+/).filter(Boolean);
+  return parts[parts.length - 1] ?? normalized;
+}
+
 type WorkdirPickerModalProps = {
   initialWorkdir: string;
   onClose: () => void;
@@ -144,6 +151,9 @@ export function WorkdirPickerModal(props: WorkdirPickerModalProps) {
   const [roots, setRoots] = useState<FsRoot[]>([]);
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(() => new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const didExpandInitialWorkdirRef = useRef(false);
   const { modalState, requestClose } = useModalMotion(onClose);
 
@@ -159,6 +169,8 @@ export function WorkdirPickerModal(props: WorkdirPickerModalProps) {
 
   const activeMeta = activePath ? items[activePath]?.data ?? null : null;
   const activeChildren = activePath ? items[activePath]?.children ?? null : null;
+  const createFolderName = newFolderName.trim();
+  const canCreateFolder = Boolean(activePath && createFolderName && !creatingFolder);
 
   const statusLine = useMemo(() => {
     if (loadError) {
@@ -397,6 +409,64 @@ export function WorkdirPickerModal(props: WorkdirPickerModalProps) {
     }
   }
 
+  async function createFolderInActivePath() {
+    const parent = activePath.trim();
+    const name = createFolderName;
+    if (!parent || !name || creatingFolder) return;
+
+    setCreatingFolder(true);
+    setCreateFolderError(null);
+    try {
+      const resp = await invoke<{ path: string }>("system_create_project_folder", {
+        parent,
+        name,
+      });
+      const createdPath = stripTrailingPathSeparators(resp.path);
+      if (!createdPath) {
+        throw new Error("Created folder path is empty");
+      }
+
+      try {
+        await loadDirectoryChildren(parent);
+      } catch {
+        // Keep the newly created folder selectable even if refreshing the parent fails.
+      }
+
+      const createdLabel = name || basenameFromPath(createdPath) || createdPath;
+      setItems((prev) => {
+        const next: Record<TreeItemIndex, TreeItem<NodeData>> = { ...prev };
+        const parentItem = next[parent];
+        if (parentItem) {
+          const children = Array.isArray(parentItem.children) ? parentItem.children : [];
+          next[parent] = {
+            ...parentItem,
+            isFolder: true,
+            children: mergeTreeIndexes(children, [createdPath]),
+            data: {
+              ...parentItem.data,
+              loaded: true,
+            },
+          };
+        }
+        next[createdPath] = next[createdPath] ?? createDirItem(createdPath, createdLabel, "dir");
+        return next;
+      });
+
+      updateTreeViewState(TREE_ID, (treePrev) => ({
+        ...treePrev,
+        expandedItems: mergeTreeIndexes(treePrev.expandedItems, [ROOT_ID, parent]),
+        selectedItems: [createdPath],
+        focusedItem: createdPath,
+      }));
+      setNewFolderName("");
+      setLoadError(null);
+    } catch (err) {
+      setCreateFolderError(toErrorMessage(err, t("settings.createFolderFailed")));
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
+
   const canConfirm = Boolean(selectedPath);
 
   const overlay = (
@@ -452,6 +522,53 @@ export function WorkdirPickerModal(props: WorkdirPickerModalProps) {
               <HardDrive className="h-3.5 w-3.5" />
               <span>Root</span>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-border/60 bg-background/70 p-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+              <Input
+                value={newFolderName}
+                onChange={(event) => {
+                  setNewFolderName(event.currentTarget.value);
+                  if (createFolderError) {
+                    setCreateFolderError(null);
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  void createFolderInActivePath();
+                }}
+                placeholder={
+                  activePath
+                    ? t("settings.newFolderNamePlaceholder")
+                    : t("settings.newFolderSelectParentFirst")
+                }
+                disabled={!activePath || creatingFolder}
+                className="h-9"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 gap-2"
+                onClick={() => void createFolderInActivePath()}
+                disabled={!canCreateFolder}
+              >
+                {creatingFolder ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Plus className="h-3.5 w-3.5" />
+                )}
+                {t("settings.createFolder")}
+              </Button>
+            </div>
+            {createFolderError ? (
+              <div className="mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 flex-1">{createFolderError}</span>
+              </div>
+            ) : null}
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-muted/20 p-2">

@@ -137,14 +137,36 @@ export type MemorySettings = {
   organizerNextRunAt?: number;
 };
 
+export type ChatSidebarSettings = {
+  projectsCollapsed: boolean;
+  recentCollapsed: boolean;
+};
+
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
+  chatSidebar: ChatSidebarSettings;
 };
 
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
   selectedSystemTools: SystemToolId[];
+  workspaceProjects: WorkspaceProject[];
+  activeWorkspaceProjectId?: string;
+  hiddenWorkspaceProjectPaths: string[];
+  missingWorkspaceProjectPaths: string[];
+};
+
+export type WorkspaceProjectKind = "managed" | "folder" | "history";
+
+export type WorkspaceProject = {
+  id: string;
+  name: string;
+  path: string;
+  kind: WorkspaceProjectKind;
+  createdAt: number;
+  updatedAt: number;
+  lastConversationAt?: number;
 };
 
 export type SelectedModel = {
@@ -301,6 +323,9 @@ export const DEFAULT_CHAT_RUNTIME_CONTROLS: ChatRuntimeControls = {
   },
 };
 
+export const DEFAULT_WORKSPACE_PROJECT_ID = "default-project";
+export const DEFAULT_WORKSPACE_PROJECT_NAME = "Default Project";
+
 function normalizeCodexRequestFormat(input: unknown): CodexRequestFormat | undefined {
   switch (input) {
     case "openai-completions":
@@ -402,6 +427,177 @@ export function isAgentDevMode(mode: ExecutionMode): boolean {
 
 function normalizeWorkdir(input: unknown): string {
   return typeof input === "string" ? input.trim() : "";
+}
+
+export function normalizeWorkspaceProjectPath(path: unknown): string {
+  return typeof path === "string" ? path.trim() : "";
+}
+
+export function workspaceProjectPathKey(path: unknown): string {
+  return normalizeWorkspaceProjectPath(path);
+}
+
+function normalizeWorkspaceProjectKind(input: unknown): WorkspaceProjectKind {
+  switch (input) {
+    case "managed":
+    case "folder":
+    case "history":
+      return input;
+    default:
+      return "folder";
+  }
+}
+
+function normalizeWorkspaceProject(input: unknown): WorkspaceProject | null {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const path = normalizeWorkspaceProjectPath(obj.path);
+  if (!path) return null;
+  const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : crypto.randomUUID();
+  const name =
+    typeof obj.name === "string" && obj.name.trim()
+      ? obj.name.trim()
+      : path.split(/[\\/]+/).filter(Boolean).pop() || "Project";
+  const createdAt =
+    typeof obj.createdAt === "number" && Number.isFinite(obj.createdAt) && obj.createdAt > 0
+      ? obj.createdAt
+      : Date.now();
+  const updatedAt =
+    typeof obj.updatedAt === "number" && Number.isFinite(obj.updatedAt) && obj.updatedAt > 0
+      ? obj.updatedAt
+      : createdAt;
+  const lastConversationAt =
+    typeof obj.lastConversationAt === "number" &&
+    Number.isFinite(obj.lastConversationAt) &&
+    obj.lastConversationAt > 0
+      ? obj.lastConversationAt
+      : undefined;
+  return {
+    id,
+    name,
+    path,
+    kind: normalizeWorkspaceProjectKind(obj.kind),
+    createdAt,
+    updatedAt,
+    ...(lastConversationAt ? { lastConversationAt } : {}),
+  };
+}
+
+function normalizeWorkspaceProjects(input: unknown): WorkspaceProject[] {
+  if (!Array.isArray(input)) return [];
+  const out: WorkspaceProject[] = [];
+  const seenPaths = new Set<string>();
+  const seenIds = new Set<string>();
+  for (const raw of input) {
+    const project = normalizeWorkspaceProject(raw);
+    if (!project) continue;
+    const pathKey = workspaceProjectPathKey(project.path);
+    if (!pathKey || seenPaths.has(pathKey)) continue;
+    seenPaths.add(pathKey);
+    let id = project.id;
+    if (seenIds.has(id)) {
+      id = crypto.randomUUID();
+    }
+    seenIds.add(id);
+    out.push({ ...project, id });
+  }
+  return out;
+}
+
+export function normalizeHiddenWorkspaceProjectPaths(input: unknown): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const path of normalizeStringArray(input)) {
+    const key = workspaceProjectPathKey(path);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(path);
+  }
+  return out;
+}
+
+export function normalizeMissingWorkspaceProjectPaths(input: unknown): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const path of normalizeStringArray(input)) {
+    const key = workspaceProjectPathKey(path);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(path);
+  }
+  return out;
+}
+
+export function resolveWorkspaceProjects(
+  system: SystemSettings,
+  defaultWorkdir: string,
+): SystemSettings {
+  const defaultPath = normalizeWorkspaceProjectPath(defaultWorkdir || system.workdir);
+  if (!defaultPath) return system;
+
+  const now = Date.now();
+  const defaultKey = workspaceProjectPathKey(defaultPath);
+  const configured = normalizeWorkspaceProjects(system.workspaceProjects);
+  const defaultExisting = configured.find(
+    (project) =>
+      project.id === DEFAULT_WORKSPACE_PROJECT_ID ||
+      workspaceProjectPathKey(project.path) === defaultKey,
+  );
+  const defaultProject: WorkspaceProject = {
+    id: DEFAULT_WORKSPACE_PROJECT_ID,
+    name: DEFAULT_WORKSPACE_PROJECT_NAME,
+    path: defaultPath,
+    kind: "managed",
+    createdAt: defaultExisting?.createdAt ?? now,
+    updatedAt: defaultExisting?.updatedAt ?? now,
+    ...(defaultExisting?.lastConversationAt
+      ? { lastConversationAt: defaultExisting.lastConversationAt }
+      : {}),
+  };
+
+  const projects: WorkspaceProject[] = [defaultProject];
+  const seenPaths = new Set<string>([defaultKey]);
+  const seenIds = new Set<string>([DEFAULT_WORKSPACE_PROJECT_ID]);
+  for (const project of configured) {
+    const pathKey = workspaceProjectPathKey(project.path);
+    if (!pathKey || seenPaths.has(pathKey)) continue;
+    seenPaths.add(pathKey);
+    let id = project.id;
+    if (!id || id === DEFAULT_WORKSPACE_PROJECT_ID || seenIds.has(id)) {
+      id = crypto.randomUUID();
+    }
+    seenIds.add(id);
+    projects.push({
+      ...project,
+      id,
+      name: project.name.trim() || project.path.split(/[\\/]+/).filter(Boolean).pop() || "Project",
+      kind: project.kind,
+    });
+  }
+
+  const hiddenWorkspaceProjectPaths = normalizeHiddenWorkspaceProjectPaths(
+    system.hiddenWorkspaceProjectPaths,
+  ).filter((path) => workspaceProjectPathKey(path) !== defaultKey);
+  const hiddenWorkspaceProjectPathKeys = new Set(
+    hiddenWorkspaceProjectPaths.map(workspaceProjectPathKey),
+  );
+  const missingWorkspaceProjectPaths = normalizeMissingWorkspaceProjectPaths(
+    system.missingWorkspaceProjectPaths,
+  ).filter((path) => !hiddenWorkspaceProjectPathKeys.has(workspaceProjectPathKey(path)));
+  const activeProjectId = projects.some((project) => project.id === system.activeWorkspaceProjectId)
+    ? system.activeWorkspaceProjectId
+    : DEFAULT_WORKSPACE_PROJECT_ID;
+  const activeProject =
+    projects.find((project) => project.id === activeProjectId) ?? defaultProject;
+  const workdir = normalizeWorkdir(system.workdir) || defaultPath;
+
+  return {
+    ...system,
+    workdir,
+    workspaceProjects: projects,
+    activeWorkspaceProjectId: activeProject.id,
+    hiddenWorkspaceProjectPaths,
+    missingWorkspaceProjectPaths,
+  };
 }
 
 export function normalizeReasoningLevel(input: unknown): ReasoningLevel {
@@ -952,6 +1148,17 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     executionMode: normalizeExecutionMode(obj.executionMode),
     workdir: normalizeWorkdir(obj.workdir),
     selectedSystemTools: normalizeSystemToolSelection(obj.selectedSystemTools),
+    workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
+    activeWorkspaceProjectId:
+      typeof obj.activeWorkspaceProjectId === "string" && obj.activeWorkspaceProjectId.trim()
+        ? obj.activeWorkspaceProjectId.trim()
+        : undefined,
+    hiddenWorkspaceProjectPaths: normalizeHiddenWorkspaceProjectPaths(
+      obj.hiddenWorkspaceProjectPaths,
+    ),
+    missingWorkspaceProjectPaths: normalizeMissingWorkspaceProjectPaths(
+      obj.missingWorkspaceProjectPaths,
+    ),
   };
 }
 
@@ -1190,11 +1397,18 @@ export function normalizeCustomSettings(
   customProviders: CustomProvider[],
 ): CustomSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const chatSidebar = (obj.chatSidebar && typeof obj.chatSidebar === "object"
+    ? obj.chatSidebar
+    : {}) as Record<string, unknown>;
   return {
     conversationTitleModel: normalizeSelectedModelForProviders(
       normalizeSelectedModel(obj.conversationTitleModel),
       customProviders,
     ),
+    chatSidebar: {
+      projectsCollapsed: chatSidebar.projectsCollapsed === true,
+      recentCollapsed: chatSidebar.recentCollapsed === true,
+    },
   };
 }
 
@@ -1205,6 +1419,10 @@ export function getDefaultSettings(): AppSettings {
       executionMode: "tools",
       workdir: "",
       selectedSystemTools: [],
+      workspaceProjects: [],
+      activeWorkspaceProjectId: undefined,
+      hiddenWorkspaceProjectPaths: [],
+      missingWorkspaceProjectPaths: [],
     },
     customProviders,
     mcp: {

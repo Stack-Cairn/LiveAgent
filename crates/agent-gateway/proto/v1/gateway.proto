@@ -38,6 +38,7 @@ message GatewayEnvelope {
     HistoryShareGetRequest history_share_get = 36;
     HistoryShareSetRequest history_share_set = 37;
     HistoryShareResolveRequest history_share_resolve = 38;
+    HistoryWorkdirsRequest history_workdirs = 39;
     ProviderListRequest provider_list = 40;
     SettingsGetRequest settings_get = 41;
     SettingsUpdateRequest settings_update = 42;
@@ -52,6 +53,7 @@ message GatewayEnvelope {
     UploadedImagePreviewRequest uploaded_image_preview = 51;
     MemoryManageRequest memory_manage = 52;
     SkillManageRequest skill_manage = 53;
+    FsCreateProjectFolderRequest fs_create_project_folder = 54;
   }
 }
 
@@ -72,6 +74,7 @@ message AgentEnvelope {
     HistoryShareGetResponse history_share_get_resp = 37;
     HistoryShareSetResponse history_share_set_resp = 38;
     HistoryShareResolveResponse history_share_resolve_resp = 39;
+    HistoryWorkdirsResponse history_workdirs_resp = 56;
     ProviderListResponse provider_list_resp = 40;
     SettingsGetResponse settings_get_resp = 41;
     SettingsUpdateResponse settings_update_resp = 42;
@@ -87,6 +90,7 @@ message AgentEnvelope {
     UploadedImagePreviewResponse uploaded_image_preview_resp = 52;
     MemoryManageResponse memory_manage_resp = 53;
     SkillManageResponse skill_manage_resp = 54;
+    FsCreateProjectFolderResponse fs_create_project_folder_resp = 55;
     ErrorResponse error = 99;
   }
 }
@@ -193,6 +197,8 @@ message CronManageResponse {
 message HistoryListRequest {
   int32 page = 1;
   int32 page_size = 2;
+  string cwd = 3;
+  bool cwd_empty = 4;
 }
 
 message HistoryListResponse {
@@ -284,6 +290,18 @@ message HistoryShareResolveResponse {
   int32 total_message_count = 3;
   ConversationSummary conversation = 4;
   bool redact_tool_content = 5;
+}
+
+message HistoryWorkdirsRequest {}
+
+message HistoryWorkdirSummary {
+  string path = 1;
+  int32 conversation_count = 2;
+  int64 updated_at = 3;
+}
+
+message HistoryWorkdirsResponse {
+  repeated HistoryWorkdirSummary workdirs = 1;
 }
 
 message HistoryDeleteRequest {
@@ -413,6 +431,15 @@ message FsListDirsResponse {
   string path = 1;
   repeated FsDirEntry entries = 2;
   bool truncated = 3;
+}
+
+message FsCreateProjectFolderRequest {
+  string parent = 1;
+  string name = 2;
+}
+
+message FsCreateProjectFolderResponse {
+  string path = 1;
 }
 
 message PingRequest {

@@ -239,6 +239,87 @@ test("gateway settings sync payload excludes remote settings and applies selecte
   assert.deepEqual(payload.chatRuntimeControls, synced.chatRuntimeControls);
 });
 
+test("workspace project selection stays out of synced system workdir", () => {
+  installWindow();
+  const resolvedSystem = settings.resolveWorkspaceProjects(
+    {
+      ...settings.getDefaultSettings().system,
+      executionMode: "tools",
+      workdir: "/default-workdir",
+      workspaceProjects: [
+        {
+          id: "project-a",
+          name: "Project A",
+          path: "/project-a",
+          kind: "folder",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      activeWorkspaceProjectId: "project-a",
+    },
+    "/default-workdir",
+  );
+
+  assert.equal(resolvedSystem.workdir, "/default-workdir");
+  assert.equal(resolvedSystem.activeWorkspaceProjectId, "project-a");
+
+  const payload = settingsSync.buildGatewaySettingsSyncPayload(
+    settings.normalizeSettings({
+      system: resolvedSystem,
+    }),
+  );
+  assert.equal(Object.hasOwn(payload.system, "activeWorkspaceProjectId"), false);
+  assert.equal(payload.system.workdir, "/default-workdir");
+});
+
+test("gateway settings sync keeps newer project conversation activity", () => {
+  installWindow();
+  const current = settings.normalizeSettings({
+    system: {
+      ...settings.getDefaultSettings().system,
+      workdir: "/default-workdir",
+      workspaceProjects: [
+        {
+          id: "project-a",
+          name: "Project A",
+          path: "/project-a",
+          kind: "folder",
+          createdAt: 1,
+          updatedAt: 1,
+          lastConversationAt: 1_700_000_000_900,
+        },
+      ],
+    },
+  });
+  const incoming = settingsSync.buildGatewaySettingsSyncPayload(
+    settings.normalizeSettings({
+      system: {
+        ...settings.getDefaultSettings().system,
+        workdir: "/default-workdir",
+        workspaceProjects: [
+          {
+            id: "project-a",
+            name: "Project A",
+            path: "/project-a",
+            kind: "folder",
+            createdAt: 1,
+            updatedAt: 1,
+            lastConversationAt: 1_700_000_000_100,
+          },
+        ],
+      },
+    }),
+  );
+
+  const synced = settingsSync.applyGatewaySettingsSyncPayload(current, incoming);
+
+  assert.equal(
+    synced.system.workspaceProjects.find((item) => item.id === "project-a")?.lastConversationAt,
+    1_700_000_000_900,
+  );
+});
+
 test("web remote settings normalize single-slash http gateway URLs", () => {
   const remote = settings.normalizeRemoteSettings({
     enabled: true,

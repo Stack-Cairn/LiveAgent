@@ -246,7 +246,7 @@ func (c *websocketConnection) startChatEventForwarder() {
 				if c.hasActiveChatRequest(event.RequestID) {
 					continue
 				}
-				if err := c.writeConversationEvent(websocketChatEventPayload(event.Event, event.Seq)); err != nil {
+				if err := c.writeConversationEvent(websocketChatEventPayload(event.Event, event.Seq, event.Workdir)); err != nil {
 					c.close()
 					return
 				}
@@ -323,8 +323,12 @@ func (c *websocketConnection) dispatch(req websocketRequest) {
 		c.handleFsRoots(req)
 	case "fs.list_dirs":
 		c.handleFsListDirs(req)
+	case "fs.create_project_folder":
+		c.handleFsCreateProjectFolder(req)
 	case "history.list":
 		c.handleHistoryList(req)
+	case "history.workdirs":
+		c.handleHistoryWorkdirs(req)
 	case "history.shared_list":
 		c.handleHistorySharedList(req)
 	case "history.get":
@@ -489,10 +493,65 @@ func (c *websocketConnection) handleFsListDirs(req websocketRequest) {
 	})
 }
 
+func (c *websocketConnection) handleFsCreateProjectFolder(req websocketRequest) {
+	type payload struct {
+		Parent string `json:"parent"`
+		Name   string `json:"name"`
+	}
+
+	var body payload
+	if err := decodeWebSocketPayload(req.Payload, &body); err != nil {
+		_ = c.writeError(req.ID, "invalid fs.create_project_folder payload")
+		return
+	}
+
+	parent := strings.TrimSpace(body.Parent)
+	name := strings.TrimSpace(body.Name)
+	if parent == "" {
+		_ = c.writeError(req.ID, "parent is required")
+		return
+	}
+	if name == "" {
+		_ = c.writeError(req.ID, "name is required")
+		return
+	}
+
+	response, err := c.awaitAgentResponse(req.ID, &gatewayv1.GatewayEnvelope{
+		RequestId: req.ID,
+		Timestamp: time.Now().Unix(),
+		Payload: &gatewayv1.GatewayEnvelope_FsCreateProjectFolder{
+			FsCreateProjectFolder: &gatewayv1.FsCreateProjectFolderRequest{
+				Parent: parent,
+				Name:   name,
+			},
+		},
+	})
+	if err != nil {
+		_ = c.writeError(req.ID, websocketErrorMessage(err))
+		return
+	}
+	if errResp := response.GetError(); errResp != nil {
+		_ = c.writeError(req.ID, errResp.GetMessage())
+		return
+	}
+
+	resp := response.GetFsCreateProjectFolderResp()
+	if resp == nil {
+		_ = c.writeError(req.ID, "unexpected agent response")
+		return
+	}
+
+	_ = c.writeResponse(req.ID, map[string]any{
+		"path": strings.TrimSpace(resp.GetPath()),
+	})
+}
+
 func (c *websocketConnection) handleHistoryList(req websocketRequest) {
 	type payload struct {
-		Page     int `json:"page"`
-		PageSize int `json:"page_size"`
+		Page     int    `json:"page"`
+		PageSize int    `json:"page_size"`
+		Cwd      string `json:"cwd"`
+		CwdEmpty bool   `json:"cwd_empty"`
 	}
 
 	var body payload
@@ -518,6 +577,8 @@ func (c *websocketConnection) handleHistoryList(req websocketRequest) {
 			HistoryList: &gatewayv1.HistoryListRequest{
 				Page:     int32(page),
 				PageSize: int32(pageSize),
+				Cwd:      strings.TrimSpace(body.Cwd),
+				CwdEmpty: body.CwdEmpty,
 			},
 		},
 	})
@@ -545,6 +606,50 @@ func (c *websocketConnection) handleHistoryList(req websocketRequest) {
 		"conversations":            conversations,
 		"total_count":              resp.GetTotalCount(),
 		"running_conversation_ids": c.sm.ActiveChatRunConversationIDs(),
+		"running_conversations":    websocketActiveChatRunSummariesPayload(c.sm.ActiveChatRunSummaries()),
+	})
+}
+
+func (c *websocketConnection) handleHistoryWorkdirs(req websocketRequest) {
+	var body struct{}
+	if err := decodeWebSocketPayload(req.Payload, &body); err != nil {
+		_ = c.writeError(req.ID, "invalid history.workdirs payload")
+		return
+	}
+
+	response, err := c.awaitAgentResponse(req.ID, &gatewayv1.GatewayEnvelope{
+		RequestId: req.ID,
+		Timestamp: time.Now().Unix(),
+		Payload: &gatewayv1.GatewayEnvelope_HistoryWorkdirs{
+			HistoryWorkdirs: &gatewayv1.HistoryWorkdirsRequest{},
+		},
+	})
+	if err != nil {
+		_ = c.writeError(req.ID, websocketErrorMessage(err))
+		return
+	}
+	if errResp := response.GetError(); errResp != nil {
+		_ = c.writeError(req.ID, errResp.GetMessage())
+		return
+	}
+
+	resp := response.GetHistoryWorkdirsResp()
+	if resp == nil {
+		_ = c.writeError(req.ID, "unexpected agent response")
+		return
+	}
+
+	workdirs := make([]map[string]any, 0, len(resp.GetWorkdirs()))
+	for _, workdir := range resp.GetWorkdirs() {
+		workdirs = append(workdirs, map[string]any{
+			"path":               workdir.GetPath(),
+			"conversation_count": workdir.GetConversationCount(),
+			"updated_at":         workdir.GetUpdatedAt(),
+		})
+	}
+
+	_ = c.writeResponse(req.ID, map[string]any{
+		"workdirs": workdirs,
 	})
 }
 
@@ -1023,6 +1128,7 @@ func (c *websocketConnection) handleChatStart(req websocketRequest) {
 		req.ID,
 		body.ConversationID,
 		body.ClientRequestID,
+		body.Workdir,
 	)
 	if err != nil {
 		_ = c.writeError(req.ID, websocketErrorMessage(err))
@@ -1102,7 +1208,7 @@ func (c *websocketConnection) handleChatStart(req websocketRequest) {
 				body.ConversationID = strings.TrimSpace(chatEvent.GetConversationId())
 				c.updateActiveChatConversationID(responseID, body.ConversationID)
 			}
-			if err := c.writeChatEvent(responseID, websocketChatEventPayload(chatEvent, event.Seq)); err != nil {
+			if err := c.writeChatEvent(responseID, websocketChatEventPayload(chatEvent, event.Seq, event.Workdir)); err != nil {
 				c.close()
 				return
 			}
@@ -1191,7 +1297,7 @@ func (c *websocketConnection) handleChatResume(req websocketRequest) {
 			if chatEvent.GetConversationId() != "" {
 				c.updateActiveChatConversationID(responseID, strings.TrimSpace(chatEvent.GetConversationId()))
 			}
-			if err := c.writeChatEvent(responseID, websocketChatEventPayload(chatEvent, event.Seq)); err != nil {
+			if err := c.writeChatEvent(responseID, websocketChatEventPayload(chatEvent, event.Seq, event.Workdir)); err != nil {
 				c.close()
 				return
 			}
@@ -1262,7 +1368,7 @@ func (c *websocketConnection) handleChatAttach(req websocketRequest) {
 			if chatEvent == nil {
 				continue
 			}
-			if err := c.writeChatEvent(req.ID, websocketChatEventPayload(chatEvent, event.Seq)); err != nil {
+			if err := c.writeChatEvent(req.ID, websocketChatEventPayload(chatEvent, event.Seq, event.Workdir)); err != nil {
 				c.close()
 				return
 			}
@@ -1946,6 +2052,22 @@ func websocketConversationSummaryPayload(conversation *gatewayv1.ConversationSum
 	}
 }
 
+func websocketActiveChatRunSummariesPayload(summaries []session.ActiveChatRunSummary) []map[string]any {
+	payload := make([]map[string]any, 0, len(summaries))
+	for _, summary := range summaries {
+		conversationID := strings.TrimSpace(summary.ConversationID)
+		if conversationID == "" {
+			continue
+		}
+		payload = append(payload, map[string]any{
+			"conversation_id": conversationID,
+			"cwd":             strings.TrimSpace(summary.Workdir),
+			"updated_at":      summary.UpdatedAt,
+		})
+	}
+	return payload
+}
+
 func websocketHistoryShareStatusPayload(share *gatewayv1.HistoryShareStatus) map[string]any {
 	if share == nil {
 		return nil
@@ -2265,12 +2387,17 @@ func websocketErrorMessage(err error) string {
 	return err.Error()
 }
 
-func websocketChatEventPayload(event *gatewayv1.ChatEvent, seq int64) map[string]any {
+func websocketChatEventPayload(event *gatewayv1.ChatEvent, seq int64, workdirInput ...string) map[string]any {
 	payload := map[string]any{
 		"type": websocketChatEventType(event.GetType()),
 	}
 	if seq > 0 {
 		payload["seq"] = seq
+	}
+	if len(workdirInput) > 0 {
+		if workdir := strings.TrimSpace(workdirInput[0]); workdir != "" {
+			payload["workdir"] = workdir
+		}
 	}
 
 	raw := strings.TrimSpace(event.GetData())

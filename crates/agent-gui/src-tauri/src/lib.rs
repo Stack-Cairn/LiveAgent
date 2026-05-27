@@ -26,6 +26,7 @@ macro_rules! app_invoke_handler {
         tauri::generate_handler![
             // Chat history
             commands::chat_history::chat_history_list,
+            commands::chat_history::chat_history_workdirs,
             commands::chat_history::chat_history_shared_list,
             commands::chat_history::chat_history_search,
             commands::chat_history::chat_history_get,
@@ -124,6 +125,7 @@ macro_rules! app_invoke_handler {
             commands::process::managed_process_stop,
             commands::process::managed_process_read_log,
             commands::system::system_pick_folder,
+            commands::system::system_create_project_folder,
             commands::system::system_import_pasted_texts,
             commands::system::system_import_readable_file_paths,
             commands::system::system_import_uploaded_readable_files,

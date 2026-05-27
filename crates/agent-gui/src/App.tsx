@@ -5,7 +5,12 @@ import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { MemoryOrganizerRunner } from "./components/memory/MemoryOrganizerRunner";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { LocaleContext, t as translate } from "./i18n";
-import { type AppSettings, getDefaultSettings, normalizeSettings } from "./lib/settings";
+import {
+  type AppSettings,
+  getDefaultSettings,
+  normalizeSettings,
+  resolveWorkspaceProjects,
+} from "./lib/settings";
 import {
   loadPersistedSettingsWithDefaults,
   persistSettings,
@@ -66,15 +71,16 @@ function hasProviderApiKeyUpdatesPayload(payload: unknown) {
 
 function applyRuntimeSystemDefaults(settings: AppSettings, defaultWorkdir: string): AppSettings {
   const normalizedDefaultWorkdir = defaultWorkdir.trim();
-  if (!normalizedDefaultWorkdir || settings.system.workdir.trim()) {
-    return settings;
-  }
+  const system =
+    !normalizedDefaultWorkdir || settings.system.workdir.trim()
+      ? settings.system
+      : {
+          ...settings.system,
+          workdir: normalizedDefaultWorkdir,
+        };
   return normalizeSettings({
     ...settings,
-    system: {
-      ...settings.system,
-      workdir: normalizedDefaultWorkdir,
-    },
+    system: resolveWorkspaceProjects(system, normalizedDefaultWorkdir),
   });
 }
 

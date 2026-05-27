@@ -1,4 +1,8 @@
-import type { ConversationSummary, GatewayHistoryEvent } from "./gatewayTypes";
+import type {
+  ConversationSummary,
+  GatewayHistoryEvent,
+  RunningConversationSummary,
+} from "./gatewayTypes";
 
 type ReconcileConversationSummariesOptions = {
   retainConversationIds?: Iterable<string>;
@@ -154,6 +158,54 @@ export function normalizeRunningConversationIds(ids: readonly unknown[] | undefi
     }
     seen.add(value);
     normalized.push(value);
+  }
+  return normalized;
+}
+
+function normalizeRunningConversationSummary(
+  value: unknown,
+): RunningConversationSummary | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const source = value as Record<string, unknown>;
+  const conversationId =
+    typeof source.conversation_id === "string" ? source.conversation_id.trim() : "";
+  if (!conversationId) {
+    return null;
+  }
+  const cwd = typeof source.cwd === "string" ? source.cwd.trim() : "";
+  const updatedAt =
+    typeof source.updated_at === "number" && Number.isFinite(source.updated_at)
+      ? source.updated_at
+      : undefined;
+  return {
+    conversation_id: conversationId,
+    cwd: cwd || undefined,
+    updated_at: updatedAt,
+  };
+}
+
+export function normalizeRunningConversations(
+  conversations: readonly unknown[] | undefined,
+  fallbackIds?: readonly unknown[],
+) {
+  const seen = new Set<string>();
+  const normalized: RunningConversationSummary[] = [];
+  for (const value of conversations ?? []) {
+    const summary = normalizeRunningConversationSummary(value);
+    if (!summary || seen.has(summary.conversation_id)) {
+      continue;
+    }
+    seen.add(summary.conversation_id);
+    normalized.push(summary);
+  }
+  for (const id of normalizeRunningConversationIds(fallbackIds)) {
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    normalized.push({ conversation_id: id });
   }
   return normalized;
 }

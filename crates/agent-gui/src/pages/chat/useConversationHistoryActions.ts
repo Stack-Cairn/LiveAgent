@@ -77,6 +77,7 @@ type UseConversationHistoryActionsParams = {
   resetVisibleTransientState: () => void;
   deleteConversationArtifacts: (conversationId: string) => void;
   disposeSubagentsForConversation?: (conversationId: string) => void;
+  getDefaultNewConversationWorkdir?: () => string | undefined;
   setCurrentConversationId: Dispatch<SetStateAction<string>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
   setHydratingConversationId: Dispatch<SetStateAction<string | null>>;
@@ -91,8 +92,9 @@ function createBlankConversationEntry(params: {
   conversationState: ConversationViewState;
   sessionId: string;
   createdAt: number;
+  workdir?: string;
 }) {
-  const { conversationState, sessionId, createdAt } = params;
+  const { conversationState, sessionId, createdAt, workdir } = params;
   return createConversationRuntimeEntry({
     state: createConversationStateFromContext({
       tools: conversationState.meta.tools,
@@ -100,6 +102,7 @@ function createBlankConversationEntry(params: {
     }),
     sessionId,
     createdAt,
+    workdir,
   });
 }
 
@@ -141,6 +144,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     resetVisibleTransientState,
     deleteConversationArtifacts,
     disposeSubagentsForConversation,
+    getDefaultNewConversationWorkdir,
     setCurrentConversationId,
     setErrorMessage,
     setHydratingConversationId,
@@ -183,7 +187,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     pruneIdleConversationCaches([conversationId]);
   }
 
-  function startNewConversation() {
+  function startNewConversation(options?: { workdir?: string }) {
     cancelConversationHydration();
     const visibleConversationId = currentConversationIdRef.current;
     setConversationRuntimeCacheEntry(
@@ -198,6 +202,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       conversationState,
       sessionId: nextIdentity.sessionId,
       createdAt: nextIdentity.createdAt,
+      workdir: options?.workdir ?? getDefaultNewConversationWorkdir?.(),
     });
     activateConversation({
       conversationId: nextIdentity.conversationId,
@@ -250,6 +255,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         state: record.state,
         sessionId: record.sessionId ?? record.id,
         createdAt: record.createdAt,
+        workdir: record.cwd,
       });
       activateConversation({
         conversationId: record.id,
@@ -276,6 +282,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         state: warmState,
         sessionId: activeRecord.sessionId ?? activeRecord.id,
         createdAt: activeRecord.createdAt,
+        workdir: activeRecord.cwd,
       });
       activateConversation({
         conversationId: activeRecord.id,
@@ -380,6 +387,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           conversationState,
           sessionId: nextIdentity.sessionId,
           createdAt: nextIdentity.createdAt,
+          workdir: getDefaultNewConversationWorkdir?.(),
         });
         activateConversation({
           conversationId: nextIdentity.conversationId,

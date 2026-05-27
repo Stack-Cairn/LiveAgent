@@ -392,7 +392,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   } = params;
 
   if (!effectiveWorkdir) {
-    throw new Error("Tool mode requires a working directory configured in Settings -> System.");
+    throw new Error("Tool mode requires a project directory from the chat sidebar.");
   }
 
   // Clear the per-conversation slug tracker before a fresh user turn so the

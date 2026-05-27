@@ -118,7 +118,7 @@ export type ChatEvent = (
       conversation_id?: string;
     }
   | { type: "error"; message: string; round?: number; conversation_id?: string }
-) & { seq?: number };
+) & { seq?: number; workdir?: string };
 
 export type CronManagePayload = {
   action: string;
@@ -155,6 +155,32 @@ export type HistoryList = {
   conversations: ConversationSummary[];
   total_count: number;
   running_conversation_ids?: string[];
+  running_conversations?: RunningConversationSummary[];
+};
+
+export type RunningConversationSummary = {
+  conversation_id: string;
+  cwd?: string;
+  updated_at?: number;
+};
+
+export type HistoryListFilter = {
+  cwd?: string;
+  cwdEmpty?: boolean;
+};
+
+export type HistoryWorkdirSummary = {
+  path: string;
+  conversationCount: number;
+  updatedAt: number;
+};
+
+export type HistoryWorkdirsResponse = {
+  workdirs: HistoryWorkdirSummary[];
+};
+
+export type CreateProjectFolderResponse = {
+  path: string;
 };
 
 export type HistoryDetail = {
@@ -197,5 +223,5 @@ export type GatewayHistoryEvent =
   | {
       kind: "running" | "idle";
       conversation_id: string;
-      conversation?: undefined;
+      conversation?: ConversationSummary;
     };

@@ -1,10 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
-import { useState } from "react";
 import {
   CheckCircle2,
-  ChevronRight,
   Cpu,
-  FolderOpen,
   MessageSquare,
   Moon,
   Sun,
@@ -12,12 +8,9 @@ import {
   Wrench,
 } from "../../components/icons";
 
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
 import { SUPPORTED_LOCALES, useLocale } from "../../i18n";
 import {
   type ExecutionMode,
-  isAgentExecutionMode,
   type Theme,
   updateSystem,
 } from "../../lib/settings";
@@ -27,34 +20,11 @@ import type { SettingsSectionProps } from "./types";
 export function SystemSettingsForm(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
-  const [pickingWorkdir, setPickingWorkdir] = useState(false);
-  const [pickWorkdirError, setPickWorkdirError] = useState<string | null>(null);
 
-  const workdirId = "system-workdir";
   const executionMode = settings.system.executionMode;
-  const workdir = settings.system.workdir;
   const selectedSystemTools = settings.system.selectedSystemTools;
-  const isAgentMode = isAgentExecutionMode(executionMode);
   const isClassicAgentMode = executionMode === "tools";
   const isAgentDevMode = executionMode === "agent-dev";
-
-  async function handlePickWorkdir() {
-    setPickWorkdirError(null);
-    setPickingWorkdir(true);
-    try {
-      const initialWorkdir = workdir.trim();
-      const picked = await invoke<string | null>("system_pick_folder", {
-        initial_workdir: initialWorkdir || undefined,
-      });
-      if (typeof picked === "string" && picked.trim()) {
-        setSettings((prev) => updateSystem(prev, { workdir: picked }));
-      }
-    } catch (error) {
-      setPickWorkdirError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setPickingWorkdir(false);
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -279,75 +249,6 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           </div>
         </section>
       </div>
-
-      <div className="border-t" />
-
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          {t("settings.workdir")}
-          {isAgentMode ? (
-            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              {t("settings.workdirRequired")}
-            </span>
-          ) : null}
-        </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">{t("settings.workdirDesc")}</p>
-
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Input
-              id={workdirId}
-              className="pr-10 font-mono text-[13px]"
-              value={workdir}
-              placeholder={t("settings.workdirPlaceholder")}
-              onChange={(e) => {
-                const nextWorkdir = e.currentTarget.value;
-                setSettings((prev) => updateSystem(prev, { workdir: nextWorkdir }));
-              }}
-            />
-            {workdir.trim() ? (
-              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              </div>
-            ) : null}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            title={t("settings.selectWorkdir")}
-            aria-label={t("settings.selectWorkdir")}
-            disabled={pickingWorkdir}
-            className="shrink-0"
-            onClick={() => {
-              void handlePickWorkdir();
-            }}
-          >
-            <FolderOpen className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {isAgentMode && !workdir.trim() ? (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
-            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-            <span className="text-xs text-amber-700 dark:text-amber-300">
-              {t("settings.workdirWarning")}
-            </span>
-          </div>
-        ) : null}
-        {pickWorkdirError ? (
-          <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
-            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-            <span className="text-xs text-destructive">
-              {t("settings.workdirOpenFailed")}
-              {pickWorkdirError}
-            </span>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="border-t" />
 
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">

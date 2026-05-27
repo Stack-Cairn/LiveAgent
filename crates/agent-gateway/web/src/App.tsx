@@ -43,11 +43,16 @@ import {
   isAgentDevMode,
   normalizeChatRuntimeControlsForProvider,
   normalizeSettings,
+  resolveWorkspaceProjects,
+  workspaceProjectPathKey,
   updateChatRuntimeControlsForProvider,
+  updateCustomSettings,
   type AppSettings,
   type ChatRuntimeControls,
   type CustomProvider,
   type SelectedModel,
+  type WorkspaceProject,
+  DEFAULT_WORKSPACE_PROJECT_ID,
 } from "@/lib/settings";
 import {
   applyGatewaySettingsSyncPayload,
@@ -69,6 +74,7 @@ import type {
   GatewaySelectedModel,
   HistoryDetail,
   HistoryShareStatus,
+  HistoryWorkdirSummary,
 } from "./lib/gatewayTypes";
 import {
   buildOptimisticConversationTitle,
@@ -96,7 +102,7 @@ import {
 } from "./lib/liveConversationStreamStore";
 import {
   applyGatewayHistoryEvent,
-  normalizeRunningConversationIds,
+  normalizeRunningConversations,
   reconcileConversationSummaries,
   upsertConversationSummary,
 } from "./lib/historySync";
@@ -122,6 +128,16 @@ import { HistoryShareModal } from "./components/chat/HistoryShareModal";
 import { useGatewayScrollAffordance } from "./components/useGatewayScrollAffordance";
 import { LoginPage } from "./pages/LoginPage";
 import { SharedHistoryPage } from "./pages/SharedHistoryPage";
+import { WorkdirPickerModal } from "./pages/settings/WorkdirPickerModal";
+import {
+  applyWorkspaceProjectConversationActivityMap,
+  buildWorkspaceProjectActivityUpdatedAts,
+  fallbackWorkspaceProjectName,
+  findWorkspaceProject,
+  mergeWorkspaceProjectActivityUpdatedAts,
+  mergeWorkspaceProjectsWithHistory,
+  workspaceProjectActivityUpdatedAtsEqual,
+} from "./lib/workspaceProjects";
 
 type ReloadHistoryOptions = {
   preferredConversationId?: string;
@@ -143,6 +159,12 @@ type ConversationRuntimeEntry = {
   toolStatus: string | null;
   toolStatusIsCompaction: boolean;
   isSending: boolean;
+  workdir?: string;
+};
+
+type RunningConversationRuntime = {
+  workdir?: string;
+  updatedAt: number;
 };
 
 const MAX_UPLOAD_FILES = 9;
@@ -197,7 +219,7 @@ async function importPastedTextsAsFiles(params: {
   const { token, workdir, pastes } = params;
   const normalizedWorkdir = workdir.trim();
   if (!normalizedWorkdir) {
-    throw new Error("工作目录未配置，无法发送大段粘贴内容。");
+    throw new Error("项目目录未选择，无法发送大段粘贴内容。");
   }
   if (pastes.length === 0) {
     return {
@@ -246,14 +268,17 @@ type SendChatOptions = {
   clientRequestId?: string;
   uploadedFiles?: PendingUploadedFile[];
   runtimeControls?: ChatRuntimeControls;
+  workdir?: string;
 };
 
 type SendChatFn = (message: string, options?: SendChatOptions) => Promise<void>;
 
 const PROTECTED_DRAFT_CONVERSATION = "__protected_draft__";
 const HISTORY_LIST_PAGE_SIZE = 80;
+const HISTORY_LIST_MIN_LOADING_MS = 260;
 const HISTORY_DETAIL_INITIAL_MAX_MESSAGES = 360;
 const HISTORY_SWITCH_OVERLAY_MIN_MS = 260;
+const PROJECT_HISTORY_DELETE_PAGE_SIZE = 200;
 const SHARED_HISTORY_LIST_PAGE_SIZE = 200;
 const HISTORY_TITLE_POSITION_LOCK_MS = 1200;
 const SECONDS_TIMESTAMP_MAX = 10_000_000_000;
@@ -292,6 +317,20 @@ function asErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
   const text = String(error ?? "").trim();
   return text || fallback;
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function waitForMinimumHistoryListLoading(startedAt: number) {
+  const elapsed = Date.now() - startedAt;
+  const remainingMs = Math.max(0, HISTORY_LIST_MIN_LOADING_MS - elapsed);
+  if (remainingMs > 0) {
+    await wait(remainingMs);
+  }
 }
 
 function normalizeOptionalStatus(value: string | null | undefined) {
@@ -368,12 +407,48 @@ function buildGatewaySelectedModel(
   };
 }
 
-function buildGatewaySystemSettings(settings: AppSettings) {
+function buildGatewaySystemSettings(settings: AppSettings, workdirOverride?: string) {
   return {
     executionMode: settings.system.executionMode,
-    workdir: settings.system.workdir.trim(),
+    workdir: workdirOverride ?? settings.system.workdir.trim(),
     selectedSystemTools: [...settings.system.selectedSystemTools],
   };
+}
+
+function getDefaultWorkspaceProjectPath(system: AppSettings["system"]) {
+  return (
+    system.workspaceProjects.find((project) => project.id === DEFAULT_WORKSPACE_PROJECT_ID)?.path ||
+    system.workdir
+  );
+}
+
+function createWorkspaceProjectFromPath(path: string, kind: WorkspaceProject["kind"]) {
+  const now = Date.now();
+  return {
+    id: `${kind}-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    name: fallbackWorkspaceProjectName(path),
+    path,
+    kind,
+    createdAt: now,
+    updatedAt: now,
+  } satisfies WorkspaceProject;
+}
+
+function historyConversationMatchesFilter(
+  conversation: ConversationSummary | undefined,
+  filter?: { cwd?: string; cwdEmpty?: boolean },
+) {
+  if (!conversation) {
+    return false;
+  }
+  if (filter?.cwdEmpty) {
+    return !conversation.cwd?.trim();
+  }
+  const cwd = filter?.cwd?.trim();
+  if (cwd) {
+    return conversation.cwd?.trim() === cwd;
+  }
+  return true;
 }
 
 function hasSettingsSyncChanged(prev: AppSettings, next: AppSettings) {
@@ -385,6 +460,16 @@ function hasSettingsSyncChanged(prev: AppSettings, next: AppSettings) {
 
 function hasProviderApiKeyUpdates(settings: AppSettings) {
   return settings.customProviders.some((provider) => provider.apiKey.trim().length > 0);
+}
+
+function resolveAppWorkspaceProjects(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    system: resolveWorkspaceProjects(
+      settings.system,
+      getDefaultWorkspaceProjectPath(settings.system),
+    ),
+  };
 }
 
 function resolveConversationTitle(
@@ -454,6 +539,7 @@ function createConversationRuntimeEntry(
     toolStatus,
     toolStatusIsCompaction: toolStatus ? input?.toolStatusIsCompaction === true : false,
     isSending: input?.isSending ?? false,
+    workdir: input?.workdir?.trim() || undefined,
   };
 }
 
@@ -581,6 +667,7 @@ export default function App() {
   const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
   const [historyMutating, setHistoryMutating] = useState(false);
   const [historyItems, setHistoryItems] = useState<ConversationSummary[]>([]);
+  const [historyWorkdirs, setHistoryWorkdirs] = useState<HistoryWorkdirSummary[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -590,6 +677,12 @@ export default function App() {
   const [remoteRunningConversationIds, setRemoteRunningConversationIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [remoteRunningConversationRuntime, setRemoteRunningConversationRuntime] = useState<
+    ReadonlyMap<string, RunningConversationRuntime>
+  >(() => new Map());
+  const [projectActivityUpdatedAtOverrides, setProjectActivityUpdatedAtOverrides] = useState<
+    ReadonlyMap<string, number>
+  >(() => new Map());
   const [liveConversationStreamMeta, setLiveConversationStreamMetaState] = useState<
     Record<string, LiveConversationStreamMeta>
   >({});
@@ -601,6 +694,7 @@ export default function App() {
     startedAt: number;
   } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [workdirPickerMode, setWorkdirPickerMode] = useState<"existing-project" | "blank-project" | null>(null);
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
   const [overlay, setOverlay] = useState<OverlayState>("closed");
   const [settings, setSettingsState] = useState<AppSettings>(() => loadWebSettings(loadToken()));
@@ -609,9 +703,43 @@ export default function App() {
   const [settingsSaveState, setSettingsSaveState] = useState<WebSettingsSaveState>({
     status: "saved",
   });
+  const isAgentMode = settings.system.executionMode !== "text";
+  const workspaceProjects = useMemo(
+    () => mergeWorkspaceProjectsWithHistory(settings.system, historyWorkdirs),
+    [historyWorkdirs, settings.system],
+  );
+  const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>(
+    DEFAULT_WORKSPACE_PROJECT_ID,
+  );
+  const missingWorkspaceProjectPathKeys = useMemo(
+    () => new Set(settings.system.missingWorkspaceProjectPaths.map(workspaceProjectPathKey)),
+    [settings.system.missingWorkspaceProjectPaths],
+  );
+  const activeWorkspaceProject = useMemo(
+    () => findWorkspaceProject(workspaceProjects, activeWorkspaceProjectId),
+    [activeWorkspaceProjectId, workspaceProjects],
+  );
+  useEffect(() => {
+    if (activeWorkspaceProject?.id && activeWorkspaceProject.id !== activeWorkspaceProjectId) {
+      setActiveWorkspaceProjectId(activeWorkspaceProject.id);
+    }
+  }, [activeWorkspaceProject?.id, activeWorkspaceProjectId]);
+  const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
+  const historyListFilter = useMemo(
+    () =>
+      isAgentMode
+        ? { cwd: activeWorkspaceProjectPath || "__liveagent_no_project__" }
+        : { cwdEmpty: true },
+    [activeWorkspaceProjectPath, isAgentMode],
+  );
+  const historyScopeKey = isAgentMode
+    ? `cwd:${activeWorkspaceProjectPath || "__liveagent_no_project__"}`
+    : "cwd-empty";
   const [sidebarOpen, setSidebarOpen] = useState(shouldOpenSidebarByDefault);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
+  const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [shareConversation, setShareConversation] = useState<ChatHistorySummary | null>(null);
   const [shareStatus, setShareStatus] = useState<HistoryShareStatus | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -660,6 +788,8 @@ export default function App() {
   const historyItemsRef = useRef(historyItems);
   const historyTotalRef = useRef(historyTotal);
   const historyHasMoreRef = useRef(historyHasMore);
+  const historyListFilterRef = useRef(historyListFilter);
+  const historyScopeKeyRef = useRef(historyScopeKey);
   const nextHistoryPageRef = useRef(1);
   const historyListPageLoadingRef = useRef(false);
   const sharedHistoryItemsRef = useRef<ChatHistorySummary[]>([]);
@@ -669,11 +799,15 @@ export default function App() {
   const uploadDragDepthRef = useRef(0);
   const localRunningConversationIdsRef = useRef<ReadonlySet<string>>(new Set());
   const remoteRunningConversationIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const remoteRunningConversationRuntimeRef = useRef<
+    ReadonlyMap<string, RunningConversationRuntime>
+  >(new Map());
   const liveConversationStreamStoresRef = useRef<Map<string, LiveConversationStreamStore>>(
     new Map(),
   );
   const liveConversationStreamMetaRef = useRef<Record<string, LiveConversationStreamMeta>>({});
   const conversationRuntimeCacheRef = useRef<Map<string, ConversationRuntimeEntry>>(new Map());
+  const displayedConversationWorkdirRef = useRef("");
   const conversationAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const attachedConversationControllersRef = useRef<Map<string, AbortController>>(new Map());
   const completedLiveStreamConversationAtRef = useRef<Map<string, number>>(new Map());
@@ -698,6 +832,45 @@ export default function App() {
   const settingsSaveSequenceRef = useRef(0);
   const settingsSaveChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const isImportingPastedTextRef = useRef(false);
+  const persistProjectConversationActivityRef = useRef(
+    (_activity: ReadonlyMap<string, number>) => undefined as void,
+  );
+
+  const recordProjectActivity = useCallback(
+    (workdir?: string | null, updatedAt?: number | null) => {
+      const pathKey = workspaceProjectPathKey(workdir ?? "");
+      if (!pathKey) {
+        return;
+      }
+      const nextUpdatedAt =
+        typeof updatedAt === "number" && Number.isFinite(updatedAt) && updatedAt > 0
+          ? updatedAt
+          : Date.now();
+      setProjectActivityUpdatedAtOverrides((current) => {
+        if ((current.get(pathKey) ?? 0) >= nextUpdatedAt) {
+          return current;
+        }
+        return mergeWorkspaceProjectActivityUpdatedAts(
+          current,
+          new Map([[pathKey, nextUpdatedAt]]),
+        );
+      });
+      persistProjectConversationActivityRef.current(new Map([[pathKey, nextUpdatedAt]]));
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const historyActivity = buildWorkspaceProjectActivityUpdatedAts(historyWorkdirs);
+    if (historyActivity.size === 0) {
+      return;
+    }
+    setProjectActivityUpdatedAtOverrides((current) => {
+      const next = mergeWorkspaceProjectActivityUpdatedAts(current, historyActivity);
+      return workspaceProjectActivityUpdatedAtsEqual(current, next) ? current : next;
+    });
+    persistProjectConversationActivityRef.current(historyActivity);
+  }, [historyWorkdirs]);
 
   function getVisibleComposerConversationId() {
     return resolveVisibleConversationId(
@@ -913,6 +1086,18 @@ export default function App() {
   }, [historyHasMore]);
 
   useEffect(() => {
+    historyListFilterRef.current = historyListFilter;
+    if (historyScopeKeyRef.current === historyScopeKey) {
+      return;
+    }
+    historyScopeKeyRef.current = historyScopeKey;
+    historyListPageLoadingRef.current = false;
+    commitHistoryListState([], 0, 1, false);
+    setHistoryError(null);
+    setHistoryListLoading(true);
+  }, [commitHistoryListState, historyListFilter, historyScopeKey]);
+
+  useEffect(() => {
     pendingUploadedFilesRef.current = pendingUploadedFiles;
   }, [pendingUploadedFiles]);
 
@@ -1061,6 +1246,7 @@ export default function App() {
         toolStatus: chatToolStatusRef.current,
         toolStatusIsCompaction: chatToolStatusIsCompactionRef.current,
         isSending: chatBusyRef.current,
+        workdir: conversationRuntimeCacheRef.current.get(conversationIdRef.current.trim())?.workdir,
       }),
     [],
   );
@@ -1143,12 +1329,51 @@ export default function App() {
     [applyChatToolStatus, buildVisibleRuntimeEntry],
   );
 
+  useEffect(() => {
+    const nextWorkdir = activeWorkspaceProjectPath.trim();
+    if (!isAgentMode || !nextWorkdir) {
+      return;
+    }
+    const conversationIdValue = resolveVisibleConversationId(
+      selectedHistoryIdRef.current,
+      conversationIdRef.current,
+    ).trim();
+    if (!conversationIdValue || !isLocalDraftConversationId(conversationIdValue)) {
+      return;
+    }
+    if (
+      chatBusyRef.current ||
+      localRunningConversationIdsRef.current.has(conversationIdValue) ||
+      remoteRunningConversationIdsRef.current.has(conversationIdValue)
+    ) {
+      return;
+    }
+    if (chatMessagesRef.current.length > 0 || pendingUploadedFilesRef.current.length > 0) {
+      return;
+    }
+    const currentWorkdir =
+      conversationRuntimeCacheRef.current.get(conversationIdValue)?.workdir?.trim() || "";
+    if (currentWorkdir === nextWorkdir) {
+      return;
+    }
+    updateConversationRuntimeEntry(conversationIdValue, (current) => ({
+      ...current,
+      workdir: nextWorkdir,
+    }));
+  }, [activeWorkspaceProjectPath, isAgentMode, updateConversationRuntimeEntry]);
+
   const setConversationRunningState = useCallback(
     (targetConversationId: string, isRunning: boolean) => {
       const conversationIdValue = targetConversationId.trim();
       if (!conversationIdValue) {
         return;
       }
+
+      const runtimeWorkdir =
+        conversationRuntimeCacheRef.current.get(conversationIdValue)?.workdir?.trim() || "";
+      const persistedWorkdir =
+        historyItemsRef.current.find((item) => item.id === conversationIdValue)?.cwd?.trim() || "";
+      recordProjectActivity(runtimeWorkdir || persistedWorkdir, Date.now());
 
       updateConversationRuntimeEntry(conversationIdValue, (previous) => ({
         ...previous,
@@ -1169,7 +1394,7 @@ export default function App() {
         return next;
       });
     },
-    [updateConversationRuntimeEntry],
+    [recordProjectActivity, updateConversationRuntimeEntry],
   );
 
   const setConversationAbortController = useCallback(
@@ -1664,15 +1889,17 @@ export default function App() {
 
   useEffect(() => {
     setSettingsState((prev) =>
-      normalizeSettings({
-        ...prev,
-        remote: {
-          ...prev.remote,
-          gatewayUrl: window.location.origin,
-          token: token.trim(),
-          enabled: token.trim() !== "" || prev.remote.enabled,
-        },
-      }),
+      resolveAppWorkspaceProjects(
+        normalizeSettings({
+          ...prev,
+          remote: {
+            ...prev.remote,
+            gatewayUrl: window.location.origin,
+            token: token.trim(),
+            enabled: token.trim() !== "" || prev.remote.enabled,
+          },
+        }),
+      ),
     );
   }, [token]);
 
@@ -1715,8 +1942,11 @@ export default function App() {
 
   const applyGatewaySettings = useCallback((payload: GatewaySettingsSyncPayload) => {
     setSettingsState((prev) => {
-      const next = redactSettingsForWebStorage(
+      const rawNext = resolveAppWorkspaceProjects(
         applyGatewaySettingsSyncPayload(prev, payload),
+      );
+      const next = redactSettingsForWebStorage(
+        rawNext,
       );
       if (!hasSettingsSyncChanged(prev, next)) {
         return prev;
@@ -1728,7 +1958,7 @@ export default function App() {
 
   const setSettings = useCallback((updater: (prev: AppSettings) => AppSettings) => {
     setSettingsState((prev) => {
-      const rawNext = normalizeSettings(updater(prev));
+      const rawNext = resolveAppWorkspaceProjects(normalizeSettings(updater(prev)));
       const next = redactSettingsForWebStorage(rawNext);
       queueSettingsSave(
         rawNext,
@@ -1738,6 +1968,323 @@ export default function App() {
       return next;
     });
   }, [queueSettingsSave]);
+
+  const persistProjectConversationActivity = useCallback(
+    (activity: ReadonlyMap<string, number>) => {
+      if (activity.size === 0) {
+        return;
+      }
+      setSettings((prev) => {
+        const hiddenProjectPathKeys = new Set(
+          prev.system.hiddenWorkspaceProjectPaths.map(workspaceProjectPathKey),
+        );
+        const workspaceProjects = applyWorkspaceProjectConversationActivityMap(
+          prev.system.workspaceProjects,
+          activity,
+          { hiddenProjectPathKeys },
+        );
+        if (!workspaceProjects) {
+          return prev;
+        }
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              workspaceProjects,
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+    },
+    [setSettings],
+  );
+  persistProjectConversationActivityRef.current = persistProjectConversationActivity;
+
+  const refreshHistoryWorkdirs = useCallback(async (currentApi = api) => {
+    if (!currentApi) {
+      setHistoryWorkdirs([]);
+      return;
+    }
+    try {
+      const response = await currentApi.listHistoryWorkdirs();
+      setHistoryWorkdirs(response.workdirs);
+    } catch (error) {
+      console.warn("Failed to load chat history workdirs", error);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void refreshHistoryWorkdirs(api);
+  }, [api, refreshHistoryWorkdirs]);
+
+  const setWorkspaceProjectDirectoryMissing = useCallback(
+    (project: WorkspaceProject, missing: boolean) => {
+      const key = workspaceProjectPathKey(project.path);
+      const path = project.path.trim();
+      if (!key || !path) return;
+      setSettings((prev) => {
+        const hasMissingPath = prev.system.missingWorkspaceProjectPaths.some(
+          (item) => workspaceProjectPathKey(item) === key,
+        );
+        if (hasMissingPath === missing) {
+          return prev;
+        }
+        const missingWorkspaceProjectPaths = missing
+          ? [...prev.system.missingWorkspaceProjectPaths, path]
+          : prev.system.missingWorkspaceProjectPaths.filter(
+              (item) => workspaceProjectPathKey(item) !== key,
+            );
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              missingWorkspaceProjectPaths,
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+    },
+    [setSettings],
+  );
+
+  const checkWorkspaceProjectDirectory = useCallback(
+    async (project: WorkspaceProject, currentApi = api) => {
+      const path = project.path.trim();
+      if (!path) {
+        setWorkspaceProjectDirectoryMissing(project, true);
+        return false;
+      }
+      if (!currentApi) {
+        return !missingWorkspaceProjectPathKeys.has(workspaceProjectPathKey(path));
+      }
+      try {
+        await currentApi.listDirs(path, 1);
+        setWorkspaceProjectDirectoryMissing(project, false);
+        return true;
+      } catch {
+        setWorkspaceProjectDirectoryMissing(project, true);
+        return false;
+      }
+    },
+    [api, missingWorkspaceProjectPathKeys, setWorkspaceProjectDirectoryMissing],
+  );
+
+  const activateWorkspaceProject = useCallback(
+    (project: WorkspaceProject, options?: { startConversation?: boolean }) => {
+      const pathKey = project.path.trim();
+      if (!pathKey) return;
+      const normalizedPathKey = workspaceProjectPathKey(pathKey);
+      const targetProject =
+        workspaceProjects.find(
+          (item) =>
+            workspaceProjectPathKey(item.path) === normalizedPathKey ||
+            item.id === project.id,
+        ) ?? project;
+      setActiveWorkspaceProjectId(targetProject.id);
+      setSettings((prev) => {
+        const existing = prev.system.workspaceProjects.find(
+          (item) =>
+            workspaceProjectPathKey(item.path) === normalizedPathKey ||
+            item.id === project.id,
+        );
+        const nextProject = existing ?? targetProject;
+        const workspaceProjects = existing
+          ? prev.system.workspaceProjects.map((item) =>
+              item.id === existing.id
+                ? {
+                    ...item,
+                    name: item.id === DEFAULT_WORKSPACE_PROJECT_ID ? item.name : nextProject.name,
+                    path: nextProject.path,
+                    kind:
+                      item.id === DEFAULT_WORKSPACE_PROJECT_ID
+                        ? "managed"
+                        : nextProject.kind === "history"
+                          ? item.kind
+                          : nextProject.kind,
+                    updatedAt: item.updatedAt,
+                    lastConversationAt:
+                      Math.max(
+                        item.lastConversationAt ?? 0,
+                        nextProject.lastConversationAt ?? 0,
+                      ) || undefined,
+                  }
+                : item,
+            )
+          : [...prev.system.workspaceProjects, nextProject];
+        const nextSystem = resolveWorkspaceProjects(
+          {
+            ...prev.system,
+            workspaceProjects,
+            hiddenWorkspaceProjectPaths: prev.system.hiddenWorkspaceProjectPaths.filter(
+              (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
+            ),
+            missingWorkspaceProjectPaths: prev.system.missingWorkspaceProjectPaths.filter(
+              (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
+            ),
+          },
+          getDefaultWorkspaceProjectPath(prev.system),
+        );
+        return {
+          ...prev,
+          system: nextSystem,
+        };
+      });
+      if (options?.startConversation) {
+        setActiveView("chat");
+        startNewConversation({ workdir: targetProject.path });
+      }
+    },
+    [setSettings, workspaceProjects],
+  );
+
+  const handleSelectWorkspaceProject = useCallback(
+    async (project: WorkspaceProject) => {
+      if (!(await checkWorkspaceProjectDirectory(project))) {
+        return;
+      }
+      activateWorkspaceProject(project);
+    },
+    [activateWorkspaceProject, checkWorkspaceProjectDirectory],
+  );
+
+  const handleNewConversationForProject = useCallback(
+    async (project: WorkspaceProject) => {
+      if (!(await checkWorkspaceProjectDirectory(project))) {
+        return;
+      }
+      if (isMobileSidebarLayout()) {
+        setSidebarOpen(false);
+      }
+      activateWorkspaceProject(project, { startConversation: true });
+    },
+    [activateWorkspaceProject, checkWorkspaceProjectDirectory],
+  );
+
+  const handleAddExistingWorkspaceProject = useCallback(() => {
+    setWorkdirPickerMode("existing-project");
+  }, []);
+
+  const handleOpenCreateWorkspaceProject = useCallback(() => {
+    setWorkdirPickerMode("blank-project");
+  }, []);
+
+  const handleWorkdirPickerSelect = useCallback(
+    (path: string) => {
+      const normalizedPath = path.trim();
+      if (!normalizedPath) return;
+      if (workdirPickerMode === "existing-project") {
+        activateWorkspaceProject(createWorkspaceProjectFromPath(normalizedPath, "folder"));
+        void refreshHistoryWorkdirs(api);
+        return;
+      }
+      if (workdirPickerMode === "blank-project") {
+        activateWorkspaceProject(createWorkspaceProjectFromPath(normalizedPath, "managed"));
+        void refreshHistoryWorkdirs(api);
+      }
+    },
+    [activateWorkspaceProject, api, refreshHistoryWorkdirs, workdirPickerMode],
+  );
+
+  const commitWorkspaceProjectRename = useCallback(
+    (project: WorkspaceProject, nextNameInput: string) => {
+      if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
+      const nextName = nextNameInput.trim();
+      if (!nextName || nextName === project.name) return;
+      setSettings((prev) => {
+        const pathKey = workspaceProjectPathKey(project.path);
+        const existing = prev.system.workspaceProjects.find(
+          (item) =>
+            item.id === project.id || workspaceProjectPathKey(item.path) === pathKey,
+        );
+        const updatedProject: WorkspaceProject = {
+          ...(existing ?? project),
+          id: existing?.id ?? project.id,
+          name: nextName,
+          kind: (existing ?? project).kind === "history" ? "folder" : (existing ?? project).kind,
+          updatedAt: Date.now(),
+        };
+        const workspaceProjects = existing
+          ? prev.system.workspaceProjects.map((item) =>
+              item.id === existing.id || workspaceProjectPathKey(item.path) === pathKey
+                ? updatedProject
+                : item,
+            )
+          : [...prev.system.workspaceProjects, updatedProject];
+
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              workspaceProjects,
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+    },
+    [setSettings],
+  );
+
+  const handleStartRenamingWorkspaceProject = useCallback((project: WorkspaceProject) => {
+    if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
+    setProjectRenamingId(project.id);
+    setProjectRenameDraft(project.name);
+  }, []);
+
+  const handleCommitWorkspaceProjectRename = useCallback(() => {
+    if (!projectRenamingId) {
+      return;
+    }
+    const project = workspaceProjects.find((item) => item.id === projectRenamingId);
+    if (project) {
+      commitWorkspaceProjectRename(project, projectRenameDraft);
+    }
+    setProjectRenamingId(null);
+    setProjectRenameDraft("");
+  }, [
+    commitWorkspaceProjectRename,
+    projectRenameDraft,
+    projectRenamingId,
+    workspaceProjects,
+  ]);
+
+  const handleCancelWorkspaceProjectRename = useCallback(() => {
+    setProjectRenamingId(null);
+    setProjectRenameDraft("");
+  }, []);
+
+  const handleSidebarProjectsCollapsedChange = useCallback(
+    (projectsCollapsed: boolean) => {
+      setSettings((prev) =>
+        updateCustomSettings(prev, {
+          chatSidebar: {
+            ...prev.customSettings.chatSidebar,
+            projectsCollapsed,
+          },
+        }),
+      );
+    },
+    [setSettings],
+  );
+
+  const handleSidebarRecentCollapsedChange = useCallback(
+    (recentCollapsed: boolean) => {
+      setSettings((prev) =>
+        updateCustomSettings(prev, {
+          chatSidebar: {
+            ...prev.customSettings.chatSidebar,
+            recentCollapsed,
+          },
+        }),
+      );
+    },
+    [setSettings],
+  );
 
   useEffect(() => {
     if (!api) {
@@ -1797,27 +2344,75 @@ export default function App() {
     remoteRunningConversationIdsRef.current = remoteRunningConversationIds;
   }, [remoteRunningConversationIds]);
 
+  useEffect(() => {
+    remoteRunningConversationRuntimeRef.current = remoteRunningConversationRuntime;
+  }, [remoteRunningConversationRuntime]);
+
   const setRemoteConversationRunningState = useCallback(
-    (targetConversationId: string, isRunning: boolean) => {
+    (
+      targetConversationId: string,
+      isRunning: boolean,
+      runtime?: { workdir?: string; updatedAt?: number },
+    ) => {
       const conversationIdValue = targetConversationId.trim();
       if (!conversationIdValue) {
         return;
       }
       const current = remoteRunningConversationIdsRef.current;
       const hasConversation = current.has(conversationIdValue);
-      if ((isRunning && hasConversation) || (!isRunning && !hasConversation)) {
+      const existingRuntime =
+        remoteRunningConversationRuntimeRef.current.get(conversationIdValue);
+      const runtimeWorkdir = runtime?.workdir?.trim() || existingRuntime?.workdir || "";
+      const runtimeUpdatedAt =
+        typeof runtime?.updatedAt === "number" &&
+        Number.isFinite(runtime.updatedAt) &&
+        runtime.updatedAt > 0
+          ? runtime.updatedAt
+          : existingRuntime?.updatedAt || Date.now();
+      recordProjectActivity(runtimeWorkdir, runtimeUpdatedAt);
+      if (!isRunning && !hasConversation && !existingRuntime) {
         return;
       }
-      const next = new Set(current);
-      if (isRunning) {
-        next.add(conversationIdValue);
-      } else {
-        next.delete(conversationIdValue);
+      if (!isRunning || !hasConversation) {
+        const next = new Set(current);
+        if (isRunning) {
+          next.add(conversationIdValue);
+        } else {
+          next.delete(conversationIdValue);
+        }
+        remoteRunningConversationIdsRef.current = next;
+        setRemoteRunningConversationIds(next);
       }
-      remoteRunningConversationIdsRef.current = next;
-      setRemoteRunningConversationIds(next);
+
+      setRemoteRunningConversationRuntime((currentRuntime) => {
+        const existing = currentRuntime.get(conversationIdValue);
+        if (!isRunning) {
+          if (!existing) {
+            return currentRuntime;
+          }
+          const nextRuntime = new Map(currentRuntime);
+          nextRuntime.delete(conversationIdValue);
+          remoteRunningConversationRuntimeRef.current = nextRuntime;
+          return nextRuntime;
+        }
+
+        const nextRuntimeEntry: RunningConversationRuntime = {
+          workdir: runtimeWorkdir || undefined,
+          updatedAt: Math.max(existing?.updatedAt ?? 0, runtimeUpdatedAt),
+        };
+        if (
+          existing?.workdir === nextRuntimeEntry.workdir &&
+          existing?.updatedAt === nextRuntimeEntry.updatedAt
+        ) {
+          return currentRuntime;
+        }
+        const nextRuntime = new Map(currentRuntime);
+        nextRuntime.set(conversationIdValue, nextRuntimeEntry);
+        remoteRunningConversationRuntimeRef.current = nextRuntime;
+        return nextRuntime;
+      });
     },
-    [],
+    [recordProjectActivity],
   );
 
   const isConversationLiveStreamAttached = useCallback((targetConversationId: string) => {
@@ -2187,6 +2782,8 @@ export default function App() {
     if (!api) {
       remoteRunningConversationIdsRef.current = new Set();
       setRemoteRunningConversationIds(new Set());
+      remoteRunningConversationRuntimeRef.current = new Map();
+      setRemoteRunningConversationRuntime(new Map());
       stopAllAttachedConversationLiveStreams();
       clearAllCompletedLiveStreamMarkers();
       clearAllConversationLiveStreams();
@@ -2207,7 +2804,10 @@ export default function App() {
       }
 
       if (event.kind === "running" || event.kind === "idle") {
-        setRemoteConversationRunningState(targetConversationId, event.kind === "running");
+        setRemoteConversationRunningState(targetConversationId, event.kind === "running", {
+          workdir: event.conversation?.cwd,
+          updatedAt: event.conversation?.updated_at,
+        });
         if (event.kind === "running") {
           if (!isConversationLiveStreamAttached(targetConversationId)) {
             clearConversationLiveStream(targetConversationId);
@@ -2215,6 +2815,8 @@ export default function App() {
           attachVisibleConversationLiveStream(targetConversationId, api);
           return;
         }
+
+        void refreshHistoryWorkdirs(api);
 
         if (hasRecentlyCompletedLiveStream(targetConversationId)) {
           return;
@@ -2248,15 +2850,25 @@ export default function App() {
       }
 
       if (event.kind === "upsert") {
+        recordProjectActivity(event.conversation.cwd, event.conversation.updated_at);
         maybeAdoptActiveDraftConversation(event.conversation);
       }
 
-      updateHistoryItems((current) =>
-        applyGatewayHistoryEvent(current, event, {
+      const matchesCurrentHistoryScope =
+        event.kind !== "upsert" ||
+        historyConversationMatchesFilter(event.conversation, historyListFilterRef.current);
+      updateHistoryItems((current) => {
+        if (event.kind === "upsert" && !matchesCurrentHistoryScope) {
+          return current.filter((item) => item.id !== targetConversationId);
+        }
+        return applyGatewayHistoryEvent(current, event, {
           preserveTitleConversationIds: optimisticTitleConversationIdsRef.current,
           preserveUpdatedAtConversationIds: getHistoryPositionLockedConversationIds(),
-        }),
-      );
+        });
+      });
+      if (event.kind === "upsert" || event.kind === "delete" || event.kind === "idle") {
+        void refreshHistoryWorkdirs(api);
+      }
       setHistoryError(null);
       setRemoteRunningConversationIds((current) => {
         if (event.kind !== "delete" || !current.has(targetConversationId)) {
@@ -2267,6 +2879,17 @@ export default function App() {
         remoteRunningConversationIdsRef.current = next;
         return next;
       });
+      if (event.kind === "delete") {
+        setRemoteRunningConversationRuntime((current) => {
+          if (!current.has(targetConversationId)) {
+            return current;
+          }
+          const next = new Map(current);
+          next.delete(targetConversationId);
+          remoteRunningConversationRuntimeRef.current = next;
+          return next;
+        });
+      }
 
       // Keep the current draft/selection stable: remote changes only refresh
       // the recent-conversations list unless they target the active row.
@@ -2280,7 +2903,9 @@ export default function App() {
           conversationIdRef.current === targetConversationId ||
           selectedHistoryIdRef.current === targetConversationId
         ) {
-          startNewConversation();
+          startNewConversation({
+            workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+          });
         }
         return;
       }
@@ -2343,6 +2968,7 @@ export default function App() {
     };
   }, [
     api,
+    activeWorkspaceProjectPath,
     attachVisibleConversationLiveStream,
     clearAllCompletedLiveStreamMarkers,
     clearAllConversationLiveStreams,
@@ -2352,9 +2978,12 @@ export default function App() {
     getHistoryPositionLockedConversationIds,
     hasRecentlyCompletedLiveStream,
     hasRetainedConversationLiveStream,
+    isAgentMode,
     isConversationLiveStreamAttached,
     maybeAdoptActiveDraftConversation,
+    recordProjectActivity,
     refreshVisibleConversationHistorySnapshot,
+    refreshHistoryWorkdirs,
     setRemoteConversationRunningState,
     shouldSuppressPendingDraftBroadcast,
     stopAllAttachedConversationLiveStreams,
@@ -2381,7 +3010,9 @@ export default function App() {
 
       const isTerminalEvent = isTerminalChatEvent(event);
       if (!isTerminalEvent && !isChatStreamNotAvailableEvent(event)) {
-        setRemoteConversationRunningState(targetConversationId, true);
+        setRemoteConversationRunningState(targetConversationId, true, {
+          workdir: event.workdir,
+        });
         if (
           resolveVisibleConversationId(
             selectedHistoryIdRef.current,
@@ -2481,6 +3112,15 @@ export default function App() {
       remoteRunningConversationIdsRef.current = next;
       return next;
     });
+    setRemoteRunningConversationRuntime((current) => {
+      if (current.size === 0) {
+        remoteRunningConversationRuntimeRef.current = current;
+        return current;
+      }
+      const next = new Map<string, RunningConversationRuntime>();
+      remoteRunningConversationRuntimeRef.current = next;
+      return next;
+    });
   }, [status?.online]);
 
   async function selectHistory(
@@ -2576,6 +3216,7 @@ export default function App() {
           error: null,
           toolStatus: null,
           isSending: localRunningConversationIdsRef.current.has(detail.conversation_id),
+          workdir: detail.conversation?.cwd,
         });
         conversationRuntimeCacheRef.current.set(detail.conversation_id, nextRuntime);
         const shouldSyncRuntime =
@@ -2585,7 +3226,8 @@ export default function App() {
           nextRuntime.error !== currentRuntime.error ||
           nextRuntime.toolStatus !== currentRuntime.toolStatus ||
           nextRuntime.toolStatusIsCompaction !== currentRuntime.toolStatusIsCompaction ||
-          nextRuntime.isSending !== currentRuntime.isSending;
+          nextRuntime.isSending !== currentRuntime.isSending ||
+          nextRuntime.workdir !== currentRuntime.workdir;
         if (!shouldSyncRuntime) {
           return;
         }
@@ -2628,6 +3270,7 @@ export default function App() {
           error: message,
           toolStatus: null,
           isSending: localRunningConversationIdsRef.current.has(conversationIdValue),
+          workdir: conversationRuntimeCacheRef.current.get(conversationIdValue)?.workdir,
         });
         conversationRuntimeCacheRef.current.set(conversationIdValue, nextRuntime);
         syncVisibleConversationRuntime(conversationIdValue, nextRuntime);
@@ -2648,18 +3291,33 @@ export default function App() {
     }
 
     const silent = options?.silent === true;
+    const loadingStartedAt = Date.now();
     if (!silent) {
       setHistoryListLoading(true);
       setHistoryError(null);
     }
+    const requestScopeKey = historyScopeKeyRef.current;
+    const requestFilter = historyListFilterRef.current;
     try {
-      const response = await currentApi.listHistory(1, HISTORY_LIST_PAGE_SIZE);
-      const runningConversationIds = normalizeRunningConversationIds(
+      const response = await currentApi.listHistory(
+        1,
+        HISTORY_LIST_PAGE_SIZE,
+        requestFilter,
+      );
+      if (requestScopeKey !== historyScopeKeyRef.current) {
+        return;
+      }
+      const runningConversations = normalizeRunningConversations(
+        response.running_conversations,
         response.running_conversation_ids,
       );
-      for (const runningConversationId of runningConversationIds) {
-        setRemoteConversationRunningState(runningConversationId, true);
+      for (const runningConversation of runningConversations) {
+        setRemoteConversationRunningState(runningConversation.conversation_id, true, {
+          workdir: runningConversation.cwd,
+          updatedAt: runningConversation.updated_at,
+        });
       }
+      const runningConversationIds = runningConversations.map((item) => item.conversation_id);
       const retainedConversationIds = new Set<string>();
       for (const id of blockedHistoryHydrationConversationIdsRef.current) {
         retainedConversationIds.add(id);
@@ -2755,7 +3413,9 @@ export default function App() {
         hadCurrentConversationInHistory &&
         currentSummary === null
       ) {
-        startNewConversation();
+        startNewConversation({
+          workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+        });
         return;
       }
 
@@ -2852,6 +3512,9 @@ export default function App() {
         });
       }
     } catch (error) {
+      if (requestScopeKey !== historyScopeKeyRef.current) {
+        return;
+      }
       const message = asErrorMessage(error, "history request failed");
       setHistoryError(message);
       if (silent) {
@@ -2869,7 +3532,8 @@ export default function App() {
         },
       ]);
     } finally {
-      if (!silent) {
+      if (!silent && requestScopeKey === historyScopeKeyRef.current) {
+        await waitForMinimumHistoryListLoading(loadingStartedAt);
         setHistoryListLoading(false);
       }
     }
@@ -2882,16 +3546,28 @@ export default function App() {
 
     historyListPageLoadingRef.current = true;
     setHistoryListLoadingMore(true);
+    const requestScopeKey = historyScopeKeyRef.current;
+    const requestFilter = historyListFilterRef.current;
     try {
       const pageNumber = nextHistoryPageRef.current;
-      const response = await api.listHistory(pageNumber, HISTORY_LIST_PAGE_SIZE);
-      const runningConversationIds = normalizeRunningConversationIds(
+      const response = await api.listHistory(
+        pageNumber,
+        HISTORY_LIST_PAGE_SIZE,
+        requestFilter,
+      );
+      if (requestScopeKey !== historyScopeKeyRef.current) {
+        return;
+      }
+      const runningConversations = normalizeRunningConversations(
+        response.running_conversations,
         response.running_conversation_ids,
       );
-      for (const runningConversationId of runningConversationIds) {
-        setRemoteConversationRunningState(runningConversationId, true);
+      for (const runningConversation of runningConversations) {
+        setRemoteConversationRunningState(runningConversation.conversation_id, true, {
+          workdir: runningConversation.cwd,
+          updatedAt: runningConversation.updated_at,
+        });
       }
-
       const retainConversationIds = new Set(historyItemsRef.current.map((item) => item.id));
       const conversations = reconcileConversationSummaries(
         historyItemsRef.current,
@@ -2912,10 +3588,15 @@ export default function App() {
       );
       setHistoryError(null);
     } catch (error) {
+      if (requestScopeKey !== historyScopeKeyRef.current) {
+        return;
+      }
       setHistoryError(asErrorMessage(error, "读取更多历史列表失败"));
     } finally {
-      historyListPageLoadingRef.current = false;
-      setHistoryListLoadingMore(false);
+      if (requestScopeKey === historyScopeKeyRef.current) {
+        historyListPageLoadingRef.current = false;
+        setHistoryListLoadingMore(false);
+      }
     }
   }, [
     api,
@@ -2993,7 +3674,7 @@ export default function App() {
         chatMessagesRef.current.length === 0 &&
         (currentConversationId === "" || isLocalDraftConversationId(currentConversationId)),
     });
-  }, [api, status?.online]);
+  }, [api, historyScopeKey, status?.online]);
 
   async function sendChat(message: string, options?: SendChatOptions) {
     if (!api || chatBusyRef.current) {
@@ -3031,6 +3712,19 @@ export default function App() {
       options?.clientRequestId?.trim() ||
       `webui-chat-${activeConversationId}-${crypto.randomUUID()}`;
     const startedAt = Date.now();
+    const persistedConversationWorkdir =
+      pickConversationSummary(historyItemsRef.current, activeConversationId)?.cwd?.trim() || "";
+    const runtimeConversationWorkdir =
+      conversationRuntimeCacheRef.current.get(activeConversationId)?.workdir?.trim() || "";
+    const effectiveWorkdir = isAgentMode
+      ? (
+          options?.workdir?.trim() ||
+          persistedConversationWorkdir ||
+          runtimeConversationWorkdir ||
+          activeWorkspaceProjectPath ||
+          settings.system.workdir.trim()
+        )
+      : "";
     const optimisticDraftTitle = buildOptimisticConversationTitle(message);
     draftConversationPinnedRef.current = false;
     pendingDraftConversationMigrationRef.current = startedAsDraftConversation
@@ -3052,6 +3746,7 @@ export default function App() {
       ...current,
       error: null,
       toolStatus: null,
+      workdir: effectiveWorkdir || undefined,
       messages: [
         ...current.messages,
         {
@@ -3075,7 +3770,7 @@ export default function App() {
             message_count: 1,
             provider_id: settings.selectedModel?.customProviderId ?? "gateway",
             model: settings.selectedModel?.model ?? "gateway",
-            cwd: settings.system.workdir.trim() || undefined,
+            cwd: effectiveWorkdir || undefined,
           },
           { preserveExistingTitle: true },
         ),
@@ -3095,7 +3790,7 @@ export default function App() {
         message,
         isLocalDraftConversationId(activeConversationId) ? undefined : activeConversationId,
         buildGatewaySelectedModel(settings.selectedModel, activeProviders),
-        buildGatewaySystemSettings(settings),
+        buildGatewaySystemSettings(settings, effectiveWorkdir),
         controller.signal,
         uploadedFiles,
         clientRequestId,
@@ -3130,6 +3825,7 @@ export default function App() {
                 created_at: startedAt,
                 updated_at: startedAt,
                 message_count: 1,
+                cwd: effectiveWorkdir || undefined,
               }, { preserveExistingTitle: true });
             });
           }
@@ -3271,7 +3967,7 @@ export default function App() {
     }
   }
 
-  function startNewConversation() {
+  function startNewConversation(options?: { workdir?: string }) {
     const currentConversationId = conversationIdRef.current.trim();
     if (currentConversationId) {
       cacheVisibleConversationRuntime(currentConversationId);
@@ -3290,12 +3986,221 @@ export default function App() {
     submitInFlightRef.current = false;
     pendingDraftConversationMigrationRef.current = null;
     composerRef.current?.clear();
-    conversationRuntimeCacheRef.current.set(nextConversationId, createConversationRuntimeEntry());
-    syncVisibleConversationRuntime(nextConversationId, createConversationRuntimeEntry());
+    const nextRuntime = createConversationRuntimeEntry({
+      workdir: options?.workdir?.trim() || undefined,
+    });
+    conversationRuntimeCacheRef.current.set(nextConversationId, nextRuntime);
+    syncVisibleConversationRuntime(nextConversationId, nextRuntime);
     setSelectedHistory(null);
     setSelectedHistoryEntries([]);
     setPendingUploadedFiles([]);
   }
+
+  const removeWorkspaceProjectFromSettings = useCallback(
+    (project: WorkspaceProject) => {
+      if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
+      const path = project.path.trim();
+      const pathKey = workspaceProjectPathKey(path);
+      setActiveWorkspaceProjectId((current) => {
+        const currentProject = workspaceProjects.find((item) => item.id === current);
+        if (
+          current === project.id ||
+          (pathKey &&
+            currentProject &&
+            workspaceProjectPathKey(currentProject.path) === pathKey)
+        ) {
+          return DEFAULT_WORKSPACE_PROJECT_ID;
+        }
+        return current;
+      });
+      setSettings((prev) => {
+        const nextHidden =
+          pathKey &&
+          prev.system.hiddenWorkspaceProjectPaths.some(
+            (item) => workspaceProjectPathKey(item) === pathKey,
+          )
+            ? prev.system.hiddenWorkspaceProjectPaths
+            : path
+              ? [...prev.system.hiddenWorkspaceProjectPaths, path]
+              : prev.system.hiddenWorkspaceProjectPaths;
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              workspaceProjects: prev.system.workspaceProjects.filter(
+                (item) =>
+                  item.id !== project.id && workspaceProjectPathKey(item.path) !== pathKey,
+              ),
+              hiddenWorkspaceProjectPaths: nextHidden,
+              missingWorkspaceProjectPaths: prev.system.missingWorkspaceProjectPaths.filter(
+                (item) => workspaceProjectPathKey(item) !== pathKey,
+              ),
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+      setProjectRenamingId((current) => (current === project.id ? null : current));
+      setProjectRenameDraft("");
+    },
+    [setSettings, workspaceProjects],
+  );
+
+  const handleRemoveWorkspaceProject = useCallback(
+    (project: WorkspaceProject) => {
+      if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
+
+      void (async () => {
+        const currentApi = api;
+        if (!currentApi) {
+          setHistoryError("Gateway 未连接，暂时不能删除项目会话。");
+          return;
+        }
+
+        const path = project.path.trim();
+        const pathKey = workspaceProjectPathKey(path);
+        const runningMessage = "项目中仍有后台任务运行，暂时不能删除该项目。";
+        const projectHasRunningConversation = () => {
+          if (!pathKey) return false;
+          const runningIds = new Set<string>();
+          for (const id of localRunningConversationIdsRef.current) {
+            const conversationId = id.trim();
+            if (conversationId) runningIds.add(conversationId);
+          }
+          for (const id of remoteRunningConversationIdsRef.current) {
+            const conversationId = id.trim();
+            if (conversationId) runningIds.add(conversationId);
+          }
+
+          for (const conversationId of runningIds) {
+            const runtimeWorkdir =
+              conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
+            const persistedWorkdir =
+              historyItemsRef.current.find((item) => item.id === conversationId)?.cwd?.trim() || "";
+            if (workspaceProjectPathKey(runtimeWorkdir || persistedWorkdir) === pathKey) {
+              return true;
+            }
+          }
+          return false;
+        };
+
+        if (projectHasRunningConversation()) {
+          setHistoryError(runningMessage);
+          return;
+        }
+
+        setHistoryError(null);
+        setHistoryMutating(true);
+        try {
+          const conversationIds: string[] = [];
+          const seenConversationIds = new Set<string>();
+          if (path) {
+            for (let pageNumber = 1; ; pageNumber += 1) {
+              const page = await currentApi.listHistory(
+                pageNumber,
+                PROJECT_HISTORY_DELETE_PAGE_SIZE,
+                { cwd: path },
+              );
+              for (const item of page.conversations) {
+                const id = item.id.trim();
+                if (!id || seenConversationIds.has(id)) continue;
+                seenConversationIds.add(id);
+                conversationIds.push(id);
+              }
+
+              if (
+                page.conversations.length === 0 ||
+                conversationIds.length >= page.total_count ||
+                page.conversations.length < PROJECT_HISTORY_DELETE_PAGE_SIZE
+              ) {
+                break;
+              }
+            }
+          }
+
+          const runningConversationIdsInProject = conversationIds.filter(
+            (id) =>
+              localRunningConversationIdsRef.current.has(id) ||
+              remoteRunningConversationIdsRef.current.has(id),
+          );
+          if (runningConversationIdsInProject.length > 0 || projectHasRunningConversation()) {
+            setHistoryError(runningMessage);
+            return;
+          }
+
+          const visibleConversationId = resolveVisibleConversationId(
+            selectedHistoryIdRef.current,
+            conversationIdRef.current,
+          );
+          const visibleRuntimeWorkdir =
+            conversationRuntimeCacheRef.current.get(visibleConversationId)?.workdir?.trim() || "";
+          const visiblePersistedWorkdir =
+            historyItemsRef.current.find((item) => item.id === visibleConversationId)?.cwd?.trim() ||
+            "";
+          const visibleWorkdir =
+            visiblePersistedWorkdir ||
+            visibleRuntimeWorkdir ||
+            (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+
+          for (const conversationId of conversationIds) {
+            await currentApi.deleteHistory(conversationId);
+          }
+
+          const deletedConversationIds = new Set(conversationIds);
+          if (deletedConversationIds.size > 0) {
+            updateHistoryItems((current) =>
+              current.filter((item) => !deletedConversationIds.has(item.id)),
+            );
+            const nextSharedItems = sharedHistoryItemsRef.current.filter(
+              (item) => !deletedConversationIds.has(item.id),
+            );
+            sharedHistoryItemsRef.current = nextSharedItems;
+            setSharedHistoryItems(nextSharedItems);
+
+            for (const conversationId of deletedConversationIds) {
+              optimisticTitleConversationIdsRef.current.delete(conversationId);
+              unlockHistoryTitlePosition(conversationId);
+              conversationRuntimeCacheRef.current.delete(conversationId);
+              conversationAbortControllersRef.current.delete(conversationId);
+              blockedHistoryHydrationConversationIdsRef.current.delete(conversationId);
+              clearConversationLiveStream(conversationId);
+              clearCachedComposerDraft(conversationId);
+            }
+          }
+
+          const shouldResetVisibleConversation =
+            Boolean(visibleConversationId && deletedConversationIds.has(visibleConversationId)) ||
+            Boolean(pathKey && workspaceProjectPathKey(visibleWorkdir) === pathKey);
+
+          removeWorkspaceProjectFromSettings(project);
+          if (shouldResetVisibleConversation) {
+            startNewConversation({
+              workdir: getDefaultWorkspaceProjectPath(settings.system) || undefined,
+            });
+          }
+          void refreshHistoryWorkdirs(currentApi);
+        } catch (error) {
+          setHistoryError(asErrorMessage(error, "删除项目失败"));
+        } finally {
+          setHistoryMutating(false);
+        }
+      })();
+    },
+    [
+      activeWorkspaceProjectPath,
+      api,
+      clearCachedComposerDraft,
+      clearConversationLiveStream,
+      isAgentMode,
+      refreshHistoryWorkdirs,
+      removeWorkspaceProjectFromSettings,
+      settings.system,
+      startNewConversation,
+      unlockHistoryTitlePosition,
+      updateHistoryItems,
+    ],
+  );
 
   function handleSidebarNewConversation() {
     if (isMobileSidebarLayout()) {
@@ -3309,7 +4214,9 @@ export default function App() {
     ) {
       return;
     }
-    startNewConversation();
+    startNewConversation({
+      workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+    });
   }
 
   function handleSidebarSelectConversation(id: string) {
@@ -3805,7 +4712,8 @@ export default function App() {
       setChatError(translate("chat.upload.onlyInTools", settings.locale));
       return;
     }
-    if (!settings.system.workdir.trim()) {
+    const workdir = displayedConversationWorkdirRef.current.trim();
+    if (!workdir) {
       setChatError(translate("chat.upload.requireWorkdir", settings.locale));
       return;
     }
@@ -3830,13 +4738,9 @@ export default function App() {
     isUploadingFilesRef.current = true;
     setIsUploadingFiles(true);
     try {
-      const result = await importReadableFiles(
-        token,
-        settings.system.workdir,
-        importBatch,
-      );
+      const result = await importReadableFiles(token, workdir, importBatch);
       registerLocalUploadedImagePreviews({
-        workspaceRoot: settings.system.workdir,
+        workspaceRoot: workdir,
         uploadedFiles: result.files,
         sourceFiles: importBatch,
       });
@@ -3879,7 +4783,6 @@ export default function App() {
   }, [
     settings.locale,
     settings.system.executionMode,
-    settings.system.workdir,
     token,
   ]);
 
@@ -4012,6 +4915,8 @@ export default function App() {
     blockedHistoryHydrationConversationIdsRef.current.clear();
     conversationRuntimeCacheRef.current.clear();
     localRunningConversationIdsRef.current = new Set();
+    remoteRunningConversationIdsRef.current = new Set();
+    remoteRunningConversationRuntimeRef.current = new Map();
     composerDraftCacheRef.current.clear();
     composerRef.current?.clear();
     conversationIdRef.current = "";
@@ -4065,6 +4970,8 @@ export default function App() {
     setHistoryMutating(false);
     setLocalRunningConversationIds(new Set());
     setRemoteRunningConversationIds(new Set());
+    setRemoteRunningConversationRuntime(new Map());
+    setProjectActivityUpdatedAtOverrides(new Map());
     clearAllConversationLiveStreams();
     setSelectedHistoryId("");
     setSelectedHistory(null);
@@ -4168,7 +5075,6 @@ export default function App() {
     },
     [currentChatProvider?.requestFormat, currentChatProvider?.type, setSettings],
   );
-  const isAgentMode = settings.system.executionMode !== "text";
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
 
   const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
@@ -4218,10 +5124,71 @@ export default function App() {
     }
     return next;
   }, [localRunningConversationIds, remoteRunningConversationIds]);
+  const runningProjectPathKeys = useMemo(() => {
+    const next = new Set<string>();
+    for (const conversationIdValue of sidebarRunningConversationIds) {
+      const conversationId = conversationIdValue.trim();
+      if (!conversationId) {
+        continue;
+      }
+
+      const runtimeWorkdir =
+        conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
+      const remoteWorkdir =
+        remoteRunningConversationRuntime.get(conversationId)?.workdir?.trim() || "";
+      const persistedWorkdir =
+        historyItems.find((item) => item.id === conversationId)?.cwd?.trim() || "";
+      const resolvedWorkdir = runtimeWorkdir || remoteWorkdir || persistedWorkdir;
+      if (resolvedWorkdir) {
+        next.add(workspaceProjectPathKey(resolvedWorkdir));
+      }
+    }
+    return next;
+  }, [historyItems, remoteRunningConversationRuntime, sidebarRunningConversationIds]);
+  const projectActivityUpdatedAts = useMemo(() => {
+    const updatedAts = buildWorkspaceProjectActivityUpdatedAts([
+      ...historyWorkdirs,
+      ...Array.from(localRunningConversationIds).map((conversationId) => {
+        const runtimeWorkdir =
+          conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
+        const persistedWorkdir =
+          historyItems.find((item) => item.id === conversationId)?.cwd?.trim() || "";
+        return {
+          cwd: runtimeWorkdir || persistedWorkdir,
+          updatedAt: Date.now(),
+        };
+      }),
+      ...Array.from(remoteRunningConversationRuntime.values()).map((item) => ({
+        cwd: item.workdir,
+        updatedAt: item.updatedAt,
+      })),
+    ]);
+    for (const [pathKey, updatedAt] of projectActivityUpdatedAtOverrides) {
+      if (updatedAt > (updatedAts.get(pathKey) ?? 0)) {
+        updatedAts.set(pathKey, updatedAt);
+      }
+    }
+    return updatedAts;
+  }, [
+    historyItems,
+    historyWorkdirs,
+    localRunningConversationIds,
+    projectActivityUpdatedAtOverrides,
+    remoteRunningConversationRuntime,
+  ]);
   const displayedConversationId = resolveVisibleConversationId(
     selectedHistoryId,
     conversationId,
   );
+  const currentConversationPersistedCwd =
+    historyItems.find((item) => item.id === displayedConversationId)?.cwd?.trim() || "";
+  const currentConversationRuntimeWorkdir =
+    conversationRuntimeCacheRef.current.get(displayedConversationId)?.workdir?.trim() || "";
+  const displayedConversationWorkdir =
+    currentConversationPersistedCwd ||
+    currentConversationRuntimeWorkdir ||
+    (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+  displayedConversationWorkdirRef.current = displayedConversationWorkdir;
 
   useEffect(() => {
     if (activeView !== "chat") {
@@ -4386,7 +5353,7 @@ export default function App() {
   const canDropUpload =
     status?.online === true &&
     isAgentMode &&
-    Boolean(settings.system.workdir.trim()) &&
+    Boolean(displayedConversationWorkdir.trim()) &&
     !composerIsSending &&
     !isUploadingFiles &&
     !composerInputDisabled;
@@ -4396,7 +5363,7 @@ export default function App() {
       ? translate("chat.upload.dropBusy", settings.locale)
       : !isAgentMode
         ? translate("chat.upload.onlyInTools", settings.locale)
-        : !settings.system.workdir.trim()
+        : !displayedConversationWorkdir.trim()
           ? translate("chat.upload.requireWorkdir", settings.locale)
           : translate("chat.upload.dropBusy", settings.locale);
   const fileDropDescription = canDropUpload
@@ -4634,6 +5601,28 @@ export default function App() {
           renamingId={renamingId}
           renameDraft={renameDraft}
           isOpen={sidebarOpen}
+          activeView={activeView}
+          showProjects={isAgentMode}
+          projects={workspaceProjects}
+          activeProjectId={activeWorkspaceProject?.id}
+          missingProjectPathKeys={missingWorkspaceProjectPathKeys}
+          runningProjectPathKeys={runningProjectPathKeys}
+          projectActivityUpdatedAts={projectActivityUpdatedAts}
+          projectRenamingId={projectRenamingId}
+          projectRenameDraft={projectRenameDraft}
+          projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+          recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
+          onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
+          onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
+          onCreateBlankProject={handleOpenCreateWorkspaceProject}
+          onAddExistingProject={handleAddExistingWorkspaceProject}
+          onSelectProject={handleSelectWorkspaceProject}
+          onNewConversationForProject={handleNewConversationForProject}
+          onStartRenamingProject={handleStartRenamingWorkspaceProject}
+          onProjectRenameDraftChange={setProjectRenameDraft}
+          onCommitProjectRename={handleCommitWorkspaceProjectRename}
+          onCancelProjectRename={handleCancelWorkspaceProjectRename}
+          onRemoveProject={handleRemoveWorkspaceProject}
           onNewConversation={handleSidebarNewConversation}
           onSelectConversation={handleSidebarSelectConversation}
           onStartRenaming={(item) => {
@@ -4711,7 +5700,9 @@ export default function App() {
                   conversationIdRef.current === id ||
                   selectedHistoryIdRef.current === id
                 ) {
-                  startNewConversation();
+                  startNewConversation({
+                    workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+                  });
                 }
               } catch (error) {
                 setHistoryError(asErrorMessage(error, "删除历史对话失败"));
@@ -4722,7 +5713,6 @@ export default function App() {
           }}
           onLoadMore={loadMoreHistory}
           onCloseSidebar={() => setSidebarOpen(false)}
-          activeView={activeView}
           onOpenSkillsHub={handleSidebarOpenSkillsHub}
           onOpenMcpHub={handleSidebarOpenMcpHub}
         />
@@ -4753,6 +5743,17 @@ export default function App() {
             onDisableShare={handleDisableSharedHistory}
             onSetRedactToolContent={handleSetSharedHistoryRedactToolContent}
             onClose={() => setSharedManagerOpen(false)}
+          />
+        ) : null}
+
+        {workdirPickerMode ? (
+          <WorkdirPickerModal
+            initialWorkdir={
+              activeWorkspaceProjectPath ||
+              settings.system.workdir.trim()
+            }
+            onClose={() => setWorkdirPickerMode(null)}
+            onSelect={handleWorkdirPickerSelect}
           />
         ) : null}
 
@@ -4875,7 +5876,7 @@ export default function App() {
                     isAgentMode={isAgentMode}
                     showUsage={isAgentDevExecutionMode}
                     usageContextWindow={currentModelContextWindow}
-                    workspaceRoot={settings.system.workdir}
+                    workspaceRoot={displayedConversationWorkdir}
                     onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
                     onResendFromEdit={hasDetachedSelection ? undefined : handleResendFromEdit}
                     onResolveUserMessageRef={hasDetachedSelection ? undefined : resolveUserMessageRef}
@@ -4902,7 +5903,7 @@ export default function App() {
                 isUploadingFiles={isUploadingFiles}
                 isInputDisabled={composerInputDisabled}
                 inputPlaceholder={composerPlaceholder}
-                workdir={settings.system.workdir}
+                workdir={displayedConversationWorkdir}
                 enabledSkills={enabledComposerSkills}
                 isAgentMode={isAgentMode}
                 chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
@@ -4938,7 +5939,7 @@ export default function App() {
                         try {
                           const imported = await importPastedTextsAsFiles({
                             token,
-                            workdir: settings.system.workdir,
+                            workdir: displayedConversationWorkdir,
                             pastes: draft.largePastes,
                           });
                           text = buildTextFromComposerDraft(draft, imported.fileByPasteId).trim();

@@ -31,6 +31,21 @@ export type ChatHistoryListPage = {
   totalCount: number;
 };
 
+export type ChatHistoryListFilter = {
+  cwd?: string;
+  cwdEmpty?: boolean;
+};
+
+export type ChatHistoryWorkdirSummary = {
+  path: string;
+  conversationCount: number;
+  updatedAt: number;
+};
+
+export type ChatHistoryWorkdirsResponse = {
+  workdirs: ChatHistoryWorkdirSummary[];
+};
+
 type ChatHistorySegmentWireRecord = {
   segmentIndex: number;
   segmentId: string;
@@ -181,8 +196,21 @@ function normalizeWireRecord(
   };
 }
 
-export async function listChatHistory(page: number, pageSize: number) {
-  return invoke<ChatHistoryListPage>("chat_history_list", { page, pageSize });
+export async function listChatHistory(
+  page: number,
+  pageSize: number,
+  filter?: ChatHistoryListFilter,
+) {
+  return invoke<ChatHistoryListPage>("chat_history_list", {
+    page,
+    pageSize,
+    cwd: filter?.cwd,
+    cwdEmpty: filter?.cwdEmpty,
+  });
+}
+
+export async function listChatHistoryWorkdirs() {
+  return invoke<ChatHistoryWorkdirsResponse>("chat_history_workdirs");
 }
 
 export async function getChatHistory(id: string, fallbackSystemPrompt?: string) {

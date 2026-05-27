@@ -12,9 +12,12 @@ import type {
   GatewayChatRuntimeControls,
   GatewayProviderSummary,
   GatewaySelectedModel,
+  CreateProjectFolderResponse,
   HistoryDetail,
   HistoryList,
+  HistoryListFilter,
   HistoryShareStatus,
+  HistoryWorkdirsResponse,
   MemoryManagePayload,
 } from "./gatewayTypes";
 
@@ -560,11 +563,36 @@ export class GatewayWebSocketClient {
     return this.request<T>("memory.manage", payload);
   }
 
-  async listHistory(page: number, pageSize: number): Promise<HistoryList> {
-    return this.requestWithRecovery<HistoryList>("history.list", {
+  async listHistory(
+    page: number,
+    pageSize: number,
+    filter?: HistoryListFilter,
+  ): Promise<HistoryList> {
+    const payload: { page: number; page_size: number; cwd?: string; cwd_empty?: boolean } = {
       page: normalizeHistoryListPage(page),
       page_size: normalizeHistoryListPageSize(pageSize),
-    });
+    };
+    const cwd = filter?.cwd?.trim();
+    if (cwd) {
+      payload.cwd = cwd;
+    }
+    if (filter?.cwdEmpty === true) {
+      payload.cwd_empty = true;
+    }
+    return this.requestWithRecovery<HistoryList>("history.list", payload);
+  }
+
+  async listHistoryWorkdirs(): Promise<HistoryWorkdirsResponse> {
+    const response = await this.requestWithRecovery<{
+      workdirs?: Array<{ path?: string; conversation_count?: number; updated_at?: number }>;
+    }>("history.workdirs", {});
+    return {
+      workdirs: (response.workdirs ?? []).map((item) => ({
+        path: item.path ?? "",
+        conversationCount: item.conversation_count ?? 0,
+        updatedAt: item.updated_at ?? 0,
+      })),
+    };
   }
 
   async listSharedHistory(page: number, pageSize: number): Promise<HistoryList> {
@@ -681,6 +709,16 @@ export class GatewayWebSocketClient {
     return this.requestWithRecovery<FsListDirsResponse>("fs.list_dirs", {
       path,
       max_results: maxResults,
+    });
+  }
+
+  async createProjectFolder(
+    parent: string,
+    name: string,
+  ): Promise<CreateProjectFolderResponse> {
+    return this.request<CreateProjectFolderResponse>("fs.create_project_folder", {
+      parent,
+      name,
     });
   }
 
@@ -1413,7 +1451,8 @@ type GatewayWebSocketClientLike = {
   cancelChat(conversationId: string): Promise<void>;
   cronManage(payload: CronManagePayload): Promise<CronManageResponse>;
   memoryManage<T = unknown>(payload: MemoryManagePayload): Promise<T>;
-  listHistory(page: number, pageSize: number): Promise<HistoryList>;
+  listHistory(page: number, pageSize: number, filter?: HistoryListFilter): Promise<HistoryList>;
+  listHistoryWorkdirs(): Promise<HistoryWorkdirsResponse>;
   listSharedHistory(page: number, pageSize: number): Promise<HistoryList>;
   getHistory(conversationId: string, options?: HistoryGetOptions): Promise<HistoryDetail>;
   truncateHistory(
@@ -1442,6 +1481,7 @@ type GatewayWebSocketClientLike = {
   ): Promise<MentionListResponse>;
   listFsRoots(): Promise<FsRootsResponse>;
   listDirs(path: string, maxResults?: number): Promise<FsListDirsResponse>;
+  createProjectFolder(parent: string, name: string): Promise<CreateProjectFolderResponse>;
   readUploadedImagePreview(
     workdir: string,
     absolutePath: string,
@@ -1827,11 +1867,36 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     return this.request<T>("memory.manage", payload);
   }
 
-  async listHistory(page: number, pageSize: number): Promise<HistoryList> {
-    return this.request<HistoryList>("history.list", {
+  async listHistory(
+    page: number,
+    pageSize: number,
+    filter?: HistoryListFilter,
+  ): Promise<HistoryList> {
+    const payload: { page: number; page_size: number; cwd?: string; cwd_empty?: boolean } = {
       page: normalizeHistoryListPage(page),
       page_size: normalizeHistoryListPageSize(pageSize),
-    });
+    };
+    const cwd = filter?.cwd?.trim();
+    if (cwd) {
+      payload.cwd = cwd;
+    }
+    if (filter?.cwdEmpty === true) {
+      payload.cwd_empty = true;
+    }
+    return this.request<HistoryList>("history.list", payload);
+  }
+
+  async listHistoryWorkdirs(): Promise<HistoryWorkdirsResponse> {
+    const response = await this.request<{
+      workdirs?: Array<{ path?: string; conversation_count?: number; updated_at?: number }>;
+    }>("history.workdirs", {});
+    return {
+      workdirs: (response.workdirs ?? []).map((item) => ({
+        path: item.path ?? "",
+        conversationCount: item.conversation_count ?? 0,
+        updatedAt: item.updated_at ?? 0,
+      })),
+    };
   }
 
   async listSharedHistory(page: number, pageSize: number): Promise<HistoryList> {
@@ -1948,6 +2013,16 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     return this.request<FsListDirsResponse>("fs.list_dirs", {
       path,
       max_results: maxResults,
+    });
+  }
+
+  async createProjectFolder(
+    parent: string,
+    name: string,
+  ): Promise<CreateProjectFolderResponse> {
+    return this.request<CreateProjectFolderResponse>("fs.create_project_folder", {
+      parent,
+      name,
     });
   }
 

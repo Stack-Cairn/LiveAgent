@@ -9,6 +9,7 @@ import {
   type ChatRuntimeControls,
   normalizeSkillsSettings,
   normalizeTheme,
+  resolveWorkspaceProjects,
   type AppSettings,
   type SelectedModel,
   type SkillsSettings,
@@ -57,8 +58,15 @@ function readLocalUiSettings(): {
 
   function normalizeLocalCustomSettings(input: unknown): AppSettings["customSettings"] {
     const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const chatSidebar = (obj.chatSidebar && typeof obj.chatSidebar === "object"
+      ? obj.chatSidebar
+      : {}) as Record<string, unknown>;
     return {
       conversationTitleModel: normalizeSelectedModel(obj.conversationTitleModel),
+      chatSidebar: {
+        projectsCollapsed: chatSidebar.projectsCollapsed === true,
+        recentCollapsed: chatSidebar.recentCollapsed === true,
+      },
     };
   }
 
@@ -168,7 +176,13 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     locale: localUi.locale,
   });
 
-  return { settings, defaultWorkdir };
+  return {
+    settings: {
+      ...settings,
+      system: resolveWorkspaceProjects(settings.system, defaultWorkdir),
+    },
+    defaultWorkdir,
+  };
 }
 
 export async function loadPersistedSettings(): Promise<AppSettings> {

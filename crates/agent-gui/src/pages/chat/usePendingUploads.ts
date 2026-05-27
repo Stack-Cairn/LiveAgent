@@ -122,7 +122,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       return;
     }
     if (!workdir) {
-      setErrorMessage("请先在设置 -> 系统中配置工作目录后再上传文件。");
+      setErrorMessage("请先在项目栏选择或创建项目后再上传文件。");
       return;
     }
 
@@ -167,7 +167,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         return;
       }
       if (!workdir) {
-        setErrorMessage("请先在设置 -> 系统中配置工作目录后再上传文件。");
+        setErrorMessage("请先在项目栏选择或创建项目后再上传文件。");
         return;
       }
 
@@ -214,7 +214,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         return;
       }
       if (!workdir) {
-        setErrorMessage("请先在设置 -> 系统中配置工作目录后再上传文件。");
+        setErrorMessage("请先在项目栏选择或创建项目后再上传文件。");
         return;
       }
 

@@ -77,7 +77,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.upload.selectFiles": "选择并导入一个或多个当前对话可读取的文件",
     "chat.upload.uploading": "上传中...",
     "chat.upload.onlyInTools": "文件上传仅在 tools 模式可用",
-    "chat.upload.requireWorkdir": "请先在设置中配置工作目录",
+    "chat.upload.requireWorkdir": "请先选择一个项目",
     "chat.upload.removeFile": "移除文件",
     "chat.upload.previewImage": "预览图片",
     "chat.upload.closePreview": "关闭预览",
@@ -305,7 +305,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryTypeDaily": "日志",
     "settings.memoryUnknownProject": "未记录路径的项目",
     "settings.memoryUnknownProjectId": "未知项目",
-    "settings.memoryProjectRequiresWorkdir": "项目记忆需要先在「系统设置」中配置工作目录。",
+    "settings.memoryProjectRequiresWorkdir": "项目记忆需要先选择一个项目。",
     "settings.memorySearchPlaceholder": "搜索记忆",
     "settings.memoryNew": "新建记忆",
     "settings.memoryNoEntries": "没有记忆条目。",
@@ -395,13 +395,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.agentDevMode": "Agent dev 模式",
     "settings.agentDevModeDesc":
       "与 Agent 模式一致，但会把当前对话的流式请求与返回逐行写入 ~/.liveagent/debug/<对话ID>.jsonl",
-    "settings.workdir": "工作目录",
+    "settings.workdir": "项目文件夹",
     "settings.workdirRequired": "必填",
     "settings.workdirDesc":
-      "Agent 模式下所有文件操作的根目录。仅允许在该目录及子目录内进行读写/搜索。",
-    "settings.workdirPlaceholder": "点击右侧按钮选择目录，或直接输入路径...",
-    "settings.selectWorkdir": "选择工作目录",
-    "settings.workdirWarning": "Agent 模式需要填写工作目录，否则无法执行文件工具。",
+      "Agent 模式下文件工具使用当前项目文件夹作为根目录。",
+    "settings.workdirPlaceholder": "选择或输入项目文件夹路径...",
+    "settings.selectWorkdir": "选择文件夹",
+    "settings.workdirWarning": "Agent 模式需要先选择项目，否则无法执行文件工具。",
     "settings.workdirOpenFailed": "打开目录选择器失败：",
     "settings.systemTools": "自定义系统工具",
     "settings.systemToolsDesc":
@@ -923,7 +923,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.upload.selectFiles": "Select and import one or more readable files into the workspace",
     "chat.upload.uploading": "Uploading...",
     "chat.upload.onlyInTools": "File upload is only available in tools mode",
-    "chat.upload.requireWorkdir": "Configure a workspace directory first",
+    "chat.upload.requireWorkdir": "Select a project first",
     "chat.upload.removeFile": "Remove file",
     "chat.upload.previewImage": "Preview image",
     "chat.upload.closePreview": "Close preview",
@@ -1160,7 +1160,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryUnknownProject": "Project with no recorded path",
     "settings.memoryUnknownProjectId": "unknown project",
     "settings.memoryProjectRequiresWorkdir":
-      "Project memory requires a workspace directory in System settings.",
+      "Project memory requires selecting a project first.",
     "settings.memorySearchPlaceholder": "Search memory",
     "settings.memoryNew": "New memory",
     "settings.memoryNoEntries": "No memory entries.",
@@ -1257,15 +1257,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.agentDevMode": "Agent Dev Mode",
     "settings.agentDevModeDesc":
       "Same as Agent mode, but also writes each streaming request and response line-by-line to ~/.liveagent/debug/<conversationId>.jsonl",
-    "settings.workdir": "Work Directory",
+    "settings.workdir": "Project Folder",
     "settings.workdirRequired": "Required",
     "settings.workdirDesc":
-      "Root directory for all file operations in Agent mode. Read/write/search is restricted to this directory and its subdirectories.",
+      "File tools in Agent mode use the current project folder as their root.",
     "settings.workdirPlaceholder":
-      "Click the button on the right to select a directory, or enter a path...",
-    "settings.selectWorkdir": "Select Work Directory",
+      "Select or enter a project folder path...",
+    "settings.selectWorkdir": "Select Folder",
     "settings.workdirWarning":
-      "Agent mode requires a work directory; file tools will not work without it.",
+      "Agent mode requires selecting a project before file tools can run.",
     "settings.workdirOpenFailed": "Failed to open directory picker: ",
     "settings.systemTools": "Custom System Tools",
     "settings.systemToolsDesc":

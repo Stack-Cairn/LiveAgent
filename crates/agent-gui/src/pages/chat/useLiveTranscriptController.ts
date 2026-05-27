@@ -3,6 +3,7 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -16,6 +17,7 @@ import {
   type LiveTranscriptStore,
 } from "../../lib/chat/conversation/liveTranscriptStore";
 import type { LiveRound } from "../../lib/chat/messages/uiMessages";
+import { resolveScrollViewport } from "./chatScrollViewport";
 
 const AUTO_SCROLL_LOCK_THRESHOLD_PX = 2;
 const SCROLL_OVERFLOW_THRESHOLD_PX = 4;
@@ -25,10 +27,6 @@ const USER_SCROLL_INTENT_WINDOW_MS = 500;
 const BOTTOM_LOCK_DURATION_MS = 700;
 const VIEWPORT_ATTACH_RETRY_MS = 80;
 const VIEWPORT_ATTACH_MAX_ATTEMPTS = 75;
-
-function resolveScrollViewport(root: HTMLDivElement | null) {
-  return root?.querySelector("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
-}
 
 function getViewportBottomGap(viewport: HTMLDivElement) {
   return Math.max(0, viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight);
@@ -242,6 +240,11 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
     scrollToBottomNow();
     requestAutoScroll();
   }, [attachAutoScroll, requestAutoScroll, scrollToBottomNow]);
+
+  useLayoutEffect(() => {
+    userScrollIntentUntilRef.current = 0;
+    stickToBottom();
+  }, [currentConversationId, stickToBottom]);
 
   const cancelPendingLiveUpdates = useCallback((artifacts: LiveTranscriptArtifacts | null) => {
     if (!artifacts) return;

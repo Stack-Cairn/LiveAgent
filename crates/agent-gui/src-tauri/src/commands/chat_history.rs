@@ -51,6 +51,26 @@ pub struct ChatHistoryListResponse {
     pub total_count: i64,
 }
 
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ChatHistoryListFilter {
+    pub cwd: Option<String>,
+    pub cwd_empty: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatHistoryWorkdirSummary {
+    pub path: String,
+    pub conversation_count: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatHistoryWorkdirsResponse {
+    pub workdirs: Vec<ChatHistoryWorkdirSummary>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatHistorySegmentRecord {
@@ -1849,18 +1869,44 @@ pub(crate) fn list_chat_history_sync(
     page: i64,
     page_size: i64,
 ) -> Result<ChatHistoryListResponse, String> {
+    list_chat_history_sync_with_filter(conn, page, page_size, ChatHistoryListFilter::default())
+}
+
+pub(crate) fn list_chat_history_sync_with_filter(
+    conn: &Connection,
+    page: i64,
+    page_size: i64,
+    filter: ChatHistoryListFilter,
+) -> Result<ChatHistoryListResponse, String> {
     let page = resolve_history_list_page(page)?;
     let limit = resolve_history_list_page_size(page_size)?;
     let offset = (page - 1).saturating_mul(limit);
-    let total = conn
-        .query_row("SELECT COUNT(*) FROM chatHistory", [], |row| {
-            row.get::<_, i64>(0)
-        })
-        .map_err(|e| format!("统计历史列表失败：{e}"))?;
+    let cwd_filter = if filter.cwd_empty {
+        None
+    } else {
+        filter
+            .cwd
+            .map(|cwd| cwd.trim().to_string())
+            .filter(|cwd| !cwd.is_empty())
+    };
+    let where_clause = if filter.cwd_empty {
+        "WHERE TRIM(COALESCE(h.cwd, '')) = ''"
+    } else if cwd_filter.is_some() {
+        "WHERE TRIM(COALESCE(h.cwd, '')) = ?1"
+    } else {
+        ""
+    };
+    let total_query = format!("SELECT COUNT(*) FROM chatHistory h {where_clause}");
+    let total = if let Some(cwd) = cwd_filter.as_deref() {
+        conn.query_row(&total_query, params![cwd], |row| row.get::<_, i64>(0))
+    } else {
+        conn.query_row(&total_query, [], |row| row.get::<_, i64>(0))
+    }
+    .map_err(|e| format!("统计历史列表失败：{e}"))?;
 
     let mut stmt = conn
-        .prepare(
-            "
+        .prepare(&format!(
+            "\
             SELECT
                 h.id AS id,
                 h.title AS title,
@@ -1879,24 +1925,70 @@ pub(crate) fn list_chat_history_sync(
                 END AS is_shared
             FROM chatHistory h
             LEFT JOIN chatHistoryShare share ON share.conversation_id = h.id
+            {where_clause}
             ORDER BY h.is_pinned DESC, h.pinned_at DESC, h.updated_at DESC, h.id ASC
-            LIMIT ?1 OFFSET ?2
+            LIMIT {limit_param} OFFSET {offset_param}
             ",
-        )
+            limit_param = if cwd_filter.is_some() { "?2" } else { "?1" },
+            offset_param = if cwd_filter.is_some() { "?3" } else { "?2" },
+        ))
         .map_err(|e| format!("准备历史列表查询失败：{e}"))?;
 
-    let rows = stmt
-        .query_map(params![limit, offset], row_to_summary)
-        .map_err(|e| format!("查询历史列表失败：{e}"))?;
-
     let mut out = Vec::new();
-    for row in rows {
-        out.push(row.map_err(|e| format!("读取历史列表行失败：{e}"))?);
+    if let Some(cwd) = cwd_filter.as_deref() {
+        let rows = stmt
+            .query_map(params![cwd, limit, offset], row_to_summary)
+            .map_err(|e| format!("查询历史列表失败：{e}"))?;
+        for row in rows {
+            out.push(row.map_err(|e| format!("读取历史列表行失败：{e}"))?);
+        }
+    } else {
+        let rows = stmt
+            .query_map(params![limit, offset], row_to_summary)
+            .map_err(|e| format!("查询历史列表失败：{e}"))?;
+        for row in rows {
+            out.push(row.map_err(|e| format!("读取历史列表行失败：{e}"))?);
+        }
     }
     Ok(ChatHistoryListResponse {
         items: out,
         total_count: total,
     })
+}
+
+pub(crate) fn list_chat_history_workdirs_sync(
+    conn: &Connection,
+) -> Result<ChatHistoryWorkdirsResponse, String> {
+    let mut stmt = conn
+        .prepare(
+            "
+            SELECT TRIM(cwd) AS path, COUNT(*) AS conversation_count, MAX(updated_at) AS updated_at
+            FROM chatHistory
+            WHERE TRIM(COALESCE(cwd, '')) != ''
+            GROUP BY TRIM(cwd)
+            ORDER BY MAX(updated_at) DESC, TRIM(cwd) ASC
+            ",
+        )
+        .map_err(|e| format!("准备历史工作目录查询失败：{e}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ChatHistoryWorkdirSummary {
+                path: row.get("path")?,
+                conversation_count: row.get("conversation_count")?,
+                updated_at: row.get("updated_at")?,
+            })
+        })
+        .map_err(|e| format!("查询历史工作目录失败：{e}"))?;
+
+    let mut out = Vec::new();
+    for row in rows {
+        let item = row.map_err(|e| format!("读取历史工作目录行失败：{e}"))?;
+        if item.path.trim().is_empty() {
+            continue;
+        }
+        out.push(item);
+    }
+    Ok(ChatHistoryWorkdirsResponse { workdirs: out })
 }
 
 pub(crate) fn list_shared_chat_history_sync(
@@ -2613,13 +2705,33 @@ pub(crate) fn search_chat_history_for_memory_sync(
 pub async fn chat_history_list(
     page: i64,
     page_size: i64,
+    cwd: Option<String>,
+    cwd_empty: Option<bool>,
 ) -> Result<ChatHistoryListResponse, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
-        list_chat_history_sync(&conn, page, page_size)
+        list_chat_history_sync_with_filter(
+            &conn,
+            page,
+            page_size,
+            ChatHistoryListFilter {
+                cwd,
+                cwd_empty: cwd_empty.unwrap_or(false),
+            },
+        )
     })
     .await
     .map_err(|e| format!("chat_history_list join 失败：{e}"))?
+}
+
+#[tauri::command]
+pub async fn chat_history_workdirs() -> Result<ChatHistoryWorkdirsResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_db()?;
+        list_chat_history_workdirs_sync(&conn)
+    })
+    .await
+    .map_err(|e| format!("chat_history_workdirs join 失败：{e}"))?
 }
 
 #[tauri::command]
@@ -3597,6 +3709,82 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["conv-2", "conv-1"]
         );
+    }
+
+    #[test]
+    fn list_history_filters_by_cwd_and_empty_cwd() {
+        let conn = open_test_db().expect("open test db");
+        let mut project_a = sample_conversation();
+        project_a.id = "project-a".to_string();
+        project_a.cwd = Some("/tmp/project-a".to_string());
+        project_a.updated_at = 1_700_000_000_300;
+        let mut project_b = sample_conversation();
+        project_b.id = "project-b".to_string();
+        project_b.cwd = Some("/tmp/project-b".to_string());
+        project_b.updated_at = 1_700_000_000_200;
+        let mut empty_cwd = sample_conversation();
+        empty_cwd.id = "chat-mode".to_string();
+        empty_cwd.cwd = None;
+        empty_cwd.updated_at = 1_700_000_000_100;
+
+        upsert_chat_history_header(&conn, &project_a).expect("upsert project a");
+        upsert_chat_history_header(&conn, &project_b).expect("upsert project b");
+        upsert_chat_history_header(&conn, &empty_cwd).expect("upsert empty cwd");
+
+        let project_page = list_chat_history_sync_with_filter(
+            &conn,
+            1,
+            20,
+            ChatHistoryListFilter {
+                cwd: Some("/tmp/project-a".to_string()),
+                cwd_empty: false,
+            },
+        )
+        .expect("list project cwd history");
+        assert_eq!(project_page.total_count, 1);
+        assert_eq!(project_page.items[0].id, "project-a");
+
+        let empty_page = list_chat_history_sync_with_filter(
+            &conn,
+            1,
+            20,
+            ChatHistoryListFilter {
+                cwd: None,
+                cwd_empty: true,
+            },
+        )
+        .expect("list empty cwd history");
+        assert_eq!(empty_page.total_count, 1);
+        assert_eq!(empty_page.items[0].id, "chat-mode");
+    }
+
+    #[test]
+    fn list_history_workdirs_returns_distinct_non_empty_cwd_counts() {
+        let conn = open_test_db().expect("open test db");
+        for (id, cwd, updated_at) in [
+            ("project-a-older", "/tmp/project-a", 1_700_000_000_100),
+            ("project-a-newer", "/tmp/project-a", 1_700_000_000_300),
+            ("project-b", "/tmp/project-b", 1_700_000_000_200),
+        ] {
+            let mut conversation = sample_conversation();
+            conversation.id = id.to_string();
+            conversation.cwd = Some(cwd.to_string());
+            conversation.updated_at = updated_at;
+            upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+        }
+        let mut empty_cwd = sample_conversation();
+        empty_cwd.id = "chat-mode".to_string();
+        empty_cwd.cwd = None;
+        upsert_chat_history_header(&conn, &empty_cwd).expect("upsert empty cwd");
+
+        let response = list_chat_history_workdirs_sync(&conn).expect("list workdirs");
+
+        assert_eq!(response.workdirs.len(), 2);
+        assert_eq!(response.workdirs[0].path, "/tmp/project-a");
+        assert_eq!(response.workdirs[0].conversation_count, 2);
+        assert_eq!(response.workdirs[0].updated_at, 1_700_000_000_300);
+        assert_eq!(response.workdirs[1].path, "/tmp/project-b");
+        assert_eq!(response.workdirs[1].conversation_count, 1);
     }
 
     #[test]

@@ -5,7 +5,6 @@ import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import { GatewayWebSocketClient } from "./gatewaySocket";
 import type {
   AgentStatus,
-  ChatEvent,
   CronManagePayload,
   GatewayChatRuntimeControls,
   GatewaySelectedModel,
@@ -238,11 +237,19 @@ async function resolveRequest(client: GatewayWebSocketClient, method: string, pa
         String(body.path ?? ""),
         typeof body.max_results === "number" ? body.max_results : undefined,
       );
+    case "fs.create_project_folder":
+      return client.createProjectFolder(String(body.parent ?? ""), String(body.name ?? ""));
     case "history.list":
       return client.listHistory(
         typeof body.page === "number" ? body.page : 0,
         typeof body.page_size === "number" ? body.page_size : 0,
+        {
+          cwd: typeof body.cwd === "string" ? body.cwd : undefined,
+          cwdEmpty: body.cwd_empty === true,
+        },
       );
+    case "history.workdirs":
+      return client.listHistoryWorkdirs();
     case "history.shared_list":
       return client.listSharedHistory(
         typeof body.page === "number" ? body.page : 0,

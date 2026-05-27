@@ -89,6 +89,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
         hookWarning,
         sessionId: currentConversationSessionId,
         createdAt: currentConversationCreatedAt,
+        workdir: conversationRuntimeCacheRef.current.get(currentConversationIdRef.current)?.workdir,
       }),
     [
       compactionStatus,
@@ -226,6 +227,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
         hookWarning,
         sessionId: currentConversationSessionId,
         createdAt: currentConversationCreatedAt,
+        workdir: conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir,
       }),
     );
   }, [

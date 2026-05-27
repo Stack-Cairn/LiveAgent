@@ -79,7 +79,7 @@ export async function importReadableFiles(
     throw new Error("Gateway token is required");
   }
   if (!normalizedWorkdir) {
-    throw new Error("工作目录未配置，无法导入文件。");
+    throw new Error("项目目录未选择，无法导入文件。");
   }
   if (files.length === 0) {
     return { files: [], skipped: [] };

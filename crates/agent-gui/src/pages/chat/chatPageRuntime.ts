@@ -15,6 +15,7 @@ export type ConversationRuntimeEntry = {
   hookWarning: string | null;
   sessionId: string;
   createdAt: number;
+  workdir?: string;
 };
 
 export function createConversationRuntimeEntry(params: {
@@ -25,6 +26,7 @@ export function createConversationRuntimeEntry(params: {
   isSending?: boolean;
   errorMessage?: string | null;
   hookWarning?: string | null;
+  workdir?: string;
 }): ConversationRuntimeEntry {
   const {
     state,
@@ -34,6 +36,7 @@ export function createConversationRuntimeEntry(params: {
     isSending = false,
     errorMessage = null,
     hookWarning = null,
+    workdir,
   } = params;
   return {
     state,
@@ -43,6 +46,7 @@ export function createConversationRuntimeEntry(params: {
     hookWarning,
     sessionId,
     createdAt,
+    workdir: workdir?.trim() || undefined,
   };
 }
 

@@ -1,9 +1,6 @@
-import { useState } from "react";
 import {
   CheckCircle2,
-  ChevronRight,
   Cpu,
-  FolderOpen,
   MessageSquare,
   Moon,
   Sun,
@@ -11,29 +8,21 @@ import {
   Wrench,
 } from "../../components/icons";
 
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
 import { SUPPORTED_LOCALES, useLocale } from "../../i18n";
 import {
   type ExecutionMode,
   type Theme,
-  isAgentExecutionMode,
   updateSystem,
 } from "../../lib/settings";
 import { CUSTOM_SYSTEM_TOOL_OPTIONS } from "../../lib/tools/customSystemTools";
 import type { SettingsSectionProps } from "./types";
-import { WorkdirPickerModal } from "./WorkdirPickerModal";
 
 export function SystemSettingsForm(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
-  const [workdirPickerOpen, setWorkdirPickerOpen] = useState(false);
 
-  const workdirId = "system-workdir";
   const executionMode = settings.system.executionMode;
-  const workdir = settings.system.workdir;
   const selectedSystemTools = settings.system.selectedSystemTools;
-  const isAgentMode = isAgentExecutionMode(executionMode);
   const isClassicAgentMode = executionMode === "tools";
   const isAgentDevMode = executionMode === "agent-dev";
 
@@ -266,77 +255,6 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           </div>
         </section>
       </div>
-
-      <div className="border-t" />
-
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          {t("settings.workdir")}
-          {isAgentMode ? (
-            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-              {t("settings.workdirRequired")}
-            </span>
-          ) : null}
-        </div>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {t("settings.workdirDesc")}
-        </p>
-
-        <div className="settings-field-row settings-workdir-row flex items-center gap-2">
-          <div className="relative flex-1">
-            <Input
-              id={workdirId}
-              className="pr-10 font-mono text-[13px]"
-              value={workdir}
-              placeholder={t("settings.workdirPlaceholder")}
-              onChange={(e) => {
-                const nextWorkdir = e.currentTarget.value;
-                setSettings((prev) => updateSystem(prev, { workdir: nextWorkdir }));
-              }}
-            />
-            {workdir.trim() ? (
-              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-              </div>
-            ) : null}
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            title={t("settings.selectWorkdir")}
-            aria-label={t("settings.selectWorkdir")}
-            disabled={workdirPickerOpen}
-            className="shrink-0"
-            onClick={() => {
-              setWorkdirPickerOpen(true);
-            }}
-          >
-            <FolderOpen className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {isAgentMode && !workdir.trim() ? (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5">
-            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-            <span className="text-xs text-amber-700 dark:text-amber-300">
-              {t("settings.workdirWarning")}
-            </span>
-          </div>
-        ) : null}
-        {workdirPickerOpen ? (
-          <WorkdirPickerModal
-            initialWorkdir={workdir}
-            onClose={() => setWorkdirPickerOpen(false)}
-            onSelect={(path) => {
-              setSettings((prev) => updateSystem(prev, { workdir: path }));
-            }}
-          />
-        ) : null}
-      </div>
-
-      <div className="border-t" />
 
       <div className="space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">

@@ -1,4 +1,9 @@
-import { type AppSettings, normalizeChatRuntimeControls, normalizeSettings } from "./index";
+import {
+  type AppSettings,
+  normalizeChatRuntimeControls,
+  normalizeSettings,
+  workspaceProjectPathKey,
+} from "./index";
 
 export type GatewayProviderApiKeyUpdates = Record<string, string>;
 export type GatewaySettingsSyncProvider = Omit<AppSettings["customProviders"][number], "apiKey"> & {
@@ -74,6 +79,71 @@ function collectProviderApiKeyUpdates(
   return Object.keys(updates).length > 0 ? updates : undefined;
 }
 
+function syncableCustomSettings(customSettings: AppSettings["customSettings"]) {
+  return {
+    ...customSettings,
+    chatSidebar: {
+      projectsCollapsed: false,
+      recentCollapsed: false,
+    },
+  };
+}
+
+function syncableSystemSettings(system: AppSettings["system"]): AppSettings["system"] {
+  const syncableSystem = { ...system };
+  delete syncableSystem.activeWorkspaceProjectId;
+  return syncableSystem as AppSettings["system"];
+}
+
+function readWorkspaceProjectLastConversationAt(
+  project: AppSettings["system"]["workspaceProjects"][number],
+) {
+  return typeof project.lastConversationAt === "number" &&
+    Number.isFinite(project.lastConversationAt) &&
+    project.lastConversationAt > 0
+    ? project.lastConversationAt
+    : 0;
+}
+
+function mergeSyncedSystemSettings(
+  current: AppSettings["system"],
+  incoming: unknown,
+): AppSettings["system"] {
+  if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
+    return current;
+  }
+
+  const incomingSystem = incoming as AppSettings["system"];
+  if (!Array.isArray(incomingSystem.workspaceProjects)) {
+    return incomingSystem;
+  }
+
+  const currentActivityByPath = new Map<string, number>();
+  for (const project of current.workspaceProjects) {
+    const pathKey = workspaceProjectPathKey(project.path);
+    const lastConversationAt = readWorkspaceProjectLastConversationAt(project);
+    if (pathKey && lastConversationAt > 0) {
+      currentActivityByPath.set(pathKey, lastConversationAt);
+    }
+  }
+
+  return {
+    ...incomingSystem,
+    workspaceProjects: incomingSystem.workspaceProjects.map((project) => {
+      const lastConversationAt = Math.max(
+        readWorkspaceProjectLastConversationAt(project),
+        currentActivityByPath.get(workspaceProjectPathKey(project.path)) ?? 0,
+      );
+      return lastConversationAt > 0
+        ? {
+            ...project,
+            lastConversationAt,
+          }
+        : project;
+    }),
+  };
+}
+
 function normalizeProviderApiKeyUpdates(value: unknown): GatewayProviderApiKeyUpdates {
   const source = asObject(value);
   const updates: GatewayProviderApiKeyUpdates = {};
@@ -122,14 +192,14 @@ export function buildGatewaySettingsSyncPayload(
   options: { includeProviderApiKeyUpdates?: boolean } = {},
 ): GatewaySettingsSyncPayload {
   const payload: GatewaySettingsSyncPayload = {
-    system: settings.system,
+    system: syncableSystemSettings(settings.system),
     customProviders: redactCustomProvidersForGateway(settings.customProviders),
     mcp: settings.mcp,
     agents: settings.agents,
     hooks: settings.hooks,
     cron: settings.cron,
     memory: settings.memory,
-    customSettings: settings.customSettings,
+    customSettings: syncableCustomSettings(settings.customSettings),
     skills: settings.skills,
     chatRuntimeControls: settings.chatRuntimeControls,
     selectedModel: settings.selectedModel ?? null,
@@ -165,7 +235,9 @@ export function applyGatewaySettingsSyncPayload(
 
   return normalizeSettings({
     ...current,
-    system: (source.system as AppSettings["system"] | undefined) ?? current.system,
+    system: Object.hasOwn(source, "system")
+      ? mergeSyncedSystemSettings(current.system, source.system)
+      : current.system,
     customProviders: mergeSyncedCustomProviders(
       current.customProviders,
       source.customProviders,
@@ -176,7 +248,10 @@ export function applyGatewaySettingsSyncPayload(
     hooks: (source.hooks as AppSettings["hooks"] | undefined) ?? current.hooks,
     cron: (source.cron as AppSettings["cron"] | undefined) ?? current.cron,
     memory: memory as AppSettings["memory"],
-    customSettings: customSettings as AppSettings["customSettings"],
+    customSettings: {
+      ...(customSettings as AppSettings["customSettings"]),
+      chatSidebar: current.customSettings.chatSidebar,
+    },
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,
     chatRuntimeControls: Object.hasOwn(source, "chatRuntimeControls")
       ? normalizeChatRuntimeControls(source.chatRuntimeControls)

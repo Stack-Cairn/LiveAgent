@@ -162,7 +162,7 @@ async function executeCronPromptRun(
 
   const workdir = settings.system.workdir.trim();
   if (!workdir) {
-    throw new Error("Tool mode requires a working directory configured in Settings -> System.");
+    throw new Error("Tool mode requires a project directory from the chat sidebar.");
   }
 
   if (!request.prompt.trim()) {

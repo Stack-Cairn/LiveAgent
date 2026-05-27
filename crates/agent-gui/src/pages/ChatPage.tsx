@@ -37,11 +37,19 @@ import {
 import {
   type ChatHistoryShareStatus,
   type ChatHistorySummary,
+  type ChatHistoryWorkdirSummary,
+  deleteChatHistory,
   getChatHistory,
   getChatHistoryShare,
+  listChatHistory,
+  listChatHistoryWorkdirs,
   listSharedChatHistory,
   setChatHistoryShare,
 } from "../lib/chat/history/chatHistory";
+import {
+  CHAT_HISTORY_SYNC_EVENT,
+  type ChatHistorySyncEvent,
+} from "../lib/chat/history/chatHistorySync";
 import { clearSilentMemoryDecisions } from "../lib/chat/memory/memoryDecisionLog";
 import { clearMemoryExtractorState } from "../lib/chat/memory/memoryExtractor";
 import { buildMemoryOverviewSection } from "../lib/chat/memory/memoryPrompt";
@@ -78,11 +86,25 @@ import {
   type ProviderId,
   type SelectedModel,
   type SystemToolId,
+  type WorkspaceProject,
+  DEFAULT_WORKSPACE_PROJECT_ID,
+  resolveWorkspaceProjects,
+  workspaceProjectPathKey,
+  updateCustomSettings,
   updateChatRuntimeControlsForProvider,
   updateMcp,
   updateMemorySettings,
   updateSkills,
 } from "../lib/settings";
+import {
+  applyWorkspaceProjectConversationActivityMap,
+  buildWorkspaceProjectActivityUpdatedAts,
+  fallbackWorkspaceProjectName,
+  findWorkspaceProject,
+  mergeWorkspaceProjectActivityUpdatedAts,
+  mergeWorkspaceProjectsWithHistory,
+  workspaceProjectActivityUpdatedAtsEqual,
+} from "../lib/workspaceProjects";
 import {
   buildSkillsSystemPrompt,
   mergeAlwaysEnabledSkillNames,
@@ -176,7 +198,13 @@ type EffectiveChatModelSelection = {
   model: string;
 };
 
+type SyncedRunningConversationRuntime = {
+  workdir?: string;
+  updatedAt: number;
+};
+
 const HISTORY_SWITCH_OVERLAY_MIN_MS = 260;
+const PROJECT_HISTORY_DELETE_PAGE_SIZE = 200;
 const SHARED_HISTORY_LIST_PAGE_SIZE = 200;
 
 function appendManagedSkillSelections(current: readonly string[], names: readonly string[]) {
@@ -199,6 +227,32 @@ function asErrorMessage(error: unknown, fallback: string) {
     return error;
   }
   return fallback;
+}
+
+async function listChatHistoryIdsForProjectPath(projectPath: string) {
+  const cwd = projectPath.trim();
+  if (!cwd) return [];
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (let pageNumber = 1; ; pageNumber += 1) {
+    const page = await listChatHistory(pageNumber, PROJECT_HISTORY_DELETE_PAGE_SIZE, { cwd });
+    for (const item of page.items) {
+      const id = item.id.trim();
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+
+    if (
+      page.items.length === 0 ||
+      ids.length >= page.totalCount ||
+      page.items.length < PROJECT_HISTORY_DELETE_PAGE_SIZE
+    ) {
+      break;
+    }
+  }
+  return ids;
 }
 
 type SystemImportPastedTextsResponse = {
@@ -237,7 +291,7 @@ function buildTextFromComposerDraft(
 async function importPastedTextsAsFiles(workdir: string, pastes: MentionComposerLargePaste[]) {
   const normalizedWorkdir = workdir.trim();
   if (!normalizedWorkdir) {
-    throw new Error("请先在设置 -> 系统中配置工作目录后再发送大段粘贴内容。");
+    throw new Error("请先在项目栏选择或创建项目后再发送大段粘贴内容。");
   }
   if (pastes.length === 0) {
     return {
@@ -412,6 +466,25 @@ function selectedModelsMatch(left: SelectedModel | undefined, right: SelectedMod
   );
 }
 
+function getDefaultWorkspaceProjectPath(system: AppSettings["system"]) {
+  return (
+    system.workspaceProjects.find((project) => project.id === DEFAULT_WORKSPACE_PROJECT_ID)?.path ||
+    system.workdir
+  );
+}
+
+function createWorkspaceProjectFromPath(path: string, kind: WorkspaceProject["kind"]) {
+  const now = Date.now();
+  return {
+    id: `${kind}-${now}-${Math.random().toString(36).slice(2, 8)}`,
+    name: fallbackWorkspaceProjectName(path),
+    path,
+    kind,
+    createdAt: now,
+    updatedAt: now,
+  } satisfies WorkspaceProject;
+}
+
 export function ChatPage(props: ChatPageProps) {
   const { settings, setSettings, context, setContext, onOpenSettings, onToggleTheme } = props;
   const { t } = useLocale();
@@ -445,9 +518,20 @@ export function ChatPage(props: ChatPageProps) {
   );
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
+  const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [runningConversationIds, setRunningConversationIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [syncedRunningConversationRuntime, setSyncedRunningConversationRuntime] = useState<
+    ReadonlyMap<string, SyncedRunningConversationRuntime>
+  >(() => new Map());
+  const syncedRunningConversationRuntimeRef = useRef<
+    ReadonlyMap<string, SyncedRunningConversationRuntime>
+  >(new Map());
+  const [syncedProjectActivityUpdatedAts, setSyncedProjectActivityUpdatedAts] = useState<
+    ReadonlyMap<string, number>
+  >(() => new Map());
   const [historySwitchOverlay, setHistorySwitchOverlay] = useState<{
     conversationId: string;
     startedAt: number;
@@ -468,6 +552,40 @@ export function ChatPage(props: ChatPageProps) {
     [skillsEnabled, settings.skills.selected],
   );
   const workdir = settings.system.workdir.trim();
+  const [historyWorkdirs, setHistoryWorkdirs] = useState<ChatHistoryWorkdirSummary[]>([]);
+  const workspaceProjects = useMemo(
+    () => mergeWorkspaceProjectsWithHistory(settings.system, historyWorkdirs),
+    [historyWorkdirs, settings.system],
+  );
+  const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>(
+    DEFAULT_WORKSPACE_PROJECT_ID,
+  );
+  const missingWorkspaceProjectPathKeys = useMemo(
+    () => new Set(settings.system.missingWorkspaceProjectPaths.map(workspaceProjectPathKey)),
+    [settings.system.missingWorkspaceProjectPaths],
+  );
+  const activeWorkspaceProject = useMemo(
+    () => findWorkspaceProject(workspaceProjects, activeWorkspaceProjectId),
+    [activeWorkspaceProjectId, workspaceProjects],
+  );
+  useEffect(() => {
+    if (activeWorkspaceProject?.id && activeWorkspaceProject.id !== activeWorkspaceProjectId) {
+      setActiveWorkspaceProjectId(activeWorkspaceProject.id);
+    }
+  }, [activeWorkspaceProject?.id, activeWorkspaceProjectId]);
+  const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
+  const historyListFilter = useMemo(
+    () =>
+      isAgentMode
+        ? { cwd: activeWorkspaceProjectPath || "__liveagent_no_project__" }
+        : {
+            cwdEmpty: true,
+          },
+    [activeWorkspaceProjectPath, isAgentMode],
+  );
+  const historyScopeKey = isAgentMode
+    ? `cwd:${activeWorkspaceProjectPath || "__liveagent_no_project__"}`
+    : "cwd-empty";
   const enabledMcpServers = useMemo(
     () => settings.mcp.servers.filter((server) => server.enabled),
     [settings.mcp.servers],
@@ -498,7 +616,7 @@ export function ChatPage(props: ChatPageProps) {
     historyError,
     setHistoryError,
     loadMoreHistory,
-  } = useChatHistoryList();
+  } = useChatHistoryList(historyListFilter);
   const [shareConversation, setShareConversation] = useState<ChatHistorySummary | null>(null);
   const [shareStatus, setShareStatus] = useState<ChatHistoryShareStatus | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -531,6 +649,434 @@ export function ChatPage(props: ChatPageProps) {
     remoteRuntimeStatus.online === true &&
     remoteRuntimeStatus.enabled === true &&
     remoteRuntimeStatus.configured === true;
+
+  const refreshHistoryWorkdirs = useCallback(async () => {
+    try {
+      const response = await listChatHistoryWorkdirs();
+      setHistoryWorkdirs(response.workdirs);
+    } catch (error) {
+      console.warn("Failed to load chat history workdirs", error);
+    }
+  }, []);
+
+  const persistProjectConversationActivity = useCallback(
+    (activity: ReadonlyMap<string, number>) => {
+      if (activity.size === 0) {
+        return;
+      }
+      setSettings((prev) => {
+        const hiddenProjectPathKeys = new Set(
+          prev.system.hiddenWorkspaceProjectPaths.map(workspaceProjectPathKey),
+        );
+        const workspaceProjects = applyWorkspaceProjectConversationActivityMap(
+          prev.system.workspaceProjects,
+          activity,
+          { hiddenProjectPathKeys },
+        );
+        if (!workspaceProjects) {
+          return prev;
+        }
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              workspaceProjects,
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+    },
+    [setSettings],
+  );
+
+  const recordProjectActivity = useCallback(
+    (workdir?: string | null, updatedAt?: number | null) => {
+      const pathKey = workspaceProjectPathKey(workdir ?? "");
+      if (!pathKey) {
+        return;
+      }
+      const nextUpdatedAt =
+        typeof updatedAt === "number" && Number.isFinite(updatedAt) && updatedAt > 0
+          ? updatedAt
+          : Date.now();
+      setSyncedProjectActivityUpdatedAts((current) => {
+        if ((current.get(pathKey) ?? 0) >= nextUpdatedAt) {
+          return current;
+        }
+        return mergeWorkspaceProjectActivityUpdatedAts(
+          current,
+          new Map([[pathKey, nextUpdatedAt]]),
+        );
+      });
+      persistProjectConversationActivity(new Map([[pathKey, nextUpdatedAt]]));
+    },
+    [persistProjectConversationActivity],
+  );
+
+  useEffect(() => {
+    const historyActivity = buildWorkspaceProjectActivityUpdatedAts(historyWorkdirs);
+    if (historyActivity.size === 0) {
+      return;
+    }
+    setSyncedProjectActivityUpdatedAts((current) => {
+      const next = mergeWorkspaceProjectActivityUpdatedAts(current, historyActivity);
+      return workspaceProjectActivityUpdatedAtsEqual(current, next) ? current : next;
+    });
+    persistProjectConversationActivity(historyActivity);
+  }, [historyWorkdirs, persistProjectConversationActivity]);
+
+  const applySyncedConversationRuntime = useCallback(
+    (event: ChatHistorySyncEvent) => {
+      const conversationId = event.conversationId.trim();
+      if (!conversationId) {
+        return;
+      }
+
+      const existing = syncedRunningConversationRuntimeRef.current.get(conversationId);
+      const eventWorkdir = event.conversation?.cwd?.trim() || "";
+      const workdir = eventWorkdir || existing?.workdir || "";
+      const eventUpdatedAt = event.conversation?.updatedAt;
+      const updatedAt =
+        typeof eventUpdatedAt === "number" && Number.isFinite(eventUpdatedAt) && eventUpdatedAt > 0
+          ? eventUpdatedAt
+          : existing?.updatedAt || Date.now();
+
+      if (workdir) {
+        recordProjectActivity(workdir, updatedAt);
+      }
+
+      if (event.kind === "upsert" && !existing) {
+        return;
+      }
+
+      setSyncedRunningConversationRuntime((current) => {
+        const currentEntry = current.get(conversationId);
+        if (event.kind === "idle" || event.kind === "delete") {
+          if (!currentEntry) {
+            syncedRunningConversationRuntimeRef.current = current;
+            return current;
+          }
+          const next = new Map(current);
+          next.delete(conversationId);
+          syncedRunningConversationRuntimeRef.current = next;
+          return next;
+        }
+
+        const nextEntry: SyncedRunningConversationRuntime = {
+          workdir: workdir || undefined,
+          updatedAt: Math.max(currentEntry?.updatedAt ?? 0, updatedAt),
+        };
+        if (
+          currentEntry?.workdir === nextEntry.workdir &&
+          currentEntry?.updatedAt === nextEntry.updatedAt
+        ) {
+          syncedRunningConversationRuntimeRef.current = current;
+          return current;
+        }
+        const next = new Map(current);
+        next.set(conversationId, nextEntry);
+        syncedRunningConversationRuntimeRef.current = next;
+        return next;
+      });
+    },
+    [recordProjectActivity],
+  );
+
+  useEffect(() => {
+    void refreshHistoryWorkdirs();
+  }, [refreshHistoryWorkdirs]);
+
+  useEffect(() => {
+    const unlistenPromise = listen<ChatHistorySyncEvent>(CHAT_HISTORY_SYNC_EVENT, (event) => {
+      applySyncedConversationRuntime(event.payload);
+      if (
+        event.payload.kind === "upsert" ||
+        event.payload.kind === "delete" ||
+        event.payload.kind === "idle"
+      ) {
+        void refreshHistoryWorkdirs();
+      }
+    });
+    return () => {
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
+  }, [applySyncedConversationRuntime, refreshHistoryWorkdirs]);
+
+  const setWorkspaceProjectDirectoryMissing = useCallback(
+    (project: WorkspaceProject, missing: boolean) => {
+      const key = workspaceProjectPathKey(project.path);
+      const path = project.path.trim();
+      if (!key || !path) return;
+      setSettings((prev) => {
+        const hasMissingPath = prev.system.missingWorkspaceProjectPaths.some(
+          (item) => workspaceProjectPathKey(item) === key,
+        );
+        if (hasMissingPath === missing) {
+          return prev;
+        }
+        const missingWorkspaceProjectPaths = missing
+          ? [...prev.system.missingWorkspaceProjectPaths, path]
+          : prev.system.missingWorkspaceProjectPaths.filter(
+              (item) => workspaceProjectPathKey(item) !== key,
+            );
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              missingWorkspaceProjectPaths,
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+    },
+    [setSettings],
+  );
+
+  const checkWorkspaceProjectDirectory = useCallback(
+    async (project: WorkspaceProject) => {
+      const path = project.path.trim();
+      if (!path) {
+        setWorkspaceProjectDirectoryMissing(project, true);
+        return false;
+      }
+      try {
+        await invoke("fs_list", {
+          workdir: path,
+          path: null,
+          depth: 1,
+          offset: 0,
+          max_results: 1,
+        });
+        setWorkspaceProjectDirectoryMissing(project, false);
+        return true;
+      } catch {
+        setWorkspaceProjectDirectoryMissing(project, true);
+        return false;
+      }
+    },
+    [setWorkspaceProjectDirectoryMissing],
+  );
+
+  const activateWorkspaceProject = useCallback(
+    (project: WorkspaceProject, options?: { startConversation?: boolean }) => {
+      const pathKey = project.path.trim();
+      if (!pathKey) return;
+      const normalizedPathKey = workspaceProjectPathKey(pathKey);
+      const targetProject =
+        workspaceProjects.find(
+          (item) =>
+            workspaceProjectPathKey(item.path) === normalizedPathKey || item.id === project.id,
+        ) ?? project;
+      setActiveWorkspaceProjectId(targetProject.id);
+      setSettings((prev) => {
+        const existing = prev.system.workspaceProjects.find(
+          (item) =>
+            workspaceProjectPathKey(item.path) === normalizedPathKey || item.id === project.id,
+        );
+        const nextProject = existing ?? targetProject;
+        const workspaceProjects = existing
+          ? prev.system.workspaceProjects.map((item) =>
+              item.id === existing.id
+                ? {
+                    ...item,
+                    name: item.id === DEFAULT_WORKSPACE_PROJECT_ID ? item.name : nextProject.name,
+                    path: nextProject.path,
+                    kind:
+                      item.id === DEFAULT_WORKSPACE_PROJECT_ID
+                        ? "managed"
+                        : nextProject.kind === "history"
+                          ? item.kind
+                          : nextProject.kind,
+                    updatedAt: item.updatedAt,
+                    lastConversationAt:
+                      Math.max(
+                        item.lastConversationAt ?? 0,
+                        nextProject.lastConversationAt ?? 0,
+                      ) || undefined,
+                  }
+                : item,
+            )
+          : [...prev.system.workspaceProjects, nextProject];
+        const nextSystem = resolveWorkspaceProjects(
+          {
+            ...prev.system,
+            workspaceProjects,
+            hiddenWorkspaceProjectPaths: prev.system.hiddenWorkspaceProjectPaths.filter(
+              (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
+            ),
+            missingWorkspaceProjectPaths: prev.system.missingWorkspaceProjectPaths.filter(
+              (path) => workspaceProjectPathKey(path) !== normalizedPathKey,
+            ),
+          },
+          getDefaultWorkspaceProjectPath(prev.system),
+        );
+        return {
+          ...prev,
+          system: nextSystem,
+        };
+      });
+      if (options?.startConversation) {
+        startNewConversationActionRef.current({ workdir: targetProject.path });
+      }
+    },
+    [setSettings, workspaceProjects],
+  );
+
+  const handleSelectWorkspaceProject = useCallback(
+    async (project: WorkspaceProject) => {
+      if (!(await checkWorkspaceProjectDirectory(project))) {
+        return;
+      }
+      activateWorkspaceProject(project);
+    },
+    [activateWorkspaceProject, checkWorkspaceProjectDirectory],
+  );
+
+  const handleNewConversationForProject = useCallback(
+    async (project: WorkspaceProject) => {
+      if (!(await checkWorkspaceProjectDirectory(project))) {
+        return;
+      }
+      setActiveView("chat");
+      activateWorkspaceProject(project, { startConversation: true });
+    },
+    [activateWorkspaceProject, checkWorkspaceProjectDirectory],
+  );
+
+  const handleAddExistingWorkspaceProject = useCallback(async () => {
+    try {
+      const picked = await invoke<string | null>("system_pick_folder", {
+        initialWorkdir: activeWorkspaceProjectPath || workdir,
+      });
+      const path = picked?.trim();
+      if (!path) return;
+      activateWorkspaceProject(createWorkspaceProjectFromPath(path, "folder"));
+      void refreshHistoryWorkdirs();
+    } catch (error) {
+      setHistoryError(asErrorMessage(error, "选择项目目录失败"));
+    }
+  }, [
+    activateWorkspaceProject,
+    activeWorkspaceProjectPath,
+    refreshHistoryWorkdirs,
+    setHistoryError,
+    workdir,
+  ]);
+
+  const handleOpenCreateWorkspaceProject = useCallback(async () => {
+    try {
+      const picked = await invoke<string | null>("system_pick_folder", {
+        initialWorkdir: activeWorkspaceProjectPath || workdir,
+      });
+      const path = picked?.trim();
+      if (!path) return;
+      activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));
+      void refreshHistoryWorkdirs();
+    } catch (error) {
+      setHistoryError(asErrorMessage(error, "选择项目目录失败"));
+    }
+  }, [
+    activateWorkspaceProject,
+    activeWorkspaceProjectPath,
+    refreshHistoryWorkdirs,
+    setHistoryError,
+    workdir,
+  ]);
+
+  const commitWorkspaceProjectRename = useCallback(
+    (project: WorkspaceProject, nextNameInput: string) => {
+      if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
+      const nextName = nextNameInput.trim();
+      if (!nextName || nextName === project.name) return;
+      setSettings((prev) => {
+        const pathKey = workspaceProjectPathKey(project.path);
+        const existing = prev.system.workspaceProjects.find(
+          (item) => item.id === project.id || workspaceProjectPathKey(item.path) === pathKey,
+        );
+        const updatedProject: WorkspaceProject = {
+          ...(existing ?? project),
+          id: existing?.id ?? project.id,
+          name: nextName,
+          kind: (existing ?? project).kind === "history" ? "folder" : (existing ?? project).kind,
+          updatedAt: Date.now(),
+        };
+        const workspaceProjects = existing
+          ? prev.system.workspaceProjects.map((item) =>
+              item.id === existing.id || workspaceProjectPathKey(item.path) === pathKey
+                ? updatedProject
+                : item,
+            )
+          : [...prev.system.workspaceProjects, updatedProject];
+
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              workspaceProjects,
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+    },
+    [setSettings],
+  );
+
+  const handleStartRenamingWorkspaceProject = useCallback((project: WorkspaceProject) => {
+    if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
+    setProjectRenamingId(project.id);
+    setProjectRenameDraft(project.name);
+  }, []);
+
+  const handleCommitWorkspaceProjectRename = useCallback(() => {
+    if (!projectRenamingId) {
+      return;
+    }
+    const project = workspaceProjects.find((item) => item.id === projectRenamingId);
+    if (project) {
+      commitWorkspaceProjectRename(project, projectRenameDraft);
+    }
+    setProjectRenamingId(null);
+    setProjectRenameDraft("");
+  }, [commitWorkspaceProjectRename, projectRenameDraft, projectRenamingId, workspaceProjects]);
+
+  const handleCancelWorkspaceProjectRename = useCallback(() => {
+    setProjectRenamingId(null);
+    setProjectRenameDraft("");
+  }, []);
+
+  const handleSidebarProjectsCollapsedChange = useCallback(
+    (projectsCollapsed: boolean) => {
+      setSettings((prev) =>
+        updateCustomSettings(prev, {
+          chatSidebar: {
+            ...prev.customSettings.chatSidebar,
+            projectsCollapsed,
+          },
+        }),
+      );
+    },
+    [setSettings],
+  );
+
+  const handleSidebarRecentCollapsedChange = useCallback(
+    (recentCollapsed: boolean) => {
+      setSettings((prev) =>
+        updateCustomSettings(prev, {
+          chatSidebar: {
+            ...prev.customSettings.chatSidebar,
+            recentCollapsed,
+          },
+        }),
+      );
+    },
+    [setSettings],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -640,9 +1186,12 @@ export function ChatPage(props: ChatPageProps) {
     promise: Promise<string | null>;
   } | null>(null);
   const previousHistoryIdsRef = useRef<Set<string>>(new Set());
+  const previousHistoryScopeKeyRef = useRef(historyScopeKey);
   const currentConversationHistoryUpdatedAtRef = useRef<number | null>(null);
   const locallySyncedHistoryUpdatedAtRef = useRef(new Map<string, number>());
-  const startNewConversationActionRef = useRef<() => void>(() => undefined);
+  const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => void>(
+    () => undefined,
+  );
   const loadConversationActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
   const commitRenameActionRef = useRef<() => Promise<void>>(async () => undefined);
   const setPinnedActionRef = useRef<(id: string, isPinned: boolean) => Promise<void>>(
@@ -729,6 +1278,73 @@ export function ChatPage(props: ChatPageProps) {
   }
 
   const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
+  const currentConversationPersistedCwd =
+    historyItems.find((item) => item.id === currentConversationId)?.cwd?.trim() || "";
+  const currentConversationRuntimeWorkdir =
+    conversationRuntimeCacheRef.current.get(currentConversationId)?.workdir?.trim() || "";
+  const displayedConversationWorkdir =
+    currentConversationPersistedCwd ||
+    currentConversationRuntimeWorkdir ||
+    (isAgentMode ? activeWorkspaceProjectPath || workdir : "");
+  const sidebarRunningConversationIds = useMemo(() => {
+    const next = new Set(runningConversationIds);
+    for (const conversationId of syncedRunningConversationRuntime.keys()) {
+      next.add(conversationId);
+    }
+    return next;
+  }, [runningConversationIds, syncedRunningConversationRuntime]);
+  const runningProjectPathKeys = useMemo(() => {
+    const next = new Set<string>();
+    for (const conversationIdValue of sidebarRunningConversationIds) {
+      const conversationId = conversationIdValue.trim();
+      if (!conversationId) {
+        continue;
+      }
+
+      const runtimeWorkdir =
+        conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
+      const syncedWorkdir =
+        syncedRunningConversationRuntime.get(conversationId)?.workdir?.trim() || "";
+      const persistedWorkdir =
+        historyItems.find((item) => item.id === conversationId)?.cwd?.trim() || "";
+      const resolvedWorkdir = runtimeWorkdir || syncedWorkdir || persistedWorkdir;
+      if (resolvedWorkdir) {
+        next.add(workspaceProjectPathKey(resolvedWorkdir));
+      }
+    }
+    return next;
+  }, [historyItems, sidebarRunningConversationIds, syncedRunningConversationRuntime]);
+  const projectActivityUpdatedAts = useMemo(() => {
+    const updatedAts = buildWorkspaceProjectActivityUpdatedAts([
+      ...historyWorkdirs,
+      ...Array.from(runningConversationIds).map((conversationId) => {
+        const runtimeWorkdir =
+          conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
+        const persistedWorkdir =
+          historyItems.find((item) => item.id === conversationId)?.cwd?.trim() || "";
+        return {
+          cwd: runtimeWorkdir || persistedWorkdir,
+          updatedAt: Date.now(),
+        };
+      }),
+      ...Array.from(syncedRunningConversationRuntime.values()).map((item) => ({
+        cwd: item.workdir,
+        updatedAt: item.updatedAt,
+      })),
+    ]);
+    for (const [pathKey, updatedAt] of syncedProjectActivityUpdatedAts) {
+      if (updatedAt > (updatedAts.get(pathKey) ?? 0)) {
+        updatedAts.set(pathKey, updatedAt);
+      }
+    }
+    return updatedAts;
+  }, [
+    historyItems,
+    historyWorkdirs,
+    runningConversationIds,
+    syncedProjectActivityUpdatedAts,
+    syncedRunningConversationRuntime,
+  ]);
 
   const addNotify = useCallback((type: NotifyItem["type"], message: string) => {
     const id = `notify-${++notifyIdCounter.current}`;
@@ -750,7 +1366,7 @@ export function ChatPage(props: ChatPageProps) {
     removePendingUpload,
   } = usePendingUploads({
     isAgentMode,
-    workdir,
+    workdir: displayedConversationWorkdir,
     currentConversationIdRef,
     composerRef,
     setErrorMessage,
@@ -1003,6 +1619,8 @@ export function ChatPage(props: ChatPageProps) {
     disposeSubagentsForConversation: (conversationId) => {
       subagentRuntimeManagerRef.current.disposeConversation(conversationId);
     },
+    getDefaultNewConversationWorkdir: () =>
+      isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
     setCurrentConversationId,
     setErrorMessage,
     setHydratingConversationId,
@@ -1018,6 +1636,179 @@ export function ChatPage(props: ChatPageProps) {
   commitRenameActionRef.current = commitRename;
   setPinnedActionRef.current = setConversationPinned;
   deleteConversationActionRef.current = requestDeleteConversation;
+
+  const removeWorkspaceProjectFromSettings = useCallback(
+    (project: WorkspaceProject) => {
+      if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
+      const path = project.path.trim();
+      const pathKey = workspaceProjectPathKey(path);
+      setActiveWorkspaceProjectId((current) => {
+        const currentProject = workspaceProjects.find((item) => item.id === current);
+        if (
+          current === project.id ||
+          (pathKey &&
+            currentProject &&
+            workspaceProjectPathKey(currentProject.path) === pathKey)
+        ) {
+          return DEFAULT_WORKSPACE_PROJECT_ID;
+        }
+        return current;
+      });
+      setSettings((prev) => {
+        const nextHidden =
+          pathKey &&
+          prev.system.hiddenWorkspaceProjectPaths.some(
+            (item) => workspaceProjectPathKey(item) === pathKey,
+          )
+            ? prev.system.hiddenWorkspaceProjectPaths
+            : path
+              ? [...prev.system.hiddenWorkspaceProjectPaths, path]
+              : prev.system.hiddenWorkspaceProjectPaths;
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              workspaceProjects: prev.system.workspaceProjects.filter(
+                (item) => item.id !== project.id && workspaceProjectPathKey(item.path) !== pathKey,
+              ),
+              hiddenWorkspaceProjectPaths: nextHidden,
+              missingWorkspaceProjectPaths: prev.system.missingWorkspaceProjectPaths.filter(
+                (item) => workspaceProjectPathKey(item) !== pathKey,
+              ),
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+      setProjectRenamingId((current) => (current === project.id ? null : current));
+      setProjectRenameDraft("");
+    },
+    [setSettings, workspaceProjects],
+  );
+
+  const handleRemoveWorkspaceProject = useCallback(
+    (project: WorkspaceProject) => {
+      if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
+
+      void (async () => {
+        const path = project.path.trim();
+        const pathKey = workspaceProjectPathKey(path);
+        const runningMessage = "项目中仍有后台任务运行，暂时不能删除该项目。";
+        if (pathKey && runningProjectPathKeys.has(pathKey)) {
+          setHistoryError(runningMessage);
+          setErrorMessage(runningMessage);
+          return;
+        }
+
+        setHistoryError(null);
+        setErrorMessage(null);
+
+        try {
+          const conversationIds = await listChatHistoryIdsForProjectPath(path);
+          const runningConversationIdsInProject = conversationIds.filter((id) => {
+            const key = id.trim();
+            return key ? isConversationRunning(key) || sidebarRunningConversationIds.has(key) : false;
+          });
+          if (runningConversationIdsInProject.length > 0) {
+            setHistoryError(runningMessage);
+            setErrorMessage(runningMessage);
+            return;
+          }
+
+          for (const conversationId of conversationIds) {
+            await deleteChatHistory(conversationId);
+          }
+
+          const deletedConversationIds = new Set(conversationIds);
+          if (deletedConversationIds.size > 0) {
+            setHistoryItems((current) =>
+              current.filter((item) => !deletedConversationIds.has(item.id)),
+            );
+            setSharedHistoryItems((current) => {
+              const next = current.filter((item) => !deletedConversationIds.has(item.id));
+              sharedHistoryItemsRef.current = next;
+              return next;
+            });
+            for (const conversationId of deletedConversationIds) {
+              persistedConversationStateRef.current.delete(conversationId);
+              conversationRuntimeCacheRef.current.delete(conversationId);
+              locallySyncedHistoryUpdatedAtRef.current.delete(conversationId);
+              deleteConversationLocalCaches(conversationId);
+              subagentRuntimeManagerRef.current.disposeConversation(conversationId);
+            }
+          }
+
+          const visibleConversationId = currentConversationIdRef.current;
+          const shouldResetVisibleConversation =
+            Boolean(visibleConversationId && deletedConversationIds.has(visibleConversationId)) ||
+            Boolean(pathKey && workspaceProjectPathKey(displayedConversationWorkdir) === pathKey);
+
+          removeWorkspaceProjectFromSettings(project);
+          if (shouldResetVisibleConversation) {
+            startNewConversationActionRef.current({
+              workdir: getDefaultWorkspaceProjectPath(settings.system) || undefined,
+            });
+          }
+          void refreshHistoryWorkdirs();
+        } catch (error) {
+          const message = asErrorMessage(error, "删除项目失败");
+          setHistoryError(message);
+          setErrorMessage(message);
+        }
+      })();
+    },
+    [
+      deleteConversationLocalCaches,
+      displayedConversationWorkdir,
+      isConversationRunning,
+      refreshHistoryWorkdirs,
+      removeWorkspaceProjectFromSettings,
+      runningProjectPathKeys,
+      setHistoryError,
+      setHistoryItems,
+      settings.system,
+      sidebarRunningConversationIds,
+    ],
+  );
+
+  useEffect(() => {
+    const nextWorkdir = activeWorkspaceProjectPath.trim();
+    if (!isAgentMode || !nextWorkdir) {
+      return;
+    }
+    const conversationId = currentConversationIdRef.current.trim();
+    if (!conversationId || isSending || isConversationRunning(conversationId)) {
+      return;
+    }
+    if (conversationState.meta.totalMessageCount > 0 || pendingUploadedFiles.length > 0) {
+      return;
+    }
+    if (persistedConversationStateRef.current.has(conversationId)) {
+      return;
+    }
+    const historyItem = historyItemsRef.current.find((item) => item.id === conversationId);
+    if (historyItem && !historyItem.isPending) {
+      return;
+    }
+    const currentWorkdir =
+      conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
+    if (currentWorkdir === nextWorkdir) {
+      return;
+    }
+    updateConversationRuntimeEntry(conversationId, (prev) => ({
+      ...prev,
+      workdir: nextWorkdir,
+    }));
+  }, [
+    activeWorkspaceProjectPath,
+    conversationState.meta.totalMessageCount,
+    isAgentMode,
+    isConversationRunning,
+    isSending,
+    pendingUploadedFiles.length,
+    updateConversationRuntimeEntry,
+  ]);
 
   useEffect(() => {
     const previous = previousSubagentRuntimeConversationRef.current;
@@ -1053,10 +1844,19 @@ export function ChatPage(props: ChatPageProps) {
   async function persistConversationWithHistorySync(
     params: Parameters<typeof persistConversation>[0],
   ) {
-    return persistConversation(params);
+    const persisted = await persistConversation(params);
+    if (persisted) {
+      recordProjectActivity(params.cwd, Date.now());
+      void refreshHistoryWorkdirs();
+    }
+    return persisted;
   }
 
-  async function publishGatewayConversationActivity(conversationId: string, running: boolean) {
+  async function publishGatewayConversationActivity(
+    conversationId: string,
+    running: boolean,
+    workdir?: string,
+  ) {
     const targetConversationId = conversationId.trim();
     if (!targetConversationId) {
       return;
@@ -1066,6 +1866,7 @@ export function ChatPage(props: ChatPageProps) {
       await invoke("gateway_publish_conversation_activity", {
         conversation_id: targetConversationId,
         running,
+        workdir: workdir?.trim() || null,
       } as any);
     } catch (error) {
       console.warn("gateway_publish_conversation_activity failed", error);
@@ -1145,6 +1946,7 @@ export function ChatPage(props: ChatPageProps) {
       createdAt: record.createdAt,
       compactionStatus: cached?.compactionStatus,
       isSending: cached?.isSending,
+      workdir: record.cwd,
     });
     setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, record.id, nextEntry);
     persistedConversationStateRef.current.set(record.id, record.state);
@@ -1200,7 +2002,7 @@ export function ChatPage(props: ChatPageProps) {
           providerId,
           model,
           sessionId: currentConversationSessionId,
-          cwd: workdir || undefined,
+          cwd: displayedConversationWorkdir || undefined,
           createdAt: currentConversationCreatedAt,
           updatedAt: Date.now(),
         }),
@@ -1218,7 +2020,7 @@ export function ChatPage(props: ChatPageProps) {
     historyItems,
     isSending,
     settings.selectedModel,
-    workdir,
+    displayedConversationWorkdir,
   ]);
 
   useEffect(() => {
@@ -1230,6 +2032,11 @@ export function ChatPage(props: ChatPageProps) {
   useEffect(() => {
     const previousIds = previousHistoryIdsRef.current;
     const nextIds = new Set(historyItems.map((item) => item.id));
+    if (previousHistoryScopeKeyRef.current !== historyScopeKey) {
+      previousHistoryIdsRef.current = nextIds;
+      previousHistoryScopeKeyRef.current = historyScopeKey;
+      return;
+    }
     const currentConversationWasPersisted = previousIds.has(currentConversationId);
     const currentConversationExists = nextIds.has(currentConversationId);
 
@@ -1243,7 +2050,7 @@ export function ChatPage(props: ChatPageProps) {
     }
 
     previousHistoryIdsRef.current = nextIds;
-  }, [currentConversationId, historyItems, isSending]);
+  }, [currentConversationId, historyItems, historyScopeKey, isSending]);
 
   useEffect(() => {
     const currentItem = historyItems.find((item) => item.id === currentConversationId);
@@ -1294,10 +2101,6 @@ export function ChatPage(props: ChatPageProps) {
   useEffect(() => {
     setContext(currentRequestContext);
   }, [currentRequestContext, setContext]);
-
-  useEffect(() => {
-    stickToBottom();
-  }, [currentConversationId, stickToBottom]);
 
   useEffect(() => {
     if (!historySwitchOverlay) {
@@ -1398,16 +2201,16 @@ export function ChatPage(props: ChatPageProps) {
       overrides?.executionModeOverride ??
       gatewayBridgeRequest?.executionModeOverride ??
       settings.system.executionMode;
+    const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
     const effectiveWorkdir = (
       overrides?.workdirOverride ??
       gatewayBridgeRequest?.workdirOverride ??
-      settings.system.workdir
+      (effectiveIsAgentMode ? (runtimeEntry?.workdir ?? settings.system.workdir) : "")
     ).trim();
     const effectiveSelectedSystemToolIds =
       overrides?.selectedSystemToolIdsOverride ??
       gatewayBridgeRequest?.selectedSystemToolIdsOverride ??
       settings.system.selectedSystemTools;
-    const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
     const effectiveIsAgentDevExecutionMode = isAgentDevMode(effectiveExecutionMode);
     const effectiveSkillsEnabled = settings.skills.enabled && effectiveIsAgentMode;
     const hasRemoteGatewayTarget =
@@ -1569,6 +2372,10 @@ export function ChatPage(props: ChatPageProps) {
     const sessionId = runtimeEntry.sessionId;
     const createdAt = runtimeEntry.createdAt;
     const conversationCwd = effectiveWorkdir || undefined;
+    updateConversationRuntimeEntry(conversationId, (prev) => ({
+      ...prev,
+      workdir: conversationCwd,
+    }));
     const transcriptStore = getConversationLiveTranscriptStore(conversationId);
     const conversationThrottleState = getCompactionThrottleState(conversationId);
     const isConversationVisible = () => currentConversationIdRef.current === conversationId;
@@ -1668,7 +2475,7 @@ export function ChatPage(props: ChatPageProps) {
     let gatewayActivityPublishChain: Promise<void> = Promise.resolve();
     function queueGatewayConversationActivity(running: boolean) {
       gatewayActivityPublishChain = gatewayActivityPublishChain.then(() =>
-        publishGatewayConversationActivity(conversationId, running),
+        publishGatewayConversationActivity(conversationId, running, conversationCwd),
       );
       void gatewayActivityPublishChain;
     }
@@ -2460,8 +3267,10 @@ export function ChatPage(props: ChatPageProps) {
   const handleNewConversation = useCallback(() => {
     setHistorySwitchOverlay(null);
     clearCachedComposerDraft();
-    startNewConversationActionRef.current();
-  }, []);
+    startNewConversationActionRef.current({
+      workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+    });
+  }, [activeWorkspaceProjectPath, isAgentMode]);
 
   const handleSelectConversation = useCallback((id: string) => {
     const targetConversationId = id.trim();
@@ -2913,7 +3722,7 @@ export function ChatPage(props: ChatPageProps) {
     const currentItem = historyItems.find((item) => item.id === currentConversationId);
     const persistedCwd = currentItem?.cwd?.trim();
     if (persistedCwd) return persistedCwd;
-    return workdir || undefined;
+    return displayedConversationWorkdir || undefined;
   })();
   const isCompactionRunning = compactionStatus.phase === "running";
   const isConversationHydrating = hydratingConversationId === currentConversationId;
@@ -2934,12 +3743,15 @@ export function ChatPage(props: ChatPageProps) {
     isImportingPastedText ||
     isUploadingFiles;
   const canDropUpload =
-    isAgentMode && Boolean(workdir.trim()) && !isSending && !isComposerInputDisabled;
+    isAgentMode &&
+    Boolean(displayedConversationWorkdir.trim()) &&
+    !isSending &&
+    !isComposerInputDisabled;
   const fileDropTitle = canDropUpload
     ? t("chat.upload.dropReady")
     : !isAgentMode
       ? t("chat.upload.onlyInTools")
-      : !workdir.trim()
+      : !displayedConversationWorkdir.trim()
         ? t("chat.upload.requireWorkdir")
         : t("chat.upload.dropBusy");
   const fileDropDescription = canDropUpload
@@ -3013,7 +3825,7 @@ export function ChatPage(props: ChatPageProps) {
         currentConversationId={currentConversationId}
         isDraftConversation={isDraftConversation}
         isBusy={isSending}
-        runningConversationIds={runningConversationIds}
+        runningConversationIds={sidebarRunningConversationIds}
         isLoading={historyLoading}
         totalItems={historyTotal}
         hasMore={historyHasMore}
@@ -3023,6 +3835,27 @@ export function ChatPage(props: ChatPageProps) {
         renameDraft={renameDraft}
         isOpen={sidebarOpen}
         activeView={activeView}
+        showProjects={isAgentMode}
+        projects={workspaceProjects}
+        activeProjectId={activeWorkspaceProject?.id}
+        missingProjectPathKeys={missingWorkspaceProjectPathKeys}
+        runningProjectPathKeys={runningProjectPathKeys}
+        projectActivityUpdatedAts={projectActivityUpdatedAts}
+        projectRenamingId={projectRenamingId}
+        projectRenameDraft={projectRenameDraft}
+        projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+        recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
+        onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
+        onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
+        onCreateBlankProject={handleOpenCreateWorkspaceProject}
+        onAddExistingProject={handleAddExistingWorkspaceProject}
+        onSelectProject={handleSelectWorkspaceProject}
+        onNewConversationForProject={handleNewConversationForProject}
+        onStartRenamingProject={handleStartRenamingWorkspaceProject}
+        onProjectRenameDraftChange={setProjectRenameDraft}
+        onCommitProjectRename={handleCommitWorkspaceProjectRename}
+        onCancelProjectRename={handleCancelWorkspaceProjectRename}
+        onRemoveProject={handleRemoveWorkspaceProject}
         onNewConversation={() => {
           setActiveView("chat");
           if (activeView !== "chat" && isDraftConversation) {
@@ -3152,7 +3985,7 @@ export function ChatPage(props: ChatPageProps) {
               isUploadingFiles={isUploadingFiles}
               isInputDisabled={isComposerInputDisabled}
               inputPlaceholder={composerPlaceholder}
-              workdir={workdir}
+              workdir={displayedConversationWorkdir}
               enabledSkills={enabledComposerSkills}
               isAgentMode={isAgentMode}
               chatRuntimeControls={chatRuntimeControlsForCurrentProvider}

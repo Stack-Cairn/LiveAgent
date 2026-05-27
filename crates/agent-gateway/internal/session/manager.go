@@ -50,6 +50,7 @@ type Manager struct {
 	chatRuns               map[string]*chatRun
 	chatRunByConversation  map[string]string
 	chatRunByClientRequest map[string]string
+	historyActiveRuns      map[string]activeHistoryRun
 }
 
 type AgentSession struct {
@@ -79,21 +80,30 @@ type ChatBroadcastEvent struct {
 	RequestID string
 	Event     *gatewayv1.ChatEvent
 	Seq       int64
+	Workdir   string
 }
 
 type ChatRunSnapshot struct {
 	RequestID       string
 	ConversationID  string
 	ClientRequestID string
+	Workdir         string
 	FirstSeq        int64
 	LatestSeq       int64
 	Done            bool
+}
+
+type ActiveChatRunSummary struct {
+	ConversationID string
+	Workdir        string
+	UpdatedAt      int64
 }
 
 type chatRun struct {
 	requestID       string
 	conversationID  string
 	clientRequestID string
+	workdir         string
 	sessionEpoch    uint64
 	events          []*ChatBroadcastEvent
 	nextSeq         int64
@@ -101,6 +111,12 @@ type chatRun struct {
 	updatedAt       time.Time
 	expiresAt       time.Time
 	subscribers     map[int]*chatRunSubscriber
+}
+
+type activeHistoryRun struct {
+	conversationID string
+	workdir        string
+	updatedAt      time.Time
 }
 
 type chatRunSubscriber struct {
@@ -126,6 +142,7 @@ func NewManager() *Manager {
 		chatRuns:               make(map[string]*chatRun),
 		chatRunByConversation:  make(map[string]string),
 		chatRunByClientRequest: make(map[string]string),
+		historyActiveRuns:      make(map[string]activeHistoryRun),
 	}
 }
 
@@ -412,6 +429,7 @@ func (m *Manager) broadcastHistorySync(event *gatewayv1.HistorySyncEvent) {
 		return
 	}
 
+	m.updateActiveHistoryRun(event)
 	m.releaseCompletedChatRunAfterHistoryUpsert(event)
 
 	m.historyMu.Lock()
@@ -429,15 +447,76 @@ func (m *Manager) broadcastHistorySync(event *gatewayv1.HistorySyncEvent) {
 	}
 }
 
+func historySyncConversationID(event *gatewayv1.HistorySyncEvent) string {
+	conversationID := strings.TrimSpace(event.GetConversationId())
+	if conversationID == "" && event.GetConversation() != nil {
+		conversationID = strings.TrimSpace(event.GetConversation().GetId())
+	}
+	return conversationID
+}
+
+func historySyncWorkdir(event *gatewayv1.HistorySyncEvent) string {
+	if event == nil || event.GetConversation() == nil {
+		return ""
+	}
+	return strings.TrimSpace(event.GetConversation().GetCwd())
+}
+
+func (m *Manager) updateActiveHistoryRun(event *gatewayv1.HistorySyncEvent) {
+	kind := strings.TrimSpace(event.GetKind())
+	conversationID := historySyncConversationID(event)
+	if conversationID == "" {
+		return
+	}
+
+	workdir := historySyncWorkdir(event)
+	now := time.Now()
+
+	m.chatMu.Lock()
+	defer m.chatMu.Unlock()
+	m.pruneExpiredChatRunsLocked(now)
+
+	switch kind {
+	case "running":
+		existing := m.historyActiveRuns[conversationID]
+		if workdir == "" {
+			workdir = existing.workdir
+		}
+		m.historyActiveRuns[conversationID] = activeHistoryRun{
+			conversationID: conversationID,
+			workdir:        workdir,
+			updatedAt:      now,
+		}
+		if requestID := m.chatRunByConversation[conversationID]; requestID != "" {
+			if run := m.chatRuns[requestID]; run != nil && workdir != "" {
+				run.workdir = workdir
+			}
+		}
+	case "idle", "delete":
+		delete(m.historyActiveRuns, conversationID)
+	case "upsert":
+		if workdir == "" {
+			return
+		}
+		if existing, ok := m.historyActiveRuns[conversationID]; ok {
+			existing.workdir = workdir
+			existing.updatedAt = now
+			m.historyActiveRuns[conversationID] = existing
+		}
+		if requestID := m.chatRunByConversation[conversationID]; requestID != "" {
+			if run := m.chatRuns[requestID]; run != nil {
+				run.workdir = workdir
+			}
+		}
+	}
+}
+
 func (m *Manager) releaseCompletedChatRunAfterHistoryUpsert(event *gatewayv1.HistorySyncEvent) {
 	if strings.TrimSpace(event.GetKind()) != "upsert" {
 		return
 	}
 
-	conversationID := strings.TrimSpace(event.GetConversationId())
-	if conversationID == "" && event.GetConversation() != nil {
-		conversationID = strings.TrimSpace(event.GetConversation().GetId())
-	}
+	conversationID := historySyncConversationID(event)
 	if conversationID == "" {
 		return
 	}
@@ -517,7 +596,7 @@ func (m *Manager) SubscribeChatEvents() (<-chan *ChatBroadcastEvent, func()) {
 }
 
 func (m *Manager) StartChatRun(requestID string, conversationID string) (ChatRunSnapshot, error) {
-	snapshot, _, err := m.StartChatRunWithClientRequest(requestID, conversationID, "")
+	snapshot, _, err := m.StartChatRunWithClientRequest(requestID, conversationID, "", "")
 	return snapshot, err
 }
 
@@ -525,6 +604,7 @@ func (m *Manager) StartChatRunWithClientRequest(
 	requestID string,
 	conversationID string,
 	clientRequestID string,
+	workdirInput ...string,
 ) (ChatRunSnapshot, bool, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID == "" {
@@ -534,6 +614,10 @@ func (m *Manager) StartChatRunWithClientRequest(
 	now := time.Now()
 	conversationID = strings.TrimSpace(conversationID)
 	clientRequestID = strings.TrimSpace(clientRequestID)
+	workdir := ""
+	if len(workdirInput) > 0 {
+		workdir = strings.TrimSpace(workdirInput[0])
+	}
 	sessionEpoch := m.currentSessionEpoch()
 
 	m.chatMu.Lock()
@@ -544,6 +628,9 @@ func (m *Manager) StartChatRunWithClientRequest(
 		if existingRequestID := m.chatRunByClientRequest[clientRequestID]; existingRequestID != "" {
 			if existing := m.chatRuns[existingRequestID]; existing != nil {
 				if !existing.done {
+					if workdir != "" && existing.workdir == "" {
+						existing.workdir = workdir
+					}
 					return existing.snapshot(), false, nil
 				}
 				m.releaseCompletedChatRunLocked(existingRequestID, existing)
@@ -560,6 +647,7 @@ func (m *Manager) StartChatRunWithClientRequest(
 		requestID:       requestID,
 		conversationID:  conversationID,
 		clientRequestID: clientRequestID,
+		workdir:         workdir,
 		sessionEpoch:    sessionEpoch,
 		updatedAt:       now,
 		subscribers:     make(map[int]*chatRunSubscriber),
@@ -615,13 +703,14 @@ func (m *Manager) RemoveChatRunByConversation(conversationID string) {
 	m.removeChatRunLocked(requestID, run)
 }
 
-func (m *Manager) ActiveChatRunConversationIDs() []string {
+func (m *Manager) ActiveChatRunSummaries() []ActiveChatRunSummary {
 	m.chatMu.Lock()
 	defer m.chatMu.Unlock()
-	m.pruneExpiredChatRunsLocked(time.Now())
+	now := time.Now()
+	m.pruneExpiredChatRunsLocked(now)
 
-	seen := make(map[string]struct{}, len(m.chatRuns))
-	ids := make([]string, 0, len(m.chatRuns))
+	seen := make(map[string]int, len(m.chatRuns)+len(m.historyActiveRuns))
+	summaries := make([]ActiveChatRunSummary, 0, len(m.chatRuns)+len(m.historyActiveRuns))
 	for _, run := range m.chatRuns {
 		if run == nil || run.done {
 			continue
@@ -630,13 +719,66 @@ func (m *Manager) ActiveChatRunConversationIDs() []string {
 		if conversationID == "" {
 			continue
 		}
-		if _, ok := seen[conversationID]; ok {
+		summary := ActiveChatRunSummary{
+			ConversationID: conversationID,
+			Workdir:        strings.TrimSpace(run.workdir),
+			UpdatedAt:      run.updatedAt.UnixMilli(),
+		}
+		if index, ok := seen[conversationID]; ok {
+			if summaries[index].Workdir == "" {
+				summaries[index].Workdir = summary.Workdir
+			}
+			if summary.UpdatedAt > summaries[index].UpdatedAt {
+				summaries[index].UpdatedAt = summary.UpdatedAt
+			}
 			continue
 		}
-		seen[conversationID] = struct{}{}
-		ids = append(ids, conversationID)
+		seen[conversationID] = len(summaries)
+		summaries = append(summaries, summary)
 	}
-	sort.Strings(ids)
+
+	for conversationID, run := range m.historyActiveRuns {
+		conversationID = strings.TrimSpace(conversationID)
+		if conversationID == "" {
+			continue
+		}
+		if now.Sub(run.updatedAt) > chatRunStaleRetention {
+			delete(m.historyActiveRuns, conversationID)
+			continue
+		}
+		workdir := strings.TrimSpace(run.workdir)
+		updatedAt := run.updatedAt.UnixMilli()
+		if index, ok := seen[conversationID]; ok {
+			if summaries[index].Workdir == "" {
+				summaries[index].Workdir = workdir
+			}
+			if updatedAt > summaries[index].UpdatedAt {
+				summaries[index].UpdatedAt = updatedAt
+			}
+			continue
+		}
+		seen[conversationID] = len(summaries)
+		summaries = append(summaries, ActiveChatRunSummary{
+			ConversationID: conversationID,
+			Workdir:        workdir,
+			UpdatedAt:      updatedAt,
+		})
+	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].ConversationID < summaries[j].ConversationID
+	})
+	return summaries
+}
+
+func (m *Manager) ActiveChatRunConversationIDs() []string {
+	summaries := m.ActiveChatRunSummaries()
+	ids := make([]string, 0, len(summaries))
+	for _, summary := range summaries {
+		if conversationID := strings.TrimSpace(summary.ConversationID); conversationID != "" {
+			ids = append(ids, conversationID)
+		}
+	}
 	return ids
 }
 
@@ -680,6 +822,7 @@ func (m *Manager) failOpenChatRunsForSessionEpoch(sessionEpoch uint64, message s
 			RequestID: requestID,
 			Event:     chatEvent,
 			Seq:       run.nextSeq,
+			Workdir:   strings.TrimSpace(run.workdir),
 		}
 		run.events = append(run.events, cloneChatBroadcastEvent(broadcast))
 		if len(run.events) > maxBufferedChatRunEvents {
@@ -834,8 +977,14 @@ func (m *Manager) broadcastChatEvent(requestID string, event *gatewayv1.ChatEven
 			}
 			run.conversationID = conversationID
 			m.chatRunByConversation[conversationID] = requestID
+			if run.workdir == "" {
+				if activeRun, ok := m.historyActiveRuns[conversationID]; ok {
+					run.workdir = strings.TrimSpace(activeRun.workdir)
+				}
+			}
 		}
 		broadcast.Seq = run.nextSeq
+		broadcast.Workdir = strings.TrimSpace(run.workdir)
 		run.events = append(run.events, cloneChatBroadcastEvent(broadcast))
 		if len(run.events) > maxBufferedChatRunEvents {
 			copy(run.events, run.events[len(run.events)-maxBufferedChatRunEvents:])
@@ -912,6 +1061,7 @@ func (r *chatRun) snapshot() ChatRunSnapshot {
 		RequestID:       r.requestID,
 		ConversationID:  r.conversationID,
 		ClientRequestID: r.clientRequestID,
+		Workdir:         r.workdir,
 		FirstSeq:        firstSeq,
 		LatestSeq:       r.nextSeq,
 		Done:            r.done,
@@ -973,6 +1123,7 @@ func cloneChatBroadcastEvent(event *ChatBroadcastEvent) *ChatBroadcastEvent {
 		RequestID: event.RequestID,
 		Event:     event.Event,
 		Seq:       event.Seq,
+		Workdir:   event.Workdir,
 	}
 }
 

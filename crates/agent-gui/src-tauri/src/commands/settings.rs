@@ -28,6 +28,12 @@ const MEMORY_SETTINGS_TABLE: &str = "memory_settings";
 const SYSTEM_EXECUTION_MODE_KEY: &str = "executionMode";
 const SYSTEM_WORKDIR_KEY: &str = "workdir";
 const SYSTEM_SELECTED_TOOLS_KEY: &str = "selectedSystemTools";
+const SYSTEM_WORKSPACE_PROJECTS_KEY: &str = "workspaceProjects";
+const SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY: &str = "activeWorkspaceProjectId";
+const SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY: &str = "hiddenWorkspaceProjectPaths";
+const SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY: &str = "missingWorkspaceProjectPaths";
+const DEFAULT_WORKSPACE_PROJECT_ID: &str = "default-project";
+const DEFAULT_WORKSPACE_PROJECT_NAME: &str = "Default Project";
 pub(crate) const PROVIDER_API_KEY_UPDATES_FIELD: &str = "providerApiKeyUpdates";
 
 const PROVIDER_SETTINGS_SELECT_SQL: &str = "
@@ -913,6 +919,83 @@ fn load_system(conn: &Connection) -> Result<Option<Value>, String> {
     }
 }
 
+fn default_workspace_project_value(default_workdir: &str) -> Value {
+    json!({
+        "id": DEFAULT_WORKSPACE_PROJECT_ID,
+        "name": DEFAULT_WORKSPACE_PROJECT_NAME,
+        "path": default_workdir,
+        "kind": "managed",
+        "createdAt": 1,
+        "updatedAt": 1,
+    })
+}
+
+fn normalize_workspace_projects_value(raw: Option<&Value>, default_workdir: &str) -> Value {
+    let mut projects = vec![default_workspace_project_value(default_workdir)];
+    let default_path = default_workdir.trim();
+    if let Some(Value::Array(existing)) = raw {
+        let mut seen_paths = HashSet::new();
+        seen_paths.insert(default_path.to_string());
+        for item in existing {
+            let Some(obj) = item.as_object() else {
+                continue;
+            };
+            let id = obj
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default();
+            let path = obj
+                .get("path")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default();
+            if path.is_empty() || id == DEFAULT_WORKSPACE_PROJECT_ID || path == default_path {
+                continue;
+            }
+            if !seen_paths.insert(path.to_string()) {
+                continue;
+            }
+            projects.push(Value::Object(obj.clone()));
+        }
+    }
+    Value::Array(projects)
+}
+
+fn normalize_hidden_workspace_project_paths(raw: Option<&Value>, default_workdir: &str) -> Value {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    if let Some(Value::Array(items)) = raw {
+        for item in items {
+            let Some(path) = item.as_str().map(str::trim).filter(|path| !path.is_empty()) else {
+                continue;
+            };
+            if path == default_workdir || !seen.insert(path.to_string()) {
+                continue;
+            }
+            out.push(Value::String(path.to_string()));
+        }
+    }
+    Value::Array(out)
+}
+
+fn normalize_missing_workspace_project_paths(raw: Option<&Value>) -> Value {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    if let Some(Value::Array(items)) = raw {
+        for item in items {
+            let Some(path) = item.as_str().map(str::trim).filter(|path| !path.is_empty()) else {
+                continue;
+            };
+            if !seen.insert(path.to_string()) {
+                continue;
+            }
+            out.push(Value::String(path.to_string()));
+        }
+    }
+    Value::Array(out)
+}
+
 fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Value {
     let mut system = match raw {
         Some(Value::Object(system)) => system,
@@ -949,6 +1032,83 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
             Value::Array(Vec::new()),
         );
     }
+
+    system.insert(
+        SYSTEM_WORKSPACE_PROJECTS_KEY.to_string(),
+        normalize_workspace_projects_value(
+            system.get(SYSTEM_WORKSPACE_PROJECTS_KEY),
+            default_workdir,
+        ),
+    );
+    let requested_active_project_id = system
+        .get(SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_WORKSPACE_PROJECT_ID)
+        .to_string();
+    let active_exists = system
+        .get(SYSTEM_WORKSPACE_PROJECTS_KEY)
+        .and_then(Value::as_array)
+        .is_some_and(|projects| {
+            projects.iter().any(|project| {
+                project
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id == requested_active_project_id)
+            })
+        });
+    let active_project_id = if active_exists {
+        requested_active_project_id
+    } else {
+        DEFAULT_WORKSPACE_PROJECT_ID.to_string()
+    };
+    let active_project_workdir = system
+        .get(SYSTEM_WORKSPACE_PROJECTS_KEY)
+        .and_then(Value::as_array)
+        .and_then(|projects| {
+            projects.iter().find_map(|project| {
+                let id = project.get("id").and_then(Value::as_str)?;
+                if id != active_project_id {
+                    return None;
+                }
+                project
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|path| !path.is_empty())
+                    .map(ToString::to_string)
+            })
+        })
+        .unwrap_or_else(|| default_workdir.to_string());
+    system.insert(
+        SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY.to_string(),
+        Value::String(active_project_id),
+    );
+    let execution_mode = system
+        .get(SYSTEM_EXECUTION_MODE_KEY)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("tools");
+    if execution_mode != "text" {
+        system.insert(
+            SYSTEM_WORKDIR_KEY.to_string(),
+            Value::String(active_project_workdir),
+        );
+    }
+    system.insert(
+        SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
+        normalize_hidden_workspace_project_paths(
+            system.get(SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY),
+            default_workdir,
+        ),
+    );
+    system.insert(
+        SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
+        normalize_missing_workspace_project_paths(
+            system.get(SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY),
+        ),
+    );
 
     Value::Object(system)
 }
@@ -1493,6 +1653,10 @@ fn save_system_with_default_workdir(
         SYSTEM_EXECUTION_MODE_KEY,
         SYSTEM_WORKDIR_KEY,
         SYSTEM_SELECTED_TOOLS_KEY,
+        SYSTEM_WORKSPACE_PROJECTS_KEY,
+        SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY,
+        SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY,
+        SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY,
     ] {
         let value = system.get(key).cloned().unwrap_or(Value::Null);
         tx.execute(
@@ -1987,8 +2151,9 @@ mod tests {
     }
 
     #[test]
-    fn save_system_persists_three_distinct_setting_rows() {
+    fn save_system_persists_project_setting_rows() {
         let mut conn = open_memory_db();
+        let default_workdir = default_project_workdir().expect("default workdir");
         save_system(
             &mut conn,
             json!({
@@ -2017,21 +2182,38 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 3);
+        assert_eq!(row_count, 7);
         assert_eq!(
             keys,
             vec![
+                SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY.to_string(),
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
+                SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
+                SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_SELECTED_TOOLS_KEY.to_string(),
                 SYSTEM_WORKDIR_KEY.to_string(),
+                SYSTEM_WORKSPACE_PROJECTS_KEY.to_string(),
             ]
         );
         assert_eq!(
             loaded,
             Some(json!({
+                "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
                 "executionMode": "tools",
-                "workdir": "E:/Code/test_directory/003",
-                "selectedSystemTools": ["http_get_test"]
+                "hiddenWorkspaceProjectPaths": [],
+                "missingWorkspaceProjectPaths": [],
+                "workdir": default_workdir.clone(),
+                "selectedSystemTools": ["http_get_test"],
+                "workspaceProjects": [
+                    {
+                        "id": DEFAULT_WORKSPACE_PROJECT_ID,
+                        "name": DEFAULT_WORKSPACE_PROJECT_NAME,
+                        "path": default_workdir.clone(),
+                        "kind": "managed",
+                        "createdAt": 1,
+                        "updatedAt": 1
+                    }
+                ]
             }))
         );
     }
@@ -2054,9 +2236,22 @@ mod tests {
         assert_eq!(
             loaded,
             Some(json!({
+                "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
                 "executionMode": "tools",
+                "hiddenWorkspaceProjectPaths": [],
+                "missingWorkspaceProjectPaths": [],
                 "workdir": "/tmp/liveagent-default-project",
-                "selectedSystemTools": []
+                "selectedSystemTools": [],
+                "workspaceProjects": [
+                    {
+                        "id": DEFAULT_WORKSPACE_PROJECT_ID,
+                        "name": DEFAULT_WORKSPACE_PROJECT_NAME,
+                        "path": "/tmp/liveagent-default-project",
+                        "kind": "managed",
+                        "createdAt": 1,
+                        "updatedAt": 1
+                    }
+                ]
             }))
         );
     }
@@ -2070,9 +2265,22 @@ mod tests {
         assert_eq!(
             loaded,
             json!({
+                "activeWorkspaceProjectId": DEFAULT_WORKSPACE_PROJECT_ID,
                 "executionMode": "tools",
+                "hiddenWorkspaceProjectPaths": [],
+                "missingWorkspaceProjectPaths": [],
                 "workdir": "/tmp/liveagent-default-project",
-                "selectedSystemTools": []
+                "selectedSystemTools": [],
+                "workspaceProjects": [
+                    {
+                        "id": DEFAULT_WORKSPACE_PROJECT_ID,
+                        "name": DEFAULT_WORKSPACE_PROJECT_NAME,
+                        "path": "/tmp/liveagent-default-project",
+                        "kind": "managed",
+                        "createdAt": 1,
+                        "updatedAt": 1
+                    }
+                ]
             })
         );
     }

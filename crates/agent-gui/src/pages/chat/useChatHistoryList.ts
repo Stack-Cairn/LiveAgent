@@ -8,7 +8,10 @@ import {
   useState,
 } from "react";
 
-import type { ChatHistorySummary } from "../../lib/chat/history/chatHistory";
+import type {
+  ChatHistoryListFilter,
+  ChatHistorySummary,
+} from "../../lib/chat/history/chatHistory";
 import { listChatHistory } from "../../lib/chat/history/chatHistory";
 import {
   applyChatHistorySyncEvent,
@@ -19,6 +22,7 @@ import { sortHistoryItems } from "../../lib/chat/page/chatPageHelpers";
 
 const HISTORY_LIST_RECONCILE_INTERVAL_MS = 60_000;
 const HISTORY_LIST_PAGE_SIZE = 80;
+const HISTORY_LIST_MIN_LOADING_MS = 260;
 
 type HistoryItemsSetter = Dispatch<SetStateAction<ChatHistorySummary[]>>;
 
@@ -43,7 +47,41 @@ function mergeHistoryPage(current: ChatHistorySummary[], nextPage: ChatHistorySu
   return sortHistoryItems(Array.from(byId.values()));
 }
 
-export function useChatHistoryList() {
+function chatHistoryFilterKey(filter?: ChatHistoryListFilter) {
+  if (filter?.cwdEmpty) return "cwd-empty";
+  const cwd = filter?.cwd?.trim();
+  return cwd ? `cwd:${cwd}` : "all";
+}
+
+function historyItemMatchesFilter(item: ChatHistorySummary, filter?: ChatHistoryListFilter) {
+  if (filter?.cwdEmpty) {
+    return !item.cwd?.trim();
+  }
+  const cwd = filter?.cwd?.trim();
+  if (cwd) {
+    return item.cwd?.trim() === cwd;
+  }
+  return true;
+}
+
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    globalThis.setTimeout(resolve, ms);
+  });
+}
+
+async function waitForMinimumLoadingDuration(startedAt: number) {
+  const elapsed = Date.now() - startedAt;
+  const remainingMs = Math.max(0, HISTORY_LIST_MIN_LOADING_MS - elapsed);
+  if (remainingMs > 0) {
+    await wait(remainingMs);
+  }
+}
+
+export function useChatHistoryList(filter?: ChatHistoryListFilter) {
+  const filterKey = chatHistoryFilterKey(filter);
+  const filterRef = useRef<ChatHistoryListFilter | undefined>(filter);
+  const filterKeyRef = useRef(filterKey);
   const [historyItems, setHistoryItemsState] = useState<ChatHistorySummary[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyHasMore, setHistoryHasMore] = useState(false);
@@ -58,6 +96,11 @@ export function useChatHistoryList() {
   const requestInFlightRef = useRef(false);
   const loadMoreInFlightRef = useRef(false);
   const queuedRefreshRef = useRef<{ silent: boolean } | null>(null);
+
+  useEffect(() => {
+    filterRef.current = filter;
+    filterKeyRef.current = filterKey;
+  }, [filterKey, filter]);
 
   const commitHistoryItems = useCallback(
     (items: ChatHistorySummary[], total: number, nextPage: number, hasMore?: boolean) => {
@@ -112,13 +155,16 @@ export function useChatHistoryList() {
         while (nextOptions && !disposedRef.current) {
           const silent = nextOptions.silent;
           queuedRefreshRef.current = null;
+          let requestFilterKey = filterKeyRef.current;
+          const loadingStartedAt = Date.now();
           if (!silent) {
             setHistoryLoading(true);
           }
 
           try {
-            const page = await listChatHistory(1, HISTORY_LIST_PAGE_SIZE);
-            if (disposedRef.current) {
+            requestFilterKey = filterKeyRef.current;
+            const page = await listChatHistory(1, HISTORY_LIST_PAGE_SIZE, filterRef.current);
+            if (disposedRef.current || requestFilterKey !== filterKeyRef.current) {
               break;
             }
             const nextItems = silent
@@ -136,7 +182,7 @@ export function useChatHistoryList() {
             );
             setHistoryError(null);
           } catch (err) {
-            if (disposedRef.current) {
+            if (disposedRef.current || requestFilterKey !== filterKeyRef.current) {
               break;
             }
             const msg = err instanceof Error ? err.message : String(err);
@@ -145,7 +191,10 @@ export function useChatHistoryList() {
             }
             setHistoryError(msg || "读取历史列表失败");
           } finally {
-            if (!silent && !disposedRef.current) {
+            if (!silent) {
+              await waitForMinimumLoadingDuration(loadingStartedAt);
+            }
+            if (!silent && !disposedRef.current && requestFilterKey === filterKeyRef.current) {
               setHistoryLoading(false);
             }
           }
@@ -173,8 +222,13 @@ export function useChatHistoryList() {
     setHistoryLoadingMore(true);
     try {
       const pageNumber = nextHistoryPageRef.current;
-      const page = await listChatHistory(pageNumber, HISTORY_LIST_PAGE_SIZE);
-      if (disposedRef.current) {
+      const requestFilterKey = filterKeyRef.current;
+      const page = await listChatHistory(
+        pageNumber,
+        HISTORY_LIST_PAGE_SIZE,
+        filterRef.current,
+      );
+      if (disposedRef.current || requestFilterKey !== filterKeyRef.current) {
         return;
       }
       const nextItems = mergeHistoryPage(historyItemsRef.current, page.items);
@@ -203,12 +257,22 @@ export function useChatHistoryList() {
   useEffect(() => {
     disposedRef.current = false;
     let cancelled = false;
+    commitHistoryItems([], 0, 1, false);
+    setHistoryError(null);
+    setHistoryLoading(true);
     const unlistenPromise = listen<ChatHistorySyncEvent>(CHAT_HISTORY_SYNC_EVENT, (event) => {
       if (disposedRef.current) {
         return;
       }
 
-      setHistoryItems((current) => applyChatHistorySyncEvent(current, event.payload));
+      setHistoryItems((current) => {
+        if (event.payload.kind === "upsert") {
+          if (!historyItemMatchesFilter(event.payload.conversation, filterRef.current)) {
+            return current.filter((item) => item.id !== event.payload.conversationId);
+          }
+        }
+        return applyChatHistorySyncEvent(current, event.payload);
+      });
       setHistoryError(null);
     });
 
@@ -232,7 +296,7 @@ export function useChatHistoryList() {
       void unlistenPromise.then((unlisten) => unlisten());
       window.clearInterval(timer);
     };
-  }, [refreshHistory, setHistoryItems]);
+  }, [commitHistoryItems, filterKey, refreshHistory, setHistoryItems]);
 
   return {
     historyItems,
