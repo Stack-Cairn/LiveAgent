@@ -426,6 +426,37 @@
     margin-bottom: 0;
   }
 
+  .release-notes-markdown {
+    @apply text-xs leading-relaxed text-muted-foreground;
+  }
+  .release-notes-markdown p {
+    @apply my-2 text-xs leading-relaxed text-muted-foreground;
+  }
+  .release-notes-markdown [data-streamdown="heading-1"] {
+    @apply mb-2 mt-3 text-sm font-semibold text-foreground;
+  }
+  .release-notes-markdown [data-streamdown="heading-2"] {
+    @apply mb-2 mt-3 text-sm font-semibold text-foreground;
+  }
+  .release-notes-markdown [data-streamdown="heading-3"] {
+    @apply mb-1.5 mt-3 text-xs font-semibold text-foreground;
+  }
+  .release-notes-markdown [data-streamdown="unordered-list"] {
+    @apply my-2 ml-0 list-disc space-y-1 pl-5;
+  }
+  .release-notes-markdown [data-streamdown="ordered-list"] {
+    @apply my-2 ml-0 list-decimal space-y-1 pl-5;
+  }
+  .release-notes-markdown [data-streamdown="list-item"] {
+    @apply pl-1 text-xs leading-relaxed text-muted-foreground;
+  }
+  .release-notes-markdown [data-streamdown="blockquote"] {
+    @apply my-2 border-l-2 border-border/70 pl-3 text-xs not-italic text-muted-foreground;
+  }
+  .release-notes-markdown [data-streamdown="inline-code"] {
+    @apply rounded border border-border/50 bg-muted/60 px-1 py-0.5 font-mono text-[11px] text-foreground/90;
+  }
+
   /* Smooth entrance for chat bubbles */
   .chat-bubble-enter {
     animation: chatBubbleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);

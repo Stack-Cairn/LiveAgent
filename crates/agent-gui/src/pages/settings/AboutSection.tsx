@@ -12,6 +12,7 @@ import {
   Shield,
   Sparkles,
 } from "../../components/icons";
+import { Markdown } from "../../components/Markdown";
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
 import { updateUpdateSettings } from "../../lib/settings";
@@ -53,6 +54,36 @@ function formatReleaseDate(value?: string | null) {
 function releaseTitle(result?: AppUpdateCheckResult) {
   if (!result) return "";
   return result.releaseName?.trim() || result.releaseTag?.trim() || result.version || "";
+}
+
+function normalizeTitle(value: string) {
+  return value
+    .replace(/^#+\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function releaseNotesBody(result?: AppUpdateCheckResult) {
+  const body = result?.body?.replace(/^\s*(?:<!--[\s\S]*?-->\s*)+/, "").trim();
+  if (!body) return "";
+
+  const title = normalizeTitle(releaseTitle(result));
+  if (!title) return body;
+
+  const lines = body.split(/\r?\n/);
+  const firstContentIndex = lines.findIndex((line) => line.trim());
+  if (firstContentIndex < 0) return "";
+
+  const firstContentLine = lines[firstContentIndex].trim();
+  if (/^#\s+/.test(firstContentLine) && normalizeTitle(firstContentLine) === title) {
+    return lines
+      .slice(firstContentIndex + 1)
+      .join("\n")
+      .trim();
+  }
+
+  return body;
 }
 
 export function AboutSection(props: SettingsSectionProps) {
@@ -122,6 +153,7 @@ export function AboutSection(props: SettingsSectionProps) {
   }
 
   const latestResult = "result" in checkState ? checkState.result : undefined;
+  const latestReleaseNotes = releaseNotesBody(latestResult);
   const channelLabel =
     latestResult?.channel === "prerelease"
       ? t("settings.aboutChannelPrerelease")
@@ -288,11 +320,14 @@ export function AboutSection(props: SettingsSectionProps) {
             </div>
           </div>
 
-          {latestResult?.body ? (
+          {latestReleaseNotes ? (
             <div className="space-y-2 rounded-xl border border-border/60 bg-background/70 p-4">
               <div className="text-sm font-semibold">{releaseTitle(latestResult)}</div>
-              <div className="max-h-48 overflow-auto whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
-                {latestResult.body}
+              <div className="max-h-48 overflow-auto pr-2">
+                <Markdown
+                  content={latestReleaseNotes}
+                  className="release-notes-markdown text-xs leading-relaxed text-muted-foreground"
+                />
               </div>
             </div>
           ) : null}
