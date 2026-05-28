@@ -262,6 +262,7 @@ function mergeSyncedProjectToolsFileTreeSettings(
   const currentState = normalizeProjectToolsFileTreeSettings(current);
   const incomingState = normalizeProjectToolsFileTreeSettings(incoming);
   const openFromIncoming = incomingState.openVersion >= currentState.openVersion;
+  const incomingOpenProjectPathKeys = new Set(incomingState.openProjectPathKeys);
   const projects: AppSettings["customSettings"]["projectToolsFileTree"]["projects"] = {
     ...currentState.projects,
   };
@@ -269,7 +270,9 @@ function mergeSyncedProjectToolsFileTreeSettings(
   for (const [pathKey, incomingProject] of Object.entries(incomingState.projects)) {
     const currentProject = projects[pathKey];
     if (!currentProject) {
-      projects[pathKey] = incomingProject;
+      if (openFromIncoming && incomingOpenProjectPathKeys.has(pathKey)) {
+        projects[pathKey] = incomingProject;
+      }
       continue;
     }
     const uiSource =

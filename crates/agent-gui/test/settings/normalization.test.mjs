@@ -691,6 +691,76 @@ test("updates project file tree synced state per project", () => {
   );
 });
 
+test("removes project tools state when a workspace project is deleted", () => {
+  const base = settings.normalizeSettings({
+    customSettings: {
+      projectToolsPanel: {
+        activeTab: "fileTree",
+        tabOrders: {
+          "/workspace/app": ["terminal-a", "__file_tree__"],
+          "/workspace/other": ["terminal-b"],
+        },
+      },
+      projectToolsFileTree: {
+        openProjectPathKeys: ["/workspace/app", "/workspace/other"],
+        openVersion: 3,
+        projects: {
+          "/workspace/app": {
+            query: "src",
+            selectedPath: "src/main.ts",
+            expandedPaths: ["", "src"],
+            revision: 2,
+            stateVersion: 4,
+          },
+          "/workspace/other": {
+            query: "lib",
+            selectedPath: "lib/index.ts",
+            expandedPaths: ["", "lib"],
+            revision: 1,
+            stateVersion: 1,
+          },
+        },
+      },
+    },
+  });
+
+  const cleaned = settings.removeProjectToolsProjectState(base, "/workspace/app");
+
+  assert.deepEqual(cleaned.customSettings.projectToolsPanel.tabOrders, {
+    "/workspace/other": ["terminal-b"],
+  });
+  assert.deepEqual(cleaned.customSettings.projectToolsFileTree.openProjectPathKeys, [
+    "/workspace/other",
+  ]);
+  assert.equal(cleaned.customSettings.projectToolsFileTree.openVersion, 4);
+  assert.deepEqual(Object.keys(cleaned.customSettings.projectToolsFileTree.projects), [
+    "/workspace/other",
+  ]);
+  assert.equal(settings.removeProjectToolsProjectState(cleaned, "/workspace/app"), cleaned);
+
+  const projectOnlyState = settings.normalizeSettings({
+    customSettings: {
+      projectToolsFileTree: {
+        openVersion: 7,
+        projects: {
+          "/workspace/app": {
+            query: "src",
+            selectedPath: "src/main.ts",
+            expandedPaths: ["", "src"],
+            stateVersion: 2,
+          },
+        },
+      },
+    },
+  });
+  const projectOnlyCleaned = settings.removeProjectToolsProjectState(
+    projectOnlyState,
+    "/workspace/app",
+  );
+  assert.equal(projectOnlyCleaned.customSettings.projectToolsFileTree.openVersion, 8);
+  assert.deepEqual(projectOnlyCleaned.customSettings.projectToolsFileTree.projects, {});
+});
+
 test("gateway settings sync keeps project tools panel state local", () => {
   const current = settings.normalizeSettings({
     customSettings: {
@@ -859,6 +929,46 @@ test("gateway settings sync ignores stale project file tree UI snapshots", () =>
     revision: 5,
     stateVersion: 4,
   });
+
+  const deletedProjectLocal = settings.removeProjectToolsProjectState(
+    settings.normalizeSettings({
+      customSettings: {
+        projectToolsFileTree: {
+          openProjectPathKeys: ["/workspace/deleted"],
+          openVersion: 4,
+          projects: {
+            "/workspace/deleted": {
+              query: "old",
+              selectedPath: "src/old.ts",
+              expandedPaths: ["", "src"],
+              revision: 1,
+              stateVersion: 1,
+            },
+          },
+        },
+      },
+    }),
+    "/workspace/deleted",
+  );
+  const deletedProjectSynced = sync.applyGatewaySettingsSyncPayload(deletedProjectLocal, {
+    customSettings: {
+      projectToolsFileTree: {
+        openProjectPathKeys: ["/workspace/deleted"],
+        openVersion: 4,
+        projects: {
+          "/workspace/deleted": {
+            query: "old",
+            selectedPath: "src/old.ts",
+            expandedPaths: ["", "src"],
+            revision: 1,
+            stateVersion: 1,
+          },
+        },
+      },
+    },
+  });
+  assert.deepEqual(deletedProjectSynced.customSettings.projectToolsFileTree.openProjectPathKeys, []);
+  assert.deepEqual(deletedProjectSynced.customSettings.projectToolsFileTree.projects, {});
 });
 
 test("gateway settings sync keeps newer project conversation activity", () => {

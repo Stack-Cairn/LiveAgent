@@ -93,6 +93,7 @@ import {
   type SelectedModel,
   type SystemToolId,
   type WorkspaceProject,
+  removeProjectToolsProjectState,
   DEFAULT_WORKSPACE_PROJECT_ID,
   resolveWorkspaceProjects,
   workspaceProjectPathKey,
@@ -1783,7 +1784,7 @@ export function ChatPage(props: ChatPageProps) {
             : path
               ? [...prev.system.hiddenWorkspaceProjectPaths, path]
               : prev.system.hiddenWorkspaceProjectPaths;
-        return {
+        const nextSettings = {
           ...prev,
           system: resolveWorkspaceProjects(
             {
@@ -1799,6 +1800,7 @@ export function ChatPage(props: ChatPageProps) {
             getDefaultWorkspaceProjectPath(prev.system),
           ),
         };
+        return removeProjectToolsProjectState(nextSettings, pathKey);
       });
       setProjectRenamingId((current) => (current === project.id ? null : current));
       setProjectRenameDraft("");
@@ -1874,6 +1876,10 @@ export function ChatPage(props: ChatPageProps) {
               current.filter((session) => !terminalSessionBelongsToProject(session, pathKey)),
             );
           }
+          if (pathKey && terminalProjectPathKey === pathKey) {
+            setProjectToolsPanelOpen(false);
+            setProjectTerminalSessions([]);
+          }
 
           const visibleConversationId = currentConversationIdRef.current;
           const shouldResetVisibleConversation =
@@ -1905,6 +1911,7 @@ export function ChatPage(props: ChatPageProps) {
       setHistoryItems,
       settings.system,
       sidebarRunningConversationIds,
+      terminalProjectPathKey,
     ],
   );
 

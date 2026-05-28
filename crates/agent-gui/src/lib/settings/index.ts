@@ -1792,6 +1792,66 @@ export function updateProjectToolsPanelTabOrder(
   });
 }
 
+export function removeProjectToolsProjectState(
+  prev: AppSettings,
+  projectPathKey: string,
+): AppSettings {
+  const normalizedPathKey = workspaceProjectPathKey(projectPathKey);
+  if (!normalizedPathKey) return prev;
+
+  const hasTabOrder = Object.hasOwn(
+    prev.customSettings.projectToolsPanel.tabOrders,
+    normalizedPathKey,
+  );
+  const openProjectPathKeys = prev.customSettings.projectToolsFileTree.openProjectPathKeys
+    .map((pathKey) => workspaceProjectPathKey(pathKey))
+    .filter(Boolean);
+  const nextOpenProjectPathKeys = openProjectPathKeys.filter(
+    (pathKey) => pathKey !== normalizedPathKey,
+  );
+  const removedOpenProjectPathKey = nextOpenProjectPathKeys.length !== openProjectPathKeys.length;
+  const hasFileTreeProjectState = Object.hasOwn(
+    prev.customSettings.projectToolsFileTree.projects,
+    normalizedPathKey,
+  );
+  const removedFileTreeState = removedOpenProjectPathKey || hasFileTreeProjectState;
+
+  if (!hasTabOrder && !removedOpenProjectPathKey && !hasFileTreeProjectState) {
+    return prev;
+  }
+
+  const tabOrders = hasTabOrder
+    ? { ...prev.customSettings.projectToolsPanel.tabOrders }
+    : prev.customSettings.projectToolsPanel.tabOrders;
+  if (hasTabOrder) {
+    delete tabOrders[normalizedPathKey];
+  }
+
+  const projects = hasFileTreeProjectState
+    ? { ...prev.customSettings.projectToolsFileTree.projects }
+    : prev.customSettings.projectToolsFileTree.projects;
+  if (hasFileTreeProjectState) {
+    delete projects[normalizedPathKey];
+  }
+
+  return updateCustomSettings(prev, {
+    projectToolsPanel: {
+      ...prev.customSettings.projectToolsPanel,
+      tabOrders,
+    },
+    projectToolsFileTree: {
+      ...prev.customSettings.projectToolsFileTree,
+      openProjectPathKeys: removedOpenProjectPathKey
+        ? nextOpenProjectPathKeys.sort()
+        : prev.customSettings.projectToolsFileTree.openProjectPathKeys,
+      openVersion: removedFileTreeState
+        ? prev.customSettings.projectToolsFileTree.openVersion + 1
+        : prev.customSettings.projectToolsFileTree.openVersion,
+      projects,
+    },
+  });
+}
+
 export function isProjectToolsFileTreeOpen(
   customSettings: CustomSettings,
   projectPathKey: string,

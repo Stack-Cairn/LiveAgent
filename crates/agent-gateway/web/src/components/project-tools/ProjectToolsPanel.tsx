@@ -1584,6 +1584,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                     )}
                   >
                     <ProjectFileTreePanel
+                      key={projectPathKey}
                       projectPathKey={projectPathKey}
                       cwd={cwd}
                       initialized={fileTreeInitialized}

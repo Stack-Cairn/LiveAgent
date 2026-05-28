@@ -56,6 +56,7 @@ import {
   isProjectToolsFileTreeOpen,
   normalizeChatRuntimeControlsForProvider,
   normalizeSettings,
+  removeProjectToolsProjectState,
   resolveWorkspaceProjects,
   workspaceProjectPathKey,
   updateChatRuntimeControlsForProvider,
@@ -4089,7 +4090,7 @@ export default function App() {
             : path
               ? [...prev.system.hiddenWorkspaceProjectPaths, path]
               : prev.system.hiddenWorkspaceProjectPaths;
-        return {
+        const nextSettings = {
           ...prev,
           system: resolveWorkspaceProjects(
             {
@@ -4106,6 +4107,7 @@ export default function App() {
             getDefaultWorkspaceProjectPath(prev.system),
           ),
         };
+        return removeProjectToolsProjectState(nextSettings, pathKey);
       });
       setProjectRenamingId((current) => (current === project.id ? null : current));
       setProjectRenameDraft("");
@@ -4196,6 +4198,12 @@ export default function App() {
           }
 
           let terminalSessionsToClose: TerminalSession[] = [];
+          const pruneProjectTerminalSessions = () => {
+            terminalSessionsVersionRef.current += 1;
+            setTerminalSessions((current) =>
+              current.filter((session) => !terminalSessionBelongsToProject(session, pathKey)),
+            );
+          };
           if (terminalClient && settings.remote.enableWebTerminal && pathKey) {
             terminalSessionsToClose = await terminalClient.list(pathKey);
             const runningTerminalCount = terminalSessionsToClose.filter((session) => session.running).length;
@@ -4250,9 +4258,13 @@ export default function App() {
           }
           if (terminalSessionsToClose.length > 0 && terminalClient) {
             await terminalClient.closeProject(pathKey);
-            setTerminalSessions((current) =>
-              current.filter((session) => !terminalSessionBelongsToProject(session, pathKey)),
-            );
+            pruneProjectTerminalSessions();
+          }
+          if (pathKey && workspaceProjectPathKey(activeWorkspaceProjectPath) === pathKey) {
+            setProjectToolsPanelOpen(false);
+            if (terminalSessionsToClose.length === 0) {
+              pruneProjectTerminalSessions();
+            }
           }
 
           const shouldResetVisibleConversation =
