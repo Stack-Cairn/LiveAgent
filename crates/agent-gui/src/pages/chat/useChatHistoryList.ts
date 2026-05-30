@@ -18,7 +18,13 @@ import {
   CHAT_HISTORY_SYNC_EVENT,
   type ChatHistorySyncEvent,
 } from "../../lib/chat/history/chatHistorySync";
-import { sortHistoryItems } from "../../lib/chat/page/chatPageHelpers";
+import {
+  chatHistoryFilterKey,
+  filterHistoryItemsForScope,
+  historyItemMatchesFilter,
+  mergeScopedHistoryPage,
+  sortScopedHistoryItems,
+} from "./historyListScope";
 
 const HISTORY_LIST_RECONCILE_INTERVAL_MS = 60_000;
 const HISTORY_LIST_PAGE_SIZE = 80;
@@ -37,31 +43,6 @@ function applyHistoryItemsUpdate(
 
 function persistedHistoryCount(items: ChatHistorySummary[]) {
   return items.reduce((count, item) => count + (item.isPending ? 0 : 1), 0);
-}
-
-function mergeHistoryPage(current: ChatHistorySummary[], nextPage: ChatHistorySummary[]) {
-  const byId = new Map(current.map((item) => [item.id, item]));
-  for (const item of nextPage) {
-    byId.set(item.id, item);
-  }
-  return sortHistoryItems(Array.from(byId.values()));
-}
-
-function chatHistoryFilterKey(filter?: ChatHistoryListFilter) {
-  if (filter?.cwdEmpty) return "cwd-empty";
-  const cwd = filter?.cwd?.trim();
-  return cwd ? `cwd:${cwd}` : "all";
-}
-
-function historyItemMatchesFilter(item: ChatHistorySummary, filter?: ChatHistoryListFilter) {
-  if (filter?.cwdEmpty) {
-    return !item.cwd?.trim();
-  }
-  const cwd = filter?.cwd?.trim();
-  if (cwd) {
-    return item.cwd?.trim() === cwd;
-  }
-  return true;
 }
 
 function wait(ms: number) {
@@ -104,15 +85,16 @@ export function useChatHistoryList(filter?: ChatHistoryListFilter) {
 
   const commitHistoryItems = useCallback(
     (items: ChatHistorySummary[], total: number, nextPage: number, hasMore?: boolean) => {
+      const scopedItems = filterHistoryItemsForScope(items, filterRef.current);
       const nextTotal = Math.max(0, total);
-      const loadedPersistedCount = persistedHistoryCount(items);
+      const loadedPersistedCount = persistedHistoryCount(scopedItems);
       const nextHasMore = hasMore ?? loadedPersistedCount < nextTotal;
 
-      historyItemsRef.current = items;
+      historyItemsRef.current = scopedItems;
       historyTotalRef.current = nextTotal;
       historyHasMoreRef.current = nextHasMore;
       nextHistoryPageRef.current = Math.max(1, nextPage);
-      setHistoryItemsState(items);
+      setHistoryItemsState(scopedItems);
       setHistoryTotal(nextTotal);
       setHistoryHasMore(nextHasMore);
     },
@@ -122,7 +104,10 @@ export function useChatHistoryList(filter?: ChatHistoryListFilter) {
   const setHistoryItems = useCallback<HistoryItemsSetter>(
     (update) => {
       const current = historyItemsRef.current;
-      const next = applyHistoryItemsUpdate(current, update);
+      const next = filterHistoryItemsForScope(
+        applyHistoryItemsUpdate(current, update),
+        filterRef.current,
+      );
       const persistedDelta = persistedHistoryCount(next) - persistedHistoryCount(current);
       const nextTotal = Math.max(
         persistedHistoryCount(next),
@@ -168,8 +153,8 @@ export function useChatHistoryList(filter?: ChatHistoryListFilter) {
               break;
             }
             const nextItems = silent
-              ? mergeHistoryPage(historyItemsRef.current, page.items)
-              : sortHistoryItems(page.items);
+              ? mergeScopedHistoryPage(historyItemsRef.current, page.items, filterRef.current)
+              : sortScopedHistoryItems(page.items, filterRef.current);
             const refreshedNextPage = page.items.length > 0 ? 2 : 1;
             const nextPage = silent
               ? Math.max(nextHistoryPageRef.current, refreshedNextPage)
@@ -231,7 +216,11 @@ export function useChatHistoryList(filter?: ChatHistoryListFilter) {
       if (disposedRef.current || requestFilterKey !== filterKeyRef.current) {
         return;
       }
-      const nextItems = mergeHistoryPage(historyItemsRef.current, page.items);
+      const nextItems = mergeScopedHistoryPage(
+        historyItemsRef.current,
+        page.items,
+        filterRef.current,
+      );
       const nextPage = page.items.length === 0 ? pageNumber : pageNumber + 1;
       commitHistoryItems(
         nextItems,

@@ -107,6 +107,10 @@ import type {
   HistoryWorkdirSummary,
 } from "./lib/gatewayTypes";
 import {
+  filterConversationSummariesForScope,
+  historyConversationMatchesFilter,
+} from "./lib/chat/historyListScope";
+import {
   buildOptimisticConversationTitle,
   formatConversationTitle,
   resolveConversationBrowserTitle,
@@ -500,23 +504,6 @@ function createWorkspaceProjectFromPath(path: string, kind: WorkspaceProject["ki
     createdAt: now,
     updatedAt: now,
   } satisfies WorkspaceProject;
-}
-
-function historyConversationMatchesFilter(
-  conversation: ConversationSummary | undefined,
-  filter?: { cwd?: string; cwdEmpty?: boolean },
-) {
-  if (!conversation) {
-    return false;
-  }
-  if (filter?.cwdEmpty) {
-    return !conversation.cwd?.trim();
-  }
-  const cwd = filter?.cwd?.trim();
-  if (cwd) {
-    return conversation.cwd?.trim() === cwd;
-  }
-  return true;
 }
 
 function hasSettingsSyncChanged(prev: AppSettings, next: AppSettings) {
@@ -984,14 +971,18 @@ export default function App() {
       nextPage: number,
       hasMore?: boolean,
     ) => {
+      const scopedConversations = filterConversationSummariesForScope(
+        conversations,
+        historyListFilterRef.current,
+      );
       const nextTotal = Math.max(0, total);
-      const nextHasMore = hasMore ?? conversations.length < nextTotal;
+      const nextHasMore = hasMore ?? scopedConversations.length < nextTotal;
 
-      historyItemsRef.current = conversations;
+      historyItemsRef.current = scopedConversations;
       historyTotalRef.current = nextTotal;
       historyHasMoreRef.current = nextHasMore;
       nextHistoryPageRef.current = Math.max(1, nextPage);
-      setHistoryItems(conversations);
+      setHistoryItems(scopedConversations);
       setHistoryTotal(nextTotal);
       setHistoryHasMore(nextHasMore);
     },
@@ -1001,7 +992,10 @@ export default function App() {
   const updateHistoryItems = useCallback(
     (updater: (current: ConversationSummary[]) => ConversationSummary[]) => {
       const current = historyItemsRef.current;
-      const next = updater(current);
+      const next = filterConversationSummariesForScope(
+        updater(current),
+        historyListFilterRef.current,
+      );
       const delta = next.length - current.length;
       commitHistoryListState(
         next,
@@ -3468,7 +3462,6 @@ export default function App() {
         conversations,
         response.total_count,
         nextPage,
-        response.conversations.length > 0 && conversations.length < response.total_count,
       );
 
       const adoptedPendingDraftConversationId =
@@ -3694,7 +3687,6 @@ export default function App() {
         conversations,
         response.total_count,
         nextPage,
-        response.conversations.length > 0 && conversations.length < response.total_count,
       );
       setHistoryError(null);
     } catch (error) {
