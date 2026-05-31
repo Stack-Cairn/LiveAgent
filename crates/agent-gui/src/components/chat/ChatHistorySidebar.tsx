@@ -98,6 +98,7 @@ const PROJECT_HEADER_BUTTON_CLASS =
   "transition-colors hover:!bg-foreground/[0.06] hover:text-foreground active:!bg-foreground/[0.1] focus-visible:!bg-foreground/[0.08] focus-visible:ring-2 focus-visible:ring-ring";
 const PROJECT_ICON_BUTTON_CLASS =
   "h-7 w-7 rounded-lg text-muted-foreground transition-colors hover:!bg-foreground/[0.08] hover:text-foreground active:!bg-foreground/[0.1] focus-visible:!bg-foreground/[0.08] data-[state=open]:!bg-foreground/[0.08] data-[state=open]:text-foreground";
+const SIDEBAR_SECTION_TRANSITION_MS = 200;
 const SIDEBAR_SECTION_TRANSITION_CLASS =
   "overflow-hidden transition-[flex-grow,flex-basis,opacity,border-color] duration-200 ease-out motion-reduce:transition-none";
 const SIDEBAR_COLLAPSIBLE_PANEL_CLASS =
@@ -830,6 +831,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const [projectSectionHeight, setProjectSectionHeight] = useState<number | null>(null);
   const [sidebarSectionsContainerHeight, setSidebarSectionsContainerHeight] = useState(0);
   const [isProjectSectionResizing, setIsProjectSectionResizing] = useState(false);
+  const [isRecentCollapseLayoutSettled, setIsRecentCollapseLayoutSettled] =
+    useState(recentCollapsed);
   const sidebarSectionsRef = useRef<HTMLDivElement | null>(null);
   const projectsSectionRef = useRef<HTMLDivElement | null>(null);
   const projectSectionResizeFrameRef = useRef<number | null>(null);
@@ -899,7 +902,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     : effectiveProjectSectionHeight;
   const hasCustomProjectSectionHeight =
     canResizeProjectSections && activeProjectSectionHeight !== null;
+  const shouldExpandProjectSectionForCollapsedRecent =
+    showProjects && !projectsCollapsed && recentCollapsed && isRecentCollapseLayoutSettled;
   const shouldUseProjectSectionAvailableHeight = hasCustomProjectSectionHeight;
+  const shouldStretchProjectSection =
+    shouldUseProjectSectionAvailableHeight || shouldExpandProjectSectionForCollapsedRecent;
   const projectsSectionStyle = hasCustomProjectSectionHeight
     ? { flexBasis: `${activeProjectSectionHeight}px` }
     : undefined;
@@ -937,6 +944,19 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onLoadMore,
     recentCollapsed,
   ]);
+
+  useEffect(() => {
+    if (!recentCollapsed) {
+      setIsRecentCollapseLayoutSettled(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsRecentCollapseLayoutSettled(true);
+    }, SIDEBAR_SECTION_TRANSITION_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [recentCollapsed]);
 
   useEffect(() => {
     if (!pendingProjectRemoveId) {
@@ -1256,8 +1276,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               style={projectsSectionStyle}
               className={cn(
                 "flex min-h-0 flex-col overflow-hidden border-b border-border/35 px-2 pb-1.5 pt-2",
-                "shrink-0",
-                isProjectSectionResizing
+                shouldExpandProjectSectionForCollapsedRecent ? "basis-0 flex-1" : "shrink-0",
+                isProjectSectionResizing || shouldExpandProjectSectionForCollapsedRecent
                   ? "transition-none motion-reduce:transition-none"
                   : SIDEBAR_SECTION_TRANSITION_CLASS,
               )}
@@ -1308,13 +1328,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 className={cn(
                   SIDEBAR_COLLAPSIBLE_PANEL_CLASS,
                   projectsCollapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100",
-                  shouldUseProjectSectionAvailableHeight && "flex-1",
+                  shouldStretchProjectSection && "flex-1",
                 )}
               >
                 <div
                   className={cn(
-                    "space-y-1 overflow-y-auto overflow-x-hidden pr-1",
-                    shouldUseProjectSectionAvailableHeight ? "h-full" : "max-h-[min(300px,36vh)]",
+                    "space-y-1 overflow-y-scroll overflow-x-hidden pr-1",
+                    shouldStretchProjectSection ? "h-full" : "max-h-[min(300px,36vh)]",
                     SIDEBAR_COLLAPSIBLE_CONTENT_CLASS,
                     projectsCollapsed
                       ? "pointer-events-none -translate-y-1 opacity-0"
@@ -1375,15 +1395,16 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           <div
             className={cn(
               "flex min-h-0 flex-col",
-              SIDEBAR_SECTION_TRANSITION_CLASS,
-              "basis-0 flex-1",
+              shouldExpandProjectSectionForCollapsedRecent
+                ? "overflow-hidden transition-none motion-reduce:transition-none"
+                : SIDEBAR_SECTION_TRANSITION_CLASS,
+              shouldExpandProjectSectionForCollapsedRecent ? "shrink-0" : "basis-0 flex-1",
             )}
           >
             <div
               className={cn(
                 "flex shrink-0 items-center justify-between px-3 pb-2",
                 showProjects ? "pt-1.5" : "pt-3",
-                recentCollapsed && "order-2 mt-auto",
               )}
             >
               <button
@@ -1430,7 +1451,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               className={cn(
                 SIDEBAR_COLLAPSIBLE_PANEL_CLASS,
                 recentCollapsed
-                  ? "order-1 grid-rows-[0fr] opacity-0"
+                  ? "grid-rows-[0fr] opacity-0"
                   : "grid-rows-[1fr] flex-1 opacity-100",
               )}
             >

@@ -1609,7 +1609,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               >
                 <div
                   className={cn(
-                    "space-y-1 overflow-y-auto overflow-x-hidden pr-1",
+                    "space-y-1 overflow-y-scroll overflow-x-hidden pr-1",
                     shouldStretchProjectSection ? "h-full" : "max-h-[min(300px,36vh)]",
                     SIDEBAR_COLLAPSIBLE_CONTENT_CLASS,
                     projectsCollapsed
@@ -1681,7 +1681,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               className={cn(
                 "flex shrink-0 items-center justify-between px-3 pb-2",
                 showProjects ? "pt-1.5" : "pt-3",
-                recentCollapsed && "order-2 mt-auto",
               )}
             >
               <button
@@ -1728,7 +1727,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               className={cn(
                 SIDEBAR_COLLAPSIBLE_PANEL_CLASS,
                 recentCollapsed
-                  ? "order-1 grid-rows-[0fr] opacity-0"
+                  ? "grid-rows-[0fr] opacity-0"
                   : "grid-rows-[1fr] flex-1 opacity-100",
               )}
             >
