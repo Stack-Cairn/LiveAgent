@@ -491,6 +491,8 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 .gateway-shell {
   position: relative;
   display: flex;
+  width: 100%;
+  min-width: 0;
   min-height: 100vh;
   min-height: 100dvh;
   height: 100vh;

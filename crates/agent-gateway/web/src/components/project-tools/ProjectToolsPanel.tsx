@@ -102,11 +102,14 @@ function getFallbackMaxPanelWidth() {
 
 function getDynamicMaxPanelWidth(panel: HTMLElement | null) {
   if (!panel) return getFallbackMaxPanelWidth();
+  const parent = panel.parentElement;
   const sibling = panel.previousElementSibling;
-  const siblingWidth =
-    sibling instanceof HTMLElement ? sibling.getBoundingClientRect().width : 0;
-  const panelWidth = panel.getBoundingClientRect().width;
-  const hostWidth = siblingWidth + panelWidth;
+  const parentRect = parent?.getBoundingClientRect();
+  const siblingRect = sibling instanceof HTMLElement ? sibling.getBoundingClientRect() : null;
+  const hostWidth =
+    parentRect && siblingRect
+      ? parentRect.right - siblingRect.left
+      : (parentRect?.width ?? panel.getBoundingClientRect().width);
   if (!Number.isFinite(hostWidth) || hostWidth <= 0) {
     return getFallbackMaxPanelWidth();
   }
