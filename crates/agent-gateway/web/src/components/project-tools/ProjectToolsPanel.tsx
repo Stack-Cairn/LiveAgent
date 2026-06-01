@@ -64,6 +64,7 @@ const DEFAULT_TERMINAL_COLS = 80;
 const DEFAULT_TERMINAL_ROWS = 24;
 const FILE_TREE_TAB_ID = "__file_tree__";
 const GIT_REVIEW_TAB_ID = "__git_review__";
+const PROJECT_TOOLS_RESIZE_END_EVENT = "liveagent:project-tools-resize-end";
 
 type ProjectToolsPanelProps = {
   isOpen: boolean;
@@ -131,6 +132,14 @@ function getDynamicMaxPanelWidth(panel: HTMLElement | null) {
 
 function clampPanelWidth(width: number, maxWidth: number) {
   return Math.min(maxWidth, Math.max(MIN_PANEL_WIDTH, width));
+}
+
+function panelWidthStyleValue(width: number) {
+  return `${Math.round(width)}px`;
+}
+
+function applyPanelWidthStyle(panel: HTMLElement | null, width: number) {
+  panel?.style.setProperty("--project-tools-panel-width", panelWidthStyleValue(width));
 }
 
 function areSessionsEqual(left: TerminalSession[], right: TerminalSession[]) {
@@ -655,7 +664,10 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     maxScrollLeft: number;
   } | null>(null);
   const panelWidth = clampPanelWidth(draftWidth, maxPanelWidth);
-  const panelStyle = { "--project-tools-panel-width": `${panelWidth}px` } as CSSProperties;
+  const panelStyleWidth = resizingRef.current ? pendingResizeWidthRef.current : panelWidth;
+  const panelStyle = {
+    "--project-tools-panel-width": panelWidthStyleValue(panelStyleWidth),
+  } as CSSProperties;
   const effectiveWidthCollapsed = !isOpen && collapseImmediately ? true : widthCollapsed;
   const effectiveShouldRenderContent = !isOpen && collapseImmediately ? false : shouldRenderContent;
   const isControlled = externalSessions !== undefined;
@@ -735,6 +747,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
   } as CSSProperties;
 
   const updateTabsScrollState = useCallback(() => {
+    if (resizingRef.current) return;
     const element = tabsScrollRef.current;
     const next = element
       ? {
@@ -833,6 +846,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
   useEffect(() => {
     if (resizingRef.current) return;
     pendingResizeWidthRef.current = clampedWidth;
+    applyPanelWidthStyle(panelRef.current, clampedWidth);
     setDraftWidth(clampedWidth);
   }, [clampedWidth]);
 
@@ -842,6 +856,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     let frameId = 0;
     const updateMaxWidth = () => {
       frameId = 0;
+      if (resizingRef.current) return;
       setMaxPanelWidth(getDynamicMaxPanelWidth(panel));
     };
     const scheduleUpdate = () => {
@@ -1241,21 +1256,25 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       event.preventDefault();
       resizeCleanupRef.current?.();
       const startX = event.clientX;
-      const startWidth = panelWidth;
+      const dragMaxWidth = getDynamicMaxPanelWidth(panelRef.current);
+      const startWidth = clampPanelWidth(panelWidth, dragMaxWidth);
       const previousCursor = document.body.style.cursor;
       const previousUserSelect = document.body.style.userSelect;
       resizingRef.current = true;
+      setMaxPanelWidth(dragMaxWidth);
       setIsResizing(true);
       pendingResizeWidthRef.current = startWidth;
+      applyPanelWidthStyle(panelRef.current, startWidth);
+      panelRef.current?.setAttribute("data-project-tools-resizing", "true");
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
 
-      const scheduleDraftWidth = (nextWidth: number) => {
+      const schedulePanelWidth = (nextWidth: number) => {
         pendingResizeWidthRef.current = nextWidth;
         if (resizeFrameRef.current !== null) return;
         resizeFrameRef.current = window.requestAnimationFrame(() => {
           resizeFrameRef.current = null;
-          setDraftWidth(pendingResizeWidthRef.current);
+          applyPanelWidthStyle(panelRef.current, pendingResizeWidthRef.current);
         });
       };
 
@@ -1263,6 +1282,11 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
         window.removeEventListener("mousemove", handleMove);
         window.removeEventListener("mouseup", handleUp);
         window.removeEventListener("blur", handleUp);
+        if (resizeFrameRef.current !== null) {
+          window.cancelAnimationFrame(resizeFrameRef.current);
+          resizeFrameRef.current = null;
+        }
+        panelRef.current?.removeAttribute("data-project-tools-resizing");
         document.body.style.cursor = previousCursor;
         document.body.style.userSelect = previousUserSelect;
         resizingRef.current = false;
@@ -1270,25 +1294,21 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       };
 
       const handleMove = (moveEvent: globalThis.MouseEvent) => {
-        const nextWidth = clampPanelWidth(
-          startWidth + startX - moveEvent.clientX,
-          getDynamicMaxPanelWidth(panelRef.current),
-        );
-        scheduleDraftWidth(nextWidth);
+        const nextWidth = clampPanelWidth(startWidth + startX - moveEvent.clientX, dragMaxWidth);
+        schedulePanelWidth(nextWidth);
       };
 
       const handleUp = () => {
         cleanupResize();
-        if (resizeFrameRef.current !== null) {
-          window.cancelAnimationFrame(resizeFrameRef.current);
-          resizeFrameRef.current = null;
-        }
         const finalWidth = pendingResizeWidthRef.current;
+        applyPanelWidthStyle(panelRef.current, finalWidth);
         setDraftWidth(finalWidth);
         if (finalWidth !== clampedWidth) {
           onWidthChange(finalWidth);
         }
         setIsResizing(false);
+        window.dispatchEvent(new Event(PROJECT_TOOLS_RESIZE_END_EVENT));
+        window.requestAnimationFrame(updateTabsScrollState);
       };
 
       resizeCleanupRef.current = cleanupResize;
@@ -1296,7 +1316,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       window.addEventListener("mouseup", handleUp);
       window.addEventListener("blur", handleUp);
     },
-    [clampedWidth, onWidthChange, panelWidth],
+    [clampedWidth, onWidthChange, panelWidth, updateTabsScrollState],
   );
 
   const handleTabsWheel = useCallback(
@@ -1496,6 +1516,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       aria-hidden={!isOpen}
       inert={!isOpen}
       data-state={isOpen ? "open" : "closed"}
+      data-project-tools-resizing={isResizing ? "true" : undefined}
       className={cn(
         "project-tools-panel fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
         isOpen

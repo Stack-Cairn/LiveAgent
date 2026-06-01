@@ -79,6 +79,7 @@ const GIT_REVIEW_STACKED_PANE_BUTTON_CLASS =
 const DIFF_SELECTION_AUTOSCROLL_EDGE_PX = 40;
 const DIFF_SELECTION_AUTOSCROLL_MAX_STEP_PX = 22;
 const DIFF_HORIZONTAL_SCROLLBAR_MIN_THUMB_PX = 32;
+const PROJECT_TOOLS_RESIZE_END_EVENT = "liveagent:project-tools-resize-end";
 const gitReviewScrollbarTimers = new WeakMap<HTMLElement, number>();
 type GitReviewScrollbarAxis = "vertical" | "horizontal";
 type GitReviewScrollbarOverlay = {
@@ -481,6 +482,10 @@ function chooseDiffHorizontalScrollTarget(
     }
   }
   return bestTarget;
+}
+
+function isProjectToolsPanelResizing(root: HTMLElement | null) {
+  return Boolean(root?.closest('[data-project-tools-resizing="true"]'));
 }
 
 type PatchChunk = {
@@ -1371,6 +1376,8 @@ function DiffContent(props: {
 
   const updateDiffHorizontalScrollbar = useCallback(() => {
     const root = rootRef.current;
+    if (isProjectToolsPanelResizing(root)) return;
+
     const trackWidth =
       diffHorizontalScrollbarTrackRef.current?.clientWidth ??
       scrollViewportRef.current?.clientWidth ??
@@ -1503,6 +1510,7 @@ function DiffContent(props: {
           });
     mutationObserver?.observe(root, { childList: true, subtree: true });
     window.addEventListener("resize", refreshTargets);
+    window.addEventListener(PROJECT_TOOLS_RESIZE_END_EVENT, refreshTargets);
     refreshTargets();
 
     return () => {
@@ -1510,6 +1518,7 @@ function DiffContent(props: {
         window.cancelAnimationFrame(animationFrame);
       }
       window.removeEventListener("resize", refreshTargets);
+      window.removeEventListener(PROJECT_TOOLS_RESIZE_END_EVENT, refreshTargets);
       mutationObserver?.disconnect();
       detachTargets();
       resizeObserver?.disconnect();
@@ -2707,7 +2716,7 @@ function GitOperationNoticeToast({
   );
 }
 
-export function GitReviewPanel(props: {
+type GitReviewPanelProps = {
   cwd: string;
   gitClient?: GitClient | null;
   canWrite?: boolean;
@@ -2715,7 +2724,9 @@ export function GitReviewPanel(props: {
   onRevealInFileTree?: (path: string) => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
-}) {
+};
+
+export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanelProps) {
   const {
     cwd,
     gitClient,
@@ -5234,4 +5245,4 @@ export function GitReviewPanel(props: {
       ) : null}
     </div>
   );
-}
+});

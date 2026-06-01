@@ -2397,7 +2397,7 @@ function assertGitOperationResult(value: unknown, fallbackMessage: string) {
   }
 }
 
-export function GitReviewPanel(props: {
+type GitReviewPanelProps = {
   cwd: string;
   gitClient?: GitClient | null;
   canWrite?: boolean;
@@ -2405,7 +2405,9 @@ export function GitReviewPanel(props: {
   onRevealInFileTree?: (path: string) => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
-}) {
+};
+
+export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanelProps) {
   const {
     cwd,
     gitClient,
@@ -4837,4 +4839,4 @@ export function GitReviewPanel(props: {
       ) : null}
     </div>
   );
-}
+});
