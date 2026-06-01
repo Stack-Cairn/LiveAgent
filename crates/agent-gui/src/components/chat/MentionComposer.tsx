@@ -5,8 +5,8 @@ import {
   type FocusEvent,
   forwardRef,
   type KeyboardEvent,
-  memo,
   type MouseEvent,
+  memo,
   type RefObject,
   useCallback,
   useEffect,
@@ -19,6 +19,7 @@ import {
 import { createPortal } from "react-dom";
 import { useLocale } from "../../i18n";
 import { cn } from "../../lib/shared/utils";
+import { ClipboardPaste, Copy, ScanText, Scissors } from "../icons";
 import { getFileTypeIcon, getFileTypeIconSvg } from "./fileTypeIcons";
 
 /* ------------------------------------------------------------------ */
@@ -82,6 +83,13 @@ export type MentionComposerGitFileMention = {
 type MentionSuggestion =
   | { type: "file"; entry: MentionFileEntry }
   | { type: "skill"; skill: MentionComposerSkill };
+
+type ComposerContextMenuState = {
+  x: number;
+  y: number;
+  selectedText: string;
+  hasContent: boolean;
+};
 
 /** Where the @/$ trigger lives inside a text node */
 interface MentionContext {
@@ -185,6 +193,9 @@ const LARGE_PASTE_TAG_ATTR = "data-large-paste-id";
 const LARGE_PASTE_CHAR_THRESHOLD = 8_000;
 const LARGE_PASTE_LINE_THRESHOLD = 200;
 const LARGE_PASTE_PREVIEW_CHARS = 160;
+const COMPOSER_CONTEXT_MENU_WIDTH = 184;
+const COMPOSER_CONTEXT_MENU_HEIGHT = 154;
+const COMPOSER_CONTEXT_MENU_MARGIN = 12;
 const CARET_ANCHOR_TEXT = "\u200B";
 const IME_ENTER_SUPPRESS_WINDOW_MS = 300;
 const IME_COMPOSITION_END_ENTER_TAIL_MS = 80;
@@ -360,6 +371,161 @@ function editorTextIsEmpty(editor: HTMLElement) {
   return raw.trim().length === 0;
 }
 
+function editorRangeIsInsideRoot(root: HTMLElement, range: Range) {
+  const commonAncestor = range.commonAncestorContainer;
+  return commonAncestor === root || root.contains(commonAncestor);
+}
+
+function editorSelectionRange(root: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  return editorRangeIsInsideRoot(root, range) ? range : null;
+}
+
+function resolveComposerSelectionText(
+  root: HTMLElement | null,
+  largePastes: Map<string, MentionComposerLargePaste>,
+) {
+  if (!root) return "";
+
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+    return "";
+  }
+
+  const range = selection.getRangeAt(0);
+  if (!editorRangeIsInsideRoot(root, range)) {
+    return "";
+  }
+
+  return normalizeSerializedText(serializeChildren(range.cloneContents(), largePastes));
+}
+
+function selectionContainsPoint(
+  root: HTMLElement,
+  selection: Selection | null,
+  x: number,
+  y: number,
+) {
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+
+  const range = selection.getRangeAt(0);
+  if (!editorRangeIsInsideRoot(root, range)) return false;
+
+  for (const rect of Array.from(range.getClientRects())) {
+    if (x >= rect.left - 2 && x <= rect.right + 2 && y >= rect.top - 2 && y <= rect.bottom + 2) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function createCaretRangeFromPoint(x: number, y: number) {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+
+  const position = doc.caretPositionFromPoint?.(x, y);
+  if (position) {
+    const range = document.createRange();
+    range.setStart(position.offsetNode, position.offset);
+    range.collapse(true);
+    return range;
+  }
+
+  return doc.caretRangeFromPoint?.(x, y) ?? null;
+}
+
+function closestComposerChipFromNode(root: HTMLElement, node: Node | null) {
+  let current: Node | null =
+    node?.nodeType === Node.ELEMENT_NODE ? node : (node?.parentNode ?? null);
+
+  while (current && current !== root) {
+    if (isComposerChipElement(current)) {
+      return current;
+    }
+    current = current.parentNode;
+  }
+
+  return null;
+}
+
+function placeComposerCaretFromPoint(root: HTMLElement, x: number, y: number) {
+  const range = createCaretRangeFromPoint(x, y);
+  if (!range || !editorRangeIsInsideRoot(root, range)) return false;
+
+  const chip = closestComposerChipFromNode(root, range.startContainer);
+  if (chip) {
+    const anchor = ensureCaretAnchorAfterChip(chip);
+    if (!anchor) return false;
+    placeCaretInTextNode(anchor.textNode, anchor.offset);
+    return true;
+  }
+
+  const selection = window.getSelection();
+  if (!selection) return false;
+
+  selection.removeAllRanges();
+  selection.addRange(range);
+  normalizeCaretAfterChip(root);
+  return true;
+}
+
+function selectComposerContents(root: HTMLElement) {
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function deleteComposerSelection(
+  root: HTMLElement,
+  largePastes: Map<string, MentionComposerLargePaste>,
+) {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+
+  const range = selection.getRangeAt(0);
+  if (!editorRangeIsInsideRoot(root, range)) return false;
+
+  range
+    .cloneContents()
+    .querySelectorAll<HTMLElement>(`[${LARGE_PASTE_TAG_ATTR}]`)
+    .forEach((chip) => {
+      const largePasteId = chip.getAttribute(LARGE_PASTE_TAG_ATTR);
+      if (largePasteId) {
+        largePastes.delete(largePasteId);
+      }
+    });
+
+  range.deleteContents();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  normalizeCaretAfterChip(root);
+  ensureTrailingCaretAnchor(root);
+  return true;
+}
+
+function clampComposerContextMenuPosition(x: number, y: number) {
+  const maxLeft = Math.max(
+    COMPOSER_CONTEXT_MENU_MARGIN,
+    window.innerWidth - COMPOSER_CONTEXT_MENU_WIDTH - COMPOSER_CONTEXT_MENU_MARGIN,
+  );
+  const maxTop = Math.max(
+    COMPOSER_CONTEXT_MENU_MARGIN,
+    window.innerHeight - COMPOSER_CONTEXT_MENU_HEIGHT - COMPOSER_CONTEXT_MENU_MARGIN,
+  );
+
+  return {
+    left: Math.min(Math.max(COMPOSER_CONTEXT_MENU_MARGIN, x), maxLeft),
+    top: Math.min(Math.max(COMPOSER_CONTEXT_MENU_MARGIN, y), maxTop),
+  };
+}
+
 function normalizeMentionQuery(query: string) {
   return removeCaretAnchors(query).trim().replace(/\\/g, "/").toLowerCase();
 }
@@ -449,6 +615,32 @@ function extractClipboardFiles(data: DataTransfer) {
   }
 
   return files;
+}
+
+function writeTextToClipboard(text: string) {
+  if (!text) return;
+
+  if (navigator.clipboard?.writeText) {
+    void navigator.clipboard.writeText(text).catch(() => {
+      fallbackWriteTextToClipboard(text);
+    });
+    return;
+  }
+
+  fallbackWriteTextToClipboard(text);
+}
+
+function fallbackWriteTextToClipboard(text: string) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
 }
 
 function isImeKeyboardEvent(event: KeyboardEvent<HTMLDivElement>) {
@@ -1396,8 +1588,11 @@ export const MentionComposer = memo(
     }: MentionComposerProps,
     ref,
   ) {
+    const { locale } = useLocale();
     const editorRef = useRef<HTMLDivElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const composerContextMenuRef = useRef<HTMLDivElement>(null);
+    const composerContextMenuRangeRef = useRef<Range | null>(null);
     const commitTooltipCloseTimerRef = useRef<number | null>(null);
     const [isEmpty, setIsEmpty] = useState(true);
     const lastIsEmptyRef = useRef(true);
@@ -1409,10 +1604,18 @@ export const MentionComposer = memo(
     const isBusyRef = useRef(false);
     const largePastesRef = useRef(new Map<string, MentionComposerLargePaste>());
     const largePasteCounterRef = useRef(0);
+    const [composerContextMenu, setComposerContextMenu] = useState<ComposerContextMenuState | null>(
+      null,
+    );
     const [commitTooltip, setCommitTooltip] = useState<{
       commit: MentionComposerCommitMention;
       rect: DOMRect;
     } | null>(null);
+
+    const closeComposerContextMenu = useCallback(() => {
+      composerContextMenuRangeRef.current = null;
+      setComposerContextMenu(null);
+    }, []);
 
     const setBusy = useCallback(
       (nextBusy: boolean) => {
@@ -1526,6 +1729,46 @@ export const MentionComposer = memo(
       closeMentionSession();
       setBusy(false);
     }, [disabled, closeMentionSession, setBusy]);
+
+    useEffect(() => {
+      if (!composerContextMenu) return;
+
+      const handlePointerDown = (event: PointerEvent) => {
+        const target = event.target;
+        if (!(target instanceof Node)) {
+          closeComposerContextMenu();
+          return;
+        }
+        if (composerContextMenuRef.current?.contains(target)) {
+          return;
+        }
+        closeComposerContextMenu();
+      };
+
+      const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+        if (event.key === "Escape") {
+          closeComposerContextMenu();
+        }
+      };
+
+      const handleClose = () => {
+        closeComposerContextMenu();
+      };
+
+      window.addEventListener("pointerdown", handlePointerDown, true);
+      window.addEventListener("keydown", handleKeyDown, true);
+      window.addEventListener("scroll", handleClose, true);
+      window.addEventListener("resize", handleClose);
+      window.addEventListener("blur", handleClose);
+
+      return () => {
+        window.removeEventListener("pointerdown", handlePointerDown, true);
+        window.removeEventListener("keydown", handleKeyDown, true);
+        window.removeEventListener("scroll", handleClose, true);
+        window.removeEventListener("resize", handleClose);
+        window.removeEventListener("blur", handleClose);
+      };
+    }, [closeComposerContextMenu, composerContextMenu]);
 
     const normalizedMentionQuery = mentionCtx ? normalizeMentionQuery(mentionCtx.query) : "";
     const suggestions = useMemo<MentionSuggestion[]>(() => {
@@ -1729,6 +1972,7 @@ export const MentionComposer = memo(
           el.innerHTML = "";
           largePastesRef.current.clear();
           setCommitTooltip(null);
+          closeComposerContextMenu();
           if (isLargePasteText(text)) {
             insertLargePaste(text);
           } else {
@@ -1743,6 +1987,7 @@ export const MentionComposer = memo(
           el.innerHTML = "";
           largePastesRef.current.clear();
           setCommitTooltip(null);
+          closeComposerContextMenu();
 
           if (draft.segments.length === 0 && draft.text) {
             if (isLargePasteText(draft.text)) {
@@ -1805,12 +2050,19 @@ export const MentionComposer = memo(
           el.innerHTML = "";
           largePastesRef.current.clear();
           setCommitTooltip(null);
+          closeComposerContextMenu();
           closeMentionSession();
           refreshEmptyState();
         },
         focus: () => editorRef.current?.focus(),
       }),
-      [buildDraft, closeMentionSession, insertLargePaste, refreshEmptyState],
+      [
+        buildDraft,
+        closeComposerContextMenu,
+        closeMentionSession,
+        insertLargePaste,
+        refreshEmptyState,
+      ],
     );
 
     // ---- Select suggestion ----
@@ -1829,8 +2081,175 @@ export const MentionComposer = memo(
       [closeMentionSession, mentionCtx, refreshEmptyState],
     );
 
+    const restoreComposerContextSelection = useCallback(() => {
+      const el = editorRef.current;
+      const range = composerContextMenuRangeRef.current;
+      if (!el || !range || !editorRangeIsInsideRoot(el, range)) return false;
+
+      const selection = window.getSelection();
+      if (!selection) return false;
+
+      try {
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return true;
+      } catch {
+        return false;
+      }
+    }, []);
+
+    const contextMenuPosition = composerContextMenu
+      ? clampComposerContextMenuPosition(composerContextMenu.x, composerContextMenu.y)
+      : null;
+    const contextMenuLabels =
+      locale === "en-US"
+        ? {
+            cut: "Cut",
+            copy: "Copy",
+            paste: "Paste",
+            selectAll: "Select all",
+          }
+        : {
+            cut: "剪切",
+            copy: "复制",
+            paste: "粘贴",
+            selectAll: "全选",
+          };
+    const contextMenuHasSelection = Boolean(composerContextMenu?.selectedText.length);
+    const contextMenuCanMutate = !disabled;
+
+    const handleComposerContextCopy = useCallback(() => {
+      if (!composerContextMenu?.selectedText) return;
+      restoreComposerContextSelection();
+      writeTextToClipboard(composerContextMenu.selectedText);
+      closeComposerContextMenu();
+    }, [closeComposerContextMenu, composerContextMenu, restoreComposerContextSelection]);
+
+    const handleComposerContextCut = useCallback(() => {
+      const el = editorRef.current;
+      const selectedText = composerContextMenu?.selectedText;
+      if (!el || disabled || !selectedText) return;
+
+      restoreComposerContextSelection();
+      if (!deleteComposerSelection(el, largePastesRef.current)) return;
+
+      writeTextToClipboard(selectedText);
+      closeMentionSession();
+      refreshEmptyState();
+      refreshMention();
+      el.focus({ preventScroll: true });
+      closeComposerContextMenu();
+    }, [
+      closeComposerContextMenu,
+      closeMentionSession,
+      composerContextMenu?.selectedText,
+      disabled,
+      refreshEmptyState,
+      refreshMention,
+      restoreComposerContextSelection,
+    ]);
+
+    const handleComposerContextPaste = useCallback(async () => {
+      const el = editorRef.current;
+      if (!el || disabled) return;
+
+      el.focus({ preventScroll: true });
+
+      let text: string | null = null;
+      try {
+        text = (await navigator.clipboard?.readText?.()) ?? "";
+      } catch {
+        text = null;
+      }
+
+      restoreComposerContextSelection();
+
+      if (text === null) {
+        document.execCommand("paste");
+        closeMentionSession();
+        refreshEmptyState();
+        refreshMention();
+        closeComposerContextMenu();
+        return;
+      }
+
+      if (!text) {
+        closeComposerContextMenu();
+        return;
+      }
+
+      if (isLargePasteText(text)) {
+        insertLargePaste(text);
+        refreshMention();
+        closeComposerContextMenu();
+        return;
+      }
+
+      document.execCommand("insertText", false, text);
+      closeMentionSession();
+      refreshEmptyState();
+      refreshMention();
+      closeComposerContextMenu();
+    }, [
+      closeComposerContextMenu,
+      closeMentionSession,
+      disabled,
+      insertLargePaste,
+      refreshEmptyState,
+      refreshMention,
+      restoreComposerContextSelection,
+    ]);
+
+    const handleComposerContextSelectAll = useCallback(() => {
+      const el = editorRef.current;
+      if (!el || !composerContextMenu?.hasContent) return;
+
+      el.focus({ preventScroll: true });
+      selectComposerContents(el);
+      closeMentionSession();
+      closeComposerContextMenu();
+    }, [closeComposerContextMenu, closeMentionSession, composerContextMenu?.hasContent]);
+
     // ---- Event handlers ----
+    const handleContextMenu = useCallback(
+      (event: MouseEvent<HTMLDivElement>) => {
+        event.preventDefault();
+
+        const el = editorRef.current;
+        if (!el) return;
+
+        closeMentionSession();
+        setCommitTooltip(null);
+
+        const selection = window.getSelection();
+        let selectedText = "";
+        let rangeForMenu: Range | null = null;
+
+        if (selectionContainsPoint(el, selection, event.clientX, event.clientY)) {
+          selectedText = resolveComposerSelectionText(el, largePastesRef.current);
+          rangeForMenu = editorSelectionRange(el)?.cloneRange() ?? null;
+        } else {
+          el.focus({ preventScroll: true });
+          if (placeComposerCaretFromPoint(el, event.clientX, event.clientY)) {
+            rangeForMenu = editorSelectionRange(el)?.cloneRange() ?? null;
+          } else {
+            selection?.removeAllRanges();
+          }
+        }
+
+        composerContextMenuRangeRef.current = rangeForMenu;
+        setComposerContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          selectedText,
+          hasContent: !editorTextIsEmpty(el),
+        });
+      },
+      [closeMentionSession],
+    );
+
     const handleInput = useCallback(() => {
+      closeComposerContextMenu();
       const el = editorRef.current;
       if (el) {
         normalizeCaretAfterChip(el);
@@ -1839,7 +2258,7 @@ export const MentionComposer = memo(
       if (!isComposingRef.current) {
         refreshMention();
       }
-    }, [refreshEmptyState, refreshMention]);
+    }, [closeComposerContextMenu, refreshEmptyState, refreshMention]);
 
     const handleKeyUp = useCallback(
       (e: KeyboardEvent<HTMLDivElement>) => {
@@ -2111,10 +2530,11 @@ export const MentionComposer = memo(
         busyReleaseTimerRef.current = null;
       }
       setBusy(false);
+      closeComposerContextMenu();
       closeMentionSession();
       cancelCommitTooltipClose();
       setCommitTooltip(null);
-    }, [cancelCommitTooltipClose, closeMentionSession, setBusy]);
+    }, [cancelCommitTooltipClose, closeComposerContextMenu, closeMentionSession, setBusy]);
 
     return (
       <div ref={wrapperRef} className="relative w-full min-w-0 max-w-full flex-1">
@@ -2138,6 +2558,83 @@ export const MentionComposer = memo(
             onMouseLeave={scheduleCommitTooltipClose}
           />
         ) : null}
+        {composerContextMenu && contextMenuPosition
+          ? createPortal(
+              <div
+                ref={composerContextMenuRef}
+                role="menu"
+                className="fixed z-[120] w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]"
+                style={{
+                  left: contextMenuPosition.left,
+                  top: contextMenuPosition.top,
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!contextMenuCanMutate || !contextMenuHasSelection}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "disabled:pointer-events-none disabled:opacity-45",
+                  )}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleComposerContextCut}
+                >
+                  <Scissors className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{contextMenuLabels.cut}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!contextMenuHasSelection}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "disabled:pointer-events-none disabled:opacity-45",
+                  )}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleComposerContextCopy}
+                >
+                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{contextMenuLabels.copy}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!contextMenuCanMutate}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "disabled:pointer-events-none disabled:opacity-45",
+                  )}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    void handleComposerContextPaste();
+                  }}
+                >
+                  <ClipboardPaste className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{contextMenuLabels.paste}</span>
+                </button>
+                <div className="my-1 h-px bg-border/70" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!composerContextMenu.hasContent}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "disabled:pointer-events-none disabled:opacity-45",
+                  )}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={handleComposerContextSelectAll}
+                >
+                  <ScanText className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{contextMenuLabels.selectAll}</span>
+                </button>
+              </div>,
+              document.body,
+            )
+          : null}
         <div
           ref={editorRef}
           contentEditable={!disabled}
@@ -2154,6 +2651,7 @@ export const MentionComposer = memo(
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onPaste={handlePaste}
+          onContextMenu={handleContextMenu}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
           onBlur={handleBlur}
