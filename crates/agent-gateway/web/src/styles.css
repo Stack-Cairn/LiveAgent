@@ -1839,7 +1839,8 @@ html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="cl
     backdrop-filter: blur(18px);
   }
 
-  html[data-liveagent-webui="gateway"] .workspace-code-editor-overlay {
+  html[data-liveagent-webui="gateway"] .workspace-code-editor-overlay,
+  html[data-liveagent-webui="gateway"] .workspace-image-preview-overlay {
     z-index: 60;
   }
 

@@ -7,6 +7,7 @@ import type {
 } from "@/lib/settings";
 import { cn } from "@/lib/shared/utils";
 import { getFileTypeIcon } from "../chat/fileTypeIcons";
+import { isWorkspaceImagePath } from "../workspace-editor/workspaceImagePreview";
 import {
   Check,
   ChevronRight,
@@ -15,6 +16,7 @@ import {
   FilePenLine,
   Folder,
   FolderOpen,
+  ImageIcon,
   Loader2,
   Plus,
   RefreshCw,
@@ -149,7 +151,7 @@ export function ProjectFileTreePanel(props: {
   onInitializedChange: (initialized: boolean) => void;
   onSyncStateChange: (patch: ProjectToolsFileTreeStatePatch) => void;
   onInsertFileMention?: (path: string, kind: FileTreeKind) => void;
-  onOpenEditableFile?: (path: string) => void;
+  onOpenFile?: (path: string) => void;
 }) {
   const {
     projectPathKey,
@@ -159,7 +161,7 @@ export function ProjectFileTreePanel(props: {
     onInitializedChange,
     onSyncStateChange,
     onInsertFileMention,
-    onOpenEditableFile,
+    onOpenFile,
   } = props;
   const { t } = useLocale();
   const [states, setStates] = useState<Record<string, FileTreeState>>({});
@@ -737,7 +739,7 @@ export function ProjectFileTreePanel(props: {
                   toggleDirectory(path, expanded);
                   return;
                 }
-                onOpenEditableFile?.(path);
+                onOpenFile?.(path);
               }}
             >
               {node.kind === "dir" ? (
@@ -763,7 +765,7 @@ export function ProjectFileTreePanel(props: {
     },
     [
       cwd,
-      onOpenEditableFile,
+      onOpenFile,
       openContextMenu,
       setProjectState,
       state,
@@ -959,14 +961,22 @@ export function ProjectFileTreePanel(props: {
                 type="button"
                 role="menuitem"
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
-                disabled={!onOpenEditableFile}
+                disabled={!onOpenFile}
                 onClick={() => {
-                  onOpenEditableFile?.(contextPath);
+                  onOpenFile?.(contextPath);
                   setContextMenu(null);
                 }}
               >
-                <FilePenLine className="h-3.5 w-3.5" />
-                {t("projectTools.fileTree.openFile")}
+                {isWorkspaceImagePath(contextPath) ? (
+                  <ImageIcon className="h-3.5 w-3.5" />
+                ) : (
+                  <FilePenLine className="h-3.5 w-3.5" />
+                )}
+                {t(
+                  isWorkspaceImagePath(contextPath)
+                    ? "projectTools.fileTree.previewImage"
+                    : "projectTools.fileTree.openFile",
+                )}
               </button>
               <div className="mx-1 my-1 h-px bg-border/60" />
             </>

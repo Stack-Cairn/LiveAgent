@@ -12,6 +12,7 @@ func TestWebsocketRequestHandlersCoverKnownProtocolTypes(t *testing.T) {
 		"fs.create_project_folder",
 		"fs.list",
 		"fs.read_editable_text",
+		"fs.read_workspace_image",
 		"fs.write_text",
 		"fs.create_dir",
 		"fs.rename",

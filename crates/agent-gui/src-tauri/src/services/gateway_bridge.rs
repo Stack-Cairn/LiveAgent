@@ -7,7 +7,8 @@ use crate::commands::{
     chat_history,
     fs::{
         fs_create_dir_sync, fs_delete_sync, fs_list_sync, fs_mention_list_sync,
-        fs_read_editable_text_sync, fs_rename_sync, fs_write_text_sync,
+        fs_read_editable_text_sync, fs_read_workspace_image_sync, fs_rename_sync,
+        fs_write_text_sync,
     },
     git::git_gateway_action_sync,
     settings::{load_providers, open_db},
@@ -548,6 +549,30 @@ pub async fn handle_fs_read_editable_text(
         content_hash: response.content_hash,
         size_bytes: u64::try_from(response.size_bytes).unwrap_or(u64::MAX),
         total_lines: u64::try_from(response.total_lines).unwrap_or(u64::MAX),
+    })
+}
+
+pub async fn handle_fs_read_workspace_image(
+    request: proto::FsReadWorkspaceImageRequest,
+) -> Result<proto::FsReadWorkspaceImageResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fs_read_workspace_image_sync(request.workdir, request.path)
+    })
+    .await
+    .map_err(|e| format!("gateway fs read workspace image join failed: {e}"))?
+    .and_then(|response| {
+        Ok(proto::FsReadWorkspaceImageResponse {
+            path: response.path,
+            mime_type: response
+                .mime_type
+                .ok_or_else(|| "workspace image response is missing mime type".to_string())?,
+            data: response
+                .data
+                .ok_or_else(|| "workspace image response is missing data".to_string())?,
+            size_bytes: u64::try_from(response.size_bytes.unwrap_or_default()).unwrap_or(u64::MAX),
+            mtime_ms: response.mtime_ms,
+            content_hash: response.content_hash,
+        })
     })
 }
 

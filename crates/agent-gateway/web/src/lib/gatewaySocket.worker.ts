@@ -394,6 +394,8 @@ async function resolveRequest(client: GatewayWebSocketClient, method: string, pa
       });
     case "fs.read_editable_text":
       return client.readEditableTextFile(String(body.workdir ?? ""), String(body.path ?? ""));
+    case "fs.read_workspace_image":
+      return client.readWorkspaceImageFile(String(body.workdir ?? ""), String(body.path ?? ""));
     case "fs.create_dir":
       return client.createDir(String(body.workdir ?? ""), String(body.path ?? ""));
     case "fs.rename":

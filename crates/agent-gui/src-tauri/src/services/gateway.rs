@@ -999,6 +999,21 @@ impl GatewayController {
                     Err(error) => self.send_error_response(request_id, 500, error).await,
                 }
             }
+            Some(proto::gateway_envelope::Payload::FsReadWorkspaceImage(request)) => {
+                match gateway_bridge::handle_fs_read_workspace_image(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(
+                                proto::agent_envelope::Payload::FsReadWorkspaceImageResp(response),
+                            ),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 500, error).await,
+                }
+            }
             Some(proto::gateway_envelope::Payload::FsWriteText(request)) => {
                 match gateway_bridge::handle_fs_write_text(request).await {
                     Ok(response) => {

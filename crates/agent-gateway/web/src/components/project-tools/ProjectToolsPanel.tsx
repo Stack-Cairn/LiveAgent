@@ -93,7 +93,7 @@ type ProjectToolsPanelProps = {
   onGitReviewOpenChange: (open: boolean) => void;
   onSessionsChange?: (sessions: TerminalSession[]) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
-  onOpenEditableFile?: (path: string) => void;
+  onOpenFile?: (path: string) => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
   onClose?: () => void;
@@ -623,7 +623,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     onGitReviewOpenChange,
     onSessionsChange,
     onInsertFileMention,
-    onOpenEditableFile,
+    onOpenFile,
     onInsertCommitMention,
     onInsertGitFileMention,
     onClose,
@@ -1935,7 +1935,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                       onInitializedChange={setFileTreeInitialized}
                       onSyncStateChange={onFileTreeStateChange}
                       onInsertFileMention={onInsertFileMention}
-                      onOpenEditableFile={onOpenEditableFile}
+                      onOpenFile={onOpenFile}
                     />
                   </div>
                 ) : null}

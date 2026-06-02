@@ -222,6 +222,11 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         String(args?.workdir ?? ""),
         String(args?.path ?? ""),
       )) as T;
+    case "fs_read_workspace_image":
+      return (await getGatewayWebSocketClient(loadToken().trim()).readWorkspaceImageFile(
+        String(args?.workdir ?? ""),
+        String(args?.path ?? ""),
+      )) as T;
     case "fs_create_dir":
       return (await getGatewayWebSocketClient(loadToken().trim()).createDir(
         String(args?.workdir ?? ""),

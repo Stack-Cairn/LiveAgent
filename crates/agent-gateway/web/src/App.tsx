@@ -31,6 +31,8 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProjectToolsPanel } from "@/components/project-tools/ProjectToolsPanel";
 import type { WorkspaceCodeEditorOpenRequest } from "@/components/workspace-editor/WorkspaceCodeEditorOverlay";
+import type { WorkspaceImagePreviewOpenRequest } from "@/components/workspace-editor/WorkspaceImagePreviewOverlay";
+import { isWorkspaceImagePath } from "@/components/workspace-editor/workspaceImagePreview";
 import { LocaleContext, t as translate } from "@/i18n";
 import type {
   MentionComposerCommitMention,
@@ -213,6 +215,13 @@ const WorkspaceCodeEditorOverlay = lazy(async () => {
   lockMonacoNlsLocale();
   return {
     default: module.WorkspaceCodeEditorOverlay,
+  };
+});
+
+const WorkspaceImagePreviewOverlay = lazy(async () => {
+  const module = await import("@/components/workspace-editor/WorkspaceImagePreviewOverlay");
+  return {
+    default: module.WorkspaceImagePreviewOverlay,
   };
 });
 
@@ -817,9 +826,7 @@ export default function App() {
   const [isFileDropActive, setIsFileDropActive] = useState(false);
   const [activeView, setActiveView] = useState<"chat" | "skills-hub" | "mcp-hub">("chat");
   const [projectToolsPanelOpen, setProjectToolsPanelOpen] = useState(false);
-  const projectToolsFileTreeOpenCount =
-    settings.customSettings.projectToolsFileTree.openProjectPathKeys.length;
-  const previousProjectToolsFileTreeOpenCountRef = useRef(projectToolsFileTreeOpenCount);
+  const previousProjectToolsFileTreeOpenRef = useRef(false);
   const [workspaceEditorMounted, setWorkspaceEditorMounted] = useState(false);
   const [workspaceEditorOpen, setWorkspaceEditorOpen] = useState(false);
   const [workspaceEditorCleanupPending, setWorkspaceEditorCleanupPending] = useState(false);
@@ -827,6 +834,11 @@ export default function App() {
     useState<WorkspaceCodeEditorOpenRequest | null>(null);
   const [workspaceEditorCloseRequestId, setWorkspaceEditorCloseRequestId] = useState(0);
   const workspaceEditorRequestIdRef = useRef(0);
+  const [workspaceImagePreviewMounted, setWorkspaceImagePreviewMounted] = useState(false);
+  const [workspaceImagePreviewOpen, setWorkspaceImagePreviewOpen] = useState(false);
+  const [workspaceImagePreviewOpenRequest, setWorkspaceImagePreviewOpenRequest] =
+    useState<WorkspaceImagePreviewOpenRequest | null>(null);
+  const workspaceImagePreviewRequestIdRef = useRef(0);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
   const { confirm: requestConfirmDialog, dialog: confirmDialog } = useConfirmDialog();
   const terminalSessionsVersionRef = useRef(0);
@@ -5280,6 +5292,10 @@ export default function App() {
   const terminalProjectPathKey = terminalProjectPath
     ? workspaceProjectPathKey(terminalProjectPath)
     : "";
+  const projectToolsFileTreeOpen = isProjectToolsFileTreeOpen(
+    settings.customSettings,
+    terminalProjectPathKey,
+  );
   const projectToolsDisabledMessage = !settingsSyncReady
     ? "Syncing desktop settings..."
     : !isAgentMode
@@ -5295,9 +5311,22 @@ export default function App() {
   const gitDisabledMessage = !settings.remote.enableWebGit
     ? "WebUI Git is disabled in desktop Remote settings."
     : undefined;
-  const handleOpenEditableFile = useCallback(
+  const handleOpenWorkspaceFile = useCallback(
     (path: string) => {
       if (!terminalProjectPath || !terminalProjectPathKey) return;
+      if (isWorkspaceImagePath(path)) {
+        workspaceImagePreviewRequestIdRef.current += 1;
+        setWorkspaceImagePreviewMounted(true);
+        setWorkspaceImagePreviewOpen(true);
+        setWorkspaceImagePreviewOpenRequest({
+          id: workspaceImagePreviewRequestIdRef.current,
+          projectPathKey: terminalProjectPathKey,
+          workdir: terminalProjectPath,
+          path,
+        });
+        return;
+      }
+      setWorkspaceImagePreviewOpen(false);
       workspaceEditorRequestIdRef.current += 1;
       setWorkspaceEditorCleanupPending(false);
       setWorkspaceEditorMounted(true);
@@ -5314,22 +5343,35 @@ export default function App() {
   const requestWorkspaceEditorClose = useCallback(() => {
     setWorkspaceEditorCloseRequestId((current) => current + 1);
   }, []);
+  const requestWorkspaceImagePreviewClose = useCallback(() => {
+    setWorkspaceImagePreviewOpen(false);
+  }, []);
+  const handleWorkspaceImagePreviewClosed = useCallback(() => {
+    setWorkspaceImagePreviewOpen(false);
+    setWorkspaceImagePreviewMounted(false);
+    setWorkspaceImagePreviewOpenRequest(null);
+  }, []);
   useEffect(() => {
-    const previousOpenCount = previousProjectToolsFileTreeOpenCountRef.current;
-    previousProjectToolsFileTreeOpenCountRef.current = projectToolsFileTreeOpenCount;
-    if (projectToolsFileTreeOpenCount > 0 && workspaceEditorCleanupPending) {
+    const previousOpen = previousProjectToolsFileTreeOpenRef.current;
+    previousProjectToolsFileTreeOpenRef.current = projectToolsFileTreeOpen;
+    if (projectToolsFileTreeOpen && workspaceEditorCleanupPending) {
       setWorkspaceEditorCleanupPending(false);
     }
-    if (previousOpenCount > 0 && projectToolsFileTreeOpenCount === 0 && workspaceEditorMounted) {
+    if (previousOpen && !projectToolsFileTreeOpen && workspaceEditorMounted) {
       setWorkspaceEditorCleanupPending(true);
       setWorkspaceEditorOpen(true);
       requestWorkspaceEditorClose();
     }
+    if (previousOpen && !projectToolsFileTreeOpen && workspaceImagePreviewMounted) {
+      requestWorkspaceImagePreviewClose();
+    }
   }, [
-    projectToolsFileTreeOpenCount,
+    projectToolsFileTreeOpen,
     requestWorkspaceEditorClose,
+    requestWorkspaceImagePreviewClose,
     workspaceEditorCleanupPending,
     workspaceEditorMounted,
+    workspaceImagePreviewMounted,
   ]);
   const projectTerminalSessions = useMemo(
     () =>
@@ -6341,6 +6383,22 @@ export default function App() {
               />
             </Suspense>
           ) : null}
+          {workspaceImagePreviewMounted ? (
+            <Suspense
+              fallback={
+                <div className="workspace-image-preview-overlay absolute inset-0 z-40 flex items-center justify-center border-r border-border bg-background text-sm text-muted-foreground shadow-2xl">
+                  {translate("workspaceImagePreview.loading", settings.locale)}
+                </div>
+              }
+            >
+              <WorkspaceImagePreviewOverlay
+                openRequest={workspaceImagePreviewOpenRequest}
+                isOpen={workspaceImagePreviewOpen}
+                onRequestClose={requestWorkspaceImagePreviewClose}
+                onClose={handleWorkspaceImagePreviewClosed}
+              />
+            </Suspense>
+          ) : null}
         </div>
 
         {terminalClient ? (
@@ -6356,10 +6414,7 @@ export default function App() {
             terminalDisabledMessage={terminalDisabledMessage}
             activeTab={settings.customSettings.projectToolsPanel.activeTab}
             tabOrder={getProjectToolsPanelTabOrder(settings.customSettings, terminalProjectPathKey)}
-            fileTreeOpen={isProjectToolsFileTreeOpen(
-              settings.customSettings,
-              terminalProjectPathKey,
-            )}
+            fileTreeOpen={projectToolsFileTreeOpen}
             fileTreeState={getProjectToolsFileTreeProjectState(
               settings.customSettings,
               terminalProjectPathKey,
@@ -6417,7 +6472,7 @@ export default function App() {
               composerRef.current?.insertFileMention(path, kind);
               composerRef.current?.focus();
             }}
-            onOpenEditableFile={handleOpenEditableFile}
+            onOpenFile={handleOpenWorkspaceFile}
             onInsertCommitMention={(commit) => {
               composerRef.current?.insertCommitMention(commit);
               composerRef.current?.focus();

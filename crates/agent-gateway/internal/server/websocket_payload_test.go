@@ -109,6 +109,24 @@ func TestWebsocketFsPayloadsUseFrontendFieldNames(t *testing.T) {
 		t.Fatalf("fs.read_editable_text sizeBytes = %#v, want 11", readEditable["sizeBytes"])
 	}
 
+	readWorkspaceImage := websocketFsReadWorkspaceImageResponsePayload(&gatewayv1.FsReadWorkspaceImageResponse{
+		Path:        "assets/preview.png",
+		MimeType:    "image/png",
+		Data:        "base64",
+		SizeBytes:   6,
+		MtimeMs:     42,
+		ContentHash: "hash",
+	})
+	if readWorkspaceImage["mimeType"] != "image/png" {
+		t.Fatalf("fs.read_workspace_image mimeType = %#v", readWorkspaceImage["mimeType"])
+	}
+	if readWorkspaceImage["sizeBytes"] != uint64(6) {
+		t.Fatalf("fs.read_workspace_image sizeBytes = %#v, want 6", readWorkspaceImage["sizeBytes"])
+	}
+	if readWorkspaceImage["contentHash"] != "hash" {
+		t.Fatalf("fs.read_workspace_image contentHash = %#v", readWorkspaceImage["contentHash"])
+	}
+
 	write := websocketFsWriteTextResponsePayload(&gatewayv1.FsWriteTextResponse{
 		Path:          "src/new.ts",
 		Mode:          "rewrite",

@@ -124,6 +124,15 @@ type FsReadEditableTextResponse = {
   totalLines: number;
 };
 
+type FsReadWorkspaceImageResponse = {
+  path: string;
+  mimeType: string;
+  data: string;
+  sizeBytes: number;
+  mtimeMs: number;
+  contentHash: string;
+};
+
 type FsCreateDirResponse = {
   path: string;
   kind: "dir";
@@ -1065,6 +1074,16 @@ export class GatewayWebSocketClient {
     });
   }
 
+  async readWorkspaceImageFile(
+    workdir: string,
+    path: string,
+  ): Promise<FsReadWorkspaceImageResponse> {
+    return this.request<FsReadWorkspaceImageResponse>("fs.read_workspace_image", {
+      workdir,
+      path,
+    });
+  }
+
   async createDir(workdir: string, path: string): Promise<FsCreateDirResponse> {
     return this.request<FsCreateDirResponse>("fs.create_dir", { workdir, path });
   }
@@ -1897,6 +1916,7 @@ export type GatewayWebSocketClientLike = {
     expectedContentHash?: string;
   }): Promise<FsWriteTextResponse>;
   readEditableTextFile(workdir: string, path: string): Promise<FsReadEditableTextResponse>;
+  readWorkspaceImageFile(workdir: string, path: string): Promise<FsReadWorkspaceImageResponse>;
   createDir(workdir: string, path: string): Promise<FsCreateDirResponse>;
   renamePath(workdir: string, fromPath: string, toPath: string): Promise<FsRenameResponse>;
   deletePath(workdir: string, path: string): Promise<FsDeleteResponse>;
@@ -2595,6 +2615,16 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
 
   async readEditableTextFile(workdir: string, path: string): Promise<FsReadEditableTextResponse> {
     return this.request<FsReadEditableTextResponse>("fs.read_editable_text", {
+      workdir,
+      path,
+    });
+  }
+
+  async readWorkspaceImageFile(
+    workdir: string,
+    path: string,
+  ): Promise<FsReadWorkspaceImageResponse> {
+    return this.request<FsReadWorkspaceImageResponse>("fs.read_workspace_image", {
       workdir,
       path,
     });

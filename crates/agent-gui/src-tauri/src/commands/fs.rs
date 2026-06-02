@@ -1766,6 +1766,29 @@ pub async fn fs_read_image_source(
     .await
 }
 
+pub(crate) fn fs_read_workspace_image_sync(
+    workdir: String,
+    path: String,
+) -> Result<ReadResponse, String> {
+    let wd = canonicalize_workdir(&workdir).map_err(|e| e.to_string())?;
+    let rel = sanitize_rel_path(&path).map_err(|e| e.to_string())?;
+    let logical_path = logical_rel_path(&rel);
+    let target = wd.join(&rel);
+    let target = resolve_existing_file_target(&wd, &target, "Image.path")?;
+    read_local_image_file(target, logical_path)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn fs_read_workspace_image(
+    workdir: String,
+    path: String,
+) -> Result<ReadResponse, String> {
+    run_blocking("fs_read_workspace_image", move || {
+        fs_read_workspace_image_sync(workdir, path)
+    })
+    .await
+}
+
 fn fs_read_text_sync(
     workdir: String,
     path: String,
@@ -3371,6 +3394,38 @@ mod tests {
             "unexpected path: {}",
             inline_response.path
         );
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn workspace_image_reads_relative_path_and_rejects_out_of_bounds_sources() {
+        let workdir = unique_test_workdir("workspace-image");
+        fs::create_dir_all(workdir.join("assets")).expect("create workdir");
+        let bytes = png_like_bytes();
+        fs::write(workdir.join("assets/preview.png"), &bytes).expect("write workspace image");
+
+        let response = fs_read_workspace_image_sync(
+            workdir.display().to_string(),
+            "assets/preview.png".to_string(),
+        )
+        .expect("workspace image should read");
+
+        assert_eq!(response.kind, "image");
+        assert_eq!(response.path, "assets/preview.png");
+        assert_eq!(response.mime_type.as_deref(), Some("image/png"));
+        assert_eq!(response.size_bytes, Some(bytes.len()));
+        assert_eq!(
+            response.data.as_deref(),
+            Some(BASE64_STANDARD.encode(&bytes).as_str())
+        );
+
+        for path in ["/tmp/liveagent-outside.png", "../outside.png", ""] {
+            let error =
+                fs_read_workspace_image_sync(workdir.display().to_string(), path.to_string())
+                    .expect_err("out-of-bounds workspace image path should fail");
+            assert!(!error.trim().is_empty(), "expected error for {path:?}");
+        }
 
         let _ = fs::remove_dir_all(workdir);
     }

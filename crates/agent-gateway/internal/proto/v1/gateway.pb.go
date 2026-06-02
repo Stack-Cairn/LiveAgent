@@ -247,6 +247,7 @@ type GatewayEnvelope struct {
 	//	*GatewayEnvelope_FsDelete
 	//	*GatewayEnvelope_GitRequest
 	//	*GatewayEnvelope_FsReadEditableText
+	//	*GatewayEnvelope_FsReadWorkspaceImage
 	Payload       isGatewayEnvelope_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -627,6 +628,15 @@ func (x *GatewayEnvelope) GetFsReadEditableText() *FsReadEditableTextRequest {
 	return nil
 }
 
+func (x *GatewayEnvelope) GetFsReadWorkspaceImage() *FsReadWorkspaceImageRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*GatewayEnvelope_FsReadWorkspaceImage); ok {
+			return x.FsReadWorkspaceImage
+		}
+	}
+	return nil
+}
+
 type isGatewayEnvelope_Payload interface {
 	isGatewayEnvelope_Payload()
 }
@@ -775,6 +785,10 @@ type GatewayEnvelope_FsReadEditableText struct {
 	FsReadEditableText *FsReadEditableTextRequest `protobuf:"bytes,62,opt,name=fs_read_editable_text,json=fsReadEditableText,proto3,oneof"`
 }
 
+type GatewayEnvelope_FsReadWorkspaceImage struct {
+	FsReadWorkspaceImage *FsReadWorkspaceImageRequest `protobuf:"bytes,63,opt,name=fs_read_workspace_image,json=fsReadWorkspaceImage,proto3,oneof"`
+}
+
 func (*GatewayEnvelope_ChatRequest) isGatewayEnvelope_Payload() {}
 
 func (*GatewayEnvelope_CancelChat) isGatewayEnvelope_Payload() {}
@@ -847,6 +861,8 @@ func (*GatewayEnvelope_GitRequest) isGatewayEnvelope_Payload() {}
 
 func (*GatewayEnvelope_FsReadEditableText) isGatewayEnvelope_Payload() {}
 
+func (*GatewayEnvelope_FsReadWorkspaceImage) isGatewayEnvelope_Payload() {}
+
 type AgentEnvelope struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -891,6 +907,7 @@ type AgentEnvelope struct {
 	//	*AgentEnvelope_FsDeleteResp
 	//	*AgentEnvelope_GitResponse
 	//	*AgentEnvelope_FsReadEditableTextResp
+	//	*AgentEnvelope_FsReadWorkspaceImageResp
 	//	*AgentEnvelope_Error
 	Payload       isAgentEnvelope_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
@@ -1290,6 +1307,15 @@ func (x *AgentEnvelope) GetFsReadEditableTextResp() *FsReadEditableTextResponse 
 	return nil
 }
 
+func (x *AgentEnvelope) GetFsReadWorkspaceImageResp() *FsReadWorkspaceImageResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*AgentEnvelope_FsReadWorkspaceImageResp); ok {
+			return x.FsReadWorkspaceImageResp
+		}
+	}
+	return nil
+}
+
 func (x *AgentEnvelope) GetError() *ErrorResponse {
 	if x != nil {
 		if x, ok := x.Payload.(*AgentEnvelope_Error); ok {
@@ -1455,6 +1481,10 @@ type AgentEnvelope_FsReadEditableTextResp struct {
 	FsReadEditableTextResp *FsReadEditableTextResponse `protobuf:"bytes,65,opt,name=fs_read_editable_text_resp,json=fsReadEditableTextResp,proto3,oneof"`
 }
 
+type AgentEnvelope_FsReadWorkspaceImageResp struct {
+	FsReadWorkspaceImageResp *FsReadWorkspaceImageResponse `protobuf:"bytes,66,opt,name=fs_read_workspace_image_resp,json=fsReadWorkspaceImageResp,proto3,oneof"`
+}
+
 type AgentEnvelope_Error struct {
 	Error *ErrorResponse `protobuf:"bytes,99,opt,name=error,proto3,oneof"`
 }
@@ -1534,6 +1564,8 @@ func (*AgentEnvelope_FsDeleteResp) isAgentEnvelope_Payload() {}
 func (*AgentEnvelope_GitResponse) isAgentEnvelope_Payload() {}
 
 func (*AgentEnvelope_FsReadEditableTextResp) isAgentEnvelope_Payload() {}
+
+func (*AgentEnvelope_FsReadWorkspaceImageResp) isAgentEnvelope_Payload() {}
 
 func (*AgentEnvelope_Error) isAgentEnvelope_Payload() {}
 
@@ -6061,6 +6093,142 @@ func (x *FsReadEditableTextResponse) GetTotalLines() uint64 {
 	return 0
 }
 
+type FsReadWorkspaceImageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Workdir       string                 `protobuf:"bytes,1,opt,name=workdir,proto3" json:"workdir,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FsReadWorkspaceImageRequest) Reset() {
+	*x = FsReadWorkspaceImageRequest{}
+	mi := &file_proto_v1_gateway_proto_msgTypes[81]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FsReadWorkspaceImageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FsReadWorkspaceImageRequest) ProtoMessage() {}
+
+func (x *FsReadWorkspaceImageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v1_gateway_proto_msgTypes[81]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FsReadWorkspaceImageRequest.ProtoReflect.Descriptor instead.
+func (*FsReadWorkspaceImageRequest) Descriptor() ([]byte, []int) {
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{81}
+}
+
+func (x *FsReadWorkspaceImageRequest) GetWorkdir() string {
+	if x != nil {
+		return x.Workdir
+	}
+	return ""
+}
+
+func (x *FsReadWorkspaceImageRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+type FsReadWorkspaceImageResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	MimeType      string                 `protobuf:"bytes,2,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
+	Data          string                 `protobuf:"bytes,3,opt,name=data,proto3" json:"data,omitempty"`
+	SizeBytes     uint64                 `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	MtimeMs       uint64                 `protobuf:"varint,5,opt,name=mtime_ms,json=mtimeMs,proto3" json:"mtime_ms,omitempty"`
+	ContentHash   string                 `protobuf:"bytes,6,opt,name=content_hash,json=contentHash,proto3" json:"content_hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FsReadWorkspaceImageResponse) Reset() {
+	*x = FsReadWorkspaceImageResponse{}
+	mi := &file_proto_v1_gateway_proto_msgTypes[82]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FsReadWorkspaceImageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FsReadWorkspaceImageResponse) ProtoMessage() {}
+
+func (x *FsReadWorkspaceImageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_v1_gateway_proto_msgTypes[82]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FsReadWorkspaceImageResponse.ProtoReflect.Descriptor instead.
+func (*FsReadWorkspaceImageResponse) Descriptor() ([]byte, []int) {
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{82}
+}
+
+func (x *FsReadWorkspaceImageResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *FsReadWorkspaceImageResponse) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *FsReadWorkspaceImageResponse) GetData() string {
+	if x != nil {
+		return x.Data
+	}
+	return ""
+}
+
+func (x *FsReadWorkspaceImageResponse) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *FsReadWorkspaceImageResponse) GetMtimeMs() uint64 {
+	if x != nil {
+		return x.MtimeMs
+	}
+	return 0
+}
+
+func (x *FsReadWorkspaceImageResponse) GetContentHash() string {
+	if x != nil {
+		return x.ContentHash
+	}
+	return ""
+}
+
 type FsWriteTextRequest struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Workdir                string                 `protobuf:"bytes,1,opt,name=workdir,proto3" json:"workdir,omitempty"`
@@ -6077,7 +6245,7 @@ type FsWriteTextRequest struct {
 
 func (x *FsWriteTextRequest) Reset() {
 	*x = FsWriteTextRequest{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[81]
+	mi := &file_proto_v1_gateway_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6089,7 +6257,7 @@ func (x *FsWriteTextRequest) String() string {
 func (*FsWriteTextRequest) ProtoMessage() {}
 
 func (x *FsWriteTextRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[81]
+	mi := &file_proto_v1_gateway_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6102,7 +6270,7 @@ func (x *FsWriteTextRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsWriteTextRequest.ProtoReflect.Descriptor instead.
 func (*FsWriteTextRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{81}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *FsWriteTextRequest) GetWorkdir() string {
@@ -6176,7 +6344,7 @@ type FsWriteTextResponse struct {
 
 func (x *FsWriteTextResponse) Reset() {
 	*x = FsWriteTextResponse{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[82]
+	mi := &file_proto_v1_gateway_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6188,7 +6356,7 @@ func (x *FsWriteTextResponse) String() string {
 func (*FsWriteTextResponse) ProtoMessage() {}
 
 func (x *FsWriteTextResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[82]
+	mi := &file_proto_v1_gateway_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6201,7 +6369,7 @@ func (x *FsWriteTextResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsWriteTextResponse.ProtoReflect.Descriptor instead.
 func (*FsWriteTextResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{82}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *FsWriteTextResponse) GetPath() string {
@@ -6263,7 +6431,7 @@ type FsCreateDirRequest struct {
 
 func (x *FsCreateDirRequest) Reset() {
 	*x = FsCreateDirRequest{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[83]
+	mi := &file_proto_v1_gateway_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6275,7 +6443,7 @@ func (x *FsCreateDirRequest) String() string {
 func (*FsCreateDirRequest) ProtoMessage() {}
 
 func (x *FsCreateDirRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[83]
+	mi := &file_proto_v1_gateway_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6288,7 +6456,7 @@ func (x *FsCreateDirRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsCreateDirRequest.ProtoReflect.Descriptor instead.
 func (*FsCreateDirRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{83}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *FsCreateDirRequest) GetWorkdir() string {
@@ -6315,7 +6483,7 @@ type FsCreateDirResponse struct {
 
 func (x *FsCreateDirResponse) Reset() {
 	*x = FsCreateDirResponse{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[84]
+	mi := &file_proto_v1_gateway_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6327,7 +6495,7 @@ func (x *FsCreateDirResponse) String() string {
 func (*FsCreateDirResponse) ProtoMessage() {}
 
 func (x *FsCreateDirResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[84]
+	mi := &file_proto_v1_gateway_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6340,7 +6508,7 @@ func (x *FsCreateDirResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsCreateDirResponse.ProtoReflect.Descriptor instead.
 func (*FsCreateDirResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{84}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *FsCreateDirResponse) GetPath() string {
@@ -6368,7 +6536,7 @@ type FsRenameRequest struct {
 
 func (x *FsRenameRequest) Reset() {
 	*x = FsRenameRequest{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[85]
+	mi := &file_proto_v1_gateway_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6380,7 +6548,7 @@ func (x *FsRenameRequest) String() string {
 func (*FsRenameRequest) ProtoMessage() {}
 
 func (x *FsRenameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[85]
+	mi := &file_proto_v1_gateway_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6393,7 +6561,7 @@ func (x *FsRenameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsRenameRequest.ProtoReflect.Descriptor instead.
 func (*FsRenameRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{85}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *FsRenameRequest) GetWorkdir() string {
@@ -6428,7 +6596,7 @@ type FsRenameResponse struct {
 
 func (x *FsRenameResponse) Reset() {
 	*x = FsRenameResponse{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[86]
+	mi := &file_proto_v1_gateway_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6440,7 +6608,7 @@ func (x *FsRenameResponse) String() string {
 func (*FsRenameResponse) ProtoMessage() {}
 
 func (x *FsRenameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[86]
+	mi := &file_proto_v1_gateway_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6453,7 +6621,7 @@ func (x *FsRenameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsRenameResponse.ProtoReflect.Descriptor instead.
 func (*FsRenameResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{86}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *FsRenameResponse) GetFromPath() string {
@@ -6487,7 +6655,7 @@ type FsDeleteRequest struct {
 
 func (x *FsDeleteRequest) Reset() {
 	*x = FsDeleteRequest{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[87]
+	mi := &file_proto_v1_gateway_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6499,7 +6667,7 @@ func (x *FsDeleteRequest) String() string {
 func (*FsDeleteRequest) ProtoMessage() {}
 
 func (x *FsDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[87]
+	mi := &file_proto_v1_gateway_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6512,7 +6680,7 @@ func (x *FsDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsDeleteRequest.ProtoReflect.Descriptor instead.
 func (*FsDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{87}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *FsDeleteRequest) GetWorkdir() string {
@@ -6539,7 +6707,7 @@ type FsDeleteResponse struct {
 
 func (x *FsDeleteResponse) Reset() {
 	*x = FsDeleteResponse{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[88]
+	mi := &file_proto_v1_gateway_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6551,7 +6719,7 @@ func (x *FsDeleteResponse) String() string {
 func (*FsDeleteResponse) ProtoMessage() {}
 
 func (x *FsDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[88]
+	mi := &file_proto_v1_gateway_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6564,7 +6732,7 @@ func (x *FsDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FsDeleteResponse.ProtoReflect.Descriptor instead.
 func (*FsDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{88}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *FsDeleteResponse) GetPath() string {
@@ -6590,7 +6758,7 @@ type PingRequest struct {
 
 func (x *PingRequest) Reset() {
 	*x = PingRequest{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[89]
+	mi := &file_proto_v1_gateway_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6602,7 +6770,7 @@ func (x *PingRequest) String() string {
 func (*PingRequest) ProtoMessage() {}
 
 func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[89]
+	mi := &file_proto_v1_gateway_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6615,7 +6783,7 @@ func (x *PingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
 func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{89}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *PingRequest) GetTimestamp() int64 {
@@ -6634,7 +6802,7 @@ type PongResponse struct {
 
 func (x *PongResponse) Reset() {
 	*x = PongResponse{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[90]
+	mi := &file_proto_v1_gateway_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6646,7 +6814,7 @@ func (x *PongResponse) String() string {
 func (*PongResponse) ProtoMessage() {}
 
 func (x *PongResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[90]
+	mi := &file_proto_v1_gateway_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6659,7 +6827,7 @@ func (x *PongResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PongResponse.ProtoReflect.Descriptor instead.
 func (*PongResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{90}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *PongResponse) GetTimestamp() int64 {
@@ -6679,7 +6847,7 @@ type ErrorResponse struct {
 
 func (x *ErrorResponse) Reset() {
 	*x = ErrorResponse{}
-	mi := &file_proto_v1_gateway_proto_msgTypes[91]
+	mi := &file_proto_v1_gateway_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6691,7 +6859,7 @@ func (x *ErrorResponse) String() string {
 func (*ErrorResponse) ProtoMessage() {}
 
 func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_v1_gateway_proto_msgTypes[91]
+	mi := &file_proto_v1_gateway_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6704,7 +6872,7 @@ func (x *ErrorResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorResponse.ProtoReflect.Descriptor instead.
 func (*ErrorResponse) Descriptor() ([]byte, []int) {
-	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{91}
+	return file_proto_v1_gateway_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *ErrorResponse) GetCode() int32 {
@@ -6734,7 +6902,7 @@ const file_proto_v1_gateway_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x03 \x01(\tR\tsessionId\"\x9d\x18\n" +
+	"session_id\x18\x03 \x01(\tR\tsessionId\"\x89\x19\n" +
 	"\x0fGatewayEnvelope\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
@@ -6781,8 +6949,9 @@ const file_proto_v1_gateway_proto_rawDesc = "" +
 	"\tfs_delete\x18< \x01(\v2%.liveagent.gateway.v1.FsDeleteRequestH\x00R\bfsDelete\x12C\n" +
 	"\vgit_request\x18= \x01(\v2 .liveagent.gateway.v1.GitRequestH\x00R\n" +
 	"gitRequest\x12d\n" +
-	"\x15fs_read_editable_text\x18> \x01(\v2/.liveagent.gateway.v1.FsReadEditableTextRequestH\x00R\x12fsReadEditableTextB\t\n" +
-	"\apayload\"\xae\x1c\n" +
+	"\x15fs_read_editable_text\x18> \x01(\v2/.liveagent.gateway.v1.FsReadEditableTextRequestH\x00R\x12fsReadEditableText\x12j\n" +
+	"\x17fs_read_workspace_image\x18? \x01(\v21.liveagent.gateway.v1.FsReadWorkspaceImageRequestH\x00R\x14fsReadWorkspaceImageB\t\n" +
+	"\apayload\"\xa4\x1d\n" +
 	"\rAgentEnvelope\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1c\n" +
@@ -6827,7 +6996,8 @@ const file_proto_v1_gateway_proto_rawDesc = "" +
 	"\x0efs_rename_resp\x18> \x01(\v2&.liveagent.gateway.v1.FsRenameResponseH\x00R\ffsRenameResp\x12N\n" +
 	"\x0efs_delete_resp\x18? \x01(\v2&.liveagent.gateway.v1.FsDeleteResponseH\x00R\ffsDeleteResp\x12F\n" +
 	"\fgit_response\x18@ \x01(\v2!.liveagent.gateway.v1.GitResponseH\x00R\vgitResponse\x12n\n" +
-	"\x1afs_read_editable_text_resp\x18A \x01(\v20.liveagent.gateway.v1.FsReadEditableTextResponseH\x00R\x16fsReadEditableTextResp\x12;\n" +
+	"\x1afs_read_editable_text_resp\x18A \x01(\v20.liveagent.gateway.v1.FsReadEditableTextResponseH\x00R\x16fsReadEditableTextResp\x12t\n" +
+	"\x1cfs_read_workspace_image_resp\x18B \x01(\v22.liveagent.gateway.v1.FsReadWorkspaceImageResponseH\x00R\x18fsReadWorkspaceImageResp\x12;\n" +
 	"\x05error\x18c \x01(\v2#.liveagent.gateway.v1.ErrorResponseH\x00R\x05errorB\t\n" +
 	"\apayload\"|\n" +
 	"\x11ChatSelectedModel\x12,\n" +
@@ -7164,7 +7334,18 @@ const file_proto_v1_gateway_proto_rawDesc = "" +
 	"\n" +
 	"size_bytes\x18\x05 \x01(\x04R\tsizeBytes\x12\x1f\n" +
 	"\vtotal_lines\x18\x06 \x01(\x04R\n" +
-	"totalLines\"\xbe\x02\n" +
+	"totalLines\"K\n" +
+	"\x1bFsReadWorkspaceImageRequest\x12\x18\n" +
+	"\aworkdir\x18\x01 \x01(\tR\aworkdir\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\"\xc0\x01\n" +
+	"\x1cFsReadWorkspaceImageResponse\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1b\n" +
+	"\tmime_type\x18\x02 \x01(\tR\bmimeType\x12\x12\n" +
+	"\x04data\x18\x03 \x01(\tR\x04data\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x04 \x01(\x04R\tsizeBytes\x12\x19\n" +
+	"\bmtime_ms\x18\x05 \x01(\x04R\amtimeMs\x12!\n" +
+	"\fcontent_hash\x18\x06 \x01(\tR\vcontentHash\"\xbe\x02\n" +
 	"\x12FsWriteTextRequest\x12\x18\n" +
 	"\aworkdir\x18\x01 \x01(\tR\aworkdir\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x18\n" +
@@ -7227,7 +7408,7 @@ func file_proto_v1_gateway_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_v1_gateway_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 92)
+var file_proto_v1_gateway_proto_msgTypes = make([]protoimpl.MessageInfo, 94)
 var file_proto_v1_gateway_proto_goTypes = []any{
 	(ChatEvent_ChatEventType)(0),          // 0: liveagent.gateway.v1.ChatEvent.ChatEventType
 	(*AuthRequest)(nil),                   // 1: liveagent.gateway.v1.AuthRequest
@@ -7311,17 +7492,19 @@ var file_proto_v1_gateway_proto_goTypes = []any{
 	(*FsListResponse)(nil),                // 79: liveagent.gateway.v1.FsListResponse
 	(*FsReadEditableTextRequest)(nil),     // 80: liveagent.gateway.v1.FsReadEditableTextRequest
 	(*FsReadEditableTextResponse)(nil),    // 81: liveagent.gateway.v1.FsReadEditableTextResponse
-	(*FsWriteTextRequest)(nil),            // 82: liveagent.gateway.v1.FsWriteTextRequest
-	(*FsWriteTextResponse)(nil),           // 83: liveagent.gateway.v1.FsWriteTextResponse
-	(*FsCreateDirRequest)(nil),            // 84: liveagent.gateway.v1.FsCreateDirRequest
-	(*FsCreateDirResponse)(nil),           // 85: liveagent.gateway.v1.FsCreateDirResponse
-	(*FsRenameRequest)(nil),               // 86: liveagent.gateway.v1.FsRenameRequest
-	(*FsRenameResponse)(nil),              // 87: liveagent.gateway.v1.FsRenameResponse
-	(*FsDeleteRequest)(nil),               // 88: liveagent.gateway.v1.FsDeleteRequest
-	(*FsDeleteResponse)(nil),              // 89: liveagent.gateway.v1.FsDeleteResponse
-	(*PingRequest)(nil),                   // 90: liveagent.gateway.v1.PingRequest
-	(*PongResponse)(nil),                  // 91: liveagent.gateway.v1.PongResponse
-	(*ErrorResponse)(nil),                 // 92: liveagent.gateway.v1.ErrorResponse
+	(*FsReadWorkspaceImageRequest)(nil),   // 82: liveagent.gateway.v1.FsReadWorkspaceImageRequest
+	(*FsReadWorkspaceImageResponse)(nil),  // 83: liveagent.gateway.v1.FsReadWorkspaceImageResponse
+	(*FsWriteTextRequest)(nil),            // 84: liveagent.gateway.v1.FsWriteTextRequest
+	(*FsWriteTextResponse)(nil),           // 85: liveagent.gateway.v1.FsWriteTextResponse
+	(*FsCreateDirRequest)(nil),            // 86: liveagent.gateway.v1.FsCreateDirRequest
+	(*FsCreateDirResponse)(nil),           // 87: liveagent.gateway.v1.FsCreateDirResponse
+	(*FsRenameRequest)(nil),               // 88: liveagent.gateway.v1.FsRenameRequest
+	(*FsRenameResponse)(nil),              // 89: liveagent.gateway.v1.FsRenameResponse
+	(*FsDeleteRequest)(nil),               // 90: liveagent.gateway.v1.FsDeleteRequest
+	(*FsDeleteResponse)(nil),              // 91: liveagent.gateway.v1.FsDeleteResponse
+	(*PingRequest)(nil),                   // 92: liveagent.gateway.v1.PingRequest
+	(*PongResponse)(nil),                  // 93: liveagent.gateway.v1.PongResponse
+	(*ErrorResponse)(nil),                 // 94: liveagent.gateway.v1.ErrorResponse
 }
 var file_proto_v1_gateway_proto_depIdxs = []int32{
 	22,  // 0: liveagent.gateway.v1.GatewayEnvelope.chat_request:type_name -> liveagent.gateway.v1.ChatRequest
@@ -7347,91 +7530,93 @@ var file_proto_v1_gateway_proto_depIdxs = []int32{
 	9,   // 20: liveagent.gateway.v1.GatewayEnvelope.upload_readable_files:type_name -> liveagent.gateway.v1.UploadReadableFilesRequest
 	70,  // 21: liveagent.gateway.v1.GatewayEnvelope.fs_roots:type_name -> liveagent.gateway.v1.FsRootsRequest
 	72,  // 22: liveagent.gateway.v1.GatewayEnvelope.fs_list_dirs:type_name -> liveagent.gateway.v1.FsListDirsRequest
-	90,  // 23: liveagent.gateway.v1.GatewayEnvelope.ping:type_name -> liveagent.gateway.v1.PingRequest
+	92,  // 23: liveagent.gateway.v1.GatewayEnvelope.ping:type_name -> liveagent.gateway.v1.PingRequest
 	11,  // 24: liveagent.gateway.v1.GatewayEnvelope.uploaded_image_preview:type_name -> liveagent.gateway.v1.UploadedImagePreviewRequest
 	13,  // 25: liveagent.gateway.v1.GatewayEnvelope.memory_manage:type_name -> liveagent.gateway.v1.MemoryManageRequest
 	64,  // 26: liveagent.gateway.v1.GatewayEnvelope.skill_manage:type_name -> liveagent.gateway.v1.SkillManageRequest
 	75,  // 27: liveagent.gateway.v1.GatewayEnvelope.fs_create_project_folder:type_name -> liveagent.gateway.v1.FsCreateProjectFolderRequest
 	15,  // 28: liveagent.gateway.v1.GatewayEnvelope.terminal_request:type_name -> liveagent.gateway.v1.TerminalRequest
 	77,  // 29: liveagent.gateway.v1.GatewayEnvelope.fs_list:type_name -> liveagent.gateway.v1.FsListRequest
-	82,  // 30: liveagent.gateway.v1.GatewayEnvelope.fs_write_text:type_name -> liveagent.gateway.v1.FsWriteTextRequest
-	84,  // 31: liveagent.gateway.v1.GatewayEnvelope.fs_create_dir:type_name -> liveagent.gateway.v1.FsCreateDirRequest
-	86,  // 32: liveagent.gateway.v1.GatewayEnvelope.fs_rename:type_name -> liveagent.gateway.v1.FsRenameRequest
-	88,  // 33: liveagent.gateway.v1.GatewayEnvelope.fs_delete:type_name -> liveagent.gateway.v1.FsDeleteRequest
+	84,  // 30: liveagent.gateway.v1.GatewayEnvelope.fs_write_text:type_name -> liveagent.gateway.v1.FsWriteTextRequest
+	86,  // 31: liveagent.gateway.v1.GatewayEnvelope.fs_create_dir:type_name -> liveagent.gateway.v1.FsCreateDirRequest
+	88,  // 32: liveagent.gateway.v1.GatewayEnvelope.fs_rename:type_name -> liveagent.gateway.v1.FsRenameRequest
+	90,  // 33: liveagent.gateway.v1.GatewayEnvelope.fs_delete:type_name -> liveagent.gateway.v1.FsDeleteRequest
 	20,  // 34: liveagent.gateway.v1.GatewayEnvelope.git_request:type_name -> liveagent.gateway.v1.GitRequest
 	80,  // 35: liveagent.gateway.v1.GatewayEnvelope.fs_read_editable_text:type_name -> liveagent.gateway.v1.FsReadEditableTextRequest
-	24,  // 36: liveagent.gateway.v1.AgentEnvelope.chat_event:type_name -> liveagent.gateway.v1.ChatEvent
-	26,  // 37: liveagent.gateway.v1.AgentEnvelope.cron_manage_resp:type_name -> liveagent.gateway.v1.CronManageResponse
-	28,  // 38: liveagent.gateway.v1.AgentEnvelope.history_list_resp:type_name -> liveagent.gateway.v1.HistoryListResponse
-	31,  // 39: liveagent.gateway.v1.AgentEnvelope.history_get_resp:type_name -> liveagent.gateway.v1.HistoryGetResponse
-	33,  // 40: liveagent.gateway.v1.AgentEnvelope.history_rename_resp:type_name -> liveagent.gateway.v1.HistoryRenameResponse
-	47,  // 41: liveagent.gateway.v1.AgentEnvelope.history_delete_resp:type_name -> liveagent.gateway.v1.HistoryDeleteResponse
-	50,  // 42: liveagent.gateway.v1.AgentEnvelope.history_sync:type_name -> liveagent.gateway.v1.HistorySyncEvent
-	49,  // 43: liveagent.gateway.v1.AgentEnvelope.history_truncate_resp:type_name -> liveagent.gateway.v1.HistoryTruncateResponse
-	35,  // 44: liveagent.gateway.v1.AgentEnvelope.history_pin_resp:type_name -> liveagent.gateway.v1.HistoryPinResponse
-	38,  // 45: liveagent.gateway.v1.AgentEnvelope.history_share_get_resp:type_name -> liveagent.gateway.v1.HistoryShareGetResponse
-	40,  // 46: liveagent.gateway.v1.AgentEnvelope.history_share_set_resp:type_name -> liveagent.gateway.v1.HistoryShareSetResponse
-	42,  // 47: liveagent.gateway.v1.AgentEnvelope.history_share_resolve_resp:type_name -> liveagent.gateway.v1.HistoryShareResolveResponse
-	45,  // 48: liveagent.gateway.v1.AgentEnvelope.history_workdirs_resp:type_name -> liveagent.gateway.v1.HistoryWorkdirsResponse
-	52,  // 49: liveagent.gateway.v1.AgentEnvelope.provider_list_resp:type_name -> liveagent.gateway.v1.ProviderListResponse
-	54,  // 50: liveagent.gateway.v1.AgentEnvelope.settings_get_resp:type_name -> liveagent.gateway.v1.SettingsGetResponse
-	56,  // 51: liveagent.gateway.v1.AgentEnvelope.settings_update_resp:type_name -> liveagent.gateway.v1.SettingsUpdateResponse
-	57,  // 52: liveagent.gateway.v1.AgentEnvelope.settings_sync:type_name -> liveagent.gateway.v1.SettingsSyncEvent
-	59,  // 53: liveagent.gateway.v1.AgentEnvelope.skill_files_list_resp:type_name -> liveagent.gateway.v1.SkillFilesListResponse
-	61,  // 54: liveagent.gateway.v1.AgentEnvelope.skill_metadata_read_resp:type_name -> liveagent.gateway.v1.SkillMetadataReadResponse
-	63,  // 55: liveagent.gateway.v1.AgentEnvelope.skill_text_read_resp:type_name -> liveagent.gateway.v1.SkillTextReadResponse
-	68,  // 56: liveagent.gateway.v1.AgentEnvelope.file_mention_list_resp:type_name -> liveagent.gateway.v1.FileMentionListResponse
-	10,  // 57: liveagent.gateway.v1.AgentEnvelope.upload_readable_files_resp:type_name -> liveagent.gateway.v1.UploadReadableFilesResponse
-	71,  // 58: liveagent.gateway.v1.AgentEnvelope.fs_roots_resp:type_name -> liveagent.gateway.v1.FsRootsResponse
-	91,  // 59: liveagent.gateway.v1.AgentEnvelope.pong:type_name -> liveagent.gateway.v1.PongResponse
-	74,  // 60: liveagent.gateway.v1.AgentEnvelope.fs_list_dirs_resp:type_name -> liveagent.gateway.v1.FsListDirsResponse
-	12,  // 61: liveagent.gateway.v1.AgentEnvelope.uploaded_image_preview_resp:type_name -> liveagent.gateway.v1.UploadedImagePreviewResponse
-	14,  // 62: liveagent.gateway.v1.AgentEnvelope.memory_manage_resp:type_name -> liveagent.gateway.v1.MemoryManageResponse
-	65,  // 63: liveagent.gateway.v1.AgentEnvelope.skill_manage_resp:type_name -> liveagent.gateway.v1.SkillManageResponse
-	76,  // 64: liveagent.gateway.v1.AgentEnvelope.fs_create_project_folder_resp:type_name -> liveagent.gateway.v1.FsCreateProjectFolderResponse
-	18,  // 65: liveagent.gateway.v1.AgentEnvelope.terminal_response:type_name -> liveagent.gateway.v1.TerminalResponse
-	19,  // 66: liveagent.gateway.v1.AgentEnvelope.terminal_event:type_name -> liveagent.gateway.v1.TerminalEvent
-	79,  // 67: liveagent.gateway.v1.AgentEnvelope.fs_list_resp:type_name -> liveagent.gateway.v1.FsListResponse
-	83,  // 68: liveagent.gateway.v1.AgentEnvelope.fs_write_text_resp:type_name -> liveagent.gateway.v1.FsWriteTextResponse
-	85,  // 69: liveagent.gateway.v1.AgentEnvelope.fs_create_dir_resp:type_name -> liveagent.gateway.v1.FsCreateDirResponse
-	87,  // 70: liveagent.gateway.v1.AgentEnvelope.fs_rename_resp:type_name -> liveagent.gateway.v1.FsRenameResponse
-	89,  // 71: liveagent.gateway.v1.AgentEnvelope.fs_delete_resp:type_name -> liveagent.gateway.v1.FsDeleteResponse
-	21,  // 72: liveagent.gateway.v1.AgentEnvelope.git_response:type_name -> liveagent.gateway.v1.GitResponse
-	81,  // 73: liveagent.gateway.v1.AgentEnvelope.fs_read_editable_text_resp:type_name -> liveagent.gateway.v1.FsReadEditableTextResponse
-	92,  // 74: liveagent.gateway.v1.AgentEnvelope.error:type_name -> liveagent.gateway.v1.ErrorResponse
-	8,   // 75: liveagent.gateway.v1.UploadReadableFilesRequest.files:type_name -> liveagent.gateway.v1.UploadReadableFile
-	7,   // 76: liveagent.gateway.v1.UploadReadableFilesResponse.files:type_name -> liveagent.gateway.v1.ChatUploadedFile
-	16,  // 77: liveagent.gateway.v1.TerminalResponse.sessions:type_name -> liveagent.gateway.v1.TerminalSession
-	16,  // 78: liveagent.gateway.v1.TerminalResponse.session:type_name -> liveagent.gateway.v1.TerminalSession
-	17,  // 79: liveagent.gateway.v1.TerminalResponse.shell_options:type_name -> liveagent.gateway.v1.TerminalShellOption
-	16,  // 80: liveagent.gateway.v1.TerminalEvent.session:type_name -> liveagent.gateway.v1.TerminalSession
-	5,   // 81: liveagent.gateway.v1.ChatRequest.selected_model:type_name -> liveagent.gateway.v1.ChatSelectedModel
-	7,   // 82: liveagent.gateway.v1.ChatRequest.uploaded_files:type_name -> liveagent.gateway.v1.ChatUploadedFile
-	6,   // 83: liveagent.gateway.v1.ChatRequest.runtime_controls:type_name -> liveagent.gateway.v1.ChatRuntimeControls
-	0,   // 84: liveagent.gateway.v1.ChatEvent.type:type_name -> liveagent.gateway.v1.ChatEvent.ChatEventType
-	29,  // 85: liveagent.gateway.v1.HistoryListResponse.conversations:type_name -> liveagent.gateway.v1.ConversationSummary
-	29,  // 86: liveagent.gateway.v1.HistoryGetResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
-	29,  // 87: liveagent.gateway.v1.HistoryRenameResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
-	29,  // 88: liveagent.gateway.v1.HistoryPinResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
-	36,  // 89: liveagent.gateway.v1.HistoryShareGetResponse.share:type_name -> liveagent.gateway.v1.HistoryShareStatus
-	36,  // 90: liveagent.gateway.v1.HistoryShareSetResponse.share:type_name -> liveagent.gateway.v1.HistoryShareStatus
-	29,  // 91: liveagent.gateway.v1.HistoryShareResolveResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
-	44,  // 92: liveagent.gateway.v1.HistoryWorkdirsResponse.workdirs:type_name -> liveagent.gateway.v1.HistoryWorkdirSummary
-	29,  // 93: liveagent.gateway.v1.HistoryTruncateResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
-	29,  // 94: liveagent.gateway.v1.HistorySyncEvent.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
-	67,  // 95: liveagent.gateway.v1.FileMentionListResponse.entries:type_name -> liveagent.gateway.v1.FileMentionEntry
-	69,  // 96: liveagent.gateway.v1.FsRootsResponse.roots:type_name -> liveagent.gateway.v1.FsRoot
-	73,  // 97: liveagent.gateway.v1.FsListDirsResponse.entries:type_name -> liveagent.gateway.v1.FsDirEntry
-	78,  // 98: liveagent.gateway.v1.FsListResponse.entries:type_name -> liveagent.gateway.v1.FsListEntry
-	4,   // 99: liveagent.gateway.v1.AgentGateway.AgentConnect:input_type -> liveagent.gateway.v1.AgentEnvelope
-	1,   // 100: liveagent.gateway.v1.AgentGateway.Authenticate:input_type -> liveagent.gateway.v1.AuthRequest
-	3,   // 101: liveagent.gateway.v1.AgentGateway.AgentConnect:output_type -> liveagent.gateway.v1.GatewayEnvelope
-	2,   // 102: liveagent.gateway.v1.AgentGateway.Authenticate:output_type -> liveagent.gateway.v1.AuthResponse
-	101, // [101:103] is the sub-list for method output_type
-	99,  // [99:101] is the sub-list for method input_type
-	99,  // [99:99] is the sub-list for extension type_name
-	99,  // [99:99] is the sub-list for extension extendee
-	0,   // [0:99] is the sub-list for field type_name
+	82,  // 36: liveagent.gateway.v1.GatewayEnvelope.fs_read_workspace_image:type_name -> liveagent.gateway.v1.FsReadWorkspaceImageRequest
+	24,  // 37: liveagent.gateway.v1.AgentEnvelope.chat_event:type_name -> liveagent.gateway.v1.ChatEvent
+	26,  // 38: liveagent.gateway.v1.AgentEnvelope.cron_manage_resp:type_name -> liveagent.gateway.v1.CronManageResponse
+	28,  // 39: liveagent.gateway.v1.AgentEnvelope.history_list_resp:type_name -> liveagent.gateway.v1.HistoryListResponse
+	31,  // 40: liveagent.gateway.v1.AgentEnvelope.history_get_resp:type_name -> liveagent.gateway.v1.HistoryGetResponse
+	33,  // 41: liveagent.gateway.v1.AgentEnvelope.history_rename_resp:type_name -> liveagent.gateway.v1.HistoryRenameResponse
+	47,  // 42: liveagent.gateway.v1.AgentEnvelope.history_delete_resp:type_name -> liveagent.gateway.v1.HistoryDeleteResponse
+	50,  // 43: liveagent.gateway.v1.AgentEnvelope.history_sync:type_name -> liveagent.gateway.v1.HistorySyncEvent
+	49,  // 44: liveagent.gateway.v1.AgentEnvelope.history_truncate_resp:type_name -> liveagent.gateway.v1.HistoryTruncateResponse
+	35,  // 45: liveagent.gateway.v1.AgentEnvelope.history_pin_resp:type_name -> liveagent.gateway.v1.HistoryPinResponse
+	38,  // 46: liveagent.gateway.v1.AgentEnvelope.history_share_get_resp:type_name -> liveagent.gateway.v1.HistoryShareGetResponse
+	40,  // 47: liveagent.gateway.v1.AgentEnvelope.history_share_set_resp:type_name -> liveagent.gateway.v1.HistoryShareSetResponse
+	42,  // 48: liveagent.gateway.v1.AgentEnvelope.history_share_resolve_resp:type_name -> liveagent.gateway.v1.HistoryShareResolveResponse
+	45,  // 49: liveagent.gateway.v1.AgentEnvelope.history_workdirs_resp:type_name -> liveagent.gateway.v1.HistoryWorkdirsResponse
+	52,  // 50: liveagent.gateway.v1.AgentEnvelope.provider_list_resp:type_name -> liveagent.gateway.v1.ProviderListResponse
+	54,  // 51: liveagent.gateway.v1.AgentEnvelope.settings_get_resp:type_name -> liveagent.gateway.v1.SettingsGetResponse
+	56,  // 52: liveagent.gateway.v1.AgentEnvelope.settings_update_resp:type_name -> liveagent.gateway.v1.SettingsUpdateResponse
+	57,  // 53: liveagent.gateway.v1.AgentEnvelope.settings_sync:type_name -> liveagent.gateway.v1.SettingsSyncEvent
+	59,  // 54: liveagent.gateway.v1.AgentEnvelope.skill_files_list_resp:type_name -> liveagent.gateway.v1.SkillFilesListResponse
+	61,  // 55: liveagent.gateway.v1.AgentEnvelope.skill_metadata_read_resp:type_name -> liveagent.gateway.v1.SkillMetadataReadResponse
+	63,  // 56: liveagent.gateway.v1.AgentEnvelope.skill_text_read_resp:type_name -> liveagent.gateway.v1.SkillTextReadResponse
+	68,  // 57: liveagent.gateway.v1.AgentEnvelope.file_mention_list_resp:type_name -> liveagent.gateway.v1.FileMentionListResponse
+	10,  // 58: liveagent.gateway.v1.AgentEnvelope.upload_readable_files_resp:type_name -> liveagent.gateway.v1.UploadReadableFilesResponse
+	71,  // 59: liveagent.gateway.v1.AgentEnvelope.fs_roots_resp:type_name -> liveagent.gateway.v1.FsRootsResponse
+	93,  // 60: liveagent.gateway.v1.AgentEnvelope.pong:type_name -> liveagent.gateway.v1.PongResponse
+	74,  // 61: liveagent.gateway.v1.AgentEnvelope.fs_list_dirs_resp:type_name -> liveagent.gateway.v1.FsListDirsResponse
+	12,  // 62: liveagent.gateway.v1.AgentEnvelope.uploaded_image_preview_resp:type_name -> liveagent.gateway.v1.UploadedImagePreviewResponse
+	14,  // 63: liveagent.gateway.v1.AgentEnvelope.memory_manage_resp:type_name -> liveagent.gateway.v1.MemoryManageResponse
+	65,  // 64: liveagent.gateway.v1.AgentEnvelope.skill_manage_resp:type_name -> liveagent.gateway.v1.SkillManageResponse
+	76,  // 65: liveagent.gateway.v1.AgentEnvelope.fs_create_project_folder_resp:type_name -> liveagent.gateway.v1.FsCreateProjectFolderResponse
+	18,  // 66: liveagent.gateway.v1.AgentEnvelope.terminal_response:type_name -> liveagent.gateway.v1.TerminalResponse
+	19,  // 67: liveagent.gateway.v1.AgentEnvelope.terminal_event:type_name -> liveagent.gateway.v1.TerminalEvent
+	79,  // 68: liveagent.gateway.v1.AgentEnvelope.fs_list_resp:type_name -> liveagent.gateway.v1.FsListResponse
+	85,  // 69: liveagent.gateway.v1.AgentEnvelope.fs_write_text_resp:type_name -> liveagent.gateway.v1.FsWriteTextResponse
+	87,  // 70: liveagent.gateway.v1.AgentEnvelope.fs_create_dir_resp:type_name -> liveagent.gateway.v1.FsCreateDirResponse
+	89,  // 71: liveagent.gateway.v1.AgentEnvelope.fs_rename_resp:type_name -> liveagent.gateway.v1.FsRenameResponse
+	91,  // 72: liveagent.gateway.v1.AgentEnvelope.fs_delete_resp:type_name -> liveagent.gateway.v1.FsDeleteResponse
+	21,  // 73: liveagent.gateway.v1.AgentEnvelope.git_response:type_name -> liveagent.gateway.v1.GitResponse
+	81,  // 74: liveagent.gateway.v1.AgentEnvelope.fs_read_editable_text_resp:type_name -> liveagent.gateway.v1.FsReadEditableTextResponse
+	83,  // 75: liveagent.gateway.v1.AgentEnvelope.fs_read_workspace_image_resp:type_name -> liveagent.gateway.v1.FsReadWorkspaceImageResponse
+	94,  // 76: liveagent.gateway.v1.AgentEnvelope.error:type_name -> liveagent.gateway.v1.ErrorResponse
+	8,   // 77: liveagent.gateway.v1.UploadReadableFilesRequest.files:type_name -> liveagent.gateway.v1.UploadReadableFile
+	7,   // 78: liveagent.gateway.v1.UploadReadableFilesResponse.files:type_name -> liveagent.gateway.v1.ChatUploadedFile
+	16,  // 79: liveagent.gateway.v1.TerminalResponse.sessions:type_name -> liveagent.gateway.v1.TerminalSession
+	16,  // 80: liveagent.gateway.v1.TerminalResponse.session:type_name -> liveagent.gateway.v1.TerminalSession
+	17,  // 81: liveagent.gateway.v1.TerminalResponse.shell_options:type_name -> liveagent.gateway.v1.TerminalShellOption
+	16,  // 82: liveagent.gateway.v1.TerminalEvent.session:type_name -> liveagent.gateway.v1.TerminalSession
+	5,   // 83: liveagent.gateway.v1.ChatRequest.selected_model:type_name -> liveagent.gateway.v1.ChatSelectedModel
+	7,   // 84: liveagent.gateway.v1.ChatRequest.uploaded_files:type_name -> liveagent.gateway.v1.ChatUploadedFile
+	6,   // 85: liveagent.gateway.v1.ChatRequest.runtime_controls:type_name -> liveagent.gateway.v1.ChatRuntimeControls
+	0,   // 86: liveagent.gateway.v1.ChatEvent.type:type_name -> liveagent.gateway.v1.ChatEvent.ChatEventType
+	29,  // 87: liveagent.gateway.v1.HistoryListResponse.conversations:type_name -> liveagent.gateway.v1.ConversationSummary
+	29,  // 88: liveagent.gateway.v1.HistoryGetResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
+	29,  // 89: liveagent.gateway.v1.HistoryRenameResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
+	29,  // 90: liveagent.gateway.v1.HistoryPinResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
+	36,  // 91: liveagent.gateway.v1.HistoryShareGetResponse.share:type_name -> liveagent.gateway.v1.HistoryShareStatus
+	36,  // 92: liveagent.gateway.v1.HistoryShareSetResponse.share:type_name -> liveagent.gateway.v1.HistoryShareStatus
+	29,  // 93: liveagent.gateway.v1.HistoryShareResolveResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
+	44,  // 94: liveagent.gateway.v1.HistoryWorkdirsResponse.workdirs:type_name -> liveagent.gateway.v1.HistoryWorkdirSummary
+	29,  // 95: liveagent.gateway.v1.HistoryTruncateResponse.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
+	29,  // 96: liveagent.gateway.v1.HistorySyncEvent.conversation:type_name -> liveagent.gateway.v1.ConversationSummary
+	67,  // 97: liveagent.gateway.v1.FileMentionListResponse.entries:type_name -> liveagent.gateway.v1.FileMentionEntry
+	69,  // 98: liveagent.gateway.v1.FsRootsResponse.roots:type_name -> liveagent.gateway.v1.FsRoot
+	73,  // 99: liveagent.gateway.v1.FsListDirsResponse.entries:type_name -> liveagent.gateway.v1.FsDirEntry
+	78,  // 100: liveagent.gateway.v1.FsListResponse.entries:type_name -> liveagent.gateway.v1.FsListEntry
+	4,   // 101: liveagent.gateway.v1.AgentGateway.AgentConnect:input_type -> liveagent.gateway.v1.AgentEnvelope
+	1,   // 102: liveagent.gateway.v1.AgentGateway.Authenticate:input_type -> liveagent.gateway.v1.AuthRequest
+	3,   // 103: liveagent.gateway.v1.AgentGateway.AgentConnect:output_type -> liveagent.gateway.v1.GatewayEnvelope
+	2,   // 104: liveagent.gateway.v1.AgentGateway.Authenticate:output_type -> liveagent.gateway.v1.AuthResponse
+	103, // [103:105] is the sub-list for method output_type
+	101, // [101:103] is the sub-list for method input_type
+	101, // [101:101] is the sub-list for extension type_name
+	101, // [101:101] is the sub-list for extension extendee
+	0,   // [0:101] is the sub-list for field type_name
 }
 
 func init() { file_proto_v1_gateway_proto_init() }
@@ -7476,6 +7661,7 @@ func file_proto_v1_gateway_proto_init() {
 		(*GatewayEnvelope_FsDelete)(nil),
 		(*GatewayEnvelope_GitRequest)(nil),
 		(*GatewayEnvelope_FsReadEditableText)(nil),
+		(*GatewayEnvelope_FsReadWorkspaceImage)(nil),
 	}
 	file_proto_v1_gateway_proto_msgTypes[3].OneofWrappers = []any{
 		(*AgentEnvelope_ChatEvent)(nil),
@@ -7516,6 +7702,7 @@ func file_proto_v1_gateway_proto_init() {
 		(*AgentEnvelope_FsDeleteResp)(nil),
 		(*AgentEnvelope_GitResponse)(nil),
 		(*AgentEnvelope_FsReadEditableTextResp)(nil),
+		(*AgentEnvelope_FsReadWorkspaceImageResp)(nil),
 		(*AgentEnvelope_Error)(nil),
 	}
 	file_proto_v1_gateway_proto_msgTypes[38].OneofWrappers = []any{}
@@ -7525,7 +7712,7 @@ func file_proto_v1_gateway_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_v1_gateway_proto_rawDesc), len(file_proto_v1_gateway_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   92,
+			NumMessages:   94,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

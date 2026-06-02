@@ -414,6 +414,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.fileTree.newFile": "新建文件",
     "projectTools.fileTree.newFolder": "新建文件夹",
     "projectTools.fileTree.openFile": "打开文件",
+    "projectTools.fileTree.previewImage": "预览图片",
     "projectTools.fileTree.rename": "重命名",
     "projectTools.fileTree.delete": "删除",
     "projectTools.fileTree.copyPath": "复制路径",
@@ -455,6 +456,12 @@ export const translations: Record<Locale, Record<string, string>> = {
       "此文件有未保存修改。你可以保存、放弃修改，或返回继续编辑。",
     "workspaceEditor.reloadDirtyTitle": "重新加载前放弃当前修改？",
     "workspaceEditor.reloadDirtyDescription": "重新加载会用磁盘版本替换当前编辑内容。",
+    "workspaceImagePreview.loading": "正在加载图片...",
+    "workspaceImagePreview.title": "图片预览",
+    "workspaceImagePreview.reload": "重新加载",
+    "workspaceImagePreview.close": "关闭预览",
+    "workspaceImagePreview.openFailed": "打开图片失败",
+    "workspaceImagePreview.empty": "未选择图片",
 
     /* ── Settings Nav ── */
     "settings.navSystem": "系统设置",
@@ -1583,6 +1590,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.fileTree.newFile": "New File",
     "projectTools.fileTree.newFolder": "New Folder",
     "projectTools.fileTree.openFile": "Open File",
+    "projectTools.fileTree.previewImage": "Preview Image",
     "projectTools.fileTree.rename": "Rename",
     "projectTools.fileTree.delete": "Delete",
     "projectTools.fileTree.copyPath": "Copy Path",
@@ -1625,6 +1633,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "workspaceEditor.reloadDirtyTitle": "Discard current changes before reloading?",
     "workspaceEditor.reloadDirtyDescription":
       "Reloading replaces the current editor contents with the version on disk.",
+    "workspaceImagePreview.loading": "Loading image...",
+    "workspaceImagePreview.title": "Image Preview",
+    "workspaceImagePreview.reload": "Reload",
+    "workspaceImagePreview.close": "Close preview",
+    "workspaceImagePreview.openFailed": "Failed to open image",
+    "workspaceImagePreview.empty": "No image selected",
 
     /* ── Settings Nav ── */
     "settings.navSystem": "System",
