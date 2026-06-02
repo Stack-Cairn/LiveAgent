@@ -153,7 +153,11 @@ function terminalDetachKey(sessionID: string, projectPathKey: string) {
   return "";
 }
 
-function clearPendingTerminalDetach(client: ManagedClient, sessionID: string, projectPathKey: string) {
+function clearPendingTerminalDetach(
+  client: ManagedClient,
+  sessionID: string,
+  projectPathKey: string,
+) {
   const key = terminalDetachKey(sessionID, projectPathKey);
   if (!key) return;
   const timer = client.terminalDetachTimers.get(key);
@@ -306,7 +310,10 @@ function getManagedClient(token: string) {
   return managed;
 }
 
-function connectPort(port: MessagePort, message: Extract<WorkerClientRequest, { type: "connect" }>) {
+function connectPort(
+  port: MessagePort,
+  message: Extract<WorkerClientRequest, { type: "connect" }>,
+) {
   const client = getManagedClient(message.token);
   clearManagedClientCleanup(client);
   client.ports.add(port);
@@ -385,6 +392,8 @@ async function resolveRequest(client: GatewayWebSocketClient, method: string, pa
         expectedContentHash:
           typeof body.expected_content_hash === "string" ? body.expected_content_hash : undefined,
       });
+    case "fs.read_editable_text":
+      return client.readEditableTextFile(String(body.workdir ?? ""), String(body.path ?? ""));
     case "fs.create_dir":
       return client.createDir(String(body.workdir ?? ""), String(body.path ?? ""));
     case "fs.rename":
@@ -416,15 +425,9 @@ async function resolveRequest(client: GatewayWebSocketClient, method: string, pa
         maxMessages: typeof body.max_messages === "number" ? body.max_messages : undefined,
       });
     case "history.rename":
-      return client.renameHistory(
-        String(body.conversation_id ?? ""),
-        String(body.title ?? ""),
-      );
+      return client.renameHistory(String(body.conversation_id ?? ""), String(body.title ?? ""));
     case "history.pin":
-      return client.pinHistory(
-        String(body.conversation_id ?? ""),
-        body.is_pinned === true,
-      );
+      return client.pinHistory(String(body.conversation_id ?? ""), body.is_pinned === true);
     case "history.share.get":
       return client.getHistoryShare(String(body.conversation_id ?? ""));
     case "history.share.set":

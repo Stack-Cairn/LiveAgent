@@ -81,6 +81,11 @@ export type GitCommitSummary = {
 export type GitLogResponse = {
   state: GitRepositoryState;
   commits: GitCommitSummary[];
+  historyBaseRef: string;
+  historyRemoteRef: string;
+  historyAhead: number;
+  historyBehind: number;
+  mergeBase: string;
 };
 
 export type GitCommitDetails = {
@@ -282,9 +287,19 @@ export function normalizeGitCommitSummary(input: unknown): GitCommitSummary {
 
 export function normalizeGitLogResponse(input: unknown, workdir = ""): GitLogResponse {
   const source = asObject(input);
+  const rawHistoryBaseRef = asString(source.historyBaseRef ?? source.history_base_ref);
+  const hasHistoryRemoteRef =
+    Object.prototype.hasOwnProperty.call(source, "historyRemoteRef") ||
+    Object.prototype.hasOwnProperty.call(source, "history_remote_ref");
+  const rawHistoryRemoteRef = asString(source.historyRemoteRef ?? source.history_remote_ref);
   return {
     state: normalizeGitRepositoryState(source.state, workdir),
     commits: Array.isArray(source.commits) ? source.commits.map(normalizeGitCommitSummary) : [],
+    historyBaseRef: hasHistoryRemoteRef ? rawHistoryBaseRef : "",
+    historyRemoteRef: rawHistoryRemoteRef || rawHistoryBaseRef,
+    historyAhead: asNumber(source.historyAhead ?? source.history_ahead),
+    historyBehind: asNumber(source.historyBehind ?? source.history_behind),
+    mergeBase: asString(source.mergeBase ?? source.merge_base),
   };
 }
 

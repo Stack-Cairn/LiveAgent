@@ -94,6 +94,21 @@ func TestWebsocketFsPayloadsUseFrontendFieldNames(t *testing.T) {
 		t.Fatalf("fs.list first entry = %#v", entries[0])
 	}
 
+	readEditable := websocketFsReadEditableTextResponsePayload(&gatewayv1.FsReadEditableTextResponse{
+		Path:        "src/main.ts",
+		Content:     "export {};\n",
+		MtimeMs:     42,
+		ContentHash: "hash",
+		SizeBytes:   11,
+		TotalLines:  1,
+	})
+	if readEditable["content"] != "export {};\n" {
+		t.Fatalf("fs.read_editable_text content = %#v", readEditable["content"])
+	}
+	if readEditable["sizeBytes"] != uint64(11) {
+		t.Fatalf("fs.read_editable_text sizeBytes = %#v, want 11", readEditable["sizeBytes"])
+	}
+
 	write := websocketFsWriteTextResponsePayload(&gatewayv1.FsWriteTextResponse{
 		Path:          "src/new.ts",
 		Mode:          "rewrite",

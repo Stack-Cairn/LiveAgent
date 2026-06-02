@@ -440,6 +440,11 @@ test("web remote settings normalize single-slash http gateway URLs", () => {
   assert.equal(remote.gatewayUrl, "https://gateway.example");
   assert.equal(remote.grpcEndpoint, "https://grpc.example");
   assert.equal(remote.token, "token");
+
+  const remoteWithOversizedPort = settings.normalizeRemoteSettings({
+    grpcPort: "70000",
+  });
+  assert.equal(remoteWithOversizedPort.grpcPort, 65_535);
 });
 
 test("web cron task normalization preserves finite and exhausted run counts", () => {

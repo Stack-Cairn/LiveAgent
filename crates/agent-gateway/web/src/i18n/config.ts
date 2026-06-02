@@ -250,7 +250,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.unstageAllChanges": "取消暂存所有更改",
     "projectTools.gitReview.discardAllChanges": "放弃所有更改",
     "projectTools.gitReview.refreshChanges": "刷新更改",
-    "projectTools.gitReview.discardAllConfirm": "放弃当前仓库中的所有本地更改？未跟踪文件也会被删除，此操作无法撤销。",
+    "projectTools.gitReview.discardAllConfirm":
+      "放弃当前仓库中的所有本地更改？未跟踪文件也会被删除，此操作无法撤销。",
     "projectTools.gitReview.largeDiff": "大文件",
     "projectTools.gitReview.diffPreviewTruncated": "... 文件 diff 预览已截断 ...",
     "projectTools.gitReview.noDiff": "没有 diff。",
@@ -287,9 +288,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.discardAllSuccessMessage": "工作区和未跟踪文件已清理。",
     "projectTools.gitReview.discardAllFailedTitle": "放弃所有更改失败",
     "projectTools.gitReview.remoteSetupTitle": "设置远端仓库",
-    "projectTools.gitReview.remoteSetupDescriptionFetch": "当前仓库还没有远端仓库。填写仓库地址后会保存为 origin，并获取远端分支。",
-    "projectTools.gitReview.remoteSetupDescriptionPull": "当前分支还没有 upstream，且没有 origin remote。填写仓库地址后会保存为 origin，并尝试从同名远端分支拉取。",
-    "projectTools.gitReview.remoteSetupDescriptionPush": "当前分支还没有 upstream，且没有 origin remote。填写仓库地址后会保存为 origin，并推送当前分支。",
+    "projectTools.gitReview.remoteSetupDescriptionFetch":
+      "当前仓库还没有远端仓库。填写仓库地址后会保存为 origin，并获取远端分支。",
+    "projectTools.gitReview.remoteSetupDescriptionPull":
+      "当前分支还没有 upstream，且没有 origin remote。填写仓库地址后会保存为 origin，并尝试从同名远端分支拉取。",
+    "projectTools.gitReview.remoteSetupDescriptionPush":
+      "当前分支还没有 upstream，且没有 origin remote。填写仓库地址后会保存为 origin，并推送当前分支。",
     "projectTools.gitReview.remoteUrl": "仓库地址",
     "projectTools.gitReview.remoteUrlPlaceholder": "https://github.com/owner/repo.git",
     "projectTools.gitReview.remoteUrlRequired": "请输入仓库地址。",
@@ -306,6 +310,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.labelBase": "基线",
     "projectTools.gitReview.labelAhead": "领先",
     "projectTools.gitReview.labelBehind": "落后",
+    "projectTools.gitReview.outgoingChanges": "传出的更改",
+    "projectTools.gitReview.incomingChanges": "传入的更改",
     "projectTools.gitReview.labelStaged": "已暂存",
     "projectTools.gitReview.labelUnstaged": "未暂存",
     "projectTools.gitReview.labelUntracked": "未跟踪",
@@ -328,6 +334,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.listPane": "列表视图",
     "projectTools.gitReview.detailPane": "详情视图",
     "projectTools.gitReview.commitHistoryTitle": "提交历史",
+    "projectTools.gitReview.revealCurrentHistoryItem": "转到当前历史记录项",
     "projectTools.gitReview.noCommitHistory": "没有提交历史。",
     "projectTools.gitReview.loadMoreCommits": "加载更多",
     "projectTools.gitReview.loadingMoreCommits": "正在加载更多...",
@@ -336,7 +343,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.openOnGithub": "在 GitHub 上打开",
     "projectTools.gitReview.createBranch": "创建分支",
     "projectTools.gitReview.createBranchFromCommitTitle": "从提交创建分支",
-    "projectTools.gitReview.createBranchFromCommitDescription": "从 {sha} 创建并切换到新分支：{subject}",
+    "projectTools.gitReview.createBranchFromCommitDescription":
+      "从 {sha} 创建并切换到新分支：{subject}",
     "projectTools.gitReview.branchName": "分支名",
     "projectTools.gitReview.branchNamePlaceholder": "commit/abcdef0",
     "projectTools.gitReview.branchNameRequired": "请输入分支名。",
@@ -373,7 +381,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "git.branchSelector.createNewBranch": "创建新分支",
     "git.branchSelector.initRepository": "初始化仓库",
     "git.branchSelector.initRepositoryTitle": "初始化 Git 仓库",
-    "git.branchSelector.initRepositoryDescription": "在当前目录创建 .git，并写入可选的本地 Git 用户信息。",
+    "git.branchSelector.initRepositoryDescription":
+      "在当前目录创建 .git，并写入可选的本地 Git 用户信息。",
     "git.branchSelector.targetDirectory": "目标目录",
     "git.branchSelector.initialBranch": "初始分支",
     "git.branchSelector.initialBranchRequired": "请输入初始分支名。",
@@ -404,11 +413,48 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.fileTree.resultsTruncated": "结果已截断",
     "projectTools.fileTree.newFile": "新建文件",
     "projectTools.fileTree.newFolder": "新建文件夹",
+    "projectTools.fileTree.openFile": "打开文件",
     "projectTools.fileTree.rename": "重命名",
     "projectTools.fileTree.delete": "删除",
     "projectTools.fileTree.copyPath": "复制路径",
     "projectTools.fileTree.copiedPath": "已复制路径",
     "projectTools.fileTree.insertReference": "插入引用",
+    "workspaceEditor.loading": "正在加载编辑器...",
+    "workspaceEditor.title": "代码编辑器",
+    "workspaceEditor.empty": "未打开文件",
+    "workspaceEditor.emptyHint": "从右侧文件树双击可编辑文件",
+    "workspaceEditor.opening": "正在打开文件...",
+    "workspaceEditor.save": "保存",
+    "workspaceEditor.saveAll": "全部保存",
+    "workspaceEditor.find": "查找",
+    "workspaceEditor.replace": "替换",
+    "workspaceEditor.reload": "重新加载",
+    "workspaceEditor.reloadFromDisk": "重新加载磁盘版本",
+    "workspaceEditor.close": "关闭编辑器",
+    "workspaceEditor.closeTab": "关闭文件",
+    "workspaceEditor.context.undo": "撤销",
+    "workspaceEditor.context.redo": "重做",
+    "workspaceEditor.context.cut": "剪切",
+    "workspaceEditor.context.copy": "复制",
+    "workspaceEditor.context.paste": "粘贴",
+    "workspaceEditor.context.selectAll": "全选",
+    "workspaceEditor.noFile": "无文件",
+    "workspaceEditor.lines": "行",
+    "workspaceEditor.unsaved": "未保存",
+    "workspaceEditor.openFailed": "打开文件失败",
+    "workspaceEditor.saveFailed": "保存失败",
+    "workspaceEditor.reloadFailed": "重新加载失败",
+    "workspaceEditor.conflictMessage": "文件已在磁盘上改变，请重新加载后再保存。",
+    "workspaceEditor.cancel": "取消",
+    "workspaceEditor.discard": "放弃修改",
+    "workspaceEditor.closeDirtyTitle": "关闭编辑器前保存修改？",
+    "workspaceEditor.closeDirtyDescription":
+      "还有未保存的文件。你可以保存全部修改、放弃修改，或返回继续编辑。",
+    "workspaceEditor.closeTabDirtyTitle": "关闭文件前保存修改？",
+    "workspaceEditor.closeTabDirtyDescription":
+      "此文件有未保存修改。你可以保存、放弃修改，或返回继续编辑。",
+    "workspaceEditor.reloadDirtyTitle": "重新加载前放弃当前修改？",
+    "workspaceEditor.reloadDirtyDescription": "重新加载会用磁盘版本替换当前编辑内容。",
 
     /* ── Settings Nav ── */
     "settings.navSystem": "系统设置",
@@ -432,7 +478,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryQuotaFull": "已满",
     "settings.memoryQuotaWarningMessage": "记忆用量已超过 80%，建议优先合并或删除低价值条目。",
     "settings.memoryQuotaNearLimitMessage": "记忆用量已超过 95%，新增记忆很快会被拒绝。",
-    "settings.memoryQuotaFullMessage": "当前 scope 已达到 500 条普通记忆上限；新增记忆会被拒绝，请先删除或合并旧条目。",
+    "settings.memoryQuotaFullMessage":
+      "当前 scope 已达到 500 条普通记忆上限；新增记忆会被拒绝，请先删除或合并旧条目。",
     "settings.memoryRefresh": "刷新",
     "settings.memoryOpenSettings": "记忆设置",
     "settings.memorySettingsTitle": "记忆设置",
@@ -484,18 +531,22 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryOrganizerNoModel": "请先在「记忆整理」中选择一个模型。",
     "settings.memoryOrganizerAlreadyRunning": "已有记忆整理正在运行，请稍后查看历史记录。",
     "settings.memoryOrganizerQueued": "记忆整理已加入队列，将在后台执行。",
-    "settings.memoryOrganizerQueuedRemote": "记忆整理已提交到桌面端后台队列；请保持桌面端运行以执行整理。",
+    "settings.memoryOrganizerQueuedRemote":
+      "记忆整理已提交到桌面端后台队列；请保持桌面端运行以执行整理。",
     "settings.memoryOrganizerHistory": "历史记录",
-    "settings.memoryOrganizerHistoryDescription": "查看每次记忆整理后的模型最终总结、统计与裁剪协议。",
+    "settings.memoryOrganizerHistoryDescription":
+      "查看每次记忆整理后的模型最终总结、统计与裁剪协议。",
     "settings.memoryOrganizerBackToList": "返回历史列表",
     "settings.memoryOrganizerHistoryAll": "全部状态",
     "settings.memoryOrganizerHistoryEmpty": "暂无记忆整理历史。",
     "settings.memoryOrganizerHistoryPending": "整理运行中，完成后会显示模型最终总结。",
     "settings.memoryOrganizerClearHistory": "清空历史记录",
     "settings.memoryOrganizerClearHistoryConfirmTitle": "清空记忆整理历史？",
-    "settings.memoryOrganizerClearHistoryConfirmDescription": "将删除所有已结束的整理历史记录；正在排队或运行中的任务会保留，避免中断当前整理。此操作不可撤销。",
+    "settings.memoryOrganizerClearHistoryConfirmDescription":
+      "将删除所有已结束的整理历史记录；正在排队或运行中的任务会保留，避免中断当前整理。此操作不可撤销。",
     "settings.memoryOrganizerHistoryCleared": "历史记录已清空。",
-    "settings.memoryOrganizerHistoryClearedActiveRetained": "历史记录已清空；正在排队或运行中的任务已保留。",
+    "settings.memoryOrganizerHistoryClearedActiveRetained":
+      "历史记录已清空；正在排队或运行中的任务已保留。",
     "settings.memoryOrganizerStatusPending": "排队中",
     "settings.memoryOrganizerStatusRunning": "运行中",
     "settings.memoryOrganizerStatusSucceeded": "成功",
@@ -519,7 +570,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryOrganizerClusterSummaries": "分组总结",
     "settings.memoryOrganizerTrimmedProtocol": "裁剪后的模型协议",
     "settings.memoryOrganizerManualPreview": "手动整理预览",
-    "settings.memoryOrganizerManualPreviewDescription": "默认选中客户端判定为安全的建议，确认后才会写入记忆。",
+    "settings.memoryOrganizerManualPreviewDescription":
+      "默认选中客户端判定为安全的建议，确认后才会写入记忆。",
     "settings.memoryOrganizerApplySelected": "应用选中建议",
     "settings.memoryOrganizerApplied": "选中建议已应用。",
     "settings.memoryOrganizerPartiallyApplied": "选中建议已部分应用；请查看失败项。",
@@ -606,7 +658,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.chinese": "简体中文",
     "settings.english": "English",
     "settings.executionMode": "执行模式",
-    "settings.executionModeDesc": "选择当前对话的运行方式。Chat 模式仅输出文本，Agent 模式允许模型调用工具执行操作。",
+    "settings.executionModeDesc":
+      "选择当前对话的运行方式。Chat 模式仅输出文本，Agent 模式允许模型调用工具执行操作。",
     "settings.chatMode": "Chat 模式",
     "settings.chatModeDesc": "纯文本对话，模型只输出文本与 Markdown",
     "settings.agentMode": "Agent 模式",
@@ -632,7 +685,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.workdirWarning": "Agent 模式需要先选择项目，否则无法执行文件工具。",
     "settings.workdirOpenFailed": "打开目录选择器失败：",
     "settings.systemTools": "自定义系统工具",
-    "settings.systemToolsDesc": "这里仅展示用户自定义的系统工具；选中的工具会在 Agent 模式下注册，供模型在对话中调用。",
+    "settings.systemToolsDesc":
+      "这里仅展示用户自定义的系统工具；选中的工具会在 Agent 模式下注册，供模型在对话中调用。",
     "settings.noSystemTools": "暂无可用的自定义系统工具",
 
     /* ── Settings Providers ── */
@@ -757,9 +811,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.cronPromptModelRequired": "请选择 Auto Prompt 要使用的模型。",
     "settings.cronPromptModelEmpty": "请先在供应商配置中至少启用一个模型。",
     "settings.cronPromptRequired": "请输入要执行的 Prompt 内容。",
-    "settings.cronPromptRunHint": "Auto Prompt 会在后台独立执行，不会进入主页面最近对话，只会将最终结论写入当前任务的日志列表。",
-    "settings.cronPromptAgentModeOnlyHint": "Auto Prompt 仅在系统执行模式为 Agent 模式或 Agent dev 模式时可运行。",
-    "settings.cronPromptAgentModeRequired": "请先将 系统设置 -> 执行模式 切换为 Agent 模式或 Agent dev 模式，再运行 Auto Prompt。",
+    "settings.cronPromptRunHint":
+      "Auto Prompt 会在后台独立执行，不会进入主页面最近对话，只会将最终结论写入当前任务的日志列表。",
+    "settings.cronPromptAgentModeOnlyHint":
+      "Auto Prompt 仅在系统执行模式为 Agent 模式或 Agent dev 模式时可运行。",
+    "settings.cronPromptAgentModeRequired":
+      "请先将 系统设置 -> 执行模式 切换为 Agent 模式或 Agent dev 模式，再运行 Auto Prompt。",
     "settings.cronPromptPlaceholder": "输入要执行的 Prompt 内容...",
     "settings.cronCommandList": "脚本",
     "settings.cronCommandHint": "输入普通 Shell 脚本，可多行",
@@ -827,7 +884,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.remoteGrpcPort": "gRPC 端口",
     "settings.remoteGrpcPortHint": "Gateway 上 gRPC 服务的监听端口，默认 50051",
     "settings.remoteGrpcEndpoint": "gRPC Endpoint",
-    "settings.remoteGrpcEndpointHint": "可选。Railway TCP Proxy 等场景可填写独立 gRPC 地址，留空则使用 Gateway 地址加 gRPC 端口。",
+    "settings.remoteGrpcEndpointHint":
+      "可选。Railway TCP Proxy 等场景可填写独立 gRPC 地址，留空则使用 Gateway 地址加 gRPC 端口。",
     "settings.remoteAuth": "身份认证",
     "settings.remoteToken": "访问令牌",
     "settings.remoteTokenPlaceholder": "输入与 Gateway 配置一致的 Token",
@@ -839,13 +897,16 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.remoteAutoReconnect": "自动重连",
     "settings.remoteAutoReconnectHint": "连接断开后自动尝试重新连接 Gateway",
     "settings.remoteWebTerminal": "允许 WebUI Terminal",
-    "settings.remoteWebTerminalHint": "由桌面端 Remote 设置控制。开启后，已登录 WebUI 可启动并控制本机项目终端。",
+    "settings.remoteWebTerminalHint":
+      "由桌面端 Remote 设置控制。开启后，已登录 WebUI 可启动并控制本机项目终端。",
     "settings.remoteWebGit": "允许 WebUI Git",
-    "settings.remoteWebGitHint": "由桌面端 Remote 设置控制。开启后，已登录 WebUI 可对本机项目执行分支、暂存、提交和同步操作。",
+    "settings.remoteWebGitHint":
+      "由桌面端 Remote 设置控制。开启后，已登录 WebUI 可对本机项目执行分支、暂存、提交和同步操作。",
     "settings.remoteHeartbeat": "心跳间隔",
     "settings.remoteHeartbeatUnit": "秒",
     "settings.remoteHeartbeatHint": "与 Gateway 之间的心跳检测间隔，用于维持连接和检测在线状态",
-    "settings.remoteInfoBanner": "启用后，本地 LiveAgent 将通过 gRPC 双向流连接云端 Gateway。你可以在浏览器中通过 WebUI 远程发送 Chat 消息、管理 Cron 任务和查看历史记录。所有工具执行仍在本地完成，远程端仅转发指令和结果。",
+    "settings.remoteInfoBanner":
+      "启用后，本地 LiveAgent 将通过 gRPC 双向流连接云端 Gateway。你可以在浏览器中通过 WebUI 远程发送 Chat 消息、管理 Cron 任务和查看历史记录。所有工具执行仍在本地完成，远程端仅转发指令和结果。",
 
     /* ── MCP Hub ── */
     "mcpHub.title": "MCP Servers",
@@ -913,7 +974,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.storeConfigureTitle": "配置 MCP Server",
     "mcpHub.storeConfigureSubtitle": "补全 {name} 的连接信息后添加到本地 MCP Servers",
     "mcpHub.storeConfigureRequiredTitle": "必填配置",
-    "mcpHub.storeConfigureRequiredDesc": "这些值会按 Registry 提供的目标写入 Env、Header、URL 或 Args。",
+    "mcpHub.storeConfigureRequiredDesc":
+      "这些值会按 Registry 提供的目标写入 Env、Header、URL 或 Args。",
     "mcpHub.storeConfigureSubmit": "添加到本地",
     "mcpHub.storeConfigureNameRequired": "请填写 Server Name",
     "mcpHub.storeConfigureCommandRequired": "请填写启动命令",
@@ -978,7 +1040,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsDisabledInChatMode":
       "Chat 模式下不启用技能。切换到 Agent 模式后，才会恢复扫描、选择和注入能力。",
     "settings.skillsNotFound": "未发现任何技能",
-    "settings.skillsNotFoundHint": "在应用 Skills 目录中添加 skill.json、SKILL.md 或 README.md 文件",
+    "settings.skillsNotFoundHint":
+      "在应用 Skills 目录中添加 skill.json、SKILL.md 或 README.md 文件",
     "settings.skillsRescan": "重新扫描",
     "settings.skillsSearch": "搜索技能...",
     "settings.skillsNoMatch": "没有匹配「{filter}」的技能",
@@ -1013,7 +1076,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsStorePreviewDownloads": "下载",
     "settings.skillsStorePreviewStars": "星标",
     "settings.skillsStorePreviewInstalls": "安装",
-    "settings.skillsStorePreviewDetailUnavailable": "ClawHub 详情暂不可用，已显示列表中的基础信息。",
+    "settings.skillsStorePreviewDetailUnavailable":
+      "ClawHub 详情暂不可用，已显示列表中的基础信息。",
     "settings.skillsStorePreviewMetadata": "信息",
     "settings.skillsStorePreviewOwner": "作者",
     "settings.skillsStorePreviewVersion": "版本",
@@ -1126,12 +1190,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceRename": "Rename",
     "chat.workspaceRemove": "Remove workspace",
     "chat.workspaceBrowseInFileTree": "Browse in File Tree",
-    "chat.workspaceRemoveConfirm": "Remove \"{name}\"?",
-    "chat.workspaceRemoveRunning": "A background task is running, so this workspace cannot be removed yet.",
+    "chat.workspaceRemoveConfirm": 'Remove "{name}"?',
+    "chat.workspaceRemoveRunning":
+      "A background task is running, so this workspace cannot be removed yet.",
     "chat.workspaceRemoveDescription":
       "This deletes conversations under the workspace, but it does not delete the folder.",
     "chat.exitConfirmRunningLabel": "Running Terminal sessions",
-    "chat.workspaceRemoveTerminalDescription": "Deleting the project will close these Terminal processes.",
+    "chat.workspaceRemoveTerminalDescription":
+      "Deleting the project will close these Terminal processes.",
     "chat.workspaceRemoveConfirmContinue": "Delete project",
     "chat.workspaceRemoveConfirmClose": "Close project deletion confirmation",
     "chat.conversationMore": "More actions",
@@ -1140,7 +1206,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.conversationRename": "Rename",
     "chat.conversationShare": "Share",
     "chat.conversationDelete": "Delete conversation",
-    "chat.conversationDeleteConfirm": "Delete \"{title}\"?",
+    "chat.conversationDeleteConfirm": 'Delete "{title}"?',
     "chat.conversationDeleteWarning": "This cannot be undone",
     "chat.statusPinned": "Pinned",
     "chat.statusShared": "Shared",
@@ -1173,7 +1239,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.runtime.reasoning": "Thinking effort",
     "chat.emptyRound": "(No reply)",
     "chat.inputHint": "Type a message, @ to mention files, Enter to send, Shift+Enter for newline",
-    "chat.inputHintWithSkills": "Type a message, @ to mention files, $ to reference Skills, Enter to send, Shift+Enter for newline",
+    "chat.inputHintWithSkills":
+      "Type a message, @ to mention files, $ to reference Skills, Enter to send, Shift+Enter for newline",
     "chat.compactingContext": "Compressing context",
     "chat.compactingContextWait": "Compressing context, please wait...",
     "chat.editMessage": "Edit Message",
@@ -1288,7 +1355,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "sharedHistory.refresh": "Refresh",
     "sharedHistory.emptyFilteredTitle": "No shared conversations match",
     "sharedHistory.emptyTitle": "No shared conversations yet",
-    "sharedHistory.emptyFilteredDesc": "Try another keyword to search titles, models, or conversation paths.",
+    "sharedHistory.emptyFilteredDesc":
+      "Try another keyword to search titles, models, or conversation paths.",
     "sharedHistory.emptyDesc":
       "Shared conversations will appear here so you can review link state and disable public access.",
     "sharedHistory.timeUnknown": "Time unknown",
@@ -1329,7 +1397,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.confirmClose": "Confirm close",
     "projectTools.closeTerminal": "Close terminal",
     "projectTools.confirmCloseTerminal": "Confirm close terminal",
-    "projectTools.closeRunningTerminal": "Close running terminal \"{title}\"?",
+    "projectTools.closeRunningTerminal": 'Close running terminal "{title}"?',
     "projectTools.closeFileTree": "Close File Tree",
     "projectTools.closeGitReview": "Close Git Review",
     "projectTools.gitReview.viewChanges": "View Changes",
@@ -1338,13 +1406,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.unstageChanges": "Unstage Changes",
     "projectTools.gitReview.addToGitignore": "Add to .gitignore",
     "projectTools.gitReview.revealInFileTree": "Reveal in File Tree",
-    "projectTools.gitReview.discardConfirm": "Discard local changes in \"{path}\"? This cannot be undone.",
+    "projectTools.gitReview.discardConfirm":
+      'Discard local changes in "{path}"? This cannot be undone.',
     "projectTools.gitReview.changesActions": "Changes Actions",
     "projectTools.gitReview.stageAllChanges": "Stage All Changes",
     "projectTools.gitReview.unstageAllChanges": "Unstage All Changes",
     "projectTools.gitReview.discardAllChanges": "Discard All Changes",
     "projectTools.gitReview.refreshChanges": "Refresh Changes",
-    "projectTools.gitReview.discardAllConfirm": "Discard all local changes in this repository? Untracked files will also be deleted. This cannot be undone.",
+    "projectTools.gitReview.discardAllConfirm":
+      "Discard all local changes in this repository? Untracked files will also be deleted. This cannot be undone.",
     "projectTools.gitReview.largeDiff": "Large",
     "projectTools.gitReview.diffPreviewTruncated": "... file diff preview truncated ...",
     "projectTools.gitReview.noDiff": "No diff.",
@@ -1366,24 +1436,31 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.pullSuccessMessage": "The current branch is synced with the remote.",
     "projectTools.gitReview.pullFailedTitle": "Pull failed",
     "projectTools.gitReview.pushSuccessTitle": "Push complete",
-    "projectTools.gitReview.pushSuccessMessage": "The current branch has been uploaded to the remote.",
+    "projectTools.gitReview.pushSuccessMessage":
+      "The current branch has been uploaded to the remote.",
     "projectTools.gitReview.pushFailedTitle": "Push failed",
     "projectTools.gitReview.commitSuccessTitle": "Commit complete",
-    "projectTools.gitReview.commitSuccessMessage": "A new local commit was created and the change list was refreshed.",
+    "projectTools.gitReview.commitSuccessMessage":
+      "A new local commit was created and the change list was refreshed.",
     "projectTools.gitReview.commitFailedTitle": "Commit failed",
     "projectTools.gitReview.createBranchSuccessTitle": "Branch created",
-    "projectTools.gitReview.createBranchSuccessMessage": "Created and switched to a new branch from the selected commit.",
+    "projectTools.gitReview.createBranchSuccessMessage":
+      "Created and switched to a new branch from the selected commit.",
     "projectTools.gitReview.createBranchFailedTitle": "Create branch failed",
     "projectTools.gitReview.discardSuccessTitle": "Changes discarded",
     "projectTools.gitReview.discardSuccessMessage": "The selected file changes were restored.",
     "projectTools.gitReview.discardFailedTitle": "Discard failed",
     "projectTools.gitReview.discardAllSuccessTitle": "All changes discarded",
-    "projectTools.gitReview.discardAllSuccessMessage": "Working tree changes and untracked files were cleaned.",
+    "projectTools.gitReview.discardAllSuccessMessage":
+      "Working tree changes and untracked files were cleaned.",
     "projectTools.gitReview.discardAllFailedTitle": "Discard all failed",
     "projectTools.gitReview.remoteSetupTitle": "Set Remote Repository",
-    "projectTools.gitReview.remoteSetupDescriptionFetch": "Remote repository is not configured. Enter a repository URL to save it as origin and fetch remote branches.",
-    "projectTools.gitReview.remoteSetupDescriptionPull": "The current branch has no upstream and no origin remote. Enter a repository URL to save it as origin and pull from the same-named remote branch.",
-    "projectTools.gitReview.remoteSetupDescriptionPush": "The current branch has no upstream and no origin remote. Enter a repository URL to save it as origin and push the current branch.",
+    "projectTools.gitReview.remoteSetupDescriptionFetch":
+      "Remote repository is not configured. Enter a repository URL to save it as origin and fetch remote branches.",
+    "projectTools.gitReview.remoteSetupDescriptionPull":
+      "The current branch has no upstream and no origin remote. Enter a repository URL to save it as origin and pull from the same-named remote branch.",
+    "projectTools.gitReview.remoteSetupDescriptionPush":
+      "The current branch has no upstream and no origin remote. Enter a repository URL to save it as origin and push the current branch.",
     "projectTools.gitReview.remoteUrl": "Repository URL",
     "projectTools.gitReview.remoteUrlPlaceholder": "https://github.com/owner/repo.git",
     "projectTools.gitReview.remoteUrlRequired": "Enter a repository URL.",
@@ -1400,6 +1477,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.labelBase": "Base",
     "projectTools.gitReview.labelAhead": "Ahead",
     "projectTools.gitReview.labelBehind": "Behind",
+    "projectTools.gitReview.outgoingChanges": "Outgoing Changes",
+    "projectTools.gitReview.incomingChanges": "Incoming Changes",
     "projectTools.gitReview.labelStaged": "Staged",
     "projectTools.gitReview.labelUnstaged": "Unstaged",
     "projectTools.gitReview.labelUntracked": "Untracked",
@@ -1422,6 +1501,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.listPane": "List view",
     "projectTools.gitReview.detailPane": "Detail view",
     "projectTools.gitReview.commitHistoryTitle": "Commit History",
+    "projectTools.gitReview.revealCurrentHistoryItem": "Go to Current History Item",
     "projectTools.gitReview.noCommitHistory": "No commit history.",
     "projectTools.gitReview.loadMoreCommits": "Load more",
     "projectTools.gitReview.loadingMoreCommits": "Loading more...",
@@ -1430,7 +1510,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.openOnGithub": "Open on GitHub",
     "projectTools.gitReview.createBranch": "Create Branch",
     "projectTools.gitReview.createBranchFromCommitTitle": "Create Branch from Commit",
-    "projectTools.gitReview.createBranchFromCommitDescription": "Create and switch to a new branch from {sha}: {subject}",
+    "projectTools.gitReview.createBranchFromCommitDescription":
+      "Create and switch to a new branch from {sha}: {subject}",
     "projectTools.gitReview.branchName": "Branch name",
     "projectTools.gitReview.branchNamePlaceholder": "commit/abcdef0",
     "projectTools.gitReview.branchNameRequired": "Enter a branch name.",
@@ -1448,7 +1529,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.copyFilePath": "Copy File Path",
     "projectTools.gitReview.refreshHistory": "Refresh Commit History",
     "projectTools.gitReview.selectCommitToViewFiles": "Select a commit to view changed files.",
-    "projectTools.gitReview.selectCommitFileToViewDiff": "Select a file in the commit to view its diff.",
+    "projectTools.gitReview.selectCommitFileToViewDiff":
+      "Select a file in the commit to view its diff.",
     "projectTools.gitReview.commitFiles": "Changed Files",
     "projectTools.gitReview.commitDiff": "Commit Diff",
     "projectTools.gitReview.remoteRef": "remote",
@@ -1467,7 +1549,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "git.branchSelector.createNewBranch": "Create New Branch",
     "git.branchSelector.initRepository": "Initialize Repository",
     "git.branchSelector.initRepositoryTitle": "Initialize Git Repository",
-    "git.branchSelector.initRepositoryDescription": "Create .git in the current directory and optionally save local Git user details.",
+    "git.branchSelector.initRepositoryDescription":
+      "Create .git in the current directory and optionally save local Git user details.",
     "git.branchSelector.targetDirectory": "Target Directory",
     "git.branchSelector.initialBranch": "Initial Branch",
     "git.branchSelector.initialBranchRequired": "Enter an initial branch name.",
@@ -1482,7 +1565,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.fileTree.searchFailed": "Search failed",
     "projectTools.fileTree.nameRequired": "Name is required",
     "projectTools.fileTree.actionFailed": "Action failed",
-    "projectTools.fileTree.deleteConfirm": "Delete \"{path}\"?",
+    "projectTools.fileTree.deleteConfirm": 'Delete "{path}"?',
     "projectTools.fileTree.deleteConfirmDescription":
       "This path will be deleted from disk. This action cannot be undone.",
     "projectTools.fileTree.deleteConfirmClose": "Close delete confirmation",
@@ -1499,11 +1582,49 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.fileTree.resultsTruncated": "Results truncated",
     "projectTools.fileTree.newFile": "New File",
     "projectTools.fileTree.newFolder": "New Folder",
+    "projectTools.fileTree.openFile": "Open File",
     "projectTools.fileTree.rename": "Rename",
     "projectTools.fileTree.delete": "Delete",
     "projectTools.fileTree.copyPath": "Copy Path",
     "projectTools.fileTree.copiedPath": "Copied Path",
     "projectTools.fileTree.insertReference": "Insert Reference",
+    "workspaceEditor.loading": "Loading editor...",
+    "workspaceEditor.title": "Code Editor",
+    "workspaceEditor.empty": "No file open",
+    "workspaceEditor.emptyHint": "Double-click an editable file in the file tree",
+    "workspaceEditor.opening": "Opening file...",
+    "workspaceEditor.save": "Save",
+    "workspaceEditor.saveAll": "Save All",
+    "workspaceEditor.find": "Find",
+    "workspaceEditor.replace": "Replace",
+    "workspaceEditor.reload": "Reload",
+    "workspaceEditor.reloadFromDisk": "Reload from disk",
+    "workspaceEditor.close": "Close editor",
+    "workspaceEditor.closeTab": "Close file",
+    "workspaceEditor.context.undo": "Undo",
+    "workspaceEditor.context.redo": "Redo",
+    "workspaceEditor.context.cut": "Cut",
+    "workspaceEditor.context.copy": "Copy",
+    "workspaceEditor.context.paste": "Paste",
+    "workspaceEditor.context.selectAll": "Select All",
+    "workspaceEditor.noFile": "No file",
+    "workspaceEditor.lines": "lines",
+    "workspaceEditor.unsaved": "Unsaved",
+    "workspaceEditor.openFailed": "Failed to open file",
+    "workspaceEditor.saveFailed": "Save failed",
+    "workspaceEditor.reloadFailed": "Reload failed",
+    "workspaceEditor.conflictMessage": "The file changed on disk. Reload it before saving.",
+    "workspaceEditor.cancel": "Cancel",
+    "workspaceEditor.discard": "Discard",
+    "workspaceEditor.closeDirtyTitle": "Save changes before closing the editor?",
+    "workspaceEditor.closeDirtyDescription":
+      "Some files have unsaved changes. Save all changes, discard them, or return to editing.",
+    "workspaceEditor.closeTabDirtyTitle": "Save changes before closing this file?",
+    "workspaceEditor.closeTabDirtyDescription":
+      "This file has unsaved changes. Save it, discard changes, or return to editing.",
+    "workspaceEditor.reloadDirtyTitle": "Discard current changes before reloading?",
+    "workspaceEditor.reloadDirtyDescription":
+      "Reloading replaces the current editor contents with the version on disk.",
 
     /* ── Settings Nav ── */
     "settings.navSystem": "System",
@@ -1525,9 +1646,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryQuotaWarning": "Near limit",
     "settings.memoryQuotaNearLimit": "Almost full",
     "settings.memoryQuotaFull": "Full",
-    "settings.memoryQuotaWarningMessage": "Memory usage is above 80%. Prefer merging or deleting low-value entries.",
-    "settings.memoryQuotaNearLimitMessage": "Memory usage is above 95%. New memories will soon be rejected.",
-    "settings.memoryQuotaFullMessage": "This scope has reached the 500 ordinary-memory limit. New memories will be rejected until old entries are deleted or merged.",
+    "settings.memoryQuotaWarningMessage":
+      "Memory usage is above 80%. Prefer merging or deleting low-value entries.",
+    "settings.memoryQuotaNearLimitMessage":
+      "Memory usage is above 95%. New memories will soon be rejected.",
+    "settings.memoryQuotaFullMessage":
+      "This scope has reached the 500 ordinary-memory limit. New memories will be rejected until old entries are deleted or merged.",
     "settings.memoryRefresh": "Refresh",
     "settings.memoryOpenSettings": "Memory settings",
     "settings.memorySettingsTitle": "Memory settings",
@@ -1541,7 +1665,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memorySettingsCapacity": "Capacity",
     "settings.memorySettingsReview": "Review",
     "settings.memorySettingsDangerZone": "Danger zone",
-    "settings.memorySettingsWipeDescription": "Wipe moves existing memories to quarantine and rebuilds an empty memory store.",
+    "settings.memorySettingsWipeDescription":
+      "Wipe moves existing memories to quarantine and rebuilds an empty memory store.",
     "settings.memoryDriverModels": "Driver models",
     "settings.memoryOrganizerModel": "Memory organization",
     "settings.memorySummaryModel": "Conversation summary",
@@ -1577,20 +1702,27 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryOrganizerNextRun": "Next automatic run:",
     "settings.memoryOrganizerRunNow": "Organize now",
     "settings.memoryOrganizerNoModel": "Choose a memory organization model first.",
-    "settings.memoryOrganizerAlreadyRunning": "Memory organization is already running. Check history again shortly.",
-    "settings.memoryOrganizerQueued": "Memory organization has been queued and will run in the background.",
-    "settings.memoryOrganizerQueuedRemote": "Memory organization has been submitted to the desktop background queue. Keep the desktop app running to execute it.",
+    "settings.memoryOrganizerAlreadyRunning":
+      "Memory organization is already running. Check history again shortly.",
+    "settings.memoryOrganizerQueued":
+      "Memory organization has been queued and will run in the background.",
+    "settings.memoryOrganizerQueuedRemote":
+      "Memory organization has been submitted to the desktop background queue. Keep the desktop app running to execute it.",
     "settings.memoryOrganizerHistory": "History",
-    "settings.memoryOrganizerHistoryDescription": "Review each memory organization run's final model summary, stats, and trimmed protocol.",
+    "settings.memoryOrganizerHistoryDescription":
+      "Review each memory organization run's final model summary, stats, and trimmed protocol.",
     "settings.memoryOrganizerBackToList": "Back to history list",
     "settings.memoryOrganizerHistoryAll": "All statuses",
     "settings.memoryOrganizerHistoryEmpty": "No memory organization history yet.",
-    "settings.memoryOrganizerHistoryPending": "Run in progress. The final model summary will appear after completion.",
+    "settings.memoryOrganizerHistoryPending":
+      "Run in progress. The final model summary will appear after completion.",
     "settings.memoryOrganizerClearHistory": "Clear history",
     "settings.memoryOrganizerClearHistoryConfirmTitle": "Clear memory organization history?",
-    "settings.memoryOrganizerClearHistoryConfirmDescription": "This deletes all finished memory organization history records. Pending or running tasks are retained so the current organization pass is not interrupted. This action cannot be undone.",
+    "settings.memoryOrganizerClearHistoryConfirmDescription":
+      "This deletes all finished memory organization history records. Pending or running tasks are retained so the current organization pass is not interrupted. This action cannot be undone.",
     "settings.memoryOrganizerHistoryCleared": "History has been cleared.",
-    "settings.memoryOrganizerHistoryClearedActiveRetained": "History has been cleared; pending or running tasks were retained.",
+    "settings.memoryOrganizerHistoryClearedActiveRetained":
+      "History has been cleared; pending or running tasks were retained.",
     "settings.memoryOrganizerStatusPending": "Pending",
     "settings.memoryOrganizerStatusRunning": "Running",
     "settings.memoryOrganizerStatusSucceeded": "Succeeded",
@@ -1614,11 +1746,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryOrganizerClusterSummaries": "Cluster summaries",
     "settings.memoryOrganizerTrimmedProtocol": "Trimmed model protocol",
     "settings.memoryOrganizerManualPreview": "Manual preview",
-    "settings.memoryOrganizerManualPreviewDescription": "Safe client-validated suggestions are selected by default and are written only after confirmation.",
+    "settings.memoryOrganizerManualPreviewDescription":
+      "Safe client-validated suggestions are selected by default and are written only after confirmation.",
     "settings.memoryOrganizerApplySelected": "Apply selected",
     "settings.memoryOrganizerApplied": "Selected suggestions have been applied.",
-    "settings.memoryOrganizerPartiallyApplied": "Selected suggestions were partially applied; review failed items.",
-    "settings.memoryOrganizerApplyFailed": "Selected suggestions could not be written; review failed items.",
+    "settings.memoryOrganizerPartiallyApplied":
+      "Selected suggestions were partially applied; review failed items.",
+    "settings.memoryOrganizerApplyFailed":
+      "Selected suggestions could not be written; review failed items.",
     "settings.memoryOrganizerSelectAtLeastOne": "Select at least one suggestion.",
     "settings.memoryOrganizerDecisionDelete": "Delete",
     "settings.memoryOrganizerDecisionUpsert": "Rewrite",
@@ -1679,7 +1814,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.memoryAppendBlockPlaceholder": "Append memory block",
     "settings.memoryEmptyBody": "<empty>",
     "settings.memoryWipeConfirmTitle": "Wipe all memories?",
-    "settings.memoryWipeConfirmDescription": "Existing memories will be moved to quarantine and the memory store will be rebuilt empty.",
+    "settings.memoryWipeConfirmDescription":
+      "Existing memories will be moved to quarantine and the memory store will be rebuilt empty.",
     "settings.memoryWipeAll": "Wipe all",
     "settings.memorySelectEntry": "Select a memory entry.",
 
@@ -1692,7 +1828,8 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     /* ── Settings System ── */
     "settings.appearance": "Appearance",
-    "settings.appearanceDesc": "Choose the color theme for the application. Your preference will be saved automatically.",
+    "settings.appearanceDesc":
+      "Choose the color theme for the application. Your preference will be saved automatically.",
     "settings.light": "Light",
     "settings.lightDesc": "Bright and clean light interface",
     "settings.dark": "Dark",
@@ -1701,7 +1838,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.chinese": "简体中文",
     "settings.english": "English",
     "settings.executionMode": "Execution Mode",
-    "settings.executionModeDesc": "Choose how the current conversation runs. Chat mode outputs text only; Agent mode allows the model to call tools.",
+    "settings.executionModeDesc":
+      "Choose how the current conversation runs. Chat mode outputs text only; Agent mode allows the model to call tools.",
     "settings.chatMode": "Chat Mode",
     "settings.chatModeDesc": "Plain text conversation, model outputs text and Markdown only",
     "settings.agentMode": "Agent Mode",
@@ -1711,7 +1849,8 @@ export const translations: Record<Locale, Record<string, string>> = {
       "Same as Agent mode, but also writes each streaming request and response line-by-line to ~/.liveagent/debug/<conversationId>.jsonl",
     "settings.workdir": "Project Folder",
     "settings.workdirRequired": "Required",
-    "settings.workdirDesc": "Choose this project's folder. File tools read/write/search within the selected project directory.",
+    "settings.workdirDesc":
+      "Choose this project's folder. File tools read/write/search within the selected project directory.",
     "settings.workdirPlaceholder": "Select or enter a project folder path...",
     "settings.selectWorkdir": "Select Folder",
     "settings.workdirPickerTitle": "Select Project Folder",
@@ -1727,7 +1866,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.workdirWarning": "Agent mode requires selecting a project before file tools can run.",
     "settings.workdirOpenFailed": "Failed to open directory picker: ",
     "settings.systemTools": "Custom System Tools",
-    "settings.systemToolsDesc": "Only user-defined system tools are shown here. Selected tools are registered in Agent mode and can be called by the model during conversation.",
+    "settings.systemToolsDesc":
+      "Only user-defined system tools are shown here. Selected tools are registered in Agent mode and can be called by the model during conversation.",
     "settings.noSystemTools": "No custom system tools available",
 
     /* ── Settings Providers ── */
@@ -1789,8 +1929,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.conversationTitleGeneration": "Conversation title generation",
     "settings.conversationTitleModel": "Title generation model",
     "settings.conversationTitleModelFollowCurrent": "Use current chat model",
-    "settings.conversationTitleModelHint": "When unselected, title generation uses the model from the current chat.",
-    "settings.customSettingsModelEmpty": "No active models are configured for the current providers.",
+    "settings.conversationTitleModelHint":
+      "When unselected, title generation uses the model from the current chat.",
+    "settings.customSettingsModelEmpty":
+      "No active models are configured for the current providers.",
 
     /* ── Settings Prompt ── */
     "settings.agentsTitle": "Prompt",
@@ -1800,7 +1942,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.agentsName": "Name",
     "settings.agentsNamePlaceholder": "e.g. Code Review Assistant",
     "settings.agentsDescription": "Description",
-    "settings.agentsDescriptionPlaceholder": "Briefly describe what this global prompt template is for",
+    "settings.agentsDescriptionPlaceholder":
+      "Briefly describe what this global prompt template is for",
     "settings.agentsTags": "Tags",
     "settings.agentsTagsPlaceholder": "e.g. review, writing, global prompt",
     "settings.agentsPrompt": "Prompt",
@@ -1809,7 +1952,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.agentsActive": "active",
     "settings.agentsActiveLabel": "Active",
     "settings.agentsNoTemplates": "No global prompt templates yet",
-    "settings.agentsNoTemplatesHint": "Create reusable prompt templates to quickly apply common Agent instructions in your chats",
+    "settings.agentsNoTemplatesHint":
+      "Create reusable prompt templates to quickly apply common Agent instructions in your chats",
     "settings.agentsNoDescription": "No description",
     "settings.agentsNoTags": "No tags",
     "settings.agentsShowPrompt": "View Prompt",
@@ -1822,7 +1966,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.cronDesc": "Configure and manage automated scheduled tasks",
     "settings.cronAdd": "Add Task",
     "settings.cronEmpty": "No scheduled tasks",
-    "settings.cronEmptyDesc": "Click \"Add Task\" to create your first scheduled task",
+    "settings.cronEmptyDesc": 'Click "Add Task" to create your first scheduled task',
     "settings.cronCount": "tasks",
     "settings.cronTaskName": "Task Name",
     "settings.cronTaskNamePlaceholder": "Enter task name",
@@ -1838,7 +1982,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.cronRemainingExecutionsUnlimitedShort": "unlimited",
     "settings.cronRemainingExecutionsUnit": "remaining",
     "settings.cronRemainingExecutionsUnitShort": "left",
-    "settings.cronRemainingExecutionsEditRequired": "Run count is exhausted. Edit this task and change the run count first.",
+    "settings.cronRemainingExecutionsEditRequired":
+      "Run count is exhausted. Edit this task and change the run count first.",
     "settings.cronTaskType": "Task Type",
     "settings.cronTypeBash": "Shell Script",
     "settings.cronTypeBashHint": "Run a multi-line script with the platform shell",
@@ -1852,9 +1997,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.cronPromptModelRequired": "Select the model for this Auto Prompt task.",
     "settings.cronPromptModelEmpty": "Enable at least one model in provider settings first.",
     "settings.cronPromptRequired": "Enter the prompt content to execute.",
-    "settings.cronPromptRunHint": "Auto Prompt runs in the background, does not appear in recent conversations, and only writes the final conclusion to this task's log list.",
-    "settings.cronPromptAgentModeOnlyHint": "Auto Prompt runs only when System -> Execution Mode is Agent Mode or Agent Dev Mode.",
-    "settings.cronPromptAgentModeRequired": "Switch System -> Execution Mode to Agent Mode or Agent Dev Mode before running Auto Prompt.",
+    "settings.cronPromptRunHint":
+      "Auto Prompt runs in the background, does not appear in recent conversations, and only writes the final conclusion to this task's log list.",
+    "settings.cronPromptAgentModeOnlyHint":
+      "Auto Prompt runs only when System -> Execution Mode is Agent Mode or Agent Dev Mode.",
+    "settings.cronPromptAgentModeRequired":
+      "Switch System -> Execution Mode to Agent Mode or Agent Dev Mode before running Auto Prompt.",
     "settings.cronPromptPlaceholder": "Enter the prompt content to execute...",
     "settings.cronCommandList": "Script",
     "settings.cronCommandHint": "Enter a regular Shell script. Multiple lines are supported.",
@@ -1862,13 +2010,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.cronCommandRequired": "Script is required.",
     "settings.cronHttpRequests": "HTTP Requests",
     "settings.cronRequestsCount": "requests",
-    "settings.cronHttpHeadersInvalid": "Headers must be a JSON object and values will be stringified.",
+    "settings.cronHttpHeadersInvalid":
+      "Headers must be a JSON object and values will be stringified.",
     "settings.cronHttpBodyInvalid": "Body must be valid JSON.",
     "settings.cronHttpRequestRequired": "At least one HTTP request is required.",
     "settings.cronHttpUrlRequired": "Request URL is required",
     "settings.cronHttpUrlInvalid": "Request URL is invalid",
     "settings.cronHttpBodyDisabled": "This HTTP method does not support a request body here",
-    "settings.cronPromptUnavailable": "Auto Prompt is not implemented yet. Only Bash and HTTP tasks are supported now.",
+    "settings.cronPromptUnavailable":
+      "Auto Prompt is not implemented yet. Only Bash and HTTP tasks are supported now.",
     "settings.cronView": "View",
     "settings.cronEdit": "Edit",
     "settings.cronDelete": "Delete",
@@ -1918,29 +2068,37 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.remoteDisable": "Disable remote access",
     "settings.remoteGatewayConnection": "Gateway Connection",
     "settings.remoteGatewayUrl": "Gateway URL",
-    "settings.remoteGatewayUrlHint": "HTTPS address of the cloud Gateway for WebUI access and gRPC connection",
+    "settings.remoteGatewayUrlHint":
+      "HTTPS address of the cloud Gateway for WebUI access and gRPC connection",
     "settings.remoteGrpcPort": "gRPC Port",
     "settings.remoteGrpcPortHint": "The gRPC service port on the Gateway, default 50051",
     "settings.remoteGrpcEndpoint": "gRPC Endpoint",
-    "settings.remoteGrpcEndpointHint": "Optional. Use a separate gRPC address for Railway TCP Proxy or similar hosts. Leave empty to use the Gateway URL plus gRPC port.",
+    "settings.remoteGrpcEndpointHint":
+      "Optional. Use a separate gRPC address for Railway TCP Proxy or similar hosts. Leave empty to use the Gateway URL plus gRPC port.",
     "settings.remoteAuth": "Authentication",
     "settings.remoteToken": "Access Token",
     "settings.remoteTokenPlaceholder": "Enter the token matching Gateway config",
-    "settings.remoteTokenHint": "Must match the --token argument used when starting the Gateway, used for mutual authentication",
+    "settings.remoteTokenHint":
+      "Must match the --token argument used when starting the Gateway, used for mutual authentication",
     "settings.remoteAgentId": "Agent ID",
     "settings.remoteAgentIdPlaceholder": "e.g. macbook-pro",
-    "settings.remoteAgentIdHint": "Unique identifier for this Agent shown in WebUI. Leave empty to use hostname",
+    "settings.remoteAgentIdHint":
+      "Unique identifier for this Agent shown in WebUI. Leave empty to use hostname",
     "settings.remoteAdvanced": "Advanced Options",
     "settings.remoteAutoReconnect": "Auto Reconnect",
     "settings.remoteAutoReconnectHint": "Automatically reconnect to Gateway after connection drops",
     "settings.remoteWebTerminal": "Allow WebUI Terminal",
-    "settings.remoteWebTerminalHint": "Controlled by the desktop Remote settings. When enabled, authenticated WebUI clients can start and control local project terminals.",
+    "settings.remoteWebTerminalHint":
+      "Controlled by the desktop Remote settings. When enabled, authenticated WebUI clients can start and control local project terminals.",
     "settings.remoteWebGit": "Allow WebUI Git",
-    "settings.remoteWebGitHint": "Controlled by the desktop Remote settings. When enabled, authenticated WebUI clients can run branch, stage, commit, and sync operations on local projects.",
+    "settings.remoteWebGitHint":
+      "Controlled by the desktop Remote settings. When enabled, authenticated WebUI clients can run branch, stage, commit, and sync operations on local projects.",
     "settings.remoteHeartbeat": "Heartbeat Interval",
     "settings.remoteHeartbeatUnit": "seconds",
-    "settings.remoteHeartbeatHint": "Heartbeat interval with Gateway for maintaining connection and detecting online status",
-    "settings.remoteInfoBanner": "When enabled, the local LiveAgent connects to the cloud Gateway via gRPC bidirectional streaming. You can remotely send Chat messages, manage Cron tasks, and view history through the WebUI in your browser. All tool execution remains local — the remote end only relays commands and results.",
+    "settings.remoteHeartbeatHint":
+      "Heartbeat interval with Gateway for maintaining connection and detecting online status",
+    "settings.remoteInfoBanner":
+      "When enabled, the local LiveAgent connects to the cloud Gateway via gRPC bidirectional streaming. You can remotely send Chat messages, manage Cron tasks, and view history through the WebUI in your browser. All tool execution remains local — the remote end only relays commands and results.",
 
     /* ── MCP Hub ── */
     "mcpHub.title": "MCP Servers",
@@ -2006,9 +2164,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.storeManualOnly": "Manual",
     "mcpHub.storeConfigure": "Configure",
     "mcpHub.storeConfigureTitle": "Configure MCP Server",
-    "mcpHub.storeConfigureSubtitle": "Fill in connection details for {name} and add it to local MCP Servers",
+    "mcpHub.storeConfigureSubtitle":
+      "Fill in connection details for {name} and add it to local MCP Servers",
     "mcpHub.storeConfigureRequiredTitle": "Required Config",
-    "mcpHub.storeConfigureRequiredDesc": "Values are written to Env, Header, URL, or Args according to the Registry target.",
+    "mcpHub.storeConfigureRequiredDesc":
+      "Values are written to Env, Header, URL, or Args according to the Registry target.",
     "mcpHub.storeConfigureSubmit": "Add locally",
     "mcpHub.storeConfigureNameRequired": "Server Name is required",
     "mcpHub.storeConfigureCommandRequired": "Command is required",
@@ -2033,7 +2193,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.storePreviewRemote": "Remote",
     "mcpHub.storePreviewLocal": "Local",
     "mcpHub.storePreviewLoadingDetail": "Loading details",
-    "mcpHub.storePreviewDetailUnavailable": "Details are unavailable. Showing the basic list information.",
+    "mcpHub.storePreviewDetailUnavailable":
+      "Details are unavailable. Showing the basic list information.",
     "mcpHub.storePreviewTags": "Tags",
     "mcpHub.storePreviewInstallPreview": "Install Preview",
     "mcpHub.storePreviewRequiredConfig": "Required Config",
@@ -2055,7 +2216,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsHubToggleDisable": "Disable Skills",
     "settings.skillsHubInstalledTab": "Installed",
     "settings.skillsHubStoreTab": "Skills Store",
-    "settings.skillsHubScanning": "Scanning the fixed Skills directory and syncing available conversation capabilities",
+    "settings.skillsHubScanning":
+      "Scanning the fixed Skills directory and syncing available conversation capabilities",
     "settings.skillsHubDeleteSkill": "Delete Skill",
     "settings.skillsHubLoadFailed": "Failed to load skills",
     "settings.skillsHubStoreLoadFailed": "Failed to load Skills Store",
@@ -2069,13 +2231,16 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsAlwaysOn": "Built-in",
     "settings.skillsScan": "Scan",
     "settings.skillsScanning": "Scanning",
-    "settings.skillsDisabledHint": "Skills is off. Enable it to inject selected skills into the system prompt.",
-    "settings.skillsDisabledInChatMode": "Skills stays disabled in Chat mode. Switch to Agent mode to scan, select, and inject skills again.",
+    "settings.skillsDisabledHint":
+      "Skills is off. Enable it to inject selected skills into the system prompt.",
+    "settings.skillsDisabledInChatMode":
+      "Skills stays disabled in Chat mode. Switch to Agent mode to scan, select, and inject skills again.",
     "settings.skillsNotFound": "No Skills found",
-    "settings.skillsNotFoundHint": "Add skill.json, SKILL.md, or README.md files to the Skills directory",
+    "settings.skillsNotFoundHint":
+      "Add skill.json, SKILL.md, or README.md files to the Skills directory",
     "settings.skillsRescan": "Rescan",
     "settings.skillsSearch": "Search Skills...",
-    "settings.skillsNoMatch": "No skills matching \"{filter}\"",
+    "settings.skillsNoMatch": 'No skills matching "{filter}"',
     "settings.skillsStoreSearch": "Search ClawHub Skills",
     "settings.skillsStoreSortMostDownloaded": "Most Downloaded",
     "settings.skillsStoreSortMostStarred": "Most Starred",
@@ -2107,7 +2272,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsStorePreviewDownloads": "Downloads",
     "settings.skillsStorePreviewStars": "Stars",
     "settings.skillsStorePreviewInstalls": "Installs",
-    "settings.skillsStorePreviewDetailUnavailable": "ClawHub details are unavailable. Showing the basic list information.",
+    "settings.skillsStorePreviewDetailUnavailable":
+      "ClawHub details are unavailable. Showing the basic list information.",
     "settings.skillsStorePreviewMetadata": "Details",
     "settings.skillsStorePreviewOwner": "Owner",
     "settings.skillsStorePreviewVersion": "Version",
@@ -2122,7 +2288,8 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     /* ── Settings Hooks ── */
     "settings.hooksTitle": "Hooks",
-    "settings.hooksDesc": "Configure Shell script or HTTP hooks for main conversation lifecycle events.",
+    "settings.hooksDesc":
+      "Configure Shell script or HTTP hooks for main conversation lifecycle events.",
     "settings.hooksCount": "hooks",
     "settings.hooksEnabledCount": "enabled",
     "settings.hooksLifecycle": "Lifecycle",
@@ -2137,7 +2304,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.hooksTypeHttp": "http",
     "settings.hooksNoDescription": "No description",
     "settings.hooksEmptyTitle": "No hooks configured for this lifecycle yet",
-    "settings.hooksEmptyDesc": "Add a hook to run Shell scripts or HTTP requests in sequence for this event.",
+    "settings.hooksEmptyDesc":
+      "Add a hook to run Shell scripts or HTTP requests in sequence for this event.",
     "settings.hooksScriptLinesCount": "script lines",
     "settings.hooksRequestsCount": "requests",
     "settings.hooksCommandList": "Script",
@@ -2155,7 +2323,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.hooksHttpBodyDisabled": "This HTTP method does not support a request body here",
     "settings.hooksHttpUrlRequired": "Request URL is required",
     "settings.hooksHttpUrlInvalid": "Request URL is invalid",
-    "settings.hooksHttpHeadersInvalid": "Headers must be a JSON object and values will be stringified.",
+    "settings.hooksHttpHeadersInvalid":
+      "Headers must be a JSON object and values will be stringified.",
     "settings.hooksHttpBodyInvalid": "Body must be valid JSON.",
     "settings.hooksHttpRequestRequired": "At least one HTTP request is required.",
     "settings.hooksNameRequired": "Hook name is required.",
@@ -2164,11 +2333,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.hooksEventTurnStart": "turn_start",
     "settings.hooksEventTurnStartDesc": "Fires when each model turn begins.",
     "settings.hooksEventMessageStart": "message_start",
-    "settings.hooksEventMessageStartDesc": "Fires when the current turn starts streaming a message.",
+    "settings.hooksEventMessageStartDesc":
+      "Fires when the current turn starts streaming a message.",
     "settings.hooksEventMessageUpdate": "message_update",
-    "settings.hooksEventMessageUpdateDesc": "Fires on every incremental message update in the current turn.",
+    "settings.hooksEventMessageUpdateDesc":
+      "Fires on every incremental message update in the current turn.",
     "settings.hooksEventMessageEnd": "message_end",
-    "settings.hooksEventMessageEndDesc": "Fires when the current turn finishes generating its message.",
+    "settings.hooksEventMessageEndDesc":
+      "Fires when the current turn finishes generating its message.",
     "settings.hooksEventToolExecutionStart": "tool_execution_start",
     "settings.hooksEventToolExecutionStartDesc": "Fires when a tool begins actual execution.",
     "settings.hooksEventToolExecutionUpdate": "tool_execution_update",

@@ -26,6 +26,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "katex": "^0.16.45",
+    "monaco-editor": "^0.55.1",
     "react": "^19.2.4",
     "react-complex-tree": "^2.6.1",
     "react-dom": "^19.2.4",

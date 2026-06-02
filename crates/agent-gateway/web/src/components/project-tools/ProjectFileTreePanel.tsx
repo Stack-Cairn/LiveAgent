@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Copy,
   Edit3,
+  FilePenLine,
   Folder,
   FolderOpen,
   Loader2,
@@ -148,6 +149,7 @@ export function ProjectFileTreePanel(props: {
   onInitializedChange: (initialized: boolean) => void;
   onSyncStateChange: (patch: ProjectToolsFileTreeStatePatch) => void;
   onInsertFileMention?: (path: string, kind: FileTreeKind) => void;
+  onOpenEditableFile?: (path: string) => void;
 }) {
   const {
     projectPathKey,
@@ -157,6 +159,7 @@ export function ProjectFileTreePanel(props: {
     onInitializedChange,
     onSyncStateChange,
     onInsertFileMention,
+    onOpenEditableFile,
   } = props;
   const { t } = useLocale();
   const [states, setStates] = useState<Record<string, FileTreeState>>({});
@@ -461,11 +464,12 @@ export function ProjectFileTreePanel(props: {
       event.stopPropagation();
       window.getSelection()?.removeAllRanges();
       const targetPath = state.nodes[path] ? path : ROOT_PATH;
+      const targetKind = state.nodes[targetPath]?.kind ?? "dir";
       setProjectState((state) => ({ ...state, selectedPath: targetPath }));
       syncFileTreeState({ selectedPath: targetPath, bumpStateVersion: true });
       const rect = panelRef.current?.getBoundingClientRect();
       const menuWidth = 220;
-      const menuHeight = 260;
+      const menuHeight = targetKind === "file" ? 292 : 260;
       const panelLeft = rect?.left ?? 0;
       const panelTop = rect?.top ?? 0;
       const panelWidth = rect?.width ?? window.innerWidth;
@@ -729,8 +733,11 @@ export function ProjectFileTreePanel(props: {
                 syncFileTreeState({ selectedPath: path, bumpStateVersion: true });
               }}
               onDoubleClick={() => {
-                if (node.kind !== "dir") return;
-                toggleDirectory(path, expanded);
+                if (node.kind === "dir") {
+                  toggleDirectory(path, expanded);
+                  return;
+                }
+                onOpenEditableFile?.(path);
               }}
             >
               {node.kind === "dir" ? (
@@ -754,7 +761,16 @@ export function ProjectFileTreePanel(props: {
         </div>
       );
     },
-    [cwd, openContextMenu, setProjectState, state, syncFileTreeState, t, toggleDirectory],
+    [
+      cwd,
+      onOpenEditableFile,
+      openContextMenu,
+      setProjectState,
+      state,
+      syncFileTreeState,
+      t,
+      toggleDirectory,
+    ],
   );
 
   const actionPlaceholder = useMemo(() => {
@@ -930,17 +946,35 @@ export function ProjectFileTreePanel(props: {
       {contextMenu ? (
         <div
           role="menu"
-          className="absolute z-[80] min-w-52 select-none overflow-hidden rounded-lg border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
+          className="editor-context-menu absolute z-[80] min-w-52 select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onContextMenu={(event) => {
             event.preventDefault();
             event.stopPropagation();
           }}
         >
+          {contextKind === "file" ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
+                disabled={!onOpenEditableFile}
+                onClick={() => {
+                  onOpenEditableFile?.(contextPath);
+                  setContextMenu(null);
+                }}
+              >
+                <FilePenLine className="h-3.5 w-3.5" />
+                {t("projectTools.fileTree.openFile")}
+              </button>
+              <div className="mx-1 my-1 h-px bg-border/60" />
+            </>
+          ) : null}
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-45"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
             disabled={!canMutate}
             onClick={() => {
               startAction("file", contextPath);
@@ -953,7 +987,7 @@ export function ProjectFileTreePanel(props: {
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-45"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
             disabled={!canMutate}
             onClick={() => {
               startAction("folder", contextPath);
@@ -966,7 +1000,7 @@ export function ProjectFileTreePanel(props: {
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-45"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
             disabled={!canMutate || !contextHasPathAction}
             onClick={() => {
               startAction("rename", contextPath);
@@ -979,7 +1013,7 @@ export function ProjectFileTreePanel(props: {
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-destructive hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-45"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-destructive transition-colors hover:bg-destructive/10 disabled:pointer-events-none disabled:opacity-45"
             disabled={!canMutate || !contextHasPathAction}
             onClick={() => {
               void deletePath(contextPath);
@@ -989,11 +1023,11 @@ export function ProjectFileTreePanel(props: {
             <Trash2 className="h-3.5 w-3.5" />
             {t("projectTools.fileTree.delete")}
           </button>
-          <div className="my-1 h-px bg-border/70" />
+          <div className="mx-1 my-1 h-px bg-border/60" />
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-45"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
             disabled={!contextHasPathAction}
             onClick={() => {
               copyPath(contextPath);
@@ -1008,7 +1042,7 @@ export function ProjectFileTreePanel(props: {
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-45"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
             disabled={!contextHasPathAction || !onInsertFileMention}
             onClick={() => {
               insertMention(contextPath);
@@ -1020,11 +1054,11 @@ export function ProjectFileTreePanel(props: {
             </span>
             {t("projectTools.fileTree.insertReference")}
           </button>
-          <div className="my-1 h-px bg-border/70" />
+          <div className="mx-1 my-1 h-px bg-border/60" />
           <button
             type="button"
             role="menuitem"
-            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-45"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45"
             disabled={!contextNode}
             onClick={() => {
               void loadChildren(contextKind === "dir" ? contextPath : dirname(contextPath), {

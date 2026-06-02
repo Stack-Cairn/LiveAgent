@@ -123,6 +123,11 @@ pub struct GitCommitSummary {
 pub struct GitLogResponse {
     pub state: GitRepositoryState,
     pub commits: Vec<GitCommitSummary>,
+    pub history_base_ref: String,
+    pub history_remote_ref: String,
+    pub history_ahead: i32,
+    pub history_behind: i32,
+    pub merge_base: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1261,22 +1266,26 @@ fn clean_git_ref_label(raw: &str) -> Option<String> {
     if value.is_empty() {
         return None;
     }
-    if let Some((_, target)) = value.split_once(" -> ") {
+    let mut is_head = false;
+    let mut is_tag = false;
+    if let Some((head, target)) = value.split_once(" -> ") {
+        is_head = head.trim() == "HEAD";
         value = target.trim();
     }
     if let Some(stripped) = value.strip_prefix("tag: ") {
+        is_tag = true;
         value = stripped.trim();
-    }
-    for prefix in ["refs/heads/", "refs/remotes/", "refs/tags/"] {
-        if let Some(stripped) = value.strip_prefix(prefix) {
-            value = stripped;
-            break;
-        }
     }
     if value.is_empty() || value == "HEAD" || value.ends_with("/HEAD") {
         return None;
     }
-    Some(value.to_string())
+    if is_head {
+        Some(format!("HEAD -> {value}"))
+    } else if is_tag && !value.starts_with("refs/tags/") {
+        Some(format!("refs/tags/{value}"))
+    } else {
+        Some(value.to_string())
+    }
 }
 
 fn parse_git_refs(raw: &str) -> Vec<String> {
@@ -1379,6 +1388,134 @@ fn local_only_commit_shas(repo_root: &str, cloud_ref: &str) -> HashSet<String> {
         .unwrap_or_default()
 }
 
+fn normalized_ref_name(reference: &str) -> String {
+    let mut value = reference.trim();
+    for prefix in ["refs/heads/", "refs/remotes/", "refs/tags/"] {
+        if let Some(stripped) = value.strip_prefix(prefix) {
+            value = stripped;
+            break;
+        }
+    }
+    value.to_string()
+}
+
+fn comparable_branch_name(reference: &str) -> String {
+    let normalized = normalized_ref_name(reference);
+    if let Some(stripped) = normalized.strip_prefix("origin/") {
+        return stripped.to_string();
+    }
+    normalized
+}
+
+fn refs_share_branch_name(a: &str, b: &str) -> bool {
+    let a = comparable_branch_name(a);
+    let b = comparable_branch_name(b);
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    a == b
+}
+
+fn is_default_history_branch(reference: &str) -> bool {
+    matches!(
+        comparable_branch_name(reference).as_str(),
+        "main" | "master" | "develop"
+    )
+}
+
+fn resolve_history_base_ref(state: &GitRepositoryState, history_remote_ref: &str) -> String {
+    let current_head = state.head.trim();
+    let current_local_ref = if current_head.is_empty() || current_head == "(detached)" {
+        String::new()
+    } else {
+        current_head.to_string()
+    };
+    if is_default_history_branch(&current_local_ref) {
+        return String::new();
+    }
+    for candidate in [
+        "origin/main",
+        "origin/master",
+        "origin/develop",
+        "main",
+        "master",
+        "develop",
+    ] {
+        if refs_share_branch_name(candidate, history_remote_ref)
+            || refs_share_branch_name(candidate, &current_local_ref)
+        {
+            continue;
+        }
+        if ref_exists(&state.repo_root, candidate) {
+            return candidate.to_string();
+        }
+    }
+    String::new()
+}
+
+fn push_unique_ref(refs: &mut Vec<String>, reference: String) {
+    let reference = reference.trim();
+    if reference.is_empty() || refs.iter().any(|existing| existing == reference) {
+        return;
+    }
+    refs.push(reference.to_string());
+}
+
+fn resolve_history_log_refs(
+    state: &GitRepositoryState,
+    history_remote_ref: &str,
+    history_base_ref: &str,
+) -> Vec<String> {
+    let mut refs = Vec::new();
+    push_unique_ref(&mut refs, "HEAD".to_string());
+
+    let current_ref = if state.head.trim().is_empty() || state.head == "(detached)" {
+        String::new()
+    } else {
+        format!("refs/heads/{}", state.head)
+    };
+    push_unique_ref(&mut refs, current_ref);
+    push_unique_ref(&mut refs, history_remote_ref.to_string());
+    push_unique_ref(&mut refs, history_base_ref.to_string());
+
+    refs
+}
+
+fn resolve_history_merge_base(repo_root: &str, history_base_ref: &str) -> String {
+    if history_base_ref.trim().is_empty() {
+        return String::new();
+    }
+    git_success(repo_root, &["merge-base", "HEAD", history_base_ref])
+        .map(|output| {
+            output
+                .stdout
+                .lines()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        })
+        .unwrap_or_default()
+}
+
+fn history_ahead_behind(repo_root: &str, history_base_ref: &str) -> (i32, i32) {
+    if history_base_ref.trim().is_empty() {
+        return (0, 0);
+    }
+    let rev_range = format!("HEAD...{history_base_ref}");
+    git_success(
+        repo_root,
+        &["rev-list", "--left-right", "--count", &rev_range],
+    )
+    .map(|output| {
+        let mut counts = output.stdout.split_whitespace();
+        let ahead = counts.next().and_then(|raw| raw.parse().ok()).unwrap_or(0);
+        let behind = counts.next().and_then(|raw| raw.parse().ok()).unwrap_or(0);
+        (ahead, behind)
+    })
+    .unwrap_or_default()
+}
+
 fn parse_shortstat_count(segment: &str) -> usize {
     segment
         .split_whitespace()
@@ -1428,12 +1565,22 @@ pub(crate) fn git_log_sync(
         return Ok(GitLogResponse {
             state,
             commits: Vec::new(),
+            history_base_ref: String::new(),
+            history_remote_ref: String::new(),
+            history_ahead: 0,
+            history_behind: 0,
+            merge_base: String::new(),
         });
     }
     if !ref_exists(&state.repo_root, "HEAD") {
         return Ok(GitLogResponse {
             state,
             commits: Vec::new(),
+            history_base_ref: String::new(),
+            history_remote_ref: String::new(),
+            history_ahead: 0,
+            history_behind: 0,
+            merge_base: String::new(),
         });
     }
     let limit = limit
@@ -1455,18 +1602,15 @@ pub(crate) fn git_log_sync(
     if skip > 0 {
         args.push(format!("--skip={skip}"));
     }
-    args.extend([
-        "--pretty=format:%x1e%H%x1f%h%x1f%P%x1f%D%x1f%an%x1f%ae%x1f%aI%x1f%s".to_string(),
-        "HEAD".to_string(),
-    ]);
-    let review_ref = if !state.upstream.trim().is_empty() {
-        state.upstream.clone()
-    } else {
+    let cloud_ref = resolve_cloud_tracking_ref(&state);
+    let review_ref = if cloud_ref.trim().is_empty() {
         resolve_review_base(&state)
+    } else {
+        cloud_ref.clone()
     };
-    if !review_ref.trim().is_empty() && review_ref != "HEAD" {
-        args.push(review_ref);
-    }
+    let history_base_ref = resolve_history_base_ref(&state, &review_ref);
+    args.push("--pretty=format:%x1e%H%x1f%h%x1f%P%x1f%D%x1f%an%x1f%ae%x1f%aI%x1f%s".to_string());
+    args.extend(resolve_history_log_refs(&state, &review_ref, &history_base_ref));
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = git_success(&state.repo_root, &arg_refs)?;
     let mut commits = parse_git_log(&output.stdout);
@@ -1483,7 +1627,6 @@ pub(crate) fn git_log_sync(
             }
         }
     }
-    let cloud_ref = resolve_cloud_tracking_ref(&state);
     let local_only_shas = local_only_commit_shas(&state.repo_root, &cloud_ref);
     if cloud_ref.trim().is_empty() {
         for commit in &mut commits {
@@ -1494,7 +1637,17 @@ pub(crate) fn git_log_sync(
             commit.local_only = local_only_shas.contains(&commit.sha);
         }
     }
-    Ok(GitLogResponse { state, commits })
+    let merge_base = resolve_history_merge_base(&state.repo_root, &review_ref);
+    let (history_ahead, history_behind) = history_ahead_behind(&state.repo_root, &review_ref);
+    Ok(GitLogResponse {
+        state,
+        commits,
+        history_base_ref,
+        history_remote_ref: review_ref,
+        history_ahead,
+        history_behind,
+        merge_base,
+    })
 }
 
 pub(crate) fn git_commit_details_sync(
@@ -2447,12 +2600,19 @@ mod tests {
 
     #[test]
     fn parses_git_log_commits_refs_and_renames() {
-        let raw = "\x1e0123456789abcdef\x1f0123456\x1ffedcba9\x1fHEAD -> refs/heads/feature, refs/remotes/origin/feature\x1fAlice\x1falice@example.com\x1f2026-05-29T10:11:12+08:00\x1frename file\nR100\0old\tname.txt\0new name.txt\0A\0src/tab\tfile.txt\0";
+        let raw = "\x1e0123456789abcdef\x1f0123456\x1ffedcba9\x1fHEAD -> refs/heads/feature, refs/remotes/origin/feature, tag: refs/tags/v1.2.3\x1fAlice\x1falice@example.com\x1f2026-05-29T10:11:12+08:00\x1frename file\nR100\0old\tname.txt\0new name.txt\0A\0src/tab\tfile.txt\0";
         let commits = parse_git_log(raw);
         assert_eq!(commits.len(), 1);
         let commit = &commits[0];
         assert_eq!(commit.short_sha, "0123456");
-        assert_eq!(commit.refs, vec!["feature", "origin/feature"]);
+        assert_eq!(
+            commit.refs,
+            vec![
+                "HEAD -> refs/heads/feature",
+                "refs/remotes/origin/feature",
+                "refs/tags/v1.2.3",
+            ]
+        );
         assert_eq!(commit.parents, vec!["fedcba9"]);
         assert_eq!(commit.files.len(), 2);
         assert_eq!(commit.files[0].status, "R");
@@ -3014,6 +3174,53 @@ mod tests {
     }
 
     #[test]
+    fn git_log_uses_local_branch_fallback_for_history_graph_when_upstream_missing() {
+        let Some(repo) = init_temp_repo() else {
+            return;
+        };
+        let workdir = repo.path().to_string_lossy().to_string();
+        let initial = git_status_sync(workdir.clone()).expect("initial status");
+        let initial_sha = git_success(&workdir, &["rev-parse", initial.head.as_str()])
+            .expect("read initial branch sha")
+            .stdout
+            .trim()
+            .to_string();
+
+        run_temp_git(repo.path(), &["checkout", "-b", "feature/history-graph"]);
+        fs::write(repo.path().join("feature-history.txt"), "feature\n")
+            .expect("write feature file");
+        run_temp_git(repo.path(), &["add", "feature-history.txt"]);
+        run_temp_git(repo.path(), &["commit", "-m", "feature history graph"]);
+
+        run_temp_git(repo.path(), &["checkout", initial.head.as_str()]);
+        fs::write(repo.path().join("main-history.txt"), "main\n").expect("write main file");
+        run_temp_git(repo.path(), &["add", "main-history.txt"]);
+        run_temp_git(repo.path(), &["commit", "-m", "main history graph"]);
+
+        run_temp_git(repo.path(), &["checkout", "feature/history-graph"]);
+        let history = git_log_sync(workdir, Some(10), None).expect("git log");
+        assert!(
+            history.state.upstream.trim().is_empty(),
+            "test branch should not have upstream: {}",
+            history.state.upstream
+        );
+        assert_eq!(history.history_base_ref, "");
+        assert_eq!(history.history_remote_ref, initial.head);
+        assert_eq!(history.history_ahead, 1);
+        assert_eq!(history.history_behind, 1);
+        assert_eq!(history.merge_base, initial_sha);
+        let subjects = history
+            .commits
+            .iter()
+            .map(|commit| commit.subject.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            subjects.contains(&"feature history graph") && subjects.contains(&"main history graph"),
+            "history subjects should include both sides of the fallback comparison: {subjects:?}"
+        );
+    }
+
+    #[test]
     fn git_create_branch_can_start_from_commit() {
         let Some(repo) = init_temp_repo() else {
             return;
@@ -3269,6 +3476,7 @@ mod tests {
             git_set_remote_sync(workdir.clone(), remote.path().to_string_lossy().to_string())
                 .expect("set origin remote");
         assert!(saved.ok, "set remote failed: {}", saved.message);
+        let initial = git_status_sync(workdir.clone()).expect("initial status");
         run_temp_git(repo.path(), &["checkout", "-b", "feature/local-only"]);
         run_temp_git(repo.path(), &["config", "push.autoSetupRemote", "false"]);
         run_temp_git(repo.path(), &["push", "origin", "feature/local-only"]);
@@ -3284,7 +3492,17 @@ mod tests {
         run_temp_git(repo.path(), &["add", "feature.txt"]);
         run_temp_git(repo.path(), &["commit", "-m", "feature local only"]);
 
+        let remote_feature_sha = git_success(&workdir, &["rev-parse", "origin/feature/local-only"])
+            .expect("read remote feature branch sha")
+            .stdout
+            .trim()
+            .to_string();
         let history = git_log_sync(workdir, Some(10), None).expect("git log");
+        assert_eq!(history.history_base_ref, initial.head);
+        assert_eq!(history.history_remote_ref, "origin/feature/local-only");
+        assert_eq!(history.history_ahead, 1);
+        assert_eq!(history.history_behind, 0);
+        assert_eq!(history.merge_base, remote_feature_sha);
         let local_commit = history
             .commits
             .iter()
@@ -3302,6 +3520,70 @@ mod tests {
         assert!(
             !pushed_commit.local_only,
             "same-name origin branch should prevent pushed commit from being local-only"
+        );
+    }
+
+    #[test]
+    fn git_log_includes_remote_base_merge_outside_current_branch() {
+        let Some(repo) = init_temp_repo() else {
+            return;
+        };
+        let workdir = repo.path().to_string_lossy().to_string();
+        let initial = git_status_sync(workdir.clone()).expect("initial status");
+
+        run_temp_git(repo.path(), &["checkout", "-b", "features"]);
+        fs::write(repo.path().join("feature-1.txt"), "feature 1\n").expect("write feature 1");
+        run_temp_git(repo.path(), &["add", "feature-1.txt"]);
+        run_temp_git(repo.path(), &["commit", "-m", "feature one"]);
+
+        run_temp_git(repo.path(), &["branch", "origin/features", "HEAD"]);
+        run_temp_git(
+            repo.path(),
+            &[
+                "branch",
+                "--set-upstream-to",
+                "origin/features",
+                "features",
+            ],
+        );
+
+        fs::write(repo.path().join("feature-2.txt"), "feature 2\n").expect("write feature 2");
+        run_temp_git(repo.path(), &["add", "feature-2.txt"]);
+        run_temp_git(repo.path(), &["commit", "-m", "feature two"]);
+
+        run_temp_git(repo.path(), &["checkout", initial.head.as_str()]);
+        run_temp_git(
+            repo.path(),
+            &[
+                "merge",
+                "--no-ff",
+                "-m",
+                "Merge pull request #52 from Stack-Cairn/features",
+                "features",
+            ],
+        );
+        let main_merge_sha = git_success(&workdir, &["rev-parse", "HEAD"])
+            .expect("read main merge")
+            .stdout
+            .trim()
+            .to_string();
+        run_temp_git(repo.path(), &["branch", "origin/main", "HEAD"]);
+        run_temp_git(repo.path(), &["checkout", "features"]);
+
+        let history = git_log_sync(workdir, Some(10), None).expect("git log");
+        assert_eq!(history.history_base_ref, "origin/main");
+        assert_eq!(history.history_remote_ref, "origin/features");
+        assert!(
+            history.commits.iter().any(|commit| {
+                commit.sha == main_merge_sha
+                    && commit.subject == "Merge pull request #52 from Stack-Cairn/features"
+            }),
+            "history should include origin/main merge outside current branch: {:?}",
+            history
+                .commits
+                .iter()
+                .map(|commit| commit.subject.as_str())
+                .collect::<Vec<_>>()
         );
     }
 

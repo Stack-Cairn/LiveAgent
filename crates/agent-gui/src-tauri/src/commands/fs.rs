@@ -18,6 +18,7 @@ use zip::ZipArchive;
 use crate::runtime::platform::expand_tilde_path;
 
 const READ_MAX_TEXT_BYTES: usize = 200 * 1024; // 200KB
+const EDITABLE_TEXT_MAX_BYTES: usize = 3 * 1024 * 1024; // 3MB
 const READ_MAX_IMAGE_BYTES: usize = 25 * 1024 * 1024; // 25MB
 const IMAGE_SOURCE_HTTP_TIMEOUT_SECS: u64 = 20;
 const DEFAULT_READ_LIMIT_LINES: usize = 200;
@@ -522,6 +523,25 @@ fn is_archive_file(path: &Path) -> bool {
 
 fn is_zip_archive_file(path: &Path) -> bool {
     matches!(extension_lower(path).as_deref(), Some("zip"))
+}
+
+fn editable_text_unsupported_reason(path: &Path) -> Option<&'static str> {
+    if infer_image_mime(path).is_some() {
+        return Some("Image files are not supported in the code editor");
+    }
+    if is_pdf_file(path) {
+        return Some("PDF files are not supported in the code editor");
+    }
+    if is_notebook_file(path) {
+        return Some("Notebook files are not supported in the code editor");
+    }
+    if is_word_file(path) || is_spreadsheet_file(path) {
+        return Some("Office documents are not supported in the code editor");
+    }
+    if is_archive_file(path) {
+        return Some("Archive files are not supported in the code editor");
+    }
+    None
 }
 
 fn office_mime_type(path: &Path) -> Option<&'static str> {
@@ -1965,6 +1985,75 @@ pub async fn fs_read_text(
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReadEditableTextResponse {
+    pub path: String,
+    pub content: String,
+    pub mtime_ms: u64,
+    pub content_hash: String,
+    pub size_bytes: usize,
+    pub total_lines: usize,
+}
+
+pub(crate) fn fs_read_editable_text_sync(
+    workdir: String,
+    path: String,
+) -> Result<ReadEditableTextResponse, String> {
+    let wd = canonicalize_workdir(&workdir).map_err(|e| e.to_string())?;
+    let rel = sanitize_rel_path(&path).map_err(|e| e.to_string())?;
+    let logical_path = logical_rel_path(&rel);
+    let target = wd.join(&rel);
+    let target = resolve_existing_file_target(&wd, &target, "Read.path")?;
+    if let Some(reason) = editable_text_unsupported_reason(&target) {
+        return Err(FsError::Other(reason.to_string()).to_string());
+    }
+
+    let md = fs::metadata(&target).map_err(|e| e.to_string())?;
+    let size_bytes = usize::try_from(md.len()).unwrap_or(usize::MAX);
+    if size_bytes > EDITABLE_TEXT_MAX_BYTES {
+        return Err(FsError::Other(format!(
+            "File is too large to edit ({size_bytes} bytes, max {EDITABLE_TEXT_MAX_BYTES} bytes)"
+        ))
+        .to_string());
+    }
+
+    let bytes = fs::read(&target).map_err(|e| e.to_string())?;
+    if bytes.len() > EDITABLE_TEXT_MAX_BYTES {
+        return Err(FsError::Other(format!(
+            "File is too large to edit ({} bytes, max {EDITABLE_TEXT_MAX_BYTES} bytes)",
+            bytes.len()
+        ))
+        .to_string());
+    }
+
+    let mtime_ms = metadata_mtime_ms(&md);
+    let content_hash = hash_bytes(&bytes);
+    let content = String::from_utf8(bytes)
+        .map_err(|_| FsError::Other("File is not valid UTF-8 text".to_string()).to_string())?;
+    let total_lines = count_text_lines(&content);
+
+    Ok(ReadEditableTextResponse {
+        path: logical_path,
+        content,
+        mtime_ms,
+        content_hash,
+        size_bytes,
+        total_lines,
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn fs_read_editable_text(
+    workdir: String,
+    path: String,
+) -> Result<ReadEditableTextResponse, String> {
+    run_blocking("fs_read_editable_text", move || {
+        fs_read_editable_text_sync(workdir, path)
+    })
+    .await
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WriteTextResponse {
     pub path: String,
     pub mode: String,
@@ -3391,6 +3480,93 @@ mod tests {
         assert!(content.contains("ZIP entries: 2/2"), "content={content}");
         assert!(content.contains("docs/readme.md"), "content={content}");
         assert!(content.contains("src/main.rs"), "content={content}");
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn read_editable_text_returns_raw_utf8_with_version_metadata() {
+        let workdir = unique_test_workdir("read-editable");
+        fs::create_dir_all(workdir.join("src")).expect("create workdir");
+        fs::write(workdir.join("src/main.rs"), "fn main() {}\n").expect("write file");
+
+        let response =
+            fs_read_editable_text_sync(workdir.display().to_string(), "src/main.rs".to_string())
+                .expect("editable text should read");
+
+        assert_eq!(response.path, "src/main.rs");
+        assert_eq!(response.content, "fn main() {}\n");
+        assert_eq!(response.size_bytes, "fn main() {}\n".len());
+        assert_eq!(response.total_lines, 1);
+        assert!(
+            !response.content.contains("\tfn main"),
+            "content must not be numbered"
+        );
+        assert_ne!(response.mtime_ms, 0);
+        assert_eq!(
+            response.content_hash,
+            hash_bytes("fn main() {}\n".as_bytes())
+        );
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn read_editable_text_rejects_invalid_targets_and_non_utf8() {
+        let workdir = unique_test_workdir("read-editable-invalid");
+        fs::create_dir_all(workdir.join("src")).expect("create workdir");
+        fs::write(workdir.join("src/binary.bin"), [0xff, 0xfe, 0xfd]).expect("write binary");
+        fs::write(workdir.join("src/notebook.ipynb"), "{}\n").expect("write notebook");
+        fs::write(workdir.join("src/readme.pdf"), "%PDF-1.7\n").expect("write pdf");
+        fs::write(
+            workdir.join("src/too-large.txt"),
+            vec![b'a'; EDITABLE_TEXT_MAX_BYTES + 1],
+        )
+        .expect("write large file");
+
+        let dir_error =
+            fs_read_editable_text_sync(workdir.display().to_string(), "src".to_string())
+                .expect_err("directory should fail");
+        assert!(
+            dir_error.contains("regular file"),
+            "unexpected error: {dir_error}"
+        );
+
+        let utf8_error =
+            fs_read_editable_text_sync(workdir.display().to_string(), "src/binary.bin".to_string())
+                .expect_err("invalid UTF-8 should fail");
+        assert!(
+            utf8_error.contains("UTF-8"),
+            "unexpected error: {utf8_error}"
+        );
+
+        for (path, expected) in [
+            ("src/notebook.ipynb", "Notebook"),
+            ("src/readme.pdf", "PDF"),
+        ] {
+            let error = fs_read_editable_text_sync(workdir.display().to_string(), path.to_string())
+                .expect_err("unsupported preview file should fail");
+            assert!(
+                error.contains(expected),
+                "unexpected error for {path}: {error}"
+            );
+        }
+
+        let large_error = fs_read_editable_text_sync(
+            workdir.display().to_string(),
+            "src/too-large.txt".to_string(),
+        )
+        .expect_err("large file should fail");
+        assert!(
+            large_error.contains("too large"),
+            "unexpected error: {large_error}"
+        );
+
+        for path in ["", "/tmp/liveagent-outside", "../outside"] {
+            let error = fs_read_editable_text_sync(workdir.display().to_string(), path.to_string())
+                .expect_err("invalid path should fail");
+            assert!(!error.trim().is_empty(), "expected error for {path:?}");
+        }
 
         let _ = fs::remove_dir_all(workdir);
     }

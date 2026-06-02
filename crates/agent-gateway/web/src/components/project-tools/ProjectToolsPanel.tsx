@@ -29,7 +29,16 @@ import type {
   TerminalShellOption,
   TerminalSnapshot,
 } from "@/lib/terminal/types";
-import { Check, ChevronRight, FolderTree, GitBranch, GripVertical, Plus, Terminal, X } from "../icons";
+import {
+  Check,
+  ChevronRight,
+  FolderTree,
+  GitBranch,
+  GripVertical,
+  Plus,
+  Terminal,
+  X,
+} from "../icons";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -55,6 +64,7 @@ const DEFAULT_TERMINAL_COLS = 80;
 const DEFAULT_TERMINAL_ROWS = 24;
 const FILE_TREE_TAB_ID = "__file_tree__";
 const GIT_REVIEW_TAB_ID = "__git_review__";
+const PROJECT_TOOLS_RESIZE_END_EVENT = "liveagent:project-tools-resize-end";
 
 type ProjectToolsPanelProps = {
   isOpen: boolean;
@@ -83,6 +93,7 @@ type ProjectToolsPanelProps = {
   onGitReviewOpenChange: (open: boolean) => void;
   onSessionsChange?: (sessions: TerminalSession[]) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
+  onOpenEditableFile?: (path: string) => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
   onClose?: () => void;
@@ -123,6 +134,14 @@ function clampPanelWidth(width: number, maxWidth: number) {
   return Math.min(maxWidth, Math.max(MIN_PANEL_WIDTH, width));
 }
 
+function panelWidthStyleValue(width: number) {
+  return `${Math.round(width)}px`;
+}
+
+function applyPanelWidthStyle(panel: HTMLElement | null, width: number) {
+  panel?.style.setProperty("--project-tools-panel-width", panelWidthStyleValue(width));
+}
+
 function areSessionsEqual(left: TerminalSession[], right: TerminalSession[]) {
   if (left.length !== right.length) return false;
   return left.every((session, index) => {
@@ -159,7 +178,10 @@ function dirname(path: string) {
 }
 
 function expandedPathsForFileTreePath(path: string) {
-  const normalized = path.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const normalized = path
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+|\/+$/g, "");
   const parts = normalized.split("/").filter(Boolean);
   const dirs = parts.slice(0, -1);
   return ["", ...dirs.map((_, index) => parts.slice(0, index + 1).join("/"))];
@@ -409,9 +431,14 @@ function XTermViewport({
     const replayBufferedEvents = () => {
       const events = bufferedEvents.splice(0);
       for (const event of events) {
-        writeTerminalEvent(term, event, (nextOffset) => {
-          lastOutputOffset = nextOffset;
-        }, lastOutputOffset);
+        writeTerminalEvent(
+          term,
+          event,
+          (nextOffset) => {
+            lastOutputOffset = nextOffset;
+          },
+          lastOutputOffset,
+        );
       }
     };
 
@@ -445,9 +472,14 @@ function XTermViewport({
       if (disposed || event.sessionId !== session.id) return;
       if (event.kind === "output" && event.data) {
         if (snapshotLoaded && !loadingSnapshot) {
-          writeTerminalEvent(term, event, (nextOffset) => {
-            lastOutputOffset = nextOffset;
-          }, lastOutputOffset);
+          writeTerminalEvent(
+            term,
+            event,
+            (nextOffset) => {
+              lastOutputOffset = nextOffset;
+            },
+            lastOutputOffset,
+          );
         } else {
           bufferedEvents.push(event);
         }
@@ -591,6 +623,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     onGitReviewOpenChange,
     onSessionsChange,
     onInsertFileMention,
+    onOpenEditableFile,
     onInsertCommitMention,
     onInsertGitFileMention,
     onClose,
@@ -631,7 +664,10 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     maxScrollLeft: number;
   } | null>(null);
   const panelWidth = clampPanelWidth(draftWidth, maxPanelWidth);
-  const panelStyle = { "--project-tools-panel-width": `${panelWidth}px` } as CSSProperties;
+  const panelStyleWidth = resizingRef.current ? pendingResizeWidthRef.current : panelWidth;
+  const panelStyle = {
+    "--project-tools-panel-width": panelWidthStyleValue(panelStyleWidth),
+  } as CSSProperties;
   const effectiveWidthCollapsed = !isOpen && collapseImmediately ? true : widthCollapsed;
   const effectiveShouldRenderContent = !isOpen && collapseImmediately ? false : shouldRenderContent;
   const isControlled = externalSessions !== undefined;
@@ -687,10 +723,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     scrollWidth: 0,
   });
   const [tabsScrollbarDragging, setTabsScrollbarDragging] = useState(false);
-  const tabsMaxScrollLeft = Math.max(
-    0,
-    tabsScrollState.scrollWidth - tabsScrollState.clientWidth,
-  );
+  const tabsMaxScrollLeft = Math.max(0, tabsScrollState.scrollWidth - tabsScrollState.clientWidth);
   const tabsHaveOverflow = tabsMaxScrollLeft > 1;
   const tabsThumbWidth =
     tabsHaveOverflow && tabsScrollState.scrollWidth > 0
@@ -714,6 +747,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
   } as CSSProperties;
 
   const updateTabsScrollState = useCallback(() => {
+    if (resizingRef.current) return;
     const element = tabsScrollRef.current;
     const next = element
       ? {
@@ -812,6 +846,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
   useEffect(() => {
     if (resizingRef.current) return;
     pendingResizeWidthRef.current = clampedWidth;
+    applyPanelWidthStyle(panelRef.current, clampedWidth);
     setDraftWidth(clampedWidth);
   }, [clampedWidth]);
 
@@ -821,6 +856,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     let frameId = 0;
     const updateMaxWidth = () => {
       frameId = 0;
+      if (resizingRef.current) return;
       setMaxPanelWidth(getDynamicMaxPanelWidth(panel));
     };
     const scheduleUpdate = () => {
@@ -1220,21 +1256,25 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       event.preventDefault();
       resizeCleanupRef.current?.();
       const startX = event.clientX;
-      const startWidth = panelWidth;
+      const dragMaxWidth = getDynamicMaxPanelWidth(panelRef.current);
+      const startWidth = clampPanelWidth(panelWidth, dragMaxWidth);
       const previousCursor = document.body.style.cursor;
       const previousUserSelect = document.body.style.userSelect;
       resizingRef.current = true;
+      setMaxPanelWidth(dragMaxWidth);
       setIsResizing(true);
       pendingResizeWidthRef.current = startWidth;
+      applyPanelWidthStyle(panelRef.current, startWidth);
+      panelRef.current?.setAttribute("data-project-tools-resizing", "true");
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
 
-      const scheduleDraftWidth = (nextWidth: number) => {
+      const schedulePanelWidth = (nextWidth: number) => {
         pendingResizeWidthRef.current = nextWidth;
         if (resizeFrameRef.current !== null) return;
         resizeFrameRef.current = window.requestAnimationFrame(() => {
           resizeFrameRef.current = null;
-          setDraftWidth(pendingResizeWidthRef.current);
+          applyPanelWidthStyle(panelRef.current, pendingResizeWidthRef.current);
         });
       };
 
@@ -1242,6 +1282,11 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
         window.removeEventListener("mousemove", handleMove);
         window.removeEventListener("mouseup", handleUp);
         window.removeEventListener("blur", handleUp);
+        if (resizeFrameRef.current !== null) {
+          window.cancelAnimationFrame(resizeFrameRef.current);
+          resizeFrameRef.current = null;
+        }
+        panelRef.current?.removeAttribute("data-project-tools-resizing");
         document.body.style.cursor = previousCursor;
         document.body.style.userSelect = previousUserSelect;
         resizingRef.current = false;
@@ -1249,25 +1294,21 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       };
 
       const handleMove = (moveEvent: globalThis.MouseEvent) => {
-        const nextWidth = clampPanelWidth(
-          startWidth + startX - moveEvent.clientX,
-          getDynamicMaxPanelWidth(panelRef.current),
-        );
-        scheduleDraftWidth(nextWidth);
+        const nextWidth = clampPanelWidth(startWidth + startX - moveEvent.clientX, dragMaxWidth);
+        schedulePanelWidth(nextWidth);
       };
 
       const handleUp = () => {
         cleanupResize();
-        if (resizeFrameRef.current !== null) {
-          window.cancelAnimationFrame(resizeFrameRef.current);
-          resizeFrameRef.current = null;
-        }
         const finalWidth = pendingResizeWidthRef.current;
+        applyPanelWidthStyle(panelRef.current, finalWidth);
         setDraftWidth(finalWidth);
         if (finalWidth !== clampedWidth) {
           onWidthChange(finalWidth);
         }
         setIsResizing(false);
+        window.dispatchEvent(new Event(PROJECT_TOOLS_RESIZE_END_EVENT));
+        window.requestAnimationFrame(updateTabsScrollState);
       };
 
       resizeCleanupRef.current = cleanupResize;
@@ -1275,7 +1316,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       window.addEventListener("mouseup", handleUp);
       window.addEventListener("blur", handleUp);
     },
-    [clampedWidth, onWidthChange, panelWidth],
+    [clampedWidth, onWidthChange, panelWidth, updateTabsScrollState],
   );
 
   const handleTabsWheel = useCallback(
@@ -1285,8 +1326,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       const maxScrollLeft = element.scrollWidth - element.clientWidth;
       if (maxScrollLeft <= 1) return;
 
-      const delta =
-        Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
       if (delta === 0) return;
 
       const nextScrollLeft = clampScrollLeft(element.scrollLeft + delta, maxScrollLeft);
@@ -1313,10 +1353,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
         maxScrollLeft > 0 && element.scrollWidth > 0
           ? Math.max(
               28,
-              Math.min(
-                rect.width,
-                (element.clientWidth / element.scrollWidth) * rect.width,
-              ),
+              Math.min(rect.width, (element.clientWidth / element.scrollWidth) * rect.width),
             )
           : rect.width;
       const travelWidth = Math.max(1, rect.width - thumbWidth);
@@ -1375,8 +1412,8 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     }
   }, []);
 
-  const showFirstOpenChooser =
-    projectReady && sessions.length === 0 && !fileTreeInitialized && !gitReviewInitialized;
+  const showProjectToolsChooser =
+    projectReady && currentActiveTab === "terminal" && !activeSession;
 
   const startFileTree = useCallback(() => {
     setFileTreeInitialized(true);
@@ -1385,14 +1422,14 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
 
   const revealPathInFileTree = useCallback(
     (path: string) => {
-      const normalizedPath = path.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+      const normalizedPath = path
+        .trim()
+        .replace(/\\/g, "/")
+        .replace(/^\/+|\/+$/g, "");
       if (!projectReady) return;
       const selectedPath = normalizedPath.endsWith("/") ? dirname(normalizedPath) : normalizedPath;
       const expandedPaths = Array.from(
-        new Set([
-          ...fileTreeState.expandedPaths,
-          ...expandedPathsForFileTreePath(selectedPath),
-        ]),
+        new Set([...fileTreeState.expandedPaths, ...expandedPathsForFileTreePath(selectedPath)]),
       );
       setFileTreeInitialized(true);
       onFileTreeStateChange({
@@ -1479,6 +1516,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       aria-hidden={!isOpen}
       inert={!isOpen}
       data-state={isOpen ? "open" : "closed"}
+      data-project-tools-resizing={isResizing ? "true" : undefined}
       className={cn(
         "project-tools-panel fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
         isOpen
@@ -1697,7 +1735,11 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                             handleCloseRequest(session);
                           }}
                         >
-                          {isPendingClose ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+                          {isPendingClose ? (
+                            <Check className="h-3 w-3" />
+                          ) : (
+                            <X className="h-3 w-3" />
+                          )}
                         </button>
                       </div>
                     );
@@ -1803,7 +1845,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
               <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
                 {disabledMessage}
               </div>
-            ) : showFirstOpenChooser ? (
+            ) : showProjectToolsChooser ? (
               <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-5 py-6">
                 <div className="flex flex-col items-center gap-1">
                   <h3 className="text-sm font-medium text-foreground">
@@ -1825,8 +1867,12 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                       <Terminal className="h-4.5 w-4.5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium leading-tight">{t("projectTools.newTerminal")}</div>
-                      <div className="mt-0.5 text-xs leading-tight text-muted-foreground">{t("projectTools.terminalDescription")}</div>
+                      <div className="font-medium leading-tight">
+                        {t("projectTools.newTerminal")}
+                      </div>
+                      <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
+                        {t("projectTools.terminalDescription")}
+                      </div>
                     </div>
                   </button>
                   <button
@@ -1838,8 +1884,12 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                       <FolderTree className="h-4.5 w-4.5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium leading-tight">{t("projectTools.newFileTree")}</div>
-                      <div className="mt-0.5 text-xs leading-tight text-muted-foreground">{t("projectTools.fileTreeDescription")}</div>
+                      <div className="font-medium leading-tight">
+                        {t("projectTools.newFileTree")}
+                      </div>
+                      <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
+                        {t("projectTools.fileTreeDescription")}
+                      </div>
                     </div>
                   </button>
                   <button
@@ -1851,8 +1901,12 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                       <GitBranch className="h-4.5 w-4.5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium leading-tight">{t("projectTools.newGitReview")}</div>
-                      <div className="mt-0.5 text-xs leading-tight text-muted-foreground">{t("projectTools.gitReviewDescription")}</div>
+                      <div className="font-medium leading-tight">
+                        {t("projectTools.newGitReview")}
+                      </div>
+                      <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
+                        {t("projectTools.gitReviewDescription")}
+                      </div>
                     </div>
                   </button>
                 </div>
@@ -1861,9 +1915,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                     {t("projectTools.loading")}
                   </div>
                 ) : null}
-                {error ? (
-                  <div className="text-center text-xs text-destructive">{error}</div>
-                ) : null}
+                {error ? <div className="text-center text-xs text-destructive">{error}</div> : null}
               </div>
             ) : (
               <>
@@ -1883,6 +1935,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                       onInitializedChange={setFileTreeInitialized}
                       onSyncStateChange={onFileTreeStateChange}
                       onInsertFileMention={onInsertFileMention}
+                      onOpenEditableFile={onOpenEditableFile}
                     />
                   </div>
                 ) : null}
@@ -1929,16 +1982,24 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                         <Terminal className="h-6 w-6 text-muted-foreground" />
                       </div>
                       <div className="flex flex-col gap-1">
-                        <div className="text-sm font-medium text-foreground">{t("projectTools.newTerminal")}</div>
+                        <div className="text-sm font-medium text-foreground">
+                          {t("projectTools.newTerminal")}
+                        </div>
                         {terminalDisabledMessage ? (
                           <div className="max-w-xs text-xs text-muted-foreground">
                             {terminalDisabledMessage}
                           </div>
                         ) : (
-                          <div className="text-xs text-muted-foreground">{t("projectTools.terminalDescription")}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {t("projectTools.terminalDescription")}
+                          </div>
                         )}
                       </div>
-                      <Button onClick={handleCreate} disabled={!terminalReady || creating} size="sm">
+                      <Button
+                        onClick={handleCreate}
+                        disabled={!terminalReady || creating}
+                        size="sm"
+                      >
                         {t("projectTools.newTerminal")}
                       </Button>
                       {loading ? (

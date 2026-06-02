@@ -115,6 +115,15 @@ type FsWriteTextResponse = {
   totalLines: number;
 };
 
+type FsReadEditableTextResponse = {
+  path: string;
+  content: string;
+  mtimeMs: number;
+  contentHash: string;
+  sizeBytes: number;
+  totalLines: number;
+};
+
 type FsCreateDirResponse = {
   path: string;
   kind: "dir";
@@ -343,15 +352,11 @@ function getRuntimeOrigin() {
 
 function readChatEventSeq(event: ChatEvent) {
   const seq = event.seq;
-  return typeof seq === "number" && Number.isFinite(seq) && seq > 0
-    ? Math.floor(seq)
-    : 0;
+  return typeof seq === "number" && Number.isFinite(seq) && seq > 0 ? Math.floor(seq) : 0;
 }
 
 function normalizeAfterSeq(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? Math.floor(value)
-    : 0;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
 function normalizePositiveInteger(value: number, fallback: number) {
@@ -615,9 +620,7 @@ export class GatewayWebSocketClient {
           execution_mode: systemSettings?.executionMode?.trim() || "text",
           workdir: systemSettings?.workdir?.trim() || "",
           selected_system_tools:
-            systemSettings?.selectedSystemTools
-              ?.map((item) => item.trim())
-              .filter(Boolean) ?? [],
+            systemSettings?.selectedSystemTools?.map((item) => item.trim()).filter(Boolean) ?? [],
           uploaded_files:
             uploadedFiles?.map((file) => ({
               relative_path: file.relativePath,
@@ -930,20 +933,14 @@ export class GatewayWebSocketClient {
     });
   }
 
-  async renameHistory(
-    conversationId: string,
-    title: string,
-  ): Promise<ConversationSummary> {
+  async renameHistory(conversationId: string, title: string): Promise<ConversationSummary> {
     return this.request<ConversationSummary>("history.rename", {
       conversation_id: conversationId,
       title,
     });
   }
 
-  async pinHistory(
-    conversationId: string,
-    isPinned: boolean,
-  ): Promise<ConversationSummary> {
+  async pinHistory(conversationId: string, isPinned: boolean): Promise<ConversationSummary> {
     return this.request<ConversationSummary>("history.pin", {
       conversation_id: conversationId,
       is_pinned: isPinned,
@@ -1020,10 +1017,7 @@ export class GatewayWebSocketClient {
     });
   }
 
-  async createProjectFolder(
-    parent: string,
-    name: string,
-  ): Promise<CreateProjectFolderResponse> {
+  async createProjectFolder(parent: string, name: string): Promise<CreateProjectFolderResponse> {
     return this.request<CreateProjectFolderResponse>("fs.create_project_folder", {
       parent,
       name,
@@ -1064,6 +1058,13 @@ export class GatewayWebSocketClient {
     });
   }
 
+  async readEditableTextFile(workdir: string, path: string): Promise<FsReadEditableTextResponse> {
+    return this.request<FsReadEditableTextResponse>("fs.read_editable_text", {
+      workdir,
+      path,
+    });
+  }
+
   async createDir(workdir: string, path: string): Promise<FsCreateDirResponse> {
     return this.request<FsCreateDirResponse>("fs.create_dir", { workdir, path });
   }
@@ -1094,11 +1095,7 @@ export class GatewayWebSocketClient {
     return this.requestWithRecovery<SkillMetadataResponse>("skills.read-metadata", { path });
   }
 
-  async readSkillText(
-    path: string,
-    offset?: number,
-    length?: number,
-  ): Promise<SkillTextResponse> {
+  async readSkillText(path: string, offset?: number, length?: number): Promise<SkillTextResponse> {
     return this.requestWithRecovery<SkillTextResponse>("skills.read-text", {
       path,
       offset,
@@ -1106,11 +1103,7 @@ export class GatewayWebSocketClient {
     });
   }
 
-  async getProviderModels(
-    type: string,
-    baseUrl: string,
-    apiKey: string,
-  ): Promise<unknown> {
+  async getProviderModels(type: string, baseUrl: string, apiKey: string): Promise<unknown> {
     return this.requestWithRecovery("provider.models", {
       type,
       base_url: baseUrl,
@@ -1189,11 +1182,7 @@ export class GatewayWebSocketClient {
   }
 
   private scheduleReconnectNotice() {
-    if (
-      this.reconnectNoticeTimer !== null ||
-      this.disposed ||
-      this.statusListeners.size === 0
-    ) {
+    if (this.reconnectNoticeTimer !== null || this.disposed || this.statusListeners.size === 0) {
       return;
     }
     const host = getRuntimeHost();
@@ -1222,15 +1211,13 @@ export class GatewayWebSocketClient {
     return (
       !this.disposed &&
       this.token.trim() !== "" &&
-      (
-        this.chatStreams.size > 0 ||
+      (this.chatStreams.size > 0 ||
         this.pending.size > 0 ||
         this.statusListeners.size > 0 ||
         this.historyListeners.size > 0 ||
         this.conversationListeners.size > 0 ||
         this.settingsListeners.size > 0 ||
-        this.terminalListeners.size > 0
-      )
+        this.terminalListeners.size > 0)
     );
   }
 
@@ -1253,9 +1240,7 @@ export class GatewayWebSocketClient {
             RECONNECT_INITIAL_DELAY_MS * 2 ** Math.min(this.reconnectAttempt, 5),
           );
     const jitter =
-      baseDelay > 0
-        ? Math.floor(Math.random() * Math.min(500, Math.max(1, baseDelay)))
-        : 0;
+      baseDelay > 0 ? Math.floor(Math.random() * Math.min(500, Math.max(1, baseDelay))) : 0;
     const host = getRuntimeHost();
     this.reconnectTimer = host.setTimeout(() => {
       this.reconnectTimer = null;
@@ -1706,7 +1691,9 @@ export class GatewayWebSocketClient {
     this.pending.delete(requestId);
 
     if (envelope.type === "error") {
-      pending.reject(new Error(typeof envelope.error === "string" ? envelope.error : "Request failed"));
+      pending.reject(
+        new Error(typeof envelope.error === "string" ? envelope.error : "Request failed"),
+      );
       return;
     }
 
@@ -1718,7 +1705,10 @@ export class GatewayWebSocketClient {
       this.socket.onclose = null;
       this.socket.onmessage = null;
       this.socket.onerror = null;
-      if (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING) {
+      if (
+        this.socket.readyState === WebSocket.OPEN ||
+        this.socket.readyState === WebSocket.CONNECTING
+      ) {
         this.socket.close();
       }
     }
@@ -1906,6 +1896,7 @@ export type GatewayWebSocketClientLike = {
     expectedMtimeMs?: number;
     expectedContentHash?: string;
   }): Promise<FsWriteTextResponse>;
+  readEditableTextFile(workdir: string, path: string): Promise<FsReadEditableTextResponse>;
   createDir(workdir: string, path: string): Promise<FsCreateDirResponse>;
   renamePath(workdir: string, fromPath: string, toPath: string): Promise<FsRenameResponse>;
   deletePath(workdir: string, path: string): Promise<FsDeleteResponse>;
@@ -1915,11 +1906,7 @@ export type GatewayWebSocketClientLike = {
   ): Promise<UploadedImagePreviewResponse>;
   readSkillMetadata(path: string): Promise<SkillMetadataResponse>;
   readSkillText(path: string, offset?: number, length?: number): Promise<SkillTextResponse>;
-  getProviderModels(
-    type: string,
-    baseUrl: string,
-    apiKey: string,
-  ): Promise<unknown>;
+  getProviderModels(type: string, baseUrl: string, apiKey: string): Promise<unknown>;
   dispose(): void;
 };
 
@@ -2481,20 +2468,14 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     });
   }
 
-  async renameHistory(
-    conversationId: string,
-    title: string,
-  ): Promise<ConversationSummary> {
+  async renameHistory(conversationId: string, title: string): Promise<ConversationSummary> {
     return this.request<ConversationSummary>("history.rename", {
       conversation_id: conversationId,
       title,
     });
   }
 
-  async pinHistory(
-    conversationId: string,
-    isPinned: boolean,
-  ): Promise<ConversationSummary> {
+  async pinHistory(conversationId: string, isPinned: boolean): Promise<ConversationSummary> {
     return this.request<ConversationSummary>("history.pin", {
       conversation_id: conversationId,
       is_pinned: isPinned,
@@ -2571,10 +2552,7 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     });
   }
 
-  async createProjectFolder(
-    parent: string,
-    name: string,
-  ): Promise<CreateProjectFolderResponse> {
+  async createProjectFolder(parent: string, name: string): Promise<CreateProjectFolderResponse> {
     return this.request<CreateProjectFolderResponse>("fs.create_project_folder", {
       parent,
       name,
@@ -2615,6 +2593,13 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     });
   }
 
+  async readEditableTextFile(workdir: string, path: string): Promise<FsReadEditableTextResponse> {
+    return this.request<FsReadEditableTextResponse>("fs.read_editable_text", {
+      workdir,
+      path,
+    });
+  }
+
   async createDir(workdir: string, path: string): Promise<FsCreateDirResponse> {
     return this.request<FsCreateDirResponse>("fs.create_dir", { workdir, path });
   }
@@ -2645,11 +2630,7 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     return this.request<SkillMetadataResponse>("skills.read-metadata", { path });
   }
 
-  async readSkillText(
-    path: string,
-    offset?: number,
-    length?: number,
-  ): Promise<SkillTextResponse> {
+  async readSkillText(path: string, offset?: number, length?: number): Promise<SkillTextResponse> {
     return this.request<SkillTextResponse>("skills.read-text", {
       path,
       offset,
@@ -2657,11 +2638,7 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     });
   }
 
-  async getProviderModels(
-    type: string,
-    baseUrl: string,
-    apiKey: string,
-  ): Promise<unknown> {
+  async getProviderModels(type: string, baseUrl: string, apiKey: string): Promise<unknown> {
     return this.request("provider.models", {
       type,
       base_url: baseUrl,
@@ -2807,11 +2784,7 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
 
   private handleMessage(raw: unknown) {
     const message = raw as SharedWorkerClientMessage;
-    if (
-      !message ||
-      typeof message !== "object" ||
-      message.connection_id !== this.connectionID
-    ) {
+    if (!message || typeof message !== "object" || message.connection_id !== this.connectionID) {
       return;
     }
 

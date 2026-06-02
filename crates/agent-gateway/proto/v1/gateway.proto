@@ -61,6 +61,7 @@ message GatewayEnvelope {
     FsRenameRequest fs_rename = 59;
     FsDeleteRequest fs_delete = 60;
     GitRequest git_request = 61;
+    FsReadEditableTextRequest fs_read_editable_text = 62;
   }
 }
 
@@ -106,6 +107,7 @@ message AgentEnvelope {
     FsRenameResponse fs_rename_resp = 62;
     FsDeleteResponse fs_delete_resp = 63;
     GitResponse git_response = 64;
+    FsReadEditableTextResponse fs_read_editable_text_resp = 65;
     ErrorResponse error = 99;
   }
 }
@@ -547,6 +549,20 @@ message FsListResponse {
   uint32 total = 6;
   bool has_more = 7;
   repeated FsListEntry entries = 8;
+}
+
+message FsReadEditableTextRequest {
+  string workdir = 1;
+  string path = 2;
+}
+
+message FsReadEditableTextResponse {
+  string path = 1;
+  string content = 2;
+  uint64 mtime_ms = 3;
+  string content_hash = 4;
+  uint64 size_bytes = 5;
+  uint64 total_lines = 6;
 }
 
 message FsWriteTextRequest {

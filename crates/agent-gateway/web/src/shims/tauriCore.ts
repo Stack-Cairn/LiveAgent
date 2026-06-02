@@ -120,15 +120,9 @@ async function readGatewayStatus(): Promise<GatewayRuntimeStatus> {
   }
 }
 
-async function invokeGatewayMemory<T>(
-  command: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
+async function invokeGatewayMemory<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   const payloadArgs =
-    args &&
-    typeof args.args === "object" &&
-    args.args !== null &&
-    !Array.isArray(args.args)
+    args && typeof args.args === "object" && args.args !== null && !Array.isArray(args.args)
       ? (args.args as Record<string, unknown>)
       : (args ?? {});
   return getGatewayWebSocketClient(loadToken().trim()).memoryManage<T>({
@@ -201,12 +195,8 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
       if (!path) {
         throw new Error("path is required");
       }
-      const maxResults =
-        typeof args?.max_results === "number" ? args.max_results : undefined;
-      return (await getGatewayWebSocketClient(loadToken().trim()).listDirs(
-        path,
-        maxResults,
-      )) as T;
+      const maxResults = typeof args?.max_results === "number" ? args.max_results : undefined;
+      return (await getGatewayWebSocketClient(loadToken().trim()).listDirs(path, maxResults)) as T;
     }
     case "fs_list":
       return (await getGatewayWebSocketClient(loadToken().trim()).listFiles(
@@ -227,6 +217,11 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         expectedContentHash:
           typeof args?.expected_content_hash === "string" ? args.expected_content_hash : undefined,
       })) as T;
+    case "fs_read_editable_text":
+      return (await getGatewayWebSocketClient(loadToken().trim()).readEditableTextFile(
+        String(args?.workdir ?? ""),
+        String(args?.path ?? ""),
+      )) as T;
     case "fs_create_dir":
       return (await getGatewayWebSocketClient(loadToken().trim()).createDir(
         String(args?.workdir ?? ""),
@@ -263,7 +258,10 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
       )) as T;
     case "system_manage_skill":
       return (await getGatewayWebSocketClient(loadToken().trim()).manageSkill(
-        (args?.payload && typeof args.payload === "object" ? args.payload : {}) as Record<string, unknown>,
+        (args?.payload && typeof args.payload === "object" ? args.payload : {}) as Record<
+          string,
+          unknown
+        >,
       )) as T;
     case "proxy_get_server_info":
       return {

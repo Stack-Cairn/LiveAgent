@@ -118,6 +118,13 @@ const SIDEBAR_SECTION_CHEVRON_CLASS =
   "h-3.5 w-3.5 shrink-0 transition-transform duration-300 ease-out motion-reduce:transition-none";
 const SIDEBAR_PROJECT_MIN_BODY_HEIGHT = 96;
 const SIDEBAR_RECENT_MIN_BODY_HEIGHT = 160;
+// Default share of the available height the workspace (projects) section claims
+// before the user drags the resize handle. Desktop splits evenly; on mobile the
+// resize handle is hidden, so bias toward the recent-conversation list — the
+// primary content of the drawer — by giving the workspace a smaller default
+// share so the recent section sits a little higher and gets a little more room.
+const SIDEBAR_PROJECTS_BODY_DEFAULT_RATIO = 0.5;
+const SIDEBAR_MOBILE_PROJECTS_BODY_DEFAULT_RATIO = 0.4;
 const EMPTY_PROJECT_PATH_KEYS = new Set<string>();
 const EMPTY_PROJECT_ACTIVITY_UPDATED_ATS = new Map<string, number>();
 const HISTORY_LOADING_SKELETON_ROWS = [
@@ -1163,8 +1170,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       0,
       Math.min(projectsContentHeight, projectMinBodyHeight, resizeMaxHeight),
     );
+    const projectsBodyDefaultRatio = isMobileMenuLayout
+      ? SIDEBAR_MOBILE_PROJECTS_BODY_DEFAULT_RATIO
+      : SIDEBAR_PROJECTS_BODY_DEFAULT_RATIO;
     const defaultProjectsBodyHeight = clampSidebarSectionHeight(
-      Math.min(projectsContentHeight, Math.floor(available / 2)),
+      Math.min(projectsContentHeight, Math.floor(available * projectsBodyDefaultRatio)),
       resizeMinHeight,
       resizeMaxHeight,
     );
@@ -1202,6 +1212,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
 
     return { projectsBodyHeight, resizeMinHeight, resizeMaxHeight, gridTemplateRows };
   }, [
+    isMobileMenuLayout,
     projectSectionHeight,
     projectsCollapsed,
     recentCollapsed,
@@ -1719,9 +1730,14 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 disabled={!canResizeProjectSections}
                 onPointerDown={handleProjectSectionResizeStart}
                 className={cn(
+                  // Always render the handle as a grid item so it keeps occupying its
+                  // grid-template-rows track. `hidden` (display:none) would drop it from
+                  // the grid below `md`, auto-shifting the recent-conversation body out of
+                  // its sized track and collapsing the list to ~0 height on mobile. The
+                  // draggable handle only becomes visible from `md` upwards.
                   "group items-center justify-center border-0 bg-transparent p-0 focus-visible:outline-none",
                   canResizeProjectSections
-                    ? "hidden h-2 cursor-row-resize touch-none md:flex"
+                    ? "flex h-0 overflow-hidden cursor-row-resize touch-none md:h-2 md:overflow-visible"
                     : "flex h-0 overflow-hidden",
                 )}
               >

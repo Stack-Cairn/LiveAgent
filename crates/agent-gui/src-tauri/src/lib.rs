@@ -60,6 +60,7 @@ macro_rules! app_invoke_handler {
             commands::subagent_history::subagent_run_prune,
             // File system
             commands::fs::fs_read_text,
+            commands::fs::fs_read_editable_text,
             commands::fs::fs_read_image_source,
             commands::fs::fs_write_text,
             commands::fs::fs_edit_text,

@@ -10,6 +10,7 @@ var websocketRequestHandlers = map[string]websocketRequestHandler{
 	"fs.list_dirs":                   (*websocketConnection).handleFsListDirs,
 	"fs.create_project_folder":       (*websocketConnection).handleFsCreateProjectFolder,
 	"fs.list":                        (*websocketConnection).handleFsList,
+	"fs.read_editable_text":          (*websocketConnection).handleFsReadEditableText,
 	"fs.write_text":                  (*websocketConnection).handleFsWriteText,
 	"fs.create_dir":                  (*websocketConnection).handleFsCreateDir,
 	"fs.rename":                      (*websocketConnection).handleFsRename,

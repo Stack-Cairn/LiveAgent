@@ -25,6 +25,7 @@ import type {
   GitCommitFile,
   GitCommitSummary,
   GitDiffResponse,
+  GitLogResponse,
   GitOperationResponse,
   GitRepositoryState,
   GitStatusEntry,
@@ -52,6 +53,7 @@ import {
   MoreHorizontal,
   RefreshCw,
   Tag,
+  Target,
   Trash2,
   Upload,
   X,
@@ -79,6 +81,7 @@ const GIT_REVIEW_STACKED_PANE_BUTTON_CLASS =
 const DIFF_SELECTION_AUTOSCROLL_EDGE_PX = 40;
 const DIFF_SELECTION_AUTOSCROLL_MAX_STEP_PX = 22;
 const DIFF_HORIZONTAL_SCROLLBAR_MIN_THUMB_PX = 32;
+const PROJECT_TOOLS_RESIZE_END_EVENT = "liveagent:project-tools-resize-end";
 const gitReviewScrollbarTimers = new WeakMap<HTMLElement, number>();
 type GitReviewScrollbarAxis = "vertical" | "horizontal";
 type GitReviewScrollbarOverlay = {
@@ -483,6 +486,10 @@ function chooseDiffHorizontalScrollTarget(
   return bestTarget;
 }
 
+function isProjectToolsPanelResizing(root: HTMLElement | null) {
+  return Boolean(root?.closest('[data-project-tools-resizing="true"]'));
+}
+
 type PatchChunk = {
   key: string;
   label: string;
@@ -516,16 +523,26 @@ type ParsedDiffStat = {
 type DiffViewKind = "branch" | "workingTree";
 type GitReviewMode = "changes" | "history";
 type GitReviewStackedPane = "list" | "detail";
+type GitHistoryMarkerKind = Extract<GraphRow["kind"], "incoming-changes" | "outgoing-changes">;
+type GitHistoryGraphState = Pick<
+  GitLogResponse,
+  "historyBaseRef" | "historyRemoteRef" | "historyAhead" | "historyBehind" | "mergeBase"
+>;
 type GitHistoryRow =
+  | {
+      type: "marker";
+      kind: GitHistoryMarkerKind;
+      graphIndex: number;
+    }
   | {
       type: "commit";
       commit: GitCommitSummary;
-      commitIndex: number;
+      graphIndex: number;
     }
   | {
       type: "file";
       commit: GitCommitSummary;
-      commitIndex: number;
+      graphIndex: number;
       file: GitCommitFile;
     }
   | {
@@ -605,7 +622,10 @@ const DIFF_SELECTION_CONTEXT_MENU_MARGIN = 12;
 const GIT_HISTORY_PAGE_SIZE = 50;
 const GIT_HISTORY_LOAD_MORE_SCROLL_THRESHOLD_PX = 96;
 const CHANGE_CONTEXT_MENU_ITEM_CLASS =
-  "flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45";
+  "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-45";
+const CONTEXT_MENU_CONTAINER_CLASS =
+  "editor-context-menu select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-xs text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]";
+const CONTEXT_MENU_SEPARATOR_CLASS = "mx-1 my-1 h-px bg-border/60";
 const GIT_REVIEW_POLL_INTERVAL_MS = 1500;
 
 type GitRefreshOptions = {
@@ -1368,6 +1388,8 @@ function DiffContent(props: {
 
   const updateDiffHorizontalScrollbar = useCallback(() => {
     const root = rootRef.current;
+    if (isProjectToolsPanelResizing(root)) return;
+
     const trackWidth =
       diffHorizontalScrollbarTrackRef.current?.clientWidth ??
       scrollViewportRef.current?.clientWidth ??
@@ -1500,6 +1522,7 @@ function DiffContent(props: {
           });
     mutationObserver?.observe(root, { childList: true, subtree: true });
     window.addEventListener("resize", refreshTargets);
+    window.addEventListener(PROJECT_TOOLS_RESIZE_END_EVENT, refreshTargets);
     refreshTargets();
 
     return () => {
@@ -1507,6 +1530,7 @@ function DiffContent(props: {
         window.cancelAnimationFrame(animationFrame);
       }
       window.removeEventListener("resize", refreshTargets);
+      window.removeEventListener(PROJECT_TOOLS_RESIZE_END_EVENT, refreshTargets);
       mutationObserver?.disconnect();
       detachTargets();
       resizeObserver?.disconnect();
@@ -1840,7 +1864,7 @@ function DiffContent(props: {
             <div
               ref={contextMenuRef}
               role="menu"
-              className="fixed z-[120] w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-lg border border-border/70 bg-popover p-1.5 text-popover-foreground shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]"
+              className="editor-context-menu fixed z-[120] w-max min-w-[9.5rem] max-w-[calc(100vw-1.5rem)] select-none overflow-hidden rounded-xl border border-border/60 bg-popover/80 p-1 text-popover-foreground shadow-2xl ring-1 ring-black/[0.03] backdrop-blur-xl dark:ring-white/[0.06]"
               style={{
                 left: selectionContextMenuPosition.left,
                 top: selectionContextMenuPosition.top,
@@ -1853,7 +1877,7 @@ function DiffContent(props: {
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   writeTextToClipboard(selectionContextMenu.selectedText);
                   closeSelectionContextMenu();
@@ -2040,12 +2064,12 @@ function commitContextRefName(
   commit: GitCommitSummary,
   state: Pick<GitRepositoryState, "remoteName">,
 ) {
-  const refs = orderedCommitRefs(commit.refs);
-  const remotePrefix = state.remoteName ? `${state.remoteName}/` : "";
+  const refs = orderedCommitRefTags(commit.refs, { remoteName: state.remoteName });
   return (
-    (remotePrefix ? refs.find((ref) => ref.startsWith(remotePrefix)) : "") ||
-    refs.find((ref) => ref.includes("/")) ||
-    refs[0] ||
+    refs.find((ref) => ref.kind === "remote")?.label ||
+    refs.find((ref) => ref.kind === "head")?.label ||
+    refs.find((ref) => ref.kind === "branch")?.label ||
+    refs[0]?.label ||
     commit.shortSha ||
     commit.sha.slice(0, 7)
   );
@@ -2210,7 +2234,11 @@ function gitRepositoryStateSignature(state: GitRepositoryState) {
   return `${header}\x1d${entries}`;
 }
 
-function gitHistorySignature(state: GitRepositoryState, commits: GitCommitSummary[]) {
+function gitHistorySignature(
+  state: GitRepositoryState,
+  commits: GitCommitSummary[],
+  historyGraphState: GitHistoryGraphState,
+) {
   const commitsSignature = commits
     .map((commit) =>
       [
@@ -2227,7 +2255,7 @@ function gitHistorySignature(state: GitRepositoryState, commits: GitCommitSummar
       ].join("\x1e"),
     )
     .join("\x1f");
-  return `${gitRepositoryStateSignature(state)}\x1d${commitsSignature}`;
+  return `${gitRepositoryStateSignature(state)}\x1d${historyGraphState.historyBaseRef}\x1e${historyGraphState.historyRemoteRef}\x1e${historyGraphState.historyAhead}\x1e${historyGraphState.historyBehind}\x1e${historyGraphState.mergeBase}\x1c${commitsSignature}`;
 }
 
 function gitDiffSignature(diff: GitDiffResponse) {
@@ -2332,16 +2360,179 @@ function graphCircleColor(row: GraphRow) {
   return graphColor(lane?.color ?? row.commitColor);
 }
 
-function orderedCommitRefs(refs: readonly string[]) {
-  const orderedRefs: string[] = [];
-  const seenRefs = new Set<string>();
-  for (const rawRef of refs) {
-    const ref = rawRef.trim();
-    if (!ref || seenRefs.has(ref)) continue;
-    seenRefs.add(ref);
-    orderedRefs.push(ref);
+type CommitRefKind = "head" | "branch" | "remote" | "tag" | "ref";
+
+type CommitRefTagInfo = {
+  label: string;
+  kind: CommitRefKind;
+  title: string;
+  order: number;
+  index: number;
+};
+
+type CommitRefTagOptions = {
+  remoteName?: string;
+};
+
+const COMMIT_REF_KIND_ORDER: Record<CommitRefKind, number> = {
+  head: 0,
+  branch: 1,
+  remote: 2,
+  tag: 3,
+  ref: 4,
+};
+
+const COMMIT_REF_KIND_TITLE: Record<CommitRefKind, string> = {
+  head: "HEAD",
+  branch: "Branch",
+  remote: "Remote branch",
+  tag: "Tag",
+  ref: "Ref",
+};
+
+function normalizeRefRemoteName(remoteName: string | undefined) {
+  return remoteName?.trim().replace(/^refs\/remotes\//, "").replace(/\/HEAD$/, "") ?? "";
+}
+
+function isLikelyRemoteRefLabel(ref: string, remoteName: string | undefined) {
+  const remote = normalizeRefRemoteName(remoteName);
+  if (remote && ref.startsWith(`${remote}/`)) return true;
+  return /^(origin|upstream)\//.test(ref);
+}
+
+function commitRefTagInfo(rawRef: string, index: number, options: CommitRefTagOptions) {
+  const raw = rawRef.trim();
+  if (!raw) return null;
+
+  let ref = raw;
+  let isHead = false;
+  let isTag = false;
+
+  if (ref.startsWith("HEAD -> ")) {
+    isHead = true;
+    ref = ref.slice("HEAD -> ".length).trim();
   }
-  return orderedRefs;
+
+  if (ref.startsWith("tag: ")) {
+    isTag = true;
+    ref = ref.slice("tag: ".length).trim();
+  }
+
+  if (!ref || ref === "HEAD" || ref.endsWith("/HEAD")) return null;
+
+  let kind: CommitRefKind = "ref";
+  let label = ref;
+  if (ref.startsWith("refs/heads/")) {
+    kind = "branch";
+    label = ref.slice("refs/heads/".length);
+  } else if (ref.startsWith("refs/remotes/")) {
+    kind = "remote";
+    label = ref.slice("refs/remotes/".length);
+  } else if (ref.startsWith("refs/tags/")) {
+    kind = "tag";
+    label = ref.slice("refs/tags/".length);
+  } else if (isTag) {
+    kind = "tag";
+  } else if (isLikelyRemoteRefLabel(ref, options.remoteName)) {
+    kind = "remote";
+  } else {
+    kind = "branch";
+  }
+
+  if (!label) return null;
+  const resolvedKind = isHead ? "head" : kind;
+  return {
+    label,
+    kind: resolvedKind,
+    title: `${COMMIT_REF_KIND_TITLE[resolvedKind]}: ${label}`,
+    order: COMMIT_REF_KIND_ORDER[resolvedKind],
+    index,
+  } satisfies CommitRefTagInfo;
+}
+
+function orderedCommitRefTags(refs: readonly string[], options: CommitRefTagOptions = {}) {
+  const orderedRefs: CommitRefTagInfo[] = [];
+  const seenRefs = new Set<string>();
+  refs.forEach((rawRef, index) => {
+    const ref = commitRefTagInfo(rawRef, index, options);
+    if (!ref) return;
+    const key = `${ref.kind}\x00${ref.label}`;
+    if (seenRefs.has(key)) return;
+    seenRefs.add(key);
+    orderedRefs.push(ref);
+  });
+  return orderedRefs.sort((left, right) => {
+    if (left.order !== right.order) return left.order - right.order;
+    return left.index - right.index;
+  });
+}
+
+function orderedCommitRefs(refs: readonly string[], options: CommitRefTagOptions = {}) {
+  return orderedCommitRefTags(refs, options).map((ref) => ref.label);
+}
+
+function commitRefChipClass(kind: CommitRefKind, selected: boolean) {
+  const baseClass =
+    "inline-flex h-5 min-w-0 items-center gap-1 rounded-full border px-1.5 text-[10px] font-semibold leading-[14px] shadow-sm ring-1 ring-inset";
+
+  if (selected) {
+    return cn(
+      baseClass,
+      "border-accent-foreground/35 bg-accent-foreground/15 text-accent-foreground ring-accent-foreground/20",
+    );
+  }
+
+  switch (kind) {
+    case "head":
+      return cn(
+        baseClass,
+        "border-emerald-300/60 bg-emerald-50 text-emerald-700 ring-emerald-200/70 dark:border-emerald-300/35 dark:bg-emerald-950/45 dark:text-emerald-200 dark:ring-emerald-300/15",
+      );
+    case "remote":
+      return cn(
+        baseClass,
+        "border-blue-300/60 bg-blue-50 text-blue-700 ring-blue-200/70 dark:border-blue-300/35 dark:bg-blue-950/45 dark:text-blue-200 dark:ring-blue-300/15",
+      );
+    case "tag":
+      return cn(
+        baseClass,
+        "border-amber-300/60 bg-amber-50 text-amber-700 ring-amber-200/70 dark:border-amber-300/35 dark:bg-amber-950/45 dark:text-amber-200 dark:ring-amber-300/15",
+      );
+    case "branch":
+      return cn(
+        baseClass,
+        "border-sky-300/60 bg-sky-50 text-sky-700 ring-sky-200/70 dark:border-sky-300/35 dark:bg-sky-950/45 dark:text-sky-200 dark:ring-sky-300/15",
+      );
+    case "ref":
+    default:
+      return cn(
+        baseClass,
+        "border-border/70 bg-muted/50 text-muted-foreground ring-border/60",
+      );
+  }
+}
+
+function CommitRefTagIcon({
+  kind,
+  variant,
+}: {
+  kind: CommitRefKind;
+  variant: "list" | "detail";
+}) {
+  const className = cn("shrink-0 opacity-85", variant === "detail" ? "h-3 w-3" : "h-2.5 w-2.5");
+  switch (kind) {
+    case "head":
+      return <Target className={className} aria-hidden="true" />;
+    case "branch":
+      return <GitBranch className={className} aria-hidden="true" />;
+    case "remote":
+      return <Cloud className={className} aria-hidden="true" />;
+    case "tag":
+      return <Tag className={className} aria-hidden="true" />;
+    case "ref":
+    default:
+      return <GitCommitHorizontal className={className} aria-hidden="true" />;
+  }
 }
 
 function commitHistoryTitle(commit: GitCommitSummary) {
@@ -2350,28 +2541,50 @@ function commitHistoryTitle(commit: GitCommitSummary) {
   return refs.length > 0 ? `${label} - ${refs.join(", ")}` : label;
 }
 
+function gitHistoryMarkerRef(
+  kind: GitHistoryMarkerKind,
+  state: Pick<GitRepositoryState, "head">,
+  historyRemoteRef: string,
+) {
+  return kind === "outgoing-changes" ? state.head : historyRemoteRef;
+}
+
+const EMPTY_GIT_HISTORY_GRAPH_STATE: GitHistoryGraphState = {
+  historyBaseRef: "",
+  historyRemoteRef: "",
+  historyAhead: 0,
+  historyBehind: 0,
+  mergeBase: "",
+};
+
+function gitHistoryGraphStateFromResponse(response: GitLogResponse): GitHistoryGraphState {
+  return {
+    historyBaseRef: response.historyBaseRef,
+    historyRemoteRef: response.historyRemoteRef,
+    historyAhead: response.historyAhead,
+    historyBehind: response.historyBehind,
+    mergeBase: response.mergeBase,
+  };
+}
+
 function CommitRefTags({
   refs,
   selected,
+  remoteName,
   variant = "list",
   limit = COMMIT_REF_TAG_LIMIT,
 }: {
   refs: readonly string[];
   selected: boolean;
+  remoteName?: string;
   variant?: "list" | "detail";
   limit?: number;
 }) {
-  const orderedRefs = orderedCommitRefs(refs);
+  const orderedRefs = orderedCommitRefTags(refs, { remoteName });
   if (orderedRefs.length === 0) return null;
 
   const visibleRefs = orderedRefs.slice(0, Math.max(0, limit));
   const hiddenCount = orderedRefs.length - visibleRefs.length;
-  const chipClass = cn(
-    "inline-flex h-5 min-w-0 items-center gap-1 rounded-full border px-1.5 text-[10px] font-semibold leading-[14px] shadow-sm ring-1 ring-inset",
-    selected
-      ? "border-accent-foreground/35 bg-accent-foreground/15 text-accent-foreground ring-accent-foreground/20"
-      : "border-sky-300/60 bg-sky-50 text-sky-700 ring-sky-200/70 dark:border-sky-300/35 dark:bg-sky-950/45 dark:text-sky-200 dark:ring-sky-300/15",
-  );
 
   return (
     <span
@@ -2380,24 +2593,28 @@ function CommitRefTags({
           ? "mt-1.5 flex min-w-0 flex-wrap items-center gap-1 overflow-visible"
           : "mt-0.5 flex max-w-[52%] shrink-0 items-center justify-end gap-1 overflow-x-hidden overflow-y-visible"
       }
-      title={orderedRefs.join(", ")}
+      title={orderedRefs.map((ref) => ref.title).join(", ")}
     >
       {visibleRefs.map((ref) => (
         <span
-          key={ref}
+          key={`${ref.kind}:${ref.label}`}
+          title={ref.title}
+          aria-label={ref.title}
           className={cn(
-            chipClass,
+            commitRefChipClass(ref.kind, selected),
             variant === "detail" ? "max-w-[12rem] shrink-0" : "max-w-[8.5rem] shrink",
           )}
         >
-          <Tag
-            className={cn("shrink-0 opacity-85", variant === "detail" ? "h-3 w-3" : "h-2.5 w-2.5")}
-          />
-          <span className="truncate leading-[14px]">{ref}</span>
+          <CommitRefTagIcon kind={ref.kind} variant={variant} />
+          <span className="truncate leading-[14px]">{ref.label}</span>
         </span>
       ))}
       {hiddenCount > 0 ? (
-        <span className={cn(chipClass, "shrink-0 px-1.5 leading-[14px]")}>+{hiddenCount}</span>
+        <span
+          className={cn(commitRefChipClass("ref", selected), "shrink-0 px-1.5 leading-[14px]")}
+        >
+          +{hiddenCount}
+        </span>
       ) : null}
     </span>
   );
@@ -2406,14 +2623,48 @@ function CommitRefTags({
 function GitGraphCommitMarker({
   cx,
   color,
+  kind,
   isHead,
   isMerge,
 }: {
   cx: number;
   color: string;
+  kind: GraphRow["kind"];
   isHead: boolean;
   isMerge: boolean;
 }) {
+  if (kind === "incoming-changes" || kind === "outgoing-changes") {
+    return (
+      <g>
+        <circle
+          cx={cx}
+          cy={GRAPH_DOT_Y}
+          r={GRAPH_DOT_R + 3}
+          fill={color}
+          stroke="var(--git-review-graph-background)"
+          strokeWidth={GRAPH_STROKE_W}
+        />
+        <circle
+          cx={cx}
+          cy={GRAPH_DOT_Y}
+          r={GRAPH_DOT_R + 1}
+          fill="var(--git-review-graph-background)"
+          stroke="var(--git-review-graph-background)"
+          strokeWidth={GRAPH_STROKE_W + 1}
+        />
+        <circle
+          cx={cx}
+          cy={GRAPH_DOT_Y}
+          r={GRAPH_DOT_R + 1}
+          fill="none"
+          stroke={color}
+          strokeDasharray="4 2"
+          strokeWidth={Math.max(1, GRAPH_STROKE_W - 1)}
+        />
+      </g>
+    );
+  }
+
   if (isHead) {
     return (
       <g>
@@ -2605,6 +2856,7 @@ function GitGraphSvgCell({ row }: { row: GraphRow }) {
         <GitGraphCommitMarker
           cx={cx}
           color={commitColor}
+          kind={row.kind}
           isHead={row.isHead}
           isMerge={row.isMerge}
         />
@@ -2704,7 +2956,7 @@ function GitOperationNoticeToast({
   );
 }
 
-export function GitReviewPanel(props: {
+type GitReviewPanelProps = {
   cwd: string;
   gitClient?: GitClient | null;
   canWrite?: boolean;
@@ -2712,7 +2964,9 @@ export function GitReviewPanel(props: {
   onRevealInFileTree?: (path: string) => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
-}) {
+};
+
+export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanelProps) {
   const {
     cwd,
     gitClient,
@@ -2742,6 +2996,9 @@ export function GitReviewPanel(props: {
   const [activeDiffView, setActiveDiffView] = useState<DiffViewKind>("workingTree");
   const [reviewMode, setReviewMode] = useState<GitReviewMode>("changes");
   const [historyCommits, setHistoryCommits] = useState<GitCommitSummary[]>([]);
+  const [historyGraphState, setHistoryGraphState] = useState<GitHistoryGraphState>(
+    EMPTY_GIT_HISTORY_GRAPH_STATE,
+  );
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyHasMore, setHistoryHasMore] = useState(false);
@@ -3139,6 +3396,7 @@ export function GitReviewPanel(props: {
         historySignatureRef.current = "";
         historyCommitsRef.current = [];
         setHistoryCommits([]);
+        setHistoryGraphState(EMPTY_GIT_HISTORY_GRAPH_STATE);
         selectedCommitShaRef.current = "";
         selectedCommitFilePathRef.current = "";
         expandedCommitShasRef.current = new Set();
@@ -3167,6 +3425,7 @@ export function GitReviewPanel(props: {
           limit: GIT_HISTORY_PAGE_SIZE,
           skip,
         });
+        const nextHistoryGraphState = gitHistoryGraphStateFromResponse(response);
         const pageHasMore = response.commits.length >= GIT_HISTORY_PAGE_SIZE;
         const previousStatusSignature = statusSignatureRef.current;
         const nextStatusSignature = gitRepositoryStateSignature(response.state);
@@ -3179,6 +3438,7 @@ export function GitReviewPanel(props: {
             historySignatureRef.current = "";
             historyCommitsRef.current = [];
             setHistoryCommits([]);
+            setHistoryGraphState(EMPTY_GIT_HISTORY_GRAPH_STATE);
             selectedCommitShaRef.current = "";
             selectedCommitFilePathRef.current = "";
             expandedCommitShasRef.current = new Set();
@@ -3197,12 +3457,17 @@ export function GitReviewPanel(props: {
           ];
           historyCommitsRef.current = nextCommits;
           setHistoryCommits(nextCommits);
+          setHistoryGraphState(nextHistoryGraphState);
           setHistoryHasMoreValue(pageHasMore);
           setHistoryLoadMoreError("");
           return;
         }
 
-        const nextSignature = gitHistorySignature(response.state, response.commits);
+        const nextSignature = gitHistorySignature(
+          response.state,
+          response.commits,
+          nextHistoryGraphState,
+        );
         const historyChanged = historySignatureRef.current !== nextSignature;
         historySignatureRef.current = nextSignature;
         if (historyChanged) {
@@ -3227,6 +3492,7 @@ export function GitReviewPanel(props: {
         setState(response.state);
         historyCommitsRef.current = response.commits;
         setHistoryCommits(response.commits);
+        setHistoryGraphState(nextHistoryGraphState);
         if (response.state.status !== "ready" || response.commits.length === 0) {
           selectedCommitShaRef.current = "";
           selectedCommitFilePathRef.current = "";
@@ -3271,6 +3537,7 @@ export function GitReviewPanel(props: {
         } else if (!silent || force) {
           historyCommitsRef.current = [];
           setHistoryCommits([]);
+          setHistoryGraphState(EMPTY_GIT_HISTORY_GRAPH_STATE);
           selectedCommitShaRef.current = "";
           selectedCommitFilePathRef.current = "";
           expandedCommitShasRef.current = new Set();
@@ -3642,18 +3909,33 @@ export function GitReviewPanel(props: {
     () =>
       computeGitGraph(historyCommits, {
         currentRef: state.head,
-        remoteRef: state.upstream,
+        remoteRef: historyGraphState.historyRemoteRef,
+        baseRef: historyGraphState.historyBaseRef,
         remoteName: state.remoteName,
+        showRemoteChangeMarkers: true,
+        ahead: historyGraphState.historyAhead,
+        behind: historyGraphState.historyBehind,
+        mergeBase: historyGraphState.mergeBase,
       }),
-    [historyCommits, state.head, state.remoteName, state.upstream],
+    [historyCommits, historyGraphState, state.head, state.remoteName],
+  );
+  const historyCommitBySha = useMemo(
+    () => new Map(historyCommits.map((commit) => [commit.sha, commit])),
+    [historyCommits],
   );
   const historyRows = useMemo<GitHistoryRow[]>(() => {
     const rows: GitHistoryRow[] = [];
-    historyCommits.forEach((commit, commitIndex) => {
-      rows.push({ type: "commit", commit, commitIndex });
+    gitGraph.rows.forEach((graphRow, graphIndex) => {
+      if (graphRow.kind === "incoming-changes" || graphRow.kind === "outgoing-changes") {
+        rows.push({ type: "marker", kind: graphRow.kind, graphIndex });
+        return;
+      }
+      const commit = historyCommitBySha.get(graphRow.sha);
+      if (!commit) return;
+      rows.push({ type: "commit", commit, graphIndex });
       if (expandedCommitShas.has(commit.sha)) {
         commit.files.forEach((file) => {
-          rows.push({ type: "file", commit, commitIndex, file });
+          rows.push({ type: "file", commit, graphIndex, file });
         });
       }
     });
@@ -3661,7 +3943,14 @@ export function GitReviewPanel(props: {
       rows.push({ type: "loadMore" });
     }
     return rows;
-  }, [expandedCommitShas, historyCommits, historyHasMore, historyLoadMoreError, historyLoadingMore]);
+  }, [
+    expandedCommitShas,
+    gitGraph.rows,
+    historyCommitBySha,
+    historyHasMore,
+    historyLoadMoreError,
+    historyLoadingMore,
+  ]);
   const historyVirtualizer = useVirtualizer({
     count: historyRows.length,
     getScrollElement: () => historyListRef.current,
@@ -3670,11 +3959,36 @@ export function GitReviewPanel(props: {
     getItemKey: (index) => {
       const row = historyRows[index];
       if (!row) return index;
+      if (row.type === "marker") return `marker:${row.kind}:${row.graphIndex}`;
       if (row.type === "commit") return `commit:${row.commit.sha}`;
       if (row.type === "loadMore") return "load-more";
       return `file:${row.commit.sha}:${row.file.status}:${row.file.oldPath ?? ""}:${row.file.path}`;
     },
   });
+  const currentHistoryItemIndex = useMemo(() => {
+    const selectedIndex = selectedCommitSha
+      ? historyRows.findIndex((row) => row.type === "commit" && row.commit.sha === selectedCommitSha)
+      : -1;
+    if (selectedIndex >= 0) return selectedIndex;
+
+    const headIndex = historyRows.findIndex(
+      (row) => row.type === "commit" && gitGraph.rows[row.graphIndex]?.isHead,
+    );
+    if (headIndex >= 0) return headIndex;
+
+    return historyRows.findIndex((row) => row.type === "commit");
+  }, [gitGraph.rows, historyRows, selectedCommitSha]);
+  const revealCurrentHistoryItem = useCallback(() => {
+    if (currentHistoryItemIndex < 0) return;
+    setHistoryContextMenu(null);
+    if (!useSplitReviewLayout) {
+      setHistoryStackedDir("back");
+      setHistoryStackedPane("list");
+    }
+    window.requestAnimationFrame(() => {
+      historyVirtualizer.scrollToIndex(currentHistoryItemIndex, { align: "center" });
+    });
+  }, [currentHistoryItemIndex, historyVirtualizer, useSplitReviewLayout]);
 
   useEffect(() => {
     if (reviewMode !== "history") {
@@ -4743,6 +5057,16 @@ export function GitReviewPanel(props: {
                 <History className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate">{t("projectTools.gitReview.commitHistoryTitle")}</span>
               </div>
+              <button
+                type="button"
+                aria-label={t("projectTools.gitReview.revealCurrentHistoryItem")}
+                title={t("projectTools.gitReview.revealCurrentHistoryItem")}
+                className="ml-auto inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                disabled={currentHistoryItemIndex < 0}
+                onClick={revealCurrentHistoryItem}
+              >
+                <Target className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
             </div>
             <div
               ref={historyListRef}
@@ -4796,6 +5120,45 @@ export function GitReviewPanel(props: {
                         </div>
                       );
                     }
+                    if (row.type === "marker") {
+                      const graphRow = gitGraph.rows[row.graphIndex];
+                      if (!graphRow) return null;
+                      const label =
+                        row.kind === "outgoing-changes"
+                          ? t("projectTools.gitReview.outgoingChanges")
+                          : t("projectTools.gitReview.incomingChanges");
+                      const refLabel = gitHistoryMarkerRef(
+                        row.kind,
+                        state,
+                        historyGraphState.historyRemoteRef,
+                      );
+                      const title = refLabel ? `${label} ${refLabel}` : label;
+                      return (
+                        <div
+                          key={virtualRow.key}
+                          ref={historyVirtualizer.measureElement}
+                          data-index={virtualRow.index}
+                          className="absolute left-0 top-0 w-full"
+                          style={{ transform: `translateY(${virtualRow.start}px)` }}
+                        >
+                          <div
+                            className="git-review-history-row flex h-[22px] w-full min-w-0 select-none items-center gap-1 px-1.5 text-left text-xs text-muted-foreground transition-colors"
+                            title={title}
+                            aria-label={title}
+                          >
+                            <GitGraphSvgCell row={graphRow} />
+                            <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
+                              {label}
+                            </span>
+                            {refLabel ? (
+                              <span className="shrink-0 truncate text-[11px] text-muted-foreground">
+                                {refLabel}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    }
                     if (row.type === "file") {
                       const TypeIcon = getFileTypeIcon(row.file.path, "file");
                       const fileSelected =
@@ -4809,7 +5172,7 @@ export function GitReviewPanel(props: {
                       const filePath = row.file.oldPath
                         ? `${parentPath(row.file.oldPath)} -> ${parentPath(row.file.path)}`
                         : parentPath(row.file.path);
-                      const graphRow = gitGraph.rows[row.commitIndex];
+                      const graphRow = gitGraph.rows[row.graphIndex];
                       return (
                         <div
                           key={virtualRow.key}
@@ -4861,7 +5224,7 @@ export function GitReviewPanel(props: {
                       historyContextMenu?.kind === "commit" &&
                       historyContextMenu.commitSha === commit.sha;
                     const commitExpanded = expandedCommitShas.has(commit.sha);
-                    const graphRow = gitGraph.rows[row.commitIndex];
+                    const graphRow = gitGraph.rows[row.graphIndex];
                     return (
                       <div
                         key={virtualRow.key}
@@ -4886,7 +5249,11 @@ export function GitReviewPanel(props: {
                           <span className="min-w-0 flex-1 truncate text-[12px] font-medium">
                             {commit.subject || commit.shortSha}
                           </span>
-                          <CommitRefTags refs={commit.refs} selected={commitSelected} />
+                          <CommitRefTags
+                            refs={commit.refs}
+                            selected={commitSelected}
+                            remoteName={state.remoteName}
+                          />
                         </button>
                       </div>
                     );
@@ -4917,6 +5284,7 @@ export function GitReviewPanel(props: {
                     <CommitRefTags
                       refs={selectedCommit.refs}
                       selected={false}
+                      remoteName={state.remoteName}
                       variant="detail"
                       limit={COMMIT_DETAIL_REF_TAG_LIMIT}
                     />
@@ -4976,7 +5344,7 @@ export function GitReviewPanel(props: {
       (historyContextMenu.kind === "commit" || historyContextFile) ? (
         <div
           role="menu"
-          className="absolute z-[75] min-w-56 select-none overflow-hidden rounded-lg border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
+          className={cn("absolute z-[75] min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
           style={{ left: historyContextMenu.x, top: historyContextMenu.y }}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
@@ -5027,7 +5395,7 @@ export function GitReviewPanel(props: {
                 <ExternalLink className="h-3.5 w-3.5" />
                 <span>{t("projectTools.gitReview.openOnGithub")}</span>
               </button>
-              <div className="my-1 h-px bg-border/70" />
+              <div className={CONTEXT_MENU_SEPARATOR_CLASS} />
               <button
                 type="button"
                 role="menuitem"
@@ -5038,7 +5406,7 @@ export function GitReviewPanel(props: {
                 <GitBranch className="h-3.5 w-3.5" />
                 <span>{t("projectTools.gitReview.createBranch")}</span>
               </button>
-              <div className="my-1 h-px bg-border/70" />
+              <div className={CONTEXT_MENU_SEPARATOR_CLASS} />
               <button
                 type="button"
                 role="menuitem"
@@ -5049,7 +5417,7 @@ export function GitReviewPanel(props: {
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>{t("projectTools.gitReview.compareWithRemote")}</span>
               </button>
-              <div className="my-1 h-px bg-border/70" />
+              <div className={CONTEXT_MENU_SEPARATOR_CLASS} />
               <button
                 type="button"
                 role="menuitem"
@@ -5068,7 +5436,7 @@ export function GitReviewPanel(props: {
                 <Copy className="h-3.5 w-3.5" />
                 <span>{t("projectTools.gitReview.copyCommitMessage")}</span>
               </button>
-              <div className="my-1 h-px bg-border/70" />
+              <div className={CONTEXT_MENU_SEPARATOR_CLASS} />
               <button
                 type="button"
                 role="menuitem"
@@ -5086,7 +5454,7 @@ export function GitReviewPanel(props: {
       {reviewMode === "changes" && changesMenu ? (
         <div
           role="menu"
-          className="absolute z-[75] min-w-56 select-none overflow-hidden rounded-lg border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
+          className={cn("absolute z-[75] min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
           style={{ left: changesMenu.x, top: changesMenu.y }}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
@@ -5145,7 +5513,7 @@ export function GitReviewPanel(props: {
       {reviewMode === "changes" && changeContextMenu && contextEntry ? (
         <div
           role="menu"
-          className="absolute z-[80] min-w-56 select-none overflow-hidden rounded-lg border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
+          className={cn("absolute z-[80] min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
           style={{ left: changeContextMenu.x, top: changeContextMenu.y }}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
@@ -5231,4 +5599,4 @@ export function GitReviewPanel(props: {
       ) : null}
     </div>
   );
-}
+});

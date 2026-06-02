@@ -19,6 +19,7 @@ import ChevronUpSource from "~icons/lucide/chevron-up";
 import CircleSource from "~icons/lucide/circle";
 import Clock3Source from "~icons/lucide/clock-3";
 import CloudSource from "~icons/lucide/cloud";
+import ClipboardPasteSource from "~icons/lucide/clipboard-paste";
 import CopySource from "~icons/lucide/copy";
 import CpuSource from "~icons/lucide/cpu";
 import DownloadSource from "~icons/lucide/download";
@@ -66,8 +67,12 @@ import PlaySource from "~icons/lucide/play";
 import PlugSource from "~icons/lucide/plug";
 import PlusSource from "~icons/lucide/plus";
 import RadioSource from "~icons/lucide/radio";
+import Redo2Source from "~icons/lucide/redo-2";
 import RefreshCwSource from "~icons/lucide/refresh-cw";
+import ReplaceSource from "~icons/lucide/replace";
+import SaveSource from "~icons/lucide/save";
 import ScrollTextSource from "~icons/lucide/scroll-text";
+import ScissorsSource from "~icons/lucide/scissors";
 import SearchSource from "~icons/lucide/search";
 import SendSource from "~icons/lucide/send";
 import ServerSource from "~icons/lucide/server";
@@ -80,9 +85,12 @@ import SquareSource from "~icons/lucide/square";
 import SquarePenSource from "~icons/lucide/square-pen";
 import SunSource from "~icons/lucide/sun";
 import TagSource from "~icons/lucide/tag";
+import TargetSource from "~icons/lucide/crosshair";
 import TerminalSource from "~icons/lucide/terminal";
 import TimerSource from "~icons/lucide/timer";
+import TextSelectSource from "~icons/lucide/text-select";
 import Trash2Source from "~icons/lucide/trash-2";
+import Undo2Source from "~icons/lucide/undo-2";
 import UploadSource from "~icons/lucide/upload";
 import UserSource from "~icons/lucide/user";
 import WifiSource from "~icons/lucide/wifi";
@@ -105,7 +113,13 @@ type IconProps = SVGProps<SVGSVGElement> & {
 export type IconComponent = ComponentType<IconProps>;
 
 function createIcon(Source: IconSource): IconComponent {
-  return function Icon({ absoluteStrokeWidth: _absoluteStrokeWidth, height, size, width, ...props }) {
+  return function Icon({
+    absoluteStrokeWidth: _absoluteStrokeWidth,
+    height,
+    size,
+    width,
+    ...props
+  }) {
     const nextProps: IconProps = { ...props };
     if (size !== undefined) {
       nextProps.width = width ?? size;
@@ -135,6 +149,7 @@ export const ChevronDown = createIcon(ChevronDownSource);
 export const ChevronRight = createIcon(ChevronRightSource);
 export const ChevronUp = createIcon(ChevronUpSource);
 export const Circle = createIcon(CircleSource);
+export const ClipboardPaste = createIcon(ClipboardPasteSource);
 export const Clock3 = createIcon(Clock3Source);
 export const Cloud = createIcon(CloudSource);
 export const Copy = createIcon(CopySource);
@@ -184,8 +199,12 @@ export const Play = createIcon(PlaySource);
 export const Plug = createIcon(PlugSource);
 export const Plus = createIcon(PlusSource);
 export const Radio = createIcon(RadioSource);
+export const Redo2 = createIcon(Redo2Source);
 export const RefreshCw = createIcon(RefreshCwSource);
+export const Replace = createIcon(ReplaceSource);
+export const Save = createIcon(SaveSource);
 export const ScrollText = createIcon(ScrollTextSource);
+export const Scissors = createIcon(ScissorsSource);
 export const Search = createIcon(SearchSource);
 export const Send = createIcon(SendSource);
 export const Server = createIcon(ServerSource);
@@ -198,9 +217,12 @@ export const Square = createIcon(SquareSource);
 export const SquarePen = createIcon(SquarePenSource);
 export const Sun = createIcon(SunSource);
 export const Tag = createIcon(TagSource);
+export const Target = createIcon(TargetSource);
 export const Terminal = createIcon(TerminalSource);
 export const Timer = createIcon(TimerSource);
+export const TextSelect = createIcon(TextSelectSource);
 export const Trash2 = createIcon(Trash2Source);
+export const Undo2 = createIcon(Undo2Source);
 export const Upload = createIcon(UploadSource);
 export const User = createIcon(UserSource);
 export const Wifi = createIcon(WifiSource);

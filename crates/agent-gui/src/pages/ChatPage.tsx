@@ -3,7 +3,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { MacOsTitleBarSpacer, MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import { ChatHistorySidebar } from "../components/chat/ChatHistorySidebar";
 import { HistoryShareModal } from "../components/chat/HistoryShareModal";
@@ -18,6 +27,7 @@ import { type NotifyItem, NotifyToast } from "../components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "../components/chat/SharedHistoryManagerModal";
 import { Ban, PanelRightClose, PanelRightOpen, Terminal, Upload } from "../components/icons";
 import { ProjectToolsPanel } from "../components/project-tools/ProjectToolsPanel";
+import type { WorkspaceCodeEditorOpenRequest } from "../components/workspace-editor/WorkspaceCodeEditorOverlay";
 import { Button } from "../components/ui/button";
 import { useConfirmDialog } from "../components/ui/confirm-dialog";
 import { useLocale } from "../i18n";
@@ -81,6 +91,11 @@ import { createSubagentRuntimeManager } from "../lib/chat/subagent/subagentRunti
 import { createStreamDebugLogger } from "../lib/debug/agentDebug";
 import { createConversationHookDispatcher } from "../lib/hooks/conversationHooks";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
+import {
+  lockMonacoNlsLocale,
+  preparePreferredMonacoNlsLocale,
+  setPreferredMonacoNlsLocale,
+} from "../lib/monacoNls";
 import { createModelFromConfig, toModelValue } from "../lib/providers/llm";
 import {
   type AppSettings,
@@ -174,6 +189,15 @@ import { MAX_UPLOAD_FILES, usePendingUploads } from "./chat/usePendingUploads";
 import { McpHubPage } from "./mcp-hub/McpHubPage";
 import type { SectionId } from "./settings/types";
 import { SkillsHubPage } from "./skills-hub/SkillsHubPage";
+
+const WorkspaceCodeEditorOverlay = lazy(async () => {
+  await preparePreferredMonacoNlsLocale();
+  const module = await import("../components/workspace-editor/WorkspaceCodeEditorOverlay");
+  lockMonacoNlsLocale();
+  return {
+    default: module.WorkspaceCodeEditorOverlay,
+  };
+});
 
 type ChatPageProps = {
   settings: AppSettings;
@@ -548,6 +572,8 @@ function createWorkspaceProjectFromPath(path: string, kind: WorkspaceProject["ki
 
 export function ChatPage(props: ChatPageProps) {
   const { settings, setSettings, context, setContext, onOpenSettings, onToggleTheme } = props;
+  // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
+  setPreferredMonacoNlsLocale(settings.locale);
   const { t } = useLocale();
   const initialConversationRef = useRef(createConversationIdentity());
   const initialConversationStateRef = useRef(createConversationStateFromContext(context));
@@ -664,6 +690,16 @@ export function ChatPage(props: ChatPageProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeView, setActiveView] = useState<"chat" | "skills-hub" | "mcp-hub">("chat");
   const [projectToolsPanelOpen, setProjectToolsPanelOpen] = useState(false);
+  const projectToolsFileTreeOpenCount =
+    settings.customSettings.projectToolsFileTree.openProjectPathKeys.length;
+  const previousProjectToolsFileTreeOpenCountRef = useRef(projectToolsFileTreeOpenCount);
+  const [workspaceEditorMounted, setWorkspaceEditorMounted] = useState(false);
+  const [workspaceEditorOpen, setWorkspaceEditorOpen] = useState(false);
+  const [workspaceEditorCleanupPending, setWorkspaceEditorCleanupPending] = useState(false);
+  const [workspaceEditorOpenRequest, setWorkspaceEditorOpenRequest] =
+    useState<WorkspaceCodeEditorOpenRequest | null>(null);
+  const [workspaceEditorCloseRequestId, setWorkspaceEditorCloseRequestId] = useState(0);
+  const workspaceEditorRequestIdRef = useRef(0);
   const [projectTerminalSessions, setProjectTerminalSessions] = useState<TerminalSession[]>([]);
   const [remoteRuntimeStatus, setRemoteRuntimeStatus] = useState<GatewayRuntimeStatus>(() =>
     buildFallbackGatewayStatus(settings.remote),
@@ -1430,6 +1466,42 @@ export function ChatPage(props: ChatPageProps) {
     : !terminalProjectPath
       ? "Select a project to use project tools."
       : undefined;
+  const handleOpenEditableFile = useCallback(
+    (path: string) => {
+      if (!terminalProjectPath || !terminalProjectPathKey) return;
+      workspaceEditorRequestIdRef.current += 1;
+      setWorkspaceEditorCleanupPending(false);
+      setWorkspaceEditorMounted(true);
+      setWorkspaceEditorOpen(true);
+      setWorkspaceEditorOpenRequest({
+        id: workspaceEditorRequestIdRef.current,
+        projectPathKey: terminalProjectPathKey,
+        workdir: terminalProjectPath,
+        path,
+      });
+    },
+    [terminalProjectPath, terminalProjectPathKey],
+  );
+  const requestWorkspaceEditorClose = useCallback(() => {
+    setWorkspaceEditorCloseRequestId((current) => current + 1);
+  }, []);
+  useEffect(() => {
+    const previousOpenCount = previousProjectToolsFileTreeOpenCountRef.current;
+    previousProjectToolsFileTreeOpenCountRef.current = projectToolsFileTreeOpenCount;
+    if (projectToolsFileTreeOpenCount > 0 && workspaceEditorCleanupPending) {
+      setWorkspaceEditorCleanupPending(false);
+    }
+    if (previousOpenCount > 0 && projectToolsFileTreeOpenCount === 0 && workspaceEditorMounted) {
+      setWorkspaceEditorCleanupPending(true);
+      setWorkspaceEditorOpen(true);
+      requestWorkspaceEditorClose();
+    }
+  }, [
+    projectToolsFileTreeOpenCount,
+    requestWorkspaceEditorClose,
+    workspaceEditorCleanupPending,
+    workspaceEditorMounted,
+  ]);
   useEffect(() => {
     if (!terminalProjectPathKey) {
       setProjectTerminalSessions([]);
@@ -4106,298 +4178,331 @@ export function ChatPage(props: ChatPageProps) {
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden">
-      <MacOsTitleBarToggle
-        sidebarOpen={sidebarOpen}
-        onToggle={handleToggleSidebar}
-        onOpenSettings={() => onOpenSettings()}
-      />
-      {/* ---- Sidebar ---- */}
-      <ChatHistorySidebar
-        items={historyItems}
-        currentConversationId={currentConversationId}
-        isBusy={isSending}
-        runningConversationIds={sidebarRunningConversationIds}
-        isLoading={historyLoading}
-        totalItems={historyTotal}
-        hasMore={historyHasMore}
-        isLoadingMore={historyLoadingMore}
-        errorMessage={historyError}
-        renamingId={renamingId}
-        renameDraft={renameDraft}
-        isOpen={sidebarOpen}
-        activeView={activeView}
-        showProjects={isAgentMode}
-        projects={workspaceProjects}
-        activeProjectId={activeWorkspaceProject?.id}
-        missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-        runningProjectPathKeys={runningProjectPathKeys}
-        projectActivityUpdatedAts={projectActivityUpdatedAts}
-        projectRenamingId={projectRenamingId}
-        projectRenameDraft={projectRenameDraft}
-        projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
-        recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
-        onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
-        onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
-        onCreateProject={handleOpenCreateWorkspaceProject}
-        onSelectProject={handleSelectWorkspaceProject}
-        onNewConversationForProject={handleNewConversationForProject}
-        onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
-        onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
-        onStartRenamingProject={handleStartRenamingWorkspaceProject}
-        onProjectRenameDraftChange={setProjectRenameDraft}
-        onCommitProjectRename={handleCommitWorkspaceProjectRename}
-        onCancelProjectRename={handleCancelWorkspaceProjectRename}
-        onSetProjectPinned={handleSetWorkspaceProjectPinned}
-        onRemoveProject={handleRemoveWorkspaceProject}
-        onNewConversation={() => {
-          setActiveView("chat");
-          if (activeView !== "chat" && isDraftConversation) {
-            return;
-          }
-          handleNewConversation();
-        }}
-        onSelectConversation={(id) => {
-          setActiveView("chat");
-          handleSelectConversation(id);
-        }}
-        onStartRenaming={handleStartRenaming}
-        onRenameDraftChange={setRenameDraft}
-        onCommitRename={handleCommitRename}
-        onCancelRename={handleCancelRename}
-        onSetPinned={handleSetPinned}
-        canShareConversations={canShareHistory}
-        sharedConversationCount={sharedHistoryItems.length}
-        onShareConversation={handleOpenShareModal}
-        onOpenSharedConversations={handleOpenSharedHistoryManager}
-        onDeleteConversation={handleDeleteConversation}
-        onLoadMore={loadMoreHistory}
-        onCloseSidebar={handleCloseSidebar}
-        onOpenSkillsHub={() => {
-          cacheActiveComposerDraft();
-          setProjectToolsPanelOpen(false);
-          setActiveView("skills-hub");
-        }}
-        onOpenMcpHub={() => {
-          cacheActiveComposerDraft();
-          setProjectToolsPanelOpen(false);
-          setActiveView("mcp-hub");
-        }}
-      />
-
-      {shareConversation ? (
-        <HistoryShareModal
-          conversation={shareConversation}
-          share={shareStatus}
-          isLoading={shareLoading}
-          isUpdating={shareUpdating}
-          errorMessage={shareError}
-          shareOrigin={sharedManagerShareOrigin}
-          shareOriginLoading={sharedManagerGatewayUrlLoading}
-          onToggle={handleToggleHistoryShare}
-          onRedactToolContentChange={handleSetShareRedactToolContent}
-          onClose={handleCloseShareModal}
+      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <MacOsTitleBarToggle
+          sidebarOpen={sidebarOpen}
+          onToggle={handleToggleSidebar}
+          onOpenSettings={() => onOpenSettings()}
         />
-      ) : null}
-
-      {sharedManagerOpen ? (
-        <SharedHistoryManagerModal
-          conversations={sharedHistoryItems}
-          statuses={sharedManagerStatuses}
-          loadingIds={sharedManagerLoadingIds}
-          updatingIds={sharedManagerUpdatingIds}
-          errors={sharedManagerErrors}
-          shareOrigin={sharedManagerShareOrigin}
-          shareOriginLoading={sharedManagerGatewayUrlLoading}
-          onRefresh={handleRefreshSharedHistoryStatuses}
-          onLoadStatus={handleLoadSharedHistoryStatus}
-          onDisableShare={handleDisableSharedHistory}
-          onSetRedactToolContent={handleSetSharedHistoryRedactToolContent}
-          onClose={() => setSharedManagerOpen(false)}
+        {/* ---- Sidebar ---- */}
+        <ChatHistorySidebar
+          items={historyItems}
+          currentConversationId={currentConversationId}
+          isBusy={isSending}
+          runningConversationIds={sidebarRunningConversationIds}
+          isLoading={historyLoading}
+          totalItems={historyTotal}
+          hasMore={historyHasMore}
+          isLoadingMore={historyLoadingMore}
+          errorMessage={historyError}
+          renamingId={renamingId}
+          renameDraft={renameDraft}
+          isOpen={sidebarOpen}
+          activeView={activeView}
+          showProjects={isAgentMode}
+          projects={workspaceProjects}
+          activeProjectId={activeWorkspaceProject?.id}
+          missingProjectPathKeys={missingWorkspaceProjectPathKeys}
+          runningProjectPathKeys={runningProjectPathKeys}
+          projectActivityUpdatedAts={projectActivityUpdatedAts}
+          projectRenamingId={projectRenamingId}
+          projectRenameDraft={projectRenameDraft}
+          projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+          recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
+          onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
+          onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
+          onCreateProject={handleOpenCreateWorkspaceProject}
+          onSelectProject={handleSelectWorkspaceProject}
+          onNewConversationForProject={handleNewConversationForProject}
+          onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
+          onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
+          onStartRenamingProject={handleStartRenamingWorkspaceProject}
+          onProjectRenameDraftChange={setProjectRenameDraft}
+          onCommitProjectRename={handleCommitWorkspaceProjectRename}
+          onCancelProjectRename={handleCancelWorkspaceProjectRename}
+          onSetProjectPinned={handleSetWorkspaceProjectPinned}
+          onRemoveProject={handleRemoveWorkspaceProject}
+          onNewConversation={() => {
+            setActiveView("chat");
+            if (activeView !== "chat" && isDraftConversation) {
+              return;
+            }
+            handleNewConversation();
+          }}
+          onSelectConversation={(id) => {
+            setActiveView("chat");
+            handleSelectConversation(id);
+          }}
+          onStartRenaming={handleStartRenaming}
+          onRenameDraftChange={setRenameDraft}
+          onCommitRename={handleCommitRename}
+          onCancelRename={handleCancelRename}
+          onSetPinned={handleSetPinned}
+          canShareConversations={canShareHistory}
+          sharedConversationCount={sharedHistoryItems.length}
+          onShareConversation={handleOpenShareModal}
+          onOpenSharedConversations={handleOpenSharedHistoryManager}
+          onDeleteConversation={handleDeleteConversation}
+          onLoadMore={loadMoreHistory}
+          onCloseSidebar={handleCloseSidebar}
+          onOpenSkillsHub={() => {
+            cacheActiveComposerDraft();
+            setProjectToolsPanelOpen(false);
+            setActiveView("skills-hub");
+          }}
+          onOpenMcpHub={() => {
+            cacheActiveComposerDraft();
+            setProjectToolsPanelOpen(false);
+            setActiveView("mcp-hub");
+          }}
         />
-      ) : null}
 
-      {confirmDialog}
-
-      {/* ---- Main content ---- */}
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
-        {activeView === "skills-hub" ? (
-          <SkillsHubPage
-            settings={settings}
-            setSettings={setSettings}
-            initialSkills={availableSkills}
-            initialRootDir={skillsRootDir}
-            isAgentMode={isAgentMode}
-            sidebarOpen={sidebarOpen}
-            onOpenSidebar={handleOpenSidebar}
+        {shareConversation ? (
+          <HistoryShareModal
+            conversation={shareConversation}
+            share={shareStatus}
+            isLoading={shareLoading}
+            isUpdating={shareUpdating}
+            errorMessage={shareError}
+            shareOrigin={sharedManagerShareOrigin}
+            shareOriginLoading={sharedManagerGatewayUrlLoading}
+            onToggle={handleToggleHistoryShare}
+            onRedactToolContentChange={handleSetShareRedactToolContent}
+            onClose={handleCloseShareModal}
           />
-        ) : activeView === "mcp-hub" ? (
-          <McpHubPage
-            settings={settings}
-            setSettings={setSettings}
-            isAgentMode={isAgentMode}
-            sidebarOpen={sidebarOpen}
-            onOpenSidebar={handleOpenSidebar}
+        ) : null}
+
+        {sharedManagerOpen ? (
+          <SharedHistoryManagerModal
+            conversations={sharedHistoryItems}
+            statuses={sharedManagerStatuses}
+            loadingIds={sharedManagerLoadingIds}
+            updatingIds={sharedManagerUpdatingIds}
+            errors={sharedManagerErrors}
+            shareOrigin={sharedManagerShareOrigin}
+            shareOriginLoading={sharedManagerGatewayUrlLoading}
+            onRefresh={handleRefreshSharedHistoryStatuses}
+            onLoadStatus={handleLoadSharedHistoryStatus}
+            onDisableShare={handleDisableSharedHistory}
+            onSetRedactToolContent={handleSetSharedHistoryRedactToolContent}
+            onClose={() => setSharedManagerOpen(false)}
           />
-        ) : (
-          <>
-            <MacOsTitleBarSpacer />
-            <div className="relative z-20">
-              <ChatHeader
-                settings={settings}
-                hasModels={hasModels}
-                currentModelLabel={currentModelLabel}
-                modelOptions={modelOptions}
-                selectedValue={selectedValue}
-                sidebarOpen={sidebarOpen}
-                setSettings={setSettings}
-                onOpenSettings={onOpenSettings}
-                onToggleTheme={onToggleTheme}
-                onOpenSidebar={handleOpenSidebar}
-                trailingActions={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setProjectToolsPanelOpen((open) => !open)}
-                    disabled={Boolean(terminalDisabledMessage) && !projectToolsPanelOpen}
-                    aria-expanded={projectToolsPanelOpen}
-                    title={
-                      projectToolsPanelOpen
-                        ? "Collapse project tools panel"
-                        : (terminalDisabledMessage ?? "Expand project tools panel")
-                    }
-                    className={`relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
-                      projectToolsPanelOpen ? "bg-muted text-foreground" : ""
-                    }`}
-                  >
-                    {projectToolsPanelOpen ? (
-                      <PanelRightClose className="h-4.5 w-4.5" />
-                    ) : (
-                      <PanelRightOpen className="h-4.5 w-4.5" />
-                    )}
-                    {projectTerminalSessions.length > 0 ? (
-                      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-semibold leading-none text-white">
-                        {projectTerminalSessions.length}
-                      </span>
-                    ) : null}
-                  </Button>
-                }
-              />
-              <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
-            </div>
+        ) : null}
 
-            <ChatTranscript
-              conversationId={currentConversationId}
-              workspaceRoot={currentConversationWorkspaceRoot}
-              gitClient={tauriGitClient}
-              scrollAreaRef={scrollAreaRef}
-              bottomRef={bottomRef}
-              hasModels={hasModels}
-              historyItems={historyRenderItems}
-              isHistorySwitching={Boolean(historySwitchOverlay)}
-              isSending={isSending}
-              isAgentMode={isAgentMode}
-              showUsage={isAgentDevExecutionMode}
-              usageContextWindow={currentModelContextWindow}
-              liveTranscriptStore={liveTranscriptStore}
-              isCompactionRunning={isCompactionRunning}
-              copiedMessageKey={copiedMessageKey}
-              setCopiedMessageKey={setCopiedMessageKey}
-              onResendFromEdit={handleResendFromEdit}
-              onOpenSettings={onOpenSettings}
-            />
+        {confirmDialog}
 
-            <ChatComposerBar
-              composerRef={composerRef}
-              isSending={isSending}
-              isUploadingFiles={isUploadingFiles}
-              isInputDisabled={isComposerInputDisabled}
-              inputPlaceholder={composerPlaceholder}
-              workdir={displayedConversationWorkdir}
-              enabledSkills={enabledComposerSkills}
+        {/* ---- Main content ---- */}
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+          {activeView === "skills-hub" ? (
+            <SkillsHubPage
+              settings={settings}
+              setSettings={setSettings}
+              initialSkills={availableSkills}
+              initialRootDir={skillsRootDir}
               isAgentMode={isAgentMode}
-              chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
-              reasoningOptions={chatRuntimeReasoningOptions}
-              gitClient={tauriGitClient}
-              onGitChanged={(gitWorkdir) =>
-                window.dispatchEvent(
-                  new CustomEvent("liveagent:git-changed", {
-                    detail: { workdir: gitWorkdir },
-                  }),
-                )
-              }
-              onSend={handleSend}
-              onStop={handleStopSending}
-              onComposerBusyChange={handleComposerBusyChange}
-              onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
-              onPickReadableFiles={pickReadableFiles}
-              onPasteFiles={importReadableFiles}
-              pendingUploadedFiles={pendingUploadedFiles}
-              onRemovePendingUpload={removePendingUpload}
+              sidebarOpen={sidebarOpen}
+              onOpenSidebar={handleOpenSidebar}
             />
-            {isFileDropActive ? (
-              <div
-                className="file-drop-overlay pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6 bg-white/30 backdrop-blur-md dark:bg-black/30"
-                aria-hidden="true"
-              >
-                <div
-                  className={`file-drop-overlay-zone absolute inset-3 sm:inset-4 rounded-2xl border border-dashed ${
-                    canDropUpload
-                      ? "border-foreground/20 bg-foreground/[0.015] dark:border-white/15 dark:bg-white/[0.015]"
-                      : "border-destructive/35 bg-destructive/[0.03]"
-                  }`}
+          ) : activeView === "mcp-hub" ? (
+            <McpHubPage
+              settings={settings}
+              setSettings={setSettings}
+              isAgentMode={isAgentMode}
+              sidebarOpen={sidebarOpen}
+              onOpenSidebar={handleOpenSidebar}
+            />
+          ) : (
+            <>
+              <MacOsTitleBarSpacer />
+              <div className="relative z-20">
+                <ChatHeader
+                  settings={settings}
+                  hasModels={hasModels}
+                  currentModelLabel={currentModelLabel}
+                  modelOptions={modelOptions}
+                  selectedValue={selectedValue}
+                  sidebarOpen={sidebarOpen}
+                  setSettings={setSettings}
+                  onOpenSettings={onOpenSettings}
+                  onToggleTheme={onToggleTheme}
+                  onOpenSidebar={handleOpenSidebar}
+                  trailingActions={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setProjectToolsPanelOpen((open) => !open)}
+                      disabled={Boolean(terminalDisabledMessage) && !projectToolsPanelOpen}
+                      aria-expanded={projectToolsPanelOpen}
+                      title={
+                        projectToolsPanelOpen
+                          ? "Collapse project tools panel"
+                          : (terminalDisabledMessage ?? "Expand project tools panel")
+                      }
+                      className={`relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
+                        projectToolsPanelOpen ? "bg-muted text-foreground" : ""
+                      }`}
+                    >
+                      {projectToolsPanelOpen ? (
+                        <PanelRightClose className="h-4.5 w-4.5" />
+                      ) : (
+                        <PanelRightOpen className="h-4.5 w-4.5" />
+                      )}
+                      {projectTerminalSessions.length > 0 ? (
+                        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-semibold leading-none text-white">
+                          {projectTerminalSessions.length}
+                        </span>
+                      ) : null}
+                    </Button>
+                  }
                 />
+                <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
+              </div>
+
+              <ChatTranscript
+                conversationId={currentConversationId}
+                workspaceRoot={currentConversationWorkspaceRoot}
+                gitClient={tauriGitClient}
+                scrollAreaRef={scrollAreaRef}
+                bottomRef={bottomRef}
+                hasModels={hasModels}
+                historyItems={historyRenderItems}
+                isHistorySwitching={Boolean(historySwitchOverlay)}
+                isSending={isSending}
+                isAgentMode={isAgentMode}
+                showUsage={isAgentDevExecutionMode}
+                usageContextWindow={currentModelContextWindow}
+                liveTranscriptStore={liveTranscriptStore}
+                isCompactionRunning={isCompactionRunning}
+                copiedMessageKey={copiedMessageKey}
+                setCopiedMessageKey={setCopiedMessageKey}
+                onResendFromEdit={handleResendFromEdit}
+                onOpenSettings={onOpenSettings}
+              />
+
+              <ChatComposerBar
+                composerRef={composerRef}
+                isSending={isSending}
+                isUploadingFiles={isUploadingFiles}
+                isInputDisabled={isComposerInputDisabled}
+                inputPlaceholder={composerPlaceholder}
+                workdir={displayedConversationWorkdir}
+                enabledSkills={enabledComposerSkills}
+                isAgentMode={isAgentMode}
+                chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
+                reasoningOptions={chatRuntimeReasoningOptions}
+                gitClient={tauriGitClient}
+                onGitChanged={(gitWorkdir) =>
+                  window.dispatchEvent(
+                    new CustomEvent("liveagent:git-changed", {
+                      detail: { workdir: gitWorkdir },
+                    }),
+                  )
+                }
+                onSend={handleSend}
+                onStop={handleStopSending}
+                onComposerBusyChange={handleComposerBusyChange}
+                onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
+                onPickReadableFiles={pickReadableFiles}
+                onPasteFiles={importReadableFiles}
+                pendingUploadedFiles={pendingUploadedFiles}
+                onRemovePendingUpload={removePendingUpload}
+              />
+              {isFileDropActive ? (
                 <div
-                  className={`file-drop-overlay-card relative flex w-full max-w-[380px] flex-col items-center gap-5 rounded-2xl border bg-white/70 px-8 py-7 text-center shadow-[0_24px_60px_-20px_rgba(0,0,0,0.25),0_8px_20px_-12px_rgba(0,0,0,0.15)] backdrop-blur-2xl dark:bg-zinc-900/70 dark:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7),0_8px_20px_-12px_rgba(0,0,0,0.5)] ${
-                    canDropUpload
-                      ? "border-black/[0.06] ring-1 ring-inset ring-white/40 dark:border-white/10 dark:ring-white/[0.04]"
-                      : "border-destructive/20 ring-1 ring-inset ring-destructive/10 dark:border-destructive/30"
-                  }`}
+                  className="file-drop-overlay pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6 bg-white/30 backdrop-blur-md dark:bg-black/30"
+                  aria-hidden="true"
                 >
                   <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-2xl ring-1 ring-inset ${
+                    className={`file-drop-overlay-zone absolute inset-3 sm:inset-4 rounded-2xl border border-dashed ${
                       canDropUpload
-                        ? "bg-foreground/[0.04] text-foreground/85 ring-foreground/10 dark:bg-white/[0.06] dark:text-white/90 dark:ring-white/10"
-                        : "bg-destructive/[0.08] text-destructive/90 ring-destructive/15"
+                        ? "border-foreground/20 bg-foreground/[0.015] dark:border-white/15 dark:bg-white/[0.015]"
+                        : "border-destructive/35 bg-destructive/[0.03]"
                     }`}
-                  >
-                    {canDropUpload ? (
-                      <Upload className="h-6 w-6" strokeWidth={1.75} />
-                    ) : (
-                      <Ban className="h-6 w-6" strokeWidth={1.75} />
-                    )}
-                  </div>
-
-                  <div className="flex flex-col items-center gap-1.5">
-                    <div className="text-[15px] font-semibold leading-tight tracking-tight text-foreground">
-                      {fileDropTitle}
-                    </div>
-                    <div className="max-w-[280px] text-xs leading-5 text-muted-foreground">
-                      {fileDropDescription}
-                    </div>
-                  </div>
-
-                  <div className="h-px w-12 bg-foreground/10 dark:bg-white/10" aria-hidden="true" />
-
+                  />
                   <div
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                    className={`file-drop-overlay-card relative flex w-full max-w-[380px] flex-col items-center gap-5 rounded-2xl border bg-white/70 px-8 py-7 text-center shadow-[0_24px_60px_-20px_rgba(0,0,0,0.25),0_8px_20px_-12px_rgba(0,0,0,0.15)] backdrop-blur-2xl dark:bg-zinc-900/70 dark:shadow-[0_24px_60px_-20px_rgba(0,0,0,0.7),0_8px_20px_-12px_rgba(0,0,0,0.5)] ${
                       canDropUpload
-                        ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
-                        : "border-destructive/20 bg-destructive/[0.05] text-destructive/80"
+                        ? "border-black/[0.06] ring-1 ring-inset ring-white/40 dark:border-white/10 dark:ring-white/[0.04]"
+                        : "border-destructive/20 ring-1 ring-inset ring-destructive/10 dark:border-destructive/30"
                     }`}
                   >
-                    <span
-                      aria-hidden="true"
-                      className={`inline-flex h-1.5 w-1.5 rounded-full ${
-                        canDropUpload ? "bg-foreground/35 dark:bg-white/50" : "bg-destructive/55"
+                    <div
+                      className={`flex h-14 w-14 items-center justify-center rounded-2xl ring-1 ring-inset ${
+                        canDropUpload
+                          ? "bg-foreground/[0.04] text-foreground/85 ring-foreground/10 dark:bg-white/[0.06] dark:text-white/90 dark:ring-white/10"
+                          : "bg-destructive/[0.08] text-destructive/90 ring-destructive/15"
                       }`}
+                    >
+                      {canDropUpload ? (
+                        <Upload className="h-6 w-6" strokeWidth={1.75} />
+                      ) : (
+                        <Ban className="h-6 w-6" strokeWidth={1.75} />
+                      )}
+                    </div>
+
+                    <div className="flex flex-col items-center gap-1.5">
+                      <div className="text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+                        {fileDropTitle}
+                      </div>
+                      <div className="max-w-[280px] text-xs leading-5 text-muted-foreground">
+                        {fileDropDescription}
+                      </div>
+                    </div>
+
+                    <div
+                      className="h-px w-12 bg-foreground/10 dark:bg-white/10"
+                      aria-hidden="true"
                     />
-                    {fileDropLimitHint}
+
+                    <div
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                        canDropUpload
+                          ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
+                          : "border-destructive/20 bg-destructive/[0.05] text-destructive/80"
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`inline-flex h-1.5 w-1.5 rounded-full ${
+                          canDropUpload ? "bg-foreground/35 dark:bg-white/50" : "bg-destructive/55"
+                        }`}
+                      />
+                      {fileDropLimitHint}
+                    </div>
                   </div>
                 </div>
+              ) : null}
+            </>
+          )}
+        </div>
+        {workspaceEditorMounted ? (
+          <Suspense
+            fallback={
+              <div className="absolute inset-0 z-50 flex min-h-0 flex-col border-r border-border bg-background text-sm text-muted-foreground shadow-2xl">
+                <MacOsTitleBarSpacer className="bg-muted/45" />
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                  {t("workspaceEditor.loading")}
+                </div>
               </div>
-            ) : null}
-          </>
-        )}
+            }
+          >
+            <WorkspaceCodeEditorOverlay
+              openRequest={workspaceEditorOpenRequest}
+              closeRequestId={workspaceEditorCloseRequestId}
+              isOpen={workspaceEditorOpen}
+              finalCloseRequested={workspaceEditorCleanupPending}
+              theme={settings.theme}
+              onHide={() => setWorkspaceEditorOpen(false)}
+              onClose={() => {
+                setWorkspaceEditorOpen(false);
+                setWorkspaceEditorMounted(false);
+                setWorkspaceEditorCleanupPending(false);
+                setWorkspaceEditorOpenRequest(null);
+                setWorkspaceEditorCloseRequestId(0);
+              }}
+            />
+          </Suspense>
+        ) : null}
       </div>
       <ProjectToolsPanel
         isOpen={activeView === "chat" && projectToolsPanelOpen}
@@ -4444,9 +4549,9 @@ export function ChatPage(props: ChatPageProps) {
             updateProjectToolsPanelTabOrder(prev, terminalProjectPathKey, tabOrder),
           )
         }
-        onFileTreeOpenChange={(open) =>
-          setSettings((prev) => updateProjectToolsFileTreeOpen(prev, terminalProjectPathKey, open))
-        }
+        onFileTreeOpenChange={(open) => {
+          setSettings((prev) => updateProjectToolsFileTreeOpen(prev, terminalProjectPathKey, open));
+        }}
         onFileTreeStateChange={(patch) =>
           setSettings((prev) =>
             updateProjectToolsFileTreeProjectState(prev, terminalProjectPathKey, patch),
@@ -4460,6 +4565,7 @@ export function ChatPage(props: ChatPageProps) {
           composerRef.current?.insertFileMention(path, kind);
           composerRef.current?.focus();
         }}
+        onOpenEditableFile={handleOpenEditableFile}
         onInsertCommitMention={(commit) => {
           composerRef.current?.insertCommitMention(commit);
           composerRef.current?.focus();

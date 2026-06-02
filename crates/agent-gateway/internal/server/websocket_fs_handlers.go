@@ -237,6 +237,57 @@ func (c *websocketConnection) handleFsList(req websocketRequest) {
 	_ = c.writeResponse(req.ID, websocketFsListResponsePayload(resp))
 }
 
+func (c *websocketConnection) handleFsReadEditableText(req websocketRequest) {
+	type payload struct {
+		Workdir string `json:"workdir"`
+		Path    string `json:"path"`
+	}
+
+	var body payload
+	if err := decodeWebSocketPayload(req.Payload, &body); err != nil {
+		_ = c.writeError(req.ID, "invalid fs.read_editable_text payload")
+		return
+	}
+
+	workdir := strings.TrimSpace(body.Workdir)
+	path := strings.TrimSpace(body.Path)
+	if workdir == "" {
+		_ = c.writeError(req.ID, "workdir is required")
+		return
+	}
+	if path == "" {
+		_ = c.writeError(req.ID, "path is required")
+		return
+	}
+
+	response, err := c.awaitAgentResponse(req.ID, &gatewayv1.GatewayEnvelope{
+		RequestId: req.ID,
+		Timestamp: time.Now().Unix(),
+		Payload: &gatewayv1.GatewayEnvelope_FsReadEditableText{
+			FsReadEditableText: &gatewayv1.FsReadEditableTextRequest{
+				Workdir: workdir,
+				Path:    path,
+			},
+		},
+	})
+	if err != nil {
+		_ = c.writeError(req.ID, websocketErrorMessage(err))
+		return
+	}
+	if errResp := response.GetError(); errResp != nil {
+		_ = c.writeError(req.ID, errResp.GetMessage())
+		return
+	}
+
+	resp := response.GetFsReadEditableTextResp()
+	if resp == nil {
+		_ = c.writeError(req.ID, "unexpected agent response")
+		return
+	}
+
+	_ = c.writeResponse(req.ID, websocketFsReadEditableTextResponsePayload(resp))
+}
+
 func (c *websocketConnection) handleFsWriteText(req websocketRequest) {
 	type payload struct {
 		Workdir             string  `json:"workdir"`
@@ -496,6 +547,17 @@ func websocketFsListResponsePayload(resp *gatewayv1.FsListResponse) map[string]a
 		"total":      resp.GetTotal(),
 		"hasMore":    resp.GetHasMore(),
 		"entries":    entryPayload,
+	}
+}
+
+func websocketFsReadEditableTextResponsePayload(resp *gatewayv1.FsReadEditableTextResponse) map[string]any {
+	return map[string]any{
+		"path":        resp.GetPath(),
+		"content":     resp.GetContent(),
+		"mtimeMs":     resp.GetMtimeMs(),
+		"contentHash": resp.GetContentHash(),
+		"sizeBytes":   resp.GetSizeBytes(),
+		"totalLines":  resp.GetTotalLines(),
 	}
 }
 

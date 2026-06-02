@@ -1452,4 +1452,9 @@ test("mcp and remote settings normalize transport, selection, ports, and tokens"
   assert.equal(remote.token, "secret");
   assert.equal(remote.autoReconnect, false);
   assert.equal(remote.heartbeatInterval, 15);
+
+  const remoteWithOversizedPort = settings.normalizeRemoteSettings({
+    grpcPort: "70000",
+  });
+  assert.equal(remoteWithOversizedPort.grpcPort, 65_535);
 });

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Cloud,
   Copy,
@@ -21,8 +21,11 @@ import {
 import { Input } from "../../components/ui/input";
 import { useLocale } from "../../i18n";
 import type { AppSettings } from "../../lib/settings";
+import { normalizeIntegerDraftInput, parseIntegerDraftValue } from "./remoteInput";
 import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";
+
+const REMOTE_GRPC_PORT_MAX = 65_535;
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -103,6 +106,50 @@ function updateRemoteSettings(
   }));
 }
 
+function usePositiveIntegerDraft(
+  value: number,
+  options: { min?: number; max?: number },
+  onCommit: (nextValue: number) => void,
+) {
+  const [draft, setDraft] = useState(() => String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const handleChange = useCallback(
+    (rawValue: string) => {
+      const nextDraft = normalizeIntegerDraftInput(rawValue);
+      setDraft(nextDraft);
+
+      const parsed = parseIntegerDraftValue(nextDraft, options);
+      if (parsed !== null && parsed !== value) {
+        onCommit(parsed);
+      }
+    },
+    [onCommit, options, value],
+  );
+
+  const handleBlur = useCallback(() => {
+    const parsed = parseIntegerDraftValue(draft, options);
+    if (parsed === null) {
+      setDraft(String(value));
+      return;
+    }
+
+    setDraft(String(parsed));
+    if (parsed !== value) {
+      onCommit(parsed);
+    }
+  }, [draft, onCommit, options, value]);
+
+  return {
+    draft,
+    handleBlur,
+    handleChange,
+  };
+}
+
 function buildGrpcEndpoint(settings: AppSettings["remote"]) {
   const explicitEndpoint = settings.grpcEndpoint.trim();
   if (explicitEndpoint) {
@@ -137,6 +184,22 @@ function formatTimestamp(value?: number | null) {
 export function RemoteSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
+  const remoteGrpcPortDraft = usePositiveIntegerDraft(
+    settings.remote.grpcPort,
+    { min: 1, max: REMOTE_GRPC_PORT_MAX },
+    (grpcPort) =>
+      updateRemoteSettings(setSettings, {
+        grpcPort,
+      }),
+  );
+  const remoteHeartbeatDraft = usePositiveIntegerDraft(
+    settings.remote.heartbeatInterval,
+    { min: 1 },
+    (heartbeatInterval) =>
+      updateRemoteSettings(setSettings, {
+        heartbeatInterval,
+      }),
+  );
   const [status, setStatus] = useState<GatewayRuntimeStatus>({
     online: false,
     enabled: settings.remote.enabled,
@@ -258,12 +321,9 @@ export function RemoteSection(props: SettingsSectionProps) {
             <Input
               type="text"
               inputMode="numeric"
-              value={String(settings.remote.grpcPort)}
-              onChange={(e) =>
-                updateRemoteSettings(setSettings, {
-                  grpcPort: Number.parseInt(e.target.value || "0", 10) || 50051,
-                })
-              }
+              value={remoteGrpcPortDraft.draft}
+              onBlur={remoteGrpcPortDraft.handleBlur}
+              onChange={(e) => remoteGrpcPortDraft.handleChange(e.target.value)}
               placeholder="50051"
               className="w-24 shrink-0 font-mono text-[13px]"
             />
@@ -421,12 +481,9 @@ export function RemoteSection(props: SettingsSectionProps) {
             <Input
               type="text"
               inputMode="numeric"
-              value={String(settings.remote.heartbeatInterval)}
-              onChange={(e) =>
-                updateRemoteSettings(setSettings, {
-                  heartbeatInterval: Number.parseInt(e.target.value || "0", 10) || 30,
-                })
-              }
+              value={remoteHeartbeatDraft.draft}
+              onBlur={remoteHeartbeatDraft.handleBlur}
+              onChange={(e) => remoteHeartbeatDraft.handleChange(e.target.value)}
               placeholder="30"
               className="w-24 font-mono text-[13px]"
             />

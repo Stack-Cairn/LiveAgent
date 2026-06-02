@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 use crate::commands::{
     chat_history,
     fs::{
-        fs_create_dir_sync, fs_delete_sync, fs_list_sync, fs_mention_list_sync, fs_rename_sync,
-        fs_write_text_sync,
+        fs_create_dir_sync, fs_delete_sync, fs_list_sync, fs_mention_list_sync,
+        fs_read_editable_text_sync, fs_rename_sync, fs_write_text_sync,
     },
     git::git_gateway_action_sync,
     settings::{load_providers, open_db},
@@ -530,6 +530,24 @@ pub async fn handle_fs_list(
                 })
                 .collect(),
         }
+    })
+}
+
+pub async fn handle_fs_read_editable_text(
+    request: proto::FsReadEditableTextRequest,
+) -> Result<proto::FsReadEditableTextResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fs_read_editable_text_sync(request.workdir, request.path)
+    })
+    .await
+    .map_err(|e| format!("gateway fs read editable text join failed: {e}"))?
+    .map(|response| proto::FsReadEditableTextResponse {
+        path: response.path,
+        content: response.content,
+        mtime_ms: response.mtime_ms,
+        content_hash: response.content_hash,
+        size_bytes: u64::try_from(response.size_bytes).unwrap_or(u64::MAX),
+        total_lines: u64::try_from(response.total_lines).unwrap_or(u64::MAX),
     })
 }
 
