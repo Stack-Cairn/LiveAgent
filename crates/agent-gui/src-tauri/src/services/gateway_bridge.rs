@@ -22,7 +22,7 @@ use crate::commands::{
 use crate::services::cron::{clear_logs_sync, list_logs_sync, CronManager};
 use crate::services::gateway::proto;
 use crate::services::memory::{
-    MemoryAcceptArgs, MemoryBatchArgs, MemoryDeleteArgs, MemoryListArgs,
+    MemoryAcceptArgs, MemoryBatchArgs, MemoryDeleteArgs, MemoryDeleteProjectArgs, MemoryListArgs,
     MemoryOrganizeDueClaimArgs, MemoryOrganizeRunCreateArgs, MemoryOrganizeRunListArgs,
     MemoryOrganizeRunReadArgs, MemoryOrganizeRunUpdateArgs, MemoryReadArgs,
     MemoryRecentRejectionsArgs, MemorySearchArgs, MemoryStore, MemoryUpdateArgs, MemoryWriteArgs,
@@ -765,6 +765,10 @@ fn handle_memory_manage_sync(
         "memory_delete" => {
             let args = parse_memory_args::<MemoryDeleteArgs>(&request.args_json, command)?;
             serde_json::to_value(memory_store.delete(args)?)
+        }
+        "memory_delete_project" => {
+            let args = parse_memory_args::<MemoryDeleteProjectArgs>(&request.args_json, command)?;
+            serde_json::to_value(memory_store.delete_project(args)?)
         }
         "memory_accept" => {
             let args = parse_memory_args::<MemoryAcceptArgs>(&request.args_json, command)?;

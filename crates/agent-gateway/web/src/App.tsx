@@ -130,7 +130,9 @@ import {
   isChatStreamNotAvailableEvent,
   isChatStreamNotAvailableMessage,
   resolveChatStreamUnavailableRecoveryAction,
+  shouldHydrateRestoredConversationSnapshot,
 } from "./lib/chatStreamRecovery";
+import { memoryDeleteProject } from "./lib/memory/api";
 import {
   appendCommittedLiveEntries,
   hasEquivalentTailEntries,
@@ -376,6 +378,7 @@ const HISTORY_TITLE_POSITION_LOCK_MS = 1200;
 const SECONDS_TIMESTAMP_MAX = 10_000_000_000;
 const DRAFT_HISTORY_ADOPTION_WINDOW_MS = 30_000;
 const LIVE_STREAM_HISTORY_REFRESH_SUPPRESS_MS = 30_000;
+const PAGE_RESTORE_HISTORY_REFRESH_THROTTLE_MS = 900;
 const DEFAULT_BROWSER_TITLE = "LiveAgent Gateway";
 const NEW_CONVERSATION_BROWSER_TITLE = "LiveAgent";
 const SHARED_HISTORY_BROWSER_TITLE = "分享会话";
@@ -864,6 +867,7 @@ export default function App() {
   const chatToolStatusRef = useRef(chatToolStatus);
   const chatToolStatusIsCompactionRef = useRef(chatToolStatusIsCompaction);
   const selectedHistoryRef = useRef(selectedHistory);
+  const selectedHistoryEntriesRef = useRef(selectedHistoryEntries);
   const historyItemsRef = useRef(historyItems);
   const historyTotalRef = useRef(historyTotal);
   const historyHasMoreRef = useRef(historyHasMore);
@@ -897,6 +901,7 @@ export default function App() {
   const titlePositionLockTimeoutsRef = useRef<Map<string, number>>(new Map());
   const blockedHistoryHydrationConversationIdsRef = useRef<Set<string>>(new Set());
   const visibleHistorySnapshotRefreshSeqRef = useRef<Map<string, number>>(new Map());
+  const restoredPageHistoryRefreshAtRef = useRef<Map<string, number>>(new Map());
   const historyLoadSequenceRef = useRef(0);
   const visibleConversationRevisionRef = useRef(0);
   const previousDisplayedConversationIdRef = useRef("");
@@ -1151,6 +1156,10 @@ export default function App() {
   useEffect(() => {
     selectedHistoryRef.current = selectedHistory;
   }, [selectedHistory]);
+
+  useEffect(() => {
+    selectedHistoryEntriesRef.current = selectedHistoryEntries;
+  }, [selectedHistoryEntries]);
 
   useEffect(() => {
     historyItemsRef.current = historyItems;
@@ -3718,6 +3727,181 @@ export default function App() {
     ],
   );
 
+  const recoverCompletedVisibleConversationFromHistorySnapshot = useCallback(
+    async (targetConversationId: string, currentApi = api) => {
+      const conversationIdValue = targetConversationId.trim();
+      if (!currentApi || !conversationIdValue) {
+        return false;
+      }
+
+      const isStillVisible = () =>
+        resolveVisibleConversationId(selectedHistoryIdRef.current, conversationIdRef.current) ===
+        conversationIdValue;
+
+      if (!isStillVisible()) {
+        return false;
+      }
+
+      const refreshSeq =
+        (visibleHistorySnapshotRefreshSeqRef.current.get(conversationIdValue) ?? 0) + 1;
+      visibleHistorySnapshotRefreshSeqRef.current.set(conversationIdValue, refreshSeq);
+
+      let detail: HistoryDetail;
+      let entries: ChatEntry[];
+      try {
+        detail = await currentApi.getHistory(conversationIdValue, {
+          maxMessages: HISTORY_DETAIL_INITIAL_MAX_MESSAGES,
+        });
+        entries = await parseHistoryMessagesJsonAsync(detail.messages_json);
+      } catch {
+        return false;
+      }
+
+      if (
+        visibleHistorySnapshotRefreshSeqRef.current.get(conversationIdValue) !== refreshSeq ||
+        !isStillVisible()
+      ) {
+        return false;
+      }
+
+      const detailConversationId = detail.conversation_id.trim();
+      if (detailConversationId !== "" && detailConversationId !== conversationIdValue) {
+        return false;
+      }
+
+      const liveStore = liveConversationStreamStoresRef.current.get(conversationIdValue);
+      liveStore?.flush();
+      const liveEntries = liveStore?.getSnapshot().entries ?? [];
+      const currentEntries =
+        conversationIdRef.current.trim() === conversationIdValue &&
+        (selectedHistoryIdRef.current.trim() === "" ||
+          selectedHistoryIdRef.current.trim() === conversationIdValue)
+          ? chatMessagesRef.current
+          : selectedHistoryIdRef.current.trim() === conversationIdValue
+            ? selectedHistoryEntriesRef.current
+            : (conversationRuntimeCacheRef.current.get(conversationIdValue)?.messages ?? []);
+
+      if (
+        !shouldHydrateRestoredConversationSnapshot({
+          currentEntries,
+          historyEntries: entries,
+          liveEntries,
+        })
+      ) {
+        return false;
+      }
+
+      const mergeOptions = { isFullSnapshot: detail.has_more === false };
+      pendingHistoryRefreshAfterLiveCompletionRef.current.delete(conversationIdValue);
+      blockedHistoryHydrationConversationIdsRef.current.delete(conversationIdValue);
+      clearConversationLiveStream(conversationIdValue);
+      clearConversationStreamingState(conversationIdValue);
+      setHistoryDetailLoading(false);
+
+      if (selectedHistoryIdRef.current.trim() === conversationIdValue) {
+        selectedHistoryRef.current = detail;
+        setSelectedHistory(detail);
+        setSelectedHistoryEntries((current) =>
+          mergeHistorySnapshotEntries(current, entries, mergeOptions),
+        );
+      }
+
+      updateConversationRuntimeEntry(conversationIdValue, (current) => ({
+        ...current,
+        messages: mergeHistorySnapshotEntries(current.messages, entries, mergeOptions),
+        error: null,
+        toolStatus: null,
+        toolStatusIsCompaction: false,
+        isSending: false,
+      }));
+      pendingDisplayedConversationAutoBottomRef.current = conversationIdValue;
+      return true;
+    },
+    [
+      api,
+      clearConversationLiveStream,
+      clearConversationStreamingState,
+      updateConversationRuntimeEntry,
+    ],
+  );
+
+  const recoverVisibleConversationAfterPageRestore = useCallback(
+    (currentApi = api) => {
+      if (!currentApi) {
+        return;
+      }
+
+      const visibleConversationId = resolveVisibleConversationId(
+        selectedHistoryIdRef.current,
+        conversationIdRef.current,
+      ).trim();
+      if (!visibleConversationId) {
+        return;
+      }
+
+      const now = Date.now();
+      const lastRefreshAt =
+        restoredPageHistoryRefreshAtRef.current.get(visibleConversationId) ?? 0;
+      if (now - lastRefreshAt < PAGE_RESTORE_HISTORY_REFRESH_THROTTLE_MS) {
+        return;
+      }
+      restoredPageHistoryRefreshAtRef.current.set(visibleConversationId, now);
+
+      if (isLocalDraftConversationId(visibleConversationId)) {
+        void reloadHistory(currentApi, {
+          preferredConversationId: visibleConversationId,
+          hydrateSelection: true,
+          silent: true,
+          adoptPendingDraftConversation: true,
+        });
+        return;
+      }
+
+      const hasLocalRunningState =
+        getConversationAbortController(visibleConversationId) !== null ||
+        localRunningConversationIdsRef.current.has(visibleConversationId) ||
+        blockedHistoryHydrationConversationIdsRef.current.has(visibleConversationId);
+      const hasRetainedLiveStream = hasRetainedConversationLiveStream(visibleConversationId);
+      const isRemoteRunning = remoteRunningConversationIdsRef.current.has(visibleConversationId);
+
+      if (hasLocalRunningState || hasRetainedLiveStream || isRemoteRunning) {
+        void recoverCompletedVisibleConversationFromHistorySnapshot(
+          visibleConversationId,
+          currentApi,
+        ).then((hydrated) => {
+          if (hydrated) {
+            return;
+          }
+          if (remoteRunningConversationIdsRef.current.has(visibleConversationId)) {
+            attachVisibleConversationLiveStream(visibleConversationId, currentApi);
+          }
+        });
+        return;
+      }
+
+      void refreshVisibleConversationHistorySnapshot(visibleConversationId, currentApi, {
+        allowIdle: true,
+      });
+    },
+    [
+      api,
+      attachVisibleConversationLiveStream,
+      getConversationAbortController,
+      hasRetainedConversationLiveStream,
+      recoverCompletedVisibleConversationFromHistorySnapshot,
+      refreshVisibleConversationHistorySnapshot,
+      reloadHistory,
+    ],
+  );
+  const recoverVisibleConversationAfterPageRestoreRef = useRef(
+    recoverVisibleConversationAfterPageRestore,
+  );
+
+  useEffect(() => {
+    recoverVisibleConversationAfterPageRestoreRef.current =
+      recoverVisibleConversationAfterPageRestore;
+  }, [recoverVisibleConversationAfterPageRestore]);
+
   useEffect(() => {
     if (!api || !status?.online) {
       return;
@@ -3737,6 +3921,49 @@ export default function App() {
         (currentConversationId === "" || isLocalDraftConversationId(currentConversationId)),
     });
   }, [api, historyScopeKey, status?.online]);
+
+  useEffect(() => {
+    if (!api || historyShareToken || status?.online !== true) {
+      return;
+    }
+
+    let delayedRestoreTimer: number | null = null;
+    const runRecovery = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
+      recoverVisibleConversationAfterPageRestoreRef.current(api);
+      if (delayedRestoreTimer !== null) {
+        window.clearTimeout(delayedRestoreTimer);
+      }
+      delayedRestoreTimer = window.setTimeout(() => {
+        delayedRestoreTimer = null;
+        recoverVisibleConversationAfterPageRestoreRef.current(api);
+      }, PAGE_RESTORE_HISTORY_REFRESH_THROTTLE_MS + 350);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        runRecovery();
+      }
+    };
+
+    window.addEventListener("pageshow", runRecovery);
+    window.addEventListener("focus", runRecovery);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("resume", runRecovery);
+    runRecovery();
+
+    return () => {
+      if (delayedRestoreTimer !== null) {
+        window.clearTimeout(delayedRestoreTimer);
+      }
+      window.removeEventListener("pageshow", runRecovery);
+      window.removeEventListener("focus", runRecovery);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("resume", runRecovery);
+    };
+  }, [api, historyShareToken, status?.online]);
 
   async function sendChat(message: string, options?: SendChatOptions) {
     if (!api || chatBusyRef.current) {
@@ -4288,6 +4515,13 @@ export default function App() {
             Boolean(visibleConversationId && deletedConversationIds.has(visibleConversationId)) ||
             Boolean(pathKey && workspaceProjectPathKey(visibleWorkdir) === pathKey);
 
+          if (path) {
+            await memoryDeleteProject({
+              workdir: path,
+              actor: "tool",
+              reason: "workspace project removed",
+            });
+          }
           removeWorkspaceProjectFromSettings(project);
           if (shouldResetVisibleConversation) {
             startNewConversation({

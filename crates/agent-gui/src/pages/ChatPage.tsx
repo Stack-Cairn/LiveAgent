@@ -72,6 +72,7 @@ import {
 import { clearSilentMemoryDecisions } from "../lib/chat/memory/memoryDecisionLog";
 import { clearMemoryExtractorState } from "../lib/chat/memory/memoryExtractor";
 import { buildMemoryOverviewSection } from "../lib/chat/memory/memoryPrompt";
+import { memoryDeleteProject } from "../lib/memory/api";
 import {
   createUserMessageWithUploads,
   mergePendingUploadedFiles,
@@ -2140,6 +2141,13 @@ export function ChatPage(props: ChatPageProps) {
             Boolean(visibleConversationId && deletedConversationIds.has(visibleConversationId)) ||
             Boolean(pathKey && workspaceProjectPathKey(displayedConversationWorkdir) === pathKey);
 
+          if (path) {
+            await memoryDeleteProject({
+              workdir: path,
+              actor: "tool",
+              reason: "workspace project removed",
+            });
+          }
           removeWorkspaceProjectFromSettings(project);
           if (shouldResetVisibleConversation) {
             startNewConversationActionRef.current({

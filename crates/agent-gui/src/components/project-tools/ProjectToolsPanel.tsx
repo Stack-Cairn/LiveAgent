@@ -341,16 +341,27 @@ function terminalTheme(theme: "light" | "dark") {
   };
 }
 
+function terminalContainerHasSize(container: HTMLElement) {
+  const rect = container.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
 function XTermViewport({
   client,
   session,
   theme,
+  isActive,
+  initialSnapshot,
   onError,
+  onInitialSnapshotConsumed,
 }: {
   client: TerminalClient;
   session: TerminalSession;
   theme: "light" | "dark";
+  isActive: boolean;
+  initialSnapshot?: TerminalSnapshot;
   onError: (message: string | null) => void;
+  onInitialSnapshotConsumed?: (sessionId: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const resizeTimerRef = useRef<number | null>(null);
@@ -358,17 +369,32 @@ function XTermViewport({
   const sessionRef = useRef(session);
   const themeRef = useRef(theme);
   const onErrorRef = useRef(onError);
+  const initialSnapshotRef = useRef(initialSnapshot);
+  const onInitialSnapshotConsumedRef = useRef(onInitialSnapshotConsumed);
   clientRef.current = client;
   sessionRef.current = session;
   themeRef.current = theme;
   onErrorRef.current = onError;
+  onInitialSnapshotConsumedRef.current = onInitialSnapshotConsumed;
 
   const termRef = useRef<XTerm | null>(null);
+  const fitAndResizeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!termRef.current) return;
     termRef.current.options.theme = terminalTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!isActive) {
+      termRef.current?.blur();
+      return;
+    }
+    termRef.current?.focus();
+    window.setTimeout(() => {
+      fitAndResizeRef.current?.();
+    }, 0);
+  }, [isActive]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -381,7 +407,7 @@ function XTermViewport({
     const bufferedEvents: TerminalEvent[] = [];
     const term = new XTerm({
       cursorBlink: true,
-      disableStdin: true,
+      disableStdin: !sessionRef.current.running,
       fontFamily:
         '"SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono", monospace',
       fontSize: 12,
@@ -399,6 +425,7 @@ function XTermViewport({
 
     const fitAndResize = () => {
       if (disposed) return;
+      if (!terminalContainerHasSize(container)) return;
       try {
         fit.fit();
         const s = sessionRef.current;
@@ -409,6 +436,7 @@ function XTermViewport({
         // xterm fit can throw while the panel is hidden or measuring at zero size.
       }
     };
+    fitAndResizeRef.current = fitAndResize;
 
     const resizeObserver = new ResizeObserver(() => {
       if (resizeTimerRef.current !== null) {
@@ -420,12 +448,24 @@ function XTermViewport({
     window.setTimeout(fitAndResize, 0);
 
     const dataDisposable = term.onData((data) => {
-      if (!snapshotLoaded) return;
       const s = sessionRef.current;
+      if (!s.running) return;
       void clientRef.current.input(s.id, data, s.projectPathKey).catch((error) => {
         onErrorRef.current(error instanceof Error ? error.message : String(error));
       });
     });
+
+    const applySnapshot = (snapshot: TerminalSnapshot) => {
+      if (snapshot.output) {
+        term.write(snapshot.output);
+      }
+      lastOutputOffset = terminalSnapshotEndOffset(snapshot);
+      snapshotLoaded = true;
+      loadingSnapshot = false;
+      term.options.disableStdin = !snapshot.session.running;
+      replayBufferedEvents();
+      window.setTimeout(fitAndResize, 0);
+    };
 
     const replayBufferedEvents = () => {
       const events = bufferedEvents.splice(0);
@@ -443,26 +483,27 @@ function XTermViewport({
 
     const loadSnapshot = () => {
       if (disposed || loadingSnapshot) return;
+      const initial = initialSnapshotRef.current;
+      if (initial?.session.id === sessionRef.current.id) {
+        initialSnapshotRef.current = undefined;
+        onInitialSnapshotConsumedRef.current?.(initial.session.id);
+        applySnapshot(initial);
+        return;
+      }
       loadingSnapshot = true;
       const s = sessionRef.current;
       void clientRef.current
         .snapshot(s.id, undefined, s.projectPathKey)
         .then((snapshot) => {
           if (disposed) return;
-          if (snapshot.output) {
-            term.write(snapshot.output);
-          }
-          lastOutputOffset = terminalSnapshotEndOffset(snapshot);
-          snapshotLoaded = true;
-          loadingSnapshot = false;
-          term.options.disableStdin = !snapshot.session.running;
-          replayBufferedEvents();
-          window.setTimeout(fitAndResize, 0);
+          applySnapshot(snapshot);
         })
         .catch((error) => {
           loadingSnapshot = false;
           if (!disposed) {
             onErrorRef.current(error instanceof Error ? error.message : String(error));
+            snapshotLoaded = true;
+            replayBufferedEvents();
           }
         });
     };
@@ -493,6 +534,7 @@ function XTermViewport({
     return () => {
       disposed = true;
       termRef.current = null;
+      fitAndResizeRef.current = null;
       unsubscribe();
       dataDisposable.dispose();
       resizeObserver.disconnect();
@@ -637,6 +679,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
   const [widthCollapsed, setWidthCollapsed] = useState(!isOpen);
   const [isResizing, setIsResizing] = useState(false);
   const panelRef = useRef<HTMLElement | null>(null);
+  const initialTerminalSnapshotsRef = useRef<Map<string, TerminalSnapshot>>(new Map());
   const [maxPanelWidth, setMaxPanelWidth] = useState(getFallbackMaxPanelWidth);
   const projectReady = projectPathKey.trim() !== "" && cwd.trim() !== "" && !disabledMessage;
   const terminalReady = projectReady && !terminalDisabledMessage;
@@ -899,6 +942,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
   useEffect(() => {
     if (lastProjectPathKeyRef.current === projectPathKey) return;
     lastProjectPathKeyRef.current = projectPathKey;
+    initialTerminalSnapshotsRef.current.clear();
     setPendingCloseSessionId("");
     setClosingSessionId("");
     setDraftTabOrder(null);
@@ -942,6 +986,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
           rows: DEFAULT_TERMINAL_ROWS,
         })
         .then((snapshot) => {
+          initialTerminalSnapshotsRef.current.set(snapshot.session.id, snapshot);
           setSessions((current) => {
             const next = sortSessions([
               ...current.filter((session) => session.id !== snapshot.session.id),
@@ -971,6 +1016,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       void client
         .close(session.id, session.projectPathKey)
         .then(() => {
+          initialTerminalSnapshotsRef.current.delete(session.id);
           setPendingCloseSessionId((current) => (current === session.id ? "" : current));
           setSessions((current) => {
             const next = sortSessions(current.filter((item) => item.id !== session.id));
@@ -983,6 +1029,10 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     },
     [client, closingSessionId, onSessionsChange],
   );
+
+  const handleInitialTerminalSnapshotConsumed = useCallback((sessionId: string) => {
+    initialTerminalSnapshotsRef.current.delete(sessionId);
+  }, []);
 
   const handleCloseRequest = useCallback(
     (session: TerminalSession) => {
@@ -1734,58 +1784,77 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                     />
                   </div>
                 ) : null}
-                {currentActiveTab === "terminal" ? (
-                  activeSession ? (
-                    <div className="flex min-h-0 flex-1 flex-col">
-                      {error ? (
-                        <div className="border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                          {error}
-                        </div>
-                      ) : null}
-                      <div className="min-h-0 flex-1">
-                        <XTermViewport
-                          key={activeSession.id}
-                          client={client}
-                          session={activeSession}
-                          theme={theme}
-                          onError={setError}
-                        />
+                {sessions.length > 0 ? (
+                  <div
+                    className={cn(
+                      "min-h-0 flex-1 flex-col",
+                      currentActiveTab === "terminal" ? "flex" : "hidden",
+                    )}
+                  >
+                    {error ? (
+                      <div className="border-b border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        {error}
                       </div>
+                    ) : null}
+                    <div className="relative min-h-0 flex-1">
+                      {sessions.map((session) => {
+                        const isActiveTerminal =
+                          currentActiveTab === "terminal" && activeSession?.id === session.id;
+                        return (
+                          <div
+                            key={session.id}
+                            aria-hidden={!isActiveTerminal}
+                            className={cn(
+                              "absolute inset-0 min-h-0",
+                              isActiveTerminal ? "block" : "hidden",
+                            )}
+                          >
+                            <XTermViewport
+                              client={client}
+                              session={session}
+                              theme={theme}
+                              isActive={isActiveTerminal}
+                              initialSnapshot={
+                                initialTerminalSnapshotsRef.current.get(session.id) ?? undefined
+                              }
+                              onError={setError}
+                              onInitialSnapshotConsumed={handleInitialTerminalSnapshotConsumed}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
-                  ) : (
-                    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted/80">
-                        <Terminal className="h-6 w-6 text-muted-foreground" />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <div className="text-sm font-medium text-foreground">
-                          {t("projectTools.newTerminal")}
-                        </div>
-                        {terminalDisabledMessage ? (
-                          <div className="max-w-xs text-xs text-muted-foreground">
-                            {terminalDisabledMessage}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-muted-foreground">
-                            {t("projectTools.terminalDescription")}
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        onClick={handleCreate}
-                        disabled={!terminalReady || creating}
-                        size="sm"
-                      >
+                  </div>
+                ) : currentActiveTab === "terminal" ? (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted/80">
+                      <Terminal className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <div className="text-sm font-medium text-foreground">
                         {t("projectTools.newTerminal")}
-                      </Button>
-                      {loading ? (
-                        <div className="text-xs text-muted-foreground">
-                          {t("projectTools.loading")}
+                      </div>
+                      {error ? (
+                        <div className="text-xs text-destructive">{error}</div>
+                      ) : terminalDisabledMessage ? (
+                        <div className="max-w-xs text-xs text-muted-foreground">
+                          {terminalDisabledMessage}
                         </div>
-                      ) : null}
-                      {error ? <div className="text-xs text-destructive">{error}</div> : null}
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          {t("projectTools.terminalDescription")}
+                        </div>
+                      )}
                     </div>
-                  )
+                    <Button onClick={handleCreate} disabled={!terminalReady || creating} size="sm">
+                      {t("projectTools.newTerminal")}
+                    </Button>
+                    {loading ? (
+                      <div className="text-xs text-muted-foreground">
+                        {t("projectTools.loading")}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
               </>
             )}

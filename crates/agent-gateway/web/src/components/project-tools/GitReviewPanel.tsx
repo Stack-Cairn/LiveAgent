@@ -1657,8 +1657,18 @@ function DiffReviewCard(props: {
 function statusTone(entry: GitStatusEntry) {
   if (entry.conflicted) return "text-destructive";
   if (entry.untracked) return "text-sky-600 dark:text-sky-300";
+  if (isDeletedStatusEntry(entry)) return "text-rose-600 dark:text-rose-300";
   if (entry.staged) return "text-emerald-600 dark:text-emerald-300";
   return "text-amber-600 dark:text-amber-300";
+}
+
+function isDeletedStatusEntry(entry: GitStatusEntry) {
+  if (entry.untracked) return false;
+  return (
+    entry.kind === "deleted" ||
+    entry.indexStatus === "D" ||
+    entry.worktreeStatus === "D"
+  );
 }
 
 function statusLabel(entry: GitStatusEntry) {
@@ -4158,6 +4168,7 @@ export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanel
     const TypeIcon = getFileTypeIcon(entry.path, "file");
     const fileName = basename(entry.path);
     const filePath = parentPath(entry.path);
+    const deleted = isDeletedStatusEntry(entry);
     return (
       <div
         key={`${section}:${entry.kind}:${entry.oldPath ?? ""}:${entry.path}`}
@@ -4181,8 +4192,20 @@ export const GitReviewPanel = memo(function GitReviewPanel(props: GitReviewPanel
         >
           <TypeIcon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 select-none">
-            <span className="block truncate text-xs font-medium text-foreground">{fileName}</span>
-            <span className="block truncate text-[11px] leading-4 text-muted-foreground">
+            <span
+              className={cn(
+                "block truncate text-xs font-medium text-foreground",
+                deleted && "line-through",
+              )}
+            >
+              {fileName}
+            </span>
+            <span
+              className={cn(
+                "block truncate text-[11px] leading-4 text-muted-foreground",
+                deleted && "line-through",
+              )}
+            >
               {filePath}
             </span>
           </span>

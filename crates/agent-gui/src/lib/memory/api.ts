@@ -108,6 +108,12 @@ export type MemoryMutationResponse = {
   warning?: string | null;
 };
 
+export type MemoryDeleteProjectResponse = {
+  workdirHash: string;
+  deletedCount: number;
+  quarantinePath?: string | null;
+};
+
 export type MemoryOverviewEntry = {
   slug: string;
   scope: "global" | "project";
@@ -337,6 +343,14 @@ export async function memoryDelete(args: {
   model?: string;
 }) {
   return invoke<MemoryMutationResponse>("memory_delete", { args });
+}
+
+export async function memoryDeleteProject(args: {
+  workdir: string;
+  actor?: "user" | "tool" | "extractor" | "reconcile";
+  reason?: string;
+}) {
+  return invoke<MemoryDeleteProjectResponse>("memory_delete_project", { args });
 }
 
 export async function memoryAccept(args: {

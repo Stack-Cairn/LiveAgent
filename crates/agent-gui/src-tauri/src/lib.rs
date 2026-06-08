@@ -92,6 +92,7 @@ macro_rules! app_invoke_handler {
             commands::memory::memory_write,
             commands::memory::memory_update,
             commands::memory::memory_delete,
+            commands::memory::memory_delete_project,
             commands::memory::memory_accept,
             commands::memory::memory_apply_batch,
             commands::memory::memory_organize_run_create,

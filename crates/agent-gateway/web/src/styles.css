@@ -1848,6 +1848,18 @@ html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="cl
     min-width: 0;
   }
 
+  html[data-liveagent-webui="gateway"] .project-terminal-viewport,
+  html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm,
+  html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-screen,
+  html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollable-element {
+    overscroll-behavior: contain;
+    touch-action: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollable-element {
+    -webkit-overflow-scrolling: touch;
+  }
+
   html[data-liveagent-webui="gateway"] .project-tools-panel-handle {
     display: block;
     width: 36px;

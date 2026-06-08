@@ -8,6 +8,7 @@ test("chat stream recovery detects released attach streams", () => {
     isChatStreamNotAvailableEvent,
     isChatStreamNotAvailableMessage,
     resolveChatStreamUnavailableRecoveryAction,
+    shouldHydrateRestoredConversationSnapshot,
   } = loader.loadModule("src/lib/chatStreamRecovery.ts");
 
   assert.equal(isChatStreamNotAvailableMessage("chat stream not available"), true);
@@ -39,5 +40,39 @@ test("chat stream recovery detects released attach streams", () => {
   assert.equal(
     resolveChatStreamUnavailableRecoveryAction("__local_draft__:conversation-1"),
     "reload-history",
+  );
+
+  assert.equal(
+    shouldHydrateRestoredConversationSnapshot({
+      currentEntries: [{ id: "local-user", kind: "user", text: "hello", attachments: [] }],
+      liveEntries: [{ id: "live-assistant", kind: "assistant", text: "partial", round: 1 }],
+      historyEntries: [
+        { id: "history-user", kind: "user", text: "hello", attachments: [] },
+        { id: "history-assistant", kind: "assistant", text: "partial and final", round: 1 },
+      ],
+    }),
+    true,
+  );
+
+  assert.equal(
+    shouldHydrateRestoredConversationSnapshot({
+      currentEntries: [{ id: "local-user", kind: "user", text: "hello", attachments: [] }],
+      historyEntries: [{ id: "history-user", kind: "user", text: "hello", attachments: [] }],
+    }),
+    false,
+  );
+
+  assert.equal(
+    shouldHydrateRestoredConversationSnapshot({
+      currentEntries: [{ id: "local-user", kind: "user", text: "hello", attachments: [] }],
+      liveEntries: [
+        { id: "live-assistant", kind: "assistant", text: "partial text that is newer", round: 1 },
+      ],
+      historyEntries: [
+        { id: "history-user", kind: "user", text: "hello", attachments: [] },
+        { id: "history-assistant", kind: "assistant", text: "partial", round: 1 },
+      ],
+    }),
+    false,
   );
 });

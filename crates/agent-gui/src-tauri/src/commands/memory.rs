@@ -5,14 +5,15 @@ use tauri::State;
 use crate::{
     commands::chat_history,
     services::memory::{
-        MemoryAcceptArgs, MemoryBatchArgs, MemoryBatchResponse, MemoryDeleteArgs, MemoryListArgs,
-        MemoryListResponse, MemoryMutationResponse, MemoryOrganizeDueClaimArgs,
-        MemoryOrganizeDueClaimResponse, MemoryOrganizeRun, MemoryOrganizeRunClearHistoryResponse,
-        MemoryOrganizeRunCreateArgs, MemoryOrganizeRunCreateResponse, MemoryOrganizeRunListArgs,
-        MemoryOrganizeRunListResponse, MemoryOrganizeRunReadArgs, MemoryOrganizeRunUpdateArgs,
-        MemoryOverviewResponse, MemoryPathsInfo, MemoryReadArgs, MemoryReadResponse,
-        MemoryRecentRejectionsArgs, MemoryRecentRejectionsResponse, MemorySearchArgs,
-        MemorySearchResponse, MemoryStore, MemoryUpdateArgs, MemoryWriteArgs,
+        MemoryAcceptArgs, MemoryBatchArgs, MemoryBatchResponse, MemoryDeleteArgs,
+        MemoryDeleteProjectArgs, MemoryDeleteProjectResponse, MemoryListArgs, MemoryListResponse,
+        MemoryMutationResponse, MemoryOrganizeDueClaimArgs, MemoryOrganizeDueClaimResponse,
+        MemoryOrganizeRun, MemoryOrganizeRunClearHistoryResponse, MemoryOrganizeRunCreateArgs,
+        MemoryOrganizeRunCreateResponse, MemoryOrganizeRunListArgs, MemoryOrganizeRunListResponse,
+        MemoryOrganizeRunReadArgs, MemoryOrganizeRunUpdateArgs, MemoryOverviewResponse,
+        MemoryPathsInfo, MemoryReadArgs, MemoryReadResponse, MemoryRecentRejectionsArgs,
+        MemoryRecentRejectionsResponse, MemorySearchArgs, MemorySearchResponse, MemoryStore,
+        MemoryUpdateArgs, MemoryWriteArgs,
     },
 };
 
@@ -86,6 +87,17 @@ pub async fn memory_delete(
     tauri::async_runtime::spawn_blocking(move || store.delete(args))
         .await
         .map_err(|e| format!("memory_delete join 失败：{e}"))?
+}
+
+#[tauri::command]
+pub async fn memory_delete_project(
+    state: State<'_, Arc<MemoryStore>>,
+    args: MemoryDeleteProjectArgs,
+) -> Result<MemoryDeleteProjectResponse, String> {
+    let store = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || store.delete_project(args))
+        .await
+        .map_err(|e| format!("memory_delete_project join 失败：{e}"))?
 }
 
 #[tauri::command]

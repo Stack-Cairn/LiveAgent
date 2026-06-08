@@ -1,4 +1,5 @@
 import type { ChatEvent } from "./gatewayTypes";
+import type { ChatEntry } from "./chatUi";
 import { isLocalDraftConversationId } from "./localDraftConversation";
 
 const CHAT_STREAM_NOT_AVAILABLE_RE = /\bchat stream not available\b/i;
@@ -30,4 +31,43 @@ export function resolveChatStreamUnavailableRecoveryAction(
   return isLocalDraftConversationId(conversationId)
     ? "reload-history"
     : "refresh-history-snapshot";
+}
+
+function collectAssistantLikeText(entries: ChatEntry[]) {
+  return entries
+    .map((entry) => {
+      if (entry.kind === "assistant" || entry.kind === "thinking" || entry.kind === "error") {
+        return entry.text;
+      }
+      return "";
+    })
+    .join("\n")
+    .trim();
+}
+
+export function shouldHydrateRestoredConversationSnapshot(params: {
+  currentEntries: ChatEntry[];
+  historyEntries: ChatEntry[];
+  liveEntries?: ChatEntry[];
+}) {
+  const historyEntries = params.historyEntries;
+  if (historyEntries.length === 0) {
+    return false;
+  }
+
+  const currentEntries = params.currentEntries;
+  const liveEntries = params.liveEntries ?? [];
+  if (currentEntries.length === 0 && liveEntries.length === 0) {
+    return true;
+  }
+
+  const currentAssistantText = collectAssistantLikeText([...currentEntries, ...liveEntries]);
+  const historyAssistantText = collectAssistantLikeText(historyEntries);
+  if (historyAssistantText.length === 0) {
+    return liveEntries.length === 0 && historyEntries.length > currentEntries.length;
+  }
+  if (currentAssistantText.length === 0) {
+    return true;
+  }
+  return historyAssistantText.length > currentAssistantText.length;
 }

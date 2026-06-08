@@ -297,6 +297,14 @@ pub struct MemoryMutationResponse {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MemoryDeleteProjectResponse {
+    pub workdir_hash: String,
+    pub deleted_count: usize,
+    pub quarantine_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MemoryOverviewResponse {
     pub user: Vec<MemoryOverviewEntry>,
     pub project: Vec<MemoryOverviewEntry>,
@@ -570,6 +578,14 @@ pub struct MemoryDeleteArgs {
     pub reason: Option<String>,
     pub conversation_id: Option<String>,
     pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryDeleteProjectArgs {
+    pub workdir: String,
+    pub actor: Option<String>,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -998,6 +1014,136 @@ impl MemoryStore {
 
     pub fn delete(&self, args: MemoryDeleteArgs) -> Result<MemoryMutationResponse, String> {
         self.delete_inner(args, None)
+    }
+
+    pub fn delete_project(
+        &self,
+        args: MemoryDeleteProjectArgs,
+    ) -> Result<MemoryDeleteProjectResponse, String> {
+        let MemoryDeleteProjectArgs {
+            workdir,
+            actor,
+            reason,
+        } = args;
+        let workdir = workdir.trim().to_string();
+        if workdir.is_empty() {
+            return Err(error_json(
+                "workdir_required",
+                "project memory deletion requires a workdir",
+                None,
+                None,
+            ));
+        }
+        let actor = actor
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let actor = match actor.as_deref() {
+            Some(value @ ("user" | "tool" | "extractor" | "reconcile")) => value.to_string(),
+            _ => "tool".to_string(),
+        };
+        let reason = reason
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+
+        let _mutation_guard = self.lock_mutation()?;
+        let workdir_hash = self.resolve_project_delete_workdir_hash(&workdir)?;
+        let deleted_count = self.count_project_memory_entries(&workdir_hash)?;
+        let project_dir = self.projects_dir().join(&workdir_hash);
+        let quarantine_path = if project_dir.exists() {
+            let quarantine_dir = self.root.join(".quarantine");
+            fs::create_dir_all(&quarantine_dir)
+                .map_err(|e| format!("创建项目记忆隔离目录失败：{e}"))?;
+            let ts = now_ms();
+            let mut target =
+                quarantine_dir.join(format!("deleted-project-{}-{}", workdir_hash, ts));
+            let mut suffix = 1;
+            while target.exists() {
+                target = quarantine_dir.join(format!(
+                    "deleted-project-{}-{}-{}",
+                    workdir_hash, ts, suffix
+                ));
+                suffix += 1;
+            }
+            fs::rename(&project_dir, &target).map_err(|e| format!("隔离项目记忆目录失败：{e}"))?;
+            Some(target)
+        } else {
+            None
+        };
+
+        if deleted_count > 0 || quarantine_path.is_some() {
+            let mut conn = self.lock_conn()?;
+            delete_project_index_rows(
+                &mut conn,
+                &workdir_hash,
+                &workdir,
+                deleted_count,
+                quarantine_path.as_deref(),
+                &actor,
+                reason.as_deref(),
+            )?;
+            drop(conn);
+            self.refresh_memory_indexes()?;
+        }
+
+        Ok(MemoryDeleteProjectResponse {
+            workdir_hash,
+            deleted_count,
+            quarantine_path: quarantine_path.map(|path| path.to_string_lossy().to_string()),
+        })
+    }
+
+    fn resolve_project_delete_workdir_hash(&self, workdir: &str) -> Result<String, String> {
+        let primary_hash = workdir_hash(workdir)?;
+        if self.project_memory_state_exists(&primary_hash)? {
+            return Ok(primary_hash);
+        }
+        Ok(self
+            .find_project_workdir_hash_by_marker(workdir)
+            .unwrap_or(primary_hash))
+    }
+
+    fn project_memory_state_exists(&self, workdir_hash: &str) -> Result<bool, String> {
+        if self.projects_dir().join(workdir_hash).exists() {
+            return Ok(true);
+        }
+        Ok(self.count_project_memory_entries(workdir_hash)? > 0)
+    }
+
+    fn count_project_memory_entries(&self, workdir_hash: &str) -> Result<usize, String> {
+        let conn = self.lock_conn()?;
+        let count = conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_meta WHERE scope = 'project' AND workdir_hash = ?1",
+                params![workdir_hash],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|e| format!("读取项目记忆数量失败：{e}"))?;
+        Ok(count.max(0) as usize)
+    }
+
+    fn find_project_workdir_hash_by_marker(&self, workdir: &str) -> Option<String> {
+        let projects_dir = self.projects_dir();
+        let entries = fs::read_dir(projects_dir).ok()?;
+        for entry in entries.flatten() {
+            if !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let hash = entry.file_name().to_string_lossy().to_string();
+            if normalize_workdir_hash_input(Some(&hash))
+                .ok()
+                .flatten()
+                .is_none()
+            {
+                continue;
+            }
+            let Some(marker_path) = self.project_workdir_path(&hash) else {
+                continue;
+            };
+            if workdir_paths_match(&marker_path, workdir) {
+                return Some(hash);
+            }
+        }
+        None
     }
 
     fn delete_inner(
@@ -3902,6 +4048,66 @@ fn delete_index_rows(
         .map_err(|e| format!("提交记忆删除事务失败：{e}"))
 }
 
+fn delete_project_index_rows(
+    conn: &mut Connection,
+    workdir_hash: &str,
+    workdir: &str,
+    deleted_count: usize,
+    quarantine_path: Option<&Path>,
+    actor: &str,
+    reason: Option<&str>,
+) -> Result<(), String> {
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("开启项目记忆删除事务失败：{e}"))?;
+    tx.execute(
+        "DELETE FROM memory_meta WHERE scope = 'project' AND workdir_hash = ?1",
+        params![workdir_hash],
+    )
+    .map_err(|e| format!("删除项目 memory_meta 行失败：{e}"))?;
+    tx.execute(
+        "DELETE FROM memory_fts WHERE scope = 'project' AND workdir_hash = ?1",
+        params![workdir_hash],
+    )
+    .map_err(|e| format!("删除项目 memory_fts 行失败：{e}"))?;
+    tx.execute(
+        "DELETE FROM memory_fts_tri WHERE scope = 'project' AND workdir_hash = ?1",
+        params![workdir_hash],
+    )
+    .map_err(|e| format!("删除项目 memory_fts_tri 行失败：{e}"))?;
+
+    let mut detail = json!({
+        "workdir": workdir,
+        "deletedCount": deleted_count,
+    });
+    if let Some(path) = quarantine_path {
+        detail["quarantinePath"] = Value::String(path.to_string_lossy().to_string());
+    }
+    if let Some(reason) = reason {
+        detail["reason"] = Value::String(reason.to_string());
+    }
+    let detail_json = serde_json::to_string(&detail).unwrap_or_else(|_| "{}".to_string());
+    tx.execute(
+        "
+        INSERT INTO memory_audit_log
+            (ts, op, scope, workdir_hash, slug, actor, detail_json)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        ",
+        params![
+            now_ms(),
+            "delete",
+            "project",
+            workdir_hash,
+            "*",
+            actor,
+            detail_json
+        ],
+    )
+    .map_err(|e| format!("写入项目记忆删除审计日志失败：{e}"))?;
+    tx.commit()
+        .map_err(|e| format!("提交项目记忆删除事务失败：{e}"))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn insert_audit_log(
     conn: &mut Connection,
@@ -4946,6 +5152,21 @@ fn workdir_hash(workdir: &str) -> Result<String, String> {
     Ok(to_hex(&digest)[..16].to_string())
 }
 
+fn workdir_paths_match(left: &str, right: &str) -> bool {
+    let left = left.trim();
+    let right = right.trim();
+    if left.is_empty() || right.is_empty() {
+        return false;
+    }
+    if left == right {
+        return true;
+    }
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     to_hex(&digest)
@@ -5958,6 +6179,154 @@ mod tests {
             })
             .expect("read project memory by workdir hash");
         assert_eq!(read.body, "project B body");
+    }
+
+    #[test]
+    fn delete_project_removes_only_matching_project_memory() {
+        let store = test_store();
+        let workdir_a = tempfile::tempdir().expect("workdir a");
+        let workdir_b = tempfile::tempdir().expect("workdir b");
+        let workdir_a_text = workdir_a.path().to_string_lossy().to_string();
+        let workdir_b_text = workdir_b.path().to_string_lossy().to_string();
+        let workdir_a_hash = workdir_hash(&workdir_a_text).expect("workdir a hash");
+        let workdir_b_hash = workdir_hash(&workdir_b_text).expect("workdir b hash");
+
+        store
+            .write(MemoryWriteArgs {
+                slug: "global-note".to_string(),
+                scope: "global".to_string(),
+                workdir: None,
+                memory_type: "reference".to_string(),
+                description: "全局说明".to_string(),
+                body: "global body".to_string(),
+                actor: None,
+                conversation_id: None,
+                model: None,
+            })
+            .expect("write global memory");
+        store
+            .write(MemoryWriteArgs {
+                slug: "project-a-note".to_string(),
+                scope: "project".to_string(),
+                workdir: Some(workdir_a_text.clone()),
+                memory_type: "project".to_string(),
+                description: "项目 A 说明".to_string(),
+                body: "project A body".to_string(),
+                actor: None,
+                conversation_id: None,
+                model: None,
+            })
+            .expect("write project a memory");
+        store
+            .write(MemoryWriteArgs {
+                slug: "project-b-note".to_string(),
+                scope: "project".to_string(),
+                workdir: Some(workdir_b_text.clone()),
+                memory_type: "project".to_string(),
+                description: "项目 B 说明".to_string(),
+                body: "project B body".to_string(),
+                actor: None,
+                conversation_id: None,
+                model: None,
+            })
+            .expect("write project b memory");
+
+        let project_a_dir = store.projects_dir().join(&workdir_a_hash);
+        assert!(project_a_dir.exists());
+
+        let deleted = store
+            .delete_project(MemoryDeleteProjectArgs {
+                workdir: workdir_a_text,
+                actor: Some("tool".to_string()),
+                reason: Some("workspace removal".to_string()),
+            })
+            .expect("delete project memory");
+
+        assert_eq!(deleted.workdir_hash, workdir_a_hash);
+        assert_eq!(deleted.deleted_count, 1);
+        let quarantine_path = deleted
+            .quarantine_path
+            .as_deref()
+            .map(PathBuf::from)
+            .expect("quarantine path");
+        assert!(!project_a_dir.exists());
+        assert!(quarantine_path.exists());
+        assert!(quarantine_path.join("project-a-note.md").exists());
+
+        let list = store
+            .list(MemoryListArgs {
+                scope: None,
+                workdir: None,
+                include_all_projects: Some(true),
+                memory_type: None,
+                include_daily: None,
+                limit: None,
+                offset: None,
+            })
+            .expect("list memories after project delete");
+        assert!(!list
+            .entries
+            .iter()
+            .any(|entry| entry.slug == "project-a-note"));
+        assert!(list.entries.iter().any(|entry| {
+            entry.slug == "project-b-note" && entry.workdir_hash == workdir_b_hash
+        }));
+        assert!(list.entries.iter().any(|entry| entry.slug == "global-note"));
+        store
+            .read(MemoryReadArgs {
+                slug: "project-a-note".to_string(),
+                scope: Some("project".to_string()),
+                workdir: None,
+                workdir_hash: Some(deleted.workdir_hash),
+                offset: None,
+                length: None,
+            })
+            .expect_err("deleted project memory should not be readable");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn delete_project_uses_workdir_marker_when_path_no_longer_canonicalizes() {
+        use std::os::unix::fs::symlink;
+
+        let store = test_store();
+        let real_workdir = tempfile::tempdir().expect("real workdir");
+        let link_parent = tempfile::tempdir().expect("link parent");
+        let link_path = link_parent.path().join("project-link");
+        symlink(real_workdir.path(), &link_path).expect("create workdir symlink");
+        let link_text = link_path.to_string_lossy().to_string();
+        let canonical_hash = workdir_hash(&link_text).expect("canonical workdir hash");
+
+        store
+            .write(MemoryWriteArgs {
+                slug: "symlink-project-note".to_string(),
+                scope: "project".to_string(),
+                workdir: Some(link_text.clone()),
+                memory_type: "project".to_string(),
+                description: "symlink project".to_string(),
+                body: "project body".to_string(),
+                actor: None,
+                conversation_id: None,
+                model: None,
+            })
+            .expect("write symlink project memory");
+        assert!(store.projects_dir().join(&canonical_hash).exists());
+
+        fs::remove_file(&link_path).expect("remove workdir symlink");
+        let raw_hash = workdir_hash(&link_text).expect("raw workdir hash");
+        assert_ne!(raw_hash, canonical_hash);
+
+        let deleted = store
+            .delete_project(MemoryDeleteProjectArgs {
+                workdir: link_text,
+                actor: Some("tool".to_string()),
+                reason: Some("workspace removal".to_string()),
+            })
+            .expect("delete symlink project memory");
+
+        assert_eq!(deleted.workdir_hash, canonical_hash);
+        assert_eq!(deleted.deleted_count, 1);
+        assert!(!store.projects_dir().join(&canonical_hash).exists());
     }
 
     #[test]
