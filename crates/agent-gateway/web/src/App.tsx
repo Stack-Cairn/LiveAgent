@@ -183,6 +183,7 @@ import { GatewayTranscript } from "./components/GatewayTranscript";
 import { HistoryShareModal } from "./components/chat/HistoryShareModal";
 import { useGatewayScrollAffordance } from "./components/useGatewayScrollAffordance";
 import { LoginPage } from "./pages/LoginPage";
+import { SettingsSyncLoading } from "./pages/SettingsSyncLoading";
 import { SharedHistoryPage } from "./pages/SharedHistoryPage";
 import { WorkdirPickerModal } from "./pages/settings/WorkdirPickerModal";
 import {
@@ -6620,7 +6621,7 @@ export default function App() {
           <main className="gateway-main-shell">
             <div className="gateway-main-backdrop" />
             <div className="gateway-chat-frame flex items-center justify-center">
-              <div className="text-sm text-muted-foreground">正在同步桌面端设置...</div>
+              <SettingsSyncLoading locale={settings.locale} />
             </div>
           </main>
         </div>

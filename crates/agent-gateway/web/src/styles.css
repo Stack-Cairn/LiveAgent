@@ -1649,6 +1649,182 @@ html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="cl
   }
 }
 
+/* ── Settings sync loading ── */
+
+.sync-loading {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 38px 46px 32px;
+  border-radius: 24px;
+  border: 1px solid hsl(0 0% 100% / 0.7);
+  background: hsl(0 0% 100% / 0.55);
+  -webkit-backdrop-filter: blur(40px) saturate(1.6);
+  backdrop-filter: blur(40px) saturate(1.6);
+  box-shadow:
+    0 0 0 1px hsl(0 0% 0% / 0.03),
+    0 1px 3px hsl(0 0% 0% / 0.03),
+    0 8px 30px hsl(0 0% 0% / 0.05),
+    0 30px 80px hsl(0 0% 0% / 0.04);
+  overflow: hidden;
+}
+
+.dark .sync-loading {
+  border-color: hsl(0 0% 100% / 0.08);
+  background: hsl(224 20% 12% / 0.6);
+  box-shadow:
+    0 0 0 1px hsl(0 0% 100% / 0.04),
+    0 1px 3px hsl(0 0% 0% / 0.15),
+    0 8px 30px hsl(0 0% 0% / 0.3),
+    0 30px 80px hsl(0 0% 0% / 0.25);
+}
+
+.sync-loading-orb {
+  position: absolute;
+  pointer-events: none;
+  z-index: -1;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.55;
+  will-change: transform;
+}
+
+.sync-loading-orb--1 {
+  width: 200px;
+  height: 200px;
+  top: -80px;
+  left: -64px;
+  background: hsl(210 100% 86% / 0.55);
+  animation: loginOrbFloat 18s ease-in-out infinite;
+}
+
+.sync-loading-orb--2 {
+  width: 170px;
+  height: 170px;
+  bottom: -72px;
+  right: -54px;
+  background: hsl(250 70% 86% / 0.45);
+  animation: loginOrbFloat 22s ease-in-out infinite reverse;
+}
+
+.dark .sync-loading-orb--1 {
+  background: hsl(210 80% 32% / 0.25);
+}
+
+.dark .sync-loading-orb--2 {
+  background: hsl(250 60% 32% / 0.2);
+}
+
+/* Icon + soft emanating pulses (no rotation) */
+.sync-loading-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  margin-top: 2px;
+}
+
+.sync-loading-pulse {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  border: 1.5px solid hsl(var(--primary) / 0.4);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: syncPulse 2.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.sync-loading-pulse--2 {
+  animation-delay: 1.4s;
+}
+
+.sync-loading-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  will-change: transform;
+  animation: syncIconBreathe 2.8s ease-in-out infinite;
+}
+
+.sync-loading-logo {
+  display: block;
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  filter: drop-shadow(0 6px 14px hsl(206 45% 28% / 0.18));
+  user-select: none;
+}
+
+.sync-loading-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: hsl(var(--foreground));
+}
+
+/* Three bouncing dots */
+.sync-loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 8px;
+}
+
+.sync-loading-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  will-change: transform, opacity;
+  animation: syncDotBounce 1.2s ease-in-out infinite;
+}
+
+.sync-loading-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.sync-loading-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.sync-loading-entrance {
+  animation: loginSlideUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes syncIconBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes syncPulse {
+  0% { transform: scale(0.9); opacity: 0; }
+  35% { opacity: 0.45; }
+  100% { transform: scale(1.85); opacity: 0; }
+}
+
+@keyframes syncDotBounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+  40% { transform: translateY(-7px); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-loading-entrance,
+  .sync-loading-icon,
+  .sync-loading-orb,
+  .sync-loading-pulse,
+  .sync-loading-dots i {
+    animation: none;
+  }
+}
+
 @media (hover: none), (pointer: coarse) {
   .login-feat:hover {
     background: hsl(0 0% 100% / 0.5);
@@ -2516,9 +2692,15 @@ html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-viewport:
   }
 
   .login-shell {
-    padding: 16px;
-    align-content: start;
+    /* Center the card vertically on phones so it isn't pinned to the very top
+       with a large empty gap below. `safe center` falls back to top-alignment
+       only if the card ever grows taller than the viewport, avoiding clipping. */
+    padding: 24px 16px;
+    align-content: safe center;
     padding-top: max(env(safe-area-inset-top, 0px), 24px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .login-container {
