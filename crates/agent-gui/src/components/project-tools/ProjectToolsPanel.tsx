@@ -15,6 +15,7 @@ import {
 } from "react";
 import { useLocale } from "../../i18n";
 import type {
+  AppSettings,
   ProjectToolsFileTreeProjectState,
   ProjectToolsFileTreeStatePatch,
   ProjectToolsPanelTab,
@@ -35,6 +36,7 @@ import {
   GitBranch,
   GripVertical,
   Plus,
+  Server,
   Terminal,
   X,
 } from "../icons";
@@ -54,6 +56,7 @@ import {
   type GitFileContextPayload,
 } from "./GitReviewPanel";
 import { ProjectFileTreePanel } from "./ProjectFileTreePanel";
+import { SandboxPanel } from "./SandboxPanel";
 
 const MIN_PANEL_WIDTH = 320;
 const DEFAULT_MAX_PANEL_WIDTH = 720;
@@ -63,6 +66,7 @@ const DEFAULT_TERMINAL_COLS = 80;
 const DEFAULT_TERMINAL_ROWS = 24;
 const FILE_TREE_TAB_ID = "__file_tree__";
 const GIT_REVIEW_TAB_ID = "__git_review__";
+const SANDBOX_TAB_ID = "__sandbox__";
 
 type ProjectToolsPanelProps = {
   isOpen: boolean;
@@ -79,6 +83,7 @@ type ProjectToolsPanelProps = {
   fileTreeOpen: boolean;
   fileTreeState: ProjectToolsFileTreeProjectState;
   gitReviewOpen: boolean;
+  sandboxOpen: boolean;
   client: TerminalClient;
   gitClient?: GitClient | null;
   gitWriteEnabled?: boolean;
@@ -89,10 +94,13 @@ type ProjectToolsPanelProps = {
   onFileTreeOpenChange: (open: boolean) => void;
   onFileTreeStateChange: (patch: ProjectToolsFileTreeStatePatch) => void;
   onGitReviewOpenChange: (open: boolean) => void;
+  onSandboxOpenChange: (open: boolean) => void;
   onSessionsChange?: (sessions: TerminalSession[]) => void;
   onInsertFileMention?: (path: string, kind: "file" | "dir") => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
+  settings: AppSettings;
+  setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   onClose?: () => void;
 };
 
@@ -189,6 +197,10 @@ type ProjectToolsTab =
   | {
       id: typeof GIT_REVIEW_TAB_ID;
       kind: "gitReview";
+    }
+  | {
+      id: typeof SANDBOX_TAB_ID;
+      kind: "sandbox";
     };
 
 type TabDragState = {
@@ -596,6 +608,7 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     fileTreeOpen,
     fileTreeState,
     gitReviewOpen,
+    sandboxOpen,
     client,
     gitClient,
     gitWriteEnabled = true,
@@ -606,10 +619,13 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     onFileTreeOpenChange,
     onFileTreeStateChange,
     onGitReviewOpenChange,
+    onSandboxOpenChange,
     onSessionsChange,
     onInsertFileMention,
     onInsertCommitMention,
     onInsertGitFileMention,
+    settings,
+    setSettings,
     onClose,
   } = props;
   const { t } = useLocale();
@@ -646,14 +662,18 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
   const isControlled = externalSessions !== undefined;
   const fileTreeInitialized = Boolean(projectPathKey && fileTreeOpen);
   const gitReviewInitialized = Boolean(projectPathKey && gitReviewOpen);
+  const sandboxInitialized = Boolean(projectPathKey && sandboxOpen);
   const previousFileTreeInitializedRef = useRef(fileTreeInitialized);
   const previousGitReviewInitializedRef = useRef(gitReviewInitialized);
+  const previousSandboxInitializedRef = useRef(sandboxInitialized);
   const currentActiveTab: ProjectToolsPanelTab =
-    activeTab === "gitReview" && gitReviewInitialized
-      ? "gitReview"
-      : activeTab === "fileTree" && fileTreeInitialized
-        ? "fileTree"
-        : "terminal";
+    activeTab === "sandbox" && sandboxInitialized
+      ? "sandbox"
+      : activeTab === "gitReview" && gitReviewInitialized
+        ? "gitReview"
+        : activeTab === "fileTree" && fileTreeInitialized
+          ? "fileTree"
+          : "terminal";
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null,
@@ -678,8 +698,11 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
     if (gitReviewInitialized) {
       nextTabs.push({ id: GIT_REVIEW_TAB_ID, kind: "gitReview" });
     }
+    if (sandboxInitialized) {
+      nextTabs.push({ id: SANDBOX_TAB_ID, kind: "sandbox" });
+    }
     return nextTabs;
-  }, [fileTreeInitialized, gitReviewInitialized, sessions]);
+  }, [fileTreeInitialized, gitReviewInitialized, sandboxInitialized, sessions]);
   const effectiveTabOrder = draftTabOrder ?? tabOrder;
   const orderedProjectTabs = useMemo(
     () => orderProjectToolsTabs(visibleTabs, effectiveTabOrder),
@@ -714,6 +737,18 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       onActiveTabChange("terminal");
     }
   }, [activeTab, gitReviewInitialized, onActiveTabChange]);
+
+  useEffect(() => {
+    const previousSandboxInitialized = previousSandboxInitializedRef.current;
+    previousSandboxInitializedRef.current = sandboxInitialized;
+    if (sandboxInitialized && !previousSandboxInitialized) {
+      onActiveTabChange("sandbox");
+      return;
+    }
+    if (!sandboxInitialized && previousSandboxInitialized && activeTab === "sandbox") {
+      onActiveTabChange("terminal");
+    }
+  }, [activeTab, onActiveTabChange, sandboxInitialized]);
 
   const publishSessions = useCallback(
     (nextSessions: TerminalSession[], options?: { notifyParent?: boolean }) => {
@@ -1171,7 +1206,11 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
   );
 
   const showFirstOpenChooser =
-    projectReady && sessions.length === 0 && !fileTreeInitialized && !gitReviewInitialized;
+    projectReady &&
+    sessions.length === 0 &&
+    !fileTreeInitialized &&
+    !gitReviewInitialized &&
+    !sandboxInitialized;
 
   const startFileTree = useCallback(() => {
     setFileTreeInitialized(true);
@@ -1227,6 +1266,19 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
       onActiveTabChange("terminal");
     }
   }, [activeTab, onActiveTabChange, onGitReviewOpenChange]);
+
+  const startSandbox = useCallback(() => {
+    if (!projectReady) return;
+    onSandboxOpenChange(true);
+    onActiveTabChange("sandbox");
+  }, [onActiveTabChange, onSandboxOpenChange, projectReady]);
+
+  const closeSandbox = useCallback(() => {
+    onSandboxOpenChange(false);
+    if (activeTab === "sandbox") {
+      onActiveTabChange("terminal");
+    }
+  }, [activeTab, onActiveTabChange, onSandboxOpenChange]);
 
   const renderCreateTerminalMenuItem = () => {
     if (shellOptions.length > 1) {
@@ -1318,6 +1370,57 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                 className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
               >
                 {orderedProjectTabs.map((tab) => {
+                  if (tab.kind === "sandbox") {
+                    return (
+                      <div
+                        key={tab.id}
+                        data-project-tools-tab-id={tab.id}
+                        className={cn(
+                          "group flex h-8 max-w-[12rem] shrink-0 select-none items-center gap-1 rounded-md border border-transparent px-1.5 text-xs text-muted-foreground transition-[background-color,border-color,color,opacity,transform,box-shadow] hover:bg-muted/80 hover:text-foreground",
+                          currentActiveTab === "sandbox" &&
+                            "border-border bg-muted text-foreground shadow-sm",
+                          draggingTabId === tab.id &&
+                            "z-10 scale-[0.98] opacity-80 shadow-md ring-1 ring-ring",
+                        )}
+                        title={t("projectTools.sandboxTitle")}
+                      >
+                        {renderTabDragHandle(tab.id, t("projectTools.sandboxTitle"))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (consumeSuppressedTabClick(tab.id)) return;
+                            onActiveTabChange("sandbox");
+                          }}
+                          className="flex min-w-0 flex-1 items-center gap-1.5 bg-transparent p-0 text-left text-inherit"
+                        >
+                          <Server className="h-3.5 w-3.5 shrink-0" />
+                          <span className="min-w-0 truncate">
+                            {t("projectTools.sandboxTitle")}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          data-project-tools-tab-action="close"
+                          aria-label={t("projectTools.closeSandbox")}
+                          title={t("projectTools.closeSandbox")}
+                          className="ml-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-colors hover:bg-background hover:text-foreground focus-visible:bg-background focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                          onPointerDown={(event) => {
+                            event.stopPropagation();
+                          }}
+                          onMouseDown={(event) => {
+                            event.stopPropagation();
+                          }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            closeSandbox();
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  }
+
                   if (tab.kind === "fileTree") {
                     return (
                       <div
@@ -1526,6 +1629,14 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                     <GitBranch className="h-3.5 w-3.5" />
                     {t("projectTools.newGitReview")}
                   </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={startSandbox}
+                    disabled={!projectReady}
+                    className="gap-2 text-xs"
+                  >
+                    <Server className="h-3.5 w-3.5" />
+                    {t("projectTools.newSandbox")}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               {onClose ? (
@@ -1630,6 +1741,19 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
                       <div className="mt-0.5 text-xs leading-tight text-muted-foreground">{t("projectTools.gitReviewDescription")}</div>
                     </div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={startSandbox}
+                    className="group flex items-center gap-3 rounded-lg border border-border/60 bg-background px-3.5 py-3 text-left text-sm text-foreground transition-all hover:border-border hover:bg-muted/60 hover:shadow-sm"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted/80 text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground">
+                      <Server className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium leading-tight">{t("projectTools.newSandbox")}</div>
+                      <div className="mt-0.5 text-xs leading-tight text-muted-foreground">{t("projectTools.sandboxDescription")}</div>
+                    </div>
+                  </button>
                 </div>
                 {loading ? (
                   <div className="text-center text-xs text-muted-foreground">
@@ -1642,6 +1766,16 @@ export function ProjectToolsPanel(props: ProjectToolsPanelProps) {
               </div>
             ) : (
               <>
+                {sandboxInitialized ? (
+                  <div
+                    className={cn(
+                      "min-h-0 flex-1",
+                      currentActiveTab === "sandbox" ? "block" : "hidden",
+                    )}
+                  >
+                    <SandboxPanel settings={settings} setSettings={setSettings} />
+                  </div>
+                ) : null}
                 {fileTreeInitialized ? (
                   <div
                     className={cn(

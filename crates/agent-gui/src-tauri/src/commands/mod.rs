@@ -1,5 +1,6 @@
 pub mod app;
 pub mod chat_history;
+pub mod cratebay;
 pub mod cron;
 pub mod delegate;
 pub mod fs;

@@ -21,7 +21,11 @@ import type {
   BuiltinToolMetadata,
 } from "./builtinTypes";
 import { createCronTools } from "./cronTools";
-import type { SystemToolId, SystemToolRuntimeScope } from "./customSystemTools";
+import {
+  CRATEBAY_SYSTEM_TOOL_IDS,
+  type SystemToolId,
+  type SystemToolRuntimeScope,
+} from "./customSystemTools";
 import { createCustomSystemTools } from "./customSystemTools";
 import { createSubagentMessageTools } from "./delegate/messageTools";
 import { createDelegateTools } from "./delegateTools";
@@ -255,6 +259,10 @@ export async function buildBuiltinToolRegistry(
   }
 
   const baseRegistry = createBuiltinToolRegistry(baseBundles);
+  const crateBaySystemToolIdSet = new Set<SystemToolId>(CRATEBAY_SYSTEM_TOOL_IDS);
+  const inheritedSandboxToolIds = params.selectedSystemToolIds.filter((toolId) =>
+    crateBaySystemToolIdSet.has(toolId),
+  );
   const parentMessageBundle = params.delegateRuntime.conversationId?.trim()
     ? createSubagentMessageTools({
         parentConversationId: params.delegateRuntime.conversationId,
@@ -304,7 +312,7 @@ export async function buildBuiltinToolRegistry(
             fileState: createFileToolState(),
             skillsEnabled: false,
             updateMcpSettings: undefined,
-            selectedSystemToolIds: [],
+            selectedSystemToolIds: inheritedSandboxToolIds,
             enabledMcpServerIds: params.enabledMcpServerIds,
             mcpLoadFailureMode: "continue",
             memoryToolMode: "ro",

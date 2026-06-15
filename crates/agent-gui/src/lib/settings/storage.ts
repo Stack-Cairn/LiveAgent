@@ -9,6 +9,7 @@ import {
   normalizeProjectToolsFileTreeSettings,
   normalizeProjectToolsGitReviewSettings,
   normalizeProjectToolsPanelTabOrders,
+  normalizeProjectToolsSandboxSettings,
   normalizeSelectedModel,
   normalizeSettings,
   normalizeSkillsSettings,
@@ -58,6 +59,7 @@ function toPersistedLocalCustomSettings(
     ...customSettings,
     projectToolsFileTree: normalizeProjectToolsFileTreeSettings({}),
     projectToolsGitReview: normalizeProjectToolsGitReviewSettings({}),
+    projectToolsSandbox: normalizeProjectToolsSandboxSettings({}),
   };
 }
 
@@ -113,6 +115,7 @@ function readLocalUiSettings(): {
       },
       projectToolsFileTree: normalizeProjectToolsFileTreeSettings({}),
       projectToolsGitReview: normalizeProjectToolsGitReviewSettings({}),
+      projectToolsSandbox: normalizeProjectToolsSandboxSettings({}),
     });
   }
 

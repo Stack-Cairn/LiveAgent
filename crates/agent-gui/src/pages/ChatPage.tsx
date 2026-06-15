@@ -94,6 +94,7 @@ import {
   isAgentExecutionMode,
   isProjectToolsFileTreeOpen,
   isProjectToolsGitReviewOpen,
+  isProjectToolsSandboxOpen,
   normalizeChatRuntimeControlsForProvider,
   type ProviderId,
   type SelectedModel,
@@ -108,6 +109,7 @@ import {
   updateProjectToolsFileTreeOpen,
   updateProjectToolsGitReviewOpen,
   updateProjectToolsPanelTabOrder,
+  updateProjectToolsSandboxOpen,
   updateChatRuntimeControlsForProvider,
   updateMcp,
   updateMemorySettings,
@@ -4416,6 +4418,7 @@ export function ChatPage(props: ChatPageProps) {
           terminalProjectPathKey,
         )}
         gitReviewOpen={isProjectToolsGitReviewOpen(settings.customSettings, terminalProjectPathKey)}
+        sandboxOpen={isProjectToolsSandboxOpen(settings.customSettings, terminalProjectPathKey)}
         client={tauriTerminalClient}
         gitClient={tauriGitClient}
         gitWriteEnabled
@@ -4455,6 +4458,9 @@ export function ChatPage(props: ChatPageProps) {
         onGitReviewOpenChange={(open) =>
           setSettings((prev) => updateProjectToolsGitReviewOpen(prev, terminalProjectPathKey, open))
         }
+        onSandboxOpenChange={(open) =>
+          setSettings((prev) => updateProjectToolsSandboxOpen(prev, terminalProjectPathKey, open))
+        }
         onSessionsChange={setProjectTerminalSessions}
         onInsertFileMention={(path, kind) => {
           composerRef.current?.insertFileMention(path, kind);
@@ -4468,6 +4474,8 @@ export function ChatPage(props: ChatPageProps) {
           composerRef.current?.insertGitFileMention(file);
           composerRef.current?.focus();
         }}
+        settings={settings}
+        setSettings={setSettings}
       />
     </div>
   );

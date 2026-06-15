@@ -3,6 +3,7 @@ import {
   normalizeChatRuntimeControls,
   normalizeProjectToolsFileTreeSettings,
   normalizeProjectToolsGitReviewSettings,
+  normalizeProjectToolsSandboxSettings,
   normalizeSettings,
   workspaceProjectPathKey,
 } from "./index";
@@ -318,6 +319,21 @@ function mergeSyncedProjectToolsGitReviewSettings(
   };
 }
 
+function mergeSyncedProjectToolsSandboxSettings(
+  current: AppSettings["customSettings"]["projectToolsSandbox"],
+  incoming: unknown,
+): AppSettings["customSettings"]["projectToolsSandbox"] {
+  const currentState = normalizeProjectToolsSandboxSettings(current);
+  const incomingState = normalizeProjectToolsSandboxSettings(incoming);
+  const openFromIncoming = incomingState.openVersion >= currentState.openVersion;
+  return {
+    openProjectPathKeys: openFromIncoming
+      ? incomingState.openProjectPathKeys
+      : currentState.openProjectPathKeys,
+    openVersion: Math.max(currentState.openVersion, incomingState.openVersion),
+  };
+}
+
 export function buildGatewaySettingsSyncPayload(
   settings: AppSettings,
   options: { includeProviderApiKeyUpdates?: boolean } = {},
@@ -398,6 +414,12 @@ export function applyGatewaySettingsSyncPayload(
             incomingCustomSettings.projectToolsGitReview,
           )
         : current.customSettings.projectToolsGitReview,
+      projectToolsSandbox: Object.hasOwn(incomingCustomSettings, "projectToolsSandbox")
+        ? mergeSyncedProjectToolsSandboxSettings(
+            current.customSettings.projectToolsSandbox,
+            incomingCustomSettings.projectToolsSandbox,
+          )
+        : current.customSettings.projectToolsSandbox,
       chatSidebar: current.customSettings.chatSidebar,
       projectToolsPanel: current.customSettings.projectToolsPanel,
     },

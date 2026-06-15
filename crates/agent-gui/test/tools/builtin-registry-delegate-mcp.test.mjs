@@ -252,3 +252,77 @@ test("delegated read-only agents inherit enabled MCP business tools but not McpM
   assert.ok(!runnerCalls[0].tools.some((tool) => tool.name === "McpManager"));
   assert.ok(!runnerCalls[0].tools.some((tool) => tool.name === "Agent"));
 });
+
+test("delegated agents inherit enabled CrateBay sandbox system tools", async () => {
+  const runnerCalls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      [agentRunnerModulePath]: {
+        async runAssistantWithTools(params) {
+          runnerCalls.push(params);
+          params.onTurnStart?.(1);
+          return {
+            assistant: createAssistant("subagent done"),
+            messages: [createAssistant("subagent done")],
+            emittedMessages: [createAssistant("subagent done")],
+          };
+        },
+      },
+      "@tauri-apps/api/core": {
+        async invoke(command) {
+          if (command === "subagent_run_upsert") {
+            return {};
+          }
+          if (command === "subagent_run_append_event") {
+            return {};
+          }
+          if (command === "subagent_run_list") {
+            return [];
+          }
+          throw new Error(`Unexpected invoke: ${command}`);
+        },
+      },
+    },
+  });
+
+  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
+  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const registry = await buildBuiltinToolRegistry({
+    workdir: "/tmp/liveagent-delegate-cratebay-test",
+    providerId: "codex",
+    fileState: createFileToolState(),
+    skillsEnabled: true,
+    runtimeScope: "chat",
+    selectedSystemToolIds: ["cratebay_status", "http_get_test"],
+    mcpSettings: {
+      selected: [],
+      servers: [],
+    },
+    enabledMcpServerIds: [],
+    selectableMcpServers: [],
+    delegateRuntime: {
+      providerId: "codex",
+      model: "gpt-5",
+      runtime: {
+        baseUrl: "https://api.example.test/v1",
+        apiKey: "test-key",
+      },
+      sessionId: "parent-session",
+      agentTemplates: [],
+    },
+  });
+
+  const result = await registry.executeToolCall(
+    createToolCall({
+      description: "Use sandbox",
+      prompt: "Check sandbox status if useful.",
+      mode: "readonly",
+    }),
+  );
+
+  assert.equal(result.isError, false);
+  assert.equal(runnerCalls.length, 1);
+  assert.ok(runnerCalls[0].tools.some((tool) => tool.name === "CrateBayStatus"));
+  assert.ok(!runnerCalls[0].tools.some((tool) => tool.name === "HttpGetTest"));
+  assert.ok(!runnerCalls[0].tools.some((tool) => tool.name === "Agent"));
+});
