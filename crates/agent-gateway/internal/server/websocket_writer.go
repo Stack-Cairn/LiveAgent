@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 )
 
 type websocketConnectionWriter struct {
@@ -31,5 +31,5 @@ func (w *websocketConnectionWriter) write(envelope websocketEnvelope) error {
 			_ = w.conn.SetWriteDeadline(time.Time{})
 		}()
 	}
-	return websocket.JSON.Send(w.conn, envelope)
+	return w.conn.WriteJSON(envelope)
 }

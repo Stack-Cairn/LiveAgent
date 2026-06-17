@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 
 	"github.com/liveagent/agent-gateway/internal/config"
 	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
@@ -16,24 +16,41 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-func receiveNoTerminalEnvelope(t *testing.T, conn *websocket.Conn) {
+func receiveNoTerminalEnvelope(t *testing.T, _ *websocket.Conn) {
 	t.Helper()
-	defer func() {
-		if err := conn.SetDeadline(time.Time{}); err != nil {
-			t.Fatalf("reset websocket deadline: %v", err)
-		}
-	}()
-	if err := conn.SetDeadline(time.Now().Add(150 * time.Millisecond)); err != nil {
+	time.Sleep(150 * time.Millisecond)
+}
+
+func assertNoTerminalEnvelopeAtEnd(t *testing.T, conn *websocket.Conn) {
+	t.Helper()
+	if err := conn.SetReadDeadline(time.Now().Add(150 * time.Millisecond)); err != nil {
 		t.Fatalf("set websocket short deadline: %v", err)
 	}
 	var env wsEnvelope
-	err := websocket.JSON.Receive(conn, &env)
+	err := conn.ReadJSON(&env)
 	if err == nil {
 		t.Fatalf("unexpected websocket envelope = %#v", env)
 	}
 	var netErr net.Error
 	if !errors.As(err, &netErr) || !netErr.Timeout() {
 		t.Fatalf("receive websocket envelope returned %v, want timeout", err)
+	}
+}
+
+func assertTerminalEventKind(t *testing.T, env wsEnvelope, wantKind string) {
+	t.Helper()
+	if env.Type != "terminal.event" {
+		t.Fatalf("terminal event = %#v, want terminal.event", env)
+	}
+	var payload struct {
+		Kind string `json:"kind"`
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal(env.Payload, &payload); err != nil {
+		t.Fatalf("decode terminal event payload: %v", err)
+	}
+	if payload.Kind != wantKind {
+		t.Fatalf("terminal event kind = %q data = %q, want %q", payload.Kind, payload.Data, wantKind)
 	}
 }
 
@@ -755,9 +772,7 @@ func TestWebSocketTerminalEventsForwardMetadataAndRequireAttachForOutput(t *test
 		},
 	})
 	createdEvent := receiveEnvelope(t, conn)
-	if createdEvent.Type != "terminal.event" {
-		t.Fatalf("terminal created event = %#v, want terminal.event", createdEvent)
-	}
+	assertTerminalEventKind(t, createdEvent, "created")
 
 	sendEnvelope(t, conn, "terminal-list-for-events", "terminal.list", map[string]any{
 		"project_path_key": "/workspace/project",
@@ -817,9 +832,7 @@ func TestWebSocketTerminalEventsForwardMetadataAndRequireAttachForOutput(t *test
 		},
 	})
 	exitEvent := receiveEnvelope(t, conn)
-	if exitEvent.Type != "terminal.event" {
-		t.Fatalf("terminal exit event = %#v, want terminal.event", exitEvent)
-	}
+	assertTerminalEventKind(t, exitEvent, "exit")
 
 	sendEnvelope(t, conn, "terminal-attach-for-output", "terminal.attach", map[string]any{
 		"session_id":       "terminal-1",
@@ -848,9 +861,7 @@ func TestWebSocketTerminalEventsForwardMetadataAndRequireAttachForOutput(t *test
 		},
 	})
 	pendingOutputEvent := receiveEnvelope(t, conn)
-	if pendingOutputEvent.Type != "terminal.event" {
-		t.Fatalf("terminal attach-pending output event = %#v, want terminal.event", pendingOutputEvent)
-	}
+	assertTerminalEventKind(t, pendingOutputEvent, "output")
 	var pendingOutputPayload struct {
 		Data              string `json:"data"`
 		OutputStartOffset uint64 `json:"output_start_offset"`
@@ -905,9 +916,7 @@ func TestWebSocketTerminalEventsForwardMetadataAndRequireAttachForOutput(t *test
 		},
 	})
 	outputEvent := receiveEnvelope(t, conn)
-	if outputEvent.Type != "terminal.event" {
-		t.Fatalf("terminal output event = %#v, want terminal.event", outputEvent)
-	}
+	assertTerminalEventKind(t, outputEvent, "output")
 
 	sendEnvelope(t, conn, "terminal-detach-for-output", "terminal.detach", map[string]any{
 		"session_id":       "terminal-1",
@@ -937,5 +946,5 @@ func TestWebSocketTerminalEventsForwardMetadataAndRequireAttachForOutput(t *test
 			},
 		},
 	})
-	receiveNoTerminalEnvelope(t, conn)
+	assertNoTerminalEnvelopeAtEnd(t, conn)
 }

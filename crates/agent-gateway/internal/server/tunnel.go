@@ -12,9 +12,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
 	"github.com/liveagent/agent-gateway/internal/session"
-	"golang.org/x/net/websocket"
 )
 
 const tunnelBodyChunkSize = 64 * 1024
@@ -235,16 +235,19 @@ func serveTunnelWebSocket(
 		writeTunnelAcquireError(w, err)
 		return
 	}
-	handlerStarted := false
-	handler := websocket.Handler(func(ws *websocket.Conn) {
-		handlerStarted = true
-		defer lease.Release()
-		handleTunnelWebSocket(ws, r, sm, lease, slug, streamID, restPath)
-	})
-	handler.ServeHTTP(w, r)
-	if !handlerStarted {
-		lease.Release()
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(_ *http.Request) bool {
+			return true
+		},
 	}
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		lease.Release()
+		return
+	}
+	ws.SetReadLimit(16 * 1024 * 1024)
+	defer lease.Release()
+	handleTunnelWebSocket(ws, r, sm, lease, slug, streamID, restPath)
 }
 
 func handleTunnelWebSocket(
@@ -256,7 +259,6 @@ func handleTunnelWebSocket(
 	streamID string,
 	restPath string,
 ) {
-	ws.MaxPayloadBytes = 16 * 1024 * 1024
 	closed := false
 	defer func() {
 		if !closed {
@@ -292,13 +294,13 @@ func handleTunnelWebSocket(
 	go func() {
 		defer close(readerDone)
 		for {
-			var body []byte
-			if err := websocket.Message.Receive(ws, &body); err != nil {
+			messageType, body, err := ws.ReadMessage()
+			if err != nil {
 				return
 			}
-			messageType := "binary"
-			if utf8.Valid(body) {
-				messageType = "text"
+			wireMessageType := "binary"
+			if messageType == websocket.TextMessage || utf8.Valid(body) {
+				wireMessageType = "text"
 			}
 			frame := &gatewayv1.TunnelFrame{
 				StreamId:      streamID,
@@ -306,7 +308,7 @@ func handleTunnelWebSocket(
 				Slug:          slug,
 				Kind:          gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME,
 				Body:          body,
-				WsMessageType: messageType,
+				WsMessageType: wireMessageType,
 			}
 			select {
 			case browserFrames <- frame:
@@ -341,11 +343,11 @@ func handleTunnelWebSocket(
 			switch frame.GetKind() {
 			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME:
 				if strings.EqualFold(frame.GetWsMessageType(), "text") {
-					if err := websocket.Message.Send(ws, string(frame.GetBody())); err != nil {
+					if err := ws.WriteMessage(websocket.TextMessage, frame.GetBody()); err != nil {
 						return
 					}
 				} else {
-					if err := websocket.Message.Send(ws, frame.GetBody()); err != nil {
+					if err := ws.WriteMessage(websocket.BinaryMessage, frame.GetBody()); err != nil {
 						return
 					}
 				}
@@ -379,7 +381,7 @@ func awaitTunnelWebSocketOpen(ws *websocket.Conn, lease *session.TunnelStreamLea
 				gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
 				gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE:
 				if frame.GetError() != "" {
-					_ = websocket.Message.Send(ws, frame.GetError())
+					_ = ws.WriteMessage(websocket.TextMessage, []byte(frame.GetError()))
 				}
 				return false
 			}

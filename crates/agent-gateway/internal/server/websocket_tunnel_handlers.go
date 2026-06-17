@@ -265,7 +265,7 @@ func (c *websocketConnection) handleTunnelClose(req websocketRequest) {
 }
 
 func (c *websocketConnection) publicBaseURL() string {
-	return publicBaseURLFromHTTPRequest(c.conn.Request())
+	return publicBaseURLFromHTTPRequest(c.req)
 }
 
 func websocketTunnelSummariesPayload(

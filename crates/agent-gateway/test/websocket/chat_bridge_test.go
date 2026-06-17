@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 
 	"github.com/liveagent/agent-gateway/internal/config"
 	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
@@ -28,7 +28,9 @@ func dialGatewayWebSocket(t *testing.T, handler http.Handler) (*websocket.Conn, 
 	t.Helper()
 	ts := httptest.NewServer(handler)
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
-	conn, err := websocket.Dial(wsURL, "", "http://gateway.test/")
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, http.Header{
+		"Origin": []string{ts.URL},
+	})
 	if err != nil {
 		ts.Close()
 		t.Fatalf("dial websocket: %v", err)
@@ -48,18 +50,21 @@ func sendEnvelope(t *testing.T, conn *websocket.Conn, id string, typ string, pay
 	if payload != nil {
 		env["payload"] = payload
 	}
-	if err := websocket.JSON.Send(conn, env); err != nil {
+	if err := conn.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("set websocket write deadline: %v", err)
+	}
+	if err := conn.WriteJSON(env); err != nil {
 		t.Fatalf("send %s: %v", typ, err)
 	}
 }
 
 func receiveEnvelope(t *testing.T, conn *websocket.Conn) wsEnvelope {
 	t.Helper()
-	if err := conn.SetDeadline(time.Now().Add(time.Second)); err != nil {
-		t.Fatalf("set websocket deadline: %v", err)
+	if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("set websocket read deadline: %v", err)
 	}
 	var env wsEnvelope
-	if err := websocket.JSON.Receive(conn, &env); err != nil {
+	if err := conn.ReadJSON(&env); err != nil {
 		t.Fatalf("receive websocket envelope: %v", err)
 	}
 	return env
@@ -79,11 +84,16 @@ func receiveEnvelopeWithID(t *testing.T, conn *websocket.Conn, id string) wsEnve
 
 func assertNoEnvelopeWithin(t *testing.T, conn *websocket.Conn, timeout time.Duration) {
 	t.Helper()
-	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
-		t.Fatalf("set websocket deadline: %v", err)
+	defer func() {
+		if err := conn.SetReadDeadline(time.Time{}); err != nil {
+			t.Fatalf("reset websocket read deadline: %v", err)
+		}
+	}()
+	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		t.Fatalf("set websocket read deadline: %v", err)
 	}
 	var env wsEnvelope
-	if err := websocket.JSON.Receive(conn, &env); err == nil {
+	if err := conn.ReadJSON(&env); err == nil {
 		t.Fatalf("unexpected websocket envelope: %#v", env)
 	}
 }

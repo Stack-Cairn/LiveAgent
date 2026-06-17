@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 
 	"github.com/liveagent/agent-gateway/internal/config"
 	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"

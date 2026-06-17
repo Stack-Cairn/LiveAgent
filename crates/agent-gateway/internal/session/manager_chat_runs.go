@@ -21,10 +21,10 @@ func (m *Manager) SubscribeChatEvents() (<-chan *ChatBroadcastEvent, func()) {
 
 	cleanup := func() {
 		m.chatStore.chatMu.Lock()
-		existing, ok := m.chatStore.chatSubscribers[subID]
-		if ok {
+		if _, ok := m.chatStore.chatSubscribers[subID]; ok {
+			// Do not close the channel here: broadcastChatEvent sends after
+			// copying subscribers, so closing can race with an in-flight send.
 			delete(m.chatStore.chatSubscribers, subID)
-			close(existing)
 		}
 		m.chatStore.chatMu.Unlock()
 	}

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 
 	"github.com/liveagent/agent-gateway/internal/config"
 	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
@@ -112,6 +112,7 @@ type websocketConnection struct {
 	sm  *session.Manager
 
 	conn *websocket.Conn
+	req  *http.Request
 
 	writer     *websocketConnectionWriter
 	closeOnce  sync.Once
@@ -140,31 +141,47 @@ const defaultHistoryListPage = 1
 const defaultHistoryListPageSize = 80
 
 func NewWebSocketServer(cfg *config.Config, sm *session.Manager) http.Handler {
-	server := &websocket.Server{
-		Handshake: func(_ *websocket.Config, _ *http.Request) error {
-			return nil
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(_ *http.Request) bool {
+			// Preserve the existing token-authenticated behavior for WebUI dev
+			// proxies and self-hosted deployments. Origin policy can be tightened
+			// independently without changing the wire protocol.
+			return true
 		},
-		Handler: websocket.Handler(func(conn *websocket.Conn) {
-			state := &websocketConnection{
-				cfg:              cfg,
-				sm:               sm,
-				conn:             conn,
-				writer:           newWebsocketConnectionWriter(conn, cfg.WebSocketWriteTimeout),
-				done:             make(chan struct{}),
-				chatTracker:      newWebsocketChatTracker(),
-				terminalInterest: newWebsocketTerminalInterestTracker(),
-			}
-			defer state.close()
-			state.serve()
-		}),
 	}
-	return server
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		conn.SetReadLimit(webSocketReadLimit(cfg))
+
+		state := &websocketConnection{
+			cfg:              cfg,
+			sm:               sm,
+			conn:             conn,
+			req:              r,
+			writer:           newWebsocketConnectionWriter(conn, cfg.WebSocketWriteTimeout),
+			done:             make(chan struct{}),
+			chatTracker:      newWebsocketChatTracker(),
+			terminalInterest: newWebsocketTerminalInterestTracker(),
+		}
+		defer state.close()
+		state.serve()
+	})
+}
+
+func webSocketReadLimit(cfg *config.Config) int64 {
+	if cfg != nil && cfg.GRPCMaxMessageBytes > 0 {
+		return int64(cfg.GRPCMaxMessageBytes)
+	}
+	return int64(config.DefaultGRPCMaxMessageBytes)
 }
 
 func (c *websocketConnection) serve() {
 	for {
 		var req websocketRequest
-		if err := websocket.JSON.Receive(c.conn, &req); err != nil {
+		if err := c.conn.ReadJSON(&req); err != nil {
 			if errors.Is(err, io.EOF) {
 				return
 			}
