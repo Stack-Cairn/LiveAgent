@@ -68,6 +68,7 @@ type ChatBroadcastEvent struct {
 	RequestID string
 	Event     *gatewayv1.ChatEvent
 	Control   *gatewayv1.ChatControlEvent
+	Payload   map[string]any
 	Seq       int64
 	Workdir   string
 }
@@ -87,7 +88,11 @@ type ChatRunSnapshot struct {
 
 type ActiveChatRunSummary struct {
 	ConversationID string
+	RequestID      string
 	Workdir        string
+	FirstSeq       int64
+	LatestSeq      int64
+	RunEpoch       int64
 	UpdatedAt      int64
 }
 
@@ -103,22 +108,23 @@ const (
 )
 
 type chatRun struct {
-	requestID       string
-	conversationID  string
-	clientRequestID string
-	workdir         string
-	sessionEpoch    uint64
-	runEpoch        int64
-	events          []*ChatBroadcastEvent
-	nextSeq         int64
-	state           string
-	errorCode       string
-	accepted        bool
-	started         bool
-	done            bool
-	updatedAt       time.Time
-	expiresAt       time.Time
-	subscribers     map[int]*chatRunSubscriber
+	requestID        string
+	conversationID   string
+	clientRequestID  string
+	workdir          string
+	sessionEpoch     uint64
+	runEpoch         int64
+	events           []*ChatBroadcastEvent
+	nextSeq          int64
+	state            string
+	errorCode        string
+	accepted         bool
+	started          bool
+	firstDeltaLogged bool
+	done             bool
+	updatedAt        time.Time
+	expiresAt        time.Time
+	subscribers      map[int]*chatRunSubscriber
 }
 
 type activeHistoryRun struct {
@@ -156,4 +162,15 @@ func NewManager() *Manager {
 		chatStore: newChatRunStore(),
 		tunnels:   newTunnelStore(),
 	}
+}
+
+func NewManagerWithChatEventStore(store ChatEventStore) (*Manager, error) {
+	manager := NewManager()
+	manager.chatStore.eventStore = store
+	if store != nil {
+		if err := store.FailOpenRuns("Gateway restarted before the remote chat run finished. Please retry."); err != nil {
+			return nil, err
+		}
+	}
+	return manager, nil
 }

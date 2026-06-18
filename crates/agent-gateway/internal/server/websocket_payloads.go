@@ -120,11 +120,24 @@ func websocketActiveChatRunSummariesPayload(summaries []session.ActiveChatRunSum
 		if conversationID == "" {
 			continue
 		}
-		payload = append(payload, map[string]any{
+		item := map[string]any{
 			"conversation_id": conversationID,
 			"cwd":             strings.TrimSpace(summary.Workdir),
 			"updated_at":      summary.UpdatedAt,
-		})
+		}
+		if requestID := strings.TrimSpace(summary.RequestID); requestID != "" {
+			item["run_id"] = requestID
+		}
+		if summary.FirstSeq > 0 {
+			item["first_seq"] = summary.FirstSeq
+		}
+		if summary.LatestSeq > 0 {
+			item["latest_seq"] = summary.LatestSeq
+		}
+		if summary.RunEpoch > 0 {
+			item["run_epoch"] = summary.RunEpoch
+		}
+		payload = append(payload, item)
 	}
 	return payload
 }

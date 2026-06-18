@@ -214,8 +214,6 @@ macro_rules! app_invoke_handler {
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,
             commands::gateway::gateway_send_chat_event,
-            commands::gateway::gateway_take_chat_request,
-            commands::gateway::gateway_take_pending_chat_requests,
             commands::gateway::gateway_chat_claim_next,
             commands::gateway::gateway_chat_mark_started,
             commands::gateway::gateway_chat_complete,

@@ -2,16 +2,12 @@ import type {
   GatewaySettingsSyncPayload,
   GatewaySettingsSyncUpdatePayload,
 } from "@/lib/settings/sync";
-import type { HistoryMessageRef } from "@/lib/chat/conversationState";
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import type { TerminalEvent, TerminalSession, TerminalSnapshot } from "@/lib/terminal/types";
 
 import { GatewayWebSocketClient } from "./gatewaySocket";
 import type {
   AgentStatus,
   CronManagePayload,
-  GatewayChatRuntimeControls,
-  GatewaySelectedModel,
   MemoryManagePayload,
 } from "./gatewayTypes";
 
@@ -27,44 +23,6 @@ type WorkerClientRequest =
       request_id: string;
       method: string;
       payload?: unknown;
-    }
-  | {
-      type: "chat.start";
-      connection_id: string;
-      request_id: string;
-      stream_id: string;
-      payload: {
-        message: string;
-        conversation_id?: string;
-        client_request_id?: string;
-        selected_model?: GatewaySelectedModel;
-        runtime_controls?: GatewayChatRuntimeControls;
-        system_settings?: {
-          executionMode?: string;
-          workdir?: string;
-          selectedSystemTools?: string[];
-        };
-        uploaded_files?: PendingUploadedFile[];
-      };
-    }
-  | {
-      type: "chat.cancel";
-      connection_id: string;
-      stream_id: string;
-      conversation_id?: string;
-    }
-  | {
-      type: "chat.attach";
-      connection_id: string;
-      request_id: string;
-      stream_id: string;
-      conversation_id: string;
-      after_seq?: number;
-    }
-  | {
-      type: "chat.detach";
-      connection_id: string;
-      stream_id: string;
     }
   | {
       type: "wakeup";
@@ -89,7 +47,6 @@ type ManagedClient = {
 type PortState = {
   connectionID: string;
   client: ManagedClient;
-  streams: Map<string, AbortController>;
   terminalAllProjects: boolean;
   terminalProjectKeys: Set<string>;
   terminalSessionIds: Set<string>;
@@ -344,13 +301,6 @@ function getManagedClient(token: string) {
       payload: event,
     });
   });
-  managed.client.subscribeConversation((event) => {
-    broadcast(managed, {
-      type: "event",
-      event_type: "conversation",
-      payload: event,
-    });
-  });
   managed.client.subscribeSettings((event) => {
     broadcast(managed, {
       type: "event",
@@ -384,7 +334,6 @@ function connectPort(
   const state: PortState = {
     connectionID: message.connection_id,
     client,
-    streams: new Map(),
     terminalAllProjects: false,
     terminalProjectKeys: new Set(),
     terminalSessionIds: new Set(),
@@ -408,10 +357,6 @@ function disconnectPort(port: MessagePort) {
   }
   const terminalSessionIds = [...state.terminalSessionIds];
   const terminalProjectKeys = [...state.terminalProjectKeys];
-  for (const controller of state.streams.values()) {
-    controller.abort();
-  }
-  state.streams.clear();
   state.client.ports.delete(port);
   portStates.delete(port);
   for (const sessionID of terminalSessionIds) {
@@ -512,15 +457,6 @@ async function resolveRequest(client: GatewayWebSocketClient, method: string, pa
     case "history.delete":
       await client.deleteHistory(String(body.conversation_id ?? ""));
       return undefined;
-    case "history.truncate":
-      return client.truncateHistory(
-        String(body.conversation_id ?? ""),
-        {
-          segmentIndex: typeof body.segment_index === "number" ? body.segment_index : 0,
-          messageIndex: typeof body.message_index === "number" ? body.message_index : 0,
-        } satisfies HistoryMessageRef,
-        { omitMessagesJson: body.omit_messages_json === true },
-      );
     case "providers.list":
       return client.listProviders();
     case "settings.get":
@@ -963,116 +899,6 @@ async function handleRequest(
   }
 }
 
-function handleChatStart(
-  port: MessagePort,
-  state: PortState,
-  message: Extract<WorkerClientRequest, { type: "chat.start" }>,
-) {
-  const controller = new AbortController();
-  state.streams.set(message.stream_id, controller);
-  respond(port, state.connectionID, message.request_id, { ok: true });
-
-  void (async () => {
-    try {
-      const stream = state.client.client.chat(
-        message.payload.message,
-        message.payload.conversation_id,
-        message.payload.selected_model,
-        message.payload.system_settings,
-        controller.signal,
-        message.payload.uploaded_files,
-        message.payload.client_request_id,
-        message.payload.runtime_controls,
-      );
-      for await (const event of stream) {
-        postToPort(port, {
-          type: "chat-event",
-          connection_id: state.connectionID,
-          stream_id: message.stream_id,
-          payload: event,
-        });
-      }
-      postToPort(port, {
-        type: "chat-closed",
-        connection_id: state.connectionID,
-        stream_id: message.stream_id,
-      });
-    } catch (error) {
-      postToPort(port, {
-        type: "chat-error",
-        connection_id: state.connectionID,
-        stream_id: message.stream_id,
-        error: asErrorMessage(error, "Gateway SharedWorker chat stream failed"),
-      });
-    } finally {
-      state.streams.delete(message.stream_id);
-    }
-  })();
-}
-
-function handleChatAttach(
-  port: MessagePort,
-  state: PortState,
-  message: Extract<WorkerClientRequest, { type: "chat.attach" }>,
-) {
-  const controller = new AbortController();
-  state.streams.set(message.stream_id, controller);
-  respond(port, state.connectionID, message.request_id, { ok: true });
-
-  void (async () => {
-    try {
-      const stream = state.client.client.attachChat(message.conversation_id, {
-        afterSeq: message.after_seq,
-        signal: controller.signal,
-      });
-      for await (const event of stream) {
-        postToPort(port, {
-          type: "chat-event",
-          connection_id: state.connectionID,
-          stream_id: message.stream_id,
-          payload: event,
-        });
-      }
-      postToPort(port, {
-        type: "chat-closed",
-        connection_id: state.connectionID,
-        stream_id: message.stream_id,
-      });
-    } catch (error) {
-      postToPort(port, {
-        type: "chat-error",
-        connection_id: state.connectionID,
-        stream_id: message.stream_id,
-        error: asErrorMessage(error, "Gateway SharedWorker chat attach failed"),
-      });
-    } finally {
-      state.streams.delete(message.stream_id);
-    }
-  })();
-}
-
-function handleChatCancel(
-  state: PortState,
-  message: Extract<WorkerClientRequest, { type: "chat.cancel" }>,
-) {
-  const controller = state.streams.get(message.stream_id);
-  controller?.abort();
-  state.streams.delete(message.stream_id);
-  const conversationID = message.conversation_id?.trim();
-  if (conversationID) {
-    void state.client.client.cancelChat(conversationID).catch(() => undefined);
-  }
-}
-
-function handleChatDetach(
-  state: PortState,
-  message: Extract<WorkerClientRequest, { type: "chat.detach" }>,
-) {
-  const controller = state.streams.get(message.stream_id);
-  controller?.abort();
-  state.streams.delete(message.stream_id);
-}
-
 function handlePortMessage(port: MessagePort, raw: unknown) {
   const message = raw as WorkerClientRequest;
   if (!message || typeof message !== "object") {
@@ -1095,18 +921,6 @@ function handlePortMessage(port: MessagePort, raw: unknown) {
   switch (message.type) {
     case "request":
       void handleRequest(port, state, message);
-      return;
-    case "chat.start":
-      handleChatStart(port, state, message);
-      return;
-    case "chat.cancel":
-      handleChatCancel(state, message);
-      return;
-    case "chat.attach":
-      handleChatAttach(port, state, message);
-      return;
-    case "chat.detach":
-      handleChatDetach(state, message);
       return;
     case "wakeup":
       state.client.client.noteForegroundWakeup();

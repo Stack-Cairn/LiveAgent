@@ -167,6 +167,7 @@ import {
   applyGatewayHistoryEvent,
   normalizeRunningConversations,
   reconcileConversationSummaries,
+  resolveRunningConversationStreamAfterSeq,
   upsertConversationSummary,
 } from "./lib/historySync";
 import { clearToken, loadToken, saveToken } from "./lib/storage";
@@ -220,7 +221,11 @@ type ConversationRuntimeEntry = {
 };
 
 type RunningConversationRuntime = {
+  runId?: string;
   workdir?: string;
+  firstSeq?: number;
+  latestSeq?: number;
+  runEpoch?: number;
   updatedAt: number;
 };
 
@@ -383,6 +388,7 @@ type SendChatOptions = {
   uploadedFiles?: PendingUploadedFile[];
   runtimeControls?: ChatRuntimeControls;
   workdir?: string;
+  editMessageRef?: HistoryMessageRef;
 };
 
 type SendChatFn = (message: string, options?: SendChatOptions) => Promise<void>;
@@ -404,6 +410,7 @@ const CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS = 1_500;
 const CHAT_RUNTIME_KEEP_WARM_INTERVAL_MS = 10_000;
 const CHAT_RUNTIME_STARTING_STATUS_DELAY_MS = 1_200;
 const CHAT_RUNTIME_READY_STATUS_TTL_MS = 20_000;
+const CHAT_RUNTIME_PREPARING_STATUS = "Preparing request...";
 const CHAT_RUNTIME_STARTING_STATUS = "Starting desktop runtime...";
 const DEFAULT_BROWSER_TITLE = "LiveAgent Gateway";
 const NEW_CONVERSATION_BROWSER_TITLE = "LiveAgent";
@@ -533,6 +540,9 @@ function isTerminalChatEvent(event: ChatEvent) {
 function isChatControlEvent(event: ChatEvent): event is ChatControlEvent {
   switch (event.type) {
     case "accepted":
+    case "user_message":
+    case "rebased":
+    case "projection_updated":
     case "delivered":
     case "claimed":
     case "starting":
@@ -554,8 +564,29 @@ function isTerminalChatControlEvent(event: ChatEvent) {
   );
 }
 
-function isRunningChatControlEvent(event: ChatEvent) {
-  return isChatControlEvent(event) && (event.state === "running" || event.type === "started");
+function isPreparingChatControlEvent(event: ChatEvent) {
+  return (
+    isChatControlEvent(event) &&
+    (event.state === "queued" ||
+      event.state === "delivered" ||
+      event.state === "claimed" ||
+      event.state === "starting" ||
+      event.type === "accepted" ||
+      event.type === "user_message" ||
+      event.type === "rebased" ||
+      event.type === "projection_updated" ||
+      event.type === "delivered" ||
+      event.type === "claimed" ||
+      event.type === "starting" ||
+      event.type === "progress")
+  );
+}
+
+function isRuntimeStartedChatControlEvent(event: ChatEvent) {
+  return (
+    isChatControlEvent(event) &&
+    (event.state === "running" || event.type === "started")
+  );
 }
 
 type TunnelManagerToolChange = {
@@ -1010,7 +1041,7 @@ export default function App() {
   const conversationRuntimeCacheRef = useRef<Map<string, ConversationRuntimeEntry>>(new Map());
   const displayedConversationWorkdirRef = useRef("");
   const conversationAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
-  const attachedConversationControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const conversationEventStreamControllersRef = useRef<Map<string, AbortController>>(new Map());
   const completedLiveStreamConversationAtRef = useRef<Map<string, number>>(new Map());
   const completedLiveStreamCleanupTimersRef = useRef<Map<string, number>>(new Map());
   const pendingHistoryRefreshAfterLiveCompletionRef = useRef<Set<string>>(new Set());
@@ -1831,7 +1862,7 @@ export default function App() {
       // Only treat a non-matching live snapshot as stale when it's the
       // post-`done` retention from a previously completed stream on THIS
       // client. For a second webui that's catching up to a peer's in-flight
-      // stream via attachChat, the live snapshot legitimately holds events
+      // stream via SSE replay, the live snapshot legitimately holds events
       // the server has not persisted yet — wiping it here would destroy the
       // in-flight content and leave the joiner staring at a blank transcript
       // until the stream ends.
@@ -2696,7 +2727,14 @@ export default function App() {
     (
       targetConversationId: string,
       isRunning: boolean,
-      runtime?: { workdir?: string; updatedAt?: number },
+      runtime?: {
+        runId?: string;
+        workdir?: string;
+        firstSeq?: number;
+        latestSeq?: number;
+        runEpoch?: number;
+        updatedAt?: number;
+      },
     ) => {
       const conversationIdValue = targetConversationId.trim();
       if (!conversationIdValue) {
@@ -2705,7 +2743,26 @@ export default function App() {
       const current = remoteRunningConversationIdsRef.current;
       const hasConversation = current.has(conversationIdValue);
       const existingRuntime = remoteRunningConversationRuntimeRef.current.get(conversationIdValue);
+      const runtimeRunId = runtime?.runId?.trim() || existingRuntime?.runId || "";
       const runtimeWorkdir = runtime?.workdir?.trim() || existingRuntime?.workdir || "";
+      const runtimeFirstSeq =
+        typeof runtime?.firstSeq === "number" &&
+        Number.isFinite(runtime.firstSeq) &&
+        runtime.firstSeq > 0
+          ? Math.floor(runtime.firstSeq)
+          : existingRuntime?.firstSeq;
+      const runtimeLatestSeq =
+        typeof runtime?.latestSeq === "number" &&
+        Number.isFinite(runtime.latestSeq) &&
+        runtime.latestSeq > 0
+          ? Math.floor(runtime.latestSeq)
+          : existingRuntime?.latestSeq;
+      const runtimeRunEpoch =
+        typeof runtime?.runEpoch === "number" &&
+        Number.isFinite(runtime.runEpoch) &&
+        runtime.runEpoch > 0
+          ? Math.floor(runtime.runEpoch)
+          : existingRuntime?.runEpoch;
       const runtimeUpdatedAt =
         typeof runtime?.updatedAt === "number" &&
         Number.isFinite(runtime.updatedAt) &&
@@ -2740,11 +2797,19 @@ export default function App() {
         }
 
         const nextRuntimeEntry: RunningConversationRuntime = {
+          runId: runtimeRunId || undefined,
           workdir: runtimeWorkdir || undefined,
+          firstSeq: runtimeFirstSeq,
+          latestSeq: runtimeLatestSeq,
+          runEpoch: runtimeRunEpoch,
           updatedAt: Math.max(existing?.updatedAt ?? 0, runtimeUpdatedAt),
         };
         if (
+          existing?.runId === nextRuntimeEntry.runId &&
           existing?.workdir === nextRuntimeEntry.workdir &&
+          existing?.firstSeq === nextRuntimeEntry.firstSeq &&
+          existing?.latestSeq === nextRuntimeEntry.latestSeq &&
+          existing?.runEpoch === nextRuntimeEntry.runEpoch &&
           existing?.updatedAt === nextRuntimeEntry.updatedAt
         ) {
           return currentRuntime;
@@ -2758,30 +2823,30 @@ export default function App() {
     [recordProjectActivity],
   );
 
-  const isConversationLiveStreamAttached = useCallback((targetConversationId: string) => {
+  const isConversationEventStreamSubscribed = useCallback((targetConversationId: string) => {
     const conversationIdValue = targetConversationId.trim();
     return (
       conversationIdValue !== "" &&
-      attachedConversationControllersRef.current.has(conversationIdValue)
+      conversationEventStreamControllersRef.current.has(conversationIdValue)
     );
   }, []);
 
-  const stopAttachedConversationLiveStream = useCallback((targetConversationId: string) => {
+  const stopConversationEventStreamSubscription = useCallback((targetConversationId: string) => {
     const conversationIdValue = targetConversationId.trim();
     if (!conversationIdValue) {
       return;
     }
-    const controller = attachedConversationControllersRef.current.get(conversationIdValue);
+    const controller = conversationEventStreamControllersRef.current.get(conversationIdValue);
     if (!controller) {
       return;
     }
-    attachedConversationControllersRef.current.delete(conversationIdValue);
+    conversationEventStreamControllersRef.current.delete(conversationIdValue);
     controller.abort();
   }, []);
 
-  const stopAllAttachedConversationLiveStreams = useCallback(() => {
-    const controllers = [...attachedConversationControllersRef.current.values()];
-    attachedConversationControllersRef.current.clear();
+  const stopAllConversationEventStreamSubscriptions = useCallback(() => {
+    const controllers = [...conversationEventStreamControllersRef.current.values()];
+    conversationEventStreamControllersRef.current.clear();
     for (const controller of controllers) {
       controller.abort();
     }
@@ -2970,7 +3035,7 @@ export default function App() {
     ],
   );
 
-  const attachVisibleConversationLiveStream = useCallback(
+  const subscribeVisibleConversationEventStream = useCallback(
     (targetConversationId: string, currentApi = api) => {
       const conversationIdValue = targetConversationId.trim();
       if (!currentApi || !conversationIdValue) {
@@ -2979,7 +3044,7 @@ export default function App() {
       if (isLocalDraftConversationId(conversationIdValue)) {
         return;
       }
-      if (attachedConversationControllersRef.current.has(conversationIdValue)) {
+      if (conversationEventStreamControllersRef.current.has(conversationIdValue)) {
         return;
       }
       if (!remoteRunningConversationIdsRef.current.has(conversationIdValue)) {
@@ -2999,21 +3064,23 @@ export default function App() {
       }
 
       const controller = new AbortController();
-      attachedConversationControllersRef.current.set(conversationIdValue, controller);
+      conversationEventStreamControllersRef.current.set(conversationIdValue, controller);
       clearCompletedLiveStreamMarker(conversationIdValue);
       clearConversationLiveStream(conversationIdValue);
       void refreshVisibleConversationHistorySnapshot(conversationIdValue, currentApi);
       const liveStore = getConversationLiveStreamStore(conversationIdValue);
       if (!liveStore) {
-        attachedConversationControllersRef.current.delete(conversationIdValue);
+        conversationEventStreamControllersRef.current.delete(conversationIdValue);
         return;
       }
+      const runtime = remoteRunningConversationRuntimeRef.current.get(conversationIdValue);
+      const streamAfterSeq = resolveRunningConversationStreamAfterSeq(runtime?.firstSeq);
 
       void (async () => {
         let terminalEventSeen = false;
         try {
-          for await (const event of currentApi.attachChat(conversationIdValue, {
-            afterSeq: 0,
+          for await (const event of currentApi.streamChatEvents(conversationIdValue, {
+            afterSeq: streamAfterSeq,
             signal: controller.signal,
           })) {
             if (controller.signal.aborted) {
@@ -3059,7 +3126,7 @@ export default function App() {
           }
         } catch (error) {
           if (!isAbortError(error)) {
-            const message = asErrorMessage(error, "chat attach failed");
+            const message = asErrorMessage(error, "chat event stream failed");
             if (isChatStreamNotAvailableMessage(message)) {
               terminalEventSeen = true;
               recoverUnavailableConversationStream(conversationIdValue, currentApi);
@@ -3079,8 +3146,10 @@ export default function App() {
             refreshHistoryAfterCompletedLiveStream(conversationIdValue, currentApi);
           }
         } finally {
-          if (attachedConversationControllersRef.current.get(conversationIdValue) === controller) {
-            attachedConversationControllersRef.current.delete(conversationIdValue);
+          if (
+            conversationEventStreamControllersRef.current.get(conversationIdValue) === controller
+          ) {
+            conversationEventStreamControllersRef.current.delete(conversationIdValue);
           }
           if (!terminalEventSeen && controller.signal.aborted) {
             liveStore.flush();
@@ -3118,7 +3187,7 @@ export default function App() {
       setRemoteRunningConversationIds(new Set());
       remoteRunningConversationRuntimeRef.current = new Map();
       setRemoteRunningConversationRuntime(new Map());
-      stopAllAttachedConversationLiveStreams();
+      stopAllConversationEventStreamSubscriptions();
       clearAllCompletedLiveStreamMarkers();
       clearAllConversationLiveStreams();
       return;
@@ -3143,10 +3212,10 @@ export default function App() {
           updatedAt: event.conversation?.updated_at,
         });
         if (event.kind === "running") {
-          if (!isConversationLiveStreamAttached(targetConversationId)) {
+          if (!isConversationEventStreamSubscribed(targetConversationId)) {
             clearConversationLiveStream(targetConversationId);
           }
-          attachVisibleConversationLiveStream(targetConversationId, api);
+          subscribeVisibleConversationEventStream(targetConversationId, api);
           return;
         }
 
@@ -3230,7 +3299,7 @@ export default function App() {
       if (event.kind === "delete") {
         optimisticTitleConversationIdsRef.current.delete(targetConversationId);
         unlockHistoryTitlePosition(targetConversationId);
-        stopAttachedConversationLiveStream(targetConversationId);
+        stopConversationEventStreamSubscription(targetConversationId);
         clearCompletedLiveStreamMarker(targetConversationId);
         clearConversationLiveStream(targetConversationId);
         if (
@@ -3278,7 +3347,7 @@ export default function App() {
         !localRunningConversationIdsRef.current.has(targetConversationId)
       ) {
         pendingHistoryRefreshAfterLiveCompletionRef.current.add(targetConversationId);
-        attachVisibleConversationLiveStream(targetConversationId, api);
+        subscribeVisibleConversationEventStream(targetConversationId, api);
         void refreshVisibleConversationHistorySnapshot(targetConversationId, api);
       }
       if (
@@ -3302,7 +3371,7 @@ export default function App() {
   }, [
     api,
     activeWorkspaceProjectPath,
-    attachVisibleConversationLiveStream,
+    subscribeVisibleConversationEventStream,
     clearAllCompletedLiveStreamMarkers,
     clearAllConversationLiveStreams,
     clearCompletedLiveStreamMarker,
@@ -3313,143 +3382,17 @@ export default function App() {
     hasRecentlyCompletedLiveStream,
     hasRetainedConversationLiveStream,
     isAgentMode,
-    isConversationLiveStreamAttached,
+    isConversationEventStreamSubscribed,
     maybeAdoptActiveDraftConversation,
     recordProjectActivity,
     refreshVisibleConversationHistorySnapshot,
     refreshHistoryWorkdirs,
     setRemoteConversationRunningState,
     shouldSuppressPendingDraftBroadcast,
-    stopAllAttachedConversationLiveStreams,
-    stopAttachedConversationLiveStream,
+    stopAllConversationEventStreamSubscriptions,
+    stopConversationEventStreamSubscription,
     unlockHistoryTitlePosition,
     updateHistoryItems,
-  ]);
-
-  useEffect(() => {
-    if (!api) {
-      clearAllConversationLiveStreams();
-      return;
-    }
-
-    const unsubscribe = api.subscribeConversation((event) => {
-      const targetConversationId = event.conversation_id?.trim() ?? "";
-      if (!targetConversationId) {
-        return;
-      }
-
-      if (shouldSuppressPendingDraftBroadcast(targetConversationId)) {
-        return;
-      }
-
-      const visibleBroadcastConversationId = resolveVisibleConversationId(
-        selectedHistoryIdRef.current,
-        conversationIdRef.current,
-      );
-      if (isChatControlEvent(event)) {
-        if (isRunningChatControlEvent(event)) {
-          setRemoteConversationRunningState(targetConversationId, true, {
-            workdir: event.workdir,
-          });
-          if (
-            visibleBroadcastConversationId === targetConversationId &&
-            !isConversationLiveStreamAttached(targetConversationId)
-          ) {
-            attachVisibleConversationLiveStream(targetConversationId, api);
-          }
-        } else if (isTerminalChatControlEvent(event)) {
-          setRemoteConversationRunningState(targetConversationId, false, {
-            workdir: event.workdir,
-          });
-        }
-        return;
-      }
-      const isTerminalEvent = isTerminalChatEvent(event);
-      if (!isTerminalEvent && !isChatStreamNotAvailableEvent(event)) {
-        setRemoteConversationRunningState(targetConversationId, true, {
-          workdir: event.workdir,
-        });
-        if (
-          visibleBroadcastConversationId === targetConversationId &&
-          !isConversationLiveStreamAttached(targetConversationId)
-        ) {
-          attachVisibleConversationLiveStream(targetConversationId, api);
-        }
-      }
-
-      if (isConversationLiveStreamAttached(targetConversationId)) {
-        return;
-      }
-
-      const liveTitle = readChatEventTitle(event);
-      if (liveTitle && isChatEventTitleFinal(event)) {
-        applyLiveConversationTitle(targetConversationId, liveTitle, {
-          isFinal: true,
-        });
-      }
-
-      // Local sends already consume the request-scoped stream. Do not also
-      // hydrate the same conversation from broadcast conversation events.
-      const isLocallySendingConversation =
-        getConversationAbortController(targetConversationId) !== null ||
-        localRunningConversationIdsRef.current.has(targetConversationId);
-      if (isLocallySendingConversation) {
-        return;
-      }
-
-      const liveStore = getConversationLiveStreamStore(targetConversationId);
-      if (!liveStore) {
-        return;
-      }
-
-      if (isChatStreamNotAvailableEvent(event)) {
-        recoverUnavailableConversationStream(targetConversationId, api);
-        return;
-      }
-
-      if (event.type === "tool_status") {
-        const normalizedStatus = normalizeOptionalStatus(event.status);
-        const isCompaction = normalizedStatus !== null && event.isCompaction === true;
-        liveStore.setToolStatus(normalizedStatus, isCompaction);
-        setLiveConversationStreamStatus(targetConversationId, normalizedStatus, isCompaction);
-        return;
-      }
-
-      liveStore.appendEvent(event, {
-        flush: isTerminalEvent,
-      });
-      if (visibleBroadcastConversationId === targetConversationId) {
-        handleTunnelManagerChatEvent(event);
-      }
-      if (isTerminalEvent) {
-        markCompletedLiveStream(targetConversationId);
-        commitTerminalConversationLiveStream(targetConversationId);
-        refreshHistoryAfterCompletedLiveStream(targetConversationId, api);
-      } else {
-        markLiveConversationStreamActive(targetConversationId);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [
-    api,
-    applyLiveConversationTitle,
-    attachVisibleConversationLiveStream,
-    clearAllConversationLiveStreams,
-    commitTerminalConversationLiveStream,
-    getConversationAbortController,
-    getConversationLiveStreamStore,
-    handleTunnelManagerChatEvent,
-    isConversationLiveStreamAttached,
-    markCompletedLiveStream,
-    markLiveConversationStreamActive,
-    recoverUnavailableConversationStream,
-    refreshHistoryAfterCompletedLiveStream,
-    setRemoteConversationRunningState,
-    setLiveConversationStreamStatus,
-    shouldSuppressPendingDraftBroadcast,
   ]);
 
   useEffect(() => {
@@ -3657,7 +3600,11 @@ export default function App() {
       );
       for (const runningConversation of runningConversations) {
         setRemoteConversationRunningState(runningConversation.conversation_id, true, {
+          runId: runningConversation.run_id,
           workdir: runningConversation.cwd,
+          firstSeq: runningConversation.first_seq,
+          latestSeq: runningConversation.latest_seq,
+          runEpoch: runningConversation.run_epoch,
           updatedAt: runningConversation.updated_at,
         });
       }
@@ -3889,7 +3836,11 @@ export default function App() {
       );
       for (const runningConversation of runningConversations) {
         setRemoteConversationRunningState(runningConversation.conversation_id, true, {
+          runId: runningConversation.run_id,
           workdir: runningConversation.cwd,
+          firstSeq: runningConversation.first_seq,
+          latestSeq: runningConversation.latest_seq,
+          runEpoch: runningConversation.run_epoch,
           updatedAt: runningConversation.updated_at,
         });
       }
@@ -4183,7 +4134,7 @@ export default function App() {
             return;
           }
           if (remoteRunningConversationIdsRef.current.has(visibleConversationId)) {
-            attachVisibleConversationLiveStream(visibleConversationId, currentApi);
+            subscribeVisibleConversationEventStream(visibleConversationId, currentApi);
           }
         });
         return;
@@ -4195,7 +4146,7 @@ export default function App() {
     },
     [
       api,
-      attachVisibleConversationLiveStream,
+      subscribeVisibleConversationEventStream,
       getConversationAbortController,
       hasRetainedConversationLiveStream,
       recoverCompletedVisibleConversationFromHistorySnapshot,
@@ -4423,7 +4374,8 @@ export default function App() {
     }
 
     let terminalEventSeen = false;
-    let runStarted = false;
+    let runActive = false;
+    let runtimeStarted = false;
     let runtimeStartingStatusTimer: number | null = null;
     const clearRuntimeStartingStatusTimer = () => {
       if (runtimeStartingStatusTimer === null) {
@@ -4454,7 +4406,7 @@ export default function App() {
       runtimeStartingStatusTimer = window.setTimeout(() => {
         runtimeStartingStatusTimer = null;
         if (
-          runStarted ||
+          runtimeStarted ||
           terminalEventSeen ||
           controller.signal.aborted ||
           !shouldShowRuntimeStartingStatus()
@@ -4473,14 +4425,34 @@ export default function App() {
         });
       }, CHAT_RUNTIME_STARTING_STATUS_DELAY_MS);
     };
-    const markRunStarted = () => {
-      if (runStarted) {
+    const markRunActive = () => {
+      if (runActive) {
         return;
       }
-      runStarted = true;
-      clearRuntimeStartingStatusTimer();
+      runActive = true;
       setConversationRunningState(activeConversationId, true);
+    };
+    const markRuntimeStarted = () => {
+      if (runtimeStarted) {
+        return;
+      }
+      runtimeStarted = true;
+      clearRuntimeStartingStatusTimer();
+      markRunActive();
       clearRuntimeStartingStatus();
+    };
+    const markRunPreparing = () => {
+      markRunActive();
+      updateConversationRuntimeEntry(activeConversationId, (current) => {
+        if (!current.isSending || current.toolStatus) {
+          return current;
+        }
+        return {
+          ...current,
+          toolStatus: CHAT_RUNTIME_PREPARING_STATUS,
+          toolStatusIsCompaction: false,
+        };
+      });
     };
     const runtimeControls = normalizeChatRuntimeControlsForProvider(
       options?.runtimeControls ?? settings.chatRuntimeControls,
@@ -4492,9 +4464,9 @@ export default function App() {
     try {
       chatStartInFlightRef.current = true;
       scheduleRuntimeStartingStatusTimer();
-      // chat.start is itself the reliable wake-up signal for a suspended desktop
-      // WebView. Keep the status refresh in the background so a stale runtime
-      // heartbeat cannot block the request that would wake it.
+      // The command request is itself the reliable wake-up signal for a suspended
+      // desktop WebView. Keep the status refresh in the background so a stale
+      // runtime heartbeat cannot block the request that would wake it.
       void prepareChatRuntime("send", api, CHAT_RUNTIME_PREPARE_TIMEOUT_MS)
         .then((nextStatus) => {
           statusRef.current = nextStatus;
@@ -4504,16 +4476,24 @@ export default function App() {
           }
         })
         .catch(() => undefined);
-      for await (const event of api.chat(
+      const gatewaySelectedModel = buildGatewaySelectedModel(settings.selectedModel, activeProviders);
+      const gatewaySystemSettings = buildGatewaySystemSettings(settings, effectiveWorkdir);
+      const targetConversationId = isLocalDraftConversationId(activeConversationId)
+        ? undefined
+        : activeConversationId;
+      const chatStream = api.commandChat({
+        type: options?.editMessageRef ? "chat.edit_resend" : "chat.submit",
         message,
-        isLocalDraftConversationId(activeConversationId) ? undefined : activeConversationId,
-        buildGatewaySelectedModel(settings.selectedModel, activeProviders),
-        buildGatewaySystemSettings(settings, effectiveWorkdir),
-        controller.signal,
+        conversationId: targetConversationId,
+        selectedModel: gatewaySelectedModel,
+        systemSettings: gatewaySystemSettings,
+        signal: controller.signal,
         uploadedFiles,
         clientRequestId,
         runtimeControls,
-      )) {
+        baseMessageRef: options?.editMessageRef,
+      });
+      for await (const event of chatStream) {
         if (event.conversation_id && event.conversation_id !== "") {
           const nextConversationId = event.conversation_id.trim();
           if (nextConversationId !== activeConversationId) {
@@ -4528,7 +4508,7 @@ export default function App() {
             migrateConversationSummary(previousConversationId, nextConversationId);
             activeConversationId = nextConversationId;
             lockedConversationIds.add(activeConversationId);
-            if (runStarted) {
+            if (runActive) {
               setConversationRunningState(previousConversationId, false);
               setConversationRunningState(activeConversationId, true);
             }
@@ -4557,14 +4537,7 @@ export default function App() {
           }
         }
         if (isChatControlEvent(event)) {
-          if (isRunningChatControlEvent(event)) {
-            markRunStarted();
-            updateConversationRuntimeEntry(activeConversationId, (current) => ({
-              ...current,
-              toolStatus: VIBING_STATUS,
-              toolStatusIsCompaction: false,
-            }));
-          } else if (isTerminalChatControlEvent(event)) {
+          if (isTerminalChatControlEvent(event)) {
             terminalEventSeen = true;
             clearRuntimeStartingStatusTimer();
             clearConversationStreamingState(activeConversationId);
@@ -4574,10 +4547,19 @@ export default function App() {
                 error: event.message?.trim() || "Desktop runtime did not start the request.",
               }));
             }
+          } else if (isRuntimeStartedChatControlEvent(event)) {
+            markRuntimeStarted();
+            updateConversationRuntimeEntry(activeConversationId, (current) => ({
+              ...current,
+              toolStatus: VIBING_STATUS,
+              toolStatusIsCompaction: false,
+            }));
+          } else if (isPreparingChatControlEvent(event)) {
+            markRunPreparing();
           }
           continue;
         }
-        markRunStarted();
+        markRuntimeStarted();
         if (isChatStreamNotAvailableEvent(event)) {
           terminalEventSeen = true;
           recoverUnavailableActiveConversationStream(activeConversationId, api);
@@ -4684,7 +4666,7 @@ export default function App() {
           })
         : null;
     controller?.abort();
-    stopAttachedConversationLiveStream(activeConversationId);
+    stopConversationEventStreamSubscription(activeConversationId);
     if (isVisibleConversation) {
       preserveTranscriptScrollPosition(
         () => {
@@ -4715,7 +4697,7 @@ export default function App() {
     if (currentConversationId) {
       cacheVisibleConversationRuntime(currentConversationId);
       optimisticTitleConversationIdsRef.current.delete(currentConversationId);
-      stopAttachedConversationLiveStream(currentConversationId);
+      stopConversationEventStreamSubscription(currentConversationId);
       clearCachedComposerDraft(currentConversationId);
     }
     invalidateHistoryLoad();
@@ -5467,12 +5449,48 @@ export default function App() {
           messageRef,
         );
         const canUseLocalTruncate = locallyTruncatedEntries !== currentRuntime.messages;
-        const detail = await api.truncateHistory(activeConversationId, messageRef, {
-          omitMessagesJson: canUseLocalTruncate,
-        });
-        const entries = canUseLocalTruncate
-          ? locallyTruncatedEntries
-          : await parseHistoryMessagesJsonAsync(detail.messages_json);
+        let detail: HistoryDetail;
+        let entries: ChatEntry[];
+        if (canUseLocalTruncate) {
+          entries = locallyTruncatedEntries;
+          detail = {
+            conversation_id: activeConversationId,
+            messages_json: "",
+            total_message_count: entries.length,
+            returned_message_count: entries.length,
+            has_more: false,
+            conversation:
+              selectedHistoryRef.current?.conversation_id === activeConversationId
+                ? selectedHistoryRef.current.conversation
+                : (pickConversationSummary(historyItemsRef.current, activeConversationId) ??
+                  undefined),
+          };
+        } else {
+          const hydratedDetail = await api.getHistory(activeConversationId);
+          const hydratedEntries = await parseHistoryMessagesJsonAsync(
+            hydratedDetail.messages_json,
+          );
+          const hydratedTruncatedEntries = truncateChatEntriesFromMessageRef(
+            hydratedEntries,
+            messageRef,
+          );
+          entries =
+            hydratedTruncatedEntries === hydratedEntries
+              ? currentRuntime.messages
+              : hydratedTruncatedEntries;
+          detail = {
+            conversation_id: activeConversationId,
+            messages_json: "",
+            total_message_count: entries.length,
+            returned_message_count: entries.length,
+            has_more: false,
+            conversation:
+              hydratedDetail.conversation ??
+              selectedHistoryRef.current?.conversation ??
+              pickConversationSummary(historyItemsRef.current, activeConversationId) ??
+              undefined,
+          };
+        }
         const nextRuntime = createConversationRuntimeEntry({
           messages: entries,
           error: null,
@@ -5498,6 +5516,7 @@ export default function App() {
           sendChatRef.current?.(normalized, {
             conversationId: activeConversationId,
             uploadedFiles,
+            editMessageRef: messageRef,
           }) ?? Promise.resolve();
         blockedHistoryHydrationConversationIdsRef.current.delete(activeConversationId);
         await resendPromise;
@@ -5741,7 +5760,7 @@ export default function App() {
       controller.abort();
     }
     conversationAbortControllersRef.current.clear();
-    stopAllAttachedConversationLiveStreams();
+    stopAllConversationEventStreamSubscriptions();
     clearAllCompletedLiveStreamMarkers();
     blockedHistoryHydrationConversationIdsRef.current.clear();
     conversationRuntimeCacheRef.current.clear();
@@ -5821,7 +5840,7 @@ export default function App() {
     clearHistoryTitlePositionLocks,
     invalidateHistoryLoad,
     markVisibleConversationRevision,
-    stopAllAttachedConversationLiveStreams,
+    stopAllConversationEventStreamSubscriptions,
   ]);
 
   const userMenuLabel = (status?.agent_id || "当前用户").trim() || "当前用户";
@@ -6353,9 +6372,11 @@ export default function App() {
   );
   useEffect(() => {
     const nextDisplayedConversationId = displayedConversationId.trim();
-    for (const conversationIdValue of [...attachedConversationControllersRef.current.keys()]) {
+    for (const conversationIdValue of [
+      ...conversationEventStreamControllersRef.current.keys(),
+    ]) {
       if (conversationIdValue !== nextDisplayedConversationId) {
-        stopAttachedConversationLiveStream(conversationIdValue);
+        stopConversationEventStreamSubscription(conversationIdValue);
       }
     }
     for (const conversationIdValue of [...liveConversationStreamStoresRef.current.keys()]) {
@@ -6369,15 +6390,15 @@ export default function App() {
     }
 
     if (api && isObservingRemoteLiveConversation && nextDisplayedConversationId !== "") {
-      attachVisibleConversationLiveStream(nextDisplayedConversationId, api);
+      subscribeVisibleConversationEventStream(nextDisplayedConversationId, api);
     }
   }, [
     api,
-    attachVisibleConversationLiveStream,
+    subscribeVisibleConversationEventStream,
     clearConversationLiveStream,
     displayedConversationId,
     isObservingRemoteLiveConversation,
-    stopAttachedConversationLiveStream,
+    stopConversationEventStreamSubscription,
   ]);
   useEffect(() => {
     if (typeof document === "undefined") {

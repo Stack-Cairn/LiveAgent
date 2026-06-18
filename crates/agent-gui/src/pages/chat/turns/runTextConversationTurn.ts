@@ -41,13 +41,13 @@ import {
 } from "../runtime/chatPageRuntime";
 import { buildProtectionCompactionStatus } from "../runtime/compactionStatusText";
 
-type RuntimeModel = {
+export type RuntimeModel = {
   api: AssistantMessage["api"];
   provider: AssistantMessage["provider"];
   id: string;
 };
 
-type CompactDuringRun = (params: {
+export type CompactDuringRun = (params: {
   trigger: "mid-stream" | "post-tool";
   state: ConversationViewState;
   requestContext: Context;
@@ -58,7 +58,7 @@ type CompactDuringRun = (params: {
   includeUploadedFilesMetadata?: boolean;
 }) => Promise<Context | null>;
 
-type PersistConversationParams = {
+export type PersistConversationParams = {
   conversationId: string;
   sessionId: string;
   providerId: string;
@@ -70,7 +70,7 @@ type PersistConversationParams = {
   titlePromise: Promise<string | null> | null;
 };
 
-type RunTextConversationTurnParams = {
+export type RunTextConversationTurnParams = {
   providerId: ProviderId;
   model: string;
   runtime: ProviderRuntimeConfig;

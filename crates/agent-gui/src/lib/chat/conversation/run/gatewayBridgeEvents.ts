@@ -19,7 +19,6 @@ type GatewayBridgeEventControllerParams = {
 
 export type GatewayBridgeEventController = {
   queueEvent: (event: Record<string, unknown>, options?: QueueEventOptions) => void;
-  queueStarted: () => void;
   queueToken: (delta: string, extra?: Record<string, unknown>) => void;
   queueTitle: (nextTitle: string, allowAfterClose?: boolean) => void;
   queueToolStatus: (status: string | null, isCompaction?: boolean) => void;
@@ -58,12 +57,6 @@ export function createGatewayBridgeEventController(
 
   return {
     queueEvent,
-    queueStarted() {
-      queueEvent({
-        type: "started",
-        conversation_id: params.conversationId,
-      });
-    },
     queueToken(delta: string, extra?: Record<string, unknown>) {
       if (delta.length === 0 && !extra) return;
       if (delta.length > 0) {

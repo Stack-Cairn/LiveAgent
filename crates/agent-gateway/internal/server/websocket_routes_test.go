@@ -29,7 +29,6 @@ func TestWebsocketRequestHandlersCoverKnownProtocolTypes(t *testing.T) {
 		"history.share.get",
 		"history.share.set",
 		"history.delete",
-		"history.truncate",
 		"providers.list",
 		"settings.get",
 		"settings.update",
@@ -39,11 +38,6 @@ func TestWebsocketRequestHandlersCoverKnownProtocolTypes(t *testing.T) {
 		"skills.read-metadata",
 		"skills.read-text",
 		"skills.manage",
-		"chat.start",
-		"chat.resume",
-		"chat.attach",
-		"chat.detach",
-		"chat.cancel",
 		"files.preview",
 		"memory.manage",
 		"terminal.shell_options",
@@ -104,6 +98,19 @@ func TestWebsocketRequestHandlersCoverKnownProtocolTypes(t *testing.T) {
 	}
 	if got := len(websocketRequestHandlers); got != len(expectedTypes) {
 		t.Fatalf("websocketRequestHandlers has %d entries, want %d", got, len(expectedTypes))
+	}
+
+	for _, removedType := range []string{
+		"history.truncate",
+		"chat.start",
+		"chat.resume",
+		"chat.attach",
+		"chat.detach",
+		"chat.cancel",
+	} {
+		if websocketRequestHandlers[removedType] != nil {
+			t.Fatalf("websocketRequestHandlers[%q] should be removed; chat uses HTTP commands and SSE", removedType)
+		}
 	}
 }
 

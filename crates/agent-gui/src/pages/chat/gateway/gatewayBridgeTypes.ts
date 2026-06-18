@@ -1,5 +1,5 @@
 import type { MutableRefObject } from "react";
-import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
+import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type {
@@ -26,8 +26,8 @@ export type GatewayChatRequestEvent = {
   conversationId: string;
   clientRequestId?: string;
   message: string;
-  forceHydrate?: boolean;
-  historyTruncationKey?: string;
+  rebased?: boolean;
+  baseMessageRef?: HistoryMessageRef;
   selectedModel?: GatewaySelectedModelEvent;
   runtimeControls?: GatewayChatRuntimeControlsEvent;
   executionMode?: string;
@@ -52,19 +52,13 @@ export type GatewayChatRequestReadyEvent = {
 };
 
 export type EnsureGatewayBridgeConversationReadyOptions = {
-  forceHydrate?: boolean;
-  historyTruncationKey?: string;
+  rebased?: boolean;
+  baseMessageRef?: HistoryMessageRef;
 };
 
 export type GatewayChatCancelEvent = {
   requestId: string;
   conversationId: string;
-};
-
-export type GatewayHistoryTruncatedEvent = {
-  conversationId: string;
-  segmentIndex: number;
-  messageIndex: number;
 };
 
 export type ActiveGatewayBridgeRequest = {
@@ -89,14 +83,13 @@ export type SendChatAction = (overrides?: {
   selectedSystemToolIdsOverride?: SystemToolId[];
   runtimeControlsOverride?: ChatRuntimeControls;
   gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
+  beforeRuntimeStart?: () => Promise<void>;
   afterInitialHistoryPersist?: () => Promise<void>;
 }) => Promise<void>;
 
 export type GatewayBridgeRuntimeRefs = {
   currentConversationIdRef: MutableRefObject<string>;
   conversationRuntimeCacheRef: MutableRefObject<Map<string, ConversationRuntimeEntry>>;
-  persistedConversationStateRef: MutableRefObject<Map<string, ConversationViewState>>;
-  appliedHistoryTruncationsRef: MutableRefObject<Map<string, string>>;
   historyItemsRef: MutableRefObject<ChatHistorySummary[]>;
   ensureGatewayBridgeConversationReadyRef: MutableRefObject<
     (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>

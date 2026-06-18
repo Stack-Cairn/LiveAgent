@@ -11,6 +11,7 @@ func TestLoadNormalizesTokenAndTLSPaths(t *testing.T) {
 	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "  secret-token\r\n")
 	t.Setenv("LIVEAGENT_GATEWAY_TLS_CERT", " cert.pem ")
 	t.Setenv("LIVEAGENT_GATEWAY_TLS_KEY", "\tkey.pem\r\n")
+	t.Setenv("LIVEAGENT_GATEWAY_CHAT_EVENT_STORE", " /tmp/liveagent/gateway-chat.sqlite3 ")
 
 	resetFlagsForTest(t)
 	cfg := Load()
@@ -22,6 +23,9 @@ func TestLoadNormalizesTokenAndTLSPaths(t *testing.T) {
 	}
 	if cfg.TLSKey != "key.pem" {
 		t.Fatalf("TLSKey = %q, want %q", cfg.TLSKey, "key.pem")
+	}
+	if cfg.ChatEventStorePath != "/tmp/liveagent/gateway-chat.sqlite3" {
+		t.Fatalf("ChatEventStorePath = %q, want trimmed path", cfg.ChatEventStorePath)
 	}
 }
 

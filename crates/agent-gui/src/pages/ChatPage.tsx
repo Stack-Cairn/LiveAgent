@@ -54,7 +54,9 @@ import {
   buildRequestContext,
   type ConversationViewState,
   createConversationStateFromContext,
+  type HistoryMessageRef,
   type RenderTimelineItem,
+  truncateConversationFromMessage,
 } from "../lib/chat/conversation/conversationState";
 import {
   createConversationHookLifecycle,
@@ -96,6 +98,10 @@ import {
   PENDING_CONVERSATION_TITLE,
   sortHistoryItems,
 } from "../lib/chat/page/chatPageHelpers";
+import {
+  collectRetainedSubagentParentToolCallIds,
+  pruneSubagentRunsForConversation,
+} from "../lib/chat/subagent/subagentHistory";
 import { createSubagentRuntimeManager } from "../lib/chat/subagent/subagentRuntimeManager";
 import { createStreamDebugLogger } from "../lib/debug/agentDebug";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
@@ -179,6 +185,7 @@ import {
   ChatHeader,
   ChatTranscript,
   clearSilentMemoryExtractionState,
+  createChatRuntimeHost,
   createConversationRuntimeEntry,
   type EffectiveChatModelSelection,
   type EnsureGatewayBridgeConversationReadyOptions,
@@ -186,8 +193,6 @@ import {
   MAX_UPLOAD_FILES,
   pruneIdleConversationRuntimeCaches,
   resolveEffectiveChatModelSelection,
-  runAgentConversationTurn,
-  runTextConversationTurn,
   type SendChatAction,
   setConversationRuntimeCacheEntry,
   startConversationTitleJob,
@@ -1342,6 +1347,7 @@ export function ChatPage(props: ChatPageProps) {
     () => buildRequestContext(conversationState),
     [conversationState],
   );
+  const chatRuntimeHost = useMemo(() => createChatRuntimeHost(), []);
 
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -1375,7 +1381,6 @@ export function ChatPage(props: ChatPageProps) {
   const ensureGatewayBridgeConversationReadyRef = useRef<
     (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
   >(async (id) => id.trim());
-  const appliedGatewayHistoryTruncationsRef = useRef(new Map<string, string>());
   const stopSendingActionRef = useRef<() => void>(() => undefined);
   const hydratingConversationIdRef = useRef<string | null>(hydratingConversationId);
   const hydrationFailedConversationIdRef = useRef<string | null>(hydrationFailedConversationId);
@@ -1771,7 +1776,6 @@ export function ChatPage(props: ChatPageProps) {
       if (!key) return;
       composerDraftCacheRef.current.delete(key);
       locallySyncedHistoryUpdatedAtRef.current.delete(key);
-      appliedGatewayHistoryTruncationsRef.current.delete(key);
       gatewayBridgeHistorySummaryRef.current.delete(key);
       pendingUploadsByConversationRef.current.delete(key);
       clearMemoryExtractorState(key);
@@ -2320,12 +2324,58 @@ export function ChatPage(props: ChatPageProps) {
     }
   }
 
+  function applyGatewayBridgeRebase(
+    conversationId: string,
+    baseMessageRef: HistoryMessageRef,
+  ) {
+    const targetConversationId = conversationId.trim();
+    if (!targetConversationId) {
+      throw new Error("Remote edit_resend requires conversation_id.");
+    }
+    const sourceEntry =
+      conversationRuntimeCacheRef.current.get(targetConversationId) ??
+      (targetConversationId === currentConversationIdRef.current
+        ? buildRuntimeEntryFromVisibleState()
+        : null);
+    if (!sourceEntry) {
+      throw new Error(`Conversation is not available for edit_resend: ${targetConversationId}`);
+    }
+    if (!sourceEntry.state.segments[baseMessageRef.segmentIndex]) {
+      throw new Error("Remote edit_resend base_message_ref segment was not found.");
+    }
+
+    const nextState = truncateConversationFromMessage(sourceEntry.state, baseMessageRef);
+    const nextEntry = createConversationRuntimeEntry({
+      ...sourceEntry,
+      state: nextState,
+    });
+    setConversationRuntimeCacheEntry(
+      conversationRuntimeCacheRef.current,
+      targetConversationId,
+      nextEntry,
+    );
+    persistedConversationStateRef.current.delete(targetConversationId);
+    if (currentConversationIdRef.current === targetConversationId) {
+      syncVisibleConversationRuntime(targetConversationId, nextEntry);
+    }
+
+    const keepParentToolCallIds = collectRetainedSubagentParentToolCallIds(nextState);
+    subagentRuntimeManagerRef.current.invalidateConversation(targetConversationId);
+    void pruneSubagentRunsForConversation({
+      parentConversationId: targetConversationId,
+      keepParentToolCallIds,
+    }).catch((error) => {
+      console.warn("gateway edit_resend subagent prune failed", error);
+    });
+  }
+
   async function ensureGatewayBridgeConversationReady(
     targetConversationId: string,
     options?: EnsureGatewayBridgeConversationReadyOptions,
   ) {
     const requestedConversationId = targetConversationId.trim();
-    let forceHydrate = options?.forceHydrate === true;
+    const baseMessageRef = options?.baseMessageRef;
+    const rebased = options?.rebased === true || Boolean(baseMessageRef);
     if (!requestedConversationId) {
       const nextIdentity = createConversationIdentity();
       setConversationRuntimeCacheEntry(
@@ -2353,27 +2403,15 @@ export function ChatPage(props: ChatPageProps) {
     }
 
     const cached = conversationRuntimeCacheRef.current.get(requestedConversationId);
-    if (forceHydrate) {
-      const appliedTruncation =
-        appliedGatewayHistoryTruncationsRef.current.get(requestedConversationId);
-      if (
-        appliedTruncation &&
-        appliedTruncation === options?.historyTruncationKey &&
-        cached &&
-        persistedConversationStateRef.current.has(requestedConversationId)
-      ) {
-        forceHydrate = false;
-        appliedGatewayHistoryTruncationsRef.current.delete(requestedConversationId);
-      } else {
-        persistedConversationStateRef.current.delete(requestedConversationId);
-      }
+    if (rebased) {
+      persistedConversationStateRef.current.delete(requestedConversationId);
     }
     const isPendingHistoryItem = historyItemsRef.current.some(
       (item) => item.id === requestedConversationId && item.isPending,
     );
     const shouldHydrateFromHistory =
       !knownConversation ||
-      forceHydrate ||
+      rebased ||
       hydratingConversationIdRef.current === requestedConversationId ||
       hydrationFailedConversationIdRef.current === requestedConversationId ||
       !cached ||
@@ -2382,6 +2420,9 @@ export function ChatPage(props: ChatPageProps) {
         !isPendingHistoryItem);
 
     if (!shouldHydrateFromHistory) {
+      if (rebased && baseMessageRef) {
+        applyGatewayBridgeRebase(requestedConversationId, baseMessageRef);
+      }
       return requestedConversationId;
     }
 
@@ -2419,6 +2460,9 @@ export function ChatPage(props: ChatPageProps) {
     }
     if (hydrationFailedConversationIdRef.current === record.id) {
       setHydrationFailedConversationId(null);
+    }
+    if (rebased && baseMessageRef) {
+      applyGatewayBridgeRebase(record.id, baseMessageRef);
     }
     return record.id;
   }
@@ -2607,18 +2651,12 @@ export function ChatPage(props: ChatPageProps) {
   useGatewayBridgeListeners({
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
-    appliedHistoryTruncationsRef: appliedGatewayHistoryTruncationsRef,
     historyItemsRef,
     ensureGatewayBridgeConversationReadyRef,
     sendActionRef,
     queueGatewayBridgeEventForRequest,
     isConversationRunning,
     getConversationAbortController,
-    syncVisibleConversationRuntime,
-    invalidateSubagentsForConversation: (conversationId) => {
-      subagentRuntimeManagerRef.current.invalidateConversation(conversationId);
-    },
   });
 
   const enableManagedSkills = useCallback(
@@ -2643,6 +2681,7 @@ export function ChatPage(props: ChatPageProps) {
     selectedSystemToolIdsOverride?: SystemToolId[];
     runtimeControlsOverride?: ChatRuntimeControls;
     gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
+    beforeRuntimeStart?: () => Promise<void>;
     afterInitialHistoryPersist?: () => Promise<void>;
   }) {
     const overrideConversationId = overrides?.conversationIdOverride?.trim() ?? "";
@@ -2968,7 +3007,6 @@ export function ChatPage(props: ChatPageProps) {
         return;
       }
       gatewayRunStarted = true;
-      gatewayBridgeEvents.queueStarted();
       gatewayBridgeEvents.queueToken("", { round: 0 });
       queueGatewayConversationActivity(true);
     }
@@ -2996,8 +3034,6 @@ export function ChatPage(props: ChatPageProps) {
       }
     }
 
-    const shouldSynchronizeInitialPersistBeforeGatewayStream =
-      Boolean(gatewayBridgeRequest) || hasRemoteGatewayTarget;
     // Persist the user turn immediately so WebUI/GUI sidebars can surface the
     // latest conversation before the assistant round finishes.
     const initialPersist = persistConversationWithHistorySync({
@@ -3010,13 +3046,13 @@ export function ChatPage(props: ChatPageProps) {
       fallbackTitle,
       createdAt,
       titlePromise,
-      titleLookahead: !shouldSynchronizeInitialPersistBeforeGatewayStream,
+      titleLookahead: true,
     });
     markConversationRunStarted();
-    if (overrides?.afterInitialHistoryPersist) {
+    if (overrides?.afterInitialHistoryPersist && !overrides.beforeRuntimeStart) {
       const persisted = await initialPersist;
       if (!persisted) {
-        const message = "历史记录保存失败，已取消子 Agent 回滚与重发。";
+        const message = "历史记录保存失败，已取消回滚与重发。";
         setConversationErrorState(message);
         gatewayBridgeEvents.emitError(message, conversationId);
         gatewayBridgeEvents.close();
@@ -3026,31 +3062,44 @@ export function ChatPage(props: ChatPageProps) {
       try {
         await overrides.afterInitialHistoryPersist();
       } catch (error) {
-        const message = asErrorMessage(error, "回滚子 Agent 历史失败");
+        const message = asErrorMessage(error, "回滚历史失败");
         setConversationErrorState(message);
         gatewayBridgeEvents.emitError(message, conversationId);
         gatewayBridgeEvents.close();
         markConversationRunStopped();
         return;
       }
-      acknowledgeGatewayRunStarted();
     } else {
-      if (shouldSynchronizeInitialPersistBeforeGatewayStream) {
-        const persisted = await initialPersist;
-        if (!persisted) {
-          const message = "历史记录保存失败，已取消本次远程对话。";
+      const initialPersistConfirmation = initialPersist
+        .then(async (persisted) => {
+          if (!persisted) {
+            console.warn("initial conversation history persist did not complete before chat runtime");
+            return false;
+          }
+          if (overrides?.afterInitialHistoryPersist) {
+            await overrides.afterInitialHistoryPersist();
+          }
+          return true;
+        })
+        .catch((error) => {
+          console.warn("initial conversation history persist confirmation failed", error);
+          return false;
+        });
+      if (overrides?.beforeRuntimeStart) {
+        try {
+          await overrides.beforeRuntimeStart();
+        } catch (error) {
+          const message = asErrorMessage(error, "启动远程对话运行失败");
           setConversationErrorState(message);
           gatewayBridgeEvents.emitError(message, conversationId);
           gatewayBridgeEvents.close();
           markConversationRunStopped();
           return;
         }
-        acknowledgeGatewayRunStarted();
-      } else {
-        void initialPersist;
-        acknowledgeGatewayRunStarted();
       }
+      void initialPersistConfirmation;
     }
+    acknowledgeGatewayRunStarted();
     let activeCompactionRollback: {
       state: ConversationViewState;
       composerText?: string;
@@ -3613,127 +3662,133 @@ export function ChatPage(props: ChatPageProps) {
 
     try {
       if (effectiveIsAgentMode) {
-        await runAgentConversationTurn({
-          providerId,
-          model,
-          runtime: {
-            baseUrl: providerConfig.baseUrl,
-            apiKey: providerConfig.apiKey,
-            requestFormat: providerConfig.requestFormat,
-            reasoning: providerConfig.reasoning,
-            promptCachingEnabled: providerConfig.promptCachingEnabled,
-            nativeWebSearchEnabled: providerConfig.nativeWebSearchEnabled,
-            modelConfig: providerConfig.modelConfig,
+        await chatRuntimeHost.runTurn({
+          mode: "agent",
+          params: {
+            providerId,
+            model,
+            runtime: {
+              baseUrl: providerConfig.baseUrl,
+              apiKey: providerConfig.apiKey,
+              requestFormat: providerConfig.requestFormat,
+              reasoning: providerConfig.reasoning,
+              promptCachingEnabled: providerConfig.promptCachingEnabled,
+              nativeWebSearchEnabled: providerConfig.nativeWebSearchEnabled,
+              modelConfig: providerConfig.modelConfig,
+            },
+            runtimeModel,
+            selectedModel,
+            memoryExtractionModel,
+            onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
+            effectiveWorkdir,
+            effectiveSkillsEnabled,
+            showSilentMemoryExtraction: effectiveIsAgentDevExecutionMode,
+            skillsRootDir: skillsRootDirForTools,
+            skillAccessPolicy: skillAccessPolicyForTools,
+            onManagedSkillsChanged: (change) => {
+              enableManagedSkills(change.names);
+            },
+            agentTemplates: settings.agents,
+            selectedSystemToolIds: effectiveSelectedSystemToolIds,
+            mcpSettings: settings.mcp,
+            updateMcpSettings: (nextMcp) => {
+              setSettings((prev) => updateMcp(prev, nextMcp));
+            },
+            enabledMcpServerIds,
+            selectableMcpServers,
+            remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
+            remoteGatewayOnline: canShareHistory,
+            sshHosts: settings.ssh.hosts,
+            associatedSshHostIds: effectiveAssociatedSshHostIds,
+            sshManagerRemoteAllowed:
+              !gatewayBridgeRequest || settings.remote.enableWebSshTerminal === true,
+            onTunnelsChanged: (change) => {
+              setTunnelRefreshToken((current) => current + 1);
+              if (change.action === "create") {
+                openTunnelToolPanel(change.tunnel.projectPathKey);
+              }
+            },
+            sessionId,
+            conversationId,
+            conversationCwd,
+            fallbackTitle,
+            createdAt,
+            titlePromise,
+            transcriptStore,
+            gatewayBridgeEvents,
+            hookLifecycle,
+            conversationThrottleState,
+            conversationDebugLogger,
+            compactionDebugLogger,
+            subagentRuntimeManager: subagentRuntimeManagerRef.current,
+            getNextConversationState: () => nextConversationState,
+            applyConversationState,
+            buildCompactionContext,
+            buildPreparedContext,
+            maybeApplyPreCompaction,
+            compactDuringRun,
+            getRequestController: () => requestController,
+            renewRequestController,
+            resetLiveTranscript,
+            updateLiveRounds,
+            batchLiveRoundsUpdate,
+            updateToolStatus,
+            updateGatewayBridgeToolStatus,
+            isConversationVisible,
+            commitVisibleAbortedConversation,
+            updateConversationRuntimeEntry,
+            persistConversationWithHistorySync,
           },
-          runtimeModel,
-          selectedModel,
-          memoryExtractionModel,
-          onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
-          effectiveWorkdir,
-          effectiveSkillsEnabled,
-          showSilentMemoryExtraction: effectiveIsAgentDevExecutionMode,
-          skillsRootDir: skillsRootDirForTools,
-          skillAccessPolicy: skillAccessPolicyForTools,
-          onManagedSkillsChanged: (change) => {
-            enableManagedSkills(change.names);
-          },
-          agentTemplates: settings.agents,
-          selectedSystemToolIds: effectiveSelectedSystemToolIds,
-          mcpSettings: settings.mcp,
-          updateMcpSettings: (nextMcp) => {
-            setSettings((prev) => updateMcp(prev, nextMcp));
-          },
-          enabledMcpServerIds,
-          selectableMcpServers,
-          remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
-          remoteGatewayOnline: canShareHistory,
-          sshHosts: settings.ssh.hosts,
-          associatedSshHostIds: effectiveAssociatedSshHostIds,
-          sshManagerRemoteAllowed:
-            !gatewayBridgeRequest || settings.remote.enableWebSshTerminal === true,
-          onTunnelsChanged: (change) => {
-            setTunnelRefreshToken((current) => current + 1);
-            if (change.action === "create") {
-              openTunnelToolPanel(change.tunnel.projectPathKey);
-            }
-          },
-          sessionId,
-          conversationId,
-          conversationCwd,
-          fallbackTitle,
-          createdAt,
-          titlePromise,
-          transcriptStore,
-          gatewayBridgeEvents,
-          hookLifecycle,
-          conversationThrottleState,
-          conversationDebugLogger,
-          compactionDebugLogger,
-          subagentRuntimeManager: subagentRuntimeManagerRef.current,
-          getNextConversationState: () => nextConversationState,
-          applyConversationState,
-          buildCompactionContext,
-          buildPreparedContext,
-          maybeApplyPreCompaction,
-          compactDuringRun,
-          getRequestController: () => requestController,
-          renewRequestController,
-          resetLiveTranscript,
-          updateLiveRounds,
-          batchLiveRoundsUpdate,
-          updateToolStatus,
-          updateGatewayBridgeToolStatus,
-          isConversationVisible,
-          commitVisibleAbortedConversation,
-          updateConversationRuntimeEntry,
-          persistConversationWithHistorySync,
         });
       } else {
-        await runTextConversationTurn({
-          providerId,
-          model,
-          runtime: {
-            baseUrl: providerConfig.baseUrl,
-            apiKey: providerConfig.apiKey,
-            requestFormat: providerConfig.requestFormat,
-            reasoning: providerConfig.reasoning,
-            promptCachingEnabled: providerConfig.promptCachingEnabled,
-            nativeWebSearchEnabled: providerConfig.nativeWebSearchEnabled,
-            modelConfig: providerConfig.modelConfig,
+        await chatRuntimeHost.runTurn({
+          mode: "text",
+          params: {
+            providerId,
+            model,
+            runtime: {
+              baseUrl: providerConfig.baseUrl,
+              apiKey: providerConfig.apiKey,
+              requestFormat: providerConfig.requestFormat,
+              reasoning: providerConfig.reasoning,
+              promptCachingEnabled: providerConfig.promptCachingEnabled,
+              nativeWebSearchEnabled: providerConfig.nativeWebSearchEnabled,
+              modelConfig: providerConfig.modelConfig,
+            },
+            runtimeModel,
+            selectedModel,
+            memoryExtractionModel,
+            onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
+            sessionId,
+            conversationId,
+            conversationCwd,
+            fallbackTitle,
+            createdAt,
+            titlePromise,
+            transcriptStore,
+            gatewayBridgeEvents,
+            hookLifecycle,
+            conversationThrottleState,
+            conversationDebugLogger,
+            recoveryDebugLogger,
+            compactionDebugLogger,
+            getNextConversationState: () => nextConversationState,
+            applyConversationState,
+            buildCompactionContext,
+            buildPreparedContext,
+            maybeApplyPreCompaction,
+            compactDuringRun,
+            getRequestController: () => requestController,
+            renewRequestController,
+            resetLiveTranscript,
+            appendDraftAssistantText,
+            batchLiveRoundsUpdate,
+            updateGatewayBridgeToolStatus,
+            isConversationVisible,
+            commitVisibleAbortedConversation,
+            updateConversationRuntimeEntry,
+            persistConversationWithHistorySync,
           },
-          runtimeModel,
-          selectedModel,
-          memoryExtractionModel,
-          onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
-          sessionId,
-          conversationId,
-          conversationCwd,
-          fallbackTitle,
-          createdAt,
-          titlePromise,
-          transcriptStore,
-          gatewayBridgeEvents,
-          hookLifecycle,
-          conversationThrottleState,
-          conversationDebugLogger,
-          recoveryDebugLogger,
-          compactionDebugLogger,
-          getNextConversationState: () => nextConversationState,
-          applyConversationState,
-          buildCompactionContext,
-          buildPreparedContext,
-          maybeApplyPreCompaction,
-          compactDuringRun,
-          getRequestController: () => requestController,
-          renewRequestController,
-          resetLiveTranscript,
-          appendDraftAssistantText,
-          batchLiveRoundsUpdate,
-          updateGatewayBridgeToolStatus,
-          isConversationVisible,
-          commitVisibleAbortedConversation,
-          updateConversationRuntimeEntry,
-          persistConversationWithHistorySync,
         });
       }
     } catch (err) {

@@ -30,7 +30,7 @@
 | 端 | 是否执行工具 | 说明 |
 |---|---|---|
 | GUI 本地 Chat | 是 | 工具在桌面端运行，直接调用 Tauri invoke 或前端本地逻辑。 |
-| WebUI Chat | 间接执行 | WebUI 发 `chat.start` 到 Gateway，实际工具仍在桌面 GUI/Tauri 运行。 |
+| WebUI Chat | 间接执行 | WebUI 发 Chat Command 到 Gateway，实际工具仍在桌面 GUI/Tauri 运行。 |
 | Gateway | 否 | Gateway 不执行业务工具，只转发 request/event 并维护 buffer。 |
 
 ## MCP 动态工具

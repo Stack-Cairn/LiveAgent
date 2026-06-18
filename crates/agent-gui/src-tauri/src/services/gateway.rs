@@ -152,19 +152,26 @@ pub struct GatewayUploadedFileEvent {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GatewayChatMessageRefEvent {
+    pub segment_index: i32,
+    pub message_index: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GatewayChatRequestEvent {
     pub request_id: String,
     pub conversation_id: String,
     pub client_request_id: String,
     pub message: String,
-    pub force_hydrate: bool,
+    pub rebased: bool,
+    pub base_message_ref: Option<GatewayChatMessageRefEvent>,
     pub selected_model: Option<GatewaySelectedModelEvent>,
     pub runtime_controls: Option<GatewayChatRuntimeControlsEvent>,
     pub execution_mode: String,
     pub workdir: String,
     pub selected_system_tools: Vec<String>,
     pub uploaded_files: Vec<GatewayUploadedFileEvent>,
-    pub history_truncation_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -209,16 +216,7 @@ pub struct GatewayChatClaimedRequest {
 }
 
 pub const CHAT_HISTORY_SYNC_EVENT: &str = "chat-history:changed";
-pub const CHAT_HISTORY_TRUNCATED_EVENT: &str = "chat-history:truncated";
 pub const GATEWAY_SETTINGS_SYNC_EVENT: &str = "gateway:settings-sync";
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GatewayHistoryTruncatedEvent {
-    pub conversation_id: String,
-    pub segment_index: i64,
-    pub message_index: i64,
-}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -256,7 +254,6 @@ pub struct GatewayController {
     status: Mutex<GatewayStatusSnapshot>,
     outbound_tx: Mutex<Option<mpsc::Sender<proto::AgentEnvelope>>>,
     settings_snapshot: Mutex<Option<Value>>,
-    pending_history_truncations: Mutex<HashMap<String, String>>,
     remote_chat_inbox: Mutex<HashMap<String, RemoteChatInboxRecord>>,
     tunnels: Mutex<HashMap<String, LocalTunnelRecord>>,
     tunnel_http_streams: Mutex<HashMap<String, TunnelHttpBodySender>>,
@@ -298,7 +295,6 @@ impl GatewayController {
             }),
             outbound_tx: Mutex::new(None),
             settings_snapshot: Mutex::new(None),
-            pending_history_truncations: Mutex::new(HashMap::new()),
             remote_chat_inbox: Mutex::new(HashMap::new()),
             tunnels: Mutex::new(HashMap::new()),
             tunnel_http_streams: Mutex::new(HashMap::new()),
@@ -833,104 +829,8 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::TunnelFrame(frame)) => {
                 self.handle_tunnel_frame(frame).await
             }
-            Some(proto::gateway_envelope::Payload::ChatRequest(request)) => {
-                let proto::ChatRequest {
-                    conversation_id,
-                    client_request_id,
-                    message,
-                    selected_model,
-                    runtime_controls,
-                    execution_mode,
-                    workdir,
-                    selected_system_tools,
-                    uploaded_files,
-                } = request;
-                let history_truncation_key = if conversation_id.trim().is_empty() {
-                    None
-                } else {
-                    self.pending_history_truncations
-                        .lock()
-                        .ok()
-                        .and_then(|mut pending| pending.remove(conversation_id.trim()))
-                };
-                let force_hydrate = history_truncation_key.is_some();
-                let selected_model =
-                    selected_model.map(|selected_model| GatewaySelectedModelEvent {
-                        custom_provider_id: selected_model.custom_provider_id,
-                        model: selected_model.model,
-                        provider_type: selected_model.provider_type,
-                    });
-                let runtime_controls =
-                    runtime_controls.map(|runtime_controls| GatewayChatRuntimeControlsEvent {
-                        thinking_enabled: runtime_controls.thinking_enabled,
-                        native_web_search_enabled: runtime_controls.native_web_search_enabled,
-                        reasoning: runtime_controls.reasoning,
-                    });
-                let event_payload = GatewayChatRequestEvent {
-                    request_id,
-                    conversation_id,
-                    client_request_id,
-                    message,
-                    force_hydrate,
-                    selected_model,
-                    runtime_controls,
-                    execution_mode,
-                    workdir,
-                    selected_system_tools,
-                    uploaded_files: uploaded_files
-                        .into_iter()
-                        .map(|file| GatewayUploadedFileEvent {
-                            relative_path: file.relative_path,
-                            absolute_path: file.absolute_path,
-                            file_name: file.file_name,
-                            kind: file.kind,
-                            size_bytes: file.size_bytes,
-                        })
-                        .collect(),
-                    history_truncation_key,
-                };
-                let enqueue_outcome = self.enqueue_remote_chat_request(event_payload.clone())?;
-                if let Err(error) = self
-                    .send_gateway_chat_control_event(
-                        enqueue_outcome.request_id.clone(),
-                        enqueue_outcome.conversation_id.clone(),
-                        enqueue_outcome.control_type,
-                    )
-                    .await
-                {
-                    if enqueue_outcome.inserted {
-                        self.remove_remote_chat_request(&enqueue_outcome.request_id)?;
-                    }
-                    return Err(error);
-                }
-                if enqueue_outcome.should_wake_runtime {
-                    self.app_handle
-                        .emit(
-                            "gateway:chat-request-ready",
-                            json!({ "requestId": enqueue_outcome.request_id }),
-                        )
-                        .map_err(|e| format!("emit gateway chat request ready failed: {e}"))?;
-                }
-                Ok(())
-            }
-            Some(proto::gateway_envelope::Payload::CancelChat(request)) => {
-                let conversation_id = request.conversation_id;
-                self.cancel_remote_chat_request(&request_id, &conversation_id)?;
-                self.send_gateway_chat_control_event(
-                    request_id.clone(),
-                    conversation_id.clone(),
-                    "cancelled",
-                )
-                .await?;
-                self.app_handle
-                    .emit(
-                        "gateway:chat-cancel",
-                        GatewayChatCancelEvent {
-                            request_id,
-                            conversation_id,
-                        },
-                    )
-                    .map_err(|e| format!("emit gateway chat cancel failed: {e}"))
+            Some(proto::gateway_envelope::Payload::ChatCommand(command)) => {
+                self.handle_chat_command(request_id, command).await
             }
             Some(proto::gateway_envelope::Payload::CronManage(request)) => {
                 let should_refresh_settings =
@@ -1118,46 +1018,6 @@ impl GatewayController {
                             request_id,
                             timestamp: now_unix_seconds(),
                             payload: Some(proto::agent_envelope::Payload::HistoryDeleteResp(
-                                response,
-                            )),
-                        })
-                        .await
-                    }
-                    Err(error) => self.send_error_response(request_id, 500, error).await,
-                }
-            }
-            Some(proto::gateway_envelope::Payload::HistoryTruncate(request)) => {
-                let truncate_conversation_id = request.conversation_id.trim().to_string();
-                let truncate_segment_index = request.segment_index;
-                let truncate_message_index = request.message_index;
-                match gateway_bridge::handle_history_truncate(request).await {
-                    Ok(response) => {
-                        if !truncate_conversation_id.is_empty() {
-                            if let Ok(mut pending) = self.pending_history_truncations.lock() {
-                                pending.insert(
-                                    truncate_conversation_id.clone(),
-                                    format!("{truncate_segment_index}:{truncate_message_index}"),
-                                );
-                            }
-                            let _ = self.app_handle.emit(
-                                CHAT_HISTORY_TRUNCATED_EVENT,
-                                GatewayHistoryTruncatedEvent {
-                                    conversation_id: truncate_conversation_id,
-                                    segment_index: i64::from(truncate_segment_index),
-                                    message_index: i64::from(truncate_message_index),
-                                },
-                            );
-                        }
-                        if let Some(conversation) = response.conversation.as_ref() {
-                            self.publish_history_sync(build_history_sync_upsert_from_proto(
-                                conversation,
-                            ))
-                            .await;
-                        }
-                        self.send_agent_envelope(proto::AgentEnvelope {
-                            request_id,
-                            timestamp: now_unix_seconds(),
-                            payload: Some(proto::agent_envelope::Payload::HistoryTruncateResp(
                                 response,
                             )),
                         })
@@ -2149,15 +2009,195 @@ impl GatewayController {
         Ok(snapshot)
     }
 
-    pub fn take_pending_chat_request(
-        &self,
-        _request_id: String,
-    ) -> Result<Option<GatewayChatRequestEvent>, String> {
-        Ok(None)
+    async fn handle_chat_command(
+        self: &Arc<Self>,
+        request_id: String,
+        command: proto::ChatCommandRequest,
+    ) -> Result<(), String> {
+        match command.r#type.trim() {
+            "chat.submit" => {
+                let Some(request) = command.request else {
+                    return self
+                        .send_gateway_chat_control_event_with_details(
+                            request_id,
+                            String::new(),
+                            "failed",
+                            "invalid_chat_command".to_string(),
+                            "chat.submit requires request payload".to_string(),
+                        )
+                        .await;
+                };
+                let event_payload =
+                    Self::build_gateway_chat_request_event(request_id, request, false, None);
+                self.enqueue_gateway_chat_request(event_payload).await
+            }
+            "chat.edit_resend" => {
+                let Some(request) = command.request else {
+                    return self
+                        .send_gateway_chat_control_event_with_details(
+                            request_id,
+                            String::new(),
+                            "failed",
+                            "invalid_chat_command".to_string(),
+                            "chat.edit_resend requires request payload".to_string(),
+                        )
+                        .await;
+                };
+                let conversation_id = request.conversation_id.trim().to_string();
+                let Some(base_message_ref) = command.base_message_ref else {
+                    return self
+                        .send_gateway_chat_control_event_with_details(
+                            request_id,
+                            conversation_id,
+                            "failed",
+                            "invalid_chat_command".to_string(),
+                            "chat.edit_resend requires base_message_ref".to_string(),
+                        )
+                        .await;
+                };
+                if conversation_id.is_empty() {
+                    return self
+                        .send_gateway_chat_control_event_with_details(
+                            request_id,
+                            String::new(),
+                            "failed",
+                            "invalid_chat_command".to_string(),
+                            "chat.edit_resend requires conversation_id".to_string(),
+                        )
+                        .await;
+                }
+                let event_payload = Self::build_gateway_chat_request_event(
+                    request_id,
+                    request,
+                    true,
+                    Some(base_message_ref),
+                );
+                self.enqueue_gateway_chat_request(event_payload).await
+            }
+            "chat.cancel" => {
+                let conversation_id = command
+                    .cancel
+                    .map(|cancel| cancel.conversation_id)
+                    .or_else(|| command.request.map(|request| request.conversation_id))
+                    .unwrap_or_default();
+                self.cancel_remote_chat_request(&request_id, &conversation_id)?;
+                self.send_gateway_chat_control_event(
+                    request_id.clone(),
+                    conversation_id.clone(),
+                    "cancelled",
+                )
+                .await?;
+                self.app_handle
+                    .emit(
+                        "gateway:chat-cancel",
+                        GatewayChatCancelEvent {
+                            request_id,
+                            conversation_id,
+                        },
+                    )
+                    .map_err(|e| format!("emit gateway chat cancel failed: {e}"))
+            }
+            other => {
+                self.send_gateway_chat_control_event_with_details(
+                    request_id,
+                    command
+                        .request
+                        .map(|request| request.conversation_id)
+                        .unwrap_or_default(),
+                    "failed",
+                    "unsupported_chat_command".to_string(),
+                    format!("unsupported chat command: {other}"),
+                )
+                .await
+            }
+        }
     }
 
-    pub fn take_pending_chat_requests(&self) -> Result<Vec<GatewayChatRequestEvent>, String> {
-        Ok(Vec::new())
+    async fn enqueue_gateway_chat_request(
+        &self,
+        event_payload: GatewayChatRequestEvent,
+    ) -> Result<(), String> {
+        let enqueue_outcome = self.enqueue_remote_chat_request(event_payload)?;
+        if let Err(error) = self
+            .send_gateway_chat_control_event(
+                enqueue_outcome.request_id.clone(),
+                enqueue_outcome.conversation_id.clone(),
+                enqueue_outcome.control_type,
+            )
+            .await
+        {
+            if enqueue_outcome.inserted {
+                self.remove_remote_chat_request(&enqueue_outcome.request_id)?;
+            }
+            return Err(error);
+        }
+        if enqueue_outcome.should_wake_runtime {
+            self.app_handle
+                .emit(
+                    "gateway:chat-request-ready",
+                    json!({ "requestId": enqueue_outcome.request_id }),
+                )
+                .map_err(|e| format!("emit gateway chat request ready failed: {e}"))?;
+        }
+        Ok(())
+    }
+
+    fn build_gateway_chat_request_event(
+        request_id: String,
+        request: proto::ChatRequest,
+        rebased: bool,
+        base_message_ref: Option<proto::ChatMessageRef>,
+    ) -> GatewayChatRequestEvent {
+        let proto::ChatRequest {
+            conversation_id,
+            client_request_id,
+            message,
+            selected_model,
+            runtime_controls,
+            execution_mode,
+            workdir,
+            selected_system_tools,
+            uploaded_files,
+        } = request;
+        let selected_model = selected_model.map(|selected_model| GatewaySelectedModelEvent {
+            custom_provider_id: selected_model.custom_provider_id,
+            model: selected_model.model,
+            provider_type: selected_model.provider_type,
+        });
+        let runtime_controls =
+            runtime_controls.map(|runtime_controls| GatewayChatRuntimeControlsEvent {
+                thinking_enabled: runtime_controls.thinking_enabled,
+                native_web_search_enabled: runtime_controls.native_web_search_enabled,
+                reasoning: runtime_controls.reasoning,
+            });
+        let base_message_ref =
+            base_message_ref.map(|base_message_ref| GatewayChatMessageRefEvent {
+                segment_index: base_message_ref.segment_index,
+                message_index: base_message_ref.message_index,
+            });
+        GatewayChatRequestEvent {
+            request_id,
+            conversation_id,
+            client_request_id,
+            message,
+            rebased,
+            base_message_ref,
+            selected_model,
+            runtime_controls,
+            execution_mode,
+            workdir,
+            selected_system_tools,
+            uploaded_files: uploaded_files
+                .into_iter()
+                .map(|file| GatewayUploadedFileEvent {
+                    relative_path: file.relative_path,
+                    absolute_path: file.absolute_path,
+                    file_name: file.file_name,
+                    kind: file.kind,
+                    size_bytes: file.size_bytes,
+                })
+                .collect(),
+        }
     }
 
     async fn current_settings_snapshot(&self) -> Result<Value, String> {
@@ -2515,6 +2555,9 @@ impl GatewayController {
                 .ok_or_else(|| "remote chat request lease is no longer active".to_string())?;
             if !Self::remote_chat_record_has_current_lease(record, &worker_id, now) {
                 return Err("remote chat request lease is no longer active".to_string());
+            }
+            if record.started {
+                return Ok(());
             }
             record.state = "running".to_string();
             record.started = true;
@@ -4264,7 +4307,7 @@ mod tests {
         build_chat_event_envelope, build_endpoint, build_grpc_url,
         build_local_settings_update_event_payload, build_tunnel_upstream_url,
         history_share_resolve_error_code, merge_settings_sync_snapshot, normalize_tunnel_ttl,
-        required_terminal_project_path_key, set_disconnected_status, tunnel_expires_at,
+        proto, required_terminal_project_path_key, set_disconnected_status, tunnel_expires_at,
         validate_tunnel_target_url, GatewayChatRequestEvent, GatewayController,
         GatewayStatusSnapshot, RemoteChatInboxRecord, GATEWAY_CHAT_LEASE_MS,
         GATEWAY_CHAT_RUNNING_LEASE_MS,
@@ -4284,14 +4327,14 @@ mod tests {
             conversation_id: conversation_id.to_string(),
             client_request_id: client_request_id.to_string(),
             message: message.to_string(),
-            force_hydrate: false,
+            rebased: false,
+            base_message_ref: None,
             selected_model: None,
             runtime_controls: None,
             execution_mode: String::new(),
             workdir: String::new(),
             selected_system_tools: Vec::new(),
             uploaded_files: Vec::new(),
-            history_truncation_key: None,
         }
     }
 
@@ -4312,6 +4355,44 @@ mod tests {
             created_at: now - Duration::from_secs(10),
             updated_at: now,
         }
+    }
+
+    #[test]
+    fn gateway_chat_command_mapping_preserves_rebase_signal() {
+        let request = proto::ChatRequest {
+            conversation_id: "conversation-1".to_string(),
+            client_request_id: "client-1".to_string(),
+            message: "edited".to_string(),
+            execution_mode: "tools".to_string(),
+            workdir: "/workspace".to_string(),
+            selected_system_tools: vec!["http_get_test".to_string()],
+            ..Default::default()
+        };
+
+        let event = GatewayController::build_gateway_chat_request_event(
+            "run-1".to_string(),
+            request,
+            true,
+            Some(proto::ChatMessageRef {
+                segment_index: 2,
+                message_index: 4,
+            }),
+        );
+
+        assert_eq!(event.request_id, "run-1");
+        assert_eq!(event.conversation_id, "conversation-1");
+        assert_eq!(event.client_request_id, "client-1");
+        assert_eq!(event.message, "edited");
+        assert!(event.rebased);
+        let base_message_ref = event
+            .base_message_ref
+            .as_ref()
+            .expect("base message ref should be preserved");
+        assert_eq!(base_message_ref.segment_index, 2);
+        assert_eq!(base_message_ref.message_index, 4);
+        assert_eq!(event.execution_mode, "tools");
+        assert_eq!(event.workdir, "/workspace");
+        assert_eq!(event.selected_system_tools, vec!["http_get_test"]);
     }
 
     #[test]
@@ -4692,56 +4773,6 @@ mod tests {
     }
 
     #[test]
-    fn build_chat_event_envelope_accepts_started_control_event() {
-        let envelope = build_chat_event_envelope(
-            "request-1".to_string(),
-            json!({
-                "type": "started",
-                "conversation_id": "conversation-1"
-            }),
-        )
-        .expect("build chat started event envelope");
-
-        let chat_event = match envelope.payload.expect("payload") {
-            super::proto::agent_envelope::Payload::ChatEvent(event) => event,
-            _ => panic!("expected chat event payload"),
-        };
-        assert_eq!(chat_event.conversation_id, "conversation-1");
-        assert_eq!(
-            chat_event.r#type,
-            super::proto::chat_event::ChatEventType::Token as i32
-        );
-
-        let data: Value = serde_json::from_str(&chat_event.data).expect("chat event data");
-        assert_eq!(data["type"], "started");
-    }
-
-    #[test]
-    fn build_chat_event_envelope_accepts_backend_accepted_control_event() {
-        let envelope = build_chat_event_envelope(
-            "request-1".to_string(),
-            json!({
-                "type": "accepted",
-                "conversation_id": "conversation-1"
-            }),
-        )
-        .expect("build chat accepted event envelope");
-
-        let chat_event = match envelope.payload.expect("payload") {
-            super::proto::agent_envelope::Payload::ChatEvent(event) => event,
-            _ => panic!("expected chat event payload"),
-        };
-        assert_eq!(chat_event.conversation_id, "conversation-1");
-        assert_eq!(
-            chat_event.r#type,
-            super::proto::chat_event::ChatEventType::Token as i32
-        );
-
-        let data: Value = serde_json::from_str(&chat_event.data).expect("chat event data");
-        assert_eq!(data["type"], "accepted");
-    }
-
-    #[test]
     fn build_chat_event_envelope_preserves_title_final_flag() {
         let envelope = build_chat_event_envelope(
             "request-1".to_string(),
@@ -4828,18 +4859,6 @@ fn build_chat_event_envelope(
         .unwrap_or_default();
 
     let (event_kind, data) = match event_type.as_str() {
-        "accepted" => (
-            proto::chat_event::ChatEventType::Token as i32,
-            json!({
-                "type": "accepted",
-            }),
-        ),
-        "started" => (
-            proto::chat_event::ChatEventType::Token as i32,
-            json!({
-                "type": "started",
-            }),
-        ),
         "token" => (
             proto::chat_event::ChatEventType::Token as i32,
             json!({

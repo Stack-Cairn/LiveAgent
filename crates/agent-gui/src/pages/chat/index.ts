@@ -29,12 +29,10 @@ export {
   buildPreparedContext,
   buildResumeContext,
 } from "./runtime/conversationContextBuilders";
+export { createChatRuntimeHost } from "./runtime/ChatRuntimeHost";
 export { startConversationTitleJob } from "./runtime/conversationTitleJob";
 export {
   type EffectiveChatModelSelection,
   resolveEffectiveChatModelSelection,
 } from "./runtime/modelSelection";
 export { ChatTranscript } from "./transcript/ChatTranscript";
-
-export { runAgentConversationTurn } from "./turns/runAgentConversationTurn";
-export { runTextConversationTurn } from "./turns/runTextConversationTurn";

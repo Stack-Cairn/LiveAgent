@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-func TestWebsocketChatEventPayloadPreservesHostedSearch(t *testing.T) {
-	payload := websocketChatEventPayload(&gatewayv1.ChatEvent{
+func TestChatEventPayloadPreservesHostedSearch(t *testing.T) {
+	payload := chatEventPayload(&gatewayv1.ChatEvent{
 		Type:           gatewayv1.ChatEvent_HOSTED_SEARCH,
 		ConversationId: "conversation-1",
 		Data:           `{"id":"search-1","provider":"codex","status":"completed","queries":["设计模式定义"],"sources":[{"url":"https://example.com/pattern","title":"设计模式"}],"round":2}`,
@@ -30,6 +31,30 @@ func TestWebsocketChatEventPayloadPreservesHostedSearch(t *testing.T) {
 	}
 	if payload["seq"] != int64(7) {
 		t.Fatalf("expected seq 7, got %#v", payload["seq"])
+	}
+}
+
+func TestActiveChatRunSummaryPayloadIncludesReplayCursor(t *testing.T) {
+	payload := websocketActiveChatRunSummariesPayload([]session.ActiveChatRunSummary{
+		{
+			ConversationID: "conversation-1",
+			RequestID:      "run-1",
+			Workdir:        "/workspace",
+			FirstSeq:       4,
+			LatestSeq:      9,
+			RunEpoch:       2,
+			UpdatedAt:      123,
+		},
+	})
+	if len(payload) != 1 {
+		t.Fatalf("payload len = %d, want 1", len(payload))
+	}
+	item := payload[0]
+	if item["run_id"] != "run-1" ||
+		item["first_seq"] != int64(4) ||
+		item["latest_seq"] != int64(9) ||
+		item["run_epoch"] != int64(2) {
+		t.Fatalf("active run payload = %#v", item)
 	}
 }
 

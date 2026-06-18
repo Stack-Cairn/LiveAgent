@@ -264,30 +264,6 @@ pub async fn handle_history_delete(
     Ok(proto::HistoryDeleteResponse {})
 }
 
-pub async fn handle_history_truncate(
-    request: proto::HistoryTruncateRequest,
-) -> Result<proto::HistoryTruncateResponse, String> {
-    let omit_messages_json = request.omit_messages_json;
-    let result = chat_history::chat_history_truncate_inner(
-        request.conversation_id,
-        i64::from(request.segment_index),
-        i64::from(request.message_index),
-        !omit_messages_json,
-    )
-    .await?;
-    let messages_json = if omit_messages_json {
-        String::new()
-    } else {
-        flatten_history_messages_json(&result.record.segments)?
-    };
-
-    Ok(proto::HistoryTruncateResponse {
-        conversation_id: result.record.id,
-        messages_json,
-        conversation: Some(build_proto_conversation_summary(result.summary)),
-    })
-}
-
 pub async fn handle_provider_list() -> Result<proto::ProviderListResponse, String> {
     let providers = tauri::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;

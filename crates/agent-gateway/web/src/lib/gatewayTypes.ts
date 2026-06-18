@@ -71,6 +71,9 @@ export type ChatRunControlState =
 export type ChatControlEvent = {
   type:
     | "accepted"
+    | "user_message"
+    | "rebased"
+    | "projection_updated"
     | "delivered"
     | "claimed"
     | "starting"
@@ -79,13 +82,15 @@ export type ChatControlEvent = {
     | "completed"
     | "failed"
     | "cancelled";
-  request_id?: string;
   client_request_id?: string;
   conversation_id?: string;
   run_epoch?: number;
   state?: ChatRunControlState;
   error_code?: string;
   message?: string;
+  uploaded_files?: unknown;
+  base_message_ref?: unknown;
+  reason?: string;
   seq?: number;
   workdir?: string;
 };
@@ -200,7 +205,11 @@ export type HistoryList = {
 
 export type RunningConversationSummary = {
   conversation_id: string;
+  run_id?: string;
   cwd?: string;
+  first_seq?: number;
+  latest_seq?: number;
+  run_epoch?: number;
   updated_at?: number;
 };
 

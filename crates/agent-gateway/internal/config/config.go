@@ -23,6 +23,7 @@ type Config struct {
 	WebSocketHeartbeatPeriod time.Duration
 	WebSocketWriteTimeout    time.Duration
 	GRPCMaxMessageBytes      int
+	ChatEventStorePath       string
 }
 
 func Load() *Config {
@@ -40,11 +41,13 @@ func Load() *Config {
 	flag.DurationVar(&cfg.WebSocketHeartbeatPeriod, "websocket-heartbeat-period", getenvDuration("LIVEAGENT_GATEWAY_WS_HEARTBEAT_PERIOD", 15*time.Second), "ping interval for browser WebSocket connections")
 	flag.DurationVar(&cfg.WebSocketWriteTimeout, "websocket-write-timeout", getenvDuration("LIVEAGENT_GATEWAY_WS_WRITE_TIMEOUT", 10*time.Second), "write timeout for browser WebSocket connections")
 	flag.IntVar(&cfg.GRPCMaxMessageBytes, "grpc-max-message-bytes", getenvInt("LIVEAGENT_GATEWAY_GRPC_MAX_MESSAGE_BYTES", DefaultGRPCMaxMessageBytes), "maximum gRPC message size in bytes")
+	flag.StringVar(&cfg.ChatEventStorePath, "chat-event-store", getenv("LIVEAGENT_GATEWAY_CHAT_EVENT_STORE", defaultChatEventStorePath()), "SQLite path for durable chat command/event replay state")
 	flag.Parse()
 
 	cfg.Token = strings.TrimSpace(cfg.Token)
 	cfg.TLSCert = strings.TrimSpace(cfg.TLSCert)
 	cfg.TLSKey = strings.TrimSpace(cfg.TLSKey)
+	cfg.ChatEventStorePath = strings.TrimSpace(cfg.ChatEventStorePath)
 
 	if cfg.Token == "" {
 		flag.Usage()
@@ -67,6 +70,14 @@ func Load() *Config {
 	}
 
 	return cfg
+}
+
+func defaultChatEventStorePath() string {
+	configDir, err := os.UserConfigDir()
+	if err != nil || strings.TrimSpace(configDir) == "" {
+		return "liveagent-gateway-chat.sqlite3"
+	}
+	return configDir + string(os.PathSeparator) + "LiveAgent" + string(os.PathSeparator) + "gateway-chat.sqlite3"
 }
 
 func getenv(key, fallback string) string {

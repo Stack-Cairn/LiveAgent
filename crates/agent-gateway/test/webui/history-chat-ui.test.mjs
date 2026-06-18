@@ -377,6 +377,66 @@ test("normalizeRunningConversationIds trims drops invalid entries and dedupes in
   assert.deepEqual(historySync.normalizeRunningConversationIds(undefined), []);
 });
 
+test("normalizeRunningConversations preserves replay cursors and merges fallback ids", () => {
+  assert.deepEqual(
+    historySync.normalizeRunningConversations(
+      [
+        {
+          conversation_id: " conversation-1 ",
+          run_id: " run-1 ",
+          cwd: " /workspace ",
+          first_seq: 42.9,
+          latest_seq: 99.8,
+          run_epoch: 3.2,
+          updated_at: 123,
+        },
+        {
+          conversation_id: "conversation-1",
+          first_seq: 7,
+        },
+        {
+          conversation_id: "conversation-2",
+          first_seq: 0,
+          latest_seq: -1,
+        },
+      ],
+      ["conversation-2", " conversation-3 "],
+    ),
+    [
+      {
+        conversation_id: "conversation-1",
+        run_id: "run-1",
+        cwd: "/workspace",
+        first_seq: 42,
+        latest_seq: 99,
+        run_epoch: 3,
+        updated_at: 123,
+      },
+      {
+        conversation_id: "conversation-2",
+        run_id: undefined,
+        cwd: undefined,
+        first_seq: undefined,
+        latest_seq: undefined,
+        run_epoch: undefined,
+        updated_at: undefined,
+      },
+      {
+        conversation_id: "conversation-3",
+      },
+    ],
+  );
+});
+
+test("resolveRunningConversationStreamAfterSeq starts remote replay at current run boundary", () => {
+  assert.equal(historySync.resolveRunningConversationStreamAfterSeq(42), 41);
+  assert.equal(historySync.resolveRunningConversationStreamAfterSeq(42.9), 41);
+  assert.equal(historySync.resolveRunningConversationStreamAfterSeq(1), 0);
+  assert.equal(historySync.resolveRunningConversationStreamAfterSeq(0), 0);
+  assert.equal(historySync.resolveRunningConversationStreamAfterSeq(undefined), 0);
+  assert.equal(historySync.resolveRunningConversationStreamAfterSeq("42"), 0);
+});
+
 test("applyGatewayHistoryEvent can protect optimistic titles from summary broadcasts", () => {
   const existing = [
     {

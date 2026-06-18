@@ -54,7 +54,6 @@ type GatewaySocketEnvelope = {
 
 type StatusListener = (status: AgentStatus | null, error: string | null) => void;
 type HistoryListener = (event: GatewayHistoryEvent) => void;
-type ConversationListener = (event: ChatEvent) => void;
 type SettingsListener = (event: GatewaySettingsSyncPayload) => void;
 type TerminalListener = (event: TerminalEvent) => void;
 type SftpTransferListener = (event: SftpTransferEvent) => void;
@@ -65,18 +64,7 @@ type PendingRequest = {
   timeoutId: number;
 };
 
-type ChatStreamState = {
-  kind: "chat" | "attach";
-  queue: AsyncEventQueue<ChatEvent>;
-  conversationId: string;
-  lastSeq: number;
-  resuming: boolean;
-  attachedSocket: WebSocket | null;
-  startWatchdogId?: number;
-  abortHandler?: () => void;
-};
-
-type ChatAttachOptions = {
+type ChatEventStreamOptions = {
   afterSeq?: number;
   signal?: AbortSignal;
 };
@@ -85,6 +73,19 @@ type GatewayChatSystemSettings = {
   executionMode?: string;
   workdir?: string;
   selectedSystemTools?: string[];
+};
+
+export type GatewayChatCommandInput = {
+  type: "chat.submit" | "chat.edit_resend";
+  message: string;
+  conversationId?: string;
+  selectedModel?: GatewaySelectedModel;
+  systemSettings?: GatewayChatSystemSettings;
+  signal?: AbortSignal;
+  uploadedFiles?: PendingUploadedFile[];
+  clientRequestId?: string;
+  runtimeControls?: GatewayChatRuntimeControls;
+  baseMessageRef?: HistoryMessageRef;
 };
 
 type SkillListResponse = {
@@ -232,10 +233,6 @@ type RawTunnelResponse = {
 
 type HistoryGetOptions = {
   maxMessages?: number;
-};
-
-type HistoryTruncateOptions = {
-  omitMessagesJson?: boolean;
 };
 
 type SkillMetadataResponse = {
@@ -446,13 +443,351 @@ function buildWebSocketUrl() {
   return url.toString();
 }
 
+function buildGatewayApiUrl(pathname: string) {
+  const origin = getRuntimeOrigin();
+  if (!origin) {
+    throw new Error("Gateway API origin is unavailable");
+  }
+  const url = new URL(origin);
+  url.pathname = pathname;
+  url.search = "";
+  url.hash = "";
+  return url;
+}
+
+function createChatClientRequestId(input: GatewayChatCommandInput) {
+  const commandType = input.type.trim() || "chat.command";
+  const conversationId = input.conversationId?.trim() || "new";
+  const randomPart =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `webui-${commandType.replace(/[^a-z0-9._-]/gi, "_")}-${conversationId.replace(
+    /[^a-z0-9._-]/gi,
+    "_",
+  )}-${randomPart}`;
+}
+
+function buildChatCommandPayload(input: GatewayChatCommandInput) {
+  const systemSettings = input.systemSettings;
+  const clientRequestId = input.clientRequestId?.trim() || createChatClientRequestId(input);
+  return {
+    type: input.type,
+    payload: {
+      message: input.message,
+      conversation_id: input.conversationId ?? "",
+      client_request_id: clientRequestId,
+      execution_mode: systemSettings?.executionMode?.trim() || "text",
+      workdir: systemSettings?.workdir?.trim() || "",
+      selected_system_tools:
+        systemSettings?.selectedSystemTools?.map((item) => item.trim()).filter(Boolean) ?? [],
+      uploaded_files:
+        input.uploadedFiles?.map((file) => ({
+          relative_path: file.relativePath,
+          absolute_path: file.absolutePath,
+          file_name: file.fileName,
+          kind: file.kind,
+          size_bytes: file.sizeBytes,
+        })) ?? [],
+      selected_model: input.selectedModel
+        ? {
+            custom_provider_id: input.selectedModel.customProviderId,
+            model: input.selectedModel.model,
+            provider_type: input.selectedModel.providerType,
+          }
+        : undefined,
+      runtime_controls: input.runtimeControls
+        ? {
+            thinking_enabled: input.runtimeControls.thinkingEnabled,
+            native_web_search_enabled: input.runtimeControls.nativeWebSearchEnabled,
+            reasoning: input.runtimeControls.reasoning,
+          }
+        : undefined,
+      base_message_ref: input.baseMessageRef
+        ? {
+            segment_index: input.baseMessageRef.segmentIndex,
+            message_index: input.baseMessageRef.messageIndex,
+          }
+        : undefined,
+    },
+  };
+}
+
+type ChatCommandResponse = {
+  run_id?: string;
+  conversation_id?: string;
+  accepted_seq?: number;
+};
+
+function parseChatSseBlock(block: string): ChatEvent | null {
+  const dataLines: string[] = [];
+  for (const rawLine of block.split(/\r?\n/)) {
+    if (rawLine.startsWith("data:")) {
+      dataLines.push(rawLine.slice(5).trimStart());
+    }
+  }
+  const data = dataLines.join("\n").trim();
+  if (!data) {
+    return null;
+  }
+  const decoded = JSON.parse(data) as {
+    payload?: unknown;
+    seq?: number;
+    run_id?: string;
+    snapshot_run_id?: string;
+    conversation_id?: string;
+  };
+  const payload =
+    decoded.payload && typeof decoded.payload === "object"
+      ? ({ ...(decoded.payload as Record<string, unknown>) } as ChatEvent)
+      : ({ ...(decoded as Record<string, unknown>) } as ChatEvent);
+  if (typeof payload.seq !== "number" && typeof decoded.seq === "number") {
+    payload.seq = decoded.seq;
+  }
+  if (
+    !("conversation_id" in payload) &&
+    typeof decoded.conversation_id === "string" &&
+    decoded.conversation_id.trim()
+  ) {
+    (payload as ChatEvent & { conversation_id?: string }).conversation_id =
+      decoded.conversation_id;
+  }
+  attachChatEventMetadata(payload, {
+    runId: decoded.run_id,
+    snapshotRunId: decoded.snapshot_run_id,
+  });
+  return typeof payload.type === "string" ? payload : null;
+}
+
+function attachChatEventMetadata(
+  event: ChatEvent,
+  metadata: { runId?: string; snapshotRunId?: string },
+) {
+  const runId = metadata.runId?.trim() ?? "";
+  const snapshotRunId = metadata.snapshotRunId?.trim() ?? "";
+  if (runId) {
+    Object.defineProperty(event, "__gatewayRunId", {
+      value: runId,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  if (snapshotRunId) {
+    Object.defineProperty(event, "__gatewaySnapshotRunId", {
+      value: snapshotRunId,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+}
+
+async function readGatewayHTTPError(response: Response, fallback: string) {
+  let raw = "";
+  try {
+    raw = await response.text();
+  } catch {
+    raw = "";
+  }
+  if (raw.trim()) {
+    try {
+      const decoded = JSON.parse(raw) as { error?: unknown; message?: unknown };
+      const message = String(decoded.error ?? decoded.message ?? "").trim();
+      if (message) {
+        return message;
+      }
+    } catch {
+      return raw.trim();
+    }
+  }
+  return `${fallback} (${response.status})`;
+}
+
+async function postGatewayChatCommand<T = unknown>(
+  tokenInput: string,
+  payload: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const token = tokenInput.trim();
+  if (!token) {
+    throw new Error("Gateway token is required");
+  }
+  const response = await fetch(buildGatewayApiUrl("/api/chat/commands").toString(), {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "X-LiveAgent-CSRF": "1",
+    },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(await readGatewayHTTPError(response, "Gateway chat command failed"));
+  }
+  return (await response.json()) as T;
+}
+
+async function* readChatEventStream(body: ReadableStream<Uint8Array>): AsyncGenerator<ChatEvent> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      let boundary = buffer.search(/\r?\n\r?\n/);
+      while (boundary >= 0) {
+        const block = buffer.slice(0, boundary);
+        const match = buffer.slice(boundary).match(/^\r?\n\r?\n/);
+        buffer = buffer.slice(boundary + (match?.[0].length ?? 2));
+        const event = parseChatSseBlock(block);
+        if (event) {
+          yield event;
+        }
+        boundary = buffer.search(/\r?\n\r?\n/);
+      }
+    }
+    const tail = buffer + decoder.decode();
+    const event = parseChatSseBlock(tail);
+    if (event) {
+      yield event;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function waitForChatReconnect(delayMs: number, signal?: AbortSignal) {
+  if (signal?.aborted || delayMs <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    const host = getRuntimeHost();
+    const timeoutId = host.setTimeout(() => {
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }, delayMs);
+    const handleAbort = () => {
+      host.clearTimeout(timeoutId);
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    };
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
+async function* streamGatewayChatEvents(params: {
+  token: string;
+  runId?: string;
+  conversationId?: string;
+  afterSeq?: number;
+  signal?: AbortSignal;
+}): AsyncGenerator<ChatEvent> {
+  const token = params.token.trim();
+  if (!token) {
+    throw new Error("Gateway token is required");
+  }
+  const runId = params.runId?.trim() ?? "";
+  let conversationId = params.conversationId?.trim() ?? "";
+  if (!runId && !conversationId) {
+    throw new Error("run_id or conversation_id is required");
+  }
+
+  let lastSeq = normalizeAfterSeq(params.afterSeq);
+  let reconnectAttempt = 0;
+  let terminalSeen = false;
+    while (!terminalSeen && !params.signal?.aborted) {
+    const eventsUrl = buildGatewayApiUrl("/api/chat/events");
+    if (runId) {
+      eventsUrl.searchParams.set("run_id", runId);
+    }
+    if (conversationId) {
+      eventsUrl.searchParams.set("conversation_id", conversationId);
+    }
+    eventsUrl.searchParams.set("after_seq", String(lastSeq));
+
+    let response: Response;
+      try {
+        const headers: Record<string, string> = {
+          Accept: "text/event-stream",
+          Authorization: `Bearer ${token}`,
+        };
+        if (lastSeq > 0) {
+          headers["Last-Event-ID"] = String(lastSeq);
+        }
+        response = await fetch(eventsUrl.toString(), {
+          method: "GET",
+          headers,
+          signal: params.signal,
+        });
+    } catch {
+      if (params.signal?.aborted) {
+        return;
+      }
+      const baseDelay = Math.min(
+        RECONNECT_MAX_DELAY_MS,
+        RECONNECT_INITIAL_DELAY_MS * 2 ** Math.min(reconnectAttempt, 5),
+      );
+      reconnectAttempt += 1;
+      const jitter = Math.floor(Math.random() * Math.min(500, Math.max(1, baseDelay)));
+      await waitForChatReconnect(baseDelay + jitter, params.signal);
+      continue;
+    }
+
+    if (!response.ok || !response.body) {
+      throw new Error(await readGatewayHTTPError(response, "Gateway chat event stream failed"));
+    }
+
+    try {
+      for await (const event of readChatEventStream(response.body)) {
+        const seq = readChatEventSeq(event);
+        if (seq > 0 && seq <= lastSeq) {
+          continue;
+        }
+        if (seq > lastSeq) {
+          lastSeq = seq;
+        }
+        if (event.conversation_id?.trim()) {
+          conversationId = event.conversation_id.trim();
+        }
+        terminalSeen = isTerminalChatEventForStream(event, runId);
+        if (isTerminalChatEvent(event) && !terminalSeen) {
+          continue;
+        }
+        reconnectAttempt = 0;
+        yield event;
+        if (terminalSeen || params.signal?.aborted) {
+          break;
+        }
+      }
+    } catch {
+      if (params.signal?.aborted) {
+        return;
+      }
+    }
+
+    if (!terminalSeen && !params.signal?.aborted) {
+      const baseDelay = Math.min(
+        RECONNECT_MAX_DELAY_MS,
+        RECONNECT_INITIAL_DELAY_MS * 2 ** Math.min(reconnectAttempt, 5),
+      );
+      reconnectAttempt += 1;
+      const jitter = Math.floor(Math.random() * Math.min(500, Math.max(1, baseDelay)));
+      await waitForChatReconnect(baseDelay + jitter, params.signal);
+    }
+  }
+}
+
 const RECONNECT_INITIAL_DELAY_MS = 500;
 const RECONNECT_MAX_DELAY_MS = 15_000;
 const RECONNECT_NOTICE_DELAY_MS = 10_000;
 const SOCKET_INBOUND_STALL_MS = 25_000;
 const FOREGROUND_SOCKET_RECYCLE_IDLE_MS = 10_000;
 const FOREGROUND_WAKEUP_RECENCY_MS = 15_000;
-const CHAT_STREAM_TRANSPORT_STALL_MS = 8_000;
 
 type RuntimeHost = {
   location?: {
@@ -512,11 +847,25 @@ function readChatEventSeq(event: ChatEvent) {
   return typeof seq === "number" && Number.isFinite(seq) && seq > 0 ? Math.floor(seq) : 0;
 }
 
+function readChatEventRunId(event: ChatEvent) {
+  const runId = (event as ChatEvent & { __gatewayRunId?: unknown }).__gatewayRunId;
+  return typeof runId === "string" ? runId.trim() : "";
+}
+
+function readChatEventSnapshotRunId(event: ChatEvent) {
+  const runId = (event as ChatEvent & { __gatewaySnapshotRunId?: unknown })
+    .__gatewaySnapshotRunId;
+  return typeof runId === "string" ? runId.trim() : "";
+}
+
 function isChatControlEvent(
   event: ChatEvent | null | undefined,
 ): event is ChatControlEvent {
   switch (event?.type) {
     case "accepted":
+    case "user_message":
+    case "rebased":
+    case "projection_updated":
     case "delivered":
     case "claimed":
     case "starting":
@@ -536,6 +885,22 @@ function isTerminalChatControlEvent(event: ChatEvent | null | undefined) {
     return false;
   }
   return event?.state === "completed" || event?.state === "failed" || event?.state === "cancelled";
+}
+
+function isTerminalChatEvent(event: ChatEvent | null | undefined) {
+  return event?.type === "done" || event?.type === "error" || isTerminalChatControlEvent(event);
+}
+
+function isTerminalChatEventForStream(event: ChatEvent, runId: string) {
+  if (!isTerminalChatEvent(event)) {
+    return false;
+  }
+  const eventRunId = readChatEventRunId(event);
+  const targetRunId = runId.trim() || readChatEventSnapshotRunId(event);
+  if (!targetRunId) {
+    return true;
+  }
+  return eventRunId === "" || eventRunId === targetRunId;
 }
 
 function normalizeAfterSeq(value: unknown) {
@@ -876,11 +1241,9 @@ export class GatewayWebSocketClient {
   private authenticated = false;
   private requestSeq = 0;
   private pending = new Map<string, PendingRequest>();
-  private chatStreams = new Map<string, ChatStreamState>();
   private disposed = false;
   private statusListeners = new Set<StatusListener>();
   private historyListeners = new Set<HistoryListener>();
-  private conversationListeners = new Set<ConversationListener>();
   private settingsListeners = new Set<SettingsListener>();
   private terminalListeners = new Set<TerminalListener>();
   private sftpTransferListeners = new Set<SftpTransferListener>();
@@ -933,7 +1296,7 @@ export class GatewayWebSocketClient {
     }
     this.noteForegroundWakeup();
     this.prepareRuntimePromise = (async () => {
-      await this.ensureConnected({ resumeStreams: true });
+      await this.ensureConnected();
       const status = await this.getStatus();
       this.emitStatus(status, null);
       return status;
@@ -966,13 +1329,6 @@ export class GatewayWebSocketClient {
     };
   }
 
-  subscribeConversation(listener: ConversationListener): () => void {
-    this.conversationListeners.add(listener);
-    return () => {
-      this.conversationListeners.delete(listener);
-    };
-  }
-
   subscribeSettings(listener: SettingsListener): () => void {
     this.settingsListeners.add(listener);
     return () => {
@@ -995,115 +1351,69 @@ export class GatewayWebSocketClient {
     };
   }
 
-  async *chat(
-    message: string,
-    conversationId?: string,
-    selectedModel?: GatewaySelectedModel,
-    systemSettings?: GatewayChatSystemSettings,
-    signal?: AbortSignal,
-    uploadedFiles?: PendingUploadedFile[],
-    clientRequestId?: string,
-    runtimeControls?: GatewayChatRuntimeControls,
-  ): AsyncGenerator<ChatEvent> {
+  async *commandChat(input: GatewayChatCommandInput): AsyncGenerator<ChatEvent> {
+    const signal = input.signal;
     if (signal?.aborted) {
       return;
     }
-    await this.ensureConnected();
-    if (signal?.aborted) {
-      return;
+    if (this.token.trim() === "") {
+      throw new Error("Gateway token is required");
     }
 
-    const requestId = this.nextRequestId("chat");
-    const queue = new AsyncEventQueue<ChatEvent>();
-    const streamState: ChatStreamState = {
-      kind: "chat",
-      queue,
-      conversationId: conversationId?.trim() ?? "",
-      lastSeq: 0,
-      resuming: false,
-      attachedSocket: null,
+    const commandResponse = await postGatewayChatCommand<ChatCommandResponse>(
+      this.token,
+      buildChatCommandPayload(input),
+      signal,
+    );
+    const runId = String(commandResponse.run_id ?? "").trim();
+    if (!runId) {
+      throw new Error("Gateway chat command returned no run_id");
+    }
+    let conversationId =
+      String(commandResponse.conversation_id ?? "").trim() || input.conversationId?.trim() || "";
+
+    const handleAbort = () => {
+      void postGatewayChatCommand(
+        this.token,
+        {
+          type: "chat.cancel",
+          payload: {
+            run_id: runId,
+            conversation_id: conversationId,
+          },
+        },
+        undefined,
+      ).catch(() => undefined);
     };
-    this.chatStreams.set(requestId, streamState);
-
     if (signal) {
-      const handleAbort = () => {
-        const active = this.chatStreams.get(requestId);
-        if (active?.conversationId) {
-          void this.cancelChat(active.conversationId).catch(() => undefined);
-        }
-        this.clearChatStreamStartWatchdog(streamState);
-        this.chatStreams.delete(requestId);
-        queue.close();
-      };
       if (signal.aborted) {
         handleAbort();
-      } else {
-        signal.addEventListener("abort", handleAbort, { once: true });
-        streamState.abortHandler = () => signal.removeEventListener("abort", handleAbort);
+        return;
       }
+      signal.addEventListener("abort", handleAbort, { once: true });
     }
 
     try {
-      const requestStartedAt = Date.now();
-      this.sendEnvelope({
-        id: requestId,
-        type: "chat.start",
-        payload: {
-          message,
-          conversation_id: conversationId ?? "",
-          client_request_id: clientRequestId?.trim() ?? "",
-          execution_mode: systemSettings?.executionMode?.trim() || "text",
-          workdir: systemSettings?.workdir?.trim() || "",
-          selected_system_tools:
-            systemSettings?.selectedSystemTools?.map((item) => item.trim()).filter(Boolean) ?? [],
-          uploaded_files:
-            uploadedFiles?.map((file) => ({
-              relative_path: file.relativePath,
-              absolute_path: file.absolutePath,
-              file_name: file.fileName,
-              kind: file.kind,
-              size_bytes: file.sizeBytes,
-            })) ?? [],
-          selected_model: selectedModel
-            ? {
-                custom_provider_id: selectedModel.customProviderId,
-                model: selectedModel.model,
-                provider_type: selectedModel.providerType,
-              }
-            : undefined,
-          runtime_controls: runtimeControls
-            ? {
-                thinking_enabled: runtimeControls.thinkingEnabled,
-                native_web_search_enabled: runtimeControls.nativeWebSearchEnabled,
-                reasoning: runtimeControls.reasoning,
-              }
-            : undefined,
-        },
-      });
-      streamState.attachedSocket = this.socket;
-      this.armChatStreamStartWatchdog(
-        requestId,
-        streamState,
-        requestStartedAt,
-        "chat.start",
-      );
-
-      for await (const event of queue) {
+      for await (const event of streamGatewayChatEvents({
+        token: this.token,
+        runId,
+        conversationId,
+        afterSeq: 0,
+        signal,
+      })) {
+        if (event.conversation_id?.trim()) {
+          conversationId = event.conversation_id.trim();
+        }
         yield event;
       }
     } finally {
-      const active = this.chatStreams.get(requestId);
-      active?.abortHandler?.();
-      if (active) {
-        this.clearChatStreamStartWatchdog(active);
-      }
-      this.chatStreams.delete(requestId);
+      signal?.removeEventListener("abort", handleAbort);
     }
   }
 
-  async *attachChat(
+  async *streamChatEvents(
     conversationId: string,
-    options?: ChatAttachOptions,
+    options?: ChatEventStreamOptions,
   ): AsyncGenerator<ChatEvent> {
     const normalizedConversationId = conversationId.trim();
     if (!normalizedConversationId) {
@@ -1114,75 +1424,26 @@ export class GatewayWebSocketClient {
     if (signal?.aborted) {
       return;
     }
-    await this.ensureConnected();
-    if (signal?.aborted) {
-      return;
-    }
-
-    const requestId = this.nextRequestId("chat-attach");
-    const queue = new AsyncEventQueue<ChatEvent>();
-    const streamState: ChatStreamState = {
-      kind: "attach",
-      queue,
+    for await (const event of streamGatewayChatEvents({
+      token: this.token,
       conversationId: normalizedConversationId,
-      lastSeq: normalizeAfterSeq(options?.afterSeq),
-      resuming: false,
-      attachedSocket: null,
-    };
-    this.chatStreams.set(requestId, streamState);
-
-    if (signal) {
-      const handleAbort = () => {
-        this.clearChatStreamStartWatchdog(streamState);
-        void this.detachChatStream(requestId).catch(() => undefined);
-        this.chatStreams.delete(requestId);
-        queue.close();
-      };
-      if (signal.aborted) {
-        handleAbort();
-      } else {
-        signal.addEventListener("abort", handleAbort, { once: true });
-        streamState.abortHandler = () => signal.removeEventListener("abort", handleAbort);
-      }
-    }
-
-    try {
-      const requestStartedAt = Date.now();
-      this.sendEnvelope({
-        id: requestId,
-        type: "chat.attach",
-        payload: {
-          conversation_id: normalizedConversationId,
-          after_seq: streamState.lastSeq,
-        },
-      });
-      streamState.attachedSocket = this.socket;
-      this.armChatStreamStartWatchdog(
-        requestId,
-        streamState,
-        requestStartedAt,
-        "chat.attach",
-      );
-
-      for await (const event of queue) {
-        yield event;
-      }
-    } finally {
-      const active = this.chatStreams.get(requestId);
-      active?.abortHandler?.();
-      if (active) {
-        this.clearChatStreamStartWatchdog(active);
-      }
-      if (active) {
-        await this.detachChatStream(requestId).catch(() => undefined);
-        this.chatStreams.delete(requestId);
-      }
+      afterSeq: options?.afterSeq,
+      signal,
+    })) {
+      yield event;
     }
   }
 
   async cancelChat(conversationId: string): Promise<void> {
-    await this.request("chat.cancel", {
-      conversation_id: conversationId,
+    const normalized = conversationId.trim();
+    if (!normalized) {
+      return;
+    }
+    await postGatewayChatCommand(this.token, {
+      type: "chat.cancel",
+      payload: {
+        conversation_id: normalized,
+      },
     });
   }
 
@@ -1595,19 +1856,6 @@ export class GatewayWebSocketClient {
     });
   }
 
-  async truncateHistory(
-    conversationId: string,
-    messageRef: HistoryMessageRef,
-    options?: HistoryTruncateOptions,
-  ): Promise<HistoryDetail> {
-    return this.request<HistoryDetail>("history.truncate", {
-      conversation_id: conversationId,
-      segment_index: messageRef.segmentIndex,
-      message_index: messageRef.messageIndex,
-      omit_messages_json: options?.omitMessagesJson === true,
-    });
-  }
-
   async renameHistory(conversationId: string, title: string): Promise<ConversationSummary> {
     return this.request<ConversationSummary>("history.rename", {
       conversation_id: conversationId,
@@ -1903,11 +2151,9 @@ export class GatewayWebSocketClient {
     return (
       !this.disposed &&
       this.token.trim() !== "" &&
-      (this.chatStreams.size > 0 ||
-        this.pending.size > 0 ||
+      (this.pending.size > 0 ||
         this.statusListeners.size > 0 ||
         this.historyListeners.size > 0 ||
-        this.conversationListeners.size > 0 ||
         this.settingsListeners.size > 0 ||
         this.terminalListeners.size > 0 ||
         this.sftpTransferListeners.size > 0)
@@ -1954,7 +2200,7 @@ export class GatewayWebSocketClient {
 
     this.reconnecting = true;
     try {
-      await this.ensureConnected({ resumeStreams: true });
+      await this.ensureConnected();
       this.clearReconnectNoticeTimer();
       this.reconnectAttempt = 0;
       if (this.statusListeners.size > 0) {
@@ -2012,12 +2258,6 @@ export class GatewayWebSocketClient {
 
   private emitHistory(event: GatewayHistoryEvent) {
     for (const listener of this.historyListeners) {
-      listener(event);
-    }
-  }
-
-  private emitConversation(event: ChatEvent) {
-    for (const listener of this.conversationListeners) {
       listener(event);
     }
   }
@@ -2094,8 +2334,7 @@ export class GatewayWebSocketClient {
     });
   }
 
-  private async ensureConnected(options?: { resumeStreams?: boolean }): Promise<void> {
-    const shouldResumeStreams = options?.resumeStreams !== false;
+  private async ensureConnected(): Promise<void> {
     if (this.disposed) {
       throw new Error("Gateway WebSocket client has been disposed");
     }
@@ -2106,17 +2345,11 @@ export class GatewayWebSocketClient {
       if (this.shouldRecycleAuthenticatedSocket()) {
         this.handleDisconnect(this.buildTransportStallError("before sending a new request"));
       } else {
-        if (shouldResumeStreams) {
-          void this.resumeChatStreams();
-        }
         return;
       }
     }
     if (this.connectPromise) {
       await this.connectPromise;
-      if (shouldResumeStreams) {
-        void this.resumeChatStreams();
-      }
       return;
     }
 
@@ -2194,129 +2427,6 @@ export class GatewayWebSocketClient {
     });
 
     await this.connectPromise;
-    if (shouldResumeStreams) {
-      void this.resumeChatStreams();
-    }
-  }
-
-  private async resumeChatStreams() {
-    if (
-      this.disposed ||
-      !this.socket ||
-      !this.authenticated ||
-      this.socket.readyState !== WebSocket.OPEN ||
-      this.chatStreams.size === 0
-    ) {
-      return;
-    }
-
-    for (const [requestId, stream] of this.chatStreams) {
-      void this.resumeChatStream(requestId, stream);
-    }
-  }
-
-  private async resumeChatStream(requestId: string, stream: ChatStreamState) {
-    if (this.disposed || stream.resuming || !this.chatStreams.has(requestId)) {
-      return;
-    }
-    if (this.socket && stream.attachedSocket === this.socket) {
-      return;
-    }
-    stream.resuming = true;
-    try {
-      await this.ensureConnected({ resumeStreams: false });
-      if (!this.socket || !this.authenticated || this.socket.readyState !== WebSocket.OPEN) {
-        return;
-      }
-      const requestStartedAt = Date.now();
-      if (stream.kind === "attach") {
-        this.sendEnvelope({
-          id: requestId,
-          type: "chat.attach",
-          payload: {
-            conversation_id: stream.conversationId,
-            after_seq: stream.lastSeq,
-          },
-        });
-      } else {
-        this.sendEnvelope({
-          id: this.nextRequestId("chat-resume"),
-          type: "chat.resume",
-          payload: {
-            request_id: requestId,
-            conversation_id: stream.conversationId,
-            after_seq: stream.lastSeq,
-          },
-        });
-      }
-      stream.attachedSocket = this.socket;
-      this.armChatStreamStartWatchdog(
-        requestId,
-        stream,
-        requestStartedAt,
-        stream.kind === "attach" ? "chat.attach" : "chat.resume",
-      );
-    } catch {
-      this.scheduleReconnect();
-    } finally {
-      stream.resuming = false;
-    }
-  }
-
-  private armChatStreamStartWatchdog(
-    requestId: string,
-    stream: ChatStreamState,
-    requestStartedAt: number,
-    action: string,
-  ) {
-    this.clearChatStreamStartWatchdog(stream);
-    const socket = this.socket;
-    if (!socket) {
-      return;
-    }
-    const host = getRuntimeHost();
-    stream.startWatchdogId = host.setTimeout(() => {
-      const active = this.chatStreams.get(requestId);
-      if (!active || active !== stream || active.lastSeq > 0) {
-        return;
-      }
-      active.startWatchdogId = undefined;
-      if (
-        this.socket === socket &&
-        active.attachedSocket === socket &&
-        this.authenticated &&
-        socket.readyState === WebSocket.OPEN &&
-        this.lastInboundAt <= requestStartedAt
-      ) {
-        this.handleDisconnect(this.buildTransportStallError(`while waiting for ${action}`));
-      }
-    }, CHAT_STREAM_TRANSPORT_STALL_MS);
-  }
-
-  private clearChatStreamStartWatchdog(stream: ChatStreamState) {
-    if (stream.startWatchdogId === undefined) {
-      return;
-    }
-    const host = getRuntimeHost();
-    host.clearTimeout(stream.startWatchdogId);
-    stream.startWatchdogId = undefined;
-  }
-
-  private async detachChatStream(requestId: string) {
-    if (this.disposed) {
-      return;
-    }
-    await this.ensureConnected({ resumeStreams: false });
-    if (!this.socket || !this.authenticated || this.socket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-    this.sendEnvelope({
-      id: this.nextRequestId("chat-detach"),
-      type: "chat.detach",
-      payload: {
-        request_id: requestId,
-      },
-    });
   }
 
   private sendEnvelope(envelope: GatewaySocketEnvelope) {
@@ -2389,61 +2499,6 @@ export class GatewayWebSocketClient {
       return;
     }
 
-    if ((envelope.type === "chat.event" || envelope.type === "chat.control") && requestId) {
-      const stream = this.chatStreams.get(requestId);
-      if (!stream) {
-        return;
-      }
-      const event = envelope.payload as ChatEvent;
-      const seq = readChatEventSeq(event);
-      if (seq > 0 && seq <= stream.lastSeq) {
-        return;
-      }
-      if (seq > stream.lastSeq) {
-        stream.lastSeq = seq;
-      }
-      if (event?.conversation_id) {
-        stream.conversationId = event.conversation_id;
-      }
-      this.clearChatStreamStartWatchdog(stream);
-      stream.queue.push(event);
-      if (
-        event?.type === "done" ||
-        event?.type === "error" ||
-        isTerminalChatControlEvent(event)
-      ) {
-        stream.abortHandler?.();
-        stream.queue.close();
-        this.chatStreams.delete(requestId);
-      }
-      return;
-    }
-
-    if (envelope.type === "conversation.event" || envelope.type === "conversation.control") {
-      const event = envelope.payload as ChatEvent;
-      if (event?.conversation_id) {
-        this.emitConversation(event);
-      }
-      return;
-    }
-
-    if (envelope.type === "error" && requestId) {
-      const stream = this.chatStreams.get(requestId);
-      if (stream) {
-        const message = typeof envelope.error === "string" ? envelope.error : "Request failed";
-        this.clearChatStreamStartWatchdog(stream);
-        stream.queue.push({
-          type: "error",
-          message,
-          conversation_id: stream.conversationId || undefined,
-        });
-        stream.abortHandler?.();
-        stream.queue.close();
-        this.chatStreams.delete(requestId);
-        return;
-      }
-    }
-
     const pending = requestId ? this.pending.get(requestId) : null;
     if (!pending) {
       return;
@@ -2486,21 +2541,6 @@ export class GatewayWebSocketClient {
       entry.reject(error);
     }
 
-    if (this.disposed) {
-      const streams = [...this.chatStreams.values()];
-      this.chatStreams.clear();
-      for (const stream of streams) {
-        this.clearChatStreamStartWatchdog(stream);
-        stream.abortHandler?.();
-        stream.queue.fail(error);
-      }
-    } else {
-      for (const stream of this.chatStreams.values()) {
-        this.clearChatStreamStartWatchdog(stream);
-        stream.attachedSocket = null;
-      }
-    }
-
     if (!this.disposed && this.statusListeners.size > 0) {
       if (isRecoverableGatewayTransportError(error) && this.shouldMaintainConnection()) {
         this.scheduleReconnectNotice();
@@ -2518,7 +2558,7 @@ export class GatewayWebSocketClient {
     }
     this.lastInboundAt = 0;
     if (!this.disposed) {
-      this.scheduleReconnect(this.chatStreams.size > 0 ? 0 : undefined);
+      this.scheduleReconnect();
     }
   }
 
@@ -2560,7 +2600,7 @@ export class GatewayWebSocketClient {
   }
 
   private async recoverTransport() {
-    await this.ensureConnected({ resumeStreams: true });
+    await this.ensureConnected();
   }
 
   private nextRequestId(prefix: string) {
@@ -2574,21 +2614,14 @@ export type GatewayWebSocketClientLike = {
   prepareChatRuntime(reason?: string): Promise<AgentStatus>;
   subscribeStatus(listener: StatusListener): () => void;
   subscribeHistory(listener: HistoryListener): () => void;
-  subscribeConversation(listener: ConversationListener): () => void;
   subscribeSettings(listener: SettingsListener): () => void;
   subscribeTerminal(listener: TerminalListener): () => void;
   subscribeSftpTransfers(listener: SftpTransferListener): () => void;
-  chat(
-    message: string,
-    conversationId?: string,
-    selectedModel?: GatewaySelectedModel,
-    systemSettings?: GatewayChatSystemSettings,
-    signal?: AbortSignal,
-    uploadedFiles?: PendingUploadedFile[],
-    clientRequestId?: string,
-    runtimeControls?: GatewayChatRuntimeControls,
+  commandChat(input: GatewayChatCommandInput): AsyncGenerator<ChatEvent>;
+  streamChatEvents(
+    conversationId: string,
+    options?: ChatEventStreamOptions,
   ): AsyncGenerator<ChatEvent>;
-  attachChat(conversationId: string, options?: ChatAttachOptions): AsyncGenerator<ChatEvent>;
   cancelChat(conversationId: string): Promise<void>;
   cronManage(payload: CronManagePayload): Promise<CronManageResponse>;
   memoryManage<T = unknown>(payload: MemoryManagePayload): Promise<T>;
@@ -2699,11 +2732,6 @@ export type GatewayWebSocketClientLike = {
   listHistoryWorkdirs(): Promise<HistoryWorkdirsResponse>;
   listSharedHistory(page: number, pageSize: number): Promise<HistoryList>;
   getHistory(conversationId: string, options?: HistoryGetOptions): Promise<HistoryDetail>;
-  truncateHistory(
-    conversationId: string,
-    messageRef: HistoryMessageRef,
-    options?: HistoryTruncateOptions,
-  ): Promise<HistoryDetail>;
   renameHistory(conversationId: string, title: string): Promise<ConversationSummary>;
   pinHistory(conversationId: string, isPinned: boolean): Promise<ConversationSummary>;
   getHistoryShare(conversationId: string): Promise<HistoryShareStatus>;
@@ -2777,37 +2805,14 @@ type SharedWorkerClientResponseMessage = {
 type SharedWorkerClientEventMessage = {
   type: "event";
   connection_id: string;
-  event_type: "status" | "history" | "conversation" | "settings" | "terminal" | "sftp";
+  event_type: "status" | "history" | "settings" | "terminal" | "sftp";
   payload: unknown;
-};
-
-type SharedWorkerClientChatEventMessage = {
-  type: "chat-event";
-  connection_id: string;
-  stream_id: string;
-  payload: ChatEvent;
-};
-
-type SharedWorkerClientChatErrorMessage = {
-  type: "chat-error";
-  connection_id: string;
-  stream_id: string;
-  error: string;
-};
-
-type SharedWorkerClientChatClosedMessage = {
-  type: "chat-closed";
-  connection_id: string;
-  stream_id: string;
 };
 
 type SharedWorkerClientMessage =
   | SharedWorkerClientReadyMessage
   | SharedWorkerClientResponseMessage
-  | SharedWorkerClientEventMessage
-  | SharedWorkerClientChatEventMessage
-  | SharedWorkerClientChatErrorMessage
-  | SharedWorkerClientChatClosedMessage;
+  | SharedWorkerClientEventMessage;
 
 type SharedWorkerClientRequestMessage =
   | {
@@ -2821,40 +2826,6 @@ type SharedWorkerClientRequestMessage =
       request_id: string;
       method: string;
       payload?: unknown;
-    }
-  | {
-      type: "chat.start";
-      connection_id: string;
-      request_id: string;
-      stream_id: string;
-      payload: {
-        message: string;
-        conversation_id?: string;
-        client_request_id?: string;
-        selected_model?: GatewaySelectedModel;
-        runtime_controls?: GatewayChatRuntimeControls;
-        system_settings?: GatewayChatSystemSettings;
-        uploaded_files?: PendingUploadedFile[];
-      };
-    }
-  | {
-      type: "chat.cancel";
-      connection_id: string;
-      stream_id: string;
-      conversation_id?: string;
-    }
-  | {
-      type: "chat.attach";
-      connection_id: string;
-      request_id: string;
-      stream_id: string;
-      conversation_id: string;
-      after_seq?: number;
-    }
-  | {
-      type: "chat.detach";
-      connection_id: string;
-      stream_id: string;
     }
   | {
       type: "wakeup";
@@ -2882,18 +2853,8 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
   private disposed = false;
   private statusRefreshRequested = false;
   private pending = new Map<string, PendingRequest>();
-  private chatStreams = new Map<
-    string,
-    {
-      queue: AsyncEventQueue<ChatEvent>;
-      conversationId: string;
-      lastSeq: number;
-      abortHandler?: () => void;
-    }
-  >();
   private statusListeners = new Set<StatusListener>();
   private historyListeners = new Set<HistoryListener>();
-  private conversationListeners = new Set<ConversationListener>();
   private settingsListeners = new Set<SettingsListener>();
   private terminalListeners = new Set<TerminalListener>();
   private sftpTransferListeners = new Set<SftpTransferListener>();
@@ -2974,13 +2935,6 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     };
   }
 
-  subscribeConversation(listener: ConversationListener): () => void {
-    this.conversationListeners.add(listener);
-    return () => {
-      this.conversationListeners.delete(listener);
-    };
-  }
-
   subscribeSettings(listener: SettingsListener): () => void {
     this.settingsListeners.add(listener);
     return () => {
@@ -3003,139 +2957,85 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     };
   }
 
-  async *chat(
-    message: string,
-    conversationId?: string,
-    selectedModel?: GatewaySelectedModel,
-    systemSettings?: GatewayChatSystemSettings,
-    signal?: AbortSignal,
-    uploadedFiles?: PendingUploadedFile[],
-    clientRequestId?: string,
-    runtimeControls?: GatewayChatRuntimeControls,
-  ): AsyncGenerator<ChatEvent> {
+  async *commandChat(input: GatewayChatCommandInput): AsyncGenerator<ChatEvent> {
+    const signal = input.signal;
     if (signal?.aborted) {
       return;
     }
-    await this.ensureConnected();
-    if (signal?.aborted) {
-      return;
+    if (this.token.trim() === "") {
+      throw new Error("Gateway token is required");
     }
 
-    const streamId = this.nextRequestId("chat-stream");
-    const queue = new AsyncEventQueue<ChatEvent>();
-    const streamState = {
-      queue,
-      conversationId: conversationId?.trim() ?? "",
-      lastSeq: 0,
-      abortHandler: undefined as (() => void) | undefined,
+    const commandResponse = await postGatewayChatCommand<ChatCommandResponse>(
+      this.token,
+      buildChatCommandPayload(input),
+      signal,
+    );
+    const runId = String(commandResponse.run_id ?? "").trim();
+    if (!runId) {
+      throw new Error("Gateway chat command returned no run_id");
+    }
+    let conversationId =
+      String(commandResponse.conversation_id ?? "").trim() || input.conversationId?.trim() || "";
+
+    const handleAbort = () => {
+      void postGatewayChatCommand(
+        this.token,
+        {
+          type: "chat.cancel",
+          payload: {
+            run_id: runId,
+            conversation_id: conversationId,
+          },
+        },
+        undefined,
+      ).catch(() => undefined);
     };
-    this.chatStreams.set(streamId, streamState);
-
     if (signal) {
-      const handleAbort = () => {
-        const active = this.chatStreams.get(streamId);
-        if (active?.conversationId) {
-          void this.request("chat.cancel", {
-            stream_id: streamId,
-            conversation_id: active.conversationId,
-          }).catch(() => undefined);
-        }
-        this.chatStreams.delete(streamId);
-        queue.close();
-      };
       if (signal.aborted) {
         handleAbort();
-      } else {
-        signal.addEventListener("abort", handleAbort, { once: true });
-        streamState.abortHandler = () => signal.removeEventListener("abort", handleAbort);
+        return;
       }
+      signal.addEventListener("abort", handleAbort, { once: true });
     }
 
     try {
-      await this.request("chat.start", {
-        stream_id: streamId,
-        message,
-        conversation_id: conversationId ?? "",
-        client_request_id: clientRequestId?.trim() ?? "",
-        selected_model: selectedModel,
-        runtime_controls: runtimeControls,
-        system_settings: systemSettings,
-        uploaded_files: uploadedFiles,
-      });
-
-      for await (const event of queue) {
+      for await (const event of streamGatewayChatEvents({
+        token: this.token,
+        runId,
+        conversationId,
+        afterSeq: 0,
+        signal,
+      })) {
+        if (event.conversation_id?.trim()) {
+          conversationId = event.conversation_id.trim();
+        }
         yield event;
       }
     } finally {
-      const active = this.chatStreams.get(streamId);
-      active?.abortHandler?.();
-      this.chatStreams.delete(streamId);
+      signal?.removeEventListener("abort", handleAbort);
     }
   }
 
-  async *attachChat(
+  async *streamChatEvents(
     conversationId: string,
-    options?: ChatAttachOptions,
+    options?: ChatEventStreamOptions,
   ): AsyncGenerator<ChatEvent> {
     const normalizedConversationId = conversationId.trim();
     if (!normalizedConversationId) {
       throw new Error("conversation_id is required");
     }
-
     const signal = options?.signal;
     if (signal?.aborted) {
       return;
     }
-    await this.ensureConnected();
-    if (signal?.aborted) {
-      return;
-    }
-
-    const streamId = this.nextRequestId("chat-attach-stream");
-    const queue = new AsyncEventQueue<ChatEvent>();
-    const streamState = {
-      queue,
+    for await (const event of streamGatewayChatEvents({
+      token: this.token,
       conversationId: normalizedConversationId,
-      lastSeq: normalizeAfterSeq(options?.afterSeq),
-      abortHandler: undefined as (() => void) | undefined,
-    };
-    this.chatStreams.set(streamId, streamState);
-
-    if (signal) {
-      const handleAbort = () => {
-        void this.request("chat.detach", {
-          stream_id: streamId,
-        }).catch(() => undefined);
-        this.chatStreams.delete(streamId);
-        queue.close();
-      };
-      if (signal.aborted) {
-        handleAbort();
-      } else {
-        signal.addEventListener("abort", handleAbort, { once: true });
-        streamState.abortHandler = () => signal.removeEventListener("abort", handleAbort);
-      }
-    }
-
-    try {
-      await this.request("chat.attach", {
-        stream_id: streamId,
-        conversation_id: normalizedConversationId,
-        after_seq: streamState.lastSeq,
-      });
-
-      for await (const event of queue) {
-        yield event;
-      }
-    } finally {
-      const active = this.chatStreams.get(streamId);
-      active?.abortHandler?.();
-      if (active) {
-        await this.request("chat.detach", {
-          stream_id: streamId,
-        }).catch(() => undefined);
-        this.chatStreams.delete(streamId);
-      }
+      afterSeq: options?.afterSeq,
+      signal,
+    })) {
+      yield event;
     }
   }
 
@@ -3144,12 +3044,11 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     if (!normalized) {
       return;
     }
-    const stream = [...this.chatStreams.entries()].find(
-      ([, item]) => item.conversationId === normalized,
-    );
-    await this.request("chat.cancel", {
-      stream_id: stream?.[0] ?? "",
-      conversation_id: normalized,
+    await postGatewayChatCommand(this.token, {
+      type: "chat.cancel",
+      payload: {
+        conversation_id: normalized,
+      },
     });
   }
 
@@ -3557,19 +3456,6 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     });
   }
 
-  async truncateHistory(
-    conversationId: string,
-    messageRef: HistoryMessageRef,
-    options?: HistoryTruncateOptions,
-  ): Promise<HistoryDetail> {
-    return this.request<HistoryDetail>("history.truncate", {
-      conversation_id: conversationId,
-      segment_index: messageRef.segmentIndex,
-      message_index: messageRef.messageIndex,
-      omit_messages_json: options?.omitMessagesJson === true,
-    });
-  }
-
   async renameHistory(conversationId: string, title: string): Promise<ConversationSummary> {
     return this.request<ConversationSummary>("history.rename", {
       conversation_id: conversationId,
@@ -3815,64 +3701,6 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
 
       this.pending.set(requestId, { resolve, reject, timeoutId });
       try {
-        if (method === "chat.start") {
-          const body = payload as Record<string, unknown>;
-          const streamId = String(body.stream_id ?? "");
-          this.postMessage({
-            type: "chat.start",
-            connection_id: this.connectionID,
-            request_id: requestId,
-            stream_id: streamId,
-            payload: {
-              message: String(body.message ?? ""),
-              conversation_id: String(body.conversation_id ?? ""),
-              client_request_id: String(body.client_request_id ?? ""),
-              selected_model: body.selected_model as GatewaySelectedModel | undefined,
-              runtime_controls: body.runtime_controls as GatewayChatRuntimeControls | undefined,
-              system_settings: body.system_settings as GatewayChatSystemSettings | undefined,
-              uploaded_files: body.uploaded_files as PendingUploadedFile[] | undefined,
-            },
-          });
-          return;
-        }
-        if (method === "chat.attach") {
-          const body = payload as Record<string, unknown>;
-          this.postMessage({
-            type: "chat.attach",
-            connection_id: this.connectionID,
-            request_id: requestId,
-            stream_id: String(body.stream_id ?? ""),
-            conversation_id: String(body.conversation_id ?? ""),
-            after_seq: normalizeAfterSeq(body.after_seq),
-          });
-          return;
-        }
-        if (method === "chat.detach") {
-          const body = payload as Record<string, unknown>;
-          this.postMessage({
-            type: "chat.detach",
-            connection_id: this.connectionID,
-            stream_id: String(body.stream_id ?? ""),
-          });
-          host.clearTimeout(timeoutId);
-          this.pending.delete(requestId);
-          resolve(undefined as T);
-          return;
-        }
-        if (method === "chat.cancel") {
-          const body = payload as Record<string, unknown>;
-          this.postMessage({
-            type: "chat.cancel",
-            connection_id: this.connectionID,
-            stream_id: String(body.stream_id ?? ""),
-            conversation_id:
-              typeof body.conversation_id === "string" ? body.conversation_id : undefined,
-          });
-          host.clearTimeout(timeoutId);
-          this.pending.delete(requestId);
-          resolve(undefined as T);
-          return;
-        }
         this.postMessage({
           type: "request",
           connection_id: this.connectionID,
@@ -3963,15 +3791,6 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
       case "event":
         this.handleWorkerEvent(message);
         return;
-      case "chat-event":
-        this.handleChatEvent(message.stream_id, message.payload);
-        return;
-      case "chat-error":
-        this.handleChatError(message.stream_id, message.error);
-        return;
-      case "chat-closed":
-        this.handleChatClosed(message.stream_id);
-        return;
     }
   }
 
@@ -4000,9 +3819,6 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
       case "history":
         this.emitHistory(message.payload as GatewayHistoryEvent);
         return;
-      case "conversation":
-        this.emitConversation(message.payload as ChatEvent);
-        return;
       case "settings":
         this.emitSettings(message.payload as GatewaySettingsSyncPayload);
         return;
@@ -4023,54 +3839,6 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     }
   }
 
-  private handleChatEvent(streamId: string, event: ChatEvent) {
-    const stream = this.chatStreams.get(streamId);
-    if (!stream) {
-      return;
-    }
-    const seq = readChatEventSeq(event);
-    if (seq > 0 && seq <= stream.lastSeq) {
-      return;
-    }
-    if (seq > stream.lastSeq) {
-      stream.lastSeq = seq;
-    }
-    if (event?.conversation_id) {
-      stream.conversationId = event.conversation_id;
-    }
-    stream.queue.push(event);
-    if (event?.type === "done" || event?.type === "error" || isTerminalChatControlEvent(event)) {
-      stream.abortHandler?.();
-      stream.queue.close();
-      this.chatStreams.delete(streamId);
-    }
-  }
-
-  private handleChatError(streamId: string, error: string) {
-    const stream = this.chatStreams.get(streamId);
-    if (!stream) {
-      return;
-    }
-    stream.queue.push({
-      type: "error",
-      message: error.trim() || "Gateway chat stream failed",
-      conversation_id: stream.conversationId || undefined,
-    });
-    stream.abortHandler?.();
-    stream.queue.close();
-    this.chatStreams.delete(streamId);
-  }
-
-  private handleChatClosed(streamId: string) {
-    const stream = this.chatStreams.get(streamId);
-    if (!stream) {
-      return;
-    }
-    stream.abortHandler?.();
-    stream.queue.close();
-    this.chatStreams.delete(streamId);
-  }
-
   private emitStatus(status: AgentStatus | null, error: string | null) {
     this.lastStatus = status;
     this.lastStatusError = error;
@@ -4084,12 +3852,6 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
 
   private emitHistory(event: GatewayHistoryEvent) {
     for (const listener of this.historyListeners) {
-      listener(event);
-    }
-  }
-
-  private emitConversation(event: ChatEvent) {
-    for (const listener of this.conversationListeners) {
       listener(event);
     }
   }
@@ -4128,12 +3890,6 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
       entry.reject(error);
     }
 
-    const streams = [...this.chatStreams.values()];
-    this.chatStreams.clear();
-    for (const stream of streams) {
-      stream.abortHandler?.();
-      stream.queue.fail(error);
-    }
   }
 
   private nextRequestId(prefix: string) {

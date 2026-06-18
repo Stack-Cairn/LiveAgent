@@ -74,10 +74,13 @@ test("gateway bridge token forwarding tracks non-empty text only", () => {
   });
 });
 
-test("gateway bridge started event is explicit and does not mark text forwarded", () => {
+test("gateway bridge started control is explicit and does not mark text forwarded", () => {
   const { controller, sent } = createController();
 
-  controller.queueStarted();
+  controller.queueEvent({
+    type: "started",
+    conversation_id: "conversation-1",
+  });
 
   assert.equal(controller.hasForwardedText(), false);
   assert.deepEqual(sent, [
@@ -94,7 +97,10 @@ test("gateway bridge started event is explicit and does not mark text forwarded"
 test("gateway bridge events carry the remote worker lease owner", () => {
   const { controller, sent } = createController({ workerId: "worker-1" });
 
-  controller.queueStarted();
+  controller.queueEvent({
+    type: "started",
+    conversation_id: "conversation-1",
+  });
 
   assert.deepEqual(sent, [
     {

@@ -2,23 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect } from "react";
 
-import {
-  type ConversationViewState,
-  truncateConversationFromMessage,
-} from "../../../lib/chat/conversation/conversationState";
+import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import { normalizeChatRuntimeControls, normalizeSystemToolSelection } from "../../../lib/settings";
-import {
-  type ConversationRuntimeEntry,
-  createConversationRuntimeEntry,
-  setConversationRuntimeCacheEntry,
-} from "../runtime/chatPageRuntime";
 import {
   type ActiveGatewayBridgeRequest,
   type GatewayBridgeRuntimeRefs,
   type GatewayChatCancelEvent,
   type GatewayChatClaimedRequest,
   type GatewayChatRequestReadyEvent,
-  type GatewayHistoryTruncatedEvent,
   normalizeGatewayExecutionMode,
   normalizeGatewayWorkdir,
 } from "./gatewayBridgeTypes";
@@ -31,8 +22,6 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
   ) => void;
   isConversationRunning: (conversationId: string) => boolean;
   getConversationAbortController: (conversationId: string) => AbortController | null;
-  syncVisibleConversationRuntime: (conversationId: string, entry: ConversationRuntimeEntry) => void;
-  invalidateSubagentsForConversation?: (conversationId: string) => void;
 };
 
 type GatewayBridgeRequestRegistry = {
@@ -83,27 +72,41 @@ function isConversationAlreadyRunningError(message: string) {
   return message.trim().startsWith("Conversation is already running:");
 }
 
+function normalizeGatewayBaseMessageRef(value: unknown): HistoryMessageRef | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const candidate = value as { segmentIndex?: unknown; messageIndex?: unknown };
+  const segmentIndex =
+    typeof candidate.segmentIndex === "number" && Number.isFinite(candidate.segmentIndex)
+      ? Math.trunc(candidate.segmentIndex)
+      : -1;
+  const messageIndex =
+    typeof candidate.messageIndex === "number" && Number.isFinite(candidate.messageIndex)
+      ? Math.trunc(candidate.messageIndex)
+      : -1;
+  if (segmentIndex < 0 || messageIndex < 0) {
+    return undefined;
+  }
+  return { segmentIndex, messageIndex };
+}
+
 export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParams) {
   const {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
-    appliedHistoryTruncationsRef,
     historyItemsRef,
     ensureGatewayBridgeConversationReadyRef,
     sendActionRef,
     queueGatewayBridgeEventForRequest,
     isConversationRunning,
     getConversationAbortController,
-    syncVisibleConversationRuntime,
-    invalidateSubagentsForConversation,
   } = params;
 
   useEffect(() => {
     let disposed = false;
     let unlistenChatRequestReady: (() => void) | null = null;
     let unlistenChatCancel: (() => void) | null = null;
-    let unlistenHistoryTruncate: (() => void) | null = null;
     let unlistenGatewayStatus: (() => void) | null = null;
     let drainInFlight = false;
     const workerId =
@@ -398,11 +401,32 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           return;
         }
 
+        const baseMessageRef =
+          payload.rebased === true
+            ? normalizeGatewayBaseMessageRef(payload.baseMessageRef)
+            : undefined;
+        if (payload.rebased === true && !baseMessageRef) {
+          const message = "Remote edit_resend command is missing base_message_ref.";
+          queueGatewayBridgeEventForRequest(
+            requestId,
+            {
+              type: "error",
+              message,
+              conversation_id: targetConversationId,
+            },
+            {
+              workerId,
+            },
+          );
+          failClaimedRequest(requestId, targetConversationId, "invalid_chat_command", message);
+          return;
+        }
+
         resolvedConversationId = await ensureGatewayBridgeConversationReadyRef.current(
           targetConversationId,
           {
-            forceHydrate: payload.forceHydrate === true,
-            historyTruncationKey: payload.historyTruncationKey,
+            rebased: payload.rebased === true,
+            baseMessageRef,
           },
         );
 
@@ -450,6 +474,13 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           workdirOverride: normalizeGatewayWorkdir(payload.workdir),
           selectedSystemToolIdsOverride: normalizeSystemToolSelection(payload.selectedSystemTools),
         });
+        const markRuntimeStarted = async () => {
+          await invoke("gateway_chat_mark_started", {
+            request_id: requestId,
+            conversation_id: resolvedConversationId,
+            worker_id: workerId,
+          } as any);
+        };
         await sendActionRef.current({
           textOverride: message,
           uploadedFilesOverride: uploadedFiles,
@@ -459,13 +490,8 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           selectedSystemToolIdsOverride: gatewayBridgeRequest.selectedSystemToolIdsOverride,
           runtimeControlsOverride: gatewayBridgeRequest.runtimeControlsOverride,
           gatewayBridgeRequestOverride: gatewayBridgeRequest,
-          afterInitialHistoryPersist: async () => {
-            await invoke("gateway_chat_mark_started", {
-              request_id: requestId,
-              conversation_id: resolvedConversationId,
-              worker_id: workerId,
-            } as any);
-          },
+          beforeRuntimeStart: markRuntimeStarted,
+          afterInitialHistoryPersist: markRuntimeStarted,
         });
         await invoke("gateway_chat_complete", {
           request_id: requestId,
@@ -605,65 +631,6 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
       unlistenChatCancel = dispose;
     });
 
-    void listen<GatewayHistoryTruncatedEvent>("chat-history:truncated", (event) => {
-      const conversationId = event.payload.conversationId?.trim?.() ?? "";
-      const segmentIndex = Math.max(0, Math.floor(event.payload.segmentIndex ?? 0));
-      const messageIndex = Math.max(0, Math.floor(event.payload.messageIndex ?? 0));
-      if (!conversationId) {
-        return;
-      }
-
-      persistedConversationStateRef.current.delete(conversationId);
-      invalidateSubagentsForConversation?.(conversationId);
-
-      const cached = conversationRuntimeCacheRef.current.get(conversationId);
-      if (
-        !cached ||
-        cached.isSending ||
-        isConversationRunning(conversationId) ||
-        getConversationAbortController(conversationId)
-      ) {
-        return;
-      }
-
-      const nextState: ConversationViewState = truncateConversationFromMessage(cached.state, {
-        segmentIndex,
-        messageIndex,
-      });
-
-      if (nextState.meta.totalMessageCount >= cached.state.meta.totalMessageCount) {
-        return;
-      }
-
-      const nextEntry = createConversationRuntimeEntry({
-        state: nextState,
-        sessionId: cached.sessionId,
-        createdAt: cached.createdAt,
-        compactionStatus: { phase: "idle" },
-        isSending: false,
-        errorMessage: null,
-        hookWarning: null,
-      });
-
-      setConversationRuntimeCacheEntry(
-        conversationRuntimeCacheRef.current,
-        conversationId,
-        nextEntry,
-      );
-      persistedConversationStateRef.current.set(conversationId, nextState);
-      appliedHistoryTruncationsRef.current.set(conversationId, `${segmentIndex}:${messageIndex}`);
-
-      if (currentConversationIdRef.current === conversationId) {
-        syncVisibleConversationRuntime(conversationId, nextEntry);
-      }
-    }).then((dispose) => {
-      if (disposed) {
-        dispose();
-        return;
-      }
-      unlistenHistoryTruncate = dispose;
-    });
-
     return () => {
       disposed = true;
       window.clearInterval(idlePollId);
@@ -679,21 +646,16 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
       }
       unlistenChatRequestReady?.();
       unlistenChatCancel?.();
-      unlistenHistoryTruncate?.();
       unlistenGatewayStatus?.();
     };
   }, [
     conversationRuntimeCacheRef,
     currentConversationIdRef,
-    appliedHistoryTruncationsRef,
     ensureGatewayBridgeConversationReadyRef,
     getConversationAbortController,
     historyItemsRef,
-    invalidateSubagentsForConversation,
     isConversationRunning,
-    persistedConversationStateRef,
     queueGatewayBridgeEventForRequest,
     sendActionRef,
-    syncVisibleConversationRuntime,
   ]);
 }

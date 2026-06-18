@@ -57,9 +57,9 @@ func newSyncHub() *syncHub {
 }
 
 type chatRunStore struct {
+	chatCommandMu          sync.Mutex
 	chatMu                 sync.Mutex
-	nextChatSubID          int
-	chatSubscribers        map[int]chan *ChatBroadcastEvent
+	eventStore             ChatEventStore
 	nextChatRunSubID       int
 	nextChatRunEpoch       int64
 	chatRuns               map[string]*chatRun
@@ -70,7 +70,6 @@ type chatRunStore struct {
 
 func newChatRunStore() *chatRunStore {
 	return &chatRunStore{
-		chatSubscribers:        make(map[int]chan *ChatBroadcastEvent),
 		chatRuns:               make(map[string]*chatRun),
 		chatRunByConversation:  make(map[string]string),
 		chatRunByClientRequest: make(map[string]string),

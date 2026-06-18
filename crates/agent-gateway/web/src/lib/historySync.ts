@@ -175,13 +175,36 @@ function normalizeRunningConversationSummary(
     return null;
   }
   const cwd = typeof source.cwd === "string" ? source.cwd.trim() : "";
+  const runId = typeof source.run_id === "string" ? source.run_id.trim() : "";
+  const firstSeq =
+    typeof source.first_seq === "number" &&
+    Number.isFinite(source.first_seq) &&
+    source.first_seq > 0
+      ? Math.floor(source.first_seq)
+      : undefined;
+  const latestSeq =
+    typeof source.latest_seq === "number" &&
+    Number.isFinite(source.latest_seq) &&
+    source.latest_seq > 0
+      ? Math.floor(source.latest_seq)
+      : undefined;
+  const runEpoch =
+    typeof source.run_epoch === "number" &&
+    Number.isFinite(source.run_epoch) &&
+    source.run_epoch > 0
+      ? Math.floor(source.run_epoch)
+      : undefined;
   const updatedAt =
     typeof source.updated_at === "number" && Number.isFinite(source.updated_at)
       ? source.updated_at
       : undefined;
   return {
     conversation_id: conversationId,
+    run_id: runId || undefined,
     cwd: cwd || undefined,
+    first_seq: firstSeq,
+    latest_seq: latestSeq,
+    run_epoch: runEpoch,
     updated_at: updatedAt,
   };
 }
@@ -208,6 +231,13 @@ export function normalizeRunningConversations(
     normalized.push({ conversation_id: id });
   }
   return normalized;
+}
+
+export function resolveRunningConversationStreamAfterSeq(firstSeq: unknown) {
+  if (typeof firstSeq !== "number" || !Number.isFinite(firstSeq) || firstSeq <= 1) {
+    return 0;
+  }
+  return Math.floor(firstSeq) - 1;
 }
 
 export function upsertConversationSummary(

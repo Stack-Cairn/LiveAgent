@@ -27,6 +27,9 @@
 | `LIVEAGENT_GATEWAY_TOKEN` | 是 | WebUI、HTTP API、桌面 gRPC 的共享访问 token。 |
 | `PORT` | Railway 自动提供 | HTTP/WebUI 监听端口，未提供时 Dockerfile 默认 `8080`。 |
 | `LIVEAGENT_GATEWAY_GRPC_ADDR` | 否 | gRPC 监听地址，默认 `:50051`。 |
+| `LIVEAGENT_GATEWAY_CHAT_EVENT_STORE` | 否 | Gateway Chat Event Store SQLite 路径；未设置时使用用户配置目录下的 `LiveAgent/gateway-chat.sqlite3`。生产容器建议挂载持久卷。 |
+| `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | 否 | Chat command 下发后等待桌面端回报 `delivered/claimed/starting` 的超时，默认 `15s`。 |
+| `LIVEAGENT_GATEWAY_CHAT_RENDER_START_TIMEOUT` | 否 | 桌面端接受 command 后等待 `started` 的超时，默认 `45s`。 |
 
 本地 smoke run 示例：
 
@@ -64,6 +67,7 @@ Gateway 运行时变量由用户在自己的平台配置：
 |---|---|
 | `LIVEAGENT_GATEWAY_TOKEN` | WebUI、HTTP API、桌面 gRPC 的共享访问 token。 |
 | `LIVEAGENT_GATEWAY_GRPC_ADDR` | 保持 `:50051`，供 Railway TCP Proxy 转发。 |
+| `LIVEAGENT_GATEWAY_CHAT_EVENT_STORE` | 指向持久卷内 SQLite 文件，保存 `chat_runs`、`chat_command_dedup`、`chat_events`。 |
 
 ## GitHub Secrets
 

@@ -139,9 +139,7 @@ const initialPendingCounters = (): PendingCounters => ({
 });
 
 function readDashboardTokenSeed() {
-  const params = new URLSearchParams(window.location.search);
-  const queryToken = params.get("token") ?? params.get("access_token") ?? "";
-  return normalizeGatewayAccessToken(queryToken || loadToken());
+  return normalizeGatewayAccessToken(loadToken());
 }
 
 function stripDashboardTokenFromUrl() {
@@ -535,6 +533,7 @@ function useDashboardAuth() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
+    stripDashboardTokenFromUrl();
     const seed = initialTokenRef.current;
     if (!seed) {
       return;
@@ -670,20 +669,6 @@ export function StatusDashboardPage() {
     const unsubscribeHistory = api.subscribeHistory((event) => {
       setHistory((current) => updateHistoryListWithEvent(current, event));
     });
-    const unsubscribeConversation = api.subscribeConversation((event) => {
-      addPendingCounters(pendingCountersRef.current, event);
-      if (event.type === "token") {
-        const currentAt = Date.now();
-        if (currentAt - lastTokenEventAtRef.current < TOKEN_EVENT_MIN_INTERVAL_MS) {
-          return;
-        }
-        lastTokenEventAtRef.current = currentAt;
-      }
-      const summary = summarizeChatEvent(event);
-      if (summary) {
-        pendingEventsRef.current.push(summary);
-      }
-    });
     const unsubscribeTerminal = api.subscribeTerminal((event) => {
       if (event.session) {
         const session = event.session;
@@ -700,7 +685,6 @@ export function StatusDashboardPage() {
     return () => {
       unsubscribeStatus();
       unsubscribeHistory();
-      unsubscribeConversation();
       unsubscribeTerminal();
       unsubscribeSettings();
     };
