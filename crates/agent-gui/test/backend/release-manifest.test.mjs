@@ -64,7 +64,48 @@ test("release updater manifest embeds generated notes and platform signatures", 
     );
     assert.equal(manifest.platforms["darwin-x86_64-app"].signature, "sig-mac-x64");
     assert.equal(manifest.platforms["windows-x86_64-nsis"].signature, "sig-win");
+    assert.deepEqual(
+      manifest.platforms["windows-x86_64"],
+      manifest.platforms["windows-x86_64-nsis"],
+    );
     assert.equal(manifest.platforms["linux-x86_64-appimage"].signature, "sig-linux");
+  } finally {
+    rmSync(dir, { force: true, recursive: true });
+  }
+});
+
+test("release updater manifest uses MSI for generic Windows fallback when NSIS is missing", () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "liveagent-release-"));
+  try {
+    writeAssetPair(dir, "LiveAgent-v9.9.9-Windows-x64.msi", "sig-win-msi");
+
+    const outputPath = path.join(dir, "latest.json");
+    const result = spawnSync(
+      process.execPath,
+      [manifestScript, dir, outputPath],
+      {
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          GITHUB_REPOSITORY: "Stack-Cairn/LiveAgent",
+          RELEASE_TAG: "v9.9.9",
+        },
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(
+      result.status,
+      0,
+      `manifest script failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+    );
+
+    const manifest = JSON.parse(readFileSync(outputPath, "utf8"));
+    assert.equal(manifest.platforms["windows-x86_64-msi"].signature, "sig-win-msi");
+    assert.deepEqual(
+      manifest.platforms["windows-x86_64"],
+      manifest.platforms["windows-x86_64-msi"],
+    );
   } finally {
     rmSync(dir, { force: true, recursive: true });
   }

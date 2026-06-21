@@ -83,6 +83,12 @@ for (const file of files) {
   }
 }
 
+if (platforms["windows-x86_64-nsis"]) {
+  platforms["windows-x86_64"] = platforms["windows-x86_64-nsis"];
+} else if (platforms["windows-x86_64-msi"]) {
+  platforms["windows-x86_64"] = platforms["windows-x86_64-msi"];
+}
+
 if (Object.keys(platforms).length === 0) {
   console.error("No updater artifacts with matching .sig files were found.");
   process.exit(1);
