@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   ClipboardPaste,
   Copy,
+  Eye,
   FilePenLine,
   Loader2,
   Redo2,
@@ -33,6 +34,7 @@ import {
   X,
 } from "../icons";
 import type { IconComponent } from "../icons";
+import { isWorkspacePreviewPath } from "./workspaceImagePreview";
 
 type MonacoEnvironmentGlobal = typeof globalThis & {
   MonacoEnvironment?: {
@@ -117,6 +119,7 @@ type WorkspaceCodeEditorOverlayProps = {
   isOpen: boolean;
   finalCloseRequested?: boolean;
   theme: "light" | "dark";
+  onPreviewFile: (request: WorkspaceCodeEditorOpenRequest) => void;
   onHide: () => void;
   onClose: () => void;
 };
@@ -277,6 +280,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     isOpen,
     finalCloseRequested = false,
     theme,
+    onPreviewFile,
     onHide,
     onClose,
   } = props;
@@ -306,6 +310,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     () => tabs.find((tab) => tab.key === activeKey) ?? tabs[0] ?? null,
     [activeKey, tabs],
   );
+  const canPreviewActiveTab = Boolean(activeTab && isWorkspacePreviewPath(activeTab.path));
   const dirtyTabs = useMemo(() => tabs.filter((tab) => tab.content !== tab.savedContent), [tabs]);
   const hasDirtyTabs = dirtyTabs.length > 0;
   const isOpening = openingPaths.length > 0;
@@ -859,6 +864,21 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
           >
             <RefreshCw className={cn("h-4 w-4", isOpening && "animate-spin")} />
           </IconButton>
+          {canPreviewActiveTab && activeTab ? (
+            <IconButton
+              label={t("workspaceEditor.preview")}
+              onClick={() =>
+                onPreviewFile({
+                  id: Date.now(),
+                  projectPathKey: activeTab.projectPathKey,
+                  workdir: activeTab.workdir,
+                  path: activeTab.path,
+                })
+              }
+            >
+              <Eye className="h-4 w-4" />
+            </IconButton>
+          ) : null}
           <IconButton label={t("workspaceEditor.close")} onClick={hideOverlay}>
             <X className="h-4 w-4" />
           </IconButton>

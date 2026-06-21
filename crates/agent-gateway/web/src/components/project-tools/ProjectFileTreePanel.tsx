@@ -7,16 +7,16 @@ import type {
 } from "@/lib/settings";
 import { cn } from "@/lib/shared/utils";
 import { getFileTypeIcon } from "../chat/fileTypeIcons";
-import { isWorkspaceImagePath } from "../workspace-editor/workspaceImagePreview";
+import { isWorkspacePreviewPath } from "../workspace-editor/workspaceImagePreview";
 import {
   Check,
   ChevronRight,
   Copy,
   Edit3,
+  Eye,
   FilePenLine,
   Folder,
   FolderOpen,
-  ImageIcon,
   Loader2,
   Plus,
   RefreshCw,
@@ -69,6 +69,7 @@ type ContextMenuState = {
 const ROOT_PATH = "";
 const DEFAULT_MAX_RESULTS = 1000;
 const SEARCH_MAX_RESULTS = 80;
+const FILE_TREE_AUTO_REFRESH_MS = 3000;
 
 function basename(path: string) {
   const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -187,10 +188,20 @@ export function ProjectFileTreePanel(props: {
   const selectedNode = state.nodes[state.selectedPath] ?? state.nodes[ROOT_PATH];
   const selectedPath = selectedNode?.path ?? ROOT_PATH;
   const canMutate = initialized && Boolean(projectPathKey && cwd);
+  const stateRef = useRef(state);
+  const queryRef = useRef(query);
 
   useEffect(() => {
     onSyncStateChangeRef.current = onSyncStateChange;
   }, [onSyncStateChange]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
 
   const setProjectState = useCallback(
     (updater: (state: FileTreeState) => FileTreeState) => {
@@ -211,12 +222,16 @@ export function ProjectFileTreePanel(props: {
   }, []);
 
   const loadChildren = useCallback(
-    async (path: string, options?: { force?: boolean }) => {
+    async (path: string, options?: { force?: boolean; silent?: boolean }) => {
       if (!projectPathKey || !cwd.trim()) return;
       let shouldLoad = true;
       setProjectState((current) => {
         const node = current.nodes[path] ?? (path === ROOT_PATH ? createRootNode(cwd) : null);
         if (!node || node.kind !== "dir") {
+          shouldLoad = false;
+          return current;
+        }
+        if (node.loading && options?.silent) {
           shouldLoad = false;
           return current;
         }
@@ -229,7 +244,11 @@ export function ProjectFileTreePanel(props: {
           initialized: true,
           nodes: {
             ...current.nodes,
-            [path]: { ...node, loading: true, error: undefined },
+            [path]: {
+              ...node,
+              loading: options?.silent ? node.loading : true,
+              error: options?.silent ? node.error : undefined,
+            },
           },
         };
       });
@@ -284,7 +303,9 @@ export function ProjectFileTreePanel(props: {
               [path]: {
                 ...node,
                 loading: false,
-                error: toErrorMessage(error, t("projectTools.fileTree.readFailed")),
+                error: options?.silent
+                  ? node.error
+                  : toErrorMessage(error, t("projectTools.fileTree.readFailed")),
               },
             },
           };
@@ -347,6 +368,26 @@ export function ProjectFileTreePanel(props: {
     if (!initialized || !projectPathKey) return;
     void loadChildren(ROOT_PATH);
   }, [initialized, loadChildren, projectPathKey]);
+
+  useEffect(() => {
+    if (!initialized || !projectPathKey || !cwd.trim()) return;
+    const interval = window.setInterval(() => {
+      const snapshot = stateRef.current;
+      const pathsToReload = Array.from(new Set([ROOT_PATH, ...snapshot.expanded])).filter(
+        (path) => {
+          const node = snapshot.nodes[path];
+          return node?.kind === "dir" && node.loaded;
+        },
+      );
+      for (const path of pathsToReload) {
+        void loadChildren(path, { force: true, silent: true });
+      }
+      if (queryRef.current.trim()) {
+        setSearchRefreshKey((current) => current + 1);
+      }
+    }, FILE_TREE_AUTO_REFRESH_MS);
+    return () => window.clearInterval(interval);
+  }, [cwd, initialized, loadChildren, projectPathKey]);
 
   useEffect(() => {
     void projectPathKey;
@@ -967,14 +1008,14 @@ export function ProjectFileTreePanel(props: {
                   setContextMenu(null);
                 }}
               >
-                {isWorkspaceImagePath(contextPath) ? (
-                  <ImageIcon className="h-3.5 w-3.5" />
+                {isWorkspacePreviewPath(contextPath) ? (
+                  <Eye className="h-3.5 w-3.5" />
                 ) : (
                   <FilePenLine className="h-3.5 w-3.5" />
                 )}
                 {t(
-                  isWorkspaceImagePath(contextPath)
-                    ? "projectTools.fileTree.previewImage"
+                  isWorkspacePreviewPath(contextPath)
+                    ? "projectTools.fileTree.previewFile"
                     : "projectTools.fileTree.openFile",
                 )}
               </button>

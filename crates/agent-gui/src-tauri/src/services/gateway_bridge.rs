@@ -438,16 +438,16 @@ pub async fn handle_fs_read_workspace_image(
         fs_read_workspace_image_sync(request.workdir, request.path)
     })
     .await
-    .map_err(|e| format!("gateway fs read workspace image join failed: {e}"))?
+    .map_err(|e| format!("gateway fs read workspace preview join failed: {e}"))?
     .and_then(|response| {
         Ok(proto::FsReadWorkspaceImageResponse {
             path: response.path,
             mime_type: response
                 .mime_type
-                .ok_or_else(|| "workspace image response is missing mime type".to_string())?,
+                .ok_or_else(|| "workspace preview response is missing mime type".to_string())?,
             data: response
                 .data
-                .ok_or_else(|| "workspace image response is missing data".to_string())?,
+                .ok_or_else(|| "workspace preview response is missing data".to_string())?,
             size_bytes: u64::try_from(response.size_bytes.unwrap_or_default()).unwrap_or(u64::MAX),
             mtime_ms: response.mtime_ms,
             content_hash: response.content_hash,

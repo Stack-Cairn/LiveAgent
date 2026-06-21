@@ -22,12 +22,14 @@ type MarkdownProps = {
   content: string;
   className?: string;
   isAnimating?: boolean;
+  readOnly?: boolean;
 };
 
 const streamdownPlugins = { code, math, mermaid, cjk };
 const remarkPlugins = [...Object.values(defaultRemarkPlugins), remarkBreaks];
 
 type MarkdownImageFallbackProps = ComponentProps<"img"> & ExtraProps;
+type MarkdownAnchorFallbackProps = ComponentProps<"a"> & ExtraProps;
 
 function MarkdownImageFallback(props: MarkdownImageFallbackProps) {
   const { alt, title } = props;
@@ -51,6 +53,29 @@ function MarkdownImageFallback(props: MarkdownImageFallbackProps) {
 
 export const markdownComponents: Components = {
   img: MarkdownImageFallback,
+};
+
+function MarkdownReadOnlyLink(props: MarkdownAnchorFallbackProps) {
+  const { children, href, title } = props;
+  const label =
+    typeof title === "string" && title.trim()
+      ? title.trim()
+      : typeof href === "string" && href.trim()
+        ? href.trim()
+        : undefined;
+  return (
+    <span
+      className="text-primary underline decoration-primary/35 underline-offset-4"
+      title={label}
+    >
+      {children}
+    </span>
+  );
+}
+
+export const markdownReadOnlyComponents: Components = {
+  ...markdownComponents,
+  a: MarkdownReadOnlyLink,
 };
 
 const codeBlockSelector = '[data-streamdown="code-block"]';
@@ -257,8 +282,8 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
 }
 
 export const Markdown = memo(function Markdown(props: MarkdownProps) {
-  const { content, className, isAnimating = false } = props;
-  const codeCopyRootRef = useEnabledCodeCopyButtons(isAnimating);
+  const { content, className, isAnimating = false, readOnly = false } = props;
+  const codeCopyRootRef = useEnabledCodeCopyButtons(!readOnly && isAnimating);
 
   return (
     <div ref={codeCopyRootRef}>
@@ -270,7 +295,7 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
         )}
         plugins={streamdownPlugins}
         remarkPlugins={remarkPlugins}
-        components={markdownComponents}
+        components={readOnly ? markdownReadOnlyComponents : markdownComponents}
         mode={isAnimating ? "streaming" : "static"}
         dir="auto"
         parseIncompleteMarkdown
@@ -279,14 +304,14 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
         caret={isAnimating ? "block" : undefined}
         animated={false}
         linkSafety={{
-          enabled: true,
+          enabled: !readOnly,
           renderModal: (modalProps) => <ExternalLinkModal {...modalProps} />,
         }}
         {...(isAnimating ? {} : { shikiTheme: ["github-light", "github-dark"] as const })}
         controls={{
-          code: { copy: true, download: false },
-          mermaid: { copy: true, download: false, fullscreen: true, panZoom: true },
-          table: { copy: true, download: false, fullscreen: true },
+          code: { copy: !readOnly, download: false },
+          mermaid: { copy: !readOnly, download: false, fullscreen: !readOnly, panZoom: !readOnly },
+          table: { copy: !readOnly, download: false, fullscreen: !readOnly },
         }}
         translations={streamdownTranslations}
       >

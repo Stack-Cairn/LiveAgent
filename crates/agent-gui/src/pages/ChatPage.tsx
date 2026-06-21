@@ -36,9 +36,9 @@ import { RightDockPanel } from "../components/project-tools/RightDockPanel";
 import { Button } from "../components/ui/button";
 import { useConfirmDialog } from "../components/ui/confirm-dialog";
 import type { WorkspaceCodeEditorOpenRequest } from "../components/workspace-editor/WorkspaceCodeEditorOverlay";
-import type { WorkspaceImagePreviewOpenRequest } from "../components/workspace-editor/WorkspaceImagePreviewOverlay";
+import type { WorkspaceFilePreviewOpenRequest } from "../components/workspace-editor/WorkspaceFilePreviewOverlay";
 import type { WorkspaceSshTerminalOpenRequest } from "../components/workspace-editor/WorkspaceSshTerminalOverlay";
-import { isWorkspaceImagePath } from "../components/workspace-editor/workspaceImagePreview";
+import { isWorkspacePreviewPath } from "../components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "../i18n";
 import type { AppUpdateController } from "../lib/appUpdates";
 import {
@@ -213,10 +213,10 @@ const WorkspaceCodeEditorOverlay = lazy(async () => {
   };
 });
 
-const WorkspaceImagePreviewOverlay = lazy(async () => {
-  const module = await import("../components/workspace-editor/WorkspaceImagePreviewOverlay");
+const WorkspaceFilePreviewOverlay = lazy(async () => {
+  const module = await import("../components/workspace-editor/WorkspaceFilePreviewOverlay");
   return {
-    default: module.WorkspaceImagePreviewOverlay,
+    default: module.WorkspaceFilePreviewOverlay,
   };
 });
 
@@ -667,11 +667,11 @@ export function ChatPage(props: ChatPageProps) {
     useState<WorkspaceCodeEditorOpenRequest | null>(null);
   const [workspaceEditorCloseRequestId, setWorkspaceEditorCloseRequestId] = useState(0);
   const workspaceEditorRequestIdRef = useRef(0);
-  const [workspaceImagePreviewMounted, setWorkspaceImagePreviewMounted] = useState(false);
-  const [workspaceImagePreviewOpen, setWorkspaceImagePreviewOpen] = useState(false);
-  const [workspaceImagePreviewOpenRequest, setWorkspaceImagePreviewOpenRequest] =
-    useState<WorkspaceImagePreviewOpenRequest | null>(null);
-  const workspaceImagePreviewRequestIdRef = useRef(0);
+  const [workspaceFilePreviewMounted, setWorkspaceFilePreviewMounted] = useState(false);
+  const [workspaceFilePreviewOpen, setWorkspaceFilePreviewOpen] = useState(false);
+  const [workspaceFilePreviewOpenRequest, setWorkspaceFilePreviewOpenRequest] =
+    useState<WorkspaceFilePreviewOpenRequest | null>(null);
+  const workspaceFilePreviewRequestIdRef = useRef(0);
   const [workspaceSshTerminalMounted, setWorkspaceSshTerminalMounted] = useState(false);
   const [workspaceSshTerminalOpen, setWorkspaceSshTerminalOpen] = useState(false);
   const [workspaceSshTerminalOpenRequest, setWorkspaceSshTerminalOpenRequest] =
@@ -1496,7 +1496,7 @@ export function ChatPage(props: ChatPageProps) {
   }, []);
   const openWorkspaceSshTerminalRequest = useCallback(
     (request: WorkspaceSshTerminalOpenRequest) => {
-      setWorkspaceImagePreviewOpen(false);
+      setWorkspaceFilePreviewOpen(false);
       setWorkspaceEditorOpen(false);
       setWorkspaceSshTerminalMounted(true);
       setWorkspaceSshTerminalOpen(true);
@@ -1507,35 +1507,55 @@ export function ChatPage(props: ChatPageProps) {
   const requestWorkspaceEditorClose = useCallback(() => {
     setWorkspaceEditorCloseRequestId((current) => current + 1);
   }, []);
-  const handleOpenWorkspaceFile = useCallback(
-    (path: string) => {
-      if (!terminalProjectPath || !terminalProjectPathKey) return;
-      if (isWorkspaceImagePath(path)) {
-        workspaceImagePreviewRequestIdRef.current += 1;
-        setWorkspaceImagePreviewMounted(true);
-        setWorkspaceImagePreviewOpen(true);
-        setWorkspaceImagePreviewOpenRequest({
-          id: workspaceImagePreviewRequestIdRef.current,
-          projectPathKey: terminalProjectPathKey,
-          workdir: terminalProjectPath,
-          path,
-        });
-        return;
-      }
+  const openWorkspaceEditorFile = useCallback(
+    (request: Omit<WorkspaceCodeEditorOpenRequest, "id">) => {
       hideWorkspaceSshTerminalOverlay();
-      setWorkspaceImagePreviewOpen(false);
+      setWorkspaceFilePreviewOpen(false);
       workspaceEditorRequestIdRef.current += 1;
       setWorkspaceEditorCleanupPending(false);
       setWorkspaceEditorMounted(true);
       setWorkspaceEditorOpen(true);
       setWorkspaceEditorOpenRequest({
         id: workspaceEditorRequestIdRef.current,
+        ...request,
+      });
+    },
+    [hideWorkspaceSshTerminalOverlay],
+  );
+  const openWorkspaceFilePreview = useCallback(
+    (request: Omit<WorkspaceFilePreviewOpenRequest, "id">) => {
+      hideWorkspaceSshTerminalOverlay();
+      setWorkspaceEditorOpen(false);
+      workspaceFilePreviewRequestIdRef.current += 1;
+      setWorkspaceFilePreviewMounted(true);
+      setWorkspaceFilePreviewOpen(true);
+      setWorkspaceFilePreviewOpenRequest({
+        id: workspaceFilePreviewRequestIdRef.current,
+        ...request,
+      });
+    },
+    [hideWorkspaceSshTerminalOverlay],
+  );
+  const handleOpenWorkspaceFile = useCallback(
+    (path: string) => {
+      if (!terminalProjectPath || !terminalProjectPathKey) return;
+      const request = {
         projectPathKey: terminalProjectPathKey,
         workdir: terminalProjectPath,
         path,
-      });
+      };
+      if (isWorkspacePreviewPath(path)) {
+        openWorkspaceFilePreview(request);
+        return;
+      }
+      openWorkspaceEditorFile(request);
     },
-    [hideWorkspaceSshTerminalOverlay, terminalProjectPath, terminalProjectPathKey],
+    [
+      openWorkspaceEditorFile,
+      openWorkspaceFilePreview,
+      terminalProjectPath,
+      terminalProjectPathKey,
+    ],
   );
   const handleOpenSshTerminal = useCallback(
     (session: TerminalSession, kind: WorkspaceSshTerminalOpenRequest["kind"] = "bash") => {
@@ -1550,13 +1570,13 @@ export function ChatPage(props: ChatPageProps) {
     },
     [openWorkspaceSshTerminalRequest],
   );
-  const requestWorkspaceImagePreviewClose = useCallback(() => {
-    setWorkspaceImagePreviewOpen(false);
+  const requestWorkspaceFilePreviewClose = useCallback(() => {
+    setWorkspaceFilePreviewOpen(false);
   }, []);
-  const handleWorkspaceImagePreviewClosed = useCallback(() => {
-    setWorkspaceImagePreviewOpen(false);
-    setWorkspaceImagePreviewMounted(false);
-    setWorkspaceImagePreviewOpenRequest(null);
+  const handleWorkspaceFilePreviewClosed = useCallback(() => {
+    setWorkspaceFilePreviewOpen(false);
+    setWorkspaceFilePreviewMounted(false);
+    setWorkspaceFilePreviewOpenRequest(null);
   }, []);
   useEffect(() => {
     const previousOpen = previousRightDockFileTreeOpenRef.current;
@@ -1569,16 +1589,16 @@ export function ChatPage(props: ChatPageProps) {
       setWorkspaceEditorOpen(true);
       requestWorkspaceEditorClose();
     }
-    if (previousOpen && !rightDockFileTreeOpen && workspaceImagePreviewMounted) {
-      requestWorkspaceImagePreviewClose();
+    if (previousOpen && !rightDockFileTreeOpen && workspaceFilePreviewMounted) {
+      requestWorkspaceFilePreviewClose();
     }
   }, [
     rightDockFileTreeOpen,
     requestWorkspaceEditorClose,
-    requestWorkspaceImagePreviewClose,
+    requestWorkspaceFilePreviewClose,
     workspaceEditorCleanupPending,
     workspaceEditorMounted,
-    workspaceImagePreviewMounted,
+    workspaceFilePreviewMounted,
   ]);
   useEffect(() => {
     if (!terminalProjectPathKey) {
@@ -4702,6 +4722,7 @@ export function ChatPage(props: ChatPageProps) {
               isOpen={workspaceEditorOpen}
               finalCloseRequested={workspaceEditorCleanupPending}
               theme={settings.theme}
+              onPreviewFile={(request) => openWorkspaceFilePreview(request)}
               onHide={() => setWorkspaceEditorOpen(false)}
               onClose={() => {
                 setWorkspaceEditorOpen(false);
@@ -4713,22 +4734,23 @@ export function ChatPage(props: ChatPageProps) {
             />
           </Suspense>
         ) : null}
-        {workspaceImagePreviewMounted ? (
+        {workspaceFilePreviewMounted ? (
           <Suspense
             fallback={
               <div className="absolute inset-0 z-50 flex min-h-0 flex-col border-r border-border bg-background text-sm text-muted-foreground shadow-2xl">
                 <MacOsTitleBarSpacer className="bg-muted/45" />
                 <div className="flex min-h-0 flex-1 items-center justify-center">
-                  {t("workspaceImagePreview.loading")}
+                  {t("workspaceFilePreview.loading")}
                 </div>
               </div>
             }
           >
-            <WorkspaceImagePreviewOverlay
-              openRequest={workspaceImagePreviewOpenRequest}
-              isOpen={workspaceImagePreviewOpen}
-              onRequestClose={requestWorkspaceImagePreviewClose}
-              onClose={handleWorkspaceImagePreviewClosed}
+            <WorkspaceFilePreviewOverlay
+              openRequest={workspaceFilePreviewOpenRequest}
+              isOpen={workspaceFilePreviewOpen}
+              onOpenEditor={(request) => openWorkspaceEditorFile(request)}
+              onRequestClose={requestWorkspaceFilePreviewClose}
+              onClose={handleWorkspaceFilePreviewClosed}
             />
           </Suspense>
         ) : null}

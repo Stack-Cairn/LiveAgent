@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react";
 
 import type { WorkspaceCodeEditorOpenRequest } from "@/components/workspace-editor/WorkspaceCodeEditorOverlay";
-import type { WorkspaceImagePreviewOpenRequest } from "@/components/workspace-editor/WorkspaceImagePreviewOverlay";
+import type { WorkspaceFilePreviewOpenRequest } from "@/components/workspace-editor/WorkspaceFilePreviewOverlay";
 import type { WorkspaceSshTerminalOpenRequest } from "@/components/workspace-editor/WorkspaceSshTerminalOverlay";
 import { t as translate } from "@/i18n";
 import type { AppSettings } from "@/lib/settings";
@@ -18,10 +18,10 @@ const WorkspaceCodeEditorOverlay = lazy(async () => {
   };
 });
 
-const WorkspaceImagePreviewOverlay = lazy(async () => {
-  const module = await import("@/components/workspace-editor/WorkspaceImagePreviewOverlay");
+const WorkspaceFilePreviewOverlay = lazy(async () => {
+  const module = await import("@/components/workspace-editor/WorkspaceFilePreviewOverlay");
   return {
-    default: module.WorkspaceImagePreviewOverlay,
+    default: module.WorkspaceFilePreviewOverlay,
   };
 });
 
@@ -40,13 +40,15 @@ type WorkspaceOverlayHostProps = {
   workspaceEditorCloseRequestId: number;
   workspaceEditorOpen: boolean;
   workspaceEditorCleanupPending: boolean;
+  onWorkspaceEditorPreviewFile: (request: WorkspaceCodeEditorOpenRequest) => void;
   onWorkspaceEditorHide: () => void;
   onWorkspaceEditorClose: () => void;
-  workspaceImagePreviewMounted: boolean;
-  workspaceImagePreviewOpenRequest: WorkspaceImagePreviewOpenRequest | null;
-  workspaceImagePreviewOpen: boolean;
-  onWorkspaceImagePreviewRequestClose: () => void;
-  onWorkspaceImagePreviewClose: () => void;
+  workspaceFilePreviewMounted: boolean;
+  workspaceFilePreviewOpenRequest: WorkspaceFilePreviewOpenRequest | null;
+  workspaceFilePreviewOpen: boolean;
+  onWorkspaceFilePreviewOpenEditor: (request: WorkspaceFilePreviewOpenRequest) => void;
+  onWorkspaceFilePreviewRequestClose: () => void;
+  onWorkspaceFilePreviewClose: () => void;
   workspaceSshTerminalMounted: boolean;
   workspaceSshTerminalOpenRequest: WorkspaceSshTerminalOpenRequest | null;
   workspaceSshTerminalOpen: boolean;
@@ -65,13 +67,15 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
     workspaceEditorCloseRequestId,
     workspaceEditorOpen,
     workspaceEditorCleanupPending,
+    onWorkspaceEditorPreviewFile,
     onWorkspaceEditorHide,
     onWorkspaceEditorClose,
-    workspaceImagePreviewMounted,
-    workspaceImagePreviewOpenRequest,
-    workspaceImagePreviewOpen,
-    onWorkspaceImagePreviewRequestClose,
-    onWorkspaceImagePreviewClose,
+    workspaceFilePreviewMounted,
+    workspaceFilePreviewOpenRequest,
+    workspaceFilePreviewOpen,
+    onWorkspaceFilePreviewOpenEditor,
+    onWorkspaceFilePreviewRequestClose,
+    onWorkspaceFilePreviewClose,
     workspaceSshTerminalMounted,
     workspaceSshTerminalOpenRequest,
     workspaceSshTerminalOpen,
@@ -97,24 +101,26 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
             isOpen={workspaceEditorOpen}
             finalCloseRequested={workspaceEditorCleanupPending}
             theme={theme}
+            onPreviewFile={onWorkspaceEditorPreviewFile}
             onHide={onWorkspaceEditorHide}
             onClose={onWorkspaceEditorClose}
           />
         </Suspense>
       ) : null}
-      {workspaceImagePreviewMounted ? (
+      {workspaceFilePreviewMounted ? (
         <Suspense
           fallback={
-            <div className="workspace-image-preview-overlay absolute inset-0 z-40 flex items-center justify-center border-r border-border bg-background text-sm text-muted-foreground shadow-2xl">
-              {translate("workspaceImagePreview.loading", locale)}
+            <div className="workspace-file-preview-overlay absolute inset-0 z-40 flex items-center justify-center border-r border-border bg-background text-sm text-muted-foreground shadow-2xl">
+              {translate("workspaceFilePreview.loading", locale)}
             </div>
           }
         >
-          <WorkspaceImagePreviewOverlay
-            openRequest={workspaceImagePreviewOpenRequest}
-            isOpen={workspaceImagePreviewOpen}
-            onRequestClose={onWorkspaceImagePreviewRequestClose}
-            onClose={onWorkspaceImagePreviewClose}
+          <WorkspaceFilePreviewOverlay
+            openRequest={workspaceFilePreviewOpenRequest}
+            isOpen={workspaceFilePreviewOpen}
+            onOpenEditor={onWorkspaceFilePreviewOpenEditor}
+            onRequestClose={onWorkspaceFilePreviewRequestClose}
+            onClose={onWorkspaceFilePreviewClose}
           />
         </Suspense>
       ) : null}

@@ -5004,9 +5004,9 @@ export default function GatewayApp() {
     workspaceEditorCleanupPending,
     workspaceEditorOpenRequest,
     workspaceEditorCloseRequestId,
-    workspaceImagePreviewMounted,
-    workspaceImagePreviewOpen,
-    workspaceImagePreviewOpenRequest,
+    workspaceFilePreviewMounted,
+    workspaceFilePreviewOpen,
+    workspaceFilePreviewOpenRequest,
     workspaceSshTerminalMounted,
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
@@ -5015,10 +5015,12 @@ export default function GatewayApp() {
     terminalSessionsVersionRef,
     terminalStatusSessionIdRef,
     projectTerminalSessions,
+    openWorkspaceEditorFile,
+    openWorkspaceFilePreview,
     handleWorkspaceEditorHide,
     handleWorkspaceEditorClosed,
-    requestWorkspaceImagePreviewClose,
-    handleWorkspaceImagePreviewClosed,
+    requestWorkspaceFilePreviewClose,
+    handleWorkspaceFilePreviewClosed,
     handleOpenWorkspaceFile,
     handleOpenSshTerminal,
     handleProjectTerminalSessionsChange,
@@ -5880,13 +5882,15 @@ export default function GatewayApp() {
             workspaceEditorCloseRequestId={workspaceEditorCloseRequestId}
             workspaceEditorOpen={workspaceEditorOpen}
             workspaceEditorCleanupPending={workspaceEditorCleanupPending}
+            onWorkspaceEditorPreviewFile={openWorkspaceFilePreview}
             onWorkspaceEditorHide={handleWorkspaceEditorHide}
             onWorkspaceEditorClose={handleWorkspaceEditorClosed}
-            workspaceImagePreviewMounted={workspaceImagePreviewMounted}
-            workspaceImagePreviewOpenRequest={workspaceImagePreviewOpenRequest}
-            workspaceImagePreviewOpen={workspaceImagePreviewOpen}
-            onWorkspaceImagePreviewRequestClose={requestWorkspaceImagePreviewClose}
-            onWorkspaceImagePreviewClose={handleWorkspaceImagePreviewClosed}
+            workspaceFilePreviewMounted={workspaceFilePreviewMounted}
+            workspaceFilePreviewOpenRequest={workspaceFilePreviewOpenRequest}
+            workspaceFilePreviewOpen={workspaceFilePreviewOpen}
+            onWorkspaceFilePreviewOpenEditor={openWorkspaceEditorFile}
+            onWorkspaceFilePreviewRequestClose={requestWorkspaceFilePreviewClose}
+            onWorkspaceFilePreviewClose={handleWorkspaceFilePreviewClosed}
             workspaceSshTerminalMounted={workspaceSshTerminalMounted}
             workspaceSshTerminalOpenRequest={workspaceSshTerminalOpenRequest}
             workspaceSshTerminalOpen={workspaceSshTerminalOpen}

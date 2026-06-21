@@ -37,6 +37,7 @@
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "docx-preview": "^0.3.6",
     "katex": "^0.16.45",
     "monaco-editor": "^0.55.1",
     "react": "^19.2.4",
@@ -45,6 +46,7 @@
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.5.0",
     "typebox": "1.1.38",
+    "xlsx": "^0.18.5",
     "yet-another-react-lightbox": "^3.31.0"
   },
   "devDependencies": {

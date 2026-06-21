@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { WorkspaceCodeEditorOpenRequest } from "@/components/workspace-editor/WorkspaceCodeEditorOverlay";
-import type { WorkspaceImagePreviewOpenRequest } from "@/components/workspace-editor/WorkspaceImagePreviewOverlay";
+import type { WorkspaceFilePreviewOpenRequest } from "@/components/workspace-editor/WorkspaceFilePreviewOverlay";
 import type { WorkspaceSshTerminalOpenRequest } from "@/components/workspace-editor/WorkspaceSshTerminalOverlay";
-import { isWorkspaceImagePath } from "@/components/workspace-editor/workspaceImagePreview";
+import { isWorkspacePreviewPath } from "@/components/workspace-editor/workspaceImagePreview";
 import {
   applyTerminalEventToSessions,
   replaceTerminalSessionsForProject,
@@ -47,11 +47,11 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     useState<WorkspaceCodeEditorOpenRequest | null>(null);
   const [workspaceEditorCloseRequestId, setWorkspaceEditorCloseRequestId] = useState(0);
   const workspaceEditorRequestIdRef = useRef(0);
-  const [workspaceImagePreviewMounted, setWorkspaceImagePreviewMounted] = useState(false);
-  const [workspaceImagePreviewOpen, setWorkspaceImagePreviewOpen] = useState(false);
-  const [workspaceImagePreviewOpenRequest, setWorkspaceImagePreviewOpenRequest] =
-    useState<WorkspaceImagePreviewOpenRequest | null>(null);
-  const workspaceImagePreviewRequestIdRef = useRef(0);
+  const [workspaceFilePreviewMounted, setWorkspaceFilePreviewMounted] = useState(false);
+  const [workspaceFilePreviewOpen, setWorkspaceFilePreviewOpen] = useState(false);
+  const [workspaceFilePreviewOpenRequest, setWorkspaceFilePreviewOpenRequest] =
+    useState<WorkspaceFilePreviewOpenRequest | null>(null);
+  const workspaceFilePreviewRequestIdRef = useRef(0);
   const [workspaceSshTerminalMounted, setWorkspaceSshTerminalMounted] = useState(false);
   const [workspaceSshTerminalOpen, setWorkspaceSshTerminalOpen] = useState(false);
   const [workspaceSshTerminalOpenRequest, setWorkspaceSshTerminalOpenRequest] =
@@ -67,7 +67,7 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
 
   const openWorkspaceSshTerminalRequest = useCallback(
     (request: WorkspaceSshTerminalOpenRequest) => {
-      setWorkspaceImagePreviewOpen(false);
+      setWorkspaceFilePreviewOpen(false);
       setWorkspaceEditorOpen(false);
       setWorkspaceSshTerminalMounted(true);
       setWorkspaceSshTerminalOpen(true);
@@ -92,35 +92,57 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     setWorkspaceEditorCloseRequestId(0);
   }, []);
 
-  const handleOpenWorkspaceFile = useCallback(
-    (path: string) => {
-      if (!terminalProjectPath || !terminalProjectPathKey) return;
-      if (isWorkspaceImagePath(path)) {
-        workspaceImagePreviewRequestIdRef.current += 1;
-        setWorkspaceImagePreviewMounted(true);
-        setWorkspaceImagePreviewOpen(true);
-        setWorkspaceImagePreviewOpenRequest({
-          id: workspaceImagePreviewRequestIdRef.current,
-          projectPathKey: terminalProjectPathKey,
-          workdir: terminalProjectPath,
-          path,
-        });
-        return;
-      }
+  const openWorkspaceEditorFile = useCallback(
+    (request: Omit<WorkspaceCodeEditorOpenRequest, "id">) => {
       hideWorkspaceSshTerminalOverlay();
-      setWorkspaceImagePreviewOpen(false);
+      setWorkspaceFilePreviewOpen(false);
       workspaceEditorRequestIdRef.current += 1;
       setWorkspaceEditorCleanupPending(false);
       setWorkspaceEditorMounted(true);
       setWorkspaceEditorOpen(true);
       setWorkspaceEditorOpenRequest({
         id: workspaceEditorRequestIdRef.current,
+        ...request,
+      });
+    },
+    [hideWorkspaceSshTerminalOverlay],
+  );
+
+  const openWorkspaceFilePreview = useCallback(
+    (request: Omit<WorkspaceFilePreviewOpenRequest, "id">) => {
+      hideWorkspaceSshTerminalOverlay();
+      setWorkspaceEditorOpen(false);
+      workspaceFilePreviewRequestIdRef.current += 1;
+      setWorkspaceFilePreviewMounted(true);
+      setWorkspaceFilePreviewOpen(true);
+      setWorkspaceFilePreviewOpenRequest({
+        id: workspaceFilePreviewRequestIdRef.current,
+        ...request,
+      });
+    },
+    [hideWorkspaceSshTerminalOverlay],
+  );
+
+  const handleOpenWorkspaceFile = useCallback(
+    (path: string) => {
+      if (!terminalProjectPath || !terminalProjectPathKey) return;
+      const request = {
         projectPathKey: terminalProjectPathKey,
         workdir: terminalProjectPath,
         path,
-      });
+      };
+      if (isWorkspacePreviewPath(path)) {
+        openWorkspaceFilePreview(request);
+        return;
+      }
+      openWorkspaceEditorFile(request);
     },
-    [hideWorkspaceSshTerminalOverlay, terminalProjectPath, terminalProjectPathKey],
+    [
+      openWorkspaceEditorFile,
+      openWorkspaceFilePreview,
+      terminalProjectPath,
+      terminalProjectPathKey,
+    ],
   );
 
   const handleOpenSshTerminal = useCallback(
@@ -136,14 +158,14 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     [openWorkspaceSshTerminalRequest],
   );
 
-  const requestWorkspaceImagePreviewClose = useCallback(() => {
-    setWorkspaceImagePreviewOpen(false);
+  const requestWorkspaceFilePreviewClose = useCallback(() => {
+    setWorkspaceFilePreviewOpen(false);
   }, []);
 
-  const handleWorkspaceImagePreviewClosed = useCallback(() => {
-    setWorkspaceImagePreviewOpen(false);
-    setWorkspaceImagePreviewMounted(false);
-    setWorkspaceImagePreviewOpenRequest(null);
+  const handleWorkspaceFilePreviewClosed = useCallback(() => {
+    setWorkspaceFilePreviewOpen(false);
+    setWorkspaceFilePreviewMounted(false);
+    setWorkspaceFilePreviewOpenRequest(null);
   }, []);
 
   useEffect(() => {
@@ -157,16 +179,16 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
       setWorkspaceEditorOpen(true);
       requestWorkspaceEditorClose();
     }
-    if (previousOpen && !rightDockFileTreeOpen && workspaceImagePreviewMounted) {
-      requestWorkspaceImagePreviewClose();
+    if (previousOpen && !rightDockFileTreeOpen && workspaceFilePreviewMounted) {
+      requestWorkspaceFilePreviewClose();
     }
   }, [
     rightDockFileTreeOpen,
     requestWorkspaceEditorClose,
-    requestWorkspaceImagePreviewClose,
+    requestWorkspaceFilePreviewClose,
     workspaceEditorCleanupPending,
     workspaceEditorMounted,
-    workspaceImagePreviewMounted,
+    workspaceFilePreviewMounted,
   ]);
 
   const projectTerminalSessions = useMemo(
@@ -294,9 +316,9 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     workspaceEditorCleanupPending,
     workspaceEditorOpenRequest,
     workspaceEditorCloseRequestId,
-    workspaceImagePreviewMounted,
-    workspaceImagePreviewOpen,
-    workspaceImagePreviewOpenRequest,
+    workspaceFilePreviewMounted,
+    workspaceFilePreviewOpen,
+    workspaceFilePreviewOpenRequest,
     workspaceSshTerminalMounted,
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,
@@ -305,10 +327,12 @@ export function useProjectToolsRuntime(params: UseProjectToolsRuntimeParams) {
     terminalSessionsVersionRef,
     terminalStatusSessionIdRef,
     projectTerminalSessions,
+    openWorkspaceEditorFile,
+    openWorkspaceFilePreview,
     handleWorkspaceEditorHide,
     handleWorkspaceEditorClosed,
-    requestWorkspaceImagePreviewClose,
-    handleWorkspaceImagePreviewClosed,
+    requestWorkspaceFilePreviewClose,
+    handleWorkspaceFilePreviewClosed,
     handleOpenWorkspaceFile,
     handleOpenSshTerminal,
     handleProjectTerminalSessionsChange,

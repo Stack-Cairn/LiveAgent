@@ -2146,6 +2146,7 @@ html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-viewport:
   }
 
   html[data-liveagent-webui="gateway"] .workspace-code-editor-overlay,
+  html[data-liveagent-webui="gateway"] .workspace-file-preview-overlay,
   html[data-liveagent-webui="gateway"] .workspace-image-preview-overlay,
   html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-overlay {
     z-index: 60;

@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Cursor, Read, Seek};
 use std::path::{Component, Path, PathBuf};
+use std::process::Command;
 use std::time::Duration;
 use std::time::UNIX_EPOCH;
 use thiserror::Error;
@@ -20,6 +21,8 @@ use crate::runtime::platform::expand_tilde_path;
 const READ_MAX_TEXT_BYTES: usize = 200 * 1024; // 200KB
 const EDITABLE_TEXT_MAX_BYTES: usize = 3 * 1024 * 1024; // 3MB
 const READ_MAX_IMAGE_BYTES: usize = 25 * 1024 * 1024; // 25MB
+const READ_MAX_PREVIEW_BYTES: usize = 25 * 1024 * 1024; // 25MB
+const DOCUMENT_PREVIEW_CACHE_VERSION: &str = "v1";
 const IMAGE_SOURCE_HTTP_TIMEOUT_SECS: u64 = 20;
 const DEFAULT_READ_LIMIT_LINES: usize = 200;
 const DEFAULT_READ_LIMIT_PDF_PAGES: usize = 5;
@@ -334,6 +337,7 @@ fn infer_image_mime(path: &Path) -> Option<&'static str> {
         Some("jpg") | Some("jpeg") => Some("image/jpeg"),
         Some("gif") => Some("image/gif"),
         Some("webp") => Some("image/webp"),
+        Some("avif") => Some("image/avif"),
         Some("bmp") => Some("image/bmp"),
         Some("svg") => Some("image/svg+xml"),
         Some("ico") => Some("image/x-icon"),
@@ -353,6 +357,7 @@ fn normalize_supported_image_mime(value: &str) -> Option<String> {
         "image/jpeg" | "image/jpg" => Some("image/jpeg".to_string()),
         "image/gif" => Some("image/gif".to_string()),
         "image/webp" => Some("image/webp".to_string()),
+        "image/avif" => Some("image/avif".to_string()),
         "image/bmp" => Some("image/bmp".to_string()),
         "image/svg+xml" => Some("image/svg+xml".to_string()),
         "image/x-icon" | "image/vnd.microsoft.icon" => Some("image/x-icon".to_string()),
@@ -379,6 +384,9 @@ fn infer_image_mime_from_bytes(bytes: &[u8]) -> Option<&'static str> {
     }
     if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
         return Some("image/webp");
+    }
+    if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && bytes[8..].windows(4).any(|w| w == b"avif") {
+        return Some("image/avif");
     }
     if bytes.starts_with(b"BM") {
         return Some("image/bmp");
@@ -482,11 +490,18 @@ fn extension_lower(path: &Path) -> Option<String> {
 }
 
 fn is_word_file(path: &Path) -> bool {
-    matches!(extension_lower(path).as_deref(), Some("docx") | Some("doc"))
+    matches!(
+        extension_lower(path).as_deref(),
+        Some("docx") | Some("doc") | Some("rtf")
+    )
 }
 
 fn is_word_extractable_file(path: &Path) -> bool {
     matches!(extension_lower(path).as_deref(), Some("docx"))
+}
+
+fn is_convertible_document_preview_file(path: &Path) -> bool {
+    matches!(extension_lower(path).as_deref(), Some("doc") | Some("rtf"))
 }
 
 fn is_spreadsheet_file(path: &Path) -> bool {
@@ -552,11 +567,13 @@ fn office_mime_type(path: &Path) -> Option<&'static str> {
             Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         }
         Some("doc") => Some("application/msword"),
+        Some("rtf") => Some("application/rtf"),
         Some("xlsx") | Some("xltx") => {
             Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         }
         Some("xlsm") | Some("xltm") => Some("application/vnd.ms-excel.sheet.macroEnabled.12"),
         Some("xls") => Some("application/vnd.ms-excel"),
+        Some("ods") => Some("application/vnd.oasis.opendocument.spreadsheet"),
         Some("zip") => Some("application/zip"),
         Some("rar") => Some("application/vnd.rar"),
         Some("7z") => Some("application/x-7z-compressed"),
@@ -566,6 +583,266 @@ fn office_mime_type(path: &Path) -> Option<&'static str> {
         Some("xz") | Some("txz") => Some("application/x-xz"),
         _ => None,
     }
+}
+
+fn infer_workspace_preview_mime(path: &Path, bytes: &[u8]) -> Option<&'static str> {
+    if let Some(mime_type) = infer_image_mime(path).or_else(|| infer_image_mime_from_bytes(bytes)) {
+        return Some(mime_type);
+    }
+
+    if is_pdf_file(path) || bytes.starts_with(b"%PDF-") {
+        return Some("application/pdf");
+    }
+
+    match extension_lower(path).as_deref() {
+        Some("html") | Some("htm") => Some("text/html"),
+        Some("md") | Some("mdx") => Some("text/markdown"),
+        Some("txt") | Some("log") => Some("text/plain"),
+        Some("csv") => Some("text/csv"),
+        Some("tsv") => Some("text/tab-separated-values"),
+        Some("docx") => {
+            Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        }
+        Some("doc") => Some("application/msword"),
+        Some("rtf") => Some("application/rtf"),
+        Some("xlsx") | Some("xltx") => {
+            Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        }
+        Some("xlsm") | Some("xltm") => Some("application/vnd.ms-excel.sheet.macroEnabled.12"),
+        Some("xls") => Some("application/vnd.ms-excel"),
+        Some("ods") => Some("application/vnd.oasis.opendocument.spreadsheet"),
+        Some("mp3") => Some("audio/mpeg"),
+        Some("wav") => Some("audio/wav"),
+        Some("ogg") | Some("oga") => Some("audio/ogg"),
+        Some("flac") => Some("audio/flac"),
+        Some("m4a") => Some("audio/mp4"),
+        Some("mp4") | Some("m4v") => Some("video/mp4"),
+        Some("webm") => Some("video/webm"),
+        Some("ogv") => Some("video/ogg"),
+        Some("mov") => Some("video/quicktime"),
+        _ => None,
+    }
+}
+
+fn truncate_process_error(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes).trim().to_string();
+    let mut chars = text.chars();
+    let truncated: String = chars.by_ref().take(400).collect();
+    if chars.next().is_some() {
+        format!("{truncated}...")
+    } else {
+        text
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn convert_document_to_html_preview(target: &Path) -> Result<Vec<u8>, String> {
+    let output = Command::new("/usr/bin/textutil")
+        .arg("-convert")
+        .arg("html")
+        .arg("-stdout")
+        .arg("-encoding")
+        .arg("UTF-8")
+        .arg("--")
+        .arg(target)
+        .output()
+        .map_err(|e| format!("Failed to start textutil for document preview: {e}"))?;
+
+    if !output.status.success() {
+        let detail = truncate_process_error(&output.stderr);
+        return Err(if detail.is_empty() {
+            "Failed to convert document preview with textutil".to_string()
+        } else {
+            format!("Failed to convert document preview with textutil: {detail}")
+        });
+    }
+
+    if output.stdout.is_empty() {
+        return Err("Document preview conversion returned empty HTML".to_string());
+    }
+    if output.stdout.len() > READ_MAX_PREVIEW_BYTES {
+        return Err(FsError::Other(format!(
+            "Converted document preview is too large ({} bytes, max {READ_MAX_PREVIEW_BYTES} bytes)",
+            output.stdout.len()
+        ))
+        .to_string());
+    }
+    Ok(output.stdout)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn convert_document_to_html_preview(_target: &Path) -> Result<Vec<u8>, String> {
+    Err("Legacy Word/RTF preview conversion is only available on macOS via textutil".to_string())
+}
+
+fn document_preview_cache_dir() -> PathBuf {
+    std::env::temp_dir()
+        .join("liveagent")
+        .join("workspace-preview-cache")
+}
+
+fn document_preview_cache_path(
+    target: &Path,
+    mtime_ms: u64,
+    size_bytes: usize,
+    content_hash: &str,
+) -> PathBuf {
+    let key = format!(
+        "{}\0{}\0{}\0{}\0{}",
+        DOCUMENT_PREVIEW_CACHE_VERSION,
+        display_path(target),
+        mtime_ms,
+        size_bytes,
+        content_hash
+    );
+    document_preview_cache_dir().join(format!("{}.html", hash_bytes(key.as_bytes())))
+}
+
+fn read_cached_document_preview(cache_path: &Path) -> Option<Vec<u8>> {
+    match fs::read(cache_path) {
+        Ok(bytes) if !bytes.is_empty() && bytes.len() <= READ_MAX_PREVIEW_BYTES => Some(bytes),
+        _ => None,
+    }
+}
+
+fn write_cached_document_preview(cache_path: &Path, bytes: &[u8]) {
+    if bytes.is_empty() || bytes.len() > READ_MAX_PREVIEW_BYTES {
+        return;
+    }
+
+    let Some(parent) = cache_path.parent() else {
+        return;
+    };
+    if fs::create_dir_all(parent).is_err() {
+        return;
+    }
+
+    let file_name = cache_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("preview.html");
+    let nanos = std::time::SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let temp_path = cache_path.with_file_name(format!(
+        "{}.{}.{}.tmp",
+        file_name,
+        std::process::id(),
+        nanos
+    ));
+
+    if fs::write(&temp_path, bytes).is_ok() {
+        let _ = fs::rename(&temp_path, cache_path);
+    }
+    let _ = fs::remove_file(temp_path);
+}
+
+fn convert_document_to_html_preview_cached(
+    target: &Path,
+    mtime_ms: u64,
+    size_bytes: usize,
+    content_hash: &str,
+) -> Result<Vec<u8>, String> {
+    let cache_path = document_preview_cache_path(target, mtime_ms, size_bytes, content_hash);
+    if let Some(bytes) = read_cached_document_preview(&cache_path) {
+        return Ok(bytes);
+    }
+
+    let bytes = convert_document_to_html_preview(target)?;
+    write_cached_document_preview(&cache_path, &bytes);
+    Ok(bytes)
+}
+
+fn build_workspace_preview_response(
+    logical_path: String,
+    bytes: Vec<u8>,
+    mime_type: &'static str,
+    mtime_ms: u64,
+    content_hash: String,
+    size_bytes: usize,
+) -> ReadResponse {
+    let kind = if mime_type.starts_with("image/") {
+        "image"
+    } else {
+        "preview"
+    };
+
+    ReadResponse {
+        kind: kind.to_string(),
+        path: logical_path,
+        content: None,
+        truncated: None,
+        start_line: None,
+        num_lines: None,
+        total_lines: None,
+        is_partial_view: None,
+        page_start: None,
+        num_pages: None,
+        total_pages: None,
+        cell_start: None,
+        num_cells: None,
+        total_cells: None,
+        mtime_ms,
+        content_hash,
+        mime_type: Some(mime_type.to_string()),
+        data: Some(BASE64_STANDARD.encode(bytes)),
+        size_bytes: Some(size_bytes),
+    }
+}
+
+fn read_local_preview_file(target: PathBuf, logical_path: String) -> Result<ReadResponse, String> {
+    let md = fs::metadata(&target).map_err(|e| e.to_string())?;
+    let size_bytes = usize::try_from(md.len()).unwrap_or(usize::MAX);
+    if size_bytes > READ_MAX_PREVIEW_BYTES {
+        return Err(FsError::Other(format!(
+            "File is too large to preview ({size_bytes} bytes, max {READ_MAX_PREVIEW_BYTES} bytes)"
+        ))
+        .to_string());
+    }
+
+    let bytes = fs::read(&target).map_err(|e| e.to_string())?;
+    if bytes.len() > READ_MAX_PREVIEW_BYTES {
+        return Err(FsError::Other(format!(
+            "File is too large to preview ({} bytes, max {READ_MAX_PREVIEW_BYTES} bytes)",
+            bytes.len()
+        ))
+        .to_string());
+    }
+
+    let mtime_ms = metadata_mtime_ms(&md);
+    let content_hash = hash_bytes(&bytes);
+    let original_size_bytes = bytes.len();
+
+    if is_convertible_document_preview_file(&target) {
+        let html_bytes = convert_document_to_html_preview_cached(
+            &target,
+            mtime_ms,
+            original_size_bytes,
+            &content_hash,
+        )?;
+        return Ok(build_workspace_preview_response(
+            logical_path,
+            html_bytes,
+            "text/html",
+            mtime_ms,
+            content_hash,
+            original_size_bytes,
+        ));
+    }
+
+    let mime_type = infer_workspace_preview_mime(&target, &bytes).ok_or_else(|| {
+        FsError::Other("File type is not supported for preview".to_string()).to_string()
+    })?;
+
+    Ok(build_workspace_preview_response(
+        logical_path,
+        bytes,
+        mime_type,
+        mtime_ms,
+        content_hash,
+        original_size_bytes,
+    ))
 }
 
 fn truncate_text_to_byte_limit(text: &str, max_bytes: usize) -> (String, bool) {
@@ -1776,8 +2053,8 @@ pub(crate) fn fs_read_workspace_image_sync(
     let rel = sanitize_rel_path(&path).map_err(|e| e.to_string())?;
     let logical_path = logical_rel_path(&rel);
     let target = wd.join(&rel);
-    let target = resolve_existing_file_target(&wd, &target, "Image.path")?;
-    read_local_image_file(target, logical_path)
+    let target = resolve_existing_file_target(&wd, &target, "Preview.path")?;
+    read_local_preview_file(target, logical_path)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -2332,6 +2609,114 @@ pub(crate) fn fs_delete_sync(workdir: String, path: String) -> Result<DeleteResp
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fs_delete(workdir: String, path: String) -> Result<DeleteResponse, String> {
     run_blocking("fs_delete", move || fs_delete_sync(workdir, path)).await
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenWorkspacePathResponse {
+    pub path: String,
+    pub absolute_path: String,
+    pub kind: String,
+    pub mode: String,
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_workspace_open_command(target: &Path, kind: &str, mode: &str) -> Result<(), String> {
+    let mut command = Command::new("open");
+    if mode == "reveal" && kind == "file" {
+        command.arg("-R");
+    }
+    command.arg(target);
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open path with macOS open: {e}"))
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_workspace_open_command(target: &Path, kind: &str, mode: &str) -> Result<(), String> {
+    let mut command = Command::new("explorer.exe");
+    if mode == "reveal" && kind == "file" {
+        command.arg(format!("/select,{}", target.display()));
+    } else {
+        command.arg(target);
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open path with Windows Explorer: {e}"))
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+fn spawn_workspace_open_command(target: &Path, kind: &str, mode: &str) -> Result<(), String> {
+    let open_target = if mode == "reveal" && kind == "file" {
+        target.parent().unwrap_or(target)
+    } else {
+        target
+    };
+    Command::new("xdg-open")
+        .arg(open_target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open path with xdg-open: {e}"))
+}
+
+pub(crate) fn fs_open_workspace_path_sync(
+    workdir: String,
+    path: String,
+    mode: Option<String>,
+) -> Result<OpenWorkspacePathResponse, String> {
+    let wd = canonicalize_workdir(&workdir).map_err(|e| e.to_string())?;
+    let rel = sanitize_rel_path(&path).map_err(|e| e.to_string())?;
+    let logical_path = logical_rel_path(&rel);
+    let target = ensure_within_workdir_existing(&wd, &wd.join(&rel)).map_err(|e| e.to_string())?;
+    let meta = fs::metadata(&target).map_err(|e| e.to_string())?;
+    let kind = if meta.is_file() {
+        "file"
+    } else if meta.is_dir() {
+        "dir"
+    } else {
+        return Err(
+            FsError::Other("Only regular files and directories can be opened".to_string())
+                .to_string(),
+        );
+    };
+    let normalized_mode = mode
+        .as_deref()
+        .unwrap_or("open")
+        .trim()
+        .to_ascii_lowercase();
+    let normalized_mode = match normalized_mode.as_str() {
+        "" | "open" => "open",
+        "reveal" | "containing_dir" | "containing-directory" => "reveal",
+        other => {
+            return Err(
+                FsError::Other(format!("Open mode must be open or reveal, got {other}"))
+                    .to_string(),
+            )
+        }
+    };
+
+    spawn_workspace_open_command(&target, kind, normalized_mode)?;
+
+    Ok(OpenWorkspacePathResponse {
+        path: logical_path,
+        absolute_path: display_path(&target),
+        kind: kind.to_string(),
+        mode: normalized_mode.to_string(),
+    })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn fs_open_workspace_path(
+    workdir: String,
+    path: String,
+    mode: Option<String>,
+) -> Result<OpenWorkspacePathResponse, String> {
+    run_blocking("fs_open_workspace_path", move || {
+        fs_open_workspace_path_sync(workdir, path, mode)
+    })
+    .await
 }
 
 #[derive(Debug, Serialize)]
@@ -3590,6 +3975,118 @@ mod tests {
                     .expect_err("out-of-bounds workspace image path should fail");
             assert!(!error.trim().is_empty(), "expected error for {path:?}");
         }
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn workspace_preview_reads_common_preview_documents() {
+        let workdir = unique_test_workdir("workspace-preview");
+        fs::create_dir_all(workdir.join("docs")).expect("create workdir");
+        let files = [
+            ("docs/page.html", "text/html", b"<h1>Hello</h1>".as_slice()),
+            ("docs/readme.md", "text/markdown", b"# Hello".as_slice()),
+            ("docs/file.pdf", "application/pdf", b"%PDF-1.7\n".as_slice()),
+        ];
+
+        for (path, _mime_type, bytes) in files {
+            fs::write(workdir.join(path), bytes).expect("write preview file");
+        }
+
+        for (path, mime_type, bytes) in files {
+            let response =
+                fs_read_workspace_image_sync(workdir.display().to_string(), path.to_string())
+                    .expect("workspace preview should read");
+            assert_eq!(response.kind, "preview");
+            assert_eq!(response.path, path);
+            assert_eq!(response.mime_type.as_deref(), Some(mime_type));
+            assert_eq!(response.size_bytes, Some(bytes.len()));
+            assert_eq!(
+                response.data.as_deref(),
+                Some(BASE64_STANDARD.encode(bytes).as_str())
+            );
+        }
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn workspace_preview_converts_rtf_to_html_on_macos() {
+        let workdir = unique_test_workdir("workspace-preview-rtf");
+        fs::create_dir_all(workdir.join("docs")).expect("create workdir");
+        let target_path = workdir.join("docs/report.rtf");
+        let rtf = r#"{\rtf1\ansi{\fonttbl\f0\fswiss Helvetica;}\f0\pard Hello RTF\par}"#;
+        fs::write(&target_path, rtf).expect("write rtf");
+        let target = fs::canonicalize(&target_path).expect("canonical rtf path");
+
+        let response = fs_read_workspace_image_sync(
+            workdir.display().to_string(),
+            "docs/report.rtf".to_string(),
+        )
+        .expect("rtf preview should convert to html");
+
+        assert_eq!(response.kind, "preview");
+        assert_eq!(response.path, "docs/report.rtf");
+        assert_eq!(response.mime_type.as_deref(), Some("text/html"));
+        assert_eq!(response.size_bytes, Some(rtf.len()));
+        let html = String::from_utf8(
+            BASE64_STANDARD
+                .decode(response.data.expect("preview html data"))
+                .expect("decode html data"),
+        )
+        .expect("html should be utf-8");
+        assert!(html.contains("Hello RTF"), "unexpected html: {html}");
+
+        let source_bytes = fs::read(&target).expect("read source rtf");
+        let source_md = fs::metadata(&target).expect("source metadata");
+        let cache_path = document_preview_cache_path(
+            &target,
+            metadata_mtime_ms(&source_md),
+            source_bytes.len(),
+            &hash_bytes(&source_bytes),
+        );
+        assert!(cache_path.exists(), "expected document preview cache file");
+
+        let cached_html = "<html><body>Cached RTF Preview</body></html>";
+        fs::write(&cache_path, cached_html).expect("overwrite cache file");
+        let cached_response = fs_read_workspace_image_sync(
+            workdir.display().to_string(),
+            "docs/report.rtf".to_string(),
+        )
+        .expect("rtf preview should use cached html");
+        let cached = String::from_utf8(
+            BASE64_STANDARD
+                .decode(cached_response.data.expect("cached preview html data"))
+                .expect("decode cached html data"),
+        )
+        .expect("cached html should be utf-8");
+        assert!(
+            cached.contains("Cached RTF Preview"),
+            "unexpected cached html: {cached}"
+        );
+
+        let updated_rtf = r#"{\rtf1\ansi{\fonttbl\f0\fswiss Helvetica;}\f0\pard Updated RTF\par}"#;
+        fs::write(&target, updated_rtf).expect("update rtf");
+        let updated_response = fs_read_workspace_image_sync(
+            workdir.display().to_string(),
+            "docs/report.rtf".to_string(),
+        )
+        .expect("rtf preview should refresh after source change");
+        let updated = String::from_utf8(
+            BASE64_STANDARD
+                .decode(updated_response.data.expect("updated preview html data"))
+                .expect("decode updated html data"),
+        )
+        .expect("updated html should be utf-8");
+        assert!(
+            updated.contains("Updated RTF"),
+            "unexpected html: {updated}"
+        );
+        assert!(
+            !updated.contains("Cached RTF Preview"),
+            "source change should not reuse stale cache: {updated}"
+        );
 
         let _ = fs::remove_dir_all(workdir);
     }
