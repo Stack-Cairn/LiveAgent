@@ -177,6 +177,106 @@ func TestSQLiteChatEventStoreReplaysCompletedRunAndDedupesCommand(t *testing.T) 
 	}
 }
 
+func TestSQLiteHistoryRunningCreatesAndReopensAttachableConversationRun(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "gateway-chat.sqlite3")
+	sm, store := newPersistentTestSessionManager(t, dbPath)
+	defer store.Close()
+
+	dispatchRunning := func() {
+		sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+			RequestId: "history-sync-running",
+			Payload: &gatewayv1.AgentEnvelope_HistorySync{
+				HistorySync: &gatewayv1.HistorySyncEvent{
+					Kind:           "running",
+					ConversationId: "conversation-1",
+					Conversation: &gatewayv1.ConversationSummary{
+						Id:  "conversation-1",
+						Cwd: "/workspace",
+					},
+				},
+			},
+		})
+	}
+
+	dispatchRunning()
+	ch, done, cleanup, snapshot, err := sm.SubscribeChatRun("", "conversation-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeChatRun first running: %v", err)
+	}
+	if snapshot.RequestID != "conversation-live-conversation-1" ||
+		snapshot.State != session.ChatRunStateRunning ||
+		snapshot.Workdir != "/workspace" {
+		t.Fatalf("first running snapshot = %#v", snapshot)
+	}
+	assertDoneOpen(t, done)
+	select {
+	case event := <-ch:
+		t.Fatalf("unexpected first replay before token: %#v", event)
+	default:
+	}
+	cleanup()
+
+	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+		RequestId: "conversation-live-conversation-1",
+		Payload: &gatewayv1.AgentEnvelope_ChatEvent{
+			ChatEvent: &gatewayv1.ChatEvent{
+				Type:           gatewayv1.ChatEvent_DONE,
+				ConversationId: "conversation-1",
+				Data:           `{}`,
+			},
+		},
+	})
+
+	dispatchRunning()
+	summaries := sm.ActiveChatRunSummaries()
+	if len(summaries) != 1 ||
+		summaries[0].RequestID != "conversation-live-conversation-1" ||
+		summaries[0].FirstSeq != 2 ||
+		summaries[0].LatestSeq != 1 {
+		t.Fatalf("second active summaries = %#v", summaries)
+	}
+
+	replayCh, replayDone, replayCleanup, replaySnapshot, err := sm.SubscribeChatRun(
+		"",
+		"conversation-1",
+		summaries[0].FirstSeq-1,
+	)
+	if err != nil {
+		t.Fatalf("SubscribeChatRun second running: %v", err)
+	}
+	defer replayCleanup()
+	assertDoneOpen(t, replayDone)
+	if replaySnapshot.State != session.ChatRunStateRunning || replaySnapshot.LatestSeq != 1 {
+		t.Fatalf("second running snapshot = %#v", replaySnapshot)
+	}
+	select {
+	case event := <-replayCh:
+		t.Fatalf("unexpected replay from previous turn: %#v", event)
+	default:
+	}
+
+	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+		RequestId: "conversation-live-conversation-1",
+		Payload: &gatewayv1.AgentEnvelope_ChatEvent{
+			ChatEvent: &gatewayv1.ChatEvent{
+				Type:           gatewayv1.ChatEvent_TOKEN,
+				ConversationId: "conversation-1",
+				Data:           `{"text":"next"}`,
+			},
+		},
+	})
+	select {
+	case event := <-replayCh:
+		if event.Seq != 2 || event.Event.GetType() != gatewayv1.ChatEvent_TOKEN {
+			t.Fatalf("second live event = %#v, want token seq 2", event)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for second live token")
+	}
+}
+
 func TestSQLiteChatEventStoreDoesNotPersistToolCallDeltaPayloads(t *testing.T) {
 	t.Parallel()
 

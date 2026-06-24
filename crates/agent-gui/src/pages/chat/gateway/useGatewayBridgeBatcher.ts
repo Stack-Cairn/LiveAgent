@@ -331,8 +331,7 @@ export function useGatewayBridgeBatcher() {
       if (!batchable) {
         flushGatewayBridgeEventBatchesForRequest(requestId);
         discardDeferredToolCallDeltasForRequest(requestId);
-        sendGatewayBridgeEventForRequest(requestId, event, options);
-        return;
+        return sendGatewayBridgeEventForRequest(requestId, event, options);
       }
 
       const workerId = options?.workerId?.trim() || undefined;

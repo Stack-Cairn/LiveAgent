@@ -97,14 +97,15 @@ type ActiveChatRunSummary struct {
 }
 
 const (
-	ChatRunStateQueued    = "queued"
-	ChatRunStateDelivered = "delivered"
-	ChatRunStateClaimed   = "claimed"
-	ChatRunStateStarting  = "starting"
-	ChatRunStateRunning   = "running"
-	ChatRunStateCompleted = "completed"
-	ChatRunStateFailed    = "failed"
-	ChatRunStateCancelled = "cancelled"
+	ChatRunStateQueued        = "queued"
+	ChatRunStateDelivered     = "delivered"
+	ChatRunStateClaimed       = "claimed"
+	ChatRunStateStarting      = "starting"
+	ChatRunStateDesktopQueued = "desktop_queued"
+	ChatRunStateRunning       = "running"
+	ChatRunStateCompleted     = "completed"
+	ChatRunStateFailed        = "failed"
+	ChatRunStateCancelled     = "cancelled"
 )
 
 type chatRun struct {

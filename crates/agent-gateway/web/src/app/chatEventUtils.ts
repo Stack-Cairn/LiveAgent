@@ -114,6 +114,7 @@ export function isChatControlEvent(event: ChatEvent): event is ChatControlEvent 
     case "delivered":
     case "claimed":
     case "starting":
+    case "queued_in_gui":
     case "started":
     case "progress":
     case "completed":
@@ -139,13 +140,14 @@ export function isPreparingChatControlEvent(event: ChatEvent) {
       event.state === "delivered" ||
       event.state === "claimed" ||
       event.state === "starting" ||
+      event.state === "desktop_queued" ||
       event.type === "accepted" ||
-      event.type === "user_message" ||
       event.type === "rebased" ||
       event.type === "projection_updated" ||
       event.type === "delivered" ||
       event.type === "claimed" ||
       event.type === "starting" ||
+      event.type === "queued_in_gui" ||
       event.type === "progress")
   );
 }

@@ -1518,9 +1518,16 @@ function cloneToolResultMessage(
   };
 }
 
-export function createSyntheticContinueUserMessage(timestamp = Date.now()): UserMessage {
+export function createSyntheticContinueUserMessage(
+  timestamp = Date.now(),
+): UserMessage & { id: string } {
   return {
     role: "user",
+    id: `user-${
+      typeof globalThis.crypto?.randomUUID === "function"
+        ? globalThis.crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+    }`,
     content: SYNTHETIC_CONTINUE_MESSAGE,
     timestamp,
   };

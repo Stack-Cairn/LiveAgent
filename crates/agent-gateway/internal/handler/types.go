@@ -37,6 +37,7 @@ type ChatRequestBody struct {
 	Workdir             string                   `json:"workdir,omitempty"`
 	SelectedSystemTools []string                 `json:"selected_system_tools,omitempty"`
 	UploadedFiles       []ChatUploadedFileBody   `json:"uploaded_files,omitempty"`
+	QueuePolicy         string                   `json:"queue_policy,omitempty"`
 }
 
 type CancelChatRequestBody struct {

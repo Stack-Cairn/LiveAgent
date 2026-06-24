@@ -1,6 +1,7 @@
 import type { MentionComposerDraft } from "@/components/chat/MentionComposer";
 import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import type { ChatRuntimeControls } from "@/lib/settings";
+import { fileMentionDisplayName } from "@/lib/chat/mentionReferences";
 
 export type QueuedChatTurn = {
   id: string;
@@ -49,6 +50,8 @@ export function buildQueuedChatTurnPreview(draft: MentionComposerDraft) {
     switch (segment.type) {
       case "largePaste":
         return segment.paste.label;
+      case "fileMention":
+        return fileMentionDisplayName(segment.reference);
       case "skillMention":
         return `$${segment.skill.name}`;
       case "commitMention":

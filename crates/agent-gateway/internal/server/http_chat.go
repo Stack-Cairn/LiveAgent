@@ -133,17 +133,18 @@ func handleChatCancelCommandHTTP(
 		return
 	}
 	if runID == "" {
-		if snapshot, ok := sm.ChatRunSnapshot("", conversationID); ok {
+		if snapshot, ok := sm.RunningChatRunSnapshot(conversationID); ok {
 			runID = strings.TrimSpace(snapshot.RequestID)
 			if conversationID == "" {
 				conversationID = strings.TrimSpace(snapshot.ConversationID)
 			}
 		}
 	}
-	requestID := runID
-	if requestID == "" {
-		requestID = "chat-cancel-" + uuid.NewString()
+	if runID == "" {
+		writeJSON(w, http.StatusAccepted, map[string]any{"accepted": true, "run_id": "", "conversation_id": conversationID})
+		return
 	}
+	requestID := runID
 	timeout := 10 * time.Second
 	if cfg != nil && cfg.WebSocketWriteTimeout > 0 {
 		timeout = cfg.WebSocketWriteTimeout
@@ -359,7 +360,7 @@ func cloudChatEventType(payload map[string]any) string {
 func isChatControlPayload(payload map[string]any) bool {
 	eventType, _ := payload["type"].(string)
 	switch strings.TrimSpace(eventType) {
-	case "accepted", "user_message", "rebased", "projection_updated", "delivered", "claimed", "starting", "started", "progress", "completed", "failed", "cancelled":
+	case "accepted", "user_message", "rebased", "projection_updated", "delivered", "claimed", "starting", "queued_in_gui", "started", "progress", "completed", "failed", "cancelled":
 		return true
 	default:
 		return false

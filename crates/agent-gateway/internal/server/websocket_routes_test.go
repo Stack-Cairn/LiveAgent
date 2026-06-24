@@ -24,6 +24,7 @@ func TestWebsocketRequestHandlersCoverKnownProtocolTypes(t *testing.T) {
 		"history.workdirs",
 		"history.shared_list",
 		"history.get",
+		"history.prefix",
 		"history.rename",
 		"history.pin",
 		"history.share.get",
@@ -88,6 +89,14 @@ func TestWebsocketRequestHandlersCoverKnownProtocolTypes(t *testing.T) {
 		"git.push",
 		"cron.manage",
 		"provider.models",
+		"chat_queue.get",
+		"chat_queue.get_item",
+		"chat_queue.run_now",
+		"chat_queue.move",
+		"chat_queue.remove",
+		"chat_queue.edit_begin",
+		"chat_queue.edit_commit",
+		"chat_queue.edit_cancel",
 	}
 
 	for _, requestType := range expectedTypes {

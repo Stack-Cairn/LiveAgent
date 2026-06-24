@@ -5,6 +5,7 @@ import type {
   MentionComposerLargePaste,
 } from "@/components/chat/MentionComposer";
 import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
+import { formatFileMentionToken } from "@/lib/chat/mentionReferences";
 import { withPastedTextDisplayMetadata } from "@/lib/chat/uploadedFiles";
 import { importReadableFiles } from "@/lib/uploadReadableFiles";
 
@@ -56,6 +57,9 @@ export function buildTextFromComposerDraft(
     .map((segment) => {
       if (segment.type === "text") {
         return segment.text;
+      }
+      if (segment.type === "fileMention") {
+        return formatFileMentionToken(segment.reference);
       }
       if (segment.type === "skillMention") {
         return `$${segment.skill.name}`;

@@ -32,7 +32,6 @@ export type RunningConversationRuntime = {
   runId?: string;
   workdir?: string;
   firstSeq?: number;
-  latestSeq?: number;
   runEpoch?: number;
   updatedAt: number;
 };
@@ -49,6 +48,9 @@ export type SendChatOptions = {
   runtimeControls?: ChatRuntimeControls;
   workdir?: string;
   editMessageRef?: HistoryMessageRef;
+  optimisticUserEntryId?: string;
+  skipOptimisticUserEntry?: boolean;
+  queuePolicy?: "auto" | "append" | "interrupt";
 };
 
 export type SendChatFn = (message: string, options?: SendChatOptions) => Promise<void>;

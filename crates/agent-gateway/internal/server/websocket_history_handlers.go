@@ -238,6 +238,68 @@ func (c *websocketConnection) handleHistoryGet(req websocketRequest) {
 	})
 }
 
+func (c *websocketConnection) handleHistoryPrefix(req websocketRequest) {
+	type payload struct {
+		ConversationID string                 `json:"conversation_id"`
+		MaxMessages    int32                  `json:"max_messages"`
+		BaseMessageRef *chatCommandMessageRef `json:"base_message_ref"`
+	}
+
+	var body payload
+	if err := decodeWebSocketPayload(req.Payload, &body); err != nil {
+		_ = c.writeError(req.ID, "invalid history.prefix payload")
+		return
+	}
+	conversationID, err := requireTrimmedWebSocketString(body.ConversationID, "conversation_id")
+	if err != nil {
+		_ = c.writeError(req.ID, err.Error())
+		return
+	}
+	if body.BaseMessageRef == nil {
+		_ = c.writeError(req.ID, "base_message_ref is required")
+		return
+	}
+	if err := validateChatMessageRef(body.BaseMessageRef); err != nil {
+		_ = c.writeError(req.ID, err.Error())
+		return
+	}
+
+	response, err := c.awaitAgentResponse(req.ID, &gatewayv1.GatewayEnvelope{
+		RequestId: req.ID,
+		Timestamp: time.Now().Unix(),
+		Payload: &gatewayv1.GatewayEnvelope_HistoryPrefix{
+			HistoryPrefix: &gatewayv1.HistoryPrefixRequest{
+				ConversationId: conversationID,
+				MaxMessages:    body.MaxMessages,
+				BaseMessageRef: buildProtoChatMessageRef(body.BaseMessageRef),
+			},
+		},
+	})
+	if err != nil {
+		_ = c.writeError(req.ID, websocketErrorMessage(err))
+		return
+	}
+	if errResp := response.GetError(); errResp != nil {
+		_ = c.writeError(req.ID, errResp.GetMessage())
+		return
+	}
+
+	resp := response.GetHistoryPrefixResp()
+	if resp == nil {
+		_ = c.writeError(req.ID, "unexpected agent response")
+		return
+	}
+
+	_ = c.writeResponse(req.ID, map[string]any{
+		"conversation_id":        resp.GetConversationId(),
+		"messages_json":          resp.GetMessagesJson(),
+		"total_message_count":    resp.GetTotalMessageCount(),
+		"returned_message_count": resp.GetReturnedMessageCount(),
+		"has_more":               resp.GetHasMore(),
+		"conversation":           websocketConversationSummaryPayload(resp.GetConversation()),
+	})
+}
+
 func (c *websocketConnection) handleHistoryRename(req websocketRequest) {
 	type payload struct {
 		ConversationID string `json:"conversation_id"`

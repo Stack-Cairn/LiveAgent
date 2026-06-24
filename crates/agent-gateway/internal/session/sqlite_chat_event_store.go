@@ -28,6 +28,7 @@ type ChatRunStoreStart struct {
 	ConversationID  string
 	ClientRequestID string
 	Workdir         string
+	State           string
 	CreatedAt       time.Time
 }
 
@@ -153,6 +154,10 @@ func (s *sqliteChatEventStore) StartRun(input ChatRunStoreStart) (ChatRunSnapsho
 	input.ConversationID = strings.TrimSpace(input.ConversationID)
 	input.ClientRequestID = strings.TrimSpace(input.ClientRequestID)
 	input.Workdir = strings.TrimSpace(input.Workdir)
+	input.State = normalizeChatRunState(input.State)
+	if input.State == "" {
+		input.State = ChatRunStateQueued
+	}
 	if input.RequestID == "" {
 		return ChatRunSnapshot{}, false, ErrChatRunNotFound
 	}
@@ -187,6 +192,47 @@ func (s *sqliteChatEventStore) StartRun(input ChatRunStoreStart) (ChatRunSnapsho
 		return ChatRunSnapshot{}, false, err
 	}
 	if ok {
+		if input.ClientRequestID == "" && snapshot.ClientRequestID == "" && snapshot.Done {
+			conversationID := input.ConversationID
+			if conversationID == "" {
+				conversationID = snapshot.ConversationID
+			}
+			workdir := input.Workdir
+			if workdir == "" {
+				workdir = snapshot.Workdir
+			}
+			runEpoch, err := nextChatRunEpochTx(ctx, tx)
+			if err != nil {
+				return ChatRunSnapshot{}, false, err
+			}
+			latestSeq, err := latestConversationSeqTx(ctx, tx, conversationID)
+			if err != nil {
+				return ChatRunSnapshot{}, false, err
+			}
+			if latestSeq < snapshot.LatestSeq {
+				latestSeq = snapshot.LatestSeq
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE chat_runs
+				SET conversation_id = ?, workdir = ?, run_epoch = ?, state = ?,
+					error_code = '', done = 0, latest_seq = max(latest_seq, ?), updated_at = ?
+				WHERE run_id = ?
+			`, conversationID, workdir, runEpoch, input.State, latestSeq, nowMs, input.RequestID); err != nil {
+				return ChatRunSnapshot{}, false, err
+			}
+			if err := tx.Commit(); err != nil {
+				return ChatRunSnapshot{}, false, err
+			}
+			return ChatRunSnapshot{
+				RequestID:      input.RequestID,
+				ConversationID: conversationID,
+				Workdir:        workdir,
+				RunEpoch:       runEpoch,
+				FirstSeq:       snapshot.FirstSeq,
+				LatestSeq:      latestSeq,
+				State:          input.State,
+			}, true, nil
+		}
 		if err := tx.Commit(); err != nil {
 			return ChatRunSnapshot{}, false, err
 		}
@@ -206,7 +252,7 @@ func (s *sqliteChatEventStore) StartRun(input ChatRunStoreStart) (ChatRunSnapsho
 			run_id, conversation_id, client_request_id, workdir, run_epoch,
 			state, error_code, done, latest_seq, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, '', 0, ?, ?, ?)
-	`, input.RequestID, input.ConversationID, input.ClientRequestID, input.Workdir, runEpoch, ChatRunStateQueued, latestSeq, nowMs, nowMs); err != nil {
+	`, input.RequestID, input.ConversationID, input.ClientRequestID, input.Workdir, runEpoch, input.State, latestSeq, nowMs, nowMs); err != nil {
 		return ChatRunSnapshot{}, false, err
 	}
 	if input.ClientRequestID != "" {
@@ -227,7 +273,7 @@ func (s *sqliteChatEventStore) StartRun(input ChatRunStoreStart) (ChatRunSnapsho
 		Workdir:         input.Workdir,
 		RunEpoch:        runEpoch,
 		LatestSeq:       latestSeq,
-		State:           ChatRunStateQueued,
+		State:           input.State,
 	}, true, nil
 }
 
@@ -745,6 +791,8 @@ func storedChatEventType(eventType gatewayv1.ChatEvent_ChatEventType) string {
 		return "tool_status"
 	case gatewayv1.ChatEvent_HOSTED_SEARCH:
 		return "hosted_search"
+	case gatewayv1.ChatEvent_USER_MESSAGE:
+		return "user_message"
 	default:
 		return "message"
 	}

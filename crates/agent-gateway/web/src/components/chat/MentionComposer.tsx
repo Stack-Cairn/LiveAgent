@@ -19,6 +19,14 @@ import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useLocale } from "../../i18n";
+import {
+  createFileMentionReference,
+  type FileMentionKind,
+  type FileMentionReference,
+  fileMentionDisplayName,
+  fileMentionTitle,
+  formatFileMentionToken,
+} from "../../lib/chat/mentionReferences";
 import { extractClipboardFiles } from "../../lib/clipboardFiles";
 import { cn } from "../../lib/shared/utils";
 
@@ -28,7 +36,7 @@ import { cn } from "../../lib/shared/utils";
 
 interface MentionFileEntry {
   path: string;
-  kind: "file" | "dir";
+  kind: FileMentionKind;
 }
 
 interface MentionListResponse {
@@ -116,6 +124,7 @@ export type MentionComposerLargePaste = {
 
 export type MentionComposerDraftSegment =
   | { type: "text"; text: string }
+  | { type: "fileMention"; reference: FileMentionReference }
   | { type: "largePaste"; paste: MentionComposerLargePaste }
   | { type: "skillMention"; skill: MentionComposerSkillMention }
   | { type: "commitMention"; commit: MentionComposerCommitMention }
@@ -281,8 +290,11 @@ function serializeChildrenToSegments(
       const el = child as HTMLElement;
       const mentionPath = el.getAttribute(MENTION_TAG_ATTR);
       if (mentionPath) {
-        const kind = el.getAttribute(MENTION_KIND_ATTR);
-        pushTextSegment(parts, formatMentionReference(mentionPath, kind === "dir" ? "dir" : "file"));
+        const kind = el.getAttribute(MENTION_KIND_ATTR) === "dir" ? "dir" : "file";
+        const reference = createFileMentionReference(mentionPath, kind);
+        if (reference) {
+          parts.push({ type: "fileMention", reference });
+        }
       } else if (el.hasAttribute(GIT_FILE_MENTION_PATH_ATTR)) {
         const file = gitFileMentionFromElement(el);
         if (file) {
@@ -342,6 +354,7 @@ function serializeChildren(
 ): string {
   return serializeChildrenToSegments(parent, largePastes)
     .map((segment) => {
+      if (segment.type === "fileMention") return formatFileMentionToken(segment.reference);
       if (segment.type === "largePaste") return segment.paste.text;
       if (segment.type === "skillMention") return formatSkillMentionToken(segment.skill);
       if (segment.type === "commitMention") return formatCommitMentionToken(segment.commit);
@@ -690,21 +703,23 @@ function detectMention(root: HTMLElement, skillsEnabled: boolean): MentionContex
   };
 }
 
-function createFileMentionChip(path: string, kind: "file" | "dir") {
+function createFileMentionChip(path: string, kind: FileMentionKind) {
+  const reference = createFileMentionReference(path, kind);
+  if (!reference) return null;
+
   const chip = document.createElement("span");
-  chip.setAttribute(MENTION_TAG_ATTR, path);
-  chip.setAttribute(MENTION_KIND_ATTR, kind);
+  chip.setAttribute(MENTION_TAG_ATTR, reference.path);
+  chip.setAttribute(MENTION_KIND_ATTR, reference.kind);
   chip.contentEditable = "false";
   chip.className =
-    kind === "dir"
+    reference.kind === "dir"
       ? "mention-chip inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 mx-0.5 text-amber-700 dark:text-amber-300 align-baseline whitespace-nowrap select-none"
       : "mention-chip inline-flex items-center gap-1 rounded bg-blue-500/15 px-1.5 mx-0.5 text-blue-700 dark:text-blue-300 align-baseline whitespace-nowrap select-none";
-  chip.title = path;
+  chip.title = fileMentionTitle(reference);
 
-  chip.appendChild(createFileTypeMentionIcon(path, kind));
+  chip.appendChild(createFileTypeMentionIcon(reference.path, reference.kind));
 
-  const fileName = path.split("/").pop() || path;
-  chip.appendChild(document.createTextNode(fileName));
+  chip.appendChild(document.createTextNode(fileMentionDisplayName(reference)));
   return chip;
 }
 
@@ -737,6 +752,7 @@ function insertMentionChipElement(
 /** Replace the @query text with a styled mention chip. */
 function insertMentionChip(ctx: MentionContext, path: string, kind: "file" | "dir") {
   const chip = createFileMentionChip(path, kind);
+  if (!chip) return;
   insertMentionChipElement(ctx, chip, { ensureSpaceAfterChip: true });
 }
 
@@ -1490,6 +1506,10 @@ export const MentionComposer = memo(forwardRef<MentionComposerHandle, MentionCom
       } else if (segment.type === "largePaste") {
         largePastes.push(segment.paste);
         textParts.push(segment.paste.text);
+      } else if (segment.type === "fileMention") {
+        const token = formatFileMentionToken(segment.reference);
+        textParts.push(token);
+        textWithoutLargePastesParts.push(token);
       } else if (segment.type === "skillMention") {
         skillMentions.push(segment.skill);
         const token = formatSkillMentionToken(segment.skill);
@@ -1622,6 +1642,9 @@ export const MentionComposer = memo(forwardRef<MentionComposerHandle, MentionCom
             if (segment.type === "largePaste") {
               largePastesRef.current.set(segment.paste.id, segment.paste);
               el.appendChild(createLargePasteChip(segment.paste));
+            } else if (segment.type === "fileMention") {
+              const chip = createFileMentionChip(segment.reference.path, segment.reference.kind);
+              if (chip) el.appendChild(chip);
             } else if (segment.type === "skillMention") {
               el.appendChild(createSkillMentionChip(segment.skill));
             } else if (segment.type === "commitMention") {
@@ -1646,7 +1669,9 @@ export const MentionComposer = memo(forwardRef<MentionComposerHandle, MentionCom
         const el = editorRef.current;
         if (!el) return;
         el.focus();
-        insertNodeAtCursor(el, createFileMentionChip(path, kind), { ensureSpaceAfterNode: true });
+        const chip = createFileMentionChip(path, kind);
+        if (!chip) return;
+        insertNodeAtCursor(el, chip, { ensureSpaceAfterNode: true });
         closeMentionSession();
         refreshEmptyState();
       },

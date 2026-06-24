@@ -4,6 +4,8 @@ type QueueEventOptions = {
   allowAfterClose?: boolean;
 };
 
+type GatewayBridgeSendResult = Promise<void> | void;
+
 type GatewayBridgeEventControllerParams = {
   conversationId: string;
   requestId: string;
@@ -13,12 +15,19 @@ type GatewayBridgeEventControllerParams = {
     requestId: string,
     event: Record<string, unknown>,
     options?: { workerId?: string },
-  ) => void;
+  ) => GatewayBridgeSendResult;
   resolveErrorConversationId?: () => string;
 };
 
 export type GatewayBridgeEventController = {
-  queueEvent: (event: Record<string, unknown>, options?: QueueEventOptions) => void;
+  queueEvent: (
+    event: Record<string, unknown>,
+    options?: QueueEventOptions,
+  ) => GatewayBridgeSendResult;
+  queueUserMessage: (
+    message: string,
+    uploadedFiles?: readonly unknown[],
+  ) => GatewayBridgeSendResult;
   queueToken: (delta: string, extra?: Record<string, unknown>) => void;
   queueTitle: (nextTitle: string, allowAfterClose?: boolean) => void;
   queueToolStatus: (status: string | null, isCompaction?: boolean) => void;
@@ -39,7 +48,7 @@ export function createGatewayBridgeEventController(
   const queueEvent = (event: Record<string, unknown>, options?: QueueEventOptions) => {
     if (!params.enabled) return;
     if (streamClosed && !options?.allowAfterClose) return;
-    params.sendEvent(params.requestId, event, { workerId: params.workerId });
+    return params.sendEvent(params.requestId, event, { workerId: params.workerId });
   };
 
   const queueToolStatus = (status: string | null, isCompaction = false) => {
@@ -57,6 +66,17 @@ export function createGatewayBridgeEventController(
 
   return {
     queueEvent,
+    queueUserMessage(message: string, uploadedFiles = []) {
+      if (!message.trim() && uploadedFiles.length === 0) return;
+      return queueEvent({
+        type: "user_message",
+        message,
+        uploaded_files: uploadedFiles.map((file) =>
+          file && typeof file === "object" ? { ...(file as Record<string, unknown>) } : file,
+        ),
+        conversation_id: params.conversationId,
+      });
+    },
     queueToken(delta: string, extra?: Record<string, unknown>) {
       if (delta.length === 0 && !extra) return;
       if (delta.length > 0) {

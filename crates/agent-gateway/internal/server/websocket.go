@@ -101,15 +101,17 @@ type websocketConnection struct {
 	done       chan struct{}
 	authorized bool
 
-	historyEvents         <-chan *gatewayv1.HistorySyncEvent
-	historyEventsCleanup  func()
-	settingsEvents        <-chan *gatewayv1.SettingsSyncEvent
-	settingsEventsCleanup func()
-	terminalEvents        <-chan *gatewayv1.TerminalEvent
-	terminalEventsCleanup func()
-	sftpEvents            <-chan *gatewayv1.SftpEvent
-	sftpEventsCleanup     func()
-	heartbeatOnce         sync.Once
+	historyEvents          <-chan *gatewayv1.HistorySyncEvent
+	historyEventsCleanup   func()
+	settingsEvents         <-chan *gatewayv1.SettingsSyncEvent
+	settingsEventsCleanup  func()
+	terminalEvents         <-chan *gatewayv1.TerminalEvent
+	terminalEventsCleanup  func()
+	sftpEvents             <-chan *gatewayv1.SftpEvent
+	sftpEventsCleanup      func()
+	chatQueueEvents        <-chan *gatewayv1.ChatQueueEvent
+	chatQueueEventsCleanup func()
+	heartbeatOnce          sync.Once
 
 	terminalInterest *websocketTerminalInterestTracker
 }
@@ -209,6 +211,10 @@ func (c *websocketConnection) close() {
 			c.sftpEventsCleanup()
 			c.sftpEventsCleanup = nil
 		}
+		if c.chatQueueEventsCleanup != nil {
+			c.chatQueueEventsCleanup()
+			c.chatQueueEventsCleanup = nil
+		}
 		_ = c.conn.Close()
 	})
 }
@@ -232,6 +238,7 @@ func (c *websocketConnection) handleAuth(req websocketRequest) {
 	c.startSettingsSyncForwarder()
 	c.startTerminalEventForwarder()
 	c.startSftpEventForwarder()
+	c.startChatQueueEventForwarder()
 	c.startWebSocketHeartbeat()
 	if err := c.writeResponse(req.ID, map[string]any{"ok": true}); err != nil {
 		c.close()
@@ -258,7 +265,7 @@ func (c *websocketConnection) startHistorySyncForwarder() {
 				if !ok {
 					return
 				}
-				if err := c.writeHistoryEvent(websocketHistorySyncPayload(event)); err != nil {
+				if err := c.writeHistoryEvent(websocketHistorySyncPayload(event, c.sm.ActiveChatRunSummaries()...)); err != nil {
 					c.close()
 					return
 				}
@@ -350,6 +357,33 @@ func (c *websocketConnection) startSftpEventForwarder() {
 					continue
 				}
 				if err := c.writeSftpEvent(websocketSftpEventPayload(event)); err != nil {
+					c.close()
+					return
+				}
+			}
+		}
+	}()
+}
+
+func (c *websocketConnection) startChatQueueEventForwarder() {
+	if c.chatQueueEvents != nil || c.chatQueueEventsCleanup != nil {
+		return
+	}
+
+	chatQueueEvents, cleanup := c.sm.SubscribeChatQueueEvents()
+	c.chatQueueEvents = chatQueueEvents
+	c.chatQueueEventsCleanup = cleanup
+
+	go func() {
+		for {
+			select {
+			case <-c.done:
+				return
+			case event, ok := <-chatQueueEvents:
+				if !ok {
+					return
+				}
+				if err := c.writeChatQueueEvent(websocketChatQueueEventPayload(event)); err != nil {
 					c.close()
 					return
 				}
@@ -509,6 +543,13 @@ func (c *websocketConnection) writeTerminalEvent(payload any) error {
 func (c *websocketConnection) writeSftpEvent(payload any) error {
 	return c.writeEnvelope(websocketEnvelope{
 		Type:    "sftp.event",
+		Payload: payload,
+	})
+}
+
+func (c *websocketConnection) writeChatQueueEvent(payload any) error {
+	return c.writeEnvelope(websocketEnvelope{
+		Type:    "chat_queue.event",
 		Payload: payload,
 	})
 }

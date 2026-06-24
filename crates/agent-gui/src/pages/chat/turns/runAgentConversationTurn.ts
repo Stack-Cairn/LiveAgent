@@ -29,6 +29,7 @@ import {
   attachToolResultToRound,
   collapseThinking,
   type LiveRound,
+  markToolCallRunningInRound,
   updateLiveRound,
   upsertHostedSearchToRound,
   upsertToolCallToRound,
@@ -726,9 +727,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       (prev) => {
         let next = prev;
         for (const { round, toolCall } of deltas) {
-          next = updateLiveRound(next, round, (target) =>
-            upsertToolCallToRound(collapseThinking(target), toolCall),
-          );
+          next = updateLiveRound(next, round, (target) => {
+            const withToolCall = upsertToolCallToRound(collapseThinking(target), toolCall);
+            return markToolCallRunningInRound(withToolCall, toolCall);
+          });
         }
         return next;
       },
@@ -901,7 +903,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             (prev) =>
               updateLiveRound(prev, round, (target) => {
                 const nextTarget = collapseThinking(target);
-                return upsertToolCallToRound(nextTarget, toolCall);
+                const withToolCall = upsertToolCallToRound(nextTarget, toolCall);
+                return markToolCallRunningInRound(withToolCall, toolCall);
               }),
             transcriptStore,
             isConversationVisible(),
@@ -930,14 +933,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             (prev) =>
               updateLiveRound(prev, round, (target) => {
                 const withToolCall = upsertToolCallToRound(collapseThinking(target), toolCall);
-                const runningIds = withToolCall.runningToolCallIds || [];
-                const nextRunning = runningIds.includes(toolCall.id)
-                  ? runningIds
-                  : [...runningIds, toolCall.id];
-                return {
-                  ...withToolCall,
-                  runningToolCallIds: nextRunning,
-                };
+                return markToolCallRunningInRound(withToolCall, toolCall);
               }),
             transcriptStore,
             isConversationVisible(),
@@ -1221,9 +1217,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         });
         batchLiveRoundsUpdate(
           (prev) =>
-            updateLiveRound(prev, round, (target) =>
-              upsertToolCallToRound(collapseThinking(target), toolCall),
-            ),
+            updateLiveRound(prev, round, (target) => {
+              const withToolCall = upsertToolCallToRound(collapseThinking(target), toolCall);
+              return markToolCallRunningInRound(withToolCall, toolCall);
+            }),
           transcriptStore,
           isConversationVisible(),
         );
@@ -1242,13 +1239,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           (prev) =>
             updateLiveRound(prev, round, (target) => {
               const withToolCall = upsertToolCallToRound(collapseThinking(target), toolCall);
-              const runningIds = withToolCall.runningToolCallIds || [];
-              return {
-                ...withToolCall,
-                runningToolCallIds: runningIds.includes(toolCall.id)
-                  ? runningIds
-                  : [...runningIds, toolCall.id],
-              };
+              return markToolCallRunningInRound(withToolCall, toolCall);
             }),
           transcriptStore,
           isConversationVisible(),

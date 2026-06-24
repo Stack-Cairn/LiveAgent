@@ -146,7 +146,10 @@ func websocketHistoryShareStatusPayload(share *gatewayv1.HistoryShareStatus) map
 	return websocketProtoPayload(share, true)
 }
 
-func websocketHistorySyncPayload(event *gatewayv1.HistorySyncEvent) map[string]any {
+func websocketHistorySyncPayload(
+	event *gatewayv1.HistorySyncEvent,
+	activeRuns ...session.ActiveChatRunSummary,
+) map[string]any {
 	payload := map[string]any{
 		"kind":            strings.TrimSpace(event.GetKind()),
 		"conversation_id": strings.TrimSpace(event.GetConversationId()),
@@ -154,6 +157,33 @@ func websocketHistorySyncPayload(event *gatewayv1.HistorySyncEvent) map[string]a
 
 	if conversation := event.GetConversation(); conversation != nil {
 		payload["conversation"] = websocketConversationSummaryPayload(conversation)
+	}
+	if payload["kind"] == "running" {
+		conversationID := strings.TrimSpace(event.GetConversationId())
+		if conversationID == "" && event.GetConversation() != nil {
+			conversationID = strings.TrimSpace(event.GetConversation().GetId())
+		}
+		for _, summary := range activeRuns {
+			if strings.TrimSpace(summary.ConversationID) != conversationID {
+				continue
+			}
+			if requestID := strings.TrimSpace(summary.RequestID); requestID != "" {
+				payload["run_id"] = requestID
+			}
+			if summary.FirstSeq > 0 {
+				payload["first_seq"] = summary.FirstSeq
+			}
+			if summary.LatestSeq > 0 {
+				payload["latest_seq"] = summary.LatestSeq
+			}
+			if summary.RunEpoch > 0 {
+				payload["run_epoch"] = summary.RunEpoch
+			}
+			if summary.UpdatedAt > 0 {
+				payload["updated_at"] = summary.UpdatedAt
+			}
+			break
+		}
 	}
 
 	return payload
@@ -177,6 +207,14 @@ func websocketSettingsJSONPayload(raw string) (map[string]any, error) {
 		return map[string]any{}, nil
 	}
 	return payload, nil
+}
+
+func websocketChatQueueEventPayload(event *gatewayv1.ChatQueueEvent) map[string]any {
+	return map[string]any{
+		"conversation_id": strings.TrimSpace(event.GetConversationId()),
+		"snapshot_json":   strings.TrimSpace(event.GetSnapshotJson()),
+		"revision":        event.GetRevision(),
+	}
 }
 
 func websocketTerminalSessionPayload(session *gatewayv1.TerminalSession) map[string]any {

@@ -5,6 +5,7 @@ import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
   type PendingUploadedFile,
+  uploadedFilesVisuallyEqual,
 } from "@/lib/chat/uploadedFiles";
 
 import {
@@ -166,6 +167,16 @@ type AssistantGroupBuilder = {
 
 type UploadedFilesUserMessage = Pick<Message, "role" | "content"> & Record<string, unknown>;
 
+const LIVE_UPLOADED_FILE_KINDS = new Set<string>([
+  "text",
+  "image",
+  "pdf",
+  "notebook",
+  "word",
+  "spreadsheet",
+  "archive",
+]);
+
 function randomId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
@@ -226,21 +237,90 @@ function readRound(value: unknown) {
   return round > 0 ? Math.floor(round) : undefined;
 }
 
+function normalizeLiveUploadedFile(value: unknown): PendingUploadedFile | null {
+  const record = asNonArrayRecord(value);
+  const relativePath = readString(record.relativePath ?? record.relative_path).trim();
+  const fileName = readString(record.fileName ?? record.file_name).trim() || relativePath;
+  const kind = readString(record.kind).trim();
+  const sizeBytes = readNumber(record.sizeBytes ?? record.size_bytes) ?? 0;
+  if (!relativePath || !fileName || !LIVE_UPLOADED_FILE_KINDS.has(kind)) {
+    return null;
+  }
+  const absolutePath = readString(record.absolutePath ?? record.absolute_path).trim();
+  const file: PendingUploadedFile = {
+    relativePath,
+    absolutePath: absolutePath || undefined,
+    fileName,
+    kind: kind as PendingUploadedFile["kind"],
+    sizeBytes: Math.max(0, Math.floor(sizeBytes)),
+  };
+  const displayMode = readString(record.displayMode ?? record.display_mode).trim();
+  if (displayMode === "largePaste") {
+    file.displayMode = "largePaste";
+  }
+  const displayLabel = readString(record.displayLabel ?? record.display_label).trim();
+  if (displayLabel) {
+    file.displayLabel = displayLabel;
+  }
+  const displayCharCount = readNumber(record.displayCharCount ?? record.display_char_count);
+  if (typeof displayCharCount === "number") {
+    file.displayCharCount = Math.max(0, Math.floor(displayCharCount));
+  }
+  const displayLineCount = readNumber(record.displayLineCount ?? record.display_line_count);
+  if (typeof displayLineCount === "number") {
+    file.displayLineCount = Math.max(0, Math.floor(displayLineCount));
+  }
+  return file;
+}
+
+function normalizeLiveUploadedFiles(value: unknown): PendingUploadedFile[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => normalizeLiveUploadedFile(item))
+    .filter((file): file is PendingUploadedFile => file !== null);
+}
+
+function liveUserEntryMatches(
+  entry: ChatEntry | undefined,
+  text: string,
+  attachments: PendingUploadedFile[],
+) {
+  return (
+    entry?.kind === "user" &&
+    entry.text === text &&
+    uploadedFilesVisuallyEqual(entry.attachments, attachments)
+  );
+}
+
 function readHistoryMessageRef(value: unknown): HistoryMessageRef | undefined {
   const record = asRecord(value);
   const segmentIndex = readNumber(record.segmentIndex ?? record.segment_index);
   const messageIndex = readNumber(record.messageIndex ?? record.message_index);
+  const segmentId = readString(record.segmentId ?? record.segment_id)?.trim();
+  const messageId = readString(record.messageId ?? record.message_id)?.trim();
+  const role = readString(record.role)?.trim();
+  const contentHash = readString(record.contentHash ?? record.content_hash)?.trim();
   if (
     typeof segmentIndex !== "number" ||
     typeof messageIndex !== "number" ||
     segmentIndex < 0 ||
-    messageIndex < 0
+    messageIndex < 0 ||
+    !segmentId ||
+    !messageId ||
+    !role ||
+    !contentHash
   ) {
     return undefined;
   }
   return {
     segmentIndex: Math.floor(segmentIndex),
     messageIndex: Math.floor(messageIndex),
+    segmentId,
+    messageId,
+    role,
+    contentHash,
   };
 }
 
@@ -735,9 +815,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
       const messageRef = readHistoryMessageRef(userRecord.liveAgentHistoryRef);
       if (text.trim() || attachments.length > 0) {
         entries.push({
-          id: messageRef
-            ? `user-${messageRef.segmentIndex}-${messageRef.messageIndex}`
-            : randomId("user"),
+          id: messageRef ? `user-${messageRef.messageId}` : randomId("user"),
           kind: "user",
           text,
           attachments,
@@ -1156,6 +1234,26 @@ function enrichTailHostedSearchEntriesWithText(entries: ChatEntry[]): ChatEntry[
 }
 
 export function pushChatEvent(entries: ChatEntry[], event: ChatEvent): ChatEntry[] {
+  if (event.type === "user_message") {
+    const text = readString(event.message);
+    const attachments = normalizeLiveUploadedFiles(event.uploaded_files);
+    if (!text.trim() && attachments.length === 0) {
+      return entries;
+    }
+    if (liveUserEntryMatches(entries.at(-1), text, attachments)) {
+      return entries;
+    }
+    return [
+      ...entries,
+      {
+        id: randomId("live-user"),
+        kind: "user",
+        text,
+        attachments,
+      },
+    ];
+  }
+
   if (event.type === "token") {
     if (isCheckpointTokenEvent(event)) {
       const checkpoint = normalizeCheckpointEntry({

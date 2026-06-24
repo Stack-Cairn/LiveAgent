@@ -36,22 +36,7 @@ import { SkillsHubPage } from "@/pages/skills-hub/SkillsHubPage";
 import { McpHubPage } from "@/pages/mcp-hub/McpHubPage";
 import type { SectionId } from "@/pages/settings/types";
 import { useChatSkills } from "@/pages/chat/useChatSkills";
-import {
-  appendQueuedChatTurn,
-  buildQueuedChatTurnPreview,
-  createQueuedChatTurn,
-  getQueuedConversationIds,
-  insertQueuedChatTurnAtSlot,
-  moveQueuedChatTurn,
-  promoteQueuedChatTurn,
-  queuedChatTurnHasContent,
-  removeQueuedChatTurn,
-  removeQueuedChatTurnsForConversation,
-  resolveQueuedChatTurnSlotIndex,
-  takeNextQueuedChatTurn,
-  type QueuedChatTurn,
-  type QueuedChatTurnEditSlot,
-} from "@/pages/chat/queue/chatTurnQueue";
+import { queuedChatTurnHasContent } from "@/pages/chat/queue/chatTurnQueue";
 import { mergeAlwaysEnabledSkillNames } from "@/lib/skills";
 import { buildModelOptions, sortHistoryItems, VIBING_STATUS } from "@/lib/chat/chatPageHelpers";
 import { SettingsPage } from "@/pages/SettingsPage";
@@ -85,6 +70,8 @@ import { terminalSessionBelongsToProject } from "@/lib/terminal/sessionStore";
 import type { TerminalSession } from "@/lib/terminal/types";
 import type {
   AgentStatus,
+  ChatQueueItemSummary,
+  ChatQueueSnapshot,
   ChatEvent,
   ConversationSummary,
   GatewayHistoryEvent,
@@ -198,7 +185,6 @@ import { WorkspaceOverlayHost } from "./WorkspaceOverlayHost";
 import {
   createConversationRuntimeEntry,
   createWorkspaceProjectFromPath,
-  findUserMessageRefByOrdinal,
   formatTranslation,
   getDefaultWorkspaceProjectPath,
   hasDetachedHistorySelection,
@@ -209,7 +195,6 @@ import {
   resolveVisibleConversationId,
   shouldOpenSidebarByDefault,
   toChatHistorySummary,
-  truncateChatEntriesFromMessageRef,
 } from "./historyUtils";
 import type {
   ConversationRuntimeEntry,
@@ -227,6 +212,23 @@ import { useGatewaySession } from "./hooks/useGatewaySession";
 import { useGatewaySettingsSync } from "./hooks/useGatewaySettingsSync";
 import { usePendingUploads } from "./hooks/usePendingUploads";
 import { useProjectToolsRuntime } from "./hooks/useProjectToolsRuntime";
+
+function resolveRunningConversationRunKey(
+  runtime: Pick<RunningConversationRuntime, "runId" | "runEpoch"> | null | undefined,
+) {
+  const runId = runtime?.runId?.trim() ?? "";
+  if (runId) {
+    return runId;
+  }
+  return typeof runtime?.runEpoch === "number" && Number.isFinite(runtime.runEpoch)
+    ? `epoch:${Math.floor(runtime.runEpoch)}`
+    : "";
+}
+
+function readGatewayChatEventRunId(event: ChatEvent) {
+  const runId = (event as ChatEvent & { __gatewayRunId?: unknown }).__gatewayRunId;
+  return typeof runId === "string" ? runId.trim() : "";
+}
 
 export default function GatewayApp() {
   const historyShareToken = useMemo(() => parseHistoryShareToken(), []);
@@ -261,7 +263,8 @@ export default function GatewayApp() {
   const [localRunningConversationIds, setLocalRunningConversationIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const [queuedChatTurns, setQueuedChatTurns] = useState<QueuedChatTurn[]>([]);
+  const [queuedChatTurns, setQueuedChatTurns] = useState<ChatQueueItemSummary[]>([]);
+  const [, setChatQueueRevision] = useState(0);
   const [remoteRunningConversationIds, setRemoteRunningConversationIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -373,18 +376,10 @@ export default function GatewayApp() {
   const chatErrorRef = useRef(chatError);
   const chatToolStatusRef = useRef(chatToolStatus);
   const chatToolStatusIsCompactionRef = useRef(chatToolStatusIsCompaction);
-  const queuedChatTurnsRef = useRef<QueuedChatTurn[]>([]);
-  const queuedChatProcessingConversationIdsRef = useRef(new Set<string>());
-  const queuedChatTurnEditSlotRef = useRef<
-    | (QueuedChatTurnEditSlot & {
-        originalId: string;
-        createdAt: number;
-        workdir: string;
-        runtimeControls: ChatRuntimeControls;
-      })
-    | null
-  >(null);
-  const previousRunningConversationIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const queuedChatTurnsRef = useRef<ChatQueueItemSummary[]>([]);
+  const chatQueueConversationIdRef = useRef("");
+  const chatQueueRevisionRef = useRef(0);
+  const queuedChatEditSessionRef = useRef<{ itemId: string; revision: number } | null>(null);
   const selectedHistoryRef = useRef(selectedHistory);
   const selectedHistoryEntriesRef = useRef(selectedHistoryEntries);
   const historyItemsRef = useRef(historyItems);
@@ -409,6 +404,7 @@ export default function GatewayApp() {
   const displayedConversationWorkdirRef = useRef("");
   const conversationAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
   const conversationEventStreamControllersRef = useRef<Map<string, AbortController>>(new Map());
+  const conversationEventStreamRunIdsRef = useRef<Map<string, string>>(new Map());
   const completedLiveStreamConversationAtRef = useRef<Map<string, number>>(new Map());
   const completedLiveStreamCleanupTimersRef = useRef<Map<string, number>>(new Map());
   const pendingHistoryRefreshAfterLiveCompletionRef = useRef<Set<string>>(new Set());
@@ -416,6 +412,10 @@ export default function GatewayApp() {
   const titlePositionLockedConversationIdsRef = useRef<Set<string>>(new Set());
   const titlePositionLockTimeoutsRef = useRef<Map<string, number>>(new Map());
   const blockedHistoryHydrationConversationIdsRef = useRef<Set<string>>(new Set());
+  const editResendGenerationRef = useRef(0);
+  const activeEditResendTransactionsRef = useRef<
+    Map<string, { generation: number; clientRequestId: string }>
+  >(new Map());
   const visibleHistorySnapshotRefreshSeqRef = useRef<Map<string, number>>(new Map());
   const restoredPageHistoryRefreshAtRef = useRef<Map<string, number>>(new Map());
   const historyLoadSequenceRef = useRef(0);
@@ -466,21 +466,31 @@ export default function GatewayApp() {
     executionMode: settings.system.executionMode,
     conversationId,
     selectedHistoryId,
-    chatBusyRef,
     displayedConversationWorkdirRef,
     composerRef,
     setChatError,
   });
 
-  const setQueuedChatTurnsState = useCallback(
-    (updater: (current: QueuedChatTurn[]) => QueuedChatTurn[]) => {
-      const next = updater(queuedChatTurnsRef.current).slice();
-      queuedChatTurnsRef.current = next;
-      setQueuedChatTurns(next);
-      return next;
-    },
-    [],
-  );
+  const applyChatQueueSnapshot = useCallback((snapshot: ChatQueueSnapshot | null | undefined) => {
+    if (!snapshot) return;
+    const visibleConversationId = resolveVisibleConversationId(
+      selectedHistoryIdRef.current,
+      conversationIdRef.current,
+    );
+    if (snapshot.conversationId !== visibleConversationId) {
+      return;
+    }
+    const revision = Number(snapshot.revision ?? 0);
+    const isSameQueueConversation = snapshot.conversationId === chatQueueConversationIdRef.current;
+    if (isSameQueueConversation && revision < chatQueueRevisionRef.current) {
+      return;
+    }
+    chatQueueConversationIdRef.current = snapshot.conversationId;
+    chatQueueRevisionRef.current = revision;
+    queuedChatTurnsRef.current = snapshot.items.slice();
+    setChatQueueRevision(revision);
+    setQueuedChatTurns(snapshot.items.slice());
+  }, []);
 
   const recordProjectActivity = useCallback(
     (workdir?: string | null, updatedAt?: number | null) => {
@@ -505,6 +515,13 @@ export default function GatewayApp() {
     },
     [],
   );
+
+  useEffect(() => {
+    if (!api) return;
+    return api.subscribeChatQueue((snapshot) => {
+      applyChatQueueSnapshot(snapshot);
+    });
+  }, [api, applyChatQueueSnapshot]);
 
   useEffect(() => {
     const historyActivity = buildWorkspaceProjectActivityUpdatedAts(historyWorkdirs);
@@ -1102,9 +1119,19 @@ export default function GatewayApp() {
   );
 
   const refreshVisibleConversationHistorySnapshot = useCallback(
-    async (targetConversationId: string, currentApi = api, options?: { allowIdle?: boolean }) => {
+    async (
+      targetConversationId: string,
+      currentApi = api,
+      options?: { allowIdle?: boolean; allowDuringEditTransaction?: boolean },
+    ) => {
       const conversationIdValue = targetConversationId.trim();
       if (!currentApi || !conversationIdValue) {
+        return;
+      }
+      if (
+        options?.allowDuringEditTransaction !== true &&
+        activeEditResendTransactionsRef.current.has(conversationIdValue)
+      ) {
         return;
       }
 
@@ -1892,7 +1919,6 @@ export default function GatewayApp() {
         runId?: string;
         workdir?: string;
         firstSeq?: number;
-        latestSeq?: number;
         runEpoch?: number;
         updatedAt?: number;
       },
@@ -1912,12 +1938,6 @@ export default function GatewayApp() {
         runtime.firstSeq > 0
           ? Math.floor(runtime.firstSeq)
           : existingRuntime?.firstSeq;
-      const runtimeLatestSeq =
-        typeof runtime?.latestSeq === "number" &&
-        Number.isFinite(runtime.latestSeq) &&
-        runtime.latestSeq > 0
-          ? Math.floor(runtime.latestSeq)
-          : existingRuntime?.latestSeq;
       const runtimeRunEpoch =
         typeof runtime?.runEpoch === "number" &&
         Number.isFinite(runtime.runEpoch) &&
@@ -1930,6 +1950,32 @@ export default function GatewayApp() {
         runtime.updatedAt > 0
           ? runtime.updatedAt
           : existingRuntime?.updatedAt || Date.now();
+      const nextRunKey = isRunning
+        ? resolveRunningConversationRunKey({
+            runId: runtimeRunId || undefined,
+            runEpoch: runtimeRunEpoch,
+          })
+        : "";
+      const previousRunKey =
+        resolveRunningConversationRunKey(existingRuntime) ||
+        (conversationEventStreamRunIdsRef.current.get(conversationIdValue) ?? "");
+      if (isRunning && nextRunKey && previousRunKey && previousRunKey !== nextRunKey) {
+        const existingController =
+          conversationEventStreamControllersRef.current.get(conversationIdValue);
+        if (existingController) {
+          conversationEventStreamControllersRef.current.delete(conversationIdValue);
+          conversationEventStreamRunIdsRef.current.delete(conversationIdValue);
+          existingController.abort();
+        }
+        const completedTimeoutId =
+          completedLiveStreamCleanupTimersRef.current.get(conversationIdValue);
+        if (completedTimeoutId !== undefined) {
+          window.clearTimeout(completedTimeoutId);
+          completedLiveStreamCleanupTimersRef.current.delete(conversationIdValue);
+        }
+        completedLiveStreamConversationAtRef.current.delete(conversationIdValue);
+        clearConversationLiveStream(conversationIdValue);
+      }
       recordProjectActivity(runtimeWorkdir, runtimeUpdatedAt);
       if (!isRunning && !hasConversation && !existingRuntime) {
         return;
@@ -1945,43 +1991,41 @@ export default function GatewayApp() {
         setRemoteRunningConversationIds(next);
       }
 
-      setRemoteRunningConversationRuntime((currentRuntime) => {
-        const existing = currentRuntime.get(conversationIdValue);
-        if (!isRunning) {
-          if (!existing) {
-            return currentRuntime;
-          }
-          const nextRuntime = new Map(currentRuntime);
-          nextRuntime.delete(conversationIdValue);
-          remoteRunningConversationRuntimeRef.current = nextRuntime;
-          return nextRuntime;
-        }
-
-        const nextRuntimeEntry: RunningConversationRuntime = {
-          runId: runtimeRunId || undefined,
-          workdir: runtimeWorkdir || undefined,
-          firstSeq: runtimeFirstSeq,
-          latestSeq: runtimeLatestSeq,
-          runEpoch: runtimeRunEpoch,
-          updatedAt: Math.max(existing?.updatedAt ?? 0, runtimeUpdatedAt),
-        };
-        if (
-          existing?.runId === nextRuntimeEntry.runId &&
-          existing?.workdir === nextRuntimeEntry.workdir &&
-          existing?.firstSeq === nextRuntimeEntry.firstSeq &&
-          existing?.latestSeq === nextRuntimeEntry.latestSeq &&
-          existing?.runEpoch === nextRuntimeEntry.runEpoch &&
-          existing?.updatedAt === nextRuntimeEntry.updatedAt
-        ) {
-          return currentRuntime;
+      const currentRuntime = remoteRunningConversationRuntimeRef.current;
+      const existing = currentRuntime.get(conversationIdValue);
+      if (!isRunning) {
+        if (!existing) {
+          return;
         }
         const nextRuntime = new Map(currentRuntime);
-        nextRuntime.set(conversationIdValue, nextRuntimeEntry);
+        nextRuntime.delete(conversationIdValue);
         remoteRunningConversationRuntimeRef.current = nextRuntime;
-        return nextRuntime;
-      });
+        setRemoteRunningConversationRuntime(nextRuntime);
+        return;
+      }
+
+      const nextRuntimeEntry: RunningConversationRuntime = {
+        runId: runtimeRunId || undefined,
+        workdir: runtimeWorkdir || undefined,
+        firstSeq: runtimeFirstSeq,
+        runEpoch: runtimeRunEpoch,
+        updatedAt: Math.max(existing?.updatedAt ?? 0, runtimeUpdatedAt),
+      };
+      if (
+        existing?.runId === nextRuntimeEntry.runId &&
+        existing?.workdir === nextRuntimeEntry.workdir &&
+        existing?.firstSeq === nextRuntimeEntry.firstSeq &&
+        existing?.runEpoch === nextRuntimeEntry.runEpoch &&
+        existing?.updatedAt === nextRuntimeEntry.updatedAt
+      ) {
+        return;
+      }
+      const nextRuntime = new Map(currentRuntime);
+      nextRuntime.set(conversationIdValue, nextRuntimeEntry);
+      remoteRunningConversationRuntimeRef.current = nextRuntime;
+      setRemoteRunningConversationRuntime(nextRuntime);
     },
-    [recordProjectActivity],
+    [clearConversationLiveStream, recordProjectActivity],
   );
 
   const isConversationEventStreamSubscribed = useCallback((targetConversationId: string) => {
@@ -2002,12 +2046,14 @@ export default function GatewayApp() {
       return;
     }
     conversationEventStreamControllersRef.current.delete(conversationIdValue);
+    conversationEventStreamRunIdsRef.current.delete(conversationIdValue);
     controller.abort();
   }, []);
 
   const stopAllConversationEventStreamSubscriptions = useCallback(() => {
     const controllers = [...conversationEventStreamControllersRef.current.values()];
     conversationEventStreamControllersRef.current.clear();
+    conversationEventStreamRunIdsRef.current.clear();
     for (const controller of controllers) {
       controller.abort();
     }
@@ -2071,7 +2117,10 @@ export default function GatewayApp() {
   );
 
   const clearConversationStreamingState = useCallback(
-    (targetConversationId: string) => {
+    (
+      targetConversationId: string,
+      options?: { remoteRunId?: string; preserveRemoteRunOnMismatch?: boolean },
+    ) => {
       const conversationIdValue = targetConversationId.trim();
       if (!conversationIdValue) {
         return;
@@ -2081,7 +2130,20 @@ export default function GatewayApp() {
         .get(conversationIdValue)
         ?.setToolStatus(null, false, { flush: true });
       setLiveConversationStreamStatus(conversationIdValue, null);
-      setRemoteConversationRunningState(conversationIdValue, false);
+      const expectedRemoteRunKey = resolveRunningConversationRunKey({
+        runId: options?.remoteRunId,
+      });
+      const currentRemoteRunKey = resolveRunningConversationRunKey(
+        remoteRunningConversationRuntimeRef.current.get(conversationIdValue),
+      );
+      const shouldClearRemoteRunning =
+        !options?.preserveRemoteRunOnMismatch ||
+        !expectedRemoteRunKey ||
+        !currentRemoteRunKey ||
+        expectedRemoteRunKey === currentRemoteRunKey;
+      if (shouldClearRemoteRunning) {
+        setRemoteConversationRunningState(conversationIdValue, false);
+      }
       setConversationAbortController(conversationIdValue, null);
       setConversationRunningState(conversationIdValue, false);
       updateConversationRuntimeEntry(conversationIdValue, (current) => {
@@ -2205,9 +2267,6 @@ export default function GatewayApp() {
       if (isLocalDraftConversationId(conversationIdValue)) {
         return;
       }
-      if (conversationEventStreamControllersRef.current.has(conversationIdValue)) {
-        return;
-      }
       if (!remoteRunningConversationIdsRef.current.has(conversationIdValue)) {
         return;
       }
@@ -2224,23 +2283,42 @@ export default function GatewayApp() {
         return;
       }
 
+      const runtime = remoteRunningConversationRuntimeRef.current.get(conversationIdValue);
+      const nextRunKey = resolveRunningConversationRunKey(runtime);
+      const existingController =
+        conversationEventStreamControllersRef.current.get(conversationIdValue);
+      if (existingController) {
+        const existingRunKey =
+          conversationEventStreamRunIdsRef.current.get(conversationIdValue) ?? "";
+        if (!nextRunKey || existingRunKey === nextRunKey) {
+          return;
+        }
+        conversationEventStreamControllersRef.current.delete(conversationIdValue);
+        conversationEventStreamRunIdsRef.current.delete(conversationIdValue);
+        existingController.abort();
+      }
+
       const controller = new AbortController();
       conversationEventStreamControllersRef.current.set(conversationIdValue, controller);
+      conversationEventStreamRunIdsRef.current.set(conversationIdValue, nextRunKey);
       clearCompletedLiveStreamMarker(conversationIdValue);
       clearConversationLiveStream(conversationIdValue);
-      void refreshVisibleConversationHistorySnapshot(conversationIdValue, currentApi);
       const liveStore = getConversationLiveStreamStore(conversationIdValue);
       if (!liveStore) {
         conversationEventStreamControllersRef.current.delete(conversationIdValue);
+        conversationEventStreamRunIdsRef.current.delete(conversationIdValue);
         return;
       }
-      const runtime = remoteRunningConversationRuntimeRef.current.get(conversationIdValue);
-      const streamAfterSeq = resolveRunningConversationStreamAfterSeq(runtime?.firstSeq);
+      void refreshVisibleConversationHistorySnapshot(conversationIdValue, currentApi);
+      const streamAfterSeq = resolveRunningConversationStreamAfterSeq(runtime?.firstSeq, {
+        runId: runtime?.runId,
+      });
 
       void (async () => {
         let terminalEventSeen = false;
         try {
           for await (const event of currentApi.streamChatEvents(conversationIdValue, {
+            runId: runtime?.runId,
             afterSeq: streamAfterSeq,
             signal: controller.signal,
           })) {
@@ -2310,6 +2388,7 @@ export default function GatewayApp() {
             conversationEventStreamControllersRef.current.get(conversationIdValue) === controller
           ) {
             conversationEventStreamControllersRef.current.delete(conversationIdValue);
+            conversationEventStreamRunIdsRef.current.delete(conversationIdValue);
           }
           if (!terminalEventSeen && controller.signal.aborted) {
             liveStore.flush();
@@ -2367,9 +2446,33 @@ export default function GatewayApp() {
       }
 
       if (event.kind === "running" || event.kind === "idle") {
+        const eventRunKey =
+          event.kind === "running"
+            ? resolveRunningConversationRunKey({
+                runId: event.run_id,
+                runEpoch: event.run_epoch,
+              })
+            : "";
+        if (event.kind === "idle" && !eventRunKey) {
+          const activeRunKey =
+            conversationEventStreamRunIdsRef.current.get(targetConversationId) ??
+            resolveRunningConversationRunKey(
+              remoteRunningConversationRuntimeRef.current.get(targetConversationId),
+            );
+          if (
+            activeRunKey &&
+            conversationEventStreamControllersRef.current.has(targetConversationId)
+          ) {
+            void refreshHistoryWorkdirs(api);
+            return;
+          }
+        }
         setRemoteConversationRunningState(targetConversationId, event.kind === "running", {
+          runId: event.run_id,
           workdir: event.conversation?.cwd,
-          updatedAt: event.conversation?.updated_at,
+          firstSeq: event.first_seq,
+          runEpoch: event.run_epoch,
+          updatedAt: event.updated_at ?? event.conversation?.updated_at,
         });
         if (event.kind === "running") {
           if (!isConversationEventStreamSubscribed(targetConversationId)) {
@@ -2763,7 +2866,6 @@ export default function GatewayApp() {
           runId: runningConversation.run_id,
           workdir: runningConversation.cwd,
           firstSeq: runningConversation.first_seq,
-          latestSeq: runningConversation.latest_seq,
           runEpoch: runningConversation.run_epoch,
           updatedAt: runningConversation.updated_at,
         });
@@ -2999,7 +3101,6 @@ export default function GatewayApp() {
           runId: runningConversation.run_id,
           workdir: runningConversation.cwd,
           firstSeq: runningConversation.first_seq,
-          latestSeq: runningConversation.latest_seq,
           runEpoch: runningConversation.run_epoch,
           updatedAt: runningConversation.updated_at,
         });
@@ -3087,6 +3188,9 @@ export default function GatewayApp() {
     async (targetConversationId: string, currentApi = api) => {
       const conversationIdValue = targetConversationId.trim();
       if (!currentApi || !conversationIdValue) {
+        return false;
+      }
+      if (activeEditResendTransactionsRef.current.has(conversationIdValue)) {
         return false;
       }
 
@@ -3496,6 +3600,9 @@ export default function GatewayApp() {
     ) {
       stickTranscriptToBottom();
     }
+    const optimisticUserEntryId =
+      options?.optimisticUserEntryId?.trim() || `user-${crypto.randomUUID()}`;
+    const shouldAppendOptimisticUserEntry = options?.skipOptimisticUserEntry !== true;
     updateConversationRuntimeEntry(activeConversationId, (current) => ({
       ...current,
       error: null,
@@ -3503,15 +3610,17 @@ export default function GatewayApp() {
       toolStatusIsCompaction: false,
       isSending: true,
       workdir: effectiveWorkdir || undefined,
-      messages: [
-        ...current.messages,
-        {
-          id: `user-${crypto.randomUUID()}`,
-          kind: "user",
-          text: message,
-          attachments: uploadedFiles,
-        },
-      ],
+      messages: shouldAppendOptimisticUserEntry
+        ? [
+            ...current.messages,
+            {
+              id: optimisticUserEntryId,
+              kind: "user",
+              text: message,
+              attachments: uploadedFiles,
+            },
+          ]
+        : current.messages,
     }));
     if (startedAsDraftConversation) {
       optimisticTitleConversationIdsRef.current.add(activeConversationId);
@@ -3536,6 +3645,11 @@ export default function GatewayApp() {
     let terminalEventSeen = false;
     let runActive = false;
     let runtimeStarted = false;
+    let activeGatewayRunId = "";
+    const preserveRemoteRunCleanupOptions = () => ({
+      remoteRunId: activeGatewayRunId,
+      preserveRemoteRunOnMismatch: true,
+    });
     let runtimeStartingStatusTimer: number | null = null;
     const clearRuntimeStartingStatusTimer = () => {
       if (runtimeStartingStatusTimer === null) {
@@ -3652,8 +3766,13 @@ export default function GatewayApp() {
         clientRequestId,
         runtimeControls,
         baseMessageRef: options?.editMessageRef,
+        queuePolicy: options?.queuePolicy ?? "auto",
       });
       for await (const event of chatStream) {
+        const eventRunId = readGatewayChatEventRunId(event);
+        if (eventRunId) {
+          activeGatewayRunId = eventRunId;
+        }
         if (event.conversation_id && event.conversation_id !== "") {
           const nextConversationId = event.conversation_id.trim();
           if (nextConversationId !== activeConversationId) {
@@ -3697,10 +3816,43 @@ export default function GatewayApp() {
           }
         }
         if (isChatControlEvent(event)) {
+          if (event.type === "queued_in_gui" || event.state === "desktop_queued") {
+            terminalEventSeen = true;
+            clearRuntimeStartingStatusTimer();
+            clearConversationStreamingState(
+              activeConversationId,
+              preserveRemoteRunCleanupOptions(),
+            );
+            updateConversationRuntimeEntry(activeConversationId, (current) => ({
+              ...current,
+              messages: current.messages.filter((entry) => entry.id !== optimisticUserEntryId),
+              error: null,
+              toolStatus: null,
+              toolStatusIsCompaction: false,
+              isSending: false,
+            }));
+            const queueConversationId = event.conversation_id?.trim() || activeConversationId;
+            void api
+              .chatQueueGet(queueConversationId)
+              .then((response) => applyChatQueueSnapshot(response.snapshot))
+              .catch(() => undefined);
+            return;
+          }
+          if (event.type === "user_message") {
+            markRunPreparing();
+            getConversationLiveStreamStore(activeConversationId)?.appendEvent(event, {
+              flush: true,
+            });
+            markLiveConversationStreamActive(activeConversationId);
+            continue;
+          }
           if (isTerminalChatControlEvent(event)) {
             terminalEventSeen = true;
             clearRuntimeStartingStatusTimer();
-            clearConversationStreamingState(activeConversationId);
+            clearConversationStreamingState(
+              activeConversationId,
+              preserveRemoteRunCleanupOptions(),
+            );
             if (event.type === "failed" || event.state === "failed") {
               getConversationLiveStreamStore(activeConversationId)?.appendEvent(event, {
                 flush: true,
@@ -3748,6 +3900,11 @@ export default function GatewayApp() {
           handleTunnelManagerChatEvent(event);
           if (terminalEvent) {
             terminalEventSeen = true;
+            clearRuntimeStartingStatusTimer();
+            clearConversationStreamingState(
+              activeConversationId,
+              preserveRemoteRunCleanupOptions(),
+            );
             markCompletedLiveStream(activeConversationId);
             commitTerminalConversationLiveStream(activeConversationId);
             refreshHistoryAfterCompletedLiveStream(activeConversationId, api);
@@ -3780,7 +3937,10 @@ export default function GatewayApp() {
     } finally {
       clearRuntimeStartingStatusTimer();
       chatStartInFlightRef.current = false;
-      clearConversationStreamingState(activeConversationId);
+      clearConversationStreamingState(activeConversationId, preserveRemoteRunCleanupOptions());
+      if (remoteRunningConversationIdsRef.current.has(activeConversationId)) {
+        subscribeVisibleConversationEventStream(activeConversationId, api);
+      }
       if (status?.online && !terminalEventSeen) {
         await reloadHistory(api, {
           preferredConversationId: activeConversationId,
@@ -3788,7 +3948,9 @@ export default function GatewayApp() {
           silent: true,
         });
       }
-      blockedHistoryHydrationConversationIdsRef.current.delete(activeConversationId);
+      if (!options?.editMessageRef) {
+        blockedHistoryHydrationConversationIdsRef.current.delete(activeConversationId);
+      }
       if (
         pendingDraftConversationMigrationRef.current?.draftConversationId === activeConversationId
       ) {
@@ -3810,6 +3972,10 @@ export default function GatewayApp() {
       return;
     }
     const controller = getConversationAbortController(activeConversationId);
+    const cancelRunId =
+      conversationEventStreamRunIdsRef.current.get(activeConversationId) ??
+      remoteRunningConversationRuntimeRef.current.get(activeConversationId)?.runId ??
+      "";
     const isVisibleConversation =
       resolveVisibleConversationId(selectedHistoryIdRef.current, conversationIdRef.current) ===
       activeConversationId;
@@ -3819,7 +3985,7 @@ export default function GatewayApp() {
       api &&
       activeConversationId !== "" &&
       !isLocalDraftConversationId(activeConversationId)
-        ? api.cancelChat(activeConversationId).catch((error) => {
+        ? api.cancelChat(activeConversationId, cancelRunId).catch((error) => {
             if (!isAbortError(error)) {
               updateConversationRuntimeEntry(activeConversationId, (current) => ({
                 ...current,
@@ -3853,17 +4019,6 @@ export default function GatewayApp() {
     if (cancelRequest) {
       await cancelRequest;
     }
-  }
-
-  function isConversationRunningForQueue(conversationId: string) {
-    const key = conversationId.trim();
-    return Boolean(
-      key &&
-        (localRunningConversationIdsRef.current.has(key) ||
-          remoteRunningConversationIdsRef.current.has(key) ||
-          chatStartLocksRef.current.has(key) ||
-          getConversationAbortController(key) !== null),
-    );
   }
 
   async function materializeComposerDraftForSend(
@@ -3909,201 +4064,225 @@ export default function GatewayApp() {
     clearCachedComposerDraft(key);
   }
 
-  function enqueueCurrentComposerTurn(position: "end" | "front" | "edit") {
+  async function submitCurrentComposerToGuiQueue(queuePolicy: "append" | "interrupt") {
     const conversationIdValue = getDisplayedConversationId();
     const draft = composerRef.current?.getDraft() ?? null;
     const uploadedFiles = pendingUploadedFiles.slice();
-    if (!conversationIdValue || !queuedChatTurnHasContent(draft, uploadedFiles)) {
+    let clearedComposer = false;
+    if (!api || !conversationIdValue || !queuedChatTurnHasContent(draft, uploadedFiles)) {
       return false;
     }
 
     const cachedRuntime = conversationRuntimeCacheRef.current.get(conversationIdValue);
-    const editSlot =
-      position === "edit" &&
-      queuedChatTurnEditSlotRef.current?.conversationId === conversationIdValue
-        ? queuedChatTurnEditSlotRef.current
-        : null;
     const workdirForTurn = (
-      editSlot?.workdir ??
       cachedRuntime?.workdir ??
       displayedConversationWorkdirRef.current ??
       activeWorkspaceProjectPath ??
       settings.system.workdir
     ).trim();
-    const queuedTurn = createQueuedChatTurn({
-      id: editSlot?.originalId,
-      conversationId: conversationIdValue,
-      draft,
-      uploadedFiles,
-      workdir: workdirForTurn,
-      runtimeControls: editSlot?.runtimeControls ?? chatRuntimeControlsForCurrentProvider,
-      createdAt: editSlot?.createdAt,
-    });
-
-    setQueuedChatTurnsState((current) => {
-      if (editSlot) {
-        return insertQueuedChatTurnAtSlot(current, queuedTurn, editSlot);
+    try {
+      const materialized = await materializeComposerDraftForSend(draft, uploadedFiles, workdirForTurn);
+      if (!materialized.text && materialized.uploadedFiles.length === 0) {
+        return false;
       }
-      return position === "front"
-        ? promoteQueuedChatTurn(appendQueuedChatTurn(current, queuedTurn), queuedTurn.id)
-        : appendQueuedChatTurn(current, queuedTurn);
-    });
-    if (editSlot) {
-      queuedChatTurnEditSlotRef.current = null;
-    }
-    clearCurrentComposerDraftForQueuedTurn(conversationIdValue);
-    return true;
-  }
-
-  function isQueuedChatTurnEditBlockingProcessing(conversationId: string) {
-    const slot = queuedChatTurnEditSlotRef.current;
-    const key = conversationId.trim();
-    if (!slot || slot.conversationId !== key) return false;
-    const queue = queuedChatTurnsRef.current;
-    const firstQueuedIndex = queue.findIndex((item) => item.conversationId === slot.conversationId);
-    if (firstQueuedIndex < 0) return false;
-    return resolveQueuedChatTurnSlotIndex(queue, slot) <= firstQueuedIndex;
-  }
-
-  function requestQueuedChatTurnProcessing(conversationId: string) {
-    const targetConversationId = conversationId.trim();
-    if (!api || !targetConversationId) return;
-    if (queuedChatProcessingConversationIdsRef.current.has(targetConversationId)) return;
-    if (isConversationRunningForQueue(targetConversationId)) return;
-    if (isQueuedChatTurnEditBlockingProcessing(targetConversationId)) return;
-    if (!queuedChatTurnsRef.current.some((item) => item.conversationId === targetConversationId)) {
-      return;
-    }
-
-    queuedChatProcessingConversationIdsRef.current.add(targetConversationId);
-    let inFlightQueuedTurn: QueuedChatTurn | null = null;
-    void Promise.resolve()
-      .then(async () => {
-        if (isConversationRunningForQueue(targetConversationId)) return false;
-        const taken = takeNextQueuedChatTurn(queuedChatTurnsRef.current, targetConversationId);
-        if (!taken.item) return false;
-        const queuedTurn = taken.item;
-        inFlightQueuedTurn = queuedTurn;
-        queuedChatTurnsRef.current = taken.queue;
-        setQueuedChatTurns(taken.queue);
-        const materialized = await materializeComposerDraftForSend(
-          queuedTurn.draft,
-          queuedTurn.uploadedFiles,
-          queuedTurn.workdir,
-        );
-        if (!materialized.text && materialized.uploadedFiles.length === 0) {
+      clearCurrentComposerDraftForQueuedTurn(conversationIdValue);
+      clearedComposer = true;
+      const gatewaySelectedModel = buildGatewaySelectedModel(settings.selectedModel, activeProviders);
+      const gatewaySystemSettings = buildGatewaySystemSettings(settings, workdirForTurn);
+      const stream = api.commandChat({
+        type: "chat.submit",
+        message: materialized.text,
+        conversationId: isLocalDraftConversationId(conversationIdValue)
+          ? undefined
+          : conversationIdValue,
+        selectedModel: gatewaySelectedModel,
+        systemSettings: gatewaySystemSettings,
+        uploadedFiles: materialized.uploadedFiles,
+        runtimeControls: chatRuntimeControlsForCurrentProvider,
+        queuePolicy,
+      });
+      for await (const event of stream) {
+        if (event.type === "queued_in_gui" || ("state" in event && event.state === "desktop_queued")) {
+          const queueConversationId = event.conversation_id?.trim() || conversationIdValue;
+          void api
+            .chatQueueGet(queueConversationId)
+            .then((response) => applyChatQueueSnapshot(response.snapshot))
+            .catch(() => undefined);
           return true;
         }
-        await sendChat(materialized.text, {
-          conversationId: targetConversationId,
-          uploadedFiles: materialized.uploadedFiles,
-          runtimeControls: queuedTurn.runtimeControls,
-          workdir: queuedTurn.workdir,
-        });
-        inFlightQueuedTurn = null;
-        return true;
-      })
-      .then((accepted) => {
-        queuedChatProcessingConversationIdsRef.current.delete(targetConversationId);
-        if (
-          accepted &&
-          !isConversationRunningForQueue(targetConversationId) &&
-          queuedChatTurnsRef.current.some((item) => item.conversationId === targetConversationId)
-        ) {
-          requestQueuedChatTurnProcessing(targetConversationId);
+        if (event.type === "failed" || event.type === "error") {
+          throw new Error("message" in event && typeof event.message === "string" ? event.message : "queue request failed");
         }
-      })
-      .catch((error) => {
-        const failedQueuedTurn = inFlightQueuedTurn;
-        if (failedQueuedTurn) {
-          setQueuedChatTurnsState((current) =>
-            promoteQueuedChatTurn(
-              appendQueuedChatTurn(current, failedQueuedTurn),
-              failedQueuedTurn.id,
-            ),
-          );
+        if (event.type === "started" || ("state" in event && event.state === "running")) {
+          return true;
         }
-        const message = asErrorMessage(error, "queued chat request failed");
-        updateConversationRuntimeEntry(targetConversationId, (current) => ({
-          ...current,
-          error: message,
-        }));
-        queuedChatProcessingConversationIdsRef.current.delete(targetConversationId);
-      });
+      }
+      return true;
+    } catch (error) {
+      if (clearedComposer && getDisplayedConversationId() === conversationIdValue) {
+        if (!composerRef.current?.hasContent()) {
+          composerRef.current?.setDraft(draft);
+        }
+        if ((pendingUploadsByConversationRef.current.get(conversationIdValue) ?? []).length === 0) {
+          setPendingUploadsForConversation(conversationIdValue, uploadedFiles);
+        }
+      }
+      updateConversationRuntimeEntry(conversationIdValue, (current) => ({
+        ...current,
+        error: asErrorMessage(error, "queued chat request failed"),
+      }));
+      return false;
+    }
   }
 
-  function enqueueCurrentComposerTurnAndMaybeInterrupt() {
+  async function commitQueuedChatEdit() {
+    const session = queuedChatEditSessionRef.current;
     const conversationIdValue = getDisplayedConversationId();
-    if (!enqueueCurrentComposerTurn("front")) return;
-    if (isConversationRunningForQueue(conversationIdValue)) {
-      void cancelChat(conversationIdValue);
-      return;
+    if (!session || !api || !conversationIdValue) return false;
+    const draft = composerRef.current?.getDraft() ?? null;
+    const uploadedFiles = pendingUploadedFiles.slice();
+    if (!queuedChatTurnHasContent(draft, uploadedFiles)) {
+      return false;
     }
-    requestQueuedChatTurnProcessing(conversationIdValue);
+    try {
+      const response = await api.chatQueueEditCommit({
+        conversationId: conversationIdValue,
+        itemId: session.itemId,
+        revision: session.revision,
+        draftJson: JSON.stringify(draft),
+        uploadedFilesJson: JSON.stringify(uploadedFiles),
+      });
+      if (!response.accepted) {
+        updateConversationRuntimeEntry(conversationIdValue, (current) => ({
+          ...current,
+          error: response.message || "queued edit failed",
+        }));
+        return false;
+      }
+      queuedChatEditSessionRef.current = null;
+      composerRef.current?.clear();
+      setPendingUploadsForConversation(conversationIdValue, []);
+      clearCachedComposerDraft(conversationIdValue);
+      applyChatQueueSnapshot(response.snapshot);
+      return true;
+    } catch (error) {
+      updateConversationRuntimeEntry(conversationIdValue, (current) => ({
+        ...current,
+        error: asErrorMessage(error, "queued edit failed"),
+      }));
+      return false;
+    }
+  }
+
+  function reportChatQueueActionError(
+    conversationId: string,
+    error: unknown,
+    fallback: string,
+  ) {
+    const key = conversationId.trim();
+    if (!key) return;
+    updateConversationRuntimeEntry(key, (current) => ({
+      ...current,
+      error: asErrorMessage(error, fallback),
+    }));
   }
 
   function runQueuedTurnNow(id: string) {
-    const queuedTurn = queuedChatTurnsRef.current.find((item) => item.id === id.trim());
-    if (!queuedTurn) return;
-    setQueuedChatTurnsState((current) => promoteQueuedChatTurn(current, queuedTurn.id));
-    if (isConversationRunningForQueue(queuedTurn.conversationId)) {
-      void cancelChat(queuedTurn.conversationId);
-      return;
-    }
-    requestQueuedChatTurnProcessing(queuedTurn.conversationId);
+    const conversationIdValue = getDisplayedConversationId();
+    if (!api || !conversationIdValue) return;
+    void api
+      .chatQueueRunNow(conversationIdValue, id)
+      .then((response) => {
+        applyChatQueueSnapshot(response.snapshot);
+        for (const delayMs of [250, 1000]) {
+          window.setTimeout(() => {
+            void api
+              .chatQueueGet(conversationIdValue)
+              .then((nextResponse) => applyChatQueueSnapshot(nextResponse.snapshot))
+              .catch(() => undefined);
+          }, delayMs);
+        }
+      })
+      .catch((error) => {
+        reportChatQueueActionError(conversationIdValue, error, "queued chat run failed");
+      });
   }
 
-  function moveQueuedTurn(id: string, direction: "up" | "down") {
-    setQueuedChatTurnsState((current) => moveQueuedChatTurn(current, id, direction));
+  function moveQueuedTurnUp(id: string) {
+    const conversationIdValue = getDisplayedConversationId();
+    if (!api || !conversationIdValue) return;
+    void api
+      .chatQueueMove(conversationIdValue, id, "up")
+      .then((response) => {
+        applyChatQueueSnapshot(response.snapshot);
+      })
+      .catch((error) => {
+        reportChatQueueActionError(conversationIdValue, error, "queued chat move failed");
+      });
   }
 
   function editQueuedTurn(id: string) {
-    const key = id.trim();
-    const queuedTurnIndex = queuedChatTurnsRef.current.findIndex((item) => item.id === key);
-    const queuedTurn = queuedTurnIndex >= 0 ? queuedChatTurnsRef.current[queuedTurnIndex] : null;
-    if (!queuedTurn) return;
-    const targetConversationId = queuedTurn.conversationId.trim();
-    if (!targetConversationId || getDisplayedConversationId() !== targetConversationId) {
-      return;
-    }
+    const conversationIdValue = getDisplayedConversationId();
+    if (!api || !conversationIdValue) return;
+    void (async () => {
+      if (queuedChatEditSessionRef.current) {
+        const committed = await commitQueuedChatEdit();
+        if (!committed) return;
+      } else {
+        const currentDraft = composerRef.current?.getDraft() ?? null;
+        const currentUploads = pendingUploadedFiles.slice();
+        if (queuedChatTurnHasContent(currentDraft, currentUploads)) {
+          const queued = await submitCurrentComposerToGuiQueue("append");
+          if (!queued) return;
+        }
+      }
 
-    const currentDraft = composerRef.current?.getDraft() ?? null;
-    const currentUploads = pendingUploadedFiles.slice();
-    if (queuedChatTurnHasContent(currentDraft, currentUploads)) {
-      enqueueCurrentComposerTurn(queuedChatTurnEditSlotRef.current ? "edit" : "end");
-    }
-
-    const sameConversationQueue = queuedChatTurnsRef.current.filter(
-      (item) => item.conversationId === targetConversationId,
-    );
-    const sameConversationIndex = sameConversationQueue.findIndex((item) => item.id === key);
-    const previousId =
-      sameConversationIndex > 0
-        ? (sameConversationQueue[sameConversationIndex - 1]?.id ?? null)
-        : null;
-    const nextId =
-      sameConversationIndex >= 0
-        ? (sameConversationQueue[sameConversationIndex + 1]?.id ?? null)
-        : null;
-    queuedChatTurnEditSlotRef.current = {
-      conversationId: targetConversationId,
-      previousId,
-      nextId,
-      index: sameConversationIndex >= 0 ? sameConversationIndex : undefined,
-      originalId: queuedTurn.id,
-      createdAt: queuedTurn.createdAt,
-      workdir: queuedTurn.workdir,
-      runtimeControls: { ...queuedTurn.runtimeControls },
-    };
-    setQueuedChatTurnsState((current) => removeQueuedChatTurn(current, key));
-    composerRef.current?.setDraft(queuedTurn.draft);
-    setPendingUploadsForConversation(targetConversationId, queuedTurn.uploadedFiles.slice());
-    clearCachedComposerDraft(targetConversationId);
-    window.requestAnimationFrame(() => composerRef.current?.focus());
+      const response = await api.chatQueueEditBegin(conversationIdValue, id);
+      try {
+        if (!response.accepted || !response.item) {
+          if (!response.accepted) {
+            updateConversationRuntimeEntry(conversationIdValue, (current) => ({
+              ...current,
+              error: response.message || "queued edit failed",
+            }));
+          }
+          return;
+        }
+        const draft = JSON.parse(response.item.draftJson) as MentionComposerDraft;
+        const uploadedFiles = JSON.parse(
+          response.item.uploadedFilesJson,
+        ) as PendingUploadedFile[];
+        queuedChatEditSessionRef.current = {
+          itemId: response.item.id,
+          revision: response.snapshot?.revision ?? chatQueueRevisionRef.current,
+        };
+        composerRef.current?.setDraft(draft);
+        setPendingUploadsForConversation(
+          conversationIdValue,
+          Array.isArray(uploadedFiles) ? uploadedFiles : [],
+        );
+        clearCachedComposerDraft(conversationIdValue);
+        applyChatQueueSnapshot(response.snapshot);
+        window.requestAnimationFrame(() => composerRef.current?.focus());
+      } catch (error) {
+        throw new Error(asErrorMessage(error, "invalid queued edit payload"));
+      }
+    })().catch((error) => {
+      reportChatQueueActionError(conversationIdValue, error, "queued chat edit failed");
+    });
   }
 
   function removeQueuedTurn(id: string) {
-    setQueuedChatTurnsState((current) => removeQueuedChatTurn(current, id));
+    const conversationIdValue = getDisplayedConversationId();
+    if (!api || !conversationIdValue) return;
+    void api
+      .chatQueueRemove(conversationIdValue, id)
+      .then((response) => {
+        applyChatQueueSnapshot(response.snapshot);
+      })
+      .catch((error) => {
+        reportChatQueueActionError(conversationIdValue, error, "queued chat remove failed");
+      });
   }
 
   function startNewConversation(options?: { workdir?: string }) {
@@ -4807,25 +4986,6 @@ export default function GatewayApp() {
       });
   }
 
-  const resolveUserMessageRef = useCallback(
-    async (userOrdinal: number, text: string, uploadedFiles: PendingUploadedFile[]) => {
-      const activeConversationId = conversationIdRef.current.trim();
-      if (
-        !api ||
-        !activeConversationId ||
-        isLocalDraftConversationId(activeConversationId) ||
-        hasDetachedHistorySelection(selectedHistoryIdRef.current, activeConversationId)
-      ) {
-        return null;
-      }
-
-      const detail = await api.getHistory(activeConversationId);
-      const entries = await parseHistoryMessagesJsonAsync(detail.messages_json);
-      return findUserMessageRefByOrdinal(entries, userOrdinal, text, uploadedFiles);
-    },
-    [api],
-  );
-
   const handleResendFromEdit = useCallback(
     async (messageRef: HistoryMessageRef, text: string, uploadedFiles: PendingUploadedFile[]) => {
       const activeConversationId = conversationIdRef.current.trim();
@@ -4841,6 +5001,43 @@ export default function GatewayApp() {
       if (!normalized && uploadedFiles.length === 0) {
         return;
       }
+      const optimisticEditUserEntryId = `edit-user-${crypto.randomUUID()}`;
+      const optimisticEditUserEntry: ChatEntry = {
+        id: optimisticEditUserEntryId,
+        kind: "user",
+        text: normalized,
+        attachments: uploadedFiles,
+      };
+      const messageRefMatches = (candidate: HistoryMessageRef | undefined) =>
+        Boolean(candidate) &&
+        candidate?.segmentIndex === messageRef.segmentIndex &&
+        candidate?.messageIndex === messageRef.messageIndex &&
+        candidate?.segmentId === messageRef.segmentId &&
+        candidate?.messageId === messageRef.messageId &&
+        candidate?.role === messageRef.role &&
+        candidate?.contentHash === messageRef.contentHash;
+      const buildPreviewMessages = (messages: ChatEntry[]) => {
+        const targetIndex = messages.findIndex(
+          (entry) => entry.kind === "user" && messageRefMatches(entry.messageRef),
+        );
+        const prefix = targetIndex >= 0 ? messages.slice(0, targetIndex) : messages;
+        return [...prefix, optimisticEditUserEntry];
+      };
+      const randomPart =
+        typeof globalThis.crypto?.randomUUID === "function"
+          ? globalThis.crypto.randomUUID()
+          : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      const clientRequestId = `webui-chat.edit_resend-${activeConversationId}-${randomPart}`;
+      const generation = editResendGenerationRef.current + 1;
+      editResendGenerationRef.current = generation;
+      activeEditResendTransactionsRef.current.set(activeConversationId, {
+        generation,
+        clientRequestId,
+      });
+      const isCurrentEditTransaction = () => {
+        const current = activeEditResendTransactionsRef.current.get(activeConversationId);
+        return current?.generation === generation && current.clientRequestId === clientRequestId;
+      };
 
       setHistoryError(null);
       setChatError(null);
@@ -4849,75 +5046,41 @@ export default function GatewayApp() {
       blockedHistoryHydrationConversationIdsRef.current.add(activeConversationId);
       invalidateHistoryLoad();
       markVisibleConversationRevision();
+      clearConversationLiveStream(activeConversationId);
+      updateConversationRuntimeEntry(activeConversationId, (current) => ({
+        ...current,
+        error: null,
+        toolStatus: null,
+        toolStatusIsCompaction: false,
+        messages: buildPreviewMessages(current.messages),
+      }));
 
-      try {
-        const currentRuntime =
-          conversationIdRef.current.trim() === activeConversationId &&
-          (selectedHistoryIdRef.current.trim() === "" ||
-            selectedHistoryIdRef.current.trim() === activeConversationId)
-            ? buildVisibleRuntimeEntry()
-            : (conversationRuntimeCacheRef.current.get(activeConversationId) ??
-              buildVisibleRuntimeEntry());
-        const locallyTruncatedEntries = truncateChatEntriesFromMessageRef(
-          currentRuntime.messages,
-          messageRef,
-        );
-        const canUseLocalTruncate = locallyTruncatedEntries !== currentRuntime.messages;
-        let detail: HistoryDetail;
-        let entries: ChatEntry[];
-        if (canUseLocalTruncate) {
-          entries = locallyTruncatedEntries;
-          detail = {
-            conversation_id: activeConversationId,
-            messages_json: "",
-            total_message_count: entries.length,
-            returned_message_count: entries.length,
-            has_more: false,
-            conversation:
-              selectedHistoryRef.current?.conversation_id === activeConversationId
-                ? selectedHistoryRef.current.conversation
-                : (pickConversationSummary(historyItemsRef.current, activeConversationId) ??
-                  undefined),
-          };
-        } else {
-          const hydratedDetail = await api.getHistory(activeConversationId);
-          const hydratedEntries = await parseHistoryMessagesJsonAsync(
-            hydratedDetail.messages_json,
-          );
-          const hydratedTruncatedEntries = truncateChatEntriesFromMessageRef(
-            hydratedEntries,
-            messageRef,
-          );
-          entries =
-            hydratedTruncatedEntries === hydratedEntries
-              ? currentRuntime.messages
-              : hydratedTruncatedEntries;
-          detail = {
-            conversation_id: activeConversationId,
-            messages_json: "",
-            total_message_count: entries.length,
-            returned_message_count: entries.length,
-            has_more: false,
-            conversation:
-              hydratedDetail.conversation ??
-              selectedHistoryRef.current?.conversation ??
-              pickConversationSummary(historyItemsRef.current, activeConversationId) ??
-              undefined,
-          };
-        }
-        const nextRuntime = createConversationRuntimeEntry({
-          messages: entries,
-          error: null,
-          toolStatus: null,
-          toolStatusIsCompaction: false,
-          isSending: false,
+      const hydrateEditPrefix = async () => {
+        const detail = await api.getHistoryPrefix(activeConversationId, messageRef, {
+          maxMessages: HISTORY_DETAIL_INITIAL_MAX_MESSAGES,
         });
+        if (!isCurrentEditTransaction()) {
+          return;
+        }
+        const entries = await parseHistoryMessagesJsonAsync(detail.messages_json);
+        if (!isCurrentEditTransaction()) {
+          return;
+        }
 
-        clearConversationLiveStream(activeConversationId);
         setSelectedHistory(detail);
         setSelectedHistoryEntries(entries);
-        conversationRuntimeCacheRef.current.set(activeConversationId, nextRuntime);
-        syncVisibleConversationRuntime(activeConversationId, nextRuntime);
+        updateConversationRuntimeEntry(activeConversationId, (current) => {
+          if (
+            !current.isSending &&
+            !localRunningConversationIdsRef.current.has(activeConversationId)
+          ) {
+            return current;
+          }
+          return {
+            ...current,
+            messages: [...entries, optimisticEditUserEntry],
+          };
+        });
 
         const truncatedConversation = detail.conversation;
         if (truncatedConversation) {
@@ -4925,29 +5088,61 @@ export default function GatewayApp() {
             upsertConversationSummary(current, truncatedConversation),
           );
         }
+      };
 
+      void hydrateEditPrefix().catch((error) => {
+        if (isCurrentEditTransaction()) {
+          console.warn("edit resend history prefix hydration failed", error);
+        }
+      });
+
+      try {
         const resendPromise =
           sendChatRef.current?.(normalized, {
             conversationId: activeConversationId,
             uploadedFiles,
             editMessageRef: messageRef,
+            clientRequestId,
+            optimisticUserEntryId: optimisticEditUserEntryId,
+            skipOptimisticUserEntry: true,
           }) ?? Promise.resolve();
-        blockedHistoryHydrationConversationIdsRef.current.delete(activeConversationId);
         await resendPromise;
+        if (isCurrentEditTransaction()) {
+          await refreshVisibleConversationHistorySnapshot(activeConversationId, api, {
+            allowIdle: true,
+            allowDuringEditTransaction: true,
+          });
+        }
       } catch (error) {
-        setChatError(asErrorMessage(error, "回溯历史消息失败"));
+        const message = asErrorMessage(error, "编辑后重发失败");
+        setChatError(message);
+        updateConversationRuntimeEntry(activeConversationId, (current) => ({
+          ...current,
+          error: message,
+          toolStatus: null,
+          toolStatusIsCompaction: false,
+          isSending: false,
+          messages: current.messages.filter((entry) => entry.id !== optimisticEditUserEntryId),
+        }));
+        void refreshVisibleConversationHistorySnapshot(activeConversationId, api, {
+          allowIdle: true,
+          allowDuringEditTransaction: true,
+        });
       } finally {
-        blockedHistoryHydrationConversationIdsRef.current.delete(activeConversationId);
+        if (isCurrentEditTransaction()) {
+          activeEditResendTransactionsRef.current.delete(activeConversationId);
+          blockedHistoryHydrationConversationIdsRef.current.delete(activeConversationId);
+        }
       }
     },
     [
       api,
-      buildVisibleRuntimeEntry,
       clearConversationLiveStream,
       invalidateHistoryLoad,
       markVisibleConversationRevision,
-      syncVisibleConversationRuntime,
+      refreshVisibleConversationHistorySnapshot,
       updateHistoryItems,
+      updateConversationRuntimeEntry,
     ],
   );
 
@@ -5047,10 +5242,11 @@ export default function GatewayApp() {
     setHistoryDetailLoading(false);
     setHistoryMutating(false);
     queuedChatTurnsRef.current = [];
-    queuedChatProcessingConversationIdsRef.current.clear();
-    queuedChatTurnEditSlotRef.current = null;
-    previousRunningConversationIdsRef.current = new Set();
+    chatQueueConversationIdRef.current = "";
+    chatQueueRevisionRef.current = 0;
+    queuedChatEditSessionRef.current = null;
     setQueuedChatTurns([]);
+    setChatQueueRevision(0);
     setLocalRunningConversationIds(new Set());
     setRemoteRunningConversationIds(new Set());
     setRemoteRunningConversationRuntime(new Map());
@@ -5218,20 +5414,6 @@ export default function GatewayApp() {
     return next;
   }, [historyItems, remoteRunningConversationRuntime, sidebarRunningConversationIds]);
 
-  useEffect(() => {
-    const currentRunningConversationIds = new Set(sidebarRunningConversationIds);
-    const previousRunningConversationIds = previousRunningConversationIdsRef.current;
-    previousRunningConversationIdsRef.current = currentRunningConversationIds;
-    for (const conversationIdValue of getQueuedConversationIds(queuedChatTurnsRef.current)) {
-      if (
-        previousRunningConversationIds.has(conversationIdValue) &&
-        !currentRunningConversationIds.has(conversationIdValue)
-      ) {
-        requestQueuedChatTurnProcessing(conversationIdValue);
-      }
-    }
-  }, [queuedChatTurns, sidebarRunningConversationIds]);
-
   const projectActivityUpdatedAts = useMemo(() => {
     const updatedAts = buildWorkspaceProjectActivityUpdatedAts([
       ...historyWorkdirs,
@@ -5273,15 +5455,40 @@ export default function GatewayApp() {
     currentConversationRuntimeWorkdir ||
     (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
   displayedConversationWorkdirRef.current = displayedConversationWorkdir;
+  useEffect(() => {
+    if (!api || !displayedConversationId) {
+      queuedChatTurnsRef.current = [];
+      chatQueueConversationIdRef.current = "";
+      chatQueueRevisionRef.current = 0;
+      setQueuedChatTurns([]);
+      setChatQueueRevision(0);
+      return;
+    }
+    if (chatQueueConversationIdRef.current !== displayedConversationId) {
+      queuedChatTurnsRef.current = [];
+      chatQueueConversationIdRef.current = displayedConversationId;
+      chatQueueRevisionRef.current = 0;
+      setQueuedChatTurns([]);
+      setChatQueueRevision(0);
+    }
+    let cancelled = false;
+    void api
+      .chatQueueGet(displayedConversationId)
+      .then((response) => {
+        if (!cancelled) applyChatQueueSnapshot(response.snapshot);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [api, applyChatQueueSnapshot, displayedConversationId]);
   const queuedChatTurnsForDisplayedConversation = useMemo<ChatQueueTurnPreview[]>(
     () =>
-      queuedChatTurns
-        .filter((item) => item.conversationId === displayedConversationId)
-        .map((item) => ({
-          id: item.id,
-          previewText: buildQueuedChatTurnPreview(item.draft),
-          fileCount: item.uploadedFiles.length,
-        })),
+      queuedChatTurns.map((item) => ({
+        id: item.id,
+        previewText: item.previewText,
+        fileCount: item.fileCount,
+      })),
     [displayedConversationId, queuedChatTurns],
   );
   const terminalProjectPath = isAgentMode ? activeWorkspaceProjectPath.trim() : "";
@@ -5474,6 +5681,9 @@ export default function GatewayApp() {
       displayedConversationId !== "" &&
       remoteRunningConversationIds.has(displayedConversationId),
   );
+  const observedRemoteRunKey = isObservingRemoteLiveConversation
+    ? resolveRunningConversationRunKey(remoteRunningConversationRuntime.get(displayedConversationId))
+    : "";
   useEffect(() => {
     const nextDisplayedConversationId = displayedConversationId.trim();
     for (const conversationIdValue of [
@@ -5502,6 +5712,7 @@ export default function GatewayApp() {
     clearConversationLiveStream,
     displayedConversationId,
     isObservingRemoteLiveConversation,
+    observedRemoteRunKey,
     stopConversationEventStreamSubscription,
   ]);
   useEffect(() => {
@@ -5537,7 +5748,6 @@ export default function GatewayApp() {
     status?.online === true &&
     isAgentMode &&
     Boolean(displayedConversationWorkdir.trim()) &&
-    !composerIsSending &&
     !isUploadingFiles &&
     !composerInputDisabled;
   const fileDropTitle = canDropUpload
@@ -6034,9 +6244,6 @@ export default function GatewayApp() {
                         gitClient={gitClient}
                         onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
                         onResendFromEdit={hasDetachedSelection ? undefined : handleResendFromEdit}
-                        onResolveUserMessageRef={
-                          hasDetachedSelection ? undefined : resolveUserMessageRef
-                        }
                       />
                     </ScrollArea>
                     {historySwitchOverlay ? (
@@ -6084,8 +6291,30 @@ export default function GatewayApp() {
                       ) {
                         return;
                       }
-                      if (chatBusyRef.current || isObservingRemoteLiveConversation) {
-                        enqueueCurrentComposerTurn("end");
+                      if (queuedChatEditSessionRef.current) {
+                        submitInFlightRef.current = true;
+                        void (async () => {
+                          try {
+                            await commitQueuedChatEdit();
+                          } finally {
+                            submitInFlightRef.current = false;
+                          }
+                        })();
+                        return;
+                      }
+                      if (
+                        chatBusyRef.current ||
+                        isObservingRemoteLiveConversation ||
+                        queuedChatTurnsForDisplayedConversation.length > 0
+                      ) {
+                        submitInFlightRef.current = true;
+                        void (async () => {
+                          try {
+                            await submitCurrentComposerToGuiQueue("append");
+                          } finally {
+                            submitInFlightRef.current = false;
+                          }
+                        })();
                         return;
                       }
                       submitInFlightRef.current = true;
@@ -6167,7 +6396,6 @@ export default function GatewayApp() {
                         isObservingRemoteLiveConversation ? displayedConversationId : undefined,
                       );
                     }}
-                    onInterruptAndSend={enqueueCurrentComposerTurnAndMaybeInterrupt}
                     onPrepareChatRuntime={() => {
                       if (!api || historyShareToken) {
                         return;
@@ -6190,7 +6418,7 @@ export default function GatewayApp() {
                     }}
                     queuedTurns={queuedChatTurnsForDisplayedConversation}
                     onRunQueuedTurnNow={runQueuedTurnNow}
-                    onMoveQueuedTurn={moveQueuedTurn}
+                    onMoveQueuedTurnUp={moveQueuedTurnUp}
                     onEditQueuedTurn={editQueuedTurn}
                     onRemoveQueuedTurn={removeQueuedTurn}
                   />

@@ -22,6 +22,14 @@ const UPLOADED_READABLE_FILE_KINDS = new Set<string>([
 const DISPLAY_CONTENT_FIELD = "liveAgentDisplayContent";
 const ATTACHMENTS_FIELD = "liveAgentAttachments";
 
+function createUserMessageId() {
+  const id =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `user-${id}`;
+}
+
 export type PendingUploadedFile = {
   relativePath: string;
   absolutePath?: string;
@@ -45,6 +53,7 @@ export type PastedTextDisplayReference = {
 const PASTED_TEXT_DISPLAY_REFERENCE_RE = /\[(Pasted text \d+):\s*([^\]\r\n]+)]/g;
 
 export type UploadedUserMessage = UserMessage & {
+  id: string;
   [DISPLAY_CONTENT_FIELD]?: string;
   [ATTACHMENTS_FIELD]?: PendingUploadedFile[];
 };
@@ -136,6 +145,7 @@ export function createUserMessageWithUploads(
 
   const message: UploadedUserMessage = {
     role: "user",
+    id: createUserMessageId(),
     content,
     timestamp,
   };

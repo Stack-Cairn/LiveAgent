@@ -1,6 +1,7 @@
 import { useId, type ComponentType, type SVGProps } from "react";
 
 import McpLogoSource from "~icons/gravity-ui/logo-mcp";
+import ConnectionIconSource from "~icons/gravity-ui/plug-connection";
 import AlertCircleSource from "~icons/lucide/circle-alert";
 import AlertTriangleSource from "~icons/lucide/triangle-alert";
 import ClaudeSource from "~icons/logos/claude-icon";
@@ -447,6 +448,7 @@ export const Circle = createIcon(CircleSource);
 export const ClipboardPaste = createIcon(ClipboardPasteSource);
 export const Clock3 = createIcon(Clock3Source);
 export const Cloud = createIcon(CloudSource);
+export const ConnectionIcon = createIcon(ConnectionIconSource);
 export const Copy = createIcon(CopySource);
 export const Cpu = createIcon(CpuSource);
 export const Download = createIcon(DownloadSource);

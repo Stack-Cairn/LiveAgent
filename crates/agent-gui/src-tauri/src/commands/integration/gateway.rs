@@ -4,9 +4,9 @@ use serde_json::Value;
 
 use crate::commands::settings::{load_remote_settings, open_db, parse_remote_settings_payload};
 use crate::services::gateway::{
-    build_history_sync_activity, GatewayChatClaimedRequest, GatewayController,
-    GatewayStatusSnapshot, GatewayTunnelCreateInput, GatewayTunnelSummary,
-    GatewayTunnelUpdateInput,
+    build_history_sync_activity, GatewayChatClaimedRequest, GatewayChatQueueEventInput,
+    GatewayChatQueueResponseInput, GatewayController, GatewayStatusSnapshot,
+    GatewayTunnelCreateInput, GatewayTunnelSummary, GatewayTunnelUpdateInput,
 };
 
 #[tauri::command]
@@ -77,6 +77,29 @@ pub async fn gateway_chat_mark_started(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn gateway_chat_mark_local_started(
+    request_id: String,
+    conversation_id: String,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<(), String> {
+    gateway_controller
+        .mark_local_chat_run_started(request_id, conversation_id)
+        .await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn gateway_chat_mark_queued_in_gui(
+    request_id: String,
+    conversation_id: String,
+    worker_id: String,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<(), String> {
+    gateway_controller
+        .mark_chat_request_queued_in_gui(request_id, conversation_id, worker_id)
+        .await
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn gateway_chat_complete(
     request_id: String,
     conversation_id: String,
@@ -111,6 +134,18 @@ pub async fn gateway_chat_fail(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn gateway_chat_cancel_request(
+    request_id: String,
+    conversation_id: String,
+    worker_id: String,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<(), String> {
+    gateway_controller
+        .cancel_chat_request(request_id, conversation_id, worker_id)
+        .await
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub fn gateway_chat_heartbeat(
     request_id: String,
     worker_id: String,
@@ -139,6 +174,22 @@ pub fn gateway_chat_release_lease(
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
     gateway_controller.release_chat_request_lease(request_id, worker_id)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn gateway_chat_queue_respond(
+    input: GatewayChatQueueResponseInput,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<(), String> {
+    gateway_controller.respond_chat_queue_request(input)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn gateway_publish_chat_queue_event(
+    input: GatewayChatQueueEventInput,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<(), String> {
+    gateway_controller.publish_chat_queue_event(input).await
 }
 
 #[tauri::command(rename_all = "snake_case")]

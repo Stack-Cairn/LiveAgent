@@ -62,6 +62,7 @@ export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
 
 export type UserMessage = {
   role: "user";
+  id: string;
   content: string | (TextContent | ImageContent)[];
   timestamp: number;
 };

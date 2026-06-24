@@ -22,6 +22,14 @@ const UPLOADED_READABLE_FILE_KINDS = new Set<string>([
 const DISPLAY_CONTENT_FIELD = "liveAgentDisplayContent";
 const ATTACHMENTS_FIELD = "liveAgentAttachments";
 
+function createUserMessageId() {
+  const id =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `user-${id}`;
+}
+
 export type PendingUploadedFile = {
   relativePath: string;
   absolutePath?: string;
@@ -139,6 +147,7 @@ export function createUserMessageWithUploads(
 
   const message: UploadedUserMessage = {
     role: "user",
+    id: createUserMessageId(),
     content,
     timestamp,
   };
@@ -212,6 +221,37 @@ export function getUserMessageAttachments(
     }
     return [pendingFile];
   });
+}
+
+export function normalizeUploadedFileForDisplayComparison(file: PendingUploadedFile) {
+  return {
+    relativePath: file.relativePath,
+    absolutePath: file.absolutePath || "",
+    fileName: file.fileName,
+    kind: file.kind,
+    sizeBytes: Number.isFinite(file.sizeBytes) ? Math.max(0, Math.floor(file.sizeBytes)) : 0,
+    displayMode: file.displayMode || "",
+    displayLabel: file.displayLabel || "",
+    displayCharCount:
+      typeof file.displayCharCount === "number" && Number.isFinite(file.displayCharCount)
+        ? Math.max(0, Math.floor(file.displayCharCount))
+        : 0,
+    displayLineCount:
+      typeof file.displayLineCount === "number" && Number.isFinite(file.displayLineCount)
+        ? Math.max(0, Math.floor(file.displayLineCount))
+        : 0,
+  };
+}
+
+function uploadedFilesDisplayKey(files: readonly PendingUploadedFile[]) {
+  return JSON.stringify(files.map(normalizeUploadedFileForDisplayComparison));
+}
+
+export function uploadedFilesVisuallyEqual(
+  left: readonly PendingUploadedFile[],
+  right: readonly PendingUploadedFile[],
+) {
+  return uploadedFilesDisplayKey(left) === uploadedFilesDisplayKey(right);
 }
 
 export function stripUploadedFilesMessageMetadata(message: Message): Message {

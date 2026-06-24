@@ -1422,6 +1422,40 @@ export function upsertToolCallToRound<TRound extends Pick<UiRound, "blocks">>(
   };
 }
 
+export function markToolCallRunningInRound<
+  TRound extends Pick<UiRound, "blocks"> & { runningToolCallIds: string[] },
+>(round: TRound, toolCall: ToolCall): TRound {
+  const visibleToolCalls = buildDelegateAgentPlaceholderToolCalls(toolCall);
+  const runningCandidateIds =
+    visibleToolCalls.length > 0
+      ? visibleToolCalls.map((item) => item.id)
+      : toolCall.id
+        ? [toolCall.id]
+        : [];
+  if (runningCandidateIds.length === 0) return round;
+
+  const visibleToolCallIds = new Set(
+    getRoundToolTrace(round)
+      .map((item) => item.toolCall.id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  let runningToolCallIds = round.runningToolCallIds;
+  for (const id of runningCandidateIds) {
+    if (!visibleToolCallIds.has(id) || runningToolCallIds.includes(id)) continue;
+    if (runningToolCallIds === round.runningToolCallIds) {
+      runningToolCallIds = runningToolCallIds.slice();
+    }
+    runningToolCallIds.push(id);
+  }
+
+  return runningToolCallIds === round.runningToolCallIds
+    ? round
+    : {
+        ...round,
+        runningToolCallIds,
+      };
+}
+
 export function attachToolResultToRound<TRound extends Pick<UiRound, "blocks">>(
   round: TRound,
   toolCall: ToolCall,

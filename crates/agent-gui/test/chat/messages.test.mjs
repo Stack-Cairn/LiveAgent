@@ -1709,6 +1709,79 @@ test("streaming Write and Edit tool previews expose bounded live argument previe
   assert.equal(editPreview.replaceAll, true);
 });
 
+test("visible live tool calls are marked running as soon as their cards appear", () => {
+  const round = {
+    round: 1,
+    blocks: [],
+    key: "live-tools-running",
+    runningToolCallIds: [],
+    thinkingOpen: false,
+  };
+  const toolCalls = [
+    {
+      type: "toolCall",
+      id: "call-write-live",
+      name: "Write",
+      arguments: { path: "report.md", content: "partial content" },
+    },
+    {
+      type: "toolCall",
+      id: "call-edit-live",
+      name: "Edit",
+      arguments: { path: "report.md", old_string: "before", new_string: "after" },
+    },
+    {
+      type: "toolCall",
+      id: "call-bash-live",
+      name: "Bash",
+      arguments: { command: "pnpm test" },
+    },
+    {
+      type: "toolCall",
+      id: "call-agent:agent:1",
+      name: "Agent",
+      arguments: {
+        delegate_agent_card: true,
+        parent_tool_call_id: "call-agent",
+        index: 1,
+        total: 1,
+        id: "reviewer",
+        name: "Reviewer",
+        prompt: "Review the change.",
+      },
+    },
+  ];
+
+  let running = round;
+  for (const toolCall of toolCalls) {
+    running = uiMessages.upsertToolCallToRound(running, toolCall);
+    running = uiMessages.markToolCallRunningInRound(running, toolCall);
+  }
+  const repeated = uiMessages.markToolCallRunningInRound(running, toolCalls[0]);
+
+  assert.deepEqual(running.runningToolCallIds, [
+    "call-write-live",
+    "call-edit-live",
+    "call-bash-live",
+    "call-agent:agent:1",
+  ]);
+  assert.strictEqual(repeated, running);
+
+  const hiddenParentAgent = {
+    type: "toolCall",
+    id: "call-agent",
+    name: "Agent",
+    arguments: {
+      agent_spec: "@agent id=reviewer\nprompt: Review the change.",
+    },
+  };
+  const parentOnly = uiMessages.markToolCallRunningInRound(
+    uiMessages.upsertToolCallToRound(round, hiddenParentAgent),
+    hiddenParentAgent,
+  );
+  assert.deepEqual(parentOnly.runningToolCallIds, []);
+});
+
 test("seed tool call recovery strips repeated historical tool call text without duplicating native calls", () => {
   const assistant = {
     role: "assistant",

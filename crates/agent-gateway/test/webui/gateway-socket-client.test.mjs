@@ -448,7 +448,7 @@ test("SharedWorker gateway client sends conversation cancel directly over HTTP",
       payload: { status: { online: true }, error: null },
     });
 
-    await client.cancelChat(" conversation-1 ");
+    await client.cancelChat(" conversation-1 ", " run-1 ");
     assert.equal(fetchCalls.length, 1);
     assert.equal(fetchCalls[0].url.toString(), "https://gateway.example/api/chat/commands");
     assert.equal(fetchCalls[0].init.method, "POST");
@@ -457,6 +457,7 @@ test("SharedWorker gateway client sends conversation cancel directly over HTTP",
     assert.deepEqual(JSON.parse(fetchCalls[0].init.body), {
       type: "chat.cancel",
       payload: {
+        run_id: "run-1",
         conversation_id: "conversation-1",
       },
     });
@@ -468,6 +469,52 @@ test("SharedWorker gateway client sends conversation cancel directly over HTTP",
     globalThis.fetch = realFetch;
     resetGatewayWebSocketClient();
   }
+});
+
+test("SharedWorker gateway client emits chat queue snapshots from worker events", async () => {
+  installBrowser();
+  FakeSharedWorker.instances = [];
+  globalThis.SharedWorker = FakeSharedWorker;
+  const loader = createWebModuleLoader();
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } = loader.loadModule("src/lib/gatewaySocket.ts");
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient(" token ");
+  assert.equal(FakeSharedWorker.instances.length, 1);
+  const port = FakeSharedWorker.instances[0].port;
+  const connect = port.messages.find((message) => message.type === "connect");
+  assert.ok(connect);
+  port.emit({
+    type: "ready",
+    connection_id: connect.connection_id,
+    payload: { status: { online: true }, error: null },
+  });
+
+  const snapshots = [];
+  client.subscribeChatQueue((snapshot) => snapshots.push(snapshot));
+  const snapshot = {
+    conversationId: "conversation-1",
+    revision: 7,
+    items: [
+      {
+        id: "queue-1",
+        previewText: "next prompt",
+        fileCount: 0,
+        createdAt: 123,
+        source: "gui",
+        editable: true,
+      },
+    ],
+  };
+  port.emit({
+    type: "event",
+    event_type: "chat_queue",
+    connection_id: connect.connection_id,
+    payload: snapshot,
+  });
+
+  assert.deepEqual(snapshots, [snapshot]);
+  resetGatewayWebSocketClient();
 });
 
 test("GatewayWebSocketClient streamChatEvents sends replay cursor", async () => {
@@ -504,12 +551,16 @@ test("GatewayWebSocketClient streamChatEvents sends replay cursor", async () => 
   try {
     const client = getGatewayWebSocketClient(" token ");
     const events = [];
-    for await (const event of client.streamChatEvents(" conversation-1 ", { afterSeq: 41 })) {
+    for await (const event of client.streamChatEvents(" conversation-1 ", {
+      runId: " live-run ",
+      afterSeq: 41,
+    })) {
       events.push(event);
     }
 
     assert.equal(fetchCalls.length, 1);
     assert.equal(fetchCalls[0].url.pathname, "/api/chat/events");
+    assert.equal(fetchCalls[0].url.searchParams.get("run_id"), "live-run");
     assert.equal(fetchCalls[0].url.searchParams.get("conversation_id"), "conversation-1");
     assert.equal(fetchCalls[0].url.searchParams.get("after_seq"), "41");
     assert.equal(fetchCalls[0].init.method, "GET");
@@ -634,6 +685,121 @@ test("GatewayWebSocketClient streamChatEvents ignores stale terminal events from
     assert.deepEqual(events, [
       { type: "token", text: "second", conversation_id: "conversation-1", seq: 4 },
       { type: "done", conversation_id: "conversation-1", seq: 5 },
+    ]);
+    assert.equal(FakeWebSocket.instances.length, 0);
+  } finally {
+    globalThis.fetch = realFetch;
+    resetGatewayWebSocketClient();
+  }
+});
+
+test("GatewayWebSocketClient streamChatEvents ignores stale non-terminal events from older runs", async () => {
+  installBrowser();
+  const realFetch = globalThis.fetch;
+  const fetchCalls = [];
+  const encoder = new TextEncoder();
+  globalThis.fetch = async (rawUrl, init = {}) => {
+    const url = new URL(String(rawUrl));
+    fetchCalls.push({ url, init });
+    if (url.pathname !== "/api/chat/events") {
+      return new Response(JSON.stringify({ error: `unexpected ${url.pathname}` }), { status: 404 });
+    }
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'id: 3\nevent: chat.event\ndata: {"run_id":"old-run","snapshot_run_id":"live-run","seq":3,"payload":{"type":"token","text":"stale","conversation_id":"conversation-1"}}\n\n' +
+              'id: 4\nevent: chat.event\ndata: {"run_id":"live-run","snapshot_run_id":"live-run","seq":4,"payload":{"type":"token","text":"fresh","conversation_id":"conversation-1"}}\n\n' +
+              'id: 5\nevent: chat.event\ndata: {"run_id":"live-run","snapshot_run_id":"live-run","seq":5,"payload":{"type":"done","conversation_id":"conversation-1"}}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  };
+
+  const loader = createWebModuleLoader();
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } = loader.loadModule("src/lib/gatewaySocket.ts");
+  resetGatewayWebSocketClient();
+
+  try {
+    const client = getGatewayWebSocketClient(" token ");
+    const events = [];
+    for await (const event of client.streamChatEvents(" conversation-1 ", {
+      runId: "live-run",
+      afterSeq: 0,
+    })) {
+      events.push(event);
+    }
+
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(fetchCalls[0].url.searchParams.get("run_id"), "live-run");
+    assert.deepEqual(events, [
+      { type: "token", text: "fresh", conversation_id: "conversation-1", seq: 4 },
+      { type: "done", conversation_id: "conversation-1", seq: 5 },
+    ]);
+    assert.equal(FakeWebSocket.instances.length, 0);
+  } finally {
+    globalThis.fetch = realFetch;
+    resetGatewayWebSocketClient();
+  }
+});
+
+test("GatewayWebSocketClient streamChatEvents isolates a run after interrupt cancellation", async () => {
+  installBrowser();
+  const realFetch = globalThis.fetch;
+  const fetchCalls = [];
+  const encoder = new TextEncoder();
+  globalThis.fetch = async (rawUrl, init = {}) => {
+    const url = new URL(String(rawUrl));
+    fetchCalls.push({ url, init });
+    if (url.pathname !== "/api/chat/events") {
+      return new Response(JSON.stringify({ error: `unexpected ${url.pathname}` }), { status: 404 });
+    }
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'id: 1\nevent: chat.control\ndata: {"run_id":"old-run","snapshot_run_id":"new-run","seq":1,"payload":{"type":"cancelled","state":"cancelled","conversation_id":"conversation-1","seq":1}}\n\n' +
+              'id: 2\nevent: chat.event\ndata: {"run_id":"old-run","snapshot_run_id":"new-run","seq":2,"payload":{"type":"token","text":"stale tail","conversation_id":"conversation-1","seq":2}}\n\n' +
+              'id: 1\nevent: chat.control\ndata: {"run_id":"new-run","snapshot_run_id":"new-run","seq":1,"payload":{"type":"started","state":"running","conversation_id":"conversation-1","seq":1}}\n\n' +
+              'id: 2\nevent: chat.event\ndata: {"run_id":"new-run","snapshot_run_id":"new-run","seq":2,"payload":{"type":"token","text":"fresh","conversation_id":"conversation-1","seq":2}}\n\n' +
+              'id: 3\nevent: chat.event\ndata: {"run_id":"new-run","snapshot_run_id":"new-run","seq":3,"payload":{"type":"done","conversation_id":"conversation-1","seq":3}}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  };
+
+  const loader = createWebModuleLoader();
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } = loader.loadModule("src/lib/gatewaySocket.ts");
+  resetGatewayWebSocketClient();
+
+  try {
+    const client = getGatewayWebSocketClient(" token ");
+    const events = [];
+    for await (const event of client.streamChatEvents(" conversation-1 ", {
+      runId: "new-run",
+      afterSeq: 0,
+    })) {
+      events.push(event);
+    }
+
+    assert.equal(fetchCalls.length, 1);
+    assert.equal(fetchCalls[0].url.searchParams.get("run_id"), "new-run");
+    assert.deepEqual(events, [
+      { type: "started", state: "running", conversation_id: "conversation-1", seq: 1 },
+      { type: "token", text: "fresh", conversation_id: "conversation-1", seq: 2 },
+      { type: "done", conversation_id: "conversation-1", seq: 3 },
     ]);
     assert.equal(FakeWebSocket.instances.length, 0);
   } finally {
@@ -929,6 +1095,7 @@ test("SharedWorker gateway client posts chat commands directly over HTTP", async
           native_web_search_enabled: true,
           reasoning: "xhigh",
         },
+        queue_policy: "auto",
       },
     });
     assert.equal(fetchCalls[1].url.pathname, "/api/chat/events");
@@ -985,6 +1152,10 @@ test("Gateway SharedWorker broadcasts events with each port connection id", asyn
 
     subscribeSftpTransfers(listener) {
       this.sftpTransferListeners.push(listener);
+      return () => {};
+    }
+
+    subscribeChatQueue() {
       return () => {};
     }
 
@@ -1102,6 +1273,10 @@ test("Gateway SharedWorker applies foreground wakeups to the managed socket clie
       return () => {};
     }
 
+    subscribeChatQueue() {
+      return () => {};
+    }
+
     noteForegroundWakeup() {
       this.wakeups += 1;
     }
@@ -1164,6 +1339,10 @@ test("Gateway SharedWorker terminal metadata reaches every page while output sta
     }
 
     subscribeSftpTransfers() {
+      return () => {};
+    }
+
+    subscribeChatQueue() {
       return () => {};
     }
 
@@ -1353,6 +1532,10 @@ test("Gateway SharedWorker forwards terminal stream snapshot and output messages
       return () => {};
     }
 
+    subscribeChatQueue() {
+      return () => {};
+    }
+
     dispose() {}
   }
 
@@ -1499,6 +1682,10 @@ test("Gateway SharedWorker keeps one upstream terminal stream until every port d
     }
 
     subscribeSftpTransfers() {
+      return () => {};
+    }
+
+    subscribeChatQueue() {
       return () => {};
     }
 
@@ -2096,6 +2283,10 @@ test("Gateway SharedWorker forwards history share requests", async () => {
       return () => {};
     }
 
+    subscribeChatQueue() {
+      return () => {};
+    }
+
     getHistoryShare(conversationID) {
       this.calls.push(["getHistoryShare", conversationID]);
       return {
@@ -2234,6 +2425,10 @@ test("Gateway SharedWorker forwards tunnel requests", async () => {
     }
 
     subscribeSftpTransfers() {
+      return () => {};
+    }
+
+    subscribeChatQueue() {
       return () => {};
     }
 
@@ -2740,6 +2935,7 @@ test("GatewayWebSocketClient commandChat posts commands and streams SSE events u
           native_web_search_enabled: true,
           reasoning: "xhigh",
         },
+        queue_policy: "auto",
       },
     });
 

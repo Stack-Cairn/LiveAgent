@@ -18,8 +18,12 @@ import (
 )
 
 type chatCommandMessageRef struct {
-	SegmentIndex int `json:"segment_index"`
-	MessageIndex int `json:"message_index"`
+	SegmentIndex int    `json:"segment_index"`
+	MessageIndex int    `json:"message_index"`
+	SegmentID    string `json:"segment_id"`
+	MessageID    string `json:"message_id"`
+	Role         string `json:"role"`
+	ContentHash  string `json:"content_hash"`
 }
 
 type chatCommandStart struct {
@@ -59,6 +63,7 @@ func normalizeChatRequestBody(body *handler.ChatRequestBody) error {
 	body.ClientRequestID = strings.TrimSpace(body.ClientRequestID)
 	body.ExecutionMode = handler.NormalizeExecutionMode(body.ExecutionMode)
 	body.Workdir = handler.NormalizeWorkdir(body.Workdir)
+	body.QueuePolicy = normalizeChatQueuePolicy(body.QueuePolicy)
 	body.SelectedSystemTools = handler.NormalizeSelectedSystemTools(body.SelectedSystemTools)
 	body.UploadedFiles = handler.NormalizeChatUploadedFiles(body.UploadedFiles)
 	body.RuntimeControls = handler.NormalizeChatRuntimeControls(body.RuntimeControls)
@@ -74,6 +79,15 @@ func normalizeChatRequestBody(body *handler.ChatRequestBody) error {
 		return errors.New("message is required")
 	}
 	return nil
+}
+
+func normalizeChatQueuePolicy(value string) string {
+	switch strings.TrimSpace(value) {
+	case "append", "interrupt":
+		return strings.TrimSpace(value)
+	default:
+		return "auto"
+	}
 }
 
 func startAcceptedChatCommand(
@@ -281,6 +295,7 @@ func buildProtoChatRequest(body handler.ChatRequestBody) *gatewayv1.ChatRequest 
 		Workdir:             body.Workdir,
 		SelectedSystemTools: body.SelectedSystemTools,
 		UploadedFiles:       handler.ToProtoChatUploadedFiles(body.UploadedFiles),
+		QueuePolicy:         body.QueuePolicy,
 	}
 }
 
@@ -291,6 +306,10 @@ func buildProtoChatMessageRef(ref *chatCommandMessageRef) *gatewayv1.ChatMessage
 	return &gatewayv1.ChatMessageRef{
 		SegmentIndex: int32(ref.SegmentIndex),
 		MessageIndex: int32(ref.MessageIndex),
+		SegmentId:    strings.TrimSpace(ref.SegmentID),
+		MessageId:    strings.TrimSpace(ref.MessageID),
+		Role:         strings.TrimSpace(ref.Role),
+		ContentHash:  strings.TrimSpace(ref.ContentHash),
 	}
 }
 
@@ -300,6 +319,16 @@ func validateChatMessageRef(ref *chatCommandMessageRef) error {
 	}
 	if ref.SegmentIndex < 0 || ref.MessageIndex < 0 {
 		return errors.New("base_message_ref indexes must be non-negative")
+	}
+	ref.SegmentID = strings.TrimSpace(ref.SegmentID)
+	ref.MessageID = strings.TrimSpace(ref.MessageID)
+	ref.Role = strings.TrimSpace(ref.Role)
+	ref.ContentHash = strings.TrimSpace(ref.ContentHash)
+	if ref.SegmentID == "" || ref.MessageID == "" || ref.Role == "" || ref.ContentHash == "" {
+		return errors.New("base_message_ref requires segment_id, message_id, role, and content_hash")
+	}
+	if ref.Role != "user" {
+		return errors.New("base_message_ref role must be user")
 	}
 	return nil
 }

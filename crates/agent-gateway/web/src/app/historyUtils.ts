@@ -1,6 +1,4 @@
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
-import type { HistoryMessageRef } from "@/lib/chat/conversationState";
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import type { ConversationSummary } from "@/lib/gatewayTypes";
 import { buildGatewaySettingsSyncPayload } from "@/lib/settings/sync";
 import {
@@ -10,7 +8,7 @@ import {
   type SelectedModel,
   type WorkspaceProject,
 } from "@/lib/settings";
-import { formatConversationTitle, type ChatEntry } from "@/lib/chatUi";
+import { formatConversationTitle } from "@/lib/chatUi";
 import { isLocalDraftConversationId } from "@/lib/localDraftConversation";
 import {
   fallbackWorkspaceProjectName,
@@ -145,23 +143,6 @@ export function createConversationRuntimeEntry(
   };
 }
 
-function historyMessageRefsEqual(a: HistoryMessageRef | undefined, b: HistoryMessageRef) {
-  return a?.segmentIndex === b.segmentIndex && a?.messageIndex === b.messageIndex;
-}
-
-export function truncateChatEntriesFromMessageRef(
-  entries: ChatEntry[],
-  messageRef: HistoryMessageRef,
-) {
-  const targetIndex = entries.findIndex(
-    (entry) => entry.kind === "user" && historyMessageRefsEqual(entry.messageRef, messageRef),
-  );
-  if (targetIndex < 0) {
-    return entries;
-  }
-  return entries.slice(0, targetIndex);
-}
-
 export function resolveVisibleConversationId(
   selectedHistoryId: string,
   conversationId: string,
@@ -191,53 +172,4 @@ export function hasDetachedHistorySelection(
   const selectedId = selectedHistoryId.trim();
   const activeConversationId = conversationId.trim();
   return selectedId !== "" && selectedId !== activeConversationId;
-}
-
-function uploadedFilesEqual(left: PendingUploadedFile[], right: PendingUploadedFile[]) {
-  if (left.length !== right.length) {
-    return false;
-  }
-  return left.every((file, index) => {
-    const other = right[index];
-    return (
-      other !== undefined &&
-      file.relativePath === other.relativePath &&
-      file.fileName === other.fileName &&
-      file.kind === other.kind &&
-      file.sizeBytes === other.sizeBytes
-    );
-  });
-}
-
-export function findUserMessageRefByOrdinal(
-  entries: ChatEntry[],
-  userOrdinal: number,
-  text: string,
-  uploadedFiles: PendingUploadedFile[],
-) {
-  if (userOrdinal < 0) {
-    return null;
-  }
-  const userEntries = entries.filter((entry) => entry.kind === "user");
-  const ordinalEntry = userEntries[userOrdinal];
-  if (
-    ordinalEntry?.messageRef &&
-    ordinalEntry.text === text &&
-    uploadedFilesEqual(ordinalEntry.attachments, uploadedFiles)
-  ) {
-    return ordinalEntry.messageRef;
-  }
-
-  for (let index = userEntries.length - 1; index >= 0; index -= 1) {
-    const entry = userEntries[index];
-    if (
-      entry?.messageRef &&
-      entry.text === text &&
-      uploadedFilesEqual(entry.attachments, uploadedFiles)
-    ) {
-      return entry.messageRef;
-    }
-  }
-
-  return null;
 }

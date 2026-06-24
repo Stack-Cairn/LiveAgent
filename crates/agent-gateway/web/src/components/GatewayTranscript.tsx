@@ -85,11 +85,6 @@ type GatewayTranscriptProps = {
     text: string,
     uploadedFiles: PendingUploadedFile[],
   ) => void;
-  onResolveUserMessageRef?: (
-    userOrdinal: number,
-    text: string,
-    uploadedFiles: PendingUploadedFile[],
-  ) => Promise<HistoryMessageRef | null>;
   readOnly?: boolean;
   redactToolContent?: boolean;
 };
@@ -630,6 +625,43 @@ function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], text: stri
   };
 }
 
+function GatewayUserMessageBubbleBody(props: {
+  text: string;
+  attachments: PendingUploadedFile[];
+  workspaceRoot?: string;
+  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
+  loadCommitDetails?: CommitDetailsLoader;
+}) {
+  const {
+    text,
+    attachments,
+    workspaceRoot,
+    onLoadUploadedImagePreview,
+    loadCommitDetails,
+  } = props;
+  const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(
+    attachments,
+    text,
+  );
+
+  return (
+    <div className="chat-bubble-enter chat-user-bubble rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-openai-chat text-[14.5px] leading-relaxed text-[hsl(var(--chat-user-fg))]">
+      <GatewayUserAttachmentCards
+        files={visibleFiles}
+        workspaceRoot={workspaceRoot}
+        onLoadUploadedImagePreview={onLoadUploadedImagePreview}
+      />
+      {text ? (
+        <UserMessageContent
+          text={text}
+          pastedTextFiles={pastedTextFiles}
+          loadCommitDetails={loadCommitDetails}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 const MIN_EDIT_BUBBLE_HEIGHT_PX = 72;
 
 function resizeEditableTextarea(textarea: HTMLTextAreaElement | null) {
@@ -726,59 +758,20 @@ const EditableUserMessageBubble = memo(function EditableUserMessageBubble(props:
   );
 });
 
-const GatewayTranscriptHistory = memo(function GatewayTranscriptHistory(props: {
-  conversationId?: string;
-  items: GatewayTranscriptItem[];
-  scrollViewport: HTMLDivElement | null;
-  hasMoreHistory?: boolean;
-  isLoadingMoreHistory?: boolean;
-  onLoadFullHistory?: () => void;
-  isStreaming: boolean;
-  showUsage: boolean;
-  usageContextWindow?: number;
-  workspaceRoot?: string;
-  gitClient?: GitClient | null;
-  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
-  onResendFromEdit?: (
-    messageRef: HistoryMessageRef,
-    text: string,
-    uploadedFiles: PendingUploadedFile[],
-  ) => void;
-  onResolveUserMessageRef?: (
-    userOrdinal: number,
-    text: string,
-    uploadedFiles: PendingUploadedFile[],
-  ) => Promise<HistoryMessageRef | null>;
-  readOnly?: boolean;
-  redactToolContent?: boolean;
-}) {
-  const {
-    conversationId,
-    items,
-    scrollViewport,
-    hasMoreHistory,
-    isLoadingMoreHistory,
-    onLoadFullHistory,
-    isStreaming,
-    showUsage,
-    usageContextWindow,
-    workspaceRoot,
-    gitClient,
-    onLoadUploadedImagePreview,
-    onResendFromEdit,
-    onResolveUserMessageRef,
-    readOnly = false,
-    redactToolContent = false,
-  } = props;
-  const { locale, t } = useLocale();
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [resolvingEditMessageId, setResolvingEditMessageId] = useState<string | null>(null);
-  const [resolvedMessageRefs, setResolvedMessageRefs] = useState<Record<string, HistoryMessageRef>>({});
+function useGatewayCommitDetailsLoader(
+  workspaceRoot?: string,
+  gitClient?: GitClient | null,
+  cacheResetKey?: string,
+) {
   const commitDetailsCacheRef = useRef(new Map<string, CommitDisplayReference>());
-  const historyIdentityKey = `${conversationId ?? ""}\n${items[0]?.id ?? ""}`;
 
-  const loadCommitDetails = useCallback<CommitDetailsLoader>(
+  useEffect(() => {
+    if (cacheResetKey !== undefined) {
+      commitDetailsCacheRef.current.clear();
+    }
+  }, [cacheResetKey]);
+
+  return useCallback<CommitDetailsLoader>(
     async (commit) => {
       const workdir = workspaceRoot?.trim() ?? "";
       const sha = commit.sha.trim();
@@ -813,12 +806,58 @@ const GatewayTranscriptHistory = memo(function GatewayTranscriptHistory(props: {
     },
     [gitClient, workspaceRoot],
   );
+}
+
+const GatewayTranscriptHistory = memo(function GatewayTranscriptHistory(props: {
+  conversationId?: string;
+  items: GatewayTranscriptItem[];
+  scrollViewport: HTMLDivElement | null;
+  hasMoreHistory?: boolean;
+  isLoadingMoreHistory?: boolean;
+  onLoadFullHistory?: () => void;
+  isStreaming: boolean;
+  showUsage: boolean;
+  usageContextWindow?: number;
+  workspaceRoot?: string;
+  gitClient?: GitClient | null;
+  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
+  onResendFromEdit?: (
+    messageRef: HistoryMessageRef,
+    text: string,
+    uploadedFiles: PendingUploadedFile[],
+  ) => void;
+  readOnly?: boolean;
+  redactToolContent?: boolean;
+}) {
+  const {
+    conversationId,
+    items,
+    scrollViewport,
+    hasMoreHistory,
+    isLoadingMoreHistory,
+    onLoadFullHistory,
+    isStreaming,
+    showUsage,
+    usageContextWindow,
+    workspaceRoot,
+    gitClient,
+    onLoadUploadedImagePreview,
+    onResendFromEdit,
+    readOnly = false,
+    redactToolContent = false,
+  } = props;
+  const { locale, t } = useLocale();
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const historyIdentityKey = `${conversationId ?? ""}\n${items[0]?.id ?? ""}`;
+  const loadCommitDetails = useGatewayCommitDetailsLoader(
+    workspaceRoot,
+    gitClient,
+    historyIdentityKey,
+  );
 
   useEffect(() => {
     setEditingMessageId(null);
-    setResolvingEditMessageId(null);
-    setResolvedMessageRefs({});
-    commitDetailsCacheRef.current.clear();
   }, [historyIdentityKey]);
 
   useEffect(() => {
@@ -896,17 +935,16 @@ const GatewayTranscriptHistory = memo(function GatewayTranscriptHistory(props: {
 
         const item = virtualItem.item;
         if (item.kind === "user") {
-          const userOrdinal = item.userOrdinal;
           const isCopied = copiedMessageId === item.id;
           const isEditing = editingMessageId === item.id;
-          const resolvedMessageRef = resolvedMessageRefs[item.id];
-          const effectiveMessageRef = item.messageRef ?? resolvedMessageRef;
-          const isResolvingEdit = resolvingEditMessageId === item.id;
-          const editDisabled = readOnly || isStreaming || isResolvingEdit || !onResendFromEdit;
-          const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(
-            item.attachments,
-            item.text,
-          );
+          const effectiveMessageRef = item.messageRef;
+          const missingStableRef = !effectiveMessageRef;
+          const editDisabled = readOnly || isStreaming || !onResendFromEdit || missingStableRef;
+          const editTitle = missingStableRef
+            ? locale === "en-US"
+              ? "This older message cannot be edited because it has no stable message identifier."
+              : "旧历史缺少稳定消息标识，无法编辑重发"
+            : t("chat.edit");
           return (
             <article
               key={virtualRow.key}
@@ -929,20 +967,13 @@ const GatewayTranscriptHistory = memo(function GatewayTranscriptHistory(props: {
                 />
               ) : (
                 <div className="chat-user-bubble-wrap group relative ml-auto max-w-[min(85%,calc(50em+2rem))]">
-                  <div className="chat-bubble-enter chat-user-bubble rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-openai-chat text-[14.5px] leading-relaxed text-[hsl(var(--chat-user-fg))]">
-                    <GatewayUserAttachmentCards
-                      files={visibleFiles}
-                      workspaceRoot={workspaceRoot}
-                      onLoadUploadedImagePreview={onLoadUploadedImagePreview}
-                    />
-                    {item.text ? (
-                      <UserMessageContent
-                        text={item.text}
-                        pastedTextFiles={pastedTextFiles}
-                        loadCommitDetails={loadCommitDetails}
-                      />
-                    ) : null}
-                  </div>
+                  <GatewayUserMessageBubbleBody
+                    text={item.text}
+                    attachments={item.attachments}
+                    workspaceRoot={workspaceRoot}
+                    onLoadUploadedImagePreview={onLoadUploadedImagePreview}
+                    loadCommitDetails={loadCommitDetails}
+                  />
                   {!readOnly ? (
                     <div className="chat-user-bubble-actions mt-1 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                       <button
@@ -970,38 +1001,13 @@ const GatewayTranscriptHistory = memo(function GatewayTranscriptHistory(props: {
                       <button
                         type="button"
                         className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                        title={t("chat.edit")}
-                        aria-label={t("chat.edit")}
+                        title={editTitle}
+                        aria-label={editTitle}
                         disabled={editDisabled}
                         onClick={() => {
                           if (effectiveMessageRef) {
                             setEditingMessageId(item.id);
-                            return;
                           }
-                          if (!onResolveUserMessageRef) {
-                            return;
-                          }
-                          setResolvingEditMessageId(item.id);
-                          void onResolveUserMessageRef(
-                            userOrdinal,
-                            item.text,
-                            item.attachments,
-                          )
-                            .then((messageRef) => {
-                              if (!messageRef) {
-                                return;
-                              }
-                              setResolvedMessageRefs((current) => ({
-                                ...current,
-                                [item.id]: messageRef,
-                              }));
-                              setEditingMessageId(item.id);
-                            })
-                            .finally(() => {
-                              setResolvingEditMessageId((current) =>
-                                current === item.id ? null : current,
-                              );
-                            });
                         }}
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -1079,6 +1085,9 @@ const GatewayTranscriptLiveState = memo(function GatewayTranscriptLiveState(prop
   isAgentMode: boolean;
   showUsage: boolean;
   usageContextWindow?: number;
+  workspaceRoot?: string;
+  gitClient?: GitClient | null;
+  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
   toolStatus?: string | null;
   toolStatusIsCompaction: boolean;
 }) {
@@ -1089,9 +1098,13 @@ const GatewayTranscriptLiveState = memo(function GatewayTranscriptLiveState(prop
     isAgentMode,
     showUsage,
     usageContextWindow,
+    workspaceRoot,
+    gitClient,
+    onLoadUploadedImagePreview,
     toolStatus,
     toolStatusIsCompaction,
   } = props;
+  const loadCommitDetails = useGatewayCommitDetailsLoader(workspaceRoot, gitClient);
   const liveItems = useMemo(
     () => buildTranscriptItems(liveSnapshot.entries),
     [liveSnapshot.entries],
@@ -1129,6 +1142,22 @@ const GatewayTranscriptLiveState = memo(function GatewayTranscriptLiveState(prop
   return (
     <>
       {liveItems.map((item, index) => {
+        if (item.kind === "user") {
+          return (
+            <article key={item.id} className="gateway-transcript-row gateway-transcript-row-user">
+              <div className="chat-user-bubble-wrap group relative ml-auto max-w-[min(85%,calc(50em+2rem))]">
+                <GatewayUserMessageBubbleBody
+                  text={item.text}
+                  attachments={item.attachments}
+                  workspaceRoot={workspaceRoot}
+                  onLoadUploadedImagePreview={onLoadUploadedImagePreview}
+                  loadCommitDetails={loadCommitDetails}
+                />
+              </div>
+            </article>
+          );
+        }
+
         if (item.kind === "assistant") {
           // While the entry is still part of the live snapshot, render it in
           // its in-flight structural state regardless of `isStreaming`. The
@@ -1246,7 +1275,6 @@ export function GatewayTranscript({
   gitClient,
   onLoadUploadedImagePreview,
   onResendFromEdit,
-  onResolveUserMessageRef,
   readOnly = false,
   redactToolContent = false,
 }: GatewayTranscriptProps) {
@@ -1361,7 +1389,6 @@ export function GatewayTranscript({
           gitClient={gitClient}
           onLoadUploadedImagePreview={onLoadUploadedImagePreview}
           onResendFromEdit={onResendFromEdit}
-          onResolveUserMessageRef={onResolveUserMessageRef}
           readOnly={readOnly}
           redactToolContent={redactToolContent}
         />
@@ -1373,6 +1400,9 @@ export function GatewayTranscript({
             isAgentMode={isAgentMode}
             showUsage={showUsage}
             usageContextWindow={usageContextWindow}
+            workspaceRoot={workspaceRoot}
+            gitClient={gitClient}
+            onLoadUploadedImagePreview={onLoadUploadedImagePreview}
             toolStatus={toolStatus}
             toolStatusIsCompaction={toolStatusIsCompaction}
           />

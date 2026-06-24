@@ -991,6 +991,200 @@ func TestDesktopBroadcastChatEventCreatesAttachableRun(t *testing.T) {
 	}
 }
 
+func TestHistoryRunningCreatesAttachableConversationRun(t *testing.T) {
+	t.Parallel()
+
+	sm := newTestSessionManager()
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
+
+	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+		RequestId: "history-sync-1",
+		Payload: &gatewayv1.AgentEnvelope_HistorySync{
+			HistorySync: &gatewayv1.HistorySyncEvent{
+				Kind:           "running",
+				ConversationId: "conversation-1",
+				Conversation: &gatewayv1.ConversationSummary{
+					Id:  "conversation-1",
+					Cwd: "/workspace",
+				},
+			},
+		},
+	})
+
+	summaries := sm.ActiveChatRunSummaries()
+	if len(summaries) != 1 ||
+		summaries[0].ConversationID != "conversation-1" ||
+		summaries[0].RequestID != "conversation-live-conversation-1" ||
+		summaries[0].Workdir != "/workspace" ||
+		summaries[0].FirstSeq != 1 {
+		t.Fatalf("active summaries = %#v", summaries)
+	}
+
+	ch, done, cleanup, snapshot, err := sm.SubscribeChatRun("", "conversation-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeChatRun: %v", err)
+	}
+	defer cleanup()
+	assertDoneOpen(t, done)
+	if snapshot.RequestID != "conversation-live-conversation-1" ||
+		snapshot.State != session.ChatRunStateRunning ||
+		snapshot.Workdir != "/workspace" ||
+		snapshot.Done {
+		t.Fatalf("snapshot = %#v", snapshot)
+	}
+
+	select {
+	case event := <-ch:
+		t.Fatalf("unexpected replay before first token: %#v", event)
+	default:
+	}
+
+	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+		RequestId: "conversation-live-conversation-1",
+		Payload: &gatewayv1.AgentEnvelope_ChatEvent{
+			ChatEvent: &gatewayv1.ChatEvent{
+				Type:           gatewayv1.ChatEvent_TOKEN,
+				ConversationId: "conversation-1",
+				Data:           `{"text":"hello"}`,
+			},
+		},
+	})
+
+	select {
+	case event := <-ch:
+		if event.Seq != 1 {
+			t.Fatalf("event seq = %d, want 1", event.Seq)
+		}
+		if event.Event.GetType() != gatewayv1.ChatEvent_TOKEN {
+			t.Fatalf("event type = %v, want TOKEN", event.Event.GetType())
+		}
+		if event.Workdir != "/workspace" {
+			t.Fatalf("event workdir = %q, want /workspace", event.Workdir)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for token after history running")
+	}
+}
+
+func TestHistoryRunningPromotesDesktopQueuedCommandRun(t *testing.T) {
+	t.Parallel()
+
+	sm := newTestSessionManager()
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
+
+	if _, created, _, err := sm.StartAcceptedChatCommandRun("request-queued", "conversation-1", "client-1", "/workspace", []map[string]any{{
+		"type":    "user_message",
+		"message": "queued prompt",
+	}}); err != nil || !created {
+		t.Fatalf("StartAcceptedChatCommandRun queued created=%v err=%v", created, err)
+	}
+	dispatchChatControl(sm, "request-queued", "conversation-1", "queued_in_gui", session.ChatRunStateDesktopQueued)
+
+	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+		RequestId: "history-sync-1",
+		Payload: &gatewayv1.AgentEnvelope_HistorySync{
+			HistorySync: &gatewayv1.HistorySyncEvent{
+				Kind:           "running",
+				ConversationId: "conversation-1",
+				Conversation: &gatewayv1.ConversationSummary{
+					Id:  "conversation-1",
+					Cwd: "/workspace",
+				},
+			},
+		},
+	})
+
+	queuedSnapshot, ok := sm.ChatRunSnapshot("request-queued", "conversation-1")
+	if !ok || queuedSnapshot.State != session.ChatRunStateRunning || queuedSnapshot.Workdir != "/workspace" {
+		t.Fatalf("queued snapshot = %#v, ok=%v; want running queued request with workdir", queuedSnapshot, ok)
+	}
+
+	summaries := sm.ActiveChatRunSummaries()
+	if len(summaries) != 1 ||
+		summaries[0].ConversationID != "conversation-1" ||
+		summaries[0].RequestID != "request-queued" ||
+		summaries[0].FirstSeq != 1 ||
+		summaries[0].LatestSeq != 3 {
+		t.Fatalf("active summaries = %#v, want request-queued replay cursor", summaries)
+	}
+
+	ch, done, cleanup, snapshot, err := sm.SubscribeChatRun("request-queued", "conversation-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeChatRun: %v", err)
+	}
+	defer cleanup()
+	assertDoneOpen(t, done)
+	if snapshot.RequestID != "request-queued" || snapshot.State != session.ChatRunStateRunning {
+		t.Fatalf("snapshot = %#v, want running request-queued", snapshot)
+	}
+
+	got := make([]string, 0, 3)
+	for len(got) < 3 {
+		select {
+		case event := <-ch:
+			eventType := ""
+			if event.Control != nil {
+				eventType = event.Control.GetType()
+			} else if event.Payload != nil {
+				eventType, _ = event.Payload["type"].(string)
+			}
+			got = append(got, fmt.Sprintf("%s:%d:%s", event.RequestID, event.Seq, eventType))
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for promoted queued replay, got %#v", got)
+		}
+	}
+	want := []string{
+		"request-queued:1:accepted",
+		"request-queued:2:user_message",
+		"request-queued:3:queued_in_gui",
+	}
+	for index := range want {
+		if got[index] != want[index] {
+			t.Fatalf("promoted queued replay = %#v, want %#v", got, want)
+		}
+	}
+}
+
+func TestStartedRunKeepsConversationOwnerWhenPreviousRunEmitsLateEvent(t *testing.T) {
+	t.Parallel()
+
+	sm := newTestSessionManager()
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
+	startRunningChatCommandRun(t, sm, "request-old", "conversation-1")
+	if _, created, err := sm.StartPendingChatCommandRun("request-new", "conversation-1", "client-new"); err != nil || !created {
+		t.Fatalf("StartPendingChatCommandRun new created=%v err=%v", created, err)
+	}
+	dispatchChatControl(sm, "request-new", "conversation-1", "started", session.ChatRunStateRunning)
+
+	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+		RequestId: "request-old",
+		Payload: &gatewayv1.AgentEnvelope_ChatEvent{
+			ChatEvent: &gatewayv1.ChatEvent{
+				Type:           gatewayv1.ChatEvent_TOKEN,
+				ConversationId: "conversation-1",
+				Data:           `{"text":"late old token"}`,
+			},
+		},
+	})
+
+	summaries := sm.ActiveChatRunSummaries()
+	if len(summaries) != 1 ||
+		summaries[0].ConversationID != "conversation-1" ||
+		summaries[0].RequestID != "request-new" {
+		t.Fatalf("active summaries = %#v, want request-new", summaries)
+	}
+
+	_, done, cleanup, snapshot, err := sm.SubscribeChatRun("", "conversation-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeChatRun: %v", err)
+	}
+	defer cleanup()
+	assertDoneOpen(t, done)
+	if snapshot.RequestID != "request-new" {
+		t.Fatalf("conversation snapshot request id = %q, want request-new", snapshot.RequestID)
+	}
+}
+
 func TestCompletedHistoryUpsertDoesNotPreemptTerminalChatEvent(t *testing.T) {
 	t.Parallel()
 

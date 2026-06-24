@@ -28,7 +28,6 @@ type UsePendingUploadsParams = {
   executionMode: AppSettings["system"]["executionMode"];
   conversationId: string;
   selectedHistoryId: string;
-  chatBusyRef: RefObject<boolean>;
   displayedConversationWorkdirRef: RefObject<string>;
   composerRef: RefObject<MentionComposerHandle | null>;
   setChatError: (message: string | null) => void;
@@ -45,7 +44,6 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     executionMode,
     conversationId,
     selectedHistoryId,
-    chatBusyRef,
     displayedConversationWorkdirRef,
     composerRef,
     setChatError,
@@ -146,10 +144,6 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       if (filesToImport.length === 0) {
         return;
       }
-      if (chatBusyRef.current) {
-        setChatError(translate("chat.upload.busyGenerating", locale));
-        return;
-      }
       if (isUploadingFilesRef.current) {
         setChatError(translate("chat.upload.uploading", locale));
         return;
@@ -231,7 +225,6 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       }
     },
     [
-      chatBusyRef,
       composerRef,
       displayedConversationWorkdirRef,
       executionMode,

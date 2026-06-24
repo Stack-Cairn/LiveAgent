@@ -59,6 +59,7 @@ const GATEWAY_RECONNECT_DELAY: Duration = Duration::from_secs(5);
 const GATEWAY_TERMINAL_STREAM_RECONNECT_MIN: Duration = Duration::from_millis(250);
 const GATEWAY_TERMINAL_STREAM_RECONNECT_MAX: Duration = Duration::from_secs(5);
 const GATEWAY_TERMINAL_STREAM_STABLE_AFTER: Duration = Duration::from_secs(30);
+const GATEWAY_TERMINAL_STREAM_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
 const GATEWAY_CHAT_LEASE_MS: u64 = 15_000;
 const GATEWAY_CHAT_RUNNING_LEASE_MS: u64 = 30 * 60_000;
 const GATEWAY_CHAT_LEASE_SWEEP_INTERVAL: Duration = Duration::from_secs(5);
@@ -160,6 +161,10 @@ pub struct GatewayUploadedFileEvent {
 pub struct GatewayChatMessageRefEvent {
     pub segment_index: i32,
     pub message_index: i32,
+    pub segment_id: String,
+    pub message_id: String,
+    pub role: String,
+    pub content_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -177,6 +182,16 @@ pub struct GatewayChatRequestEvent {
     pub workdir: String,
     pub selected_system_tools: Vec<String>,
     pub uploaded_files: Vec<GatewayUploadedFileEvent>,
+    pub queue_policy: String,
+}
+
+fn is_complete_user_chat_message_ref(ref_value: &proto::ChatMessageRef) -> bool {
+    ref_value.segment_index >= 0
+        && ref_value.message_index >= 0
+        && !ref_value.segment_id.trim().is_empty()
+        && !ref_value.message_id.trim().is_empty()
+        && ref_value.role.trim() == "user"
+        && !ref_value.content_hash.trim().is_empty()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -184,6 +199,47 @@ pub struct GatewayChatRequestEvent {
 struct GatewayChatCancelEvent {
     request_id: String,
     conversation_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayChatQueueRequestEvent {
+    pub request_id: String,
+    pub action: String,
+    pub conversation_id: String,
+    pub item_id: String,
+    pub direction: String,
+    pub revision: u64,
+    pub draft_json: String,
+    pub uploaded_files_json: String,
+    pub request_json: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayChatQueueResponseInput {
+    pub request_id: String,
+    #[serde(default)]
+    pub accepted: bool,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub snapshot_json: String,
+    #[serde(default)]
+    pub item_json: String,
+    #[serde(default)]
+    pub error_code: String,
+    #[serde(default)]
+    pub revision: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayChatQueueEventInput {
+    pub conversation_id: String,
+    pub snapshot_json: String,
+    #[serde(default)]
+    pub revision: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -265,6 +321,7 @@ pub struct GatewayController {
     tunnel_http_streams: Mutex<HashMap<String, TunnelHttpBodySender>>,
     tunnel_ws_streams: Mutex<HashMap<String, mpsc::Sender<proto::TunnelFrame>>>,
     pending_tunnel_controls: Mutex<HashMap<String, oneshot::Sender<proto::TunnelControlResponse>>>,
+    pending_chat_queue_requests: Mutex<HashMap<String, oneshot::Sender<proto::ChatQueueResponse>>>,
     terminal_forwarder_once: Once,
     terminal_stream_forwarder_once: Once,
     sftp_forwarder_once: Once,
@@ -308,6 +365,7 @@ impl GatewayController {
             tunnel_http_streams: Mutex::new(HashMap::new()),
             tunnel_ws_streams: Mutex::new(HashMap::new()),
             pending_tunnel_controls: Mutex::new(HashMap::new()),
+            pending_chat_queue_requests: Mutex::new(HashMap::new()),
             terminal_forwarder_once: Once::new(),
             terminal_stream_forwarder_once: Once::new(),
             sftp_forwarder_once: Once::new(),
@@ -916,6 +974,7 @@ impl GatewayController {
         let (terminal_tx, terminal_rx) = mpsc::channel::<proto::TerminalStreamFrame>(4096);
 
         let result = async {
+            queue_terminal_stream_handshake_frame(&terminal_tx)?;
             let mut request = tonic::Request::new(ReceiverStream::new(terminal_rx));
             insert_bearer_metadata(request.metadata_mut(), &config.token)?;
             let response = tokio::select! {
@@ -926,17 +985,25 @@ impl GatewayController {
                     return Ok(());
                 }
                 response = client.agent_terminal_connect(request) => {
-                    response.map_err(|error| format!("open gateway terminal stream failed: {error}"))?
+                    response.map_err(|error| {
+                        format_gateway_terminal_stream_rpc_error("open", &error, &config)
+                    })?
                 }
             };
             self.set_terminal_stream_sender(Some(terminal_tx.clone()));
             let mut inbound = response.into_inner();
+            let mut keepalive = tokio::time::interval(GATEWAY_TERMINAL_STREAM_KEEPALIVE_INTERVAL);
+            keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            keepalive.tick().await;
             loop {
                 tokio::select! {
                     changed = stop_rx.changed() => {
                         if changed.is_err() || *stop_rx.borrow() {
                             return Ok(());
                         }
+                    }
+                    _ = keepalive.tick() => {
+                        queue_terminal_stream_keepalive_frame(&terminal_tx).await?;
                     }
                     message = inbound.message() => {
                         match message {
@@ -947,7 +1014,7 @@ impl GatewayController {
                             }
                             Ok(None) => return Ok(()),
                             Err(error) => {
-                                return Err(format!("gateway terminal stream receive failed: {error}"))
+                                return Err(format_gateway_terminal_stream_rpc_error("receive", &error, &config))
                             }
                         }
                     }
@@ -1056,6 +1123,9 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::ChatCommand(command)) => {
                 self.handle_chat_command(request_id, command).await
             }
+            Some(proto::gateway_envelope::Payload::ChatQueue(request)) => {
+                self.handle_chat_queue_request(request_id, request).await
+            }
             Some(proto::gateway_envelope::Payload::CronManage(request)) => {
                 let should_refresh_settings =
                     matches!(request.action.trim(), "create" | "update" | "delete");
@@ -1121,6 +1191,21 @@ impl GatewayController {
                             request_id,
                             timestamp: now_unix_seconds(),
                             payload: Some(proto::agent_envelope::Payload::HistoryGetResp(response)),
+                        })
+                        .await
+                    }
+                    Err(error) => self.send_error_response(request_id, 500, error).await,
+                }
+            }
+            Some(proto::gateway_envelope::Payload::HistoryPrefix(request)) => {
+                match gateway_bridge::handle_history_prefix(request).await {
+                    Ok(response) => {
+                        self.send_agent_envelope(proto::AgentEnvelope {
+                            request_id,
+                            timestamp: now_unix_seconds(),
+                            payload: Some(proto::agent_envelope::Payload::HistoryPrefixResp(
+                                response,
+                            )),
                         })
                         .await
                     }
@@ -2401,6 +2486,18 @@ impl GatewayController {
                         )
                         .await;
                 };
+                if !is_complete_user_chat_message_ref(&base_message_ref) {
+                    return self
+                        .send_gateway_chat_control_event_with_details(
+                            request_id,
+                            conversation_id,
+                            "failed",
+                            "invalid_chat_command".to_string(),
+                            "chat.edit_resend requires a complete stable base_message_ref"
+                                .to_string(),
+                        )
+                        .await;
+                }
                 if conversation_id.is_empty() {
                     return self
                         .send_gateway_chat_control_event_with_details(
@@ -2504,6 +2601,7 @@ impl GatewayController {
             workdir,
             selected_system_tools,
             uploaded_files,
+            queue_policy,
         } = request;
         let selected_model = selected_model.map(|selected_model| GatewaySelectedModelEvent {
             custom_provider_id: selected_model.custom_provider_id,
@@ -2520,6 +2618,10 @@ impl GatewayController {
             base_message_ref.map(|base_message_ref| GatewayChatMessageRefEvent {
                 segment_index: base_message_ref.segment_index,
                 message_index: base_message_ref.message_index,
+                segment_id: base_message_ref.segment_id,
+                message_id: base_message_ref.message_id,
+                role: base_message_ref.role,
+                content_hash: base_message_ref.content_hash,
             });
         GatewayChatRequestEvent {
             request_id,
@@ -2543,6 +2645,7 @@ impl GatewayController {
                     size_bytes: file.size_bytes,
                 })
                 .collect(),
+            queue_policy,
         }
     }
 
@@ -2681,7 +2784,10 @@ impl GatewayController {
             inbox.remove(request_id);
         }
         if !conversation_id.is_empty() {
-            inbox.retain(|_, record| record.request.conversation_id.trim() != conversation_id);
+            inbox.retain(|_, record| {
+                record.request.conversation_id.trim() != conversation_id
+                    || !Self::remote_chat_record_should_cancel_for_conversation(record)
+            });
         }
         Ok(())
     }
@@ -2721,6 +2827,7 @@ impl GatewayController {
         match record.state.trim() {
             "claimed" => "claimed",
             "starting" => "starting",
+            "queued_in_gui" => "queued_in_gui",
             "running" => "started",
             "failed" => "failed",
             "cancelled" => "cancelled",
@@ -2744,6 +2851,13 @@ impl GatewayController {
                 .unwrap_or(true),
             _ => false,
         }
+    }
+
+    fn remote_chat_record_should_cancel_for_conversation(record: &RemoteChatInboxRecord) -> bool {
+        if record.started {
+            return true;
+        }
+        matches!(record.state.trim(), "claimed" | "starting" | "running")
     }
 
     fn remote_chat_record_has_current_lease(
@@ -2899,7 +3013,10 @@ impl GatewayController {
             let record = inbox
                 .get_mut(&request_id)
                 .ok_or_else(|| "remote chat request lease is no longer active".to_string())?;
-            if !Self::remote_chat_record_has_current_lease(record, &worker_id, now) {
+            let queued_in_gui = record.state.trim() == "queued_in_gui" && !record.started;
+            if !queued_in_gui
+                && !Self::remote_chat_record_has_current_lease(record, &worker_id, now)
+            {
                 return Err("remote chat request lease is no longer active".to_string());
             }
             if record.started {
@@ -2907,6 +3024,7 @@ impl GatewayController {
             }
             record.state = "running".to_string();
             record.started = true;
+            record.lease_owner = Some(worker_id);
             if !conversation_id.is_empty() {
                 record.request.conversation_id = conversation_id.clone();
             }
@@ -2915,6 +3033,59 @@ impl GatewayController {
             record.updated_at = now;
         }
         self.send_gateway_chat_control_event(request_id, conversation_id, "started")
+            .await
+    }
+
+    pub async fn mark_local_chat_run_started(
+        &self,
+        request_id: String,
+        conversation_id: String,
+    ) -> Result<(), String> {
+        let request_id = request_id.trim().to_string();
+        let conversation_id = conversation_id.trim().to_string();
+        if request_id.is_empty() || conversation_id.is_empty() {
+            return Ok(());
+        }
+        self.send_gateway_chat_control_event(request_id, conversation_id, "started")
+            .await
+    }
+
+    pub async fn mark_chat_request_queued_in_gui(
+        &self,
+        request_id: String,
+        conversation_id: String,
+        worker_id: String,
+    ) -> Result<(), String> {
+        let request_id = request_id.trim().to_string();
+        let conversation_id = conversation_id.trim().to_string();
+        let worker_id = worker_id.trim().to_string();
+        let should_send = {
+            let mut inbox = self
+                .remote_chat_inbox
+                .lock()
+                .map_err(|_| "gateway remote chat inbox lock poisoned".to_string())?;
+            let Some(record) = inbox.get_mut(&request_id) else {
+                return Ok(());
+            };
+            if record.started {
+                return Ok(());
+            }
+            if !Self::remote_chat_record_is_owned_by_worker(record, &worker_id) {
+                return Ok(());
+            }
+            record.state = "queued_in_gui".to_string();
+            record.lease_owner = None;
+            record.lease_expires_at = None;
+            if !conversation_id.is_empty() {
+                record.request.conversation_id = conversation_id.clone();
+            }
+            record.updated_at = Instant::now();
+            true
+        };
+        if !should_send {
+            return Ok(());
+        }
+        self.send_gateway_chat_control_event(request_id, conversation_id, "queued_in_gui")
             .await
     }
 
@@ -2968,7 +3139,8 @@ impl GatewayController {
             let Some(record) = inbox.get_mut(&request_id) else {
                 return Ok(());
             };
-            if !Self::remote_chat_record_is_owned_by_worker(record, &worker_id) {
+            let queued_in_gui = terminal && record.state.trim() == "queued_in_gui";
+            if !queued_in_gui && !Self::remote_chat_record_is_owned_by_worker(record, &worker_id) {
                 return Ok(());
             }
             record.state = if terminal { "failed" } else { "queued" }.to_string();
@@ -2992,6 +3164,37 @@ impl GatewayController {
             message,
         )
         .await
+    }
+
+    pub async fn cancel_chat_request(
+        &self,
+        request_id: String,
+        conversation_id: String,
+        worker_id: String,
+    ) -> Result<(), String> {
+        let request_id = request_id.trim().to_string();
+        let conversation_id = conversation_id.trim().to_string();
+        let worker_id = worker_id.trim().to_string();
+        let should_send = {
+            let mut inbox = self
+                .remote_chat_inbox
+                .lock()
+                .map_err(|_| "gateway remote chat inbox lock poisoned".to_string())?;
+            let Some(record) = inbox.get(&request_id) else {
+                return Ok(());
+            };
+            let queued_in_gui = record.state.trim() == "queued_in_gui";
+            if !queued_in_gui && !Self::remote_chat_record_is_owned_by_worker(record, &worker_id) {
+                return Ok(());
+            }
+            inbox.remove(&request_id);
+            true
+        };
+        if !should_send {
+            return Ok(());
+        }
+        self.send_gateway_chat_control_event(request_id, conversation_id, "cancelled")
+            .await
     }
 
     pub fn heartbeat_chat_request(
@@ -3151,6 +3354,132 @@ impl GatewayController {
             error_code,
             message,
         ))
+        .await
+    }
+
+    async fn handle_chat_queue_request(
+        self: &Arc<Self>,
+        request_id: String,
+        request: proto::ChatQueueRequest,
+    ) -> Result<(), String> {
+        let event_payload = GatewayChatQueueRequestEvent {
+            request_id: request_id.clone(),
+            action: request.action,
+            conversation_id: request.conversation_id,
+            item_id: request.item_id,
+            direction: request.direction,
+            revision: request.revision,
+            draft_json: request.draft_json,
+            uploaded_files_json: request.uploaded_files_json,
+            request_json: request.request_json,
+        };
+
+        let (tx, rx) = oneshot::channel();
+        self.pending_chat_queue_requests
+            .lock()
+            .map_err(|_| "gateway chat queue request lock poisoned".to_string())?
+            .insert(request_id.clone(), tx);
+
+        if let Err(error) = self
+            .app_handle
+            .emit("gateway:chat-queue-request", event_payload)
+        {
+            let _ = self
+                .pending_chat_queue_requests
+                .lock()
+                .map(|mut pending| pending.remove(&request_id));
+            return self
+                .send_chat_queue_response(
+                    request_id,
+                    proto::ChatQueueResponse {
+                        accepted: false,
+                        message: format!("emit gateway chat queue request failed: {error}"),
+                        error_code: "emit_failed".to_string(),
+                        ..Default::default()
+                    },
+                )
+                .await;
+        }
+
+        let response = match tokio::time::timeout(Duration::from_secs(30), rx).await {
+            Ok(Ok(response)) => response,
+            Ok(Err(_)) => proto::ChatQueueResponse {
+                accepted: false,
+                message: "chat queue response dropped".to_string(),
+                error_code: "response_dropped".to_string(),
+                ..Default::default()
+            },
+            Err(_) => {
+                let _ = self
+                    .pending_chat_queue_requests
+                    .lock()
+                    .map(|mut pending| pending.remove(&request_id));
+                proto::ChatQueueResponse {
+                    accepted: false,
+                    message: "chat queue request timed out".to_string(),
+                    error_code: "timeout".to_string(),
+                    ..Default::default()
+                }
+            }
+        };
+
+        self.send_chat_queue_response(request_id, response).await
+    }
+
+    async fn send_chat_queue_response(
+        &self,
+        request_id: String,
+        response: proto::ChatQueueResponse,
+    ) -> Result<(), String> {
+        self.send_agent_envelope(proto::AgentEnvelope {
+            request_id,
+            timestamp: now_unix_seconds(),
+            payload: Some(proto::agent_envelope::Payload::ChatQueueResp(response)),
+        })
+        .await
+    }
+
+    pub fn respond_chat_queue_request(
+        &self,
+        input: GatewayChatQueueResponseInput,
+    ) -> Result<(), String> {
+        let request_id = input.request_id.trim().to_string();
+        if request_id.is_empty() {
+            return Err("chat queue request_id is required".to_string());
+        }
+        let sender = self
+            .pending_chat_queue_requests
+            .lock()
+            .map_err(|_| "gateway chat queue request lock poisoned".to_string())?
+            .remove(&request_id);
+        if let Some(sender) = sender {
+            let _ = sender.send(proto::ChatQueueResponse {
+                accepted: input.accepted,
+                message: input.message,
+                snapshot_json: input.snapshot_json,
+                item_json: input.item_json,
+                error_code: input.error_code,
+                revision: input.revision,
+            });
+        }
+        Ok(())
+    }
+
+    pub async fn publish_chat_queue_event(
+        &self,
+        input: GatewayChatQueueEventInput,
+    ) -> Result<(), String> {
+        self.send_agent_envelope(proto::AgentEnvelope {
+            request_id: format!("chat-queue-event-{}", Uuid::new_v4()),
+            timestamp: now_unix_seconds(),
+            payload: Some(proto::agent_envelope::Payload::ChatQueueEvent(
+                proto::ChatQueueEvent {
+                    conversation_id: input.conversation_id,
+                    snapshot_json: input.snapshot_json,
+                    revision: input.revision,
+                },
+            )),
+        })
         .await
     }
 
@@ -4795,11 +5124,12 @@ mod tests {
     use super::{
         build_chat_event_envelope, build_endpoint, build_grpc_url,
         build_local_settings_update_event_payload, build_tunnel_upstream_url,
-        history_share_resolve_error_code, merge_settings_sync_snapshot, normalize_tunnel_ttl,
-        proto, required_terminal_project_path_key, set_disconnected_status, tunnel_expires_at,
-        validate_tunnel_target_url, GatewayChatRequestEvent, GatewayController,
-        GatewayStatusSnapshot, RemoteChatInboxRecord, GATEWAY_CHAT_LEASE_MS,
-        GATEWAY_CHAT_RUNNING_LEASE_MS,
+        format_gateway_terminal_stream_rpc_error, history_share_resolve_error_code,
+        merge_settings_sync_snapshot, normalize_tunnel_ttl, proto,
+        queue_terminal_stream_handshake_frame, required_terminal_project_path_key,
+        set_disconnected_status, tunnel_expires_at, validate_tunnel_target_url,
+        GatewayChatRequestEvent, GatewayController, GatewayStatusSnapshot, RemoteChatInboxRecord,
+        GATEWAY_CHAT_LEASE_MS, GATEWAY_CHAT_RUNNING_LEASE_MS,
     };
     use crate::commands::settings::RemoteSettingsPayload;
     use serde_json::{json, Value};
@@ -4824,6 +5154,7 @@ mod tests {
             workdir: String::new(),
             selected_system_tools: Vec::new(),
             uploaded_files: Vec::new(),
+            queue_policy: String::new(),
         }
     }
 
@@ -4865,6 +5196,10 @@ mod tests {
             Some(proto::ChatMessageRef {
                 segment_index: 2,
                 message_index: 4,
+                segment_id: "segment-c".to_string(),
+                message_id: "user-c".to_string(),
+                role: "user".to_string(),
+                content_hash: "fnv1a32:00000000".to_string(),
             }),
         );
 
@@ -4879,6 +5214,10 @@ mod tests {
             .expect("base message ref should be preserved");
         assert_eq!(base_message_ref.segment_index, 2);
         assert_eq!(base_message_ref.message_index, 4);
+        assert_eq!(base_message_ref.segment_id, "segment-c");
+        assert_eq!(base_message_ref.message_id, "user-c");
+        assert_eq!(base_message_ref.role, "user");
+        assert_eq!(base_message_ref.content_hash, "fnv1a32:00000000");
         assert_eq!(event.execution_mode, "tools");
         assert_eq!(event.workdir, "/workspace");
         assert_eq!(event.selected_system_tools, vec!["http_get_test"]);
@@ -4975,6 +5314,42 @@ mod tests {
             &record,
             now + Duration::from_secs(1),
         ));
+    }
+
+    #[test]
+    fn conversation_cancel_preserves_gui_queued_remote_requests() {
+        let now = Instant::now();
+        let queued_in_gui = remote_chat_record(
+            gateway_chat_request("request-1", "client-1", "conversation-1", "first"),
+            "queued_in_gui",
+            false,
+            now,
+        );
+        let queued = remote_chat_record(
+            gateway_chat_request("request-2", "client-2", "conversation-1", "second"),
+            "queued",
+            false,
+            now,
+        );
+        let claimed = remote_chat_record(
+            gateway_chat_request("request-3", "client-3", "conversation-1", "third"),
+            "claimed",
+            false,
+            now,
+        );
+        let running = remote_chat_record(
+            gateway_chat_request("request-4", "client-4", "conversation-1", "fourth"),
+            "running",
+            true,
+            now,
+        );
+
+        assert!(
+            !GatewayController::remote_chat_record_should_cancel_for_conversation(&queued_in_gui)
+        );
+        assert!(!GatewayController::remote_chat_record_should_cancel_for_conversation(&queued));
+        assert!(GatewayController::remote_chat_record_should_cancel_for_conversation(&claimed));
+        assert!(GatewayController::remote_chat_record_should_cancel_for_conversation(&running));
     }
 
     #[test]
@@ -5226,6 +5601,48 @@ mod tests {
     }
 
     #[test]
+    fn terminal_stream_handshake_frame_is_gateway_noop() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel::<proto::TerminalStreamFrame>(1);
+
+        queue_terminal_stream_handshake_frame(&sender).expect("queue terminal stream handshake");
+
+        let frame = receiver
+            .try_recv()
+            .expect("terminal stream handshake frame");
+        assert_eq!(frame.kind, "detach");
+        assert!(frame.stream_id.starts_with("desktop-handshake-"));
+        assert!(frame.session_id.is_empty());
+    }
+
+    #[test]
+    fn terminal_stream_h2_error_points_to_grpc_endpoint() {
+        let config = RemoteSettingsPayload {
+            enabled: true,
+            gateway_url: "https://gateway.example.com".to_string(),
+            grpc_port: 443,
+            grpc_endpoint: String::new(),
+            token: "dev-token".to_string(),
+            agent_id: "agent".to_string(),
+            auto_reconnect: true,
+            heartbeat_interval: 30,
+            enable_web_terminal: true,
+            enable_web_ssh_terminal: true,
+            enable_web_git: false,
+            enable_web_tunnels: false,
+        };
+
+        let message = format_gateway_terminal_stream_rpc_error(
+            "receive",
+            &tonic::Status::internal("h2 protocol error: http2 error"),
+            &config,
+        );
+
+        assert!(message.contains("receive failed"));
+        assert!(message.contains("HTTP/2 bidi streams"));
+        assert!(message.contains("https://gateway.example.com"));
+    }
+
+    #[test]
     fn build_chat_event_envelope_preserves_tool_result_arguments() {
         let envelope = build_chat_event_envelope(
             "request-1".to_string(),
@@ -5332,6 +5749,45 @@ mod tests {
         assert_eq!(data["updatedAt"], 1234);
         assert_eq!(data["round"], 2);
     }
+
+    #[test]
+    fn build_chat_event_envelope_preserves_user_message_payload() {
+        let envelope = build_chat_event_envelope(
+            "request-1".to_string(),
+            json!({
+                "type": "user_message",
+                "conversation_id": "conversation-1",
+                "message": "queued prompt",
+                "uploaded_files": [
+                    {
+                        "relativePath": "notes.md",
+                        "absolutePath": "/workspace/notes.md",
+                        "fileName": "notes.md",
+                        "kind": "text",
+                        "sizeBytes": 12
+                    }
+                ],
+                "execution_mode": "agent"
+            }),
+        )
+        .expect("build user message event envelope");
+
+        let chat_event = match envelope.payload.expect("payload") {
+            super::proto::agent_envelope::Payload::ChatEvent(event) => event,
+            _ => panic!("expected chat event payload"),
+        };
+        assert_eq!(chat_event.conversation_id, "conversation-1");
+        assert_eq!(
+            chat_event.r#type,
+            super::proto::chat_event::ChatEventType::UserMessage as i32
+        );
+
+        let data: Value = serde_json::from_str(&chat_event.data).expect("chat event data");
+        assert_eq!(data["message"], "queued prompt");
+        assert_eq!(data["uploaded_files"][0]["relativePath"], "notes.md");
+        assert_eq!(data["uploaded_files"][0]["kind"], "text");
+        assert_eq!(data["execution_mode"], "agent");
+    }
 }
 
 fn build_chat_event_envelope(
@@ -5402,6 +5858,36 @@ fn build_chat_event_envelope(
                 "sources": object.get("sources").cloned().unwrap_or(Value::Null),
                 "updatedAt": object.get("updatedAt").cloned().unwrap_or(Value::Null),
                 "round": optional_number_field(object, "round"),
+            }),
+        ),
+        "user_message" => (
+            proto::chat_event::ChatEventType::UserMessage as i32,
+            json!({
+                "message": required_raw_string_field(object, "message")?,
+                "uploaded_files": object.get("uploaded_files")
+                    .or_else(|| object.get("uploadedFiles"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                "execution_mode": optional_string_field(object, "execution_mode")
+                    .or_else(|| optional_string_field(object, "executionMode")),
+                "workdir": optional_string_field(object, "workdir"),
+                "selected_system_tools": object.get("selected_system_tools")
+                    .or_else(|| object.get("selectedSystemTools"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                "runtime_controls": object.get("runtime_controls")
+                    .or_else(|| object.get("runtimeControls"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                "selected_model": object.get("selected_model")
+                    .or_else(|| object.get("selectedModel"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                "base_message_ref": object.get("base_message_ref")
+                    .or_else(|| object.get("baseMessageRef"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+                "reason": optional_string_field(object, "reason"),
             }),
         ),
         "done" => (
@@ -5567,6 +6053,57 @@ fn build_grpc_url(config: &RemoteSettingsPayload) -> Result<String, String> {
     url.set_query(None);
     url.set_fragment(None);
     Ok(url.to_string().trim_end_matches('/').to_string())
+}
+
+fn queue_terminal_stream_handshake_frame(
+    sender: &mpsc::Sender<proto::TerminalStreamFrame>,
+) -> Result<(), String> {
+    // Some HTTP/2 proxies do not fully establish a bidi stream until the client
+    // sends its first DATA frame. `detach` is a gateway no-op and is not forwarded
+    // to browser terminal subscribers.
+    sender
+        .try_send(terminal_stream_noop_frame("desktop-handshake"))
+        .map_err(|error| format!("queue gateway terminal stream handshake failed: {error}"))
+}
+
+async fn queue_terminal_stream_keepalive_frame(
+    sender: &mpsc::Sender<proto::TerminalStreamFrame>,
+) -> Result<(), String> {
+    sender
+        .send(terminal_stream_noop_frame("desktop-keepalive"))
+        .await
+        .map_err(|error| format!("queue gateway terminal stream keepalive failed: {error}"))
+}
+
+fn terminal_stream_noop_frame(prefix: &str) -> proto::TerminalStreamFrame {
+    proto::TerminalStreamFrame {
+        kind: "detach".to_string(),
+        stream_id: format!("{}-{}", prefix.trim(), Uuid::new_v4()),
+        ..Default::default()
+    }
+}
+
+fn format_gateway_terminal_stream_rpc_error(
+    phase: &str,
+    error: &tonic::Status,
+    config: &RemoteSettingsPayload,
+) -> String {
+    let message = error.to_string();
+    if !is_h2_protocol_error(&message) {
+        return format!("gateway terminal stream {phase} failed: {message}");
+    }
+
+    let endpoint = build_grpc_url(config).unwrap_or_else(|_| "invalid endpoint".to_string());
+    format!(
+        "gateway terminal stream {phase} failed: {message}. \
+         The gateway terminal stream requires a gRPC endpoint that supports HTTP/2 bidi streams; \
+         check Remote gRPC Endpoint / gRPC port. Current endpoint: {endpoint}"
+    )
+}
+
+fn is_h2_protocol_error(message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    normalized.contains("h2 protocol error") || normalized.contains("http2 error")
 }
 
 fn build_endpoint(grpc_url: &str) -> Result<Endpoint, String> {

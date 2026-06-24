@@ -386,7 +386,6 @@ test("normalizeRunningConversations preserves replay cursors and merges fallback
           run_id: " run-1 ",
           cwd: " /workspace ",
           first_seq: 42.9,
-          latest_seq: 99.8,
           run_epoch: 3.2,
           updated_at: 123,
         },
@@ -397,7 +396,6 @@ test("normalizeRunningConversations preserves replay cursors and merges fallback
         {
           conversation_id: "conversation-2",
           first_seq: 0,
-          latest_seq: -1,
         },
       ],
       ["conversation-2", " conversation-3 "],
@@ -408,7 +406,6 @@ test("normalizeRunningConversations preserves replay cursors and merges fallback
         run_id: "run-1",
         cwd: "/workspace",
         first_seq: 42,
-        latest_seq: 99,
         run_epoch: 3,
         updated_at: 123,
       },
@@ -417,7 +414,6 @@ test("normalizeRunningConversations preserves replay cursors and merges fallback
         run_id: undefined,
         cwd: undefined,
         first_seq: undefined,
-        latest_seq: undefined,
         run_epoch: undefined,
         updated_at: undefined,
       },
@@ -435,6 +431,10 @@ test("resolveRunningConversationStreamAfterSeq starts remote replay at current r
   assert.equal(historySync.resolveRunningConversationStreamAfterSeq(0), 0);
   assert.equal(historySync.resolveRunningConversationStreamAfterSeq(undefined), 0);
   assert.equal(historySync.resolveRunningConversationStreamAfterSeq("42"), 0);
+  assert.equal(
+    historySync.resolveRunningConversationStreamAfterSeq(42, { runId: "chat-command-1" }),
+    0,
+  );
 });
 
 test("applyGatewayHistoryEvent can protect optimistic titles from summary broadcasts", () => {
@@ -485,7 +485,14 @@ test("parseHistoryMessagesJson preserves upload display text and checkpoint meta
           sizeBytes: 42,
         },
       ],
-      liveAgentHistoryRef: { segmentIndex: 1, messageIndex: 2 },
+      liveAgentHistoryRef: {
+        segmentIndex: 1,
+        messageIndex: 2,
+        segmentId: "segment-1",
+        messageId: "message-2",
+        role: "user",
+        contentHash: "hash-2",
+      },
     },
     {
       role: "summary",
@@ -506,7 +513,14 @@ test("parseHistoryMessagesJson preserves upload display text and checkpoint meta
   assert.equal(entries[0].kind, "user");
   assert.equal(entries[0].text, "please inspect notes");
   assert.equal(entries[0].attachments[0].relativePath, "uploads/notes.txt");
-  assert.deepEqual(entries[0].messageRef, { segmentIndex: 1, messageIndex: 2 });
+  assert.deepEqual(entries[0].messageRef, {
+    segmentIndex: 1,
+    messageIndex: 2,
+    segmentId: "segment-1",
+    messageId: "message-2",
+    role: "user",
+    contentHash: "hash-2",
+  });
   assert.equal(entries[1].kind, "checkpoint");
   assert.equal(entries[1].summaryId, "summary-1");
   assert.equal(entries[1].coveredMessageCount, 8);
@@ -1246,6 +1260,231 @@ test("createLiveConversationStreamStore ignores replayed events with the same se
   assert.equal(store.getSnapshot().entries[0].text, "fresh");
 });
 
+test("createLiveConversationStreamStore does not render queue control events", () => {
+  globalThis.window = undefined;
+  globalThis.document = { visibilityState: "visible" };
+
+  const store = liveStore.createLiveConversationStreamStore();
+  store.appendEvent({
+    type: "accepted",
+    state: "queued",
+    conversation_id: "conversation-1",
+    seq: 1,
+  });
+  store.appendEvent({
+    type: "queued_in_gui",
+    state: "desktop_queued",
+    conversation_id: "conversation-1",
+    seq: 2,
+  });
+  store.appendEvent({
+    type: "started",
+    state: "running",
+    conversation_id: "conversation-1",
+    seq: 3,
+  });
+  store.appendEvent({
+    type: "token",
+    text: "visible",
+    round: 1,
+    conversation_id: "conversation-1",
+    seq: 4,
+  });
+
+  assert.equal(store.getSnapshot().entries.length, 1);
+  assert.equal(store.getSnapshot().entries[0].text, "visible");
+});
+
+test("createLiveConversationStreamStore renders live user_message events", () => {
+  globalThis.window = undefined;
+  globalThis.document = { visibilityState: "visible" };
+
+  const store = liveStore.createLiveConversationStreamStore();
+  store.appendEvent({
+    type: "user_message",
+    message: "queued from gui",
+    uploaded_files: [
+      {
+        relative_path: "notes.md",
+        absolute_path: "/workspace/notes.md",
+        file_name: "notes.md",
+        kind: "text",
+        size_bytes: 12,
+      },
+    ],
+    conversation_id: "conversation-1",
+    seq: 1,
+  });
+  store.appendEvent({
+    type: "token",
+    text: "reply",
+    round: 1,
+    conversation_id: "conversation-1",
+    seq: 2,
+  });
+
+  const entries = store.getSnapshot().entries;
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].kind, "user");
+  assert.equal(entries[0].text, "queued from gui");
+  assert.equal(entries[0].attachments.length, 1);
+  assert.equal(entries[0].attachments[0].relativePath, "notes.md");
+  assert.equal(entries[1].kind, "assistant");
+  assert.equal(entries[1].text, "reply");
+});
+
+function findTreeNode(node, predicate) {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const match = findTreeNode(child, predicate);
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  }
+  if (node == null || typeof node !== "object") {
+    return null;
+  }
+  if (predicate(node)) {
+    return node;
+  }
+  const children = node.props?.children;
+  const childList = Array.isArray(children) ? children : [children];
+  for (const child of childList) {
+    const match = findTreeNode(child, predicate);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
+test("GatewayTranscript live renderer shows user bubbles before live assistant output", () => {
+  const fakeReact = {
+    createContext(defaultValue) {
+      return { defaultValue };
+    },
+    memo(component) {
+      return component;
+    },
+    useCallback(callback) {
+      return callback;
+    },
+    useContext(context) {
+      return context.defaultValue;
+    },
+    useEffect() {},
+    useLayoutEffect() {},
+    useMemo(factory) {
+      return factory();
+    },
+    useRef(value) {
+      return { current: value };
+    },
+    useState(initialValue) {
+      const value = typeof initialValue === "function" ? initialValue() : initialValue;
+      return [value, () => {}];
+    },
+    useSyncExternalStore(_subscribe, getSnapshot) {
+      return getSnapshot();
+    },
+  };
+  const transcriptLoader = createWebModuleLoader({
+    mocks: {
+      react: fakeReact,
+      "@tanstack/react-virtual": {
+        useVirtualizer() {
+          return {
+            getTotalSize: () => 0,
+            getVirtualItems: () => [],
+            measureElement: () => {},
+          };
+        },
+      },
+      "@/components/Markdown": {
+        Markdown(props) {
+          return { type: "Markdown", props };
+        },
+      },
+      "@/components/chat/ImagePreview": {
+        ImagePreview(props) {
+          return { type: "ImagePreview", props };
+        },
+      },
+      "@/pages/chat/AssistantBubble": {
+        AssistantAvatar() {
+          return { type: "AssistantAvatar", props: {} };
+        },
+        AssistantBubble(props) {
+          return { type: "AssistantBubble", props };
+        },
+        CompactingText(props) {
+          return { type: "CompactingText", props };
+        },
+        VibingText(props) {
+          return { type: "VibingText", props };
+        },
+      },
+    },
+  });
+  const transcriptLiveStore = transcriptLoader.loadModule("src/lib/liveConversationStreamStore.ts");
+  const { GatewayTranscript } = transcriptLoader.loadModule("src/components/GatewayTranscript.tsx");
+
+  globalThis.window = undefined;
+  globalThis.document = { visibilityState: "visible" };
+
+  const store = transcriptLiveStore.createLiveConversationStreamStore();
+  store.appendEvent(
+    {
+      type: "user_message",
+      message: "queued from gui",
+      conversation_id: "conversation-1",
+      seq: 1,
+    },
+    { flush: true },
+  );
+  store.appendEvent(
+    {
+      type: "token",
+      text: "reply",
+      round: 1,
+      conversation_id: "conversation-1",
+      seq: 2,
+    },
+    { flush: true },
+  );
+
+  const transcriptTree = GatewayTranscript({
+    conversationId: "conversation-1",
+    entries: [],
+    liveStore: store,
+    hasLiveStream: true,
+    isStreaming: true,
+  });
+  const liveStateNode = findTreeNode(
+    transcriptTree,
+    (node) => typeof node.type === "function" && node.props?.liveSnapshot,
+  );
+
+  assert.ok(liveStateNode);
+  const liveTree = liveStateNode.type(liveStateNode.props);
+  assert.ok(
+    findTreeNode(
+      liveTree,
+      (node) =>
+        typeof node.props?.className === "string" &&
+        node.props.className.includes("gateway-transcript-row-user"),
+    ),
+  );
+  assert.ok(
+    findTreeNode(
+      liveTree,
+      (node) => typeof node.type === "function" && node.props?.text === "queued from gui",
+    ),
+  );
+});
+
 test("mergeHistorySnapshotEntries appends remote user turn without dropping loaded history", () => {
   const existing = [
     { id: "existing-user-1", kind: "user", text: "first", attachments: [] },
@@ -1380,6 +1619,119 @@ test("omitEquivalentTailEntries treats assistant metadata placement as the same 
     visibleHistory.map((entry) => entry.text),
     ["你好"],
   );
+});
+
+test("omitEquivalentTailEntries removes live user and assistant overlap", () => {
+  const existing = [
+    { id: "history-user-1", kind: "user", text: "first", attachments: [] },
+    { id: "history-assistant-1", kind: "assistant", text: "first answer", round: 1 },
+    { id: "history-user-2", kind: "user", text: "queued from gui", attachments: [] },
+    { id: "history-assistant-2", kind: "assistant", text: "reply", round: 1 },
+  ];
+  const liveEntries = [
+    { id: "live-user-2", kind: "user", text: "queued from gui", attachments: [] },
+    { id: "live-assistant-2", kind: "assistant", text: "reply", round: 1 },
+  ];
+
+  const visibleHistory = liveCommit.omitEquivalentTailEntries(existing, liveEntries);
+
+  assert.deepEqual(
+    visibleHistory.map((entry) => entry.text),
+    ["first", "first answer"],
+  );
+});
+
+test("omitEquivalentTailEntries removes uploaded live user overlap", () => {
+  const historyAttachment = {
+    relativePath: ".liveagent/uploads/08-conclusion.png",
+    fileName: "08-conclusion.png",
+    kind: "image",
+    sizeBytes: 58368,
+    absolutePath: "/workspace/.liveagent/uploads/08-conclusion.png",
+  };
+  const liveAttachment = {
+    relativePath: ".liveagent/uploads/08-conclusion.png",
+    absolutePath: "/workspace/.liveagent/uploads/08-conclusion.png",
+    fileName: "08-conclusion.png",
+    kind: "image",
+    sizeBytes: 58368,
+  };
+  const existing = [
+    { id: "history-user-1", kind: "user", text: "这是什么", attachments: [historyAttachment] },
+    { id: "history-assistant-1", kind: "assistant", text: "reply", round: 1 },
+  ];
+  const liveEntries = [
+    { id: "live-user-1", kind: "user", text: "这是什么", attachments: [liveAttachment] },
+    { id: "live-assistant-1", kind: "assistant", text: "reply", round: 1 },
+  ];
+
+  const visibleHistory = liveCommit.omitEquivalentTailEntries(existing, liveEntries);
+
+  assert.deepEqual(visibleHistory, []);
+});
+
+test("appendCommittedLiveEntries does not duplicate optimistic user message overlaps", () => {
+  const existing = [
+    { id: "history-user-1", kind: "user", text: "first", attachments: [] },
+    { id: "optimistic-user-2", kind: "user", text: "queued from gui", attachments: [] },
+  ];
+  const liveEntries = [
+    { id: "live-user-2", kind: "user", text: "queued from gui", attachments: [] },
+    { id: "live-assistant-2", kind: "assistant", text: "reply", round: 1 },
+  ];
+
+  const merged = liveCommit.appendCommittedLiveEntries(existing, liveEntries);
+
+  assert.deepEqual(
+    merged.map((entry) => entry.text),
+    ["first", "queued from gui", "reply"],
+  );
+  assert.equal(merged[1].id, "optimistic-user-2");
+  assert.equal(merged[2].kind, "assistant");
+});
+
+test("appendCommittedLiveEntries does not duplicate uploaded optimistic user overlaps", () => {
+  const existing = [
+    {
+      id: "optimistic-user-1",
+      kind: "user",
+      text: "这是什么",
+      attachments: [
+        {
+          relativePath: ".liveagent/uploads/08-conclusion.png",
+          fileName: "08-conclusion.png",
+          kind: "image",
+          sizeBytes: 58368,
+          absolutePath: "/workspace/.liveagent/uploads/08-conclusion.png",
+        },
+      ],
+    },
+  ];
+  const liveEntries = [
+    {
+      id: "live-user-1",
+      kind: "user",
+      text: "这是什么",
+      attachments: [
+        {
+          relativePath: ".liveagent/uploads/08-conclusion.png",
+          absolutePath: "/workspace/.liveagent/uploads/08-conclusion.png",
+          fileName: "08-conclusion.png",
+          kind: "image",
+          sizeBytes: 58368,
+        },
+      ],
+    },
+    { id: "live-assistant-1", kind: "assistant", text: "reply", round: 1 },
+  ];
+
+  const merged = liveCommit.appendCommittedLiveEntries(existing, liveEntries);
+
+  assert.deepEqual(
+    merged.map((entry) => entry.text),
+    ["这是什么", "reply"],
+  );
+  assert.equal(merged[0].id, "optimistic-user-1");
 });
 
 test("mergeHistorySnapshotEntries replaces stale local entries when an authoritative snapshot is shorter", () => {

@@ -108,6 +108,13 @@ test("gateway web queued chat turn preview keeps structured draft hints compact"
       },
     },
     {
+      type: "fileMention",
+      reference: {
+        path: "src/notes.txt",
+        kind: "file",
+      },
+    },
+    {
       type: "skillMention",
       skill: {
         name: "reviewer",
@@ -118,7 +125,7 @@ test("gateway web queued chat turn preview keeps structured draft hints compact"
     },
   ]);
 
-  assert.equal(queue.buildQueuedChatTurnPreview(richDraft), "hello pasted.txt$reviewer");
+  assert.equal(queue.buildQueuedChatTurnPreview(richDraft), "hello pasted.txtnotes.txt$reviewer");
   assert.equal(queue.queuedChatTurnHasContent(richDraft, []), true);
   assert.equal(queue.queuedChatTurnHasContent(draft(""), [{ fileName: "a.txt" }]), true);
 });

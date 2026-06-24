@@ -33,6 +33,7 @@ message GatewayEnvelope {
     HistoryGetRequest history_get = 31;
     HistoryRenameRequest history_rename = 32;
     HistoryDeleteRequest history_delete = 33;
+    HistoryPrefixRequest history_prefix = 34;
     HistoryPinRequest history_pin = 35;
     HistoryShareGetRequest history_share_get = 36;
     HistoryShareSetRequest history_share_set = 37;
@@ -67,6 +68,7 @@ message GatewayEnvelope {
     TunnelControlResponse tunnel_control_resp = 68;
     TunnelFrame tunnel_frame = 69;
     SettingsResetSshKnownHostRequest settings_reset_ssh_known_host = 72;
+    ChatQueueRequest chat_queue = 73;
   }
 }
 
@@ -82,6 +84,7 @@ message AgentEnvelope {
     HistoryRenameResponse history_rename_resp = 32;
     HistoryDeleteResponse history_delete_resp = 33;
     HistorySyncEvent history_sync = 34;
+    HistoryPrefixResponse history_prefix_resp = 35;
     HistoryPinResponse history_pin_resp = 36;
     HistoryShareGetResponse history_share_get_resp = 37;
     HistoryShareSetResponse history_share_set_resp = 38;
@@ -115,6 +118,8 @@ message AgentEnvelope {
     FsReadWorkspaceImageResponse fs_read_workspace_image_resp = 66;
     SftpResponse sftp_response = 73;
     SftpEvent sftp_event = 74;
+    ChatQueueResponse chat_queue_resp = 75;
+    ChatQueueEvent chat_queue_event = 76;
     TunnelControlRequest tunnel_control = 67;
     TunnelControlResponse tunnel_control_resp = 68;
     TunnelFrame tunnel_frame = 69;
@@ -451,11 +456,16 @@ message ChatRequest {
   repeated ChatUploadedFile uploaded_files = 7;
   string client_request_id = 8;
   ChatRuntimeControls runtime_controls = 9;
+  string queue_policy = 10;
 }
 
 message ChatMessageRef {
   int32 segment_index = 1;
   int32 message_index = 2;
+  string segment_id = 3;
+  string message_id = 4;
+  string role = 5;
+  string content_hash = 6;
 }
 
 message CancelChatRequest {
@@ -467,6 +477,32 @@ message ChatCommandRequest {
   ChatRequest request = 2;
   ChatMessageRef base_message_ref = 3;
   CancelChatRequest cancel = 4;
+}
+
+message ChatQueueRequest {
+  string action = 1;
+  string conversation_id = 2;
+  string item_id = 3;
+  string direction = 4;
+  uint64 revision = 5;
+  string draft_json = 6;
+  string uploaded_files_json = 7;
+  string request_json = 8;
+}
+
+message ChatQueueResponse {
+  bool accepted = 1;
+  string message = 2;
+  string snapshot_json = 3;
+  string item_json = 4;
+  string error_code = 5;
+  uint64 revision = 6;
+}
+
+message ChatQueueEvent {
+  string conversation_id = 1;
+  string snapshot_json = 2;
+  uint64 revision = 3;
 }
 
 message ChatEvent {
@@ -483,6 +519,7 @@ message ChatEvent {
     ERROR = 5;
     TOOL_STATUS = 6;
     HOSTED_SEARCH = 7;
+    USER_MESSAGE = 8;
   }
 }
 
@@ -550,6 +587,21 @@ message HistoryGetRequest {
 }
 
 message HistoryGetResponse {
+  string conversation_id = 1;
+  string messages_json = 2;
+  int32 total_message_count = 3;
+  int32 returned_message_count = 4;
+  bool has_more = 5;
+  ConversationSummary conversation = 6;
+}
+
+message HistoryPrefixRequest {
+  string conversation_id = 1;
+  int32 max_messages = 2;
+  ChatMessageRef base_message_ref = 3;
+}
+
+message HistoryPrefixResponse {
   string conversation_id = 1;
   string messages_json = 2;
   int32 total_message_count = 3;

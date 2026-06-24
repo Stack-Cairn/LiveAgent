@@ -63,6 +63,7 @@ export type ChatRunControlState =
   | "delivered"
   | "claimed"
   | "starting"
+  | "desktop_queued"
   | "running"
   | "completed"
   | "failed"
@@ -77,6 +78,7 @@ export type ChatControlEvent = {
     | "delivered"
     | "claimed"
     | "starting"
+    | "queued_in_gui"
     | "started"
     | "progress"
     | "completed"
@@ -171,6 +173,35 @@ export type CronManagePayload = {
   task_json?: string;
 };
 
+export type ChatQueueItemSummary = {
+  id: string;
+  previewText: string;
+  fileCount: number;
+  createdAt: number;
+  source: "gui" | "webui";
+  editable: boolean;
+};
+
+export type ChatQueueSnapshot = {
+  conversationId: string;
+  revision: number;
+  items: ChatQueueItemSummary[];
+};
+
+export type ChatQueueItemDetail = ChatQueueItemSummary & {
+  draftJson: string;
+  uploadedFilesJson: string;
+};
+
+export type ChatQueueResponse = {
+  accepted: boolean;
+  message?: string;
+  snapshot?: ChatQueueSnapshot;
+  item?: ChatQueueItemDetail;
+  errorCode?: string;
+  revision?: number;
+};
+
 export type CronManageResponse = {
   action: string;
   result_json: string;
@@ -208,7 +239,6 @@ export type RunningConversationSummary = {
   run_id?: string;
   cwd?: string;
   first_seq?: number;
-  latest_seq?: number;
   run_epoch?: number;
   updated_at?: number;
 };
@@ -273,4 +303,8 @@ export type GatewayHistoryEvent =
       kind: "running" | "idle";
       conversation_id: string;
       conversation?: ConversationSummary;
+      run_id?: string;
+      first_seq?: number;
+      run_epoch?: number;
+      updated_at?: number;
     };

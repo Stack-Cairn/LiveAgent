@@ -575,9 +575,7 @@ impl TerminalEchoDispatchState {
     }
 
     fn is_empty(&self) -> bool {
-        self.pending.is_empty()
-            && self.deferred_local.is_empty()
-            && self.deferred_remote.is_empty()
+        self.pending.is_empty() && self.deferred_local.is_empty() && self.deferred_remote.is_empty()
     }
 }
 
@@ -2205,11 +2203,7 @@ impl TerminalSessionRegistry {
         self.broadcast_output(&entry, data, output_start_offset, output_end_offset);
     }
 
-    fn record_input_echo_candidates(
-        &self,
-        session_id: &str,
-        echo_bytes: Vec<PendingEchoByte>,
-    ) {
+    fn record_input_echo_candidates(&self, session_id: &str, echo_bytes: Vec<PendingEchoByte>) {
         if echo_bytes.is_empty() {
             return;
         }

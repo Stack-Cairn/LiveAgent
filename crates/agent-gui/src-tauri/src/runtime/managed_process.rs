@@ -8,9 +8,7 @@ use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::runtime::platform::expand_tilde_path;
-use crate::runtime::process::{
-    kill_child_process_tree_best_effort, terminate_child_process_tree,
-};
+use crate::runtime::process::{kill_child_process_tree_best_effort, terminate_child_process_tree};
 use crate::runtime::shell_runner::spawn_platform_shell_command;
 
 const PROCESS_LOG_DIR: &str = "process-logs";

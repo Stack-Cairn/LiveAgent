@@ -82,6 +82,32 @@ func TestActiveChatRunSummaryPayloadIncludesReplayCursor(t *testing.T) {
 	}
 }
 
+func TestHistoryRunningPayloadIncludesReplayCursor(t *testing.T) {
+	payload := websocketHistorySyncPayload(&gatewayv1.HistorySyncEvent{
+		Kind:           "running",
+		ConversationId: "conversation-1",
+		Conversation: &gatewayv1.ConversationSummary{
+			Id:  "conversation-1",
+			Cwd: "/workspace",
+		},
+	}, session.ActiveChatRunSummary{
+		ConversationID: "conversation-1",
+		RequestID:      "conversation-live-conversation-1",
+		FirstSeq:       2,
+		LatestSeq:      1,
+		RunEpoch:       5,
+		UpdatedAt:      123,
+	})
+
+	if payload["run_id"] != "conversation-live-conversation-1" ||
+		payload["first_seq"] != int64(2) ||
+		payload["latest_seq"] != int64(1) ||
+		payload["run_epoch"] != int64(5) ||
+		payload["updated_at"] != int64(123) {
+		t.Fatalf("history running payload = %#v", payload)
+	}
+}
+
 func TestWebsocketTerminalPayloadsPreserveOutputOffsets(t *testing.T) {
 	response := websocketTerminalResponsePayload(&gatewayv1.TerminalResponse{
 		Action:            "attach",

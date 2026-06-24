@@ -15,11 +15,11 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  ConnectionIcon,
   FolderTree,
   Globe,
   Key,
   Loader2,
-  Plus,
   RefreshCw,
   Server,
   Settings,
@@ -31,6 +31,12 @@ import {
 } from "../icons";
 import { Button } from "../ui/button";
 import { useConfirmDialog } from "../ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 type SshTunnelScope = "project" | "all";
 type SshTunnelView = "list" | "settings" | "create";
@@ -218,6 +224,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
   const [scope, setScope] = useState<SshTunnelScope>("project");
   const [view, setView] = useState<SshTunnelView>("list");
   const [createHostId, setCreateHostId] = useState("");
+  const [createHostMenuOpen, setCreateHostMenuOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
   const [createSftpEnabled, setCreateSftpEnabled] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -709,34 +716,94 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
             }}
           >
             <div className="space-y-3">
-              <label className="block space-y-1.5">
+              <div className="block space-y-1.5">
                 <span className="text-xs font-medium text-foreground">
                   {t("projectTools.sshTunnelHost")}
                 </span>
-                <div className="group relative">
-                  <span
-                    className="pointer-events-none absolute inset-y-0 left-0 flex w-10 items-center justify-center text-emerald-500"
-                    aria-hidden="true"
+                <DropdownMenu open={createHostMenuOpen} onOpenChange={setCreateHostMenuOpen}>
+                  <DropdownMenuTrigger
+                    type="button"
+                    className={cn(
+                      "flex min-h-12 w-full items-center gap-3 rounded-lg border border-border/70 bg-card/80 px-3 py-2 text-left shadow-[0_1px_2px_hsl(0_0%_0%_/_0.04)] outline-none transition-all hover:border-emerald-500/40 hover:bg-card focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20",
+                      createHostMenuOpen && "border-emerald-500/50 ring-1 ring-emerald-500/20",
+                    )}
+                    aria-label={t("projectTools.sshTunnelHost")}
                   >
-                    <Server className="h-4 w-4" />
-                  </span>
-                  <select
-                    className="h-10 w-full appearance-none rounded-lg border border-border/70 bg-card/80 pl-10 pr-9 text-[11px] font-medium text-foreground shadow-[0_1px_2px_hsl(0_0%_0%_/_0.04)] outline-none transition-colors hover:border-emerald-500/40 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20"
-                    value={selectedCreateHostId}
-                    onChange={(event) => setCreateHostId(event.currentTarget.value)}
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+                      <Server className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold text-foreground">
+                        {selectedCreateHost?.name}
+                      </span>
+                      <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+                        {selectedCreateHost ? endpointLabel(selectedCreateHost) : ""}
+                      </span>
+                    </span>
+                    {selectedCreateHost ? (
+                      <span className="hidden shrink-0 rounded-md bg-muted/70 px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground min-[360px]:inline-flex">
+                        {authLabel(selectedCreateHost, t)}
+                      </span>
+                    ) : null}
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                        createHostMenuOpen && "rotate-180 text-emerald-500",
+                      )}
+                      aria-hidden="true"
+                    />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    side="bottom"
+                    align="start"
+                    sideOffset={6}
+                    collisionPadding={12}
+                    className="z-[80] w-max max-w-[calc(100vw-2rem)] min-w-[var(--radix-dropdown-menu-trigger-width)] rounded-xl border-border/70 bg-popover/95 p-1 shadow-[0_18px_46px_-24px_hsl(160_84%_25%_/_0.42),0_8px_24px_-18px_hsl(0_0%_0%_/_0.32)] backdrop-blur-xl"
                   >
-                    {createHosts.map((host) => (
-                      <option key={host.id} value={host.id}>
-                        {host.name} - {endpointLabel(host)}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-emerald-500"
-                    aria-hidden="true"
-                  />
-                </div>
-              </label>
+                    <div className="max-h-72 overflow-y-auto p-0.5">
+                      {createHosts.map((host) => {
+                        const selected = host.id === selectedCreateHostId;
+                        return (
+                          <DropdownMenuItem
+                            key={host.id}
+                            onSelect={() => setCreateHostId(host.id)}
+                            className={cn(
+                              "group/item flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-all focus:translate-x-0.5 focus:bg-emerald-500/10 focus:text-foreground",
+                              selected && "bg-emerald-500/10 text-foreground",
+                            )}
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500 transition-colors group-focus/item:bg-emerald-500/15">
+                              <Server className="h-3.5 w-3.5" />
+                            </span>
+                            <span className="flex min-w-0 flex-1 items-center gap-2">
+                              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                                {host.name}
+                              </span>
+                              <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                                {endpointLabel(host)}
+                              </span>
+                              <span className="shrink-0 rounded-md bg-background/80 px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                                {authLabel(host, t)}
+                              </span>
+                            </span>
+                            <span
+                              className={cn(
+                                "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                                selected
+                                  ? "border-emerald-500 bg-emerald-500 text-white"
+                                  : "border-border bg-background text-transparent",
+                              )}
+                              aria-hidden="true"
+                            >
+                              <Check className="h-3 w-3" />
+                            </span>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
 
               <label className="block space-y-1.5">
                 <span className="text-xs font-medium text-foreground">
@@ -837,7 +904,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                 aria-label={t("projectTools.newSshTunnel")}
                 onClick={() => setView("create")}
               >
-                <Plus className="h-4 w-4" />
+                <ConnectionIcon height="1em" />
               </button>
             ) : null}
             {scope === "project" ? (

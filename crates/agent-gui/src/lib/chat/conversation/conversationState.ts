@@ -8,6 +8,8 @@ import {
 import { normalizeConversationSystemPrompt } from "../context/systemPrompt";
 import { buildUiMessages, type UiRound } from "../messages/uiMessages";
 import {
+  getUserMessageAttachments,
+  getUserMessageDisplayText,
   type PendingUploadedFile,
   stripUploadedFilesMessageMetadata,
 } from "../messages/uploadedFiles";
@@ -64,6 +66,10 @@ export type StoredContextSegment = {
 export type HistoryMessageRef = {
   segmentIndex: number;
   messageIndex: number;
+  segmentId: string;
+  messageId: string;
+  role: string;
+  contentHash: string;
 };
 
 export type RenderSummaryCard = {
@@ -87,7 +93,7 @@ export type RenderUserMessage = {
   kind: "user";
   key: string;
   segmentIndex: number;
-  messageRef: HistoryMessageRef;
+  messageRef?: HistoryMessageRef;
   text: string;
   attachments: PendingUploadedFile[];
   timestamp: number;
@@ -139,6 +145,19 @@ function isRuntimeHistoryMessage(message: Message) {
 function getMessageTimestamp(message: Message | undefined) {
   if (!message) return Date.now();
   return typeof message.timestamp === "number" ? message.timestamp : Date.now();
+}
+
+function readMessageStringId(message: Message | undefined) {
+  if (!message) return undefined;
+  const rawId = (message as { id?: unknown }).id;
+  if (typeof rawId === "string" && rawId.trim()) {
+    return rawId.trim();
+  }
+  if (message.role === "assistant" && typeof message.responseId === "string") {
+    const responseId = message.responseId.trim();
+    if (responseId) return responseId;
+  }
+  return undefined;
 }
 
 function isMemoryManagerToolUseAssistantMessage(message: Message): message is AssistantMessage {
@@ -212,18 +231,111 @@ function getMessageStableId(
   segmentIndex: number,
   messageIndex: number,
 ) {
-  const candidate =
-    message &&
-    typeof (message as { id?: unknown }).id === "string" &&
-    String((message as { id?: unknown }).id).trim()
-      ? String((message as { id?: unknown }).id).trim()
-      : message?.role === "assistant" &&
-          typeof message.responseId === "string" &&
-          message.responseId.trim()
-        ? message.responseId.trim()
-        : undefined;
+  const candidate = readMessageStringId(message);
   if (candidate) return candidate;
   return `segment-${segmentIndex}-message-${messageIndex}-${getMessageTimestamp(message)}`;
+}
+
+function appendHashPart(parts: string[], value: unknown) {
+  const text = String(value ?? "");
+  const byteLength =
+    typeof TextEncoder === "function"
+      ? new TextEncoder().encode(text).length
+      : text.length;
+  parts.push(`${byteLength}:${text}`);
+}
+
+function hashFnv1a32(input: string) {
+  const bytes =
+    typeof TextEncoder === "function"
+      ? new TextEncoder().encode(input)
+      : Uint8Array.from(input, (char) => char.charCodeAt(0) & 0xff);
+  let hash = 0x811c9dc5;
+  for (const byte of bytes) {
+    hash ^= byte;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `fnv1a32:${hash.toString(16).padStart(8, "0")}`;
+}
+
+export function getHistoryMessageContentHash(message: Message): string {
+  const parts = ["liveagent-history-ref-v1"];
+  appendHashPart(parts, message.role);
+  if (message.role === "user") {
+    appendHashPart(parts, getUserMessageDisplayText(message as Message & Record<string, unknown>));
+    const attachments = getUserMessageAttachments(message as Message & Record<string, unknown>);
+    appendHashPart(parts, attachments.length);
+    for (const file of attachments) {
+      appendHashPart(parts, file.relativePath);
+      appendHashPart(parts, file.fileName);
+      appendHashPart(parts, file.kind);
+      appendHashPart(parts, file.sizeBytes);
+    }
+  } else {
+    appendHashPart(parts, JSON.stringify(message.content ?? null));
+  }
+  return hashFnv1a32(parts.join("|"));
+}
+
+function buildHistoryMessageRef(params: {
+  segment: StoredContextSegment;
+  message: Message | undefined;
+  messageIndex: number;
+}): HistoryMessageRef | undefined {
+  const { segment, message, messageIndex } = params;
+  if (!message) return undefined;
+  const segmentId = segment.segmentId?.trim();
+  const messageId = readMessageStringId(message);
+  const role = typeof message.role === "string" ? message.role.trim() : "";
+  if (!segmentId || !messageId || !role) return undefined;
+  return {
+    segmentIndex: segment.segmentIndex,
+    messageIndex,
+    segmentId,
+    messageId,
+    role,
+    contentHash: getHistoryMessageContentHash(message),
+  };
+}
+
+function messageMatchesHistoryRef(
+  segment: StoredContextSegment,
+  message: Message | undefined,
+  messageIndex: number,
+  ref: HistoryMessageRef,
+) {
+  if (!message || segment.segmentId !== ref.segmentId) return false;
+  const messageId = readMessageStringId(message);
+  if (!messageId || messageId !== ref.messageId) return false;
+  if (message.role !== ref.role) return false;
+  if (getHistoryMessageContentHash(message) !== ref.contentHash) return false;
+  return messageIndex >= 0;
+}
+
+function locateHistoryMessageRef(state: ConversationViewState, ref: HistoryMessageRef) {
+  if (ref.role !== "user") {
+    throw new Error("edit-resend only supports user message refs.");
+  }
+  const hintedSegment = state.segments[ref.segmentIndex];
+  const targetSegment =
+    hintedSegment?.segmentId === ref.segmentId
+      ? hintedSegment
+      : state.segments.find((segment) => segment.segmentId === ref.segmentId);
+  if (!targetSegment) {
+    throw new Error("edit-resend base_message_ref segment was not found.");
+  }
+  const segmentArrayIndex = state.segments.indexOf(targetSegment);
+  const hintedMessage = targetSegment.messages[ref.messageIndex];
+  if (messageMatchesHistoryRef(targetSegment, hintedMessage, ref.messageIndex, ref)) {
+    return { segmentArrayIndex, messageIndex: ref.messageIndex };
+  }
+  const messageIndex = targetSegment.messages.findIndex((message, index) =>
+    messageMatchesHistoryRef(targetSegment, message, index, ref),
+  );
+  if (messageIndex < 0) {
+    throw new Error("edit-resend base_message_ref message failed stable identity validation.");
+  }
+  return { segmentArrayIndex, messageIndex };
 }
 
 function getSummaryId(summary: StoredSummaryMessage | undefined) {
@@ -459,14 +571,16 @@ function buildTimelineItemsForSegment(
     if (uiMessage.role === "user") {
       const localMessageIndex = uiMessage.messageIndex ?? 0;
       const source = segment.messages[localMessageIndex];
+      const messageRef = buildHistoryMessageRef({
+        segment,
+        message: source,
+        messageIndex: localMessageIndex,
+      });
       items.push({
         kind: "user",
         key: `segment-${segment.segmentIndex}-${uiMessage.key}`,
         segmentIndex: segment.segmentIndex,
-        messageRef: {
-          segmentIndex: segment.segmentIndex,
-          messageIndex: localMessageIndex,
-        },
+        messageRef,
         text: uiMessage.text,
         attachments: uiMessage.attachments ?? [],
         timestamp: getMessageTimestamp(source),
@@ -740,20 +854,21 @@ export function truncateConversationFromMessage(
   state: ConversationViewState,
   ref: HistoryMessageRef,
 ): ConversationViewState {
-  const targetSegment = state.segments[ref.segmentIndex];
+  const targetLocation = locateHistoryMessageRef(state, ref);
+  const targetSegment = state.segments[targetLocation.segmentArrayIndex];
   if (!targetSegment) return state;
 
-  const segments = state.segments.slice(0, ref.segmentIndex + 1).map((segment) => ({
+  const segments = state.segments.slice(0, targetLocation.segmentArrayIndex + 1).map((segment) => ({
     ...segment,
     messages: segment.messages.slice(),
   }));
-  const target = segments[ref.segmentIndex];
-  const cutoff = Math.max(0, Math.min(ref.messageIndex, target.messages.length));
+  const target = segments[targetLocation.segmentArrayIndex];
+  const cutoff = Math.max(0, Math.min(targetLocation.messageIndex, target.messages.length));
   target.messages = target.messages.slice(0, cutoff);
   target.updatedAt =
     cutoff > 0 ? getMessageTimestamp(target.messages[cutoff - 1]) : target.createdAt;
   const normalizedSegments = segments.map((segment, index) =>
-    index === ref.segmentIndex ? normalizeSegment(segment, index) : segment,
+    index === targetLocation.segmentArrayIndex ? normalizeSegment(segment, index) : segment,
   );
   const activeSegmentIndex = Math.max(0, normalizedSegments.length - 1);
   const meta = buildConversationMeta({
@@ -771,7 +886,7 @@ export function truncateConversationFromMessage(
       previousItems: state.historyRenderItems,
       segments: normalizedSegments,
       activeSegmentIndex,
-      startSegmentIndex: ref.segmentIndex,
+      startSegmentIndex: targetLocation.segmentArrayIndex,
     }),
   };
 }

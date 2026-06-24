@@ -173,17 +173,18 @@ test("compaction checkpoint creates a summarized segment and carries summary int
 test("truncateConversationFromMessage removes later segments and rebuilds render timeline", () => {
   const state = conversationState.createConversationStateFromContext({
     messages: [
-      user("one", 1),
-      assistant("two", 2),
-      user("three", 3),
-      assistant("four", 4),
+      { ...user("one", 1), id: "message-1" },
+      { ...assistant("two", 2), id: "message-2" },
+      { ...user("three", 3), id: "message-3" },
+      { ...assistant("four", 4), id: "message-4" },
     ],
   });
 
-  const truncated = conversationState.truncateConversationFromMessage(state, {
-    segmentIndex: 0,
-    messageIndex: 2,
-  });
+  const target = state.historyRenderItems.find(
+    (item) => item.kind === "user" && item.text === "three",
+  );
+  assert.ok(target?.messageRef);
+  const truncated = conversationState.truncateConversationFromMessage(state, target.messageRef);
 
   assert.equal(truncated.activeSegmentIndex, 0);
   assert.deepEqual(

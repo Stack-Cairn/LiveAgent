@@ -2,6 +2,7 @@ import type {
   GatewaySettingsSyncPayload,
   GatewaySettingsSyncUpdatePayload,
 } from "@/lib/settings/sync";
+import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type {
   TerminalEvent,
   TerminalSession,
@@ -123,6 +124,44 @@ function postToPort(port: MessagePort, payload: unknown) {
   } catch {
     disconnectPort(port);
   }
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : undefined;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeWorkerHistoryMessageRef(value: unknown): HistoryMessageRef {
+  const body = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const segmentIndex = readNumber(body.segmentIndex ?? body.segment_index);
+  const messageIndex = readNumber(body.messageIndex ?? body.message_index);
+  const segmentId = readString(body.segmentId ?? body.segment_id);
+  const messageId = readString(body.messageId ?? body.message_id);
+  const role = readString(body.role);
+  const contentHash = readString(body.contentHash ?? body.content_hash);
+  if (
+    segmentIndex === undefined ||
+    messageIndex === undefined ||
+    segmentIndex < 0 ||
+    messageIndex < 0 ||
+    !segmentId ||
+    !messageId ||
+    !role ||
+    !contentHash
+  ) {
+    throw new Error("history.prefix requires a complete base_message_ref");
+  }
+  return {
+    segmentIndex,
+    messageIndex,
+    segmentId,
+    messageId,
+    role,
+    contentHash,
+  };
 }
 
 function broadcast(client: ManagedClient, payload: Record<string, unknown>) {
@@ -611,6 +650,13 @@ function getManagedClient(token: string) {
       payload: event,
     });
   });
+  managed.client.subscribeChatQueue((snapshot) => {
+    broadcast(managed, {
+      type: "event",
+      event_type: "chat_queue",
+      payload: snapshot,
+    });
+  });
 
   clients.set(normalizedToken, managed);
   return managed;
@@ -727,6 +773,14 @@ async function resolveRequest(client: GatewayWebSocketClient, method: string, pa
       return client.getHistory(String(body.conversation_id ?? ""), {
         maxMessages: typeof body.max_messages === "number" ? body.max_messages : undefined,
       });
+    case "history.prefix":
+      return client.getHistoryPrefix(
+        String(body.conversation_id ?? ""),
+        normalizeWorkerHistoryMessageRef(body.base_message_ref),
+        {
+          maxMessages: typeof body.max_messages === "number" ? body.max_messages : undefined,
+        },
+      );
     case "history.rename":
       return client.renameHistory(String(body.conversation_id ?? ""), String(body.title ?? ""));
     case "history.pin":
@@ -744,6 +798,47 @@ async function resolveRequest(client: GatewayWebSocketClient, method: string, pa
     case "history.delete":
       await client.deleteHistory(String(body.conversation_id ?? ""));
       return undefined;
+    case "chat_queue.get":
+      return client.chatQueueGet(String(body.conversation_id ?? ""));
+    case "chat_queue.get_item":
+      return client.chatQueueGetItem(
+        String(body.conversation_id ?? ""),
+        String(body.item_id ?? ""),
+      );
+    case "chat_queue.run_now":
+      return client.chatQueueRunNow(
+        String(body.conversation_id ?? ""),
+        String(body.item_id ?? ""),
+      );
+    case "chat_queue.move":
+      return client.chatQueueMove(
+        String(body.conversation_id ?? ""),
+        String(body.item_id ?? ""),
+        body.direction === "down" ? "down" : "up",
+      );
+    case "chat_queue.remove":
+      return client.chatQueueRemove(
+        String(body.conversation_id ?? ""),
+        String(body.item_id ?? ""),
+      );
+    case "chat_queue.edit_begin":
+      return client.chatQueueEditBegin(
+        String(body.conversation_id ?? ""),
+        String(body.item_id ?? ""),
+      );
+    case "chat_queue.edit_commit":
+      return client.chatQueueEditCommit({
+        conversationId: String(body.conversation_id ?? ""),
+        itemId: String(body.item_id ?? ""),
+        revision: typeof body.revision === "number" ? body.revision : 0,
+        draftJson: String(body.draft_json ?? ""),
+        uploadedFilesJson: String(body.uploaded_files_json ?? ""),
+      });
+    case "chat_queue.edit_cancel":
+      return client.chatQueueEditCancel(
+        String(body.conversation_id ?? ""),
+        String(body.item_id ?? ""),
+      );
     case "providers.list":
       return client.listProviders();
     case "settings.get":

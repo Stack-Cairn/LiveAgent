@@ -136,6 +136,10 @@ func (s *GRPCServer) AgentTerminalConnect(stream gatewayv1.AgentGateway_AgentTer
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 
+	if err := stream.Send(gatewayTerminalStreamReadyFrame()); err != nil {
+		return err
+	}
+
 	sendErrCh := make(chan error, 1)
 	recvErrCh := make(chan error, 1)
 	go func() {
@@ -190,6 +194,13 @@ func (s *GRPCServer) AgentTerminalConnect(stream gatewayv1.AgentGateway_AgentTer
 			}
 			return err
 		}
+	}
+}
+
+func gatewayTerminalStreamReadyFrame() *gatewayv1.TerminalStreamFrame {
+	return &gatewayv1.TerminalStreamFrame{
+		Kind:     "detach",
+		StreamId: "gateway-ready-" + uuid.NewString(),
 	}
 }
 

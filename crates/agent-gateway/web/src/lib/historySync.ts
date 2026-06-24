@@ -182,12 +182,6 @@ function normalizeRunningConversationSummary(
     source.first_seq > 0
       ? Math.floor(source.first_seq)
       : undefined;
-  const latestSeq =
-    typeof source.latest_seq === "number" &&
-    Number.isFinite(source.latest_seq) &&
-    source.latest_seq > 0
-      ? Math.floor(source.latest_seq)
-      : undefined;
   const runEpoch =
     typeof source.run_epoch === "number" &&
     Number.isFinite(source.run_epoch) &&
@@ -203,7 +197,6 @@ function normalizeRunningConversationSummary(
     run_id: runId || undefined,
     cwd: cwd || undefined,
     first_seq: firstSeq,
-    latest_seq: latestSeq,
     run_epoch: runEpoch,
     updated_at: updatedAt,
   };
@@ -233,7 +226,13 @@ export function normalizeRunningConversations(
   return normalized;
 }
 
-export function resolveRunningConversationStreamAfterSeq(firstSeq: unknown) {
+export function resolveRunningConversationStreamAfterSeq(
+  firstSeq: unknown,
+  options?: { runId?: unknown },
+) {
+  if (typeof options?.runId === "string" && options.runId.trim()) {
+    return 0;
+  }
   if (typeof firstSeq !== "number" || !Number.isFinite(firstSeq) || firstSeq <= 1) {
     return 0;
   }

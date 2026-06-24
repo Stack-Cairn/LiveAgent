@@ -35,6 +35,7 @@ export type GatewayChatRequestEvent = {
   workdir?: string;
   selectedSystemTools?: string[];
   uploadedFiles?: PendingUploadedFile[];
+  queuePolicy?: "auto" | "append" | "interrupt" | string;
 };
 
 export type GatewayChatClaimedRequest = {

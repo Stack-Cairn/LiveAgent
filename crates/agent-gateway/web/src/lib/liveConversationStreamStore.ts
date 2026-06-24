@@ -99,8 +99,35 @@ function isTerminalChatEvent(event: ChatEvent) {
   );
 }
 
+function isChatControlEvent(event: ChatEvent) {
+  switch (event.type) {
+    case "accepted":
+    case "user_message":
+    case "rebased":
+    case "projection_updated":
+    case "delivered":
+    case "claimed":
+    case "starting":
+    case "queued_in_gui":
+    case "started":
+    case "progress":
+    case "completed":
+    case "failed":
+    case "cancelled":
+      return true;
+    default:
+      return false;
+  }
+}
+
 function shouldAppendChatEvent(event: ChatEvent) {
-  return event.type !== "done" && event.type !== "completed" && event.type !== "cancelled";
+  if (event.type === "user_message") {
+    return true;
+  }
+  if (event.type === "error" || event.type === "failed") {
+    return true;
+  }
+  return event.type !== "done" && !isChatControlEvent(event);
 }
 
 function resolveCommitInterval(snapshot: LiveConversationStreamSnapshot) {

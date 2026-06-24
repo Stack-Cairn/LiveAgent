@@ -192,6 +192,12 @@ export const TranscriptHistory = memo(function TranscriptHistory(props: Transcri
         if (item.kind === "user") {
           const isEditing = editingMessageKey === item.key;
           const isCopied = copiedMessageKey === item.key;
+          const effectiveMessageRef = item.messageRef;
+          const missingStableRef = !effectiveMessageRef;
+          const editDisabled = isSending || missingStableRef;
+          const editTitle = missingStableRef
+            ? "旧历史缺少稳定消息标识，无法编辑重发"
+            : t("chat.edit");
           const compactedClass = item.isFromCompactedSegment ? "opacity-70" : "";
           const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(
             item.attachments,
@@ -205,7 +211,7 @@ export const TranscriptHistory = memo(function TranscriptHistory(props: Transcri
               className="absolute left-0 right-0 top-0 flex justify-end"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
-              {isEditing ? (
+              {isEditing && effectiveMessageRef ? (
                 <EditableUserMessageBubble
                   initialText={item.text}
                   attachments={item.attachments}
@@ -214,7 +220,7 @@ export const TranscriptHistory = memo(function TranscriptHistory(props: Transcri
                   onCancel={() => setEditingMessageKey(null)}
                   onSubmit={(newText, nextAttachments) => {
                     setEditingMessageKey(null);
-                    onResendFromEdit(item.messageRef, newText, nextAttachments);
+                    onResendFromEdit(effectiveMessageRef, newText, nextAttachments);
                   }}
                 />
               ) : (
@@ -256,10 +262,13 @@ export const TranscriptHistory = memo(function TranscriptHistory(props: Transcri
                     </button>
                     <button
                       type="button"
-                      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                      title={t("chat.edit")}
-                      disabled={isSending}
-                      onClick={() => setEditingMessageKey(item.key)}
+                      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      title={editTitle}
+                      disabled={editDisabled}
+                      onClick={() => {
+                        if (!effectiveMessageRef) return;
+                        setEditingMessageKey(item.key);
+                      }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </button>

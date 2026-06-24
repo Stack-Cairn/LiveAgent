@@ -552,8 +552,8 @@ where
     let mut errors: Vec<String> = Vec::new();
 
     for candidate in platform_shell_candidates(command) {
-        let (stdout, stderr) = stdio_factory()
-            .map_err(|err| format!("Failed to prepare shell stdio: {err}"))?;
+        let (stdout, stderr) =
+            stdio_factory().map_err(|err| format!("Failed to prepare shell stdio: {err}"))?;
         let mut c = Command::new(&candidate.program);
         c.args(&candidate.args);
         if candidate.augment_macos_path {
@@ -576,8 +576,7 @@ where
             }
             Err(err) => errors.push(format!(
                 "{} ({}) failed: {err}",
-                candidate.profile.profile,
-                candidate.profile.display_shell
+                candidate.profile.profile, candidate.profile.display_shell
             )),
         }
     }
@@ -629,9 +628,8 @@ pub(crate) fn run_shell_script(
     let timeout = Duration::from_millis(effective_timeout_ms);
     let start = Instant::now();
 
-    let spawned = spawn_platform_shell_command(cmd, &actual_cwd, || {
-        Ok((Stdio::piped(), Stdio::piped()))
-    })?;
+    let spawned =
+        spawn_platform_shell_command(cmd, &actual_cwd, || Ok((Stdio::piped(), Stdio::piped())))?;
     let mut child = spawned.child;
     let shell_profile = spawned.profile;
     let shell_name = shell_basename(shell_profile.display_shell);

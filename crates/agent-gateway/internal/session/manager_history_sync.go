@@ -1,6 +1,7 @@
 package session
 
 import (
+	"log"
 	"strings"
 	"time"
 
@@ -78,7 +79,6 @@ func (m *Manager) updateActiveHistoryRun(event *gatewayv1.HistorySyncEvent) {
 	now := time.Now()
 
 	m.chatStore.chatMu.Lock()
-	defer m.chatStore.chatMu.Unlock()
 	m.pruneExpiredChatRunsLocked(now)
 
 	switch kind {
@@ -97,10 +97,16 @@ func (m *Manager) updateActiveHistoryRun(event *gatewayv1.HistorySyncEvent) {
 				run.workdir = workdir
 			}
 		}
+		m.chatStore.chatMu.Unlock()
+		if _, _, err := m.ensureConversationChatRun(conversationID, workdir, now); err != nil {
+			log.Printf("ensure conversation chat run failed conversation_id=%q: %v", conversationID, err)
+		}
+		return
 	case "idle", "delete":
 		delete(m.chatStore.historyActiveRuns, conversationID)
 	case "upsert":
 		if workdir == "" {
+			m.chatStore.chatMu.Unlock()
 			return
 		}
 		if existing, ok := m.chatStore.historyActiveRuns[conversationID]; ok {
@@ -114,6 +120,7 @@ func (m *Manager) updateActiveHistoryRun(event *gatewayv1.HistorySyncEvent) {
 			}
 		}
 	}
+	m.chatStore.chatMu.Unlock()
 }
 
 func (m *Manager) releaseCompletedChatRunAfterHistoryUpsert(event *gatewayv1.HistorySyncEvent) {

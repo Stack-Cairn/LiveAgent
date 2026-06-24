@@ -1,6 +1,19 @@
 import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode, SystemToolId } from "../../../lib/settings";
+import type {
+  GatewaySelectedModelEvent,
+  GatewayChatRuntimeControlsEvent,
+} from "../gateway/gatewayBridgeTypes";
+
+export type QueuedGatewayChatRequest = {
+  requestId: string;
+  clientRequestId?: string;
+  workerId?: string;
+  queuePolicy?: "auto" | "append" | "interrupt";
+  selectedModel?: GatewaySelectedModelEvent;
+  runtimeControls?: GatewayChatRuntimeControlsEvent;
+};
 
 export type QueuedChatTurn = {
   id: string;
@@ -12,6 +25,27 @@ export type QueuedChatTurn = {
   selectedSystemToolIds: SystemToolId[];
   runtimeControls: ChatRuntimeControls;
   createdAt: number;
+  gatewayRequest?: QueuedGatewayChatRequest;
+};
+
+export type ChatQueueItemSummary = {
+  id: string;
+  previewText: string;
+  fileCount: number;
+  createdAt: number;
+  source: "gui" | "webui";
+  editable: boolean;
+};
+
+export type ChatQueueSnapshot = {
+  conversationId: string;
+  revision: number;
+  items: ChatQueueItemSummary[];
+};
+
+export type ChatQueueItemDetail = ChatQueueItemSummary & {
+  draftJson: string;
+  uploadedFilesJson: string;
 };
 
 export type QueuedChatTurnInput = Omit<QueuedChatTurn, "createdAt" | "id"> & {
@@ -38,6 +72,7 @@ export function createQueuedChatTurn(input: QueuedChatTurnInput): QueuedChatTurn
     selectedSystemToolIds: input.selectedSystemToolIds.slice(),
     runtimeControls: { ...input.runtimeControls },
     createdAt,
+    gatewayRequest: input.gatewayRequest ? { ...input.gatewayRequest } : undefined,
   };
 }
 
@@ -59,6 +94,8 @@ export function buildQueuedChatTurnPreview(draft: MentionComposerDraft) {
         return segment.commit.subject || segment.commit.shortSha || segment.commit.sha;
       case "gitFileMention":
         return segment.file.path;
+      case "fileMention":
+        return segment.reference.path;
       case "text":
         return segment.text;
     }
