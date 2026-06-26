@@ -332,6 +332,15 @@ const HISTORY_SWITCH_OVERLAY_MIN_MS = 260;
 const PROJECT_HISTORY_DELETE_PAGE_SIZE = 200;
 const SHARED_HISTORY_LIST_PAGE_SIZE = 200;
 const GATEWAY_RUNTIME_SNAPSHOT_DEBOUNCE_MS = 300;
+const GATEWAY_RUNTIME_TERMINAL_SNAPSHOT_RETRY_MS = 1500;
+
+function isTerminalGatewayRuntimeSnapshotState(state: GatewayRuntimeSnapshotState) {
+  return state === "completed" || state === "failed" || state === "cancelled";
+}
+
+function gatewayRuntimeRunKey(run: ActiveGatewayRuntimeRun) {
+  return run.runId.trim() || `${run.conversationId}:${run.clientRequestId ?? ""}`;
+}
 
 function appendManagedSkillSelections(current: readonly string[], names: readonly string[]) {
   const out = mergeAlwaysEnabledSkillNames(current);
@@ -790,6 +799,11 @@ export function ChatPage(props: ChatPageProps) {
     remoteRuntimeStatus.online === true &&
     remoteRuntimeStatus.enabled === true &&
     remoteRuntimeStatus.configured === true;
+  const canShareHistoryRef = useRef(canShareHistory);
+
+  useEffect(() => {
+    canShareHistoryRef.current = canShareHistory;
+  }, [canShareHistory]);
 
   const refreshHistoryWorkdirs = useCallback(async () => {
     try {
@@ -1862,8 +1876,11 @@ export function ChatPage(props: ChatPageProps) {
     >
   >(new Map());
   const activeGatewayRuntimeRunsRef = useRef(new Map<string, ActiveGatewayRuntimeRun>());
-  const gatewayRuntimeSnapshotChainsRef = useRef(new Map<string, Promise<void>>());
+  const pendingGatewayRuntimeTerminalRunsRef = useRef(new Map<string, ActiveGatewayRuntimeRun>());
+  const gatewayRuntimeSnapshotChainsRef = useRef(new Map<string, Promise<boolean>>());
   const gatewayRuntimeSnapshotTimersRef = useRef(new Map<string, number>());
+  const gatewayRuntimeTerminalRetryTimersRef = useRef(new Map<string, number>());
+  const gatewayRuntimeTerminalPublishInFlightRef = useRef(new Set<string>());
   const previousRunningConversationIdsRef = useRef<ReadonlySet<string>>(new Set());
 
   function buildChatQueueSnapshot(
@@ -3131,10 +3148,23 @@ export function ChatPage(props: ChatPageProps) {
     gatewayRuntimeSnapshotTimersRef.current.delete(targetConversationId);
   }
 
+  function clearGatewayRuntimeTerminalRetryTimer(runKey: string) {
+    const targetRunKey = runKey.trim();
+    if (!targetRunKey) {
+      return;
+    }
+    const timerId = gatewayRuntimeTerminalRetryTimersRef.current.get(targetRunKey);
+    if (timerId === undefined) {
+      return;
+    }
+    window.clearTimeout(timerId);
+    gatewayRuntimeTerminalRetryTimersRef.current.delete(targetRunKey);
+  }
+
   async function publishGatewayRuntimeSnapshot(
     run: ActiveGatewayRuntimeRun,
     state: GatewayRuntimeSnapshotState = run.state,
-  ) {
+  ): Promise<boolean> {
     const liveTranscript = run.transcriptStore.getSnapshot();
     const entries = buildGatewayRuntimeSnapshotEntries({
       userMessage: run.userMessage,
@@ -3160,9 +3190,33 @@ export function ChatPage(props: ChatPageProps) {
           toolStatusIsCompaction: Boolean(toolStatus) && run.toolStatusIsCompaction,
         },
       } as any);
+      return true;
     } catch (error) {
       console.warn("gateway_publish_chat_runtime_snapshot failed", error);
+      return false;
     }
+  }
+
+  function publishGatewayRuntimeSnapshotChained(
+    run: ActiveGatewayRuntimeRun,
+    state: GatewayRuntimeSnapshotState = run.state,
+  ) {
+    const targetConversationId = run.conversationId.trim();
+    if (!targetConversationId) {
+      return Promise.resolve(false);
+    }
+    const previous =
+      gatewayRuntimeSnapshotChainsRef.current.get(targetConversationId) ?? Promise.resolve(true);
+    const next = previous
+      .catch(() => false)
+      .then(() => publishGatewayRuntimeSnapshot(run, state));
+    gatewayRuntimeSnapshotChainsRef.current.set(targetConversationId, next);
+    void next.finally(() => {
+      if (gatewayRuntimeSnapshotChainsRef.current.get(targetConversationId) === next) {
+        gatewayRuntimeSnapshotChainsRef.current.delete(targetConversationId);
+      }
+    });
+    return next;
   }
 
   function queueGatewayRuntimeSnapshotForRun(
@@ -3174,23 +3228,14 @@ export function ChatPage(props: ChatPageProps) {
     if (options?.force) {
       clearGatewayRuntimeSnapshotTimer(run.conversationId);
     } else if (gatewayRuntimeSnapshotTimersRef.current.has(run.conversationId)) {
-      return gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve();
+      return (
+        gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve(false)
+      );
     }
 
     const publish = () => {
       gatewayRuntimeSnapshotTimersRef.current.delete(run.conversationId);
-      const previous =
-        gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve();
-      const next = previous
-        .catch(() => undefined)
-        .then(() => publishGatewayRuntimeSnapshot(run, state));
-      gatewayRuntimeSnapshotChainsRef.current.set(run.conversationId, next);
-      void next.finally(() => {
-        if (gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) === next) {
-          gatewayRuntimeSnapshotChainsRef.current.delete(run.conversationId);
-        }
-      });
-      return next;
+      return publishGatewayRuntimeSnapshotChained(run, state);
     };
 
     if (options?.force) {
@@ -3199,7 +3244,9 @@ export function ChatPage(props: ChatPageProps) {
 
     const timerId = window.setTimeout(publish, GATEWAY_RUNTIME_SNAPSHOT_DEBOUNCE_MS);
     gatewayRuntimeSnapshotTimersRef.current.set(run.conversationId, timerId);
-    return gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve();
+    return (
+      gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve(false)
+    );
   }
 
   function queueGatewayRuntimeSnapshot(
@@ -3208,11 +3255,11 @@ export function ChatPage(props: ChatPageProps) {
   ) {
     const targetConversationId = conversationId.trim();
     if (!targetConversationId) {
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
     const run = activeGatewayRuntimeRunsRef.current.get(targetConversationId);
     if (!run) {
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
     return queueGatewayRuntimeSnapshotForRun(run, options);
   }
@@ -3220,6 +3267,57 @@ export function ChatPage(props: ChatPageProps) {
   function registerActiveGatewayRuntimeRun(run: ActiveGatewayRuntimeRun) {
     activeGatewayRuntimeRunsRef.current.set(run.conversationId, run);
     return run;
+  }
+
+  function scheduleGatewayRuntimeTerminalSnapshotRetry(run: ActiveGatewayRuntimeRun) {
+    const runKey = gatewayRuntimeRunKey(run);
+    if (!runKey || gatewayRuntimeTerminalRetryTimersRef.current.has(runKey)) {
+      return;
+    }
+    const timerId = window.setTimeout(() => {
+      gatewayRuntimeTerminalRetryTimersRef.current.delete(runKey);
+      if (pendingGatewayRuntimeTerminalRunsRef.current.get(runKey) !== run) {
+        return;
+      }
+      publishPendingGatewayRuntimeTerminalSnapshot(run);
+    }, GATEWAY_RUNTIME_TERMINAL_SNAPSHOT_RETRY_MS);
+    gatewayRuntimeTerminalRetryTimersRef.current.set(runKey, timerId);
+  }
+
+  function publishPendingGatewayRuntimeTerminalSnapshot(run: ActiveGatewayRuntimeRun) {
+    const runKey = gatewayRuntimeRunKey(run);
+    if (!runKey) {
+      return;
+    }
+    clearGatewayRuntimeTerminalRetryTimer(runKey);
+    const state = isTerminalGatewayRuntimeSnapshotState(run.state) ? run.state : "completed";
+    run.state = state;
+    pendingGatewayRuntimeTerminalRunsRef.current.set(runKey, run);
+    if (!canShareHistoryRef.current) {
+      return;
+    }
+    if (gatewayRuntimeTerminalPublishInFlightRef.current.has(runKey)) {
+      return;
+    }
+    gatewayRuntimeTerminalPublishInFlightRef.current.add(runKey);
+
+    void publishGatewayRuntimeSnapshotChained(run, state)
+      .then((published) => {
+        if (pendingGatewayRuntimeTerminalRunsRef.current.get(runKey) !== run) {
+          return;
+        }
+        if (published) {
+          pendingGatewayRuntimeTerminalRunsRef.current.delete(runKey);
+          clearGatewayRuntimeTerminalRetryTimer(runKey);
+          return;
+        }
+        if (canShareHistoryRef.current) {
+          scheduleGatewayRuntimeTerminalSnapshotRetry(run);
+        }
+      })
+      .finally(() => {
+        gatewayRuntimeTerminalPublishInFlightRef.current.delete(runKey);
+      });
   }
 
   function finishActiveGatewayRuntimeRun(
@@ -3234,12 +3332,12 @@ export function ChatPage(props: ChatPageProps) {
     if (!run) {
       return;
     }
-    void queueGatewayRuntimeSnapshotForRun(run, { state, force: true }).finally(() => {
-      if (activeGatewayRuntimeRunsRef.current.get(targetConversationId) === run) {
-        activeGatewayRuntimeRunsRef.current.delete(targetConversationId);
-      }
+    run.state = state;
+    if (activeGatewayRuntimeRunsRef.current.get(targetConversationId) === run) {
+      activeGatewayRuntimeRunsRef.current.delete(targetConversationId);
       clearGatewayRuntimeSnapshotTimer(targetConversationId);
-    });
+    }
+    publishPendingGatewayRuntimeTerminalSnapshot(run);
   }
 
   useEffect(
@@ -3247,8 +3345,14 @@ export function ChatPage(props: ChatPageProps) {
       for (const timerId of gatewayRuntimeSnapshotTimersRef.current.values()) {
         window.clearTimeout(timerId);
       }
+      for (const timerId of gatewayRuntimeTerminalRetryTimersRef.current.values()) {
+        window.clearTimeout(timerId);
+      }
       gatewayRuntimeSnapshotTimersRef.current.clear();
+      gatewayRuntimeTerminalRetryTimersRef.current.clear();
       activeGatewayRuntimeRunsRef.current.clear();
+      pendingGatewayRuntimeTerminalRunsRef.current.clear();
+      gatewayRuntimeTerminalPublishInFlightRef.current.clear();
     },
     [],
   );
@@ -3264,6 +3368,9 @@ export function ChatPage(props: ChatPageProps) {
     );
     for (const run of activeGatewayRuntimeRunsRef.current.values()) {
       void queueGatewayRuntimeSnapshotForRun(run, { state: run.state, force: true });
+    }
+    for (const run of pendingGatewayRuntimeTerminalRunsRef.current.values()) {
+      publishPendingGatewayRuntimeTerminalSnapshot(run);
     }
   }, [canShareHistory, remoteRuntimeStatus.connectedSince, remoteRuntimeStatus.sessionId]);
 
@@ -3610,6 +3717,7 @@ export function ChatPage(props: ChatPageProps) {
     enqueueGatewayChatRequest,
     isConversationRunning,
     getConversationAbortController,
+    requestQueuedChatTurnProcessing,
   });
 
   const enableManagedSkills = useCallback(

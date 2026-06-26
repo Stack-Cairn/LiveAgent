@@ -7175,6 +7175,12 @@ type HistorySyncEvent struct {
 	Kind           string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Conversation   *ConversationSummary   `protobuf:"bytes,2,opt,name=conversation,proto3" json:"conversation,omitempty"`
 	ConversationId string                 `protobuf:"bytes,3,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	RunId          string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	FirstSeq       int64                  `protobuf:"varint,5,opt,name=first_seq,json=firstSeq,proto3" json:"first_seq,omitempty"`
+	LatestSeq      int64                  `protobuf:"varint,6,opt,name=latest_seq,json=latestSeq,proto3" json:"latest_seq,omitempty"`
+	RunEpoch       int64                  `protobuf:"varint,7,opt,name=run_epoch,json=runEpoch,proto3" json:"run_epoch,omitempty"`
+	UpdatedAt      int64                  `protobuf:"varint,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	State          string                 `protobuf:"bytes,9,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -7226,6 +7232,48 @@ func (x *HistorySyncEvent) GetConversation() *ConversationSummary {
 func (x *HistorySyncEvent) GetConversationId() string {
 	if x != nil {
 		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *HistorySyncEvent) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *HistorySyncEvent) GetFirstSeq() int64 {
+	if x != nil {
+		return x.FirstSeq
+	}
+	return 0
+}
+
+func (x *HistorySyncEvent) GetLatestSeq() int64 {
+	if x != nil {
+		return x.LatestSeq
+	}
+	return 0
+}
+
+func (x *HistorySyncEvent) GetRunEpoch() int64 {
+	if x != nil {
+		return x.RunEpoch
+	}
+	return 0
+}
+
+func (x *HistorySyncEvent) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+func (x *HistorySyncEvent) GetState() string {
+	if x != nil {
+		return x.State
 	}
 	return ""
 }
@@ -10379,11 +10427,19 @@ const file_proto_v1_gateway_proto_rawDesc = "" +
 	"\bworkdirs\x18\x01 \x03(\v2+.liveagent.gateway.v1.HistoryWorkdirSummaryR\bworkdirs\"?\n" +
 	"\x14HistoryDeleteRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"\x17\n" +
-	"\x15HistoryDeleteResponse\"\x9e\x01\n" +
+	"\x15HistoryDeleteResponse\"\xc3\x02\n" +
 	"\x10HistorySyncEvent\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12M\n" +
 	"\fconversation\x18\x02 \x01(\v2).liveagent.gateway.v1.ConversationSummaryR\fconversation\x12'\n" +
-	"\x0fconversation_id\x18\x03 \x01(\tR\x0econversationId\"\x15\n" +
+	"\x0fconversation_id\x18\x03 \x01(\tR\x0econversationId\x12\x15\n" +
+	"\x06run_id\x18\x04 \x01(\tR\x05runId\x12\x1b\n" +
+	"\tfirst_seq\x18\x05 \x01(\x03R\bfirstSeq\x12\x1d\n" +
+	"\n" +
+	"latest_seq\x18\x06 \x01(\x03R\tlatestSeq\x12\x1b\n" +
+	"\trun_epoch\x18\a \x01(\x03R\brunEpoch\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\x03R\tupdatedAt\x12\x14\n" +
+	"\x05state\x18\t \x01(\tR\x05state\"\x15\n" +
 	"\x13ProviderListRequest\"=\n" +
 	"\x14ProviderListResponse\x12%\n" +
 	"\x0eproviders_json\x18\x01 \x01(\tR\rprovidersJson\"\x14\n" +

@@ -30,6 +30,7 @@ type chatCommandStart struct {
 	RunID          string
 	ConversationID string
 	AcceptedSeq    int64
+	InitialSeq     int64
 	Created        bool
 	State          string
 }
@@ -118,6 +119,7 @@ func startAcceptedChatCommand(
 		RunID:          runID,
 		ConversationID: strings.TrimSpace(snapshot.ConversationID),
 		AcceptedSeq:    acceptedSeq,
+		InitialSeq:     snapshot.LatestSeq,
 		Created:        created,
 		State:          strings.TrimSpace(snapshot.State),
 	}, nil

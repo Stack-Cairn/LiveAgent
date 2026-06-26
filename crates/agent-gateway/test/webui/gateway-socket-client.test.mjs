@@ -187,7 +187,8 @@ function decodeTerminalStreamFrame(payload) {
 test("GatewayWebSocketClient authenticates once and sends status requests over /ws", async () => {
   installBrowser();
   const loader = createWebModuleLoader();
-  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } = loader.loadModule("src/lib/gatewaySocket.ts");
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } =
+    loader.loadModule("src/lib/gatewaySocket.ts");
   resetGatewayWebSocketClient();
 
   const client = getGatewayWebSocketClient(" token ");
@@ -380,7 +381,8 @@ test("BrowserGatewayTerminalStreamClient falls back to /ws terminal query when /
 test("GatewayWebSocketClient sends git requests with workdir and args", async () => {
   installBrowser();
   const loader = createWebModuleLoader();
-  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } = loader.loadModule("src/lib/gatewaySocket.ts");
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } =
+    loader.loadModule("src/lib/gatewaySocket.ts");
   resetGatewayWebSocketClient();
 
   const client = getGatewayWebSocketClient(" token ");
@@ -405,7 +407,8 @@ test("GatewayWebSocketClient sends git requests with workdir and args", async ()
 test("GatewayWebSocketClient does not recover mutating git requests", async () => {
   installBrowser();
   const loader = createWebModuleLoader();
-  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } = loader.loadModule("src/lib/gatewaySocket.ts");
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } =
+    loader.loadModule("src/lib/gatewaySocket.ts");
   resetGatewayWebSocketClient();
 
   const client = getGatewayWebSocketClient(" token ");
@@ -514,6 +517,134 @@ test("SharedWorker gateway client emits chat queue snapshots from worker events"
   });
 
   assert.deepEqual(snapshots, [snapshot]);
+  resetGatewayWebSocketClient();
+});
+
+test("GatewayWebSocketClient normalizes chat queue events from gateway envelopes", async () => {
+  installBrowser();
+  const loader = createWebModuleLoader();
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } =
+    loader.loadModule("src/lib/gatewaySocket.ts");
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const snapshots = [];
+  client.subscribeChatQueue((snapshot) => snapshots.push(snapshot));
+  const statusPromise = client.getStatus();
+  const socket = await connectAndAuth();
+  await waitFor(
+    () => socket.sent.some((message) => message.type === "status.get"),
+    "status envelope",
+  );
+  const statusRequest = socket.sent.find((message) => message.type === "status.get");
+  socket.receive({
+    id: statusRequest.id,
+    type: "response",
+    payload: { online: true },
+  });
+  await statusPromise;
+
+  socket.receive({
+    type: "chat_queue.event",
+    payload: {
+      conversation_id: "conversation-1",
+      revision: 7,
+      snapshot_json: JSON.stringify({
+        conversation_id: "conversation-1",
+        revision: 7,
+        items: [
+          {
+            id: "queue-1",
+            preview_text: "next prompt",
+            file_count: 2,
+            created_at: 123,
+            source: "webui",
+            editable: false,
+          },
+        ],
+      }),
+    },
+  });
+
+  assert.deepEqual(snapshots, [
+    {
+      conversationId: "conversation-1",
+      revision: 7,
+      items: [
+        {
+          id: "queue-1",
+          previewText: "next prompt",
+          fileCount: 2,
+          createdAt: 123,
+          source: "webui",
+          editable: false,
+        },
+      ],
+    },
+  ]);
+  resetGatewayWebSocketClient();
+});
+
+test("GatewayWebSocketClient normalizes chat queue response snapshot json", async () => {
+  installBrowser();
+  const loader = createWebModuleLoader();
+  const { getGatewayWebSocketClient, resetGatewayWebSocketClient } = loader.loadModule("src/lib/gatewaySocket.ts");
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const responsePromise = client.chatQueueGet("conversation-1");
+  const socket = await connectAndAuth();
+  await waitFor(
+    () => socket.sent.some((message) => message.type === "chat_queue.get"),
+    "chat queue get envelope",
+  );
+  const request = socket.sent.find((message) => message.type === "chat_queue.get");
+  assert.deepEqual(request.payload, { conversation_id: "conversation-1" });
+
+  socket.receive({
+    id: request.id,
+    type: "response",
+    payload: {
+      accepted: true,
+      snapshot_json: JSON.stringify({
+        conversation_id: "conversation-1",
+        revision: 8,
+        items: [
+          {
+            id: "queue-2",
+            preview_text: "queued from webui",
+            file_count: 1,
+            created_at: 456,
+            source: "webui",
+            editable: true,
+          },
+        ],
+      }),
+      revision: 8,
+    },
+  });
+
+  assert.deepEqual(await responsePromise, {
+    accepted: true,
+    message: undefined,
+    snapshot: {
+      conversationId: "conversation-1",
+      revision: 8,
+      items: [
+        {
+          id: "queue-2",
+          previewText: "queued from webui",
+          fileCount: 1,
+          createdAt: 456,
+          source: "webui",
+          editable: true,
+        },
+      ],
+    },
+    item: undefined,
+    errorCode: undefined,
+    revision: 8,
+  });
   resetGatewayWebSocketClient();
 });
 
@@ -1046,6 +1177,7 @@ test("SharedWorker gateway client posts chat commands directly over HTTP", async
           run_id: "run-1",
           conversation_id: "conversation-1",
           accepted_seq: 1,
+          initial_seq: 2,
         }),
         {
           status: 202,
@@ -1054,11 +1186,12 @@ test("SharedWorker gateway client posts chat commands directly over HTTP", async
       );
     }
     if (url.pathname === "/api/chat/events") {
+      assert.equal(url.searchParams.get("after_seq"), "2");
       const body = new ReadableStream({
         start(controller) {
           controller.enqueue(
             encoder.encode(
-              'id: 1\nevent: chat.event\ndata: {"seq":1,"payload":{"type":"done","conversation_id":"conversation-1"}}\n\n',
+              'id: 3\nevent: chat.event\ndata: {"seq":3,"payload":{"type":"done","conversation_id":"conversation-1"}}\n\n',
             ),
           );
           controller.close();
@@ -1156,7 +1289,8 @@ test("SharedWorker gateway client posts chat commands directly over HTTP", async
     });
     assert.equal(fetchCalls[1].url.pathname, "/api/chat/events");
     assert.equal(fetchCalls[1].url.searchParams.get("run_id"), "run-1");
-    assert.deepEqual(events, [{ type: "done", conversation_id: "conversation-1", seq: 1 }]);
+    assert.equal(fetchCalls[1].url.searchParams.get("after_seq"), "2");
+    assert.deepEqual(events, [{ type: "done", conversation_id: "conversation-1", seq: 3 }]);
     const legacyWorkerChatCommand = "chat" + ".command";
     assert.equal(
       port.messages.some(
@@ -2906,6 +3040,7 @@ test("GatewayWebSocketClient commandChat posts commands and streams SSE events u
           run_id: "run-1",
           conversation_id: "conversation-1",
           accepted_seq: 1,
+          initial_seq: 2,
         }),
         {
           status: 202,
@@ -2914,21 +3049,17 @@ test("GatewayWebSocketClient commandChat posts commands and streams SSE events u
       );
     }
     if (url.pathname === "/api/chat/events") {
+      assert.equal(url.searchParams.get("after_seq"), "2");
       const body = new ReadableStream({
         start(controller) {
           controller.enqueue(
             encoder.encode(
-              'id: 1\nevent: chat.control\ndata: {"seq":1,"payload":{"type":"accepted","conversation_id":"conversation-1","seq":1}}\n\n',
+              'id: 3\nevent: chat.event\ndata: {"seq":3,"payload":{"type":"token","text":"hi","conversation_id":"conversation-1"}}\n\n',
             ),
           );
           controller.enqueue(
             encoder.encode(
-              'id: 2\nevent: chat.event\ndata: {"seq":2,"payload":{"type":"token","text":"hi","conversation_id":"conversation-1"}}\n\n',
-            ),
-          );
-          controller.enqueue(
-            encoder.encode(
-              'id: 3\nevent: chat.event\ndata: {"seq":3,"payload":{"type":"done","conversation_id":"conversation-1"}}\n\n',
+              'id: 4\nevent: chat.event\ndata: {"seq":4,"payload":{"type":"done","conversation_id":"conversation-1"}}\n\n',
             ),
           );
           controller.close();
@@ -3052,14 +3183,13 @@ test("GatewayWebSocketClient commandChat posts commands and streams SSE events u
     assert.equal(eventsCall.url.pathname, "/api/chat/events");
     assert.equal(eventsCall.url.searchParams.get("run_id"), "run-1");
     assert.equal(eventsCall.url.searchParams.get("conversation_id"), "conversation-1");
-    assert.equal(eventsCall.url.searchParams.get("after_seq"), "0");
+    assert.equal(eventsCall.url.searchParams.get("after_seq"), "2");
     assert.equal(eventsCall.init.method, "GET");
     assert.equal(eventsCall.init.headers.Accept, "text/event-stream");
     assert.equal(eventsCall.init.headers.Authorization, "Bearer token");
     assert.deepEqual(events, [
-      { type: "accepted", conversation_id: "conversation-1", seq: 1 },
-      { type: "token", text: "hi", conversation_id: "conversation-1", seq: 2 },
-      { type: "done", conversation_id: "conversation-1", seq: 3 },
+      { type: "token", text: "hi", conversation_id: "conversation-1", seq: 3 },
+      { type: "done", conversation_id: "conversation-1", seq: 4 },
     ]);
     assert.equal(FakeWebSocket.instances.length, 0);
   } finally {

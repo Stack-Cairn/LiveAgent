@@ -636,6 +636,62 @@ func TestChatCancelCommandFindsRunByConversation(t *testing.T) {
 	}
 }
 
+func TestChatCancelCommandFindsStartingRunByConversation(t *testing.T) {
+	sm := session.NewManager()
+	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
+	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot())
+	sm.SetSession(agentSession)
+	if _, created, err := sm.StartPendingChatCommandRun("run-1", "conversation-1", "client-1"); err != nil || !created {
+		t.Fatalf("StartPendingChatCommandRun created=%v err=%v", created, err)
+	}
+	sm.MarkChatRunControl("run-1", "conversation-1", "starting", "", "")
+
+	handler := NewHTTPServer(&config.Config{
+		Token:                 "dev-token",
+		RequestTimeout:        time.Second,
+		WebSocketWriteTimeout: time.Second,
+	}, sm)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"http://gateway.test/api/chat/commands",
+		strings.NewReader(`{"type":"chat.cancel","payload":{"conversation_id":"conversation-1"}}`),
+	)
+	req.Header.Set("Authorization", "Bearer dev-token")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-LiveAgent-CSRF", "1")
+	rec := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	select {
+	case outbound := <-agentSession.Outbound():
+		outbound.Ack(nil)
+		if outbound.GetRequestId() != "run-1" {
+			t.Fatalf("cancel request id = %q, want run-1", outbound.GetRequestId())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for cancel chat request")
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for cancel response")
+	}
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected status %d, got %d body %s", http.StatusAccepted, rec.Code, rec.Body.String())
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode cancel response: %v", err)
+	}
+	if decoded["run_id"] != "run-1" {
+		t.Fatalf("cancel response = %#v, want run-1", decoded)
+	}
+}
+
 func TestChatCancelByConversationIgnoresDesktopQueuedRun(t *testing.T) {
 	sm := session.NewManager()
 	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
@@ -793,12 +849,16 @@ func TestChatCommandSubmitAcceptsAndSSEReplaysControl(t *testing.T) {
 	var accepted struct {
 		RunID        string `json:"run_id"`
 		AcceptedSeq  int64  `json:"accepted_seq"`
+		InitialSeq   int64  `json:"initial_seq"`
 		Conversation string `json:"conversation_id"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&accepted); err != nil {
 		t.Fatalf("decode accepted response: %v", err)
 	}
-	if accepted.RunID == "" || accepted.AcceptedSeq != 1 || accepted.Conversation != "conversation-1" {
+	if accepted.RunID == "" ||
+		accepted.AcceptedSeq != 1 ||
+		accepted.InitialSeq != 2 ||
+		accepted.Conversation != "conversation-1" {
 		t.Fatalf("accepted response = %#v", accepted)
 	}
 
@@ -1045,8 +1105,8 @@ func TestChatCommandSeqContinuesAcrossConversationRuns(t *testing.T) {
 
 	first := postCommand(`{"type":"chat.submit","payload":{"message":"first","conversation_id":"conversation-1","client_request_id":"client-submit-1"}}`)
 	firstRunID, _ := first["run_id"].(string)
-	if firstRunID == "" || first["accepted_seq"] != float64(1) {
-		t.Fatalf("first response = %#v, want accepted_seq 1", first)
+	if firstRunID == "" || first["accepted_seq"] != float64(1) || first["initial_seq"] != float64(2) {
+		t.Fatalf("first response = %#v, want accepted_seq 1 and initial_seq 2", first)
 	}
 	select {
 	case outbound := <-agentSession.Outbound():
@@ -1058,8 +1118,11 @@ func TestChatCommandSeqContinuesAcrossConversationRuns(t *testing.T) {
 
 	second := postCommand(`{"type":"chat.edit_resend","payload":{"message":"edited","conversation_id":"conversation-1","client_request_id":"client-edit-1","base_message_ref":{"segment_index":0,"message_index":0,"segment_id":"segment-a","message_id":"user-a","role":"user","content_hash":"fnv1a32:00000000"}}}`)
 	secondRunID, _ := second["run_id"].(string)
-	if secondRunID == "" || secondRunID == firstRunID || second["accepted_seq"] != float64(4) {
-		t.Fatalf("second response = %#v, want new run accepted_seq 4", second)
+	if secondRunID == "" ||
+		secondRunID == firstRunID ||
+		second["accepted_seq"] != float64(4) ||
+		second["initial_seq"] != float64(6) {
+		t.Fatalf("second response = %#v, want new run accepted_seq 4 and initial_seq 6", second)
 	}
 	select {
 	case outbound := <-agentSession.Outbound():

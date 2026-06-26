@@ -4,6 +4,7 @@ import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
 const historySync = loader.loadModule("src/lib/historySync.ts");
+const chatEventUtils = loader.loadModule("src/app/chatEventUtils.ts");
 const chatUi = loader.loadModule("src/lib/chatUi.ts");
 const liveStore = loader.loadModule("src/lib/liveConversationStreamStore.ts");
 const liveCommit = loader.loadModule("src/lib/liveConversationCommit.ts");
@@ -371,6 +372,7 @@ test("normalizeRunningConversations requires run ids and preserves replay cursor
         first_seq: 42.9,
         run_epoch: 3.2,
         updated_at: 123,
+        state: "running",
       },
       {
         conversation_id: "conversation-1",
@@ -381,6 +383,12 @@ test("normalizeRunningConversations requires run ids and preserves replay cursor
         conversation_id: "conversation-2",
         first_seq: 0,
       },
+      {
+        conversation_id: "conversation-3",
+        run_id: "run-queued",
+        first_seq: 99,
+        state: "desktop_queued",
+      },
     ]),
     [
       {
@@ -390,6 +398,7 @@ test("normalizeRunningConversations requires run ids and preserves replay cursor
         first_seq: 42,
         run_epoch: 3,
         updated_at: 123,
+        state: "running",
       },
     ],
   );
@@ -402,10 +411,13 @@ test("resolveRunningConversationStreamAfterSeq starts remote replay at current r
   assert.equal(historySync.resolveRunningConversationStreamAfterSeq(0), 0);
   assert.equal(historySync.resolveRunningConversationStreamAfterSeq(undefined), 0);
   assert.equal(historySync.resolveRunningConversationStreamAfterSeq("42"), 0);
-  assert.equal(
-    historySync.resolveRunningConversationStreamAfterSeq(42, { runId: "chat-command-1" }),
-    0,
-  );
+});
+
+test("projection-only chat controls do not keep runtime in preparing state", () => {
+  assert.equal(chatEventUtils.isPreparingChatControlEvent({ type: "rebased" }), false);
+  assert.equal(chatEventUtils.isPreparingChatControlEvent({ type: "projection_updated" }), false);
+  assert.equal(chatEventUtils.isPreparingChatControlEvent({ type: "accepted" }), true);
+  assert.equal(chatEventUtils.isPreparingChatControlEvent({ type: "claimed" }), true);
 });
 
 test("applyGatewayHistoryEvent can protect optimistic titles from summary broadcasts", () => {

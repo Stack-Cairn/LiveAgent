@@ -15,7 +15,7 @@ export type ChatHistorySyncEvent =
       conversation?: undefined;
     }
   | {
-      kind: "running" | "idle";
+      kind: "running" | "idle" | "queue_drained";
       conversationId: string;
       conversation?: Partial<ChatHistorySummary>;
     };

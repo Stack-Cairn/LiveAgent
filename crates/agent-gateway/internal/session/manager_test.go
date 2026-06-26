@@ -180,6 +180,85 @@ func TestChatRunShouldPruneRetainsRunningUntilStale(t *testing.T) {
 	}
 }
 
+func TestActiveChatRunSummaryPriorityPrefersRunningOverQueuedOwner(t *testing.T) {
+	now := time.Now()
+	current := ActiveChatRunSummary{
+		RequestID: "request-queued",
+		State:     ChatRunStateQueued,
+		UpdatedAt: now.Add(time.Minute).UnixMilli(),
+	}
+	candidate := ActiveChatRunSummary{
+		RequestID: "request-running",
+		State:     ChatRunStateRunning,
+		UpdatedAt: now.UnixMilli(),
+	}
+
+	if !shouldReplaceActiveChatRunSummary(candidate, current, "request-queued") {
+		t.Fatal("running summary must replace a stale queued owner")
+	}
+}
+
+func TestCompletingCurrentChatRunBroadcastsIdle(t *testing.T) {
+	manager := NewManager()
+	historyCh, cleanup := manager.SubscribeHistorySync()
+	defer cleanup()
+
+	manager.MarkChatRunControl("run-1", "conversation-1", "started", "", "")
+	waitForHistorySyncKind(t, historyCh, "running")
+
+	manager.MarkChatRunControl("run-1", "conversation-1", "completed", "", "")
+	event := waitForHistorySyncKind(t, historyCh, "idle")
+	if event.GetConversationId() != "conversation-1" {
+		t.Fatalf("idle conversation_id = %q, want conversation-1", event.GetConversationId())
+	}
+	if event.GetRunId() != "run-1" || event.GetState() != ChatRunStateCompleted {
+		t.Fatalf("idle run metadata = %#v, want run-1 completed", event)
+	}
+}
+
+func TestCompletingStaleChatRunDoesNotBroadcastIdleWhenNewRunActive(t *testing.T) {
+	manager := NewManager()
+	historyCh, cleanup := manager.SubscribeHistorySync()
+	defer cleanup()
+
+	manager.MarkChatRunControl("old-run", "conversation-1", "started", "", "")
+	waitForHistorySyncKind(t, historyCh, "running")
+	manager.MarkChatRunControl("new-run", "conversation-1", "started", "", "")
+	waitForHistorySyncKind(t, historyCh, "running")
+
+	manager.MarkChatRunControl("old-run", "conversation-1", "completed", "", "")
+	if event := readHistorySyncEventWithin(historyCh, 100*time.Millisecond); event != nil {
+		t.Fatalf("unexpected history sync after stale completion: kind=%q conversation_id=%q", event.GetKind(), event.GetConversationId())
+	}
+
+	summaries := manager.ActiveChatRunSummaries()
+	if len(summaries) != 1 {
+		t.Fatalf("active summaries len = %d, want 1: %#v", len(summaries), summaries)
+	}
+	if summaries[0].RequestID != "new-run" || summaries[0].State != ChatRunStateRunning {
+		t.Fatalf("active summary = %#v, want new running run", summaries[0])
+	}
+}
+
+func TestCancellableChatRunSnapshotIncludesStartingButExcludesDesktopQueued(t *testing.T) {
+	manager := NewManager()
+	if _, created, err := manager.StartPendingChatCommandRun("starting-run", "conversation-1", "client-starting"); err != nil || !created {
+		t.Fatalf("StartPendingChatCommandRun starting created=%v err=%v", created, err)
+	}
+	manager.MarkChatRunControl("starting-run", "conversation-1", "starting", "", "")
+	if snapshot, ok := manager.CancellableChatRunSnapshot("conversation-1"); !ok || snapshot.RequestID != "starting-run" {
+		t.Fatalf("cancellable starting snapshot = %#v ok=%v, want starting-run", snapshot, ok)
+	}
+
+	if _, created, err := manager.StartPendingChatCommandRun("queued-run", "conversation-2", "client-queued"); err != nil || !created {
+		t.Fatalf("StartPendingChatCommandRun queued created=%v err=%v", created, err)
+	}
+	manager.MarkChatRunControl("queued-run", "conversation-2", "queued_in_gui", "", "")
+	if snapshot, ok := manager.CancellableChatRunSnapshot("conversation-2"); ok {
+		t.Fatalf("desktop queued snapshot should not be cancellable: %#v", snapshot)
+	}
+}
+
 func TestPruneExpiredChatRunsDropsNilEntries(t *testing.T) {
 	manager := NewManager()
 	manager.chatStore.chatMu.Lock()
@@ -190,5 +269,31 @@ func TestPruneExpiredChatRunsDropsNilEntries(t *testing.T) {
 
 	if exists {
 		t.Fatal("nil chat run should be deleted during pruning")
+	}
+}
+
+func waitForHistorySyncKind(t *testing.T, ch <-chan *gatewayv1.HistorySyncEvent, kind string) *gatewayv1.HistorySyncEvent {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case event := <-ch:
+			if event.GetKind() == kind {
+				return event
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for history sync kind %q", kind)
+		}
+	}
+}
+
+func readHistorySyncEventWithin(ch <-chan *gatewayv1.HistorySyncEvent, timeout time.Duration) *gatewayv1.HistorySyncEvent {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case event := <-ch:
+		return event
+	case <-timer.C:
+		return nil
 	}
 }

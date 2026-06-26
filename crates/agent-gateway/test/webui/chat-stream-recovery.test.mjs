@@ -11,6 +11,7 @@ test("chat stream recovery detects released attach streams", () => {
     isRecoverableChatStreamTransportStatus,
     resolveChatStreamUnavailableRecoveryAction,
     shouldHydrateRestoredConversationSnapshot,
+    shouldRecoverIdleConversationSnapshot,
   } = loader.loadModule("src/lib/chatStreamRecovery.ts");
 
   assert.equal(isChatStreamNotAvailableMessage("chat stream not available"), true);
@@ -86,4 +87,53 @@ test("chat stream recovery detects released attach streams", () => {
     }),
     false,
   );
+
+  assert.equal(
+    shouldHydrateRestoredConversationSnapshot({
+      currentEntries: [{ id: "local-user", kind: "user", text: "hello", attachments: [] }],
+      liveEntries: [
+        { id: "live-assistant", kind: "assistant", text: "complete text", round: 1 },
+      ],
+      historyEntries: [
+        { id: "history-user", kind: "user", text: "hello", attachments: [] },
+        { id: "history-assistant", kind: "assistant", text: "complete text", round: 1 },
+      ],
+      serverIdle: true,
+    }),
+    true,
+  );
+
+  assert.equal(
+    shouldRecoverIdleConversationSnapshot({
+      isVisibleConversation: true,
+      isHistoryHydrationBlocked: false,
+      isChatBusy: false,
+      hasLocalDraft: false,
+      hasRetainedLiveTranscript: true,
+      hasRecentlyCompletedLiveStream: false,
+    }),
+    true,
+  );
+
+  for (const blocked of [
+    { isHistoryHydrationBlocked: true },
+    { isChatBusy: true },
+    { hasLocalDraft: true },
+    { hasRecentlyCompletedLiveStream: true },
+    { hasRetainedLiveTranscript: false },
+    { isVisibleConversation: false },
+  ]) {
+    assert.equal(
+      shouldRecoverIdleConversationSnapshot({
+        isVisibleConversation: true,
+        isHistoryHydrationBlocked: false,
+        isChatBusy: false,
+        hasLocalDraft: false,
+        hasRetainedLiveTranscript: true,
+        hasRecentlyCompletedLiveStream: false,
+        ...blocked,
+      }),
+      false,
+    );
+  }
 });

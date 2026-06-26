@@ -66,10 +66,14 @@ export function shouldHydrateRestoredConversationSnapshot(params: {
   currentEntries: ChatEntry[];
   historyEntries: ChatEntry[];
   liveEntries?: ChatEntry[];
+  serverIdle?: boolean;
 }) {
   const historyEntries = params.historyEntries;
   if (historyEntries.length === 0) {
     return false;
+  }
+  if (params.serverIdle === true) {
+    return true;
   }
 
   const currentEntries = params.currentEntries;
@@ -87,4 +91,22 @@ export function shouldHydrateRestoredConversationSnapshot(params: {
     return true;
   }
   return historyAssistantText.length > currentAssistantText.length;
+}
+
+export function shouldRecoverIdleConversationSnapshot(params: {
+  isVisibleConversation: boolean;
+  isHistoryHydrationBlocked: boolean;
+  isChatBusy: boolean;
+  hasLocalDraft: boolean;
+  hasRetainedLiveTranscript: boolean;
+  hasRecentlyCompletedLiveStream: boolean;
+}) {
+  return (
+    params.isVisibleConversation &&
+    !params.isHistoryHydrationBlocked &&
+    !params.isChatBusy &&
+    !params.hasLocalDraft &&
+    params.hasRetainedLiveTranscript &&
+    !params.hasRecentlyCompletedLiveStream
+  );
 }

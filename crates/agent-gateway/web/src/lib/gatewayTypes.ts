@@ -257,6 +257,7 @@ export type RunningConversationSummary = {
   first_seq?: number;
   run_epoch?: number;
   updated_at?: number;
+  state?: ChatRunControlState;
 };
 
 export type HistoryListFilter = {
@@ -316,7 +317,7 @@ export type GatewayHistoryEvent =
       conversation?: undefined;
     }
   | {
-      kind: "running" | "idle";
+      kind: "running" | "idle" | "queue_drained";
       conversation_id: string;
       conversation?: ConversationSummary;
       run_id?: string;

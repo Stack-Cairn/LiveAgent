@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import {
@@ -35,6 +35,7 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
   getConversationAbortController: (
     conversationId: string,
   ) => AbortController | null;
+  requestQueuedChatTurnProcessing: (conversationId: string) => void;
 };
 
 type GatewayBridgeRequestRegistry = {
@@ -155,18 +156,8 @@ function normalizeGatewayBaseMessageRef(
 export function useGatewayBridgeListeners(
   params: UseGatewayBridgeListenersParams,
 ) {
-  const {
-    currentConversationIdRef,
-    conversationRuntimeCacheRef,
-    historyItemsRef,
-    ensureGatewayBridgeConversationReadyRef,
-    sendActionRef,
-    queueGatewayBridgeEventForRequest,
-    shouldQueueGatewayChatRequest,
-    enqueueGatewayChatRequest,
-    isConversationRunning,
-    getConversationAbortController,
-  } = params;
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
 
   useEffect(() => {
     let disposed = false;
@@ -366,6 +357,24 @@ export function useGatewayBridgeListeners(
       );
     };
 
+    const wakeQueuedChatTurnProcessing = (conversationId: string) => {
+      const targetConversationId = conversationId.trim();
+      if (!targetConversationId) {
+        return;
+      }
+      for (const delayMs of [0, 150, 500, 1200] as const) {
+        window.setTimeout(() => {
+          if (
+            paramsRef.current.isConversationRunning(targetConversationId) ||
+            paramsRef.current.getConversationAbortController(targetConversationId)
+          ) {
+            return;
+          }
+          paramsRef.current.requestQueuedChatTurnProcessing(targetConversationId);
+        }, delayMs);
+      }
+    };
+
     const failClaimedRequest = (
       requestId: string,
       conversationId: string,
@@ -390,7 +399,10 @@ export function useGatewayBridgeListeners(
     ) => {
       const requestId = claimed.requestId.trim();
       if (!requestId) return false;
-      const queued = await enqueueGatewayChatRequest(claimed, conversationId);
+      const queued = await paramsRef.current.enqueueGatewayChatRequest(
+        claimed,
+        conversationId,
+      );
       if (!queued) return false;
       await invoke("gateway_chat_mark_queued_in_gui", {
         request_id: requestId,
@@ -422,7 +434,7 @@ export function useGatewayBridgeListeners(
       }
       startHeartbeat(requestId);
       if (!message && uploadedFiles.length === 0) {
-        queueGatewayBridgeEventForRequest(
+        paramsRef.current.queueGatewayBridgeEventForRequest(
           requestId,
           {
             type: "error",
@@ -492,7 +504,7 @@ export function useGatewayBridgeListeners(
         if (payload.rebased === true && !baseMessageRef) {
           const message =
             "Remote edit_resend command is missing base_message_ref.";
-          queueGatewayBridgeEventForRequest(
+          paramsRef.current.queueGatewayBridgeEventForRequest(
             requestId,
             {
               type: "error",
@@ -515,9 +527,12 @@ export function useGatewayBridgeListeners(
         if (
           targetConversationId &&
           payload.rebased !== true &&
-          (shouldQueueGatewayChatRequest(targetConversationId, queuePolicy) ||
-            isConversationRunning(targetConversationId) ||
-            getConversationAbortController(targetConversationId))
+          (paramsRef.current.shouldQueueGatewayChatRequest(
+            targetConversationId,
+            queuePolicy,
+          ) ||
+            paramsRef.current.isConversationRunning(targetConversationId) ||
+            paramsRef.current.getConversationAbortController(targetConversationId))
         ) {
           if (await markQueuedInGui(claimed, targetConversationId)) {
             return;
@@ -526,7 +541,7 @@ export function useGatewayBridgeListeners(
         }
 
         resolvedConversationId =
-          await ensureGatewayBridgeConversationReadyRef.current(
+          await paramsRef.current.ensureGatewayBridgeConversationReadyRef.current(
             targetConversationId,
             {
               rebased: payload.rebased === true,
@@ -542,10 +557,13 @@ export function useGatewayBridgeListeners(
             ? getActiveGatewayBridgeRequestByClientRequestId(clientRequestId)
             : null);
         if (
-          shouldQueueGatewayChatRequest(resolvedConversationId, queuePolicy) ||
+          paramsRef.current.shouldQueueGatewayChatRequest(
+            resolvedConversationId,
+            queuePolicy,
+          ) ||
           runningRequest ||
-          isConversationRunning(resolvedConversationId) ||
-          getConversationAbortController(resolvedConversationId)
+          paramsRef.current.isConversationRunning(resolvedConversationId) ||
+          paramsRef.current.getConversationAbortController(resolvedConversationId)
         ) {
           if (
             await markQueuedInGui(
@@ -583,7 +601,7 @@ export function useGatewayBridgeListeners(
             worker_id: workerId,
           } as any);
         };
-        const accepted = await sendActionRef.current({
+        const accepted = await paramsRef.current.sendActionRef.current({
           textOverride: message,
           uploadedFilesOverride: uploadedFiles,
           conversationIdOverride: resolvedConversationId,
@@ -619,7 +637,7 @@ export function useGatewayBridgeListeners(
         const message = conversationBusy
           ? GATEWAY_CHAT_CONVERSATION_BUSY_MESSAGE
           : rawMessage;
-        queueGatewayBridgeEventForRequest(
+        paramsRef.current.queueGatewayBridgeEventForRequest(
           requestId,
           {
             type: "error",
@@ -627,7 +645,7 @@ export function useGatewayBridgeListeners(
             conversation_id:
               resolvedConversationId ||
               targetConversationId ||
-              currentConversationIdRef.current,
+              paramsRef.current.currentConversationIdRef.current,
           },
           {
             workerId,
@@ -637,7 +655,7 @@ export function useGatewayBridgeListeners(
           requestId,
           resolvedConversationId ||
             targetConversationId ||
-            currentConversationIdRef.current,
+            paramsRef.current.currentConversationIdRef.current,
           conversationBusy ? "conversation_busy" : "desktop_runtime_error",
           message,
         );
@@ -742,8 +760,10 @@ export function useGatewayBridgeListeners(
       if (!conversationId) {
         return;
       }
-      const controller = getConversationAbortController(conversationId);
+      const controller =
+        paramsRef.current.getConversationAbortController(conversationId);
       controller?.abort();
+      wakeQueuedChatTurnProcessing(conversationId);
     }).then((dispose) => {
       if (disposed) {
         dispose();
@@ -769,16 +789,5 @@ export function useGatewayBridgeListeners(
       unlistenChatCancel?.();
       unlistenGatewayStatus?.();
     };
-  }, [
-    conversationRuntimeCacheRef,
-    currentConversationIdRef,
-    ensureGatewayBridgeConversationReadyRef,
-    getConversationAbortController,
-    historyItemsRef,
-    isConversationRunning,
-    shouldQueueGatewayChatRequest,
-    enqueueGatewayChatRequest,
-    queueGatewayBridgeEventForRequest,
-    sendActionRef,
-  ]);
+  }, []);
 }

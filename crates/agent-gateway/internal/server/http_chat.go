@@ -93,6 +93,7 @@ func chatCommandsHTTP(cfg *config.Config, sm *session.Manager, limiter *chatRate
 			"conversation_id":   start.ConversationID,
 			"client_request_id": body.ClientRequestID,
 			"accepted_seq":      start.AcceptedSeq,
+			"initial_seq":       start.InitialSeq,
 			"state":             start.State,
 			"deduped":           !start.Created,
 		})
@@ -133,7 +134,7 @@ func handleChatCancelCommandHTTP(
 		return
 	}
 	if runID == "" {
-		if snapshot, ok := sm.RunningChatRunSnapshot(conversationID); ok {
+		if snapshot, ok := sm.CancellableChatRunSnapshot(conversationID); ok {
 			runID = strings.TrimSpace(snapshot.RequestID)
 			if conversationID == "" {
 				conversationID = strings.TrimSpace(snapshot.ConversationID)

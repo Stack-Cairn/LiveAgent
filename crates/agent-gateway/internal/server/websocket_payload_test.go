@@ -68,6 +68,7 @@ func TestActiveChatRunSummaryPayloadIncludesReplayCursor(t *testing.T) {
 			LatestSeq:      9,
 			RunEpoch:       2,
 			UpdatedAt:      123,
+			State:          session.ChatRunStateRunning,
 		},
 	})
 	if len(payload) != 1 {
@@ -77,7 +78,8 @@ func TestActiveChatRunSummaryPayloadIncludesReplayCursor(t *testing.T) {
 	if item["run_id"] != "run-1" ||
 		item["first_seq"] != int64(4) ||
 		item["latest_seq"] != int64(9) ||
-		item["run_epoch"] != int64(2) {
+		item["run_epoch"] != int64(2) ||
+		item["state"] != session.ChatRunStateRunning {
 		t.Fatalf("active run payload = %#v", item)
 	}
 }
@@ -86,6 +88,12 @@ func TestHistoryRunningPayloadIncludesReplayCursor(t *testing.T) {
 	payload := websocketHistorySyncPayload(&gatewayv1.HistorySyncEvent{
 		Kind:           "running",
 		ConversationId: "conversation-1",
+		RunId:          "run-1",
+		FirstSeq:       2,
+		LatestSeq:      1,
+		RunEpoch:       5,
+		UpdatedAt:      123,
+		State:          session.ChatRunStateRunning,
 		Conversation: &gatewayv1.ConversationSummary{
 			Id:  "conversation-1",
 			Cwd: "/workspace",
@@ -97,14 +105,42 @@ func TestHistoryRunningPayloadIncludesReplayCursor(t *testing.T) {
 		LatestSeq:      1,
 		RunEpoch:       5,
 		UpdatedAt:      123,
+		State:          session.ChatRunStateRunning,
 	})
 
 	if payload["run_id"] != "run-1" ||
 		payload["first_seq"] != int64(2) ||
 		payload["latest_seq"] != int64(1) ||
 		payload["run_epoch"] != int64(5) ||
-		payload["updated_at"] != int64(123) {
+		payload["updated_at"] != int64(123) ||
+		payload["state"] != session.ChatRunStateRunning {
 		t.Fatalf("history running payload = %#v", payload)
+	}
+}
+
+func TestHistoryIdlePayloadIncludesCompletedRunMetadata(t *testing.T) {
+	payload := websocketHistorySyncPayload(&gatewayv1.HistorySyncEvent{
+		Kind:           "idle",
+		ConversationId: "conversation-1",
+		RunId:          "run-old",
+		FirstSeq:       2,
+		LatestSeq:      9,
+		RunEpoch:       5,
+		UpdatedAt:      123,
+		State:          session.ChatRunStateCompleted,
+		Conversation: &gatewayv1.ConversationSummary{
+			Id:  "conversation-1",
+			Cwd: "/workspace",
+		},
+	})
+
+	if payload["run_id"] != "run-old" ||
+		payload["first_seq"] != int64(2) ||
+		payload["latest_seq"] != int64(9) ||
+		payload["run_epoch"] != int64(5) ||
+		payload["updated_at"] != int64(123) ||
+		payload["state"] != session.ChatRunStateCompleted {
+		t.Fatalf("history idle payload = %#v", payload)
 	}
 }
 

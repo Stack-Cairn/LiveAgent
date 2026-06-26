@@ -40,6 +40,8 @@ import {
 
 import type {
   AgentStatus,
+  ChatQueueItemDetail,
+  ChatQueueItemSummary,
   ChatQueueResponse,
   ChatQueueSnapshot,
   ChatControlEvent,
@@ -589,19 +591,26 @@ type ChatCommandResponse = {
   run_id?: string;
   conversation_id?: string;
   accepted_seq?: number;
+  initial_seq?: number;
 };
 
 type RawChatQueueResponse = {
   accepted?: boolean;
   message?: string;
+  snapshot?: unknown;
   snapshot_json?: string;
+  item?: unknown;
   item_json?: string;
+  errorCode?: string;
   error_code?: string;
   revision?: number;
 };
 
 type RawChatQueueEvent = {
+  conversationId?: string;
   conversation_id?: string;
+  snapshot?: unknown;
+  snapshotJson?: string;
   snapshot_json?: string;
   revision?: number;
 };
@@ -616,18 +625,94 @@ function parseJsonPayload<T>(raw: string | undefined, fallback: T): T {
   }
 }
 
+function recordValue(input: unknown): Record<string, unknown> | null {
+  return input && typeof input === "object" && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : null;
+}
+
+function readStringField(record: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  return "";
+}
+
+function readNumberField(record: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function readBooleanField(record: Record<string, unknown>, key: string, fallback: boolean) {
+  const value = record[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizeChatQueueItemSummary(input: unknown): ChatQueueItemSummary | null {
+  const raw = recordValue(input);
+  if (!raw) return null;
+  const id = readStringField(raw, "id");
+  if (!id) return null;
+  const source = readStringField(raw, "source") === "webui" ? "webui" : "gui";
+  return {
+    id,
+    previewText: readStringField(raw, "previewText", "preview_text"),
+    fileCount: Math.max(0, readNumberField(raw, "fileCount", "file_count") ?? 0),
+    createdAt: Math.max(0, readNumberField(raw, "createdAt", "created_at") ?? 0),
+    source,
+    editable: readBooleanField(raw, "editable", true),
+  };
+}
+
+function normalizeChatQueueItemDetail(input: unknown): ChatQueueItemDetail | null {
+  const raw = recordValue(input);
+  if (!raw) return null;
+  const summary = normalizeChatQueueItemSummary(raw);
+  if (!summary) return null;
+  return {
+    ...summary,
+    draftJson: readStringField(raw, "draftJson", "draft_json"),
+    uploadedFilesJson: readStringField(raw, "uploadedFilesJson", "uploaded_files_json"),
+  };
+}
+
 function normalizeChatQueueResponse(input: RawChatQueueResponse): ChatQueueResponse {
-  const normalized = input as RawChatQueueResponse & Partial<ChatQueueResponse>;
+  const snapshotInput =
+    input.snapshot ??
+    parseJsonPayload<unknown>(input.snapshot_json, undefined);
+  const itemInput = input.item ?? parseJsonPayload<unknown>(input.item_json, undefined);
   return {
     accepted: input.accepted === true,
     message: input.message,
-    snapshot:
-      normalized.snapshot ??
-      parseJsonPayload<ChatQueueSnapshot | undefined>(input.snapshot_json, undefined),
-    item: normalized.item ?? parseJsonPayload(input.item_json, undefined),
-    errorCode: normalized.errorCode ?? input.error_code,
+    snapshot: normalizeChatQueueSnapshot(snapshotInput, undefined, input.revision) ?? undefined,
+    item: normalizeChatQueueItemDetail(itemInput) ?? undefined,
+    errorCode: input.errorCode ?? input.error_code,
     revision: input.revision,
   };
+}
+
+function normalizePositiveSequence(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : 0;
+}
+
+function normalizeChatCommandReplayAfterSeq(input: ChatCommandResponse) {
+  return (
+    normalizePositiveSequence(input.initial_seq) ||
+    normalizePositiveSequence(input.accepted_seq)
+  );
 }
 
 function normalizeChatQueueSnapshot(
@@ -635,35 +720,42 @@ function normalizeChatQueueSnapshot(
   fallbackConversationId?: string,
   fallbackRevision?: number,
 ): ChatQueueSnapshot | null {
-  if (!input || typeof input !== "object") return null;
-  const raw = input as Partial<ChatQueueSnapshot>;
+  const raw = recordValue(input);
+  if (!raw) return null;
   const conversationId =
-    typeof raw.conversationId === "string" && raw.conversationId.trim()
-      ? raw.conversationId
-      : (fallbackConversationId ?? "");
+    readStringField(raw, "conversationId", "conversation_id") || (fallbackConversationId ?? "");
   if (!conversationId) return null;
-  const revision =
-    typeof raw.revision === "number" && Number.isFinite(raw.revision)
-      ? raw.revision
-      : (fallbackRevision ?? 0);
+  const revision = readNumberField(raw, "revision") ?? fallbackRevision ?? 0;
+  const rawItems = Array.isArray(raw.items) ? raw.items : [];
   return {
     conversationId,
     revision,
-    items: Array.isArray(raw.items) ? raw.items : [],
+    items: rawItems
+      .map((item) => normalizeChatQueueItemSummary(item))
+      .filter((item): item is ChatQueueItemSummary => item !== null),
   };
 }
 
 function normalizeChatQueueEvent(
   input: RawChatQueueEvent | ChatQueueSnapshot,
 ): ChatQueueSnapshot | null {
-  const direct = normalizeChatQueueSnapshot(input);
-  if (direct) return direct;
   const raw = input as RawChatQueueEvent;
-  return normalizeChatQueueSnapshot(
-    parseJsonPayload<ChatQueueSnapshot | null>(raw.snapshot_json, null),
-    raw.conversation_id,
+  const fallbackConversationId = raw.conversationId ?? raw.conversation_id;
+  const fromJson = normalizeChatQueueSnapshot(
+    parseJsonPayload<unknown>(raw.snapshotJson ?? raw.snapshot_json, null),
+    fallbackConversationId,
     raw.revision,
   );
+  if (fromJson) return fromJson;
+  const fromSnapshot = normalizeChatQueueSnapshot(
+    raw.snapshot,
+    fallbackConversationId,
+    raw.revision,
+  );
+  if (fromSnapshot) return fromSnapshot;
+  const direct = normalizeChatQueueSnapshot(input);
+  if (direct) return direct;
+  return null;
 }
 
 function parseChatSseBlock(block: string): ChatEvent | null {
@@ -1058,7 +1150,7 @@ function isTerminalChatControlEvent(event: ChatEvent | null | undefined) {
   if (!isChatControlEvent(event)) {
     return false;
   }
-  return event?.state === "completed" || event?.state === "failed" || event?.state === "cancelled";
+  return event?.type === "completed" || event?.type === "failed" || event?.type === "cancelled";
 }
 
 function isTerminalChatEvent(event: ChatEvent | null | undefined) {
@@ -1710,6 +1802,7 @@ export class GatewayWebSocketClient {
     if (!runId) {
       throw new Error("Gateway chat command returned no run_id");
     }
+    const replayAfterSeq = normalizeChatCommandReplayAfterSeq(commandResponse);
     let conversationId =
       String(commandResponse.conversation_id ?? "").trim() || input.conversationId?.trim() || "";
 
@@ -1739,7 +1832,7 @@ export class GatewayWebSocketClient {
         token: this.token,
         runId,
         conversationId,
-        afterSeq: 0,
+        afterSeq: replayAfterSeq,
         signal,
       })) {
         if (event.conversation_id?.trim()) {
@@ -2819,7 +2912,8 @@ export class GatewayWebSocketClient {
         event?.kind === "upsert" ||
         event?.kind === "delete" ||
         event?.kind === "running" ||
-        event?.kind === "idle"
+        event?.kind === "idle" ||
+        event?.kind === "queue_drained"
       ) {
         this.emitHistory(event);
       }
@@ -3809,6 +3903,7 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
     if (!runId) {
       throw new Error("Gateway chat command returned no run_id");
     }
+    const replayAfterSeq = normalizeChatCommandReplayAfterSeq(commandResponse);
     let conversationId =
       String(commandResponse.conversation_id ?? "").trim() || input.conversationId?.trim() || "";
 
@@ -3838,7 +3933,7 @@ class SharedWorkerGatewayWebSocketClient implements GatewayWebSocketClientLike {
         token: this.token,
         runId,
         conversationId,
-        afterSeq: 0,
+        afterSeq: replayAfterSeq,
         signal,
       })) {
         if (event.conversation_id?.trim()) {

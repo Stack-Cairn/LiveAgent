@@ -129,21 +129,14 @@ export function isChatControlEvent(event: ChatEvent): event is ChatControlEvent 
 export function isTerminalChatControlEvent(event: ChatEvent) {
   return (
     isChatControlEvent(event) &&
-    (event.state === "completed" || event.state === "failed" || event.state === "cancelled")
+    (event.type === "completed" || event.type === "failed" || event.type === "cancelled")
   );
 }
 
 export function isPreparingChatControlEvent(event: ChatEvent) {
   return (
     isChatControlEvent(event) &&
-    (event.state === "queued" ||
-      event.state === "delivered" ||
-      event.state === "claimed" ||
-      event.state === "starting" ||
-      event.state === "desktop_queued" ||
-      event.type === "accepted" ||
-      event.type === "rebased" ||
-      event.type === "projection_updated" ||
+    (event.type === "accepted" ||
       event.type === "delivered" ||
       event.type === "claimed" ||
       event.type === "starting" ||
@@ -153,10 +146,7 @@ export function isPreparingChatControlEvent(event: ChatEvent) {
 }
 
 export function isRuntimeStartedChatControlEvent(event: ChatEvent) {
-  return (
-    isChatControlEvent(event) &&
-    (event.state === "running" || event.type === "started")
-  );
+  return isChatControlEvent(event) && event.type === "started";
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

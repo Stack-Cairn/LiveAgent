@@ -135,14 +135,7 @@ function isTerminalChatEvent(event: ChatEvent) {
   if (event.type === "done" || event.type === "error") {
     return true;
   }
-  if (event.type !== "completed" && event.type !== "failed" && event.type !== "cancelled") {
-    return false;
-  }
-  return (
-    event.state === "completed" ||
-    event.state === "failed" ||
-    event.state === "cancelled"
-  );
+  return event.type === "completed" || event.type === "failed" || event.type === "cancelled";
 }
 
 function isChatControlEvent(event: ChatEvent) {

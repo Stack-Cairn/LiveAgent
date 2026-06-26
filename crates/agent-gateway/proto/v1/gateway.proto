@@ -717,6 +717,12 @@ message HistorySyncEvent {
   string kind = 1;
   ConversationSummary conversation = 2;
   string conversation_id = 3;
+  string run_id = 4;
+  int64 first_seq = 5;
+  int64 latest_seq = 6;
+  int64 run_epoch = 7;
+  int64 updated_at = 8;
+  string state = 9;
 }
 
 message ProviderListRequest {}

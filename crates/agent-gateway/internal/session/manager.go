@@ -92,6 +92,7 @@ type ActiveChatRunSummary struct {
 	LatestSeq      int64
 	RunEpoch       int64
 	UpdatedAt      int64
+	State          string
 }
 
 const (

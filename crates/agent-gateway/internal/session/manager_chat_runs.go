@@ -181,6 +181,26 @@ func (m *Manager) chatRunCanClaimConversationLocked(conversationID string, reque
 	return currentRun == nil || currentRun.done
 }
 
+func (m *Manager) conversationHasActiveChatRunLocked(conversationID string, excludeRequestID string) bool {
+	conversationID = strings.TrimSpace(conversationID)
+	excludeRequestID = strings.TrimSpace(excludeRequestID)
+	if conversationID == "" {
+		return false
+	}
+	for requestID, run := range m.chatStore.chatRuns {
+		if run == nil || strings.TrimSpace(requestID) == excludeRequestID {
+			continue
+		}
+		if strings.TrimSpace(run.conversationID) != conversationID {
+			continue
+		}
+		if !run.done && ChatRunStateIsActive(run.state) {
+			return true
+		}
+	}
+	return false
+}
+
 func chatRunControlCanClaimConversation(controlType string, state string) bool {
 	if normalizeChatRunState(state) == ChatRunStateRunning {
 		return true
@@ -357,18 +377,17 @@ func (m *Manager) ActiveChatRunSummaries() []ActiveChatRunSummary {
 			LatestSeq:      run.nextSeq,
 			RunEpoch:       run.runEpoch,
 			UpdatedAt:      run.updatedAt.UnixMilli(),
+			State:          normalizeChatRunState(run.state),
 		}
 		if index, ok := seen[conversationID]; ok {
-			if summaries[index].Workdir == "" {
-				summaries[index].Workdir = summary.Workdir
-			}
 			currentOwner := strings.TrimSpace(m.chatStore.chatRunByConversation[conversationID])
 			if shouldReplaceActiveChatRunSummary(summary, summaries[index], currentOwner) {
-				summaries[index].RequestID = summary.RequestID
-				summaries[index].FirstSeq = summary.FirstSeq
-				summaries[index].LatestSeq = summary.LatestSeq
-				summaries[index].RunEpoch = summary.RunEpoch
-				summaries[index].UpdatedAt = summary.UpdatedAt
+				if summary.Workdir == "" {
+					summary.Workdir = summaries[index].Workdir
+				}
+				summaries[index] = summary
+			} else if summaries[index].Workdir == "" {
+				summaries[index].Workdir = summary.Workdir
 			}
 			continue
 		}
@@ -400,7 +419,25 @@ func activeChatRunSummaryPriority(summary ActiveChatRunSummary, currentOwner str
 	if currentOwner != "" && requestID == currentOwner {
 		priority += 4
 	}
+	priority += activeChatRunSummaryStatePriority(summary.State) * 10
 	return priority
+}
+
+func activeChatRunSummaryStatePriority(state string) int {
+	switch normalizeChatRunState(state) {
+	case ChatRunStateRunning:
+		return 6
+	case ChatRunStateStarting:
+		return 5
+	case ChatRunStateClaimed:
+		return 4
+	case ChatRunStateDelivered:
+		return 3
+	case ChatRunStateQueued:
+		return 2
+	default:
+		return 0
+	}
 }
 
 func (m *Manager) FailStartingChatRun(requestID string, message string) bool {
@@ -779,11 +816,58 @@ func (m *Manager) RunningChatRunSnapshot(conversationID string) (ChatRunSnapshot
 	return best.snapshot(), true
 }
 
+func (m *Manager) CancellableChatRunSnapshot(conversationID string) (ChatRunSnapshot, bool) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return ChatRunSnapshot{}, false
+	}
+
+	m.chatStore.chatMu.Lock()
+	defer m.chatStore.chatMu.Unlock()
+	m.pruneExpiredChatRunsLocked(time.Now())
+
+	if requestID := strings.TrimSpace(m.chatStore.chatRunByConversation[conversationID]); requestID != "" {
+		if run := m.chatStore.chatRuns[requestID]; chatRunIsCancellableForConversation(run, conversationID) {
+			return run.snapshot(), true
+		}
+	}
+
+	var best *chatRun
+	var bestRequestID string
+	var bestPriority int
+	for requestID, run := range m.chatStore.chatRuns {
+		if !chatRunIsCancellableForConversation(run, conversationID) {
+			continue
+		}
+		priority := activeChatRunSummaryStatePriority(run.state)
+		if best == nil ||
+			priority > bestPriority ||
+			(priority == bestPriority && run.updatedAt.After(best.updatedAt)) ||
+			(priority == bestPriority && run.updatedAt.Equal(best.updatedAt) && strings.TrimSpace(requestID) > bestRequestID) {
+			best = run
+			bestRequestID = strings.TrimSpace(requestID)
+			bestPriority = priority
+		}
+	}
+	if best == nil {
+		return ChatRunSnapshot{}, false
+	}
+	return best.snapshot(), true
+}
+
 func chatRunIsRunningForConversation(run *chatRun, conversationID string) bool {
 	return run != nil &&
 		!run.done &&
 		strings.TrimSpace(run.conversationID) == conversationID &&
 		normalizeChatRunState(run.state) == ChatRunStateRunning
+}
+
+func chatRunIsCancellableForConversation(run *chatRun, conversationID string) bool {
+	return run != nil &&
+		!run.done &&
+		strings.TrimSpace(run.conversationID) == conversationID &&
+		ChatRunStateIsActive(run.state) &&
+		normalizeChatRunState(run.state) != ChatRunStateDesktopQueued
 }
 
 func (m *Manager) MarkChatRunControl(
@@ -938,8 +1022,14 @@ func (m *Manager) ApplyChatRuntimeSnapshot(snapshot *gatewayv1.ChatRuntimeSnapsh
 	var broadcast *ChatBroadcastEvent
 	var runSubscribers []*chatRunSubscriber
 	var activityKind string
+	var queueDrained bool
 	var activityConversationID string
 	var activityWorkdir string
+	var activityRunID string
+	var activityFirstSeq int64
+	var activityLatestSeq int64
+	var activityRunEpoch int64
+	var activityState string
 	terminalState := isTerminalChatRunState(state)
 
 	m.chatStore.chatMu.Lock()
@@ -1009,11 +1099,19 @@ func (m *Manager) ApplyChatRuntimeSnapshot(snapshot *gatewayv1.ChatRuntimeSnapsh
 	}
 	if state == ChatRunStateRunning && (created || previousState != ChatRunStateRunning) {
 		activityKind = "running"
-	} else if terminalState {
+		if previousState == ChatRunStateDesktopQueued {
+			queueDrained = true
+		}
+	} else if terminalState && !m.conversationHasActiveChatRunLocked(conversationID, requestID) {
 		activityKind = "idle"
 	}
 	activityConversationID = strings.TrimSpace(run.conversationID)
 	activityWorkdir = strings.TrimSpace(run.workdir)
+	activityRunID = strings.TrimSpace(run.requestID)
+	activityFirstSeq = run.snapshot().FirstSeq
+	activityLatestSeq = run.nextSeq
+	activityRunEpoch = run.runEpoch
+	activityState = normalizeChatRunState(run.state)
 	m.chatStore.chatMu.Unlock()
 
 	if broadcast == nil {
@@ -1032,7 +1130,30 @@ func (m *Manager) ApplyChatRuntimeSnapshot(snapshot *gatewayv1.ChatRuntimeSnapsh
 		}
 	}
 	if activityKind != "" {
-		m.broadcastChatRunActivity(activityKind, activityConversationID, activityWorkdir, now)
+		m.broadcastChatRunActivity(
+			activityKind,
+			activityConversationID,
+			activityWorkdir,
+			activityRunID,
+			activityFirstSeq,
+			activityLatestSeq,
+			activityRunEpoch,
+			activityState,
+			now,
+		)
+		if queueDrained {
+			m.broadcastChatRunActivity(
+				"queue_drained",
+				activityConversationID,
+				activityWorkdir,
+				activityRunID,
+				activityFirstSeq,
+				activityLatestSeq,
+				activityRunEpoch,
+				activityState,
+				now,
+			)
+		}
 	}
 }
 
@@ -1066,8 +1187,14 @@ func (m *Manager) broadcastChatEvent(requestID string, event *gatewayv1.ChatEven
 	var runSubscribers []*chatRunSubscriber
 	var firstDelta *ChatBroadcastEvent
 	var activityKind string
+	var queueDrained bool
 	var activityConversationID string
 	var activityWorkdir string
+	var activityRunID string
+	var activityFirstSeq int64
+	var activityLatestSeq int64
+	var activityRunEpoch int64
+	var activityState string
 	run := m.chatStore.chatRuns[requestID]
 	if run == nil && requestID != "" {
 		m.chatStore.nextChatRunEpoch += 1
@@ -1130,10 +1257,21 @@ func (m *Manager) broadcastChatEvent(requestID string, event *gatewayv1.ChatEven
 			activityKind = "idle"
 		} else if previousState != ChatRunStateRunning && nextState == ChatRunStateRunning {
 			activityKind = "running"
+			if previousState == ChatRunStateDesktopQueued {
+				queueDrained = true
+			}
+		}
+		if activityKind == "idle" && m.conversationHasActiveChatRunLocked(run.conversationID, requestID) {
+			activityKind = ""
 		}
 		if activityKind != "" {
 			activityConversationID = strings.TrimSpace(run.conversationID)
 			activityWorkdir = strings.TrimSpace(run.workdir)
+			activityRunID = strings.TrimSpace(run.requestID)
+			activityFirstSeq = run.snapshot().FirstSeq
+			activityLatestSeq = run.nextSeq
+			activityRunEpoch = run.runEpoch
+			activityState = normalizeChatRunState(run.state)
 		}
 		run.appendEvent(broadcast)
 		if !isEphemeralChatBroadcastEvent(broadcast) {
@@ -1161,7 +1299,30 @@ func (m *Manager) broadcastChatEvent(requestID string, event *gatewayv1.ChatEven
 		}
 	}
 	if activityKind != "" {
-		m.broadcastChatRunActivity(activityKind, activityConversationID, activityWorkdir, now)
+		m.broadcastChatRunActivity(
+			activityKind,
+			activityConversationID,
+			activityWorkdir,
+			activityRunID,
+			activityFirstSeq,
+			activityLatestSeq,
+			activityRunEpoch,
+			activityState,
+			now,
+		)
+		if queueDrained {
+			m.broadcastChatRunActivity(
+				"queue_drained",
+				activityConversationID,
+				activityWorkdir,
+				activityRunID,
+				activityFirstSeq,
+				activityLatestSeq,
+				activityRunEpoch,
+				activityState,
+				now,
+			)
+		}
 	}
 }
 
@@ -1244,8 +1405,14 @@ func (m *Manager) markChatRunControl(
 
 	var persist ChatRunEventAppend
 	var activityKind string
+	var queueDrained bool
 	var activityConversationID string
 	var activityWorkdir string
+	var activityRunID string
+	var activityFirstSeq int64
+	var activityLatestSeq int64
+	var activityRunEpoch int64
+	var activityState string
 	m.chatStore.chatMu.Lock()
 	m.pruneExpiredChatRunsLocked(now)
 	run := m.chatStore.chatRuns[requestID]
@@ -1288,10 +1455,21 @@ func (m *Manager) markChatRunControl(
 		activityKind = "idle"
 	} else if previousState != ChatRunStateRunning && nextState == ChatRunStateRunning {
 		activityKind = "running"
+		if previousState == ChatRunStateDesktopQueued {
+			queueDrained = true
+		}
+	}
+	if activityKind == "idle" && m.conversationHasActiveChatRunLocked(run.conversationID, requestID) {
+		activityKind = ""
 	}
 	if activityKind != "" {
 		activityConversationID = strings.TrimSpace(run.conversationID)
 		activityWorkdir = strings.TrimSpace(run.workdir)
+		activityRunID = strings.TrimSpace(run.requestID)
+		activityFirstSeq = run.snapshot().FirstSeq
+		activityLatestSeq = run.nextSeq
+		activityRunEpoch = run.runEpoch
+		activityState = normalizeChatRunState(run.state)
 	}
 	persist = chatRunEventAppendSnapshot(run, broadcast, now)
 	runSubscribers := make([]*chatRunSubscriber, 0, len(run.subscribers))
@@ -1314,7 +1492,30 @@ func (m *Manager) markChatRunControl(
 		}
 	}
 	if activityKind != "" {
-		m.broadcastChatRunActivity(activityKind, activityConversationID, activityWorkdir, now)
+		m.broadcastChatRunActivity(
+			activityKind,
+			activityConversationID,
+			activityWorkdir,
+			activityRunID,
+			activityFirstSeq,
+			activityLatestSeq,
+			activityRunEpoch,
+			activityState,
+			now,
+		)
+		if queueDrained {
+			m.broadcastChatRunActivity(
+				"queue_drained",
+				activityConversationID,
+				activityWorkdir,
+				activityRunID,
+				activityFirstSeq,
+				activityLatestSeq,
+				activityRunEpoch,
+				activityState,
+				now,
+			)
+		}
 	}
 }
 

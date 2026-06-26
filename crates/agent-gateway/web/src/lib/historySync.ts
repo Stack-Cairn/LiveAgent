@@ -22,6 +22,24 @@ type ApplyGatewayHistoryEventOptions = {
 
 const SECONDS_TIMESTAMP_MAX = 10_000_000_000;
 
+function normalizeRunningConversationState(
+  value: unknown,
+): RunningConversationSummary["state"] | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  switch (value.trim()) {
+    case "queued":
+    case "delivered":
+    case "claimed":
+    case "starting":
+    case "running":
+      return value.trim() as RunningConversationSummary["state"];
+    default:
+      return undefined;
+  }
+}
+
 function normalizeComparableTimestamp(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return 0;
@@ -178,6 +196,11 @@ function normalizeRunningConversationSummary(
     typeof source.updated_at === "number" && Number.isFinite(source.updated_at)
       ? source.updated_at
       : undefined;
+  const rawState = typeof source.state === "string" ? source.state.trim() : "";
+  const state = normalizeRunningConversationState(rawState);
+  if (rawState && !state) {
+    return null;
+  }
   return {
     conversation_id: conversationId,
     run_id: runId || undefined,
@@ -185,6 +208,7 @@ function normalizeRunningConversationSummary(
     first_seq: firstSeq,
     run_epoch: runEpoch,
     updated_at: updatedAt,
+    state: state || undefined,
   };
 }
 
@@ -206,11 +230,7 @@ export function normalizeRunningConversations(
 
 export function resolveRunningConversationStreamAfterSeq(
   firstSeq: unknown,
-  options?: { runId?: unknown },
 ) {
-  if (typeof options?.runId === "string" && options.runId.trim()) {
-    return 0;
-  }
   if (typeof firstSeq !== "number" || !Number.isFinite(firstSeq) || firstSeq <= 1) {
     return 0;
   }
@@ -292,6 +312,7 @@ export function applyGatewayHistoryEvent(
       return conversations.filter((item) => item.id !== event.conversation_id);
     case "running":
     case "idle":
+    case "queue_drained":
       return conversations;
     case "upsert": {
       const conversationId = event.conversation_id.trim();

@@ -137,6 +137,9 @@ func websocketActiveChatRunSummariesPayload(summaries []session.ActiveChatRunSum
 		if summary.RunEpoch > 0 {
 			item["run_epoch"] = summary.RunEpoch
 		}
+		if state := strings.TrimSpace(summary.State); state != "" {
+			item["state"] = state
+		}
 		payload = append(payload, item)
 	}
 	return payload
@@ -153,6 +156,24 @@ func websocketHistorySyncPayload(
 	payload := map[string]any{
 		"kind":            strings.TrimSpace(event.GetKind()),
 		"conversation_id": strings.TrimSpace(event.GetConversationId()),
+	}
+	if runID := strings.TrimSpace(event.GetRunId()); runID != "" {
+		payload["run_id"] = runID
+	}
+	if event.GetFirstSeq() > 0 {
+		payload["first_seq"] = event.GetFirstSeq()
+	}
+	if event.GetLatestSeq() > 0 {
+		payload["latest_seq"] = event.GetLatestSeq()
+	}
+	if event.GetRunEpoch() > 0 {
+		payload["run_epoch"] = event.GetRunEpoch()
+	}
+	if event.GetUpdatedAt() > 0 {
+		payload["updated_at"] = event.GetUpdatedAt()
+	}
+	if state := strings.TrimSpace(event.GetState()); state != "" {
+		payload["state"] = state
 	}
 
 	if conversation := event.GetConversation(); conversation != nil {
@@ -181,6 +202,9 @@ func websocketHistorySyncPayload(
 			}
 			if summary.UpdatedAt > 0 {
 				payload["updated_at"] = summary.UpdatedAt
+			}
+			if state := strings.TrimSpace(summary.State); state != "" {
+				payload["state"] = state
 			}
 			break
 		}

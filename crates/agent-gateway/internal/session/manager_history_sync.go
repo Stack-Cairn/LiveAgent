@@ -93,20 +93,30 @@ func isCriticalHistorySyncEvent(event *gatewayv1.HistorySyncEvent) bool {
 		return false
 	}
 	switch strings.TrimSpace(event.GetKind()) {
-	case "running", "idle":
+	case "running", "idle", "queue_drained":
 		return true
 	default:
 		return false
 	}
 }
 
-func (m *Manager) broadcastChatRunActivity(kind string, conversationID string, workdir string, updatedAt time.Time) {
+func (m *Manager) broadcastChatRunActivity(
+	kind string,
+	conversationID string,
+	workdir string,
+	runID string,
+	firstSeq int64,
+	latestSeq int64,
+	runEpoch int64,
+	state string,
+	updatedAt time.Time,
+) {
 	kind = strings.TrimSpace(kind)
 	conversationID = strings.TrimSpace(conversationID)
 	if conversationID == "" {
 		return
 	}
-	if kind != "running" && kind != "idle" {
+	if kind != "running" && kind != "idle" && kind != "queue_drained" {
 		return
 	}
 	if updatedAt.IsZero() {
@@ -116,6 +126,12 @@ func (m *Manager) broadcastChatRunActivity(kind string, conversationID string, w
 	event := &gatewayv1.HistorySyncEvent{
 		Kind:           kind,
 		ConversationId: conversationID,
+		RunId:          strings.TrimSpace(runID),
+		FirstSeq:       firstSeq,
+		LatestSeq:      latestSeq,
+		RunEpoch:       runEpoch,
+		UpdatedAt:      updatedAt.UnixMilli(),
+		State:          normalizeChatRunState(state),
 	}
 	if workdir = strings.TrimSpace(workdir); workdir != "" {
 		event.Conversation = &gatewayv1.ConversationSummary{
