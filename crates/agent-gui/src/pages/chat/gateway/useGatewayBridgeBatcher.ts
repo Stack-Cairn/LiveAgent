@@ -40,6 +40,7 @@ const GATEWAY_BRIDGE_BATCH_MAX_DELAY_MS = 32;
 const GATEWAY_BRIDGE_BATCH_MAX_TEXT_LENGTH = 640;
 const GATEWAY_BRIDGE_TOOL_DELTA_BATCH_MAX_DELAY_MS = 200;
 const GATEWAY_BRIDGE_TOOL_DELTA_HIDDEN_BATCH_MAX_DELAY_MS = 750;
+const GATEWAY_BRIDGE_SEND_RETRY_DELAYS_MS = [100, 300, 750];
 
 function normalizeGatewayBridgeBatchRound(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -50,6 +51,39 @@ function shouldFlushGatewayBridgeBatchWithoutAnimationFrame() {
     return false;
   }
   return document.visibilityState !== "visible";
+}
+
+function isTerminalGatewayBridgeEvent(event: Record<string, unknown>) {
+  return event.type === "done" || event.type === "error";
+}
+
+function delayGatewayBridgeSendRetry(delayMs: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+}
+
+async function invokeGatewaySendChatEventWithRetry(
+  requestId: string,
+  event: Record<string, unknown>,
+  workerId?: string,
+) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await invoke("gateway_send_chat_event", {
+        request_id: requestId,
+        event,
+        worker_id: workerId,
+      } as any);
+      return;
+    } catch (error) {
+      const retryDelayMs = GATEWAY_BRIDGE_SEND_RETRY_DELAYS_MS[attempt];
+      if (retryDelayMs === undefined) {
+        throw error;
+      }
+      await delayGatewayBridgeSendRetry(retryDelayMs);
+    }
+  }
 }
 
 function toBatchableGatewayBridgeEvent(
@@ -133,32 +167,86 @@ function batchableGatewayBridgeEventSize(event: BatchableGatewayBridgeEvent) {
 
 export function useGatewayBridgeBatcher() {
   const gatewayEventChainRef = useRef<Promise<void>>(Promise.resolve());
+  const gatewayEventSendsByRequestRef = useRef(new Map<string, Set<Promise<void>>>());
+  const gatewayEventBarriersByRequestRef = useRef(new Map<string, Set<Promise<void>>>());
+  const gatewayEventBarrierChainByRequestRef = useRef(new Map<string, Promise<void>>());
   const pendingGatewayBridgeEventBatchesRef = useRef(
     new Map<string, PendingGatewayBridgeEventBatch>(),
   );
   const inFlightToolCallDeltaBatchesRef = useRef(new Set<string>());
   const deferredToolCallDeltaSendsRef = useRef(new Map<string, DeferredToolCallDeltaSend>());
 
+  const trackGatewayBridgeEventSend = useCallback(
+    (requestId: string, sendPromise: Promise<void>) => {
+      const normalizedRequestId = requestId.trim();
+      if (!normalizedRequestId) {
+        return;
+      }
+      let sends = gatewayEventSendsByRequestRef.current.get(normalizedRequestId);
+      if (!sends) {
+        sends = new Set();
+        gatewayEventSendsByRequestRef.current.set(normalizedRequestId, sends);
+      }
+      sends.add(sendPromise);
+      const removeSend = () => {
+        const currentSends = gatewayEventSendsByRequestRef.current.get(normalizedRequestId);
+        if (!currentSends) {
+          return;
+        }
+        currentSends.delete(sendPromise);
+        if (currentSends.size === 0) {
+          gatewayEventSendsByRequestRef.current.delete(normalizedRequestId);
+        }
+      };
+      sendPromise.then(removeSend, removeSend);
+    },
+    [],
+  );
+
+  const trackGatewayBridgeEventBarrier = useCallback(
+    (requestId: string, barrierPromise: Promise<void>) => {
+      const normalizedRequestId = requestId.trim();
+      if (!normalizedRequestId) {
+        return;
+      }
+      let barriers = gatewayEventBarriersByRequestRef.current.get(normalizedRequestId);
+      if (!barriers) {
+        barriers = new Set();
+        gatewayEventBarriersByRequestRef.current.set(normalizedRequestId, barriers);
+      }
+      barriers.add(barrierPromise);
+      const removeBarrier = () => {
+        const currentBarriers =
+          gatewayEventBarriersByRequestRef.current.get(normalizedRequestId);
+        if (!currentBarriers) {
+          return;
+        }
+        currentBarriers.delete(barrierPromise);
+        if (currentBarriers.size === 0) {
+          gatewayEventBarriersByRequestRef.current.delete(normalizedRequestId);
+        }
+      };
+      barrierPromise.then(removeBarrier, removeBarrier);
+    },
+    [],
+  );
+
   const sendGatewayBridgeEventForRequest = useCallback(
     (requestId: string, event: Record<string, unknown>, options?: GatewayBridgeSendOptions) => {
       const workerId = options?.workerId?.trim() || undefined;
       const sendPromise = gatewayEventChainRef.current
         .catch(() => undefined)
-        .then(() =>
-          invoke("gateway_send_chat_event", {
-            request_id: requestId,
-            event,
-            worker_id: workerId,
-          } as any),
-        )
-        .then(() => undefined)
-        .catch((error) => {
+        .then(() => invokeGatewaySendChatEventWithRetry(requestId, event, workerId));
+      gatewayEventChainRef.current = sendPromise.catch(() => undefined);
+      trackGatewayBridgeEventSend(requestId, sendPromise);
+      sendPromise.catch((error) => {
+        if (!isTerminalGatewayBridgeEvent(event)) {
           console.warn("gateway_send_chat_event failed", error);
-        });
-      gatewayEventChainRef.current = sendPromise;
+        }
+      });
       return sendPromise;
     },
-    [],
+    [trackGatewayBridgeEventSend],
   );
 
   const sendToolCallDeltaForRequest = useCallback(
@@ -179,7 +267,8 @@ export function useGatewayBridgeBatcher() {
       }
 
       inFlightToolCallDeltaBatchesRef.current.add(batchKey);
-      sendGatewayBridgeEventForRequest(requestId, event, options).finally(() => {
+      const sendPromise = sendGatewayBridgeEventForRequest(requestId, event, options);
+      const finishSend = () => {
         inFlightToolCallDeltaBatchesRef.current.delete(batchKey);
         const deferred = deferredToolCallDeltaSendsRef.current.get(batchKey);
         if (!deferred) {
@@ -192,7 +281,8 @@ export function useGatewayBridgeBatcher() {
           deferred.event,
           deferred.options,
         );
-      });
+      };
+      sendPromise.then(finishSend, finishSend);
     },
     [sendGatewayBridgeEventForRequest],
   );
@@ -265,6 +355,163 @@ export function useGatewayBridgeBatcher() {
     [flushGatewayBridgeEventBatchForRequest],
   );
 
+  const hasPendingGatewayBridgeEventBatchesForRequest = useCallback((requestId: string) => {
+    const normalizedRequestId = requestId.trim();
+    if (!normalizedRequestId) {
+      return false;
+    }
+    for (const pending of pendingGatewayBridgeEventBatchesRef.current.values()) {
+      if (pending.requestId === normalizedRequestId) {
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
+  const hasDeferredToolCallDeltasForRequest = useCallback((requestId: string) => {
+    const normalizedRequestId = requestId.trim();
+    if (!normalizedRequestId) {
+      return false;
+    }
+    for (const deferred of deferredToolCallDeltaSendsRef.current.values()) {
+      if (deferred.requestId === normalizedRequestId) {
+        return true;
+      }
+    }
+    return false;
+  }, []);
+
+  const hasGatewayBridgeEventSendsForRequest = useCallback((requestId: string) => {
+    const sends = gatewayEventSendsByRequestRef.current.get(requestId.trim());
+    return Boolean(sends && sends.size > 0);
+  }, []);
+
+  const hasGatewayBridgeEventBarriersForRequest = useCallback((requestId: string) => {
+    const barriers = gatewayEventBarriersByRequestRef.current.get(requestId.trim());
+    return Boolean(barriers && barriers.size > 0);
+  }, []);
+
+  const waitForGatewayBridgeEventSendsForRequest = useCallback(async (requestId: string) => {
+    const sends = gatewayEventSendsByRequestRef.current.get(requestId.trim());
+    if (!sends || sends.size === 0) {
+      return;
+    }
+    const results = await Promise.allSettled(Array.from(sends));
+    const rejected = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (rejected) {
+      throw rejected.reason;
+    }
+  }, []);
+
+  const waitForGatewayBridgeEventBarriersForRequest = useCallback(async (requestId: string) => {
+    const barriers = gatewayEventBarriersByRequestRef.current.get(requestId.trim());
+    if (!barriers || barriers.size === 0) {
+      return;
+    }
+    const results = await Promise.allSettled(Array.from(barriers));
+    const rejected = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (rejected) {
+      throw rejected.reason;
+    }
+  }, []);
+
+  const drainGatewayBridgeEventsForRequest = useCallback(
+    async (requestId: string) => {
+      const normalizedRequestId = requestId.trim();
+      if (!normalizedRequestId) {
+        return;
+      }
+      for (;;) {
+        flushGatewayBridgeEventBatchesForRequest(normalizedRequestId);
+        await waitForGatewayBridgeEventSendsForRequest(normalizedRequestId);
+        await Promise.resolve();
+        if (
+          !hasPendingGatewayBridgeEventBatchesForRequest(normalizedRequestId) &&
+          !hasDeferredToolCallDeltasForRequest(normalizedRequestId) &&
+          !hasGatewayBridgeEventSendsForRequest(normalizedRequestId)
+        ) {
+          return;
+        }
+      }
+    },
+    [
+      flushGatewayBridgeEventBatchesForRequest,
+      hasDeferredToolCallDeltasForRequest,
+      hasGatewayBridgeEventSendsForRequest,
+      hasPendingGatewayBridgeEventBatchesForRequest,
+      waitForGatewayBridgeEventSendsForRequest,
+    ],
+  );
+
+  const queueTerminalGatewayBridgeEventForRequest = useCallback(
+    (requestId: string, event: Record<string, unknown>, options?: GatewayBridgeSendOptions) => {
+      const normalizedRequestId = requestId.trim();
+      if (!normalizedRequestId) {
+        return sendGatewayBridgeEventForRequest(requestId, event, options);
+      }
+      const previousBarrier =
+        gatewayEventBarrierChainByRequestRef.current.get(normalizedRequestId) ??
+        Promise.resolve();
+      const barrierPromise = previousBarrier
+        .catch(() => undefined)
+        .then(async () => {
+          await drainGatewayBridgeEventsForRequest(normalizedRequestId);
+          await sendGatewayBridgeEventForRequest(normalizedRequestId, event, options);
+        });
+      const barrierChain = barrierPromise.catch(() => undefined);
+      gatewayEventBarrierChainByRequestRef.current.set(normalizedRequestId, barrierChain);
+      barrierChain.then(() => {
+        if (gatewayEventBarrierChainByRequestRef.current.get(normalizedRequestId) === barrierChain) {
+          gatewayEventBarrierChainByRequestRef.current.delete(normalizedRequestId);
+        }
+      });
+      trackGatewayBridgeEventBarrier(normalizedRequestId, barrierPromise);
+      barrierPromise.catch((error) => {
+        console.warn("gateway terminal chat event failed", error);
+      });
+      return barrierPromise;
+    },
+    [
+      drainGatewayBridgeEventsForRequest,
+      sendGatewayBridgeEventForRequest,
+      trackGatewayBridgeEventBarrier,
+    ],
+  );
+
+  const flushGatewayBridgeEventsForRequest = useCallback(
+    async (requestId: string) => {
+      const normalizedRequestId = requestId.trim();
+      if (!normalizedRequestId) {
+        return;
+      }
+      for (;;) {
+        await drainGatewayBridgeEventsForRequest(normalizedRequestId);
+        await waitForGatewayBridgeEventBarriersForRequest(normalizedRequestId);
+        await Promise.resolve();
+        if (
+          !hasPendingGatewayBridgeEventBatchesForRequest(normalizedRequestId) &&
+          !hasDeferredToolCallDeltasForRequest(normalizedRequestId) &&
+          !hasGatewayBridgeEventSendsForRequest(normalizedRequestId) &&
+          !hasGatewayBridgeEventBarriersForRequest(normalizedRequestId)
+        ) {
+          return;
+        }
+      }
+    },
+    [
+      drainGatewayBridgeEventsForRequest,
+      hasDeferredToolCallDeltasForRequest,
+      hasGatewayBridgeEventBarriersForRequest,
+      hasGatewayBridgeEventSendsForRequest,
+      hasPendingGatewayBridgeEventBatchesForRequest,
+      waitForGatewayBridgeEventBarriersForRequest,
+    ],
+  );
+
   const scheduleGatewayBridgeEventBatchFlush = useCallback(
     (batchKey: string) => {
       const pending = pendingGatewayBridgeEventBatchesRef.current.get(batchKey);
@@ -329,6 +576,9 @@ export function useGatewayBridgeBatcher() {
     (requestId: string, event: Record<string, unknown>, options?: GatewayBridgeSendOptions) => {
       const batchable = toBatchableGatewayBridgeEvent(event);
       if (!batchable) {
+        if (isTerminalGatewayBridgeEvent(event)) {
+          return queueTerminalGatewayBridgeEventForRequest(requestId, event, options);
+        }
         flushGatewayBridgeEventBatchesForRequest(requestId);
         discardDeferredToolCallDeltasForRequest(requestId);
         return sendGatewayBridgeEventForRequest(requestId, event, options);
@@ -371,6 +621,7 @@ export function useGatewayBridgeBatcher() {
       discardDeferredToolCallDeltasForRequest,
       flushGatewayBridgeEventBatchesForRequest,
       flushGatewayBridgeEventBatchForRequest,
+      queueTerminalGatewayBridgeEventForRequest,
       scheduleGatewayBridgeEventBatchFlush,
       sendGatewayBridgeEventForRequest,
     ],
@@ -397,6 +648,9 @@ export function useGatewayBridgeBatcher() {
       pendingGatewayBridgeEventBatchesRef.current.clear();
       deferredToolCallDeltaSendsRef.current.clear();
       inFlightToolCallDeltaBatchesRef.current.clear();
+      gatewayEventSendsByRequestRef.current.clear();
+      gatewayEventBarriersByRequestRef.current.clear();
+      gatewayEventBarrierChainByRequestRef.current.clear();
     },
     [],
   );
@@ -419,5 +673,6 @@ export function useGatewayBridgeBatcher() {
   return {
     queueGatewayBridgeEventForRequest,
     flushPendingGatewayBridgeEvents,
+    flushGatewayBridgeEventsForRequest,
   };
 }
