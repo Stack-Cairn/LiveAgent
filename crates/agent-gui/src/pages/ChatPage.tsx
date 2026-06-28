@@ -1439,7 +1439,8 @@ export function ChatPage(props: ChatPageProps) {
     scrollAreaRef,
     composerBusyRef,
   });
-  const { queueGatewayBridgeEventForRequest } = useGatewayBridgeBatcher();
+  const { queueGatewayBridgeEventForRequest, flushGatewayBridgeEventsForRequest } =
+    useGatewayBridgeBatcher();
   const {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
@@ -2295,13 +2296,29 @@ export function ChatPage(props: ChatPageProps) {
           );
           inFlightQueuedTurn = null;
         } else if (gatewayRequest) {
-          void invoke("gateway_chat_complete", {
-            request_id: gatewayRequest.requestId,
-            conversation_id: targetConversationId,
-            worker_id: gatewayWorkerId,
-          } as any).catch((error) => {
+          try {
+            await flushGatewayBridgeEventsForRequest(gatewayRequest.requestId);
+            await invoke("gateway_chat_complete", {
+              request_id: gatewayRequest.requestId,
+              conversation_id: targetConversationId,
+              worker_id: gatewayWorkerId,
+            } as any);
+          } catch (error) {
             console.warn("gateway_chat_complete failed", error);
-          });
+            await invoke("gateway_chat_fail", {
+              request_id: gatewayRequest.requestId,
+              conversation_id: targetConversationId,
+              error_code: "desktop_event_flush_failed",
+              message: asErrorMessage(
+                error,
+                "Failed to flush gateway chat events before completing queued request.",
+              ),
+              terminal: true,
+              worker_id: gatewayWorkerId,
+            } as any).catch((failError) => {
+              console.warn("gateway_chat_fail failed", failError);
+            });
+          }
         }
         return accepted;
       })
@@ -3441,6 +3458,7 @@ export function ChatPage(props: ChatPageProps) {
     ensureGatewayBridgeConversationReadyRef,
     sendActionRef,
     queueGatewayBridgeEventForRequest,
+    flushGatewayBridgeEventsForRequest,
     shouldQueueGatewayChatRequest,
     enqueueGatewayChatRequest,
     isConversationRunning,
@@ -3517,12 +3535,54 @@ export function ChatPage(props: ChatPageProps) {
       gatewayBridgeRequest?.requestId ?? createLocalGatewayChatRunId(conversationId);
     const gatewayBridgeWorkerId =
       gatewayBridgeRequest?.workerId ?? (mirrorsLocalRunToGateway ? "gui-live" : undefined);
+    let gatewayBridgeAbortSignal: AbortSignal | null = null;
+    const waitForLocalGatewayMirror = (sendResult: Promise<void> | void) => {
+      const sendPromise = Promise.resolve(sendResult);
+      const signal = gatewayBridgeAbortSignal;
+      if (!signal) {
+        return sendPromise;
+      }
+      if (signal.aborted) {
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve, reject) => {
+        const handleAbort = () => {
+          resolve();
+        };
+        signal.addEventListener("abort", handleAbort, { once: true });
+        sendPromise.then(
+          () => {
+            signal.removeEventListener("abort", handleAbort);
+            resolve();
+          },
+          (error) => {
+            signal.removeEventListener("abort", handleAbort);
+            reject(error);
+          },
+        );
+      });
+    };
+    const sendGatewayBridgeEventForRun = mirrorsLocalRunToGateway
+      ? (
+          requestId: string,
+          event: Record<string, unknown>,
+          options?: { workerId?: string },
+        ) => {
+          const sendPromise = waitForLocalGatewayMirror(
+            queueGatewayBridgeEventForRequest(requestId, event, options),
+          );
+          sendPromise.catch((error) => {
+            console.warn("local gateway chat event mirror failed", error);
+          });
+          return sendPromise;
+        }
+      : queueGatewayBridgeEventForRequest;
     const gatewayBridgeEvents = createGatewayBridgeEventController({
       conversationId,
       requestId: gatewayBridgeRequestId,
       workerId: gatewayBridgeWorkerId,
       enabled: Boolean(gatewayBridgeRequest) || hasRemoteGatewayTarget,
-      sendEvent: queueGatewayBridgeEventForRequest,
+      sendEvent: sendGatewayBridgeEventForRun,
       resolveErrorConversationId: () =>
         gatewayBridgeRequest?.conversationId ?? currentConversationIdRef.current,
     });
@@ -3696,6 +3756,7 @@ export function ChatPage(props: ChatPageProps) {
     const conversationThrottleState = getCompactionThrottleState(conversationId);
     const isConversationVisible = () => currentConversationIdRef.current === conversationId;
     let requestController = new AbortController();
+    gatewayBridgeAbortSignal = requestController.signal;
     const conversationDebugLogger = createStreamDebugLogger({
       enabled: effectiveIsAgentDevExecutionMode,
       conversationId,
@@ -3821,6 +3882,22 @@ export function ChatPage(props: ChatPageProps) {
         queueGatewayConversationActivity(conversationId, false, conversationCwd);
       }
     }
+    function finishAbortedBeforeRuntimeStart() {
+      if (!requestController.signal.aborted) {
+        return false;
+      }
+      gatewayBridgeEvents.queueEvent({
+        type: "error",
+        message: "Cancelled",
+        conversation_id: conversationId,
+      });
+      gatewayBridgeEvents.close();
+      updateToolStatus(null, transcriptStore, isConversationVisible());
+      clearAbortSnapshot(transcriptStore);
+      markConversationRunStopped();
+      requestQueuedChatTurnProcessing(conversationId);
+      return true;
+    }
     let localGatewayRunStarted = false;
     async function markLocalGatewayRunStarted() {
       if (!mirrorsLocalRunToGateway || localGatewayRunStarted) {
@@ -3836,9 +3913,18 @@ export function ChatPage(props: ChatPageProps) {
     markConversationRunStarted();
     if (mirrorsLocalRunToGateway) {
       try {
-        await markLocalGatewayRunStarted();
+        await waitForLocalGatewayMirror(markLocalGatewayRunStarted());
       } catch (error) {
+        const message = asErrorMessage(error, "Gateway 本地会话启动同步失败");
+        setConversationErrorState(message);
+        gatewayBridgeEvents.emitError(message, conversationId);
+        gatewayBridgeEvents.close();
+        markConversationRunStopped();
         console.warn("gateway_chat_mark_local_started failed", error);
+        return true;
+      }
+      if (finishAbortedBeforeRuntimeStart()) {
+        return true;
       }
     }
     if (overrides?.beforeRuntimeStart) {
@@ -3851,6 +3937,9 @@ export function ChatPage(props: ChatPageProps) {
         gatewayBridgeEvents.close();
         markConversationRunStopped();
         return false;
+      }
+      if (finishAbortedBeforeRuntimeStart()) {
+        return true;
       }
     }
 
@@ -3920,7 +4009,22 @@ export function ChatPage(props: ChatPageProps) {
         console.warn("gateway stream started before initial user turn was persisted");
       }
     }
-    await gatewayBridgeEvents.queueUserMessage(text, uploadedFiles);
+    try {
+      await gatewayBridgeEvents.queueUserMessage(text, uploadedFiles);
+    } catch (error) {
+      if (!mirrorsLocalRunToGateway) {
+        throw error;
+      }
+      const message = asErrorMessage(error, "Gateway 用户消息同步失败");
+      setConversationErrorState(message);
+      gatewayBridgeEvents.emitError(message, conversationId);
+      gatewayBridgeEvents.close();
+      markConversationRunStopped();
+      return true;
+    }
+    if (finishAbortedBeforeRuntimeStart()) {
+      return true;
+    }
     acknowledgeGatewayRunStarted();
     let activeCompactionRollback: {
       state: ConversationViewState;
@@ -4217,6 +4321,7 @@ export function ChatPage(props: ChatPageProps) {
 
     function renewRequestController() {
       requestController = new AbortController();
+      gatewayBridgeAbortSignal = requestController.signal;
       setConversationAbortController(conversationId, requestController);
       return requestController;
     }
@@ -4488,6 +4593,9 @@ export function ChatPage(props: ChatPageProps) {
         ...prev,
         hookWarning: null,
       }));
+    }
+    if (finishAbortedBeforeRuntimeStart()) {
+      return true;
     }
 
     try {

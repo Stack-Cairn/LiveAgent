@@ -1317,7 +1317,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     createdAt,
     titlePromise,
   });
-  gatewayBridgeEvents.queueEvent({
+  await gatewayBridgeEvents.queueEvent({
     type: "done",
     conversation_id: conversationId,
   });

@@ -559,7 +559,7 @@ impl GatewayController {
         worker_id: Option<String>,
     ) -> Result<(), String> {
         if !self.renew_remote_chat_request_lease(&request_id, worker_id.as_deref(), true)? {
-            return Ok(());
+            return Err("remote chat request lease is no longer active".to_string());
         }
         let envelope = build_chat_event_envelope(request_id, event)?;
         self.send_agent_envelope(envelope).await

@@ -23,6 +23,7 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
     event: Record<string, unknown>,
     options?: { workerId?: string },
   ) => Promise<void> | void;
+  flushGatewayBridgeEventsForRequest: (requestId: string) => Promise<void>;
   shouldQueueGatewayChatRequest: (
     conversationId: string,
     queuePolicy: "auto" | "append" | "interrupt",
@@ -162,6 +163,7 @@ export function useGatewayBridgeListeners(
     ensureGatewayBridgeConversationReadyRef,
     sendActionRef,
     queueGatewayBridgeEventForRequest,
+    flushGatewayBridgeEventsForRequest,
     shouldQueueGatewayChatRequest,
     enqueueGatewayChatRequest,
     isConversationRunning,
@@ -366,22 +368,24 @@ export function useGatewayBridgeListeners(
       );
     };
 
-    const failClaimedRequest = (
+    const failClaimedRequest = async (
       requestId: string,
       conversationId: string,
       errorCode: string,
       message: string,
     ) => {
-      void invoke("gateway_chat_fail", {
-        request_id: requestId,
-        conversation_id: conversationId || undefined,
-        error_code: errorCode,
-        message,
-        terminal: true,
-        worker_id: workerId,
-      } as any).catch((error) => {
+      try {
+        await invoke("gateway_chat_fail", {
+          request_id: requestId,
+          conversation_id: conversationId || undefined,
+          error_code: errorCode,
+          message,
+          terminal: true,
+          worker_id: workerId,
+        } as any);
+      } catch (error) {
         console.warn("gateway_chat_fail failed", error);
-      });
+      }
     };
 
     const markQueuedInGui = async (
@@ -433,7 +437,10 @@ export function useGatewayBridgeListeners(
             workerId,
           },
         );
-        failClaimedRequest(
+        await flushGatewayBridgeEventsForRequest(requestId).catch((error) => {
+          console.warn("flush gateway chat events failed", error);
+        });
+        await failClaimedRequest(
           requestId,
           targetConversationId,
           "empty_remote_message",
@@ -503,7 +510,10 @@ export function useGatewayBridgeListeners(
               workerId,
             },
           );
-          failClaimedRequest(
+          await flushGatewayBridgeEventsForRequest(requestId).catch((error) => {
+            console.warn("flush gateway chat events failed", error);
+          });
+          await failClaimedRequest(
             requestId,
             targetConversationId,
             "invalid_chat_command",
@@ -597,7 +607,10 @@ export function useGatewayBridgeListeners(
           afterInitialHistoryPersist: markRuntimeStarted,
         });
         if (!accepted) {
-          failClaimedRequest(
+          await flushGatewayBridgeEventsForRequest(requestId).catch((error) => {
+            console.warn("flush gateway chat events failed", error);
+          });
+          await failClaimedRequest(
             requestId,
             resolvedConversationId,
             "desktop_runtime_rejected",
@@ -605,6 +618,7 @@ export function useGatewayBridgeListeners(
           );
           return;
         }
+        await flushGatewayBridgeEventsForRequest(requestId);
         await invoke("gateway_chat_complete", {
           request_id: requestId,
           conversation_id: resolvedConversationId,
@@ -633,7 +647,10 @@ export function useGatewayBridgeListeners(
             workerId,
           },
         );
-        failClaimedRequest(
+        await flushGatewayBridgeEventsForRequest(requestId).catch((flushError) => {
+          console.warn("flush gateway chat events failed", flushError);
+        });
+        await failClaimedRequest(
           requestId,
           resolvedConversationId ||
             targetConversationId ||
@@ -778,6 +795,7 @@ export function useGatewayBridgeListeners(
     isConversationRunning,
     shouldQueueGatewayChatRequest,
     enqueueGatewayChatRequest,
+    flushGatewayBridgeEventsForRequest,
     queueGatewayBridgeEventForRequest,
     sendActionRef,
   ]);

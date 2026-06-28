@@ -487,7 +487,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     createdAt,
     titlePromise,
   });
-  gatewayBridgeEvents.queueEvent({
+  await gatewayBridgeEvents.queueEvent({
     type: "done",
     conversation_id: conversationId,
   });

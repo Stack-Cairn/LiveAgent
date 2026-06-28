@@ -12,9 +12,9 @@ function createActivityId(scope: string) {
 
 async function beginPowerActivity(activityId: string, reason: string) {
   await invoke("system_begin_power_activity", {
-    activityId,
+    activity_id: activityId,
     reason,
-    ttlMs: POWER_ACTIVITY_TTL_MS,
+    ttl_ms: POWER_ACTIVITY_TTL_MS,
   });
 }
 
@@ -40,7 +40,7 @@ export async function withPowerActivity<T>(scope: string, reason: string, run: (
       clearInterval(refreshTimer);
     }
     try {
-      await invoke("system_end_power_activity", { activityId });
+      await invoke("system_end_power_activity", { activity_id: activityId });
     } catch (error) {
       console.warn("system_end_power_activity failed", error);
     }
