@@ -8,6 +8,7 @@ const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const uiMessagesLoader = createWebModuleLoader({ rootDir });
 const uiMessages = uiMessagesLoader.loadModule("src/lib/chat/uiMessages.ts");
 const toolPreview = uiMessagesLoader.loadModule("src/lib/chat/toolPreview.ts");
+const fileChangeStats = uiMessagesLoader.loadModule("src/lib/chat/fileChangeStats.ts");
 const hostedSearch = uiMessagesLoader.loadModule("src/lib/chat/hostedSearch.ts");
 const uploadedImagePreview = uiMessagesLoader.loadModule("src/lib/chat/uploadedImagePreview.ts");
 const loader = createWebModuleLoader({
@@ -165,6 +166,106 @@ test("web uiMessages summarizes SendMessage calls", () => {
     subject: "Scope",
     messageChars: 33,
   });
+});
+
+test("web uiMessages keeps char counts out of Write/Edit summaries", () => {
+  assert.equal(
+    uiMessages.summarizeToolCall({
+      type: "toolCall",
+      id: "write-1",
+      name: "Write",
+      arguments: { path: "src/App.tsx", content: "line-1\nline-2" },
+    }),
+    "Write path=src/App.tsx mode=rewrite",
+  );
+  assert.equal(
+    uiMessages.summarizeToolCall({
+      type: "toolCall",
+      id: "edit-1",
+      name: "Edit",
+      arguments: {
+        path: "src/App.tsx",
+        old_string: "a".repeat(20),
+        new_string: "b".repeat(35),
+        expected_replacements: 1,
+        replace_all: true,
+      },
+    }),
+    "Edit path=src/App.tsx expected=1 replaceAll=true",
+  );
+});
+
+test("deriveFileChangeStats derives collapsed-bar line counts", () => {
+  const oldLines = Array.from({ length: 50 }, (_, index) => `line-${index}`);
+  const newLines = oldLines.slice();
+  newLines[25] = "line-25-changed";
+  assert.deepEqual(
+    fileChangeStats.deriveFileChangeStats({
+      type: "toolCall",
+      id: "edit-1",
+      name: "Edit",
+      arguments: { old_string: oldLines.join("\n"), new_string: newLines.join("\n") },
+    }),
+    { added: 1, removed: 1 },
+  );
+
+  assert.deepEqual(
+    fileChangeStats.deriveFileChangeStats({
+      type: "toolCall",
+      id: "edit-2",
+      name: "Edit",
+      arguments: {
+        old_string: "o".repeat(4000),
+        new_string: "n".repeat(4000),
+        __liveagent_stream_preview: {
+          v: 2,
+          progress: 17_000,
+          fields: {
+            old_string: { chars: 9000, lines: 300, truncated: true },
+            new_string: { chars: 8000, lines: 280, truncated: false },
+          },
+        },
+      },
+    }),
+    { added: 280, removed: 300 },
+  );
+
+  assert.deepEqual(
+    fileChangeStats.deriveFileChangeStats({
+      type: "toolCall",
+      id: "edit-3",
+      name: "Edit",
+      arguments: { old_string: "a\nb\nc" },
+    }),
+    { added: undefined, removed: 3 },
+  );
+
+  assert.deepEqual(
+    fileChangeStats.deriveFileChangeStats({
+      type: "toolCall",
+      id: "write-1",
+      name: "Write",
+      arguments: {
+        content: "preview…",
+        __liveagent_stream_preview: {
+          v: 2,
+          progress: 12_000,
+          fields: { content: { chars: 12_000, lines: 800, truncated: true } },
+        },
+      },
+    }),
+    { added: 800 },
+  );
+
+  assert.equal(
+    fileChangeStats.deriveFileChangeStats({
+      type: "toolCall",
+      id: "bash-1",
+      name: "Bash",
+      arguments: { command: "ls" },
+    }),
+    undefined,
+  );
 });
 
 test("buildRowsFromEntries emits user rows keyed by entry id", () => {

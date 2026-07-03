@@ -337,13 +337,7 @@ export function summarizeToolCall(
                               : null,
                           ]
                         : name === "Write"
-                          ? [
-                              path ? `path=${path}` : null,
-                              "mode=rewrite",
-                              typeof args.content === "string"
-                                ? `contentChars=${fileToolFieldChars(args, "content")}`
-                                : null,
-                            ]
+                          ? [path ? `path=${path}` : null, "mode=rewrite"]
                           : name === "Edit"
                             ? [
                                 path ? `path=${path}` : null,
@@ -351,12 +345,6 @@ export function summarizeToolCall(
                                   ? `expected=${args.expected_replacements}`
                                   : null,
                                 args.replace_all === true ? "replaceAll=true" : null,
-                                typeof args.old_string === "string"
-                                  ? `oldChars=${fileToolFieldChars(args, "old_string")}`
-                                  : null,
-                                typeof args.new_string === "string"
-                                  ? `newChars=${fileToolFieldChars(args, "new_string")}`
-                                  : null,
                               ]
                             : name === "List"
                               ? [

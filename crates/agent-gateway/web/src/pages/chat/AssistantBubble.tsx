@@ -38,6 +38,8 @@ import {
   type UiRound,
 } from "../../lib/chat/uiMessages";
 import { deriveFileToolPreview, FILE_TOOL_TEXT_FIELDS } from "../../lib/chat/toolPreview";
+import { deriveFileChangeStats } from "../../lib/chat/fileChangeStats";
+import { FileChangeBadge } from "../../components/chat/FileChangeBadge";
 import { EditDiffView } from "./EditDiffView";
 import { FileToolArgsDisplay } from "./FileToolArgs";
 import {
@@ -2428,6 +2430,10 @@ function ToolCallItem({
           includeName: false,
           includeManagerAction: false,
         });
+  const fileChangeStats = useMemo(
+    () => (isRedactedToolContent ? undefined : deriveFileChangeStats(item.toolCall)),
+    [isRedactedToolContent, item.toolCall],
+  );
   const meta = getToolMeta(item.toolCall.name);
   const ToolIcon = meta.Icon;
   const title = isRedactedToolContent
@@ -2504,6 +2510,10 @@ function ToolCallItem({
           <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground/55" title={toolArgsSummary}>
             {toolArgsSummary}
           </span>
+        ) : null}
+
+        {fileChangeStats ? (
+          <FileChangeBadge added={fileChangeStats.added} removed={fileChangeStats.removed} />
         ) : null}
       </div>
 

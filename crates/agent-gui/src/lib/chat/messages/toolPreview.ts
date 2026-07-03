@@ -89,6 +89,15 @@ export function fileToolFieldChars(args: Record<string, unknown>, field: string)
   return typeof value === "string" ? value.length : undefined;
 }
 
+// True line count of a preview field: producer meta when present, else the
+// raw string's line count.
+export function fileToolFieldLines(args: Record<string, unknown>, field: string) {
+  const metaLines = readStreamPreviewMeta(args)?.fields[field]?.lines;
+  if (metaLines !== undefined) return metaLines;
+  const value = args[field];
+  return typeof value === "string" ? countTextLines(value) : undefined;
+}
+
 // Monotonic progress of a tool call's args; undefined for untracked tools
 // (merge behavior unchanged there).
 export function toolArgsProgress(name: string, args: Record<string, unknown>) {

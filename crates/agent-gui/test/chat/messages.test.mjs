@@ -1454,7 +1454,16 @@ test("tool call summaries and argument display avoid dumping large payloads", ()
 
   assert.equal(
     uiMessages.summarizeToolCall(editCall),
-    "Edit path=src/App.tsx expected=1 replaceAll=true oldChars=20 newChars=35",
+    "Edit path=src/App.tsx expected=1 replaceAll=true",
+  );
+  assert.equal(
+    uiMessages.summarizeToolCall({
+      type: "toolCall",
+      id: "write-1",
+      name: "Write",
+      arguments: { path: "src/App.tsx", content: "line-1\nline-2" },
+    }),
+    "Write path=src/App.tsx mode=rewrite",
   );
   assert.deepEqual(uiMessages.toolCallArgsForDisplay(editCall), {
     path: "src/App.tsx",

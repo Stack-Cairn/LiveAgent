@@ -1,8 +1,10 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 
+import { FileChangeBadge } from "../../../../components/chat/FileChangeBadge";
 import { ChevronRight, Search } from "../../../../components/icons";
 import { useLocale } from "../../../../i18n";
+import { deriveFileChangeStats } from "../../../../lib/chat/messages/fileChangeStats";
 import {
   deriveFileToolPreview,
   FILE_TOOL_TEXT_FIELDS,
@@ -296,6 +298,7 @@ function ToolCallItem({
           includeName: false,
           includeManagerAction: false,
         });
+  const fileChangeStats = useMemo(() => deriveFileChangeStats(item.toolCall), [item.toolCall]);
   const meta = getToolMeta(item.toolCall.name);
   const ToolIcon = meta.Icon;
   const title = getToolDisplayTitle(item.toolCall);
@@ -402,6 +405,10 @@ function ToolCallItem({
             >
               {toolArgsSummary}
             </span>
+          ) : null}
+
+          {fileChangeStats ? (
+            <FileChangeBadge added={fileChangeStats.added} removed={fileChangeStats.removed} />
           ) : null}
         </div>
 
