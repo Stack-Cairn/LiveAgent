@@ -46,7 +46,7 @@ WebUI 是 Gateway 承载的浏览器端操作台。它复用/复制了大量 GUI
 | 维度 | 说明 |
 |---|---|
 | 视觉/交互 | Settings、Skills Hub、MCP Hub、Chat sidebar、AssistantBubble 等与 GUI 保持 parity。 |
-| 源码组织 | WebUI 保留自己的复制/镜像文件，不直接从 `agent-gui` import 大量源码。 |
+| 源码组织 | WebUI 保留自己的复制/镜像文件，不直接从 `agent-gui` import 大量源码。右侧边栏（project-tools）与 `lib/workspace-activity` 的镜像文件必须逐字节一致：清单在 `scripts/mirror-manifest.json`，CI 以 `node scripts/check-mirror.mjs` 强制校验；平台差异只允许出现在两端各自的适配文件（ChatPage/GatewayApp、workspace-activity client、SshTunnelPanel）。 |
 | Tauri API | WebUI 通过 Vite alias 指向 shims，避免真实 Tauri 依赖进入浏览器运行时。 |
 | 数据通道 | GUI 走 Tauri invoke；WebUI 走 Gateway WebSocket/HTTP。 |
 | 执行权限 | GUI 可以触发本地工具；WebUI 只能请求桌面端代执行。 |
@@ -82,5 +82,5 @@ WebUI 是 Gateway 承载的浏览器端操作台。它复用/复制了大量 GUI
 |---|---|
 | 不直接执行工具 | Shell、FS、MCP、Memory mutation、Cron prompt 都必须回到桌面端。 |
 | 依赖 Gateway 在线 | Gateway 或 Desktop offline 时，Chat/Settings/History 能力受限。 |
-| 复制维护成本 | GUI/WebUI 镜像组件需要双端一起检查，避免交互漂移。 |
+| 复制维护成本 | 列入 `scripts/mirror-manifest.json` 的文件由 CI 逐字节校验，改动必须双端同 PR 落地；未列入清单的镜像组件仍需双端一起检查。 |
 | 浏览器存储不是权威 | Settings 和 history 的真实来源仍是桌面端 SQLite 与 Gateway sync。 |
