@@ -6,11 +6,9 @@ import { getMessageText } from "../messages/uiMessages";
 
 const FALLBACK_TITLE_MAX_CHARS = 48;
 const TITLE_LOOKAHEAD_TIMEOUT_MS = 1_200;
-const PENDING_CONVERSATION_TITLE = "新会话";
 const MODEL_GENERATING_STATUS_PATTERN = /^第\s*\d+\s*轮：模型生成中\.\.\.$/;
 
 export const VIBING_STATUS = "Vibing...";
-export { PENDING_CONVERSATION_TITLE };
 
 export function buildModelOptions(settings: AppSettings): ModelOption[] {
   const options: ModelOption[] = [];
@@ -95,39 +93,10 @@ export function isAbortLikeError(error: unknown) {
   );
 }
 
-export function sortHistoryItems(items: ChatHistorySummary[]) {
-  return [...items].sort((a, b) => {
-    const aPinned = a.isPinned === true;
-    const bPinned = b.isPinned === true;
-    if (aPinned !== bPinned) {
-      return aPinned ? -1 : 1;
-    }
-    if (aPinned && bPinned) {
-      const pinnedDelta = (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0);
-      if (pinnedDelta !== 0) return pinnedDelta;
-    }
-    const updatedDelta = b.updatedAt - a.updatedAt;
-    if (updatedDelta !== 0) return updatedDelta;
-    return a.id.localeCompare(b.id);
-  });
-}
-
-export function mergeHistoryItem(items: ChatHistorySummary[], nextItem: ChatHistorySummary) {
-  const existing = items.find((item) => item.id === nextItem.id);
-  const merged = existing
-    ? {
-        ...existing,
-        ...nextItem,
-        isPinned: nextItem.isPinned ?? existing.isPinned,
-        pinnedAt: "pinnedAt" in nextItem ? nextItem.pinnedAt : existing.pinnedAt,
-        isShared: nextItem.isShared ?? existing.isShared,
-      }
-    : nextItem;
-  return sortHistoryItems([merged, ...items.filter((item) => item.id !== nextItem.id)]);
-}
-
 export function createPendingHistoryItem(params: {
   conversationId: string;
+  // The localized pending title (t("chat.pendingTitle")) — callers own i18n.
+  title: string;
   providerId: string;
   model: string;
   sessionId?: string;
@@ -137,6 +106,7 @@ export function createPendingHistoryItem(params: {
 }) {
   const {
     conversationId,
+    title,
     providerId,
     model,
     sessionId,
@@ -146,7 +116,7 @@ export function createPendingHistoryItem(params: {
   } = params;
   return {
     id: conversationId,
-    title: PENDING_CONVERSATION_TITLE,
+    title,
     providerId,
     model,
     sessionId,

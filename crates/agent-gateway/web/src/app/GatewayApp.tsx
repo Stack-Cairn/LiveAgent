@@ -6,10 +6,8 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { flushSync } from "react-dom";
-import { ChatHistorySidebar } from "@/components/chat/ChatHistorySidebar";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
@@ -26,12 +24,8 @@ import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LocaleContext, t as translate } from "@/i18n";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
-import { buildModelOptions, sortHistoryItems } from "@/lib/chat/chatPageHelpers";
+import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
-import {
-  filterConversationSummariesForScope,
-  historyConversationMatchesFilter,
-} from "@/lib/chat/historyListScope";
 import { createActivityStore } from "@/lib/chat/stream/activityStore";
 import {
   type ChatCommandOutcome,
@@ -62,11 +56,8 @@ import type {
   ChatEvent,
   ChatQueueItemSummary,
   ChatQueueSnapshot,
-  ConversationSummary,
-  GatewayHistoryEvent,
   HistoryDetail,
   HistoryShareStatus,
-  HistoryWorkdirSummary,
 } from "@/lib/gatewayTypes";
 import { parseHistoryMessagesJsonAsync } from "@/lib/historyParser";
 import { memoryDeleteProject } from "@/lib/memory/api";
@@ -124,18 +115,19 @@ import { GatewayTranscript } from "@/components/GatewayTranscript";
 import { useGatewayScrollAffordance } from "@/components/useGatewayScrollAffordance";
 import { parseHistoryShareToken } from "@/lib/historyShare";
 import {
-  applyGatewayHistoryEvent,
-  reconcileConversationSummaries,
-  upsertConversationSummary,
-} from "@/lib/historySync";
+  type ConversationOpenState,
+  createConversationOpenController,
+} from "@/lib/sidebar/openController";
+import { sortSidebarConversations } from "@/lib/sidebar/reconcile";
+import { createSidebarStore } from "@/lib/sidebar/store";
+import { useSidebarSelector } from "@/lib/sidebar/useSidebarSelector";
 import {
-  applyWorkspaceProjectConversationActivityMap,
-  buildWorkspaceProjectActivityUpdatedAts,
-  findWorkspaceProject,
-  mergeWorkspaceProjectActivityUpdatedAts,
-  mergeWorkspaceProjectsWithHistory,
-  workspaceProjectActivityUpdatedAtsEqual,
-} from "@/lib/workspaceProjects";
+  createIdleSidebarBackend,
+  createWebSidebarBackend,
+  normalizeGatewayConversationSummary,
+  normalizeRunningConversationItems,
+} from "@/lib/sidebar/webSidebarBackend";
+import { findWorkspaceProject, mergeWorkspaceProjectsWithHistory } from "@/lib/workspaceProjects";
 import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
 import { SharedHistoryPage } from "@/pages/SharedHistoryPage";
@@ -149,7 +141,6 @@ import {
   isChatEventTitleFinal,
   readChatEventTitle,
   readTunnelManagerToolChange,
-  waitForMinimumHistoryListLoading,
 } from "./chatEventUtils";
 import {
   CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS,
@@ -159,8 +150,6 @@ import {
   DEFAULT_BROWSER_TITLE,
   HISTORY_DETAIL_INITIAL_MAX_MESSAGES,
   HISTORY_LIST_PAGE_SIZE,
-  HISTORY_SWITCH_OVERLAY_MIN_MS,
-  HISTORY_TITLE_POSITION_LOCK_MS,
   MAX_UPLOAD_FILES,
   MCP_HUB_BROWSER_TITLE,
   NEW_CONVERSATION_BROWSER_TITLE,
@@ -176,61 +165,31 @@ import {
   createWorkspaceProjectFromPath,
   formatTranslation,
   getDefaultWorkspaceProjectPath,
-  hasLocalDraftConversation,
   isMobileSidebarLayout,
-  pickConversationSummary,
-  resolveConversationTitle,
   resolveVisibleConversationId,
   shouldOpenSidebarByDefault,
-  toChatHistorySummary,
 } from "./historyUtils";
 import { useGatewayClients } from "./hooks/useGatewayClients";
 import { useGatewaySession } from "./hooks/useGatewaySession";
 import { useGatewaySettingsSync } from "./hooks/useGatewaySettingsSync";
 import { usePendingUploads } from "./hooks/usePendingUploads";
 import { useProjectToolsRuntime } from "./hooks/useProjectToolsRuntime";
-import type {
-  ModelProviderSource,
-  OverlayState,
-  ReloadHistoryOptions,
-  SendChatFn,
-  SendChatOptions,
-} from "./types";
+import { GatewaySidebarContainer } from "./sidebar/GatewaySidebarContainer";
+import type { ModelProviderSource, OverlayState, SendChatFn, SendChatOptions } from "./types";
 import { UserMenu } from "./UserMenu";
 import { WorkspaceOverlayHost } from "./WorkspaceOverlayHost";
 
-// history.list `running_conversations` items → activity store hydration shape.
-function normalizeActivityHydrationItems(items: readonly unknown[] | undefined) {
-  const normalized: Array<{
-    conversationId: string;
-    runId: string;
-    state?: string;
-    workdir?: string | null;
-    updatedAt?: number;
-  }> = [];
-  for (const value of items ?? []) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      continue;
-    }
-    const source = value as Record<string, unknown>;
-    const conversationId =
-      typeof source.conversation_id === "string" ? source.conversation_id.trim() : "";
-    const runId = typeof source.run_id === "string" ? source.run_id.trim() : "";
-    if (!conversationId || !runId) {
-      continue;
-    }
-    normalized.push({
-      conversationId,
-      runId,
-      state: typeof source.state === "string" ? source.state : undefined,
-      workdir: typeof source.cwd === "string" ? source.cwd : null,
-      updatedAt:
-        typeof source.updated_at === "number" && Number.isFinite(source.updated_at)
-          ? source.updated_at
-          : undefined,
-    });
+// Two-phase open: schedule the quiet full hydration at browser idle time,
+// with a hard timeout so it still runs on busy pages (mirrors the GUI helper
+// semantics).
+const HYDRATE_IDLE_TIMEOUT_MS = 1_500;
+function scheduleIdleTask(task: () => void): () => void {
+  if (typeof window.requestIdleCallback === "function") {
+    const handle = window.requestIdleCallback(() => task(), { timeout: HYDRATE_IDLE_TIMEOUT_MS });
+    return () => window.cancelIdleCallback(handle);
   }
-  return normalized;
+  const timeoutId = window.setTimeout(task, 300);
+  return () => window.clearTimeout(timeoutId);
 }
 
 export default function GatewayApp() {
@@ -250,31 +209,28 @@ export default function GatewayApp() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState("");
   const [chatError, setChatError] = useState<string | null>(null);
-  const [historyListLoading, setHistoryListLoading] = useState(false);
-  const [historyListLoadingMore, setHistoryListLoadingMore] = useState(false);
-  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
-  const [historyMutating, setHistoryMutating] = useState(false);
-  const [historyItems, setHistoryItems] = useState<ConversationSummary[]>([]);
-  const [historyWorkdirs, setHistoryWorkdirs] = useState<HistoryWorkdirSummary[]>([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
-  const [historyHasMore, setHistoryHasMore] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  // Sidebar errors raised outside the sidebar store (project removal flow).
+  const [sidebarActionError, setSidebarActionError] = useState<string | null>(null);
   const [queuedChatTurns, setQueuedChatTurns] = useState<ChatQueueItemSummary[]>([]);
   const [, setChatQueueRevision] = useState(0);
-  const [projectActivityUpdatedAtOverrides, setProjectActivityUpdatedAtOverrides] = useState<
-    ReadonlyMap<string, number>
-  >(() => new Map());
   const [selectedHistoryId, setSelectedHistoryId] = useState("");
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
+  // Two-phase conversation open (openController): "opening" gates the
+  // composer/transcript loading affordances; showOverlay drives the switch
+  // overlay (appears only after ~150ms of still-loading).
+  const [conversationOpenState, setConversationOpenState] = useState<ConversationOpenState>({
+    conversationId: "",
+    phase: "idle",
+    showOverlay: false,
+    errorCode: null,
+  });
+  // Explicit "load full history" request from the transcript header.
+  const [fullHistoryLoading, setFullHistoryLoading] = useState(false);
   // Bumped whenever the command pipeline's pending set changes so busy state
   // re-derives.
   const [pendingCommandRevision, setPendingCommandRevision] = useState(0);
   // Bumped inside flushSync to synchronously commit a settled-tail fold.
   const [, setFoldFlushTick] = useState(0);
-  const [historySwitchOverlay, setHistorySwitchOverlay] = useState<{
-    conversationId: string;
-    startedAt: number;
-  } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
@@ -283,10 +239,6 @@ export default function GatewayApp() {
     useGatewaySettingsSync({ token, api });
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
   const isAgentMode = settings.system.executionMode !== "text";
-  const workspaceProjects = useMemo(
-    () => mergeWorkspaceProjectsWithHistory(settings.system, historyWorkdirs),
-    [historyWorkdirs, settings.system],
-  );
   const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>(
     () => settings.system.activeWorkspaceProjectId?.trim() || DEFAULT_WORKSPACE_PROJECT_ID,
   );
@@ -294,29 +246,7 @@ export default function GatewayApp() {
     () => new Set(settings.system.missingWorkspaceProjectPaths.map(workspaceProjectPathKey)),
     [settings.system.missingWorkspaceProjectPaths],
   );
-  const activeWorkspaceProject = useMemo(
-    () => findWorkspaceProject(workspaceProjects, activeWorkspaceProjectId),
-    [activeWorkspaceProjectId, workspaceProjects],
-  );
-  useEffect(() => {
-    if (activeWorkspaceProject?.id && activeWorkspaceProject.id !== activeWorkspaceProjectId) {
-      setActiveWorkspaceProjectId(activeWorkspaceProject.id);
-    }
-  }, [activeWorkspaceProject?.id, activeWorkspaceProjectId]);
-  const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
-  const historyListFilter = useMemo(
-    () =>
-      isAgentMode
-        ? { cwd: activeWorkspaceProjectPath || "__liveagent_no_project__" }
-        : { cwdEmpty: true },
-    [activeWorkspaceProjectPath, isAgentMode],
-  );
-  const historyScopeKey = isAgentMode
-    ? `cwd:${activeWorkspaceProjectPath || "__liveagent_no_project__"}`
-    : "cwd-empty";
   const [sidebarOpen, setSidebarOpen] = useState(shouldOpenSidebarByDefault);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
   const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
   const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [shareConversation, setShareConversation] = useState<ChatHistorySummary | null>(null);
@@ -362,27 +292,16 @@ export default function GatewayApp() {
   const chatQueueRevisionRef = useRef(0);
   const queuedChatEditSessionRef = useRef<{ itemId: string; revision: number } | null>(null);
   const selectedHistoryRef = useRef(selectedHistory);
-  const historyItemsRef = useRef(historyItems);
-  const historyTotalRef = useRef(historyTotal);
-  const historyHasMoreRef = useRef(historyHasMore);
-  const historyListFilterRef = useRef(historyListFilter);
-  const historyScopeKeyRef = useRef(historyScopeKey);
-  const nextHistoryPageRef = useRef(1);
-  const historyListPageLoadingRef = useRef(false);
   const sharedHistoryItemsRef = useRef<ChatHistorySummary[]>([]);
   const sharedHistoryListRequestRef = useRef<Promise<ChatHistorySummary[]> | null>(null);
   // Per-conversation runtime workdir (drafts have no persisted summary yet).
   const conversationWorkdirsRef = useRef<Map<string, string>>(new Map());
   const displayedConversationWorkdirRef = useRef("");
   const displayedConversationBusyRef = useRef(false);
-  const optimisticTitleConversationIdsRef = useRef<Set<string>>(new Set());
-  const titlePositionLockedConversationIdsRef = useRef<Set<string>>(new Set());
-  const titlePositionLockTimeoutsRef = useRef<Map<string, number>>(new Map());
   const historyLoadSequenceRef = useRef(0);
   const visibleConversationRevisionRef = useRef(0);
   const previousDisplayedConversationIdRef = useRef("");
   const pendingDisplayedConversationAutoBottomRef = useRef<string | null>(null);
-  const draftConversationPinnedRef = useRef(false);
   const protectedConversationRef = useRef("");
   const chatRuntimePreparePromiseRef = useRef<Promise<AgentStatus> | null>(null);
   const submitInFlightRef = useRef(false);
@@ -391,9 +310,6 @@ export default function GatewayApp() {
   const sendChatRef = useRef<SendChatFn | null>(null);
   const isImportingPastedTextRef = useRef(false);
   const resetProjectToolsRuntimeRef = useRef(() => undefined as void);
-  const persistProjectConversationActivityRef = useRef(
-    (_activity: ReadonlyMap<string, number>) => undefined as void,
-  );
 
   // --- Chat streaming infrastructure (Phase 4) -----------------------------
   // Transcript stores (one per conversation), the global activity map, and
@@ -434,6 +350,109 @@ export default function GatewayApp() {
       }),
     [transcriptStoreRegistry],
   );
+
+  // --- Sidebar state layer --------------------------------------------------
+  // One external store owns the whole sidebar domain (list, workdirs, running
+  // set, per-row mutations); GatewayApp only creates it, feeds it the scope,
+  // and makes imperative peek/upsertLocal/removeLocal calls. All rendering
+  // subscriptions live in <GatewaySidebarContainer/>.
+  const getSidebarProtectedConversationIds = useCallback(() => {
+    // Authoritative reconciles keep only these ids when the server list omits
+    // them: in-flight commands, the protected (displayed) conversation, and
+    // running conversations. Never a blanket retain-all — that resurrects
+    // deletions made by other clients while this one was offline.
+    const ids = new Set<string>(chatCommandPipeline.pendingConversationIds());
+    const protectedId = protectedConversationRef.current.trim();
+    if (protectedId && protectedId !== PROTECTED_DRAFT_CONVERSATION) {
+      ids.add(protectedId);
+    }
+    for (const id of activityStore.getSnapshot().activities.keys()) {
+      ids.add(id);
+    }
+    return ids;
+  }, [activityStore, chatCommandPipeline]);
+  const getActivityKeepConversationIds = useCallback(
+    () => chatCommandPipeline.pendingConversationIds(),
+    [chatCommandPipeline],
+  );
+  const sidebarStore = useMemo(
+    () =>
+      createSidebarStore(
+        api
+          ? createWebSidebarBackend({
+              api,
+              activityStore,
+              getProtectedConversationIds: getSidebarProtectedConversationIds,
+              getActivityKeepConversationIds,
+            })
+          : createIdleSidebarBackend(),
+        { pageSize: HISTORY_LIST_PAGE_SIZE },
+      ),
+    [activityStore, api, getActivityKeepConversationIds, getSidebarProtectedConversationIds],
+  );
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    sidebarStore.start();
+    return () => {
+      sidebarStore.stop();
+    };
+  }, [api, sidebarStore]);
+
+  // Narrow app-root subscriptions: workdirs (rare commits — project merge
+  // inputs) and the byId index (list commits only; never running/idle ticks).
+  const sidebarWorkdirs = useSidebarSelector(sidebarStore, (snapshot) => snapshot.workdirs);
+  const sidebarConversationsById = useSidebarSelector(sidebarStore, (snapshot) => snapshot.byId);
+
+  const workspaceProjects = useMemo(
+    () => mergeWorkspaceProjectsWithHistory(settings.system, sidebarWorkdirs),
+    [settings.system, sidebarWorkdirs],
+  );
+  const activeWorkspaceProject = useMemo(
+    () => findWorkspaceProject(workspaceProjects, activeWorkspaceProjectId),
+    [activeWorkspaceProjectId, workspaceProjects],
+  );
+  useEffect(() => {
+    if (activeWorkspaceProject?.id && activeWorkspaceProject.id !== activeWorkspaceProjectId) {
+      setActiveWorkspaceProjectId(activeWorkspaceProject.id);
+    }
+  }, [activeWorkspaceProject?.id, activeWorkspaceProjectId]);
+  const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
+
+  // Scope derivation: agent mode with a project → that workdir; agent mode
+  // without a project → "none" (resolves to an empty list locally, no wire
+  // sentinel); text mode → unscoped.
+  useEffect(() => {
+    sidebarStore.setScope(
+      isAgentMode
+        ? activeWorkspaceProjectPath
+          ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
+          : { kind: "none" }
+        : { kind: "unscoped" },
+    );
+  }, [activeWorkspaceProjectPath, isAgentMode, sidebarStore]);
+
+  // Two-phase open controller: phase 1 paints the message tail fast, phase 2
+  // hydrates the full transcript at idle. Deps go through refs (assigned per
+  // render) so the controller instance stays stable.
+  const openInitialRef = useRef<(id: string, seq: number) => Promise<"cache-hit" | "painted">>(() =>
+    Promise.resolve("painted"),
+  );
+  const hydrateFullRef = useRef<(id: string, seq: number) => Promise<void>>(() =>
+    Promise.resolve(),
+  );
+  const openController = useMemo(
+    () =>
+      createConversationOpenController({
+        openInitial: (id, seq) => openInitialRef.current(id, seq),
+        hydrateFull: (id, seq) => hydrateFullRef.current(id, seq),
+        scheduleIdle: scheduleIdleTask,
+        onStateChange: setConversationOpenState,
+      }),
+    [],
+  );
+
   const {
     pendingUploadedFiles,
     pendingUploadedFilesRef,
@@ -488,48 +507,12 @@ export default function GatewayApp() {
     setQueuedChatTurns(snapshot.items.slice());
   }, []);
 
-  const recordProjectActivity = useCallback(
-    (workdir?: string | null, updatedAt?: number | null) => {
-      const pathKey = workspaceProjectPathKey(workdir ?? "");
-      if (!pathKey) {
-        return;
-      }
-      const nextUpdatedAt =
-        typeof updatedAt === "number" && Number.isFinite(updatedAt) && updatedAt > 0
-          ? updatedAt
-          : Date.now();
-      setProjectActivityUpdatedAtOverrides((current) => {
-        if ((current.get(pathKey) ?? 0) >= nextUpdatedAt) {
-          return current;
-        }
-        return mergeWorkspaceProjectActivityUpdatedAts(
-          current,
-          new Map([[pathKey, nextUpdatedAt]]),
-        );
-      });
-      persistProjectConversationActivityRef.current(new Map([[pathKey, nextUpdatedAt]]));
-    },
-    [],
-  );
-
   useEffect(() => {
     if (!api) return;
     return api.subscribeChatQueue((snapshot) => {
       applyChatQueueSnapshot(snapshot);
     });
   }, [api, applyChatQueueSnapshot]);
-
-  useEffect(() => {
-    const historyActivity = buildWorkspaceProjectActivityUpdatedAts(historyWorkdirs);
-    if (historyActivity.size === 0) {
-      return;
-    }
-    setProjectActivityUpdatedAtOverrides((current) => {
-      const next = mergeWorkspaceProjectActivityUpdatedAts(current, historyActivity);
-      return workspaceProjectActivityUpdatedAtsEqual(current, next) ? current : next;
-    });
-    persistProjectConversationActivityRef.current(historyActivity);
-  }, [historyWorkdirs]);
 
   function getVisibleComposerConversationId() {
     return resolveVisibleConversationId(selectedHistoryIdRef.current, conversationIdRef.current);
@@ -559,93 +542,6 @@ export default function GatewayApp() {
     composerDraftCacheRef.current.delete(targetConversationId);
   }
 
-  const commitHistoryListState = useCallback(
-    (conversations: ConversationSummary[], total: number, nextPage: number, hasMore?: boolean) => {
-      const scopedConversations = filterConversationSummariesForScope(
-        conversations,
-        historyListFilterRef.current,
-      );
-      const nextTotal = Math.max(0, total);
-      const nextHasMore = hasMore ?? scopedConversations.length < nextTotal;
-
-      historyItemsRef.current = scopedConversations;
-      historyTotalRef.current = nextTotal;
-      historyHasMoreRef.current = nextHasMore;
-      nextHistoryPageRef.current = Math.max(1, nextPage);
-      setHistoryItems(scopedConversations);
-      setHistoryTotal(nextTotal);
-      setHistoryHasMore(nextHasMore);
-    },
-    [],
-  );
-
-  const updateHistoryItems = useCallback(
-    (updater: (current: ConversationSummary[]) => ConversationSummary[]) => {
-      const current = historyItemsRef.current;
-      const next = filterConversationSummariesForScope(
-        updater(current),
-        historyListFilterRef.current,
-      );
-      const delta = next.length - current.length;
-      commitHistoryListState(
-        next,
-        Math.max(next.length, historyTotalRef.current + delta),
-        nextHistoryPageRef.current,
-      );
-    },
-    [commitHistoryListState],
-  );
-
-  const unlockHistoryTitlePosition = useCallback((conversationIdValue: string) => {
-    const conversationId = conversationIdValue.trim();
-    if (!conversationId) {
-      return;
-    }
-    const timeoutId = titlePositionLockTimeoutsRef.current.get(conversationId);
-    if (timeoutId !== undefined) {
-      window.clearTimeout(timeoutId);
-      titlePositionLockTimeoutsRef.current.delete(conversationId);
-    }
-    titlePositionLockedConversationIdsRef.current.delete(conversationId);
-  }, []);
-
-  const lockHistoryTitlePosition = useCallback((conversationIdValue: string) => {
-    const conversationId = conversationIdValue.trim();
-    if (!conversationId) {
-      return;
-    }
-
-    const existingTimeoutId = titlePositionLockTimeoutsRef.current.get(conversationId);
-    if (existingTimeoutId !== undefined) {
-      window.clearTimeout(existingTimeoutId);
-    }
-
-    titlePositionLockedConversationIdsRef.current.add(conversationId);
-    const timeoutId = window.setTimeout(() => {
-      titlePositionLockTimeoutsRef.current.delete(conversationId);
-      titlePositionLockedConversationIdsRef.current.delete(conversationId);
-    }, HISTORY_TITLE_POSITION_LOCK_MS);
-    titlePositionLockTimeoutsRef.current.set(conversationId, timeoutId);
-  }, []);
-
-  const getHistoryPositionLockedConversationIds = useCallback(() => {
-    const conversationIds = new Set([
-      ...optimisticTitleConversationIdsRef.current,
-      ...titlePositionLockedConversationIdsRef.current,
-    ]);
-    return conversationIds;
-  }, []);
-
-  const clearHistoryTitlePositionLocks = useCallback(() => {
-    for (const timeoutId of titlePositionLockTimeoutsRef.current.values()) {
-      window.clearTimeout(timeoutId);
-    }
-    titlePositionLockTimeoutsRef.current.clear();
-    titlePositionLockedConversationIdsRef.current.clear();
-  }, []);
-
-  useEffect(() => clearHistoryTitlePositionLocks, [clearHistoryTitlePositionLocks]);
-
   useEffect(() => {
     conversationIdRef.current = conversationId;
   }, [conversationId]);
@@ -662,30 +558,6 @@ export default function GatewayApp() {
     selectedHistoryRef.current = selectedHistory;
   }, [selectedHistory]);
 
-  useEffect(() => {
-    historyItemsRef.current = historyItems;
-  }, [historyItems]);
-
-  useEffect(() => {
-    historyTotalRef.current = historyTotal;
-  }, [historyTotal]);
-
-  useEffect(() => {
-    historyHasMoreRef.current = historyHasMore;
-  }, [historyHasMore]);
-
-  useEffect(() => {
-    historyListFilterRef.current = historyListFilter;
-    if (historyScopeKeyRef.current === historyScopeKey) {
-      return;
-    }
-    historyScopeKeyRef.current = historyScopeKey;
-    historyListPageLoadingRef.current = false;
-    commitHistoryListState([], 0, 1, false);
-    setHistoryError(null);
-    setHistoryListLoading(true);
-  }, [commitHistoryListState, historyListFilter, historyScopeKey]);
-
   function getDisplayedConversationId() {
     return resolveVisibleConversationId(
       selectedHistoryIdRef.current,
@@ -699,40 +571,35 @@ export default function GatewayApp() {
   }
 
   const applyLiveConversationTitle = useCallback(
-    (
-      targetConversationId: string,
-      nextTitle: string,
-      options?: {
-        isFinal?: boolean;
-      },
-    ) => {
+    (targetConversationId: string, nextTitle: string) => {
       const conversationIdValue = targetConversationId.trim();
       const title = nextTitle.trim();
       if (!conversationIdValue || !title) {
         return;
       }
 
-      const updatedAt = Date.now();
-      lockHistoryTitlePosition(conversationIdValue);
-      if (options?.isFinal) {
-        optimisticTitleConversationIdsRef.current.delete(conversationIdValue);
-      }
-      updateHistoryItems((current) => {
-        const existing = pickConversationSummary(current, conversationIdValue);
-        return upsertConversationSummary(
-          current,
-          {
-            id: conversationIdValue,
-            title,
-            created_at: existing?.created_at ?? updatedAt,
-            updated_at: existing?.updated_at ?? updatedAt,
-            message_count: existing?.message_count ?? 1,
-          },
-          { preserveExistingUpdatedAt: existing !== null },
-        );
+      // Position-preserving local upsert: reuse the existing row's updatedAt
+      // so a live title never reorders the sidebar (the store's own position
+      // locks cover mutation confirmations).
+      const now = Date.now();
+      const existing = sidebarStore.peek(conversationIdValue);
+      sidebarStore.upsertLocal({
+        id: conversationIdValue,
+        title,
+        providerId: existing?.providerId ?? "",
+        model: existing?.model ?? "",
+        sessionId: existing?.sessionId,
+        cwd: existing?.cwd,
+        messageCount: existing?.messageCount ?? 1,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: existing?.updatedAt ?? now,
+        isPinned: existing?.isPinned,
+        pinnedAt: existing ? existing.pinnedAt : null,
+        isShared: existing?.isShared,
+        isPending: existing?.isPending,
       });
     },
-    [lockHistoryTitlePosition, updateHistoryItems],
+    [sidebarStore],
   );
 
   // Total entry count of a conversation's transcript store.
@@ -908,54 +775,30 @@ export default function GatewayApp() {
         protectedConversationRef.current = nextId;
       }
 
-      const shouldPreserveOptimisticTitle =
-        optimisticTitleConversationIdsRef.current.delete(previousId);
-      if (shouldPreserveOptimisticTitle) {
-        optimisticTitleConversationIdsRef.current.add(nextId);
-      }
-      if (titlePositionLockedConversationIdsRef.current.has(previousId)) {
-        unlockHistoryTitlePosition(previousId);
-        lockHistoryTitlePosition(nextId);
-      }
-
-      updateHistoryItems((current) => {
-        const previousSummary = pickConversationSummary(current, previousId);
-        if (!previousSummary) {
-          return current;
-        }
-
-        const nextSummary = pickConversationSummary(current, nextId);
-        const mergedSummary = {
-          ...previousSummary,
-          ...(nextSummary ?? {}),
+      // Re-key the sidebar row: drop the draft row, merge its fields under
+      // the real id. The row stays pending until a server upsert confirms it.
+      const draftRow = sidebarStore.peek(previousId);
+      sidebarStore.removeLocal(previousId);
+      if (draftRow) {
+        const existingNext = sidebarStore.peek(nextId);
+        sidebarStore.upsertLocal({
           id: nextId,
-          title: shouldPreserveOptimisticTitle
-            ? previousSummary.title
-            : nextSummary?.title?.trim() || previousSummary.title,
-          provider_id: nextSummary?.provider_id || previousSummary.provider_id,
-          model: nextSummary?.model || previousSummary.model,
-          session_id: nextSummary?.session_id || previousSummary.session_id,
-          cwd: nextSummary?.cwd || previousSummary.cwd,
-          is_pinned: nextSummary?.is_pinned ?? previousSummary.is_pinned,
-          pinned_at:
-            "pinned_at" in (nextSummary ?? {}) ? nextSummary?.pinned_at : previousSummary.pinned_at,
-          is_shared: nextSummary?.is_shared ?? previousSummary.is_shared,
-        };
-        const withoutMigratedRows = current.filter(
-          (item) => item.id !== previousId && item.id !== nextId,
-        );
-        return upsertConversationSummary(withoutMigratedRows, mergedSummary, {
-          preserveExistingTitle: shouldPreserveOptimisticTitle,
+          title: existingNext?.title?.trim() || draftRow.title,
+          providerId: existingNext?.providerId || draftRow.providerId,
+          model: existingNext?.model || draftRow.model,
+          sessionId: existingNext?.sessionId || draftRow.sessionId,
+          cwd: existingNext?.cwd || draftRow.cwd,
+          messageCount: existingNext?.messageCount ?? draftRow.messageCount,
+          createdAt: existingNext?.createdAt ?? draftRow.createdAt,
+          updatedAt: existingNext?.updatedAt ?? draftRow.updatedAt,
+          isPinned: existingNext?.isPinned ?? draftRow.isPinned,
+          pinnedAt: existingNext ? existingNext.pinnedAt : draftRow.pinnedAt,
+          isShared: existingNext?.isShared ?? draftRow.isShared,
+          isPending: existingNext && existingNext.isPending !== true ? undefined : true,
         });
-      });
+      }
     },
-    [
-      lockHistoryTitlePosition,
-      pendingUploadsByConversationRef,
-      transcriptStoreRegistry,
-      unlockHistoryTitlePosition,
-      updateHistoryItems,
-    ],
+    [pendingUploadsByConversationRef, sidebarStore, transcriptStoreRegistry],
   );
 
   const ensureTunnelToolTab = useCallback(
@@ -981,59 +824,6 @@ export default function GatewayApp() {
     },
     [ensureTunnelToolTab],
   );
-
-  const persistProjectConversationActivity = useCallback(
-    (activity: ReadonlyMap<string, number>) => {
-      if (activity.size === 0) {
-        return;
-      }
-      setSettings((prev) => {
-        const hiddenProjectPathKeys = new Set(
-          prev.system.hiddenWorkspaceProjectPaths.map(workspaceProjectPathKey),
-        );
-        const workspaceProjects = applyWorkspaceProjectConversationActivityMap(
-          prev.system.workspaceProjects,
-          activity,
-          { hiddenProjectPathKeys },
-        );
-        if (!workspaceProjects) {
-          return prev;
-        }
-        return {
-          ...prev,
-          system: resolveWorkspaceProjects(
-            {
-              ...prev.system,
-              workspaceProjects,
-            },
-            getDefaultWorkspaceProjectPath(prev.system),
-          ),
-        };
-      });
-    },
-    [setSettings],
-  );
-  persistProjectConversationActivityRef.current = persistProjectConversationActivity;
-
-  const refreshHistoryWorkdirs = useCallback(
-    async (currentApi = api) => {
-      if (!currentApi) {
-        setHistoryWorkdirs([]);
-        return;
-      }
-      try {
-        const response = await currentApi.listHistoryWorkdirs();
-        setHistoryWorkdirs(response.workdirs);
-      } catch (error) {
-        console.warn("Failed to load chat history workdirs", error);
-      }
-    },
-    [api],
-  );
-
-  useEffect(() => {
-    void refreshHistoryWorkdirs(api);
-  }, [api, refreshHistoryWorkdirs]);
 
   const setWorkspaceProjectDirectoryMissing = useCallback(
     (project: WorkspaceProject, missing: boolean) => {
@@ -1207,9 +997,9 @@ export default function GatewayApp() {
       const normalizedPath = path.trim();
       if (!normalizedPath) return;
       activateWorkspaceProject(createWorkspaceProjectFromPath(normalizedPath, "managed"));
-      void refreshHistoryWorkdirs(api);
+      void sidebarStore.refreshWorkdirs("new-workdir");
     },
-    [activateWorkspaceProject, api, refreshHistoryWorkdirs],
+    [activateWorkspaceProject, sidebarStore],
   );
 
   const commitWorkspaceProjectRename = useCallback(
@@ -1412,24 +1202,22 @@ export default function GatewayApp() {
     if (isLocalDraftConversationId(conversationIdValue)) {
       // The draft never materialized: drop its optimistic sidebar row. The
       // transcript keeps the pipeline's error entry.
-      optimisticTitleConversationIdsRef.current.delete(conversationIdValue);
-      unlockHistoryTitlePosition(conversationIdValue);
-      updateHistoryItems((current) => current.filter((item) => item.id !== conversationIdValue));
+      sidebarStore.removeLocal(conversationIdValue);
     }
     if (isDisplayedConversation(conversationIdValue)) {
       setChatError(message);
     }
   };
 
-  // chat.activity is the single global source for running conversations
-  // (sidebar dots, busy fallbacks) plus project activity bookkeeping.
+  // chat.activity ingestion: the activity store stays the app-wide running
+  // authority; the sidebar store consumes it through the adapter's diff
+  // bridge (running/idle events also carry the workdir-activity bumps).
   useEffect(() => {
     if (!api) {
       activityStore.clear();
       return;
     }
     const unsubscribe = api.subscribeChatActivity((event: ConversationActivityEvent) => {
-      const previous = activityStore.get(event.conversationId);
       activityStore.applyActivityEvent(event);
       // Settle pending commands from the always-on hub too: the run may
       // start (or finish) while its conversation is not the displayed one,
@@ -1443,18 +1231,9 @@ export default function GatewayApp() {
           event.clientRequestId ?? undefined,
         );
       }
-      const workdir =
-        event.workdir?.trim() ||
-        previous?.workdir?.trim() ||
-        historyItemsRef.current.find((item) => item.id === event.conversationId)?.cwd?.trim() ||
-        "";
-      recordProjectActivity(workdir, event.updatedAt);
-      if (!event.running && previous) {
-        void refreshHistoryWorkdirs(api);
-      }
     });
     return unsubscribe;
-  }, [activityStore, api, chatCommandPipeline, recordProjectActivity, refreshHistoryWorkdirs]);
+  }, [activityStore, api, chatCommandPipeline]);
 
   useEffect(() => {
     if (!api) {
@@ -1484,7 +1263,7 @@ export default function GatewayApp() {
           if (cancelled) {
             return;
           }
-          activityStore.hydrate(normalizeActivityHydrationItems(items), {
+          activityStore.hydrate(normalizeRunningConversationItems(items), {
             keepConversationIds: chatCommandPipeline.pendingConversationIds(),
           });
         })
@@ -1495,16 +1274,6 @@ export default function GatewayApp() {
       unsubscribe();
     };
   }, [activityStore, api, chatCommandPipeline]);
-
-  const subscribeActivityStore = useCallback(
-    (listener: () => void) => activityStore.subscribe(listener),
-    [activityStore],
-  );
-  const activitySnapshot = useSyncExternalStore(
-    subscribeActivityStore,
-    activityStore.getSnapshot,
-    activityStore.getSnapshot,
-  );
 
   // App-level observation of the displayed conversation's stream: titles,
   // pipeline settlement, queue refreshes, tunnel side effects, and the one
@@ -1564,7 +1333,7 @@ export default function GatewayApp() {
               ? ((event as { title: string }).title ?? "").trim()
               : "";
           if (finishedTitle) {
-            applyLiveConversationTitle(targetConversationId, finishedTitle, { isFinal: true });
+            applyLiveConversationTitle(targetConversationId, finishedTitle);
           }
           return;
         }
@@ -1583,7 +1352,7 @@ export default function GatewayApp() {
           const chatEvent = event as ChatEvent;
           const liveTitle = readChatEventTitle(chatEvent);
           if (liveTitle && isChatEventTitleFinal(chatEvent)) {
-            applyLiveConversationTitle(targetConversationId, liveTitle, { isFinal: true });
+            applyLiveConversationTitle(targetConversationId, liveTitle);
           }
           if (!isReplay) {
             handleTunnelManagerChatEvent(chatEvent);
@@ -1658,6 +1427,10 @@ export default function GatewayApp() {
   });
   displayedConversationBusyRef.current = displayedConversationBusy;
 
+  // Phase-1 open in flight (initial tail fetch). The quiet phase-2 hydration
+  // ("hydrating") intentionally does NOT gate the composer or transcript.
+  const historyDetailLoading = conversationOpenState.phase === "opening";
+
   // Deterministic messageRef attachment: when the displayed conversation
   // transitions busy → idle (run finished), run the quiet enrich refresh so
   // the settled tail's user bubbles gain their persisted messageRef (edit
@@ -1686,106 +1459,36 @@ export default function GatewayApp() {
     refreshDisplayedConversationHistorySnapshot,
   ]);
 
-  useEffect(() => {
-    if (!api) {
-      return;
-    }
-
-    const unsubscribe = api.subscribeHistory((event: GatewayHistoryEvent) => {
-      const targetConversationId = event.conversation_id.trim();
-      if (!targetConversationId) {
-        return;
-      }
-
-      if (event.kind === "upsert") {
-        recordProjectActivity(event.conversation.cwd, event.conversation.updated_at);
-      }
-
-      const matchesCurrentHistoryScope =
-        event.kind !== "upsert" ||
-        historyConversationMatchesFilter(event.conversation, historyListFilterRef.current);
-      updateHistoryItems((current) => {
-        if (event.kind === "upsert" && !matchesCurrentHistoryScope) {
-          return current.filter((item) => item.id !== targetConversationId);
-        }
-        return applyGatewayHistoryEvent(current, event, {
-          preserveTitleConversationIds: optimisticTitleConversationIdsRef.current,
-          preserveUpdatedAtConversationIds: getHistoryPositionLockedConversationIds(),
-        });
-      });
-      void refreshHistoryWorkdirs(api);
-      setHistoryError(null);
-
-      if (event.kind === "delete") {
-        optimisticTitleConversationIdsRef.current.delete(targetConversationId);
-        unlockHistoryTitlePosition(targetConversationId);
-        transcriptStoreRegistry.remove(targetConversationId);
-        conversationWorkdirsRef.current.delete(targetConversationId);
-        if (
-          conversationIdRef.current === targetConversationId ||
-          selectedHistoryIdRef.current === targetConversationId
-        ) {
-          startNewConversation({
-            workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
-          });
-        }
-        return;
-      }
-
-      // Upsert of the displayed conversation while idle: quiet, id-preserving
-      // refresh. Run completion never triggers a refetch — the settled tail
-      // already shows the final reply.
-      if (
-        isDisplayedConversation(targetConversationId) &&
-        !isConversationBusy(targetConversationId)
-      ) {
-        void refreshDisplayedConversationHistorySnapshot(targetConversationId, api);
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [
-    api,
-    activeWorkspaceProjectPath,
-    getHistoryPositionLockedConversationIds,
-    isAgentMode,
-    isConversationBusy,
-    recordProjectActivity,
-    refreshDisplayedConversationHistorySnapshot,
-    refreshHistoryWorkdirs,
-    transcriptStoreRegistry,
-    unlockHistoryTitlePosition,
-    updateHistoryItems,
-  ]);
-
-  async function selectHistory(
+  // --- Two-phase conversation open (controller deps) ------------------------
+  // Phase 1: paint the message tail fast. Sets the selection state
+  // synchronously (controller.open calls this in the same tick), fetches the
+  // initial slice, and replace-applies it to the transcript store. The web
+  // end has no synchronous local-activation path, so it always resolves
+  // "painted" (never "cache-hit") — revisits still show the cached transcript
+  // instantly because the registry store keeps rendering underneath.
+  async function openConversationInitial(
     conversationIdValue: string,
-    currentApi = api,
-    options?: {
-      fullHistory?: boolean;
-      scrollToBottom?: boolean;
-    },
-  ) {
+    _seq: number,
+  ): Promise<"cache-hit" | "painted"> {
+    const currentApi = api;
     if (!currentApi) {
-      return;
+      throw new Error("Gateway client is not ready.");
     }
 
     const loadSequence = invalidateHistoryLoad();
     const selectionRevision = markVisibleConversationRevision();
+    const isStale = () =>
+      historyLoadSequenceRef.current !== loadSequence ||
+      visibleConversationRevisionRef.current !== selectionRevision;
     const previousDisplayedConversationId = getDisplayedConversationId();
     const isChangingConversation = previousDisplayedConversationId !== conversationIdValue;
-    if (options?.scrollToBottom) {
-      pendingDisplayedConversationAutoBottomRef.current = conversationIdValue;
-    }
+    pendingDisplayedConversationAutoBottomRef.current = conversationIdValue;
     if (isChangingConversation && previousDisplayedConversationId) {
       // Fold the previous conversation's settled turns so a revisit starts
       // with a clean virtualized transcript.
       transcriptStoreRegistry.peek(previousDisplayedConversationId)?.foldSettledTurns();
     }
 
-    draftConversationPinnedRef.current = false;
     protectedConversationRef.current = conversationIdValue;
     conversationIdRef.current = conversationIdValue;
     selectedHistoryIdRef.current = conversationIdValue;
@@ -1796,24 +1499,16 @@ export default function GatewayApp() {
       setSelectedHistory(null);
     }
 
-    setHistoryDetailLoading(true);
     try {
-      const detail = await currentApi.getHistory(
-        conversationIdValue,
-        options?.fullHistory ? undefined : { maxMessages: HISTORY_DETAIL_INITIAL_MAX_MESSAGES },
-      );
-      if (
-        historyLoadSequenceRef.current !== loadSequence ||
-        visibleConversationRevisionRef.current !== selectionRevision
-      ) {
-        return;
+      const detail = await currentApi.getHistory(conversationIdValue, {
+        maxMessages: HISTORY_DETAIL_INITIAL_MAX_MESSAGES,
+      });
+      if (isStale()) {
+        return "painted";
       }
       const entries = await parseHistoryMessagesJsonAsync(detail.messages_json);
-      if (
-        historyLoadSequenceRef.current !== loadSequence ||
-        visibleConversationRevisionRef.current !== selectionRevision
-      ) {
-        return;
+      if (isStale()) {
+        return "painted";
       }
       setSelectedHistory(detail);
       transcriptStoreRegistry
@@ -1823,270 +1518,39 @@ export default function GatewayApp() {
       if (detailWorkdir) {
         conversationWorkdirsRef.current.set(conversationIdValue, detailWorkdir);
       }
+      return "painted";
     } catch (error) {
-      if (
-        historyLoadSequenceRef.current !== loadSequence ||
-        visibleConversationRevisionRef.current !== selectionRevision
-      ) {
-        return;
+      if (!isStale()) {
+        const message = asErrorMessage(
+          error,
+          translate("chat.history.openFailed", settings.locale),
+        );
+        setSelectedHistory({
+          conversation_id: conversationIdValue,
+          messages_json: message,
+          has_more: false,
+        } satisfies HistoryDetail);
+        setChatError(message);
       }
-      const message = asErrorMessage(error, "history detail request failed");
-      setSelectedHistory({
-        conversation_id: conversationIdValue,
-        messages_json: message,
-        has_more: false,
-      } satisfies HistoryDetail);
-      setChatError(message);
-    } finally {
-      if (
-        historyLoadSequenceRef.current === loadSequence &&
-        visibleConversationRevisionRef.current === selectionRevision
-      ) {
-        setHistoryDetailLoading(false);
-      }
+      throw error;
     }
   }
 
-  async function reloadHistory(currentApi = api, options?: ReloadHistoryOptions) {
-    if (!currentApi) {
+  // Phase 2: quiet full hydration at idle, through the id-preserving enrich
+  // path — it never clobbers live-stream transcript entries and it skips
+  // entirely when phase 1 already returned the whole conversation.
+  async function hydrateConversationFull(conversationIdValue: string, _seq: number): Promise<void> {
+    const selected = selectedHistoryRef.current;
+    if (selected?.conversation_id === conversationIdValue && selected.has_more !== true) {
       return;
     }
-
-    const silent = options?.silent === true;
-    const loadingStartedAt = Date.now();
-    if (!silent) {
-      setHistoryListLoading(true);
-      setHistoryError(null);
-    }
-    const requestScopeKey = historyScopeKeyRef.current;
-    const requestFilter = historyListFilterRef.current;
-    try {
-      const response = await currentApi.listHistory(1, HISTORY_LIST_PAGE_SIZE, requestFilter);
-      if (requestScopeKey !== historyScopeKeyRef.current) {
-        return;
-      }
-      // Authoritative running snapshot: hydrate the activity store (sidebar
-      // dots) and project activity bookkeeping. Conversations with an
-      // in-flight local command are kept — the gateway may not have
-      // registered their run when the snapshot was built.
-      const runningConversations = normalizeActivityHydrationItems(response.running_conversations);
-      activityStore.hydrate(runningConversations, {
-        keepConversationIds: chatCommandPipeline.pendingConversationIds(),
-      });
-      for (const runningConversation of runningConversations) {
-        recordProjectActivity(runningConversation.workdir, runningConversation.updatedAt);
-      }
-      const retainedConversationIds = new Set<string>(
-        runningConversations.map((item) => item.conversationId),
-      );
-      for (const item of historyItemsRef.current) {
-        if (
-          isLocalDraftConversationId(item.id) ||
-          isConversationBusy(item.id) ||
-          getConversationTranscriptEntryCount(item.id) > 0
-        ) {
-          retainedConversationIds.add(item.id);
-        }
-      }
-      if (silent) {
-        for (const item of historyItemsRef.current) {
-          retainedConversationIds.add(item.id);
-        }
-      }
-      const conversations = reconcileConversationSummaries(
-        historyItemsRef.current,
-        response.conversations,
-        {
-          preserveTitleConversationIds: optimisticTitleConversationIdsRef.current,
-          preserveUpdatedAtConversationIds: getHistoryPositionLockedConversationIds(),
-          retainConversationIds: retainedConversationIds,
-        },
-      );
-      const refreshedNextPage = response.conversations.length > 0 ? 2 : 1;
-      const nextPage = silent
-        ? Math.max(nextHistoryPageRef.current, refreshedNextPage)
-        : refreshedNextPage;
-      commitHistoryListState(conversations, response.total_count, nextPage);
-
-      if (options?.skipSelectionSync) {
-        return;
-      }
-
-      const currentConversationId = conversationIdRef.current;
-      const currentSelectedHistoryId = selectedHistoryIdRef.current;
-      const currentTranscriptEntryCount =
-        getConversationTranscriptEntryCount(currentConversationId);
-      const currentSelectedHistory = selectedHistoryRef.current;
-      const requestedConversationId = options?.preferredConversationId?.trim() ?? "";
-      const protectedConversationId = protectedConversationRef.current.trim();
-      const isProtectedDraftConversation = protectedConversationId === PROTECTED_DRAFT_CONVERSATION;
-      const hadCurrentConversationInHistory =
-        pickConversationSummary(historyItemsRef.current, currentConversationId) !== null;
-
-      const currentSummary = pickConversationSummary(conversations, currentConversationId);
-      const protectedConversationSummary =
-        protectedConversationId && !isProtectedDraftConversation
-          ? pickConversationSummary(conversations, protectedConversationId)
-          : null;
-
-      if (
-        currentConversationId &&
-        !isLocalDraftConversationId(currentConversationId) &&
-        hadCurrentConversationInHistory &&
-        currentSummary === null
-      ) {
-        startNewConversation({
-          workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
-        });
-        return;
-      }
-
-      if (isProtectedDraftConversation) {
-        return;
-      }
-
-      if (
-        protectedConversationId &&
-        protectedConversationSummary === null &&
-        (requestedConversationId === "" || requestedConversationId === protectedConversationId) &&
-        (currentConversationId === protectedConversationId ||
-          currentSelectedHistoryId === protectedConversationId)
-      ) {
-        return;
-      }
-
-      const requestedConversationSummary =
-        requestedConversationId !== "" && !isLocalDraftConversationId(requestedConversationId)
-          ? pickConversationSummary(conversations, requestedConversationId)
-          : null;
-      const shouldKeepCurrentConversation =
-        requestedConversationId !== "" &&
-        requestedConversationSummary === null &&
-        currentConversationId === requestedConversationId &&
-        currentTranscriptEntryCount > 0;
-
-      if (shouldKeepCurrentConversation) {
-        return;
-      }
-
-      const shouldKeepDraftConversation = hasLocalDraftConversation({
-        conversationId: currentConversationId,
-        selectedHistoryId: currentSelectedHistoryId,
-        requestedConversationId,
-        chatMessageCount: currentTranscriptEntryCount,
-        pendingUploadCount: pendingUploadedFilesRef.current.length,
-        draftPinned: draftConversationPinnedRef.current,
-      });
-      if (shouldKeepDraftConversation) {
-        return;
-      }
-
-      const isCurrentConversationRunning =
-        currentConversationId !== "" &&
-        isConversationBusy(currentConversationId) &&
-        (currentSelectedHistoryId === "" || currentSelectedHistoryId === currentConversationId) &&
-        requestedConversationId === "";
-      if (isCurrentConversationRunning) {
-        return;
-      }
-
-      const preferredConversationId =
-        requestedConversationSummary?.id ??
-        protectedConversationSummary?.id ??
-        (pickConversationSummary(conversations, currentSelectedHistoryId)
-          ? currentSelectedHistoryId
-          : pickConversationSummary(conversations, currentConversationId)
-            ? currentConversationId
-            : currentConversationId && currentTranscriptEntryCount > 0
-              ? ""
-              : (conversations[0]?.id ?? ""));
-
-      if (!preferredConversationId) {
-        if (!currentConversationId) {
-          setSelectedHistoryId("");
-          setSelectedHistory(null);
-        }
-        return;
-      }
-
-      const shouldHydrateSelection =
-        options?.hydrateSelection === true ||
-        currentSelectedHistory?.conversation_id !== preferredConversationId ||
-        getDisplayedConversationId() !== preferredConversationId;
-
-      if (shouldHydrateSelection) {
-        await selectHistory(preferredConversationId, currentApi, {
-          scrollToBottom: true,
-        });
-      }
-    } catch (error) {
-      if (requestScopeKey !== historyScopeKeyRef.current) {
-        return;
-      }
-      const message = asErrorMessage(error, "history request failed");
-      setHistoryError(message);
-    } finally {
-      if (!silent && requestScopeKey === historyScopeKeyRef.current) {
-        await waitForMinimumHistoryListLoading(loadingStartedAt);
-        setHistoryListLoading(false);
-      }
-    }
+    await refreshDisplayedConversationHistorySnapshot(conversationIdValue, api, {
+      forceFull: true,
+    });
   }
 
-  const loadMoreHistory = useCallback(async () => {
-    if (!api || historyListPageLoadingRef.current || !historyHasMoreRef.current) {
-      return;
-    }
-
-    historyListPageLoadingRef.current = true;
-    setHistoryListLoadingMore(true);
-    const requestScopeKey = historyScopeKeyRef.current;
-    const requestFilter = historyListFilterRef.current;
-    try {
-      const pageNumber = nextHistoryPageRef.current;
-      const response = await api.listHistory(pageNumber, HISTORY_LIST_PAGE_SIZE, requestFilter);
-      if (requestScopeKey !== historyScopeKeyRef.current) {
-        return;
-      }
-      const runningConversations = normalizeActivityHydrationItems(response.running_conversations);
-      activityStore.hydrate(runningConversations, {
-        keepConversationIds: chatCommandPipeline.pendingConversationIds(),
-      });
-      for (const runningConversation of runningConversations) {
-        recordProjectActivity(runningConversation.workdir, runningConversation.updatedAt);
-      }
-      const retainConversationIds = new Set(historyItemsRef.current.map((item) => item.id));
-      const conversations = reconcileConversationSummaries(
-        historyItemsRef.current,
-        response.conversations,
-        {
-          preserveTitleConversationIds: optimisticTitleConversationIdsRef.current,
-          preserveUpdatedAtConversationIds: getHistoryPositionLockedConversationIds(),
-          retainConversationIds,
-        },
-      );
-      const nextPage = response.conversations.length === 0 ? pageNumber : pageNumber + 1;
-      commitHistoryListState(conversations, response.total_count, nextPage);
-      setHistoryError(null);
-    } catch (error) {
-      if (requestScopeKey !== historyScopeKeyRef.current) {
-        return;
-      }
-      setHistoryError(asErrorMessage(error, "读取更多历史列表失败"));
-    } finally {
-      if (requestScopeKey === historyScopeKeyRef.current) {
-        historyListPageLoadingRef.current = false;
-        setHistoryListLoadingMore(false);
-      }
-    }
-  }, [
-    activityStore,
-    api,
-    chatCommandPipeline,
-    commitHistoryListState,
-    getHistoryPositionLockedConversationIds,
-    recordProjectActivity,
-  ]);
+  openInitialRef.current = openConversationInitial;
+  hydrateFullRef.current = hydrateConversationFull;
 
   const prepareChatRuntime = useCallback(
     async (
@@ -2143,40 +1607,9 @@ export default function GatewayApp() {
     [api],
   );
 
-  useEffect(() => {
-    if (!api || !status?.online) {
-      return;
-    }
-
-    const currentConversationId = conversationIdRef.current.trim();
-    const currentTranscriptEntryCount = getConversationTranscriptEntryCount(currentConversationId);
-    const shouldKeepNewConversation =
-      currentTranscriptEntryCount === 0 &&
-      selectedHistoryIdRef.current.trim() === "" &&
-      (currentConversationId === "" || isLocalDraftConversationId(currentConversationId));
-
-    void reloadHistory(api, {
-      skipSelectionSync: shouldKeepNewConversation,
-      hydrateSelection:
-        !shouldKeepNewConversation &&
-        currentTranscriptEntryCount === 0 &&
-        (currentConversationId === "" || isLocalDraftConversationId(currentConversationId)),
-    });
-  }, [api, historyScopeKey, status?.online]);
-
-  // Reconnect reconciliation: a run that finished while the socket was down
-  // never produced an idle activity event; re-hydrate the activity registry
-  // from history.list so no phantom running dot survives an outage.
-  const previousOnlineRef = useRef<boolean | null>(null);
-  useEffect(() => {
-    const wasOnline = previousOnlineRef.current;
-    const isOnline = status?.online === true;
-    previousOnlineRef.current = isOnline;
-    if (!api || !isOnline || wasOnline !== false) {
-      return;
-    }
-    void reloadHistory(api, { silent: true, skipSelectionSync: true });
-  }, [api, status?.online]);
+  // List loading, reconnect reconciliation, and the 60s silent reconcile all
+  // live in the sidebar store now (start/refresh/subscribeConnection); the
+  // old mount/online reload effects are gone with reloadHistory.
 
   // Foreground nudge: waking the page just pings the runtime keep-warm; the
   // socket's own wakeup/reconnect plus per-conversation subscription resume
@@ -2266,8 +1699,7 @@ export default function GatewayApp() {
 
     const clientRequestId = options?.clientRequestId?.trim() || crypto.randomUUID();
     const startedAt = Date.now();
-    const persistedConversationWorkdir =
-      pickConversationSummary(historyItemsRef.current, activeConversationId)?.cwd?.trim() || "";
+    const persistedConversationWorkdir = sidebarStore.peek(activeConversationId)?.cwd?.trim() || "";
     const runtimeConversationWorkdir =
       conversationWorkdirsRef.current.get(activeConversationId)?.trim() || "";
     const effectiveWorkdir = isAgentMode
@@ -2280,7 +1712,6 @@ export default function GatewayApp() {
     if (effectiveWorkdir) {
       conversationWorkdirsRef.current.set(activeConversationId, effectiveWorkdir);
     }
-    draftConversationPinnedRef.current = false;
     protectedConversationRef.current = activeConversationId;
     setChatError(null);
     if (isDisplayedConversation(activeConversationId)) {
@@ -2288,23 +1719,19 @@ export default function GatewayApp() {
     }
     if (startedAsDraftConversation) {
       draftClientRequestsRef.current.set(clientRequestId, activeConversationId);
-      optimisticTitleConversationIdsRef.current.add(activeConversationId);
-      updateHistoryItems((current) =>
-        upsertConversationSummary(
-          current,
-          {
-            id: activeConversationId,
-            title: buildOptimisticConversationTitle(message),
-            created_at: startedAt,
-            updated_at: startedAt,
-            message_count: 1,
-            provider_id: settings.selectedModel?.customProviderId ?? "gateway",
-            model: settings.selectedModel?.model ?? "gateway",
-            cwd: effectiveWorkdir || undefined,
-          },
-          { preserveExistingTitle: true },
-        ),
-      );
+      // Optimistic pending sidebar row: survives authoritative reconciles
+      // until a server upsert (post-bind) confirms the conversation.
+      sidebarStore.upsertLocal({
+        id: activeConversationId,
+        title: buildOptimisticConversationTitle(message),
+        providerId: settings.selectedModel?.customProviderId ?? "",
+        model: settings.selectedModel?.model ?? "",
+        cwd: effectiveWorkdir || undefined,
+        messageCount: 1,
+        createdAt: startedAt,
+        updatedAt: startedAt,
+        isPending: true,
+      });
     }
 
     // Keep-warm preflight: the command request itself is the reliable wake-up
@@ -2674,15 +2101,12 @@ export default function GatewayApp() {
     const currentConversationId = conversationIdRef.current.trim();
     if (currentConversationId) {
       transcriptStoreRegistry.peek(currentConversationId)?.foldSettledTurns();
-      optimisticTitleConversationIdsRef.current.delete(currentConversationId);
       clearCachedComposerDraft(currentConversationId);
     }
     invalidateHistoryLoad();
     markVisibleConversationRevision();
-    setHistorySwitchOverlay(null);
-    setHistoryDetailLoading(false);
+    openController.cancel();
     const nextConversationId = createLocalDraftConversationId();
-    draftConversationPinnedRef.current = true;
     protectedConversationRef.current = PROTECTED_DRAFT_CONVERSATION;
     submitInFlightRef.current = false;
     composerRef.current?.clear();
@@ -2755,7 +2179,7 @@ export default function GatewayApp() {
       void (async () => {
         const currentApi = api;
         if (!currentApi) {
-          setHistoryError("Gateway 未连接，暂时不能删除项目会话。");
+          setSidebarActionError("Gateway 未连接，暂时不能删除项目会话。");
           return;
         }
 
@@ -2769,8 +2193,7 @@ export default function GatewayApp() {
               activity.workdir?.trim() ||
               conversationWorkdirsRef.current.get(conversationId)?.trim() ||
               "";
-            const persistedWorkdir =
-              historyItemsRef.current.find((item) => item.id === conversationId)?.cwd?.trim() || "";
+            const persistedWorkdir = sidebarStore.peek(conversationId)?.cwd?.trim() || "";
             if (workspaceProjectPathKey(runtimeWorkdir || persistedWorkdir) === pathKey) {
               return true;
             }
@@ -2779,12 +2202,11 @@ export default function GatewayApp() {
         };
 
         if (projectHasRunningConversation()) {
-          setHistoryError(runningMessage);
+          setSidebarActionError(runningMessage);
           return;
         }
 
-        setHistoryError(null);
-        setHistoryMutating(true);
+        setSidebarActionError(null);
         try {
           const conversationIds: string[] = [];
           const seenConversationIds = new Set<string>();
@@ -2816,7 +2238,7 @@ export default function GatewayApp() {
             isConversationBusy(id),
           );
           if (runningConversationIdsInProject.length > 0 || projectHasRunningConversation()) {
-            setHistoryError(runningMessage);
+            setSidebarActionError(runningMessage);
             return;
           }
 
@@ -2881,9 +2303,7 @@ export default function GatewayApp() {
           const visibleRuntimeWorkdir =
             conversationWorkdirsRef.current.get(visibleConversationId)?.trim() || "";
           const visiblePersistedWorkdir =
-            historyItemsRef.current
-              .find((item) => item.id === visibleConversationId)
-              ?.cwd?.trim() || "";
+            sidebarStore.peek(visibleConversationId)?.cwd?.trim() || "";
           const visibleWorkdir =
             visiblePersistedWorkdir ||
             visibleRuntimeWorkdir ||
@@ -2895,9 +2315,6 @@ export default function GatewayApp() {
 
           const deletedConversationIds = new Set(conversationIds);
           if (deletedConversationIds.size > 0) {
-            updateHistoryItems((current) =>
-              current.filter((item) => !deletedConversationIds.has(item.id)),
-            );
             const nextSharedItems = sharedHistoryItemsRef.current.filter(
               (item) => !deletedConversationIds.has(item.id),
             );
@@ -2905,8 +2322,8 @@ export default function GatewayApp() {
             setSharedHistoryItems(nextSharedItems);
 
             for (const conversationId of deletedConversationIds) {
-              optimisticTitleConversationIdsRef.current.delete(conversationId);
-              unlockHistoryTitlePosition(conversationId);
+              // Immediate local echo; the gateway delete events confirm.
+              sidebarStore.removeLocal(conversationId);
               transcriptStoreRegistry.remove(conversationId);
               conversationWorkdirsRef.current.delete(conversationId);
               clearCachedComposerDraft(conversationId);
@@ -2936,16 +2353,19 @@ export default function GatewayApp() {
             });
           }
           removeWorkspaceProjectFromSettings(project);
-          if (shouldResetVisibleConversation) {
+          // The conversation-removal watcher may already have migrated the
+          // selection; only reset when the same conversation is still shown.
+          if (
+            shouldResetVisibleConversation &&
+            getDisplayedConversationId() === visibleConversationId.trim()
+          ) {
             startNewConversation({
               workdir: getDefaultWorkspaceProjectPath(settings.system) || undefined,
             });
           }
-          void refreshHistoryWorkdirs(currentApi);
+          void sidebarStore.refreshWorkdirs("delete");
         } catch (error) {
-          setHistoryError(asErrorMessage(error, "删除项目失败"));
-        } finally {
-          setHistoryMutating(false);
+          setSidebarActionError(asErrorMessage(error, "删除项目失败"));
         }
       })();
     },
@@ -2956,17 +2376,15 @@ export default function GatewayApp() {
       clearCachedComposerDraft,
       isAgentMode,
       isConversationBusy,
-      refreshHistoryWorkdirs,
       removeWorkspaceProjectFromSettings,
       requestConfirmDialog,
       settings.remote.enableWebSshTerminal,
       settings.remote.enableWebTerminal,
       settings.locale,
       settings.system,
+      sidebarStore,
       startNewConversation,
       terminalClient,
-      unlockHistoryTitlePosition,
-      updateHistoryItems,
     ],
   );
 
@@ -2997,10 +2415,6 @@ export default function GatewayApp() {
     if (!targetConversationId) {
       return;
     }
-    setHistorySwitchOverlay({
-      conversationId: targetConversationId,
-      startedAt: Date.now(),
-    });
 
     const currentConversationId = conversationIdRef.current.trim();
     if (currentConversationId && currentConversationId !== targetConversationId) {
@@ -3012,6 +2426,7 @@ export default function GatewayApp() {
     if (isLocalDraftConversationId(targetConversationId)) {
       // Local drafts have no server history to load; the transcript store is
       // already the source (optimistic entries and error entries included).
+      openController.cancel();
       invalidateHistoryLoad();
       markVisibleConversationRevision();
       if (currentConversationId && currentConversationId !== targetConversationId) {
@@ -3023,15 +2438,82 @@ export default function GatewayApp() {
       setConversationId(targetConversationId);
       setSelectedHistoryId(targetConversationId);
       setChatError(null);
-      setHistoryDetailLoading(false);
       setSelectedHistory(null);
       return;
     }
 
-    void selectHistory(targetConversationId, api, {
-      scrollToBottom: true,
-    });
+    // Two-phase open: initial tail paint now, quiet full hydration at idle;
+    // the overlay appears only after ~150ms of still-loading.
+    openController.open(targetConversationId);
   }
+
+  // Conversations that left the authoritative sidebar index (remote deletes,
+  // confirmed local deletes, reconcile drops): clean per-conversation caches
+  // and migrate the selection when the displayed conversation vanished.
+  // Local drafts are skipped — a failed draft keeps its transcript (error
+  // entry) visible; user-initiated draft removal goes through
+  // handleSidebarLocalDraftDeleted instead.
+  const handleSidebarConversationsRemoved = useCallback(
+    (ids: readonly string[]) => {
+      const displayedId = getDisplayedConversationId();
+      let displayedRemoved = false;
+      const removedIds = new Set<string>();
+      for (const id of ids) {
+        if (isLocalDraftConversationId(id)) {
+          continue;
+        }
+        removedIds.add(id);
+        transcriptStoreRegistry.remove(id);
+        conversationWorkdirsRef.current.delete(id);
+        composerDraftCacheRef.current.delete(id);
+        pendingUploadsByConversationRef.current.delete(id);
+        if (id === displayedId) {
+          displayedRemoved = true;
+        }
+      }
+      if (removedIds.size === 0) {
+        return;
+      }
+      const nextSharedItems = sharedHistoryItemsRef.current.filter(
+        (item) => !removedIds.has(item.id),
+      );
+      if (nextSharedItems.length !== sharedHistoryItemsRef.current.length) {
+        sharedHistoryItemsRef.current = nextSharedItems;
+        setSharedHistoryItems(nextSharedItems);
+      }
+      if (displayedRemoved) {
+        startNewConversation({
+          workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+        });
+      }
+    },
+    [
+      activeWorkspaceProjectPath,
+      isAgentMode,
+      pendingUploadsByConversationRef,
+      transcriptStoreRegistry,
+    ],
+  );
+
+  const handleSidebarLocalDraftDeleted = useCallback(
+    (id: string) => {
+      transcriptStoreRegistry.remove(id);
+      conversationWorkdirsRef.current.delete(id);
+      composerDraftCacheRef.current.delete(id);
+      pendingUploadsByConversationRef.current.delete(id);
+      if (conversationIdRef.current === id || selectedHistoryIdRef.current === id) {
+        startNewConversation({
+          workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+        });
+      }
+    },
+    [
+      activeWorkspaceProjectPath,
+      isAgentMode,
+      pendingUploadsByConversationRef,
+      transcriptStoreRegistry,
+    ],
+  );
 
   function handleSidebarOpenSkillsHub() {
     setRightDockOpen(false);
@@ -3159,7 +2641,7 @@ export default function GatewayApp() {
   }
 
   const setSharedHistoryItemsState = useCallback((items: ChatHistorySummary[]) => {
-    const nextItems = sortHistoryItems(items.map((item) => ({ ...item, isShared: true })));
+    const nextItems = sortSidebarConversations(items.map((item) => ({ ...item, isShared: true })));
     sharedHistoryItemsRef.current = nextItems;
     setSharedHistoryItems(nextItems);
   }, []);
@@ -3184,7 +2666,7 @@ export default function GatewayApp() {
           );
           totalCount = Math.max(0, response.total_count);
           for (const conversation of response.conversations) {
-            const item = toChatHistorySummary(conversation, settings.selectedModel);
+            const item = normalizeGatewayConversationSummary(conversation);
             byId.set(item.id, { ...item, isShared: true });
           }
           if (response.conversations.length === 0 || byId.size >= totalCount) {
@@ -3194,14 +2676,14 @@ export default function GatewayApp() {
 
         const nextItems = Array.from(byId.values());
         setSharedHistoryItemsState(nextItems);
-        return sortHistoryItems(nextItems);
+        return sortSidebarConversations(nextItems);
       })();
 
       sharedHistoryListRequestRef.current = request;
       try {
         return await request;
       } catch (error) {
-        setHistoryError(asErrorMessage(error, "读取已分享历史列表失败"));
+        setSidebarActionError(asErrorMessage(error, "读取已分享历史列表失败"));
         return sharedHistoryItemsRef.current;
       } finally {
         if (sharedHistoryListRequestRef.current === request) {
@@ -3209,7 +2691,7 @@ export default function GatewayApp() {
         }
       }
     },
-    [api, settings.selectedModel, setSharedHistoryItemsState],
+    [api, setSharedHistoryItemsState],
   );
 
   useEffect(() => {
@@ -3225,21 +2707,17 @@ export default function GatewayApp() {
     isShared: boolean,
     source?: ChatHistorySummary | null,
   ) {
-    updateHistoryItems((current) =>
-      current.map((conversation) =>
-        conversation.id === id ? { ...conversation, is_shared: isShared } : conversation,
-      ),
-    );
+    const existingRow = sidebarStore.peek(id);
+    if (existingRow && existingRow.isShared !== isShared) {
+      sidebarStore.upsertLocal({ ...existingRow, isShared });
+    }
     if (!isShared) {
       setSharedHistoryItemsState(sharedHistoryItemsRef.current.filter((item) => item.id !== id));
       return;
     }
 
-    const sourceSummary = historyItemsRef.current.find((item) => item.id === id);
     const conversation =
-      source ??
-      (sourceSummary ? toChatHistorySummary(sourceSummary, settings.selectedModel) : null) ??
-      sharedHistoryItemsRef.current.find((item) => item.id === id);
+      source ?? existingRow ?? sharedHistoryItemsRef.current.find((item) => item.id === id);
     if (!conversation) {
       return;
     }
@@ -3365,7 +2843,6 @@ export default function GatewayApp() {
         return;
       }
 
-      setHistoryError(null);
       setChatError(null);
       composerRef.current?.clear();
       setPendingUploadsForConversation(activeConversationId, []);
@@ -3424,6 +2901,9 @@ export default function GatewayApp() {
   const handleLogout = useCallback(() => {
     invalidateHistoryLoad();
     markVisibleConversationRevision();
+    // Dropping the api swaps in a fresh (empty) sidebar store; the start/stop
+    // effect stops the old one.
+    openController.cancel();
     clearSession();
     transcriptStoreRegistry.clear();
     activityStore.clear();
@@ -3434,56 +2914,37 @@ export default function GatewayApp() {
     conversationIdRef.current = "";
     selectedHistoryIdRef.current = "";
     selectedHistoryRef.current = null;
-    historyItemsRef.current = [];
-    historyTotalRef.current = 0;
-    historyHasMoreRef.current = false;
-    nextHistoryPageRef.current = 1;
-    historyListPageLoadingRef.current = false;
     sharedHistoryItemsRef.current = [];
     sharedHistoryListRequestRef.current = null;
     clearPendingUploads();
-    draftConversationPinnedRef.current = false;
     protectedConversationRef.current = "";
     submitInFlightRef.current = false;
     setUserMenuOpen(false);
     setSettingsOpen(false);
     setOverlay("closed");
-    setHistorySwitchOverlay(null);
     setStatus(null);
     setStatusError(null);
     setConversationId("");
     setChatError(null);
-    optimisticTitleConversationIdsRef.current.clear();
-    clearHistoryTitlePositionLocks();
-    historyItemsRef.current = [];
-    setHistoryItems([]);
+    setSidebarActionError(null);
+    setFullHistoryLoading(false);
     setSharedHistoryItems([]);
-    setHistoryTotal(0);
-    setHistoryHasMore(false);
-    setHistoryError(null);
-    setHistoryListLoading(false);
-    setHistoryListLoadingMore(false);
-    setHistoryDetailLoading(false);
-    setHistoryMutating(false);
     queuedChatTurnsRef.current = [];
     chatQueueConversationIdRef.current = "";
     chatQueueRevisionRef.current = 0;
     queuedChatEditSessionRef.current = null;
     setQueuedChatTurns([]);
     setChatQueueRevision(0);
-    setProjectActivityUpdatedAtOverrides(new Map());
     resetProjectToolsRuntimeRef.current();
     setSelectedHistoryId("");
     setSelectedHistory(null);
-    setRenamingId(null);
-    setRenameDraft("");
   }, [
     activityStore,
-    clearHistoryTitlePositionLocks,
     clearPendingUploads,
     clearSession,
     invalidateHistoryLoad,
     markVisibleConversationRevision,
+    openController,
     transcriptStoreRegistry,
   ]);
 
@@ -3592,63 +3053,16 @@ export default function GatewayApp() {
       .filter((skill): skill is (typeof availableSkills)[number] => Boolean(skill));
   }, [availableSkills, selectedSkillNames, skillsEnabled]);
 
-  const sidebarItems = useMemo<ChatHistorySummary[]>(
-    () => historyItems.map((item) => toChatHistorySummary(item, settings.selectedModel)),
-    [historyItems, settings.selectedModel],
-  );
   const canShareHistory = Boolean(
     api &&
       settings.remote.enabled &&
       settings.remote.gatewayUrl.trim() &&
       settings.remote.token.trim(),
   );
-  // Sidebar running dots come from the activity store only.
-  const sidebarRunningConversationIds = useMemo(() => {
-    return new Set(activitySnapshot.activities.keys());
-  }, [activitySnapshot]);
-  const runningProjectPathKeys = useMemo(() => {
-    const next = new Set<string>();
-    for (const [conversationIdValue, activity] of activitySnapshot.activities) {
-      const conversationId = conversationIdValue.trim();
-      if (!conversationId) {
-        continue;
-      }
-
-      const activityWorkdir = activity.workdir?.trim() || "";
-      const runtimeWorkdir = conversationWorkdirsRef.current.get(conversationId)?.trim() || "";
-      const persistedWorkdir =
-        historyItems.find((item) => item.id === conversationId)?.cwd?.trim() || "";
-      const resolvedWorkdir = activityWorkdir || runtimeWorkdir || persistedWorkdir;
-      if (resolvedWorkdir) {
-        next.add(workspaceProjectPathKey(resolvedWorkdir));
-      }
-    }
-    return next;
-  }, [activitySnapshot, historyItems]);
-
-  const projectActivityUpdatedAts = useMemo(() => {
-    const updatedAts = buildWorkspaceProjectActivityUpdatedAts([
-      ...historyWorkdirs,
-      ...Array.from(activitySnapshot.activities.entries()).map(([conversationId, activity]) => {
-        const activityWorkdir = activity.workdir?.trim() || "";
-        const runtimeWorkdir = conversationWorkdirsRef.current.get(conversationId)?.trim() || "";
-        const persistedWorkdir =
-          historyItems.find((item) => item.id === conversationId)?.cwd?.trim() || "";
-        return {
-          cwd: activityWorkdir || runtimeWorkdir || persistedWorkdir,
-          updatedAt: activity.updatedAt > 0 ? activity.updatedAt : Date.now(),
-        };
-      }),
-    ]);
-    for (const [pathKey, updatedAt] of projectActivityUpdatedAtOverrides) {
-      if (updatedAt > (updatedAts.get(pathKey) ?? 0)) {
-        updatedAts.set(pathKey, updatedAt);
-      }
-    }
-    return updatedAts;
-  }, [activitySnapshot, historyItems, historyWorkdirs, projectActivityUpdatedAtOverrides]);
+  // Sidebar rows, running dots, and project activity all render inside
+  // <GatewaySidebarContainer/> from the sidebar store — no app-root memos.
   const currentConversationPersistedCwd =
-    historyItems.find((item) => item.id === displayedConversationId)?.cwd?.trim() || "";
+    sidebarConversationsById.get(displayedConversationId)?.cwd?.trim() || "";
   const currentConversationRuntimeWorkdir =
     conversationWorkdirsRef.current.get(displayedConversationId)?.trim() || "";
   const displayedConversationWorkdir =
@@ -3870,8 +3284,8 @@ export default function GatewayApp() {
     if (!displayedId || isLocalDraftConversationId(displayedId)) {
       return null;
     }
-    return pickConversationSummary(historyItems, displayedId);
-  }, [displayedConversationId, historyItems]);
+    return sidebarConversationsById.get(displayedId) ?? null;
+  }, [displayedConversationId, sidebarConversationsById]);
   const activeProjectBrowserTitle = isAgentMode ? (activeWorkspaceProject?.name.trim() ?? "") : "";
   const displayedConversationTitle = useMemo(
     () =>
@@ -3904,9 +3318,9 @@ export default function GatewayApp() {
     if (!selectedId) {
       return "";
     }
-    const item = historyItems.find((candidate) => candidate.id === selectedId);
-    return item ? resolveConversationTitle(item, item.id) : "";
-  }, [historyItems, selectedHistoryId]);
+    const item = sidebarConversationsById.get(selectedId);
+    return item?.title ?? "";
+  }, [selectedHistoryId, sidebarConversationsById]);
   const transcriptFoldedRows = displayedTranscript.foldedRows;
   const transcriptLiveRows = displayedTranscript.liveRows;
   // Row count gates everything visual (empty state, error banner, loading
@@ -3917,18 +3331,20 @@ export default function GatewayApp() {
   const selectedHistoryHasMore =
     selectedHistory?.conversation_id === displayedConversationId &&
     selectedHistory.has_more === true;
-  const loadingOlderHistory =
-    historyDetailLoading &&
-    selectedHistory?.conversation_id === displayedConversationId &&
-    displayedTranscriptRowCount > 0;
+  const loadingOlderHistory = fullHistoryLoading && displayedTranscriptRowCount > 0;
   const handleLoadFullHistory = useCallback(() => {
     if (!api || !displayedConversationId) {
       return;
     }
-    void selectHistory(displayedConversationId, api, {
-      fullHistory: true,
+    // Explicit full fetch through the id-preserving enrich path (same as the
+    // idle hydration); no-ops while a run is streaming.
+    setFullHistoryLoading(true);
+    void refreshDisplayedConversationHistorySnapshot(displayedConversationId, api, {
+      forceFull: true,
+    }).finally(() => {
+      setFullHistoryLoading(false);
     });
-  }, [api, displayedConversationId]);
+  }, [api, displayedConversationId, refreshDisplayedConversationHistorySnapshot]);
   const transcriptHasLiveRows = transcriptLiveRows.length > 0;
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -4034,60 +3450,6 @@ export default function GatewayApp() {
     stickTranscriptToBottom,
   ]);
 
-  useEffect(() => {
-    if (!historySwitchOverlay) {
-      return;
-    }
-
-    const targetConversationId = historySwitchOverlay.conversationId;
-    const currentDisplayedConversationId = displayedConversationId.trim();
-    const currentSelectedHistoryId = selectedHistoryId.trim();
-    const isTargetVisible = currentDisplayedConversationId === targetConversationId;
-    const isTargetSelected = isTargetVisible || currentSelectedHistoryId === targetConversationId;
-
-    if (historyDetailLoading && isTargetSelected) {
-      return;
-    }
-
-    let firstRafId: number | null = null;
-    let secondRafId: number | null = null;
-    const elapsed = Date.now() - historySwitchOverlay.startedAt;
-    const delayMs = Math.max(0, HISTORY_SWITCH_OVERLAY_MIN_MS - elapsed);
-    const timeoutId = window.setTimeout(() => {
-      firstRafId = requestAnimationFrame(() => {
-        if (isTargetVisible) {
-          stickTranscriptToBottom();
-        }
-        secondRafId = requestAnimationFrame(() => {
-          if (isTargetVisible) {
-            stickTranscriptToBottom();
-            refreshTranscriptScrollState();
-          }
-          setHistorySwitchOverlay((current) =>
-            current?.conversationId === targetConversationId ? null : current,
-          );
-        });
-      });
-    }, delayMs);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-      if (firstRafId !== null) {
-        cancelAnimationFrame(firstRafId);
-      }
-      if (secondRafId !== null) {
-        cancelAnimationFrame(secondRafId);
-      }
-    };
-  }, [
-    displayedConversationId,
-    historyDetailLoading,
-    historySwitchOverlay,
-    refreshTranscriptScrollState,
-    selectedHistoryId,
-    stickTranscriptToBottom,
-  ]);
-
   useLayoutEffect(() => {
     if (transcriptBusy || transcriptHasLiveRows) {
       syncTranscriptAutoScroll();
@@ -4164,30 +3526,23 @@ export default function GatewayApp() {
         />
 
         <div className="gateway-editor-host">
-          <ChatHistorySidebar
-            items={sidebarItems}
+          <GatewaySidebarContainer
+            store={sidebarStore}
             currentConversationId={displayedConversationId}
-            isBusy={historyDetailLoading || historyMutating}
-            runningConversationIds={sidebarRunningConversationIds}
-            isLoading={historyListLoading && sidebarItems.length === 0}
-            totalItems={historyTotal}
-            hasMore={historyHasMore}
-            isLoadingMore={historyListLoadingMore}
-            errorMessage={historyError}
-            renamingId={renamingId}
-            renameDraft={renameDraft}
             isOpen={sidebarOpen}
             activeView={activeView}
             showProjects={isAgentMode}
             projects={workspaceProjects}
             activeProjectId={activeWorkspaceProject?.id}
             missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-            runningProjectPathKeys={runningProjectPathKeys}
-            projectActivityUpdatedAts={projectActivityUpdatedAts}
             projectRenamingId={projectRenamingId}
             projectRenameDraft={projectRenameDraft}
             projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
             recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
+            canShareConversations={canShareHistory}
+            sharedConversationCount={sharedHistoryItems.length}
+            externalErrorMessage={sidebarActionError}
+            isLocalDraftConversationId={isLocalDraftConversationId}
             onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
             onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
             onCreateProject={handleOpenCreateWorkspaceProject}
@@ -4202,101 +3557,10 @@ export default function GatewayApp() {
             onRemoveProject={handleRemoveWorkspaceProject}
             onNewConversation={handleSidebarNewConversation}
             onSelectConversation={handleSidebarSelectConversation}
-            onStartRenaming={(item) => {
-              setRenamingId(item.id);
-              setRenameDraft(item.title);
-            }}
-            onRenameDraftChange={setRenameDraft}
-            onCommitRename={() => {
-              if (!renamingId) {
-                return;
-              }
-              const conversationIdValue = renamingId;
-              const title = renameDraft.trim();
-              setHistoryError(null);
-              void (async () => {
-                if (!title) {
-                  setRenamingId(null);
-                  setRenameDraft("");
-                  return;
-                }
-                setHistoryMutating(true);
-                try {
-                  const summary = await api.renameHistory(conversationIdValue, title);
-                  optimisticTitleConversationIdsRef.current.delete(conversationIdValue);
-                  unlockHistoryTitlePosition(conversationIdValue);
-                  updateHistoryItems((current) => upsertConversationSummary(current, summary));
-                } catch (error) {
-                  setHistoryError(asErrorMessage(error, "修改历史对话标题失败"));
-                } finally {
-                  setHistoryMutating(false);
-                  setRenamingId(null);
-                  setRenameDraft("");
-                }
-              })();
-            }}
-            onCancelRename={() => {
-              setRenamingId(null);
-              setRenameDraft("");
-            }}
-            onSetPinned={(id, isPinned) => {
-              setHistoryError(null);
-              void (async () => {
-                setHistoryMutating(true);
-                try {
-                  const summary = await api.pinHistory(id, isPinned);
-                  updateHistoryItems((current) => upsertConversationSummary(current, summary));
-                } catch (error) {
-                  setHistoryError(asErrorMessage(error, "更新历史对话置顶状态失败"));
-                } finally {
-                  setHistoryMutating(false);
-                }
-              })();
-            }}
-            canShareConversations={canShareHistory}
-            sharedConversationCount={sharedHistoryItems.length}
             onShareConversation={handleOpenShareModal}
             onOpenSharedConversations={handleOpenSharedHistoryManager}
-            onDeleteConversation={(id) => {
-              setHistoryError(null);
-              if (sidebarRunningConversationIds.has(id)) {
-                setHistoryError("后台任务仍在运行，暂时不能删除该对话。");
-                return;
-              }
-              if (isLocalDraftConversationId(id)) {
-                optimisticTitleConversationIdsRef.current.delete(id);
-                unlockHistoryTitlePosition(id);
-                updateHistoryItems((current) => current.filter((item) => item.id !== id));
-                if (conversationIdRef.current === id || selectedHistoryIdRef.current === id) {
-                  startNewConversation({
-                    workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
-                  });
-                }
-                return;
-              }
-              void (async () => {
-                setHistoryMutating(true);
-                try {
-                  await api.deleteHistory(id);
-                  optimisticTitleConversationIdsRef.current.delete(id);
-                  unlockHistoryTitlePosition(id);
-                  updateHistoryItems((current) => current.filter((item) => item.id !== id));
-                  setSharedHistoryItemsState(
-                    sharedHistoryItemsRef.current.filter((item) => item.id !== id),
-                  );
-                  if (conversationIdRef.current === id || selectedHistoryIdRef.current === id) {
-                    startNewConversation({
-                      workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
-                    });
-                  }
-                } catch (error) {
-                  setHistoryError(asErrorMessage(error, "删除历史对话失败"));
-                } finally {
-                  setHistoryMutating(false);
-                }
-              })();
-            }}
-            onLoadMore={loadMoreHistory}
+            onLocalDraftDeleted={handleSidebarLocalDraftDeleted}
+            onConversationsRemoved={handleSidebarConversationsRemoved}
             onCloseSidebar={() => setSidebarOpen(false)}
             onOpenSkillsHub={handleSidebarOpenSkillsHub}
             onOpenMcpHub={handleSidebarOpenMcpHub}
@@ -4472,7 +3736,7 @@ export default function GatewayApp() {
                         onResendFromEdit={handleResendFromEdit}
                       />
                     </ScrollArea>
-                    {historySwitchOverlay ? (
+                    {conversationOpenState.showOverlay ? (
                       <HistorySwitchLoadingOverlay locale={settings.locale} />
                     ) : null}
                   </div>

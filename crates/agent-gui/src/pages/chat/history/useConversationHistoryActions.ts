@@ -1,25 +1,20 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { type Dispatch, type MutableRefObject, type SetStateAction, useRef } from "react";
 import {
   type ConversationViewState,
   createConversationStateFromContext,
   normalizeConversationState,
 } from "../../../lib/chat/conversation/conversationState";
 import {
-  type ChatHistorySummary,
-  deleteChatHistory,
   getChatHistory,
   getChatHistoryActiveSegment,
   persistConversationState,
   renameChatHistory,
-  setChatHistoryPinned,
 } from "../../../lib/chat/history/chatHistory";
 import {
   createConversationIdentity,
-  mergeHistoryItem,
-  normalizeConversationTitle,
-  PENDING_CONVERSATION_TITLE,
   waitForTitleLookahead,
 } from "../../../lib/chat/page/chatPageHelpers";
+import type { SidebarStore } from "../../../lib/sidebar/store";
 import {
   type ConversationRuntimeEntry,
   createConversationRuntimeEntry,
@@ -61,10 +56,9 @@ type UseConversationHistoryActionsParams = {
   markLocalHistorySnapshotSynced: (conversationId: string, updatedAt: number) => void;
   isConversationRunning: (conversationId: string) => boolean;
   conversationLoadSequenceRef: MutableRefObject<number>;
-  historyItemsRef: MutableRefObject<ChatHistorySummary[]>;
+  sidebarStore: SidebarStore;
   titleJobRef: MutableRefObject<TitleJobRefValue>;
-  renamingId: string | null;
-  renameDraft: string;
+  t: (key: string) => string;
   buildRuntimeEntryFromVisibleState: () => ConversationRuntimeEntry;
   syncVisibleConversationRuntime: (conversationId: string, entry: ConversationRuntimeEntry) => void;
   updateConversationRuntimeEntry: (
@@ -82,10 +76,6 @@ type UseConversationHistoryActionsParams = {
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
   setHydratingConversationId: Dispatch<SetStateAction<string | null>>;
   setHydrationFailedConversationId: Dispatch<SetStateAction<string | null>>;
-  setHistoryItems: Dispatch<SetStateAction<ChatHistorySummary[]>>;
-  setHistoryError: Dispatch<SetStateAction<string | null>>;
-  setRenamingId: Dispatch<SetStateAction<string | null>>;
-  setRenameDraft: Dispatch<SetStateAction<string>>;
 };
 
 function createBlankConversationEntry(params: {
@@ -106,7 +96,9 @@ function createBlankConversationEntry(params: {
   });
 }
 
-function scheduleIdleHydration(task: () => void) {
+// Shared idle scheduler for phase-2 hydration: used by the conversation open
+// controller (ChatPage) and available to any caller needing the same policy.
+export function scheduleIdleHydration(task: () => void) {
   if (typeof window === "undefined") {
     const timeoutId = setTimeout(task, FULL_HISTORY_HYDRATION_FALLBACK_DELAY_MS);
     return () => clearTimeout(timeoutId);
@@ -133,10 +125,9 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     markLocalHistorySnapshotSynced,
     isConversationRunning,
     conversationLoadSequenceRef,
-    historyItemsRef,
+    sidebarStore,
     titleJobRef,
-    renamingId,
-    renameDraft,
+    t,
     buildRuntimeEntryFromVisibleState,
     syncVisibleConversationRuntime,
     updateConversationRuntimeEntry,
@@ -149,11 +140,12 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     setErrorMessage,
     setHydratingConversationId,
     setHydrationFailedConversationId,
-    setHistoryItems,
-    setHistoryError,
-    setRenamingId,
-    setRenameDraft,
   } = params;
+
+  // The sequence claimed by the latest openInitial. hydrateFull validates
+  // against this (not the live counter) so any bump in between — a new
+  // conversation, another open — turns the idle hydration into a no-op.
+  const openLoadSequenceRef = useRef(0);
 
   function pruneIdleConversationCaches(extraKeepIds: Iterable<string> = []) {
     pruneIdleConversationRuntimeCaches({
@@ -210,9 +202,33 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     });
   }
 
-  async function loadConversationFromHistory(id: string) {
+  async function activateFullRecord(id: string, loadSequence: number) {
+    const record = await getChatHistory(id);
+    if (conversationLoadSequenceRef.current !== loadSequence) {
+      return;
+    }
+    const nextEntry = createConversationRuntimeEntry({
+      state: record.state,
+      sessionId: record.sessionId ?? record.id,
+      createdAt: record.createdAt,
+      workdir: record.cwd,
+    });
+    activateConversation({
+      conversationId: record.id,
+      entry: nextEntry,
+      persistedState: record.state,
+      clearError: true,
+    });
+  }
+
+  // Phase 1 of the two-phase open: activate from the runtime cache
+  // synchronously ("cache-hit", already complete) or fetch and paint the
+  // active segment ("painted", phase 2 pending). Throws on failure after the
+  // one-shot full-record fallback also fails.
+  async function openInitial(id: string): Promise<"cache-hit" | "painted"> {
     const loadSequence = conversationLoadSequenceRef.current + 1;
     conversationLoadSequenceRef.current = loadSequence;
+    openLoadSequenceRef.current = loadSequence;
     setHydratingConversationId(id);
     setHydrationFailedConversationId((prev) => (prev === id ? null : prev));
     setErrorMessage(null);
@@ -227,9 +243,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
 
     const cached = conversationRuntimeCacheRef.current.get(id);
     if (cached) {
-      const isPendingHistoryItem = historyItemsRef.current.some(
-        (item) => item.id === id && item.isPending,
-      );
+      const isPendingHistoryItem = sidebarStore.peek(id)?.isPending === true;
       if (
         persistedConversationStateRef.current.has(id) ||
         cached.isSending ||
@@ -241,34 +255,15 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
           entry: cached,
           clearError: true,
         });
-        return;
+        return "cache-hit";
       }
       conversationRuntimeCacheRef.current.delete(id);
     }
 
-    const activateFullRecord = async () => {
-      const record = await getChatHistory(id);
-      if (conversationLoadSequenceRef.current !== loadSequence) {
-        return;
-      }
-      const nextEntry = createConversationRuntimeEntry({
-        state: record.state,
-        sessionId: record.sessionId ?? record.id,
-        createdAt: record.createdAt,
-        workdir: record.cwd,
-      });
-      activateConversation({
-        conversationId: record.id,
-        entry: nextEntry,
-        persistedState: record.state,
-        clearError: true,
-      });
-    };
-
     try {
       const activeRecord = await getChatHistoryActiveSegment(id);
       if (conversationLoadSequenceRef.current !== loadSequence) {
-        return;
+        return "painted";
       }
 
       const warmState = normalizeConversationState({
@@ -289,37 +284,47 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         entry: warmEntry,
         clearError: true,
       });
-
-      await new Promise<void>((resolve) => {
-        scheduleIdleHydration(() => {
-          if (conversationLoadSequenceRef.current !== loadSequence) {
-            resolve();
-            return;
-          }
-          void activateFullRecord()
-            .catch((err) => {
-              if (conversationLoadSequenceRef.current !== loadSequence) {
-                return;
-              }
-              const msg = err instanceof Error ? err.message : String(err);
-              setHydrationFailedConversationId(id);
-              setErrorMessage(msg || "读取完整历史对话失败");
-            })
-            .finally(resolve);
-        });
-      });
+      return "painted";
     } catch (err) {
+      // Keep the old fallback semantics: when the active-segment fetch fails,
+      // try the full record once before surfacing the failure.
       try {
-        await activateFullRecord();
-        return;
-      } catch {
-        if (conversationLoadSequenceRef.current !== loadSequence) {
-          return;
+        await activateFullRecord(id, loadSequence);
+        if (conversationLoadSequenceRef.current === loadSequence) {
+          setHydratingConversationId((current) => (current === id ? null : current));
         }
-        const msg = err instanceof Error ? err.message : String(err);
-        setHydrationFailedConversationId(id);
-        setErrorMessage(msg || "读取历史对话失败");
+        // Fully hydrated already — the controller skips phase 2.
+        return "cache-hit";
+      } catch {
+        if (conversationLoadSequenceRef.current === loadSequence) {
+          const msg = err instanceof Error ? err.message : String(err);
+          setHydrationFailedConversationId(id);
+          setErrorMessage(msg || t("chat.history.openFailed"));
+          setHydratingConversationId((current) => (current === id ? null : current));
+        }
+        throw err;
       }
+    }
+  }
+
+  // Phase 2: quiet full hydration. Valid only for the sequence opened by the
+  // preceding openInitial — any other bump (new conversation, another open)
+  // turns this into a no-op.
+  async function hydrateFull(id: string): Promise<void> {
+    const loadSequence = openLoadSequenceRef.current;
+    if (conversationLoadSequenceRef.current !== loadSequence) {
+      return;
+    }
+    try {
+      await activateFullRecord(id, loadSequence);
+    } catch (err) {
+      if (conversationLoadSequenceRef.current !== loadSequence) {
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      setHydrationFailedConversationId(id);
+      setErrorMessage(msg || t("chat.history.openFullFailed"));
+      throw err;
     } finally {
       if (conversationLoadSequenceRef.current === loadSequence) {
         setHydratingConversationId((current) => (current === id ? null : current));
@@ -327,87 +332,29 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     }
   }
 
-  async function commitRename() {
-    if (!renamingId) return;
-    if (isConversationRunning(renamingId)) {
-      setErrorMessage("后台任务仍在运行，暂时不能修改该对话标题。");
-      setRenamingId(null);
-      setRenameDraft("");
-      return;
-    }
+  // Post-deletion cleanup: the store already removed the row (and ran the
+  // IPC delete); this evicts local caches and replaces the visible
+  // conversation with a blank one when the deleted one was open.
+  function cleanupDeletedConversation(id: string) {
+    persistedConversationStateRef.current.delete(id);
+    conversationRuntimeCacheRef.current.delete(id);
+    deleteConversationArtifacts(id);
+    disposeSubagentsForConversation?.(id);
 
-    const title = normalizeConversationTitle(renameDraft);
-    const currentItem = historyItemsRef.current.find((item) => item.id === renamingId);
-    if (!title || !currentItem) {
-      setRenamingId(null);
-      setRenameDraft("");
-      return;
-    }
-
-    if (title === currentItem.title) {
-      setRenamingId(null);
-      setRenameDraft("");
-      return;
-    }
-
-    try {
-      markLocalHistorySnapshotSynced(renamingId, Number.MAX_SAFE_INTEGER);
-      const summary = await renameChatHistory(renamingId, title);
-      markLocalHistorySnapshotSynced(summary.id, summary.updatedAt);
-      setHistoryItems((prev) => mergeHistoryItem(prev, summary));
-    } catch (err) {
-      markLocalHistorySnapshotSynced(renamingId, -1);
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(msg || "修改历史对话标题失败");
-    } finally {
-      setRenamingId(null);
-      setRenameDraft("");
-    }
-  }
-
-  async function requestDeleteConversation(id: string) {
-    if (isConversationRunning(id)) {
-      setErrorMessage("后台任务仍在运行，暂时不能删除该对话。");
-      return;
-    }
-
-    try {
-      await deleteChatHistory(id);
-      setHistoryItems((prev) => prev.filter((item) => item.id !== id));
-      persistedConversationStateRef.current.delete(id);
-      conversationRuntimeCacheRef.current.delete(id);
-      deleteConversationArtifacts(id);
-      disposeSubagentsForConversation?.(id);
-
-      if (currentConversationIdRef.current === id) {
-        cancelConversationHydration();
-        resetVisibleTransientState();
-        const nextIdentity = createConversationIdentity();
-        const nextEntry = createBlankConversationEntry({
-          conversationState,
-          sessionId: nextIdentity.sessionId,
-          createdAt: nextIdentity.createdAt,
-          workdir: getDefaultNewConversationWorkdir?.(),
-        });
-        activateConversation({
-          conversationId: nextIdentity.conversationId,
-          entry: nextEntry,
-        });
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setErrorMessage(msg || "删除历史对话失败");
-    }
-  }
-
-  async function setConversationPinned(id: string, isPinned: boolean) {
-    try {
-      const summary = await setChatHistoryPinned(id, isPinned);
-      setHistoryItems((prev) => mergeHistoryItem(prev, summary));
-      setHistoryError(null);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setHistoryError(msg || "更新历史对话置顶状态失败");
+    if (currentConversationIdRef.current === id) {
+      cancelConversationHydration();
+      resetVisibleTransientState();
+      const nextIdentity = createConversationIdentity();
+      const nextEntry = createBlankConversationEntry({
+        conversationState,
+        sessionId: nextIdentity.sessionId,
+        createdAt: nextIdentity.createdAt,
+        workdir: getDefaultNewConversationWorkdir?.(),
+      });
+      activateConversation({
+        conversationId: nextIdentity.conversationId,
+        entry: nextEntry,
+      });
     }
   }
 
@@ -425,9 +372,10 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       titleLookahead = true,
     } = params;
 
-    const currentItem = historyItemsRef.current.find((item) => item.id === conversationId);
+    const pendingConversationTitle = t("chat.pendingTitle");
+    const currentItem = sidebarStore.peek(conversationId);
     let titleToStore =
-      currentItem && (!currentItem.isPending || currentItem.title !== PENDING_CONVERSATION_TITLE)
+      currentItem && (!currentItem.isPending || currentItem.title !== pendingConversationTitle)
         ? currentItem.title
         : fallbackTitle;
     if (titlePromise && titleLookahead) {
@@ -459,19 +407,17 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
         ...prev,
         errorMessage: null,
       }));
-      setHistoryItems((prev) =>
-        mergeHistoryItem(prev, {
-          ...summary,
-          isPending: false,
-        }),
-      );
-      setHistoryError(null);
+      sidebarStore.upsertLocal({ ...summary, isPending: undefined });
     } catch (err) {
       markLocalHistorySnapshotSynced(conversationId, -1);
       const msg = err instanceof Error ? err.message : String(err);
+      const persistFailedMessage = t("chat.history.persistFailed").replace(
+        "{message}",
+        msg || String(err),
+      );
       updateConversationRuntimeEntry(conversationId, (prev) => ({
         ...prev,
-        errorMessage: `历史记录保存失败：${msg || "未知错误"}`,
+        errorMessage: persistFailedMessage,
       }));
       return false;
     }
@@ -483,29 +429,22 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       .then(async (resolvedTitle) => {
         if (!resolvedTitle || resolvedTitle === initialStoredTitle) return;
 
-        const currentItem = historyItemsRef.current.find((item) => item.id === conversationId);
+        const currentItem = sidebarStore.peek(conversationId);
         if (!currentItem || currentItem.title !== initialStoredTitle) return;
 
         if (currentItem.isPending) {
-          setHistoryItems((prev) =>
-            mergeHistoryItem(prev, {
-              ...currentItem,
-              title: resolvedTitle,
-              updatedAt: Date.now(),
-            }),
-          );
+          sidebarStore.upsertLocal({
+            ...currentItem,
+            title: resolvedTitle,
+            updatedAt: Date.now(),
+          });
           return;
         }
 
         markLocalHistorySnapshotSynced(conversationId, Number.MAX_SAFE_INTEGER);
         const summary = await renameChatHistory(conversationId, resolvedTitle);
         markLocalHistorySnapshotSynced(summary.id, summary.updatedAt);
-        setHistoryItems((prev) =>
-          mergeHistoryItem(prev, {
-            ...summary,
-            isPending: false,
-          }),
-        );
+        sidebarStore.upsertLocal({ ...summary, isPending: undefined });
       })
       .catch(() => {
         markLocalHistorySnapshotSynced(conversationId, -1);
@@ -522,10 +461,9 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
 
   return {
     startNewConversation,
-    loadConversationFromHistory,
-    commitRename,
-    setConversationPinned,
-    requestDeleteConversation,
+    openInitial,
+    hydrateFull,
+    cleanupDeletedConversation,
     persistConversation,
   };
 }

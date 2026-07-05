@@ -7,6 +7,7 @@ import type {
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
 import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
+import { buildMemoryToolsSuffixSection } from "../../memory/prompts/injection";
 import {
   createHostedSearchEventAggregator,
   createHostedSearchProbeId,
@@ -45,7 +46,6 @@ import type {
 } from "../../settings";
 import { withPowerActivity } from "../../system/powerActivity";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
-import { buildMemoryToolsSuffixSection } from "../../memory/prompts/injection";
 import {
   appendHostedSearchBlocksToAssistant,
   type HostedSearchBlock,

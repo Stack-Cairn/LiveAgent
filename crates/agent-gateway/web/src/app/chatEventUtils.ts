@@ -1,27 +1,12 @@
 import type { ChatEvent, GatewaySelectedModel } from "@/lib/gatewayTypes";
 import type { AppSettings, SelectedModel } from "@/lib/settings";
 
-import { HISTORY_LIST_MIN_LOADING_MS } from "./constants";
 import type { ModelProviderSource, TunnelManagerToolChange } from "./types";
 
 export function asErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
   const text = String(error ?? "").trim();
   return text || fallback;
-}
-
-function wait(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
-}
-
-export async function waitForMinimumHistoryListLoading(startedAt: number) {
-  const elapsed = Date.now() - startedAt;
-  const remainingMs = Math.max(0, HISTORY_LIST_MIN_LOADING_MS - elapsed);
-  if (remainingMs > 0) {
-    await wait(remainingMs);
-  }
 }
 
 export function isAbortError(error: unknown) {

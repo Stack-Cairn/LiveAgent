@@ -42,16 +42,22 @@ test("conversation title job disables thinking, caching, and native web search",
     nativeWebSearchEnabled: false,
   });
 
-  let historyItems = [
-    {
-      id: "conversation-1",
-      title: "新会话",
-      updatedAt: 1,
-      isPending: true,
+  const historyItemsById = new Map([
+    [
+      "conversation-1",
+      {
+        id: "conversation-1",
+        title: "新会话",
+        updatedAt: 1,
+        isPending: true,
+      },
+    ],
+  ]);
+  const sidebarStore = {
+    peek: (conversationId) => historyItemsById.get(conversationId),
+    upsertLocal: (conversation) => {
+      historyItemsById.set(conversation.id, conversation);
     },
-  ];
-  const setHistoryItems = (updater) => {
-    historyItems = typeof updater === "function" ? updater(historyItems) : updater;
   };
   const titleJobRef = { current: null };
   const forwardedTitles = [];
@@ -64,7 +70,7 @@ test("conversation title job disables thinking, caching, and native web search",
     conversationId: "conversation-1",
     titleSourceText: "Please build a fast settings drawer.",
     content: "Please build a fast settings drawer.",
-    setHistoryItems,
+    sidebarStore,
     titleJobRef,
     gatewayBridgeEvents: {
       queueTitle: (nextTitle) => forwardedTitles.push(nextTitle),
@@ -80,6 +86,6 @@ test("conversation title job disables thinking, caching, and native web search",
   assert.equal(capturedParams.runtime.nativeWebSearchEnabled, false);
   assert.equal(capturedParams.nativeWebSearch, false);
   assert.equal(capturedParams.cacheRetention, "none");
-  assert.equal(historyItems[0].title, "Fast title");
+  assert.equal(historyItemsById.get("conversation-1").title, "Fast title");
   assert.equal(forwardedTitles[0], "Fast title");
 });

@@ -1,7 +1,6 @@
 import type { MutableRefObject } from "react";
 import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
-import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type {
   ChatRuntimeControls,
@@ -98,7 +97,6 @@ export type SendChatAction = (overrides?: {
 export type GatewayBridgeRuntimeRefs = {
   currentConversationIdRef: MutableRefObject<string>;
   conversationRuntimeCacheRef: MutableRefObject<Map<string, ConversationRuntimeEntry>>;
-  historyItemsRef: MutableRefObject<ChatHistorySummary[]>;
   ensureGatewayBridgeConversationReadyRef: MutableRefObject<
     (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
   >;

@@ -1,13 +1,12 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { MutableRefObject } from "react";
 import type { GatewayBridgeEventController } from "../../../lib/chat/conversation/run";
-import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
 import {
   buildConversationTitlePrompt,
-  mergeHistoryItem,
   normalizeConversationTitle,
 } from "../../../lib/chat/page/chatPageHelpers";
 import { assistantMessageToText, streamAssistantMessage } from "../../../lib/providers/llm";
 import type { ProviderId } from "../../../lib/settings";
+import type { SidebarStore } from "../../../lib/sidebar/store";
 
 type TitleJobRefValue = {
   conversationId: string;
@@ -22,7 +21,9 @@ type StartConversationTitleJobParams = {
   conversationId: string;
   titleSourceText: string;
   content: string;
-  setHistoryItems: Dispatch<SetStateAction<ChatHistorySummary[]>>;
+  // Only the pending row's title is streamed into the sidebar; persisted rows
+  // are renamed through the history IPC by the caller.
+  sidebarStore: Pick<SidebarStore, "peek" | "upsertLocal">;
   titleJobRef: MutableRefObject<TitleJobRefValue>;
   gatewayBridgeEvents: GatewayBridgeEventController;
 };
@@ -49,7 +50,7 @@ export function startConversationTitleJob(params: StartConversationTitleJobParam
     conversationId,
     titleSourceText,
     content,
-    setHistoryItems,
+    sidebarStore,
     titleJobRef,
     gatewayBridgeEvents,
   } = params;
@@ -99,14 +100,12 @@ export function startConversationTitleJob(params: StartConversationTitleJobParam
         .trim();
       if (!preview) return;
       forwardGatewayTitlePreview(preview);
-      setHistoryItems((prev) => {
-        const currentItem = prev.find((item) => item.id === conversationId);
-        if (!currentItem || !currentItem.isPending) return prev;
-        return mergeHistoryItem(prev, {
-          ...currentItem,
-          title: preview,
-          updatedAt: Date.now(),
-        });
+      const currentItem = sidebarStore.peek(conversationId);
+      if (!currentItem?.isPending) return;
+      sidebarStore.upsertLocal({
+        ...currentItem,
+        title: preview,
+        updatedAt: Date.now(),
       });
     },
   })
@@ -123,15 +122,13 @@ export function startConversationTitleJob(params: StartConversationTitleJobParam
     .then((resolvedTitle) => {
       if (!resolvedTitle) return;
       forwardGatewayTitlePreview(resolvedTitle, true);
-      setHistoryItems((prev) => {
-        const currentItem = prev.find((item) => item.id === conversationId);
-        if (!currentItem || !currentItem.isPending) return prev;
-        if (currentItem.title === resolvedTitle) return prev;
-        return mergeHistoryItem(prev, {
-          ...currentItem,
-          title: resolvedTitle,
-          updatedAt: Date.now(),
-        });
+      const currentItem = sidebarStore.peek(conversationId);
+      if (!currentItem?.isPending) return;
+      if (currentItem.title === resolvedTitle) return;
+      sidebarStore.upsertLocal({
+        ...currentItem,
+        title: resolvedTitle,
+        updatedAt: Date.now(),
       });
     })
     .catch(() => {

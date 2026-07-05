@@ -3,13 +3,6 @@ import type { ChatCommandOutcome } from "@/lib/chat/stream/chatCommandPipeline";
 import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import type { ChatRuntimeControls, CustomProvider } from "@/lib/settings";
 
-export type ReloadHistoryOptions = {
-  preferredConversationId?: string;
-  hydrateSelection?: boolean;
-  skipSelectionSync?: boolean;
-  silent?: boolean;
-};
-
 export type OverlayState = "closed" | "entering" | "open" | "leaving";
 
 export type SendChatOptions = {

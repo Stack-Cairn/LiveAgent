@@ -18,7 +18,6 @@ import {
   workspaceProjectPathKey,
 } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
-import { sortWorkspaceProjectsByActivity } from "../../lib/workspaceProjects";
 import {
   ChevronRight,
   Edit3,
@@ -46,12 +45,19 @@ import {
 } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 
+export type ChatHistorySidebarListStatus = "initial" | "loading" | "syncing" | "ready";
+export type ChatHistorySidebarMutationKind = "rename" | "pin" | "delete";
+
 type ChatHistorySidebarProps = {
-  items: ChatHistorySummary[];
+  items: readonly ChatHistorySummary[];
   currentConversationId: string;
-  isBusy: boolean;
+  // Per-row in-flight mutations: only that row's menu/inputs disable.
+  busyConversationIds: ReadonlyMap<string, ChatHistorySidebarMutationKind>;
   runningConversationIds: ReadonlySet<string>;
-  isLoading: boolean;
+  listStatus: ChatHistorySidebarListStatus;
+  // Identity of the current list scope (workspace/text mode). A change
+  // remounts the list content with a soft enter transition and resets scroll.
+  scopeKey?: string;
   totalItems: number;
   hasMore: boolean;
   isLoadingMore: boolean;
@@ -61,11 +67,11 @@ type ChatHistorySidebarProps = {
   isOpen: boolean;
   activeView?: "chat" | "skills-hub" | "mcp-hub";
   showProjects?: boolean;
+  // Pre-sorted by the container (pinned/running/activity); rendered as-is.
   projects?: WorkspaceProject[];
   activeProjectId?: string;
-  missingProjectPathKeys?: ReadonlySet<string>;
-  runningProjectPathKeys?: ReadonlySet<string>;
-  projectActivityUpdatedAts?: ReadonlyMap<string, number>;
+  missingProjectPathKeys: ReadonlySet<string>;
+  runningProjectPathKeys: ReadonlySet<string>;
   projectRenamingId?: string | null;
   projectRenameDraft?: string;
   projectsCollapsed?: boolean;
@@ -90,7 +96,7 @@ type ChatHistorySidebarProps = {
   onCancelRename: () => void;
   onSetPinned: (id: string, isPinned: boolean) => void;
   canShareConversations: boolean;
-  sharedConversationCount?: number;
+  sharedConversationCount: number;
   onShareConversation: (item: ChatHistorySummary) => void;
   onOpenSharedConversations: () => void;
   onDeleteConversation: (id: string) => void;
@@ -124,8 +130,9 @@ const SIDEBAR_RECENT_MIN_BODY_HEIGHT = 160;
 // share so the recent section sits a little higher and gets a little more room.
 const SIDEBAR_PROJECTS_BODY_DEFAULT_RATIO = 0.5;
 const SIDEBAR_MOBILE_PROJECTS_BODY_DEFAULT_RATIO = 0.4;
-const EMPTY_PROJECT_PATH_KEYS = new Set<string>();
-const EMPTY_PROJECT_ACTIVITY_UPDATED_ATS = new Map<string, number>();
+// Projects are not virtualized; cap the rendered rows and offer an explicit
+// "show all (N)" expansion instead.
+const SIDEBAR_PROJECT_RENDER_CAP = 30;
 const HISTORY_LOADING_SKELETON_ROWS = [
   { title: "w-36", meta: "w-20" },
   { title: "w-44", meta: "w-24" },
@@ -244,6 +251,9 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
   const { t } = useLocale();
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Enter/Escape mark the blur as handled so onBlur commits exactly once —
+  // symmetric with ProjectRow's skipNextBlurCommitRef.
+  const skipNextBlurCommitRef = useRef(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const longPressTriggeredRef = useRef(false);
@@ -422,6 +432,7 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
 
   useEffect(() => {
     if (!isRenaming) return;
+    skipNextBlurCommitRef.current = false;
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [isRenaming]);
@@ -479,14 +490,22 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
             ref={inputRef}
             value={renameDraft}
             onChange={(e) => onRenameDraftChange(e.currentTarget.value)}
-            onBlur={onCommitRename}
+            onBlur={() => {
+              if (skipNextBlurCommitRef.current) {
+                skipNextBlurCommitRef.current = false;
+                return;
+              }
+              onCommitRename();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
+                skipNextBlurCommitRef.current = true;
                 onCommitRename();
               }
               if (e.key === "Escape") {
                 e.preventDefault();
+                skipNextBlurCommitRef.current = true;
                 onCancelRename();
               }
             }}
@@ -1023,9 +1042,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const {
     items,
     currentConversationId,
-    isBusy,
+    busyConversationIds,
     runningConversationIds,
-    isLoading,
+    listStatus,
+    scopeKey = "",
     totalItems,
     hasMore,
     isLoadingMore,
@@ -1037,9 +1057,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     showProjects = false,
     projects = [],
     activeProjectId,
-    missingProjectPathKeys = EMPTY_PROJECT_PATH_KEYS,
-    runningProjectPathKeys = EMPTY_PROJECT_PATH_KEYS,
-    projectActivityUpdatedAts = EMPTY_PROJECT_ACTIVITY_UPDATED_ATS,
+    missingProjectPathKeys,
+    runningProjectPathKeys,
     projectRenamingId = null,
     projectRenameDraft = "",
     projectsCollapsed = false,
@@ -1064,7 +1083,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onCancelRename,
     onSetPinned,
     canShareConversations,
-    sharedConversationCount: sharedConversationCountProp,
+    sharedConversationCount,
     onShareConversation,
     onOpenSharedConversations,
     onDeleteConversation,
@@ -1077,6 +1096,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [pendingProjectRemoveId, setPendingProjectRemoveId] = useState<string | null>(null);
+  const [showAllProjects, setShowAllProjects] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [isMobileMenuLayout, setIsMobileMenuLayout] = useState(isMobileSidebarLayout);
   const [projectSectionHeight, setProjectSectionHeight] = useState<number | null>(null);
@@ -1136,16 +1156,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const handleRemoveProject = useStableEvent((project: WorkspaceProject) => {
     onRemoveProject?.(project);
   });
-  const sharedConversationCount = useMemo(
-    () => sharedConversationCountProp ?? items.filter((item) => item.isShared === true).length,
-    [items, sharedConversationCountProp],
+  // Projects arrive pre-sorted from the container; only the render cap is
+  // applied here.
+  const renderedProjects = useMemo(
+    () => (showAllProjects ? projects : projects.slice(0, SIDEBAR_PROJECT_RENDER_CAP)),
+    [projects, showAllProjects],
   );
-  const renderedProjects = useMemo(() => {
-    return sortWorkspaceProjectsByActivity(projects, {
-      projectActivityUpdatedAts,
-      runningProjectPathKeys,
-    });
-  }, [projectActivityUpdatedAts, projects, runningProjectPathKeys]);
+  const hasCappedProjects = projects.length > SIDEBAR_PROJECT_RENDER_CAP;
   const sidebarSectionLayout = useMemo(() => {
     const {
       containerHeight,
@@ -1285,10 +1302,17 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   const lastVirtualHistoryIndex =
     virtualHistoryRows.length > 0 ? virtualHistoryRows[virtualHistoryRows.length - 1].index : -1;
 
+  // Workspace switch: land the new scope at the top; the scope-keyed content
+  // wrapper below replays the soft enter transition at the same time.
+  useEffect(() => {
+    historyScrollRef.current?.scrollTo({ top: 0 });
+  }, [scopeKey]);
+
   useEffect(() => {
     if (
       !hasMore ||
-      isLoading ||
+      listStatus === "loading" ||
+      listStatus === "initial" ||
       isLoadingMore ||
       recentCollapsed ||
       items.length === 0 ||
@@ -1299,22 +1323,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onLoadMore();
   }, [
     hasMore,
-    isLoading,
+    listStatus,
     isLoadingMore,
     items.length,
     lastVirtualHistoryIndex,
     onLoadMore,
     recentCollapsed,
   ]);
-
-  useEffect(() => {
-    if (!pendingProjectRemoveId) {
-      return;
-    }
-    if (!projects.some((project) => project.id === pendingProjectRemoveId)) {
-      setPendingProjectRemoveId(null);
-    }
-  }, [pendingProjectRemoveId, projects]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-run to (re)observe section refs when sections mount/unmount or toggle
   useEffect(() => {
@@ -1489,7 +1504,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         key={item.id}
         item={item}
         isActive={currentConversationId === item.id}
-        isBusy={isBusy}
+        isBusy={busyConversationIds.has(item.id)}
         isRunning={runningConversationIds.has(item.id)}
         isDeleteDisabled={runningConversationIds.has(item.id)}
         canShareConversation={canShareConversations}
@@ -1522,7 +1537,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       handleSetPinned,
       handleShareConversation,
       handleStartRenaming,
-      isBusy,
+      busyConversationIds,
       canShareConversations,
       isMobileMenuLayout,
       menuSide,
@@ -1719,6 +1734,23 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                       />
                     );
                   })}
+                  {hasCappedProjects ? (
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11.5px] font-medium text-muted-foreground outline-hidden",
+                        PROJECT_HEADER_BUTTON_CLASS,
+                      )}
+                      onClick={() => setShowAllProjects((current) => !current)}
+                    >
+                      {showAllProjects
+                        ? t("chat.workspaceShowLessProjects")
+                        : t("chat.workspaceShowAllProjects").replace(
+                            "{count}",
+                            String(projects.length),
+                          )}
+                    </button>
+                  ) : null}
                 </div>
               </div>
               <button
@@ -1773,6 +1805,19 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               <span className="min-w-0 truncate">{t("chat.recentConversation")}</span>
             </button>
             <div className="flex items-center gap-1.5">
+              {listStatus === "syncing" ? (
+                <span
+                  role="status"
+                  aria-live="polite"
+                  className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-[10.5px] font-medium text-primary/80"
+                >
+                  <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden="true">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/35 opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary/70" />
+                  </span>
+                  {t("chat.history.syncing")}
+                </span>
+              ) : null}
               <div className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                 {Math.max(totalItems, items.length)}
               </div>
@@ -1808,6 +1853,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 : "translate-y-0 opacity-100",
             )}
           >
+            {/* Render priority: error banner ABOVE rows (never replacing
+                them); skeleton only while loading with nothing cached; rows
+                whenever present; empty state only when authoritatively
+                empty. */}
             {errorMessage ? (
               <div className="shrink-0 px-3 pb-2">
                 <SidebarStateCard
@@ -1819,25 +1868,15 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             ) : null}
             <div
               ref={historyScrollRef}
-              aria-busy={isLoading || isLoadingMore}
+              aria-busy={listStatus === "loading" || listStatus === "syncing" || isLoadingMore}
               className="chat-history-list min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3"
             >
-              {isLoading ? (
-                <HistoryListLoadingSkeleton />
-              ) : items.length === 0 ? (
-                <div className="flex flex-col items-center px-2 pt-6 pb-4 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/10 to-blue-500/10 ring-1 ring-violet-500/15">
-                    <MessageSquareText className="h-5 w-5 text-violet-500/70" />
-                  </div>
-                  <p className="mt-3.5 text-[13px] font-medium text-foreground/70">
-                    {t("chat.emptyChatHistory")}
-                  </p>
-                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground/80">
-                    {t("chat.clickNewConversation")}
-                  </p>
-                </div>
-              ) : (
-                <div className="relative" style={{ height: historyVirtualizer.getTotalSize() }}>
+              {items.length > 0 ? (
+                <div
+                  key={scopeKey || "scope"}
+                  className="chat-history-scope-enter relative"
+                  style={{ height: historyVirtualizer.getTotalSize() }}
+                >
                   {virtualHistoryRows.map((virtualRow) => {
                     const item = items[virtualRow.index];
                     if (!item) return null;
@@ -1855,8 +1894,22 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     );
                   })}
                 </div>
-              )}
-              {!isLoading && items.length > 0 && (hasMore || isLoadingMore) ? (
+              ) : listStatus === "loading" || listStatus === "initial" ? (
+                <HistoryListLoadingSkeleton />
+              ) : listStatus === "ready" && !errorMessage ? (
+                <div className="chat-history-scope-enter flex flex-col items-center px-2 pt-6 pb-4 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/10 to-blue-500/10 ring-1 ring-violet-500/15">
+                    <MessageSquareText className="h-5 w-5 text-violet-500/70" />
+                  </div>
+                  <p className="mt-3.5 text-[13px] font-medium text-foreground/70">
+                    {t("chat.emptyChatHistory")}
+                  </p>
+                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground/80">
+                    {t("chat.clickNewConversation")}
+                  </p>
+                </div>
+              ) : null}
+              {items.length > 0 && (hasMore || isLoadingMore) ? (
                 <div className="px-2 pb-2 pt-1 text-center text-[11px] leading-5 text-muted-foreground/70">
                   {isLoadingMore
                     ? t("sidebar.loadingMoreHistory")

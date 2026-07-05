@@ -13,7 +13,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChatHistorySidebar } from "../components/chat/ChatHistorySidebar";
 import { HistoryShareModal } from "../components/chat/HistoryShareModal";
 import type {
   MentionComposerCommitMention,
@@ -65,19 +64,13 @@ import {
 import {
   type ChatHistoryShareStatus,
   type ChatHistorySummary,
-  type ChatHistoryWorkdirSummary,
   deleteChatHistory,
   getChatHistory,
   getChatHistoryShare,
   listChatHistory,
-  listChatHistoryWorkdirs,
   listSharedChatHistory,
   setChatHistoryShare,
 } from "../lib/chat/history/chatHistory";
-import {
-  CHAT_HISTORY_SYNC_EVENT,
-  type ChatHistorySyncEvent,
-} from "../lib/chat/history/chatHistorySync";
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
 import type { MemoryExtractionStatusKey } from "../lib/chat/memory/extractionEngine";
 import {
@@ -98,9 +91,6 @@ import {
   createPendingHistoryItem,
   getFirstUserMessageText,
   isAbortLikeError,
-  mergeHistoryItem,
-  PENDING_CONVERSATION_TITLE,
-  sortHistoryItems,
 } from "../lib/chat/page/chatPageHelpers";
 import {
   collectRetainedSubagentParentToolCallIds,
@@ -155,6 +145,17 @@ import {
   workspaceProjectPathKey,
 } from "../lib/settings";
 import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
+import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
+import {
+  type ConversationOpenState,
+  createConversationOpenController,
+} from "../lib/sidebar/openController";
+import { sortSidebarConversations } from "../lib/sidebar/reconcile";
+import { sidebarScopeKey } from "../lib/sidebar/scope";
+import { selectConversations } from "../lib/sidebar/selectors";
+import { createSidebarStore } from "../lib/sidebar/store";
+import type { SidebarScope } from "../lib/sidebar/types";
+import { useSidebarSelector } from "../lib/sidebar/useSidebarSelector";
 import {
   buildSkillsSystemPrompt,
   mergeAlwaysEnabledSkillNames,
@@ -177,13 +178,9 @@ import type {
 } from "../lib/tunnels/constants";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
 import {
-  applyWorkspaceProjectConversationActivityMap,
-  buildWorkspaceProjectActivityUpdatedAts,
   fallbackWorkspaceProjectName,
   findWorkspaceProject,
-  mergeWorkspaceProjectActivityUpdatedAts,
   mergeWorkspaceProjectsWithHistory,
-  workspaceProjectActivityUpdatedAtsEqual,
 } from "../lib/workspaceProjects";
 import {
   type ActiveGatewayBridgeRequest,
@@ -205,9 +202,9 @@ import {
   pruneIdleConversationRuntimeCaches,
   resolveEffectiveChatModelSelection,
   type SendChatAction,
+  scheduleIdleHydration,
   setConversationRuntimeCacheEntry,
   startConversationTitleJob,
-  useChatHistoryList,
   useChatPageRuntimeStore,
   useChatSkills,
   useConversationHistoryActions,
@@ -244,6 +241,7 @@ import {
   resolveQueuedChatTurnSlotIndex,
   takeNextQueuedChatTurn,
 } from "./chat/queue/chatTurnQueue";
+import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import { McpHubPage } from "./mcp-hub/McpHubPage";
 import type { SectionId } from "./settings/types";
 import { SkillsHubPage } from "./skills-hub/SkillsHubPage";
@@ -317,11 +315,6 @@ function buildFallbackGatewayStatus(remote: AppSettings["remote"]): GatewayRunti
   };
 }
 
-type SyncedRunningConversationRuntime = {
-  workdir?: string;
-  updatedAt: number;
-};
-
 type ActiveGatewayRuntimeRun = {
   conversationId: string;
   runId: string;
@@ -335,7 +328,6 @@ type ActiveGatewayRuntimeRun = {
   toolStatusIsCompaction: boolean;
 };
 
-const HISTORY_SWITCH_OVERLAY_MIN_MS = 260;
 const PROJECT_HISTORY_DELETE_PAGE_SIZE = 200;
 const SHARED_HISTORY_LIST_PAGE_SIZE = 200;
 const GATEWAY_RUNTIME_SNAPSHOT_DEBOUNCE_MS = 300;
@@ -631,26 +623,17 @@ export function ChatPage(props: ChatPageProps) {
   const [currentConversationCreatedAt, setCurrentConversationCreatedAt] = useState(
     () => initialConversationRef.current.createdAt,
   );
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
   const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
   const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [runningConversationIds, setRunningConversationIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-  const [syncedRunningConversationRuntime, setSyncedRunningConversationRuntime] = useState<
-    ReadonlyMap<string, SyncedRunningConversationRuntime>
-  >(() => new Map());
-  const syncedRunningConversationRuntimeRef = useRef<
-    ReadonlyMap<string, SyncedRunningConversationRuntime>
-  >(new Map());
-  const [syncedProjectActivityUpdatedAts, setSyncedProjectActivityUpdatedAts] = useState<
-    ReadonlyMap<string, number>
-  >(() => new Map());
-  const [historySwitchOverlay, setHistorySwitchOverlay] = useState<{
-    conversationId: string;
-    startedAt: number;
-  } | null>(null);
+  const [conversationOpenState, setConversationOpenState] = useState<ConversationOpenState>({
+    conversationId: "",
+    phase: "idle",
+    showOverlay: false,
+    errorCode: null,
+  });
   const { confirm: requestConfirmDialog, dialog: confirmDialog } = useConfirmDialog();
 
   const isAgentMode = isAgentExecutionMode(settings.system.executionMode);
@@ -668,10 +651,20 @@ export function ChatPage(props: ChatPageProps) {
     [skillsEnabled, settings.skills.selected],
   );
   const workdir = settings.system.workdir.trim();
-  const [historyWorkdirs, setHistoryWorkdirs] = useState<ChatHistoryWorkdirSummary[]>([]);
+  // The sidebar store owns all sidebar domain state (conversation list,
+  // workdirs, running set); ChatPage only issues imperative calls and keeps a
+  // few narrow selector subscriptions.
+  const sidebarStore = useMemo(() => createSidebarStore(createGuiSidebarBackend()), []);
+  useEffect(() => {
+    sidebarStore.start();
+    return () => {
+      sidebarStore.stop();
+    };
+  }, [sidebarStore]);
+  const sidebarWorkdirs = useSidebarSelector(sidebarStore, (s) => s.workdirs);
   const workspaceProjects = useMemo(
-    () => mergeWorkspaceProjectsWithHistory(settings.system, historyWorkdirs),
-    [historyWorkdirs, settings.system],
+    () => mergeWorkspaceProjectsWithHistory(settings.system, sidebarWorkdirs),
+    [sidebarWorkdirs, settings.system],
   );
   const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>(
     () => settings.system.activeWorkspaceProjectId?.trim() || DEFAULT_WORKSPACE_PROJECT_ID,
@@ -690,18 +683,19 @@ export function ChatPage(props: ChatPageProps) {
     }
   }, [activeWorkspaceProject?.id, activeWorkspaceProjectId]);
   const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
-  const historyListFilter = useMemo(
+  const sidebarScope = useMemo<SidebarScope>(
     () =>
       isAgentMode
-        ? { cwd: activeWorkspaceProjectPath || "__liveagent_no_project__" }
-        : {
-            cwdEmpty: true,
-          },
+        ? activeWorkspaceProjectPath
+          ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
+          : { kind: "none" }
+        : { kind: "unscoped" },
     [activeWorkspaceProjectPath, isAgentMode],
   );
-  const historyScopeKey = isAgentMode
-    ? `cwd:${activeWorkspaceProjectPath || "__liveagent_no_project__"}`
-    : "cwd-empty";
+  useEffect(() => {
+    sidebarStore.setScope(sidebarScope);
+  }, [sidebarScope, sidebarStore]);
+  const historyScopeKey = sidebarScopeKey(sidebarScope);
   const enabledMcpServers = useMemo(
     () => settings.mcp.servers.filter((server) => server.enabled),
     [settings.mcp.servers],
@@ -788,18 +782,9 @@ export function ChatPage(props: ChatPageProps) {
     };
   }, []);
 
-  const {
-    historyItems,
-    setHistoryItems,
-    historyItemsRef,
-    historyTotal,
-    historyHasMore,
-    historyLoading,
-    historyLoadingMore,
-    historyError,
-    setHistoryError,
-    loadMoreHistory,
-  } = useChatHistoryList(historyListFilter);
+  // The only page-level subscription to the sidebar list: ChatPage's own
+  // render needs (draft detection, pending-item effect, workspace root).
+  const historyItems = useSidebarSelector(sidebarStore, selectConversations);
   const [shareConversation, setShareConversation] = useState<ChatHistorySummary | null>(null);
   const [shareStatus, setShareStatus] = useState<ChatHistoryShareStatus | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -832,160 +817,6 @@ export function ChatPage(props: ChatPageProps) {
     remoteRuntimeStatus.online === true &&
     remoteRuntimeStatus.enabled === true &&
     remoteRuntimeStatus.configured === true;
-
-  const refreshHistoryWorkdirs = useCallback(async () => {
-    try {
-      const response = await listChatHistoryWorkdirs();
-      setHistoryWorkdirs(response.workdirs);
-    } catch (error) {
-      console.warn("Failed to load chat history workdirs", error);
-    }
-  }, []);
-
-  const persistProjectConversationActivity = useCallback(
-    (activity: ReadonlyMap<string, number>) => {
-      if (activity.size === 0) {
-        return;
-      }
-      setSettings((prev) => {
-        const hiddenProjectPathKeys = new Set(
-          prev.system.hiddenWorkspaceProjectPaths.map(workspaceProjectPathKey),
-        );
-        const workspaceProjects = applyWorkspaceProjectConversationActivityMap(
-          prev.system.workspaceProjects,
-          activity,
-          { hiddenProjectPathKeys },
-        );
-        if (!workspaceProjects) {
-          return prev;
-        }
-        return {
-          ...prev,
-          system: resolveWorkspaceProjects(
-            {
-              ...prev.system,
-              workspaceProjects,
-            },
-            getDefaultWorkspaceProjectPath(prev.system),
-          ),
-        };
-      });
-    },
-    [setSettings],
-  );
-
-  const recordProjectActivity = useCallback(
-    (workdir?: string | null, updatedAt?: number | null) => {
-      const pathKey = workspaceProjectPathKey(workdir ?? "");
-      if (!pathKey) {
-        return;
-      }
-      const nextUpdatedAt =
-        typeof updatedAt === "number" && Number.isFinite(updatedAt) && updatedAt > 0
-          ? updatedAt
-          : Date.now();
-      setSyncedProjectActivityUpdatedAts((current) => {
-        if ((current.get(pathKey) ?? 0) >= nextUpdatedAt) {
-          return current;
-        }
-        return mergeWorkspaceProjectActivityUpdatedAts(
-          current,
-          new Map([[pathKey, nextUpdatedAt]]),
-        );
-      });
-      persistProjectConversationActivity(new Map([[pathKey, nextUpdatedAt]]));
-    },
-    [persistProjectConversationActivity],
-  );
-
-  useEffect(() => {
-    const historyActivity = buildWorkspaceProjectActivityUpdatedAts(historyWorkdirs);
-    if (historyActivity.size === 0) {
-      return;
-    }
-    setSyncedProjectActivityUpdatedAts((current) => {
-      const next = mergeWorkspaceProjectActivityUpdatedAts(current, historyActivity);
-      return workspaceProjectActivityUpdatedAtsEqual(current, next) ? current : next;
-    });
-    persistProjectConversationActivity(historyActivity);
-  }, [historyWorkdirs, persistProjectConversationActivity]);
-
-  const applySyncedConversationRuntime = useCallback(
-    (event: ChatHistorySyncEvent) => {
-      const conversationId = event.conversationId.trim();
-      if (!conversationId) {
-        return;
-      }
-
-      const existing = syncedRunningConversationRuntimeRef.current.get(conversationId);
-      const eventWorkdir = event.conversation?.cwd?.trim() || "";
-      const workdir = eventWorkdir || existing?.workdir || "";
-      const eventUpdatedAt = event.conversation?.updatedAt;
-      const updatedAt =
-        typeof eventUpdatedAt === "number" && Number.isFinite(eventUpdatedAt) && eventUpdatedAt > 0
-          ? eventUpdatedAt
-          : existing?.updatedAt || Date.now();
-
-      if (workdir) {
-        recordProjectActivity(workdir, updatedAt);
-      }
-
-      if (event.kind === "upsert" && !existing) {
-        return;
-      }
-
-      setSyncedRunningConversationRuntime((current) => {
-        const currentEntry = current.get(conversationId);
-        if (event.kind === "idle" || event.kind === "delete") {
-          if (!currentEntry) {
-            syncedRunningConversationRuntimeRef.current = current;
-            return current;
-          }
-          const next = new Map(current);
-          next.delete(conversationId);
-          syncedRunningConversationRuntimeRef.current = next;
-          return next;
-        }
-
-        const nextEntry: SyncedRunningConversationRuntime = {
-          workdir: workdir || undefined,
-          updatedAt: Math.max(currentEntry?.updatedAt ?? 0, updatedAt),
-        };
-        if (
-          currentEntry?.workdir === nextEntry.workdir &&
-          currentEntry?.updatedAt === nextEntry.updatedAt
-        ) {
-          syncedRunningConversationRuntimeRef.current = current;
-          return current;
-        }
-        const next = new Map(current);
-        next.set(conversationId, nextEntry);
-        syncedRunningConversationRuntimeRef.current = next;
-        return next;
-      });
-    },
-    [recordProjectActivity],
-  );
-
-  useEffect(() => {
-    void refreshHistoryWorkdirs();
-  }, [refreshHistoryWorkdirs]);
-
-  useEffect(() => {
-    const unlistenPromise = listen<ChatHistorySyncEvent>(CHAT_HISTORY_SYNC_EVENT, (event) => {
-      applySyncedConversationRuntime(event.payload);
-      if (
-        event.payload.kind === "upsert" ||
-        event.payload.kind === "delete" ||
-        event.payload.kind === "idle"
-      ) {
-        void refreshHistoryWorkdirs();
-      }
-    });
-    return () => {
-      void unlistenPromise.then((unlisten) => unlisten());
-    };
-  }, [applySyncedConversationRuntime, refreshHistoryWorkdirs]);
 
   const setWorkspaceProjectDirectoryMissing = useCallback(
     (project: WorkspaceProject, missing: boolean) => {
@@ -1178,12 +1009,10 @@ export function ChatPage(props: ChatPageProps) {
       try {
         await revealItemInDir(project.path.trim());
       } catch (error) {
-        const message = asErrorMessage(error, t("chat.workspaceOpenSystemFileManagerFailed"));
-        setHistoryError(message);
-        setErrorMessage(message);
+        setErrorMessage(asErrorMessage(error, t("chat.workspaceOpenSystemFileManagerFailed")));
       }
     },
-    [checkWorkspaceProjectDirectory, setErrorMessage, setHistoryError, t],
+    [checkWorkspaceProjectDirectory, setErrorMessage, t],
   );
 
   const handleOpenCreateWorkspaceProject = useCallback(async () => {
@@ -1194,17 +1023,10 @@ export function ChatPage(props: ChatPageProps) {
       const path = picked?.trim();
       if (!path) return;
       activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));
-      void refreshHistoryWorkdirs();
     } catch (error) {
-      setHistoryError(asErrorMessage(error, "选择项目目录失败"));
+      setErrorMessage(asErrorMessage(error, "选择项目目录失败"));
     }
-  }, [
-    activateWorkspaceProject,
-    activeWorkspaceProjectPath,
-    refreshHistoryWorkdirs,
-    setHistoryError,
-    workdir,
-  ]);
+  }, [activateWorkspaceProject, activeWorkspaceProjectPath, workdir]);
 
   const commitWorkspaceProjectRename = useCallback(
     (project: WorkspaceProject, nextNameInput: string) => {
@@ -1459,12 +1281,24 @@ export function ChatPage(props: ChatPageProps) {
   const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => void>(
     () => undefined,
   );
-  const loadConversationActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
-  const commitRenameActionRef = useRef<() => Promise<void>>(async () => undefined);
-  const setPinnedActionRef = useRef<(id: string, isPinned: boolean) => Promise<void>>(
-    async () => undefined,
+  const openInitialActionRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(
+    async () => "painted",
   );
-  const deleteConversationActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
+  const hydrateFullActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
+  const cleanupDeletedConversationActionRef = useRef<(id: string) => void>(() => undefined);
+  // Two-phase conversation open: paint the active segment fast, hydrate the
+  // full transcript at idle. The overlay appears only after 150ms of
+  // still-opening — no minimum overlay duration.
+  const openController = useMemo(
+    () =>
+      createConversationOpenController({
+        openInitial: (conversationId) => openInitialActionRef.current(conversationId),
+        hydrateFull: (conversationId) => hydrateFullActionRef.current(conversationId),
+        scheduleIdle: scheduleIdleHydration,
+        onStateChange: setConversationOpenState,
+      }),
+    [],
+  );
   const sendActionRef = useRef<SendChatAction>(async () => false);
   const ensureGatewayBridgeConversationReadyRef = useRef<
     (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
@@ -1845,65 +1679,28 @@ export function ChatPage(props: ChatPageProps) {
       unlisten?.();
     };
   }, [requestConfirmDialog, t]);
-  const sidebarRunningConversationIds = useMemo(() => {
-    const next = new Set(runningConversationIds);
-    for (const conversationId of syncedRunningConversationRuntime.keys()) {
-      next.add(conversationId);
-    }
-    return next;
-  }, [runningConversationIds, syncedRunningConversationRuntime]);
-  const runningProjectPathKeys = useMemo(() => {
-    const next = new Set<string>();
-    for (const conversationIdValue of sidebarRunningConversationIds) {
-      const conversationId = conversationIdValue.trim();
-      if (!conversationId) {
-        continue;
-      }
-
-      const runtimeWorkdir =
-        conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
-      const syncedWorkdir =
-        syncedRunningConversationRuntime.get(conversationId)?.workdir?.trim() || "";
-      const persistedWorkdir =
-        historyItems.find((item) => item.id === conversationId)?.cwd?.trim() || "";
-      const resolvedWorkdir = runtimeWorkdir || syncedWorkdir || persistedWorkdir;
-      if (resolvedWorkdir) {
-        next.add(workspaceProjectPathKey(resolvedWorkdir));
+  // Local runner running-state → sidebar store: diff transitions so sidebar
+  // dots (and running workdir keys) include local runs immediately; remote
+  // runs arrive through the store's own event subscription.
+  const previousSidebarRunningPatchIdsRef = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const previous = previousSidebarRunningPatchIdsRef.current;
+    previousSidebarRunningPatchIdsRef.current = runningConversationIds;
+    for (const conversationId of runningConversationIds) {
+      if (!previous.has(conversationId)) {
+        sidebarStore.applyRunningPatch({
+          conversationId,
+          running: true,
+          workdir: conversationRuntimeCacheRef.current.get(conversationId)?.workdir,
+        });
       }
     }
-    return next;
-  }, [historyItems, sidebarRunningConversationIds, syncedRunningConversationRuntime]);
-  const projectActivityUpdatedAts = useMemo(() => {
-    const updatedAts = buildWorkspaceProjectActivityUpdatedAts([
-      ...historyWorkdirs,
-      ...Array.from(runningConversationIds).map((conversationId) => {
-        const runtimeWorkdir =
-          conversationRuntimeCacheRef.current.get(conversationId)?.workdir?.trim() || "";
-        const persistedWorkdir =
-          historyItems.find((item) => item.id === conversationId)?.cwd?.trim() || "";
-        return {
-          cwd: runtimeWorkdir || persistedWorkdir,
-          updatedAt: Date.now(),
-        };
-      }),
-      ...Array.from(syncedRunningConversationRuntime.values()).map((item) => ({
-        cwd: item.workdir,
-        updatedAt: item.updatedAt,
-      })),
-    ]);
-    for (const [pathKey, updatedAt] of syncedProjectActivityUpdatedAts) {
-      if (updatedAt > (updatedAts.get(pathKey) ?? 0)) {
-        updatedAts.set(pathKey, updatedAt);
+    for (const conversationId of previous) {
+      if (!runningConversationIds.has(conversationId)) {
+        sidebarStore.applyRunningPatch({ conversationId, running: false });
       }
     }
-    return updatedAts;
-  }, [
-    historyItems,
-    historyWorkdirs,
-    runningConversationIds,
-    syncedProjectActivityUpdatedAts,
-    syncedRunningConversationRuntime,
-  ]);
+  }, [conversationRuntimeCacheRef, runningConversationIds, sidebarStore]);
 
   const addNotify = useCallback((type: NotifyItem["type"], message: string) => {
     const id = `notify-${++notifyIdCounter.current}`;
@@ -2109,8 +1906,6 @@ export function ChatPage(props: ChatPageProps) {
     setPendingUploadedFiles([]);
     setErrorMessage(null);
     setHookWarning(null);
-    setRenamingId(null);
-    setRenameDraft("");
     setCopiedMessageKey(null);
     stickToBottom();
   }
@@ -2275,7 +2070,7 @@ export function ChatPage(props: ChatPageProps) {
       if (updatedAt < 0) {
         locallySyncedHistoryUpdatedAtRef.current.delete(key);
         if (currentConversationIdRef.current === key) {
-          const currentItem = historyItemsRef.current.find((item) => item.id === key);
+          const currentItem = sidebarStore.peek(key);
           currentConversationHistoryUpdatedAtRef.current =
             currentItem && !currentItem.isPending ? currentItem.updatedAt : null;
         }
@@ -2293,7 +2088,7 @@ export function ChatPage(props: ChatPageProps) {
             : Math.max(currentSyncedAt, updatedAt);
       }
     },
-    [currentConversationIdRef, historyItemsRef],
+    [currentConversationIdRef, sidebarStore],
   );
 
   function stopConversation(conversationId: string) {
@@ -2905,10 +2700,9 @@ export function ChatPage(props: ChatPageProps) {
 
   const {
     startNewConversation,
-    loadConversationFromHistory,
-    commitRename,
-    setConversationPinned,
-    requestDeleteConversation,
+    openInitial: openConversationInitial,
+    hydrateFull: hydrateConversationFull,
+    cleanupDeletedConversation,
     persistConversation,
   } = useConversationHistoryActions({
     conversationState,
@@ -2918,10 +2712,9 @@ export function ChatPage(props: ChatPageProps) {
     markLocalHistorySnapshotSynced,
     isConversationRunning,
     conversationLoadSequenceRef,
-    historyItemsRef,
+    sidebarStore,
     titleJobRef,
-    renamingId,
-    renameDraft,
+    t,
     buildRuntimeEntryFromVisibleState,
     syncVisibleConversationRuntime,
     updateConversationRuntimeEntry,
@@ -2937,17 +2730,12 @@ export function ChatPage(props: ChatPageProps) {
     setErrorMessage,
     setHydratingConversationId,
     setHydrationFailedConversationId,
-    setHistoryItems,
-    setHistoryError,
-    setRenamingId,
-    setRenameDraft,
   });
 
   startNewConversationActionRef.current = startNewConversation;
-  loadConversationActionRef.current = loadConversationFromHistory;
-  commitRenameActionRef.current = commitRename;
-  setPinnedActionRef.current = setConversationPinned;
-  deleteConversationActionRef.current = requestDeleteConversation;
+  openInitialActionRef.current = openConversationInitial;
+  hydrateFullActionRef.current = hydrateConversationFull;
+  cleanupDeletedConversationActionRef.current = cleanupDeletedConversation;
 
   const removeWorkspaceProjectFromSettings = useCallback(
     (project: WorkspaceProject) => {
@@ -3006,25 +2794,21 @@ export function ChatPage(props: ChatPageProps) {
         const path = project.path.trim();
         const pathKey = workspaceProjectPathKey(path);
         const runningMessage = "项目中仍有后台任务运行，暂时不能删除该项目。";
-        if (pathKey && runningProjectPathKeys.has(pathKey)) {
-          setHistoryError(runningMessage);
+        if (pathKey && sidebarStore.getSnapshot().runningWorkdirPathKeys.has(pathKey)) {
           setErrorMessage(runningMessage);
           return;
         }
 
-        setHistoryError(null);
         setErrorMessage(null);
 
         try {
           const conversationIds = await listChatHistoryIdsForProjectPath(path);
+          const sidebarRunningIds = sidebarStore.getSnapshot().runningConversationIds;
           const runningConversationIdsInProject = conversationIds.filter((id) => {
             const key = id.trim();
-            return key
-              ? isConversationRunning(key) || sidebarRunningConversationIds.has(key)
-              : false;
+            return key ? isConversationRunning(key) || sidebarRunningIds.has(key) : false;
           });
           if (runningConversationIdsInProject.length > 0) {
-            setHistoryError(runningMessage);
             setErrorMessage(runningMessage);
             return;
           }
@@ -3069,9 +2853,9 @@ export function ChatPage(props: ChatPageProps) {
 
           const deletedConversationIds = new Set(conversationIds);
           if (deletedConversationIds.size > 0) {
-            setHistoryItems((current) =>
-              current.filter((item) => !deletedConversationIds.has(item.id)),
-            );
+            for (const conversationId of deletedConversationIds) {
+              sidebarStore.removeLocal(conversationId);
+            }
             setSharedHistoryItems((current) => {
               const next = current.filter((item) => !deletedConversationIds.has(item.id));
               sharedHistoryItemsRef.current = next;
@@ -3116,11 +2900,8 @@ export function ChatPage(props: ChatPageProps) {
               workdir: getDefaultWorkspaceProjectPath(settings.system) || undefined,
             });
           }
-          void refreshHistoryWorkdirs();
         } catch (error) {
-          const message = asErrorMessage(error, "删除项目失败");
-          setHistoryError(message);
-          setErrorMessage(message);
+          setErrorMessage(asErrorMessage(error, "删除项目失败"));
         }
       })();
     },
@@ -3128,13 +2909,9 @@ export function ChatPage(props: ChatPageProps) {
       deleteConversationLocalCaches,
       displayedConversationWorkdir,
       isConversationRunning,
-      refreshHistoryWorkdirs,
       removeWorkspaceProjectFromSettings,
-      runningProjectPathKeys,
-      setHistoryError,
-      setHistoryItems,
       settings.system,
-      sidebarRunningConversationIds,
+      sidebarStore,
       terminalProjectPathKey,
     ],
   );
@@ -3154,7 +2931,7 @@ export function ChatPage(props: ChatPageProps) {
     if (persistedConversationStateRef.current.has(conversationId)) {
       return;
     }
-    const historyItem = historyItemsRef.current.find((item) => item.id === conversationId);
+    const historyItem = sidebarStore.peek(conversationId);
     if (historyItem && !historyItem.isPending) {
       return;
     }
@@ -3174,6 +2951,7 @@ export function ChatPage(props: ChatPageProps) {
     isConversationRunning,
     isSending,
     pendingUploadedFiles.length,
+    sidebarStore,
     updateConversationRuntimeEntry,
   ]);
 
@@ -3208,15 +2986,13 @@ export function ChatPage(props: ChatPageProps) {
     [],
   );
 
+  // The sidebar store keeps workdir activity/summaries fresh from the
+  // persist-driven upsert (locally and via sync events); no settings write,
+  // no extra workdirs IPC.
   async function persistConversationWithHistorySync(
     params: Parameters<typeof persistConversation>[0],
   ) {
-    const persisted = await persistConversation(params);
-    if (persisted) {
-      recordProjectActivity(params.cwd, Date.now());
-      void refreshHistoryWorkdirs();
-    }
-    return persisted;
+    return await persistConversation(params);
   }
 
   function clearGatewayRuntimeSnapshotTimer(conversationId: string) {
@@ -3453,7 +3229,7 @@ export function ChatPage(props: ChatPageProps) {
     const knownConversation =
       requestedConversationId === currentConversationIdRef.current ||
       conversationRuntimeCacheRef.current.has(requestedConversationId) ||
-      historyItemsRef.current.some((item) => item.id === requestedConversationId) ||
+      Boolean(sidebarStore.peek(requestedConversationId)) ||
       gatewayBridgeHistorySummaryRef.current.has(requestedConversationId);
     if (isConversationRunning(requestedConversationId)) {
       throw new Error(`Conversation is already running: ${requestedConversationId}`);
@@ -3478,9 +3254,7 @@ export function ChatPage(props: ChatPageProps) {
     if (rebased) {
       persistedConversationStateRef.current.delete(requestedConversationId);
     }
-    const isPendingHistoryItem = historyItemsRef.current.some(
-      (item) => item.id === requestedConversationId && item.isPending,
-    );
+    const isPendingHistoryItem = sidebarStore.peek(requestedConversationId)?.isPending === true;
     const shouldHydrateFromHistory =
       !knownConversation ||
       rebased ||
@@ -3523,7 +3297,7 @@ export function ChatPage(props: ChatPageProps) {
     setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, record.id, nextEntry);
     persistedConversationStateRef.current.set(record.id, record.state);
     gatewayBridgeHistorySummaryRef.current.set(record.id, historySummary);
-    setHistoryItems((prev) => mergeHistoryItem(prev, historySummary));
+    sidebarStore.upsertLocal(historySummary);
     if (currentConversationIdRef.current === record.id) {
       syncVisibleConversationRuntime(record.id, nextEntry);
     }
@@ -3565,28 +3339,25 @@ export function ChatPage(props: ChatPageProps) {
     );
     const providerId =
       settings.selectedModel?.customProviderId ??
-      historyItemsRef.current.find((item) => item.id === currentConversationId)?.providerId ??
+      sidebarStore.peek(currentConversationId)?.providerId ??
       "pending";
     const model =
-      settings.selectedModel?.model ??
-      historyItemsRef.current.find((item) => item.id === currentConversationId)?.model ??
-      "pending";
+      settings.selectedModel?.model ?? sidebarStore.peek(currentConversationId)?.model ?? "pending";
 
-    setHistoryItems((prev) =>
-      mergeHistoryItem(prev, {
-        ...createPendingHistoryItem({
-          conversationId: currentConversationId,
-          providerId,
-          model,
-          sessionId: currentConversationSessionId,
-          cwd: displayedConversationWorkdir || undefined,
-          createdAt: currentConversationCreatedAt,
-          updatedAt: Date.now(),
-        }),
+    const pendingConversationTitle = t("chat.pendingTitle");
+    sidebarStore.upsertLocal(
+      createPendingHistoryItem({
+        conversationId: currentConversationId,
         title:
-          fallbackTitle && fallbackTitle !== PENDING_CONVERSATION_TITLE
+          fallbackTitle && fallbackTitle !== pendingConversationTitle
             ? fallbackTitle
-            : PENDING_CONVERSATION_TITLE,
+            : pendingConversationTitle,
+        providerId,
+        model,
+        sessionId: currentConversationSessionId,
+        cwd: displayedConversationWorkdir || undefined,
+        createdAt: currentConversationCreatedAt,
+        updatedAt: Date.now(),
       }),
     );
   }, [
@@ -3598,13 +3369,15 @@ export function ChatPage(props: ChatPageProps) {
     isSending,
     settings.selectedModel,
     displayedConversationWorkdir,
+    sidebarStore,
+    t,
   ]);
 
   useEffect(() => {
-    const currentItem = historyItemsRef.current.find((item) => item.id === currentConversationId);
+    const currentItem = sidebarStore.peek(currentConversationId);
     currentConversationHistoryUpdatedAtRef.current =
       currentItem && !currentItem.isPending ? currentItem.updatedAt : null;
-  }, [currentConversationId]);
+  }, [currentConversationId, sidebarStore]);
 
   useEffect(() => {
     const previousIds = previousHistoryIdsRef.current;
@@ -3657,13 +3430,14 @@ export function ChatPage(props: ChatPageProps) {
     }
 
     currentConversationHistoryUpdatedAtRef.current = currentItem.updatedAt;
-    void loadConversationActionRef.current(currentConversationId).catch(() => undefined);
+    openController.open(currentConversationId);
   }, [
     currentConversationId,
     historyItems,
     hydrationFailedConversationId,
     hydratingConversationId,
     isSending,
+    openController,
     pendingUploadedFiles,
   ]);
 
@@ -3679,42 +3453,39 @@ export function ChatPage(props: ChatPageProps) {
     setContext(currentRequestContext);
   }, [currentRequestContext, setContext]);
 
+  // Post-open pinning: when the open phase leaves "opening" for the visible
+  // conversation (overlay clears / initial paint landed), run two
+  // requestAnimationFrame stickToBottom passes so the transcript stays pinned
+  // across the layout swap (same behavior the old overlay effect provided).
+  const previousOpenPhaseRef = useRef<ConversationOpenState["phase"]>("idle");
   useEffect(() => {
-    if (!historySwitchOverlay) {
+    const previousPhase = previousOpenPhaseRef.current;
+    previousOpenPhaseRef.current = conversationOpenState.phase;
+    if (previousPhase !== "opening" || conversationOpenState.phase === "opening") {
+      return;
+    }
+    if (
+      conversationOpenState.phase === "failed" ||
+      conversationOpenState.conversationId !== currentConversationIdRef.current
+    ) {
       return;
     }
 
-    const targetConversationId = historySwitchOverlay.conversationId;
-    if (hydratingConversationId === targetConversationId) {
-      return;
-    }
-
-    let firstRafId: number | null = null;
     let secondRafId: number | null = null;
-    const elapsed = Date.now() - historySwitchOverlay.startedAt;
-    const delayMs = Math.max(0, HISTORY_SWITCH_OVERLAY_MIN_MS - elapsed);
-    const timeoutId = window.setTimeout(() => {
-      firstRafId = requestAnimationFrame(() => {
+    const firstRafId = requestAnimationFrame(() => {
+      stickToBottom();
+      secondRafId = requestAnimationFrame(() => {
         stickToBottom();
-        secondRafId = requestAnimationFrame(() => {
-          stickToBottom();
-          setHistorySwitchOverlay((current) =>
-            current?.conversationId === targetConversationId ? null : current,
-          );
-        });
       });
-    }, delayMs);
+    });
 
     return () => {
-      window.clearTimeout(timeoutId);
-      if (firstRafId !== null) {
-        cancelAnimationFrame(firstRafId);
-      }
+      cancelAnimationFrame(firstRafId);
       if (secondRafId !== null) {
         cancelAnimationFrame(secondRafId);
       }
     };
-  }, [historySwitchOverlay, hydratingConversationId, stickToBottom]);
+  }, [conversationOpenState, stickToBottom]);
 
   useEffect(() => {
     requestAutoScroll();
@@ -3723,7 +3494,6 @@ export function ChatPage(props: ChatPageProps) {
   useGatewayBridgeListeners({
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    historyItemsRef,
     ensureGatewayBridgeConversationReadyRef,
     sendActionRef,
     queueGatewayBridgeEventForRequest,
@@ -4026,12 +3796,13 @@ export function ChatPage(props: ChatPageProps) {
     const baseConversationState = runtimeEntry.state;
     const isFirstTurn = baseConversationState.meta.totalMessageCount === 0;
     const existingHistoryItem =
-      historyItemsRef.current.find((item) => item.id === conversationId) ??
+      sidebarStore.peek(conversationId) ??
       gatewayBridgeHistorySummaryRef.current.get(conversationId);
     const shouldCreatePendingHistoryItem = isFirstTurn && !existingHistoryItem;
+    const pendingConversationTitle = t("chat.pendingTitle");
     const fallbackTitle =
       existingHistoryItem &&
-      (!existingHistoryItem.isPending || existingHistoryItem.title !== PENDING_CONVERSATION_TITLE)
+      (!existingHistoryItem.isPending || existingHistoryItem.title !== pendingConversationTitle)
         ? existingHistoryItem.title
         : buildFallbackConversationTitle(
             getFirstUserMessageText(buildRequestContext(baseConversationState)) || titleSourceText,
@@ -4064,27 +3835,24 @@ export function ChatPage(props: ChatPageProps) {
         conversationId,
         titleSourceText,
         content,
-        setHistoryItems,
+        sidebarStore,
         titleJobRef,
         gatewayBridgeEvents,
       });
     }
 
     if (shouldCreatePendingHistoryItem) {
-      setHistoryItems((prev) =>
-        mergeHistoryItem(
-          prev,
-          createPendingHistoryItem({
-            conversationId,
-            providerId,
-            model,
-            sessionId,
-            cwd: conversationCwd,
-            createdAt,
-          }),
-        ),
+      sidebarStore.upsertLocal(
+        createPendingHistoryItem({
+          conversationId,
+          title: pendingConversationTitle,
+          providerId,
+          model,
+          sessionId,
+          cwd: conversationCwd,
+          createdAt,
+        }),
       );
-      setHistoryError(null);
     }
 
     clearAbortSnapshot(transcriptStore);
@@ -4965,7 +4733,7 @@ export function ChatPage(props: ChatPageProps) {
         commitErroredConversation(msg || "Request failed");
       }
       if (shouldCreatePendingHistoryItem && !abortedConversationCommitted) {
-        setHistoryItems((prev) => prev.filter((item) => item.id !== conversationId));
+        sidebarStore.removeLocal(conversationId);
       }
       if (titleJobRef.current?.conversationId === conversationId) {
         titleJobRef.current = null;
@@ -4997,61 +4765,39 @@ export function ChatPage(props: ChatPageProps) {
   }, []);
 
   const handleNewConversation = useCallback(() => {
-    setHistorySwitchOverlay(null);
+    openController.cancel();
     clearCachedComposerDraft();
     startNewConversationActionRef.current({
       workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
     });
-  }, [activeWorkspaceProjectPath, isAgentMode]);
+  }, [activeWorkspaceProjectPath, isAgentMode, openController]);
 
-  const handleSelectConversation = useCallback((id: string) => {
-    const targetConversationId = id.trim();
-    if (!targetConversationId) {
-      return;
-    }
-    if (targetConversationId !== currentConversationIdRef.current) {
-      setHistorySwitchOverlay({
-        conversationId: targetConversationId,
-        startedAt: Date.now(),
-      });
-    }
-    void loadConversationActionRef.current(targetConversationId);
-  }, []);
-
-  const handleStartRenaming = useCallback((item: ChatHistorySummary) => {
-    setRenamingId(item.id);
-    setRenameDraft(item.title);
-  }, []);
-
-  const handleCommitRename = useCallback(() => {
-    void commitRenameActionRef.current();
-  }, []);
-
-  const handleCancelRename = useCallback(() => {
-    setRenamingId(null);
-    setRenameDraft("");
-  }, []);
-
-  const handleSetPinned = useCallback((id: string, isPinned: boolean) => {
-    void setPinnedActionRef.current(id, isPinned);
-  }, []);
+  const handleSelectConversation = useCallback(
+    (id: string) => {
+      const targetConversationId = id.trim();
+      if (!targetConversationId) {
+        return;
+      }
+      openController.open(targetConversationId);
+    },
+    [openController],
+  );
 
   const setSharedHistoryItemsState = useCallback((items: ChatHistorySummary[]) => {
-    const nextItems = sortHistoryItems(items.map((item) => ({ ...item, isShared: true })));
+    const nextItems = sortSidebarConversations(items.map((item) => ({ ...item, isShared: true })));
     sharedHistoryItemsRef.current = nextItems;
     setSharedHistoryItems(nextItems);
   }, []);
 
-  const handleDeleteConversation = useCallback(
+  // Called by the sidebar container after the store confirmed a deletion:
+  // evict local caches, replace the visible conversation when it was the
+  // deleted one, and drop the row from the shared-history list.
+  const handleConversationDeleted = useCallback(
     (id: string) => {
-      void deleteConversationActionRef.current(id).then(() => {
-        if (historyItemsRef.current.some((item) => item.id === id)) {
-          return;
-        }
-        setSharedHistoryItemsState(sharedHistoryItemsRef.current.filter((item) => item.id !== id));
-      });
+      cleanupDeletedConversationActionRef.current(id);
+      setSharedHistoryItemsState(sharedHistoryItemsRef.current.filter((item) => item.id !== id));
     },
-    [historyItemsRef, setSharedHistoryItemsState],
+    [setSharedHistoryItemsState],
   );
 
   const updateSharedManagerIdSet = useCallback(
@@ -5106,21 +4852,21 @@ export function ChatPage(props: ChatPageProps) {
 
       const nextItems = Array.from(byId.values());
       setSharedHistoryItemsState(nextItems);
-      return sortHistoryItems(nextItems);
+      return sortSidebarConversations(nextItems);
     })();
 
     sharedHistoryListRequestRef.current = request;
     try {
       return await request;
     } catch (error) {
-      setHistoryError(asErrorMessage(error, "读取已分享历史列表失败"));
+      setErrorMessage(asErrorMessage(error, "读取已分享历史列表失败"));
       return sharedHistoryItemsRef.current;
     } finally {
       if (sharedHistoryListRequestRef.current === request) {
         sharedHistoryListRequestRef.current = null;
       }
     }
-  }, [setHistoryError, setSharedHistoryItemsState]);
+  }, [setSharedHistoryItemsState]);
 
   useEffect(() => {
     void refreshSharedHistoryItems();
@@ -5128,9 +4874,10 @@ export function ChatPage(props: ChatPageProps) {
 
   const markSharedConversation = useCallback(
     (id: string, isShared: boolean, source?: ChatHistorySummary | null) => {
-      setHistoryItems((current) =>
-        current.map((item) => (item.id === id ? { ...item, isShared } : item)),
-      );
+      const existing = sidebarStore.peek(id);
+      if (existing && existing.isShared !== isShared) {
+        sidebarStore.upsertLocal({ ...existing, isShared });
+      }
       if (!isShared) {
         setSharedHistoryItemsState(sharedHistoryItemsRef.current.filter((item) => item.id !== id));
         return;
@@ -5138,7 +4885,7 @@ export function ChatPage(props: ChatPageProps) {
 
       const conversation =
         source ??
-        historyItemsRef.current.find((item) => item.id === id) ??
+        sidebarStore.peek(id) ??
         sharedHistoryItemsRef.current.find((item) => item.id === id);
       if (!conversation) {
         return;
@@ -5148,7 +4895,7 @@ export function ChatPage(props: ChatPageProps) {
         ...sharedHistoryItemsRef.current.filter((item) => item.id !== id),
       ]);
     },
-    [historyItemsRef, setHistoryItems, setSharedHistoryItemsState],
+    [setSharedHistoryItemsState, sidebarStore],
   );
 
   const handleLoadSharedHistoryStatus = useCallback(
@@ -5568,25 +5315,15 @@ export function ChatPage(props: ChatPageProps) {
           appUpdate={appUpdate}
         />
         {/* ---- Sidebar ---- */}
-        <ChatHistorySidebar
-          items={historyItems}
+        <ChatSidebarContainer
+          store={sidebarStore}
           currentConversationId={currentConversationId}
-          runningConversationIds={sidebarRunningConversationIds}
-          isLoading={historyLoading}
-          totalItems={historyTotal}
-          hasMore={historyHasMore}
-          isLoadingMore={historyLoadingMore}
-          errorMessage={historyError}
-          renamingId={renamingId}
-          renameDraft={renameDraft}
           isOpen={sidebarOpen}
           activeView={activeView}
           showProjects={isAgentMode}
           projects={workspaceProjects}
           activeProjectId={activeWorkspaceProject?.id}
           missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-          runningProjectPathKeys={runningProjectPathKeys}
-          projectActivityUpdatedAts={projectActivityUpdatedAts}
           projectRenamingId={projectRenamingId}
           projectRenameDraft={projectRenameDraft}
           projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
@@ -5615,17 +5352,11 @@ export function ChatPage(props: ChatPageProps) {
             setActiveView("chat");
             handleSelectConversation(id);
           }}
-          onStartRenaming={handleStartRenaming}
-          onRenameDraftChange={setRenameDraft}
-          onCommitRename={handleCommitRename}
-          onCancelRename={handleCancelRename}
-          onSetPinned={handleSetPinned}
+          onConversationDeleted={handleConversationDeleted}
           canShareConversations={canShareHistory}
           sharedConversationCount={sharedHistoryItems.length}
           onShareConversation={handleOpenShareModal}
           onOpenSharedConversations={handleOpenSharedHistoryManager}
-          onDeleteConversation={handleDeleteConversation}
-          onLoadMore={loadMoreHistory}
           onCloseSidebar={handleCloseSidebar}
           onOpenSkillsHub={() => {
             cacheActiveComposerDraft();
@@ -5748,7 +5479,7 @@ export function ChatPage(props: ChatPageProps) {
                 bottomRef={bottomRef}
                 hasModels={hasModels}
                 historyItems={historyRenderItems}
-                isHistorySwitching={Boolean(historySwitchOverlay)}
+                isHistorySwitching={conversationOpenState.showOverlay}
                 isSending={isSending}
                 isAgentMode={isAgentMode}
                 showUsage={isAgentDevExecutionMode}

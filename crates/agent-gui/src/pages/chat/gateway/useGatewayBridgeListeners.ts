@@ -139,7 +139,6 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
   const {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    historyItemsRef,
     ensureGatewayBridgeConversationReadyRef,
     sendActionRef,
     queueGatewayBridgeEventForRequest,
@@ -690,7 +689,6 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
     currentConversationIdRef,
     ensureGatewayBridgeConversationReadyRef,
     getConversationAbortController,
-    historyItemsRef,
     isConversationRunning,
     shouldQueueGatewayChatRequest,
     enqueueGatewayChatRequest,

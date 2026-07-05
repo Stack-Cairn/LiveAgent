@@ -1,4 +1,3 @@
-import type { ChatHistoryWorkdirSummary } from "./chat/history/chatHistory";
 import {
   DEFAULT_WORKSPACE_PROJECT_ID,
   DEFAULT_WORKSPACE_PROJECT_NAME,
@@ -6,6 +5,7 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "./settings";
+import type { SidebarWorkdirSummary } from "./sidebar/types";
 
 type WorkspaceProjectActivitySource = {
   path?: string;
@@ -75,7 +75,7 @@ function createHistoryWorkspaceProjectFromPath(path: string, updatedAt?: number 
 
 export function mergeWorkspaceProjectsWithHistory(
   system: SystemSettings,
-  historyWorkdirs: ChatHistoryWorkdirSummary[],
+  historyWorkdirs: readonly SidebarWorkdirSummary[],
 ) {
   const hidden = new Set(system.hiddenWorkspaceProjectPaths.map(workspaceProjectPathKey));
   const historyActivity = buildWorkspaceProjectActivityUpdatedAts(historyWorkdirs);
