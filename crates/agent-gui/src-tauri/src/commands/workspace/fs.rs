@@ -233,12 +233,33 @@ fn file_identity(meta: &fs::Metadata, _canon: &Path) -> String {
 }
 
 #[cfg(windows)]
-fn file_identity(meta: &fs::Metadata, canon: &Path) -> String {
-    use std::os::windows::fs::MetadataExt;
-    match (meta.volume_serial_number(), meta.file_index()) {
-        (Some(volume), Some(index)) => format!("{volume}:{index}"),
-        _ => format!("path:{}", display_path(canon).to_lowercase()),
+fn file_identity(_meta: &fs::Metadata, canon: &Path) -> String {
+    // std's volume_serial_number()/file_index() are unstable (windows_by_handle,
+    // rust-lang/rust#63010); query GetFileInformationByHandle directly instead.
+    fn identity_by_handle(path: &Path) -> Option<String> {
+        use std::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Storage::FileSystem::{
+            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS,
+        };
+
+        // access_mode(0): metadata-only handle, no read permission required.
+        // FILE_FLAG_BACKUP_SEMANTICS is required to open directories.
+        let file = fs::OpenOptions::new()
+            .access_mode(0)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)
+            .ok()?;
+        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, &mut info) } == 0 {
+            return None;
+        }
+        let volume = info.dwVolumeSerialNumber;
+        let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+        Some(format!("{volume}:{index}"))
     }
+    identity_by_handle(canon)
+        .unwrap_or_else(|| format!("path:{}", display_path(canon).to_lowercase()))
 }
 
 fn levenshtein_at_most(a: &str, b: &str, max: usize) -> bool {

@@ -3261,6 +3261,7 @@ dependencies = [
  "uuid",
  "wait-timeout",
  "walkdir",
+ "windows-sys 0.61.2",
  "zip 0.6.6",
 ]
 
