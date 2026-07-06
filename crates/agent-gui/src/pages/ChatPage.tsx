@@ -3927,6 +3927,55 @@ export function ChatPage(props: ChatPageProps) {
     }
 
     markConversationRunStarted();
+    // Clear the composer in the same beat as the optimistic user bubble.
+    // Everything below until the runtime turn starts (gateway mark-started
+    // IPC, initial history persist, skills refresh, memory overview read) may
+    // await for seconds; the input box must not keep the sent text visible in
+    // the meantime. Early-failure paths below restore the cleared draft.
+    let composerClearedOnStart = false;
+    let clearedComposerDraft: MentionComposerDraft | null = null;
+    let clearedPendingUploads: PendingUploadedFile[] = [];
+    if (!hasTextOverride && !overrides?.composerDraftOverride) {
+      clearCachedComposerDraft(conversationId);
+    }
+    if (!overrides?.preserveComposerOnStart) {
+      if (isConversationVisible()) {
+        composerClearedOnStart = true;
+        const liveDraft = composerDraft ?? composerRef.current?.getDraft() ?? null;
+        clearedComposerDraft = liveDraft && !liveDraft.isEmpty ? liveDraft : null;
+        clearedPendingUploads = pendingUploadedFiles;
+      }
+      resetVisibleTransientState(conversationId);
+    } else {
+      setConversationErrorState(null);
+      updateConversationRuntimeEntry(conversationId, (prev) => ({
+        ...prev,
+        hookWarning: null,
+      }));
+    }
+    const restoreComposerOnStartFailure = () => {
+      if (!composerClearedOnStart) {
+        return;
+      }
+      const hasStoredUploads =
+        (pendingUploadsByConversationRef.current.get(conversationId) ?? []).length > 0;
+      if (isConversationVisible()) {
+        if (clearedComposerDraft && composerRef.current && !composerRef.current.hasContent()) {
+          composerRef.current.setDraft(clearedComposerDraft);
+        }
+        if (clearedPendingUploads.length > 0 && !hasStoredUploads) {
+          pendingUploadsByConversationRef.current.set(conversationId, clearedPendingUploads);
+          setPendingUploadedFiles(clearedPendingUploads);
+        }
+        return;
+      }
+      if (clearedComposerDraft && !composerDraftCacheRef.current.has(conversationId)) {
+        composerDraftCacheRef.current.set(conversationId, clearedComposerDraft);
+      }
+      if (clearedPendingUploads.length > 0 && !hasStoredUploads) {
+        pendingUploadsByConversationRef.current.set(conversationId, clearedPendingUploads);
+      }
+    };
     if (mirrorsLocalRunToGateway) {
       try {
         await markLocalGatewayRunStarted();
@@ -3943,6 +3992,7 @@ export function ChatPage(props: ChatPageProps) {
         gatewayBridgeEvents.emitError(message, conversationId);
         gatewayBridgeEvents.close();
         markConversationRunStopped("failed");
+        restoreComposerOnStartFailure();
         return false;
       }
     }
@@ -3970,6 +4020,7 @@ export function ChatPage(props: ChatPageProps) {
         gatewayBridgeEvents.emitError(message, conversationId);
         gatewayBridgeEvents.close();
         markConversationRunStopped("failed");
+        restoreComposerOnStartFailure();
         return true;
       }
       try {
@@ -3980,6 +4031,7 @@ export function ChatPage(props: ChatPageProps) {
         gatewayBridgeEvents.emitError(message, conversationId);
         gatewayBridgeEvents.close();
         markConversationRunStopped("failed");
+        restoreComposerOnStartFailure();
         return true;
       }
     } else {
@@ -4167,6 +4219,7 @@ export function ChatPage(props: ChatPageProps) {
         gatewayBridgeEvents.emitError(message, conversationId);
         gatewayBridgeEvents.close();
         markConversationRunStopped("failed");
+        restoreComposerOnStartFailure();
         return true;
       }
 
@@ -4567,19 +4620,6 @@ export function ChatPage(props: ChatPageProps) {
       } finally {
         updateGatewayBridgeToolStatus(null, isConversationVisible());
       }
-    }
-
-    if (!hasTextOverride && !overrides?.composerDraftOverride) {
-      clearCachedComposerDraft(conversationId);
-    }
-    if (!overrides?.preserveComposerOnStart) {
-      resetVisibleTransientState(conversationId);
-    } else {
-      setConversationErrorState(null);
-      updateConversationRuntimeEntry(conversationId, (prev) => ({
-        ...prev,
-        hookWarning: null,
-      }));
     }
 
     let gatewayRuntimeFinalState: GatewayRuntimeSnapshotState = "completed";
