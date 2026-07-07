@@ -973,7 +973,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.systemToolsDesc":
       "这里展示可选的系统内置工具与自定义系统工具；选中的工具会在 Agent 模式下注册，供模型在对话中调用。",
     "settings.noSystemTools": "暂无可用的系统工具",
-    "settings.systemToolsTabBuiltin": "系统工具",
+    "settings.systemToolsTabBuiltin": "内置工具",
     "settings.systemToolsTabCustom": "自定义工具",
     "settings.systemToolsBuiltinDesc":
       "LiveAgent 在 Agent 模式下自动注册的内置工具，此处仅供查阅。",
