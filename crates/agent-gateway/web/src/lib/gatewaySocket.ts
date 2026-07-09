@@ -706,10 +706,15 @@ type RuntimeHost = {
     origin?: string;
     href?: string;
   };
-  setTimeout: typeof setTimeout;
-  clearTimeout: typeof clearTimeout;
-  setInterval: typeof setInterval;
-  clearInterval: typeof clearInterval;
+  // Explicit browser-timer signatures rather than typeof setTimeout/etc: this
+  // code only ever runs against window/globalThis in a browser, but `typeof
+  // setTimeout` resolves ambiently and flips to NodeJS.Timeout if any
+  // dependency's types pull in @types/node, breaking the `number`-typed
+  // timer handle fields below.
+  setTimeout: (handler: () => void, timeout?: number) => number;
+  clearTimeout: (handle: number) => void;
+  setInterval: (handler: () => void, timeout?: number) => number;
+  clearInterval: (handle: number) => void;
 };
 
 const DEFAULT_HISTORY_LIST_PAGE = 1;

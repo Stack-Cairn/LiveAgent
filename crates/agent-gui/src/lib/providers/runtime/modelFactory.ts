@@ -255,7 +255,7 @@ export function createModelFromConfig(
   modelConfig?: ProviderModelConfig,
   upstreamBaseUrl?: string,
 ): Model<any> {
-  const defaults = getProviderModelDefaults(providerId);
+  const defaults = getProviderModelDefaults(providerId, modelId);
   const contextWindow = modelConfig?.contextWindow ?? defaults.contextWindow;
   const maxTokens = modelConfig?.maxOutputToken ?? defaults.maxOutputToken;
 

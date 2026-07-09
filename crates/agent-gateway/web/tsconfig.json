@@ -3,6 +3,7 @@
     "target": "ES2022",
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "types": [],
     "allowJs": false,
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
