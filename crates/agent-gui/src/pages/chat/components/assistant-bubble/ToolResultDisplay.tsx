@@ -47,7 +47,7 @@ export function ToolSection(props: { label: string; trailing?: ReactNode; childr
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/52">
+        <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] font-semibold uppercase tracking-[0.18em] text-muted-foreground/52">
           {label}
         </span>
         <div className="h-px flex-1 bg-black/[0.05] dark:bg-white/[0.08]" />
@@ -74,7 +74,7 @@ export function ToolSurface(props: { children: ReactNode; className?: string }) 
 
 export function ToolSurfaceLabel({ label }: { label: string }) {
   return (
-    <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/45">
+    <div className="mb-1.5 text-[calc(10px*var(--zone-font-scale,1))] font-semibold uppercase tracking-[0.16em] text-muted-foreground/45">
       {label}
     </div>
   );
@@ -87,7 +87,7 @@ export function ToolFactGrid({ tags }: { tags: MetaTag[] }) {
       {tags.map((tag) => (
         <ToolSurface key={`${tag.label}-${tag.value}`} className="px-2.5 py-2">
           <ToolSurfaceLabel label={tag.label} />
-          <div className="break-all font-mono text-[11px] leading-[1.55] text-foreground/78">
+          <div className="break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
             {tag.value}
           </div>
         </ToolSurface>
@@ -169,7 +169,7 @@ export function MetaTags({ tags }: { tags: MetaTag[] }) {
         return (
           <span
             key={stableKey}
-            className="tool-arg-pill inline-flex min-h-6 items-center gap-1.5 rounded-full border border-black/[0.05] bg-white/[0.78] px-2 py-1 text-[10.5px] leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:shadow-none"
+            className="tool-arg-pill inline-flex min-h-6 items-center gap-1.5 rounded-full border border-black/[0.05] bg-white/[0.78] px-2 py-1 text-[calc(10.5px*var(--zone-font-scale,1))] leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:shadow-none"
           >
             <span className="font-semibold uppercase tracking-[0.12em] text-muted-foreground/55">
               {tag.label}
@@ -193,7 +193,7 @@ export function ToolScrollablePre(props: { children: ReactNode; className?: stri
   return (
     <pre
       className={cn(
-        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-[8px] px-2.5 py-2 text-[11.5px] leading-[1.6]",
+        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-[8px] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]",
         className,
       )}
     >
@@ -555,14 +555,14 @@ export function ToolResultDisplay({
             {details.entries.map((entry) => (
               <div
                 key={`${entry.kind}-${entry.path}`}
-                className="flex items-start gap-2 rounded-[8px] px-1.5 py-1 text-[11px] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className="flex items-start gap-2 rounded-[8px] px-1.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
               >
-                <span className="mt-[1px] shrink-0 text-[10px] font-semibold uppercase text-muted-foreground/35">
+                <span className="mt-[1px] shrink-0 text-[calc(10px*var(--zone-font-scale,1))] font-semibold uppercase text-muted-foreground/35">
                   {entry.kind}
                 </span>
                 <PathDisplay
                   path={entry.path}
-                  className="min-w-0 break-all font-mono text-[11px]"
+                  className="min-w-0 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))]"
                 />
               </div>
             ))}
@@ -593,7 +593,7 @@ export function ToolResultDisplay({
               <PathDisplay
                 key={entry}
                 path={entry}
-                className="block rounded-[8px] px-1.5 py-1 break-all font-mono text-[11px] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className="block rounded-[8px] px-1.5 py-1 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
               />
             ))}
           </div>
@@ -628,7 +628,7 @@ export function ToolResultDisplay({
                 >
                   <PathDisplay
                     path={file.path}
-                    className="block break-all font-mono text-[11px] leading-[1.5]"
+                    className="block break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5]"
                   />
                   <MetaTags
                     tags={[
@@ -652,9 +652,9 @@ export function ToolResultDisplay({
                 <div className="flex items-start gap-2">
                   <PathDisplay
                     path={match.path}
-                    className="min-w-0 break-all font-mono text-[11px] leading-[1.5]"
+                    className="min-w-0 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5]"
                   />
-                  <span className="shrink-0 rounded bg-black/[0.04] px-1.5 py-[1px] text-[10px] font-semibold text-muted-foreground/60 dark:bg-white/[0.05]">
+                  <span className="shrink-0 rounded bg-black/[0.04] px-1.5 py-[1px] text-[calc(10px*var(--zone-font-scale,1))] font-semibold text-muted-foreground/60 dark:bg-white/[0.05]">
                     line {match.line}
                   </span>
                 </div>
@@ -688,7 +688,7 @@ export function ToolResultDisplay({
             { label: "issues", value: String(issues.length) },
           ]}
         />
-        <div className="text-[12px] font-semibold leading-[1.45] text-foreground/90">
+        <div className="text-[calc(12px*var(--zone-font-scale,1))] font-semibold leading-[1.45] text-foreground/90">
           Agent call rejected — no subagents were started
         </div>
         {issues.length > 0 ? (
@@ -745,21 +745,21 @@ export function ToolResultDisplay({
       <ToolSurface className="space-y-2">
         <MetaTags tags={tags} />
         <div className="space-y-2">
-          <div className="text-[12px] font-semibold leading-[1.45] text-foreground/90">
+          <div className="text-[calc(12px*var(--zone-font-scale,1))] font-semibold leading-[1.45] text-foreground/90">
             {agentDisplayName}
           </div>
           {agent.role ? (
-            <div className="text-[11px] font-medium leading-[1.55] text-foreground/78">
+            <div className="text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/78">
               <span className="text-muted-foreground">role</span> {agent.role}
             </div>
           ) : null}
           {agentTask ? (
-            <div className="break-words text-[11px] font-medium leading-[1.6] text-foreground/80">
+            <div className="break-words text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.6] text-foreground/80">
               <span className="text-muted-foreground">task</span> {agentTask}
             </div>
           ) : null}
           {shouldShowSubagentWorktreeLocation(agent) ? (
-            <div className="break-all text-[10px] text-muted-foreground/70">
+            <div className="break-all text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/70">
               {agent.branchName ? `${agent.branchName} | ` : ""}
               {agent.worktreeRoot}
             </div>
@@ -848,12 +848,12 @@ export function ToolResultDisplay({
           ]}
         />
         {details.subject ? (
-          <div className="break-words text-[11.5px] font-semibold leading-[1.5] text-foreground/86">
+          <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] font-semibold leading-[1.5] text-foreground/86">
             {details.subject}
           </div>
         ) : null}
         {details.bodyPreview ? (
-          <div className="rounded-[8px] border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-[11.5px] leading-[1.6] dark:border-white/[0.07] dark:bg-white/[0.03]">
+          <div className="rounded-[8px] border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] dark:border-white/[0.07] dark:bg-white/[0.03]">
             <Markdown content={details.bodyPreview} />
           </div>
         ) : null}

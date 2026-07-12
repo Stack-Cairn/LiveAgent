@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
+  type CSSProperties,
   lazy,
   type SetStateAction,
   Suspense,
@@ -139,13 +140,14 @@ import {
   workspaceProjectPathKey,
 } from "../lib/settings";
 import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
+import { cn } from "../lib/shared/utils";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import {
   type ConversationOpenState,
   createConversationOpenController,
 } from "../lib/sidebar/openController";
 import { sortSidebarConversations } from "../lib/sidebar/reconcile";
-import { sidebarScopeKey } from "../lib/sidebar/scope";
+import { conversationMatchesScope, sidebarScopeKey } from "../lib/sidebar/scope";
 import { selectConversations } from "../lib/sidebar/selectors";
 import { createSidebarStore } from "../lib/sidebar/store";
 import type { SidebarScope } from "../lib/sidebar/types";
@@ -881,6 +883,21 @@ export function ChatPage(props: ChatPageProps) {
           (item) =>
             workspaceProjectPathKey(item.path) === normalizedPathKey || item.id === project.id,
         ) ?? project;
+      // 目标工作区已完全激活时提前返回，避免流式进行中触发无谓的 settings 写入与重渲染
+      if (
+        !options?.startConversation &&
+        targetProject.id === activeWorkspaceProjectId &&
+        settings.system.activeWorkspaceProjectId === targetProject.id &&
+        settings.system.workspaceProjects.some((item) => item.id === targetProject.id) &&
+        !settings.system.hiddenWorkspaceProjectPaths.some(
+          (path) => workspaceProjectPathKey(path) === normalizedPathKey,
+        ) &&
+        !settings.system.missingWorkspaceProjectPaths.some(
+          (path) => workspaceProjectPathKey(path) === normalizedPathKey,
+        )
+      ) {
+        return;
+      }
       setActiveWorkspaceProjectId(targetProject.id);
       setSettings((prev) => {
         const existing = prev.system.workspaceProjects.find(
@@ -932,7 +949,7 @@ export function ChatPage(props: ChatPageProps) {
         startNewConversationActionRef.current({ workdir: targetProject.path });
       }
     },
-    [setSettings, workspaceProjects],
+    [setSettings, workspaceProjects, activeWorkspaceProjectId, settings.system],
   );
 
   const handleSelectWorkspaceProject = useCallback(
@@ -1240,7 +1257,10 @@ export function ChatPage(props: ChatPageProps) {
       .filter((skill): skill is (typeof availableSkills)[number] => Boolean(skill));
   }, [availableSkills, selectedSkillNames, skillsEnabled]);
 
-  const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
+  const modelOptions = useMemo(
+    () => buildModelOptions(settings, { floatSelectedFirst: false }),
+    [settings],
+  );
   const selectedValue = settings.selectedModel
     ? toModelValue(settings.selectedModel.customProviderId, settings.selectedModel.model)
     : undefined;
@@ -1642,7 +1662,7 @@ export function ChatPage(props: ChatPageProps) {
                   <span className="text-sm font-semibold text-foreground">
                     {t("chat.exitConfirmRunningLabel")}
                   </span>
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-semibold text-amber-700 dark:text-amber-300">
                     {runningCount}
                   </span>
                 </div>
@@ -2763,7 +2783,7 @@ export function ChatPage(props: ChatPageProps) {
                       <span className="text-sm font-semibold text-foreground">
                         {t("chat.exitConfirmRunningLabel")}
                       </span>
-                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-semibold text-amber-700 dark:text-amber-300">
                         {runningTerminalCount}
                       </span>
                     </div>
@@ -3275,21 +3295,26 @@ export function ChatPage(props: ChatPageProps) {
       settings.selectedModel?.model ?? sidebarStore.peek(currentConversationId)?.model ?? "pending";
 
     const pendingConversationTitle = t("chat.pendingTitle");
-    sidebarStore.upsertLocal(
-      createPendingHistoryItem({
-        conversationId: currentConversationId,
-        title:
-          fallbackTitle && fallbackTitle !== pendingConversationTitle
-            ? fallbackTitle
-            : pendingConversationTitle,
-        providerId,
-        model,
-        sessionId: currentConversationSessionId,
-        cwd: displayedConversationWorkdir || undefined,
-        createdAt: currentConversationCreatedAt,
-        updatedAt: Date.now(),
-      }),
-    );
+    const pendingItem = createPendingHistoryItem({
+      conversationId: currentConversationId,
+      title:
+        fallbackTitle && fallbackTitle !== pendingConversationTitle
+          ? fallbackTitle
+          : pendingConversationTitle,
+      providerId,
+      model,
+      sessionId: currentConversationSessionId,
+      cwd: displayedConversationWorkdir || undefined,
+      createdAt: currentConversationCreatedAt,
+      updatedAt: Date.now(),
+    });
+    // 会话不属于当前工作区作用域时（例如流式进行中切换了工作区），不往
+    // 侧栏强插 pending 行：它本就不该出现在新工作区的列表里，反复重插
+    // 会与作用域过滤互相打架，形成无限更新循环导致页面崩溃。
+    if (!conversationMatchesScope(pendingItem, sidebarScope)) {
+      return;
+    }
+    sidebarStore.upsertLocal(pendingItem);
   }, [
     conversationState,
     currentConversationCreatedAt,
@@ -3299,6 +3324,7 @@ export function ChatPage(props: ChatPageProps) {
     isSending,
     settings.selectedModel,
     displayedConversationWorkdir,
+    sidebarScope,
     sidebarStore,
     t,
   ]);
@@ -4991,6 +5017,7 @@ export function ChatPage(props: ChatPageProps) {
           store={sidebarStore}
           currentConversationId={currentConversationId}
           isOpen={sidebarOpen}
+          fontScale={settings.customSettings.fontScale.sidebar}
           activeView={activeView}
           showProjects={isAgentMode}
           projects={workspaceProjects}
@@ -5076,8 +5103,22 @@ export function ChatPage(props: ChatPageProps) {
 
         {confirmDialog}
 
-        {/* ---- Main content ---- */}
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        {/* ---- Main content ----
+            字体缩放仅作用于聊天视图：Skills/MCP Hub 页面存在大量未迁移的固定
+            像素字号，整列缩放会造成混排（聊天区设置也只应影响聊天区）。 */}
+        <div
+          className={cn(
+            "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
+            activeView === "chat" && "zone-font-scale",
+          )}
+          style={
+            activeView === "chat"
+              ? ({
+                  "--zone-font-scale": settings.customSettings.fontScale.chat,
+                } as CSSProperties)
+              : undefined
+          }
+        >
           {activeView === "skills-hub" ? (
             <SkillsHubPage
               settings={settings}
@@ -5133,7 +5174,7 @@ export function ChatPage(props: ChatPageProps) {
                         <PanelRightOpen className="h-4.5 w-4.5" />
                       )}
                       {projectTerminalSessions.length > 0 ? (
-                        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-semibold leading-none text-white">
+                        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none text-white">
                           {projectTerminalSessions.length}
                         </span>
                       ) : null}
@@ -5229,7 +5270,7 @@ export function ChatPage(props: ChatPageProps) {
                     </div>
 
                     <div className="flex flex-col items-center gap-1.5">
-                      <div className="text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+                      <div className="text-[calc(15px*var(--zone-font-scale,1))] font-semibold leading-tight tracking-tight text-foreground">
                         {fileDropTitle}
                       </div>
                       <div className="max-w-[280px] text-xs leading-5 text-muted-foreground">
@@ -5243,7 +5284,7 @@ export function ChatPage(props: ChatPageProps) {
                     />
 
                     <div
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium ${
                         canDropUpload
                           ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
                           : "border-destructive/20 bg-destructive/[0.05] text-destructive/80"
@@ -5339,6 +5380,7 @@ export function ChatPage(props: ChatPageProps) {
       <RightDockPanel
         isOpen={activeView === "chat" && rightDockOpen}
         collapseImmediately={activeView !== "chat"}
+        fontScale={settings.customSettings.fontScale.rightDock}
         projectPathKey={terminalProjectPathKey}
         cwd={terminalProjectPath}
         sessions={terminalSessions}

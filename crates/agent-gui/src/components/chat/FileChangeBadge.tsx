@@ -15,7 +15,7 @@ export function FileChangeBadge({
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center gap-1.5 font-mono text-[11px] tabular-nums",
+        "flex shrink-0 items-center gap-1.5 font-mono text-[calc(11px*var(--zone-font-scale,1))] tabular-nums",
         className,
       )}
     >

@@ -91,7 +91,7 @@ function RedactionPicker(props: {
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-3 py-1 text-[11px] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
           value
             ? "bg-emerald-500 text-white shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -111,7 +111,7 @@ function RedactionPicker(props: {
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-3 py-1 text-[11px] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",

@@ -111,6 +111,26 @@ pub struct SystemBuiltinSkillSeedResponse {
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct SystemExternalSkillEntry {
+    pub name: String,
+    pub description: String,
+    /// 技能目录的绝对路径，可直接作为 install 动作的 `source`。
+    pub base_dir: String,
+    pub skill_file: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemExternalToolScan {
+    pub tool: String,
+    pub root_dir: String,
+    pub exists: bool,
+    pub skills: Vec<SystemExternalSkillEntry>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct SystemSkillInstallJobSnapshot {
     pub job_id: String,
     pub phase: String,
@@ -150,6 +170,7 @@ pub struct SystemManageSkillResponse {
     pub clawhub_next_cursor: Option<String>,
     pub clawhub_slug: Option<String>,
     pub clawhub_download_url: Option<String>,
+    pub external: Option<Vec<SystemExternalToolScan>>,
 }
 
 impl SystemManageSkillResponse {

@@ -10,7 +10,10 @@ const MODEL_GENERATING_STATUS_PATTERN = /^第\s*\d+\s*轮：模型生成中\.\.\
 
 export const VIBING_STATUS = "Vibing...";
 
-export function buildModelOptions(settings: AppSettings): ModelOption[] {
+export function buildModelOptions(
+  settings: AppSettings,
+  opts?: { floatSelectedFirst?: boolean },
+): ModelOption[] {
   const options: ModelOption[] = [];
   for (const provider of settings.customProviders) {
     for (const model of provider.activeModels) {
@@ -23,7 +26,7 @@ export function buildModelOptions(settings: AppSettings): ModelOption[] {
       });
     }
   }
-  if (!settings.selectedModel) return options;
+  if (!settings.selectedModel || opts?.floatSelectedFirst === false) return options;
 
   const selectedValue = toModelValue(
     settings.selectedModel.customProviderId,

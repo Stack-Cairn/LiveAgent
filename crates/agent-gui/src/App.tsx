@@ -1,6 +1,7 @@
 import type { Context } from "@earendil-works/pi-ai";
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { MemoryOrganizerHost } from "./components/memory/useMemoryOrganizer";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
@@ -403,16 +404,18 @@ export default function App() {
       <AppChrome appUpdate={appUpdate}>
         <CronPromptRunner settings={settings} />
         <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
-        <ChatPage
-          settings={settings}
-          setSettings={setSettings}
-          getMcpSettings={getMcpSettings}
-          context={context}
-          setContext={setContext}
-          onOpenSettings={openSettings}
-          onToggleTheme={toggleTheme}
-          appUpdate={appUpdate}
-        />
+        <AppErrorBoundary>
+          <ChatPage
+            settings={settings}
+            setSettings={setSettings}
+            getMcpSettings={getMcpSettings}
+            context={context}
+            setContext={setContext}
+            onOpenSettings={openSettings}
+            onToggleTheme={toggleTheme}
+            appUpdate={appUpdate}
+          />
+        </AppErrorBoundary>
         {visible && (
           <div
             className={`absolute inset-0 z-50 transition-all duration-300 ease-out ${
@@ -420,14 +423,16 @@ export default function App() {
             }`}
             onTransitionEnd={handleTransitionEnd}
           >
-            <SettingsPage
-              settings={settings}
-              setSettings={setSettings}
-              saveState={settingsSaveState}
-              onBack={closeSettings}
-              initialSection={settingsSection}
-              appUpdate={appUpdate}
-            />
+            <AppErrorBoundary>
+              <SettingsPage
+                settings={settings}
+                setSettings={setSettings}
+                saveState={settingsSaveState}
+                onBack={closeSettings}
+                initialSection={settingsSection}
+                appUpdate={appUpdate}
+              />
+            </AppErrorBoundary>
           </div>
         )}
       </AppChrome>

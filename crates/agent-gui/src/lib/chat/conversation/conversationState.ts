@@ -624,7 +624,9 @@ function buildTimelineItemsForSegment(
       key: `segment-${segment.segmentIndex}-${uiMessage.key}`,
       segmentIndex: segment.segmentIndex,
       rounds: uiMessage.rounds ?? [],
-      timestamp: getMessageTimestamp(segment.messages[segment.messages.length - 1]),
+      // 使用本组自身的回复时间；仅在缺失时才回退到段内最后一条消息的时间
+      timestamp:
+        uiMessage.timestamp ?? getMessageTimestamp(segment.messages[segment.messages.length - 1]),
       isFromCompactedSegment: isCompacted,
     });
   }

@@ -16,9 +16,8 @@ pub(crate) fn action_from_payload(
     });
     match action {
         "read" | "list" | "install" | "install_start" | "install_status" | "install_cancel"
-        | "create" | "validate" | "package" | "delete" | "clawhub_search" | "clawhub_install" => {
-            Ok(action.to_string())
-        }
+        | "create" | "validate" | "package" | "delete" | "clawhub_search" | "clawhub_install"
+        | "scan_external" => Ok(action.to_string()),
         _ => Err(format!("SkillsManager action is not supported: {action}")),
     }
 }
@@ -66,6 +65,10 @@ pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillRespo
                 ..base
             })
         }
+        "scan_external" => Ok(SystemManageSkillResponse {
+            external: Some(scan_external_skills()),
+            ..base
+        }),
         "clawhub_search" => {
             let (clawhub_results, clawhub_next_cursor) =
                 search_clawhub_skills_from_payload(payload)?;

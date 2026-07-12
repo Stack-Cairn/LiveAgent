@@ -126,17 +126,17 @@ export function HostedSearchGroupView({ items }: { items: HostedSearchBlock[] })
 
         <div className="min-w-0 space-y-0.5 sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-2 sm:space-y-0">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="inline-flex h-5 shrink-0 items-center text-[12.5px] font-semibold leading-none text-foreground/90">
+            <span className="inline-flex h-5 shrink-0 items-center text-[calc(12.5px*var(--zone-font-scale,1))] font-semibold leading-none text-foreground/90">
               {t("chat.search.webSearch")}
             </span>
-            <span className="inline-flex h-5 max-w-[5.75rem] shrink-0 items-center truncate rounded-full bg-black/[0.04] px-1.5 text-[10.5px] font-semibold leading-none text-muted-foreground/70 dark:bg-white/[0.06]">
+            <span className="inline-flex h-5 max-w-[5.75rem] shrink-0 items-center truncate rounded-full bg-black/[0.04] px-1.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-semibold leading-none text-muted-foreground/70 dark:bg-white/[0.06]">
               {getHostedSearchCountLabel(items.length, t)}
             </span>
           </div>
           <span
             key={latestTitle}
             className={cn(
-              "block h-4 min-w-0 truncate text-[11px] leading-4 text-muted-foreground/60 transition-opacity duration-200 sm:inline-flex sm:h-5 sm:items-center sm:leading-none",
+              "block h-4 min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground/60 transition-opacity duration-200 sm:inline-flex sm:h-5 sm:items-center sm:leading-none",
               isSearching ? "animate-pulse" : "",
             )}
             title={latestTitle}
@@ -149,7 +149,7 @@ export function HostedSearchGroupView({ items }: { items: HostedSearchBlock[] })
           <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
           <span
             className={cn(
-              "inline-flex h-5 max-w-[5.5rem] items-center truncate rounded-full px-1.5 text-[10px] font-semibold leading-none",
+              "inline-flex h-5 max-w-[5.5rem] items-center truncate rounded-full px-1.5 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none",
               statusBgClass,
             )}
           >
@@ -171,7 +171,7 @@ export function HostedSearchGroupView({ items }: { items: HostedSearchBlock[] })
               {queries.map((query) => (
                 <span
                   key={query}
-                  className="tool-arg-pill min-w-0 max-w-full truncate rounded-[6px] border border-border/35 bg-background/65 px-2 py-1 text-[12px] text-foreground/85"
+                  className="tool-arg-pill min-w-0 max-w-full truncate rounded-[6px] border border-border/35 bg-background/65 px-2 py-1 text-[calc(12px*var(--zone-font-scale,1))] text-foreground/85"
                   title={query}
                 >
                   {query}
@@ -182,7 +182,7 @@ export function HostedSearchGroupView({ items }: { items: HostedSearchBlock[] })
 
           {visibleSources.length > 0 ? (
             <div className="space-y-1.5">
-              <div className="text-[11px] font-medium uppercase tracking-normal text-muted-foreground/70">
+              <div className="text-[calc(11px*var(--zone-font-scale,1))] font-medium uppercase tracking-normal text-muted-foreground/70">
                 {t("chat.search.sources")}
               </div>
               <div className="grid gap-1 sm:grid-cols-2">
@@ -194,7 +194,7 @@ export function HostedSearchGroupView({ items }: { items: HostedSearchBlock[] })
                       href={source.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="block min-w-0 max-w-full rounded-[6px] border border-transparent px-2 py-1 text-[12px] transition-colors hover:border-border/45 hover:bg-background/60"
+                      className="block min-w-0 max-w-full rounded-[6px] border border-transparent px-2 py-1 text-[calc(12px*var(--zone-font-scale,1))] transition-colors hover:border-border/45 hover:bg-background/60"
                       title={source.url}
                     >
                       <span className="block truncate font-medium text-foreground/85">{label}</span>

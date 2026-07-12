@@ -6,8 +6,10 @@ import {
   BookOpen,
   Check,
   Cloud,
+  Download,
   ExternalLink,
   FileText,
+  Folder,
   Loader2,
   Lock,
   MessageSquare,
@@ -28,6 +30,7 @@ import { cn } from "../../lib/shared/utils";
 import {
   cancelSkillInstallJob,
   discoverSkills,
+  type ExternalToolScan,
   getSkillInstallJobStatus,
   isAlwaysEnabledSkillName,
   isUserSelectableSkill,
@@ -37,6 +40,7 @@ import {
   readSkillText,
   type SkillInstallJobSnapshot,
   type SkillSummary,
+  scanExternalSkills,
   startSkillInstallJob,
 } from "../../lib/skills";
 import {
@@ -49,7 +53,13 @@ import {
   searchClawHubSkills,
 } from "../../lib/skills/clawHub";
 
-type SkillsHubView = "installed" | "store";
+type SkillsHubView = "installed" | "store" | "import";
+
+const EXTERNAL_TOOL_LABELS: Record<string, string> = {
+  "claude-code": "Claude Code",
+  codex: "Codex",
+  codebuddy: "CodeBuddy",
+};
 
 const STORE_PAGE_LIMIT = 24;
 const INSTALLED_SKILL_PREVIEW_LINES = 10_000;
@@ -321,6 +331,18 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const [installJobs, setInstallJobs] = useState<Record<string, SkillInstallJobSnapshot>>({});
   const [installingBySlug, setInstallingBySlug] = useState<Record<string, string>>({});
   const [deletingSkillName, setDeletingSkillName] = useState<string | null>(null);
+  const [externalScans, setExternalScans] = useState<ExternalToolScan[] | null>(null);
+  const [externalLoading, setExternalLoading] = useState(false);
+  const [externalError, setExternalError] = useState<string | null>(null);
+  const [selectedExternal, setSelectedExternal] = useState<ReadonlySet<string>>(new Set());
+  const [importQuery, setImportQuery] = useState("");
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
+  const [importErrors, setImportErrors] = useState<
+    Array<{ baseDir: string; name: string; message: string }>
+  >([]);
+  const [importedCount, setImportedCount] = useState<number | null>(null);
   const [previewInstalledSkill, setPreviewInstalledSkill] = useState<SkillSummary | null>(null);
   const [installedPreviewState, setInstalledPreviewState] = useState<InstalledSkillPreviewState>(
     () => emptyInstalledSkillPreviewState(),
@@ -391,6 +413,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   );
   const selectableSkills = useMemo(() => skills.filter(isUserSelectableSkill), [skills]);
   const selectedCount = selectableSkills.filter((skill) => selected.has(skill.name)).length;
+  const installedSkillNames = useMemo(() => new Set(skills.map((skill) => skill.name)), [skills]);
 
   const filtered = useMemo(() => {
     const text = filter.trim().toLowerCase();
@@ -405,6 +428,76 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     if (view === "installed" && !lockedByChatMode) return;
     setPreviewInstalledSkill(null);
   }, [lockedByChatMode, view]);
+
+  const rescanExternalSkills = useCallback(async () => {
+    setExternalLoading(true);
+    setExternalError(null);
+    try {
+      const scans = await scanExternalSkills();
+      setExternalScans(scans);
+      // 剔除本次扫描已不存在的勾选项，避免按钮计数虚高或静默空导入
+      const validBaseDirs = new Set(scans.flatMap((scan) => scan.skills.map((s) => s.baseDir)));
+      setSelectedExternal((prev) => {
+        const next = new Set([...prev].filter((baseDir) => validBaseDirs.has(baseDir)));
+        return next.size === prev.size ? prev : next;
+      });
+    } catch (err) {
+      setExternalScans([]);
+      setSelectedExternal(new Set());
+      setExternalError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExternalLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view !== "import" || lockedByChatMode) return;
+    if (externalScans !== null || externalLoading) return;
+    void rescanExternalSkills();
+  }, [view, lockedByChatMode, externalScans, externalLoading, rescanExternalSkills]);
+
+  const toggleExternalSkill = useCallback((baseDir: string) => {
+    setSelectedExternal((prev) => {
+      const next = new Set(prev);
+      if (next.has(baseDir)) {
+        next.delete(baseDir);
+      } else {
+        next.add(baseDir);
+      }
+      return next;
+    });
+  }, []);
+
+  const importSelectedExternalSkills = useCallback(async () => {
+    const targets = (externalScans ?? [])
+      .flatMap((scan) => scan.skills)
+      .filter((skill) => selectedExternal.has(skill.baseDir));
+    if (targets.length === 0 || importProgress) return;
+    setImportErrors([]);
+    setImportedCount(null);
+    const failures: Array<{ baseDir: string; name: string; message: string }> = [];
+    for (let index = 0; index < targets.length; index += 1) {
+      setImportProgress({ done: index, total: targets.length });
+      try {
+        await manageSkill({
+          action: "install",
+          source: targets[index].baseDir,
+          conflict: "backup",
+        });
+      } catch (err) {
+        failures.push({
+          baseDir: targets[index].baseDir,
+          name: targets[index].name,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    setImportProgress(null);
+    setImportErrors(failures);
+    setImportedCount(targets.length - failures.length);
+    setSelectedExternal(new Set());
+    await refresh({ silent: true });
+  }, [externalScans, selectedExternal, importProgress, refresh]);
 
   useEffect(() => {
     if (!previewInstalledSkill) {
@@ -887,6 +980,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                     icon: Cloud,
                     count: null,
                   },
+                  {
+                    value: "import" as const,
+                    label: t("settings.skillsHubImportTab"),
+                    icon: Download,
+                    count: null,
+                  },
                 ].map((item) => {
                   const Icon = item.icon;
                   const active = view === item.value;
@@ -920,6 +1019,36 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   );
                 })}
               </div>
+
+              {!lockedByChatMode ? (
+                <div className="relative w-full min-w-0 max-w-md">
+                  <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={
+                      view === "installed" ? filter : view === "store" ? storeQuery : importQuery
+                    }
+                    onChange={(e) => {
+                      const value = e.currentTarget.value;
+                      if (view === "installed") {
+                        setFilter(value);
+                      } else if (view === "store") {
+                        setStoreQuery(value);
+                      } else {
+                        setImportQuery(value);
+                      }
+                    }}
+                    placeholder={
+                      view === "installed"
+                        ? t("settings.skillsSearch")
+                        : view === "store"
+                          ? t("settings.skillsStoreSearch")
+                          : t("settings.skillsImportSearchPlaceholder")
+                    }
+                    className="h-10 w-full rounded-xl border border-border/40 bg-background/60 pl-10 pr-3 text-[13px] outline-hidden backdrop-blur-xl transition-all placeholder:text-muted-foreground/60 focus:border-border/60 focus:bg-background/85 focus:ring-2 focus:ring-foreground/10"
+                  />
+                </div>
+              ) : null}
             </div>
 
             <div className="min-h-0 flex-1 overflow-hidden">
@@ -957,19 +1086,6 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                               </span>
                             </div>
                           </GlassPanel>
-                        ) : null}
-
-                        {skills.length > 4 ? (
-                          <div className="hub-panel-enter relative max-w-md">
-                            <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                            <input
-                              type="text"
-                              value={filter}
-                              onChange={(e) => setFilter(e.currentTarget.value)}
-                              placeholder={t("settings.skillsSearch")}
-                              className="h-10 w-full rounded-xl border border-border/40 bg-background/60 pl-10 pr-3 text-[13px] outline-hidden backdrop-blur-xl transition-all placeholder:text-muted-foreground/60 focus:border-border/60 focus:bg-background/85 focus:ring-2 focus:ring-foreground/10"
-                            />
-                          </div>
                         ) : null}
 
                         {!loading && skills.length === 0 && !loadError ? (
@@ -1212,7 +1328,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                         ) : null}
                       </div>
                     </div>
-                  ) : (
+                  ) : view === "store" ? (
                     <SkillsStoreView
                       items={storeItems}
                       query={storeQuery}
@@ -1224,10 +1340,24 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                       installedSlugs={installedStoreSlugs}
                       installingBySlug={installingBySlug}
                       installJobs={installJobs}
-                      onQueryChange={setStoreQuery}
                       onSortChange={setStoreSort}
                       onLoadMore={() => void loadMoreStore()}
                       onInstall={(skill) => void installStoreSkill(skill)}
+                    />
+                  ) : (
+                    <SkillsImportView
+                      scans={externalScans ?? []}
+                      loading={externalLoading}
+                      error={externalError}
+                      query={importQuery}
+                      selected={selectedExternal}
+                      installedNames={installedSkillNames}
+                      importProgress={importProgress}
+                      importErrors={importErrors}
+                      importedCount={importedCount}
+                      onToggle={toggleExternalSkill}
+                      onRescan={() => void rescanExternalSkills()}
+                      onImport={() => void importSelectedExternalSkills()}
                     />
                   )}
                 </>
@@ -1248,6 +1378,290 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
           onClose={() => setPreviewInstalledSkill(null)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function SkillsImportView(props: {
+  scans: ExternalToolScan[];
+  loading: boolean;
+  error: string | null;
+  query: string;
+  selected: ReadonlySet<string>;
+  installedNames: ReadonlySet<string>;
+  importProgress: { done: number; total: number } | null;
+  importErrors: Array<{ baseDir: string; name: string; message: string }>;
+  importedCount: number | null;
+  onToggle: (baseDir: string) => void;
+  onRescan: () => void;
+  onImport: () => void;
+}) {
+  const {
+    scans,
+    loading,
+    error,
+    query,
+    selected,
+    installedNames,
+    importProgress,
+    importErrors,
+    importedCount,
+    onToggle,
+    onRescan,
+    onImport,
+  } = props;
+  const { t } = useLocale();
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredScans = useMemo(
+    () =>
+      scans.map((scan) => ({
+        ...scan,
+        skills: normalizedQuery
+          ? scan.skills.filter(
+              (skill) =>
+                skill.name.toLowerCase().includes(normalizedQuery) ||
+                skill.description.toLowerCase().includes(normalizedQuery),
+            )
+          : scan.skills,
+      })),
+    [scans, normalizedQuery],
+  );
+  const importing = importProgress !== null;
+
+  const [activeTool, setActiveTool] = useState<string>(scans[0]?.tool ?? "claude-code");
+  const userChoseToolRef = useRef(false);
+  // 扫描结果就绪后自动定位到第一个有技能的工具；用户手动切换后不再干预
+  useEffect(() => {
+    if (userChoseToolRef.current || scans.length === 0) return;
+    const preferred =
+      scans.find((scan) => scan.skills.length > 0) ?? scans.find((scan) => scan.exists) ?? scans[0];
+    if (preferred && preferred.tool !== activeTool) {
+      setActiveTool(preferred.tool);
+    }
+  }, [scans, activeTool]);
+  const activeScan = filteredScans.find((scan) => scan.tool === activeTool);
+
+  return (
+    <div className="h-full min-h-0 overflow-y-auto px-0.5 pb-4 pr-1 pt-1.5">
+      <div className="flex flex-col gap-4">
+        {error ? (
+          <GlassPanel tone="error" className="hub-panel-enter">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+              <span className="text-xs text-destructive">
+                {t("settings.skillsImportScanFailed")}: {error}
+              </span>
+            </div>
+          </GlassPanel>
+        ) : null}
+
+        {importErrors.length > 0 ? (
+          <GlassPanel tone="error" className="hub-panel-enter">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+                <span className="text-xs font-medium text-destructive">
+                  {t("settings.skillsImportFailed")}
+                </span>
+              </div>
+              {importErrors.map((failure) => (
+                <div key={failure.baseDir} className="pl-6 text-[11px] text-destructive/90">
+                  {failure.name}: {failure.message}
+                </div>
+              ))}
+            </div>
+          </GlassPanel>
+        ) : null}
+
+        {importedCount !== null && importedCount > 0 ? (
+          <GlassPanel tone="muted" className="hub-panel-enter">
+            <div className="flex items-center gap-2">
+              <Check className="h-4 w-4 shrink-0 text-[hsl(var(--chat-success))]" />
+              <span className="text-xs text-muted-foreground">
+                {t("settings.skillsImportDone")} ({importedCount})
+              </span>
+            </div>
+          </GlassPanel>
+        ) : null}
+
+        {loading ? (
+          <GlassPanel className="hub-panel-enter">
+            <div className="flex items-center gap-3 py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">
+                {t("settings.skillsImportScanning")}
+              </span>
+            </div>
+          </GlassPanel>
+        ) : (
+          <>
+            <div className="hub-panel-enter flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex shrink-0 rounded-2xl border border-border/40 bg-background/60 p-1 backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
+                {filteredScans.map((scan) => {
+                  const toolLabel = EXTERNAL_TOOL_LABELS[scan.tool] ?? scan.tool;
+                  const active = scan.tool === activeTool;
+                  return (
+                    <button
+                      key={scan.tool}
+                      type="button"
+                      onClick={() => {
+                        userChoseToolRef.current = true;
+                        setActiveTool(scan.tool);
+                      }}
+                      className={cn(
+                        "relative inline-flex h-9 items-center justify-center gap-2 rounded-xl px-4 text-[12.5px] font-medium transition-all",
+                        active
+                          ? "bg-background/85 text-foreground shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_4px_12px_-8px_rgba(15,23,42,0.18)] ring-1 ring-border/45 dark:bg-white/[0.08] dark:ring-white/[0.09] dark:shadow-[0_1px_0_rgba(255,255,255,0.07)_inset,0_4px_12px_-8px_rgba(0,0,0,0.55)]"
+                          : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
+                      )}
+                    >
+                      <Folder className="h-3.5 w-3.5" />
+                      <span>{toolLabel}</span>
+                      {scan.exists ? (
+                        <span
+                          className={cn(
+                            "ml-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums",
+                            active
+                              ? "bg-foreground/[0.08] text-foreground/85"
+                              : "bg-muted/70 text-muted-foreground",
+                          )}
+                        >
+                          {scan.skills.length}
+                        </span>
+                      ) : (
+                        <span className="ml-0.5 text-[10px] text-muted-foreground/70">
+                          {t("settings.skillsImportNotDetected")}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 rounded-full"
+                  disabled={loading || importing}
+                  onClick={onRescan}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                  {t("settings.skillsImportRescan")}
+                </Button>
+                <Button
+                  size="sm"
+                  className="gap-1.5 rounded-full"
+                  disabled={selected.size === 0 || importing || loading}
+                  onClick={onImport}
+                >
+                  {importing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {importing && importProgress
+                    ? `${t("settings.skillsImportProgress")} ${importProgress.done + 1}/${importProgress.total}`
+                    : `${t("settings.skillsImportButton")}${selected.size > 0 ? ` (${selected.size})` : ""}`}
+                </Button>
+              </div>
+            </div>
+
+            {activeScan ? (
+              <div key={activeScan.tool} className="hub-panel-enter flex flex-col gap-3">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground/70">
+                  <span className="font-mono">{activeScan.rootDir}</span>
+                  {activeScan.tool === "codebuddy" && activeScan.exists ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{t("settings.skillsImportCodebuddyHint")}</span>
+                    </>
+                  ) : null}
+                  {activeScan.errors.length > 0 ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>
+                        {t("settings.skillsImportUnparsable").replace(
+                          "{count}",
+                          String(activeScan.errors.length),
+                        )}
+                      </span>
+                    </>
+                  ) : null}
+                  {activeScan.exists && activeScan.skills.length > 0 ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span>{t("settings.skillsImportOverwriteHint")}</span>
+                    </>
+                  ) : null}
+                </p>
+
+                {!activeScan.exists ? (
+                  <GlassPanel tone="muted">
+                    <p className="py-2 text-center text-xs text-muted-foreground">
+                      {t("settings.skillsImportNotDetected")} · {activeScan.rootDir}
+                    </p>
+                  </GlassPanel>
+                ) : activeScan.skills.length === 0 ? (
+                  <GlassPanel tone="muted">
+                    <p className="py-2 text-center text-xs text-muted-foreground">
+                      {t("settings.skillsImportEmpty")}
+                    </p>
+                  </GlassPanel>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {activeScan.skills.map((skill) => {
+                      const checked = selected.has(skill.baseDir);
+                      const alreadyInstalled = installedNames.has(skill.name);
+                      return (
+                        <button
+                          key={skill.baseDir}
+                          type="button"
+                          disabled={importing}
+                          onClick={() => onToggle(skill.baseDir)}
+                          className={cn(
+                            "group flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60",
+                            checked
+                              ? "border-primary/60 bg-primary/5 shadow-sm shadow-primary/10"
+                              : "border-border/40 bg-background/60 hover:border-border/70 hover:bg-background/85",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
+                              checked
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border/70 bg-background",
+                            )}
+                          >
+                            {checked ? <Check className="h-3 w-3" /> : null}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-1.5">
+                              <span className="truncate text-[13px] font-medium text-foreground">
+                                {skill.name}
+                              </span>
+                              {alreadyInstalled ? (
+                                <span className="shrink-0 rounded-full bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                  {t("settings.skillsImportInstalledBadge")}
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="mt-0.5 line-clamp-2 block text-[11px] leading-relaxed text-muted-foreground">
+                              {skill.description}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1511,7 +1925,6 @@ function SkillsStoreView(props: {
   installedSlugs: Set<string>;
   installingBySlug: Record<string, string>;
   installJobs: Record<string, SkillInstallJobSnapshot>;
-  onQueryChange: (value: string) => void;
   onSortChange: (value: ClawHubSort) => void;
   onLoadMore: () => void;
   onInstall: (skill: ClawHubSkillCard) => void;
@@ -1527,7 +1940,6 @@ function SkillsStoreView(props: {
     installedSlugs,
     installingBySlug,
     installJobs,
-    onQueryChange,
     onSortChange,
     onLoadMore,
     onInstall,
@@ -1592,25 +2004,8 @@ function SkillsStoreView(props: {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-      <div className="hub-panel-enter flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative w-full min-w-0 lg:max-w-md">
-          <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => onQueryChange(e.currentTarget.value)}
-            placeholder={t("settings.skillsStoreSearch")}
-            className="h-10 w-full rounded-xl border border-border/40 bg-background/60 pl-10 pr-3 text-[13px] outline-hidden backdrop-blur-xl transition-all placeholder:text-muted-foreground/60 focus:border-border/60 focus:bg-background/85 focus:ring-2 focus:ring-foreground/10"
-          />
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5 self-start lg:self-auto">
-          <Loader2
-            aria-hidden={!refreshing}
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground transition-opacity duration-200 motion-reduce:transition-none",
-              refreshing ? "opacity-100" : "opacity-0",
-            )}
-          />
+      <div className="hub-panel-enter flex items-center justify-start">
+        <div className="flex shrink-0 items-center gap-1.5">
           <div className="flex max-w-full shrink-0 items-center gap-1 overflow-x-auto rounded-xl border border-border/40 bg-background/60 p-1 backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
             {STORE_SORT_OPTIONS.map((option) => {
               const active = sort === option.value;
@@ -1633,6 +2028,13 @@ function SkillsStoreView(props: {
               );
             })}
           </div>
+          <Loader2
+            aria-hidden={!refreshing}
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground transition-opacity duration-200 motion-reduce:transition-none",
+              refreshing ? "opacity-100" : "opacity-0",
+            )}
+          />
         </div>
       </div>
 

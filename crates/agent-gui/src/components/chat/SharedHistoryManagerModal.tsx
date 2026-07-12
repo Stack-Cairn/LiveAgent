@@ -144,7 +144,7 @@ function RedactionPicker(props: {
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-2.5 py-0.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-emerald-500/35 disabled:cursor-not-allowed",
           value
             ? "bg-emerald-500 text-white shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -164,7 +164,7 @@ function RedactionPicker(props: {
         className={cn(
           "cursor-pointer",
           disabled && "cursor-not-allowed",
-          "relative rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
+          "relative rounded-full px-2.5 py-0.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500/35 disabled:cursor-not-allowed",
           !value
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground",
@@ -303,7 +303,7 @@ export function SharedHistoryManagerModal({
 
           <div className="mt-4 grid grid-cols-3 gap-2">
             <div className="min-w-0 rounded-2xl border border-border/60 bg-muted/25 px-2.5 py-2 sm:px-3">
-              <div className="truncate text-[10px] font-medium uppercase leading-4 text-muted-foreground sm:text-[11px]">
+              <div className="truncate text-[calc(10px*var(--zone-font-scale,1))] font-medium uppercase leading-4 text-muted-foreground sm:text-[calc(11px*var(--zone-font-scale,1))]">
                 {t("sharedHistory.summaryShared")}
               </div>
               <div className="mt-1 text-lg font-semibold text-foreground">
@@ -311,13 +311,13 @@ export function SharedHistoryManagerModal({
               </div>
             </div>
             <div className="min-w-0 rounded-2xl border border-border/60 bg-muted/25 px-2.5 py-2 sm:px-3">
-              <div className="truncate text-[10px] font-medium uppercase leading-4 text-muted-foreground sm:text-[11px]">
+              <div className="truncate text-[calc(10px*var(--zone-font-scale,1))] font-medium uppercase leading-4 text-muted-foreground sm:text-[calc(11px*var(--zone-font-scale,1))]">
                 {t("sharedHistory.summaryCopyable")}
               </div>
               <div className="mt-1 text-lg font-semibold text-foreground">{copyableCount}</div>
             </div>
             <div className="min-w-0 rounded-2xl border border-border/60 bg-muted/25 px-2.5 py-2 sm:px-3">
-              <div className="truncate text-[10px] font-medium uppercase leading-4 text-muted-foreground sm:text-[11px]">
+              <div className="truncate text-[calc(10px*var(--zone-font-scale,1))] font-medium uppercase leading-4 text-muted-foreground sm:text-[calc(11px*var(--zone-font-scale,1))]">
                 {t("sharedHistory.summaryStatus")}
               </div>
               <div className="mt-1 flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground sm:gap-2">
@@ -395,16 +395,16 @@ export function SharedHistoryManagerModal({
                           <span className="min-w-0 truncate text-sm font-semibold text-foreground">
                             {conversation.title}
                           </span>
-                          <span className="shrink-0 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-600 dark:text-sky-400">
+                          <span className="shrink-0 rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-sky-600 dark:text-sky-400">
                             {t("sharedHistory.publicBadge")}
                           </span>
                           {redactToolContent ? (
-                            <span className="shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                            <span className="shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-emerald-600 dark:text-emerald-400">
                               {t("sharedHistory.redactedBadge")}
                             </span>
                           ) : null}
                         </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
                           <span>{messageCount}</span>
                           <span>
                             {t("sharedHistory.updatedAt").replace(
@@ -518,7 +518,7 @@ export function SharedHistoryManagerModal({
                             {t("sharedHistory.redactionTitle")}
                           </div>
                           <div
-                            className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground"
+                            className="mt-0.5 truncate text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground"
                             title={t("sharedHistory.redactionDescriptionTitle")}
                           >
                             {t("sharedHistory.redactionDescription")}

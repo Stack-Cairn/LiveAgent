@@ -178,7 +178,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {name ? (
           <ToolSurface>
             <ToolSurfaceLabel label="agent" />
-            <div className="break-words text-[11.5px] font-semibold leading-[1.55] text-foreground/86">
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] font-semibold leading-[1.55] text-foreground/86">
               {name}
             </div>
           </ToolSurface>
@@ -186,7 +186,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {role ? (
           <ToolSurface>
             <ToolSurfaceLabel label="role" />
-            <div className="break-words text-[11.5px] leading-[1.55] text-foreground/78">
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
               {role}
             </div>
           </ToolSurface>
@@ -194,7 +194,9 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {task ? (
           <ToolSurface>
             <ToolSurfaceLabel label="task" />
-            <div className="break-words text-[11.5px] leading-[1.6] text-foreground/82">{task}</div>
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-foreground/82">
+              {task}
+            </div>
           </ToolSurface>
         ) : null}
       </div>
@@ -230,7 +232,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="path" />
             <PathDisplay
               path={display.path}
-              className="block min-w-0 break-all font-mono text-[11.5px] leading-[1.6]"
+              className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
             />
           </ToolSurface>
         ) : null}
@@ -248,7 +250,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="query" />
             <div className="flex items-start gap-2">
               <Search className="mt-[2px] h-3.5 w-3.5 shrink-0 text-muted-foreground/35" />
-              <span className="min-w-0 break-all font-mono text-[11.5px] leading-[1.6] text-foreground/82">
+              <span className="min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-foreground/82">
                 {display.pattern}
               </span>
             </div>
@@ -259,7 +261,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="scope" />
             <PathDisplay
               path={display.path}
-              className="block min-w-0 break-all font-mono text-[11.5px] leading-[1.6]"
+              className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
             />
           </ToolSurface>
         ) : null}
@@ -407,10 +409,10 @@ function ToolCallItem({
           {/* Container carries the summary styling so the truncation ellipsis
               (styled per the block container) matches the summary text */}
           <div
-            className="min-w-0 truncate font-mono text-[11px] leading-5 text-muted-foreground/55"
+            className="min-w-0 truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/55"
             title={!isBash && !inlineCommand && toolArgsSummary ? toolArgsSummary : undefined}
           >
-            <span className="font-sans text-[12.5px] font-semibold tracking-[-0.01em] text-foreground/90">
+            <span className="font-sans text-[calc(12.5px*var(--zone-font-scale,1))] font-semibold tracking-[-0.01em] text-foreground/90">
               {title.name}
               {title.action ? (
                 <span className="font-mono font-semibold text-muted-foreground/70">
@@ -441,7 +443,7 @@ function ToolCallItem({
           <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
           <span
             className={cn(
-              "inline-flex items-center rounded-full px-1.5 py-[1px] text-[10px] font-semibold",
+              "inline-flex items-center rounded-full px-1.5 py-[1px] text-[calc(10px*var(--zone-font-scale,1))] font-semibold",
               statusBgClass,
             )}
           >
@@ -466,7 +468,7 @@ function ToolCallItem({
               label={t("chat.tool.return")}
               trailing={
                 result.isError ? (
-                  <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-[1px] text-[10px] font-bold text-red-500 dark:bg-red-500/15">
+                  <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-[1px] text-[calc(10px*var(--zone-font-scale,1))] font-bold text-red-500 dark:bg-red-500/15">
                     {t("chat.tool.error")}
                   </span>
                 ) : null
@@ -490,7 +492,7 @@ function ToolCallItem({
 
                   return (
                     <details className="group/result">
-                      <summary className="flex cursor-pointer select-none items-center gap-1 text-[10.5px] text-muted-foreground/50 transition-colors duration-150 hover:text-foreground/60">
+                      <summary className="flex cursor-pointer select-none items-center gap-1 text-[calc(10.5px*var(--zone-font-scale,1))] text-muted-foreground/50 transition-colors duration-150 hover:text-foreground/60">
                         <ChevronRight className="h-2.5 w-2.5 transition-transform duration-200 group-open/result:rotate-90" />
                         {t("chat.tool.viewReturn")}
                       </summary>

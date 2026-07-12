@@ -110,11 +110,11 @@ function UserImageAttachmentCard({
       )}
       <div className="flex items-center gap-1.5 px-2.5 py-1.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+          <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
             {file.fileName}
           </div>
         </div>
-        <span className="shrink-0 text-[10px] tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
+        <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
           {formatUploadedFileSize(file.sizeBytes)}
         </span>
       </div>
@@ -145,10 +145,10 @@ function UserFileAttachmentCard({
         <FileText className="h-4 w-4 text-[hsl(var(--chat-user-fg)/0.45)]" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[11px] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+        <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
           {file.fileName}
         </div>
-        <div className="mt-0.5 text-[10px] tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
+        <div className="mt-0.5 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
           {formatUploadedFileSize(file.sizeBytes)}
         </div>
       </div>

@@ -17,6 +17,7 @@
 mod builtin;
 mod clawhub;
 mod create;
+mod external;
 mod install;
 mod jobs;
 mod library;
@@ -34,6 +35,7 @@ pub use builtin::ensure_builtin_agent_skills_sync;
 pub(crate) use builtin::*;
 pub(crate) use clawhub::*;
 pub(crate) use create::*;
+pub(crate) use external::*;
 pub(crate) use install::*;
 pub(crate) use jobs::*;
 pub use library::{

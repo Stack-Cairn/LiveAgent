@@ -28,6 +28,25 @@ export function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], tex
   };
 }
 
+export function formatMessageTimestamp(timestamp: number, now = new Date()): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return "";
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  ) {
+    return time;
+  }
+  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${monthDay} ${time}`;
+  }
+  return `${date.getFullYear()}-${monthDay} ${time}`;
+}
+
 export type TranscriptContextMenuState = {
   x: number;
   y: number;

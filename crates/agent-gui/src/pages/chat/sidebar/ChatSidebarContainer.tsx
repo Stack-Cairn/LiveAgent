@@ -24,6 +24,7 @@ type ChatSidebarContainerProps = {
   store: SidebarStore;
   currentConversationId: string;
   isOpen: boolean;
+  fontScale?: number;
   activeView: "chat" | "skills-hub" | "mcp-hub";
   showProjects: boolean;
   // Merged (settings ∪ history workdirs) but unsorted — the container sorts
@@ -183,6 +184,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       renamingId={renamingId}
       renameDraft={renameDraft}
       isOpen={props.isOpen}
+      fontScale={props.fontScale}
       activeView={props.activeView}
       showProjects={props.showProjects}
       projects={sortedProjects}

@@ -570,12 +570,28 @@
 
 /* Streamdown content styling via data-streamdown selectors */
 @layer components {
+  /*
+   * Per-zone font scaling: re-declare Tailwind v4 text-size theme variables so
+   * every rem-based text-* utility inside the zone follows --zone-font-scale.
+   * Hard-coded px sizes opt in via text-[calc(NNpx*var(--zone-font-scale,1))].
+   * Line-height variables are unitless ratios, so they scale automatically.
+   */
+  .zone-font-scale {
+    font-size: calc(1rem * var(--zone-font-scale, 1));
+    --text-xs: calc(0.75rem * var(--zone-font-scale, 1));
+    --text-sm: calc(0.875rem * var(--zone-font-scale, 1));
+    --text-base: calc(1rem * var(--zone-font-scale, 1));
+    --text-lg: calc(1.125rem * var(--zone-font-scale, 1));
+    --text-xl: calc(1.25rem * var(--zone-font-scale, 1));
+    --text-2xl: calc(1.5rem * var(--zone-font-scale, 1));
+  }
+
   .chat-markdown {
-    @apply text-[15px] leading-[1.7] text-foreground;
+    @apply text-[calc(15px*var(--zone-font-scale,1))] leading-[1.7] text-foreground;
   }
 
   .chat-markdown p {
-    @apply my-3 text-[15px] leading-[1.7] text-foreground;
+    @apply my-3 text-[calc(15px*var(--zone-font-scale,1))] leading-[1.7] text-foreground;
   }
 
   .chat-markdown strong,
@@ -609,7 +625,7 @@
 
   /* Inline code */
   .chat-markdown [data-streamdown="inline-code"] {
-    @apply rounded-md border border-border/50 bg-muted/70 px-1.5 py-0.5 font-mono text-[13px] font-medium text-foreground/90;
+    @apply rounded-md border border-border/50 bg-muted/70 px-1.5 py-0.5 font-mono text-[calc(13px*var(--zone-font-scale,1))] font-medium text-foreground/90;
   }
 
   /* Code blocks — container, header, body (safe in components layer) */
@@ -620,13 +636,13 @@
       0 1px 2px -1px rgba(0, 0, 0, 0.04);
   }
   .chat-markdown [data-streamdown="code-block-header"] {
-    @apply h-auto border-b border-border/60 bg-muted/55 px-3 py-2 text-[11px] uppercase tracking-[0.22em] text-muted-foreground;
+    @apply h-auto border-b border-border/60 bg-muted/55 px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] uppercase tracking-[0.22em] text-muted-foreground;
   }
   .chat-markdown [data-streamdown="code-block-header"] > span {
     @apply ml-0 font-mono tracking-[0.18em];
   }
   .chat-markdown [data-streamdown="code-block-body"] {
-    @apply overflow-x-auto rounded-lg border border-border/40 bg-background/90 p-4 text-[13px] shadow-inner;
+    @apply overflow-x-auto rounded-lg border border-border/40 bg-background/90 p-4 text-[calc(13px*var(--zone-font-scale,1))] shadow-inner;
   }
   .chat-markdown [data-streamdown="code-block-body"] pre {
     @apply leading-6;
@@ -646,7 +662,7 @@
     background: hsl(var(--chat-running) / 0.14);
     color: hsl(var(--chat-running));
     padding: 0.15rem 0.5rem;
-    font-size: 10px;
+    font-size: calc(10px * var(--zone-font-scale, 1));
     font-weight: 600;
     letter-spacing: 0.22em;
     z-index: 20;
@@ -673,7 +689,7 @@
     @apply my-3 ml-1 list-decimal space-y-1 pl-5;
   }
   .chat-markdown [data-streamdown="list-item"] {
-    @apply pl-1 text-[15px] leading-[1.7];
+    @apply pl-1 text-[calc(15px*var(--zone-font-scale,1))] leading-[1.7];
   }
   .chat-markdown .contains-task-list {
     @apply list-none pl-0;
@@ -702,7 +718,7 @@
     @apply bg-muted/70;
   }
   .chat-markdown [data-streamdown="table-header-cell"] {
-    @apply border-b border-border/50 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
+    @apply border-b border-border/50 px-4 py-2.5 text-left text-[calc(11px*var(--zone-font-scale,1))] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
   }
   .chat-markdown [data-streamdown="table-cell"] {
     @apply border-b border-border/30 px-4 py-2.5 text-left align-top;
@@ -763,7 +779,7 @@
     @apply my-2 border-l-2 border-border/70 pl-3 text-xs not-italic text-muted-foreground;
   }
   .release-notes-markdown [data-streamdown="inline-code"] {
-    @apply rounded border border-border/50 bg-muted/60 px-1 py-0.5 font-mono text-[11px] text-foreground/90;
+    @apply rounded border border-border/50 bg-muted/60 px-1 py-0.5 font-mono text-[calc(11px*var(--zone-font-scale,1))] text-foreground/90;
   }
 
   /* Smooth entrance for chat bubbles */
@@ -1811,7 +1827,7 @@
   }
 
   .mention-chip {
-    font-size: 13px;
+    font-size: calc(13px * var(--zone-font-scale, 1));
     line-height: 1.5;
     vertical-align: baseline;
     cursor: default;

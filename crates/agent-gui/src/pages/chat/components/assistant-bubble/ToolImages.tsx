@@ -237,13 +237,13 @@ function ToolImageStatusCard(props: {
         <Icon className={cn("h-4 w-4", !isError && "animate-spin text-primary")} />
       </div>
       <div className="max-w-full space-y-1">
-        <div className="text-[12px] font-medium">
+        <div className="text-[calc(12px*var(--zone-font-scale,1))] font-medium">
           {title ?? (isError ? t("chat.image.unavailable") : t("chat.image.loading"))}
         </div>
         {detail ? (
           <div
             className={cn(
-              "max-w-full truncate text-[11px]",
+              "max-w-full truncate text-[calc(11px*var(--zone-font-scale,1))]",
               isError ? "text-red-700/75 dark:text-red-200/75" : "text-muted-foreground",
             )}
             title={detail}

@@ -2045,3 +2045,21 @@ test("mcp and remote settings normalize transport, selection, ports, and tokens"
   });
   assert.equal(remoteWithOversizedPort.grpcPort, 65_535);
 });
+
+test("font scale settings normalize invalid values to 1 and clamp out-of-range values", () => {
+  const defaults = settings.normalizeFontScaleSettings(undefined);
+  assert.deepEqual(defaults, { sidebar: 1, chat: 1, rightDock: 1 });
+
+  const normalized = settings.normalizeFontScaleSettings({
+    sidebar: "big",
+    chat: 2.5,
+    rightDock: 0.5,
+  });
+  assert.deepEqual(normalized, { sidebar: 1, chat: 1.4, rightDock: 0.8 });
+
+  const kept = settings.normalizeFontScaleSettings({ sidebar: 0.9, chat: 1.1, rightDock: 1.2 });
+  assert.deepEqual(kept, { sidebar: 0.9, chat: 1.1, rightDock: 1.2 });
+
+  const custom = settings.normalizeCustomSettings({ fontScale: { chat: 1.2 } }, []);
+  assert.deepEqual(custom.fontScale, { sidebar: 1, chat: 1.2, rightDock: 1 });
+});

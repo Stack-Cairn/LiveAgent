@@ -99,14 +99,14 @@ export function ToolTraceGroup(props: { items: ToolTraceItem[]; runningToolCallI
         </div>
 
         <div className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2">
-          <span className="min-w-0 truncate text-[12.5px] font-semibold leading-5 text-foreground/90">
+          <span className="min-w-0 truncate text-[calc(12.5px*var(--zone-font-scale,1))] font-semibold leading-5 text-foreground/90">
             {title}
           </span>
-          <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-black/[0.04] px-1.5 text-[10.5px] font-semibold leading-none text-muted-foreground/70 dark:bg-white/[0.06]">
+          <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-black/[0.04] px-1.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-semibold leading-none text-muted-foreground/70 dark:bg-white/[0.06]">
             {countLabel}
           </span>
           {composition ? (
-            <span className="inline-flex h-5 min-w-0 items-center truncate font-mono text-[11px] leading-none text-muted-foreground/55">
+            <span className="inline-flex h-5 min-w-0 items-center truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-none text-muted-foreground/55">
               {composition}
             </span>
           ) : null}
@@ -116,7 +116,7 @@ export function ToolTraceGroup(props: { items: ToolTraceItem[]; runningToolCallI
           <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
           <span
             className={cn(
-              "inline-flex h-5 items-center rounded-full px-1.5 text-[10px] font-semibold leading-none",
+              "inline-flex h-5 items-center rounded-full px-1.5 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none",
               statusBgClass,
             )}
           >

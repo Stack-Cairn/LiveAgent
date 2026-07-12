@@ -18,7 +18,9 @@ import {
 function StreamingArgPlaceholder({ label }: { label: string }) {
   return (
     <ToolSurface>
-      <div className="text-[11.5px] leading-[1.6] text-muted-foreground/62">{label}</div>
+      <div className="text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-muted-foreground/62">
+        {label}
+      </div>
     </ToolSurface>
   );
 }
@@ -43,12 +45,12 @@ function StreamingTextPreviewSurface({
             {preview.text}
           </ToolScrollablePre>
         ) : (
-          <div className="px-2.5 pb-2 text-[11.5px] leading-[1.6] text-muted-foreground/62">
+          <div className="px-2.5 pb-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-muted-foreground/62">
             {emptyLabel}
           </div>
         )
       ) : (
-        <div className="px-2.5 pb-2 text-[11.5px] leading-[1.6] text-muted-foreground/62">
+        <div className="px-2.5 pb-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-muted-foreground/62">
           Waiting for {label}...
         </div>
       )}
@@ -62,7 +64,7 @@ function PathSurface({ path }: { path: string }) {
       <ToolSurfaceLabel label="path" />
       <PathDisplay
         path={path}
-        className="block min-w-0 break-all font-mono text-[11.5px] leading-[1.6]"
+        className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
       />
     </ToolSurface>
   );

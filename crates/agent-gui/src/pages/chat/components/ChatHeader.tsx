@@ -86,11 +86,13 @@ export const ChatHeader = memo(function ChatHeader(props: {
         : t("tooltip.switchToAuto");
   const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isModelMenuOpen) {
       setModelSearch("");
+      setExpandedGroups({});
       setTimeout(() => searchInputRef.current?.focus(), 0);
     }
   }, [isModelMenuOpen]);
@@ -118,6 +120,17 @@ export const ChatHeader = memo(function ChatHeader(props: {
   }
 
   const selectedOption = modelOptions.find((o) => o.value === selectedValue);
+  const selectedGroupName = selectedOption?.providerName;
+  // 默认全部折叠，仅当前选中模型所在分组展开；搜索时强制展开所有匹配分组
+  const isGroupExpanded = (name: string) =>
+    normalizedSearch.length > 0 || (expandedGroups[name] ?? name === selectedGroupName);
+  // 基于存储态取反（而非 isGroupExpanded）：搜索强制展开是只读覆盖，
+  // 不应让搜索期间的点击把折叠态写坏
+  const toggleGroup = (name: string) =>
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [name]: !(prev[name] ?? name === selectedGroupName),
+    }));
 
   return (
     <header data-tauri-drag-region className="flex items-center justify-between gap-2 px-4 py-2.5">
@@ -166,7 +179,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
             collisionPadding={8}
             className="model-selector-dropdown w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-border/40 bg-popover/70 p-0 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.25)] ring-1 ring-white/10 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-popover/55"
           >
-            <DropdownMenuLabel className="model-selector-menu-title px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80 dark:text-white/80">
+            <DropdownMenuLabel className="model-selector-menu-title px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] font-medium uppercase tracking-wider text-muted-foreground/80 dark:text-white/80">
               {t("chat.selectModel")}
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="my-0 bg-border/40" />
@@ -207,50 +220,74 @@ export const ChatHeader = memo(function ChatHeader(props: {
                   );
                 }
 
-                return filteredGroups.map((group, groupIndex) => (
-                  <div key={group.name}>
-                    {groupIndex > 0 ? <DropdownMenuSeparator className="bg-border/30" /> : null}
-                    <DropdownMenuLabel className="model-selector-group-label sticky top-0 z-10 flex items-center gap-1.5 bg-popover/60 px-2 py-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80 backdrop-blur-xl supports-[backdrop-filter]:bg-popover/40 dark:text-white/80">
-                      <ProviderBrandIcon
-                        type={group.providerType}
-                        className="h-3.5 w-3.5 opacity-90"
-                      />
-                      <span className="truncate normal-case tracking-normal">{group.name}</span>
-                    </DropdownMenuLabel>
-                    {group.opts.map((option) => {
-                      const isSelected = option.value === selectedValue;
-                      const itemAnimationDelay = `${Math.min(animationIndex, 5) * 0.025}s`;
-                      animationIndex += 1;
-                      return (
-                        <DropdownMenuItem
-                          key={option.value}
-                          onSelect={() => {
-                            const parsed = parseModelValue(option.value);
-                            if (!parsed) return;
-                            setSettings((prev) => setSelectedModel(prev, parsed));
-                          }}
+                return filteredGroups.map((group, groupIndex) => {
+                  const expanded = isGroupExpanded(group.name);
+                  return (
+                    <div key={group.name}>
+                      {groupIndex > 0 ? <DropdownMenuSeparator className="bg-border/30" /> : null}
+                      <DropdownMenuItem
+                        closeOnClick={false}
+                        onSelect={() => toggleGroup(group.name)}
+                        aria-expanded={expanded}
+                        title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
+                        className="model-selector-group-label sticky top-0 z-10 flex cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium uppercase tracking-wider text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40 dark:text-white/80"
+                      >
+                        <ProviderBrandIcon
+                          type={group.providerType}
+                          className="h-3.5 w-3.5 opacity-90"
+                        />
+                        <span className="min-w-0 flex-1 truncate normal-case tracking-normal">
+                          {group.name}
+                        </span>
+                        <span className="inline-flex h-4 min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted/70 px-1 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums tracking-normal">
+                          {group.opts.length}
+                        </span>
+                        <ChevronDown
                           className={cn(
-                            "model-selector-item group/item max-w-full justify-between gap-3 overflow-hidden rounded-md text-foreground transition-all duration-150 ease-out data-[highlighted]:translate-x-0.5 data-[highlighted]:bg-muted/40 dark:text-white",
-                            isSelected && "bg-muted/60 font-medium text-foreground",
+                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                            expanded && "rotate-180",
                           )}
-                          style={{ animationDelay: itemAnimationDelay }}
-                        >
-                          <span className="flex min-w-0 items-center gap-2">
-                            <ProviderBrandIcon
-                              type={option.providerType}
-                              className={cn(
-                                "opacity-70 transition-opacity duration-150 group-data-[highlighted]/item:opacity-100",
-                                isSelected && "opacity-100",
-                              )}
-                            />
-                            <span className="min-w-0 truncate">{option.model}</span>
-                          </span>
-                          {isSelected ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </div>
-                ));
+                        />
+                      </DropdownMenuItem>
+                      {expanded
+                        ? group.opts.map((option) => {
+                            const isSelected = option.value === selectedValue;
+                            const itemAnimationDelay = `${Math.min(animationIndex, 5) * 0.025}s`;
+                            animationIndex += 1;
+                            return (
+                              <DropdownMenuItem
+                                key={option.value}
+                                onSelect={() => {
+                                  const parsed = parseModelValue(option.value);
+                                  if (!parsed) return;
+                                  setSettings((prev) => setSelectedModel(prev, parsed));
+                                }}
+                                className={cn(
+                                  "model-selector-item group/item max-w-full justify-between gap-3 overflow-hidden rounded-md text-foreground transition-all duration-150 ease-out data-[highlighted]:translate-x-0.5 data-[highlighted]:bg-muted/40 dark:text-white",
+                                  isSelected && "bg-muted/60 font-medium text-foreground",
+                                )}
+                                style={{ animationDelay: itemAnimationDelay }}
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <ProviderBrandIcon
+                                    type={option.providerType}
+                                    className={cn(
+                                      "opacity-70 transition-opacity duration-150 group-data-[highlighted]/item:opacity-100",
+                                      isSelected && "opacity-100",
+                                    )}
+                                  />
+                                  <span className="min-w-0 truncate">{option.model}</span>
+                                </span>
+                                {isSelected ? (
+                                  <Check className="h-4 w-4 shrink-0 text-primary" />
+                                ) : null}
+                              </DropdownMenuItem>
+                            );
+                          })
+                        : null}
+                    </div>
+                  );
+                });
               })()}
             </div>
           </DropdownMenuContent>

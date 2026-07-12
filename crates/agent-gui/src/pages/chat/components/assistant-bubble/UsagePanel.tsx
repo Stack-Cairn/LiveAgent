@@ -92,7 +92,7 @@ export function UsagePanel(props: { usage?: Usage; contextWindow?: number }) {
   ];
 
   return (
-    <div className="overflow-x-auto pt-0.5 text-[12px] leading-5 whitespace-nowrap text-muted-foreground/80">
+    <div className="overflow-x-auto pt-0.5 text-[calc(12px*var(--zone-font-scale,1))] leading-5 whitespace-nowrap text-muted-foreground/80">
       {stats.map((item, index) => (
         <span key={item.key}>
           {index > 0 ? <span className="px-1.5 text-muted-foreground/45">·</span> : null}

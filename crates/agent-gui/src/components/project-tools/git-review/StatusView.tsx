@@ -445,14 +445,19 @@ export function GitReviewStatusView(props: {
             </span>
             <span
               className={cn(
-                "block truncate text-[11px] leading-4 text-muted-foreground",
+                "block truncate text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground",
                 deleted && "line-through",
               )}
             >
               {filePath}
             </span>
           </span>
-          <span className={cn("mt-0.5 shrink-0 text-[10px] font-semibold", statusTone(entry))}>
+          <span
+            className={cn(
+              "mt-0.5 shrink-0 text-[calc(10px*var(--zone-font-scale,1))] font-semibold",
+              statusTone(entry),
+            )}
+          >
             {statusLabel(entry)}
           </span>
         </button>
@@ -486,11 +491,11 @@ export function GitReviewStatusView(props: {
             )}
             aria-hidden="true"
           />
-          <span className="min-w-0 truncate text-[11px] font-semibold text-muted-foreground">
+          <span className="min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] font-semibold text-muted-foreground">
             {title}
           </span>
         </button>
-        <span className="inline-flex h-4 min-w-6 shrink-0 items-center justify-center justify-self-end rounded bg-background/70 px-1.5 text-center text-[10px] font-medium tabular-nums text-muted-foreground">
+        <span className="inline-flex h-4 min-w-6 shrink-0 items-center justify-center justify-self-end rounded bg-background/70 px-1.5 text-center text-[calc(10px*var(--zone-font-scale,1))] font-medium tabular-nums text-muted-foreground">
           {sectionEntries.length}
         </span>
         <Button
@@ -630,7 +635,7 @@ export function GitReviewStatusView(props: {
               onChange={(event) => onCommitMessageChange(event.target.value)}
               placeholder={t("projectTools.gitReview.commitMessagePlaceholder")}
               disabled={writeDisabled || operationBusy}
-              className="h-8 text-[11px] placeholder:text-[11px] focus-visible:ring-1 focus-visible:ring-border/40"
+              className="h-8 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))] focus-visible:ring-1 focus-visible:ring-border/40"
             />
             <Button
               size="sm"

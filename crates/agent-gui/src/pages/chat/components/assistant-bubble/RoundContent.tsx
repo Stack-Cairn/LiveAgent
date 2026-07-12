@@ -50,7 +50,7 @@ function ThinkingBlock({ text, open }: { text: string; open?: boolean }) {
           userInteractedRef.current = true;
           setIsOpen((prev) => !prev);
         }}
-        className="thinking-block-toggle flex w-full cursor-pointer select-none items-center gap-2 px-3 py-2 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        className="thinking-block-toggle flex w-full cursor-pointer select-none items-center gap-2 px-3 py-2 text-[calc(13px*var(--zone-font-scale,1))] text-muted-foreground transition-colors hover:text-foreground"
       >
         <Sparkles className="h-3.5 w-3.5 text-muted-foreground/70" />
         <span className="thinking-block-label font-medium">{t("chat.thinkingProcess")}</span>
@@ -62,7 +62,7 @@ function ThinkingBlock({ text, open }: { text: string; open?: boolean }) {
         <div className="border-t border-border/30 px-3 pb-3 pt-2">
           <pre
             ref={setThinkingPre}
-            className="thinking-block-pre max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-[12.5px] leading-relaxed text-muted-foreground"
+            className="thinking-block-pre max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-[calc(12.5px*var(--zone-font-scale,1))] leading-relaxed text-muted-foreground"
           >
             <code ref={setThinkingContent} className="block font-[inherit]">
               {text}
@@ -125,7 +125,7 @@ export function RoundContent(props: {
       {showLabel ? <div className="h-px bg-border/40" /> : null}
 
       {isActive && isLive && normalizedToolStatus ? (
-        <div className="flex items-center gap-2 py-1 text-[13px]">
+        <div className="flex items-center gap-2 py-1 text-[calc(13px*var(--zone-font-scale,1))]">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
           {isCompactionStatus ? (
             <CompactingText className="font-medium text-muted-foreground" />

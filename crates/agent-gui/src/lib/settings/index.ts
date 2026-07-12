@@ -114,10 +114,17 @@ export type RightDockFileTreeStatePatch = Partial<RightDockFileTreeState> & {
   bumpRevision?: boolean;
 };
 
+export type FontScaleSettings = {
+  sidebar: number;
+  chat: number;
+  rightDock: number;
+};
+
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
   chatSidebar: ChatSidebarSettings;
   rightDock: RightDockSettings;
+  fontScale: FontScaleSettings;
 };
 
 export type UpdateSettings = {
@@ -1701,6 +1708,20 @@ export function normalizeRightDockSettings(input: unknown): RightDockSettings {
   };
 }
 
+export function normalizeFontScale(value: unknown): number {
+  const num = typeof value === "number" && Number.isFinite(value) ? value : 1;
+  return Math.min(1.4, Math.max(0.8, Math.round(num * 100) / 100));
+}
+
+export function normalizeFontScaleSettings(input: unknown): FontScaleSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return {
+    sidebar: normalizeFontScale(obj.sidebar),
+    chat: normalizeFontScale(obj.chat),
+    rightDock: normalizeFontScale(obj.rightDock),
+  };
+}
+
 export function normalizeCustomSettings(
   input: unknown,
   customProviders: CustomProvider[],
@@ -1719,6 +1740,7 @@ export function normalizeCustomSettings(
       recentCollapsed: chatSidebar.recentCollapsed === true,
     },
     rightDock: normalizeRightDockSettings(obj.rightDock),
+    fontScale: normalizeFontScaleSettings(obj.fontScale),
   };
 }
 

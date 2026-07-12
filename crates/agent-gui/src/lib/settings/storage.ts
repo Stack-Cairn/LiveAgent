@@ -6,6 +6,7 @@ import {
   type ChatRuntimeControls,
   getDefaultSettings,
   normalizeChatRuntimeControls,
+  normalizeFontScaleSettings,
   normalizeRightDockSettings,
   normalizeSelectedModel,
   normalizeSettings,
@@ -81,6 +82,7 @@ function readLocalUiSettings(): {
         recentCollapsed: chatSidebar.recentCollapsed === true,
       },
       rightDock: normalizeRightDockSettings(obj.rightDock),
+      fontScale: normalizeFontScaleSettings(obj.fontScale),
     };
   }
 

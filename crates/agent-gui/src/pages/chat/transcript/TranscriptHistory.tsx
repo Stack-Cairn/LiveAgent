@@ -26,7 +26,7 @@ import {
 import { AssistantAvatar, AssistantBubble } from "../components/AssistantBubble";
 import { EditableUserMessageBubble } from "./EditableUserMessageBubble";
 import type { TranscriptHistoryProps } from "./transcriptTypes";
-import { splitUserAttachmentsForDisplay } from "./transcriptUtils";
+import { formatMessageTimestamp, splitUserAttachmentsForDisplay } from "./transcriptUtils";
 import { UserAttachmentCards } from "./UserAttachmentCards";
 
 const TRANSCRIPT_ROW_ESTIMATED_HEIGHT = 260;
@@ -55,14 +55,14 @@ const SummaryCard = memo(function SummaryCard(props: { item: RenderSummaryCard }
           {/* Text content */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="text-[13px] font-medium text-foreground/90">
+              <span className="text-[calc(13px*var(--zone-font-scale,1))] font-medium text-foreground/90">
                 {isEn ? "Context Checkpoint" : "上下文检查点"}
               </span>
-              <span className="inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-[1px] text-[11px] font-normal tabular-nums text-muted-foreground dark:bg-white/[0.08]">
+              <span className="inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-[1px] text-[calc(11px*var(--zone-font-scale,1))] font-normal tabular-nums text-muted-foreground dark:bg-white/[0.08]">
                 {item.coveredMessageCount} {isEn ? "msgs" : "条消息"}
               </span>
             </div>
-            <div className="mt-[2px] text-[11px] text-muted-foreground/70">
+            <div className="mt-[2px] text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/70">
               {item.generatedBy.providerId} · {item.generatedBy.model}
             </div>
           </div>
@@ -238,7 +238,7 @@ export const TranscriptHistory = memo(function TranscriptHistory(props: Transcri
                 <div
                   className={`chat-user-bubble-wrap group relative ml-auto max-w-[min(85%,calc(50em+2rem))] ${compactedClass}`}
                 >
-                  <div className="chat-bubble-enter chat-user-bubble rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-openai-chat text-[14.5px] leading-relaxed text-[hsl(var(--chat-user-fg))]">
+                  <div className="chat-bubble-enter chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-openai-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))]">
                     <UserAttachmentCards files={visibleFiles} workspaceRoot={workspaceRoot} />
                     {item.text ? (
                       <UserMessageContent
@@ -248,41 +248,46 @@ export const TranscriptHistory = memo(function TranscriptHistory(props: Transcri
                       />
                     ) : null}
                   </div>
-                  <div className="mt-1 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      type="button"
-                      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                      title={t("chat.copy")}
-                      onClick={() => {
-                        navigator.clipboard.writeText(item.text);
-                        setCopiedMessageKey(item.key);
-                        if (copiedResetTimerRef.current !== null) {
-                          window.clearTimeout(copiedResetTimerRef.current);
-                        }
-                        copiedResetTimerRef.current = window.setTimeout(() => {
-                          copiedResetTimerRef.current = null;
-                          setCopiedMessageKey(null);
-                        }, 1500);
-                      }}
-                    >
-                      {isCopied ? (
-                        <Check className="h-3.5 w-3.5" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                      title={editTitle}
-                      disabled={editDisabled}
-                      onClick={() => {
-                        if (!effectiveMessageRef) return;
-                        setEditingMessageKey(item.key);
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
+                  <div className="mt-1 flex items-center justify-end gap-1.5">
+                    <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        type="button"
+                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                        title={t("chat.copy")}
+                        onClick={() => {
+                          navigator.clipboard.writeText(item.text);
+                          setCopiedMessageKey(item.key);
+                          if (copiedResetTimerRef.current !== null) {
+                            window.clearTimeout(copiedResetTimerRef.current);
+                          }
+                          copiedResetTimerRef.current = window.setTimeout(() => {
+                            copiedResetTimerRef.current = null;
+                            setCopiedMessageKey(null);
+                          }, 1500);
+                        }}
+                      >
+                        {isCopied ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                        title={editTitle}
+                        disabled={editDisabled}
+                        onClick={() => {
+                          if (!effectiveMessageRef) return;
+                          setEditingMessageKey(item.key);
+                        }}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
+                      {formatMessageTimestamp(item.timestamp)}
+                    </span>
                   </div>
                 </div>
               )}
@@ -326,52 +331,61 @@ export const TranscriptHistory = memo(function TranscriptHistory(props: Transcri
                   showUsage={showUsage}
                   usageContextWindow={usageContextWindow}
                 />
-                <div className="mt-1 flex justify-start gap-0.5 pl-10 opacity-0 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100">
-                  <button
-                    type="button"
-                    className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                    title={t("chat.copy")}
-                    disabled={!replyText}
-                    onClick={() => {
-                      navigator.clipboard.writeText(replyText);
-                      setCopiedMessageKey(item.key);
-                      if (copiedResetTimerRef.current !== null) {
-                        window.clearTimeout(copiedResetTimerRef.current);
-                      }
-                      copiedResetTimerRef.current = window.setTimeout(() => {
-                        copiedResetTimerRef.current = null;
-                        setCopiedMessageKey(null);
-                      }, 1500);
-                    }}
-                  >
-                    {isReplyCopied ? (
-                      <Check className="h-3.5 w-3.5" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                  <ConfirmActionPopover
-                    title={t("chat.retryConfirmTitle")}
-                    description={t("chat.retryConfirmDescription")}
-                    confirmLabel={t("chat.retry")}
-                    align="start"
-                    side="top"
-                    onConfirm={() => {
-                      if (!retryTarget || !retryMessageRef) return;
-                      onResendFromEdit(retryMessageRef, retryTarget.text, retryTarget.attachments);
-                    }}
-                  >
-                    {() => (
-                      <button
-                        type="button"
-                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                        title={retryTitle}
-                        disabled={retryDisabled}
-                      >
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </ConfirmActionPopover>
+                <div className="mt-1 flex items-center justify-start gap-1.5 pl-10">
+                  <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
+                    {formatMessageTimestamp(item.timestamp)}
+                  </span>
+                  <div className="flex gap-0.5 opacity-0 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100">
+                    <button
+                      type="button"
+                      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                      title={t("chat.copy")}
+                      disabled={!replyText}
+                      onClick={() => {
+                        navigator.clipboard.writeText(replyText);
+                        setCopiedMessageKey(item.key);
+                        if (copiedResetTimerRef.current !== null) {
+                          window.clearTimeout(copiedResetTimerRef.current);
+                        }
+                        copiedResetTimerRef.current = window.setTimeout(() => {
+                          copiedResetTimerRef.current = null;
+                          setCopiedMessageKey(null);
+                        }, 1500);
+                      }}
+                    >
+                      {isReplyCopied ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    <ConfirmActionPopover
+                      title={t("chat.retryConfirmTitle")}
+                      description={t("chat.retryConfirmDescription")}
+                      confirmLabel={t("chat.retry")}
+                      align="start"
+                      side="top"
+                      onConfirm={() => {
+                        if (!retryTarget || !retryMessageRef) return;
+                        onResendFromEdit(
+                          retryMessageRef,
+                          retryTarget.text,
+                          retryTarget.attachments,
+                        );
+                      }}
+                    >
+                      {() => (
+                        <button
+                          type="button"
+                          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                          title={retryTitle}
+                          disabled={retryDisabled}
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </ConfirmActionPopover>
+                  </div>
                 </div>
               </div>
             ) : (
