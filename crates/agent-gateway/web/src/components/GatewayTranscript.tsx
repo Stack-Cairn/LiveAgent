@@ -143,7 +143,7 @@ function TypingDots() {
 function LiveStatusFooter(props: { status: string; isCompaction?: boolean }) {
   const { status, isCompaction = false } = props;
   return (
-    <div className="gateway-live-status-footer ml-9 flex items-center gap-2 pt-1 text-[13px]">
+    <div className="gateway-live-status-footer ml-9 flex items-center gap-2 pt-1 text-[calc(13px*var(--zone-font-scale,1))]">
       <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
       {isCompaction ? (
         <CompactingText className="font-medium text-muted-foreground" />
@@ -197,11 +197,11 @@ function HistoryLoadingState(props: { title?: string }) {
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border border-border/70 bg-background/80 shadow-sm">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-          <div className="max-w-[28rem] text-[14px] font-medium text-foreground/90">
+          <div className="max-w-[28rem] text-[calc(14px*var(--zone-font-scale,1))] font-medium text-foreground/90">
             正在加载会话历史
           </div>
           {title ? (
-            <div className="mt-1 max-w-[28rem] truncate text-[12px] text-muted-foreground">
+            <div className="mt-1 max-w-[28rem] truncate text-[calc(12px*var(--zone-font-scale,1))] text-muted-foreground">
               {title}
             </div>
           ) : null}
@@ -228,12 +228,14 @@ function CheckpointCard(props: {
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-medium text-foreground/90">上下文检查点</span>
-          <span className="inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-[1px] text-[11px] font-normal tabular-nums text-muted-foreground dark:bg-white/[0.08]">
+          <span className="text-[calc(13px*var(--zone-font-scale,1))] font-medium text-foreground/90">
+            上下文检查点
+          </span>
+          <span className="inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-[1px] text-[calc(11px*var(--zone-font-scale,1))] font-normal tabular-nums text-muted-foreground dark:bg-white/[0.08]">
             {messageCountLabel}
           </span>
         </div>
-        <div className="mt-[2px] text-[11px] text-muted-foreground/70">
+        <div className="mt-[2px] text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/70">
           {item.generatedBy.providerId} · {item.generatedBy.model}
         </div>
       </div>
@@ -426,11 +428,11 @@ function GatewayUserImageAttachmentCard(props: {
       )}
       <div className="flex items-center gap-1.5 px-2.5 py-1.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[11px] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+          <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
             {file.fileName}
           </div>
         </div>
-        <span className="shrink-0 text-[10px] tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
+        <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
           {formatUploadedFileSize(file.sizeBytes)}
         </span>
       </div>
@@ -457,10 +459,10 @@ function GatewayUserFileAttachmentCard(props: {
         <FileText className="h-4 w-4 text-[hsl(var(--chat-user-fg)/0.45)]" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[11px] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
+        <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
           {file.fileName}
         </div>
-        <div className="mt-0.5 text-[10px] tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
+        <div className="mt-0.5 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
           {formatUploadedFileSize(file.sizeBytes)}
         </div>
       </div>
@@ -621,6 +623,25 @@ function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], text: stri
   };
 }
 
+function formatMessageTimestamp(timestamp: number | undefined, now = new Date()): string {
+  if (!timestamp || !Number.isFinite(timestamp) || timestamp <= 0) return "";
+  const date = new Date(timestamp);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  if (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  ) {
+    return time;
+  }
+  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${monthDay} ${time}`;
+  }
+  return `${date.getFullYear()}-${monthDay} ${time}`;
+}
+
 function GatewayUserMessageBubbleBody(props: {
   text: string;
   attachments: PendingUploadedFile[];
@@ -632,7 +653,7 @@ function GatewayUserMessageBubbleBody(props: {
   const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(attachments, text);
 
   return (
-    <div className="chat-user-bubble rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-openai-chat text-[14.5px] leading-relaxed text-[hsl(var(--chat-user-fg))]">
+    <div className="chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-openai-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))]">
       <GatewayUserAttachmentCards
         files={visibleFiles}
         workspaceRoot={workspaceRoot}
@@ -715,7 +736,7 @@ const EditableUserMessageBubble = memo(function EditableUserMessageBubble(props:
       />
       <textarea
         ref={textareaRef}
-        className="chat-user-bubble-editor-textarea w-full resize-none overflow-hidden rounded-lg bg-transparent p-2 font-openai-chat text-[14.5px] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none"
+        className="chat-user-bubble-editor-textarea w-full resize-none overflow-hidden rounded-lg bg-transparent p-2 font-openai-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none"
         value={draftText}
         onChange={(event) => setDraftText(event.target.value)}
         rows={1}
@@ -873,40 +894,45 @@ function GatewayUserMessageRowBody(props: {
         onLoadUploadedImagePreview={onLoadUploadedImagePreview}
         loadCommitDetails={loadCommitDetails}
       />
-      {!readOnly ? (
-        <div className="chat-user-bubble-actions mt-1 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <button
-            type="button"
-            className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-            title={t("chat.copy")}
-            aria-label={t("chat.copy")}
-            onClick={() => {
-              void navigator.clipboard.writeText(row.text).then(() => {
-                setCopiedMessageId(row.key);
-                window.setTimeout(() => {
-                  setCopiedMessageId((current) => (current === row.key ? null : current));
-                }, 1500);
-              });
-            }}
-          >
-            {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          </button>
-          <button
-            type="button"
-            className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            title={editTitle}
-            aria-label={editTitle}
-            disabled={editDisabled}
-            onClick={() => {
-              if (effectiveMessageRef) {
-                setEditingMessageId(row.key);
-              }
-            }}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ) : null}
+      <div className="chat-user-bubble-actions mt-1 flex items-center justify-end gap-1.5">
+        {!readOnly ? (
+          <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <button
+              type="button"
+              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              title={t("chat.copy")}
+              aria-label={t("chat.copy")}
+              onClick={() => {
+                void navigator.clipboard.writeText(row.text).then(() => {
+                  setCopiedMessageId(row.key);
+                  window.setTimeout(() => {
+                    setCopiedMessageId((current) => (current === row.key ? null : current));
+                  }, 1500);
+                });
+              }}
+            >
+              {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              title={editTitle}
+              aria-label={editTitle}
+              disabled={editDisabled}
+              onClick={() => {
+                if (effectiveMessageRef) {
+                  setEditingMessageId(row.key);
+                }
+              }}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : null}
+        <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
+          {formatMessageTimestamp(row.timestamp)}
+        </span>
+      </div>
     </div>
   );
 }
@@ -966,48 +992,53 @@ function GatewayAssistantMessageActions(props: {
   return (
     <div className="assistant-bubble-shell flex w-full max-w-full items-start gap-3">
       <div className="assistant-bubble-avatar w-7 shrink-0" aria-hidden="true" />
-      <div className="chat-assistant-actions flex min-w-0 flex-1 justify-start gap-0.5 opacity-0 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100">
-        <button
-          type="button"
-          className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-          title={t("chat.copy")}
-          aria-label={t("chat.copy")}
-          disabled={!replyText}
-          onClick={() => {
-            void navigator.clipboard.writeText(replyText).then(() => {
-              setCopiedMessageId(row.key);
-              window.setTimeout(() => {
-                setCopiedMessageId((current) => (current === row.key ? null : current));
-              }, 1500);
-            });
-          }}
-        >
-          {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-        <ConfirmActionPopover
-          title={t("chat.retryConfirmTitle")}
-          description={t("chat.retryConfirmDescription")}
-          confirmLabel={t("chat.retry")}
-          align="start"
-          side="top"
-          onConfirm={() => {
-            if (!retryTarget || !retryMessageRef) return;
-            onResendFromEdit?.(retryMessageRef, retryTarget.text, retryTarget.attachments);
-          }}
-        >
-          {(open) => (
-            <button
-              type="button"
-              className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-              title={retryTitle}
-              aria-label={retryTitle}
-              disabled={retryDisabled}
-              onClick={open}
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </ConfirmActionPopover>
+      <div className="chat-assistant-actions flex min-w-0 flex-1 items-center justify-start gap-1.5">
+        <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
+          {formatMessageTimestamp(row.timestamp)}
+        </span>
+        <div className="flex gap-0.5 opacity-0 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100">
+          <button
+            type="button"
+            className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            title={t("chat.copy")}
+            aria-label={t("chat.copy")}
+            disabled={!replyText}
+            onClick={() => {
+              void navigator.clipboard.writeText(replyText).then(() => {
+                setCopiedMessageId(row.key);
+                window.setTimeout(() => {
+                  setCopiedMessageId((current) => (current === row.key ? null : current));
+                }, 1500);
+              });
+            }}
+          >
+            {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+          <ConfirmActionPopover
+            title={t("chat.retryConfirmTitle")}
+            description={t("chat.retryConfirmDescription")}
+            confirmLabel={t("chat.retry")}
+            align="start"
+            side="top"
+            onConfirm={() => {
+              if (!retryTarget || !retryMessageRef) return;
+              onResendFromEdit?.(retryMessageRef, retryTarget.text, retryTarget.attachments);
+            }}
+          >
+            {(open) => (
+              <button
+                type="button"
+                className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                title={retryTitle}
+                aria-label={retryTitle}
+                disabled={retryDisabled}
+                onClick={open}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </ConfirmActionPopover>
+        </div>
       </div>
     </div>
   );

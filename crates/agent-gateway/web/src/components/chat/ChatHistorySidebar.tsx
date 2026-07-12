@@ -1,5 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
+  type CSSProperties,
   memo,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -74,6 +75,7 @@ type ChatHistorySidebarProps = {
   renamingId: string | null;
   renameDraft: string;
   isOpen: boolean;
+  fontScale?: number;
   activeView?: "chat" | "skills-hub" | "mcp-hub";
   showProjects?: boolean;
   // Pre-sorted by the container (pinned/running/activity); rendered as-is.
@@ -500,7 +502,7 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
         <p className="truncate text-sm leading-5 text-foreground/80">
           {t("chat.conversationDeleteConfirm").replace("{title}", item.title)}
         </p>
-        <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+        <p className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground">
           {t("chat.conversationDeleteWarning")}
         </p>
         <div className="mt-2 grid grid-cols-2 gap-1.5">
@@ -833,7 +835,7 @@ const ProjectRow = memo(function ProjectRow(props: {
         <p className="truncate font-medium leading-5 text-destructive">
           {t("chat.workspaceRemoveConfirm").replace("{name}", project.name)}
         </p>
-        <p className="mt-0.5 text-[11px] leading-4 text-destructive/75">
+        <p className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-destructive/75">
           {isRunning ? t("chat.workspaceRemoveRunning") : t("chat.workspaceRemoveDescription")}
         </p>
         <div className="mt-2 grid grid-cols-2 gap-1.5">
@@ -910,7 +912,7 @@ const ProjectRow = memo(function ProjectRow(props: {
             />
             <span
               className={cn(
-                "mt-0.5 block truncate text-[10.5px] font-normal leading-4 transition-colors",
+                "mt-0.5 block truncate text-[calc(10.5px*var(--zone-font-scale,1))] font-normal leading-4 transition-colors",
                 isMissing
                   ? "text-destructive/75"
                   : isActive
@@ -949,7 +951,7 @@ const ProjectRow = memo(function ProjectRow(props: {
           <span className="min-w-0 flex-1">
             <span
               className={cn(
-                "flex min-w-0 items-center gap-1.5 text-[13px] font-medium leading-5",
+                "flex min-w-0 items-center gap-1.5 text-[calc(13px*var(--zone-font-scale,1))] font-medium leading-5",
                 isMissing ? "text-destructive" : undefined,
               )}
             >
@@ -978,7 +980,7 @@ const ProjectRow = memo(function ProjectRow(props: {
             </span>
             <span
               className={cn(
-                "block truncate text-[10.5px] font-normal leading-4 transition-colors",
+                "block truncate text-[calc(10.5px*var(--zone-font-scale,1))] font-normal leading-4 transition-colors",
                 isMissing
                   ? "text-destructive/75"
                   : isActive
@@ -1116,7 +1118,7 @@ function HistoryListLoadingSkeleton() {
       aria-live="polite"
       aria-label={t("sidebar.readingHistory")}
     >
-      <div className="flex items-center gap-2 px-2 pb-1 text-[11px] font-medium text-muted-foreground/75">
+      <div className="flex items-center gap-2 px-2 pb-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground/75">
         <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/35 opacity-75" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-primary/70" />
@@ -1155,6 +1157,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     renamingId,
     renameDraft,
     isOpen,
+    fontScale = 1,
     activeView = "chat",
     showProjects = false,
     projects = [],
@@ -1790,9 +1793,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       inert={!isOpen}
       data-state={isOpen ? "open" : "closed"}
       className={cn(
-        "chat-history-sidebar flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out",
+        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out",
         isOpen ? "w-[272px] opacity-100" : "w-0 opacity-0",
       )}
+      style={{ "--zone-font-scale": fontScale } as CSSProperties}
     >
       <div className="chat-history-sidebar-inner flex w-[272px] min-w-[272px] min-h-0 flex-1 flex-col">
         <div className="shrink-0 border-b border-border/50 px-3 pb-3 pt-3">
@@ -1828,7 +1832,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               onClick={() => onOpenSkillsHub?.()}
               className={cn(
-                "sidebar-hub-menu-item h-9 w-full justify-start gap-3 rounded-lg px-3 text-[14px] font-normal leading-5 shadow-none transition-colors",
+                "sidebar-hub-menu-item h-9 w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
                 activeView === "skills-hub"
                   ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
                   : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
@@ -1848,7 +1852,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               onClick={() => onOpenMcpHub?.()}
               className={cn(
-                "sidebar-hub-menu-item h-9 w-full justify-start gap-3 rounded-lg px-3 text-[14px] font-normal leading-5 shadow-none transition-colors",
+                "sidebar-hub-menu-item h-9 w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
                 activeView === "mcp-hub"
                   ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
                   : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
@@ -1868,7 +1872,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               onClick={onNewConversation}
               className={cn(
-                "chat-history-new-conversation-button h-9 w-full justify-start gap-3 rounded-lg px-3 text-[14px] font-normal leading-5 shadow-none transition-colors",
+                "chat-history-new-conversation-button h-9 w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
                 activeView === "chat"
                   ? "text-foreground/90 hover:bg-foreground/[0.08] hover:text-foreground active:bg-foreground/[0.1] active:text-foreground focus-visible:bg-foreground/[0.08]"
                   : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
@@ -1903,7 +1907,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   type="button"
                   aria-expanded={!projectsCollapsed}
                   className={cn(
-                    "flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground outline-hidden",
+                    "flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-semibold uppercase tracking-[0.14em] text-muted-foreground outline-hidden",
                     PROJECT_HEADER_BUTTON_CLASS,
                   )}
                   onClick={handleProjectsCollapsedChange}
@@ -1994,7 +1998,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     <button
                       type="button"
                       className={cn(
-                        "flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[11.5px] font-medium text-muted-foreground outline-hidden",
+                        "flex w-full items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[calc(11.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground outline-hidden",
                         PROJECT_HEADER_BUTTON_CLASS,
                       )}
                       onClick={handleShowAllProjects}
@@ -2052,7 +2056,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             <button
               type="button"
               aria-expanded={!recentCollapsed}
-              className="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-semibold uppercase tracking-[0.14em] text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               onClick={handleRecentCollapsedChange}
               disabled={sectionsDisabled}
             >
@@ -2067,7 +2071,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 <span
                   role="status"
                   aria-live="polite"
-                  className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-[10.5px] font-medium text-primary/80"
+                  className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/[0.06] px-2 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-primary/80"
                 >
                   <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden="true">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/35 opacity-75" />
@@ -2080,7 +2084,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 role={errorMessage ? "status" : undefined}
                 title={errorMessage ? `${t("chat.historyReadFailed")}: ${errorMessage}` : undefined}
                 className={cn(
-                  "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+                  "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium",
                   errorMessage
                     ? "border-destructive/40 bg-destructive/10 text-destructive"
                     : "border-border/60 bg-background/80 text-muted-foreground",
@@ -2135,7 +2139,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 <div
                   role="alert"
                   title={actionErrorMessage}
-                  className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-[11px] leading-4 text-destructive"
+                  className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-destructive"
                 >
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span className="min-w-0 break-words">{actionErrorMessage}</span>
@@ -2177,16 +2181,16 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/10 to-blue-500/10 ring-1 ring-violet-500/15">
                     <MessageSquareText className="h-5 w-5 text-violet-500/70" />
                   </div>
-                  <p className="mt-3.5 text-[13px] font-medium text-foreground/70">
+                  <p className="mt-3.5 text-[calc(13px*var(--zone-font-scale,1))] font-medium text-foreground/70">
                     {t("chat.emptyChatHistory")}
                   </p>
-                  <p className="mt-1 text-[11px] leading-4 text-muted-foreground/80">
+                  <p className="mt-1 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground/80">
                     {t("chat.clickNewConversation")}
                   </p>
                 </div>
               ) : null}
               {items.length > 0 && (hasMore || isLoadingMore) ? (
-                <div className="px-2 pb-2 pt-1 text-center text-[11px] leading-5 text-muted-foreground/70">
+                <div className="px-2 pb-2 pt-1 text-center text-[calc(11px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/70">
                   {isLoadingMore
                     ? t("sidebar.loadingMoreHistory")
                     : t("sidebar.continueLoadingHistory")}

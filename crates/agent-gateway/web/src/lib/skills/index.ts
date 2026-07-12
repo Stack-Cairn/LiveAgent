@@ -140,6 +140,23 @@ type SystemManageSkillResponse = {
   clawhubNextCursor?: string | null;
   clawhubSlug?: string | null;
   clawhubDownloadUrl?: string | null;
+  external?: ExternalToolScan[] | null;
+};
+
+export type ExternalSkillEntry = {
+  name: string;
+  description: string;
+  /** 技能目录绝对路径（桌面端机器上），可直接作为 install 动作的 source */
+  baseDir: string;
+  skillFile: string;
+};
+
+export type ExternalToolScan = {
+  tool: string;
+  rootDir: string;
+  exists: boolean;
+  skills: ExternalSkillEntry[];
+  errors: string[];
 };
 
 type DiscoverSkillsOptions = {
@@ -476,6 +493,11 @@ export async function manageSkill(
     invalidateSkillsDiscoveryCache();
   }
   return response;
+}
+
+export async function scanExternalSkills(): Promise<ExternalToolScan[]> {
+  const response = await manageSkill({ action: "scan_external" });
+  return response.external ?? [];
 }
 
 export async function startSkillInstallJob(

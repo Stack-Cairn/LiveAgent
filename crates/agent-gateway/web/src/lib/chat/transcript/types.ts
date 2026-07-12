@@ -50,6 +50,7 @@ export type TranscriptRow =
       text: string;
       attachments: PendingUploadedFile[];
       messageRef?: HistoryMessageRef;
+      timestamp?: number;
     }
   | {
       key: string;
@@ -57,6 +58,7 @@ export type TranscriptRow =
       kind: "assistant";
       rounds: GatewayTranscriptRound[];
       turnKey?: string;
+      timestamp?: number;
     }
   | {
       key: string;

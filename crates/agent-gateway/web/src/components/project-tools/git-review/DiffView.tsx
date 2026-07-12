@@ -281,10 +281,10 @@ const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isD
 
   return (
     <div ref={containerRef} className="border-b border-border/60 last:border-b-0">
-      <div className="flex select-none items-center gap-2 border-b border-border/60 bg-muted/20 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+      <div className="flex select-none items-center gap-2 border-b border-border/60 bg-muted/20 px-3 py-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground">
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {item.large ? (
-          <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">
+          <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[calc(10px*var(--zone-font-scale,1))] text-amber-700 dark:text-amber-300">
             {t("projectTools.gitReview.largeDiff")}
           </span>
         ) : null}
@@ -304,7 +304,7 @@ const DiffChunkView = memo(function DiffChunkView(props: { item: PatchChunk; isD
         <pre
           className={cn(
             GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-            "git-review-diff-selectable-content max-h-[26rem] select-text overflow-auto px-3 py-3 text-[11px] leading-relaxed text-muted-foreground",
+            "git-review-diff-selectable-content max-h-[26rem] select-text overflow-auto px-3 py-3 text-[calc(11px*var(--zone-font-scale,1))] leading-relaxed text-muted-foreground",
           )}
           onScroll={handleOverlayScroll}
         >
@@ -329,7 +329,7 @@ function DiffStatView(props: { stat: string }) {
       <pre
         className={cn(
           GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-          "max-h-24 overflow-auto border-b border-border/70 bg-muted/25 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground",
+          "max-h-24 overflow-auto border-b border-border/70 bg-muted/25 px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] leading-relaxed text-muted-foreground",
         )}
         onScroll={handleOverlayScroll}
       >
@@ -352,10 +352,10 @@ function DiffStatView(props: { stat: string }) {
               title={file.raw}
             >
               <div className="flex min-w-0 items-center gap-2">
-                <div className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+                <div className="min-w-0 flex-1 truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium text-foreground">
                   {basename(file.path)}
                 </div>
-                <div className="flex shrink-0 items-center gap-1 text-[10px] tabular-nums">
+                <div className="flex shrink-0 items-center gap-1 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums">
                   {file.binary ? (
                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">
                       {t("projectTools.gitReview.statBinary")}
@@ -412,7 +412,7 @@ function DiffStatView(props: { stat: string }) {
         <pre
           className={cn(
             GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-            "mt-2 max-h-20 overflow-auto rounded-md bg-muted/35 px-2 py-1.5 text-[10px] leading-relaxed text-muted-foreground",
+            "mt-2 max-h-20 overflow-auto rounded-md bg-muted/35 px-2 py-1.5 text-[calc(10px*var(--zone-font-scale,1))] leading-relaxed text-muted-foreground",
           )}
           onScroll={handleOverlayScroll}
         >
@@ -932,7 +932,7 @@ export function DiffContent(props: {
           }}
           className={cn(
             GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS,
-            "git-review-diff-selectable-content min-h-0 flex-1 select-text overflow-auto px-3 py-3 text-[11px] leading-relaxed text-muted-foreground",
+            "git-review-diff-selectable-content min-h-0 flex-1 select-text overflow-auto px-3 py-3 text-[calc(11px*var(--zone-font-scale,1))] leading-relaxed text-muted-foreground",
           )}
           onScroll={handleOverlayScroll}
         >
@@ -945,7 +945,7 @@ export function DiffContent(props: {
         </div>
       ) : null}
       {diff?.truncated ? (
-        <div className="shrink-0 border-t border-border/70 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-300">
+        <div className="shrink-0 border-t border-border/70 px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] text-amber-600 dark:text-amber-300">
           {t("projectTools.gitReview.diffOutputTruncated")}
         </div>
       ) : null}
@@ -992,7 +992,7 @@ export function DiffContent(props: {
               <button
                 type="button"
                 role="menuitem"
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] text-foreground/90 transition-colors hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   writeTextToClipboard(selectionContextMenu.selectedText);
                   closeSelectionContextMenu();
@@ -1040,7 +1040,7 @@ export function DiffReviewCard(props: {
         <div className="min-w-0">
           <div className="truncate text-xs font-semibold">{activeTitle}</div>
           {activeDiff ? (
-            <div className="truncate text-[11px] text-muted-foreground">
+            <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
               {activeDiff.baseRef} → {activeDiff.headRef}
             </div>
           ) : null}

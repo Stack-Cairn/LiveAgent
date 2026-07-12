@@ -73,6 +73,7 @@ export type GatewaySidebarContainerProps = {
   store: SidebarStore;
   currentConversationId: string;
   isOpen: boolean;
+  fontScale?: number;
   activeView: "chat" | "skills-hub" | "mcp-hub";
   showProjects: boolean;
   // Merged (settings + history workdirs), unsorted: sorting happens here on
@@ -307,6 +308,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       renamingId={renamingId}
       renameDraft={renameDraft}
       isOpen={props.isOpen}
+      fontScale={props.fontScale}
       activeView={props.activeView}
       showProjects={props.showProjects}
       projects={sortedProjects}

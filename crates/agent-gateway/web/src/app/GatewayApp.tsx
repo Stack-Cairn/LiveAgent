@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type DragEvent,
   useCallback,
   useEffect,
@@ -8,6 +9,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
@@ -2348,7 +2350,7 @@ export default function GatewayApp() {
                         <span className="text-sm font-semibold text-foreground">
                           {translate("chat.exitConfirmRunningLabel", settings.locale)}
                         </span>
-                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500/15 px-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-semibold text-amber-700 dark:text-amber-300">
                           {runningTerminalCount}
                         </span>
                       </div>
@@ -3155,7 +3157,10 @@ export default function GatewayApp() {
   );
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
 
-  const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
+  const modelOptions = useMemo(
+    () => buildModelOptions(settings, { floatSelectedFirst: false }),
+    [settings],
+  );
   const selectedValue = settings.selectedModel
     ? toModelValue(settings.selectedModel.customProviderId, settings.selectedModel.model)
     : undefined;
@@ -3686,474 +3691,485 @@ export default function GatewayApp() {
 
   return (
     <LocaleContext.Provider value={localeContextValue}>
-      <div className="gateway-shell">
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          aria-label={translate("chat.upload.selectFiles", settings.locale)}
-          className="gateway-hidden-file-input"
-          onChange={(event) => {
-            const files = Array.from(event.currentTarget.files ?? []);
-            void handleImportReadableFiles(files);
-            event.currentTarget.value = "";
-          }}
-        />
-
-        <div className="gateway-editor-host">
-          <GatewaySidebarContainer
-            store={sidebarStore}
-            currentConversationId={displayedConversationId}
-            isOpen={sidebarOpen}
-            activeView={activeView}
-            showProjects={isAgentMode}
-            projects={workspaceProjects}
-            activeProjectId={activeWorkspaceProject?.id}
-            missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-            projectRenamingId={projectRenamingId}
-            projectRenameDraft={projectRenameDraft}
-            projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
-            recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
-            canShareConversations={canShareHistory}
-            sharedConversationCount={sharedHistoryItems.length}
-            externalErrorMessage={sidebarActionError}
-            connectionLost={gatewayConnectionLost}
-            sectionsDisabled={sidebarSectionsDisabled}
-            isLocalDraftConversationId={isLocalDraftConversationId}
-            onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
-            onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
-            onCreateProject={handleOpenCreateWorkspaceProject}
-            onSelectProject={handleSelectWorkspaceProject}
-            onNewConversationForProject={handleNewConversationForProject}
-            onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
-            onStartRenamingProject={handleStartRenamingWorkspaceProject}
-            onProjectRenameDraftChange={setProjectRenameDraft}
-            onCommitProjectRename={handleCommitWorkspaceProjectRename}
-            onCancelProjectRename={handleCancelWorkspaceProjectRename}
-            onSetProjectPinned={handleSetWorkspaceProjectPinned}
-            onRemoveProject={handleRemoveWorkspaceProject}
-            onNewConversation={handleSidebarNewConversation}
-            onSelectConversation={handleSidebarSelectConversation}
-            onShareConversation={handleOpenShareModal}
-            onOpenSharedConversations={handleOpenSharedHistoryManager}
-            onLocalDraftDeleted={handleSidebarLocalDraftDeleted}
-            onConversationsRemoved={handleSidebarConversationsRemoved}
-            onCloseSidebar={() => setSidebarOpen(false)}
-            onOpenSkillsHub={handleSidebarOpenSkillsHub}
-            onOpenMcpHub={handleSidebarOpenMcpHub}
+      <AppErrorBoundary>
+        <div className="gateway-shell">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            aria-label={translate("chat.upload.selectFiles", settings.locale)}
+            className="gateway-hidden-file-input"
+            onChange={(event) => {
+              const files = Array.from(event.currentTarget.files ?? []);
+              void handleImportReadableFiles(files);
+              event.currentTarget.value = "";
+            }}
           />
 
-          {shareConversation ? (
-            <HistoryShareModal
-              conversation={shareConversation}
-              share={shareStatus}
-              isLoading={shareLoading}
-              isUpdating={shareUpdating}
-              errorMessage={shareError}
-              onToggle={handleToggleHistoryShare}
-              onRedactToolContentChange={handleSetShareRedactToolContent}
-              onClose={handleCloseShareModal}
+          <div className="gateway-editor-host">
+            <GatewaySidebarContainer
+              store={sidebarStore}
+              currentConversationId={displayedConversationId}
+              isOpen={sidebarOpen}
+              fontScale={settings.customSettings.fontScale.sidebar}
+              activeView={activeView}
+              showProjects={isAgentMode}
+              projects={workspaceProjects}
+              activeProjectId={activeWorkspaceProject?.id}
+              missingProjectPathKeys={missingWorkspaceProjectPathKeys}
+              projectRenamingId={projectRenamingId}
+              projectRenameDraft={projectRenameDraft}
+              projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+              recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
+              canShareConversations={canShareHistory}
+              sharedConversationCount={sharedHistoryItems.length}
+              externalErrorMessage={sidebarActionError}
+              connectionLost={gatewayConnectionLost}
+              sectionsDisabled={sidebarSectionsDisabled}
+              isLocalDraftConversationId={isLocalDraftConversationId}
+              onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
+              onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
+              onCreateProject={handleOpenCreateWorkspaceProject}
+              onSelectProject={handleSelectWorkspaceProject}
+              onNewConversationForProject={handleNewConversationForProject}
+              onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
+              onStartRenamingProject={handleStartRenamingWorkspaceProject}
+              onProjectRenameDraftChange={setProjectRenameDraft}
+              onCommitProjectRename={handleCommitWorkspaceProjectRename}
+              onCancelProjectRename={handleCancelWorkspaceProjectRename}
+              onSetProjectPinned={handleSetWorkspaceProjectPinned}
+              onRemoveProject={handleRemoveWorkspaceProject}
+              onNewConversation={handleSidebarNewConversation}
+              onSelectConversation={handleSidebarSelectConversation}
+              onShareConversation={handleOpenShareModal}
+              onOpenSharedConversations={handleOpenSharedHistoryManager}
+              onLocalDraftDeleted={handleSidebarLocalDraftDeleted}
+              onConversationsRemoved={handleSidebarConversationsRemoved}
+              onCloseSidebar={() => setSidebarOpen(false)}
+              onOpenSkillsHub={handleSidebarOpenSkillsHub}
+              onOpenMcpHub={handleSidebarOpenMcpHub}
             />
-          ) : null}
 
-          {sharedManagerOpen ? (
-            <SharedHistoryManagerModal
-              conversations={sharedHistoryItems}
-              statuses={sharedManagerStatuses}
-              loadingIds={sharedManagerLoadingIds}
-              updatingIds={sharedManagerUpdatingIds}
-              errors={sharedManagerErrors}
-              listError={sharedHistoryListError}
-              shareOrigin={settings.remote.gatewayUrl}
-              onRefresh={handleRefreshSharedHistoryStatuses}
-              onLoadStatus={handleLoadSharedHistoryStatus}
-              onDisableShare={handleDisableSharedHistory}
-              onSetRedactToolContent={handleSetSharedHistoryRedactToolContent}
-              onClose={() => setSharedManagerOpen(false)}
-            />
-          ) : null}
-
-          {projectPickerOpen ? (
-            <WorkdirPickerModal
-              initialWorkdir={activeWorkspaceProjectPath || settings.system.workdir.trim()}
-              onClose={() => setProjectPickerOpen(false)}
-              onSelect={handleWorkdirPickerSelect}
-            />
-          ) : null}
-
-          {confirmDialog}
-
-          <main className="gateway-main-shell">
-            <div className="gateway-main-backdrop" />
-            {activeView === "skills-hub" ? (
-              <SkillsHubPage
-                settings={settings}
-                setSettings={setSettings}
-                initialSkills={availableSkills}
-                initialRootDir={skillsRootDir}
-                isAgentMode={isAgentMode}
-                sidebarOpen={sidebarOpen}
-                onOpenSidebar={() => setSidebarOpen(true)}
+            {shareConversation ? (
+              <HistoryShareModal
+                conversation={shareConversation}
+                share={shareStatus}
+                isLoading={shareLoading}
+                isUpdating={shareUpdating}
+                errorMessage={shareError}
+                onToggle={handleToggleHistoryShare}
+                onRedactToolContentChange={handleSetShareRedactToolContent}
+                onClose={handleCloseShareModal}
               />
-            ) : activeView === "mcp-hub" ? (
-              <McpHubPage
-                settings={settings}
-                setSettings={setSettings}
-                isAgentMode={isAgentMode}
-                sidebarOpen={sidebarOpen}
-                onOpenSidebar={() => setSidebarOpen(true)}
+            ) : null}
+
+            {sharedManagerOpen ? (
+              <SharedHistoryManagerModal
+                conversations={sharedHistoryItems}
+                statuses={sharedManagerStatuses}
+                loadingIds={sharedManagerLoadingIds}
+                updatingIds={sharedManagerUpdatingIds}
+                errors={sharedManagerErrors}
+                listError={sharedHistoryListError}
+                shareOrigin={settings.remote.gatewayUrl}
+                onRefresh={handleRefreshSharedHistoryStatuses}
+                onLoadStatus={handleLoadSharedHistoryStatus}
+                onDisableShare={handleDisableSharedHistory}
+                onSetRedactToolContent={handleSetSharedHistoryRedactToolContent}
+                onClose={() => setSharedManagerOpen(false)}
               />
-            ) : (
-              <div
-                className="gateway-chat-frame"
-                onDragEnter={handleFileDragEnter}
-                onDragOver={handleFileDragOver}
-                onDragLeave={handleFileDragLeave}
-                onDrop={handleFileDrop}
-              >
-                <ChatHeader
+            ) : null}
+
+            {projectPickerOpen ? (
+              <WorkdirPickerModal
+                initialWorkdir={activeWorkspaceProjectPath || settings.system.workdir.trim()}
+                onClose={() => setProjectPickerOpen(false)}
+                onSelect={handleWorkdirPickerSelect}
+              />
+            ) : null}
+
+            {confirmDialog}
+
+            <main className="gateway-main-shell">
+              <div className="gateway-main-backdrop" />
+              {activeView === "skills-hub" ? (
+                <SkillsHubPage
                   settings={settings}
-                  hasModels={modelOptions.length > 0}
-                  currentModelLabel={currentModelLabel}
-                  modelOptions={modelOptions}
-                  selectedValue={selectedValue}
-                  sidebarOpen={sidebarOpen}
                   setSettings={setSettings}
-                  onOpenSettings={openSettings}
-                  onToggleTheme={() =>
-                    setSettings((prev) => ({
-                      ...prev,
-                      theme: getNextTheme(prev.theme),
-                    }))
-                  }
+                  initialSkills={availableSkills}
+                  initialRootDir={skillsRootDir}
+                  isAgentMode={isAgentMode}
+                  sidebarOpen={sidebarOpen}
                   onOpenSidebar={() => setSidebarOpen(true)}
-                  preThemeActions={
-                    <span
-                      className={`gateway-online-pill${status?.online ? " gateway-online-pill-active" : ""}`}
-                      title={status?.online ? "Online" : "Offline"}
-                      aria-label={status?.online ? "Online" : "Offline"}
-                    >
-                      {status?.online ? "Online" : "Offline"}
-                    </span>
-                  }
-                  trailingActions={
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setRightDockOpen((open) => !open)}
-                        disabled={Boolean(projectToolsDisabledMessage) && !rightDockOpen}
-                        aria-expanded={rightDockOpen}
-                        title={
-                          rightDockOpen
-                            ? "Collapse project tools panel"
-                            : (projectToolsDisabledMessage ?? "Expand project tools panel")
-                        }
-                        className={`gateway-project-tools-panel-toggle relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
-                          rightDockOpen ? "bg-muted text-foreground" : ""
-                        }`}
-                      >
-                        {rightDockOpen ? (
-                          <PanelRightClose className="h-4.5 w-4.5" />
-                        ) : (
-                          <PanelRightOpen className="h-4.5 w-4.5" />
-                        )}
-                        {projectTerminalSessions.length > 0 ? (
-                          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-semibold leading-none text-white">
-                            {projectTerminalSessions.length}
-                          </span>
-                        ) : null}
-                      </Button>
-                      <UserMenu
-                        open={userMenuOpen}
-                        onOpenChange={setUserMenuOpen}
-                        userMenuLabel={userMenuLabel}
-                        userAvatarLabel={userAvatarLabel}
-                        sessionId={status?.session_id}
-                        onLogout={handleLogout}
-                      />
-                    </>
-                  }
                 />
-
-                {statusError ? <div className="gateway-banner-error">{statusError}</div> : null}
-                {settingsSyncError ? (
-                  <div className="gateway-banner-error">{settingsSyncError}</div>
-                ) : null}
-                {chatError && displayedTranscriptRowCount === 0 ? (
-                  <div className="gateway-banner-error">{chatError}</div>
-                ) : null}
-
-                <section className="gateway-transcript-stage">
-                  <div className="gateway-transcript-scroll-shell">
-                    <ScrollArea ref={transcriptScrollAreaRef} className="gateway-transcript-scroll">
-                      <GatewayTranscript
-                        conversationId={displayedConversationId}
-                        foldedRows={transcriptFoldedRows}
-                        liveRows={transcriptLiveRows}
-                        activeTurnKey={displayedTranscript.activeTurnKey}
-                        error={transcriptError}
-                        toolStatus={transcriptToolStatus}
-                        toolStatusIsCompaction={transcriptToolStatusIsCompaction}
-                        isStreaming={transcriptBusy}
-                        isLoading={transcriptHistoryLoading}
-                        loadingTitle={historyDetailLoadingTitle}
-                        hasModels={modelOptions.length > 0}
-                        onOpenSettings={openSettings}
-                        hasMoreHistory={selectedHistoryHasMore}
-                        isLoadingMoreHistory={loadingOlderHistory}
-                        onLoadFullHistory={
-                          selectedHistoryHasMore ? handleLoadFullHistory : undefined
-                        }
-                        isAgentMode={isAgentMode}
-                        showUsage={isAgentDevExecutionMode}
-                        usageContextWindow={currentModelContextWindow}
-                        workspaceRoot={displayedConversationWorkdir}
-                        gitClient={gitClient}
-                        onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
-                        onResendFromEdit={handleResendFromEdit}
-                        onSuggestionSelect={handleEmptyStateSuggestion}
-                        suggestionsDisabled={isSuggestionTyping}
-                      />
-                    </ScrollArea>
-                    {conversationOpenState.showOverlay ? (
-                      <HistorySwitchLoadingOverlay locale={settings.locale} />
-                    ) : null}
-                  </div>
-                  {showTranscriptJumpToBottom ? (
-                    <button
-                      type="button"
-                      className="gateway-scroll-to-bottom"
-                      onClick={jumpTranscriptToBottom}
-                      aria-label="滚动到底部"
-                      title="滚动到底部"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                  <ChatComposerBar
-                    composerRef={composerRef}
-                    isSending={composerIsSending}
-                    isUploadingFiles={isUploadingFiles}
-                    isInputDisabled={composerInputDisabled}
-                    inputPlaceholder={composerPlaceholder}
-                    workdir={displayedConversationWorkdir}
-                    enabledSkills={enabledComposerSkills}
-                    isAgentMode={isAgentMode}
-                    chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
-                    reasoningOptions={chatRuntimeReasoningOptions}
-                    thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
-                    gitClient={gitClient}
-                    gitWriteEnabled={settings.remote.enableWebGit}
-                    gitDisabledMessage={gitDisabledMessage}
-                    workspaceActivityClient={workspaceActivityClient}
-                    onSend={() => {
-                      if (
-                        submitInFlightRef.current ||
-                        isUploadingFiles ||
-                        isImportingPastedTextRef.current ||
-                        composerInputDisabled
-                      ) {
-                        return;
-                      }
-                      if (queuedChatEditSessionRef.current) {
-                        submitInFlightRef.current = true;
-                        void (async () => {
-                          try {
-                            await commitQueuedChatEdit();
-                          } finally {
-                            submitInFlightRef.current = false;
+              ) : activeView === "mcp-hub" ? (
+                <McpHubPage
+                  settings={settings}
+                  setSettings={setSettings}
+                  isAgentMode={isAgentMode}
+                  sidebarOpen={sidebarOpen}
+                  onOpenSidebar={() => setSidebarOpen(true)}
+                />
+              ) : (
+                <div
+                  className="gateway-chat-frame zone-font-scale"
+                  style={
+                    { "--zone-font-scale": settings.customSettings.fontScale.chat } as CSSProperties
+                  }
+                  onDragEnter={handleFileDragEnter}
+                  onDragOver={handleFileDragOver}
+                  onDragLeave={handleFileDragLeave}
+                  onDrop={handleFileDrop}
+                >
+                  <ChatHeader
+                    settings={settings}
+                    hasModels={modelOptions.length > 0}
+                    currentModelLabel={currentModelLabel}
+                    modelOptions={modelOptions}
+                    selectedValue={selectedValue}
+                    sidebarOpen={sidebarOpen}
+                    setSettings={setSettings}
+                    onOpenSettings={openSettings}
+                    onToggleTheme={() =>
+                      setSettings((prev) => ({
+                        ...prev,
+                        theme: getNextTheme(prev.theme),
+                      }))
+                    }
+                    onOpenSidebar={() => setSidebarOpen(true)}
+                    preThemeActions={
+                      <span
+                        className={`gateway-online-pill${status?.online ? " gateway-online-pill-active" : ""}`}
+                        title={status?.online ? "Online" : "Offline"}
+                        aria-label={status?.online ? "Online" : "Offline"}
+                      >
+                        {status?.online ? "Online" : "Offline"}
+                      </span>
+                    }
+                    trailingActions={
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setRightDockOpen((open) => !open)}
+                          disabled={Boolean(projectToolsDisabledMessage) && !rightDockOpen}
+                          aria-expanded={rightDockOpen}
+                          title={
+                            rightDockOpen
+                              ? "Collapse project tools panel"
+                              : (projectToolsDisabledMessage ?? "Expand project tools panel")
                           }
-                        })();
-                        return;
-                      }
-                      if (
-                        displayedConversationBusyRef.current ||
-                        queuedChatTurnsForDisplayedConversation.length > 0
-                      ) {
-                        submitInFlightRef.current = true;
-                        void (async () => {
-                          try {
-                            await submitCurrentComposerToGuiQueue("append");
-                          } finally {
-                            submitInFlightRef.current = false;
-                          }
-                        })();
-                        return;
-                      }
-                      submitInFlightRef.current = true;
-                      void (async () => {
-                        try {
-                          const draft = composerRef.current?.getDraft() ?? null;
-                          // Capture the send target before the paste import
-                          // awaits: switching conversations mid-import must
-                          // not reroute the message or clear the composer of
-                          // the newly displayed conversation.
-                          const sendConversationId = getDisplayedConversationId();
-                          let text: string;
-                          let files: PendingUploadedFile[];
-                          try {
-                            const materialized = draft
-                              ? await materializeComposerDraftForSend(
-                                  draft,
-                                  pendingUploadedFiles,
-                                  displayedConversationWorkdir,
-                                )
-                              : { text: "", uploadedFiles: pendingUploadedFiles };
-                            text = materialized.text;
-                            files = materialized.uploadedFiles;
-                          } catch (error) {
-                            setChatError(asErrorMessage(error, "大段粘贴内容导入失败"));
-                            return;
-                          }
-
-                          if (!text && files.length === 0) {
-                            return;
-                          }
-                          if (getDisplayedConversationId() === sendConversationId) {
-                            composerRef.current?.clear();
-                          }
-                          setPendingUploadsForConversation(sendConversationId, []);
-                          void sendChat(text, {
-                            conversationId: sendConversationId,
-                            uploadedFiles: files,
-                            runtimeControls: chatRuntimeControlsForCurrentProvider,
-                          }).catch(() => {
-                            updatePendingUploadsForConversation(sendConversationId, (current) =>
-                              mergePendingUploadedFiles(current, files),
-                            );
-                          });
-                        } finally {
-                          submitInFlightRef.current = false;
-                        }
-                      })();
-                    }}
-                    onStop={() => {
-                      void cancelChat(displayedConversationId);
-                    }}
-                    onPrepareChatRuntime={() => {
-                      if (!api || historyShareToken) {
-                        return;
-                      }
-                      void prepareChatRuntime(
-                        "composer-focus",
-                        api,
-                        CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS,
-                      ).catch(() => undefined);
-                    }}
-                    onComposerBusyChange={handleComposerBusyChange}
-                    onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
-                    onPickReadableFiles={() => fileInputRef.current?.click()}
-                    onPasteFiles={handleImportReadableFiles}
-                    pendingUploadedFiles={pendingUploadedFiles}
-                    onRemovePendingUpload={(relativePath) => {
-                      updatePendingUploadsForConversation(getDisplayedConversationId(), (current) =>
-                        current.filter((file) => file.relativePath !== relativePath),
-                      );
-                    }}
-                    queuedTurns={queuedChatTurnsForDisplayedConversation}
-                    onRunQueuedTurnNow={runQueuedTurnNow}
-                    onMoveQueuedTurnUp={moveQueuedTurnUp}
-                    onEditQueuedTurn={editQueuedTurn}
-                    onRemoveQueuedTurn={removeQueuedTurn}
+                          className={`gateway-project-tools-panel-toggle relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
+                            rightDockOpen ? "bg-muted text-foreground" : ""
+                          }`}
+                        >
+                          {rightDockOpen ? (
+                            <PanelRightClose className="h-4.5 w-4.5" />
+                          ) : (
+                            <PanelRightOpen className="h-4.5 w-4.5" />
+                          )}
+                          {projectTerminalSessions.length > 0 ? (
+                            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none text-white">
+                              {projectTerminalSessions.length}
+                            </span>
+                          ) : null}
+                        </Button>
+                        <UserMenu
+                          open={userMenuOpen}
+                          onOpenChange={setUserMenuOpen}
+                          userMenuLabel={userMenuLabel}
+                          userAvatarLabel={userAvatarLabel}
+                          sessionId={status?.session_id}
+                          onLogout={handleLogout}
+                        />
+                      </>
+                    }
                   />
-                  {isFileDropActive ? (
-                    <FileDropOverlay
-                      canDropUpload={canDropUpload}
-                      title={fileDropTitle}
-                      description={fileDropDescription}
-                      limitHint={fileDropLimitHint}
-                    />
+
+                  {statusError ? <div className="gateway-banner-error">{statusError}</div> : null}
+                  {settingsSyncError ? (
+                    <div className="gateway-banner-error">{settingsSyncError}</div>
                   ) : null}
-                </section>
-              </div>
-            )}
-          </main>
-          <WorkspaceOverlayHost
-            locale={settings.locale}
-            theme={effectiveTheme}
-            workspaceEditorMounted={workspaceEditorMounted}
-            workspaceEditorOpenRequest={workspaceEditorOpenRequest}
-            workspaceEditorCloseRequestId={workspaceEditorCloseRequestId}
-            workspaceEditorOpen={workspaceEditorOpen}
-            workspaceEditorCleanupPending={workspaceEditorCleanupPending}
-            onWorkspaceEditorPreviewFile={openWorkspaceFilePreview}
-            onWorkspaceEditorHide={handleWorkspaceEditorHide}
-            onWorkspaceEditorClose={handleWorkspaceEditorClosed}
-            workspaceFilePreviewMounted={workspaceFilePreviewMounted}
-            workspaceFilePreviewOpenRequest={workspaceFilePreviewOpenRequest}
-            workspaceFilePreviewOpen={workspaceFilePreviewOpen}
-            onWorkspaceFilePreviewOpenEditor={openWorkspaceEditorFile}
-            onWorkspaceFilePreviewRequestClose={requestWorkspaceFilePreviewClose}
-            onWorkspaceFilePreviewClose={handleWorkspaceFilePreviewClosed}
-            workspaceSshTerminalMounted={workspaceSshTerminalMounted}
-            workspaceSshTerminalOpenRequest={workspaceSshTerminalOpenRequest}
-            workspaceSshTerminalOpen={workspaceSshTerminalOpen}
-            terminalProjectPathKey={terminalProjectPathKey}
-            terminalClient={terminalClient}
-            sftpClient={sftpClient}
-            terminalSessions={terminalSessions}
-            onWorkspaceSshTerminalHide={hideWorkspaceSshTerminalOverlay}
-          />
-        </div>
+                  {chatError && displayedTranscriptRowCount === 0 ? (
+                    <div className="gateway-banner-error">{chatError}</div>
+                  ) : null}
 
-        {terminalClient ? (
-          <RightDockPanel
-            isOpen={activeView === "chat" && rightDockOpen}
-            collapseImmediately={activeView !== "chat"}
-            projectPathKey={terminalProjectPathKey}
-            cwd={terminalProjectPath}
-            sessions={terminalSessions}
-            sessionsLoaded={terminalSessionsLoaded}
-            width={settings.customSettings.rightDock.width}
-            theme={effectiveTheme}
-            disabledMessage={projectToolsDisabledMessage}
-            terminalDisabledMessage={terminalDisabledMessage}
-            projectState={rightDockProjectState}
-            fileTreeState={rightDockFileTreeState}
-            sshHosts={settings.ssh.hosts}
-            associatedSshHostIds={associatedSshHostIds}
-            client={terminalClient}
-            gitClient={gitClient}
-            gitWriteEnabled={settings.remote.enableWebGit}
-            gitDisabledMessage={gitDisabledMessage}
-            tunnelClient={isAgentMode ? api : null}
-            tunnelEnabled={tunnelEnabled}
-            tunnelDisabledMessage={tunnelDisabledMessage}
-            tunnelPublicBaseUrl={window.location.origin}
-            workspaceActivityClient={workspaceActivityClient}
-            onWidthChange={handleRightDockWidthChange}
-            onProjectStateChange={handleRightDockProjectStateChange}
-            onFileTreeStateChange={handleRightDockFileTreeStateChange}
-            onSshProjectHostIdsChange={handleSshProjectHostIdsChange}
-            onOpenSshSession={handleOpenSshTerminal}
-            onSessionsChange={handleProjectTerminalSessionsChange}
-            onInsertFileMention={handleRightDockInsertFileMention}
-            onOpenFile={handleOpenWorkspaceFile}
-            onInsertCommitMention={handleRightDockInsertCommitMention}
-            onInsertGitFileMention={handleRightDockInsertGitFileMention}
-            onClose={handleRightDockClose}
-          />
-        ) : null}
+                  <section className="gateway-transcript-stage">
+                    <div className="gateway-transcript-scroll-shell">
+                      <ScrollArea
+                        ref={transcriptScrollAreaRef}
+                        className="gateway-transcript-scroll"
+                      >
+                        <GatewayTranscript
+                          conversationId={displayedConversationId}
+                          foldedRows={transcriptFoldedRows}
+                          liveRows={transcriptLiveRows}
+                          activeTurnKey={displayedTranscript.activeTurnKey}
+                          error={transcriptError}
+                          toolStatus={transcriptToolStatus}
+                          toolStatusIsCompaction={transcriptToolStatusIsCompaction}
+                          isStreaming={transcriptBusy}
+                          isLoading={transcriptHistoryLoading}
+                          loadingTitle={historyDetailLoadingTitle}
+                          hasModels={modelOptions.length > 0}
+                          onOpenSettings={openSettings}
+                          hasMoreHistory={selectedHistoryHasMore}
+                          isLoadingMoreHistory={loadingOlderHistory}
+                          onLoadFullHistory={
+                            selectedHistoryHasMore ? handleLoadFullHistory : undefined
+                          }
+                          isAgentMode={isAgentMode}
+                          showUsage={isAgentDevExecutionMode}
+                          usageContextWindow={currentModelContextWindow}
+                          workspaceRoot={displayedConversationWorkdir}
+                          gitClient={gitClient}
+                          onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
+                          onResendFromEdit={handleResendFromEdit}
+                          onSuggestionSelect={handleEmptyStateSuggestion}
+                          suggestionsDisabled={isSuggestionTyping}
+                        />
+                      </ScrollArea>
+                      {conversationOpenState.showOverlay ? (
+                        <HistorySwitchLoadingOverlay locale={settings.locale} />
+                      ) : null}
+                    </div>
+                    {showTranscriptJumpToBottom ? (
+                      <button
+                        type="button"
+                        className="gateway-scroll-to-bottom"
+                        onClick={jumpTranscriptToBottom}
+                        aria-label="滚动到底部"
+                        title="滚动到底部"
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                    <ChatComposerBar
+                      composerRef={composerRef}
+                      isSending={composerIsSending}
+                      isUploadingFiles={isUploadingFiles}
+                      isInputDisabled={composerInputDisabled}
+                      inputPlaceholder={composerPlaceholder}
+                      workdir={displayedConversationWorkdir}
+                      enabledSkills={enabledComposerSkills}
+                      isAgentMode={isAgentMode}
+                      chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
+                      reasoningOptions={chatRuntimeReasoningOptions}
+                      thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
+                      gitClient={gitClient}
+                      gitWriteEnabled={settings.remote.enableWebGit}
+                      gitDisabledMessage={gitDisabledMessage}
+                      workspaceActivityClient={workspaceActivityClient}
+                      onSend={() => {
+                        if (
+                          submitInFlightRef.current ||
+                          isUploadingFiles ||
+                          isImportingPastedTextRef.current ||
+                          composerInputDisabled
+                        ) {
+                          return;
+                        }
+                        if (queuedChatEditSessionRef.current) {
+                          submitInFlightRef.current = true;
+                          void (async () => {
+                            try {
+                              await commitQueuedChatEdit();
+                            } finally {
+                              submitInFlightRef.current = false;
+                            }
+                          })();
+                          return;
+                        }
+                        if (
+                          displayedConversationBusyRef.current ||
+                          queuedChatTurnsForDisplayedConversation.length > 0
+                        ) {
+                          submitInFlightRef.current = true;
+                          void (async () => {
+                            try {
+                              await submitCurrentComposerToGuiQueue("append");
+                            } finally {
+                              submitInFlightRef.current = false;
+                            }
+                          })();
+                          return;
+                        }
+                        submitInFlightRef.current = true;
+                        void (async () => {
+                          try {
+                            const draft = composerRef.current?.getDraft() ?? null;
+                            // Capture the send target before the paste import
+                            // awaits: switching conversations mid-import must
+                            // not reroute the message or clear the composer of
+                            // the newly displayed conversation.
+                            const sendConversationId = getDisplayedConversationId();
+                            let text: string;
+                            let files: PendingUploadedFile[];
+                            try {
+                              const materialized = draft
+                                ? await materializeComposerDraftForSend(
+                                    draft,
+                                    pendingUploadedFiles,
+                                    displayedConversationWorkdir,
+                                  )
+                                : { text: "", uploadedFiles: pendingUploadedFiles };
+                              text = materialized.text;
+                              files = materialized.uploadedFiles;
+                            } catch (error) {
+                              setChatError(asErrorMessage(error, "大段粘贴内容导入失败"));
+                              return;
+                            }
 
-        {settingsOpen ? (
-          <div
-            className={`gateway-settings-overlay ${
-              overlay === "open" ? "gateway-settings-overlay-open" : ""
-            }`}
-            onTransitionEnd={handleSettingsTransitionEnd}
-          >
-            <SettingsPage
-              settings={settings}
-              setSettings={setSettings}
-              saveState={settingsSaveState}
-              onBack={closeSettings}
-              initialSection={settingsSection}
-              hiddenSections={["remote"]}
+                            if (!text && files.length === 0) {
+                              return;
+                            }
+                            if (getDisplayedConversationId() === sendConversationId) {
+                              composerRef.current?.clear();
+                            }
+                            setPendingUploadsForConversation(sendConversationId, []);
+                            void sendChat(text, {
+                              conversationId: sendConversationId,
+                              uploadedFiles: files,
+                              runtimeControls: chatRuntimeControlsForCurrentProvider,
+                            }).catch(() => {
+                              updatePendingUploadsForConversation(sendConversationId, (current) =>
+                                mergePendingUploadedFiles(current, files),
+                              );
+                            });
+                          } finally {
+                            submitInFlightRef.current = false;
+                          }
+                        })();
+                      }}
+                      onStop={() => {
+                        void cancelChat(displayedConversationId);
+                      }}
+                      onPrepareChatRuntime={() => {
+                        if (!api || historyShareToken) {
+                          return;
+                        }
+                        void prepareChatRuntime(
+                          "composer-focus",
+                          api,
+                          CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS,
+                        ).catch(() => undefined);
+                      }}
+                      onComposerBusyChange={handleComposerBusyChange}
+                      onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
+                      onPickReadableFiles={() => fileInputRef.current?.click()}
+                      onPasteFiles={handleImportReadableFiles}
+                      pendingUploadedFiles={pendingUploadedFiles}
+                      onRemovePendingUpload={(relativePath) => {
+                        updatePendingUploadsForConversation(
+                          getDisplayedConversationId(),
+                          (current) => current.filter((file) => file.relativePath !== relativePath),
+                        );
+                      }}
+                      queuedTurns={queuedChatTurnsForDisplayedConversation}
+                      onRunQueuedTurnNow={runQueuedTurnNow}
+                      onMoveQueuedTurnUp={moveQueuedTurnUp}
+                      onEditQueuedTurn={editQueuedTurn}
+                      onRemoveQueuedTurn={removeQueuedTurn}
+                    />
+                    {isFileDropActive ? (
+                      <FileDropOverlay
+                        canDropUpload={canDropUpload}
+                        title={fileDropTitle}
+                        description={fileDropDescription}
+                        limitHint={fileDropLimitHint}
+                      />
+                    ) : null}
+                  </section>
+                </div>
+              )}
+            </main>
+            <WorkspaceOverlayHost
+              locale={settings.locale}
+              theme={effectiveTheme}
+              workspaceEditorMounted={workspaceEditorMounted}
+              workspaceEditorOpenRequest={workspaceEditorOpenRequest}
+              workspaceEditorCloseRequestId={workspaceEditorCloseRequestId}
+              workspaceEditorOpen={workspaceEditorOpen}
+              workspaceEditorCleanupPending={workspaceEditorCleanupPending}
+              onWorkspaceEditorPreviewFile={openWorkspaceFilePreview}
+              onWorkspaceEditorHide={handleWorkspaceEditorHide}
+              onWorkspaceEditorClose={handleWorkspaceEditorClosed}
+              workspaceFilePreviewMounted={workspaceFilePreviewMounted}
+              workspaceFilePreviewOpenRequest={workspaceFilePreviewOpenRequest}
+              workspaceFilePreviewOpen={workspaceFilePreviewOpen}
+              onWorkspaceFilePreviewOpenEditor={openWorkspaceEditorFile}
+              onWorkspaceFilePreviewRequestClose={requestWorkspaceFilePreviewClose}
+              onWorkspaceFilePreviewClose={handleWorkspaceFilePreviewClosed}
+              workspaceSshTerminalMounted={workspaceSshTerminalMounted}
+              workspaceSshTerminalOpenRequest={workspaceSshTerminalOpenRequest}
+              workspaceSshTerminalOpen={workspaceSshTerminalOpen}
+              terminalProjectPathKey={terminalProjectPathKey}
+              terminalClient={terminalClient}
+              sftpClient={sftpClient}
+              terminalSessions={terminalSessions}
+              onWorkspaceSshTerminalHide={hideWorkspaceSshTerminalOverlay}
             />
           </div>
-        ) : null}
-      </div>
+
+          {terminalClient ? (
+            <RightDockPanel
+              isOpen={activeView === "chat" && rightDockOpen}
+              collapseImmediately={activeView !== "chat"}
+              fontScale={settings.customSettings.fontScale.rightDock}
+              projectPathKey={terminalProjectPathKey}
+              cwd={terminalProjectPath}
+              sessions={terminalSessions}
+              sessionsLoaded={terminalSessionsLoaded}
+              width={settings.customSettings.rightDock.width}
+              theme={effectiveTheme}
+              disabledMessage={projectToolsDisabledMessage}
+              terminalDisabledMessage={terminalDisabledMessage}
+              projectState={rightDockProjectState}
+              fileTreeState={rightDockFileTreeState}
+              sshHosts={settings.ssh.hosts}
+              associatedSshHostIds={associatedSshHostIds}
+              client={terminalClient}
+              gitClient={gitClient}
+              gitWriteEnabled={settings.remote.enableWebGit}
+              gitDisabledMessage={gitDisabledMessage}
+              tunnelClient={isAgentMode ? api : null}
+              tunnelEnabled={tunnelEnabled}
+              tunnelDisabledMessage={tunnelDisabledMessage}
+              tunnelPublicBaseUrl={window.location.origin}
+              workspaceActivityClient={workspaceActivityClient}
+              onWidthChange={handleRightDockWidthChange}
+              onProjectStateChange={handleRightDockProjectStateChange}
+              onFileTreeStateChange={handleRightDockFileTreeStateChange}
+              onSshProjectHostIdsChange={handleSshProjectHostIdsChange}
+              onOpenSshSession={handleOpenSshTerminal}
+              onSessionsChange={handleProjectTerminalSessionsChange}
+              onInsertFileMention={handleRightDockInsertFileMention}
+              onOpenFile={handleOpenWorkspaceFile}
+              onInsertCommitMention={handleRightDockInsertCommitMention}
+              onInsertGitFileMention={handleRightDockInsertGitFileMention}
+              onClose={handleRightDockClose}
+            />
+          ) : null}
+
+          {settingsOpen ? (
+            <div
+              className={`gateway-settings-overlay ${
+                overlay === "open" ? "gateway-settings-overlay-open" : ""
+              }`}
+              onTransitionEnd={handleSettingsTransitionEnd}
+            >
+              <SettingsPage
+                settings={settings}
+                setSettings={setSettings}
+                saveState={settingsSaveState}
+                onBack={closeSettings}
+                initialSection={settingsSection}
+                hiddenSections={["remote"]}
+              />
+            </div>
+          ) : null}
+        </div>
+      </AppErrorBoundary>
     </LocaleContext.Provider>
   );
 }

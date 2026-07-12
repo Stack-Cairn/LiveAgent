@@ -26,6 +26,7 @@ export type ChatEntry =
       text: string;
       attachments: PendingUploadedFile[];
       messageRef?: HistoryMessageRef;
+      timestamp?: number;
     }
   | {
       id: string;
@@ -40,7 +41,14 @@ export type ChatEntry =
       };
       timestamp?: number;
     }
-  | { id: string; kind: "assistant"; text: string; round?: number; meta?: AssistantMeta }
+  | {
+      id: string;
+      kind: "assistant";
+      text: string;
+      round?: number;
+      meta?: AssistantMeta;
+      timestamp?: number;
+    }
   | { id: string; kind: "thinking"; text: string; round?: number }
   | {
       id: string;
@@ -83,6 +91,10 @@ type StoredMessage = {
   summaryMeta?: unknown;
   liveAgentHistoryRef?: unknown;
 };
+
+function readMessageTimestamp(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
 
 export type ToolCallLike = {
   id?: unknown;
@@ -726,6 +738,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
           text,
           attachments,
           messageRef,
+          timestamp: readMessageTimestamp(message.timestamp),
         });
       }
       continue;
@@ -748,6 +761,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
     if (role === "assistant") {
       currentRound += 1;
       const round = currentRound;
+      const messageTimestamp = readMessageTimestamp(message.timestamp);
       const blocks = normalizeAssistantBlocks(message.content);
       const meta = buildAssistantMeta({
         provider: message.provider,
@@ -767,6 +781,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
           text: textBuffer,
           round,
           meta: metaEmitted ? undefined : meta,
+          timestamp: messageTimestamp,
         });
         textBuffer = "";
         if (meta) {

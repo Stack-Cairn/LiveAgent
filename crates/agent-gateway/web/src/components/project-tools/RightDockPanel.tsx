@@ -1,5 +1,6 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+  type CSSProperties,
   memo,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -46,6 +47,7 @@ import { useRightDockTabReorder } from "./useRightDockTabReorder";
 type RightDockPanelProps = {
   isOpen: boolean;
   collapseImmediately?: boolean;
+  fontScale?: number;
   projectPathKey: string;
   cwd: string;
   sessions?: TerminalSession[];
@@ -323,6 +325,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
   const {
     isOpen,
     collapseImmediately = false,
+    fontScale = 1,
     projectPathKey,
     cwd,
     sessions: externalSessions,
@@ -691,13 +694,13 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         data-state={isOpen ? "open" : "closed"}
         data-project-tools-resizing={isResizing ? "true" : undefined}
         className={cn(
-          "project-tools-panel fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
+          "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
           isOpen
             ? "pointer-events-auto translate-y-0 border-t border-border opacity-100 md:w-[var(--project-tools-panel-width)] md:translate-x-0 md:border-l md:border-t-0"
             : "pointer-events-none translate-y-full border-t border-transparent opacity-0 md:translate-x-3 md:translate-y-0 md:border-l-0 md:border-t-0",
           effectiveWidthCollapsed ? "md:w-0" : "md:w-[var(--project-tools-panel-width)]",
         )}
-        style={panelStyle}
+        style={{ ...panelStyle, "--zone-font-scale": fontScale } as CSSProperties}
       >
         <div
           className={cn(

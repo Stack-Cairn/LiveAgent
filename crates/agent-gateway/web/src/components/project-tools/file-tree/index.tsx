@@ -458,7 +458,7 @@ export function FileTreePanel(props: { active: boolean }) {
             value={query}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder={t("projectTools.fileTree.searchPlaceholder")}
-            className="h-8 pl-7 text-[11px] placeholder:text-[11px]"
+            className="h-8 pl-7 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
           />
         </div>
         <Button
@@ -491,7 +491,7 @@ export function FileTreePanel(props: { active: boolean }) {
               }
             }}
             placeholder={actionPlaceholder}
-            className="h-8 text-[11px] placeholder:text-[11px]"
+            className="h-8 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
           />
           <Button
             size="icon"
@@ -558,7 +558,7 @@ export function FileTreePanel(props: { active: boolean }) {
             })
           )}
           {search.truncated ? (
-            <div className="px-2 pt-1 text-[11px] text-muted-foreground">
+            <div className="px-2 pt-1 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
               {t("projectTools.fileTree.resultsTruncated")}
             </div>
           ) : null}

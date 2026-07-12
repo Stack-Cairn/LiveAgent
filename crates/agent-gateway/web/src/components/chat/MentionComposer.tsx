@@ -926,7 +926,7 @@ function createGitFileMentionChip(fileInput: MentionComposerGitFileMention) {
   const fileName = file.path.split("/").pop() || file.path;
   chip.appendChild(document.createTextNode(fileName));
   const ref = document.createElement("span");
-  ref.className = "max-w-[8rem] truncate text-[10px] opacity-70";
+  ref.className = "max-w-[8rem] truncate text-[calc(10px*var(--zone-font-scale,1))] opacity-70";
   ref.textContent = `@${file.refName || file.shortSha}`;
   chip.appendChild(ref);
   return chip;
@@ -1241,7 +1241,7 @@ function Popup({
               }
               ref={i === highlightIndex ? hlRef : undefined}
               className={cn(
-                "mention-popup-item group mx-1.5 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[13px] leading-5 transition-all",
+                "mention-popup-item group mx-1.5 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[calc(13px*var(--zone-font-scale,1))] leading-5 transition-all",
                 i === highlightIndex
                   ? "bg-foreground/[0.08] text-foreground shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)] dark:bg-white/[0.08] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
                   : "text-foreground/85 hover:bg-foreground/[0.04] dark:text-foreground/90 dark:hover:bg-white/[0.04]",
@@ -1266,16 +1266,18 @@ function Popup({
               <span className="min-w-0 flex-1 truncate">
                 <span className="font-medium tracking-tight text-foreground/95">{title}</span>
                 {subtitle && (
-                  <span className="ml-1.5 text-[10px] text-muted-foreground/85">{subtitle}</span>
+                  <span className="ml-1.5 text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/85">
+                    {subtitle}
+                  </span>
                 )}
               </span>
               {isSkill ? (
-                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] uppercase tracking-wider text-muted-foreground/60">
                   skill
                 </span>
               ) : (
                 isDir && (
-                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                  <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] uppercase tracking-wider text-muted-foreground/60">
                     dir
                   </span>
                 )
@@ -1413,7 +1415,7 @@ function CommitMentionTooltip({
         <div className="min-w-0">
           <div className="break-words font-medium leading-tight">{authorLabel}</div>
           {date ? (
-            <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">
+            <div className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-tight text-muted-foreground">
               {date.relative} ({date.absolute})
             </div>
           ) : null}
@@ -1425,14 +1427,14 @@ function CommitMentionTooltip({
           {messageBody}
         </div>
       ) : null}
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-tight">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[calc(11px*var(--zone-font-scale,1))] leading-tight">
         <span className="text-muted-foreground">{filesChangedLabel}</span>
         <span className="font-medium text-emerald-600 dark:text-emerald-400">
           {insertionsLabel}
         </span>
         <span className="font-medium text-rose-600 dark:text-rose-400">{deletionsLabel}</span>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-[11px] leading-tight text-muted-foreground">
+      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border/70 pt-1.5 text-[calc(11px*var(--zone-font-scale,1))] leading-tight text-muted-foreground">
         <span className="font-mono text-foreground">{shortSha}</span>
         {commit.remoteName ? <span>{commit.remoteName}</span> : null}
         {commit.githubUrl ? (

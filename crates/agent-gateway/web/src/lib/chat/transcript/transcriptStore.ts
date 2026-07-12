@@ -408,7 +408,13 @@ export function createTranscriptStore(options?: {
       if (!next.user) {
         next = {
           ...next,
-          user: { id: optimisticUserEntryId(clientRequestId), kind: "user", text, attachments },
+          user: {
+            id: optimisticUserEntryId(clientRequestId),
+            kind: "user",
+            text,
+            attachments,
+            timestamp: Date.now(),
+          },
         };
       }
       if (next !== ownTurn) {
@@ -424,7 +430,13 @@ export function createTranscriptStore(options?: {
       if (!runTurn.user) {
         replaceTurn(runTurn, {
           ...runTurn,
-          user: { id: seededUserEntryId(runId), kind: "user", text, attachments },
+          user: {
+            id: seededUserEntryId(runId),
+            kind: "user",
+            text,
+            attachments,
+            timestamp: Date.now(),
+          },
         });
         schedule(true);
       }
@@ -447,6 +459,7 @@ export function createTranscriptStore(options?: {
           kind: "user",
           text,
           attachments,
+          timestamp: Date.now(),
         },
       },
     ];
@@ -882,6 +895,7 @@ export function createTranscriptStore(options?: {
             kind: "user",
             text,
             attachments: attachments ?? [],
+            timestamp: Date.now(),
           },
         },
       ];

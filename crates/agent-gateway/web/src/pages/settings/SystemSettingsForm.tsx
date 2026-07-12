@@ -4,14 +4,24 @@ import {
   MessageSquare,
   MonitorSmartphone,
   Moon,
+  ScanText,
   Sun,
   Terminal,
   Wrench,
 } from "../../components/icons";
 
 import { SUPPORTED_LOCALES, useLocale } from "../../i18n";
-import { type ExecutionMode, THEME_OPTIONS, type Theme, updateSystem } from "../../lib/settings";
+import {
+  type ExecutionMode,
+  type FontScaleSettings,
+  THEME_OPTIONS,
+  type Theme,
+  updateCustomSettings,
+  updateSystem,
+} from "../../lib/settings";
 import type { SettingsSectionProps } from "./types";
+
+const FONT_SCALE_OPTIONS = [0.9, 1, 1.1, 1.2] as const;
 
 export function SystemSettingsForm(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
@@ -39,6 +49,28 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
     if (theme === "light") return <Sun className="h-4.5 w-4.5" />;
     if (theme === "dark") return <Moon className="h-4.5 w-4.5" />;
     return <MonitorSmartphone className="h-4.5 w-4.5" />;
+  }
+
+  const fontScale = settings.customSettings.fontScale;
+  const fontScaleZones: Array<{ key: keyof FontScaleSettings; label: string }> = [
+    { key: "sidebar", label: t("settings.fontSizeSidebar") },
+    { key: "chat", label: t("settings.fontSizeChat") },
+    { key: "rightDock", label: t("settings.fontSizeRightDock") },
+  ];
+
+  function getFontScaleLabel(value: number) {
+    if (value === 0.9) return t("settings.fontSizeSmall");
+    if (value === 1.1) return t("settings.fontSizeLarge");
+    if (value === 1.2) return t("settings.fontSizeXLarge");
+    return t("settings.fontSizeStandard");
+  }
+
+  function setZoneFontScale(zone: keyof FontScaleSettings, value: number) {
+    setSettings((prev) =>
+      updateCustomSettings(prev, {
+        fontScale: { ...prev.customSettings.fontScale, [zone]: value },
+      }),
+    );
   }
 
   return (
@@ -254,6 +286,61 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           </div>
         </section>
       </div>
+
+      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <ScanText className="h-4 w-4 text-muted-foreground" />
+              {t("settings.fontSize")}
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t("settings.fontSizeDesc")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              setSettings((prev) =>
+                updateCustomSettings(prev, { fontScale: { sidebar: 1, chat: 1, rightDock: 1 } }),
+              )
+            }
+            className="shrink-0 rounded-lg border border-border/60 bg-background/80 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-border hover:bg-muted/35 hover:text-foreground"
+          >
+            {t("settings.fontSizeReset")}
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {fontScaleZones.map((zone) => (
+            <div
+              key={zone.key}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5"
+            >
+              <div className="text-sm font-medium text-foreground">{zone.label}</div>
+              <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
+                {FONT_SCALE_OPTIONS.map((value) => {
+                  const selected = fontScale[zone.key] === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setZoneFontScale(zone.key, value)}
+                      className={`rounded-md px-2.5 py-1 text-xs transition-all ${
+                        selected
+                          ? "bg-background font-semibold text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {getFontScaleLabel(value)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

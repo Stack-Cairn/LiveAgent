@@ -187,7 +187,7 @@ function UsagePanel(props: { usage?: Usage; contextWindow?: number }) {
   ];
 
   return (
-    <div className="overflow-x-auto pt-0.5 text-[12px] leading-5 whitespace-nowrap text-muted-foreground/80">
+    <div className="overflow-x-auto pt-0.5 text-[calc(12px*var(--zone-font-scale,1))] leading-5 whitespace-nowrap text-muted-foreground/80">
       {stats.map((item, index) => (
         <span key={item.key}>
           {index > 0 ? <span className="px-1.5 text-muted-foreground/45">·</span> : null}
@@ -395,7 +395,7 @@ function ThinkingBlock({ text, open }: { text: string; open?: boolean }) {
           userInteractedRef.current = true;
           setIsOpen((prev) => !prev);
         }}
-        className="thinking-block-toggle flex w-full cursor-pointer select-none items-center gap-2 px-3 py-2 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        className="thinking-block-toggle flex w-full cursor-pointer select-none items-center gap-2 px-3 py-2 text-[calc(13px*var(--zone-font-scale,1))] text-muted-foreground transition-colors hover:text-foreground"
       >
         <Sparkles className="h-3.5 w-3.5 text-muted-foreground/70" />
         <span className="thinking-block-label font-medium">{t("chat.thinkingProcess")}</span>
@@ -407,7 +407,7 @@ function ThinkingBlock({ text, open }: { text: string; open?: boolean }) {
         <div className="border-t border-border/30 px-3 pb-3 pt-2">
           <pre
             ref={thinkingPreRef}
-            className="thinking-block-pre max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-[12.5px] leading-relaxed text-muted-foreground"
+            className="thinking-block-pre max-h-64 overflow-auto whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-[calc(12.5px*var(--zone-font-scale,1))] leading-relaxed text-muted-foreground"
           >
             {text}
           </pre>
@@ -554,17 +554,17 @@ function HostedSearchGroupView({
 
         <div className="min-w-0 space-y-0.5 sm:grid sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:gap-2 sm:space-y-0">
           <div className="flex min-w-0 items-center gap-1.5">
-            <span className="inline-flex h-5 shrink-0 items-center text-[12.5px] font-semibold leading-none text-foreground/90">
+            <span className="inline-flex h-5 shrink-0 items-center text-[calc(12.5px*var(--zone-font-scale,1))] font-semibold leading-none text-foreground/90">
               {t("chat.search.webSearch")}
             </span>
-            <span className="inline-flex h-5 max-w-[5.75rem] shrink-0 items-center truncate rounded-full bg-black/[0.04] px-1.5 text-[10.5px] font-semibold leading-none text-muted-foreground/70 dark:bg-white/[0.06]">
+            <span className="inline-flex h-5 max-w-[5.75rem] shrink-0 items-center truncate rounded-full bg-black/[0.04] px-1.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-semibold leading-none text-muted-foreground/70 dark:bg-white/[0.06]">
               {getHostedSearchCountLabel(items.length, t)}
             </span>
           </div>
           <span
             key={latestTitle}
             className={cn(
-              "block h-4 min-w-0 truncate text-[11px] leading-4 text-muted-foreground/60 transition-opacity duration-200 sm:inline-flex sm:h-5 sm:items-center sm:leading-none",
+              "block h-4 min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-muted-foreground/60 transition-opacity duration-200 sm:inline-flex sm:h-5 sm:items-center sm:leading-none",
               isSearching ? "animate-pulse" : "",
             )}
             title={latestTitle}
@@ -577,7 +577,7 @@ function HostedSearchGroupView({
           <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
           <span
             className={cn(
-              "inline-flex h-5 max-w-[5.5rem] items-center truncate rounded-full px-1.5 text-[10px] font-semibold leading-none",
+              "inline-flex h-5 max-w-[5.5rem] items-center truncate rounded-full px-1.5 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none",
               statusBgClass,
             )}
           >
@@ -599,7 +599,7 @@ function HostedSearchGroupView({
               {queries.map((query) => (
                 <span
                   key={query}
-                  className="tool-arg-pill min-w-0 max-w-full truncate rounded-[6px] border border-border/35 bg-background/65 px-2 py-1 text-[12px] text-foreground/85"
+                  className="tool-arg-pill min-w-0 max-w-full truncate rounded-[6px] border border-border/35 bg-background/65 px-2 py-1 text-[calc(12px*var(--zone-font-scale,1))] text-foreground/85"
                   title={query}
                 >
                   {query}
@@ -610,7 +610,7 @@ function HostedSearchGroupView({
 
           {visibleSources.length > 0 ? (
             <div className="space-y-1.5">
-              <div className="text-[11px] font-medium uppercase tracking-normal text-muted-foreground/70">
+              <div className="text-[calc(11px*var(--zone-font-scale,1))] font-medium uppercase tracking-normal text-muted-foreground/70">
                 {t("chat.search.sources")}
               </div>
               <div className="grid gap-1 sm:grid-cols-2">
@@ -622,7 +622,7 @@ function HostedSearchGroupView({
                       href={source.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="block min-w-0 max-w-full rounded-[6px] border border-transparent px-2 py-1 text-[12px] transition-colors hover:border-border/45 hover:bg-background/60"
+                      className="block min-w-0 max-w-full rounded-[6px] border border-transparent px-2 py-1 text-[calc(12px*var(--zone-font-scale,1))] transition-colors hover:border-border/45 hover:bg-background/60"
                       title={source.url}
                     >
                       <span className="block truncate font-medium text-foreground/85">{label}</span>
@@ -1149,7 +1149,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {name ? (
           <ToolSurface>
             <ToolSurfaceLabel label="agent" />
-            <div className="break-words text-[11.5px] font-semibold leading-[1.55] text-foreground/86">
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] font-semibold leading-[1.55] text-foreground/86">
               {name}
             </div>
           </ToolSurface>
@@ -1157,7 +1157,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {role ? (
           <ToolSurface>
             <ToolSurfaceLabel label="role" />
-            <div className="break-words text-[11.5px] leading-[1.55] text-foreground/78">
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
               {role}
             </div>
           </ToolSurface>
@@ -1165,7 +1165,9 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
         {task ? (
           <ToolSurface>
             <ToolSurfaceLabel label="task" />
-            <div className="break-words text-[11.5px] leading-[1.6] text-foreground/82">{task}</div>
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-foreground/82">
+              {task}
+            </div>
           </ToolSurface>
         ) : null}
       </div>
@@ -1201,7 +1203,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="path" />
             <PathDisplay
               path={display.path}
-              className="block min-w-0 break-all font-mono text-[11.5px] leading-[1.6]"
+              className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
             />
           </ToolSurface>
         ) : null}
@@ -1219,7 +1221,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="query" />
             <div className="flex items-start gap-2">
               <Search className="mt-[2px] h-3.5 w-3.5 shrink-0 text-muted-foreground/35" />
-              <span className="min-w-0 break-all font-mono text-[11.5px] leading-[1.6] text-foreground/82">
+              <span className="min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-foreground/82">
                 {display.pattern}
               </span>
             </div>
@@ -1230,7 +1232,7 @@ function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
             <ToolSurfaceLabel label="scope" />
             <PathDisplay
               path={display.path}
-              className="block min-w-0 break-all font-mono text-[11.5px] leading-[1.6]"
+              className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
             />
           </ToolSurface>
         ) : null}
@@ -1495,13 +1497,13 @@ function ToolImageStatusCard(props: {
         <Icon className={cn("h-4 w-4", !isError && "animate-spin text-primary")} />
       </div>
       <div className="max-w-full space-y-1">
-        <div className="text-[12px] font-medium">
+        <div className="text-[calc(12px*var(--zone-font-scale,1))] font-medium">
           {title ?? (isError ? t("chat.image.unavailable") : t("chat.image.loading"))}
         </div>
         {detail ? (
           <div
             className={cn(
-              "max-w-full truncate text-[11px]",
+              "max-w-full truncate text-[calc(11px*var(--zone-font-scale,1))]",
               isError ? "text-red-700/75 dark:text-red-200/75" : "text-muted-foreground",
             )}
             title={detail}
@@ -1574,8 +1576,13 @@ function ToolResultImagePreview(props: {
           <Eye className="h-4 w-4" />
         </div>
         <div className="max-w-full space-y-1">
-          <div className="text-[12px] font-medium">{t("chat.image.clickToLoad")}</div>
-          <div className="max-w-full truncate text-[11px]" title={imageDetail}>
+          <div className="text-[calc(12px*var(--zone-font-scale,1))] font-medium">
+            {t("chat.image.clickToLoad")}
+          </div>
+          <div
+            className="max-w-full truncate text-[calc(11px*var(--zone-font-scale,1))]"
+            title={imageDetail}
+          >
             {imageDetail}
           </div>
         </div>
@@ -2218,14 +2225,14 @@ function ToolResultDisplay({
             {details.entries.map((entry) => (
               <div
                 key={`${entry.kind}-${entry.path}`}
-                className="flex items-start gap-2 rounded-[8px] px-1.5 py-1 text-[11px] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className="flex items-start gap-2 rounded-[8px] px-1.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
               >
-                <span className="mt-[1px] shrink-0 text-[10px] font-semibold uppercase text-muted-foreground/35">
+                <span className="mt-[1px] shrink-0 text-[calc(10px*var(--zone-font-scale,1))] font-semibold uppercase text-muted-foreground/35">
                   {entry.kind}
                 </span>
                 <PathDisplay
                   path={entry.path}
-                  className="min-w-0 break-all font-mono text-[11px]"
+                  className="min-w-0 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))]"
                 />
               </div>
             ))}
@@ -2256,7 +2263,7 @@ function ToolResultDisplay({
               <PathDisplay
                 key={entry}
                 path={entry}
-                className="block rounded-[8px] px-1.5 py-1 break-all font-mono text-[11px] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className="block rounded-[8px] px-1.5 py-1 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
               />
             ))}
           </div>
@@ -2291,7 +2298,7 @@ function ToolResultDisplay({
                 >
                   <PathDisplay
                     path={file.path}
-                    className="block break-all font-mono text-[11px] leading-[1.5]"
+                    className="block break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5]"
                   />
                   <MetaTags
                     tags={[
@@ -2315,9 +2322,9 @@ function ToolResultDisplay({
                 <div className="flex items-start gap-2">
                   <PathDisplay
                     path={match.path}
-                    className="min-w-0 break-all font-mono text-[11px] leading-[1.5]"
+                    className="min-w-0 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5]"
                   />
-                  <span className="shrink-0 rounded bg-black/[0.04] px-1.5 py-[1px] text-[10px] font-semibold text-muted-foreground/60 dark:bg-white/[0.05]">
+                  <span className="shrink-0 rounded bg-black/[0.04] px-1.5 py-[1px] text-[calc(10px*var(--zone-font-scale,1))] font-semibold text-muted-foreground/60 dark:bg-white/[0.05]">
                     line {match.line}
                   </span>
                 </div>
@@ -2351,7 +2358,7 @@ function ToolResultDisplay({
             { label: "issues", value: String(issues.length) },
           ]}
         />
-        <div className="text-[12px] font-semibold leading-[1.45] text-foreground/90">
+        <div className="text-[calc(12px*var(--zone-font-scale,1))] font-semibold leading-[1.45] text-foreground/90">
           Agent call rejected — no subagents were started
         </div>
         {issues.length > 0 ? (
@@ -2408,21 +2415,21 @@ function ToolResultDisplay({
       <ToolSurface className="space-y-2">
         <MetaTags tags={tags} />
         <div className="space-y-2">
-          <div className="text-[12px] font-semibold leading-[1.45] text-foreground/90">
+          <div className="text-[calc(12px*var(--zone-font-scale,1))] font-semibold leading-[1.45] text-foreground/90">
             {agentDisplayName}
           </div>
           {agent.role ? (
-            <div className="text-[11px] font-medium leading-[1.55] text-foreground/78">
+            <div className="text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/78">
               <span className="text-muted-foreground">role</span> {agent.role}
             </div>
           ) : null}
           {agentTask ? (
-            <div className="break-words text-[11px] font-medium leading-[1.6] text-foreground/80">
+            <div className="break-words text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-[1.6] text-foreground/80">
               <span className="text-muted-foreground">task</span> {agentTask}
             </div>
           ) : null}
           {shouldShowSubagentWorktreeLocation(agent) ? (
-            <div className="break-all text-[10px] text-muted-foreground/70">
+            <div className="break-all text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/70">
               {agent.branchName ? `${agent.branchName} | ` : ""}
               {agent.worktreeRoot}
             </div>
@@ -2511,12 +2518,12 @@ function ToolResultDisplay({
           ]}
         />
         {details.subject ? (
-          <div className="break-words text-[11.5px] font-semibold leading-[1.5] text-foreground/86">
+          <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] font-semibold leading-[1.5] text-foreground/86">
             {details.subject}
           </div>
         ) : null}
         {details.bodyPreview ? (
-          <div className="rounded-[8px] border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-[11.5px] leading-[1.6] dark:border-white/[0.07] dark:bg-white/[0.03]">
+          <div className="rounded-[8px] border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] dark:border-white/[0.07] dark:bg-white/[0.03]">
             <Markdown content={details.bodyPreview} />
           </div>
         ) : null}
@@ -2697,10 +2704,10 @@ function ToolCallItem({
         {/* Container carries the summary styling so the truncation ellipsis
             (styled per the block container) matches the summary text */}
         <div
-          className="min-w-0 truncate font-mono text-[11px] leading-5 text-muted-foreground/55"
+          className="min-w-0 truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/55"
           title={!isBash && !inlineCommand && toolArgsSummary ? toolArgsSummary : undefined}
         >
-          <span className="font-sans text-[12.5px] font-semibold tracking-[-0.01em] text-foreground/90">
+          <span className="font-sans text-[calc(12.5px*var(--zone-font-scale,1))] font-semibold tracking-[-0.01em] text-foreground/90">
             {title.name}
             {title.action ? (
               <span className="font-mono font-semibold text-muted-foreground/70">
@@ -2729,7 +2736,7 @@ function ToolCallItem({
         <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
         <span
           className={cn(
-            "inline-flex items-center rounded-full px-1.5 py-[1px] text-[10px] font-semibold",
+            "inline-flex items-center rounded-full px-1.5 py-[1px] text-[calc(10px*var(--zone-font-scale,1))] font-semibold",
             statusBgClass,
           )}
         >
@@ -2754,7 +2761,7 @@ function ToolCallItem({
           label={t("chat.tool.return")}
           trailing={
             result.isError ? (
-              <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-[1px] text-[10px] font-bold text-red-500 dark:bg-red-500/15">
+              <span className="inline-flex items-center rounded-full bg-red-500/10 px-2 py-[1px] text-[calc(10px*var(--zone-font-scale,1))] font-bold text-red-500 dark:bg-red-500/15">
                 {t("chat.tool.error")}
               </span>
             ) : null
@@ -2785,7 +2792,7 @@ function ToolCallItem({
 
               return (
                 <details className="group/result">
-                  <summary className="flex cursor-pointer select-none items-center gap-1 text-[10.5px] text-muted-foreground/50 transition-colors duration-150 hover:text-foreground/60">
+                  <summary className="flex cursor-pointer select-none items-center gap-1 text-[calc(10.5px*var(--zone-font-scale,1))] text-muted-foreground/50 transition-colors duration-150 hover:text-foreground/60">
                     <ChevronRight className="h-2.5 w-2.5 transition-transform duration-200 group-open/result:rotate-90" />
                     {t("chat.tool.viewReturn")}
                   </summary>
@@ -2976,14 +2983,14 @@ function ToolTraceGroup(props: {
         </div>
 
         <div className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2">
-          <span className="min-w-0 truncate text-[12.5px] font-semibold leading-5 text-foreground/90">
+          <span className="min-w-0 truncate text-[calc(12.5px*var(--zone-font-scale,1))] font-semibold leading-5 text-foreground/90">
             {title}
           </span>
-          <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-black/[0.04] px-1.5 text-[10.5px] font-semibold leading-none text-muted-foreground/70 dark:bg-white/[0.06]">
+          <span className="inline-flex h-5 shrink-0 items-center rounded-full bg-black/[0.04] px-1.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-semibold leading-none text-muted-foreground/70 dark:bg-white/[0.06]">
             {countLabel}
           </span>
           {composition ? (
-            <span className="inline-flex h-5 min-w-0 items-center truncate font-mono text-[11px] leading-none text-muted-foreground/55">
+            <span className="inline-flex h-5 min-w-0 items-center truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-none text-muted-foreground/55">
               {composition}
             </span>
           ) : null}
@@ -2993,7 +3000,7 @@ function ToolTraceGroup(props: {
           <span className={cn("inline-block h-1.5 w-1.5 rounded-full", dotClass)} />
           <span
             className={cn(
-              "inline-flex h-5 items-center rounded-full px-1.5 text-[10px] font-semibold leading-none",
+              "inline-flex h-5 items-center rounded-full px-1.5 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none",
               statusBgClass,
             )}
           >
@@ -3092,7 +3099,7 @@ function RoundContent(props: {
       {showLabel ? <div className="h-px bg-border/40" /> : null}
 
       {isActive && isLive && normalizedToolStatus ? (
-        <div className="flex items-center gap-2 py-1 text-[13px]">
+        <div className="flex items-center gap-2 py-1 text-[calc(13px*var(--zone-font-scale,1))]">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
           {isCompactionStatus ? (
             <CompactingText className="font-medium text-muted-foreground" />

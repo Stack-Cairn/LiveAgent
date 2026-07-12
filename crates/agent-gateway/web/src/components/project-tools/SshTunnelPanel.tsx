@@ -190,7 +190,7 @@ function HostMetaTags(props: { host: SshHostConfig }) {
       {tags.map((tag) => (
         <span
           key={tag}
-          className="max-w-full truncate rounded-md bg-muted/70 px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground"
+          className="max-w-full truncate rounded-md bg-muted/70 px-1.5 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground"
           title={tag}
         >
           {tag}
@@ -677,11 +677,11 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                         <span className="truncate text-sm font-medium text-foreground">
                           {host.name}
                         </span>
-                        <span className="shrink-0 rounded-md bg-muted/70 px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                        <span className="shrink-0 rounded-md bg-muted/70 px-1.5 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground">
                           {authLabel(host, t)}
                         </span>
                         {hostHasProxy(host) ? (
-                          <span className="shrink-0 rounded-md bg-muted/70 px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                          <span className="shrink-0 rounded-md bg-muted/70 px-1.5 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground">
                             {t("settings.sshAdvancedProxy")}
                           </span>
                         ) : null}
@@ -779,12 +779,12 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                       <span className="block truncate text-xs font-semibold text-foreground">
                         {selectedCreateHost?.name}
                       </span>
-                      <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+                      <span className="mt-0.5 block truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
                         {selectedCreateHost ? endpointLabel(selectedCreateHost) : ""}
                       </span>
                     </span>
                     {selectedCreateHost ? (
-                      <span className="hidden shrink-0 rounded-md bg-muted/70 px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground min-[360px]:inline-flex">
+                      <span className="hidden shrink-0 rounded-md bg-muted/70 px-1.5 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground min-[360px]:inline-flex">
                         {authLabel(selectedCreateHost, t)}
                       </span>
                     ) : null}
@@ -822,10 +822,10 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                               <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
                                 {host.name}
                               </span>
-                              <span className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                              <span className="shrink-0 whitespace-nowrap font-mono text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
                                 {endpointLabel(host)}
                               </span>
-                              <span className="shrink-0 rounded-md bg-background/80 px-1.5 py-0.5 text-[10.5px] font-medium text-muted-foreground">
+                              <span className="shrink-0 rounded-md bg-background/80 px-1.5 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground">
                                 {authLabel(host, t)}
                               </span>
                             </span>
@@ -855,7 +855,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                 <input
                   value={createTitle}
                   onChange={(event) => setCreateTitle(event.currentTarget.value)}
-                  className="h-10 w-full rounded-lg border border-border/70 bg-background/80 px-3 text-[11px] text-foreground outline-none transition-colors placeholder:text-[11px] placeholder:text-muted-foreground/70 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20"
+                  className="h-10 w-full rounded-lg border border-border/70 bg-background/80 px-3 text-[calc(11px*var(--zone-font-scale,1))] text-foreground outline-none transition-colors placeholder:text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-muted-foreground/70 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20"
                   placeholder={
                     selectedCreateHost?.name || t("projectTools.sshTunnelTabTitlePlaceholder")
                   }
@@ -882,16 +882,16 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                       <div className="truncate text-xs font-medium text-foreground">
                         {selectedCreateHost.name}
                       </div>
-                      <div className="truncate font-mono text-[11px] text-muted-foreground">
+                      <div className="truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
                         {endpointLabel(selectedCreateHost)}
                       </div>
                     </div>
-                    <span className="shrink-0 rounded-md bg-background/70 px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
+                    <span className="shrink-0 rounded-md bg-background/70 px-1.5 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] text-muted-foreground">
                       {authLabel(selectedCreateHost, t)}
                     </span>
                   </div>
                   {selectedHostMessage ? (
-                    <div className="mt-2 flex gap-2 rounded-md bg-destructive/10 px-2 py-1.5 text-[11px] leading-relaxed text-destructive">
+                    <div className="mt-2 flex gap-2 rounded-md bg-destructive/10 px-2 py-1.5 text-[calc(11px*var(--zone-font-scale,1))] leading-relaxed text-destructive">
                       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                       <span>{selectedHostMessage}</span>
                     </div>
@@ -1022,7 +1022,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                   <Key className="h-5 w-5" />
                 </div>
                 <div className="text-xs font-medium text-foreground/80">{emptyTitle}</div>
-                <div className="max-w-[16rem] text-[11px] leading-relaxed text-muted-foreground">
+                <div className="max-w-[16rem] text-[calc(11px*var(--zone-font-scale,1))] leading-relaxed text-muted-foreground">
                   {emptyHint}
                 </div>
                 <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
@@ -1085,7 +1085,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                           </span>
                           <span
                             className={cn(
-                              "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-medium",
+                              "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium",
                               sshStatus === "disconnected"
                                 ? "bg-destructive/10 text-destructive"
                                 : sshStatus === "reconnecting"
@@ -1103,11 +1103,11 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                             {sshStatusLabel(session, t)}
                           </span>
                         </div>
-                        <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                        <div className="mt-1 truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
                           {endpoint}
                         </div>
                         {scope === "all" && projectLabel ? (
-                          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                          <div className="mt-1 truncate text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
                             {projectLabel}
                           </div>
                         ) : null}
@@ -1116,7 +1116,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
 
                     <div className="mt-3 flex items-end justify-between gap-3">
                       <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 px-1.5 py-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] text-muted-foreground">
                           {latencyBySessionId[session.id]?.loading &&
                           !latencyBySessionId[session.id]?.latencyMs ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1249,7 +1249,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
               <input
                 value={promptAnswer}
                 onChange={(event) => setPromptAnswer(event.currentTarget.value)}
-                className="mt-3 h-10 w-full rounded-lg border border-border/70 bg-background/80 px-3 text-[11px] text-foreground outline-none transition-colors placeholder:text-[11px] placeholder:text-muted-foreground/70 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20"
+                className="mt-3 h-10 w-full rounded-lg border border-border/70 bg-background/80 px-3 text-[calc(11px*var(--zone-font-scale,1))] text-foreground outline-none transition-colors placeholder:text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-muted-foreground/70 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20"
                 type={prompt.answerEcho ? "text" : "password"}
                 aria-label={t("projectTools.sshTunnelAuthPromptTitle")}
                 autoFocus

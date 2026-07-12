@@ -47,7 +47,7 @@ export function FileDropOverlay({
         </div>
 
         <div className="flex flex-col items-center gap-1.5">
-          <div className="text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+          <div className="text-[calc(15px*var(--zone-font-scale,1))] font-semibold leading-tight tracking-tight text-foreground">
             {title}
           </div>
           <div className="max-w-[280px] text-xs leading-5 text-muted-foreground">{description}</div>
@@ -56,7 +56,7 @@ export function FileDropOverlay({
         <div className="h-px w-12 bg-foreground/10 dark:bg-white/10" aria-hidden="true" />
 
         <div
-          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium ${
             canDropUpload
               ? "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]"
               : "border-destructive/20 bg-destructive/[0.05] text-destructive/80"

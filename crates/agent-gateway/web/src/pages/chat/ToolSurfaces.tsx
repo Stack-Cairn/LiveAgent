@@ -12,7 +12,7 @@ export function ToolSection(props: { label: string; trailing?: ReactNode; childr
   return (
     <section className="space-y-2">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/52">
+        <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] font-semibold uppercase tracking-[0.18em] text-muted-foreground/52">
           {label}
         </span>
         <div className="h-px flex-1 bg-black/[0.05] dark:bg-white/[0.08]" />
@@ -39,7 +39,7 @@ export function ToolSurface(props: { children: ReactNode; className?: string }) 
 
 export function ToolSurfaceLabel({ label }: { label: string }) {
   return (
-    <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/45">
+    <div className="mb-1.5 text-[calc(10px*var(--zone-font-scale,1))] font-semibold uppercase tracking-[0.16em] text-muted-foreground/45">
       {label}
     </div>
   );
@@ -52,7 +52,7 @@ export function ToolFactGrid({ tags }: { tags: MetaTag[] }) {
       {tags.map((tag) => (
         <ToolSurface key={`${tag.label}-${tag.value}`} className="px-2.5 py-2">
           <ToolSurfaceLabel label={tag.label} />
-          <div className="break-all font-mono text-[11px] leading-[1.55] text-foreground/78">
+          <div className="break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
             {tag.value}
           </div>
         </ToolSurface>
@@ -108,7 +108,7 @@ export function MetaTags({ tags }: { tags: MetaTag[] }) {
         return (
           <span
             key={stableKey}
-            className="tool-arg-pill inline-flex min-h-6 items-center gap-1.5 rounded-full border border-black/[0.05] bg-white/[0.78] px-2 py-1 text-[10.5px] leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:shadow-none"
+            className="tool-arg-pill inline-flex min-h-6 items-center gap-1.5 rounded-full border border-black/[0.05] bg-white/[0.78] px-2 py-1 text-[calc(10.5px*var(--zone-font-scale,1))] leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] dark:border-white/[0.08] dark:bg-white/[0.04] dark:shadow-none"
           >
             <span className="font-semibold uppercase tracking-[0.12em] text-muted-foreground/55">
               {tag.label}
@@ -127,7 +127,7 @@ export function ToolScrollablePre(props: { children: ReactNode; className?: stri
   return (
     <pre
       className={cn(
-        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-[8px] px-2.5 py-2 text-[11.5px] leading-[1.6]",
+        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-[8px] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]",
         className,
       )}
     >

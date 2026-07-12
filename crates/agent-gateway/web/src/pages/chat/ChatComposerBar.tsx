@@ -171,7 +171,7 @@ function RuntimeControlTooltip(props: { label: string; children: ReactNode }) {
             <span
               ref={tooltipRef}
               aria-hidden
-              className="pointer-events-none fixed z-[1000] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border/60 bg-popover px-2 py-1 text-[11px] font-medium text-popover-foreground opacity-100 shadow-md"
+              className="pointer-events-none fixed z-[1000] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border/60 bg-popover px-2 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-popover-foreground opacity-100 shadow-md"
               style={{
                 left: position.left,
                 maxWidth: "calc(100vw - 16px)",
@@ -519,16 +519,16 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
               <div
                 key={file.relativePath}
                 title={file.relativePath}
-                className="group flex w-[calc(25%-6px)] min-w-[calc(25%-6px)] items-center gap-2 rounded-xl border border-white/45 bg-white/55 px-2.5 py-1.5 text-[11px] shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] backdrop-blur-2xl backdrop-saturate-150 transition-all hover:bg-white/75 hover:shadow-[0_4px_14px_-4px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.10]"
+                className="group flex w-[calc(25%-6px)] min-w-[calc(25%-6px)] items-center gap-2 rounded-xl border border-white/45 bg-white/55 px-2.5 py-1.5 text-[calc(11px*var(--zone-font-scale,1))] shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] backdrop-blur-2xl backdrop-saturate-150 transition-all hover:bg-white/75 hover:shadow-[0_4px_14px_-4px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.10]"
               >
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-sky-500/12 dark:bg-sky-400/15">
                   <Paperclip className="h-3 w-3 text-sky-600 dark:text-sky-400" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12px] font-medium tracking-tight text-foreground/90">
+                  <div className="truncate text-[calc(12px*var(--zone-font-scale,1))] font-medium tracking-tight text-foreground/90">
                     {file.fileName}
                   </div>
-                  <div className="truncate text-[10px] text-muted-foreground">
+                  <div className="truncate text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground">
                     {formatUploadedFileSize(file.sizeBytes)}
                   </div>
                 </div>
@@ -594,11 +594,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                             <Clock3 className="h-3 w-3 shrink-0 text-muted-foreground/65" />
                           </div>
                           <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                            <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[11px] leading-4 text-foreground/88">
+                            <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-foreground/88">
                               {item.previewText || t("chat.queue.emptyMessage")}
                             </span>
                             {item.fileCount > 0 ? (
-                              <span className="max-w-[4.5rem] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-[9px] leading-4 text-muted-foreground">
+                              <span className="max-w-[4.5rem] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-[calc(9px*var(--zone-font-scale,1))] leading-4 text-muted-foreground">
                                 {t("chat.queue.fileCount").replace(
                                   "{count}",
                                   String(item.fileCount),
@@ -680,7 +680,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
               ) : (
                 <ChevronUp className="h-3 w-3" />
               )}
-              <span className="text-[10px] font-medium leading-none tabular-nums">
+              <span className="text-[calc(10px*var(--zone-font-scale,1))] font-medium leading-none tabular-nums">
                 {queuedTurns.length}
               </span>
             </button>
@@ -746,7 +746,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                   {pendingUploadedFiles.length > 0 ? (
                     <span
                       aria-hidden
-                      className="absolute -right-0.5 -top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-sky-500 px-[3px] text-[9px] font-semibold leading-none text-white shadow-[0_0_0_1.5px_rgba(255,255,255,0.95)] dark:bg-sky-400 dark:text-slate-900 dark:shadow-[0_0_0_1.5px_rgba(20,22,28,0.9)]"
+                      className="absolute -right-0.5 -top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-sky-500 px-[3px] text-[calc(9px*var(--zone-font-scale,1))] font-semibold leading-none text-white shadow-[0_0_0_1.5px_rgba(255,255,255,0.95)] dark:bg-sky-400 dark:text-slate-900 dark:shadow-[0_0_0_1.5px_rgba(20,22,28,0.9)]"
                     >
                       {pendingUploadedFiles.length}
                     </span>

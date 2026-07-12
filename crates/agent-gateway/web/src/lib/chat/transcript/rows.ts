@@ -30,6 +30,7 @@ type AssistantGroupBuilder = {
   id: string;
   rounds: GatewayTranscriptRound[];
   roundIndexByNumber: Map<number, number>;
+  timestamp?: number;
 };
 
 function createTranscriptRound(groupId: string, round: number): GatewayTranscriptRound {
@@ -190,6 +191,7 @@ export function buildRowsFromEntries(
         origin,
         kind: "assistant",
         rounds,
+        timestamp: assistantGroup.timestamp,
       });
     }
     assistantGroup = null;
@@ -206,6 +208,7 @@ export function buildRowsFromEntries(
           text: entry.text,
           attachments: entry.attachments,
           messageRef: entry.messageRef,
+          timestamp: entry.timestamp,
         });
       } else if (entry.kind === "checkpoint") {
         rows.push({
@@ -229,6 +232,9 @@ export function buildRowsFromEntries(
       entry.round ?? assistantGroup.rounds[assistantGroup.rounds.length - 1]?.round ?? 1;
 
     if (entry.kind === "assistant") {
+      if (entry.timestamp) {
+        assistantGroup.timestamp = entry.timestamp;
+      }
       updateTranscriptRound(assistantGroup, roundNumber, (round) => {
         let nextRound = round;
         if (entry.text !== "") {
@@ -346,6 +352,7 @@ export function buildTurnRows(turn: Turn): TranscriptRow[] {
       text: turn.user.text,
       attachments: turn.user.attachments,
       messageRef: turn.user.messageRef,
+      timestamp: turn.user.timestamp,
     });
   }
   for (const row of buildRowsFromEntries(turn.entries, "stream")) {

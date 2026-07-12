@@ -122,7 +122,7 @@ export function GitRemoteSetupModal(props: {
               id={remoteUrlId}
               value={remoteUrl}
               onChange={(event) => onRemoteUrlChange(event.target.value)}
-              className="h-9 text-[11px] placeholder:text-[11px]"
+              className="h-9 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
               placeholder={t("projectTools.gitReview.remoteUrlPlaceholder")}
               autoFocus
               disabled={loading}
@@ -271,7 +271,9 @@ export function GitBranchFromCommitModal(props: {
         </div>
         <div className="space-y-4 px-5 py-4">
           <div className="rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs">
-            <div className="font-mono text-[11px] text-muted-foreground">{target.shortSha}</div>
+            <div className="font-mono text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
+              {target.shortSha}
+            </div>
             <div className="mt-1 truncate font-medium" title={target.subject}>
               {target.subject || target.commitSha}
             </div>
@@ -284,7 +286,7 @@ export function GitBranchFromCommitModal(props: {
               id={branchNameId}
               value={branchName}
               onChange={(event) => onBranchNameChange(event.target.value)}
-              className="h-9 text-[11px] placeholder:text-[11px]"
+              className="h-9 text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-[calc(11px*var(--zone-font-scale,1))]"
               placeholder={t("projectTools.gitReview.branchNamePlaceholder")}
               autoFocus
               disabled={loading}
@@ -419,7 +421,7 @@ export function GitReviewToolbar(props: {
           <div className="truncate text-sm font-semibold">
             {state.head || t("projectTools.gitReviewTitle")}
           </div>
-          <div className="truncate text-[11px] text-muted-foreground">
+          <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
             {state.repoRoot || disabledMessage || t("projectTools.gitReview.noRepository")}
           </div>
         </div>
@@ -491,10 +493,10 @@ export function GitReviewToolbar(props: {
         <div className="mt-2.5 overflow-hidden rounded-xl border border-white/20 bg-white/50 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.03]">
           <div className="flex items-center gap-2 border-b border-black/[0.04] px-3 py-2 dark:border-white/[0.06]">
             <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground/70" />
-            <span className="min-w-0 truncate text-[11px] font-medium text-foreground/80">
+            <span className="min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium text-foreground/80">
               {branchDiff?.baseRef || state.upstream || t("projectTools.gitReview.unresolved")}
             </span>
-            <span className="ml-auto shrink-0 text-[10px] text-muted-foreground/60">
+            <span className="ml-auto shrink-0 text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/60">
               {t("projectTools.gitReview.labelBase")}
             </span>
           </div>
@@ -541,7 +543,7 @@ export function GitReviewToolbar(props: {
                 >
                   {item.count}
                 </span>
-                <span className="text-[9px] leading-none text-muted-foreground/60">
+                <span className="text-[calc(9px*var(--zone-font-scale,1))] leading-none text-muted-foreground/60">
                   {item.label}
                 </span>
               </div>

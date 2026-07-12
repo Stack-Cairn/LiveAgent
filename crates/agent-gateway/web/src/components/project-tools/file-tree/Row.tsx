@@ -107,7 +107,7 @@ export const FileTreeErrorRow = memo(function FileTreeErrorRow(props: FileTreeEr
   const { depth, message } = props;
   return (
     <div
-      className="break-all px-3 py-1 text-[11px] text-amber-600"
+      className="break-all px-3 py-1 text-[calc(11px*var(--zone-font-scale,1))] text-amber-600"
       style={{ paddingLeft: 12 + depth * 14 }}
     >
       {message}

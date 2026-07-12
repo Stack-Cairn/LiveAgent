@@ -118,7 +118,7 @@ export function ChatEmptyState({
 
       {variant === "no-models" ? (
         <>
-          <div className="hero-entrance-delay-1 mb-2 bg-gradient-to-b from-foreground to-foreground/65 bg-clip-text text-center text-[26px] font-semibold leading-tight tracking-tight text-transparent">
+          <div className="hero-entrance-delay-1 mb-2 bg-gradient-to-b from-foreground to-foreground/65 bg-clip-text text-center text-[calc(26px*var(--zone-font-scale,1))] font-semibold leading-tight tracking-tight text-transparent">
             {t("chat.welcome")}
           </div>
           <div className="hero-entrance-delay-2 mb-1 text-center text-sm leading-relaxed text-muted-foreground">
@@ -140,7 +140,7 @@ export function ChatEmptyState({
         </>
       ) : (
         <>
-          <div className="hero-entrance-delay-1 mb-2.5 bg-gradient-to-b from-foreground to-foreground/65 bg-clip-text text-center text-[26px] font-semibold leading-tight tracking-tight text-transparent">
+          <div className="hero-entrance-delay-1 mb-2.5 bg-gradient-to-b from-foreground to-foreground/65 bg-clip-text text-center text-[calc(26px*var(--zone-font-scale,1))] font-semibold leading-tight tracking-tight text-transparent">
             {t(GREETING_KEYS[period])}
           </div>
           <div className="hero-entrance-delay-2 flex items-center justify-center gap-1.5 text-center text-sm leading-relaxed text-muted-foreground">
@@ -173,7 +173,7 @@ export function ChatEmptyState({
                     <card.icon className="h-4 w-4" />
                   </span>
                   <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="truncate text-[13px] font-medium leading-tight text-foreground/90">
+                    <span className="truncate text-[calc(13px*var(--zone-font-scale,1))] font-medium leading-tight text-foreground/90">
                       {t(card.titleKey)}
                     </span>
                     <span className="truncate text-xs leading-tight text-muted-foreground">

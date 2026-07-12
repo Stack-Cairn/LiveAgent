@@ -332,6 +332,8 @@ function syncableCustomSettings(
       projectsCollapsed: false,
       recentCollapsed: false,
     },
+    // fontScale 是本机 UI 偏好：固定为默认值，避免本地调整触发网关广播
+    fontScale: { sidebar: 1, chat: 1, rightDock: 1 },
   };
 }
 
@@ -908,6 +910,8 @@ export function applyGatewaySettingsSyncPayload(
           )
         : current.customSettings.rightDock,
       chatSidebar: current.customSettings.chatSidebar,
+      // fontScale 是本机 UI 偏好，不参与网关同步
+      fontScale: current.customSettings.fontScale,
     },
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,
     chatRuntimeControls: Object.hasOwn(source, "chatRuntimeControls")

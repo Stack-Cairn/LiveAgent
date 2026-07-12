@@ -799,15 +799,22 @@ export function createSidebarStore(
       const merged = mergeSidebarConversation(byId.get(conversation.id), conversation);
       byId = new Map(byId);
       byId.set(merged.id, merged);
-      const rest = snapshot.conversations.filter((item) => item.id !== merged.id);
-      const next = conversationMatchesScope(merged, scope)
-        ? sortSidebarConversations([merged, ...rest])
-        : rest;
+      const inScope = conversationMatchesScope(merged, scope);
+      const wasVisible = snapshot.conversations.some((item) => item.id === merged.id);
       const workdirActivity = bumpWorkdirActivity(
         snapshot.workdirActivity,
         merged.cwd,
         merged.updatedAt,
       );
+      if (!inScope && !wasVisible) {
+        // 会话不属于当前作用域且原本不可见：保持 conversations 引用稳定。
+        // 否则每次调用都会产生新列表引用，调用方若依据“列表里没有该会话”
+        // 反复重插，会形成同步更新风暴（Maximum update depth exceeded）。
+        commit({ byId, workdirActivity });
+        return;
+      }
+      const rest = snapshot.conversations.filter((item) => item.id !== merged.id);
+      const next = inScope ? sortSidebarConversations([merged, ...rest]) : rest;
       commitScopedList(next, { workdirActivity });
     },
 
