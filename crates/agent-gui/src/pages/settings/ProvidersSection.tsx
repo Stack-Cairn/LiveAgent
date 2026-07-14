@@ -1,4 +1,3 @@
-import { Popover } from "@base-ui/react";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -9,11 +8,9 @@ import {
   Download,
   Eye,
   EyeOff,
-  FolderOpen,
   GeminiIcon,
   Key,
   Loader2,
-  MoreHorizontal,
   OpenaiChatgptIcon,
   Pencil,
   Plus,
@@ -55,11 +52,6 @@ import {
   updateCustomSettings,
 } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
-import {
-  type CherryProviderImportItem,
-  type CherryProvidersResponse,
-  CherryStudioImportModal,
-} from "./CherryStudioImportModal";
 import {
   createDraftModelConfig,
   fetchModelsFromApi,
@@ -120,15 +112,6 @@ function ProviderBrandIcon({ type }: { type: ProviderId }) {
 }
 
 const REDACTED_API_KEY_DISPLAY = "API Key";
-const CHERRY_DATA_PATH_STORAGE_KEY = "liveagent.cherryStudioDataPath";
-
-function readCherryDataPath() {
-  try {
-    return localStorage.getItem(CHERRY_DATA_PATH_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
 
 function normalizeModelDomId(modelId: string) {
   return modelId.replace(/[^a-zA-Z0-9_-]+/g, "-");
@@ -796,76 +779,6 @@ function ccsProviderIsTransferable(item: CcsProviderImportItem) {
   return ccsProviderCanSyncModels(item) || (item.models?.length ?? 0) > 0;
 }
 
-function cherryProviderId(item: CherryProviderImportItem) {
-  const baseId = `cherry-studio-${item.sourceId}`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return baseId || "cherry-studio-provider";
-}
-
-function cherryProviderName(item: CherryProviderImportItem, allItems: CherryProviderImportItem[]) {
-  const duplicateCount = allItems.filter(
-    (candidate) =>
-      candidate.name.trim().toLowerCase() === item.name.trim().toLowerCase() &&
-      candidate.providerType === item.providerType &&
-      candidate.baseUrl.trim().replace(/\/+$/, "").toLowerCase() ===
-        item.baseUrl.trim().replace(/\/+$/, "").toLowerCase(),
-  ).length;
-  if (duplicateCount <= 1) return `${item.name.trim()}（Cherry Studio）`;
-  const sourceId = item.sourceId.split("::", 1)[0].slice(0, 8);
-  return `${item.name.trim()}（Cherry Studio · ${sourceId}）`;
-}
-
-function providerFromCherry(
-  item: CherryProviderImportItem,
-  allItems: CherryProviderImportItem[],
-  existing?: CustomProvider,
-): CustomProvider {
-  const providerType = item.providerType;
-  const models = existing?.models ?? [];
-  return {
-    ...(existing ?? {}),
-    id: cherryProviderId(item),
-    name: existing?.name ?? cherryProviderName(item, allItems),
-    type: providerType,
-    baseUrl: item.baseUrl,
-    apiKey: item.apiKey,
-    apiKeyConfigured: item.apiKey.trim().length > 0,
-    models,
-    activeModels: existing?.activeModels ?? [],
-    requestFormat:
-      providerType === "codex"
-        ? item.requestFormat === "openai-completions"
-          ? "openai-completions"
-          : "openai-responses"
-        : undefined,
-    reasoning: existing?.reasoning ?? "off",
-    promptCachingEnabled: existing?.promptCachingEnabled ?? providerType === "claude_code",
-    nativeWebSearchEnabled: existing?.nativeWebSearchEnabled ?? true,
-  };
-}
-
-function isLikelyCherryChatModel(modelId: string) {
-  const lower = modelId.toLowerCase();
-  return ![
-    "embedding",
-    "rerank",
-    "whisper",
-    "realtime",
-    "audio-preview",
-    "audio-realtime",
-    "image",
-    "video",
-    "banana",
-    "dall-e",
-    "imagen",
-    "sora-",
-    "veo-",
-    "tts-",
-  ].some((needle) => lower.includes(needle));
-}
-
 // sourceId alone can collide across ccswitch app_type buckets that map to the
 // same provider tab (e.g. "claude" and "claude-code"), so key rows on both.
 function ccsItemKey(item: CcsProviderImportItem) {
@@ -881,19 +794,6 @@ function CcsSourceLogo({ className }: { className?: string }) {
       )}
     >
       CC
-    </span>
-  );
-}
-
-function CherrySourceLogo({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "flex shrink-0 select-none items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-orange-500 font-bold text-white shadow-sm",
-        className,
-      )}
-    >
-      CS
     </span>
   );
 }
@@ -1178,17 +1078,9 @@ function ProviderList(props: {
   ccsLoading: boolean;
   ccsImporting: boolean;
   ccsMessage: string | null;
-  cherryProviders: CherryProvidersResponse | null;
-  cherryLoading: boolean;
-  cherryImporting: boolean;
-  cherryMessage: string | null;
-  cherryDataPath: string | null;
-  onEnsureThirdPartyScan: () => void;
-  onRefreshThirdPartyProviders: () => void;
+  onEnsureCcsScan: () => void;
+  onRefreshCcsProviders: () => void;
   onOpenCcsImport: () => void;
-  onOpenCherryImport: () => void;
-  onChooseCherryDataDirectory: () => void;
-  onResetCherryDataDirectory: () => void;
 }) {
   const { t } = useLocale();
   const {
@@ -1202,22 +1094,13 @@ function ProviderList(props: {
     ccsLoading,
     ccsImporting,
     ccsMessage,
-    cherryProviders,
-    cherryLoading,
-    cherryImporting,
-    cherryMessage,
-    cherryDataPath,
-    onEnsureThirdPartyScan,
-    onRefreshThirdPartyProviders,
+    onEnsureCcsScan,
+    onRefreshCcsProviders,
     onOpenCcsImport,
-    onOpenCherryImport,
-    onChooseCherryDataDirectory,
-    onResetCherryDataDirectory,
   } = props;
   const [syncMenuOpen, setSyncMenuOpen] = useState(false);
   const filtered = providers.filter((provider) => provider.type === type);
   const ccsAll = ccsProviders?.providers ?? [];
-  const cherryAll = cherryProviders?.providers ?? [];
   const ccsBreakdown = PROVIDER_TABS.map((tab) => ({
     type: tab,
     count: ccsAll.filter((provider) => provider.providerType === tab).length,
@@ -1231,7 +1114,7 @@ function ProviderList(props: {
 
   function handleSyncMenuOpenChange(open: boolean) {
     setSyncMenuOpen(open);
-    if (open) onEnsureThirdPartyScan();
+    if (open) onEnsureCcsScan();
   }
 
   const scanned = ccsProviders !== null;
@@ -1246,19 +1129,6 @@ function ProviderList(props: {
         : scanned
           ? ccsMessage || "未发现可导入的供应商"
           : "点击扫描本地配置";
-  const cherryReady = cherryAll.filter(
-    (provider) => provider.providerType === type && provider.importable,
-  ).length;
-  const cherrySubtitle = cherryImporting
-    ? "正在同步供应商、获取并激活模型…"
-    : cherryLoading
-      ? "正在扫描本地配置…"
-      : cherryProviders
-        ? cherryMessage || `发现 ${cherryReady} 个可同步配置`
-        : cherryMessage || "点击扫描本地配置";
-  const thirdPartyLoading = ccsLoading || cherryLoading;
-  const thirdPartyImporting = ccsImporting || cherryImporting;
-  const cherryResolvedDataPath = cherryDataPath ?? cherryProviders?.dataPath ?? "";
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -1275,16 +1145,9 @@ function ProviderList(props: {
           </Button>
           <DropdownMenu open={syncMenuOpen} onOpenChange={handleSyncMenuOpenChange}>
             <DropdownMenuTrigger
-              render={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  disabled={thirdPartyImporting}
-                />
-              }
+              render={<Button variant="outline" size="sm" className="gap-1.5" />}
             >
-              {thirdPartyImporting ? (
+              {ccsImporting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Download className="h-3.5 w-3.5" />
@@ -1310,12 +1173,12 @@ function ProviderList(props: {
                 <DropdownMenuItem
                   closeOnClick={false}
                   className="h-7 w-7 cursor-pointer justify-center rounded-md p-0 text-muted-foreground"
-                  disabled={thirdPartyLoading || thirdPartyImporting}
-                  onSelect={onRefreshThirdPartyProviders}
+                  disabled={ccsLoading || ccsImporting}
+                  onSelect={onRefreshCcsProviders}
                   aria-label="重新扫描本地配置"
                   title="重新扫描本地配置"
                 >
-                  <RefreshCw className={cn("h-3.5 w-3.5", thirdPartyLoading && "animate-spin")} />
+                  <RefreshCw className={cn("h-3.5 w-3.5", ccsLoading && "animate-spin")} />
                 </DropdownMenuItem>
               </div>
               <DropdownMenuSeparator className="my-0 bg-border/40" />
@@ -1346,108 +1209,6 @@ function ProviderList(props: {
                     <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
                   ) : null}
                 </DropdownMenuItem>
-                <div className="flex items-stretch gap-1">
-                  <DropdownMenuItem
-                    className="model-selector-item min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-lg px-2.5 py-2.5"
-                    disabled={cherryLoading || cherryImporting || !cherryAll.length}
-                    onSelect={onOpenCherryImport}
-                  >
-                    <CherrySourceLogo className="h-9 w-9 text-[11px]" />
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="flex items-center gap-1.5 text-sm font-medium">
-                        Cherry Studio
-                        {cherryReady > 0 ? (
-                          <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                            {cherryReady}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span
-                        className="line-clamp-2 text-xs text-muted-foreground"
-                        title={cherrySubtitle}
-                      >
-                        {cherrySubtitle}
-                      </span>
-                    </span>
-                    {cherryLoading || cherryImporting ? (
-                      <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
-                    ) : null}
-                  </DropdownMenuItem>
-                  <Popover.Root>
-                    <Popover.Trigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-auto w-8 shrink-0 rounded-lg text-muted-foreground"
-                          disabled={cherryLoading || cherryImporting}
-                          aria-label="Cherry Studio 数据目录设置"
-                          title="Cherry Studio 数据目录设置"
-                        />
-                      }
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Popover.Trigger>
-                    <Popover.Portal>
-                      <Popover.Positioner
-                        side="bottom"
-                        align="end"
-                        sideOffset={6}
-                        collisionPadding={8}
-                        className="z-[10000]"
-                      >
-                        <Popover.Popup className="w-80 rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl outline-none">
-                          <div className="space-y-3">
-                            <div>
-                              <div className="text-sm font-medium">Cherry Studio 数据目录</div>
-                              <div className="mt-0.5 text-xs text-muted-foreground">
-                                {cherryDataPath
-                                  ? "正在使用手动指定的目录"
-                                  : "LiveAgent 会自动读取 Cherry Studio 的数据目录设置"}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Input
-                                readOnly
-                                value={cherryResolvedDataPath}
-                                placeholder={cherryLoading ? "正在检测…" : "未检测到数据目录"}
-                                className="h-9 min-w-0 flex-1 text-xs"
-                                title={cherryResolvedDataPath}
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="h-9 w-9 shrink-0"
-                                disabled={cherryLoading || cherryImporting}
-                                onClick={onChooseCherryDataDirectory}
-                                title="选择数据目录"
-                                aria-label="选择 Cherry Studio 数据目录"
-                              >
-                                <FolderOpen className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                              <span>{cherryDataPath ? "手动指定" : "自动检测"}</span>
-                              {cherryDataPath ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2 text-xs"
-                                  onClick={onResetCherryDataDirectory}
-                                >
-                                  恢复自动检测
-                                </Button>
-                              ) : null}
-                            </div>
-                          </div>
-                        </Popover.Popup>
-                      </Popover.Positioner>
-                    </Popover.Portal>
-                  </Popover.Root>
-                </div>
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -1525,98 +1286,27 @@ export function ProvidersSection(props: SettingsSectionProps) {
   const [customSettingsOpen, setCustomSettingsOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<CustomProvider | null>(null);
   const [ccsImportType, setCcsImportType] = useState<ProviderId | null>(null);
-  const [cherryImportType, setCherryImportType] = useState<ProviderId | null>(null);
   const [ccsProviders, setCcsProviders] = useState<CcsProvidersResponse | null>(null);
   const [ccsLoading, setCcsLoading] = useState(false);
   const [ccsImporting, setCcsImporting] = useState(false);
   const [ccsMessage, setCcsMessage] = useState<string | null>(null);
-  const [cherryProviders, setCherryProviders] = useState<CherryProvidersResponse | null>(null);
-  const [cherryLoading, setCherryLoading] = useState(false);
-  const [cherryImporting, setCherryImporting] = useState(false);
-  const [cherryMessage, setCherryMessage] = useState<string | null>(null);
-  const [cherryDataPath, setCherryDataPath] = useState<string | null>(readCherryDataPath);
 
-  async function refreshThirdPartyProviders() {
+  async function refreshCcsProviders() {
     setCcsLoading(true);
-    setCherryLoading(true);
-    const [ccsResult, cherryResult] = await Promise.allSettled([
-      invoke<CcsProvidersResponse>("settings_list_ccswitch_providers"),
-      cherryDataPath
-        ? invoke<CherryProvidersResponse>("settings_list_cherry_studio_providers_from_path", {
-            dataPath: cherryDataPath,
-          })
-        : invoke<CherryProvidersResponse>("settings_list_cherry_studio_providers"),
-    ]);
-    if (ccsResult.status === "fulfilled") {
-      setCcsProviders(ccsResult.value);
-      setCcsMessage(ccsResult.value.message);
-    } else {
-      setCcsProviders(null);
-      setCcsMessage(
-        ccsResult.reason instanceof Error ? ccsResult.reason.message : String(ccsResult.reason),
-      );
-    }
-    if (cherryResult.status === "fulfilled") {
-      setCherryProviders(cherryResult.value);
-      setCherryMessage(cherryResult.value.message);
-    } else {
-      setCherryProviders(null);
-      setCherryMessage(
-        cherryResult.reason instanceof Error
-          ? cherryResult.reason.message
-          : String(cherryResult.reason),
-      );
-    }
-    setCcsLoading(false);
-    setCherryLoading(false);
-  }
-
-  async function chooseCherryDataDirectory() {
-    const selected = await invoke<string | null>("system_pick_folder", {
-      initial_workdir: cherryDataPath ?? cherryProviders?.dataPath ?? undefined,
-    });
-    if (!selected) return;
-
-    setCherryLoading(true);
-    setCherryMessage("正在扫描选择的 Cherry Studio 数据目录…");
     try {
-      const response = await invoke<CherryProvidersResponse>(
-        "settings_list_cherry_studio_providers_from_path",
-        { dataPath: selected },
-      );
-      const resolvedPath = response.dataPath || selected;
-      localStorage.setItem(CHERRY_DATA_PATH_STORAGE_KEY, resolvedPath);
-      setCherryDataPath(resolvedPath);
-      setCherryProviders(response);
-      setCherryMessage(response.message);
-    } catch (error) {
-      setCherryMessage(error instanceof Error ? error.message : String(error));
+      const result = await invoke<CcsProvidersResponse>("settings_list_ccswitch_providers");
+      setCcsProviders(result);
+      setCcsMessage(result.message);
+    } catch (err) {
+      setCcsMessage(err instanceof Error ? err.message : String(err));
+      setCcsProviders(null);
     } finally {
-      setCherryLoading(false);
+      setCcsLoading(false);
     }
   }
 
-  function resetCherryDataDirectory() {
-    localStorage.removeItem(CHERRY_DATA_PATH_STORAGE_KEY);
-    setCherryDataPath(null);
-    setCherryProviders(null);
-    setCherryMessage("已恢复自动检测，正在重新扫描…");
-    setCherryLoading(true);
-    void invoke<CherryProvidersResponse>("settings_list_cherry_studio_providers")
-      .then((response) => {
-        setCherryProviders(response);
-        setCherryMessage(response.message);
-      })
-      .catch((error) => {
-        setCherryMessage(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => setCherryLoading(false));
-  }
-
-  function ensureThirdPartyScan() {
-    if ((!ccsProviders || !cherryProviders) && !ccsLoading && !cherryLoading) {
-      void refreshThirdPartyProviders();
-    }
+  function ensureCcsScan() {
+    if (!ccsProviders && !ccsLoading) void refreshCcsProviders();
   }
 
   function buildCcsImportedProviders(
@@ -1726,114 +1416,6 @@ export function ProvidersSection(props: SettingsSectionProps) {
     }
   }
 
-  async function importCherryProviders(items: CherryProviderImportItem[]) {
-    const importable = items.filter((item) => item.importable);
-    if (!importable.length) {
-      const message = "所选 Cherry Studio 配置没有可导入的 API 配置";
-      setCherryMessage(message);
-      return;
-    }
-
-    setCherryImporting(true);
-    setCherryMessage("正在同步供应商、获取并激活全部模型…");
-
-    const allItems = cherryProviders?.providers ?? importable;
-
-    try {
-      setSettings((prev) => {
-        let changed = false;
-        const providers = [...prev.customProviders];
-
-        for (const item of importable) {
-          const id = cherryProviderId(item);
-          const existingIndex = providers.findIndex((provider) => provider.id === id);
-          const nextProvider = providerFromCherry(
-            item,
-            allItems,
-            existingIndex >= 0 ? providers[existingIndex] : undefined,
-          );
-
-          if (existingIndex >= 0) providers[existingIndex] = nextProvider;
-          else providers.push(nextProvider);
-          changed = true;
-        }
-
-        return changed ? updateCustomProviders(prev, providers) : prev;
-      });
-
-      const modelResults = await Promise.all(
-        importable.map(async (item) => {
-          const identity = cherryProviderId(item);
-          try {
-            const fetchedModels = await fetchModelsFromApi(
-              item.providerType,
-              item.baseUrl,
-              item.apiKey,
-            );
-            const models = fetchedModels.filter((model) => isLikelyCherryChatModel(model.id));
-            return { identity, models, fetched: true, failed: false };
-          } catch {
-            return {
-              identity,
-              models: [] as ProviderModelConfig[],
-              fetched: false,
-              failed: true,
-            };
-          }
-        }),
-      );
-
-      const resultsByIdentity = new Map(
-        modelResults.map((result) => [result.identity, result] as const),
-      );
-      setSettings((prev) => {
-        let changed = false;
-        const providers = prev.customProviders.map((provider) => {
-          const result = resultsByIdentity.get(provider.id);
-          if (!result?.fetched) return provider;
-
-          const models = mergeFetchedModels(result.models, provider.models);
-          const activeModels = models.map((model) => model.id);
-          if (
-            models.length === provider.models.length &&
-            models.every((model, index) => model.id === provider.models[index]?.id) &&
-            activeModels.length === provider.activeModels.length &&
-            activeModels.every((model, index) => model === provider.activeModels[index])
-          ) {
-            return provider;
-          }
-          changed = true;
-          return { ...provider, models, activeModels };
-        });
-        return changed ? updateCustomProviders(prev, providers) : prev;
-      });
-
-      const fetchedCount = modelResults.filter((result) => result.fetched).length;
-      const failedCount = modelResults.filter((result) => result.failed).length;
-      const refreshedModelCount = modelResults.reduce(
-        (total, result) => total + result.models.length,
-        0,
-      );
-      const importedByType = PROVIDER_TABS.map((type) => ({
-        type,
-        count: importable.filter((item) => item.providerType === type).length,
-      })).filter((entry) => entry.count > 0);
-      const details = [
-        `已同步 ${importedByType
-          .map((entry) => `${entry.count} 个 ${getProviderLabel(entry.type)}`)
-          .join("、")} 供应商`,
-        fetchedCount > 0 && refreshedModelCount > 0
-          ? `LiveAgent 获取并激活 ${refreshedModelCount} 个模型`
-          : "LiveAgent API 未返回可用模型",
-        failedCount > 0 ? `${failedCount} 个供应商模型获取失败` : "",
-      ].filter(Boolean);
-      setCherryMessage(details.join("，"));
-      setCherryImportType(null);
-    } finally {
-      setCherryImporting(false);
-    }
-  }
-
   function openAdd() {
     setEditingProvider(null);
     setModalOpen(true);
@@ -1934,17 +1516,9 @@ export function ProvidersSection(props: SettingsSectionProps) {
                 ccsLoading={ccsLoading}
                 ccsImporting={ccsImporting}
                 ccsMessage={ccsMessage}
-                cherryProviders={cherryProviders}
-                cherryLoading={cherryLoading}
-                cherryImporting={cherryImporting}
-                cherryMessage={cherryMessage}
-                cherryDataPath={cherryDataPath}
-                onEnsureThirdPartyScan={ensureThirdPartyScan}
-                onRefreshThirdPartyProviders={() => void refreshThirdPartyProviders()}
+                onEnsureCcsScan={ensureCcsScan}
+                onRefreshCcsProviders={() => void refreshCcsProviders()}
                 onOpenCcsImport={() => setCcsImportType(tab)}
-                onOpenCherryImport={() => setCherryImportType(tab)}
-                onChooseCherryDataDirectory={() => void chooseCherryDataDirectory()}
-                onResetCherryDataDirectory={resetCherryDataDirectory}
               />
             </div>
           ))}
@@ -1967,18 +1541,6 @@ export function ProvidersSection(props: SettingsSectionProps) {
           importing={ccsImporting}
           onImport={importCcsProviders}
           onClose={() => setCcsImportType(null)}
-        />
-      ) : null}
-      {cherryImportType && cherryProviders ? (
-        <CherryStudioImportModal
-          providerType={cherryImportType}
-          response={cherryProviders}
-          importing={cherryImporting}
-          isExisting={(item) =>
-            settings.customProviders.some((provider) => provider.id === cherryProviderId(item))
-          }
-          onConfirm={(items) => void importCherryProviders(items)}
-          onClose={() => setCherryImportType(null)}
         />
       ) : null}
       {customSettingsOpen ? (

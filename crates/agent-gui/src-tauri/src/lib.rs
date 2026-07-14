@@ -114,8 +114,6 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_load_all,
             commands::settings::settings_save_providers,
             commands::settings::settings_list_ccswitch_providers,
-            commands::settings::settings_list_cherry_studio_providers,
-            commands::settings::settings_list_cherry_studio_providers_from_path,
             commands::settings::settings_save_system,
             commands::settings::settings_save_mcp,
             commands::settings::settings_save_agents,

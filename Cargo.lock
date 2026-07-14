@@ -870,15 +870,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crc32c"
-version = "0.6.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a47af21622d091a8f0fb295b88bc886ac74efcc613efc19f5d0b21de5c89e47"
-dependencies = [
- "rustc_version",
-]
-
-[[package]]
 name = "crc32fast"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2776,12 +2767,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "integer-encoding"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14c00403deb17c3221a1fe4fb571b9ed0370b3dcd116553c77fa294a3d918699"
-
-[[package]]
 name = "internal-russh-num-bigint"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3073,17 +3058,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
-name = "leveldb-core"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cad243539ed0c8177fda730a6654e6e2e1b5542102c6d69e9aae733881a631e2"
-dependencies = [
- "crc32c",
- "integer-encoding",
- "snap",
-]
-
-[[package]]
 name = "libappindicator"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3185,7 +3159,6 @@ dependencies = [
  "futures-util",
  "globset",
  "ignore",
- "leveldb-core",
  "lopdf",
  "notify",
  "objc2-app-kit 0.3.2",
@@ -5835,12 +5808,6 @@ name = "smallvec"
 version = "1.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
-
-[[package]]
-name = "snap"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b6b67fb9a61334225b5b790716f609cd58395f895b3fe8b328786812a40bc3b"
 
 [[package]]
 name = "socket2"
