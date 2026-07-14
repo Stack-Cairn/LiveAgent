@@ -817,6 +817,12 @@ function cherryProviderName(item: CherryProviderImportItem, allItems: CherryProv
   return `${item.name.trim()}（Cherry Studio · ${sourceId}）`;
 }
 
+// Re-syncing an existing provider must not silently revert an API key the
+// user already configured in LiveAgent; like `name`, the existing key wins.
+function cherryEffectiveApiKey(item: CherryProviderImportItem, existing?: CustomProvider) {
+  return existing?.apiKey?.trim() ? existing.apiKey : item.apiKey;
+}
+
 function providerFromCherry(
   item: CherryProviderImportItem,
   allItems: CherryProviderImportItem[],
@@ -824,14 +830,15 @@ function providerFromCherry(
 ): CustomProvider {
   const providerType = item.providerType;
   const models = existing?.models ?? [];
+  const apiKey = cherryEffectiveApiKey(item, existing);
   return {
     ...(existing ?? {}),
     id: cherryProviderId(item),
     name: existing?.name ?? cherryProviderName(item, allItems),
     type: providerType,
     baseUrl: item.baseUrl,
-    apiKey: item.apiKey,
-    apiKeyConfigured: item.apiKey.trim().length > 0,
+    apiKey,
+    apiKeyConfigured: apiKey.trim().length > 0,
     models,
     activeModels: existing?.activeModels ?? [],
     requestFormat:
@@ -1738,6 +1745,9 @@ export function ProvidersSection(props: SettingsSectionProps) {
     setCherryMessage("正在同步供应商、获取并激活全部模型…");
 
     const allItems = cherryProviders?.providers ?? importable;
+    const existingById = new Map(
+      settings.customProviders.map((provider) => [provider.id, provider] as const),
+    );
 
     try {
       setSettings((prev) => {
@@ -1768,7 +1778,7 @@ export function ProvidersSection(props: SettingsSectionProps) {
             const fetchedModels = await fetchModelsFromApi(
               item.providerType,
               item.baseUrl,
-              item.apiKey,
+              cherryEffectiveApiKey(item, existingById.get(identity)),
             );
             const models = fetchedModels.filter((model) => isLikelyCherryChatModel(model.id));
             return { identity, models, fetched: true, failed: false };
@@ -1783,9 +1793,22 @@ export function ProvidersSection(props: SettingsSectionProps) {
         }),
       );
 
-      const resultsByIdentity = new Map(
-        modelResults.map((result) => [result.identity, result] as const),
-      );
+      // Two selected items can normalize to the same provider id; merge their
+      // results instead of letting the last one win.
+      const resultsByIdentity = new Map<string, (typeof modelResults)[number]>();
+      for (const result of modelResults) {
+        const merged = resultsByIdentity.get(result.identity);
+        if (!merged) {
+          resultsByIdentity.set(result.identity, result);
+          continue;
+        }
+        resultsByIdentity.set(result.identity, {
+          identity: result.identity,
+          models: mergeFetchedModels(result.models, merged.models),
+          fetched: merged.fetched || result.fetched,
+          failed: merged.failed || result.failed,
+        });
+      }
       setSettings((prev) => {
         let changed = false;
         const providers = prev.customProviders.map((provider) => {
