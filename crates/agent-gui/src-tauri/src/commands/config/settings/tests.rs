@@ -1077,4 +1077,58 @@ mod tests {
         );
     }
 
+    #[test]
+    fn expand_home_prefix_supports_bare_tilde() {
+        let home = dirs::home_dir().expect("home dir available in tests");
+        assert_eq!(expand_home_prefix("~"), home);
+    }
+
+    #[test]
+    fn expand_home_prefix_supports_forward_slash() {
+        let home = dirs::home_dir().expect("home dir available in tests");
+        assert_eq!(
+            expand_home_prefix("~/OneDrive/ccswitch"),
+            home.join("OneDrive/ccswitch")
+        );
+    }
+
+    #[test]
+    fn expand_home_prefix_supports_windows_backslash() {
+        let home = dirs::home_dir().expect("home dir available in tests");
+        assert_eq!(
+            expand_home_prefix("~\\OneDrive\\ccswitch"),
+            home.join("OneDrive\\ccswitch")
+        );
+    }
+
+    #[test]
+    fn expand_home_prefix_passes_through_absolute_paths() {
+        assert_eq!(
+            expand_home_prefix("/data/ccswitch"),
+            PathBuf::from("/data/ccswitch")
+        );
+        assert_eq!(
+            expand_home_prefix("C:\\Users\\Alice\\ccswitch"),
+            PathBuf::from("C:\\Users\\Alice\\ccswitch")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ccswitch_db_candidates_include_home_env_fallback_on_windows() {
+        // 候选列表必须覆盖 ccswitch v3.10.3 在 `%HOME%\.cc-switch\` 的遗留库位置。
+        let previous = std::env::var("HOME").ok();
+        std::env::set_var("HOME", "C:\\legacy-home");
+        let candidates = ccswitch_db_candidates();
+        match previous {
+            Some(value) => std::env::set_var("HOME", value),
+            None => std::env::remove_var("HOME"),
+        }
+
+        let expected = PathBuf::from("C:\\legacy-home")
+            .join(".cc-switch")
+            .join("cc-switch.db");
+        assert!(candidates.contains(&expected));
+    }
+
 }

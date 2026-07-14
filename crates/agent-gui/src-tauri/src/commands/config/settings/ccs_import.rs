@@ -59,6 +59,21 @@ fn ccswitch_db_candidates() -> Vec<PathBuf> {
         candidates.push(override_dir.join(&filename));
     }
     candidates.push(ccswitch_legacy_config_dir().join(&filename));
+    // Windows 上 `HOME` 可能被 Git/MSYS 等注入且不等于真实用户目录，ccswitch
+    // v3.10.3 曾据此把数据库写到 `%HOME%\.cc-switch\`，上游至今保留该位置作读取
+    // 兜底（见其 config.rs get_app_config_dir），这里同样纳入候选。
+    #[cfg(windows)]
+    if let Ok(home_env) = std::env::var("HOME") {
+        let trimmed = home_env.trim();
+        if !trimmed.is_empty() {
+            let legacy = PathBuf::from(trimmed)
+                .join(format!(".{}-{}", "cc", "switch"))
+                .join(&filename);
+            if !candidates.contains(&legacy) {
+                candidates.push(legacy);
+            }
+        }
+    }
     candidates
 }
 
@@ -81,8 +96,14 @@ fn ccswitch_override_config_dir() -> Option<PathBuf> {
     Some(expand_home_prefix(override_dir))
 }
 
+/// 与上游 ccswitch 的 `resolve_path` 对齐：支持 `~`、`~/`、`~\` 三种写法
+/// （Windows 用户习惯用反斜杠书写迁移路径，ccswitch 自身能解析这些形式）。
 fn expand_home_prefix(path: &str) -> PathBuf {
-    if let Some(rest) = path.strip_prefix("~/") {
+    if path == "~" {
+        if let Some(home) = dirs::home_dir() {
+            return home;
+        }
+    } else if let Some(rest) = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")) {
         if let Some(home) = dirs::home_dir() {
             return home.join(rest);
         }
