@@ -20,7 +20,6 @@
 
 <p align="center">
   <a href="#核心能力">核心能力</a> •
-  <a href="#架构">架构</a> •
   <a href="#快速开始">快速开始</a> •
   <a href="#下载与部署">下载与部署</a> •
   <a href="#faq">FAQ</a> •
@@ -75,52 +74,6 @@ LiveAgent 是一个 **本地优先** 的 AI Agent 桌面客户端。它将大语
 
 ---
 
-## 架构
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                        Browser WebUI                          │
-│              React + Vite + WebSocket + Gateway API           │
-└────────────────────────────┬─────────────────────────────────┘
-                             │ WebSocket / HTTP
-┌────────────────────────────▼─────────────────────────────────┐
-│                       Agent Gateway                           │
-│         Go · gRPC · HTTP · Session Manager · Event Store     │
-│                    (Railway / Docker / 自部署)                 │
-└────────────────────────────┬─────────────────────────────────┘
-                             │ gRPC (双向流)
-┌────────────────────────────▼─────────────────────────────────┐
-│                        Agent GUI                              │
-│                   Tauri 2 · React 19 · Rust                  │
-├──────────┬───────────┬───────────┬───────────┬───────────────┤
-│ 模型协议  │ Agent运行时 │  工具执行   │  Skills   │  Memory/Cron  │
-│ pi-ai    │ 多轮循环   │ FS/Bash/  │  渐进披露  │  SQLite+MD    │
-│ + Codex  │ + SubAgent │ MCP桥接   │  + Hub    │  FTS索引      │
-└──────────┴───────────┴───────────┴───────────┴───────────────┘
-```
-
-### 技术栈
-
-<details>
-<summary><b>展开技术栈明细</b></summary>
-
-| 组件 | 技术 |
-|---|---|
-| **Agent GUI** · 框架 | Tauri 2 + React 19 + TypeScript 6 |
-| **Agent GUI** · 构建 | Vite 8 + pnpm |
-| **Agent GUI** · 样式 | Tailwind CSS 4 + Radix UI |
-| **Agent GUI** · 渲染 | streamdown + KaTeX + Mermaid + Monaco Editor |
-| **Agent GUI** · 后端 | Rust + Tokio + SQLite (rusqlite) + gRPC (tonic) |
-| **Agent GUI** · LLM | @earendil-works/pi-ai · @openai/codex-sdk · claude-agent-sdk |
-| **Gateway** · 语言 | Go 1.25 |
-| **Gateway** · 协议 | gRPC + Protobuf + HTTP + WebSocket |
-| **Gateway** · Web UI | React + Vite + Tailwind CSS(嵌入式) |
-| **Gateway** · 部署 | Docker multi-stage · Railway CI/CD |
-
-</details>
-
----
-
 ## 快速开始
 
 ### 环境要求
@@ -163,17 +116,48 @@ make gateway-docker-smoke
 
 ## 下载与部署
 
-### 桌面应用
+安装包由 GitHub Actions 自动构建、签名并发布,请前往 [**GitHub Releases**](https://github.com/Stack-Cairn/LiveAgent/releases/latest) 获取最新版本。
 
-安装包由 GitHub Actions 自动构建与签发,推送 `v*` 标签或手动 dispatch 触发:
+### 系统要求
 
-| 平台 | 安装包 | 说明 |
+| 平台 | 要求 |
+|---|---|
+| macOS | Intel(x64)与 Apple Silicon(aarch64)双架构 |
+| Windows | x64,需 WebView2 运行时(Windows 11 已内置) |
+| Linux | x86_64,需 WebKitGTK 4.1(Ubuntu 22.04+ / Debian 12+ 等) |
+
+### macOS 用户
+
+从 [Releases](https://github.com/Stack-Cairn/LiveAgent/releases/latest) 下载对应芯片的 DMG,打开后将 LiveAgent 拖入「应用程序」:
+
+- Apple Silicon(M 系列):`LiveAgent-<版本>-macOS-aarch64.dmg`
+- Intel:`LiveAgent-<版本>-macOS-x64.dmg`
+
+> 安装包已签名并通过 Apple 公证,首次启动无需在安全设置中手动放行。
+
+### Windows 用户
+
+从 [Releases](https://github.com/Stack-Cairn/LiveAgent/releases/latest) 按需选择一种安装方式:
+
+| 方式 | 文件 | 适合 |
 |---|---|---|
-| macOS | DMG | Intel + Apple Silicon,签名 + 公证 |
-| Windows | NSIS | 标准安装向导 |
-| Linux | AppImage / DEB / RPM | 覆盖主流发行版 |
+| 安装向导 | `LiveAgent-<版本>-Windows-x64-Setup.exe` | 大多数用户 |
+| MSI 包 | `LiveAgent-<版本>-Windows-x64.msi` | 企业分发 / 静默安装 |
+| 便携版 | `LiveAgent-<版本>-Windows-x64-portable.zip` | 免安装,解压即用 |
 
-### Gateway 服务
+### Linux 用户
+
+从 [Releases](https://github.com/Stack-Cairn/LiveAgent/releases/latest) 按发行版选择:
+
+| 格式 | 适用发行版 | 安装方式 |
+|---|---|---|
+| AppImage | 任意发行版 | `chmod +x` 后直接运行 |
+| DEB | Debian / Ubuntu 系 | `sudo dpkg -i LiveAgent-<版本>-Linux-x86_64.deb` |
+| RPM | Fedora / openSUSE 系 | `sudo rpm -i LiveAgent-<版本>-Linux-x86_64.rpm` |
+
+### 需要远程访问? 部署 Gateway
+
+桌面端开箱即用,不依赖任何服务端。只有想 **在浏览器里远程操控本地 Agent** 时,才需要部署 Gateway:
 
 ```bash
 # Docker 构建(multi-stage,最终镜像 ~30MB)
@@ -185,36 +169,74 @@ docker run -p 8080:8080 -p 50051:50051 \
   liveagent-gateway
 ```
 
-> 已配置 `railway.json`,支持 Railway 一键部署。
+### 开发者从源码构建
 
----
-
-## 内建工具
+参考上方 [快速开始](#快速开始),或展开下方「开发指南」查看完整 Make 命令。
 
 <details>
-<summary><b>展开全部 10 类工具</b></summary>
+<summary><b>架构总览</b> — 架构图与技术栈</summary>
 
-| 分类 | 工具 | 说明 |
-|---|---|---|
-| 文件系统 | `Read` `Write` `Edit` `Delete` | 文件读写与精确替换 |
-| 搜索 | `List` `Glob` `Grep` | 目录遍历、模式匹配、正则搜索 |
-| Shell | `Bash` | 非交互式命令执行,支持 cwd/timeout |
-| 进程 | `ManagedProcess` | 长驻进程管理(dev server 等) |
-| 网络 | `TunnelManager` | 本地服务一键暴露公网 |
-| MCP | 动态工具桥接 | 通过 MCP 协议接入任意 stdio/http 工具 |
-| 系统 | `CronTaskManager` | 定时任务 CRUD |
-| 知识 | `MemoryManager` | 持久化记忆读写搜索 |
-| Skills | `SkillsManager` | 技能包安装/创建/管理 |
-| 委派 | `Agent` | Sub-Agent 并行任务委派 |
+```
+┌──────────────────────────────────────────────────────────────┐
+│                        Browser WebUI                          │
+│              React + Vite + WebSocket + Gateway API           │
+└────────────────────────────┬─────────────────────────────────┘
+                             │ WebSocket / HTTP
+┌────────────────────────────▼─────────────────────────────────┐
+│                       Agent Gateway                           │
+│         Go · gRPC · HTTP · Session Manager · Event Store     │
+│                    (Railway / Docker / 自部署)                 │
+└────────────────────────────┬─────────────────────────────────┘
+                             │ gRPC (双向流)
+┌────────────────────────────▼─────────────────────────────────┐
+│                        Agent GUI                              │
+│                   Tauri 2 · React 19 · Rust                  │
+├──────────┬───────────┬───────────┬───────────┬───────────────┤
+│ 模型协议  │ Agent运行时 │  工具执行   │  Skills   │  Memory/Cron  │
+│ pi-ai    │ 多轮循环   │ FS/Bash/  │  渐进披露  │  SQLite+MD    │
+│ + Codex  │ + SubAgent │ MCP桥接   │  + Hub    │  FTS索引      │
+└──────────┴───────────┴───────────┴───────────┴───────────────┘
+```
+
+**技术栈**
+
+| 组件 | 技术 |
+|---|---|
+| **Agent GUI** · 框架 | Tauri 2 + React 19 + TypeScript 6 |
+| **Agent GUI** · 构建 | Vite 8 + pnpm |
+| **Agent GUI** · 样式 | Tailwind CSS 4 + Radix UI |
+| **Agent GUI** · 渲染 | streamdown + KaTeX + Mermaid + Monaco Editor |
+| **Agent GUI** · 后端 | Rust + Tokio + SQLite (rusqlite) + gRPC (tonic) |
+| **Agent GUI** · LLM | @earendil-works/pi-ai · @openai/codex-sdk · claude-agent-sdk |
+| **Gateway** · 语言 | Go 1.25 |
+| **Gateway** · 协议 | gRPC + Protobuf + HTTP + WebSocket |
+| **Gateway** · Web UI | React + Vite + Tailwind CSS(嵌入式) |
+| **Gateway** · 部署 | Docker multi-stage · Railway CI/CD |
 
 </details>
 
----
+<details>
+<summary><b>开发指南</b> — 常用 Make 命令(完整列表见 <code>make help</code>)</summary>
 
-## 项目结构
+| 命令 | 说明 |
+|---|---|
+| `make dev` | 启动 Tauri 开发环境 |
+| `make build` | 构建桌面应用 |
+| `make dev-gateway` | 启动 Gateway 开发服务 |
+| `make dev-webui` | 启动 WebUI 开发服务 |
+| `make gateway-build` | 构建 Gateway 二进制 |
+| `make gateway-docker-build` | 构建 Docker 镜像 |
+| `make gateway-docker-smoke` | 构建 + 健康检查 |
+| `make desktop-build-macos-release` | macOS 签名发布构建 |
+| `make build-linux` | Linux amd64 网关 |
+| `make build-linux-arm` | Linux arm64 网关 |
+| `make proto` | 重新生成 Protobuf 代码 |
+| `make clean` | 清理构建产物 |
+
+</details>
 
 <details>
-<summary><b>展开目录树</b></summary>
+<summary><b>项目结构</b> — 目录树</summary>
 
 ```
 LiveAgent/
@@ -245,30 +267,6 @@ LiveAgent/
 ├── Makefile                      # 构建命令集
 └── Cargo.toml                    # Rust workspace
 ```
-
-</details>
-
----
-
-## 开发指南
-
-<details>
-<summary><b>展开常用 Make 命令(完整列表见 <code>make help</code>)</b></summary>
-
-| 命令 | 说明 |
-|---|---|
-| `make dev` | 启动 Tauri 开发环境 |
-| `make build` | 构建桌面应用 |
-| `make dev-gateway` | 启动 Gateway 开发服务 |
-| `make dev-webui` | 启动 WebUI 开发服务 |
-| `make gateway-build` | 构建 Gateway 二进制 |
-| `make gateway-docker-build` | 构建 Docker 镜像 |
-| `make gateway-docker-smoke` | 构建 + 健康检查 |
-| `make desktop-build-macos-release` | macOS 签名发布构建 |
-| `make build-linux` | Linux amd64 网关 |
-| `make build-linux-arm` | Linux arm64 网关 |
-| `make proto` | 重新生成 Protobuf 代码 |
-| `make clean` | 清理构建产物 |
 
 </details>
 
@@ -308,10 +306,7 @@ LiveAgent/
 
 ## 文档
 
-<details>
-<summary><b>展开文档索引</b></summary>
-
-| 文档 | 说明 |
+| 文档列表 | 描述 |
 |---|---|
 | [架构总览](docs/architecture/overview.md) | 系统分层、进程边界、数据流 |
 | [GUI 架构](docs/architecture/gui.md) | 桌面客户端内部设计 |
@@ -325,8 +320,6 @@ LiveAgent/
 | [历史压缩](docs/features/history-compaction.md) | 长对话上下文管理 |
 | [部署运维](docs/operations/deployment.md) | Docker、自部署、桌面发布 |
 | [开发指南](docs/operations/development.md) | 本地开发环境搭建 |
-
-</details>
 
 ---
 
