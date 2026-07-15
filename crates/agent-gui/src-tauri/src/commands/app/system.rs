@@ -1,12 +1,17 @@
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use regex::Regex;
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fs;
-use std::io::{BufReader, Read, Write};
+use std::collections::HashMap;
+use std::fs::{self, TryLockError};
+use std::io::{BufReader, Read, Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, LazyLock, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 use crate::runtime::platform::expand_tilde_path;
 use crate::services::power_activity::PowerActivityManager;
@@ -17,6 +22,107 @@ pub use crate::services::skills::{
 
 const UPLOADED_IMAGE_PREVIEW_MAX_BYTES: usize = 5 * 1024 * 1024; // 5MB
 const UPLOADED_NATIVE_ATTACHMENT_MAX_BYTES: u64 = 25 * 1024 * 1024; // 25MB
+pub(crate) const DEBUG_SANITIZER_VERSION: u32 = 3;
+const LEGACY_DEBUG_DIR_NAME: &str = "debug";
+const MAX_DEBUG_LOG_ENTRY_BYTES: usize = 1024 * 1024;
+const MAX_DEBUG_LOG_FILE_BYTES: u64 = 10 * 1024 * 1024;
+const MAX_DEBUG_LOG_DIRECTORY_BYTES: u64 = 100 * 1024 * 1024;
+const MAX_DEBUG_LOG_DIRECTORY_FILES: usize = 128;
+const UNLEASED_DEBUG_LOG_GRACE: Duration = Duration::from_secs(10 * 60);
+const MAX_DEBUG_VALUE_DEPTH: usize = 64;
+const LEGACY_DEBUG_WARNING_MARKER: &str = "SECURITY-WARNING-legacy-debug-cleanup.txt";
+const DEBUG_LOG_QUOTA_LOCK_FILE: &str = ".quota.lock";
+const DEBUG_PROCESS_LEASE_PREFIX: &str = ".lease.";
+const REDACTED_DEBUG_CREDENTIAL: &str = "[redacted credential]";
+const REDACTED_DEBUG_CREDENTIAL_TEXT: &str = "[redacted credential-bearing text]";
+const REDACTED_NESTED_DEBUG_VALUE: &str = "[redacted deeply nested debug value]";
+static DEBUG_LOGS_PREPARED: Mutex<bool> = Mutex::new(false);
+static DEBUG_PROCESS_LEASE: Mutex<Option<fs::File>> = Mutex::new(None);
+static DEBUG_LOG_WRITE_LOCK: Mutex<()> = Mutex::new(());
+static DEBUG_PROCESS_FILE_SUFFIX: LazyLock<String> =
+    LazyLock::new(|| format!("{}-{}", std::process::id(), Uuid::new_v4()));
+static DEBUG_CREDENTIAL_ASSIGNMENT_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)["']?([a-z][a-z0-9_.-]*)["']?\s*[:=]"#)
+        .expect("debug credential assignment regex must compile")
+});
+static DEBUG_HEADER_PAIR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"(?i)["']([a-z][a-z0-9_.-]*)["']\s*,"#)
+        .expect("debug header pair regex must compile")
+});
+static DEBUG_PRIVATE_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----")
+        .expect("debug private key regex must compile")
+});
+static DEBUG_AUTH_SCHEME_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)(?:^|[\s:,])bearer\s+[^\s,;]+").expect("debug auth scheme regex must compile")
+});
+static DEBUG_URL_USERINFO_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\b[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]+@")
+        .expect("debug URL userinfo regex must compile")
+});
+static DEBUG_DATA_URL_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)^\s*data:[^,;]*;base64,").expect("debug data URL regex must compile")
+});
+static DEBUG_LOG_FILE_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?i)^.+\.([0-9]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$",
+    )
+    .expect("debug log filename regex must compile")
+});
+
+#[derive(Debug, Clone, Copy)]
+struct DebugLogDirectoryLimits {
+    max_bytes: u64,
+    max_files: usize,
+    unleased_grace: Duration,
+}
+
+impl DebugLogDirectoryLimits {
+    const PRODUCTION: Self = Self {
+        max_bytes: MAX_DEBUG_LOG_DIRECTORY_BYTES,
+        max_files: MAX_DEBUG_LOG_DIRECTORY_FILES,
+        unleased_grace: UNLEASED_DEBUG_LOG_GRACE,
+    };
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct DebugLogPreparationReport {
+    pub(crate) legacy_cleanup_warning: Option<String>,
+    pub(crate) maintenance_warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DebugProcessLeaseStatus {
+    Active,
+    Stale,
+    Unknown,
+}
+
+#[derive(Debug)]
+struct DebugLogPruneCandidate {
+    path: PathBuf,
+    file_name: String,
+    size_bytes: u64,
+    modified: SystemTime,
+}
+
+#[derive(Debug, Default)]
+struct DebugLogInventory {
+    total_bytes: u64,
+    total_files: usize,
+    prune_candidates: Vec<DebugLogPruneCandidate>,
+    stale_lease_paths: Vec<PathBuf>,
+    target_size_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DebugAppendPlan {
+    existing_bytes: u64,
+    final_bytes: u64,
+    needs_separator: bool,
+    truncate: bool,
+    existed: bool,
+}
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -87,10 +193,162 @@ fn app_storage_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-fn debug_root_dir() -> Result<PathBuf, String> {
-    let dir = app_storage_dir()?.join("debug");
+fn legacy_debug_root_dir(storage_dir: &Path) -> PathBuf {
+    storage_dir.join(LEGACY_DEBUG_DIR_NAME)
+}
+
+fn current_debug_root_dir_in(storage_dir: &Path) -> Result<PathBuf, String> {
+    let dir = storage_dir.join(format!("debug-v{DEBUG_SANITIZER_VERSION}"));
     fs::create_dir_all(&dir).map_err(|e| format!("创建 debug 目录失败：{e}"))?;
+    let metadata = fs::symlink_metadata(&dir)
+        .map_err(|e| format!("检查 debug 目录 {} 失败：{e}", dir.display()))?;
+    if !metadata.file_type().is_dir() {
+        return Err(format!(
+            "debug 路径必须是真实目录，不能是文件或符号链接：{}",
+            dir.display()
+        ));
+    }
+    #[cfg(unix)]
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))
+        .map_err(|e| format!("收紧 debug 目录权限 {} 失败：{e}", dir.display()))?;
     Ok(dir)
+}
+
+fn current_debug_root_dir() -> Result<PathBuf, String> {
+    current_debug_root_dir_in(&app_storage_dir()?)
+}
+
+fn set_private_file_permissions(file: &fs::File, path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    file.set_permissions(fs::Permissions::from_mode(0o600))
+        .map_err(|error| format!("收紧文件权限 {} 失败：{error}", path.display()))?;
+    Ok(())
+}
+
+fn open_or_create_private_control_file(path: &Path) -> Result<fs::File, String> {
+    loop {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if !metadata.file_type().is_file() => {
+                return Err(format!(
+                    "debug 控制路径必须是真实文件，不能是目录或符号链接：{}",
+                    path.display()
+                ));
+            }
+            Ok(_) => {
+                let file = fs::OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(path)
+                    .map_err(|error| {
+                        format!("打开 debug 控制文件 {} 失败：{error}", path.display())
+                    })?;
+                set_private_file_permissions(&file, path)?;
+                return Ok(file);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let mut options = fs::OpenOptions::new();
+                options.read(true).write(true).create_new(true);
+                #[cfg(unix)]
+                options.mode(0o600);
+                match options.open(path) {
+                    Ok(file) => {
+                        set_private_file_permissions(&file, path)?;
+                        return Ok(file);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                    Err(error) => {
+                        return Err(format!(
+                            "创建 debug 控制文件 {} 失败：{error}",
+                            path.display()
+                        ));
+                    }
+                }
+            }
+            Err(error) => {
+                return Err(format!(
+                    "检查 debug 控制文件 {} 失败：{error}",
+                    path.display()
+                ));
+            }
+        }
+    }
+}
+
+fn open_and_lock_debug_quota_file(debug_root: &Path) -> Result<fs::File, String> {
+    let path = debug_root.join(DEBUG_LOG_QUOTA_LOCK_FILE);
+    let file = open_or_create_private_control_file(&path)?;
+    file.lock()
+        .map_err(|error| format!("锁定 debug 目录配额文件 {} 失败：{error}", path.display()))?;
+    Ok(file)
+}
+
+fn validate_debug_process_suffix(process_file_suffix: &str) -> Result<(), String> {
+    let Some((pid, nonce)) = process_file_suffix.split_once('-') else {
+        return Err("非法的 debug 进程标识".to_string());
+    };
+    if pid.is_empty()
+        || !pid.bytes().all(|byte| byte.is_ascii_digit())
+        || Uuid::parse_str(nonce).is_err()
+    {
+        return Err("非法的 debug 进程标识".to_string());
+    }
+    Ok(())
+}
+
+fn debug_process_lease_path(debug_root: &Path, process_file_suffix: &str) -> PathBuf {
+    debug_root.join(format!("{DEBUG_PROCESS_LEASE_PREFIX}{process_file_suffix}"))
+}
+
+fn acquire_debug_process_lease(
+    debug_root: &Path,
+    process_file_suffix: &str,
+) -> Result<fs::File, String> {
+    validate_debug_process_suffix(process_file_suffix)?;
+    let path = debug_process_lease_path(debug_root, process_file_suffix);
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let file = options
+        .open(&path)
+        .map_err(|error| format!("创建 debug 进程 lease {} 失败：{error}", path.display()))?;
+    set_private_file_permissions(&file, &path)?;
+    file.lock()
+        .map_err(|error| format!("锁定 debug 进程 lease {} 失败：{error}", path.display()))?;
+    Ok(file)
+}
+
+fn write_legacy_debug_warning_marker(storage_dir: &Path, warning: &str) -> Result<(), String> {
+    let path = storage_dir.join(LEGACY_DEBUG_WARNING_MARKER);
+    let mut file = open_or_create_private_control_file(&path)?;
+    file.set_len(0)
+        .map_err(|error| format!("清空安全警告 marker {} 失败：{error}", path.display()))?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|error| format!("定位安全警告 marker {} 失败：{error}", path.display()))?;
+    file.write_all(warning.as_bytes())
+        .and_then(|_| file.write_all(b"\n"))
+        .map_err(|error| format!("写入安全警告 marker {} 失败：{error}", path.display()))?;
+    file.flush()
+        .map_err(|error| format!("刷新安全警告 marker {} 失败：{error}", path.display()))?;
+    set_private_file_permissions(&file, &path)?;
+    Ok(())
+}
+
+fn remove_legacy_debug_warning_marker(storage_dir: &Path) -> Result<(), String> {
+    let path = storage_dir.join(LEGACY_DEBUG_WARNING_MARKER);
+    match fs::symlink_metadata(&path) {
+        Ok(metadata) if !metadata.file_type().is_file() => Err(format!(
+            "安全警告 marker 必须是真实文件，不能是目录或符号链接：{}",
+            path.display()
+        )),
+        Ok(_) => fs::remove_file(&path)
+            .map_err(|error| format!("删除安全警告 marker {} 失败：{error}", path.display())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "检查安全警告 marker {} 失败：{error}",
+            path.display()
+        )),
+    }
 }
 
 fn sanitize_debug_file_stem(input: &str) -> Result<String, String> {
@@ -942,18 +1200,883 @@ pub(crate) fn system_read_skill_text_sync(
     crate::services::skills::system_read_skill_text_sync(path, offset, length)
 }
 
-fn system_append_debug_jsonl_sync(conversation_id: String, entry: Value) -> Result<(), String> {
-    let file_stem = sanitize_debug_file_stem(&conversation_id)?;
-    let debug_path = debug_root_dir()?.join(format!("{file_stem}.jsonl"));
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&debug_path)
+fn remove_legacy_debug_logs_in_with<F>(dir: &Path, mut remove_file: F) -> Result<(), String>
+where
+    F: FnMut(&Path) -> std::io::Result<()>,
+{
+    match fs::symlink_metadata(dir) {
+        Ok(metadata) if !metadata.file_type().is_dir() => {
+            return Err(format!(
+                "旧版 debug 路径必须是真实目录，不能是文件或符号链接：{}",
+                dir.display()
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "检查旧版 debug 目录 {} 失败：{error}",
+                dir.display()
+            ));
+        }
+    }
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(error) => {
+            return Err(format!(
+                "读取旧版 debug 目录 {} 失败：{error}",
+                dir.display()
+            ))
+        }
+    };
+    let mut errors = Vec::new();
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                errors.push(format!("读取目录项失败：{error}"));
+                continue;
+            }
+        };
+        let path = entry.path();
+        let is_jsonl = path.extension().and_then(|value| value.to_str()) == Some("jsonl");
+        if !is_jsonl {
+            continue;
+        }
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(error) => {
+                errors.push(format!("读取 {} 的文件类型失败：{error}", path.display()));
+                continue;
+            }
+        };
+        if !file_type.is_file() {
+            continue;
+        }
+        if let Err(error) = remove_file(&path) {
+            errors.push(format!("删除 {} 失败：{error}", path.display()));
+        }
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("清理旧版 debug 日志失败：{}", errors.join("；")))
+    }
+}
+
+#[cfg(test)]
+fn remove_legacy_debug_logs_in(dir: &Path) -> Result<(), String> {
+    remove_legacy_debug_logs_in_with(dir, |path| fs::remove_file(path))
+}
+
+fn prepare_debug_logs_in_with<F>(
+    storage_dir: &Path,
+    process_file_suffix: &str,
+    limits: DebugLogDirectoryLimits,
+    now: SystemTime,
+    remove_file: F,
+) -> Result<(DebugLogPreparationReport, fs::File), String>
+where
+    F: FnMut(&Path) -> std::io::Result<()>,
+{
+    let debug_root = current_debug_root_dir_in(storage_dir)?;
+    let process_lease = acquire_debug_process_lease(&debug_root, process_file_suffix)?;
+    let _quota_guard = open_and_lock_debug_quota_file(&debug_root)?;
+    let mut report = DebugLogPreparationReport::default();
+    let legacy_root = legacy_debug_root_dir(storage_dir);
+
+    match remove_legacy_debug_logs_in_with(&legacy_root, remove_file) {
+        Ok(()) => {
+            if let Err(error) = remove_legacy_debug_warning_marker(storage_dir) {
+                report.maintenance_warnings.push(error);
+            }
+        }
+        Err(error) => {
+            let mut warning = format!(
+                "旧版 debug 日志清理失败；{} 中的 JSONL 可能仍包含凭据，请退出 LiveAgent 后手动删除。详情：{error}",
+                legacy_root.display()
+            );
+            if let Err(marker_error) = write_legacy_debug_warning_marker(storage_dir, &warning) {
+                warning.push_str(&format!("；安全警告 marker 写入失败：{marker_error}"));
+            }
+            report.legacy_cleanup_warning = Some(warning);
+        }
+    }
+
+    if let Err(error) =
+        prune_debug_logs_to_limits_locked(&debug_root, process_file_suffix, None, limits, now)
+    {
+        report
+            .maintenance_warnings
+            .push(format!("启动时收敛 debug 目录配额失败：{error}"));
+    }
+
+    Ok((report, process_lease))
+}
+
+fn prepare_debug_logs_in(
+    storage_dir: &Path,
+    process_file_suffix: &str,
+) -> Result<(DebugLogPreparationReport, fs::File), String> {
+    prepare_debug_logs_in_with(
+        storage_dir,
+        process_file_suffix,
+        DebugLogDirectoryLimits::PRODUCTION,
+        SystemTime::now(),
+        |path| fs::remove_file(path),
+    )
+}
+
+pub(crate) fn prepare_debug_logs_on_startup() -> Result<DebugLogPreparationReport, String> {
+    let mut prepared = DEBUG_LOGS_PREPARED
+        .lock()
+        .map_err(|_| "debug sanitizer state lock poisoned".to_string())?;
+    if *prepared {
+        return Ok(DebugLogPreparationReport::default());
+    }
+
+    let (report, process_lease) =
+        prepare_debug_logs_in(&app_storage_dir()?, &DEBUG_PROCESS_FILE_SUFFIX)?;
+    let mut stored_lease = DEBUG_PROCESS_LEASE
+        .lock()
+        .map_err(|_| "debug process lease state lock poisoned".to_string())?;
+    *stored_lease = Some(process_lease);
+    *prepared = true;
+    Ok(report)
+}
+
+fn normalize_debug_key(key: &str) -> String {
+    key.chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+fn is_sensitive_debug_key(key: &str) -> bool {
+    let normalized = normalize_debug_key(key);
+    if matches!(
+        normalized.as_str(),
+        "hasapikey"
+            | "inputtoken"
+            | "outputtoken"
+            | "maxtoken"
+            | "totaltoken"
+            | "contexttoken"
+            | "prompttoken"
+            | "completiontoken"
+    ) {
+        return false;
+    }
+    matches!(
+        normalized.as_str(),
+        "apikey"
+            | "apikeys"
+            | "authorization"
+            | "authorizationheader"
+            | "proxyauthorization"
+            | "xapikey"
+            | "xgoogapikey"
+            | "xliveagentproxytoken"
+            | "cookie"
+            | "cookies"
+            | "cookieheader"
+            | "setcookie"
+            | "token"
+            | "auth"
+            | "authentication"
+            | "apikeyheader"
+            | "authtoken"
+            | "bearertoken"
+            | "accesstoken"
+            | "refreshtoken"
+            | "idtoken"
+            | "sessiontoken"
+            | "securitytoken"
+            | "personalaccesstoken"
+            | "secret"
+            | "secrets"
+            | "secretkey"
+            | "secretaccesskey"
+            | "awssecretaccesskey"
+            | "accesskeyid"
+            | "awsaccesskeyid"
+            | "key"
+            | "access"
+            | "refresh"
+            | "credential"
+            | "credentials"
+            | "clientsecret"
+            | "privatekey"
+            | "password"
+            | "passwords"
+            | "passwd"
+            | "pwd"
+            | "passphrase"
+            | "subscriptionkey"
+            | "signingkey"
+    ) || [
+        "apikey",
+        "token",
+        "secret",
+        "secretkey",
+        "secretaccesskey",
+        "privatekey",
+        "password",
+        "passwd",
+        "pwd",
+        "passphrase",
+        "cookie",
+        "cookies",
+        "authorization",
+        "auth",
+        "accesskeyid",
+        "credential",
+        "credentials",
+        "secrets",
+        "passwords",
+        "subscriptionkey",
+        "signingkey",
+    ]
+    .iter()
+    .any(|suffix| normalized.ends_with(suffix))
+}
+
+fn plain_debug_string_contains_credentials(value: &str) -> bool {
+    if DEBUG_DATA_URL_RE.is_match(value)
+        || DEBUG_PRIVATE_KEY_RE.is_match(value)
+        || DEBUG_AUTH_SCHEME_RE.is_match(value)
+        || DEBUG_URL_USERINFO_RE.is_match(value)
+    {
+        return true;
+    }
+    DEBUG_CREDENTIAL_ASSIGNMENT_RE
+        .captures_iter(value)
+        .filter_map(|captures| captures.get(1))
+        .any(|name| is_sensitive_debug_key(name.as_str()))
+        || DEBUG_HEADER_PAIR_RE
+            .captures_iter(value)
+            .filter_map(|captures| captures.get(1))
+            .any(|name| is_sensitive_debug_key(name.as_str()))
+}
+
+fn is_json_like_debug_string(value: &str) -> bool {
+    let trimmed = value.trim();
+    (trimmed.starts_with('{') && trimmed.ends_with('}'))
+        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+        || (trimmed.starts_with('"') && trimmed.ends_with('"'))
+}
+
+fn json_string_tokens_contain_sensitive_keys(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'"' {
+            index += 1;
+            continue;
+        }
+        let start = index;
+        index += 1;
+        let mut escaped = false;
+        let mut closed = false;
+        while index < bytes.len() {
+            let byte = bytes[index];
+            index += 1;
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                closed = true;
+                break;
+            }
+        }
+        if !closed {
+            return false;
+        }
+        let end = index;
+        while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+            index += 1;
+        }
+        if matches!(bytes.get(index), Some(b':') | Some(b',')) {
+            if let Ok(decoded) = serde_json::from_str::<String>(&value[start..end]) {
+                if is_sensitive_debug_key(&decoded) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn debug_json_value_contains_credentials(value: &Value, depth: usize) -> bool {
+    if depth >= MAX_DEBUG_VALUE_DEPTH && matches!(value, Value::Array(_) | Value::Object(_)) {
+        return true;
+    }
+    match value {
+        Value::String(text) => debug_string_contains_credentials(text, depth + 1),
+        Value::Array(items) => {
+            let is_sensitive_pair = items.len() > 1
+                && items
+                    .first()
+                    .and_then(Value::as_str)
+                    .is_some_and(is_sensitive_debug_key);
+            is_sensitive_pair
+                || items
+                    .iter()
+                    .any(|item| debug_json_value_contains_credentials(item, depth + 1))
+        }
+        Value::Object(object) => {
+            let has_sensitive_name = object.len() > 1
+                && object.iter().any(|(key, child)| {
+                    matches!(
+                        normalize_debug_key(key).as_str(),
+                        "name" | "header" | "headername" | "key"
+                    ) && child.as_str().is_some_and(is_sensitive_debug_key)
+                });
+            has_sensitive_name
+                || object.iter().any(|(key, child)| {
+                    is_sensitive_debug_key(key)
+                        || debug_json_value_contains_credentials(child, depth + 1)
+                })
+        }
+        _ => false,
+    }
+}
+
+fn debug_string_contains_credentials(value: &str, depth: usize) -> bool {
+    if plain_debug_string_contains_credentials(value) {
+        return true;
+    }
+    if !is_json_like_debug_string(value) {
+        return false;
+    }
+    if json_string_tokens_contain_sensitive_keys(value) || depth >= MAX_DEBUG_VALUE_DEPTH {
+        return true;
+    }
+    serde_json::from_str::<Value>(value.trim())
+        .ok()
+        .is_some_and(|parsed| debug_json_value_contains_credentials(&parsed, depth + 1))
+}
+
+fn sanitize_debug_value(value: &mut Value, depth: usize) {
+    if depth >= MAX_DEBUG_VALUE_DEPTH && matches!(value, Value::Array(_) | Value::Object(_)) {
+        *value = Value::String(REDACTED_NESTED_DEBUG_VALUE.to_string());
+        return;
+    }
+    match value {
+        Value::String(text) if debug_string_contains_credentials(text, depth) => {
+            *text = REDACTED_DEBUG_CREDENTIAL_TEXT.to_string();
+        }
+        Value::Array(items) => {
+            let is_sensitive_pair = items
+                .first()
+                .and_then(Value::as_str)
+                .is_some_and(is_sensitive_debug_key);
+            for (index, item) in items.iter_mut().enumerate() {
+                if is_sensitive_pair && index > 0 {
+                    *item = Value::String(REDACTED_DEBUG_CREDENTIAL.to_string());
+                } else {
+                    sanitize_debug_value(item, depth + 1);
+                }
+            }
+        }
+        Value::Object(object) => {
+            let has_sensitive_name = object.iter().any(|(key, child)| {
+                matches!(
+                    normalize_debug_key(key).as_str(),
+                    "name" | "header" | "headername" | "key"
+                ) && child.as_str().is_some_and(is_sensitive_debug_key)
+            });
+            for (key, child) in object {
+                let normalized_key = normalize_debug_key(key);
+                let is_named_credential_value = has_sensitive_name
+                    && !matches!(
+                        normalized_key.as_str(),
+                        "name" | "header" | "headername" | "key"
+                    );
+                if is_sensitive_debug_key(key) || is_named_credential_value {
+                    *child = Value::String(REDACTED_DEBUG_CREDENTIAL.to_string());
+                } else {
+                    sanitize_debug_value(child, depth + 1);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn sanitize_debug_entry(mut entry: Value) -> Result<Value, String> {
+    if !entry.is_object() {
+        return Err("debug entry must be a JSON object".to_string());
+    }
+    sanitize_debug_value(&mut entry, 0);
+    entry
+        .as_object_mut()
+        .expect("debug entry object checked above")
+        .insert(
+            "sanitizerVersion".to_string(),
+            Value::from(DEBUG_SANITIZER_VERSION),
+        );
+    Ok(entry)
+}
+
+fn validate_debug_entry_capacity(
+    entry_bytes: &[u8],
+    max_entry_bytes: usize,
+    max_file_bytes: u64,
+) -> Result<(), String> {
+    if entry_bytes.len() > max_entry_bytes {
+        return Err(format!(
+            "调试日志单条记录过大（{} bytes，上限 {max_entry_bytes} bytes）",
+            entry_bytes.len()
+        ));
+    }
+    if entry_bytes.len() as u64 > max_file_bytes {
+        return Err("调试日志单条记录超过文件容量上限".to_string());
+    }
+    Ok(())
+}
+
+fn plan_debug_append(
+    path: &Path,
+    entry_bytes: &[u8],
+    max_file_bytes: u64,
+) -> Result<DebugAppendPlan, String> {
+    let (existing_bytes, existed) = match fs::symlink_metadata(path) {
+        Ok(metadata) if !metadata.file_type().is_file() => {
+            return Err(format!(
+                "调试日志路径必须是真实文件，不能是目录或符号链接：{}",
+                path.display()
+            ));
+        }
+        Ok(metadata) => (metadata.len(), true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (0, false),
+        Err(error) => return Err(format!("读取调试日志文件大小失败：{error}")),
+    };
+    let needs_separator = if existing_bytes == 0 || existing_bytes >= max_file_bytes {
+        false
+    } else {
+        let mut existing =
+            fs::File::open(path).map_err(|error| format!("检查调试日志末尾失败：{error}"))?;
+        existing
+            .seek(SeekFrom::End(-1))
+            .map_err(|error| format!("定位调试日志末尾失败：{error}"))?;
+        let mut last_byte = [0u8; 1];
+        existing
+            .read_exact(&mut last_byte)
+            .map_err(|error| format!("读取调试日志末尾失败：{error}"))?;
+        last_byte[0] != b'\n'
+    };
+    let appended_bytes = (entry_bytes.len() as u64)
+        .checked_add(u64::from(needs_separator))
+        .ok_or_else(|| "计算调试日志追加大小溢出".to_string())?;
+    let truncate = existing_bytes > max_file_bytes.saturating_sub(appended_bytes);
+    let final_bytes = if truncate {
+        entry_bytes.len() as u64
+    } else {
+        existing_bytes
+            .checked_add(appended_bytes)
+            .ok_or_else(|| "计算调试日志文件大小溢出".to_string())?
+    };
+    Ok(DebugAppendPlan {
+        existing_bytes,
+        final_bytes,
+        needs_separator,
+        truncate,
+        existed,
+    })
+}
+
+fn write_debug_entry_with_plan(
+    path: &Path,
+    entry_bytes: &[u8],
+    plan: DebugAppendPlan,
+) -> Result<(), String> {
+    let mut options = fs::OpenOptions::new();
+    options.create(true).write(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    if plan.truncate {
+        options.truncate(true);
+    } else {
+        options.append(true);
+    }
+    let mut file = options
+        .open(path)
         .map_err(|e| format!("打开调试日志文件失败：{e}"))?;
-    serde_json::to_writer(&mut file, &entry).map_err(|e| format!("序列化调试日志失败：{e}"))?;
-    file.write_all(b"\n")
-        .map_err(|e| format!("写入调试日志换行失败：{e}"))?;
+    set_private_file_permissions(&file, path)?;
+    if plan.needs_separator && !plan.truncate {
+        file.write_all(b"\n")
+            .map_err(|e| format!("修复调试日志行边界失败：{e}"))?;
+    }
+    file.write_all(entry_bytes)
+        .map_err(|e| format!("写入调试日志失败：{e}"))?;
     file.flush().map_err(|e| format!("刷新调试日志失败：{e}"))?;
+    Ok(())
+}
+
+#[cfg(test)]
+fn append_debug_entry_bytes(
+    path: &Path,
+    entry_bytes: &[u8],
+    max_entry_bytes: usize,
+    max_file_bytes: u64,
+) -> Result<(), String> {
+    validate_debug_entry_capacity(entry_bytes, max_entry_bytes, max_file_bytes)?;
+
+    let _write_guard = DEBUG_LOG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "debug log write lock poisoned".to_string())?;
+    let plan = plan_debug_append(path, entry_bytes, max_file_bytes)?;
+    write_debug_entry_with_plan(path, entry_bytes, plan)
+}
+
+fn debug_log_owner_from_file_name(file_name: &str) -> Option<String> {
+    DEBUG_LOG_FILE_NAME_RE
+        .captures(file_name)
+        .and_then(|captures| captures.get(1))
+        .map(|value| value.as_str().to_ascii_lowercase())
+}
+
+fn debug_process_lease_status(
+    lease_path: &Path,
+    process_file_suffix: &str,
+    current_process_file_suffix: &str,
+) -> DebugProcessLeaseStatus {
+    if process_file_suffix.eq_ignore_ascii_case(current_process_file_suffix) {
+        return DebugProcessLeaseStatus::Active;
+    }
+    let metadata = match fs::symlink_metadata(lease_path) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            eprintln!(
+                "debug lease status unknown for {}: {error}",
+                lease_path.display()
+            );
+            return DebugProcessLeaseStatus::Unknown;
+        }
+    };
+    if !metadata.file_type().is_file() {
+        return DebugProcessLeaseStatus::Unknown;
+    }
+    let file = match fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(lease_path)
+    {
+        Ok(file) => file,
+        Err(error) => {
+            eprintln!(
+                "debug lease status unknown for {}: {error}",
+                lease_path.display()
+            );
+            return DebugProcessLeaseStatus::Unknown;
+        }
+    };
+    match file.try_lock() {
+        Ok(()) => DebugProcessLeaseStatus::Stale,
+        Err(TryLockError::WouldBlock) => DebugProcessLeaseStatus::Active,
+        Err(TryLockError::Error(error)) => {
+            eprintln!(
+                "debug lease status unknown for {}: {error}",
+                lease_path.display()
+            );
+            DebugProcessLeaseStatus::Unknown
+        }
+    }
+}
+
+fn scan_debug_log_inventory(
+    debug_root: &Path,
+    current_process_file_suffix: &str,
+    protected_target: Option<&Path>,
+    unleased_grace: Duration,
+    now: SystemTime,
+) -> Result<DebugLogInventory, String> {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(debug_root)
+        .map_err(|error| format!("读取 debug 目录 {} 失败：{error}", debug_root.display()))?
+    {
+        let entry = entry.map_err(|error| format!("读取 debug 目录项失败：{error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("读取 {} 文件类型失败：{error}", entry.path().display()))?;
+        entries.push((entry.path(), entry.file_name(), file_type));
+    }
+
+    let mut lease_statuses = HashMap::new();
+    let mut stale_lease_paths = Vec::new();
+    for (path, file_name, _) in &entries {
+        let Some(file_name) = file_name.to_str() else {
+            continue;
+        };
+        let Some(process_file_suffix) = file_name.strip_prefix(DEBUG_PROCESS_LEASE_PREFIX) else {
+            continue;
+        };
+        if validate_debug_process_suffix(process_file_suffix).is_err() {
+            continue;
+        }
+        let status =
+            debug_process_lease_status(path, process_file_suffix, current_process_file_suffix);
+        if status == DebugProcessLeaseStatus::Stale {
+            stale_lease_paths.push(path.clone());
+        }
+        lease_statuses.insert(process_file_suffix.to_ascii_lowercase(), status);
+    }
+
+    let mut inventory = DebugLogInventory {
+        stale_lease_paths,
+        ..DebugLogInventory::default()
+    };
+    for (path, file_name, file_type) in entries {
+        if !file_type.is_file()
+            || path.extension().and_then(|value| value.to_str()) != Some("jsonl")
+        {
+            continue;
+        }
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|error| format!("读取 debug 日志元数据 {} 失败：{error}", path.display()))?;
+        if !metadata.file_type().is_file() {
+            continue;
+        }
+        inventory.total_bytes = inventory
+            .total_bytes
+            .checked_add(metadata.len())
+            .ok_or_else(|| "统计 debug 目录大小溢出".to_string())?;
+        inventory.total_files = inventory
+            .total_files
+            .checked_add(1)
+            .ok_or_else(|| "统计 debug 日志文件数溢出".to_string())?;
+        if protected_target.is_some_and(|target| target == path) {
+            inventory.target_size_bytes = Some(metadata.len());
+            continue;
+        }
+
+        let file_name = file_name.to_string_lossy().into_owned();
+        let Some(owner) = debug_log_owner_from_file_name(&file_name) else {
+            continue;
+        };
+        if owner.eq_ignore_ascii_case(current_process_file_suffix) {
+            continue;
+        }
+        let modified = match metadata.modified() {
+            Ok(modified) => modified,
+            Err(error) => {
+                eprintln!(
+                    "debug log modification time unknown for {}: {error}",
+                    path.display()
+                );
+                continue;
+            }
+        };
+        let eligible = match lease_statuses.get(&owner).copied() {
+            Some(DebugProcessLeaseStatus::Stale) => true,
+            Some(DebugProcessLeaseStatus::Active | DebugProcessLeaseStatus::Unknown) => false,
+            None => now
+                .duration_since(modified)
+                .is_ok_and(|age| age >= unleased_grace),
+        };
+        if eligible {
+            inventory.prune_candidates.push(DebugLogPruneCandidate {
+                path,
+                file_name,
+                size_bytes: metadata.len(),
+                modified,
+            });
+        }
+    }
+    inventory.prune_candidates.sort_by(|left, right| {
+        left.modified
+            .cmp(&right.modified)
+            .then_with(|| left.file_name.cmp(&right.file_name))
+    });
+    Ok(inventory)
+}
+
+fn remove_stale_debug_leases(paths: &[PathBuf]) {
+    for path in paths {
+        match fs::remove_file(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => eprintln!(
+                "failed to remove stale debug process lease {}: {error}",
+                path.display()
+            ),
+        }
+    }
+}
+
+fn debug_quota_is_exceeded(
+    total_bytes: u64,
+    total_files: usize,
+    limits: DebugLogDirectoryLimits,
+) -> bool {
+    total_bytes > limits.max_bytes || total_files > limits.max_files
+}
+
+fn prune_debug_logs_to_limits_locked(
+    debug_root: &Path,
+    current_process_file_suffix: &str,
+    pending_append: Option<(&Path, DebugAppendPlan)>,
+    limits: DebugLogDirectoryLimits,
+    now: SystemTime,
+) -> Result<(), String> {
+    let protected_target = pending_append.map(|(path, _)| path);
+    let mut inventory = scan_debug_log_inventory(
+        debug_root,
+        current_process_file_suffix,
+        protected_target,
+        limits.unleased_grace,
+        now,
+    )?;
+    let mut prospective_bytes = inventory.total_bytes;
+    let mut prospective_files = inventory.total_files;
+    if let Some((target, append_plan)) = pending_append {
+        match (append_plan.existed, inventory.target_size_bytes) {
+            (true, Some(accounted_bytes)) if accounted_bytes == append_plan.existing_bytes => {
+                prospective_bytes = prospective_bytes
+                    .checked_sub(accounted_bytes)
+                    .and_then(|value| value.checked_add(append_plan.final_bytes))
+                    .ok_or_else(|| "计算 debug 目录写后大小溢出".to_string())?;
+            }
+            (false, None) => {
+                prospective_bytes = prospective_bytes
+                    .checked_add(append_plan.final_bytes)
+                    .ok_or_else(|| "计算 debug 目录写后大小溢出".to_string())?;
+                prospective_files = prospective_files
+                    .checked_add(1)
+                    .ok_or_else(|| "计算 debug 目录写后文件数溢出".to_string())?;
+            }
+            _ => {
+                return Err(format!(
+                    "debug 目标文件在配额扫描期间发生变化：{}",
+                    target.display()
+                ));
+            }
+        }
+    }
+
+    if debug_quota_is_exceeded(prospective_bytes, prospective_files, limits) {
+        let reclaimable_bytes = inventory
+            .prune_candidates
+            .iter()
+            .try_fold(0u64, |total, candidate| {
+                total.checked_add(candidate.size_bytes)
+            })
+            .ok_or_else(|| "统计可回收 debug 日志大小溢出".to_string())?;
+        let minimum_bytes = prospective_bytes.saturating_sub(reclaimable_bytes);
+        let minimum_files = prospective_files.saturating_sub(inventory.prune_candidates.len());
+        if debug_quota_is_exceeded(minimum_bytes, minimum_files, limits) {
+            remove_stale_debug_leases(&inventory.stale_lease_paths);
+            return Err(format!(
+                "debug 目录配额不足（写后至少 {minimum_bytes} bytes/{minimum_files} files，上限 {} bytes/{} files）；活跃或状态未知的日志受到保护",
+                limits.max_bytes, limits.max_files
+            ));
+        }
+    }
+
+    for candidate in inventory.prune_candidates.drain(..) {
+        if !debug_quota_is_exceeded(prospective_bytes, prospective_files, limits) {
+            break;
+        }
+        match fs::remove_file(&candidate.path) {
+            Ok(()) => {
+                prospective_bytes = prospective_bytes.saturating_sub(candidate.size_bytes);
+                prospective_files = prospective_files.saturating_sub(1);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                prospective_bytes = prospective_bytes.saturating_sub(candidate.size_bytes);
+                prospective_files = prospective_files.saturating_sub(1);
+            }
+            Err(error) => eprintln!(
+                "failed to prune stale debug log {}: {error}",
+                candidate.path.display()
+            ),
+        }
+    }
+    remove_stale_debug_leases(&inventory.stale_lease_paths);
+    if debug_quota_is_exceeded(prospective_bytes, prospective_files, limits) {
+        return Err(format!(
+            "debug 目录配额不足（写后 {prospective_bytes} bytes/{prospective_files} files，上限 {} bytes/{} files）",
+            limits.max_bytes, limits.max_files
+        ));
+    }
+    Ok(())
+}
+
+fn append_debug_entry_bytes_with_quota(
+    debug_root: &Path,
+    path: &Path,
+    process_file_suffix: &str,
+    entry_bytes: &[u8],
+    max_entry_bytes: usize,
+    max_file_bytes: u64,
+    limits: DebugLogDirectoryLimits,
+    now: SystemTime,
+) -> Result<(), String> {
+    validate_debug_entry_capacity(entry_bytes, max_entry_bytes, max_file_bytes)?;
+    let _write_guard = DEBUG_LOG_WRITE_LOCK
+        .lock()
+        .map_err(|_| "debug log write lock poisoned".to_string())?;
+    let _quota_guard = open_and_lock_debug_quota_file(debug_root)?;
+    let append_plan = plan_debug_append(path, entry_bytes, max_file_bytes)?;
+    prune_debug_logs_to_limits_locked(
+        debug_root,
+        process_file_suffix,
+        Some((path, append_plan)),
+        limits,
+        now,
+    )?;
+    write_debug_entry_with_plan(path, entry_bytes, append_plan)
+}
+
+fn persist_debug_entry_in(
+    debug_root: &Path,
+    process_file_suffix: &str,
+    conversation_id: &str,
+    entry: Value,
+    max_entry_bytes: usize,
+    max_file_bytes: u64,
+    limits: DebugLogDirectoryLimits,
+) -> Result<PathBuf, String> {
+    let file_stem = sanitize_debug_file_stem(conversation_id)?;
+    let entry = sanitize_debug_entry(entry)?;
+    let mut entry_bytes =
+        serde_json::to_vec(&entry).map_err(|e| format!("序列化调试日志失败：{e}"))?;
+    entry_bytes.push(b'\n');
+    let debug_path = debug_root.join(format!("{file_stem}.{process_file_suffix}.jsonl"));
+    append_debug_entry_bytes_with_quota(
+        debug_root,
+        &debug_path,
+        process_file_suffix,
+        &entry_bytes,
+        max_entry_bytes,
+        max_file_bytes,
+        limits,
+        SystemTime::now(),
+    )?;
+    Ok(debug_path)
+}
+
+fn system_append_debug_jsonl_sync(conversation_id: String, entry: Value) -> Result<(), String> {
+    let prepared = DEBUG_LOGS_PREPARED
+        .lock()
+        .map_err(|_| "debug sanitizer state lock poisoned".to_string())?;
+    if !*prepared {
+        return Err("debug logs were not safely prepared during startup".to_string());
+    }
+    drop(prepared);
+
+    let debug_root = current_debug_root_dir()?;
+    persist_debug_entry_in(
+        &debug_root,
+        &DEBUG_PROCESS_FILE_SUFFIX,
+        &conversation_id,
+        entry,
+        MAX_DEBUG_LOG_ENTRY_BYTES,
+        MAX_DEBUG_LOG_FILE_BYTES,
+        DebugLogDirectoryLimits::PRODUCTION,
+    )?;
     Ok(())
 }
 
@@ -1260,6 +2383,31 @@ pub fn system_end_power_activity(
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    fn debug_test_process_suffix(pid: u32, nonce: u64) -> String {
+        format!("{pid}-00000000-0000-0000-0000-{nonce:012x}")
+    }
+
+    fn debug_test_limits(
+        max_bytes: u64,
+        max_files: usize,
+        grace_secs: u64,
+    ) -> DebugLogDirectoryLimits {
+        DebugLogDirectoryLimits {
+            max_bytes,
+            max_files,
+            unleased_grace: Duration::from_secs(grace_secs),
+        }
+    }
+
+    fn set_debug_test_modified(path: &Path, modified: SystemTime) {
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .expect("open test log for timestamp update");
+        file.set_times(fs::FileTimes::new().set_modified(modified))
+            .expect("set test log modified time");
+    }
 
     #[test]
     fn sanitize_uploaded_file_name_avoids_windows_reserved_names() {
@@ -1588,4 +2736,519 @@ mod tests {
         );
     }
 
+    #[test]
+    fn legacy_debug_cleanup_is_filename_only_and_skips_current_directory() {
+        let temp = tempdir().expect("create debug temp dir");
+        let legacy_root = legacy_debug_root_dir(temp.path());
+        fs::create_dir(&legacy_root).expect("create legacy debug root");
+        let malformed = legacy_root.join("malformed.jsonl");
+        let oversized = legacy_root.join("oversized.jsonl");
+        let unrelated = legacy_root.join("notes.txt");
+        let jsonl_directory = legacy_root.join("nested.jsonl");
+        fs::write(&malformed, br#"{"apiKey":"truncated"#).expect("write malformed legacy log");
+        fs::write(
+            &oversized,
+            vec![b'x'; MAX_DEBUG_LOG_FILE_BYTES as usize + 1],
+        )
+        .expect("write oversized legacy log");
+        fs::write(&unrelated, "keep").expect("write unrelated file");
+        fs::create_dir(&jsonl_directory).expect("create jsonl-named directory");
+
+        let current_root = current_debug_root_dir_in(temp.path()).expect("create current root");
+        let current = current_root.join("current.1-nonce.jsonl");
+        fs::write(&current, b"{truncated current tail").expect("write current log");
+
+        remove_legacy_debug_logs_in(&legacy_root).expect("remove legacy logs without parsing");
+
+        assert!(!malformed.exists(), "malformed legacy log must be removed");
+        assert!(!oversized.exists(), "oversized legacy log must be removed");
+        assert!(
+            current.exists(),
+            "current log directory must not be scanned"
+        );
+        assert!(
+            unrelated.exists(),
+            "unrelated debug artifact must be retained"
+        );
+        assert!(
+            jsonl_directory.exists(),
+            "directories must never be removed"
+        );
+        assert_ne!(
+            legacy_root, current_root,
+            "log generations must be isolated"
+        );
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&current_root)
+                .expect("current root metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700,
+            "current debug directory must be private"
+        );
+    }
+
+    #[test]
+    fn legacy_debug_cleanup_aggregates_all_removal_failures() {
+        let temp = tempdir().expect("create debug temp dir");
+        let first = temp.path().join("first.jsonl");
+        let second = temp.path().join("second.jsonl");
+        fs::write(&first, "first").expect("write first legacy log");
+        fs::write(&second, "second").expect("write second legacy log");
+        let mut attempts = Vec::new();
+
+        let error = remove_legacy_debug_logs_in_with(temp.path(), |path| {
+            attempts.push(path.to_path_buf());
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("cannot remove {}", path.display()),
+            ))
+        })
+        .expect_err("all cleanup failures must be reported");
+
+        assert_eq!(attempts.len(), 2, "cleanup must continue after a failure");
+        assert!(error.contains("first.jsonl"), "error = {error}");
+        assert!(error.contains("second.jsonl"), "error = {error}");
+    }
+
+    #[test]
+    fn legacy_debug_cleanup_failure_is_reported_and_marker_is_reconciled() {
+        let temp = tempdir().expect("create debug temp dir");
+        let legacy_root = legacy_debug_root_dir(temp.path());
+        fs::create_dir(&legacy_root).expect("create legacy debug root");
+        let legacy_log = legacy_root.join("credentials.jsonl");
+        fs::write(&legacy_log, r#"{"apiKey":"legacy-secret"}"#).expect("write legacy debug log");
+        let now = UNIX_EPOCH + Duration::from_secs(10_000);
+
+        let (failed_report, failed_lease) = prepare_debug_logs_in_with(
+            temp.path(),
+            &debug_test_process_suffix(4101, 1),
+            debug_test_limits(1024, 8, 60),
+            now,
+            |_path| {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "injected removal failure",
+                ))
+            },
+        )
+        .expect("legacy cleanup failure must not fail current debug preparation");
+        let warning = failed_report
+            .legacy_cleanup_warning
+            .expect("security warning must be returned");
+        assert!(warning.contains("可能仍包含凭据"), "warning = {warning}");
+        assert!(legacy_log.exists(), "failed legacy log must remain");
+        let marker = temp.path().join(LEGACY_DEBUG_WARNING_MARKER);
+        let marker_text = fs::read_to_string(&marker).expect("read warning marker");
+        assert!(marker_text.contains("可能仍包含凭据"));
+        assert!(!marker_text.contains("legacy-secret"));
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&marker)
+                .expect("warning marker metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600,
+            "warning marker must be private"
+        );
+        drop(failed_lease);
+
+        let (success_report, success_lease) = prepare_debug_logs_in_with(
+            temp.path(),
+            &debug_test_process_suffix(4102, 2),
+            debug_test_limits(1024, 8, 60),
+            now,
+            |path| fs::remove_file(path),
+        )
+        .expect("subsequent cleanup should succeed");
+        assert!(success_report.legacy_cleanup_warning.is_none());
+        assert!(!legacy_log.exists(), "legacy log must be removed on retry");
+        assert!(
+            !marker.exists(),
+            "successful retry must remove warning marker"
+        );
+        drop(success_lease);
+    }
+
+    #[test]
+    fn current_debug_path_and_process_lease_failures_remain_fatal() {
+        let path_failure = tempdir().expect("create current path temp dir");
+        let current_root = path_failure
+            .path()
+            .join(format!("debug-v{DEBUG_SANITIZER_VERSION}"));
+        fs::write(&current_root, "not a directory").expect("write conflicting current path");
+        let error = prepare_debug_logs_in_with(
+            path_failure.path(),
+            &debug_test_process_suffix(4201, 1),
+            debug_test_limits(1024, 8, 0),
+            SystemTime::now(),
+            |path| fs::remove_file(path),
+        )
+        .expect_err("unsafe current debug path must remain fatal");
+        assert!(error.contains("真实目录"), "error = {error}");
+
+        let lease_failure = tempdir().expect("create lease temp dir");
+        let debug_root =
+            current_debug_root_dir_in(lease_failure.path()).expect("create current debug root");
+        let suffix = debug_test_process_suffix(4202, 2);
+        fs::write(debug_process_lease_path(&debug_root, &suffix), "collision")
+            .expect("precreate conflicting lease");
+        let error = prepare_debug_logs_in_with(
+            lease_failure.path(),
+            &suffix,
+            debug_test_limits(1024, 8, 0),
+            SystemTime::now(),
+            |path| fs::remove_file(path),
+        )
+        .expect_err("lease acquisition failure must remain fatal");
+        assert!(error.contains("lease"), "error = {error}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn debug_log_directories_reject_symlink_traversal() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempdir().expect("create debug temp dir");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&outside).expect("create outside directory");
+        let outside_log = outside.join("keep.jsonl");
+        fs::write(&outside_log, "must survive").expect("write outside log");
+
+        let legacy_link = legacy_debug_root_dir(temp.path());
+        symlink(&outside, &legacy_link).expect("create legacy directory symlink");
+        let legacy_error = remove_legacy_debug_logs_in(&legacy_link)
+            .expect_err("legacy cleanup must not follow a directory symlink");
+        assert!(legacy_error.contains("符号链接"), "error = {legacy_error}");
+        assert_eq!(
+            fs::read_to_string(&outside_log).expect("outside log survives"),
+            "must survive"
+        );
+
+        let current_link = temp
+            .path()
+            .join(format!("debug-v{DEBUG_SANITIZER_VERSION}"));
+        symlink(&outside, &current_link).expect("create current directory symlink");
+        let current_error = current_debug_root_dir_in(temp.path())
+            .expect_err("current debug directory must not follow a symlink");
+        assert!(
+            current_error.contains("符号链接"),
+            "error = {current_error}"
+        );
+    }
+
+    #[test]
+    fn backend_resanitizes_untrusted_debug_entries_and_forces_version() {
+        let temp = tempdir().expect("create current debug temp dir");
+        let mut deep = serde_json::json!({"apiKey": "deep-raw-secret"});
+        for _ in 0..(MAX_DEBUG_VALUE_DEPTH + 4) {
+            deep = serde_json::json!({"nested": deep});
+        }
+        let untrusted = serde_json::json!({
+            "sanitizerVersion": 999,
+            "apiKey": "raw-api-key",
+            "oauth": {"access": "raw-access", "refresh": "raw-refresh"},
+            "auth": {"scheme": "Bearer", "value": "raw-auth"},
+            "requestAuthorization": "Bearer raw-request-auth",
+            "apiKeyHeader": "raw-header-api-key",
+            "authDiagnostic": "request failed: Bearer !raw-punctuated-auth",
+            "basicHeader": "Authorization: Basic raw-basic-secret",
+            "credentials": ["raw-user", "raw-password"],
+            "serviceCredentials": {"password": "raw-service-password"},
+            "sessionCookies": {"session": "raw-cookie-map"},
+            "url": "https://example.test/path?api_key=url-secret&safe=1",
+            "cookieLine": "Cookie: first=one; session=cookie-secret",
+            "arrayHeader": "prefix [[\"Authorization\",\"Bearer array-secret\"]]",
+            "structuredHeaders": [
+                ["X-API-Key", "raw-pair-secret", "raw-pair-second-secret"],
+                {
+                    "name": "Authorization",
+                    "value": "raw-named-secret",
+                    "data": "raw-named-data-secret"
+                }
+            ],
+            "pemText": "-----BEGIN PRIVATE KEY----- raw-private -----END PRIVATE KEY-----",
+            "pwd": "raw-pwd-secret",
+            "signingKey": "raw-signing-secret",
+            "Ocp-Apim-Subscription-Key": "raw-subscription-secret",
+            "escapedJson": r#"{"api\u004bey":"raw-unicode-secret"}"#,
+            "ordinaryBasic": "Please build a basic calculator app",
+            "safeJson": "{\"inputToken\":9007199254740993,\"inputToken\":2}",
+            "inputToken": 17,
+            "deep": deep,
+        });
+
+        let path = persist_debug_entry_in(
+            temp.path(),
+            "test-process-a",
+            "conversation",
+            untrusted,
+            MAX_DEBUG_LOG_ENTRY_BYTES,
+            MAX_DEBUG_LOG_FILE_BYTES,
+            DebugLogDirectoryLimits::PRODUCTION,
+        )
+        .expect("persist untrusted entry");
+        let persisted = fs::read_to_string(&path).expect("read persisted entry");
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&path)
+                .expect("persisted log metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600,
+            "debug log must be private"
+        );
+
+        for secret in [
+            "raw-api-key",
+            "raw-access",
+            "raw-refresh",
+            "raw-auth",
+            "raw-request-auth",
+            "raw-header-api-key",
+            "raw-punctuated-auth",
+            "raw-basic-secret",
+            "raw-user",
+            "raw-password",
+            "raw-service-password",
+            "raw-cookie-map",
+            "url-secret",
+            "cookie-secret",
+            "array-secret",
+            "raw-pair-secret",
+            "raw-pair-second-secret",
+            "raw-named-secret",
+            "raw-named-data-secret",
+            "raw-private",
+            "raw-pwd-secret",
+            "raw-signing-secret",
+            "raw-subscription-secret",
+            "raw-unicode-secret",
+            "deep-raw-secret",
+        ] {
+            assert!(!persisted.contains(secret), "leaked {secret}: {persisted}");
+        }
+        let parsed: Value = serde_json::from_str(persisted.trim()).expect("parse persisted entry");
+        assert_eq!(
+            parsed.get("sanitizerVersion").and_then(Value::as_u64),
+            Some(u64::from(DEBUG_SANITIZER_VERSION))
+        );
+        assert_eq!(parsed.get("inputToken").and_then(Value::as_u64), Some(17));
+        assert_eq!(
+            parsed.get("ordinaryBasic").and_then(Value::as_str),
+            Some("Please build a basic calculator app")
+        );
+        assert_eq!(
+            parsed.get("safeJson").and_then(Value::as_str),
+            Some("{\"inputToken\":9007199254740993,\"inputToken\":2}"),
+            "non-credential JSON strings must stay byte-for-byte stable"
+        );
+
+        let other_path = persist_debug_entry_in(
+            temp.path(),
+            "test-process-b",
+            "conversation",
+            serde_json::json!({"message": "safe"}),
+            MAX_DEBUG_LOG_ENTRY_BYTES,
+            MAX_DEBUG_LOG_FILE_BYTES,
+            DebugLogDirectoryLimits::PRODUCTION,
+        )
+        .expect("persist from another process identity");
+        assert_ne!(
+            other_path, path,
+            "process identities must never share a log file"
+        );
+        assert_eq!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("conversation.test-process-a.jsonl")
+        );
+        assert_eq!(
+            other_path.file_name().and_then(|name| name.to_str()),
+            Some("conversation.test-process-b.jsonl")
+        );
+    }
+
+    #[test]
+    fn debug_directory_quota_prunes_oldest_unleased_logs_before_writing() {
+        let temp = tempdir().expect("create quota temp dir");
+        let debug_root = current_debug_root_dir_in(temp.path()).expect("create debug root");
+        let oldest_suffix = debug_test_process_suffix(4301, 1);
+        let newer_suffix = debug_test_process_suffix(4302, 2);
+        let current_suffix = debug_test_process_suffix(4303, 3);
+        let oldest = debug_root.join(format!("oldest.{oldest_suffix}.jsonl"));
+        let newer = debug_root.join(format!("newer.{newer_suffix}.jsonl"));
+        let target = debug_root.join(format!("current.{current_suffix}.jsonl"));
+        fs::write(&oldest, b"aaaaa").expect("write oldest log");
+        fs::write(&newer, b"bbbbb").expect("write newer log");
+        let now = UNIX_EPOCH + Duration::from_secs(10_000);
+        set_debug_test_modified(&oldest, UNIX_EPOCH + Duration::from_secs(100));
+        set_debug_test_modified(&newer, UNIX_EPOCH + Duration::from_secs(200));
+
+        append_debug_entry_bytes_with_quota(
+            &debug_root,
+            &target,
+            &current_suffix,
+            b"new\n",
+            16,
+            16,
+            debug_test_limits(9, 2, 60),
+            now,
+        )
+        .expect("oldest stale log should make room");
+
+        assert!(!oldest.exists(), "oldest eligible log must be pruned first");
+        assert!(newer.exists(), "newer eligible log should be retained");
+        assert_eq!(fs::read(&target).expect("read target"), b"new\n");
+    }
+
+    #[test]
+    fn debug_directory_quota_protects_active_logs_and_keeps_target_unchanged() {
+        let temp = tempdir().expect("create active quota temp dir");
+        let debug_root = current_debug_root_dir_in(temp.path()).expect("create debug root");
+        let active_suffix = debug_test_process_suffix(4401, 1);
+        let current_suffix = debug_test_process_suffix(4402, 2);
+        let active_lease =
+            acquire_debug_process_lease(&debug_root, &active_suffix).expect("acquire active lease");
+        let active_lease_path = debug_process_lease_path(&debug_root, &active_suffix);
+        let active_log = debug_root.join(format!("active.{active_suffix}.jsonl"));
+        let target = debug_root.join(format!("current.{current_suffix}.jsonl"));
+        fs::write(&active_log, b"12345678").expect("write active log");
+        fs::write(&target, b"original\n").expect("write target");
+        let before = fs::read(&target).expect("read target before rejection");
+        let limits = debug_test_limits(17, 8, 0);
+
+        let error = append_debug_entry_bytes_with_quota(
+            &debug_root,
+            &target,
+            &current_suffix,
+            b"new\n",
+            16,
+            64,
+            limits,
+            SystemTime::now(),
+        )
+        .expect_err("active logs must not be deleted to satisfy quota");
+        assert!(error.contains("配额不足"), "error = {error}");
+        assert_eq!(
+            fs::read(&target).expect("read rejected target"),
+            before,
+            "quota rejection must not mutate the target"
+        );
+        assert!(active_log.exists(), "active log must remain");
+
+        drop(active_lease);
+        append_debug_entry_bytes_with_quota(
+            &debug_root,
+            &target,
+            &current_suffix,
+            b"new\n",
+            16,
+            64,
+            limits,
+            SystemTime::now(),
+        )
+        .expect("released lease should make its stale log reclaimable");
+        assert!(!active_log.exists(), "stale owner log should be pruned");
+        assert!(
+            !active_lease_path.exists(),
+            "stale lease should be cleaned up"
+        );
+        assert_eq!(
+            fs::read(&target).expect("read appended target"),
+            b"original\nnew\n"
+        );
+    }
+
+    #[test]
+    fn debug_directory_quota_honors_unleased_grace_and_unknown_leases() {
+        let temp = tempdir().expect("create grace quota temp dir");
+        let debug_root = current_debug_root_dir_in(temp.path()).expect("create debug root");
+        let unleased_suffix = debug_test_process_suffix(4501, 1);
+        let unknown_suffix = debug_test_process_suffix(4502, 2);
+        let current_suffix = debug_test_process_suffix(4503, 3);
+        let unleased_log = debug_root.join(format!("recent.{unleased_suffix}.jsonl"));
+        let unknown_log = debug_root.join(format!("unknown.{unknown_suffix}.jsonl"));
+        let target = debug_root.join(format!("current.{current_suffix}.jsonl"));
+        fs::write(&unleased_log, b"aaaaa").expect("write unleased log");
+        fs::write(&unknown_log, b"bbbbb").expect("write unknown-owner log");
+        fs::create_dir(debug_process_lease_path(&debug_root, &unknown_suffix))
+            .expect("create invalid lease path");
+        let now = UNIX_EPOCH + Duration::from_secs(10_000);
+        set_debug_test_modified(&unleased_log, now - Duration::from_secs(30));
+        set_debug_test_modified(&unknown_log, UNIX_EPOCH + Duration::from_secs(100));
+        let limits = debug_test_limits(9, 2, 60);
+
+        let error = append_debug_entry_bytes_with_quota(
+            &debug_root,
+            &target,
+            &current_suffix,
+            b"new\n",
+            16,
+            16,
+            limits,
+            now,
+        )
+        .expect_err("recent unleased and unknown lease logs must be protected");
+        assert!(error.contains("配额不足"), "error = {error}");
+        assert!(!target.exists(), "rejected new target must not be created");
+        assert!(unleased_log.exists());
+        assert!(unknown_log.exists());
+
+        append_debug_entry_bytes_with_quota(
+            &debug_root,
+            &target,
+            &current_suffix,
+            b"new\n",
+            16,
+            16,
+            limits,
+            now + Duration::from_secs(31),
+        )
+        .expect("expired unleased grace should make enough room");
+        assert!(
+            !unleased_log.exists(),
+            "expired unleased log should be pruned"
+        );
+        assert!(
+            unknown_log.exists(),
+            "unknown lease owner must remain protected"
+        );
+        assert_eq!(fs::read(&target).expect("read target"), b"new\n");
+    }
+
+    #[test]
+    fn debug_log_capacity_rotates_without_inspecting_existing_content() {
+        let temp = tempdir().expect("create debug temp dir");
+        let path = temp.path().join("current.jsonl");
+        fs::write(&path, b"{truncated-tail").expect("write truncated current tail");
+
+        append_debug_entry_bytes(&path, b"{}\n", 16, 64)
+            .expect("append without parsing current file");
+        assert_eq!(
+            fs::read(&path).expect("read appended file"),
+            b"{truncated-tail\n{}\n",
+            "a truncated tail must be retained and separated from the next entry"
+        );
+
+        append_debug_entry_bytes(&path, b"second-entry\n", 16, 16)
+            .expect("rotate file at capacity");
+        assert_eq!(
+            fs::read(&path).expect("read rotated file"),
+            b"second-entry\n",
+            "capacity rotation must retain the new complete entry"
+        );
+
+        let error = append_debug_entry_bytes(&path, b"entry-is-too-large\n", 8, 16)
+            .expect_err("oversized entries must be rejected");
+        assert!(error.contains("单条记录过大"), "error = {error}");
+        assert_eq!(
+            fs::read(&path).expect("read file after rejection"),
+            b"second-entry\n",
+            "a rejected entry must not mutate the existing log"
+        );
+    }
 }

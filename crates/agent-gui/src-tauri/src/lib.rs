@@ -425,6 +425,14 @@ pub fn run() {
             let sftp_registry = Arc::clone(&sftp_registry);
             let managed_process_registry = Arc::clone(&managed_process_registry);
             move |app| {
+                let debug_log_report = commands::system::prepare_debug_logs_on_startup()
+                    .map_err(std::io::Error::other)?;
+                if let Some(warning) = debug_log_report.legacy_cleanup_warning {
+                    eprintln!("SECURITY WARNING: {warning}");
+                }
+                for warning in debug_log_report.maintenance_warnings {
+                    eprintln!("debug log maintenance warning: {warning}");
+                }
                 commands::history_db::initialize_history_db()?;
                 configure_system_tray(
                     app,

@@ -1064,7 +1064,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.agentModeDesc": "允许调用工具，执行文件与命令行操作",
     "settings.agentDevMode": "Agent dev 模式",
     "settings.agentDevModeDesc":
-      "与 Agent 模式一致，但会把当前对话的流式请求与返回逐行写入 ~/.liveagent/debug/<对话ID>.jsonl",
+      "与 Agent 模式一致，但会把当前对话的已脱敏流式请求与返回逐行写入 ~/.liveagent/debug-v3/<对话ID>.<进程标识>.jsonl",
     "settings.workdir": "项目文件夹",
     "settings.workdirRequired": "必填",
     "settings.workdirDesc": "Agent 模式下文件工具使用当前项目文件夹作为根目录。",
@@ -2862,7 +2862,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.agentModeDesc": "Allows tool calls, file and command-line operations",
     "settings.agentDevMode": "Agent Dev Mode",
     "settings.agentDevModeDesc":
-      "Same as Agent mode, but also writes each streaming request and response line-by-line to ~/.liveagent/debug/<conversationId>.jsonl",
+      "Same as Agent mode, but also writes sanitized streaming requests and responses line-by-line to ~/.liveagent/debug-v3/<conversationId>.<process-id>.jsonl",
     "settings.workdir": "Project Folder",
     "settings.workdirRequired": "Required",
     "settings.workdirDesc":

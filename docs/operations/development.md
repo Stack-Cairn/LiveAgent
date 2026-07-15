@@ -50,7 +50,7 @@
 | `~/.liveagent/memory/` | Memory Markdown 根目录与 `memory-index.sqlite3`。 |
 | `~/.liveagent/skills` | Skills runtime root。 |
 | `~/.liveagent/default-project` | 首次安装/空 workdir 时的默认项目目录。 |
-| `~/.liveagent/debug/*.jsonl` | debug JSONL 日志。 |
+| `~/.liveagent/debug-v3/*.jsonl` | 已脱敏的 debug JSONL 日志；文件名包含对话 ID 和进程标识。 |
 
 ## Gateway 开发关注点
 

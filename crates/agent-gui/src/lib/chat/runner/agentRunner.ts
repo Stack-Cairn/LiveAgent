@@ -1240,14 +1240,16 @@ export async function runAssistantWithTools(params: {
         disposeAggregator: hostedSearchAggregator.dispose,
       });
 
-      params.debugLogger?.logRequest(
-        buildStreamRequestDebugPayload({
-          runtime: params.runtime,
-          context: effectiveContext,
-          options: streamOptions,
-          round,
-        }),
-      );
+      if (params.debugLogger?.enabled) {
+        params.debugLogger.logRequest(
+          buildStreamRequestDebugPayload({
+            runtime: params.runtime,
+            context: effectiveContext,
+            options: streamOptions,
+            round,
+          }),
+        );
+      }
 
       const sourceStream = streamSimpleByApi(streamModel, effectiveContext, streamOptions);
       return wrapStreamWithToolCallArgumentGuard(sourceStream, (toolCall, reason) => {

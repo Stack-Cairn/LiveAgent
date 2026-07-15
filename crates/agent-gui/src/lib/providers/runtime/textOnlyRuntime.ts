@@ -176,13 +176,15 @@ export async function streamAssistantMessage(params: {
     debugLogger: params.debugLogger,
   });
 
-  params.debugLogger?.logRequest(
-    buildStreamRequestDebugPayload({
-      runtime: params.runtime,
-      context: callContext,
-      options,
-    }),
-  );
+  if (params.debugLogger?.enabled) {
+    params.debugLogger.logRequest(
+      buildStreamRequestDebugPayload({
+        runtime: params.runtime,
+        context: callContext,
+        options,
+      }),
+    );
+  }
 
   return withPowerActivity("assistant-stream", `${params.providerId}:${modelId}`, async () => {
     const orderedBlocks: HostedSearchOrderedBlock[] = [];
@@ -353,13 +355,15 @@ export async function completeAssistantMessage(params: {
     debugLogger: params.debugLogger,
   });
 
-  params.debugLogger?.logRequest(
-    buildStreamRequestDebugPayload({
-      runtime: params.runtime,
-      context: callContext,
-      options,
-    }),
-  );
+  if (params.debugLogger?.enabled) {
+    params.debugLogger.logRequest(
+      buildStreamRequestDebugPayload({
+        runtime: params.runtime,
+        context: callContext,
+        options,
+      }),
+    );
+  }
 
   return withPowerActivity("assistant-complete", `${params.providerId}:${modelId}`, async () => {
     try {
