@@ -1,5 +1,9 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, LazyLock},
+};
 
+use regex::Regex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -916,79 +920,189 @@ fn serialize_cron_manage_result(payload: &impl serde::Serialize) -> Result<Strin
         .map_err(|e| format!("serialize cron manage response failed: {e}"))
 }
 
+const BUILTIN_SHARE_TOOL_NAMES: &[&str] = &[
+    "Agent",
+    "Bash",
+    "CronTaskManager",
+    "Delete",
+    "Edit",
+    "Glob",
+    "Grep",
+    "HttpGetTest",
+    "Image",
+    "List",
+    "ManagedProcess",
+    "McpManager",
+    "MemoryManager",
+    "Read",
+    "ReadTerminal",
+    "SendMessage",
+    "SkillsManager",
+    "SSHManager",
+    "SshManager",
+    "TodoWrite",
+    "TunnelManager",
+    "Write",
+];
+
 fn is_builtin_share_tool_name(name: &str) -> bool {
     let trimmed = name.trim();
-    if trimmed.starts_with("mcp_") {
-        return true;
-    }
-    matches!(
-        trimmed,
-        "Agent"
-            | "Bash"
-            | "CronTaskManager"
-            | "Delete"
-            | "Edit"
-            | "Glob"
-            | "Grep"
-            | "HttpGetTest"
-            | "Image"
-            | "List"
-            | "ManagedProcess"
-            | "McpManager"
-            | "MemoryManager"
-            | "Read"
-            | "SkillsManager"
-            | "SSHManager"
-            | "SshManager"
-            | "Write"
-    )
+    let normalized = trimmed.to_ascii_lowercase();
+    normalized.starts_with("mcp_")
+        || matches!(
+            normalized.as_str(),
+            "websearch"
+                | "web_search"
+                | "builtin_web_search"
+                | "web_search_20250305"
+                | "web_search_20260209"
+                | "web_search_20260318"
+                | "web_search_2025_08_26"
+                | "web_search_preview"
+                | "web_search_preview_2025_03_11"
+        )
+        || normalized.starts_with("web_search_call")
+        || BUILTIN_SHARE_TOOL_NAMES
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(trimmed))
 }
 
-fn read_json_string_field(
+fn collect_json_string_fields(
     object: &serde_json::Map<String, Value>,
     keys: &[&str],
-) -> Option<String> {
-    keys.iter().find_map(|key| {
-        object
+    values: &mut Vec<String>,
+) {
+    for key in keys {
+        let Some(value) = object
             .get(*key)
             .and_then(Value::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .map(str::to_string)
+        else {
+            continue;
+        };
+        if !values.iter().any(|candidate| candidate == value) {
+            values.push(value.to_string());
+        }
+    }
+}
+
+fn json_string_fields(
+    object: &serde_json::Map<String, Value>,
+    keys: &[&str],
+) -> Vec<String> {
+    let mut values = Vec::new();
+    collect_json_string_fields(object, keys, &mut values);
+    values
+}
+
+fn non_empty_json_object(value: &Value) -> Option<&serde_json::Map<String, Value>> {
+    value.as_object().filter(|object| !object.is_empty())
+}
+
+#[derive(Debug)]
+struct NormalizedToolCall {
+    id: Option<String>,
+    associated_ids: Vec<String>,
+    name: Option<String>,
+    is_call_like: bool,
+}
+
+fn normalize_tool_call_like(block: &Value) -> Option<NormalizedToolCall> {
+    let record = block.as_object()?;
+    let payload_record = record.get("payload").and_then(non_empty_json_object);
+    let parsed_data = record
+        .get("data")
+        .and_then(Value::as_str)
+        .and_then(|value| serde_json::from_str::<Value>(value).ok());
+    let data_record = record
+        .get("data")
+        .and_then(non_empty_json_object)
+        .or_else(|| parsed_data.as_ref().and_then(non_empty_json_object));
+
+    let direct_nested_tool_call = record
+        .get("toolCall")
+        .filter(|value| !value.is_null())
+        .and_then(non_empty_json_object);
+    let payload_nested_tool_call = payload_record
+        .and_then(|payload| payload.get("toolCall"))
+        .filter(|value| !value.is_null())
+        .and_then(non_empty_json_object);
+    let data_nested_tool_call = data_record
+        .and_then(|data| data.get("toolCall"))
+        .filter(|value| !value.is_null())
+        .and_then(non_empty_json_object);
+    // Preserve WebUI field precedence, but inspect every wrapper as a security
+    // boundary: a custom name in one layer must not mask a builtin name in another.
+    let sources = [
+        direct_nested_tool_call,
+        payload_nested_tool_call,
+        data_nested_tool_call,
+        payload_record,
+        data_record,
+        Some(record),
+    ];
+    let mut associated_ids = Vec::new();
+    let mut candidate_names = Vec::new();
+    for source in sources.into_iter().flatten() {
+        collect_json_string_fields(
+            source,
+            &["id", "toolCallId", "toolCallID", "tool_call_id", "call_id"],
+            &mut associated_ids,
+        );
+        collect_json_string_fields(
+            source,
+            &["name", "toolName", "tool_name"],
+            &mut candidate_names,
+        );
+    }
+    let id = associated_ids.first().cloned();
+    let name = candidate_names
+        .iter()
+        .find(|name| is_builtin_share_tool_name(name))
+        .cloned()
+        .or_else(|| candidate_names.first().cloned());
+    let block_type = record.get("type").and_then(Value::as_str).map(str::trim);
+    let is_call_like = matches!(block_type, Some("toolCall") | Some("tool_use"))
+        || direct_nested_tool_call.is_some()
+        || payload_nested_tool_call.is_some()
+        || data_nested_tool_call.is_some()
+        || ((payload_record.is_some() || data_record.is_some())
+            && (id.is_some() || name.is_some()));
+
+    Some(NormalizedToolCall {
+        id,
+        associated_ids,
+        name,
+        is_call_like,
     })
 }
 
-fn read_tool_block_name(block: &Value) -> Option<String> {
-    let object = block.as_object()?;
-    read_json_string_field(object, &["name", "toolName", "tool_name"]).or_else(|| {
-        object
-            .get("toolCall")
-            .and_then(Value::as_object)
-            .and_then(|nested| read_json_string_field(nested, &["name", "toolName", "tool_name"]))
-    })
+#[derive(Clone, Debug)]
+struct RedactedToolIdentity {
+    public_id: String,
+    tool_name: String,
 }
 
-fn read_tool_block_id(block: &Value) -> Option<String> {
-    let object = block.as_object()?;
-    read_json_string_field(
-        object,
-        &["id", "toolCallId", "toolCallID", "tool_call_id", "call_id"],
-    )
-    .or_else(|| {
-        object
-            .get("toolCall")
-            .and_then(Value::as_object)
-            .and_then(|nested| {
-                read_json_string_field(
-                    nested,
-                    &["id", "toolCallId", "toolCallID", "tool_call_id", "call_id"],
-                )
-            })
-    })
+fn next_redacted_tool_identity(
+    tool_name: String,
+    next_ordinal: &mut usize,
+    reserved_tool_ids: &mut HashSet<String>,
+) -> RedactedToolIdentity {
+    loop {
+        let public_id = format!("share-redacted-tool-call-{}", *next_ordinal);
+        *next_ordinal = (*next_ordinal).saturating_add(1);
+        if reserved_tool_ids.insert(public_id.clone()) {
+            return RedactedToolIdentity {
+                public_id,
+                tool_name,
+            };
+        }
+    }
 }
 
-fn collect_redacted_tool_call_ids(messages: &[Value]) -> HashSet<String> {
-    let mut ids = HashSet::new();
+fn collect_reserved_tool_ids(messages: &[Value]) -> HashSet<String> {
+    let mut reserved_tool_ids = HashSet::new();
     for message in messages {
         let Some(object) = message.as_object() else {
             continue;
@@ -999,72 +1113,395 @@ fn collect_redacted_tool_call_ids(messages: &[Value]) -> HashSet<String> {
                     continue;
                 };
                 for block in blocks {
-                    let block_type = block
-                        .as_object()
-                        .and_then(|record| record.get("type"))
-                        .and_then(Value::as_str)
-                        .map(str::trim);
-                    if !matches!(block_type, Some("toolCall") | Some("tool_use")) {
+                    let Some(normalized) = normalize_tool_call_like(block) else {
                         continue;
-                    }
-                    if read_tool_block_name(block)
-                        .as_deref()
-                        .map(is_builtin_share_tool_name)
-                        .unwrap_or(false)
-                    {
-                        if let Some(id) = read_tool_block_id(block) {
-                            ids.insert(id);
+                    };
+                    if normalized.is_call_like {
+                        for id in normalized.associated_ids {
+                            reserved_tool_ids.insert(id);
                         }
                     }
                 }
             }
             Some("toolResult") => {
-                let is_builtin = read_json_string_field(object, &["toolName", "tool_name", "name"])
-                    .as_deref()
-                    .map(is_builtin_share_tool_name)
-                    .unwrap_or(false);
-                if is_builtin {
-                    if let Some(id) = read_json_string_field(
-                        object,
-                        &["toolCallId", "toolCallID", "tool_call_id", "call_id"],
-                    ) {
-                        ids.insert(id);
+                for id in json_string_fields(
+                    object,
+                    &["toolCallId", "toolCallID", "tool_call_id", "call_id"],
+                ) {
+                    reserved_tool_ids.insert(id);
+                }
+            }
+            _ => {}
+        }
+    }
+    reserved_tool_ids
+}
+
+fn collect_redacted_original_tool_ids(messages: &[Value]) -> HashMap<String, String> {
+    let mut tool_names_by_id = HashMap::new();
+    for message in messages {
+        let Some(object) = message.as_object() else {
+            continue;
+        };
+        match object.get("role").and_then(Value::as_str).map(str::trim) {
+            Some("assistant") => {
+                let Some(blocks) = object.get("content").and_then(Value::as_array) else {
+                    continue;
+                };
+                for block in blocks {
+                    let Some(normalized) = normalize_tool_call_like(block) else {
+                        continue;
+                    };
+                    if !normalized.is_call_like {
+                        continue;
+                    }
+                    let Some(tool_name) = normalized
+                        .name
+                        .filter(|name| is_builtin_share_tool_name(name))
+                    else {
+                        continue;
+                    };
+                    for id in normalized.associated_ids {
+                        tool_names_by_id.entry(id).or_insert(tool_name.clone());
+                    }
+                }
+            }
+            Some("toolResult") => {
+                let Some(tool_name) = json_string_fields(
+                    object,
+                    &["toolName", "tool_name", "name"],
+                )
+                .into_iter()
+                .find(|name| is_builtin_share_tool_name(name))
+                else {
+                    continue;
+                };
+                for id in json_string_fields(
+                    object,
+                    &["toolCallId", "toolCallID", "tool_call_id", "call_id"],
+                ) {
+                    tool_names_by_id.entry(id).or_insert(tool_name.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    tool_names_by_id
+}
+
+struct RedactedToolPlan {
+    call_identities_by_location: HashMap<(usize, usize), RedactedToolIdentity>,
+    call_identities_by_original_id: HashMap<String, Vec<RedactedToolIdentity>>,
+    tool_names_by_original_id: HashMap<String, String>,
+    next_ordinal: usize,
+    reserved_tool_ids: HashSet<String>,
+}
+
+fn build_redacted_tool_plan(messages: &[Value]) -> RedactedToolPlan {
+    let tool_names_by_original_id = collect_redacted_original_tool_ids(messages);
+    let mut reserved_tool_ids = collect_reserved_tool_ids(messages);
+    let mut call_identities_by_location = HashMap::new();
+    let mut call_identities_by_original_id: HashMap<String, Vec<RedactedToolIdentity>> =
+        HashMap::new();
+    let mut next_ordinal = 1;
+
+    for (message_index, message) in messages.iter().enumerate() {
+        let Some(object) = message.as_object() else {
+            continue;
+        };
+        if object.get("role").and_then(Value::as_str).map(str::trim) != Some("assistant") {
+            continue;
+        }
+        let Some(blocks) = object.get("content").and_then(Value::as_array) else {
+            continue;
+        };
+        for (block_index, block) in blocks.iter().enumerate() {
+            let Some(normalized) = normalize_tool_call_like(block) else {
+                continue;
+            };
+            if !normalized.is_call_like {
+                continue;
+            }
+            let original_name = normalized.name;
+            let original_id = normalized.id;
+            let associated_ids = normalized.associated_ids;
+            let tool_name = original_name
+                .as_ref()
+                .filter(|name| is_builtin_share_tool_name(name))
+                .cloned()
+                .or_else(|| {
+                    original_id
+                        .as_ref()
+                        .and_then(|id| tool_names_by_original_id.get(id))
+                        .cloned()
+                });
+            let Some(tool_name) = tool_name else {
+                continue;
+            };
+
+            let identity =
+                next_redacted_tool_identity(tool_name, &mut next_ordinal, &mut reserved_tool_ids);
+            call_identities_by_location.insert((message_index, block_index), identity.clone());
+            for original_id in associated_ids {
+                call_identities_by_original_id
+                    .entry(original_id)
+                    .or_default()
+                    .push(identity.clone());
+            }
+        }
+    }
+
+    RedactedToolPlan {
+        call_identities_by_location,
+        call_identities_by_original_id,
+        tool_names_by_original_id,
+        next_ordinal,
+        reserved_tool_ids,
+    }
+}
+
+static SEED_TOOL_CALL_MARKUP_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?is)<\s*seed:tool_call\s*>.*?(?:</\s*seed:tool_call\s*>|\z)")
+        .expect("valid seed tool-call markup regex")
+});
+
+static DSML_TOOL_CALL_MARKUP_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?is)<\s*(?:\|{2}|｜{2})\s*DSML\s*(?:\|{2}|｜{2})\s*tool_calls\s*>.*?(?:</\s*(?:\|{2}|｜{2})\s*DSML\s*(?:\|{2}|｜{2})\s*tool_calls\s*>|\z)",
+    )
+    .expect("valid DSML tool-call markup regex")
+});
+
+static FLATTENED_TOOL_REQUEST_HEADER_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r"(?im)(?:(?:Previous assistant tool request:|Historical assistant tool request \(read-only context; do not repeat\):|Historical tool call \(read-only, not repeating\):)\s*|^[ \t]*)(?:tool_call_id:[^\r\n]*\s*)?tool_name:\s*(?P<tool_name>[^\r\n]+?)\s*arguments:\s*",
+    )
+    .expect("valid flattened tool-request header regex")
+});
+
+fn find_json_container_end(value: &str, start: usize) -> Option<usize> {
+    let bytes = value.as_bytes();
+    let mut index = start;
+    while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+        index += 1;
+    }
+    if !matches!(bytes.get(index), Some(b'{') | Some(b'[')) {
+        return None;
+    }
+
+    let mut stack = Vec::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    for (offset, byte) in bytes[index..].iter().copied().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'{' => stack.push(b'}'),
+            b'[' => stack.push(b']'),
+            b'}' | b']' if stack.pop() != Some(byte) => return None,
+            b'}' | b']' if stack.is_empty() => return Some(index + offset + 1),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn strip_flattened_builtin_tool_requests(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    let mut copied_through = 0;
+    let mut search_from = 0;
+
+    while search_from < value.len() {
+        let Some(captures) = FLATTENED_TOOL_REQUEST_HEADER_RE.captures(&value[search_from..])
+        else {
+            break;
+        };
+        let header = captures.get(0).expect("flattened header match");
+        let absolute_start = search_from + header.start();
+        let absolute_end = search_from + header.end();
+        let is_builtin = captures
+            .name("tool_name")
+            .map(|capture| is_builtin_share_tool_name(capture.as_str()))
+            .unwrap_or(false);
+        if !is_builtin {
+            search_from = absolute_end;
+            continue;
+        }
+
+        output.push_str(&value[copied_through..absolute_start]);
+        // A malformed or truncated recovered request is removed through EOF. This
+        // deliberately fails closed because its argument boundary is unknowable.
+        let removal_end = find_json_container_end(value, absolute_end).unwrap_or(value.len());
+        copied_through = removal_end;
+        search_from = removal_end;
+    }
+    output.push_str(&value[copied_through..]);
+    output
+}
+
+fn strip_recovered_tool_call_markup(value: &str) -> String {
+    let without_seed = SEED_TOOL_CALL_MARKUP_RE.replace_all(value, "");
+    let without_dsml = DSML_TOOL_CALL_MARKUP_RE
+        .replace_all(&without_seed, "")
+        .into_owned();
+    strip_flattened_builtin_tool_requests(&without_dsml)
+}
+
+fn redact_assistant_text_markup(message: &mut Value) {
+    let Some(content) = message
+        .as_object_mut()
+        .and_then(|object| object.get_mut("content"))
+    else {
+        return;
+    };
+    if let Some(text) = content.as_str() {
+        *content = Value::String(strip_recovered_tool_call_markup(text));
+        return;
+    }
+    let Some(blocks) = content.as_array_mut() else {
+        return;
+    };
+    for block in blocks {
+        let Some(object) = block.as_object_mut() else {
+            continue;
+        };
+        match object.get("type").and_then(Value::as_str).map(str::trim) {
+            Some("text") => {
+                if let Some(text) = object.get("text").and_then(Value::as_str) {
+                    let stripped = strip_recovered_tool_call_markup(text);
+                    object.insert("text".to_string(), Value::String(stripped));
+                }
+            }
+            Some("thinking") => {
+                for key in ["thinking", "text"] {
+                    if let Some(text) = object.get(key).and_then(Value::as_str) {
+                        let stripped = strip_recovered_tool_call_markup(text);
+                        object.insert(key.to_string(), Value::String(stripped));
                     }
                 }
             }
             _ => {}
         }
     }
-    ids
 }
 
-fn redact_tool_call_block(block: &mut Value) {
-    let Some(object) = block.as_object_mut() else {
+fn redacted_tool_call_block(identity: &RedactedToolIdentity) -> Value {
+    json!({
+        "type": "toolCall",
+        "id": identity.public_id,
+        "name": identity.tool_name,
+        "redacted": true,
+    })
+}
+
+fn redacted_hosted_search_block(source: &Value, public_id: String) -> Value {
+    let status = source
+        .as_object()
+        .and_then(|object| object.get("status"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|status| matches!(*status, "searching" | "completed" | "failed"))
+        .unwrap_or("searching");
+    json!({
+        "type": "hostedSearch",
+        "id": public_id,
+        "status": status,
+        "queries": [],
+        "sources": [],
+        "redacted": true,
+    })
+}
+
+fn redacted_tool_result_message(source: &Value, identity: &RedactedToolIdentity) -> Value {
+    let source = source.as_object();
+    let mut redacted = serde_json::Map::new();
+    redacted.insert("role".to_string(), Value::String("toolResult".to_string()));
+    redacted.insert(
+        "toolCallId".to_string(),
+        Value::String(identity.public_id.clone()),
+    );
+    redacted.insert(
+        "toolName".to_string(),
+        Value::String(identity.tool_name.clone()),
+    );
+    redacted.insert(
+        "content".to_string(),
+        json!([{ "type": "text", "text": "工具调用内容已脱敏" }]),
+    );
+    redacted.insert(
+        "details".to_string(),
+        json!({ "kind": "redacted_tool_content" }),
+    );
+    redacted.insert(
+        "isError".to_string(),
+        Value::Bool(
+            source
+                .and_then(|object| object.get("isError"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        ),
+    );
+    if let Some(timestamp) = source
+        .and_then(|object| object.get("timestamp"))
+        .filter(|value| value.is_number())
+    {
+        redacted.insert("timestamp".to_string(), timestamp.clone());
+    }
+    redacted.insert("redacted".to_string(), Value::Bool(true));
+    Value::Object(redacted)
+}
+
+fn redact_summary_message(message: &Value) -> Value {
+    let source = message.as_object();
+    let mut redacted = serde_json::Map::new();
+    redacted.insert("role".to_string(), Value::String("summary".to_string()));
+    if let Some(id) = source
+        .and_then(|object| object.get("id"))
+        .and_then(Value::as_str)
+    {
+        redacted.insert("id".to_string(), Value::String(id.to_string()));
+    }
+    if let Some(timestamp) = source
+        .and_then(|object| object.get("timestamp"))
+        .filter(|value| value.is_number())
+    {
+        redacted.insert("timestamp".to_string(), timestamp.clone());
+    }
+    redacted.insert(
+        "content".to_string(),
+        Value::String("摘要内容已脱敏".to_string()),
+    );
+    redacted.insert("redacted".to_string(), Value::Bool(true));
+    Value::Object(redacted)
+}
+
+fn refresh_redacted_history_ref_content_hash(message: &mut Value) {
+    let has_history_ref = message
+        .as_object()
+        .and_then(|object| object.get("liveAgentHistoryRef"))
+        .and_then(Value::as_object)
+        .is_some();
+    if !has_history_ref {
         return;
-    };
-    for key in [
-        "arguments",
-        "args",
-        "input",
-        "parameters",
-        "payload",
-        "data",
-    ] {
-        object.remove(key);
     }
-    if let Some(nested) = object.get_mut("toolCall").and_then(Value::as_object_mut) {
-        for key in [
-            "arguments",
-            "args",
-            "input",
-            "parameters",
-            "payload",
-            "data",
-        ] {
-            nested.remove(key);
-        }
+
+    let content_hash = history_message_content_hash(message);
+    if let Some(history_ref) = message
+        .as_object_mut()
+        .and_then(|object| object.get_mut("liveAgentHistoryRef"))
+        .and_then(Value::as_object_mut)
+    {
+        history_ref.insert("contentHash".to_string(), Value::String(content_hash));
     }
-    object.insert("redacted".to_string(), Value::Bool(true));
 }
 
 fn redact_builtin_tool_content_json(raw: &str) -> Result<String, String> {
@@ -1073,64 +1510,122 @@ fn redact_builtin_tool_content_json(raw: &str) -> Result<String, String> {
     let items = parsed
         .as_array_mut()
         .ok_or_else(|| "share history messages payload is not an array".to_string())?;
-    let redacted_tool_call_ids = collect_redacted_tool_call_ids(items);
+    let redacted_tool_plan = build_redacted_tool_plan(items);
+    let mut next_redacted_ordinal = redacted_tool_plan.next_ordinal;
+    let mut next_redacted_hosted_search_ordinal = 1usize;
+    let mut reserved_tool_ids = redacted_tool_plan.reserved_tool_ids.clone();
+    let mut result_identity_cursors: HashMap<String, usize> = HashMap::new();
+    let mut consumed_result_identity_ids = HashSet::new();
 
-    for message in items.iter_mut() {
-        let Some(object) = message.as_object_mut() else {
+    for (message_index, message) in items.iter_mut().enumerate() {
+        if message
+            .as_object()
+            .and_then(|object| object.get("role"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            == Some("summary")
+        {
+            *message = redact_summary_message(message);
             continue;
-        };
-        match object.get("role").and_then(Value::as_str).map(str::trim) {
+        }
+        let role = message
+            .as_object()
+            .and_then(|object| object.get("role"))
+            .and_then(Value::as_str)
+            .map(|value| value.trim().to_string());
+        match role.as_deref() {
             Some("assistant") => {
-                let Some(blocks) = object.get_mut("content").and_then(Value::as_array_mut) else {
-                    continue;
-                };
-                for block in blocks {
-                    let block_type = block
-                        .as_object()
-                        .and_then(|record| record.get("type"))
-                        .and_then(Value::as_str)
-                        .map(str::trim);
-                    if !matches!(block_type, Some("toolCall") | Some("tool_use")) {
-                        continue;
-                    }
-                    let is_builtin = read_tool_block_name(block)
-                        .as_deref()
-                        .map(is_builtin_share_tool_name)
-                        .unwrap_or(false);
-                    let is_redacted_id = read_tool_block_id(block)
-                        .as_ref()
-                        .map(|id| redacted_tool_call_ids.contains(id))
-                        .unwrap_or(false);
-                    if is_builtin || is_redacted_id {
-                        redact_tool_call_block(block);
+                redact_assistant_text_markup(message);
+                if let Some(blocks) = message
+                    .as_object_mut()
+                    .and_then(|object| object.get_mut("content"))
+                    .and_then(Value::as_array_mut)
+                {
+                    for (block_index, block) in blocks.iter_mut().enumerate() {
+                        if let Some(identity) = redacted_tool_plan
+                            .call_identities_by_location
+                            .get(&(message_index, block_index))
+                        {
+                            *block = redacted_tool_call_block(identity);
+                        } else if block
+                            .as_object()
+                            .and_then(|object| object.get("type"))
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            == Some("hostedSearch")
+                        {
+                            let public_id = loop {
+                                let candidate = format!(
+                                    "share-redacted-hosted-search-{}",
+                                    next_redacted_hosted_search_ordinal
+                                );
+                                next_redacted_hosted_search_ordinal =
+                                    next_redacted_hosted_search_ordinal.saturating_add(1);
+                                if reserved_tool_ids.insert(candidate.clone()) {
+                                    break candidate;
+                                }
+                            };
+                            *block = redacted_hosted_search_block(block, public_id);
+                        }
                     }
                 }
             }
             Some("toolResult") => {
-                let is_builtin = read_json_string_field(object, &["toolName", "tool_name", "name"])
-                    .as_deref()
-                    .map(is_builtin_share_tool_name)
-                    .unwrap_or(false);
-                let is_redacted_id = read_json_string_field(
+                let object = message.as_object().expect("toolResult message object");
+                let original_names =
+                    json_string_fields(object, &["toolName", "tool_name", "name"]);
+                let original_ids = json_string_fields(
                     object,
                     &["toolCallId", "toolCallID", "tool_call_id", "call_id"],
-                )
-                .as_ref()
-                .map(|id| redacted_tool_call_ids.contains(id))
-                .unwrap_or(false);
-                if is_builtin || is_redacted_id {
-                    object.insert(
-                        "content".to_string(),
-                        json!([{ "type": "text", "text": "工具调用内容已脱敏" }]),
-                    );
-                    object.insert(
-                        "details".to_string(),
-                        json!({ "kind": "redacted_tool_content" }),
-                    );
+                );
+                let builtin_name = original_names
+                    .iter()
+                    .find(|name| is_builtin_share_tool_name(name))
+                    .cloned();
+                let mut planned_identity = None;
+                for id in &original_ids {
+                    let Some(identities) = redacted_tool_plan.call_identities_by_original_id.get(id)
+                    else {
+                        continue;
+                    };
+                    let cursor = result_identity_cursors.entry(id.clone()).or_default();
+                    while identities.get(*cursor).is_some_and(|identity| {
+                        consumed_result_identity_ids.contains(&identity.public_id)
+                    }) {
+                        *cursor = (*cursor).saturating_add(1);
+                    }
+                    if let Some(identity) = identities.get(*cursor).cloned() {
+                        *cursor = (*cursor).saturating_add(1);
+                        consumed_result_identity_ids.insert(identity.public_id.clone());
+                        planned_identity = Some(identity);
+                        break;
+                    }
+                }
+                let planned_tool_name = original_ids.iter().find_map(|id| {
+                    redacted_tool_plan
+                        .tool_names_by_original_id
+                        .get(id)
+                        .cloned()
+                });
+                if builtin_name.is_some()
+                    || planned_identity.is_some()
+                    || planned_tool_name.is_some()
+                {
+                    let identity = planned_identity.unwrap_or_else(|| {
+                        next_redacted_tool_identity(
+                            builtin_name
+                                .or(planned_tool_name)
+                                .unwrap_or_else(|| "Tool".to_string()),
+                            &mut next_redacted_ordinal,
+                            &mut reserved_tool_ids,
+                        )
+                    });
+                    *message = redacted_tool_result_message(message, &identity);
                 }
             }
             _ => {}
         }
+        refresh_redacted_history_ref_content_hash(message);
     }
 
     serde_json::to_string(items)
@@ -1598,8 +2093,9 @@ mod tests {
 
     use super::{
         build_history_prefix_segments, flatten_history_messages_json,
-        flatten_history_messages_json_window, history_message_content_hash, parse_runs_limit,
-        redact_builtin_tool_content_json, sanitize_provider_summaries,
+        flatten_history_messages_json_window, history_message_content_hash,
+        is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
+        sanitize_provider_summaries,
     };
     use crate::commands::chat_history::ChatHistorySegmentRecord;
 
@@ -1844,7 +2340,10 @@ mod tests {
                         "type": "toolCall",
                         "id": "call-bash",
                         "name": "Bash",
-                        "arguments": { "command": "cat secret.txt" }
+                        "arguments": { "command": "cat secret.txt" },
+                        "thoughtSignature": "secret thought signature",
+                        "reasoning_details": { "encrypted": "secret reasoning" },
+                        "unknownProviderField": "secret provider field"
                     },
                     {
                         "type": "toolCall",
@@ -1865,7 +2364,8 @@ mod tests {
                 "toolCallId": "call-bash",
                 "toolName": "Bash",
                 "content": [{ "type": "text", "text": "secret output" }],
-                "details": { "stdout": "secret output" }
+                "details": { "stdout": "secret output" },
+                "unknownProviderField": "secret result field"
             },
             {
                 "role": "toolResult",
@@ -1889,18 +2389,932 @@ mod tests {
         let items = parsed.as_array().expect("redacted history array");
         let blocks = items[0]["content"].as_array().expect("assistant content");
 
-        assert_eq!(blocks[0]["name"], "Bash");
-        assert_eq!(blocks[0]["arguments"], Value::Null);
-        assert_eq!(blocks[0]["redacted"], true);
+        assert_eq!(
+            blocks[0],
+            json!({
+                "type": "toolCall",
+                "id": "share-redacted-tool-call-1",
+                "name": "Bash",
+                "redacted": true
+            })
+        );
         assert_eq!(blocks[1]["arguments"]["query"], "keep me");
-        assert_eq!(items[1]["content"][0]["text"], "工具调用内容已脱敏");
-        assert_eq!(items[1]["details"]["kind"], "redacted_tool_content");
+        assert_eq!(
+            items[1],
+            json!({
+                "role": "toolResult",
+                "toolCallId": "share-redacted-tool-call-1",
+                "toolName": "Bash",
+                "content": [{ "type": "text", "text": "工具调用内容已脱敏" }],
+                "details": { "kind": "redacted_tool_content" },
+                "isError": false,
+                "redacted": true
+            })
+        );
         assert_eq!(items[2]["content"][0]["text"], "visible output");
         assert_eq!(items[2]["details"]["data"], "keep me");
         assert_eq!(blocks[2]["name"], "mcp_docs_search");
+        assert_eq!(blocks[2]["id"], "share-redacted-tool-call-2");
         assert_eq!(blocks[2]["arguments"], Value::Null);
         assert_eq!(blocks[2]["redacted"], true);
+        assert_eq!(items[3]["toolCallId"], blocks[2]["id"]);
         assert_eq!(items[3]["content"][0]["text"], "工具调用内容已脱敏");
         assert_eq!(items[3]["details"]["kind"], "redacted_tool_content");
+        for secret in [
+            "secret thought signature",
+            "secret reasoning",
+            "secret provider field",
+            "secret result field",
+        ] {
+            assert!(!redacted.contains(secret), "leaked {secret}");
+        }
+    }
+
+    #[test]
+    fn redact_builtin_tool_content_covers_current_chat_tools() {
+        for tool_name in ["ReadTerminal", "SendMessage", "TodoWrite", "TunnelManager"] {
+            let tool_call_id = format!("call-{tool_name}");
+            let raw = serde_json::to_string(&json!([
+                {
+                    "role": "assistant",
+                    "content": [{
+                        "type": "toolCall",
+                        "id": tool_call_id,
+                        "name": tool_name,
+                        "arguments": { "secretArgument": format!("secret-{tool_name}") }
+                    }]
+                },
+                {
+                    "role": "toolResult",
+                    "toolCallId": tool_call_id,
+                    "toolName": tool_name,
+                    "content": [{ "type": "text", "text": format!("secret output from {tool_name}") }],
+                    "details": { "secretDetail": format!("secret detail from {tool_name}") }
+                }
+            ]))
+            .expect("serialize input");
+
+            let redacted = redact_builtin_tool_content_json(&raw)
+                .unwrap_or_else(|error| panic!("redact {tool_name}: {error}"));
+            let parsed = serde_json::from_str::<Value>(&redacted)
+                .unwrap_or_else(|error| panic!("parse redacted {tool_name}: {error}"));
+            let items = parsed.as_array().expect("redacted history array");
+            let block = &items[0]["content"][0];
+
+            assert_eq!(block["name"], tool_name);
+            assert_eq!(block["id"], "share-redacted-tool-call-1", "{tool_name}");
+            assert_eq!(block["arguments"], Value::Null, "{tool_name}");
+            assert_eq!(block["redacted"], true, "{tool_name}");
+            assert_eq!(items[1]["toolCallId"], block["id"], "{tool_name}");
+            assert_eq!(
+                items[1]["content"][0]["text"], "工具调用内容已脱敏",
+                "{tool_name}"
+            );
+            assert_eq!(
+                items[1]["details"]["kind"], "redacted_tool_content",
+                "{tool_name}"
+            );
+            assert!(
+                !redacted.contains(&format!("secret-{tool_name}")),
+                "{tool_name}"
+            );
+            assert!(
+                !redacted.contains(&format!("secret output from {tool_name}")),
+                "{tool_name}"
+            );
+            assert!(
+                !redacted.contains(&format!("secret detail from {tool_name}")),
+                "{tool_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn redaction_strips_recovered_tool_markup_from_all_assistant_text_shapes() {
+        let raw = serde_json::to_string(&json!([
+            {
+                "role": "assistant",
+                "content": "before <seed:tool_call>string-secret</seed:tool_call> after"
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "text-before <SEED:TOOL_CALL>text-secret</SEED:TOOL_CALL> text-after"
+                    },
+                    {
+                        "type": "thinking",
+                        "thinking": "think-before <｜｜DSML｜｜ tool_calls>thinking-secret</｜｜DSML｜｜ tool_calls> think-after"
+                    },
+                    {
+                        "type": "thinking",
+                        "text": "fallback-before <||DSML|| tool_calls>unterminated-dsml-secret"
+                    },
+                    {
+                        "type": "text",
+                        "text": "tail-before <seed:tool_call>unterminated-seed-secret"
+                    }
+                ]
+            }
+        ]))
+        .expect("serialize recovered markup history");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact recovered markup");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse redacted history");
+
+        assert_eq!(parsed[0]["content"], "before  after");
+        assert_eq!(parsed[1]["content"][0]["text"], "text-before  text-after");
+        assert_eq!(
+            parsed[1]["content"][1]["thinking"],
+            "think-before  think-after"
+        );
+        assert_eq!(parsed[1]["content"][2]["text"], "fallback-before ");
+        assert_eq!(parsed[1]["content"][3]["text"], "tail-before ");
+        for secret_or_markup in [
+            "string-secret",
+            "text-secret",
+            "thinking-secret",
+            "unterminated-dsml-secret",
+            "unterminated-seed-secret",
+            "<seed:tool_call>",
+            "DSML",
+        ] {
+            assert!(
+                !redacted.contains(secret_or_markup),
+                "leaked {secret_or_markup}"
+            );
+        }
+    }
+
+    #[test]
+    fn redaction_strips_flattened_builtin_requests_but_preserves_surrounding_and_custom_text() {
+        let raw = serde_json::to_string(&json!([{
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "before\nPrevious assistant tool request:\n\ntool_call_id: c1\n\ntool_name: bash\n\narguments:\n{\"command\":\"cat /home/me/.ssh/id_rsa\",\"nested\":{\"close\":\"} still secret\"}}\nafter"
+                },
+                {
+                    "type": "thinking",
+                    "thinking": "Historical tool call (read-only, not repeating):\ntool_name: MCP_docs_search\narguments: [\"thinking-secret\"]\nthinking-after"
+                },
+                {
+                    "type": "text",
+                    "text": "Previous assistant tool request:\ntool_name: CustomTool\narguments:\n{\"query\":\"custom-visible\"}"
+                },
+                {
+                    "type": "text",
+                    "text": "prefix\ntool_name: BASH\narguments:\n{\"command\":\"unterminated-secret\""
+                }
+            ]
+        }]))
+        .expect("serialize flattened tool requests");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact flattened requests");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse redacted history");
+
+        assert_eq!(parsed[0]["content"][0]["text"], "before\n\nafter");
+        assert_eq!(parsed[0]["content"][1]["thinking"], "\nthinking-after");
+        assert!(parsed[0]["content"][2]["text"]
+            .as_str()
+            .expect("custom flattened text")
+            .contains("custom-visible"));
+        assert_eq!(parsed[0]["content"][3]["text"], "prefix\n");
+        for secret in [
+            "/home/me/.ssh/id_rsa",
+            "thinking-secret",
+            "unterminated-secret",
+        ] {
+            assert!(!redacted.contains(secret), "leaked {secret}");
+        }
+    }
+
+    #[test]
+    fn redaction_is_case_insensitive_and_covers_provider_native_search() {
+        let raw = serde_json::to_string(&json!([
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "toolCall",
+                        "id": "lower-bash",
+                        "name": " bash ",
+                        "arguments": { "command": "lowercase-secret" }
+                    },
+                    {
+                        "type": "toolCall",
+                        "id": "native-search",
+                        "name": "WebSearch",
+                        "arguments": { "query": "native-query-secret" }
+                    },
+                    {
+                        "type": "toolCall",
+                        "id": "preview-search",
+                        "name": "WEB_SEARCH_PREVIEW",
+                        "arguments": { "query": "preview-query-secret" }
+                    },
+                    {
+                        "type": "hostedSearch",
+                        "id": "provider-secret-id",
+                        "provider": "provider-secret",
+                        "status": "completed",
+                        "queries": ["hosted-query-secret"],
+                        "sources": [{
+                            "url": "https://secret.example/private",
+                            "title": "source-title-secret",
+                            "citedText": "cited-text-secret"
+                        }],
+                        "unknown": "hosted-unknown-secret"
+                    },
+                    {
+                        "type": "toolCall",
+                        "id": "share-redacted-hosted-search-1",
+                        "name": "CustomTool",
+                        "arguments": { "query": "custom-visible" }
+                    }
+                ]
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "lower-bash",
+                "toolName": "BASH",
+                "content": [{ "type": "text", "text": "lower-result-secret" }]
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "native-search",
+                "toolName": "web_search",
+                "content": [{ "type": "text", "text": "native-result-secret" }],
+                "details": { "sources": ["native-source-secret"] }
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "preview-search",
+                "toolName": "web_search_preview",
+                "content": [{ "type": "text", "text": "preview-result-secret" }]
+            }
+        ]))
+        .expect("serialize case and native search history");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact search history");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse redacted history");
+        let blocks = parsed[0]["content"].as_array().expect("assistant blocks");
+
+        for block in &blocks[..3] {
+            assert_eq!(block["redacted"], true);
+            assert_eq!(block["arguments"], Value::Null);
+        }
+        assert_eq!(
+            blocks[3],
+            json!({
+                "type": "hostedSearch",
+                "id": "share-redacted-hosted-search-2",
+                "status": "completed",
+                "queries": [],
+                "sources": [],
+                "redacted": true
+            })
+        );
+        assert_eq!(blocks[4]["id"], "share-redacted-hosted-search-1");
+        assert_eq!(blocks[4]["arguments"]["query"], "custom-visible");
+        for result in parsed.as_array().expect("history items").iter().skip(1) {
+            assert_eq!(result["redacted"], true);
+            assert_eq!(result["details"]["kind"], "redacted_tool_content");
+        }
+        for secret in [
+            "lowercase-secret",
+            "native-query-secret",
+            "preview-query-secret",
+            "provider-secret-id",
+            "provider-secret",
+            "hosted-query-secret",
+            "https://secret.example/private",
+            "source-title-secret",
+            "cited-text-secret",
+            "hosted-unknown-secret",
+            "lower-result-secret",
+            "native-result-secret",
+            "native-source-secret",
+            "preview-result-secret",
+        ] {
+            assert!(!redacted.contains(secret), "leaked {secret}");
+        }
+    }
+
+    #[test]
+    fn redaction_normalizes_nested_payload_and_data_tool_call_shapes() {
+        let data_tool_call_json = serde_json::to_string(&json!({
+            "toolCall": {
+                "id": "inner-data-json",
+                "name": "TodoWrite",
+                "arguments": { "todos": ["secret-data-json"] }
+            }
+        }))
+        .expect("serialize data toolCall wrapper");
+        let raw = serde_json::to_string(&json!([
+            {
+                "role": "assistant",
+                "content": [
+                {
+                    "type": "toolCall",
+                    "id": "misleading-direct-id",
+                    "name": "CustomTool",
+                    "toolCall": {
+                        "id": "inner-direct",
+                        "name": "Bash",
+                        "arguments": { "command": "secret-direct" }
+                    }
+                },
+                {
+                    "type": "toolCall",
+                    "id": "misleading-payload-id",
+                    "name": "CustomTool",
+                    "payload": {
+                        "toolCall": {
+                            "id": "inner-payload",
+                            "name": "Read",
+                            "input": { "path": "secret-payload" }
+                        }
+                    }
+                },
+                {
+                    "type": "toolCall",
+                    "name": "CustomTool",
+                    "data": {
+                        "toolCall": {
+                            "id": "inner-data-object",
+                            "name": "mcp_private_lookup",
+                            "parameters": { "query": "secret-data-object" }
+                        }
+                    }
+                },
+                {
+                    "type": "toolCall",
+                    "name": "CustomTool",
+                    "data": data_tool_call_json
+                },
+                {
+                    "type": "toolCall",
+                    "name": "CustomTool",
+                    "payload": {
+                        "id": "payload-source",
+                        "name": "Write",
+                        "args": { "content": "secret-payload-source" }
+                    }
+                },
+                {
+                    "type": "toolCall",
+                    "name": "CustomTool",
+                    "data": {
+                        "id": "data-source",
+                        "name": "Grep",
+                        "arguments": { "pattern": "secret-data-source" }
+                    }
+                },
+                {
+                    "type": "toolCall",
+                    "id": "outer-builtin-id",
+                    "name": "Bash",
+                    "arguments": { "command": "secret-outer-builtin" },
+                    "payload": {
+                        "id": "inner-custom-id",
+                        "name": "CustomTool",
+                        "marker": "secret-inner-custom"
+                    }
+                }
+                ]
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "outer-builtin-id",
+                "content": [{ "type": "text", "text": "secret-outer-result" }]
+            }
+        ]))
+        .expect("serialize normalized tool-call shapes");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact normalized shapes");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse normalized shapes");
+        let blocks = parsed[0]["content"].as_array().expect("assistant blocks");
+        for (index, expected_name) in [
+            "Bash",
+            "Read",
+            "mcp_private_lookup",
+            "TodoWrite",
+            "Write",
+            "Grep",
+            "Bash",
+        ]
+        .iter()
+        .enumerate()
+        {
+            assert_eq!(
+                blocks[index],
+                json!({
+                    "type": "toolCall",
+                    "id": format!("share-redacted-tool-call-{}", index + 1),
+                    "name": expected_name,
+                    "redacted": true
+                })
+            );
+        }
+        assert_eq!(parsed[1]["redacted"], true);
+        assert_eq!(parsed[1]["toolCallId"], "share-redacted-tool-call-7");
+        for secret in [
+            "secret-direct",
+            "secret-payload",
+            "secret-data-object",
+            "secret-data-json",
+            "secret-payload-source",
+            "secret-data-source",
+            "misleading-direct-id",
+            "misleading-payload-id",
+            "outer-builtin-id",
+            "inner-custom-id",
+            "secret-outer-builtin",
+            "secret-inner-custom",
+            "secret-outer-result",
+        ] {
+            assert!(!redacted.contains(secret), "leaked {secret}");
+        }
+    }
+
+    #[test]
+    fn redacted_hosted_search_preserves_only_valid_status() {
+        let raw = serde_json::to_string(&json!([{
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "hostedSearch",
+                    "id": "failed-secret-id",
+                    "status": "failed",
+                    "queries": ["failed-query-secret"]
+                },
+                {
+                    "type": "hostedSearch",
+                    "id": "searching-secret-id",
+                    "status": "searching",
+                    "sources": [{ "url": "https://searching-secret.example" }]
+                },
+                {
+                    "type": "hostedSearch",
+                    "id": "invalid-secret-id",
+                    "status": "provider-private-status",
+                    "queries": ["invalid-query-secret"]
+                }
+            ]
+        }]))
+        .expect("serialize hosted search statuses");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact hosted searches");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse redacted history");
+        let blocks = parsed[0]["content"].as_array().expect("hosted search blocks");
+
+        assert_eq!(blocks[0]["status"], "failed");
+        assert_eq!(blocks[1]["status"], "searching");
+        assert_eq!(blocks[2]["status"], "searching");
+        for (index, block) in blocks.iter().enumerate() {
+            assert_eq!(
+                block["id"],
+                format!("share-redacted-hosted-search-{}", index + 1)
+            );
+            assert_eq!(block["queries"], json!([]));
+            assert_eq!(block["sources"], json!([]));
+            assert_eq!(block["redacted"], true);
+        }
+        for secret in [
+            "failed-secret-id",
+            "failed-query-secret",
+            "searching-secret-id",
+            "https://searching-secret.example",
+            "invalid-secret-id",
+            "provider-private-status",
+            "invalid-query-secret",
+        ] {
+            assert!(!redacted.contains(secret), "leaked {secret}");
+        }
+    }
+
+    #[test]
+    fn generated_redacted_ids_avoid_all_input_tool_ids_and_keep_result_pairing() {
+        let raw = serde_json::to_string(&json!([
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "toolCall",
+                        "id": "share-redacted-tool-call-1",
+                        "name": "CustomTool",
+                        "arguments": { "keep": true }
+                    },
+                    {
+                        "type": "toolCall",
+                        "id": "share-redacted-tool-call-2",
+                        "name": "Bash",
+                        "arguments": { "command": "secret-first" }
+                    },
+                    {
+                        "type": "toolCall",
+                        "id": "share-redacted-tool-call-3",
+                        "name": "CustomTool",
+                        "arguments": { "keep": true }
+                    },
+                    {
+                        "type": "toolCall",
+                        "id": "builtin-second",
+                        "name": "Read",
+                        "arguments": { "path": "secret-second" }
+                    }
+                ]
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "share-redacted-tool-call-4",
+                "toolName": "CustomTool",
+                "content": "keep custom result"
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "share-redacted-tool-call-2",
+                "toolName": "Bash",
+                "content": "secret first result"
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "builtin-second",
+                "toolName": "Read",
+                "content": "secret second result"
+            }
+        ]))
+        .expect("serialize colliding tool IDs");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact colliding IDs");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse colliding IDs");
+        let blocks = parsed[0]["content"].as_array().expect("assistant blocks");
+
+        assert_eq!(blocks[0]["id"], "share-redacted-tool-call-1");
+        assert_eq!(blocks[1]["id"], "share-redacted-tool-call-5");
+        assert_eq!(blocks[2]["id"], "share-redacted-tool-call-3");
+        assert_eq!(blocks[3]["id"], "share-redacted-tool-call-6");
+        assert_eq!(parsed[1]["toolCallId"], "share-redacted-tool-call-4");
+        assert_eq!(parsed[2]["toolCallId"], blocks[1]["id"]);
+        assert_eq!(parsed[3]["toolCallId"], blocks[3]["id"]);
+        for secret in [
+            "secret-first",
+            "secret-second",
+            "secret first result",
+            "secret second result",
+            "builtin-second",
+        ] {
+            assert!(!redacted.contains(secret), "leaked {secret}");
+        }
+    }
+
+    #[test]
+    fn redaction_checks_every_name_and_id_alias_in_the_same_object() {
+        let raw = serde_json::to_string(&json!([
+            {
+                "role": "assistant",
+                "content": [{
+                    "type": "toolCall",
+                    "id": "misleading-call-id",
+                    "toolCallId": "actual-builtin-id",
+                    "name": "CustomTool",
+                    "toolName": "Bash",
+                    "arguments": { "command": "same-object-call-secret" }
+                }]
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "misleading-result-id",
+                "call_id": "actual-builtin-id",
+                "name": "CustomTool",
+                "toolName": "Bash",
+                "content": "same-object-result-secret"
+            },
+            {
+                "role": "toolResult",
+                "toolCallId": "result-only-secret-id",
+                "name": "CustomTool",
+                "tool_name": "Read",
+                "content": "result-only-alias-secret"
+            }
+        ]))
+        .expect("serialize aliased tool messages");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact aliased tools");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse aliased tools");
+        let call = &parsed[0]["content"][0];
+
+        assert_eq!(call["name"], "Bash");
+        assert_eq!(call["redacted"], true);
+        assert_eq!(parsed[1]["toolCallId"], call["id"]);
+        assert_eq!(parsed[1]["toolName"], "Bash");
+        assert_eq!(parsed[1]["redacted"], true);
+        assert_eq!(parsed[2]["toolName"], "Read");
+        assert_eq!(parsed[2]["redacted"], true);
+        for secret in [
+            "misleading-call-id",
+            "actual-builtin-id",
+            "same-object-call-secret",
+            "misleading-result-id",
+            "same-object-result-secret",
+            "result-only-secret-id",
+            "result-only-alias-secret",
+        ] {
+            assert!(!redacted.contains(secret), "leaked {secret}");
+        }
+    }
+
+    #[test]
+    fn string_assistant_redaction_refreshes_the_public_history_hash() {
+        let redact = |secret: &str| {
+            let mut message = json!({
+                "role": "assistant",
+                "id": "assistant-string-content",
+                "content": format!(
+                    "before<seed:tool_call>{{\"name\":\"Bash\",\"pin\":\"{secret}\"}}</seed:tool_call>after"
+                )
+            });
+            let original_hash = history_message_content_hash(&message);
+            message.as_object_mut().expect("assistant object").insert(
+                "liveAgentHistoryRef".to_string(),
+                json!({
+                    "segmentIndex": 0,
+                    "messageIndex": 0,
+                    "segmentId": "segment-string-content",
+                    "messageId": "assistant-string-content",
+                    "role": "assistant",
+                    "contentHash": original_hash,
+                }),
+            );
+            let raw = serde_json::to_string(&json!([message])).expect("serialize history ref");
+            let redacted = redact_builtin_tool_content_json(&raw).expect("redact string content");
+            let parsed = serde_json::from_str::<Value>(&redacted).expect("parse redacted history");
+            (parsed[0].clone(), redacted)
+        };
+
+        let (first, first_json) = redact("pin-1111");
+        let (second, second_json) = redact("pin-2222");
+
+        assert_eq!(first, second);
+        assert_eq!(first["content"], "beforeafter");
+        assert_eq!(
+            first["liveAgentHistoryRef"]["contentHash"],
+            history_message_content_hash(&first)
+        );
+        assert!(!first_json.contains("pin-1111"));
+        assert!(!second_json.contains("pin-2222"));
+    }
+
+    #[test]
+    fn builtin_share_policy_covers_the_mirrored_tool_catalog() {
+        let catalog = include_str!("../../../src/lib/tools/builtinToolCatalog.ts");
+        let catalog_names = catalog
+            .lines()
+            .filter_map(|line| {
+                line.trim()
+                    .strip_prefix("toolName: \"")
+                    .and_then(|value| value.strip_suffix("\","))
+            })
+            .collect::<Vec<_>>();
+
+        assert!(
+            !catalog_names.is_empty(),
+            "catalog parser found no tool names"
+        );
+        for tool_name in &catalog_names {
+            assert!(
+                is_builtin_share_tool_name(tool_name),
+                "{tool_name} is missing from the server share-redaction policy"
+            );
+        }
+        let mut unique_names = catalog_names.clone();
+        unique_names.sort_unstable();
+        unique_names.dedup();
+        assert_eq!(
+            unique_names.len(),
+            catalog_names.len(),
+            "builtin catalog tool names must be unique"
+        );
+    }
+
+    #[test]
+    fn redacted_tool_ids_are_public_placeholders_even_for_out_of_order_or_missing_ids() {
+        let raw = serde_json::to_string(&json!([
+            {
+                "role": "toolResult",
+                "toolCallId": "dsml-tool-call-secret-hash",
+                "toolName": "Bash",
+                "content": "secret result"
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "toolCall",
+                        "id": "dsml-tool-call-secret-hash",
+                        "name": "RecoveredAlias",
+                        "arguments": { "command": "secret command" }
+                    },
+                    {
+                        "type": "toolCall",
+                        "name": "TodoWrite",
+                        "arguments": { "todos": ["secret todo"] }
+                    },
+                    {
+                        "type": "toolCall",
+                        "id": "duplicate-secret-id",
+                        "name": "Read",
+                        "arguments": { "path": "/secret/one" }
+                    },
+                    {
+                        "type": "toolCall",
+                        "id": "duplicate-secret-id",
+                        "name": "Bash",
+                        "arguments": { "command": "secret two" }
+                    }
+                ]
+            },
+            {
+                "role": "toolResult",
+                "toolName": "TodoWrite",
+                "content": "secret id-less result"
+            }
+        ]))
+        .expect("serialize edge-case history");
+
+        let redacted = redact_builtin_tool_content_json(&raw).expect("redact edge-case history");
+        let parsed = serde_json::from_str::<Value>(&redacted).expect("parse edge-case history");
+        let blocks = parsed[1]["content"].as_array().expect("assistant blocks");
+
+        assert_eq!(parsed[0]["toolCallId"], "share-redacted-tool-call-1");
+        assert_eq!(blocks[0]["id"], parsed[0]["toolCallId"]);
+        assert_eq!(blocks[0]["name"], "Bash");
+        assert_eq!(blocks[1]["id"], "share-redacted-tool-call-2");
+        assert_eq!(blocks[2]["id"], "share-redacted-tool-call-3");
+        assert_eq!(blocks[3]["id"], "share-redacted-tool-call-4");
+        assert_ne!(blocks[3]["id"], blocks[2]["id"]);
+        assert_eq!(parsed[2]["toolCallId"], "share-redacted-tool-call-5");
+        for secret in [
+            "dsml-tool-call-secret-hash",
+            "duplicate-secret-id",
+            "secret command",
+            "secret todo",
+            "secret two",
+            "secret result",
+            "secret id-less result",
+        ] {
+            assert!(!redacted.contains(secret), "leaked {secret}");
+        }
+    }
+
+    #[test]
+    fn flattened_shared_history_redacts_summaries_and_refreshes_tool_hashes() {
+        let flatten_and_redact = |secret: &str| {
+            let derived_tool_call_id = format!("dsml-tool-call-{secret}");
+            let summary_json = serde_json::to_string(&json!({
+                "role": "summary",
+                "id": "summary-1",
+                "timestamp": 42,
+                "content": format!("ran command with {secret} in /private/{secret}"),
+                "summaryMeta": {
+                    "fileLedger": [{ "path": format!("/private/{secret}") }],
+                    "unknownMetadata": { "error": format!("failure: {secret}") }
+                },
+                "provider": format!("provider-{secret}")
+            }))
+            .expect("serialize summary");
+            let messages_json = serde_json::to_string(&json!([
+                {
+                    "role": "user",
+                    "id": "user-1",
+                    "content": "ordinary user text"
+                },
+                {
+                    "role": "assistant",
+                    "responseId": "response-builtin",
+                    "content": [
+                        { "type": "text", "text": "ordinary assistant text" },
+                        {
+                            "type": "toolCall",
+                            "id": derived_tool_call_id,
+                            "name": "ReadTerminal",
+                            "arguments": { "sessionId": secret },
+                            "thoughtSignature": format!("signature-{secret}"),
+                            "reasoning_details": { "encrypted": format!("reasoning-{secret}") },
+                            "unknownProviderField": format!("provider-{secret}")
+                        }
+                    ]
+                },
+                {
+                    "role": "toolResult",
+                    "id": format!("result-{secret}"),
+                    "toolCallId": derived_tool_call_id,
+                    "toolName": "ReadTerminal",
+                    "content": [{ "type": "text", "text": format!("terminal output {secret}") }],
+                    "details": { "error": format!("terminal error {secret}") },
+                    "isError": true,
+                    "timestamp": 77,
+                    "unknownProviderField": format!("result-provider-{secret}")
+                },
+                {
+                    "role": "assistant",
+                    "responseId": "response-custom",
+                    "content": [{
+                        "type": "toolCall",
+                        "id": "call-custom",
+                        "name": "CustomTool",
+                        "arguments": { "query": "keep custom arguments" }
+                    }]
+                },
+                {
+                    "role": "toolResult",
+                    "id": "result-custom",
+                    "toolCallId": "call-custom",
+                    "toolName": "CustomTool",
+                    "content": [{ "type": "text", "text": "keep custom output" }],
+                    "details": { "data": "keep custom details" }
+                }
+            ]))
+            .expect("serialize messages");
+            let flattened = flatten_history_messages_json(&[make_segment(
+                0,
+                "segment-a",
+                Some(&summary_json),
+                &messages_json,
+            )])
+            .expect("flatten history");
+            let flattened_value = serde_json::from_str::<Value>(&flattened)
+                .expect("parse flattened history before redaction");
+            let redacted = redact_builtin_tool_content_json(&flattened)
+                .expect("redact flattened shared history");
+            let redacted_value =
+                serde_json::from_str::<Value>(&redacted).expect("parse redacted shared history");
+            (flattened_value, redacted_value, redacted)
+        };
+
+        let (flattened_a, redacted_a, redacted_json_a) = flatten_and_redact("pin-1111");
+        let (flattened_b, redacted_b, redacted_json_b) = flatten_and_redact("pin-2222");
+
+        assert_ne!(
+            flattened_a[2]["liveAgentHistoryRef"]["contentHash"],
+            flattened_b[2]["liveAgentHistoryRef"]["contentHash"]
+        );
+        assert_eq!(
+            redacted_a[2]["liveAgentHistoryRef"]["contentHash"],
+            redacted_b[2]["liveAgentHistoryRef"]["contentHash"]
+        );
+        assert_eq!(
+            redacted_a[2]["liveAgentHistoryRef"]["contentHash"],
+            history_message_content_hash(&redacted_a[2])
+        );
+        assert_eq!(redacted_a, redacted_b);
+
+        for (public_json, secret) in [
+            (&redacted_json_a, "pin-1111"),
+            (&redacted_json_b, "pin-2222"),
+        ] {
+            assert!(!public_json.contains(secret), "leaked {secret}");
+        }
+
+        assert_eq!(redacted_a[0]["role"], "summary");
+        assert_eq!(redacted_a[0]["id"], "summary-1");
+        assert_eq!(redacted_a[0]["timestamp"], 42);
+        assert_eq!(redacted_a[0]["content"], "摘要内容已脱敏");
+        assert_eq!(redacted_a[0]["redacted"], true);
+        assert_eq!(redacted_a[0]["summaryMeta"], Value::Null);
+        assert_eq!(redacted_a[0]["provider"], Value::Null);
+
+        assert_eq!(redacted_a[1], flattened_a[1]);
+        assert_eq!(
+            redacted_a[2]["content"][0]["text"],
+            "ordinary assistant text"
+        );
+        assert_eq!(
+            redacted_a[2]["content"][1],
+            json!({
+                "type": "toolCall",
+                "id": "share-redacted-tool-call-1",
+                "name": "ReadTerminal",
+                "redacted": true
+            })
+        );
+        assert_eq!(
+            redacted_a[3],
+            json!({
+                "role": "toolResult",
+                "toolCallId": "share-redacted-tool-call-1",
+                "toolName": "ReadTerminal",
+                "content": [{ "type": "text", "text": "工具调用内容已脱敏" }],
+                "details": { "kind": "redacted_tool_content" },
+                "isError": true,
+                "timestamp": 77,
+                "redacted": true
+            })
+        );
+        assert_eq!(redacted_a[4], flattened_a[4]);
+        assert_eq!(redacted_a[5], flattened_a[5]);
     }
 }

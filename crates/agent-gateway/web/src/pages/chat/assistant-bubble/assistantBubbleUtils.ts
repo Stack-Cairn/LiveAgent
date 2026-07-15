@@ -26,6 +26,7 @@ import {
   type UiRound,
 } from "../../../lib/chat/uiMessages";
 import type { SubagentCardDetails, SubagentReportDetails } from "../../../lib/subagents/protocol";
+import { BUILTIN_TOOL_CATALOG } from "../../../lib/tools/builtinToolCatalog";
 
 export function getToolMeta(name: string): {
   Icon: IconComponent;
@@ -325,30 +326,31 @@ export function getBuiltinResultKind(result?: ToolResultMessage) {
   return typeof kind === "string" ? kind : null;
 }
 
+const BUILTIN_SHARE_TOOL_NAMES = new Set(
+  [...BUILTIN_TOOL_CATALOG.map((entry) => entry.toolName), "HttpGetTest", "SshManager"].map(
+    (name) => name.toLowerCase(),
+  ),
+);
+
+const PROVIDER_NATIVE_WEB_SEARCH_TOOL_NAMES = new Set([
+  "websearch",
+  "web_search",
+  "builtin_web_search",
+  "web_search_20250305",
+  "web_search_20260209",
+  "web_search_20260318",
+  "web_search_2025_08_26",
+  "web_search_preview",
+  "web_search_preview_2025_03_11",
+]);
+
 export function isBuiltinShareToolName(name: string) {
-  const trimmed = name.trim();
-  if (trimmed.startsWith("mcp_")) {
+  const normalized = name.trim().toLowerCase();
+  if (normalized.startsWith("mcp_") || normalized.startsWith("web_search_call")) {
     return true;
   }
-  return [
-    "Agent",
-    "Bash",
-    "CronTaskManager",
-    "Delete",
-    "Edit",
-    "Glob",
-    "Grep",
-    "HttpGetTest",
-    "Image",
-    "List",
-    "ManagedProcess",
-    "McpManager",
-    "MemoryManager",
-    "Read",
-    "SkillsManager",
-    "SSHManager",
-    "SshManager",
-    "TunnelManager",
-    "Write",
-  ].includes(trimmed);
+  return (
+    BUILTIN_SHARE_TOOL_NAMES.has(normalized) ||
+    PROVIDER_NATIVE_WEB_SEARCH_TOOL_NAMES.has(normalized)
+  );
 }

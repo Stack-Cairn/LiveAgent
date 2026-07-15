@@ -234,6 +234,7 @@ export const RoundContent = memo(function RoundContent(props: {
               key={block.key}
               items={block.kind === "hostedSearch" ? [block.item] : block.items}
               readOnly={readOnly}
+              redactToolContent={redactToolContent}
             />
           );
         }

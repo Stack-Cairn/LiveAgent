@@ -81,18 +81,28 @@ function getHostedSearchCountLabel(count: number, t: (key: string) => string) {
 export function HostedSearchGroupView({
   items,
   readOnly = false,
+  redactToolContent = false,
 }: {
   items: HostedSearchBlock[];
   readOnly?: boolean;
+  redactToolContent?: boolean;
 }) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
-  const queries = useMemo(() => getUniqueHostedSearchQueries(items), [items]);
-  const sources = useMemo(() => getUniqueHostedSearchSources(items), [items]);
+  const queries = useMemo(
+    () => (redactToolContent ? [] : getUniqueHostedSearchQueries(items)),
+    [items, redactToolContent],
+  );
+  const sources = useMemo(
+    () => (redactToolContent ? [] : getUniqueHostedSearchSources(items)),
+    [items, redactToolContent],
+  );
   const visibleSources = sources.slice(0, 10);
   const status = getHostedSearchGroupStatus(items);
   const statusLabel = getHostedSearchStatusLabel(t, status);
-  const latestTitle = getLatestHostedSearchTitle(items, t, status);
+  const latestTitle = redactToolContent
+    ? getHostedSearchStatusLabel(t, status)
+    : getLatestHostedSearchTitle(items, t, status);
   const isSearching = status === "searching";
   const hasDetails = queries.length > 0 || visibleSources.length > 0;
   const statusBgClass =
