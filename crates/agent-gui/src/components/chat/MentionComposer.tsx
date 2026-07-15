@@ -29,14 +29,7 @@ import {
 } from "../../lib/chat/messages/mentionReferences";
 import { cn } from "../../lib/shared/utils";
 import { invokeFs } from "../../lib/tools/fsBackend";
-import {
-  ClipboardPaste,
-  Copy,
-  ScanText,
-  Scissors,
-  SKILL_ICON_SVG_MARKUP,
-  SkillIcon,
-} from "../icons";
+import { Blend, ClipboardPaste, Copy, ScanText, Scissors, SKILL_ICON_SVG_MARKUP } from "../icons";
 import { getFileTypeIcon, getFileTypeIconSvg } from "./fileTypeIcons";
 import { mentionChipClassName } from "./mentionChipStyles";
 
@@ -1423,6 +1416,7 @@ function deleteChipBeforeCursor(
 
 function Popup({
   anchorRef,
+  trigger,
   suggestions,
   highlightIndex,
   isLoading,
@@ -1432,6 +1426,7 @@ function Popup({
   onSelect,
 }: {
   anchorRef: RefObject<HTMLElement | null>;
+  trigger: MentionContext["trigger"];
   suggestions: MentionSuggestion[];
   highlightIndex: number;
   isLoading: boolean;
@@ -1450,9 +1445,10 @@ function Popup({
     const anchor = anchorRef.current;
     const popup = popupRef.current;
     if (!anchor || !popup) return;
+    const inputSurface = anchor.closest<HTMLElement>(".composer-glass-card") ?? anchor;
 
     const update = () => {
-      const rect = anchor.getBoundingClientRect();
+      const rect = inputSurface.getBoundingClientRect();
       popup.style.left = `${rect.left}px`;
       popup.style.bottom = `${Math.max(8, window.innerHeight - rect.top + 8)}px`;
       popup.style.width = `${rect.width}px`;
@@ -1460,7 +1456,7 @@ function Popup({
 
     update();
     const ro = new ResizeObserver(update);
-    ro.observe(anchor);
+    ro.observe(inputSurface);
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
     return () => {
@@ -1475,20 +1471,17 @@ function Popup({
       ref={popupRef}
       className={cn(
         "mention-popup-enter fixed z-[100] overflow-hidden rounded-2xl",
-        "border border-white/55 bg-white/75 shadow-[0_18px_48px_-12px_rgba(15,23,42,0.22),0_2px_8px_-2px_rgba(15,23,42,0.06)]",
-        "backdrop-blur-2xl backdrop-saturate-[180%]",
-        "dark:border-white/[0.08] dark:bg-slate-900/65 dark:shadow-[0_18px_48px_-10px_rgba(0,0,0,0.55)]",
+        "border border-black/[0.075] bg-popover text-popover-foreground shadow-sm ring-0 dark:border-white/[0.15]",
       )}
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-4 top-0 h-px rounded-full bg-gradient-to-r from-transparent via-white/85 to-transparent dark:via-white/15"
-      />
-      <div className="mention-popup-scroll relative max-h-[260px] overflow-y-auto py-0.5">
+      <div className="px-3.5 pb-1.5 pt-3 text-xs font-medium text-muted-foreground">
+        {trigger === "skill" ? "Skills" : "文件"}
+      </div>
+      <div className="mention-popup-scroll relative flex max-h-[320px] flex-col gap-0.5 overflow-y-auto px-2 pb-2">
         {isLoading && (
-          <div className="px-3 py-2 text-xs text-muted-foreground">Indexing files...</div>
+          <div className="px-2 py-2 text-xs text-muted-foreground">Indexing files...</div>
         )}
-        {error && !isLoading && <div className="px-3 py-2 text-xs text-destructive">{error}</div>}
+        {error && !isLoading && <div className="px-2 py-2 text-xs text-destructive">{error}</div>}
         {suggestions.map((suggestion, i) => {
           const isSkill = suggestion.type === "skill";
           const entry = suggestion.type === "file" ? suggestion.entry : null;
@@ -1507,10 +1500,10 @@ function Popup({
               }
               ref={i === highlightIndex ? hlRef : undefined}
               className={cn(
-                "mention-popup-item group mx-1.5 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[calc(13px*var(--zone-font-scale,1))] leading-5 transition-all",
+                "mention-popup-item group flex h-[30px] cursor-pointer items-center gap-3 rounded-lg px-3 text-xs leading-5 transition-colors",
                 i === highlightIndex
-                  ? "bg-foreground/[0.08] text-foreground shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)] dark:bg-white/[0.08] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]"
-                  : "text-foreground/85 hover:bg-foreground/[0.04] dark:text-foreground/90 dark:hover:bg-white/[0.04]",
+                  ? "bg-foreground/[0.07] text-foreground"
+                  : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",
               )}
               onMouseDown={(e) => {
                 e.preventDefault();
@@ -1519,31 +1512,29 @@ function Popup({
             >
               <span
                 className={cn(
-                  "flex h-5 w-5 shrink-0 items-center justify-center rounded-md",
+                  "flex h-4 w-4 shrink-0 items-center justify-center",
                   isSkill
-                    ? "bg-violet-500/10 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300"
+                    ? "text-foreground/85"
                     : isDir
-                      ? "bg-amber-500/10 dark:bg-amber-400/15"
-                      : "bg-foreground/[0.04] dark:bg-white/[0.05]",
+                      ? "text-amber-600 dark:text-amber-300"
+                      : "text-muted-foreground",
                 )}
               >
-                {Icon ? <Icon width={12} height={12} /> : <SkillIcon width={12} height={12} />}
+                {Icon ? <Icon width={16} height={16} /> : <Blend className="h-4 w-4" />}
               </span>
               <span className="min-w-0 flex-1 truncate">
-                <span className="font-medium tracking-tight text-foreground/95">{title}</span>
+                <span className="font-normal text-foreground/95">{title}</span>
                 {subtitle && (
-                  <span className="ml-1.5 text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/85">
-                    {subtitle}
-                  </span>
+                  <span className="ml-2 text-xs text-muted-foreground/75">{subtitle}</span>
                 )}
               </span>
               {isSkill ? (
-                <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] uppercase tracking-wider text-muted-foreground/60">
+                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
                   skill
                 </span>
               ) : (
                 isDir && (
-                  <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] uppercase tracking-wider text-muted-foreground/60">
+                  <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
                     dir
                   </span>
                 )
@@ -1552,7 +1543,7 @@ function Popup({
           );
         })}
         {showEmpty && !isLoading && !error && suggestions.length === 0 && (
-          <div className="px-3 py-2 text-xs text-muted-foreground">{emptyLabel}</div>
+          <div className="px-2 py-2 text-xs text-muted-foreground">{emptyLabel}</div>
         )}
       </div>
     </div>,
@@ -1741,7 +1732,7 @@ export const MentionComposer = memo(
     }: MentionComposerProps,
     ref,
   ) {
-    const { locale } = useLocale();
+    const { locale, t } = useLocale();
     const editorRef = useRef<HTMLDivElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const composerContextMenuRef = useRef<HTMLDivElement>(null);
@@ -1979,7 +1970,9 @@ export const MentionComposer = memo(
     const popupLoading = mentionSessionLoading;
     const popupError = suggestions.length === 0 ? mentionSessionError : null;
     const popupEmptyLabel =
-      mentionCtx?.trigger === "skill" ? "No matching enabled Skills" : "No matching files";
+      mentionCtx?.trigger === "skill"
+        ? t("chat.composer.noMatchingEnabledSkills")
+        : t("chat.composer.noMatchingFiles");
     const showEmpty =
       mentionCtx !== null && !popupLoading && !popupError && suggestions.length === 0;
     const popupVisible =
@@ -2378,8 +2371,9 @@ export const MentionComposer = memo(
               typewriterRef.current = null;
               settle(true);
             };
-            refreshEmptyState();
-            typewriterRef.current = { timer: window.setTimeout(tick, tickMs), finish, settle };
+            // Commit the first animated character in the same frame as the
+            // replacement so the empty-state placeholder never flashes.
+            tick();
           });
         },
       }),
@@ -2914,6 +2908,7 @@ export const MentionComposer = memo(
         {popupVisible && (
           <Popup
             anchorRef={wrapperRef}
+            trigger={mentionCtx.trigger}
             suggestions={suggestions}
             highlightIndex={highlightIdx}
             isLoading={popupLoading}

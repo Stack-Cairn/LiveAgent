@@ -10,7 +10,7 @@
         "minHeight": 720,
         "backgroundThrottling": "disabled",
         "titleBarStyle": "Overlay",
-        "trafficLightPosition": { "x": 18, "y": 18 }
+        "trafficLightPosition": { "x": 18, "y": 26 }
       }
     ]
   },

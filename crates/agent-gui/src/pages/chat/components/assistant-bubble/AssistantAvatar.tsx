@@ -6,7 +6,7 @@ export function AssistantAvatar(props: { className?: string }) {
   return (
     <div
       className={cn(
-        "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 shadow-sm dark:bg-background/70",
+        "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/80 shadow-none dark:bg-background/70",
         className,
       )}
     >

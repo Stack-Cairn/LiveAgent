@@ -15,7 +15,7 @@ type MacOsTrafficLightMetrics = {
 };
 
 // Fallback values match tauri.conf.json; runtime AppKit metrics replace them on macOS.
-const MAC_OS_TRAFFIC_LIGHT_TOP = 18;
+const MAC_OS_TRAFFIC_LIGHT_TOP = 26;
 const MAC_OS_TRAFFIC_LIGHT_LEFT = 18;
 const MAC_OS_TRAFFIC_LIGHT_GROUP_WIDTH = 52;
 const MAC_OS_TRAFFIC_LIGHT_GROUP_HEIGHT = 12;

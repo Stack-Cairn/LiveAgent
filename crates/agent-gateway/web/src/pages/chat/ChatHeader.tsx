@@ -17,7 +17,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
@@ -41,9 +40,9 @@ function ProviderBrandIcon({ type, className }: { type: ProviderId; className?: 
 }
 
 function ThemeToggleIcon(props: { theme: Theme }) {
-  if (props.theme === "light") return <Sun className="h-4.5 w-4.5" />;
-  if (props.theme === "dark") return <Moon className="h-4.5 w-4.5" />;
-  return <MonitorSmartphone className="h-4.5 w-4.5" />;
+  if (props.theme === "light") return <Sun className="h-4 w-4" />;
+  if (props.theme === "dark") return <Moon className="h-4 w-4" />;
+  return <MonitorSmartphone className="h-4 w-4" />;
 }
 
 export const ChatHeader = memo(function ChatHeader(props: {
@@ -141,8 +140,8 @@ export const ChatHeader = memo(function ChatHeader(props: {
               variant="ghost"
               disabled={!hasModels}
               className={cn(
-                "model-selector-trigger h-9 max-w-[min(20rem,calc(100vw-8.5rem))] justify-between gap-1.5 overflow-hidden rounded-lg px-3 text-base font-semibold text-foreground transition-all duration-200 ease-out hover:bg-muted/60 dark:text-white",
-                isModelMenuOpen && "bg-muted/70 shadow-sm",
+                "model-selector-trigger h-8 max-w-[min(20rem,calc(100vw-8.5rem))] justify-between gap-1.5 overflow-hidden rounded-lg px-2.5 py-1 text-base font-semibold text-foreground transition-all duration-200 ease-out hover:bg-muted/60 dark:text-white",
+                isModelMenuOpen && "bg-muted/60",
               )}
             >
               <span className="model-selector-current-label flex min-w-0 items-center gap-1.5 text-left">
@@ -161,21 +160,17 @@ export const ChatHeader = memo(function ChatHeader(props: {
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="start"
-            sideOffset={8}
+            sideOffset={4}
             collisionPadding={8}
-            className="model-selector-dropdown w-[min(18rem,calc(100vw-1rem))] border-border/70 bg-popover/95 p-0 shadow-lg shadow-black/5 backdrop-blur supports-[backdrop-filter]:bg-popover/90"
+            className="model-selector-dropdown w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-xl p-0 text-xs"
           >
-            <DropdownMenuLabel className="model-selector-menu-title px-3 py-2 text-muted-foreground dark:text-white/80">
-              {t("chat.selectModel")}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator className="my-0" />
-            <div className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto overscroll-contain px-1 pb-1">
+            <div className="max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
               {(() => {
                 let animationIndex = 0;
                 return groups.map((group, groupIndex) => {
                   const expanded = isGroupExpanded(group.name);
                   return (
-                    <div key={group.name}>
+                    <div key={group.name} className="flex flex-col gap-0.5">
                       {groupIndex > 0 ? <DropdownMenuSeparator /> : null}
                       <DropdownMenuItem
                         onSelect={(event) => {
@@ -185,7 +180,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
                         }}
                         aria-expanded={expanded}
                         title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
-                        className="model-selector-group-label sticky top-0 z-10 flex cursor-pointer items-center gap-1.5 bg-popover/95 px-2 py-1 text-xs font-medium text-muted-foreground backdrop-blur transition-colors supports-[backdrop-filter]:bg-popover/80 dark:text-white/80"
+                        className="model-selector-group-label sticky top-0 z-10 flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 bg-popover/95 px-2 py-0 text-xs font-medium text-muted-foreground backdrop-blur transition-colors supports-[backdrop-filter]:bg-popover/80 dark:text-white/80"
                       >
                         <ProviderBrandIcon
                           type={group.providerType}
@@ -216,18 +211,16 @@ export const ChatHeader = memo(function ChatHeader(props: {
                                   setSettings((prev) => setSelectedModel(prev, parsed));
                                 }}
                                 className={cn(
-                                  "model-selector-item group/item max-w-full justify-between gap-3 overflow-hidden text-foreground transition-all duration-150 ease-out data-[highlighted]:translate-x-0.5 dark:text-white",
-                                  isSelected && "bg-muted font-medium text-foreground",
+                                  "model-selector-item h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden py-0 text-xs font-normal leading-5 text-foreground transition-none focus:bg-foreground/[0.05] dark:text-white",
+                                  isSelected &&
+                                    "bg-foreground/[0.07] font-medium text-foreground focus:bg-foreground/[0.09]",
                                 )}
                                 style={{ animationDelay: itemAnimationDelay }}
                               >
                                 <span className="flex min-w-0 items-center gap-2">
                                   <ProviderBrandIcon
                                     type={option.providerType}
-                                    className={cn(
-                                      "opacity-70 transition-opacity duration-150 group-data-[highlighted]/item:opacity-100",
-                                      isSelected && "opacity-100",
-                                    )}
+                                    className={cn("opacity-70", isSelected && "opacity-100")}
                                   />
                                   <span className="min-w-0 truncate">{option.model}</span>
                                 </span>
@@ -267,7 +260,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
             title={t("tooltip.settings")}
             className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
           >
-            <Settings className="h-4.5 w-4.5" />
+            <Settings className="h-4 w-4" />
           </Button>
         ) : null}
         {trailingActions}

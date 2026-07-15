@@ -3824,9 +3824,9 @@ export default function GatewayApp() {
                           }`}
                         >
                           {rightDockOpen ? (
-                            <PanelRightClose className="h-4.5 w-4.5" />
+                            <PanelRightClose className="h-4 w-4" />
                           ) : (
-                            <PanelRightOpen className="h-4.5 w-4.5" />
+                            <PanelRightOpen className="h-4 w-4" />
                           )}
                           {projectTerminalSessions.length > 0 ? (
                             <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none text-white">

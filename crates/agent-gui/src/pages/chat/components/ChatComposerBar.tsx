@@ -1,16 +1,14 @@
+import { Tooltip } from "@base-ui/react";
 import {
   type MutableRefObject,
   memo,
-  type FocusEvent as ReactFocusEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   MentionComposer,
   type MentionComposerHandle,
@@ -18,16 +16,18 @@ import {
 } from "../../../components/chat/MentionComposer";
 import { GitBranchSelector } from "../../../components/git/GitBranchSelector";
 import {
-  Brain,
   ChevronDown,
   ChevronUp,
   Clock3,
-  Globe2,
+  Globe,
+  GlobeOff,
   Lightbulb,
+  LightbulbOff,
   Loader2,
   Paperclip,
   Play,
   Send,
+  Sparkle,
   Square,
   SquarePen,
   Trash2,
@@ -69,128 +69,28 @@ function isReasoningLevel(value: unknown): value is ReasoningLevel {
   return typeof value === "string" && Object.hasOwn(REASONING_I18N_KEYS, value);
 }
 
-function isFocusVisibleTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  try {
-    return target.matches(":focus-visible");
-  } catch {
-    // Engines without :focus-visible keep the legacy show-on-any-focus behavior.
-    return true;
-  }
-}
-
 function RuntimeControlTooltip(props: { label: string; children: ReactNode }) {
-  const triggerRef = useRef<HTMLSpanElement | null>(null);
-  const tooltipRef = useRef<HTMLSpanElement | null>(null);
-  const openTimerRef = useRef<number | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [position, setPosition] = useState({ left: 0, top: 0 });
-
-  const clearOpenTimer = useCallback(() => {
-    if (openTimerRef.current === null) return;
-    window.clearTimeout(openTimerRef.current);
-    openTimerRef.current = null;
-  }, []);
-
-  const updatePosition = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-
-    const rect = trigger.getBoundingClientRect();
-    const tooltipWidth =
-      tooltipRef.current?.offsetWidth ?? Math.min(Math.max(props.label.length * 7 + 16, 48), 240);
-    const viewportPadding = 8;
-    const centeredLeft = rect.left + rect.width / 2;
-    const minLeft = viewportPadding + tooltipWidth / 2;
-    const maxLeft = window.innerWidth - viewportPadding - tooltipWidth / 2;
-    const left = Math.min(Math.max(centeredLeft, minLeft), Math.max(minLeft, maxLeft));
-
-    setPosition({
-      left,
-      top: Math.max(viewportPadding, rect.top - viewportPadding),
-    });
-  }, [props.label]);
-
-  const showTooltip = useCallback(() => {
-    if (typeof window === "undefined") return;
-    clearOpenTimer();
-    openTimerRef.current = window.setTimeout(() => {
-      openTimerRef.current = null;
-      updatePosition();
-      setIsVisible(true);
-    }, 150);
-  }, [clearOpenTimer, updatePosition]);
-
-  const hideTooltip = useCallback(() => {
-    clearOpenTimer();
-    setIsVisible(false);
-  }, [clearOpenTimer]);
-
-  const handlePointerEnter = useCallback(
-    (event: ReactPointerEvent<HTMLSpanElement>) => {
-      // Touch has no hover: a tap would open a tooltip nothing ever closes.
-      if (event.pointerType === "touch") return;
-      showTooltip();
-    },
-    [showTooltip],
-  );
-
-  const handleFocusCapture = useCallback(
-    (event: ReactFocusEvent<HTMLSpanElement>) => {
-      // Only keyboard focus opens the tooltip; click/window-refocus would
-      // otherwise pop it without hover (e.g. after the file picker closes).
-      if (!isFocusVisibleTarget(event.target)) return;
-      showTooltip();
-    },
-    [showTooltip],
-  );
-
-  useEffect(() => clearOpenTimer, [clearOpenTimer]);
-
-  // Layout effect so the measured-width reposition lands before paint.
-  useLayoutEffect(() => {
-    if (!isVisible) return;
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
-
-    return () => {
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
-    };
-  }, [isVisible, updatePosition]);
-
   return (
-    <span
-      ref={triggerRef}
-      className="inline-flex shrink-0"
-      onBlurCapture={hideTooltip}
-      onFocusCapture={handleFocusCapture}
-      onPointerDownCapture={hideTooltip}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={hideTooltip}
-    >
-      {props.children}
-      {isVisible && typeof document !== "undefined"
-        ? createPortal(
-            <span
-              ref={tooltipRef}
-              aria-hidden
-              className="pointer-events-none fixed z-[1000] -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-border/60 bg-popover px-2 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-popover-foreground opacity-100 shadow-md"
-              style={{
-                left: position.left,
-                maxWidth: "calc(100vw - 16px)",
-                top: position.top,
-              }}
-            >
-              {props.label}
-            </span>,
-            document.body,
-          )
-        : null}
-    </span>
+    <Tooltip.Root>
+      <Tooltip.Trigger
+        delay={0}
+        closeOnClick
+        render={<span className="inline-flex shrink-0">{props.children}</span>}
+      />
+      <Tooltip.Portal>
+        <Tooltip.Positioner
+          side="top"
+          align="center"
+          sideOffset={6}
+          collisionPadding={8}
+          className="z-[9999]"
+        >
+          <Tooltip.Popup className="max-w-64 rounded-xl border border-border/60 bg-popover px-3 py-2 text-xs font-medium leading-4 text-popover-foreground shadow-lg outline-hidden data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95">
+            {props.label}
+          </Tooltip.Popup>
+        </Tooltip.Positioner>
+      </Tooltip.Portal>
+    </Tooltip.Root>
   );
 }
 
@@ -734,7 +634,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                           : t("chat.upload.selectFiles")
                   }
                   className={cn(
-                    "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors",
+                    "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
                     "disabled:pointer-events-none disabled:opacity-40",
                     pendingUploadedFiles.length > 0
                       ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
@@ -757,6 +657,36 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                 </button>
               </RuntimeControlTooltip>
 
+              <RuntimeControlTooltip label={webSearchTooltip}>
+                <button
+                  type="button"
+                  disabled={controlsDisabled}
+                  onClick={() =>
+                    onChatRuntimeControlsChange({
+                      nativeWebSearchEnabled: !chatRuntimeControls.nativeWebSearchEnabled,
+                    })
+                  }
+                  aria-label={
+                    chatRuntimeControls.nativeWebSearchEnabled
+                      ? t("chat.runtime.webSearchOn")
+                      : t("chat.runtime.webSearchOff")
+                  }
+                  className={cn(
+                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                    "disabled:pointer-events-none disabled:opacity-40",
+                    chatRuntimeControls.nativeWebSearchEnabled
+                      ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200"
+                      : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                  )}
+                >
+                  {chatRuntimeControls.nativeWebSearchEnabled ? (
+                    <Globe className="h-4 w-4" />
+                  ) : (
+                    <GlobeOff className="h-4 w-4" />
+                  )}
+                </button>
+              </RuntimeControlTooltip>
+
               <RuntimeControlTooltip label={thinkingTooltip}>
                 <button
                   type="button"
@@ -774,96 +704,72 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                         : t("chat.runtime.thinkingOff")
                   }
                   className={cn(
-                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors",
+                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
                     "disabled:pointer-events-none disabled:opacity-40",
                     chatRuntimeControls.thinkingEnabled && thinkingSupported
                       ? "text-amber-600 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-200"
                       : "text-muted-foreground hover:text-foreground dark:hover:text-white",
                   )}
                 >
-                  <Lightbulb className="h-4 w-4" />
-                </button>
-              </RuntimeControlTooltip>
-
-              <RuntimeControlTooltip label={webSearchTooltip}>
-                <button
-                  type="button"
-                  disabled={controlsDisabled}
-                  onClick={() =>
-                    onChatRuntimeControlsChange({
-                      nativeWebSearchEnabled: !chatRuntimeControls.nativeWebSearchEnabled,
-                    })
-                  }
-                  aria-label={
-                    chatRuntimeControls.nativeWebSearchEnabled
-                      ? t("chat.runtime.webSearchOn")
-                      : t("chat.runtime.webSearchOff")
-                  }
-                  className={cn(
-                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors",
-                    "disabled:pointer-events-none disabled:opacity-40",
-                    chatRuntimeControls.nativeWebSearchEnabled
-                      ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200"
-                      : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                  {chatRuntimeControls.thinkingEnabled && thinkingSupported ? (
+                    <Lightbulb className="h-4 w-4" />
+                  ) : (
+                    <LightbulbOff className="h-4 w-4" />
                   )}
-                >
-                  <Globe2 className="h-4 w-4" />
                 </button>
               </RuntimeControlTooltip>
 
               {reasoningOptions.length > 0 ? (
-                <Select
-                  value={selectedReasoning}
-                  onValueChange={(value) =>
-                    onChatRuntimeControlsChange({ reasoning: value as ReasoningLevel })
-                  }
-                  disabled={controlsDisabled || !chatRuntimeControls.thinkingEnabled}
+                <div
+                  aria-hidden={!chatRuntimeControls.thinkingEnabled}
+                  className={cn(
+                    "shrink-0 overflow-hidden transition-[max-width,margin-left,opacity] duration-200 ease-out",
+                    chatRuntimeControls.thinkingEnabled
+                      ? "ml-0 max-w-40 opacity-100"
+                      : "pointer-events-none -ml-1 max-w-0 opacity-0",
+                  )}
                 >
-                  <SelectTrigger
-                    className={cn(
-                      // Base UI wraps the chevron in an Icon <span>, so the
-                      // svg is a descendant (not a direct child) of the
-                      // trigger; the open state lives on data-popup-open.
-                      "composer-reasoning-trigger group/reasoning h-8 w-auto shrink-0 gap-0.5 rounded-full border pl-2 pr-1.5 text-xs font-medium shadow-none outline-hidden transition-all duration-200 ease-out disabled:opacity-45 [&_svg:last-child]:h-3 [&_svg:last-child]:w-3 [&_svg:last-child]:opacity-50 [&_svg:last-child]:transition-transform [&_svg:last-child]:duration-200 [&[data-popup-open]_svg:last-child]:rotate-180",
-                      chatRuntimeControls.thinkingEnabled
-                        ? "border-violet-300/30 bg-violet-50/55 text-foreground hover:border-violet-300/45 hover:bg-violet-50/80 dark:border-violet-300/15 dark:bg-violet-400/[0.07] dark:text-foreground dark:hover:bg-violet-400/[0.13]"
-                        : "border-transparent bg-foreground/4 text-muted-foreground hover:bg-foreground/[0.07] dark:bg-white/[0.04] dark:hover:bg-white/[0.08]",
-                    )}
-                    aria-label={t("chat.runtime.reasoning")}
+                  <Select
+                    value={selectedReasoning}
+                    onValueChange={(value) =>
+                      onChatRuntimeControlsChange({ reasoning: value as ReasoningLevel })
+                    }
+                    disabled={controlsDisabled || !chatRuntimeControls.thinkingEnabled}
                   >
-                    <span className="flex min-w-0 items-center gap-1">
-                      <Brain
-                        className={cn(
-                          "h-3.5 w-3.5 shrink-0 transition-colors",
-                          chatRuntimeControls.thinkingEnabled
-                            ? "text-violet-500 dark:text-violet-400"
-                            : "",
-                        )}
-                      />
-                      <SelectValue>
-                        {(value) =>
-                          t(
-                            REASONING_I18N_KEYS[
-                              isReasoningLevel(value) ? value : selectedReasoning
-                            ],
-                          )
-                        }
-                      </SelectValue>
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent className="composer-reasoning-dropdown min-w-30 rounded-xl border border-violet-200/40 bg-popover/85 p-1 shadow-[0_14px_34px_-16px_rgba(88,28,135,0.38)] ring-1 ring-white/15 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-popover/70 dark:border-violet-300/15 dark:bg-popover/70">
-                    {reasoningOptions.map((value, index) => (
-                      <SelectItem
-                        key={value}
-                        value={value}
-                        className="composer-reasoning-item rounded-md transition-all duration-150 ease-out data-[highlighted]:translate-x-0.5 data-[highlighted]:bg-violet-50/70 data-[highlighted]:text-foreground data-[selected]:bg-violet-50/80 data-[selected]:font-medium dark:data-[highlighted]:bg-violet-400/[0.12] dark:data-[selected]:bg-violet-400/[0.14]"
-                        style={{ animationDelay: `${Math.min(index, 5) * 0.022}s` }}
-                      >
-                        {t(REASONING_I18N_KEYS[value])}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                    <SelectTrigger
+                      className="composer-reasoning-trigger group/reasoning h-8 w-auto shrink-0 gap-0.5 rounded-full border-0 bg-violet-50/55 pl-2 pr-1.5 text-xs font-medium text-foreground shadow-none outline-hidden transition-all duration-200 ease-out hover:bg-violet-50/80 disabled:opacity-45 dark:bg-violet-400/[0.07] dark:text-foreground dark:hover:bg-violet-400/[0.13] [&_svg:last-child]:h-3 [&_svg:last-child]:w-3 [&_svg:last-child]:opacity-50 [&_svg:last-child]:transition-transform [&_svg:last-child]:duration-200 [&[data-popup-open]_svg:last-child]:rotate-180"
+                      aria-label={t("chat.runtime.reasoning")}
+                    >
+                      <span className="flex min-w-0 items-center gap-1">
+                        <Sparkle className="h-3.5 w-3.5 shrink-0 text-violet-500 transition-colors dark:text-violet-400" />
+                        <SelectValue>
+                          {(value) =>
+                            t(
+                              REASONING_I18N_KEYS[
+                                isReasoningLevel(value) ? value : selectedReasoning
+                              ],
+                            )
+                          }
+                        </SelectValue>
+                      </span>
+                    </SelectTrigger>
+                    <SelectContent className="sidebar-context-menu min-w-40 rounded-xl border-0">
+                      {reasoningOptions.map((value) => (
+                        <SelectItem
+                          key={value}
+                          value={value}
+                          className={cn(
+                            "mb-0.5 h-[30px] rounded-md py-0 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 transition-none last:mb-0 data-[highlighted]:bg-foreground/[0.05] data-[highlighted]:text-foreground",
+                            value === selectedReasoning &&
+                              "bg-foreground/[0.07] data-[highlighted]:bg-foreground/[0.09]",
+                          )}
+                        >
+                          {t(REASONING_I18N_KEYS[value])}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               ) : null}
 
               <GitBranchSelector
@@ -891,7 +797,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                   if (sendDisabled) return;
                   onSend();
                 }}
-                size="icon"
+                size="sm"
                 title={primaryActionTitle}
                 aria-label={primaryActionTitle}
                 style={
@@ -910,20 +816,20 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                       : undefined
                 }
                 className={cn(
-                  "h-8 w-8 shrink-0 rounded-full shadow-[0_1px_2px_rgba(15,23,42,0.12)] transition-all",
+                  "h-8 w-8 shrink-0 rounded-full border-0 p-0 shadow-none transition-all",
                   canQueueDraftWhileSending
-                    ? "hover:brightness-105 hover:shadow-[0_8px_18px_-8px_rgba(5,150,105,0.72)] active:scale-95"
+                    ? "hover:brightness-105 active:scale-95"
                     : isSending
                       ? "hover:opacity-90 active:scale-95"
-                      : "disabled:opacity-100 [&:not(:disabled)]:bg-foreground [&:not(:disabled)]:text-background [&:not(:disabled)]:hover:bg-foreground/85 [&:not(:disabled)]:hover:shadow-[0_4px_14px_-2px_rgba(15,23,42,0.28)] [&:not(:disabled)]:active:scale-95 disabled:bg-foreground/10 disabled:text-foreground/35",
+                      : "disabled:opacity-100 [&:not(:disabled)]:bg-foreground [&:not(:disabled)]:text-background [&:not(:disabled)]:hover:bg-foreground/85 [&:not(:disabled)]:active:scale-95 disabled:bg-muted/60 disabled:text-muted-foreground",
                 )}
               >
                 {canQueueDraftWhileSending ? (
-                  <Send className="h-3.5 w-3.5" />
+                  <Send className="h-4 w-4" />
                 ) : isSending ? (
                   <Square className="h-3 w-3 fill-current" />
                 ) : (
-                  <Send className="h-3.5 w-3.5" />
+                  <Send className="h-4 w-4" />
                 )}
               </Button>
             </div>

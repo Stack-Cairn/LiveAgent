@@ -19,7 +19,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
@@ -43,9 +42,9 @@ function ProviderBrandIcon({ type, className }: { type: ProviderId; className?: 
 }
 
 function ThemeToggleIcon(props: { theme: Theme }) {
-  if (props.theme === "light") return <Sun className="h-4.5 w-4.5" />;
-  if (props.theme === "dark") return <Moon className="h-4.5 w-4.5" />;
-  return <MonitorSmartphone className="h-4.5 w-4.5" />;
+  if (props.theme === "light") return <Sun className="h-4 w-4" />;
+  if (props.theme === "dark") return <Moon className="h-4 w-4" />;
+  return <MonitorSmartphone className="h-4 w-4" />;
 }
 
 export const ChatHeader = memo(function ChatHeader(props: {
@@ -88,6 +87,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
   const [modelSearch, setModelSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const macOsTauri = isMacOsTauri();
 
   useEffect(() => {
     if (isModelMenuOpen) {
@@ -133,9 +133,15 @@ export const ChatHeader = memo(function ChatHeader(props: {
     }));
 
   return (
-    <header data-tauri-drag-region className="flex items-center justify-between gap-2 px-4 py-2.5">
+    <header
+      data-tauri-drag-region
+      className={cn(
+        "flex items-center justify-between gap-2 py-2.5 pr-4",
+        !sidebarOpen && macOsTauri ? "pl-[232px]" : "pl-4",
+      )}
+    >
       <div className="flex min-w-0 items-center gap-1.5">
-        {!sidebarOpen && !isMacOsTauri() ? (
+        {!sidebarOpen && !macOsTauri ? (
           <Button
             variant="ghost"
             size="icon"
@@ -154,8 +160,8 @@ export const ChatHeader = memo(function ChatHeader(props: {
                 variant="ghost"
                 disabled={!hasModels}
                 className={cn(
-                  "model-selector-trigger h-9 max-w-[min(20rem,calc(100vw-8.5rem))] justify-between gap-1.5 overflow-hidden rounded-lg px-3 cursor-pointer text-xs font-normal text-foreground transition-all duration-200 ease-out hover:bg-muted/60 dark:text-white",
-                  isModelMenuOpen && "bg-muted/70 shadow-sm",
+                  "model-selector-trigger h-8 max-w-[min(20rem,calc(100vw-8.5rem))] -translate-y-px justify-between gap-1.5 overflow-hidden rounded-lg px-2.5 py-1 cursor-pointer text-xs font-normal text-foreground transition-all duration-200 ease-out hover:bg-muted/60 dark:text-white",
+                  isModelMenuOpen && "bg-muted/60",
                 )}
               />
             }
@@ -175,14 +181,10 @@ export const ChatHeader = memo(function ChatHeader(props: {
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="start"
-            sideOffset={8}
+            sideOffset={4}
             collisionPadding={8}
-            className="model-selector-dropdown w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-border/40 bg-popover/70 p-0 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.25)] ring-1 ring-white/10 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-popover/55"
+            className="model-selector-dropdown w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-xl p-0 text-xs"
           >
-            <DropdownMenuLabel className="model-selector-menu-title px-3 py-2 text-[calc(11px*var(--zone-font-scale,1))] font-medium uppercase tracking-wider text-muted-foreground/80 dark:text-white/80">
-              {t("chat.selectModel")}
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator className="my-0 bg-border/40" />
             <div className="px-2 py-1.5">
               <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
                 <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
@@ -191,12 +193,12 @@ export const ChatHeader = memo(function ChatHeader(props: {
                   value={modelSearch}
                   onChange={(e) => setModelSearch(e.target.value)}
                   placeholder={t("chat.searchModel")}
-                  className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/60"
+                  className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
                   onKeyDown={(e) => e.stopPropagation()}
                 />
               </div>
             </div>
-            <div className="max-h-[min(20rem,var(--available-height,20rem))] overflow-y-auto overscroll-contain px-1 pb-1">
+            <div className="max-h-[min(20rem,var(--available-height,20rem))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
               {(() => {
                 let animationIndex = 0;
                 const filteredGroups = normalizedSearch
@@ -223,14 +225,14 @@ export const ChatHeader = memo(function ChatHeader(props: {
                 return filteredGroups.map((group, groupIndex) => {
                   const expanded = isGroupExpanded(group.name);
                   return (
-                    <div key={group.name}>
+                    <div key={group.name} className="flex flex-col gap-0.5">
                       {groupIndex > 0 ? <DropdownMenuSeparator className="bg-border/30" /> : null}
                       <DropdownMenuItem
                         closeOnClick={false}
                         onSelect={() => toggleGroup(group.name)}
                         aria-expanded={expanded}
                         title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
-                        className="model-selector-group-label sticky top-0 z-10 flex cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium uppercase tracking-wider text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40 dark:text-white/80"
+                        className="model-selector-group-label sticky top-0 z-10 flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-0 text-xs font-medium uppercase tracking-wider text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40 dark:text-white/80"
                       >
                         <ProviderBrandIcon
                           type={group.providerType}
@@ -263,18 +265,16 @@ export const ChatHeader = memo(function ChatHeader(props: {
                                   setSettings((prev) => setSelectedModel(prev, parsed));
                                 }}
                                 className={cn(
-                                  "model-selector-item group/item max-w-full justify-between gap-3 overflow-hidden rounded-md text-foreground transition-all duration-150 ease-out data-[highlighted]:translate-x-0.5 data-[highlighted]:bg-muted/40 dark:text-white",
-                                  isSelected && "bg-muted/60 font-medium text-foreground",
+                                  "model-selector-item h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05] dark:text-white",
+                                  isSelected &&
+                                    "bg-foreground/[0.07] font-medium text-foreground data-[highlighted]:bg-foreground/[0.09]",
                                 )}
                                 style={{ animationDelay: itemAnimationDelay }}
                               >
                                 <span className="flex min-w-0 items-center gap-2">
                                   <ProviderBrandIcon
                                     type={option.providerType}
-                                    className={cn(
-                                      "opacity-70 transition-opacity duration-150 group-data-[highlighted]/item:opacity-100",
-                                      isSelected && "opacity-100",
-                                    )}
+                                    className={cn("opacity-70", isSelected && "opacity-100")}
                                   />
                                   <span className="min-w-0 truncate">{option.model}</span>
                                 </span>
@@ -294,7 +294,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
         </DropdownMenu>
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 -translate-y-px items-center gap-1">
         {preThemeActions}
         <Button
           variant="ghost"
@@ -314,7 +314,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
             title={t("tooltip.settings")}
             className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
           >
-            <Settings className="h-4.5 w-4.5" />
+            <Settings className="h-4 w-4" />
           </Button>
         )}
         {trailingActions}

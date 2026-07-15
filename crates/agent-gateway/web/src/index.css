@@ -600,10 +600,12 @@
   }
 
   /* First/last child margin reset */
-  .chat-markdown > *:first-child {
+  .chat-markdown > *:first-child,
+  .chat-markdown > *:first-child > *:first-child {
     margin-top: 0;
   }
-  .chat-markdown > *:last-child {
+  .chat-markdown > *:last-child,
+  .chat-markdown > *:last-child > *:last-child {
     margin-bottom: 0;
   }
 
@@ -874,162 +876,6 @@
     }
   }
 
-  /* Empty state – hero entrance */
-  .hero-entrance {
-    animation: heroFadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-  .hero-entrance-delay-1 {
-    animation: heroFadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
-  }
-  .hero-entrance-delay-2 {
-    animation: heroFadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.24s both;
-  }
-  .hero-entrance-delay-3 {
-    animation: heroFadeInUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.36s both;
-  }
-
-  @keyframes heroFadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px) scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-
-  /* Suggestion cards: `backwards` fill so hover transforms win after entry */
-  .hero-card-entrance {
-    animation: heroFadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) var(--hero-delay, 0.3s) backwards;
-  }
-
-  /* Suggestion cards: per-card accent (--card-accent) drives a cursor-tracking
-     spotlight (--spot-x/--spot-y set from JS), border tint, and glow shadow. */
-  .hero-suggest-card {
-    position: relative;
-    overflow: hidden;
-    border: 1px solid hsl(var(--border) / 0.6);
-    background: hsl(var(--card) / 0.5);
-    transition:
-      transform 0.2s ease,
-      border-color 0.2s ease,
-      background-color 0.2s ease,
-      box-shadow 0.25s ease;
-  }
-
-  .hero-suggest-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: radial-gradient(
-      140px circle at var(--spot-x, 50%) var(--spot-y, 50%),
-      hsl(var(--card-accent) / 0.14),
-      transparent 65%
-    );
-    opacity: 0;
-    transition: opacity 0.25s ease;
-    pointer-events: none;
-  }
-
-  .hero-suggest-card:hover {
-    transform: translateY(-2px);
-    border-color: hsl(var(--card-accent) / 0.45);
-    background: hsl(var(--card) / 0.9);
-    box-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.04),
-      0 12px 32px -8px hsl(var(--card-accent) / 0.28);
-  }
-
-  .hero-suggest-card:hover::before {
-    opacity: 1;
-  }
-
-  .hero-suggest-card:active {
-    transform: translateY(0) scale(0.99);
-  }
-
-  .dark .hero-suggest-card:hover {
-    box-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.3),
-      0 12px 36px -8px hsl(var(--card-accent) / 0.35);
-  }
-
-  /* Icon float animation */
-  .hero-icon-float {
-    animation: heroFloat 5.5s ease-in-out infinite;
-  }
-
-  @keyframes heroFloat {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-8px);
-    }
-  }
-
-  /* Aurora halo behind the hero logo: slow spin + breathing opacity */
-  .hero-aura {
-    position: absolute;
-    inset: -18px;
-    border-radius: 9999px;
-    background: conic-gradient(
-      from 40deg,
-      hsl(213 94% 62% / 0.2),
-      hsl(268 83% 66% / 0.14),
-      hsl(174 68% 50% / 0.12),
-      hsl(31 92% 62% / 0.1),
-      hsl(213 94% 62% / 0.2)
-    );
-    filter: blur(22px);
-    animation:
-      heroAuraSpin 18s linear infinite,
-      heroAuraBreathe 7s ease-in-out infinite;
-    pointer-events: none;
-  }
-
-  .dark .hero-aura {
-    background: conic-gradient(
-      from 40deg,
-      hsl(213 94% 62% / 0.3),
-      hsl(268 83% 66% / 0.22),
-      hsl(174 68% 50% / 0.18),
-      hsl(31 92% 62% / 0.16),
-      hsl(213 94% 62% / 0.3)
-    );
-  }
-
-  @keyframes heroAuraSpin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes heroAuraBreathe {
-    0%,
-    100% {
-      opacity: 0.65;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .hero-icon-float,
-    .hero-aura,
-    .hero-entrance,
-    .hero-entrance-delay-1,
-    .hero-entrance-delay-2,
-    .hero-entrance-delay-3,
-    .hero-card-entrance {
-      animation: none;
-    }
-  }
-
   /* Mention composer placeholder */
   .mention-composer.is-empty::before {
     content: attr(data-placeholder);
@@ -1222,43 +1068,10 @@
     }
   }
 
-  @keyframes composerReasoningItemIn {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
   .composer-reasoning-trigger[data-state="open"] {
     box-shadow:
       0 8px 18px -14px rgba(88, 28, 135, 0.55),
       inset 0 0 0 1px rgba(167, 139, 250, 0.12);
-  }
-
-  .composer-reasoning-dropdown[data-state="open"] {
-    animation: composerReasoningDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    transform-origin: var(--radix-select-content-transform-origin);
-    --tw-enter-opacity: initial;
-    --tw-enter-scale: initial;
-    --tw-enter-translate-y: initial;
-  }
-
-  .composer-reasoning-dropdown[data-state="closed"] {
-    animation: composerReasoningDropdownOut 0.12s cubic-bezier(0.4, 0, 1, 1);
-    transform-origin: var(--radix-select-content-transform-origin);
-    --tw-exit-opacity: initial;
-    --tw-exit-scale: initial;
-    --tw-exit-translate-y: initial;
-  }
-
-  /* `backwards` (not `both`): a filled forwards animation would keep holding
-   * transform after it ends and suppress the item highlight translate. */
-  .composer-reasoning-dropdown[data-state="open"] .composer-reasoning-item {
-    animation: composerReasoningItemIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
 
   /* Branch selector dropdown shares the reasoning-select motion. */
@@ -1337,8 +1150,6 @@
     .composer-dropdown,
     .composer-dropdown [role="menuitemcheckbox"],
     .composer-dropdown [role="menuitem"],
-    .composer-reasoning-dropdown,
-    .composer-reasoning-item,
     .composer-branch-dropdown,
     .model-selector-dropdown,
     .model-selector-item {
