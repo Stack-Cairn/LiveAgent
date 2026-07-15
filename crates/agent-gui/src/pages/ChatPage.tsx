@@ -3831,7 +3831,11 @@ export function ChatPage(props: ChatPageProps) {
       resetLiveTranscript(transcriptStore);
       setConversationAbortController(conversationId, cancellation.userStop);
       setConversationSendingState(conversationId, true);
-      if (isConversationVisible()) {
+      // Queue-drained auto-starts are not a user gesture: the reader may be
+      // deep in history when the previous run finishes, and force-pinning
+      // for the next queued turn would yank them to the bottom. Manual sends
+      // still pin (here and via resetVisibleTransientState below).
+      if (isConversationVisible() && !overrides?.preserveComposerOnStart) {
         scrollFollowRef.current?.stickToBottom();
       }
     }

@@ -14,11 +14,16 @@
 //   after a programmatic pin (the abort lands with the next main-thread
 //   commit); those frames carry no input and no drag, so they can never
 //   detach.
-// - ATTACH is position-driven: landing at the physical clamp always attaches;
-//   a gesture-latched downward arrival inside the reattach zone attaches; a
-//   pointer released inside the zone after downward movement attaches. The
-//   gesture latch is the only timing heuristic left and it gates attach only —
-//   a false positive re-pins, it can never tear follow down.
+// - ATTACH is position-driven and intent-gated: landing at the physical clamp
+//   attaches while following (our own pin write echoing back) or inside an
+//   active gesture latch; a gesture-latched downward arrival inside the
+//   reattach zone attaches; a pointer released inside the zone after downward
+//   movement attaches. Content shrinking under a detached reader (a reply
+//   settling out of the row list, a collapsing block) also clamps scrollTop
+//   to the bottom with no input — that arrival carries no latch, so it can
+//   never re-engage follow and the next growth cannot yank the reader down.
+//   The gesture latch is the only timing heuristic left and it gates attach
+//   only — a false positive re-pins, it can never tear follow down.
 // - While following, a scroll event that leaves a gap open is corrected by
 //   re-pinning rather than classified.
 // - ResizeObserver deliveries (contentGrowth) never change follow state; they
@@ -194,11 +199,17 @@ export function reduceFollowEvent(
       const next = { ...state, lastGap: gap };
 
       if (isAtBottom(gap, config)) {
-        // At the physical clamp — attaching is always safe, whether the user
-        // landed here or our own pin write echoed back. Also counts as
-        // downward movement for the pointer-release re-check.
-        next.following = true;
+        // At the physical clamp. Counts as downward movement for the
+        // pointer-release re-check, but attaching needs evidence of intent:
+        // our own pin write echoing back (still following) or an arrival
+        // inside an active gesture latch. Content shrinking under a detached
+        // reader (a reply settling out of the row list, a collapsing block)
+        // also clamps scrollTop here with no input — attaching on that would
+        // let the next growth yank the reader to the bottom.
         next.dragTowardBottom = true;
+        if (state.following || now <= state.latchUntil) {
+          next.following = true;
+        }
         return { state: next, pin: false };
       }
 

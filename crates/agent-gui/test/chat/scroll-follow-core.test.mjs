@@ -48,10 +48,39 @@ test("constants coupling: reserve band and DPR tolerance", () => {
   assert.ok(BOTTOM_ATTACH_THRESHOLD_PX >= 4);
 });
 
-test("fractional-DPR clamp shortfall still attaches (c4d6471)", () => {
+test("fractional-DPR clamp shortfall attaches inside the latch (c4d6471)", () => {
   // Windows 125%/150% scaling clamps scrollTop 1-3px short of the physical
-  // bottom; landing there must attach with no latch and no pointer.
-  const { state } = run([wheelUp(), growth(500), scroll(3, 10_000)]);
+  // bottom; a latched downward arrival landing there must still attach (the
+  // attach threshold covers the shortfall).
+  const { state } = run([
+    wheelUp({ now: 0 }),
+    growth(500),
+    wheelDown({ now: 9_800 }), // latch until 10_300
+    scroll(3, 10_000),
+  ]);
+  assert.equal(state.following, true);
+});
+
+test("content shrink clamping a detached reader never re-attaches", () => {
+  // A reply settling out of the row list (or a collapsing block) shrinks
+  // scrollHeight; the browser clamps scrollTop and emits a scroll event at
+  // the bottom with no input and no latch. Follow must stay off, and the
+  // regrowth that lands right after must not pin — this was the "jump to
+  // the bottom when the reply finishes" bug.
+  const clamped = run([wheelUp({ now: 0 }), growth(2000), scroll(0, 10_000)]);
+  assert.equal(clamped.state.following, false);
+  // The clamp still counts as downward movement for a later release check.
+  assert.equal(clamped.state.dragTowardBottom, true);
+
+  const regrown = run([growth(1800)], { state: clamped.state });
+  assert.equal(regrown.state.following, false);
+  assert.equal(regrown.pin, false);
+});
+
+test("pin echo at the clamp keeps following without a latch", () => {
+  // While following, our own pin write echoes back as a scroll event at the
+  // clamp long after any input; it must keep follow engaged.
+  const { state } = run([growth(0), scroll(2, 10_000)]);
   assert.equal(state.following, true);
 });
 
