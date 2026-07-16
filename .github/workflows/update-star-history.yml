@@ -21,22 +21,19 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Download Star History charts
+      - name: Collect stargazer history
         env:
-          STAR_HISTORY_TOKEN: ${{ secrets.STAR_HISTORY_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p docs/images
-          cache_key="$(date -u +%Y-%m-%d-%H)-${GITHUB_RUN_ID}"
-          base_url="https://api.star-history.com/chart?repos=Stack-Cairn/LiveAgent&type=date&legend=top-left&sealed_token=${STAR_HISTORY_TOKEN}&cache=${cache_key}"
-          curl --fail --location --retry 3 --retry-all-errors --show-error \
-            "$base_url" \
-            --output docs/images/star-history-light.svg
-          curl --fail --location --retry 3 --retry-all-errors --show-error \
-            "${base_url}&theme=dark" \
-            --output docs/images/star-history-dark.svg
-          grep -q '<svg' docs/images/star-history-light.svg
-          grep -q '<svg' docs/images/star-history-dark.svg
+          gh api --paginate --slurp \
+            --header "Accept: application/vnd.github.star+json" \
+            "repos/${GITHUB_REPOSITORY}/stargazers?per_page=100" \
+            > "$RUNNER_TEMP/stargazers.json"
+          python3 scripts/update-star-history.py \
+            "$RUNNER_TEMP/stargazers.json" \
+            docs/images/star-history-light.svg \
+            docs/images/star-history-dark.svg
 
       - name: Check chart files
         run: |
