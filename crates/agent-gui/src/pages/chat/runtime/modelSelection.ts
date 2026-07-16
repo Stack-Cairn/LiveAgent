@@ -1,14 +1,21 @@
-import type { AppSettings, ProviderId, SelectedModel } from "../../../lib/settings";
+import {
+  type AppSettings,
+  isAutoModelSelection,
+  type ProviderId,
+  type SelectedModel,
+} from "../../../lib/settings";
 import {
   type GatewaySelectedModelEvent,
   normalizeGatewayProviderType,
 } from "../gateway/gatewayBridgeTypes";
+import { type AutoRoutingDecision, type AutoRoutingInput, routeAutoModel } from "./autoModelRouter";
 
 export type EffectiveChatModelSelection = {
   selectedModel: SelectedModel;
   provider: AppSettings["customProviders"][number];
   providerId: ProviderId;
   model: string;
+  autoRouting?: Pick<AutoRoutingDecision, "requestedTier" | "selectedTier" | "reasons">;
 };
 
 export function resolveActiveModelSelection(
@@ -29,12 +36,31 @@ export function resolveEffectiveChatModelSelection(params: {
   settings: AppSettings;
   conversationSelectedModel?: SelectedModel;
   gatewaySelectedModel?: GatewaySelectedModelEvent;
+  routingInput?: AutoRoutingInput;
 }): EffectiveChatModelSelection {
-  const { settings, conversationSelectedModel, gatewaySelectedModel } = params;
+  const { settings, conversationSelectedModel, gatewaySelectedModel, routingInput } = params;
   const resolveLocalSelection = (): EffectiveChatModelSelection => {
     const activeSelectedModel = resolveActiveModelSelection(settings, conversationSelectedModel);
     if (!activeSelectedModel) {
       throw new Error("请先在左上角选择一个模型（或先去设置添加模型）。");
+    }
+
+    if (isAutoModelSelection(activeSelectedModel)) {
+      if (!routingInput) {
+        throw new Error("Auto 模式需要当前消息才能选择模型。");
+      }
+      const routed = routeAutoModel(settings, routingInput);
+      return {
+        selectedModel: activeSelectedModel,
+        provider: routed.provider,
+        providerId: routed.provider.type,
+        model: routed.model,
+        autoRouting: {
+          requestedTier: routed.requestedTier,
+          selectedTier: routed.selectedTier,
+          reasons: routed.reasons,
+        },
+      };
     }
 
     const { customProviderId, model } = activeSelectedModel;

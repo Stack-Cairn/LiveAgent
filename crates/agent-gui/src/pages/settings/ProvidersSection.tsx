@@ -45,6 +45,7 @@ import { useLocale } from "../../i18n";
 import { buildModelOptions } from "../../lib/chat/page/chatPageHelpers";
 import { parseModelValue, toModelValue } from "../../lib/providers/llm";
 import {
+  type AutoRoutingTier,
   CODEX_REQUEST_FORMAT_LABELS,
   type CodexRequestFormat,
   type CustomProvider,
@@ -156,6 +157,9 @@ function ModelSettingsModal({ model, onClose, onSave }: ModelSettingsModalProps)
   const { t } = useLocale();
   const [contextWindow, setContextWindow] = useState(String(model.contextWindow));
   const [maxOutputToken, setMaxOutputToken] = useState(String(model.maxOutputToken));
+  const [autoRoutingTier, setAutoRoutingTier] = useState<AutoRoutingTier | "off">(
+    model.autoRoutingTier ?? "off",
+  );
 
   const parsedContextWindow = parsePositiveInteger(contextWindow);
   const parsedMaxOutputToken = parsePositiveInteger(maxOutputToken);
@@ -167,6 +171,7 @@ function ModelSettingsModal({ model, onClose, onSave }: ModelSettingsModalProps)
       ...model,
       contextWindow: parsedContextWindow,
       maxOutputToken: parsedMaxOutputToken,
+      autoRoutingTier: autoRoutingTier === "off" ? undefined : autoRoutingTier,
     });
   }
 
@@ -209,6 +214,26 @@ function ModelSettingsModal({ model, onClose, onSave }: ModelSettingsModalProps)
               value={maxOutputToken}
               onChange={(e) => setMaxOutputToken(e.currentTarget.value)}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>{t("settings.autoRoutingTier")}</Label>
+            <Select
+              value={autoRoutingTier}
+              onValueChange={(value) => setAutoRoutingTier(value as AutoRoutingTier | "off")}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue>{t(`settings.autoRoutingTier.${autoRoutingTier}`)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {(["off", "fast", "balanced", "reasoning"] as const).map((tier) => (
+                  <SelectItem key={tier} value={tier}>
+                    {t(`settings.autoRoutingTier.${tier}`)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground">{t("settings.autoRoutingTierHint")}</div>
           </div>
 
           {!canSave ? (

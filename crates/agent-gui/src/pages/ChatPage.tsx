@@ -118,6 +118,7 @@ import {
   getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
+  isAutoModelSelection,
   isRightDockSingletonTabOpen,
   normalizeChatRuntimeControls,
   normalizeChatRuntimeControlsForProvider,
@@ -2720,7 +2721,9 @@ export function ChatPage(props: ChatPageProps) {
     getDefaultNewConversationWorkdir: () =>
       isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
     resolveConversationSelectedModel: (json) =>
-      normalizeSelectedModelForProviders(parseSelectedModelJson(json), settings.customProviders),
+      normalizeSelectedModelForProviders(parseSelectedModelJson(json), settings.customProviders, {
+        allowAuto: true,
+      }),
     setCurrentConversationId,
     setErrorMessage,
     setHydratingConversationId,
@@ -3275,6 +3278,7 @@ export function ChatPage(props: ChatPageProps) {
       selectedModel: normalizeSelectedModelForProviders(
         parseSelectedModelJson(record.selectedModelJson),
         settings.customProviders,
+        { allowAuto: true },
       ),
     });
     const historySummary: ChatHistorySummary = {
@@ -3601,69 +3605,6 @@ export function ChatPage(props: ChatPageProps) {
       }));
     }
 
-    let effectiveSelectedModel: EffectiveChatModelSelection;
-    try {
-      effectiveSelectedModel = resolveEffectiveChatModelSelection({
-        settings,
-        conversationSelectedModel:
-          conversationRuntimeCacheRef.current.get(conversationId)?.selectedModel,
-        gatewaySelectedModel: gatewayBridgeRequest?.selectedModelOverride,
-      });
-    } catch (error) {
-      const message = asErrorMessage(error, "当前模型配置不可用，请重新选择后重试。");
-      setConversationErrorState(message);
-      gatewayBridgeEvents.emitError(message);
-      return false;
-    }
-
-    const { selectedModel, provider, providerId, model } = effectiveSelectedModel;
-    updateConversationRuntimeEntry(conversationId, (prev) =>
-      selectedModelsMatch(prev.selectedModel, selectedModel) ? prev : { ...prev, selectedModel },
-    );
-    const runtimeControls =
-      gatewayBridgeRequest?.runtimeControlsOverride ??
-      overrides?.runtimeControlsOverride ??
-      settings.chatRuntimeControls;
-    const providerConfig = buildProviderRuntimeConfig(provider, model, runtimeControls);
-    const memorySummaryModelSelection = resolveMemorySummaryModelSelection(settings);
-    const memoryExtractionModel = memorySummaryModelSelection
-      ? {
-          providerId: memorySummaryModelSelection.providerId,
-          model: memorySummaryModelSelection.model,
-          runtime: buildProviderRuntimeConfig(
-            memorySummaryModelSelection.provider,
-            memorySummaryModelSelection.model,
-            runtimeControls,
-          ),
-          selectedModel: memorySummaryModelSelection.selectedModel,
-        }
-      : undefined;
-    const handleMemoryExtractionModelFailure = memoryExtractionModel
-      ? (failedModel: { selectedModel?: SelectedModel }) => {
-          const failedSelectedModel = failedModel.selectedModel;
-          setSettings((prev) => {
-            if (!selectedModelsMatch(prev.memory.summaryModel, failedSelectedModel)) {
-              return prev;
-            }
-            return updateMemorySettings(prev, { summaryModel: undefined });
-          });
-        }
-      : undefined;
-    const memoryExtractionStatusText = (
-      key: MemoryExtractionStatusKey,
-      counts: { accepted: number; rejected: number },
-    ) =>
-      t(`chat.memoryExtraction.${key}`)
-        .replace("{accepted}", String(counts.accepted))
-        .replace("{rejected}", String(counts.rejected));
-    const runtimeModel = createModelFromConfig(
-      providerId,
-      model,
-      provider.baseUrl.trim(),
-      provider.requestFormat,
-      providerConfig.modelConfig,
-    );
-
     const textOverride =
       typeof overrides?.textOverride === "string" ? overrides.textOverride : null;
     const hasTextOverride = textOverride !== null;
@@ -3720,6 +3661,70 @@ export function ChatPage(props: ChatPageProps) {
     const pendingUserMessage = userMessage;
     const content =
       typeof pendingUserMessage.content === "string" ? pendingUserMessage.content : "";
+
+    let effectiveSelectedModel: EffectiveChatModelSelection;
+    try {
+      effectiveSelectedModel = resolveEffectiveChatModelSelection({
+        settings,
+        conversationSelectedModel:
+          conversationRuntimeCacheRef.current.get(conversationId)?.selectedModel,
+        gatewaySelectedModel: gatewayBridgeRequest?.selectedModelOverride,
+        routingInput: { text, hasAttachments: uploadedFiles.length > 0 },
+      });
+    } catch (error) {
+      const message = asErrorMessage(error, "当前模型配置不可用，请重新选择后重试。");
+      setConversationErrorState(message);
+      gatewayBridgeEvents.emitError(message);
+      return false;
+    }
+
+    const { selectedModel, provider, providerId, model } = effectiveSelectedModel;
+    updateConversationRuntimeEntry(conversationId, (prev) =>
+      selectedModelsMatch(prev.selectedModel, selectedModel) ? prev : { ...prev, selectedModel },
+    );
+    const runtimeControls =
+      gatewayBridgeRequest?.runtimeControlsOverride ??
+      overrides?.runtimeControlsOverride ??
+      settings.chatRuntimeControls;
+    const providerConfig = buildProviderRuntimeConfig(provider, model, runtimeControls);
+    const memorySummaryModelSelection = resolveMemorySummaryModelSelection(settings);
+    const memoryExtractionModel = memorySummaryModelSelection
+      ? {
+          providerId: memorySummaryModelSelection.providerId,
+          model: memorySummaryModelSelection.model,
+          runtime: buildProviderRuntimeConfig(
+            memorySummaryModelSelection.provider,
+            memorySummaryModelSelection.model,
+            runtimeControls,
+          ),
+          selectedModel: memorySummaryModelSelection.selectedModel,
+        }
+      : undefined;
+    const handleMemoryExtractionModelFailure = memoryExtractionModel
+      ? (failedModel: { selectedModel?: SelectedModel }) => {
+          const failedSelectedModel = failedModel.selectedModel;
+          setSettings((prev) => {
+            if (!selectedModelsMatch(prev.memory.summaryModel, failedSelectedModel)) {
+              return prev;
+            }
+            return updateMemorySettings(prev, { summaryModel: undefined });
+          });
+        }
+      : undefined;
+    const memoryExtractionStatusText = (
+      key: MemoryExtractionStatusKey,
+      counts: { accepted: number; rejected: number },
+    ) =>
+      t(`chat.memoryExtraction.${key}`)
+        .replace("{accepted}", String(counts.accepted))
+        .replace("{rejected}", String(counts.rejected));
+    const runtimeModel = createModelFromConfig(
+      providerId,
+      model,
+      provider.baseUrl.trim(),
+      provider.requestFormat,
+      providerConfig.modelConfig,
+    );
 
     const titleSourceText = text || uploadedFiles.map((file) => file.fileName).join(", ");
 
@@ -4892,6 +4897,7 @@ export function ChatPage(props: ChatPageProps) {
 
   const currentModelLabel = (() => {
     if (!activeSelectedModel) return t("chat.selectModel");
+    if (isAutoModelSelection(activeSelectedModel)) return t("chat.autoModel");
     const opt = modelOptions.find((o) => o.value === selectedValue);
     if (opt) return `${opt.providerName} / ${opt.model}`;
     return activeSelectedModel.model;
@@ -4943,6 +4949,7 @@ export function ChatPage(props: ChatPageProps) {
     const parsed = normalizeSelectedModelForProviders(
       parseSelectedModelJson(displayedConversationPersistedModelJson),
       settings.customProviders,
+      { allowAuto: true },
     );
     if (!parsed) return;
     const entry = conversationRuntimeCacheRef.current.get(currentConversationId);

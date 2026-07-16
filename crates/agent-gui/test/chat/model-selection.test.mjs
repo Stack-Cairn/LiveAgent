@@ -5,6 +5,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
 const modelSelection = loader.loadModule("src/pages/chat/runtime/modelSelection.ts");
+const autoModelRouter = loader.loadModule("src/pages/chat/runtime/autoModelRouter.ts");
 
 function provider(overrides = {}) {
   const id = overrides.id ?? "provider-1";
@@ -27,6 +28,19 @@ function appSettings(customProviders, selectedModel) {
   return settings.normalizeSettings({
     customProviders,
     selectedModel,
+  });
+}
+
+function routedProvider(id, models) {
+  return provider({
+    id,
+    models: models.map(({ id: modelId, tier }) => ({
+      id: modelId,
+      contextWindow: 128_000,
+      maxOutputToken: 16_000,
+      autoRoutingTier: tier,
+    })),
+    activeModels: models.map((item) => item.id),
   });
 }
 
@@ -249,4 +263,107 @@ test("selected model json round-trips and rejects malformed payloads", () => {
   assert.equal(settings.parseSelectedModelJson("not-json"), undefined);
   assert.equal(settings.parseSelectedModelJson('{"model":"m1"}'), undefined);
   assert.equal(settings.serializeSelectedModelJson(undefined), undefined);
+});
+
+test("Auto selection survives chat settings normalization", () => {
+  const providers = [routedProvider("openai-main", [{ id: "gpt-fast", tier: "fast" }])];
+  const app = appSettings(providers, settings.AUTO_ROUTER_SELECTION);
+
+  assert.deepEqual(app.selectedModel, settings.AUTO_ROUTER_SELECTION);
+  assert.equal(
+    settings.normalizeSelectedModelForProviders(
+      settings.AUTO_ROUTER_SELECTION,
+      app.customProviders,
+    ),
+    undefined,
+  );
+  assert.deepEqual(
+    settings.normalizeSelectedModelForProviders(
+      settings.AUTO_ROUTER_SELECTION,
+      app.customProviders,
+      { allowAuto: true },
+    ),
+    settings.AUTO_ROUTER_SELECTION,
+  );
+});
+
+test("Auto classifies simple, complex, and attachment turns", () => {
+  assert.equal(autoModelRouter.classifyAutoRoutingInput({ text: "hello" }).tier, "fast");
+  assert.equal(
+    autoModelRouter.classifyAutoRoutingInput({ text: "请分析架构并实现修复方案" }).tier,
+    "reasoning",
+  );
+  assert.equal(
+    autoModelRouter.classifyAutoRoutingInput({ text: "summarize this", hasAttachments: true })
+      .tier,
+    "reasoning",
+  );
+});
+
+test("Auto routes each turn while preserving Auto as the conversation selection", () => {
+  const app = appSettings(
+    [
+      routedProvider("openai-main", [
+        { id: "gpt-fast", tier: "fast" },
+        { id: "gpt-balanced", tier: "balanced" },
+        { id: "gpt-reasoning", tier: "reasoning" },
+      ]),
+    ],
+    settings.AUTO_ROUTER_SELECTION,
+  );
+
+  const simple = modelSelection.resolveEffectiveChatModelSelection({
+    settings: app,
+    routingInput: { text: "hello" },
+  });
+  const complex = modelSelection.resolveEffectiveChatModelSelection({
+    settings: app,
+    routingInput: { text: "Analyze the architecture, debug the failure, and implement tests." },
+  });
+
+  assert.equal(simple.model, "gpt-fast");
+  assert.equal(simple.autoRouting.requestedTier, "fast");
+  assert.deepEqual(simple.selectedModel, settings.AUTO_ROUTER_SELECTION);
+  assert.equal(complex.model, "gpt-reasoning");
+  assert.equal(complex.autoRouting.requestedTier, "reasoning");
+  assert.deepEqual(complex.selectedModel, settings.AUTO_ROUTER_SELECTION);
+});
+
+test("Auto falls back to the nearest configured tier deterministically", () => {
+  const app = appSettings(
+    [
+      routedProvider("first-provider", [{ id: "first-reasoning", tier: "reasoning" }]),
+      routedProvider("second-provider", [
+        { id: "second-reasoning", tier: "reasoning" },
+        { id: "second-fast", tier: "fast" },
+      ]),
+    ],
+    settings.AUTO_ROUTER_SELECTION,
+  );
+
+  const resolved = modelSelection.resolveEffectiveChatModelSelection({
+    settings: app,
+    routingInput: { text: "review this" },
+  });
+
+  assert.equal(resolved.autoRouting.requestedTier, "balanced");
+  assert.equal(resolved.autoRouting.selectedTier, "reasoning");
+  assert.equal(resolved.provider.id, "first-provider");
+  assert.equal(resolved.model, "first-reasoning");
+});
+
+test("Auto explains when no enabled model is tagged for routing", () => {
+  const app = appSettings(
+    [provider({ id: "openai-main", models: ["gpt-5"] })],
+    settings.AUTO_ROUTER_SELECTION,
+  );
+
+  assert.throws(
+    () =>
+      modelSelection.resolveEffectiveChatModelSelection({
+        settings: app,
+        routingInput: { text: "hello" },
+      }),
+    /Auto 模式没有可用模型/,
+  );
 });

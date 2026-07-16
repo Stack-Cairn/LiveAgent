@@ -161,10 +161,34 @@ export type SelectedModel = {
   model: string;
 };
 
+export const AUTO_ROUTER_PROVIDER_ID = "__liveagent_auto__";
+export const AUTO_ROUTER_MODEL_ID = "auto";
+export type AutoModelSelection = SelectedModel & {
+  customProviderId: typeof AUTO_ROUTER_PROVIDER_ID;
+  model: typeof AUTO_ROUTER_MODEL_ID;
+};
+
+export const AUTO_ROUTER_SELECTION: AutoModelSelection = {
+  customProviderId: AUTO_ROUTER_PROVIDER_ID,
+  model: AUTO_ROUTER_MODEL_ID,
+};
+
+export function isAutoModelSelection(
+  selectedModel: SelectedModel | undefined,
+): selectedModel is AutoModelSelection {
+  return (
+    selectedModel?.customProviderId === AUTO_ROUTER_PROVIDER_ID &&
+    selectedModel.model === AUTO_ROUTER_MODEL_ID
+  );
+}
+
+export type AutoRoutingTier = "fast" | "balanced" | "reasoning";
+
 export type ProviderModelConfig = {
   id: string;
   contextWindow: number;
   maxOutputToken: number;
+  autoRoutingTier?: AutoRoutingTier;
 };
 
 export type ChatRuntimeControls = {
@@ -1010,6 +1034,12 @@ export function normalizeProviderModelConfig(
   if (!id) return null;
 
   const defaults = getProviderModelDefaults(providerId, id);
+  const autoRoutingTier =
+    obj.autoRoutingTier === "fast" ||
+    obj.autoRoutingTier === "balanced" ||
+    obj.autoRoutingTier === "reasoning"
+      ? obj.autoRoutingTier
+      : undefined;
   return {
     id,
     contextWindow: normalizePositiveInteger(obj.contextWindow, defaults.contextWindow),
@@ -1017,6 +1047,7 @@ export function normalizeProviderModelConfig(
       obj.maxOutputToken ?? obj.maxTokens,
       defaults.maxOutputToken,
     ),
+    ...(autoRoutingTier ? { autoRoutingTier } : {}),
   };
 }
 
@@ -1491,9 +1522,13 @@ export function computeNextMemoryOrganizerRunAt(
 export function normalizeSelectedModelForProviders(
   selectedModel: SelectedModel | undefined,
   customProviders: CustomProvider[],
+  options?: { allowAuto?: boolean },
 ): SelectedModel | undefined {
   if (!selectedModel) {
     return undefined;
+  }
+  if (options?.allowAuto && isAutoModelSelection(selectedModel)) {
+    return AUTO_ROUTER_SELECTION;
   }
 
   const provider = customProviders.find((item) => item.id === selectedModel.customProviderId);
@@ -1829,6 +1864,7 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
   const selectedModel = normalizeSelectedModelForProviders(
     normalizeSelectedModel(obj.selectedModel),
     customProviders,
+    { allowAuto: true },
   );
 
   return {

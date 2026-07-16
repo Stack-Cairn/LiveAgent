@@ -10,6 +10,7 @@ import {
   PanelLeft,
   Search,
   Settings,
+  Sparkles,
   Sun,
 } from "../../../components/icons";
 
@@ -23,9 +24,10 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { useLocale } from "../../../i18n";
-import { type ModelOption, parseModelValue } from "../../../lib/providers/llm";
+import { type ModelOption, parseModelValue, toModelValue } from "../../../lib/providers/llm";
 import {
   type AppSettings,
+  AUTO_ROUTER_SELECTION,
   getNextTheme,
   type ProviderId,
   type SelectedModel,
@@ -98,6 +100,19 @@ export const ChatHeader = memo(function ChatHeader(props: {
   }, [isModelMenuOpen]);
 
   const normalizedSearch = modelSearch.trim().toLowerCase();
+  const autoOptionLabel = t("chat.autoModel");
+  const autoValue = toModelValue(
+    AUTO_ROUTER_SELECTION.customProviderId,
+    AUTO_ROUTER_SELECTION.model,
+  );
+  const autoSelected = selectedValue === autoValue;
+  const hasAutoModels = settings.customProviders.some((provider) =>
+    provider.activeModels.some((model) =>
+      provider.models.some((item) => item.id === model && item.autoRoutingTier),
+    ),
+  );
+  const showAutoOption =
+    normalizedSearch.length === 0 || autoOptionLabel.toLowerCase().includes(normalizedSearch);
   const groups: {
     name: string;
     providerType: ProviderId;
@@ -167,7 +182,9 @@ export const ChatHeader = memo(function ChatHeader(props: {
             }
           >
             <span className="model-selector-current-label flex min-w-0 items-center gap-1.5 text-left">
-              {selectedOption ? (
+              {autoSelected ? (
+                <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+              ) : selectedOption ? (
                 <ProviderBrandIcon type={selectedOption.providerType} className="opacity-80" />
               ) : null}
               <span className="min-w-0 truncate">{currentModelLabel}</span>
@@ -199,6 +216,28 @@ export const ChatHeader = memo(function ChatHeader(props: {
               </div>
             </div>
             <div className="max-h-[min(20rem,var(--available-height,20rem))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
+              {showAutoOption ? (
+                <>
+                  <DropdownMenuItem
+                    disabled={!hasAutoModels}
+                    onSelect={() => onSelectModel(AUTO_ROUTER_SELECTION)}
+                    title={
+                      hasAutoModels ? t("chat.autoModelHint") : t("chat.autoModelConfigureHint")
+                    }
+                    className={cn(
+                      "model-selector-item h-[34px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground",
+                      autoSelected && "bg-primary/10 font-medium text-primary",
+                    )}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Sparkles className="h-4 w-4 shrink-0" />
+                      <span className="min-w-0 truncate">{autoOptionLabel}</span>
+                    </span>
+                    {autoSelected ? <Check className="h-4 w-4 shrink-0" /> : null}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-border/30" />
+                </>
+              ) : null}
               {(() => {
                 let animationIndex = 0;
                 const filteredGroups = normalizedSearch
@@ -214,13 +253,15 @@ export const ChatHeader = memo(function ChatHeader(props: {
                       .filter((g) => g.opts.length > 0)
                   : groups;
 
-                if (filteredGroups.length === 0) {
+                if (filteredGroups.length === 0 && !showAutoOption) {
                   return (
                     <div className="px-2 py-6 text-center text-xs text-muted-foreground">
                       {t("chat.noModelFound")}
                     </div>
                   );
                 }
+
+                if (filteredGroups.length === 0) return null;
 
                 return filteredGroups.map((group, groupIndex) => {
                   const expanded = isGroupExpanded(group.name);
