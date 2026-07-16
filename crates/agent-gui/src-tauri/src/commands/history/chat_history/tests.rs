@@ -895,6 +895,117 @@ mod tests {
     }
 
     #[test]
+    fn delete_conversation_cleans_upload_after_last_history_reference() {
+        let mut conn = open_test_db().expect("open test db");
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        std::fs::create_dir_all(&workdir).expect("create workspace");
+        let mut uploaded_files =
+            crate::commands::system::system_import_uploaded_readable_files_sync(
+                workdir.to_string_lossy().into_owned(),
+                vec![
+                    crate::commands::system::SystemReadableFileUploadInput {
+                        file_name: "pasted-text-1.txt".to_string(),
+                        mime_type: Some("text/plain".to_string()),
+                        content: b"temporary conversation text".to_vec(),
+                    },
+                    crate::commands::system::SystemReadableFileUploadInput {
+                        file_name: "removed-from-draft.txt".to_string(),
+                        mime_type: Some("text/plain".to_string()),
+                        content: b"orphaned sibling".to_vec(),
+                    },
+                ],
+            )
+            .expect("import managed upload")
+            .files;
+        let upload = uploaded_files.remove(0);
+        let orphaned_sibling = uploaded_files.remove(0);
+        let upload_path = std::path::PathBuf::from(&upload.absolute_path);
+        let orphaned_sibling_path = std::path::PathBuf::from(&orphaned_sibling.absolute_path);
+        let upload_batch = upload_path.parent().expect("upload batch").to_path_buf();
+
+        let mut first = sample_conversation();
+        first.cwd = Some(workdir.to_string_lossy().into_owned());
+        upsert_chat_history_header(&conn, &first).expect("insert first conversation");
+        let first_messages = serde_json::to_string(&serde_json::json!([{
+            "id": "m-user-1",
+            "role": "user",
+            "content": format!("[Pasted text 1: {}]", upload.relative_path),
+            "liveAgentAttachments": [{
+                "relativePath": upload.relative_path.clone(),
+                "absolutePath": upload.absolute_path.clone(),
+                "fileName": upload.file_name.clone(),
+                "kind": upload.kind.clone(),
+                "sizeBytes": upload.size_bytes
+            }]
+        }]))
+        .expect("serialize first conversation messages");
+        upsert_single_segment(
+            &conn,
+            "conv-1",
+            &ChatHistorySegmentInput {
+                segment_index: 0,
+                segment_id: "segment-0".to_string(),
+                summary_json: None,
+                messages_json: first_messages,
+                message_count: 1,
+                start_message_id: Some("m-user-1".to_string()),
+                end_message_id: Some("m-user-1".to_string()),
+                created_at: 1_700_000_000_000,
+                updated_at: 1_700_000_000_100,
+            },
+        )
+        .expect("insert first conversation segment");
+
+        let mut second = sample_conversation();
+        second.id = "conv-2".to_string();
+        second.cwd = Some(format!(
+            "{}{}",
+            workdir.to_string_lossy(),
+            std::path::MAIN_SEPARATOR
+        ));
+        upsert_chat_history_header(&conn, &second).expect("insert second conversation");
+        let second_summary = serde_json::to_string(&serde_json::json!({
+            "summary": format!("Retain {} for the next turn", upload.relative_path)
+        }))
+        .expect("serialize second conversation summary");
+        upsert_single_segment(
+            &conn,
+            "conv-2",
+            &ChatHistorySegmentInput {
+                segment_index: 0,
+                segment_id: "segment-0".to_string(),
+                summary_json: Some(second_summary),
+                messages_json: "[]".to_string(),
+                message_count: 0,
+                start_message_id: None,
+                end_message_id: None,
+                created_at: 1_700_000_000_000,
+                updated_at: 1_700_000_000_100,
+            },
+        )
+        .expect("insert second conversation segment");
+
+        delete_chat_history_sync(&mut conn, "conv-1").expect("delete first conversation");
+        assert!(
+            upload_path.is_file(),
+            "another conversation still references the upload"
+        );
+        assert!(orphaned_sibling_path.is_file());
+
+        delete_chat_history_sync(&mut conn, "conv-2").expect("delete second conversation");
+        assert!(
+            !upload_path.exists(),
+            "last reference cleanup removes upload"
+        );
+        assert!(
+            !orphaned_sibling_path.exists(),
+            "batch cleanup removes an unreferenced sibling"
+        );
+        assert!(!upload_batch.exists(), "empty managed batch is pruned");
+    }
+
+    #[test]
     fn resolve_share_returns_full_conversation_segments() {
         let conn = open_test_db().expect("open test db");
         let conversation = sample_conversation();

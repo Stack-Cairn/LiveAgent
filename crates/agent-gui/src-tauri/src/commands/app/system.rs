@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::commands::upload_cleanup::{canonicalize_upload_workdir, create_managed_upload_batch};
 use crate::runtime::platform::expand_tilde_path;
 use crate::services::power_activity::PowerActivityManager;
 pub use crate::services::skills::{
@@ -105,26 +106,6 @@ fn sanitize_debug_file_stem(input: &str) -> Result<String, String> {
         return Ok(trimmed.to_string());
     }
     Err(format!("非法的对话 ID：{input}"))
-}
-
-fn canonicalize_upload_workdir(workdir: &str) -> Result<PathBuf, String> {
-    let raw = workdir.trim();
-    if raw.is_empty() {
-        return Err("项目目录未选择，无法导入文件".to_string());
-    }
-
-    let path = expand_tilde_path(raw);
-    if !path.is_absolute() {
-        return Err(format!("工作目录必须是绝对路径：{workdir}"));
-    }
-
-    let metadata =
-        fs::metadata(&path).map_err(|_| format!("工作目录不存在或不可访问：{workdir}"))?;
-    if !metadata.is_dir() {
-        return Err(format!("工作目录不是文件夹：{workdir}"));
-    }
-
-    fs::canonicalize(&path).map_err(|e| format!("无法解析工作目录：{e}"))
 }
 
 fn infer_image_upload_kind(path: &Path) -> Option<&'static str> {
@@ -483,16 +464,6 @@ fn rel_to_workdir_forward_slash(workdir: &Path, abs: &Path) -> Result<String, St
         .map_err(|_| format!("路径超出工作目录：{}", abs.display()))
 }
 
-fn upload_import_root(workdir: &Path) -> Result<PathBuf, String> {
-    let batch = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let root = workdir.join("uploads").join(batch.to_string());
-    fs::create_dir_all(&root).map_err(|e| format!("创建上传目录失败 {}: {e}", root.display()))?;
-    Ok(root)
-}
-
 fn build_readable_file_entry(
     workdir: &Path,
     destination: &Path,
@@ -728,7 +699,7 @@ fn import_readable_file_paths_into_workdir(
             let import_root = match import_root.as_ref() {
                 Some(root) => root.clone(),
                 None => {
-                    let root = upload_import_root(workdir)?;
+                    let root = create_managed_upload_batch(workdir)?;
                     import_root = Some(root.clone());
                     root
                 }
@@ -805,7 +776,7 @@ pub(crate) fn system_import_uploaded_readable_files_sync(
         let import_root = match import_root.as_ref() {
             Some(root) => root.clone(),
             None => {
-                let root = upload_import_root(&workdir)?;
+                let root = create_managed_upload_batch(&workdir)?;
                 import_root = Some(root.clone());
                 root
             }
@@ -1274,7 +1245,7 @@ mod tests {
     }
 
     #[test]
-    fn upload_import_root_uses_workdir_uploads_directory() {
+    fn managed_upload_batch_uses_workdir_uploads_directory() {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -1285,7 +1256,7 @@ mod tests {
         ));
         fs::create_dir_all(&workdir).expect("create test workdir");
 
-        let root = upload_import_root(&workdir).expect("create upload root");
+        let root = create_managed_upload_batch(&workdir).expect("create upload root");
 
         assert!(
             root.starts_with(workdir.join("uploads")),
