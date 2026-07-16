@@ -40,11 +40,27 @@ import type { SubagentConversationStore } from "./store";
 import {
   AGENT_TOOL_NAME,
   MAX_AGENTS,
+  type SubagentModelSelection,
   type SubagentTemplate,
   type SubagentToolRegistry,
 } from "./types";
 import { createSequentialQueue, normalizeErrorMessage, runWithConcurrency } from "./utils";
 import { parseSubagentBatch, type ResolvedSubagentSpec } from "./validate";
+
+const MODEL_SELECTION_PARAMETER = Type.Object(
+  {
+    custom_provider_id: Type.String({
+      minLength: 1,
+      description: "Configured provider id from LiveAgent settings.",
+    }),
+    model: Type.String({ minLength: 1, description: "Enabled model id for that provider." }),
+  },
+  {
+    additionalProperties: false,
+    description:
+      "Optional model override for this run. Omit it to inherit the parent conversation model.",
+  },
+);
 
 const AGENT_PARAMETERS = Type.Object(
   {
@@ -80,6 +96,7 @@ const AGENT_PARAMETERS = Type.Object(
                 "Enabled AGENTS template id or name. Only valid when the id is first created.",
             }),
           ),
+          model: Type.Optional(MODEL_SELECTION_PARAMETER),
           mode: Type.Optional(
             Type.Union([Type.Literal("readonly"), Type.Literal("worktree")], {
               description:
@@ -185,16 +202,28 @@ export type SubagentRuntimeConfig = {
   providerId: ProviderId;
   model: string;
   runtime: SubagentProviderRuntime;
+  resolveModel?: ResolveSubagentModel;
   sessionId?: string;
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
 };
 
+export type ResolvedSubagentModel = {
+  providerId: ProviderId;
+  model: string;
+  runtime: SubagentProviderRuntime;
+};
+
+export type ResolveSubagentModel = (
+  selectedModel: SubagentModelSelection,
+) => ResolvedSubagentModel | undefined;
+
 export function createSubagentTools(params: {
   providerId: ProviderId;
   model: string;
   runtime: SubagentProviderRuntime;
+  resolveModel?: ResolveSubagentModel;
   runtimePlatform?: RuntimePlatform;
   workdir: string;
   resolveHomeDir?: () => Promise<string>;
@@ -292,6 +321,41 @@ export function createSubagentTools(params: {
     if (!parsed.ok) {
       return rejectBatch(parsed.issues);
     }
+    const modelByAgentId = new Map<string, ResolvedSubagentModel>();
+    const modelIssues: SubagentIssue[] = [];
+    for (const agent of parsed.batch.agents) {
+      const selectedModel = agent.spec.selectedModel;
+      if (!selectedModel) continue;
+
+      let resolvedModel: ResolvedSubagentModel | undefined;
+      try {
+        resolvedModel = params.resolveModel?.(selectedModel);
+      } catch (error) {
+        modelIssues.push(
+          issue(
+            "model_unavailable",
+            `Configured model ${selectedModel.customProviderId}/${selectedModel.model} could not be resolved: ${normalizeErrorMessage(error, "unknown model configuration error")}`,
+            agent.spec.id,
+          ),
+        );
+        continue;
+      }
+      if (!resolvedModel) {
+        modelIssues.push(
+          issue(
+            "model_unavailable",
+            `Configured model ${selectedModel.customProviderId}/${selectedModel.model} is missing or disabled. Select an active model or omit the override to inherit the conversation model.`,
+            agent.spec.id,
+          ),
+        );
+        continue;
+      }
+      modelByAgentId.set(agent.spec.id, resolvedModel);
+    }
+    if (modelIssues.length > 0) {
+      return rejectBatch(modelIssues);
+    }
+
     const { agents, issues: pathIssues } = await resolveOutputPaths({
       agents: parsed.batch.agents,
       workdir: params.workdir,
@@ -380,10 +444,19 @@ export function createSubagentTools(params: {
         };
 
         try {
+          const resolvedModel = modelByAgentId.get(resolved.spec.id);
+          const runEnvironment = resolvedModel
+            ? {
+                ...env,
+                providerId: resolvedModel.providerId,
+                model: resolvedModel.model,
+                runtime: resolvedModel.runtime,
+              }
+            : env;
           const report = await enqueueAgentRun(resolved.spec.id, () =>
             scheduler.runSubagent(
               () =>
-                executeSubagentRun(env, {
+                executeSubagentRun(runEnvironment, {
                   spec: resolved.spec,
                   existingIdentity: resolved.existingIdentity,
                   template: resolved.template,

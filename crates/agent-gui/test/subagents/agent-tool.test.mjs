@@ -48,7 +48,7 @@ test("readonly happy path: identity prompts, filtered child tools, SendMessage a
   const call = harness.runnerCalls[0];
   assert.deepEqual(
     call.tools.map((tool) => tool.name),
-    ["Read", "Grep", "mcp_docs_search", "SendMessage"],
+    ["Read", "Grep", "SendMessage"],
   );
   assert.equal(call.sessionId, "parent-session:subagent:reviewer-a");
   assert.equal(call.workdir, "/tmp/liveagent-subagent-test");
@@ -521,6 +521,118 @@ test("unknown template rejects the batch before any agent starts", async () => {
   assert.equal(result.details.issues[0].code, "unknown_template");
   assert.match(result.content[0].text, /Enabled templates/);
   assert.equal(harness.runnerCalls.length, 0);
+});
+
+test("Agent resolves a different configured model for each delegated job", async () => {
+  const harness = await createSubagentHarness({
+    resolveModel(selectedModel) {
+      if (selectedModel.customProviderId === "provider-a" && selectedModel.model === "model-a") {
+        return {
+          providerId: "codex",
+          model: "model-a",
+          runtime: { baseUrl: "https://a.example.test", apiKey: "key-a" },
+        };
+      }
+      if (selectedModel.customProviderId === "provider-b" && selectedModel.model === "model-b") {
+        return {
+          providerId: "gemini",
+          model: "model-b",
+          runtime: { baseUrl: "https://b.example.test", apiKey: "key-b" },
+        };
+      }
+      return undefined;
+    },
+  });
+  const result = await harness.bundle.executeToolCall(
+    createAgentToolCall({
+      agents: [
+        {
+          id: "specialist-a",
+          prompt: "Review A",
+          model: { custom_provider_id: "provider-a", model: "model-a" },
+        },
+        {
+          id: "specialist-b",
+          prompt: "Review B",
+          model: { custom_provider_id: "provider-b", model: "model-b" },
+        },
+        { id: "inherited", prompt: "Review C" },
+      ],
+      concurrency: 3,
+    }),
+  );
+
+  assert.equal(result.isError, false);
+  assert.deepEqual(
+    harness.runnerCalls
+      .map((call) => [call.providerId, call.model, call.runtime.apiKey])
+      .sort((left, right) => left[1].localeCompare(right[1])),
+    [
+      ["codex", "gpt-5", "test-key"],
+      ["codex", "model-a", "key-a"],
+      ["gemini", "model-b", "key-b"],
+    ],
+  );
+  assert.deepEqual(
+    harness.storeIpc.appliedSaves
+      .filter((save) => save.run.status === "completed")
+      .map((save) => [save.run.agentId, save.run.model])
+      .sort((left, right) => left[0].localeCompare(right[0])),
+    [
+      ["inherited", "gpt-5"],
+      ["specialist-a", "model-a"],
+      ["specialist-b", "model-b"],
+    ],
+  );
+});
+
+test("an unavailable explicit model rejects the whole Agent batch", async () => {
+  const harness = await createSubagentHarness({ resolveModel: () => undefined });
+  const result = await harness.bundle.executeToolCall(
+    createAgentToolCall({
+      agents: [
+        { id: "inherited", prompt: "Would otherwise run" },
+        {
+          id: "missing-model",
+          prompt: "Cannot run",
+          model: { custom_provider_id: "disabled-provider", model: "disabled-model" },
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.isError, true);
+  assert.equal(result.details.status, "rejected");
+  assert.equal(result.details.issues[0].code, "model_unavailable");
+  assert.match(result.content[0].text, /missing or disabled/);
+  assert.equal(harness.runnerCalls.length, 0);
+  assert.equal(harness.storeIpc.upsertIdentityCount, 0);
+  assert.equal(harness.worktreeIpc.creates.length, 0);
+});
+
+test("a model resolver failure rejects the whole Agent batch", async () => {
+  const harness = await createSubagentHarness({
+    resolveModel() {
+      throw new Error("provider settings could not be decoded");
+    },
+  });
+  const result = await harness.bundle.executeToolCall(
+    createAgentToolCall({
+      agents: [
+        {
+          id: "broken-model",
+          prompt: "Cannot run",
+          model: { custom_provider_id: "provider-a", model: "model-a" },
+        },
+      ],
+    }),
+  );
+
+  assert.equal(result.isError, true);
+  assert.equal(result.details.issues[0].code, "model_unavailable");
+  assert.match(result.content[0].text, /provider settings could not be decoded/);
+  assert.equal(harness.runnerCalls.length, 0);
+  assert.equal(harness.storeIpc.upsertIdentityCount, 0);
 });
 
 test("abort persists a cancelled run and retains the worktree", async () => {

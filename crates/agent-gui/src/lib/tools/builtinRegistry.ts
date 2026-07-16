@@ -290,6 +290,7 @@ export async function buildBuiltinToolRegistry(
       providerId: subagentRuntime.providerId,
       model: subagentRuntime.model,
       runtime: subagentRuntime.runtime,
+      resolveModel: subagentRuntime.resolveModel,
       runtimePlatform: params.runtimePlatform,
       workdir: params.workdir,
       resolveHomeDir,

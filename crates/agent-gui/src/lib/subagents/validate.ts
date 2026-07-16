@@ -8,6 +8,7 @@ import {
   type SubagentApplyPolicy,
   type SubagentIdentity,
   type SubagentMode,
+  type SubagentModelSelection,
   type SubagentSpec,
   type SubagentTemplate,
 } from "./types";
@@ -48,6 +49,7 @@ const KNOWN_AGENT_KEYS = new Set([
   "role",
   "identity",
   "template",
+  "model",
   "mode",
   "apply_policy",
   "allowed_output_paths",
@@ -57,6 +59,51 @@ const KNOWN_AGENT_KEYS = new Set([
 
 const MODES = new Set<SubagentMode>(["readonly", "worktree"]);
 const APPLY_POLICIES = new Set<SubagentApplyPolicy>(["none", "explicit", "auto"]);
+
+function parseModelSelection(
+  value: unknown,
+  agentId: string | undefined,
+  issues: SubagentIssue[],
+): SubagentModelSelection | undefined {
+  if (typeof value === "undefined") return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    issues.push(
+      issue(
+        "invalid_arguments",
+        "model must be an object with custom_provider_id and model strings.",
+        agentId,
+      ),
+    );
+    return undefined;
+  }
+
+  const obj = asObject(value);
+  for (const key of Object.keys(obj)) {
+    if (key !== "custom_provider_id" && key !== "model") {
+      issues.push(
+        issue(
+          "invalid_arguments",
+          `Unknown model field "${key}". Allowed fields: custom_provider_id, model.`,
+          agentId,
+        ),
+      );
+    }
+  }
+
+  const customProviderId = optionalString(obj.custom_provider_id);
+  const model = optionalString(obj.model);
+  if (!customProviderId || !model) {
+    issues.push(
+      issue(
+        "invalid_arguments",
+        "model.custom_provider_id and model.model must both be non-empty strings.",
+        agentId,
+      ),
+    );
+    return undefined;
+  }
+  return { customProviderId, model };
+}
 
 function parseOptionalBoolean(
   value: unknown,
@@ -233,6 +280,7 @@ export function parseSubagentBatch(
     const role = optionalString(entry.role);
     const identityText = optionalString(entry.identity);
     const templateRef = optionalString(entry.template);
+    const selectedModel = parseModelSelection(entry.model, agentRef, issues);
 
     let template: SubagentTemplate | undefined;
     if (templateRef) {
@@ -343,6 +391,7 @@ export function parseSubagentBatch(
         role,
         identity: identityText,
         templateId: template?.id ?? existingIdentity?.templateId,
+        selectedModel,
         mode,
         applyPolicy,
         allowedOutputPaths,

@@ -58,6 +58,7 @@ import {
   buildRosterReminder,
   createSubagentScheduler,
   isSubagentCardToolCall,
+  type ResolveSubagentModel,
   renderMessageBusSnapshot,
   SUBAGENT_PARENT_ID,
   type SubagentConversationStore,
@@ -206,6 +207,7 @@ export type RunAgentConversationTurnParams = {
     customProviderId: string;
     model: string;
   };
+  resolveSubagentModel: ResolveSubagentModel;
   effectiveWorkdir: string;
   effectiveSkillsEnabled: boolean;
   showSilentMemoryExtraction: boolean;
@@ -275,6 +277,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     runtime,
     runtimeModel,
     selectedModel,
+    resolveSubagentModel,
     effectiveWorkdir,
     effectiveSkillsEnabled,
     showSilentMemoryExtraction,
@@ -422,6 +425,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           providerId,
           model,
           runtime,
+          resolveModel: resolveSubagentModel,
           sessionId,
           templates: enabledSubagentTemplates(agentTemplates),
           store: subagentStore,

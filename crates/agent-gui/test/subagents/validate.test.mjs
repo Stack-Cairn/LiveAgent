@@ -56,6 +56,48 @@ test("minimal valid agent gets mechanical defaults", () => {
   assert.equal(result.batch.concurrency, 1);
 });
 
+test("model overrides require a complete configured provider reference", () => {
+  const valid = parse({
+    agents: [
+      {
+        id: "expert-a",
+        prompt: "Inspect the code.",
+        model: { custom_provider_id: "provider-a", model: "model-a" },
+      },
+    ],
+  });
+  assert.equal(valid.ok, true);
+  assert.deepEqual(valid.batch.agents[0].spec.selectedModel, {
+    customProviderId: "provider-a",
+    model: "model-a",
+  });
+
+  const incomplete = parse({
+    agents: [{ id: "expert-a", prompt: "Inspect the code.", model: { model: "model-a" } }],
+  });
+  assert.deepEqual(issueCodes(incomplete), ["invalid_arguments"]);
+  assert.match(incomplete.issues[0].message, /custom_provider_id and model\.model/);
+});
+
+test("model overrides reject unknown fields", () => {
+  const result = parse({
+    agents: [
+      {
+        id: "expert-a",
+        prompt: "Inspect the code.",
+        model: {
+          custom_provider_id: "provider-a",
+          model: "model-a",
+          base_url: "https://untrusted.example.test",
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(issueCodes(result), ["invalid_arguments"]);
+  assert.match(result.issues[0].message, /Unknown model field "base_url"/);
+});
+
 test("unknown top-level parameter rejects the whole call", () => {
   const result = parse({
     agents: [{ id: "a", prompt: "ok" }],

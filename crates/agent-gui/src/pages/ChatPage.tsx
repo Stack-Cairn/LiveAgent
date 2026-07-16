@@ -173,6 +173,7 @@ import {
   collectRetainedSubagentParentToolCallIds,
   createSubagentStoreManager,
   pruneSubagentRunsForConversation,
+  type ResolveSubagentModel,
 } from "../lib/subagents";
 import {
   applyTerminalEventToSessions,
@@ -569,6 +570,23 @@ function buildProviderRuntimeConfig(
     promptCachingEnabled: true,
     nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
     modelConfig,
+  };
+}
+
+function createSubagentModelResolver(
+  settings: AppSettings,
+  runtimeControls: ChatRuntimeControls,
+): ResolveSubagentModel {
+  return (selectedModel) => {
+    const provider = settings.customProviders.find(
+      (item) => item.id === selectedModel.customProviderId,
+    );
+    if (!provider?.activeModels.includes(selectedModel.model)) return undefined;
+    return {
+      providerId: provider.type,
+      model: selectedModel.model,
+      runtime: buildProviderRuntimeConfig(provider, selectedModel.model, runtimeControls),
+    };
   };
 }
 
@@ -3780,6 +3798,7 @@ export function ChatPage(props: ChatPageProps) {
       overrides?.runtimeControlsOverride ??
       settings.chatRuntimeControls;
     const providerConfig = buildProviderRuntimeConfig(provider, model, runtimeControls);
+    const resolveSubagentModel = createSubagentModelResolver(settings, runtimeControls);
     const memorySummaryModelSelection = resolveMemorySummaryModelSelection(settings);
     const memoryExtractionModel = memorySummaryModelSelection
       ? {
@@ -4508,6 +4527,7 @@ export function ChatPage(props: ChatPageProps) {
             },
             runtimeModel,
             selectedModel,
+            resolveSubagentModel,
             memoryExtractionModel,
             onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
             memoryExtractionStatusText,

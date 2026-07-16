@@ -1,4 +1,9 @@
-export { createSubagentTools, type SubagentRuntimeConfig } from "./agentTool";
+export {
+  createSubagentTools,
+  type ResolvedSubagentModel,
+  type ResolveSubagentModel,
+  type SubagentRuntimeConfig,
+} from "./agentTool";
 export { renderMessageBusSnapshot } from "./bus";
 export { isSubagentCardToolCall } from "./card";
 export type { SubagentStoreIpc } from "./ipc/store";
@@ -33,6 +38,7 @@ export {
   SUBAGENT_BROADCAST_RECIPIENT,
   SUBAGENT_PARENT_ID,
   type SubagentIdentity,
+  type SubagentModelSelection,
   type SubagentRunSummary,
   type SubagentTemplate,
   type SubagentToolRegistry,

@@ -236,7 +236,7 @@ export function decideWorktreeCleanup(params: {
   return { shouldCleanup: false, reason: "unapplied_changes" };
 }
 
-/** Readonly children: read-only builtin tools + MCP business tools. */
+/** Readonly children: only tools whose metadata explicitly declares read-only behavior. */
 export function selectReadOnlyTools(params: {
   tools: Tool[];
   metadataByName: Map<string, ToolMetadataLike>;
@@ -245,9 +245,7 @@ export function selectReadOnlyTools(params: {
     if (tool.name === AGENT_TOOL_NAME) return false;
     if (tool.name === SEND_MESSAGE_TOOL_NAME) return true;
     const metadata = params.metadataByName.get(tool.name);
-    return (
-      metadata?.isReadOnly === true || (metadata?.groupId === "mcp" && metadata.kind === "mcp")
-    );
+    return metadata?.isReadOnly === true;
   });
 }
 

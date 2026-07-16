@@ -24,6 +24,11 @@ export type SubagentApplyPolicy = "none" | "explicit" | "auto";
 export type SubagentRunStatus = "running" | "completed" | "failed" | "cancelled";
 export type SubagentMessageChannel = "direct" | "shared" | "decision" | "question";
 
+export type SubagentModelSelection = {
+  customProviderId: string;
+  model: string;
+};
+
 /** One fully validated agent request inside an Agent tool call. */
 export type SubagentSpec = {
   id: string;
@@ -32,6 +37,7 @@ export type SubagentSpec = {
   role?: string;
   identity?: string;
   templateId?: string;
+  selectedModel?: SubagentModelSelection;
   mode: SubagentMode;
   applyPolicy: SubagentApplyPolicy;
   allowedOutputPaths: string[];

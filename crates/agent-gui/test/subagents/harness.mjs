@@ -446,6 +446,7 @@ export async function createSubagentHarness(options = {}) {
       apiKey: "test-key",
       reasoning: "medium",
     },
+    resolveModel: options.resolveModel,
     workdir: options.workdir ?? "/tmp/liveagent-subagent-test",
     sessionId: options.sessionId === null ? undefined : (options.sessionId ?? "parent-session"),
     templates: options.templates ?? [
