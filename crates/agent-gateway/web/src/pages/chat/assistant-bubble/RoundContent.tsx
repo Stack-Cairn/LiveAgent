@@ -4,6 +4,7 @@ import { Markdown } from "../../../components/Markdown";
 import { useLocale } from "../../../i18n";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "../../../lib/chat/chatPageHelpers";
 import type { ToolTraceItem, UiRound } from "../../../lib/chat/uiMessages";
+import { shouldRenderTodoInline, TodoListBlock } from "../TodoListView";
 import { groupRoundBlocks, isBuiltinShareToolName } from "./assistantBubbleUtils";
 import { HostedSearchGroupView } from "./HostedSearchGroupView";
 import { LazyCollapse } from "./LazyCollapse";
@@ -212,6 +213,10 @@ export const RoundContent = memo(function RoundContent(props: {
             !block.item.toolResult?.isError
           ) {
             return null;
+          }
+
+          if (!isRedactedToolContent && shouldRenderTodoInline(block.item)) {
+            return <TodoListBlock key={block.key} item={block.item} />;
           }
 
           return (

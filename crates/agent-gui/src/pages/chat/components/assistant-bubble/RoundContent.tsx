@@ -9,6 +9,7 @@ import { groupRoundBlocks } from "./assistantBubbleUtils";
 import { HostedSearchGroupView } from "./HostedSearchGroupView";
 import { LazyCollapse } from "./LazyCollapse";
 import { AssistantStatus, CompactingText, VibingText } from "./StatusText";
+import { shouldRenderTodoInline, TodoListBlock } from "./TodoListView";
 import { MemoToolCallItem } from "./ToolCallItem";
 import { getNativeDisplayImagePayload, NativeDisplayImageBlock } from "./ToolImages";
 import { ToolTraceGroup } from "./ToolTraceGroup";
@@ -195,6 +196,10 @@ export const RoundContent = memo(function RoundContent(props: {
 
           if (block.item.toolCall.name === "Image" && !block.item.toolResult?.isError) {
             return null;
+          }
+
+          if (shouldRenderTodoInline(block.item)) {
+            return <TodoListBlock key={block.key} item={block.item} />;
           }
 
           return (
