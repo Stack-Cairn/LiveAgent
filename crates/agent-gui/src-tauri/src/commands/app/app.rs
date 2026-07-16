@@ -1,9 +1,26 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 
 use tauri::{AppHandle, State};
 
 use crate::runtime::terminal::TerminalSessionRegistry;
+
+pub type CloseWindowBehaviorState = AtomicU8;
+
+pub const CLOSE_WINDOW_BEHAVIOR_MINIMIZE: u8 = 0;
+pub const CLOSE_WINDOW_BEHAVIOR_EXIT: u8 = 1;
+
+pub fn parse_close_window_behavior(value: &str) -> u8 {
+    if value.trim().eq_ignore_ascii_case("exit") {
+        CLOSE_WINDOW_BEHAVIOR_EXIT
+    } else {
+        CLOSE_WINDOW_BEHAVIOR_MINIMIZE
+    }
+}
+
+pub fn is_close_window_exit(state: &CloseWindowBehaviorState) -> bool {
+    state.load(Ordering::SeqCst) == CLOSE_WINDOW_BEHAVIOR_EXIT
+}
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, serde::Serialize)]
@@ -31,6 +48,15 @@ pub fn app_runtime_platform() -> RuntimePlatformResponse {
         "linux"
     };
     RuntimePlatformResponse { platform }
+}
+
+#[tauri::command]
+pub fn app_set_close_window_behavior(
+    behavior: String,
+    close_window_behavior: State<'_, Arc<CloseWindowBehaviorState>>,
+) -> Result<(), String> {
+    close_window_behavior.store(parse_close_window_behavior(&behavior), Ordering::SeqCst);
+    Ok(())
 }
 
 #[tauri::command]
@@ -175,4 +201,33 @@ fn macos_window_button_screen_frame(
         screen_frame.size.width,
         screen_frame.size.height,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn close_window_behavior_parser_accepts_exit_and_defaults_to_minimize() {
+        assert_eq!(
+            parse_close_window_behavior("exit"),
+            CLOSE_WINDOW_BEHAVIOR_EXIT
+        );
+        assert_eq!(
+            parse_close_window_behavior(" EXIT "),
+            CLOSE_WINDOW_BEHAVIOR_EXIT
+        );
+        assert_eq!(
+            parse_close_window_behavior("tray"),
+            CLOSE_WINDOW_BEHAVIOR_MINIMIZE
+        );
+    }
+
+    #[test]
+    fn close_window_exit_reads_shared_state() {
+        let state = CloseWindowBehaviorState::new(CLOSE_WINDOW_BEHAVIOR_MINIMIZE);
+        assert!(!is_close_window_exit(&state));
+        state.store(CLOSE_WINDOW_BEHAVIOR_EXIT, Ordering::SeqCst);
+        assert!(is_close_window_exit(&state));
+    }
 }

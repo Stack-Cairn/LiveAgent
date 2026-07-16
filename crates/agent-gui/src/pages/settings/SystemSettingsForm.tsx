@@ -1,7 +1,9 @@
 import {
   CheckCircle2,
   Cpu,
+  LogOut,
   MessageSquare,
+  Minimize2,
   MonitorSmartphone,
   Moon,
   ScanText,
@@ -12,6 +14,7 @@ import {
 
 import { SUPPORTED_LOCALES, useLocale } from "../../i18n";
 import {
+  CLOSE_WINDOW_BEHAVIOR_OPTIONS,
   type ExecutionMode,
   type FontScaleSettings,
   THEME_OPTIONS,
@@ -286,6 +289,71 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           </div>
         </section>
       </div>
+
+      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Minimize2 className="h-4 w-4 text-muted-foreground" />
+            {t("settings.closeWindowBehavior")}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("settings.closeWindowBehaviorDesc")}
+          </p>
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-2">
+          {CLOSE_WINDOW_BEHAVIOR_OPTIONS.map((behavior) => {
+            const selected = settings.closeWindowBehavior === behavior;
+            const isMinimize = behavior === "minimize";
+            return (
+              <button
+                key={behavior}
+                type="button"
+                onClick={() =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    closeWindowBehavior: behavior,
+                  }))
+                }
+                className={`group relative flex h-full items-start gap-3 rounded-xl border px-3.5 py-3.5 text-left transition-all ${
+                  selected
+                    ? "border-primary bg-primary/5 shadow-sm shadow-primary/10"
+                    : "border-border/60 bg-background/80 hover:border-border hover:bg-muted/35"
+                }`}
+              >
+                <div
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                    selected
+                      ? "bg-primary/10 text-primary"
+                      : "bg-muted text-muted-foreground group-hover:bg-accent/80"
+                  }`}
+                >
+                  {isMinimize ? (
+                    <Minimize2 className="h-4.5 w-4.5" />
+                  ) : (
+                    <LogOut className="h-4.5 w-4.5" />
+                  )}
+                </div>
+                <div className="min-w-0 pr-6">
+                  <div className="text-sm font-semibold">
+                    {isMinimize ? t("settings.closeWindowMinimize") : t("settings.closeWindowExit")}
+                  </div>
+                  <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                    {isMinimize
+                      ? t("settings.closeWindowMinimizeDesc")
+                      : t("settings.closeWindowExitDesc")}
+                  </div>
+                </div>
+                {selected ? (
+                  <div className="absolute right-3 top-3">
+                    <CheckCircle2 className="h-4.5 w-4.5 text-primary" />
+                  </div>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
         <div className="flex items-start justify-between gap-3">

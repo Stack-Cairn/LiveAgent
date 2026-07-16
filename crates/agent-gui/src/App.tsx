@@ -1,4 +1,5 @@
 import type { Context } from "@earendil-works/pi-ai";
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
@@ -162,6 +163,15 @@ export default function App() {
     const root = document.documentElement;
     root.classList.toggle("dark", effectiveTheme === "dark");
   }, [effectiveTheme]);
+
+  useEffect(() => {
+    if (!settingsReady) return;
+    void invoke("app_set_close_window_behavior", {
+      behavior: settings.closeWindowBehavior,
+    }).catch(() => {
+      // Ignore non-Tauri and older desktop shells.
+    });
+  }, [settingsReady, settings.closeWindowBehavior]);
 
   useEffect(() => {
     let cancelled = false;

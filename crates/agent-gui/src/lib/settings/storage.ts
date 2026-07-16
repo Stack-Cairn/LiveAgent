@@ -4,8 +4,10 @@ import { type Locale, normalizeLocale } from "../../i18n/config";
 import {
   type AppSettings,
   type ChatRuntimeControls,
+  type CloseWindowBehavior,
   getDefaultSettings,
   normalizeChatRuntimeControls,
+  normalizeCloseWindowBehavior,
   normalizeFontScaleSettings,
   normalizeRightDockSettings,
   normalizeSelectedModel,
@@ -41,6 +43,7 @@ type LocalUiSettings = {
   selectedModel?: unknown;
   theme?: unknown;
   locale?: unknown;
+  closeWindowBehavior?: unknown;
 };
 
 export type SettingsSaveState =
@@ -67,6 +70,7 @@ function readLocalUiSettings(): {
   selectedModel?: SelectedModel;
   theme: Theme;
   locale: Locale;
+  closeWindowBehavior: CloseWindowBehavior;
 } {
   const defaults = getDefaultSettings();
 
@@ -97,6 +101,7 @@ function readLocalUiSettings(): {
         selectedModel: defaults.selectedModel,
         theme: defaults.theme,
         locale: defaults.locale,
+        closeWindowBehavior: defaults.closeWindowBehavior,
       };
     }
 
@@ -113,6 +118,9 @@ function readLocalUiSettings(): {
       selectedModel: normalizeSelectedModel(parsed?.selectedModel),
       theme: normalizeTheme(parsed?.theme ?? defaults.theme),
       locale: normalizeLocale(parsed?.locale ?? defaults.locale),
+      closeWindowBehavior: normalizeCloseWindowBehavior(
+        parsed?.closeWindowBehavior ?? defaults.closeWindowBehavior,
+      ),
     };
   } catch {
     return {
@@ -123,6 +131,7 @@ function readLocalUiSettings(): {
       selectedModel: defaults.selectedModel,
       theme: defaults.theme,
       locale: defaults.locale,
+      closeWindowBehavior: defaults.closeWindowBehavior,
     };
   }
 }
@@ -137,6 +146,7 @@ function writeLocalUiSettings(
     | "selectedModel"
     | "theme"
     | "locale"
+    | "closeWindowBehavior"
   >,
 ) {
   const payload = {
@@ -147,6 +157,7 @@ function writeLocalUiSettings(
     selectedModel: settings.selectedModel,
     theme: settings.theme,
     locale: settings.locale,
+    closeWindowBehavior: settings.closeWindowBehavior,
   };
   localStorage.setItem(LOCAL_UI_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
 }
@@ -206,6 +217,7 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     selectedModel: localUi.selectedModel,
     theme: localUi.theme,
     locale: localUi.locale,
+    closeWindowBehavior: localUi.closeWindowBehavior,
   });
 
   return {
@@ -304,7 +316,8 @@ export async function persistSettings(
     hasChanged(prev.updates, next.updates) ||
     hasChanged(prev.selectedModel ?? null, next.selectedModel ?? null) ||
     hasChanged(prev.theme, next.theme) ||
-    hasChanged(prev.locale, next.locale)
+    hasChanged(prev.locale, next.locale) ||
+    hasChanged(prev.closeWindowBehavior, next.closeWindowBehavior)
   ) {
     writeLocalUiSettings({
       skills: next.skills,
@@ -314,6 +327,7 @@ export async function persistSettings(
       selectedModel: next.selectedModel,
       theme: next.theme,
       locale: next.locale,
+      closeWindowBehavior: next.closeWindowBehavior,
     });
   }
 

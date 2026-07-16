@@ -2071,3 +2071,18 @@ test("font scale settings normalize invalid values to 1 and clamp out-of-range v
   const custom = settings.normalizeCustomSettings({ fontScale: { chat: 1.2 } }, []);
   assert.deepEqual(custom.fontScale, { sidebar: 1, chat: 1.2, rightDock: 1 });
 });
+
+test("close window behavior defaults to minimize and only accepts exit", () => {
+  assert.equal(settings.normalizeCloseWindowBehavior(undefined), "minimize");
+  assert.equal(settings.normalizeCloseWindowBehavior("tray"), "minimize");
+  assert.equal(settings.normalizeCloseWindowBehavior("exit"), "exit");
+  assert.equal(settings.getDefaultSettings().closeWindowBehavior, "minimize");
+  assert.equal(
+    settings.normalizeSettings({ closeWindowBehavior: "exit" }).closeWindowBehavior,
+    "exit",
+  );
+  assert.equal(
+    settings.normalizeSettings({ closeWindowBehavior: "nope" }).closeWindowBehavior,
+    "minimize",
+  );
+});

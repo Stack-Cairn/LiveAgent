@@ -129,6 +129,7 @@ macro_rules! app_invoke_handler {
             commands::update::app_update_install,
             commands::update::app_restart,
             commands::app::app_runtime_platform,
+            commands::app::app_set_close_window_behavior,
             commands::app::app_confirmed_exit,
             commands::app::app_macos_traffic_light_metrics,
             // Hooks
@@ -266,6 +267,29 @@ fn show_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+fn request_app_exit(
+    app: &tauri::AppHandle,
+    allow_exit: &AtomicBool,
+    terminal_registry: &runtime::terminal::TerminalSessionRegistry,
+) {
+    let running_count = terminal_registry.running_session_count();
+    if running_count > 0 {
+        if let Err(error) = show_main_window(app) {
+            eprintln!("failed to show LiveAgent window before terminal exit confirm: {error}");
+        }
+        if let Err(error) = app.emit(
+            TERMINAL_EXIT_REQUESTED_EVENT,
+            TerminalExitRequestedEvent { running_count },
+        ) {
+            eprintln!("failed to request terminal exit confirmation: {error}");
+        }
+        return;
+    }
+
+    allow_exit.store(true, Ordering::SeqCst);
+    app.exit(0);
+}
+
 fn record_tray_left_click(last_click_at: &Mutex<Option<Instant>>) -> bool {
     let now = Instant::now();
     let mut last_click_at = last_click_at.lock().unwrap();
@@ -299,23 +323,7 @@ fn configure_system_tray(
                 }
             }
             TRAY_QUIT_ID => {
-                let running_count = terminal_registry.running_session_count();
-                if running_count > 0 {
-                    if let Err(error) = show_main_window(app) {
-                        eprintln!(
-                            "failed to show LiveAgent window before terminal exit confirm: {error}"
-                        );
-                    }
-                    if let Err(error) = app.emit(
-                        TERMINAL_EXIT_REQUESTED_EVENT,
-                        TerminalExitRequestedEvent { running_count },
-                    ) {
-                        eprintln!("failed to request terminal exit confirmation: {error}");
-                    }
-                } else {
-                    allow_exit.store(true, Ordering::SeqCst);
-                    app.exit(0);
-                }
+                request_app_exit(app, &allow_exit, &terminal_registry);
             }
             _ => {}
         })
@@ -404,6 +412,9 @@ pub fn run() {
         &terminal_registry,
     )));
     let allow_exit = Arc::new(AtomicBool::new(false));
+    let close_window_behavior = Arc::new(commands::app::CloseWindowBehaviorState::new(
+        commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
+    ));
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -417,6 +428,7 @@ pub fn run() {
         .manage(Arc::clone(&terminal_registry))
         .manage(Arc::clone(&sftp_registry))
         .manage(Arc::clone(&allow_exit))
+        .manage(Arc::clone(&close_window_behavior))
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
@@ -477,15 +489,22 @@ pub fn run() {
                 Ok(())
             }
         })
-        .on_window_event(|window, event| {
-            if window.label() != MAIN_WINDOW_LABEL {
-                return;
-            }
+        .on_window_event({
+            let allow_exit = Arc::clone(&allow_exit);
+            let close_window_behavior = Arc::clone(&close_window_behavior);
+            let terminal_registry = Arc::clone(&terminal_registry);
+            move |window, event| {
+                if window.label() != MAIN_WINDOW_LABEL {
+                    return;
+                }
 
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                if let Err(error) = window.hide() {
-                    eprintln!("failed to hide LiveAgent window on close: {error}");
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    if commands::app::is_close_window_exit(&close_window_behavior) {
+                        request_app_exit(window.app_handle(), &allow_exit, &terminal_registry);
+                    } else if let Err(error) = window.hide() {
+                        eprintln!("failed to hide LiveAgent window on close: {error}");
+                    }
                 }
             }
         })

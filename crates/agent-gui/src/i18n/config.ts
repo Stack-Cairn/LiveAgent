@@ -1047,6 +1047,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     /* ── Settings System ── */
     "settings.appearance": "外观主题",
     "settings.appearanceDesc": "选择应用的颜色主题，偏好会自动保存。",
+    "settings.closeWindowBehavior": "关闭窗口",
+    "settings.closeWindowBehaviorDesc": "点击窗口关闭按钮时：隐藏到系统托盘，或直接退出应用。",
+    "settings.closeWindowMinimize": "最小化到托盘",
+    "settings.closeWindowMinimizeDesc": "关闭窗口后应用继续在后台运行，可从托盘恢复。",
+    "settings.closeWindowExit": "退出应用",
+    "settings.closeWindowExitDesc": "关闭窗口即退出；有运行中的终端时会先确认。",
     "settings.light": "浅色",
     "settings.lightDesc": "明亮清爽的浅色界面",
     "settings.dark": "深色",
@@ -2856,6 +2862,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.appearance": "Appearance",
     "settings.appearanceDesc":
       "Choose the color theme for the application. Your preference will be saved automatically.",
+    "settings.closeWindowBehavior": "Close Window",
+    "settings.closeWindowBehaviorDesc":
+      "When you click the window close button: hide to the system tray, or quit the app.",
+    "settings.closeWindowMinimize": "Minimize to tray",
+    "settings.closeWindowMinimizeDesc":
+      "Keep the app running in the background and restore it from the tray.",
+    "settings.closeWindowExit": "Quit application",
+    "settings.closeWindowExitDesc":
+      "Quit when the window closes. Running terminals still require confirmation.",
     "settings.light": "Light",
     "settings.lightDesc": "Bright and clean light interface",
     "settings.dark": "Dark",

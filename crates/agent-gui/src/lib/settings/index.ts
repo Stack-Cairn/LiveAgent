@@ -240,8 +240,13 @@ export type CustomProvider = {
 
 export type EffectiveTheme = "light" | "dark";
 export type Theme = EffectiveTheme | "system";
+export type CloseWindowBehavior = "minimize" | "exit";
 
 export const THEME_OPTIONS = ["light", "dark", "system"] as const satisfies readonly Theme[];
+export const CLOSE_WINDOW_BEHAVIOR_OPTIONS = [
+  "minimize",
+  "exit",
+] as const satisfies readonly CloseWindowBehavior[];
 
 const SYSTEM_THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
 
@@ -275,6 +280,8 @@ export type AppSettings = {
   selectedModel?: SelectedModel;
   theme: Theme;
   locale: Locale;
+  /** Desktop-only: close title-bar X to hide to tray or exit the application. */
+  closeWindowBehavior: CloseWindowBehavior;
 };
 
 export const CODEX_REQUEST_FORMAT_LABELS: Record<CodexRequestFormat, string> = {
@@ -1347,6 +1354,10 @@ export function normalizeTheme(input: unknown): Theme {
   return "light";
 }
 
+export function normalizeCloseWindowBehavior(input: unknown): CloseWindowBehavior {
+  return input === "exit" ? "exit" : "minimize";
+}
+
 export function resolveEffectiveTheme(theme: Theme): EffectiveTheme {
   if (theme !== "system") return theme;
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
@@ -1817,6 +1828,7 @@ export function getDefaultSettings(): AppSettings {
     selectedModel: undefined,
     theme: "light",
     locale: DEFAULT_LOCALE,
+    closeWindowBehavior: "minimize",
   };
 }
 
@@ -1851,6 +1863,7 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
     selectedModel,
     theme: normalizeTheme(obj.theme),
     locale: normalizeLocale(obj.locale),
+    closeWindowBehavior: normalizeCloseWindowBehavior(obj.closeWindowBehavior),
   };
 }
 
