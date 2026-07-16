@@ -975,6 +975,7 @@ export function ChatPage(props: ChatPageProps) {
         };
       });
       if (options?.startConversation) {
+        prepareComposerForConversationChangeActionRef.current();
         startNewConversationActionRef.current({ workdir: targetProject.path });
       }
     },
@@ -1332,6 +1333,7 @@ export function ChatPage(props: ChatPageProps) {
   const composerBusyRef = useRef(false);
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const composerDraftCacheRef = useRef<Map<string, MentionComposerDraft>>(new Map());
+  const composerDraftOwnerRef = useRef(currentConversationId);
   const conversationLoadSequenceRef = useRef(0);
   const subagentStoresRef = useRef(createSubagentStoreManager());
   const previousSubagentRuntimeConversationRef = useRef(currentConversationId);
@@ -1348,6 +1350,7 @@ export function ChatPage(props: ChatPageProps) {
   const startNewConversationActionRef = useRef<(options?: { workdir?: string }) => void>(
     () => undefined,
   );
+  const prepareComposerForConversationChangeActionRef = useRef<() => void>(() => undefined);
   const openInitialActionRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(
     async () => "painted",
   );
@@ -1983,6 +1986,9 @@ export function ChatPage(props: ChatPageProps) {
       const key = conversationId.trim();
       if (!key) return;
       composerDraftCacheRef.current.delete(key);
+      if (composerDraftOwnerRef.current === key) {
+        composerDraftOwnerRef.current = "";
+      }
       locallySyncedHistoryUpdatedAtRef.current.delete(key);
       gatewayBridgeHistorySummaryRef.current.delete(key);
       setPendingUploadsForConversation(key, []);
@@ -2004,10 +2010,14 @@ export function ChatPage(props: ChatPageProps) {
     scrollFollowRef.current?.stickToBottom();
   }
 
-  function cacheActiveComposerDraft(conversationId = currentConversationIdRef.current) {
+  function cacheActiveComposerDraft(conversationId = composerDraftOwnerRef.current) {
     const targetConversationId = conversationId.trim();
     const composer = composerRef.current;
-    if (!targetConversationId || !composer) {
+    if (
+      !targetConversationId ||
+      composerDraftOwnerRef.current !== targetConversationId ||
+      !composer
+    ) {
       return;
     }
 
@@ -2019,6 +2029,29 @@ export function ChatPage(props: ChatPageProps) {
 
     composerDraftCacheRef.current.set(targetConversationId, draft);
   }
+
+  function prepareComposerForConversationChange() {
+    cacheActiveComposerDraft();
+    composerDraftOwnerRef.current = "";
+  }
+
+  function restoreCachedComposerDraft(conversationId: string) {
+    const targetConversationId = conversationId.trim();
+    const composer = composerRef.current;
+    if (!targetConversationId || !composer) {
+      return;
+    }
+
+    const cachedDraft = composerDraftCacheRef.current.get(targetConversationId);
+    if (cachedDraft) {
+      composer.setDraft(cachedDraft);
+    } else {
+      composer.clear();
+    }
+    composerDraftOwnerRef.current = targetConversationId;
+  }
+
+  prepareComposerForConversationChangeActionRef.current = prepareComposerForConversationChange;
 
   function clearCachedComposerDraft(conversationId = currentConversationIdRef.current) {
     const targetConversationId = conversationId.trim();
@@ -2039,12 +2072,14 @@ export function ChatPage(props: ChatPageProps) {
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      const cachedDraft = composerDraftCacheRef.current.get(targetConversationId);
       const composer = composerRef.current;
-      if (!cachedDraft || !composer || composer.hasContent()) {
+      if (
+        !composer ||
+        (composerDraftOwnerRef.current === targetConversationId && composer.hasContent())
+      ) {
         return;
       }
-      composer.setDraft(cachedDraft);
+      restoreCachedComposerDraft(targetConversationId);
     });
 
     return () => {
@@ -4612,7 +4647,7 @@ export function ChatPage(props: ChatPageProps) {
 
   const handleNewConversation = useCallback(() => {
     openController.cancel();
-    clearCachedComposerDraft();
+    prepareComposerForConversationChange();
     startNewConversationActionRef.current({
       workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
     });
@@ -4624,7 +4659,9 @@ export function ChatPage(props: ChatPageProps) {
       if (!targetConversationId) {
         return;
       }
+      prepareComposerForConversationChange();
       openController.open(targetConversationId);
+      restoreCachedComposerDraft(targetConversationId);
     },
     [openController],
   );

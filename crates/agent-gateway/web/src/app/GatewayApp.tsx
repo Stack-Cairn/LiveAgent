@@ -309,6 +309,7 @@ export default function GatewayApp() {
   });
   const composerRef = useRef<MentionComposerHandle | null>(null);
   const composerDraftCacheRef = useRef<Map<string, MentionComposerDraft>>(new Map());
+  const composerDraftOwnerRef = useRef("");
   const conversationIdRef = useRef(conversationId);
   const selectedHistoryIdRef = useRef(selectedHistoryId);
   const statusRef = useRef<AgentStatus | null>(status);
@@ -561,10 +562,14 @@ export default function GatewayApp() {
     return resolveVisibleConversationId(selectedHistoryIdRef.current, conversationIdRef.current);
   }
 
-  function cacheVisibleComposerDraft(conversationId = getVisibleComposerConversationId()) {
+  function cacheVisibleComposerDraft(conversationId = composerDraftOwnerRef.current) {
     const targetConversationId = conversationId.trim();
     const composer = composerRef.current;
-    if (!targetConversationId || !composer) {
+    if (
+      !targetConversationId ||
+      composerDraftOwnerRef.current !== targetConversationId ||
+      !composer
+    ) {
       return;
     }
 
@@ -575,6 +580,27 @@ export default function GatewayApp() {
     }
 
     composerDraftCacheRef.current.set(targetConversationId, draft);
+  }
+
+  function prepareComposerForConversationChange() {
+    cacheVisibleComposerDraft();
+    composerDraftOwnerRef.current = "";
+  }
+
+  function restoreCachedComposerDraft(conversationId: string) {
+    const targetConversationId = conversationId.trim();
+    const composer = composerRef.current;
+    if (!targetConversationId || !composer) {
+      return;
+    }
+
+    const cachedDraft = composerDraftCacheRef.current.get(targetConversationId);
+    if (cachedDraft) {
+      composer.setDraft(cachedDraft);
+    } else {
+      composer.clear();
+    }
+    composerDraftOwnerRef.current = targetConversationId;
   }
 
   function clearCachedComposerDraft(conversationId = getVisibleComposerConversationId()) {
@@ -810,6 +836,9 @@ export default function GatewayApp() {
         composerDraftCacheRef.current.delete(previousId);
         composerDraftCacheRef.current.set(nextId, cachedComposerDraft);
       }
+      if (composerDraftOwnerRef.current === previousId) {
+        composerDraftOwnerRef.current = nextId;
+      }
       moveConversationUploads(previousId, nextId);
       if (chatQueueConversationIdRef.current === previousId) {
         chatQueueConversationIdRef.current = nextId;
@@ -1005,7 +1034,10 @@ export default function GatewayApp() {
       });
       if (options?.startConversation) {
         setActiveView("chat");
-        startNewConversation({ workdir: targetProject.path });
+        startNewConversation({
+          workdir: targetProject.path,
+          preserveCurrentComposerDraft: true,
+        });
       }
     },
     [setSettings, workspaceProjects],
@@ -2245,11 +2277,18 @@ export default function GatewayApp() {
       });
   }
 
-  function startNewConversation(options?: { workdir?: string }) {
-    const currentConversationId = conversationIdRef.current.trim();
+  function startNewConversation(options?: {
+    workdir?: string;
+    preserveCurrentComposerDraft?: boolean;
+  }) {
+    const currentConversationId = getVisibleComposerConversationId().trim();
     if (currentConversationId) {
       transcriptStoreRegistry.peek(currentConversationId)?.foldSettledTurns();
-      clearCachedComposerDraft(currentConversationId);
+      if (options?.preserveCurrentComposerDraft) {
+        cacheVisibleComposerDraft(currentConversationId);
+      } else {
+        clearCachedComposerDraft(currentConversationId);
+      }
     }
     invalidateHistoryLoad();
     markVisibleConversationRevision();
@@ -2257,6 +2296,7 @@ export default function GatewayApp() {
     const nextConversationId = createLocalDraftConversationId();
     protectedConversationRef.current = PROTECTED_DRAFT_CONVERSATION;
     submitInFlightRef.current = false;
+    composerDraftOwnerRef.current = "";
     composerRef.current?.clear();
     const nextWorkdir = options?.workdir?.trim() || "";
     if (nextWorkdir) {
@@ -2638,6 +2678,7 @@ export default function GatewayApp() {
     }
     startNewConversation({
       workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+      preserveCurrentComposerDraft: true,
     });
   }
 
@@ -2652,9 +2693,9 @@ export default function GatewayApp() {
       return;
     }
 
-    const currentConversationId = conversationIdRef.current.trim();
-    if (currentConversationId && currentConversationId !== targetConversationId) {
-      cacheVisibleComposerDraft(currentConversationId);
+    const currentConversationId = getVisibleComposerConversationId().trim();
+    if (currentConversationId !== targetConversationId) {
+      prepareComposerForConversationChange();
     }
 
     pendingDisplayedConversationAutoBottomRef.current = targetConversationId;
@@ -2675,12 +2716,14 @@ export default function GatewayApp() {
       setSelectedHistoryId(targetConversationId);
       setChatError(null);
       setSelectedHistory(null);
+      restoreCachedComposerDraft(targetConversationId);
       return;
     }
 
     // Two-phase open: initial tail paint now, quiet full hydration at idle;
     // the overlay appears only after ~150ms of still-loading.
     openController.open(targetConversationId);
+    restoreCachedComposerDraft(targetConversationId);
   }
 
   // Conversations that left the authoritative sidebar index (remote deletes,
@@ -3177,6 +3220,7 @@ export default function GatewayApp() {
     draftClientRequestsRef.current.clear();
     conversationWorkdirsRef.current.clear();
     composerDraftCacheRef.current.clear();
+    composerDraftOwnerRef.current = "";
     composerRef.current?.clear();
     conversationIdRef.current = "";
     selectedHistoryIdRef.current = "";
@@ -3638,12 +3682,14 @@ export default function GatewayApp() {
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      const cachedDraft = composerDraftCacheRef.current.get(targetConversationId);
       const composer = composerRef.current;
-      if (!cachedDraft || !composer || composer.hasContent()) {
+      if (
+        !composer ||
+        (composerDraftOwnerRef.current === targetConversationId && composer.hasContent())
+      ) {
         return;
       }
-      composer.setDraft(cachedDraft);
+      restoreCachedComposerDraft(targetConversationId);
     });
 
     return () => {

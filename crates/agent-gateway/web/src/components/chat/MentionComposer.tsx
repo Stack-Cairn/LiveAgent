@@ -1972,6 +1972,8 @@ export const MentionComposer = memo(
           ensureTrailingCaretAnchor(el);
           closeMentionSession();
           refreshEmptyState();
+          placeCaretAtEditorEnd();
+          scheduleComposerSelectionScroll(el);
         },
         insertFileMention: (path: string, kind: "file" | "dir") => {
           const el = editorRef.current;
