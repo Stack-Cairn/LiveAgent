@@ -199,17 +199,17 @@ function pathCrumbs(path: string, side: SftpSide, projectLabel: string) {
   return crumbs;
 }
 
-function remotePathSuggestionTarget(value: string, currentPath: string) {
+function pathSuggestionTarget(value: string, currentPath: string, side: SftpSide) {
   const rawValue = value.trim().replace(/\\/g, "/");
-  const normalizedValue = normalizePath(rawValue, "remote");
-  if (normalizedValue === normalizePath(currentPath, "remote")) {
+  const normalizedValue = normalizePath(rawValue, side);
+  if (normalizedValue === normalizePath(currentPath, side)) {
     return { directoryPath: normalizedValue, prefix: "" };
   }
   if (!rawValue || rawValue === "." || rawValue === "/" || rawValue.endsWith("/")) {
     return { directoryPath: normalizedValue, prefix: "" };
   }
   return {
-    directoryPath: parentPath(normalizedValue, "remote"),
+    directoryPath: parentPath(normalizedValue, side),
     prefix: basename(normalizedValue),
   };
 }
@@ -256,17 +256,30 @@ function PathCrumbRow(props: {
   );
 }
 
-function RemotePathNavigator(props: {
+function PathNavigator(props: {
+  side: SftpSide;
   path: string;
   loading: boolean;
   client: SftpClient;
   sessionId: string;
   projectPathKey: string;
   workdir: string;
+  rootLabel: string;
   onNavigate: (path: string) => void;
   t: (key: string) => string;
 }) {
-  const { path, loading, client, sessionId, projectPathKey, workdir, onNavigate, t } = props;
+  const {
+    side,
+    path,
+    loading,
+    client,
+    sessionId,
+    projectPathKey,
+    workdir,
+    rootLabel,
+    onNavigate,
+    t,
+  } = props;
   const listboxId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const requestIdRef = useRef(0);
@@ -281,10 +294,10 @@ function RemotePathNavigator(props: {
 
   const crumbs = useMemo(
     () =>
-      pathCrumbs(path, "remote", "").map((crumb, index) =>
-        index === 0 && crumb.label === "." ? { ...crumb, label: "~" } : crumb,
+      pathCrumbs(path, side, rootLabel).map((crumb, index) =>
+        side === "remote" && index === 0 && crumb.label === "." ? { ...crumb, label: "~" } : crumb,
       ),
-    [path],
+    [path, rootLabel, side],
   );
 
   useEffect(() => {
@@ -304,7 +317,7 @@ function RemotePathNavigator(props: {
   useEffect(() => {
     if (!open) return;
     const requestId = ++requestIdRef.current;
-    const { directoryPath, prefix } = remotePathSuggestionTarget(value, path);
+    const { directoryPath, prefix } = pathSuggestionTarget(value, path, side);
     setSuggestions([]);
     setSuggestionsLoading(true);
     setSuggestionError(null);
@@ -316,7 +329,7 @@ function RemotePathNavigator(props: {
           sessionId,
           projectPathKey,
           workdir,
-          side: "remote",
+          side,
           path: directoryPath,
         })
         .then((response) => {
@@ -349,7 +362,7 @@ function RemotePathNavigator(props: {
         requestIdRef.current += 1;
       }
     };
-  }, [client, open, path, projectPathKey, sessionId, value, workdir]);
+  }, [client, open, path, projectPathKey, sessionId, side, value, workdir]);
 
   useEffect(() => {
     if (activeIndex < 0) return;
@@ -369,7 +382,7 @@ function RemotePathNavigator(props: {
   };
 
   const navigate = (nextPath: string) => {
-    const normalizedPath = normalizePath(nextPath, "remote");
+    const normalizedPath = normalizePath(nextPath, side);
     setValue(normalizedPath);
     setOpen(false);
     setEditing(false);
@@ -445,7 +458,11 @@ function RemotePathNavigator(props: {
             autoCapitalize="none"
             autoCorrect="off"
             className="h-full min-w-0 flex-1 bg-transparent pl-8 pr-11 font-mono text-xs text-foreground outline-none placeholder:font-sans placeholder:text-muted-foreground/60"
-            placeholder={t("workspaceSftp.pathPlaceholder")}
+            placeholder={t(
+              side === "remote"
+                ? "workspaceSftp.pathPlaceholder"
+                : "workspaceSftp.pathPlaceholderLocal",
+            )}
             onFocus={() => setOpen(true)}
             onChange={(event) => {
               setValue(event.target.value);
@@ -1511,26 +1528,18 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                     </button>
                   </div>
 
-                  {side === "remote" ? (
-                    <RemotePathNavigator
-                      path={pane.path}
-                      loading={pane.loading}
-                      client={client}
-                      sessionId={session.id}
-                      projectPathKey={projectPathKey}
-                      workdir={workdir}
-                      onNavigate={(path) => void loadPane("remote", path)}
-                      t={t}
-                    />
-                  ) : (
-                    <div className="flex h-10 shrink-0 items-center border-b border-border/60 bg-muted/15 px-2.5">
-                      <PathCrumbRow
-                        crumbs={pathCrumbs(pane.path, side, t("workspaceSftp.projectRoot"))}
-                        fallbackLabel={t("workspaceSftp.projectRoot")}
-                        onNavigate={(crumbPath) => void loadPane(side, crumbPath)}
-                      />
-                    </div>
-                  )}
+                  <PathNavigator
+                    side={side}
+                    path={pane.path}
+                    loading={pane.loading}
+                    client={client}
+                    sessionId={session.id}
+                    projectPathKey={projectPathKey}
+                    workdir={workdir}
+                    rootLabel={t("workspaceSftp.projectRoot")}
+                    onNavigate={(nextPath) => void loadPane(side, nextPath)}
+                    t={t}
+                  />
 
                   {pane.error ? (
                     <div className="m-3 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
