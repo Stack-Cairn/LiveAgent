@@ -130,6 +130,72 @@ const AGENT_PARAMETERS = Type.Object(
   { additionalProperties: false },
 );
 
+const READONLY_AGENT_PARAMETERS = Type.Object(
+  {
+    agents: Type.Array(
+      Type.Object(
+        {
+          id: Type.String({
+            minLength: 1,
+            maxLength: 64,
+            description:
+              "Stable agent id (letters, digits, dots, dashes, underscores). Reuse the same id to resume that agent.",
+          }),
+          prompt: Type.String({
+            minLength: 1,
+            description:
+              "Task for this run. For an existing id this is normally the only field needed besides id.",
+          }),
+          name: Type.Optional(
+            Type.String({ description: "Display name. Only valid when the id is first created." }),
+          ),
+          role: Type.Optional(
+            Type.String({ description: "Short role. Only valid when the id is first created." }),
+          ),
+          identity: Type.Optional(
+            Type.String({
+              description:
+                "Long-lived persona/identity instructions. Only valid when the id is first created.",
+            }),
+          ),
+          template: Type.Optional(
+            Type.String({
+              description:
+                "Enabled AGENTS template id or name. Only valid when the id is first created.",
+            }),
+          ),
+          mode: Type.Optional(
+            Type.Literal("readonly", {
+              description:
+                "This parent conversation is read-only, so delegated agents must use readonly mode.",
+            }),
+          ),
+          resume: Type.Optional(
+            Type.Boolean({
+              description:
+                "Defaults to true. Set false to start a fresh private context for the same stable id.",
+            }),
+          ),
+        },
+        { additionalProperties: false },
+      ),
+      {
+        minItems: 1,
+        maxItems: MAX_AGENTS,
+        description: "One entry per delegated read-only job. Independent entries run in parallel.",
+      },
+    ),
+    concurrency: Type.Optional(
+      Type.Integer({
+        minimum: 1,
+        maximum: MAX_AGENTS,
+        description: `Maximum agents running concurrently. Defaults to ${MAX_AGENTS}.`,
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 async function resolveOutputPaths(params: {
   agents: ResolvedSubagentSpec[];
   workdir: string;
@@ -189,6 +255,7 @@ export type SubagentRuntimeConfig = {
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  readonlyOnly?: boolean;
 };
 
 export function createSubagentTools(params: {
@@ -207,15 +274,20 @@ export function createSubagentTools(params: {
   metadataByName: Map<string, BuiltinToolMetadata>;
   createSubagentToolRegistry?: (workdir: string) => Promise<SubagentToolRegistry>;
   worktreeIpc?: SubagentWorktreeIpc;
+  readonlyOnly?: boolean;
 }): BuiltinToolBundle {
   const store = params.store;
   const templates = params.templates;
   const messageBusEnabled = Boolean(store.conversationId);
   const worktreeIpc = params.worktreeIpc ?? tauriSubagentWorktreeIpc;
-  const readonlyTools = selectReadOnlyTools({
-    tools: params.baseTools,
-    metadataByName: params.metadataByName,
-  });
+  const readonlyTools = params.readonlyOnly
+    ? params.baseTools.filter(
+        (tool) => params.metadataByName.get(tool.name)?.isReadOnly === true,
+      )
+    : selectReadOnlyTools({
+        tools: params.baseTools,
+        metadataByName: params.metadataByName,
+      });
   const enqueueWorktreeApply = createSequentialQueue();
   const agentRunQueues = new Map<string, ReturnType<typeof createSequentialQueue>>();
   const enqueueAgentRun = <T>(agentId: string, run: () => Promise<T>) => {
@@ -239,9 +311,15 @@ export function createSubagentTools(params: {
       "Pass one entry per job in `agents`; independent entries run in parallel up to `concurrency`. Use sequential Agent calls only when a later job needs an earlier job's output.",
       "Each agent has a stable `id` inside this conversation. Reuse the same id to resume that agent's private context; use a new id only for a genuinely new persona.",
       "Creation fields (name, role, identity, template) apply only when an id is first created; sending different values for an existing id is an error. For an existing id, send only id and the new prompt.",
-      "mode=readonly (default for new agents) gives inspect-only tools — use it for research, review, and discussion. mode=worktree gives file+shell tools inside an isolated git worktree — use it only when file changes are expected or explicitly requested. A resumed agent keeps its previous mode unless you set mode.",
-      "apply_policy controls merge-back from a worktree: none (default) never applies, auto applies the patch automatically, explicit applies only when every changed file matches allowed_output_paths.",
-      "retain_worktree=true keeps a safely-cleanable worktree for review. Worktrees with unapplied changes or failed agents are always retained.",
+      params.readonlyOnly
+        ? "This parent conversation is read-only. Every delegated agent must use mode=readonly; worktree mode and merge-back fields are unavailable. Explicitly set mode=readonly when resuming an agent that previously used worktree mode."
+        : "mode=readonly (default for new agents) gives inspect-only tools — use it for research, review, and discussion. mode=worktree gives file+shell tools inside an isolated git worktree — use it only when file changes are expected or explicitly requested. A resumed agent keeps its previous mode unless you set mode.",
+      params.readonlyOnly
+        ? "Delegated agents can inspect and report, but cannot modify workspace files, settings, memory, tasks, or external systems."
+        : "apply_policy controls merge-back from a worktree: none (default) never applies, auto applies the patch automatically, explicit applies only when every changed file matches allowed_output_paths.",
+      params.readonlyOnly
+        ? null
+        : "retain_worktree=true keeps a safely-cleanable worktree for review. Worktrees with unapplied changes or failed agents are always retained.",
       "Subagents cannot call Agent recursively. Worktree mode must not modify global LiveAgent settings, MCP server configuration, cron tasks, or user-level skills.",
       "Subagents communicate through SendMessage (to=parent is parent-private; to=* is a shared broadcast); do not use workspace files as a message channel.",
       "Include the new user request and any parent-conversation context each subagent needs in that agent's prompt. The parent conversation is not copied automatically.",
@@ -250,8 +328,10 @@ export function createSubagentTools(params: {
       formatRoster(rosterEntries),
       "Enabled AGENTS templates (reference by template=<id>):",
       formatTemplates(templateEntries),
-    ].join("\n"),
-    parameters: AGENT_PARAMETERS,
+    ]
+      .filter((line): line is string => typeof line === "string")
+      .join("\n"),
+    parameters: params.readonlyOnly ? READONLY_AGENT_PARAMETERS : AGENT_PARAMETERS,
   };
 
   async function executeAgentToolCall(
@@ -291,6 +371,20 @@ export function createSubagentTools(params: {
     const parsed = parseSubagentBatch(toolCall.arguments, { identities, templates });
     if (!parsed.ok) {
       return rejectBatch(parsed.issues);
+    }
+    if (params.readonlyOnly) {
+      const permissionIssues = parsed.batch.agents
+        .filter((agent) => agent.spec.mode !== "readonly")
+        .map((agent) =>
+          issue(
+            "permission_denied",
+            "The parent conversation is read-only; delegated agents must explicitly use mode=readonly.",
+            agent.spec.id,
+          ),
+        );
+      if (permissionIssues.length > 0) {
+        return rejectBatch(permissionIssues);
+      }
     }
     const { agents, issues: pathIssues } = await resolveOutputPaths({
       agents: parsed.batch.agents,

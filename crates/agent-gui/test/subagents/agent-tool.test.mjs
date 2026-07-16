@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createAgentToolCall,
+  createFakeStoreIpc,
   createRecordingContext,
   createSubagentHarness,
   sleep,
@@ -89,6 +90,58 @@ test("Agent tool never appears in child tool selections", async () => {
   for (const call of harness.runnerCalls) {
     assert.ok(!call.tools.some((tool) => tool.name === "Agent"));
   }
+});
+
+test("readonly parent rejects worktree delegation before an agent starts", async () => {
+  const harness = await createSubagentHarness({ readonlyOnly: true });
+  const result = await harness.bundle.executeToolCall(
+    createAgentToolCall({
+      agents: [{ id: "writer", prompt: "change a file", mode: "worktree" }],
+    }),
+  );
+
+  assert.equal(result.isError, true);
+  assert.equal(result.details.status, "rejected");
+  assert.equal(result.details.issues[0].code, "permission_denied");
+  assert.equal(harness.runnerCalls.length, 0);
+  assert.equal(harness.worktreeIpc.creates.length, 0);
+});
+
+test("readonly parent requires an explicit downgrade for a stored worktree agent", async () => {
+  const storeIpc = createFakeStoreIpc();
+  storeIpc.seedIdentity({
+    parentConversationId: "conversation-1",
+    agentId: "builder",
+    name: "Builder",
+    role: "Implementation",
+    identityPrompt: "",
+    lastMode: "worktree",
+    createdAt: 1,
+    updatedAt: 2,
+  });
+  const harness = await createSubagentHarness({ readonlyOnly: true, storeIpc });
+  const result = await harness.bundle.executeToolCall(
+    createAgentToolCall({ agents: [{ id: "builder", prompt: "inspect the current state" }] }),
+  );
+
+  assert.equal(result.isError, true);
+  assert.equal(result.details.issues[0].code, "permission_denied");
+  assert.equal(harness.runnerCalls.length, 0);
+});
+
+test("readonly Agent schema omits worktree and merge-back fields", async () => {
+  const harness = await createSubagentHarness({ readonlyOnly: true });
+  const agentTool = harness.bundle.tools.find((tool) => tool.name === "Agent");
+  const agentProperties = agentTool.parameters.properties.agents.items.properties;
+
+  assert.deepEqual(agentProperties.mode, {
+    const: "readonly",
+    description: "This parent conversation is read-only, so delegated agents must use readonly mode.",
+    optional: true,
+  });
+  assert.equal("apply_policy" in agentProperties, false);
+  assert.equal("allowed_output_paths" in agentProperties, false);
+  assert.equal("retain_worktree" in agentProperties, false);
 });
 
 test("SendMessage is not attached and persistence is skipped without a conversation id", async () => {

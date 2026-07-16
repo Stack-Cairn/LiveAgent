@@ -1466,3 +1466,15 @@ test("web right dock migrates the legacy tabs shape", () => {
   assert.deepEqual(project.tabOrder, ["sess-1", RIGHT_DOCK_TAB_IDS.fileTree]);
   assert.equal(project.activeTabId, "sess-1");
 });
+
+test("web settings preserve readonly execution mode", () => {
+  installWindow();
+  const defaults = settings.getDefaultSettings();
+  const normalized = settings.normalizeSettings({
+    system: { ...defaults.system, executionMode: "readonly" },
+  });
+
+  assert.equal(normalized.system.executionMode, "readonly");
+  assert.equal(settings.isAgentExecutionMode("readonly"), true);
+  assert.equal(settings.isReadOnlyExecutionMode("readonly"), true);
+});

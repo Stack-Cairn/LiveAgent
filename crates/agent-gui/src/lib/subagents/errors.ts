@@ -13,6 +13,7 @@ export type SubagentIssueCode =
   | "unknown_agent_id"
   | "unknown_template"
   | "identity_conflict"
+  | "permission_denied"
   | "worktree_unavailable"
   | "output_path_outside_workspace"
   | "unknown_recipient"

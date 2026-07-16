@@ -34,6 +34,16 @@
 | WebUI Chat | 间接执行 | WebUI 发 Chat Command 到 Gateway，实际工具仍在桌面 GUI/Tauri 运行。 |
 | Gateway | 否 | Gateway 不执行业务工具，只转发 request/event 并维护 buffer。 |
 
+主会话还会通过 `toolAccessPolicy.ts` 将 execution mode 映射到统一授权级别，并对模型可见 schema 与实际 executor dispatch 使用同一 allowlist：
+
+| Execution mode | 工具授权 | 约束 |
+|---|---|---|
+| `text` | `none` | 不构造本地工具调用流程。 |
+| `readonly` | `readonly` | 仅允许 `BuiltinToolMetadata.isReadOnly=true` 的工具，以及受限的 `Agent`/`SendMessage`；未分类工具默认拒绝。 |
+| `tools` / `agent-dev` | `full` | 使用完整 registry；`agent-dev` 额外写调试 trace。 |
+
+readonly runtime 将 MemoryManager 降为只读 schema，不注册 TodoWrite，不运行会话 hooks 或 silent memory extraction，并禁用 Skills mutation、Cron、SSH、Tunnel、MCP 配置写入和动态 MCP 工具。上传与大段粘贴导入也不会创建 workspace 文件。即使调用方绕过 schema 直接提交工具名，受限 registry 的 dispatch 仍返回 `tool_access_denied`，不会进入原 executor。
+
 ## MCP 动态工具
 
 | 阶段 | 说明 |
@@ -81,6 +91,7 @@
 | 结构化参数 | `agents` 数组（每项 `id/prompt/name/role/identity/template/mode/apply_policy/allowed_output_paths/resume/retain_worktree`）+ 顶层 `concurrency`，单次最多 8 个 agent 并行。 |
 | 稳定 id 与复用 | 同一会话内复用 id 即恢复该子代理的私有上下文；`name/role/identity/template` 只在 id 首次创建时生效，对既有 id 传入不同值会被拒绝。`resume=false` 为同一 id 开启全新私有上下文。 |
 | mode | `readonly`（新 agent 默认，只读工具）用于调研/评审；`worktree` 在隔离 git worktree 内提供文件+shell 工具。resume 的 agent 默认沿用上次 mode。 |
+| readonly 父会话 | `Agent` schema 隐藏 worktree、apply 与 retain 字段；所有子代理必须为 `mode=readonly`。既有 worktree agent 未显式降级时整批拒绝，且拒绝发生在创建 worktree 之前。 |
 | apply_policy | `none`（默认，不回灌）/`auto`（自动 apply patch）/`explicit`（仅当所有变更文件命中 `allowed_output_paths` 才 apply；路径必须解析进 workspace）。`retain_worktree=true` 保留可安全清理的 worktree 供复查。 |
 | 原子校验 | 校验失败时不启动任何 agent，返回结构化错误并附上当前 roster 与已启用模板列表；`AgentPromptTemplate.enabled` 生效，`template` 只能引用已启用模板（按 id 或 name 解析）。 |
 | SendMessage | `to=parent`（父私有）/`to=*`（共享广播）/`to=<agent id>`（直达），收件人按 roster 校验，未知收件人直接拒绝；channel 为 direct/shared/decision/question，消息在下一轮 turn 边界投递。 |

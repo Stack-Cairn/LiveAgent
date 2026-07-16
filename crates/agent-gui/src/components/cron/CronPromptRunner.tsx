@@ -13,6 +13,7 @@ import {
   findProviderModelConfig,
   isAgentDevMode,
   isAgentExecutionMode,
+  isReadOnlyExecutionMode,
 } from "../../lib/settings";
 import {
   buildSkillsSystemPrompt,
@@ -23,6 +24,10 @@ import {
 import { buildBuiltinToolRegistry } from "../../lib/tools/builtinRegistry";
 import { createFileToolState } from "../../lib/tools/fileToolState";
 import type { SkillAccessPolicy } from "../../lib/tools/skillAccessPolicy";
+import {
+  restrictBuiltinToolRegistry,
+  toolAccessModeForExecutionMode,
+} from "../../lib/tools/toolAccessPolicy";
 import { appendSystemPrompt } from "../../pages/chat";
 import {
   createCompletePromptRunInput,
@@ -107,7 +112,7 @@ async function executeCronPromptRun(
 ) {
   if (!isAgentExecutionMode(settings.system.executionMode)) {
     throw new Error(
-      "Auto Prompt requires System -> Execution Mode to be Agent Mode or Agent Dev Mode.",
+      "Auto Prompt requires System -> Execution Mode to be Read-only Agent or Agent Mode.",
     );
   }
 
@@ -132,7 +137,8 @@ async function executeCronPromptRun(
   const skillsContext = await buildCronSkillsContext(settings);
   const activeAgentPrompt = getActiveAgentPrompt(settings);
   const runtimePlatform = await resolveRuntimePlatform();
-  const builtinRegistry = await buildBuiltinToolRegistry({
+  const readOnlyMode = isReadOnlyExecutionMode(settings.system.executionMode);
+  const unrestrictedRegistry = await buildBuiltinToolRegistry({
     workdir,
     providerId: provider.type,
     runtimePlatform,
@@ -147,8 +153,13 @@ async function executeCronPromptRun(
     },
     selectedSystemToolIds: settings.system.selectedSystemTools,
     getMcpSettings: () => settings.mcp,
+    memoryToolMode: readOnlyMode ? "ro" : "rw",
     mcpLoadFailureMode: "throw",
   });
+  const builtinRegistry = restrictBuiltinToolRegistry(
+    unrestrictedRegistry,
+    toolAccessModeForExecutionMode(settings.system.executionMode),
+  );
 
   let systemPrompt = buildCronSystemPrompt(request.taskName);
   if (activeAgentPrompt) {

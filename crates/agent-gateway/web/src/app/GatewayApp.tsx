@@ -66,6 +66,7 @@ import { toModelValue } from "@/lib/providers/llm";
 import {
   type ChatRuntimeControls,
   DEFAULT_WORKSPACE_PROJECT_ID,
+  type ExecutionMode,
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
   getNextTheme,
@@ -92,6 +93,7 @@ import {
   updateRightDockWidth,
   updateSkills,
   updateSshProjectHostIds,
+  updateSystem,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@/lib/settings";
@@ -3397,6 +3399,12 @@ export default function GatewayApp() {
       activeSelectedModel?.model,
     ],
   );
+  const handleExecutionModeChange = useCallback(
+    (executionMode: ExecutionMode) => {
+      setSettings((prev) => updateSystem(prev, { executionMode }));
+    },
+    [setSettings],
+  );
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
 
   const modelOptions = useMemo(
@@ -4226,6 +4234,8 @@ export default function GatewayApp() {
                       workdir={displayedConversationWorkdir}
                       enabledSkills={enabledComposerSkills}
                       isAgentMode={isAgentMode}
+                      executionMode={settings.system.executionMode}
+                      onExecutionModeChange={handleExecutionModeChange}
                       chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                       reasoningOptions={chatRuntimeReasoningOptions}
                       thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}

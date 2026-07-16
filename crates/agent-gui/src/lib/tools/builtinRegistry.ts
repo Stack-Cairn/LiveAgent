@@ -297,6 +297,7 @@ export async function buildBuiltinToolRegistry(
       templates: subagentRuntime.templates,
       store: subagentRuntime.store,
       scheduler: subagentRuntime.scheduler,
+      readonlyOnly: subagentRuntime.readonlyOnly,
       baseTools: baseRegistry.tools,
       executeToolCall: baseRegistry.executeToolCall,
       metadataByName: baseRegistry.metadataByName,

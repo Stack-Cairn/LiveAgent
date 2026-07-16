@@ -46,6 +46,8 @@ import { assistantMessageToText } from "../../../lib/providers/llm";
 import { resolveRuntimePlatform } from "../../../lib/runtimePlatform";
 import {
   type AppSettings,
+  type ExecutionMode,
+  isReadOnlyExecutionMode,
   type McpSettingsOp,
   type ProviderId,
   type SshHostConfig,
@@ -69,6 +71,10 @@ import { createFileToolState } from "../../../lib/tools/fileToolState";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
 import { getOrCreateTodoToolState } from "../../../lib/tools/todoTools";
+import {
+  restrictBuiltinToolRegistry,
+  toolAccessModeForExecutionMode,
+} from "../../../lib/tools/toolAccessPolicy";
 import type { TunnelManagerChange } from "../../../lib/tools/tunnelManagerTools";
 import {
   appendSystemPrompt,
@@ -206,6 +212,7 @@ export type RunAgentConversationTurnParams = {
     customProviderId: string;
     model: string;
   };
+  executionMode: ExecutionMode;
   effectiveWorkdir: string;
   effectiveSkillsEnabled: boolean;
   showSilentMemoryExtraction: boolean;
@@ -275,6 +282,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     runtime,
     runtimeModel,
     selectedModel,
+    executionMode,
     effectiveWorkdir,
     effectiveSkillsEnabled,
     showSilentMemoryExtraction,
@@ -319,6 +327,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     onMemoryExtractionModelFailure,
     memoryExtractionStatusText,
   } = params;
+
+  const readOnlyMode = isReadOnlyExecutionMode(executionMode);
 
   if (!effectiveWorkdir) {
     throw new Error("Tool mode requires a project directory from the chat sidebar.");
@@ -385,11 +395,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       : context;
   };
   const fileState = createFileToolState();
-  const todoState = getOrCreateTodoToolState(conversationId);
+  const todoState = readOnlyMode ? undefined : getOrCreateTodoToolState(conversationId);
   const subagentScheduler = createSubagentScheduler();
   const runtimePlatform = await resolveRuntimePlatform();
   const buildRegistryStartedAt = perfNowMs();
-  const builtinRegistry = await buildBuiltinToolRegistry({
+  const unrestrictedRegistry = await buildBuiltinToolRegistry({
     workdir: effectiveWorkdir,
     providerId,
     runtimePlatform,
@@ -403,13 +413,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     currentChatModel: selectedModel,
     selectedSystemToolIds,
     getMcpSettings,
-    applyMcpOps,
-    remoteWebTunnelsEnabled,
+    applyMcpOps: readOnlyMode ? undefined : applyMcpOps,
+    memoryToolMode: readOnlyMode ? "ro" : "rw",
+    remoteWebTunnelsEnabled: readOnlyMode ? false : remoteWebTunnelsEnabled,
     tunnelProjectPathKey: workspaceProjectPathKey(effectiveWorkdir),
     tunnelPublicBaseUrl,
     sshHosts,
     associatedSshHostIds,
-    sshManagerRemoteAllowed,
+    sshManagerRemoteAllowed: readOnlyMode ? false : sshManagerRemoteAllowed,
     onSshSessionsChanged,
     onTunnelsChanged,
     onMcpLoadError: (message) => {
@@ -426,9 +437,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           templates: enabledSubagentTemplates(agentTemplates),
           store: subagentStore,
           scheduler: subagentScheduler,
+          readonlyOnly: readOnlyMode,
         }
       : undefined,
   });
+  const builtinRegistry = restrictBuiltinToolRegistry(
+    unrestrictedRegistry,
+    toolAccessModeForExecutionMode(executionMode),
+  );
   finishAgentPerfSpan(conversationDebugLogger, "builtin_registry.build", buildRegistryStartedAt, {
     toolCount: builtinRegistry.tools.length,
     enabledMcpServerCount: selectEnabledMcpServers(getMcpSettings()).length,
@@ -954,7 +970,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     });
   }
   const shouldRunMemoryExtraction =
-    assistantStopReason !== "error" && assistantStopReason !== "aborted";
+    !readOnlyMode && assistantStopReason !== "error" && assistantStopReason !== "aborted";
   const memoryRoundOffset = Math.max(
     activeAgentRound || pendingTerminalAssistantMetaRef.current?.round || 1,
     1,

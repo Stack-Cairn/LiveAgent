@@ -123,6 +123,7 @@ import {
   getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
+  isReadOnlyExecutionMode,
   isRightDockSingletonTabOpen,
   normalizeChatRuntimeControls,
   normalizeChatRuntimeControlsForProvider,
@@ -147,6 +148,7 @@ import {
   updateRightDockWidth,
   updateSkills,
   updateSshProjectHostIds,
+  updateSystem,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../lib/settings";
@@ -3669,6 +3671,7 @@ export function ChatPage(props: ChatPageProps) {
       gatewayBridgeRequest?.executionModeOverride ??
       settings.system.executionMode;
     const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
+    const effectiveIsReadOnlyMode = isReadOnlyExecutionMode(effectiveExecutionMode);
     const effectiveWorkdir = (
       overrides?.workdirOverride ??
       gatewayBridgeRequest?.workdirOverride ??
@@ -3829,7 +3832,7 @@ export function ChatPage(props: ChatPageProps) {
     let text = hasTextOverride
       ? textOverride.trim()
       : composerDraft
-        ? (effectiveIsAgentMode && composerDraft.largePastes.length > 0
+        ? (effectiveIsAgentMode && !effectiveIsReadOnlyMode && composerDraft.largePastes.length > 0
             ? composerDraft.textWithoutLargePastes
             : buildTextFromComposerDraft(composerDraft)
           ).trim()
@@ -3838,6 +3841,7 @@ export function ChatPage(props: ChatPageProps) {
 
     if (
       effectiveIsAgentMode &&
+      !effectiveIsReadOnlyMode &&
       composerDraft &&
       composerDraft.largePastes.length > 0 &&
       !hasTextOverride
@@ -4198,7 +4202,7 @@ export function ChatPage(props: ChatPageProps) {
           allowedSkillBaseDirs: [],
           allowSkillInventory: false,
           allowSkillManagement: false,
-          allowSkillMutation: true,
+          allowSkillMutation: !effectiveIsReadOnlyMode,
         }
       : undefined;
 
@@ -4337,9 +4341,11 @@ export function ChatPage(props: ChatPageProps) {
       }
 
       const selectedSkills = selectedSkillNames.map((n) => byName.get(n)!).filter(Boolean);
-      const allowBuiltinSkillManagement = selectedSkills.some(
-        (skill) => skill.name === "skills-creator" || skill.name === "skills-installer",
-      );
+      const allowBuiltinSkillManagement =
+        !effectiveIsReadOnlyMode &&
+        selectedSkills.some(
+          (skill) => skill.name === "skills-creator" || skill.name === "skills-installer",
+        );
 
       // IMPORTANT: Claude Code-style skills are progressive disclosure.
       // We only provide metadata in the system prompt. The model decides whether to read the skill file.
@@ -4355,7 +4361,7 @@ export function ChatPage(props: ChatPageProps) {
           .map((skill) => skill.baseDir),
         allowSkillInventory: true,
         allowSkillManagement: allowBuiltinSkillManagement,
-        allowSkillMutation: true,
+        allowSkillMutation: !effectiveIsReadOnlyMode,
       };
       const explicitSkills = resolveExplicitSkillMentions({
         text,
@@ -4377,7 +4383,7 @@ export function ChatPage(props: ChatPageProps) {
     }
 
     const hookScope = createHookRunScope({
-      hooks: getAutomationState().hooks.hooks,
+      hooks: effectiveIsReadOnlyMode ? [] : getAutomationState().hooks.hooks,
       conversationId,
       workdir: effectiveWorkdir,
       onWarning: (warning) => {
@@ -4512,6 +4518,7 @@ export function ChatPage(props: ChatPageProps) {
             },
             runtimeModel,
             selectedModel,
+            executionMode: effectiveExecutionMode,
             memoryExtractionModel,
             onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
             memoryExtractionStatusText,
@@ -5206,6 +5213,12 @@ export function ChatPage(props: ChatPageProps) {
     },
     [chatRuntimeReasoningParams, setSettings],
   );
+  const handleExecutionModeChange = useCallback(
+    (executionMode: ExecutionMode) => {
+      setSettings((prev) => updateSystem(prev, { executionMode }));
+    },
+    [setSettings],
+  );
   const currentConversationWorkspaceRoot = (() => {
     const currentItem = historyItems.find((item) => item.id === currentConversationId);
     const persistedCwd = currentItem?.cwd?.trim();
@@ -5563,6 +5576,8 @@ export function ChatPage(props: ChatPageProps) {
                 workdir={displayedConversationWorkdir}
                 enabledSkills={enabledComposerSkills}
                 isAgentMode={isAgentMode}
+                executionMode={settings.system.executionMode}
+                onExecutionModeChange={handleExecutionModeChange}
                 chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                 reasoningOptions={chatRuntimeReasoningOptions}
                 thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}

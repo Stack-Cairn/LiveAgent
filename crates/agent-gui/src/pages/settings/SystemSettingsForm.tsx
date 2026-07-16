@@ -9,6 +9,7 @@ import {
   MonitorSmartphone,
   Moon,
   ScanText,
+  Shield,
   Sun,
   Terminal,
   Wrench,
@@ -38,7 +39,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
   const { t } = useLocale();
 
   const executionMode = settings.system.executionMode;
-  const isClassicAgentMode = executionMode === "tools";
+  const isClassicAgentMode = executionMode === "tools" || executionMode === "agent-dev";
   const isAgentDevMode = executionMode === "agent-dev";
   const appearanceIcon =
     settings.theme === "system" ? (
@@ -154,6 +155,41 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           <button
             type="button"
             onClick={() =>
+              setSettings((prev) =>
+                updateSystem(prev, { executionMode: "readonly" as ExecutionMode }),
+              )
+            }
+            className={`group relative flex flex-col items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+              executionMode === "readonly"
+                ? "border-emerald-500/45 bg-emerald-500/5 shadow-sm shadow-emerald-500/10"
+                : "border-transparent bg-muted/40 hover:border-border hover:bg-muted/60"
+            }`}
+          >
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+                executionMode === "readonly"
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "bg-muted text-muted-foreground group-hover:bg-accent"
+              }`}
+            >
+              <Shield className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold">{t("settings.readonlyAgentMode")}</div>
+              <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {t("settings.readonlyAgentModeDesc")}
+              </div>
+            </div>
+            {executionMode === "readonly" ? (
+              <div className="absolute right-3 top-3">
+                <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600" />
+              </div>
+            ) : null}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
               setSettings((prev) => updateSystem(prev, { executionMode: "tools" as ExecutionMode }))
             }
             className={`group relative flex flex-col items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
@@ -183,42 +219,47 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
               </div>
             ) : null}
           </button>
+        </div>
 
+        {isClassicAgentMode ? (
           <button
             type="button"
+            role="switch"
+            aria-checked={isAgentDevMode}
             onClick={() =>
               setSettings((prev) =>
-                updateSystem(prev, { executionMode: "agent-dev" as ExecutionMode }),
+                updateSystem(prev, {
+                  executionMode: isAgentDevMode ? "tools" : "agent-dev",
+                }),
               )
             }
-            className={`group relative flex flex-col items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
-              isAgentDevMode
-                ? "border-primary bg-primary/5 shadow-sm shadow-primary/10"
-                : "border-transparent bg-muted/40 hover:border-border hover:bg-muted/60"
-            }`}
+            className="flex w-full items-center justify-between gap-4 rounded-lg border border-border/60 bg-background/70 px-3.5 py-3 text-left transition-colors hover:bg-muted/35"
           >
-            <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-                isAgentDevMode
-                  ? "bg-primary/10 text-primary"
-                  : "bg-muted text-muted-foreground group-hover:bg-accent"
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                <Cpu className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{t("settings.agentTrace")}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {t("settings.agentTraceDesc")}
+                </span>
+              </span>
+            </span>
+            <span
+              aria-hidden
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                isAgentDevMode ? "bg-primary" : "bg-muted-foreground/25"
               }`}
             >
-              <Cpu className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold">{t("settings.agentDevMode")}</div>
-              <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {t("settings.agentDevModeDesc")}
-              </div>
-            </div>
-            {isAgentDevMode ? (
-              <div className="absolute right-3 top-3">
-                <CheckCircle2 className="h-4.5 w-4.5 text-primary" />
-              </div>
-            ) : null}
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                  isAgentDevMode ? "translate-x-[18px]" : "translate-x-0.5"
+                }`}
+              />
+            </span>
           </button>
-        </div>
+        ) : null}
       </div>
 
       <div className="border-t" />

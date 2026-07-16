@@ -137,7 +137,7 @@ func normalizeTrimmedText(value string) string {
 func NormalizeExecutionMode(value string) string {
 	normalized := normalizeTrimmedText(value)
 	switch normalized {
-	case "tools", "agent-dev":
+	case "tools", "agent-dev", "readonly":
 		return normalized
 	default:
 		return "text"

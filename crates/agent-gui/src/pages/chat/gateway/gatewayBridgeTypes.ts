@@ -117,6 +117,7 @@ export function normalizeGatewayExecutionMode(
   switch (value?.trim()) {
     case "tools":
     case "agent-dev":
+    case "readonly":
     case "text":
       return value.trim() as ExecutionMode;
     default:

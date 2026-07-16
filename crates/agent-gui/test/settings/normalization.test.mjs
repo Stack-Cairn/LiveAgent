@@ -2238,3 +2238,15 @@ test("gateway sync merge keeps system proxy password against redacted payloads",
   assert.equal(mergedHost.system.systemProxy.port, 1080);
   assert.equal(mergedHost.system.systemProxy.password, "secret");
 });
+
+test("readonly execution mode survives settings normalization", () => {
+  const defaults = settings.getDefaultSettings();
+  const normalized = settings.normalizeSettings({
+    system: { ...defaults.system, executionMode: "readonly" },
+  });
+
+  assert.equal(normalized.system.executionMode, "readonly");
+  assert.equal(settings.isAgentExecutionMode("readonly"), true);
+  assert.equal(settings.isReadOnlyExecutionMode("readonly"), true);
+  assert.equal(settings.isReadOnlyExecutionMode("tools"), false);
+});

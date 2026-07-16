@@ -33,7 +33,8 @@
 | 会话运行态 | 当前 conversation、session、message list、live stream、tool status、running/canceling 状态。 | `ChatPage.tsx`、`pages/chat/useChatPageRuntimeStore.ts`、`lib/chat/conversation/liveTranscriptStore.ts` |
 | 发送入口 | 将用户文本、附件、选中模型、execution mode、workdir、system tools 等合并为 turn request。 | `ChatPage.tsx` |
 | text 模式 | 只做模型文本流式，不注入本地工具。 | `pages/chat/runTextConversationTurn.ts`、`lib/providers/llm.ts` |
-| tools/agent-dev 模式 | 构造 builtin tools，执行模型 tool loop，写工具 trace，并同步 Gateway chat event。 | `pages/chat/runAgentConversationTurn.ts`、`lib/chat/conversation/run/*` |
+| readonly 模式 | 构造 builtin tools 后同时过滤模型可见 schema 和实际 dispatch；Memory 只读，禁用写文件、Cron/Hooks、SSH/Tunnel、Skills mutation 和未分类 MCP。 | `pages/chat/runAgentConversationTurn.ts`、`lib/tools/toolAccessPolicy.ts` |
+| tools/agent-dev 模式 | 构造完整 builtin tools，执行模型 tool loop，写工具 trace，并同步 Gateway chat event。 | `pages/chat/runAgentConversationTurn.ts`、`lib/chat/conversation/run/*` |
 | 历史持久化 | V3 segment 写入 Tauri SQLite，支持 append segment、active segment update、rename/delete/pin/share。 | `lib/chat/conversationState.ts`、`src-tauri/src/commands/chat_history.rs` |
 | 上下文压缩 | 在 pre-send、mid-stream、post-tool 等阶段生成 summary checkpoint，避免超上下文。 | `pages/chat/conversationContextBuilders.ts`、`lib/chat/conversation/compaction/*` |
 | 记忆注入 | 每轮根据 workdir 读取 memory overview，并附加到 system prompt。 | `lib/chat/memory/memoryPrompt.ts`、`src-tauri/src/services/memory.rs` |

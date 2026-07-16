@@ -24,13 +24,16 @@ import {
   Lightbulb,
   LightbulbOff,
   Loader2,
+  MessageSquare,
   Paperclip,
   Play,
   Send,
+  Shield,
   Sparkle,
   Square,
   SquarePen,
   Trash2,
+  Wrench,
   X,
 } from "../../components/icons";
 import { Button } from "../../components/ui/button";
@@ -47,6 +50,7 @@ import type { GitClient } from "../../lib/git/types";
 import {
   type ChatRuntimeControls,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
+  type ExecutionMode,
   type ReasoningLevel,
 } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
@@ -115,6 +119,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   workdir: string;
   enabledSkills: MentionComposerSkill[];
   isAgentMode: boolean;
+  executionMode: ExecutionMode;
+  onExecutionModeChange: (mode: ExecutionMode) => void;
   chatRuntimeControls: ChatRuntimeControls;
   reasoningOptions: ReasoningLevel[];
   thinkingAlwaysOn: boolean;
@@ -148,6 +154,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     workdir,
     enabledSkills,
     isAgentMode,
+    executionMode,
+    onExecutionModeChange,
     chatRuntimeControls,
     reasoningOptions,
     thinkingAlwaysOn,
@@ -187,7 +195,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
-  const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
+  const visibleExecutionMode = executionMode === "agent-dev" ? "tools" : executionMode;
+  const uploadDisabled =
+    isInputDisabled || isUploadingFiles || visibleExecutionMode !== "tools" || !workdir;
   const controlsDisabled = isInputDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
   const thinkingSupported = reasoningOptions.length > 0;
@@ -213,6 +223,18 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     : t("chat.runtime.thinkingTooltip");
   const webSearchTooltip = t("chat.runtime.webSearchTooltip");
   const toggleQueueTooltip = queueCollapsed ? t("chat.queue.expand") : t("chat.queue.collapse");
+  const executionModes: Array<{
+    mode: "text" | "readonly" | "tools";
+    label: string;
+    icon: typeof MessageSquare;
+  }> = [
+    { mode: "text", label: t("settings.chatMode"), icon: MessageSquare },
+    { mode: "readonly", label: t("settings.readonlyAgentMode"), icon: Shield },
+    { mode: "tools", label: t("settings.agentMode"), icon: Wrench },
+  ];
+  const selectedExecutionMode =
+    executionModes.find((option) => option.mode === visibleExecutionMode) ?? executionModes[2];
+  const SelectedExecutionModeIcon = selectedExecutionMode.icon;
 
   const toggleQueueCollapsed = useCallback(() => {
     setQueueCollapsed((current) => !current);
@@ -620,6 +642,50 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
 
           <div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">
             <div className="flex min-w-0 flex-1 items-center gap-1">
+              <Select
+                value={visibleExecutionMode}
+                onValueChange={(value) =>
+                  onExecutionModeChange(value as "text" | "readonly" | "tools")
+                }
+                disabled={controlsDisabled}
+              >
+                <SelectTrigger
+                  aria-label={`${t("settings.executionMode")}: ${selectedExecutionMode.label}`}
+                  title={selectedExecutionMode.label}
+                  className={cn(
+                    "mr-1 h-8 w-auto max-w-[7.5rem] shrink-0 gap-1 rounded-full border-black/[0.055] bg-white/45 px-2 py-0 text-xs font-medium shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-hidden transition-colors hover:bg-white/70 disabled:pointer-events-none dark:border-white/[0.08] dark:bg-white/[0.04] dark:hover:bg-white/[0.08] max-sm:mr-0 max-sm:w-8 max-sm:gap-0 max-sm:px-0 max-sm:[&_svg:last-child]:hidden [&_svg:last-child]:h-3 [&_svg:last-child]:w-3 [&_svg:last-child]:shrink-0 [&_svg:last-child]:opacity-45 [&_svg:last-child]:transition-transform [&[data-popup-open]_svg:last-child]:rotate-180",
+                    visibleExecutionMode === "readonly" &&
+                      "border-emerald-500/15 bg-emerald-50/70 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-300/10 dark:bg-emerald-400/[0.10] dark:text-emerald-200 dark:hover:bg-emerald-400/[0.15]",
+                  )}
+                >
+                  <SelectValue>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <SelectedExecutionModeIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate max-sm:hidden">{selectedExecutionMode.label}</span>
+                    </span>
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="min-w-40 border-black/[0.08] bg-popover/95 shadow-xl backdrop-blur-xl dark:border-white/[0.10]">
+                  {executionModes.map((option) => {
+                    const Icon = option.icon;
+                    return (
+                      <SelectItem key={option.mode} value={option.mode} className="py-2 pr-8">
+                        <span className="flex items-center gap-2">
+                          <Icon
+                            className={cn(
+                              "h-4 w-4 text-muted-foreground",
+                              option.mode === "readonly" &&
+                                "text-emerald-600 dark:text-emerald-300",
+                            )}
+                          />
+                          <span>{option.label}</span>
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+
               <RuntimeControlTooltip label={uploadTooltip}>
                 <button
                   type="button"

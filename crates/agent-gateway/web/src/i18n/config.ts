@@ -1029,13 +1029,19 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.fontSizeLarge": "大",
     "settings.fontSizeXLarge": "特大",
     "settings.executionMode": "执行模式",
+    "settings.executionModeDesc":
+      "选择新对话的默认权限；当前对话也可从输入框切换。",
     "settings.chatMode": "Chat 模式",
     "settings.chatModeDesc": "纯文本对话，模型只输出文本与 Markdown",
+    "settings.readonlyAgentMode": "只读 Agent",
+    "settings.readonlyAgentModeDesc": "可检查项目并委派只读代理，不修改文件或外部系统",
     "settings.agentMode": "Agent 模式",
     "settings.agentModeDesc": "允许调用工具，执行文件与命令行操作",
     "settings.agentDevMode": "Agent dev 模式",
     "settings.agentDevModeDesc":
       "与 Agent 模式一致，但会把当前对话的流式请求与返回逐行写入 ~/.liveagent/debug/<对话ID>.jsonl",
+    "settings.agentTrace": "Agent 调试记录",
+    "settings.agentTraceDesc": "仅在 Agent 模式启用时写入逐行 JSONL 调试记录",
     "settings.workdir": "项目文件夹",
     "settings.workdirRequired": "必填",
     "settings.workdirDesc": "选择这个项目的文件夹。文件工具会在所选项目目录内读写/搜索。",
@@ -2814,13 +2820,20 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.fontSizeLarge": "Large",
     "settings.fontSizeXLarge": "Extra Large",
     "settings.executionMode": "Execution Mode",
+    "settings.executionModeDesc":
+      "Choose the default permission for new conversations. The current conversation can also be changed from the main composer.",
     "settings.chatMode": "Chat Mode",
     "settings.chatModeDesc": "Plain text conversation, model outputs text and Markdown only",
+    "settings.readonlyAgentMode": "Read-only Agent",
+    "settings.readonlyAgentModeDesc":
+      "Can inspect the project and delegate read-only agents without modifying files or external systems",
     "settings.agentMode": "Agent Mode",
     "settings.agentModeDesc": "Allows tool calls, file and command-line operations",
     "settings.agentDevMode": "Agent Dev Mode",
     "settings.agentDevModeDesc":
       "Same as Agent mode, but also writes each streaming request and response line-by-line to ~/.liveagent/debug/<conversationId>.jsonl",
+    "settings.agentTrace": "Agent debug trace",
+    "settings.agentTraceDesc": "Writes line-delimited JSONL traces only while Agent mode is active",
     "settings.workdir": "Project Folder",
     "settings.workdirRequired": "Required",
     "settings.workdirDesc":

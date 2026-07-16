@@ -464,6 +464,7 @@ export async function createSubagentHarness(options = {}) {
       return createToolResult(toolCall.id, toolCall.name, `base:${toolCall.name}`);
     },
     metadataByName,
+    readonlyOnly: options.readonlyOnly,
     createSubagentToolRegistry: options.omitChildRegistry
       ? undefined
       : async (workdir) => {

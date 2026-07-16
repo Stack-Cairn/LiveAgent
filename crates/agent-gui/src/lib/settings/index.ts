@@ -19,7 +19,7 @@ export type { SystemToolId } from "../tools/systemToolOptions";
 
 export type ProviderId = "codex" | "claude_code" | "gemini";
 
-export type ExecutionMode = "text" | "tools" | "agent-dev";
+export type ExecutionMode = "text" | "readonly" | "tools" | "agent-dev";
 
 export type CodexRequestFormat = "openai-completions" | "openai-responses";
 
@@ -428,6 +428,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
 function normalizeExecutionMode(input: unknown): ExecutionMode {
   switch (input) {
     case "text":
+    case "readonly":
     case "tools":
     case "agent-dev":
       return input;
@@ -438,6 +439,10 @@ function normalizeExecutionMode(input: unknown): ExecutionMode {
 
 export function isAgentExecutionMode(mode: ExecutionMode): boolean {
   return mode !== "text";
+}
+
+export function isReadOnlyExecutionMode(mode: ExecutionMode): boolean {
+  return mode === "readonly";
 }
 
 export function isAgentDevMode(mode: ExecutionMode): boolean {

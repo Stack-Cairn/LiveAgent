@@ -11,6 +11,7 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	cases := map[string]string{
 		"":          "text",
 		" text ":    "text",
+		"readonly":  "readonly",
 		"tools":     "tools",
 		"agent-dev": "agent-dev",
 		"unknown":   "text",
