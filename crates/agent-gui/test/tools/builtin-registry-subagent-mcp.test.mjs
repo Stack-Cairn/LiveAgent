@@ -276,7 +276,7 @@ test("subagent registries list MCP servers from live settings, not turn-start sn
   assert.deepEqual(harness.listedServerCommands, [["mock-mcp-server"], ["mock-mcp-server-v2"]]);
 });
 
-test("read-only children inherit MCP business tools but no write, shell, or manager tools", async () => {
+test("read-only children reject unclassified MCP, write, shell, and manager tools", async () => {
   const harness = createRegistryHarness();
   const { registry } = await buildRegistry(harness, { withSubagentRuntime: true });
 
@@ -290,7 +290,7 @@ test("read-only children inherit MCP business tools but no write, shell, or mana
   const names = harness.runnerCalls[0].tools.map((tool) => tool.name);
 
   assert.ok(names.includes("Read"));
-  assert.ok(names.includes("mcp_docs_search"));
+  assert.ok(!names.includes("mcp_docs_search"));
   assert.ok(names.includes("SendMessage"));
 
   assert.ok(!names.includes("Write"));
