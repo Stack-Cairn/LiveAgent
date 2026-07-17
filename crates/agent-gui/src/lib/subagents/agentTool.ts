@@ -281,9 +281,7 @@ export function createSubagentTools(params: {
   const messageBusEnabled = Boolean(store.conversationId);
   const worktreeIpc = params.worktreeIpc ?? tauriSubagentWorktreeIpc;
   const readonlyTools = params.readonlyOnly
-    ? params.baseTools.filter(
-        (tool) => params.metadataByName.get(tool.name)?.isReadOnly === true,
-      )
+    ? params.baseTools.filter((tool) => params.metadataByName.get(tool.name)?.isReadOnly === true)
     : selectReadOnlyTools({
         tools: params.baseTools,
         metadataByName: params.metadataByName,

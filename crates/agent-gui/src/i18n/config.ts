@@ -1102,8 +1102,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.fontSizeLarge": "大",
     "settings.fontSizeXLarge": "特大",
     "settings.executionMode": "执行模式",
-    "settings.executionModeDesc":
-      "选择新对话的默认权限；当前对话也可从输入框切换。",
+    "settings.executionModeDesc": "选择新对话的默认权限；当前对话也可从输入框切换。",
     "settings.chatMode": "Chat 模式",
     "settings.chatModeDesc": "纯文本对话，模型只输出文本与 Markdown",
     "settings.readonlyAgentMode": "只读 Agent",
