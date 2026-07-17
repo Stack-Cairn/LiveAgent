@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { Markdown } from "../../../../components/Markdown";
 import {
   previewText,
-  safeStringify,
   type ToolTraceItem,
   toolResultMessageToText,
 } from "../../../../lib/chat/messages/uiMessages";
@@ -32,6 +31,7 @@ import type {
 } from "../../../../lib/tools/builtinTypes";
 import {
   getBuiltinResultKind,
+  getStableValueSignature,
   getSubagentTask,
   isShellResultDetails,
   type MetaTag,
@@ -889,7 +889,7 @@ export function ToolResultDisplay({
     return (
       <ToolSurface className="overflow-hidden px-0 py-0">
         <ToolScrollablePre className="max-h-32 rounded-none">
-          {safeStringify(result.details)}
+          {getStableValueSignature(result.details)}
         </ToolScrollablePre>
       </ToolSurface>
     );

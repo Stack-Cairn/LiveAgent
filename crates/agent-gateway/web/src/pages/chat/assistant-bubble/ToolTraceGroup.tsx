@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ChevronRight, Terminal } from "../../../components/icons";
 import { useLocale } from "../../../i18n";
 import type { ToolTraceItem } from "../../../lib/chat/uiMessages";
 import { cn } from "../../../lib/shared/utils";
 import { getToolDisplayName, getToolMeta, getToolTraceKey } from "./assistantBubbleUtils";
 import { AssistantStatus } from "./StatusText";
-import { MemoToolCallItem } from "./ToolCallItem";
+import { areToolTraceItemsEqual, MemoToolCallItem } from "./ToolCallItem";
 
 function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]) {
   const runningIds = new Set(runningToolCallIds);
@@ -54,7 +54,7 @@ function getDominantToolName(items: ToolTraceItem[]) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Tool";
 }
 
-export function ToolTraceGroup(props: {
+function ToolTraceGroupInner(props: {
   items: ToolTraceItem[];
   runningToolCallIds?: string[];
   readOnly?: boolean;
@@ -158,3 +158,25 @@ export function ToolTraceGroup(props: {
     </div>
   );
 }
+
+function areRunningIdsEqual(previous?: string[], next?: string[]) {
+  if (previous === next) return true;
+  if (!previous || !next || previous.length !== next.length) return false;
+  return previous.every((id, index) => id === next[index]);
+}
+
+// A streaming text delta rebuilds the round's grouped-block structure with
+// fresh arrays but unchanged tool items — compare element-wise so the whole
+// group (every child card) bails unless a tool actually changed.
+export const ToolTraceGroup = memo(
+  ToolTraceGroupInner,
+  (previous, next) =>
+    previous.readOnly === next.readOnly &&
+    previous.redactToolContent === next.redactToolContent &&
+    previous.items.length === next.items.length &&
+    previous.items.every(
+      (item, index) =>
+        item === next.items[index] || areToolTraceItemsEqual(item, next.items[index]),
+    ) &&
+    areRunningIdsEqual(previous.runningToolCallIds, next.runningToolCallIds),
+);

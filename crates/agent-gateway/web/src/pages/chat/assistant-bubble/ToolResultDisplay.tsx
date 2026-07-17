@@ -45,6 +45,7 @@ import {
 import {
   displayString,
   getBuiltinResultKind,
+  getStableValueSignature,
   getSubagentTask,
   isSubagentCardToolCall,
   shouldShowSubagentApplyStatus,
@@ -342,14 +343,29 @@ export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
     return <ToolFactGrid tags={display.tags} />;
   }
 
-  // Fallback: raw JSON
+  // Fallback: raw JSON, cached by argument identity — settled tool args are
+  // immutable, so virtualizer remounts reuse the stringified form.
   return (
     <ToolSurface className="overflow-hidden px-0 py-0">
       <ToolScrollablePre className="max-h-44 rounded-none">
-        {safeStringify(toolCallArgsForDisplay(toolCall))}
+        {getRawArgsDisplayText(toolCall)}
       </ToolScrollablePre>
     </ToolSurface>
   );
+}
+
+const rawArgsDisplayCache = new WeakMap<object, string>();
+
+function getRawArgsDisplayText(toolCall: ToolTraceItem["toolCall"]) {
+  const cacheKey = toolCall.arguments;
+  if (!cacheKey || typeof cacheKey !== "object") {
+    return safeStringify(toolCallArgsForDisplay(toolCall));
+  }
+  const cached = rawArgsDisplayCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const text = safeStringify(toolCallArgsForDisplay(toolCall));
+  rawArgsDisplayCache.set(cacheKey, text);
+  return text;
 }
 
 function extractResultText(result?: ToolResultMessage) {
@@ -1079,7 +1095,7 @@ export function ToolResultDisplay({
     return (
       <ToolSurface className="overflow-hidden px-0 py-0">
         <ToolScrollablePre className="max-h-32 rounded-none">
-          {safeStringify(result.details)}
+          {getStableValueSignature(result.details)}
         </ToolScrollablePre>
       </ToolSurface>
     );

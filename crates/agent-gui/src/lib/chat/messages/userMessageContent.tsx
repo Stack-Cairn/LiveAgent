@@ -2,9 +2,11 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   type FocusEvent,
   type MouseEvent,
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -858,7 +860,9 @@ function CommitMentionChip({
   );
 }
 
-export function UserMessageContent({
+// Memoized: tokenization scans the text char by char, so virtualizer
+// remounts of long user rows should be the only time it runs.
+export const UserMessageContent = memo(function UserMessageContent({
   text,
   pastedTextFiles = [],
   loadCommitDetails,
@@ -867,7 +871,7 @@ export function UserMessageContent({
   pastedTextFiles?: PendingUploadedFile[];
   loadCommitDetails?: CommitDetailsLoader;
 }) {
-  const parts = tokenizeUserMessage(text, pastedTextFiles);
+  const parts = useMemo(() => tokenizeUserMessage(text, pastedTextFiles), [text, pastedTextFiles]);
   const hasChip = parts.some(
     (part) =>
       part.type === "mention" ||
@@ -907,4 +911,4 @@ export function UserMessageContent({
       })}
     </>
   );
-}
+});

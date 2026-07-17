@@ -13,7 +13,7 @@ import { getNativeDisplayImagePayload, NativeDisplayImageBlock } from "./ToolIma
 import { ToolTraceGroup } from "./ToolTraceGroup";
 import { UsagePanel } from "./UsagePanel";
 
-function ThinkingBlock({
+const ThinkingBlock = memo(function ThinkingBlock({
   text,
   open,
   isRunning,
@@ -76,7 +76,7 @@ function ThinkingBlock({
       </div>
     </div>
   );
-}
+});
 
 export const RoundContent = memo(function RoundContent(props: {
   round: UiRound;

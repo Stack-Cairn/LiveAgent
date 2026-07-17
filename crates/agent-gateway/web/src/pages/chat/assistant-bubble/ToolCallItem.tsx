@@ -325,7 +325,7 @@ function areToolResultsEqual(
   );
 }
 
-function areToolTraceItemsEqual(previous: ToolTraceItem, next: ToolTraceItem) {
+export function areToolTraceItemsEqual(previous: ToolTraceItem, next: ToolTraceItem) {
   if (previous === next) {
     return true;
   }

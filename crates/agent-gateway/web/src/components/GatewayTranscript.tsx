@@ -822,12 +822,15 @@ function useGatewayCommitDetailsLoader(
 // inline editor while this row is being edited. Both transcript regions
 // render it; the per-row copied/editing state lives in the owning region so
 // folds and conversation switches reset it there.
-function GatewayUserMessageRowBody(props: {
+// Memoized with per-row `isCopied`/`isEditing` booleans (instead of the raw
+// region-level ids) so copying or editing one row never re-renders the
+// others, and streaming flushes bail on every settled user row.
+const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props: {
   row: Extract<TranscriptRow, { kind: "user" }>;
   isStreaming: boolean;
   readOnly?: boolean;
-  copiedMessageId: string | null;
-  editingMessageId: string | null;
+  isCopied: boolean;
+  isEditing: boolean;
   setCopiedMessageId: Dispatch<SetStateAction<string | null>>;
   setEditingMessageId: Dispatch<SetStateAction<string | null>>;
   workspaceRoot?: string;
@@ -843,8 +846,8 @@ function GatewayUserMessageRowBody(props: {
     row,
     isStreaming,
     readOnly = false,
-    copiedMessageId,
-    editingMessageId,
+    isCopied,
+    isEditing,
     setCopiedMessageId,
     setEditingMessageId,
     workspaceRoot,
@@ -853,8 +856,6 @@ function GatewayUserMessageRowBody(props: {
     onResendFromEdit,
   } = props;
   const { locale, t } = useLocale();
-  const isCopied = copiedMessageId === row.key;
-  const isEditing = editingMessageId === row.key;
   const effectiveMessageRef = row.messageRef;
   const missingStableRef = !effectiveMessageRef;
   const editDisabled = readOnly || isStreaming || !onResendFromEdit || missingStableRef;
@@ -930,7 +931,7 @@ function GatewayUserMessageRowBody(props: {
       </div>
     </div>
   );
-}
+});
 
 // Maps each assistant row to the nearest preceding user row — the prompt a
 // retry re-sends.
@@ -951,11 +952,11 @@ function buildRetryTargetMap(rows: readonly TranscriptRow[]) {
 // nearest preceding user prompt through the edit-resend pipeline: this reply
 // and everything after it are discarded, same as editing that prompt
 // unchanged. Both transcript regions render it below the bubble.
-function GatewayAssistantMessageActions(props: {
+const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActions(props: {
   row: Extract<TranscriptRow, { kind: "assistant" }>;
   retryTarget: Extract<TranscriptRow, { kind: "user" }> | null;
   isStreaming: boolean;
-  copiedMessageId: string | null;
+  isCopied: boolean;
   setCopiedMessageId: Dispatch<SetStateAction<string | null>>;
   onResendFromEdit?: (
     messageRef: HistoryMessageRef,
@@ -969,14 +970,13 @@ function GatewayAssistantMessageActions(props: {
     row,
     retryTarget,
     isStreaming,
-    copiedMessageId,
+    isCopied,
     setCopiedMessageId,
     onResendFromEdit,
     onBranchConversation,
     branchPendingMessageId,
   } = props;
   const { locale, t } = useLocale();
-  const isCopied = copiedMessageId === row.key;
   const replyText = row.rounds
     .map((round) => getRoundText(round).trim())
     .filter((text) => text.length > 0)
@@ -1078,7 +1078,7 @@ function GatewayAssistantMessageActions(props: {
       </div>
     </div>
   );
-}
+});
 
 const rowEstimateCache = new WeakMap<TranscriptRow, number>();
 
@@ -1425,8 +1425,8 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                 row={row}
                 isStreaming={isStreaming}
                 readOnly={readOnly}
-                copiedMessageId={copiedMessageId}
-                editingMessageId={editingMessageId}
+                isCopied={copiedMessageId === row.key}
+                isEditing={editingMessageId === row.key}
                 setCopiedMessageId={setCopiedMessageId}
                 setEditingMessageId={setEditingMessageId}
                 workspaceRoot={workspaceRoot}
@@ -1473,7 +1473,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                     row={row}
                     retryTarget={retryTargetByAssistantKey.get(row.key) ?? null}
                     isStreaming={isStreaming}
-                    copiedMessageId={copiedMessageId}
+                    isCopied={copiedMessageId === row.key}
                     setCopiedMessageId={setCopiedMessageId}
                     onResendFromEdit={onResendFromEdit}
                     onBranchConversation={onBranchConversation}

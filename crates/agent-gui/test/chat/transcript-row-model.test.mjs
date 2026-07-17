@@ -143,20 +143,78 @@ test("settled rows reuse identities across builds while streaming", () => {
 test("entrance registry: initial rows never animate, new rows animate once", () => {
   let clock = 1_000;
   const registry = createEntranceRegistry(() => clock);
-  registry.observeRowKeys(["a", "b"]);
+  registry.observeBirths(["a", "b"], true);
   assert.equal(registry.shouldAnimate("a"), false, "initial rows are pre-registered");
 
   clock += 50;
-  registry.observeRowKeys(["a", "b", "c"]);
+  registry.observeBirths(["c"], false);
   assert.equal(registry.shouldAnimate("c"), true, "new row animates in its birth window");
   assert.equal(registry.shouldAnimate("a"), false);
 
   clock += ENTRANCE_ANIMATION_WINDOW_MS + 1;
   assert.equal(registry.shouldAnimate("c"), false, "virtualizer re-entry does not replay");
 
+  // Replayed births (StrictMode double-build) keep the original stamp.
+  registry.observeBirths(["c"], false);
+  assert.equal(registry.shouldAnimate("c"), false, "replayed birth does not re-animate");
+
   registry.reset();
-  registry.observeRowKeys(["c"]);
+  registry.observeBirths(["c"], true);
   assert.equal(registry.shouldAnimate("c"), false, "after reset the first build re-seeds");
+});
+
+test("row model reports births once and reuses the history array between emits", () => {
+  const births = [];
+  const model = createTranscriptRowModel({
+    onRowsBorn: (keys, isInitialBuild) => births.push([keys.slice(), isInitialBuild]),
+  });
+  const history = [userItem("u1"), assistantItem("a1", [round("r1", "done")])];
+
+  const first = model.build(history, idleLive);
+  assert.deepEqual(births, [[["u1", "a1"], true]]);
+
+  // Same history identity → the same rows array comes back, no new births.
+  const second = model.build(history, idleLive);
+  assert.equal(second.rows, first.rows);
+  assert.equal(births.length, 1);
+
+  const sendingLive = {
+    ...idleLive,
+    isSending: true,
+    liveRounds: [{ ...round("r1", "x"), runningToolCallIds: [], thinkingOpen: false }],
+  };
+  const streaming = model.build(history, sendingLive);
+  assert.equal(births.length, 2);
+  assert.equal(births[1][1], false);
+  assert.ok(births[1][0][0].startsWith("live-turn-"));
+  assert.equal(streaming.rows[0], first.rows[0], "cached history rows survive the live tail");
+
+  // Streaming emits with unchanged history report nothing further.
+  model.build(history, { ...sendingLive });
+  assert.equal(births.length, 2);
+});
+
+test("a twin that lands while still sending is re-keyed onto the live row at settle", () => {
+  const model = createTranscriptRowModel();
+  const sendingLive = {
+    ...idleLive,
+    isSending: true,
+    liveRounds: [{ ...round("r1", "x"), runningToolCallIds: [], thinkingOpen: false }],
+  };
+
+  model.build([userItem("u1")], sendingLive);
+  // The committed twin lands while the run is still sending (persist raced
+  // the settle): it gets built un-aliased next to the live tail.
+  const midRun = [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])];
+  const racing = model.build(midRun, sendingLive);
+  const liveKey = racing.rows.at(-1).key;
+  assert.equal(racing.rows[1].key, "a1");
+
+  // Settle with the same history identity: the twin must adopt the live key
+  // in place instead of keeping the stale un-aliased row.
+  const settled = model.build(midRun, idleLive);
+  assert.equal(settled.rows.length, 2);
+  assert.equal(settled.rows[1].key, liveKey);
 });
 
 test("live range extractor unions the live tail with the visible window", () => {

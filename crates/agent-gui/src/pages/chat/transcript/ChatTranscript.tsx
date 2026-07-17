@@ -15,6 +15,7 @@ import { useLocale } from "../../../i18n";
 import { BOTTOM_REATTACH_ZONE_PX } from "../../../lib/chat-scroll/scrollFollowCore";
 import { useScrollFollow } from "../../../lib/chat-scroll/useScrollFollow";
 import { ChatEmptyState } from "./ChatEmptyState";
+import { RowInteractionProvider, useRowInteractionStore } from "./rowInteraction";
 import { TranscriptList } from "./TranscriptList";
 import { HistorySwitchLoadingOverlay } from "./TranscriptLoadingStates";
 import type { ChatTranscriptProps } from "./transcriptTypes";
@@ -79,6 +80,13 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     listenerRoot: scrollAreaRoot,
     trackKeys: true,
     config: { reattachZonePx: BOTTOM_REATTACH_ZONE_PX },
+  });
+
+  // Run-scoped state reaches row action bars through this store instead of
+  // row props, so settled rows stay memo-stable across run start/settle.
+  const rowInteractionStore = useRowInteractionStore({
+    isSending,
+    branchPendingMessageId: branchPendingMessageId ?? null,
   });
 
   useLayoutEffect(() => {
@@ -190,23 +198,24 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           ) : null}
 
           <div className="select-text">
-            <TranscriptList
-              conversationId={conversationId}
-              historyItems={historyItems}
-              liveTranscriptStore={liveTranscriptStore}
-              scrollViewport={scrollViewport}
-              isViewportFollowing={scrollFollowHandle.isFollowing}
-              isSending={isSending}
-              isAgentMode={isAgentMode}
-              isCompactionRunning={isCompactionRunning}
-              showUsage={showUsage}
-              usageContextWindow={usageContextWindow}
-              workspaceRoot={workspaceRoot}
-              gitClient={gitClient}
-              onResendFromEdit={onResendFromEdit}
-              onBranchConversation={onBranchConversation}
-              branchPendingMessageId={branchPendingMessageId}
-            />
+            <RowInteractionProvider value={rowInteractionStore}>
+              <TranscriptList
+                conversationId={conversationId}
+                historyItems={historyItems}
+                liveTranscriptStore={liveTranscriptStore}
+                scrollViewport={scrollViewport}
+                isViewportFollowing={scrollFollowHandle.isFollowing}
+                isSending={isSending}
+                isAgentMode={isAgentMode}
+                isCompactionRunning={isCompactionRunning}
+                showUsage={showUsage}
+                usageContextWindow={usageContextWindow}
+                workspaceRoot={workspaceRoot}
+                gitClient={gitClient}
+                onResendFromEdit={onResendFromEdit}
+                onBranchConversation={onBranchConversation}
+              />
+            </RowInteractionProvider>
           </div>
 
           <div style={{ height: transcriptBottomReservePx }} />

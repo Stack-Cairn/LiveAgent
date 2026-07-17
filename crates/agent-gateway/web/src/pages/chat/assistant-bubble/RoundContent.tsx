@@ -14,7 +14,7 @@ import { UsagePanel } from "./UsagePanel";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
 
-function ThinkingBlock({
+const ThinkingBlock = memo(function ThinkingBlock({
   text,
   open,
   isRunning,
@@ -77,7 +77,7 @@ function ThinkingBlock({
       </div>
     </div>
   );
-}
+});
 
 export const RoundContent = memo(function RoundContent(props: {
   round: UiRound;
