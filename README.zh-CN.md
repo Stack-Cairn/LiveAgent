@@ -53,7 +53,27 @@
 <td width="200" align="center" valign="middle"><a href="https://www.right.codes/register"><img src="docs/images/partners/rightcode.jpg" alt="RightCode" width="160"></a></td>
 <td valign="middle">Right Code 提供稳定的 Claude Code、Codex、Gemini，国模 等模型的中转服务。充值即可开票，企业、团队用户一对一对接。<b>开发本软件用的另一部分模型资源都是RightCode提供，感谢RC站长，感谢小客服！</b> 从 <a href="https://www.right.codes/register">此处</a> 注册并开始使用！</td>
 </tr>
+<tr>
+<td width="200" align="center" valign="middle"><a href="https://cubence.com/signup"><img src="docs/images/partners/cubence.png" alt="Cubence" width="160"></a></td>
+<td valign="middle">Cubence 是一家可靠高效的 API 中转服务商，提供 Claude Code、Codex、Gemini 等多种模型的中转服务，支持按量付费的计费方式。<b>感谢 Cubence 对本项目的支持！</b>从 <a href="https://cubence.com/signup">此处</a> 注册并开始使用！</td>
+</tr>
 </table>
+
+
+
+---
+
+## 🤝 一起来开发吧！
+
+<p align="center">
+  <img src="docs/images/QQ.png" alt="LiveAgent QQ 交流群" width="300" />
+</p>
+
+<p align="center">
+  欢迎扫码进群，一起推进 LiveAgent 的开发！<br/>
+  （至于为什么是QQ群，感觉功能比微信群多一些～）
+</p>
+
 
 ---
 

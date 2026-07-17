@@ -38,7 +38,7 @@
     <img src="docs/images/linuxdo.png" alt="LINUX DO" width="420" />
   </a>
 </p>
-<p align="center"><b>学AI，上L站！祝小破站越来越好～</b></p>
+<p align="center"><b>For all things AI, head to LINUX DO! Wishing the community ever greater success~</b></p>
 
 ---
 
@@ -53,7 +53,26 @@
 <td width="200" align="center" valign="middle"><a href="https://www.right.codes/register"><img src="docs/images/partners/rightcode.jpg" alt="RightCode" width="160"></a></td>
 <td valign="middle">Right Code provides stable relay services for Claude Code, Codex, Gemini, Chinese domestic models, and more. Invoices are available upon top-up, and enterprise and team users receive dedicated one-on-one support. <b>The remaining model resources used to develop this software were provided by RightCode — thanks to the RC site owner and the support team!</b> Register <a href="https://www.right.codes/register">here</a> to get started!</td>
 </tr>
+<tr>
+<td width="200" align="center" valign="middle"><a href="https://cubence.com/signup"><img src="docs/images/partners/cubence.png" alt="Cubence" width="160"></a></td>
+<td valign="middle">Cubence is a reliable and efficient API relay service provider, offering relay services for Claude Code, Codex, Gemini, and more, with pay-as-you-go billing. <b>Thanks to Cubence for supporting this project!</b> Register <a href="https://cubence.com/signup">here</a> to get started!</td>
+</tr>
 </table>
+
+
+---
+
+## 🤝 Come Build With Us!
+
+<p align="center">
+  <img src="docs/images/QQ.png" alt="LiveAgent QQ Group" width="300" />
+</p>
+
+<p align="center">
+  Scan the QR code to join our QQ group and help drive LiveAgent development!<br/>
+  (Why a QQ group? It just packs a few more features than a WeChat group~)
+</p>
+
 
 ---
 
