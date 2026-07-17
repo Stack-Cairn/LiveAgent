@@ -156,6 +156,8 @@ type BuildBuiltinBaseToolRegistryParams = {
   sshManagerRemoteAllowed?: boolean;
   onSshSessionsChanged?: (change: SshManagerSessionChange) => void | Promise<void>;
   onTunnelsChanged?: (change: TunnelManagerChange) => void | Promise<void>;
+  /** Native image and pet tools are desktop-only and excluded from WebUI runs. */
+  includeDesktopOnlyTools?: boolean;
 };
 
 const resolveHomeDir = () => homeDir();
@@ -208,10 +210,12 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       workdir: params.workdir,
       mode: params.memoryToolMode ?? "rw",
     }),
-    ...(params.runtimeScope === "chat"
+    ...(params.runtimeScope === "chat" && params.includeDesktopOnlyTools !== false
       ? [createNativeImageTools({ workdir: params.workdir })]
       : []),
-    ...(params.runtimeScope === "chat" ? [createPetManagerTools({ workdir: params.workdir })] : []),
+    ...(params.runtimeScope === "chat" && params.includeDesktopOnlyTools !== false
+      ? [createPetManagerTools({ workdir: params.workdir })]
+      : []),
     createTunnelManagerTools({
       enabled: params.remoteWebTunnelsEnabled === true && params.runtimeScope === "chat",
       runtimeScope: params.runtimeScope,

@@ -1,9 +1,6 @@
-const ALWAYS_ENABLED_SKILL_NAMES = [
-  "skills-creator",
-  "skills-installer",
-  "hatch-pet",
-  "api2img",
-] as const;
+const ALWAYS_ENABLED_SKILL_NAMES = ["skills-creator", "skills-installer"] as const;
+
+const DESKTOP_ONLY_SKILL_NAMES = new Set(["hatch-pet", "api2img"]);
 
 const alwaysEnabledSkillNameSet = new Set<string>(ALWAYS_ENABLED_SKILL_NAMES);
 
@@ -12,7 +9,7 @@ export function isAlwaysEnabledSkillName(name: string) {
 }
 
 export function isUserSelectableSkillName(name: string) {
-  return !isAlwaysEnabledSkillName(name);
+  return !isAlwaysEnabledSkillName(name) && !DESKTOP_ONLY_SKILL_NAMES.has(name);
 }
 
 export function isUserSelectableSkill(skill: { name: string }) {
@@ -28,7 +25,7 @@ export function mergeAlwaysEnabledSkillNames(selected: readonly string[]) {
   }
   for (const rawName of selected) {
     const name = String(rawName).trim();
-    if (!name || seen.has(name)) continue;
+    if (!name || seen.has(name) || DESKTOP_ONLY_SKILL_NAMES.has(name)) continue;
     seen.add(name);
     next.push(name);
   }

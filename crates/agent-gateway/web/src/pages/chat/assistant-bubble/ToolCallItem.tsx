@@ -12,6 +12,7 @@ import {
   toolResultMessageToText,
 } from "../../../lib/chat/uiMessages";
 import { cn } from "../../../lib/shared/utils";
+import { BUILTIN_TOOL_CATALOG } from "../../../lib/tools/builtinToolCatalog";
 import { ToolScrollablePre, ToolSection } from "../ToolSurfaces";
 import {
   areStableValuesEqual,
@@ -24,6 +25,10 @@ import {
   isSubagentCardToolCall,
 } from "./assistantBubbleUtils";
 import { ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
+
+const DESKTOP_ONLY_TOOL_NAMES = new Set(
+  BUILTIN_TOOL_CATALOG.filter((tool) => tool.desktopOnly).map((tool) => tool.toolName),
+);
 
 function ToolCallItem({
   item,
@@ -40,6 +45,7 @@ function ToolCallItem({
 }) {
   const { t } = useLocale();
   const result = item.toolResult;
+  const isDesktopOnlyTool = DESKTOP_ONLY_TOOL_NAMES.has(item.toolCall.name);
   const builtinResultKind = getBuiltinResultKind(result);
   const isRedactedToolContent = redactToolContent && isBuiltinShareToolName(item.toolCall.name);
   const shouldAutoOpen =
@@ -52,6 +58,7 @@ function ToolCallItem({
   const hasArgs = Object.keys(item.toolCall.arguments || {}).length > 0;
   const isStreamingFilePreviewTool = FILE_TOOL_TEXT_FIELDS[item.toolCall.name] !== undefined;
   const shouldShowArgs =
+    !isDesktopOnlyTool &&
     !isRedactedToolContent &&
     (!isSubagentCard || !result) &&
     (isStreamingFilePreviewTool ? !result : hasArgs);
@@ -113,8 +120,8 @@ function ToolCallItem({
     }
   }, [isRedactedToolContent, readOnly, shouldAutoOpen]);
 
-  const canExpand = !isRedactedToolContent;
-  const effectiveOpen = canExpand && open;
+  const canExpand = !isRedactedToolContent && !isDesktopOnlyTool;
+  const effectiveOpen = isDesktopOnlyTool || (canExpand && open);
   const summaryClassName = cn(
     "flex select-none items-center gap-2",
     canExpand
@@ -186,13 +193,18 @@ function ToolCallItem({
   );
   const body = effectiveOpen ? (
     <div className="space-y-3 border-t border-black/[0.04] px-2.5 py-2.5 dark:border-white/[0.05]">
+      {isDesktopOnlyTool ? (
+        <div className="rounded-[8px] border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-[calc(12px*var(--zone-font-scale,1))] text-amber-800 dark:text-amber-200">
+          {t("chat.tool.desktopOnly")}
+        </div>
+      ) : null}
       {shouldShowArgs ? (
         <ToolSection label={isBash || inlineCommand ? t("chat.tool.command") : t("chat.tool.args")}>
           <ToolArgsDisplay item={item} />
         </ToolSection>
       ) : null}
 
-      {result ? (
+      {result && !isDesktopOnlyTool ? (
         <ToolSection
           label={t("chat.tool.return")}
           trailing={

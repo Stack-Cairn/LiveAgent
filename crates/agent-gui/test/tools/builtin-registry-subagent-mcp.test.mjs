@@ -101,7 +101,7 @@ function createRegistryHarness() {
   return { loader, runnerCalls, listedServerIds, listedServerCommands };
 }
 
-async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
+async function buildRegistry(harness, { withSubagentRuntime, storeIpc, includeDesktopOnlyTools } = {}) {
   const { loader } = harness;
   const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
   const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
@@ -112,6 +112,7 @@ async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
     fileState: createFileToolState(),
     skillsEnabled: true,
     runtimeScope: "chat",
+    includeDesktopOnlyTools,
     selectedSystemToolIds: [],
     getMcpSettings: () => mcpSettingsHolder.value,
   };
@@ -157,6 +158,15 @@ test("registry without a subagent runtime exposes neither Agent nor SendMessage"
   // Sanity: the base surface is otherwise intact.
   assert.ok(names.includes("Read"));
   assert.ok(names.includes("mcp_docs_search"));
+});
+
+test("WebUI registry excludes desktop-only image and pet tools", async () => {
+  const harness = createRegistryHarness();
+  const { registry } = await buildRegistry(harness, { includeDesktopOnlyTools: false });
+  const names = registry.tools.map((tool) => tool.name);
+  for (const name of ["ImageManager", "ImageGenerate", "ImageEdit", "PetManager"]) {
+    assert.equal(names.includes(name), false, `${name} is unavailable to WebUI runs`);
+  }
 });
 
 test("registry with a subagent runtime exposes Agent and the parent SendMessage", async () => {

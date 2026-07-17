@@ -51,6 +51,8 @@ export type BuiltinToolCatalogEntry = {
   runtimeScopes: readonly SystemToolRuntimeScope[];
   /** Registered only when its feature is enabled/associated (shown as a hint). */
   conditional?: boolean;
+  /** Available only in the native desktop app, never in the WebUI. */
+  desktopOnly?: boolean;
 };
 
 export type BuiltinToolCategory = {
@@ -215,6 +217,7 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     categoryId: "intelligence",
     isReadOnly: false,
     runtimeScopes: CHAT_ONLY,
+    desktopOnly: true,
   },
   {
     id: "image_generate",
@@ -223,6 +226,7 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     categoryId: "intelligence",
     isReadOnly: false,
     runtimeScopes: CHAT_ONLY,
+    desktopOnly: true,
   },
   {
     id: "image_edit",
@@ -231,6 +235,7 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     categoryId: "intelligence",
     isReadOnly: false,
     runtimeScopes: CHAT_ONLY,
+    desktopOnly: true,
   },
   {
     id: "pet_manager",
@@ -239,6 +244,7 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     categoryId: "intelligence",
     isReadOnly: false,
     runtimeScopes: CHAT_ONLY,
+    desktopOnly: true,
   },
   /* ── Automation ── */
   {
@@ -277,6 +283,12 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     conditional: true,
   },
 ];
+
+export function getBuiltinToolCatalog(includeDesktopOnlyTools = true) {
+  return includeDesktopOnlyTools
+    ? BUILTIN_TOOL_CATALOG
+    : BUILTIN_TOOL_CATALOG.filter((entry) => !entry.desktopOnly);
+}
 
 export type CustomToolPresentation = {
   icon: ToolCatalogIconId;

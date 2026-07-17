@@ -176,7 +176,13 @@ export function SettingsPage(props: SettingsPageProps) {
       case "system":
         return <SystemSettingsForm settings={settings} setSettings={setSettings} />;
       case "systemTools":
-        return <SystemToolsSection settings={settings} setSettings={setSettings} />;
+        return (
+          <SystemToolsSection
+            settings={settings}
+            setSettings={setSettings}
+            includeDesktopOnlyTools={false}
+          />
+        );
       case "hooks":
         return <HooksSection settings={settings} setSettings={setSettings} />;
       case "cron":

@@ -4298,6 +4298,7 @@ export function ChatPage(props: ChatPageProps) {
             associatedSshHostIds: effectiveAssociatedSshHostIds,
             sshManagerRemoteAllowed:
               !gatewayBridgeRequest || settings.remote.enableWebSshTerminal === true,
+            includeDesktopOnlyTools: !gatewayBridgeRequest,
             onSshSessionsChanged: (change) => {
               if (change.action === "create") {
                 ensureSshTunnelToolTab(change.projectPathKey);

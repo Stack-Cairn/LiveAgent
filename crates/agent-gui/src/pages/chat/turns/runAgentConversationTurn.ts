@@ -228,6 +228,8 @@ export type RunAgentConversationTurnParams = {
   associatedSshHostIds?: string[];
   sshManagerRemoteAllowed?: boolean;
   onSshSessionsChanged?: (change: SshManagerSessionChange) => void;
+  /** Gateway-originated turns power the WebUI and exclude desktop-only tools. */
+  includeDesktopOnlyTools?: boolean;
   sessionId: string;
   conversationId: string;
   conversationCwd?: string;
@@ -293,6 +295,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     associatedSshHostIds,
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
+    includeDesktopOnlyTools,
     sessionId,
     conversationId,
     conversationCwd,
@@ -412,6 +415,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     associatedSshHostIds,
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
+    includeDesktopOnlyTools,
     onTunnelsChanged,
     onMcpLoadError: (message) => {
       const warning = `MCP 工具加载失败，已跳过并继续对话：${message || "未知错误"}`;

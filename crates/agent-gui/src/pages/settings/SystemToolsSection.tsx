@@ -41,11 +41,11 @@ import { useLocale } from "../../i18n";
 import { updateSystem } from "../../lib/settings";
 import { useModalMotion } from "../../lib/shared/modalMotion";
 import {
-  BUILTIN_TOOL_CATALOG,
   BUILTIN_TOOL_CATEGORIES,
   type BuiltinToolCatalogEntry,
   type BuiltinToolCategoryId,
   CUSTOM_TOOL_PRESENTATION,
+  getBuiltinToolCatalog,
   type ToolCatalogIconId,
 } from "../../lib/tools/builtinToolCatalog";
 import { SYSTEM_TOOL_OPTIONS, type SystemToolOption } from "../../lib/tools/systemToolOptions";
@@ -146,7 +146,9 @@ type ToolDetail =
   | { kind: "builtin"; entry: BuiltinToolCatalogEntry }
   | { kind: "custom"; option: SystemToolOption };
 
-export function SystemToolsSection(props: SettingsSectionProps) {
+export function SystemToolsSection(
+  props: SettingsSectionProps & { includeDesktopOnlyTools?: boolean },
+) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
 
@@ -209,9 +211,15 @@ export function SystemToolsSection(props: SettingsSectionProps) {
     () =>
       BUILTIN_TOOL_CATEGORIES.map((category) => ({
         category,
-        entries: BUILTIN_TOOL_CATALOG.filter((entry) => entry.categoryId === category.id),
+        entries: getBuiltinToolCatalog(props.includeDesktopOnlyTools !== false).filter(
+          (entry) => entry.categoryId === category.id,
+        ),
       })).filter((group) => group.entries.length > 0),
-    [],
+    [props.includeDesktopOnlyTools],
+  );
+  const builtinToolCount = useMemo(
+    () => builtinGroups.reduce((count, group) => count + group.entries.length, 0),
+    [builtinGroups],
   );
   const activeCategoryEntries =
     builtinGroups.find((group) => group.category.id === activeCategory)?.entries ?? [];
@@ -256,7 +264,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
         </div>
         <ToolsTabSwitch
           activeTab={activeTab}
-          builtinCount={BUILTIN_TOOL_CATALOG.length}
+          builtinCount={builtinToolCount}
           customCount={customOptions.length}
           onSelect={selectTab}
         />
