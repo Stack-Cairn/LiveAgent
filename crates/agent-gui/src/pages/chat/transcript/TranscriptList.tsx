@@ -109,6 +109,11 @@ export type TranscriptListProps = {
     attachments: PendingUploadedFile[],
   ) => void;
   onBranchConversation?: (messageRef: HistoryMessageRef) => void;
+  // Fires once per mount, when the first layout has settled (scroll offset
+  // and total size stable across frames after the initial scroll-to-end).
+  // ChatTranscript keeps the transcript hidden behind the loading overlay
+  // until then, so estimate→measure corrections never show as jumps.
+  onFirstLayoutSettled?: () => void;
 };
 
 // The whole transcript — committed history and the streaming reply — lives in
@@ -132,6 +137,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     gitClient,
     onResendFromEdit,
     onBranchConversation,
+    onFirstLayoutSettled,
   } = props;
 
   const liveState = useSyncExternalStore(
@@ -269,6 +275,48 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     scrollToEndOnceRef.current = true;
     virtualizer.scrollToEnd();
   }, [scrollViewport, rows.length, virtualizer]);
+
+  // First-layout settle watch: the transcript stays hidden (parent-gated)
+  // until the initial scroll-to-end and its estimate→measure corrections
+  // have converged — scroll offset and total size unchanged across two
+  // frames — then reveals in one shot. Streaming conversations and empty
+  // transcripts reveal immediately; a hard cap always reveals.
+  const hasRows = rows.length > 0;
+  const settledRef = useRef(false);
+  const onFirstLayoutSettledRef = useRef(onFirstLayoutSettled);
+  onFirstLayoutSettledRef.current = onFirstLayoutSettled;
+  useLayoutEffect(() => {
+    if (settledRef.current || scrollViewport === null) {
+      return;
+    }
+    const settle = () => {
+      settledRef.current = true;
+      onFirstLayoutSettledRef.current?.();
+    };
+    if (!hasRows || isSending) {
+      settle();
+      return;
+    }
+
+    let stableFrames = 0;
+    let previousTotalSize = -1;
+    let previousScrollTop = -1;
+    const startedAt = performance.now();
+    let frame = requestAnimationFrame(function check() {
+      const totalSize = virtualizer.getTotalSize();
+      const scrollTop = scrollViewport.scrollTop;
+      stableFrames =
+        totalSize === previousTotalSize && scrollTop === previousScrollTop ? stableFrames + 1 : 0;
+      previousTotalSize = totalSize;
+      previousScrollTop = scrollTop;
+      if (stableFrames >= 2 || performance.now() - startedAt > 800) {
+        settle();
+        return;
+      }
+      frame = requestAnimationFrame(check);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [hasRows, isSending, scrollViewport, virtualizer]);
 
   // Snapshot measured heights for the next open of this conversation.
   const saveMeasurementsRef = useRef(() => {});

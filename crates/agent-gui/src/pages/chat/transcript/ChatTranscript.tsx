@@ -89,6 +89,16 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     branchPendingMessageId: branchPendingMessageId ?? null,
   });
 
+  // A freshly opened conversation stays behind the loading overlay until its
+  // first layout settles (TranscriptList reports convergence), then reveals
+  // in one shot — estimate→measure corrections never show as jumps.
+  const [settledConversationId, setSettledConversationId] = useState<string | null>(null);
+  const handleFirstLayoutSettled = useCallback(() => {
+    setSettledConversationId(conversationId);
+  }, [conversationId]);
+  const isTranscriptSettling =
+    shouldReserveTranscriptBottomSpace && settledConversationId !== conversationId;
+
   useLayoutEffect(() => {
     followRef.current = scrollFollowHandle;
     return () => {
@@ -197,7 +207,9 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
             </div>
           ) : null}
 
-          <div className="select-text">
+          <div
+            className={`select-text transition-opacity duration-150 ${isTranscriptSettling ? "opacity-0" : "opacity-100"}`}
+          >
             <RowInteractionProvider value={rowInteractionStore}>
               {/* Keyed remount per conversation: per-conversation state
                   (row model, entrance registry, virtualizer measurements)
@@ -219,6 +231,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
                 gitClient={gitClient}
                 onResendFromEdit={onResendFromEdit}
                 onBranchConversation={onBranchConversation}
+                onFirstLayoutSettled={handleFirstLayoutSettled}
               />
             </RowInteractionProvider>
           </div>
@@ -268,7 +281,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
             document.body,
           )
         : null}
-      {isHistorySwitching ? <HistorySwitchLoadingOverlay /> : null}
+      {isHistorySwitching || isTranscriptSettling ? <HistorySwitchLoadingOverlay /> : null}
     </div>
   );
 });
