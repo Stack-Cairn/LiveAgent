@@ -9,6 +9,7 @@ import {
   CHECKPOINT_ROW_ESTIMATE_PX,
   estimateAssistantRowHeight,
   estimateUserRowHeight,
+  measureEstimateText,
 } from "../../../lib/transcript-virtual/rowEstimates";
 
 // The transcript's single row list: committed history rows plus (while a run
@@ -64,13 +65,18 @@ export type LiveTailInput = LiveTranscriptState & {
 };
 
 function computeAssistantEstimate(rounds: (UiRound | LiveRound)[]): number {
-  let textChars = 0;
+  let proseChars = 0;
+  let codeLines = 0;
+  let codeFences = 0;
   let toolCount = 0;
   let thinkingCount = 0;
   for (const round of rounds) {
     for (const block of round.blocks) {
       if (block.kind === "text") {
-        textChars += block.text.length;
+        const measured = measureEstimateText(block.text);
+        proseChars += measured.proseChars;
+        codeLines += measured.codeLines;
+        codeFences += measured.codeFences;
       } else if (block.kind === "thinking") {
         thinkingCount += 1;
       } else {
@@ -78,7 +84,7 @@ function computeAssistantEstimate(rounds: (UiRound | LiveRound)[]): number {
       }
     }
   }
-  return estimateAssistantRowHeight({ textChars, toolCount, thinkingCount });
+  return estimateAssistantRowHeight({ proseChars, codeLines, codeFences, toolCount, thinkingCount });
 }
 
 function buildReplyText(rounds: (UiRound | LiveRound)[]): string {
@@ -188,7 +194,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
       row = {
         kind: "user",
         key: item.key,
-        estimate: estimateUserRowHeight(item.text.length),
+        estimate: estimateUserRowHeight(item.text.length, item.attachments.length),
         item,
       };
     } else {

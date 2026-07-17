@@ -42,6 +42,7 @@ import {
   CHECKPOINT_ROW_ESTIMATE_PX,
   estimateAssistantRowHeight,
   estimateUserRowHeight,
+  measureEstimateText,
 } from "@/lib/transcript-virtual/rowEstimates";
 import {
   AssistantAvatar,
@@ -1099,15 +1100,20 @@ function estimateRowHeight(row: TranscriptRow): number {
   }
   let estimate: number;
   if (row.kind === "user") {
-    estimate = estimateUserRowHeight(row.text.length);
+    estimate = estimateUserRowHeight(row.text.length, row.attachments.length);
   } else if (row.kind === "assistant") {
-    let textChars = 0;
+    let proseChars = 0;
+    let codeLines = 0;
+    let codeFences = 0;
     let toolCount = 0;
     let thinkingCount = 0;
     for (const round of row.rounds) {
       for (const block of round.blocks) {
         if (block.kind === "text") {
-          textChars += block.text.length;
+          const measured = measureEstimateText(block.text);
+          proseChars += measured.proseChars;
+          codeLines += measured.codeLines;
+          codeFences += measured.codeFences;
         } else if (block.kind === "thinking") {
           thinkingCount += 1;
         } else {
@@ -1115,7 +1121,13 @@ function estimateRowHeight(row: TranscriptRow): number {
         }
       }
     }
-    estimate = estimateAssistantRowHeight({ textChars, toolCount, thinkingCount });
+    estimate = estimateAssistantRowHeight({
+      proseChars,
+      codeLines,
+      codeFences,
+      toolCount,
+      thinkingCount,
+    });
   } else if (row.kind === "checkpoint") {
     estimate = CHECKPOINT_ROW_ESTIMATE_PX;
   } else {
