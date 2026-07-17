@@ -74,7 +74,18 @@ type GatewaySocketEnvelope = {
   type: string;
   payload?: unknown;
   error?: string;
+  error_code?: string;
 };
+
+export class GatewayRequestError extends Error {
+  readonly code: string;
+
+  constructor(message: string, code = "") {
+    super(message);
+    this.name = "GatewayRequestError";
+    this.code = code;
+  }
+}
 
 type StatusListener = (status: AgentStatus | null, error: string | null) => void;
 type HistoryListener = (event: GatewayHistoryEvent) => void;
@@ -2371,11 +2382,17 @@ export class GatewayWebSocketClient {
     });
   }
 
-  async getProviderModels(type: string, baseUrl: string, apiKey: string): Promise<unknown> {
+  async getProviderModels(
+    type: string,
+    baseUrl: string,
+    apiKey: string,
+    allowPrivateNetwork = false,
+  ): Promise<unknown> {
     return this.requestWithRecovery("provider.models", {
       type,
       base_url: baseUrl,
       api_key: apiKey,
+      allow_private_network: allowPrivateNetwork,
     });
   }
 
@@ -3072,7 +3089,10 @@ export class GatewayWebSocketClient {
 
     if (envelope.type === "error") {
       pending.reject(
-        new Error(typeof envelope.error === "string" ? envelope.error : "Request failed"),
+        new GatewayRequestError(
+          typeof envelope.error === "string" ? envelope.error : "Request failed",
+          typeof envelope.error_code === "string" ? envelope.error_code : "",
+        ),
       );
       return;
     }
@@ -3408,7 +3428,12 @@ export type GatewayWebSocketClientLike = {
   ): Promise<UploadedImagePreviewResponse>;
   readSkillMetadata(path: string): Promise<SkillMetadataResponse>;
   readSkillText(path: string, offset?: number, length?: number): Promise<SkillTextResponse>;
-  getProviderModels(type: string, baseUrl: string, apiKey: string): Promise<unknown>;
+  getProviderModels(
+    type: string,
+    baseUrl: string,
+    apiKey: string,
+    allowPrivateNetwork?: boolean,
+  ): Promise<unknown>;
   dispose(): void;
 };
 

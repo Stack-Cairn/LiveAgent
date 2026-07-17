@@ -77,15 +77,29 @@ func buildOutboundAllowedPorts() []int {
 }
 
 func newSafeOutboundHTTPClient(timeout time.Duration) outboundHTTPClient {
+	return newSafeOutboundHTTPClientWithOptions(timeout, nil, validateSafeOutboundRedirect)
+}
+
+func newSafeOutboundHTTPClientWithOptions(
+	timeout time.Duration,
+	allowedIPs []netip.Addr,
+	checkRedirect func(req *http.Request, via []*http.Request) error,
+) outboundHTTPClient {
 	config := safeurl.GetConfigBuilder().
 		SetTimeout(timeout).
 		SetAllowedSchemes("http", "https").
 		SetAllowedPorts(outboundAllowedPorts...).
-		SetCheckRedirect(validateSafeOutboundRedirect).
+		SetCheckRedirect(checkRedirect).
 		EnableIPv6(true).
-		AllowSendingCredentials(false).
-		Build()
-	return safeurl.Client(config)
+		AllowSendingCredentials(false)
+	if len(allowedIPs) > 0 {
+		allowedIPStrings := make([]string, 0, len(allowedIPs))
+		for _, ip := range allowedIPs {
+			allowedIPStrings = append(allowedIPStrings, ip.String())
+		}
+		config.SetAllowedIPs(allowedIPStrings...)
+	}
+	return safeurl.Client(config.Build())
 }
 
 func validateSafeOutboundRedirect(req *http.Request, via []*http.Request) error {
@@ -114,6 +128,16 @@ func validateOutboundHTTPURL(raw string) (*url.URL, error) {
 }
 
 func validateParsedOutboundHTTPURL(parsed *url.URL) error {
+	if err := validateParsedOutboundHTTPURLShape(parsed); err != nil {
+		return err
+	}
+	if hostIP, err := netip.ParseAddr(parsed.Hostname()); err == nil && isBlockedOutboundIP(hostIP) {
+		return &unsafeOutboundURLError{message: "URL host resolves to a blocked IP range"}
+	}
+	return nil
+}
+
+func validateParsedOutboundHTTPURLShape(parsed *url.URL) error {
 	if parsed == nil {
 		return &unsafeOutboundURLError{message: "URL must be absolute"}
 	}
@@ -125,9 +149,6 @@ func validateParsedOutboundHTTPURL(parsed *url.URL) error {
 	}
 	if parsed.User != nil {
 		return &unsafeOutboundURLError{message: "URL cannot include embedded credentials"}
-	}
-	if hostIP, err := netip.ParseAddr(parsed.Hostname()); err == nil && isBlockedOutboundIP(hostIP) {
-		return &unsafeOutboundURLError{message: "URL host resolves to a blocked IP range"}
 	}
 	return nil
 }

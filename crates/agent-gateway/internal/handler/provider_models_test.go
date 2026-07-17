@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -102,19 +104,31 @@ func TestBuildProviderModelsAttempts(t *testing.T) {
 	}
 }
 
-func TestBuildProviderModelsURLRejectsLoopback(t *testing.T) {
+func TestBuildProviderModelsURLAllowsPrivateAndLoopback(t *testing.T) {
 	t.Parallel()
 
-	if _, err := buildProviderModelsURL("codex", "http://127.0.0.1:11434", false); err == nil {
-		t.Fatal("buildProviderModelsURL() error = nil, want loopback rejection")
+	for _, baseURL := range []string{
+		"http://10.66.0.1:8787",
+		"http://10.66.0.1:8787/v1",
+		"http://127.0.0.1:11434",
+		"http://[::1]:11434",
+		"http://[fd00::1]:11434",
+	} {
+		got, err := buildProviderModelsURL("codex", baseURL, false)
+		if err != nil {
+			t.Fatalf("buildProviderModelsURL(%q) error = %v", baseURL, err)
+		}
+		if !strings.HasSuffix(got, "/v1/models") {
+			t.Fatalf("buildProviderModelsURL(%q) = %q, want /v1/models suffix", baseURL, got)
+		}
 	}
 }
 
-func TestBuildProviderModelsURLRejectsIPv4MappedLoopback(t *testing.T) {
+func TestBuildProviderModelsURLDefersAddressPolicy(t *testing.T) {
 	t.Parallel()
 
-	if _, err := buildProviderModelsURL("codex", "http://[::ffff:127.0.0.1]:11434", false); err == nil {
-		t.Fatal("buildProviderModelsURL() error = nil, want IPv4-mapped loopback rejection")
+	if _, err := buildProviderModelsURL("codex", "http://169.254.169.254/latest", false); err != nil {
+		t.Fatalf("buildProviderModelsURL() error = %v, want structural validation to pass", err)
 	}
 }
 
@@ -123,7 +137,7 @@ func TestFetchProviderModelsRejectsUnsafeURL(t *testing.T) {
 
 	_, err := FetchProviderModels(context.Background(), ProviderModelsRequestBody{
 		Type:    "codex",
-		BaseURL: "http://127.0.0.1:11434",
+		BaseURL: "http://169.254.169.254:80",
 		APIKey:  "test-key",
 	})
 	if err == nil {
@@ -135,6 +149,81 @@ func TestFetchProviderModelsRejectsUnsafeURL(t *testing.T) {
 	}
 	if statusErr.Status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", statusErr.Status, http.StatusBadRequest)
+	}
+}
+
+func TestFetchProviderModelsRequiresConfirmationForPrivateURL(t *testing.T) {
+	t.Parallel()
+
+	_, err := FetchProviderModels(context.Background(), ProviderModelsRequestBody{
+		Type:    "codex",
+		BaseURL: "http://10.66.0.1:8787",
+		APIKey:  "test-key",
+	})
+	if err == nil {
+		t.Fatal("FetchProviderModels() error = nil, want confirmation requirement")
+	}
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) {
+		t.Fatalf("FetchProviderModels() error = %T, want *HTTPStatusError", err)
+	}
+	if statusErr.Code != "provider_models_confirmation_required" {
+		t.Fatalf("code = %q, want confirmation code", statusErr.Code)
+	}
+}
+
+func TestFetchProviderModelsAllowsConfirmedLoopback(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
+		if req.URL.Path != "/v1/models" {
+			t.Fatalf("path = %q, want /v1/models", req.URL.Path)
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"data":[{"id":"local-model"}]}`))
+	}))
+	defer server.Close()
+
+	result, err := FetchProviderModels(context.Background(), ProviderModelsRequestBody{
+		Type:                "codex",
+		BaseURL:             server.URL,
+		APIKey:              "test-key",
+		AllowPrivateNetwork: true,
+	})
+	if err != nil {
+		t.Fatalf("FetchProviderModels() error = %v", err)
+	}
+	if !bytes.Contains(result.Body, []byte("local-model")) {
+		t.Fatalf("result body = %s, want local model", result.Body)
+	}
+}
+
+func TestFetchProviderModelsRejectsCrossOriginPrivateRedirect(t *testing.T) {
+	t.Parallel()
+
+	target := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"data":[{"id":"redirected-model"}]}`))
+	}))
+	defer target.Close()
+
+	source := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, req *http.Request) {
+		http.Redirect(writer, req, target.URL+"/v1/models", http.StatusTemporaryRedirect)
+	}))
+	defer source.Close()
+
+	_, err := FetchProviderModels(context.Background(), ProviderModelsRequestBody{
+		Type:                "codex",
+		BaseURL:             source.URL,
+		APIKey:              "test-key",
+		AllowPrivateNetwork: true,
+	})
+	if err == nil {
+		t.Fatal("FetchProviderModels() error = nil, want redirect rejection")
+	}
+	var statusErr *HTTPStatusError
+	if !errors.As(err, &statusErr) || statusErr.Message != "provider models URL is not allowed" {
+		t.Fatalf("error = %#v, want provider models URL rejection", err)
 	}
 }
 

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"sort"
 	"strings"
@@ -18,6 +20,7 @@ const anthropicAPIVersion = "2023-06-01"
 type HTTPStatusError struct {
 	Status  int
 	Message string
+	Code    string
 }
 
 func (e *HTTPStatusError) Error() string {
@@ -38,6 +41,15 @@ var codexModelsSuffixes = []string{
 	"/response",
 }
 
+var providerModelsAllowedIPPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("10.0.0.0/8"),
+	netip.MustParsePrefix("172.16.0.0/12"),
+	netip.MustParsePrefix("192.168.0.0/16"),
+	netip.MustParsePrefix("127.0.0.0/8"),
+	netip.MustParsePrefix("::1/128"),
+	netip.MustParsePrefix("fc00::/7"),
+}
+
 type providerModelsAttempt struct {
 	url     string
 	headers map[string]string
@@ -52,7 +64,15 @@ func FetchProviderModels(
 	ctx context.Context,
 	req ProviderModelsRequestBody,
 ) (*ProviderModelsResult, error) {
-	return fetchProviderModelsWithClient(ctx, req, newSafeOutboundHTTPClient(0))
+	attempts, err := prepareProviderModelsAttempts(req)
+	if err != nil {
+		return nil, err
+	}
+	client, err := newProviderModelsHTTPClient(ctx, attempts[0].url, req.AllowPrivateNetwork)
+	if err != nil {
+		return nil, err
+	}
+	return fetchProviderModelsAttemptsWithClient(ctx, attempts, client)
 }
 
 func fetchProviderModelsWithClient(
@@ -60,6 +80,14 @@ func fetchProviderModelsWithClient(
 	req ProviderModelsRequestBody,
 	client outboundHTTPClient,
 ) (*ProviderModelsResult, error) {
+	attempts, err := prepareProviderModelsAttempts(req)
+	if err != nil {
+		return nil, err
+	}
+	return fetchProviderModelsAttemptsWithClient(ctx, attempts, client)
+}
+
+func prepareProviderModelsAttempts(req ProviderModelsRequestBody) ([]providerModelsAttempt, error) {
 	providerType := strings.TrimSpace(req.Type)
 	baseURL := strings.TrimSpace(req.BaseURL)
 	apiKey := strings.TrimSpace(req.APIKey)
@@ -77,7 +105,14 @@ func fetchProviderModelsWithClient(
 			Message: err.Error(),
 		}
 	}
+	return attempts, nil
+}
 
+func fetchProviderModelsAttemptsWithClient(
+	ctx context.Context,
+	attempts []providerModelsAttempt,
+	client outboundHTTPClient,
+) (*ProviderModelsResult, error) {
 	var failures []providerModelsAttemptFailure
 	var emptyResult *ProviderModelsResult
 
@@ -101,6 +136,118 @@ func fetchProviderModelsWithClient(
 	}
 
 	return nil, pickProviderModelsFailure(failures)
+}
+
+func newProviderModelsHTTPClient(
+	ctx context.Context,
+	targetURL string,
+	allowPrivateNetwork bool,
+) (outboundHTTPClient, error) {
+	parsed, err := url.Parse(targetURL)
+	if err != nil {
+		return nil, &HTTPStatusError{
+			Status:  http.StatusBadRequest,
+			Message: "base_url is not allowed",
+			Code:    "provider_models_url_not_allowed",
+		}
+	}
+	if err := validateParsedOutboundHTTPURLShape(parsed); err != nil {
+		return nil, &HTTPStatusError{
+			Status:  http.StatusBadRequest,
+			Message: "base_url is not allowed",
+			Code:    "provider_models_url_not_allowed",
+		}
+	}
+
+	addresses := make([]netip.Addr, 0, 4)
+	if literal, err := netip.ParseAddr(parsed.Hostname()); err == nil {
+		addresses = append(addresses, literal.Unmap())
+	} else {
+		resolved, resolveErr := net.DefaultResolver.LookupNetIP(ctx, "ip", parsed.Hostname())
+		if resolveErr != nil {
+			return nil, &HTTPStatusError{
+				Status:  http.StatusBadGateway,
+				Message: "failed to resolve provider models URL",
+			}
+		}
+		addresses = append(addresses, resolved...)
+	}
+
+	allowedIPs := make([]netip.Addr, 0, len(addresses))
+	hasPrivateAddress := false
+	for _, address := range addresses {
+		address = address.Unmap()
+		if isProviderModelsAllowedIP(address) {
+			hasPrivateAddress = true
+			if allowPrivateNetwork {
+				allowedIPs = append(allowedIPs, address)
+			}
+			continue
+		}
+		if !isBlockedOutboundIP(address) {
+			allowedIPs = append(allowedIPs, address)
+		}
+	}
+
+	if hasPrivateAddress && !allowPrivateNetwork {
+		return nil, &HTTPStatusError{
+			Status:  http.StatusBadRequest,
+			Message: "provider models URL requires confirmation",
+			Code:    "provider_models_confirmation_required",
+		}
+	}
+	if len(allowedIPs) == 0 {
+		return nil, &HTTPStatusError{
+			Status:  http.StatusBadRequest,
+			Message: "base_url is not allowed",
+			Code:    "provider_models_url_not_allowed",
+		}
+	}
+
+	if !hasPrivateAddress {
+		return newSafeOutboundHTTPClient(0), nil
+	}
+	origin := providerModelsOrigin(parsed)
+	return newSafeOutboundHTTPClientWithOptions(
+		0,
+		allowedIPs,
+		func(req *http.Request, via []*http.Request) error {
+			return validateProviderModelsRedirect(origin, req, via)
+		},
+	), nil
+}
+
+func isProviderModelsAllowedIP(ip netip.Addr) bool {
+	if !ip.IsValid() {
+		return false
+	}
+	ip = ip.Unmap()
+	for _, prefix := range providerModelsAllowedIPPrefixes {
+		if prefix.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func providerModelsOrigin(parsed *url.URL) string {
+	return strings.ToLower(parsed.Scheme) + "://" + strings.ToLower(parsed.Host)
+}
+
+func validateProviderModelsRedirect(origin string, req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return &unsafeOutboundURLError{message: "too many redirects"}
+	}
+	if req == nil || req.URL == nil {
+		return &unsafeOutboundURLError{message: "redirect URL is required"}
+	}
+	if err := validateParsedOutboundHTTPURLShape(req.URL); err != nil {
+		return err
+	}
+	if providerModelsOrigin(req.URL) != origin {
+		return &unsafeOutboundURLError{message: "provider models redirect origin is not allowed"}
+	}
+	return nil
 }
 
 // runProviderModelsAttempt performs a single upstream request. A non-nil
@@ -337,7 +484,7 @@ func buildProviderModelsURL(providerType string, baseURL string, official bool) 
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
 		return "", errors.New("base_url cannot contain query parameters or fragments")
 	}
-	if err := validateParsedOutboundHTTPURL(parsed); err != nil {
+	if err := validateParsedOutboundHTTPURLShape(parsed); err != nil {
 		return "", errors.New("base_url is not allowed")
 	}
 

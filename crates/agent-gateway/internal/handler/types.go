@@ -56,9 +56,10 @@ type CronManageRequestBody struct {
 }
 
 type ProviderModelsRequestBody struct {
-	Type    string `json:"type"`
-	BaseURL string `json:"base_url"`
-	APIKey  string `json:"api_key"`
+	Type                string `json:"type"`
+	BaseURL             string `json:"base_url"`
+	APIKey              string `json:"api_key"`
+	AllowPrivateNetwork bool   `json:"allow_private_network"`
 }
 
 func boolPtr(value bool) *bool {

@@ -72,6 +72,18 @@ test("buildProviderModelsUrl defaults to /v1/models and falls back to official e
   );
 });
 
+test("provider model URL safety helpers identify local network targets", () => {
+  assert.equal(providerUtils.isProviderModelsPrivateAddress("http://10.66.0.1:8787"), true);
+  assert.equal(providerUtils.isProviderModelsPrivateAddress("http://10.66.0.1:8787/v1"), true);
+  assert.equal(providerUtils.isProviderModelsPrivateAddress("http://127.0.0.1:11434"), true);
+  assert.equal(providerUtils.isProviderModelsPrivateAddress("http://localhost:11434"), true);
+  assert.equal(providerUtils.isProviderModelsPrivateAddress("https://api.example.com"), false);
+  assert.equal(
+    providerUtils.providerModelsConfirmationKey("HTTP://10.66.0.1:8787/v1"),
+    "http://10.66.0.1:8787",
+  );
+});
+
 test("buildProviderModelsAttempts orders default before official with provider headers", () => {
   const gemini = providerUtils.buildProviderModelsAttempts(
     "gemini",

@@ -14,6 +14,59 @@ const CODEX_MODELS_SUFFIXES = ["/chat/completions", "/responses", "/response"];
 const GEMINI_GENERATE_SUFFIXES = [":streamGenerateContent", ":generateContent"];
 const ANTHROPIC_API_VERSION = "2023-06-01";
 
+export type ProviderModelsFetchOptions = {
+  allowPrivateNetwork?: boolean;
+};
+
+export function isProviderModelsConfirmationRequired(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error as Error & { code?: unknown }).code === "provider_models_confirmation_required"
+  );
+}
+
+function isPrivateIPv4(host: string) {
+  const parts = host.split(".").map((part) => Number(part));
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
+    return false;
+  }
+  return (
+    parts[0] === 10 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168) ||
+    parts[0] === 127
+  );
+}
+
+export function isProviderModelsPrivateAddress(baseUrl: string) {
+  try {
+    const parsed = new URL(baseUrl.trim());
+    const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return (
+      host === "localhost" ||
+      isPrivateIPv4(host) ||
+      host === "::1" ||
+      host.startsWith("fc") ||
+      host.startsWith("fd") ||
+      host.startsWith("::ffff:127.")
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function providerModelsConfirmationKey(baseUrl: string) {
+  try {
+    const parsed = new URL(baseUrl.trim());
+    return parsed.origin.toLowerCase();
+  } catch {
+    return baseUrl.trim();
+  }
+}
+
 export function isGatewayWebuiRuntime() {
   return (
     typeof document !== "undefined" &&
@@ -199,6 +252,7 @@ async function fetchModelsThroughGateway(
   type: ProviderId,
   baseUrl: string,
   apiKey: string,
+  options?: ProviderModelsFetchOptions,
 ): Promise<ProviderModelConfig[]> {
   const token =
     typeof window !== "undefined"
@@ -212,6 +266,7 @@ async function fetchModelsThroughGateway(
     type,
     base_url: baseUrl,
     api_key: apiKey,
+    allow_private_network: options?.allowPrivateNetwork === true,
   } as any);
 
   const items = extractModelListItems(data);
@@ -331,11 +386,12 @@ export async function fetchModelsFromApi(
   type: ProviderId,
   baseUrl: string,
   apiKey: string,
+  options?: ProviderModelsFetchOptions,
 ): Promise<ProviderModelConfig[]> {
   const normalizedUrl = normalizeModelBaseUrl(type, baseUrl);
   const normalizedApiKey = apiKey.trim();
   if (isGatewayWebuiRuntime()) {
-    return fetchModelsThroughGateway(type, normalizedUrl, normalizedApiKey);
+    return fetchModelsThroughGateway(type, normalizedUrl, normalizedApiKey, options);
   }
 
   const attempts = buildProviderModelsAttempts(type, normalizedUrl, normalizedApiKey);

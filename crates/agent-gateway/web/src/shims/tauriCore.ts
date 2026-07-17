@@ -306,6 +306,7 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         String(args?.type ?? ""),
         String(args?.base_url ?? ""),
         String(args?.api_key ?? ""),
+        args?.allow_private_network === true,
       )) as T;
     case "settings_reset_ssh_known_host": {
       const host = String(args?.host ?? "").trim();

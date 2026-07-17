@@ -17,6 +17,7 @@ import {
 } from "../../components/icons";
 
 import { Button } from "../../components/ui/button";
+import { useConfirmDialog } from "../../components/ui/confirm-dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import {
@@ -44,8 +45,11 @@ import {
   createDraftModelConfig,
   fetchModelsFromApi,
   isGatewayWebuiRuntime,
+  isProviderModelsConfirmationRequired,
+  isProviderModelsPrivateAddress,
   mergeFetchedModels,
   normalizeFetchedModels,
+  providerModelsConfirmationKey,
   sortModelsBySelection,
 } from "./providerUtils";
 import { ConfirmDeletePopover } from "./shared";
@@ -207,10 +211,14 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const [modelSearch, setModelSearch] = useState("");
   const [editingModel, setEditingModel] = useState<ProviderModelConfig | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  const { confirm, dialog } = useConfirmDialog();
   const { isClosing, modalState, requestClose } = useModalMotion(onClose);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevFetchKey = useRef("");
+  const fetchSeq = useRef(0);
+  const confirmedPrivateUrls = useRef(new Set<string>());
+  const confirmationInFlight = useRef(new Map<string, Promise<boolean>>());
   const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_API_KEY_DISPLAY;
   const apiKeyForRequest = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
   const canFetchModels = baseUrl.trim().length > 0 && apiKeyForRequest.length > 0;
@@ -222,6 +230,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     if (!trimUrl || !trimKey) return;
     if (key === prevFetchKey.current) return;
 
+    fetchSeq.current += 1;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       prevFetchKey.current = key;
@@ -233,16 +242,61 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     };
   }, [baseUrl, apiKeyForRequest]);
 
+  async function confirmPrivateProviderUrl(url: string) {
+    const confirmationKey = providerModelsConfirmationKey(url);
+    if (confirmedPrivateUrls.current.has(confirmationKey)) return true;
+    const existing = confirmationInFlight.current.get(confirmationKey);
+    if (existing) return existing;
+
+    const pending = confirm({
+      title: t("settings.providerNetworkWarningTitle"),
+      subtitle: url,
+      description: t("settings.providerNetworkWarningDescription"),
+      detail: t("settings.providerNetworkWarningDetail"),
+      confirmLabel: t("settings.providerNetworkWarningConfirm"),
+      cancelLabel: t("settings.cancel"),
+      tone: "warning",
+    }).then((accepted) => {
+      if (accepted) confirmedPrivateUrls.current.add(confirmationKey);
+      return accepted;
+    });
+    confirmationInFlight.current.set(confirmationKey, pending);
+    void pending.finally(() => confirmationInFlight.current.delete(confirmationKey));
+    return pending;
+  }
+
+  async function fetchModelsWithConfirmation(url: string, key: string) {
+    if (isProviderModelsPrivateAddress(url)) {
+      if (!(await confirmPrivateProviderUrl(url))) return null;
+      return fetchModelsFromApi(providerType, url, key, { allowPrivateNetwork: true });
+    }
+
+    try {
+      return await fetchModelsFromApi(providerType, url, key);
+    } catch (err) {
+      if (!isGatewayWebui || !isProviderModelsConfirmationRequired(err)) throw err;
+      if (!(await confirmPrivateProviderUrl(url))) return null;
+      return fetchModelsFromApi(providerType, url, key, { allowPrivateNetwork: true });
+    }
+  }
+
   async function doFetch(url: string, key: string) {
+    const requestSeq = ++fetchSeq.current;
     setFetchingModels(true);
     setFetchError(null);
     try {
-      const list = await fetchModelsFromApi(providerType, url, key);
-      setModels((prev) => mergeFetchedModels(list, prev));
+      const list = await fetchModelsWithConfirmation(url, key);
+      if (!list && requestSeq === fetchSeq.current) {
+        setFetchError(t("settings.providerNetworkWarningCancelled"));
+      } else if (list && requestSeq === fetchSeq.current) {
+        setModels((prev) => mergeFetchedModels(list, prev));
+      }
     } catch (err) {
-      setFetchError(err instanceof Error ? err.message : String(err));
+      if (requestSeq === fetchSeq.current) {
+        setFetchError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setFetchingModels(false);
+      if (requestSeq === fetchSeq.current) setFetchingModels(false);
     }
   }
 
@@ -607,6 +661,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
             onSave={saveModelSettings}
           />
         ) : null}
+        {dialog}
       </div>
     </div>,
     document.body,

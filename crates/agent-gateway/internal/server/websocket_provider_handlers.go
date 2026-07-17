@@ -60,7 +60,11 @@ func (c *websocketConnection) handleProviderModels(req websocketRequest) {
 	if err != nil {
 		var statusErr *handler.HTTPStatusError
 		if errors.As(err, &statusErr) {
-			_ = c.writeError(req.ID, statusErr.Message)
+			if statusErr.Code != "" {
+				_ = c.writeErrorCode(req.ID, statusErr.Message, statusErr.Code)
+			} else {
+				_ = c.writeError(req.ID, statusErr.Message)
+			}
 			return
 		}
 		_ = c.writeError(req.ID, websocketErrorMessage(err))

@@ -1205,6 +1205,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.fetchFailed": "无法获取模型列表，请点击刷新或手动添加",
     "settings.fetchHint": "填写 Base URL 和 API Key 后自动获取",
     "settings.noBaseUrlApiKey": "请先填写 Base URL 和 API Key",
+    "settings.providerNetworkWarningTitle": "确认访问局域网地址",
+    "settings.providerNetworkWarningDescription":
+      "此供应商位于本机或局域网，模型列表请求将访问该地址。请确认这是您信任的服务。",
+    "settings.providerNetworkWarningDetail":
+      "恶意地址可能探测或访问 Gateway 所在网络中的内部服务。",
+    "settings.providerNetworkWarningConfirm": "继续访问",
+    "settings.providerNetworkWarningCancelled": "已取消访问局域网供应商",
     "settings.activeModels": "个激活模型",
     "settings.noProviders": "暂无供应商",
     "settings.noBaseUrl": "未设置 Base URL",
@@ -2982,6 +2989,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.fetchFailed": "Failed to fetch model list. Click refresh or add manually.",
     "settings.fetchHint": "Fill in Base URL and API Key to auto-fetch",
     "settings.noBaseUrlApiKey": "Please fill in Base URL and API Key first",
+    "settings.providerNetworkWarningTitle": "Confirm local network access",
+    "settings.providerNetworkWarningDescription":
+      "This provider is hosted on the local machine or network. Fetching its model list will connect to this address. Continue only if you trust the service.",
+    "settings.providerNetworkWarningDetail":
+      "A malicious address could probe or access internal services reachable from the Gateway.",
+    "settings.providerNetworkWarningConfirm": "Continue",
+    "settings.providerNetworkWarningCancelled": "Local network access was cancelled",
     "settings.activeModels": " active models",
     "settings.noProviders": "No providers",
     "settings.noBaseUrl": "Base URL not set",

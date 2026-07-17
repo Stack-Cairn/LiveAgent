@@ -27,10 +27,11 @@ type websocketRequest struct {
 }
 
 type websocketEnvelope struct {
-	ID      string `json:"id,omitempty"`
-	Type    string `json:"type"`
-	Payload any    `json:"payload,omitempty"`
-	Error   string `json:"error,omitempty"`
+	ID        string `json:"id,omitempty"`
+	Type      string `json:"type"`
+	Payload   any    `json:"payload,omitempty"`
+	Error     string `json:"error,omitempty"`
+	ErrorCode string `json:"error_code,omitempty"`
 
 	// priority is transport-local metadata and is never serialized. It lets
 	// latency-sensitive acknowledgements bypass a congested data queue without
@@ -760,6 +761,15 @@ func (c *websocketConnection) writeError(requestID string, message string) error
 		ID:    requestID,
 		Type:  "error",
 		Error: message,
+	})
+}
+
+func (c *websocketConnection) writeErrorCode(requestID string, message string, code string) error {
+	return c.writeEnvelope(websocketEnvelope{
+		ID:        requestID,
+		Type:      "error",
+		Error:     message,
+		ErrorCode: code,
 	})
 }
 
