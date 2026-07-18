@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
+import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
 import { MemoryOrganizerHost } from "./components/memory/useMemoryOrganizer";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
 import { LocaleContext, t as translate } from "./i18n";
@@ -48,15 +49,18 @@ function asErrorMessage(error: unknown, fallback: string) {
 const GATEWAY_SETTINGS_SYNC_EVENT = "gateway:settings-sync";
 
 function AppChrome(props: { children: ReactNode }) {
+  // Plain inputs get a shared cut/copy/paste menu; everything else keeps the
+  // suppressed native menu (surfaces with their own menus opt out upstream).
+  const { onRootContextMenu, onRootMouseDownCapture, menu } = useNativeInputContextMenu();
   return (
     <div
       className="relative flex h-full w-full flex-col overflow-hidden bg-background"
-      onContextMenu={(event) => {
-        event.preventDefault();
-      }}
+      onContextMenu={onRootContextMenu}
+      onMouseDownCapture={onRootMouseDownCapture}
     >
       <WindowsTitleBar />
       <div className="relative min-h-0 flex-1 overflow-hidden bg-background">{props.children}</div>
+      {menu}
     </div>
   );
 }

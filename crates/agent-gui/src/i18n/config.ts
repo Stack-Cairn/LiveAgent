@@ -24,6 +24,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "window.restore": "还原",
     "window.close": "关闭",
 
+    /* ── Input context menu ── */
+    "inputContextMenu.cut": "剪切",
+    "inputContextMenu.copy": "复制",
+    "inputContextMenu.paste": "粘贴",
+    "inputContextMenu.selectAll": "全选",
+
     /* ── Tooltip ── */
     "tooltip.settings": "设置",
     "tooltip.switchToLight": "切换到浅色模式",
@@ -1835,6 +1841,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "window.maximize": "Maximize",
     "window.restore": "Restore",
     "window.close": "Close",
+
+    /* ── Input context menu ── */
+    "inputContextMenu.cut": "Cut",
+    "inputContextMenu.copy": "Copy",
+    "inputContextMenu.paste": "Paste",
+    "inputContextMenu.selectAll": "Select All",
 
     /* ── Tooltip ── */
     "tooltip.settings": "Settings",
