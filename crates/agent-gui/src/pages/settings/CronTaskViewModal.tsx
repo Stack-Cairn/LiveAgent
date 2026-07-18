@@ -117,6 +117,7 @@ function LeftPanel({
   isRunningNow,
   runNowError,
   onRunNow,
+  onClose,
 }: {
   task: CronTask;
   t: (key: string) => string;
@@ -124,6 +125,7 @@ function LeftPanel({
   isRunningNow: boolean;
   runNowError: string | null;
   onRunNow: () => void;
+  onClose: () => void;
 }) {
   const TypeIcon = cfg.icon;
   const script = task.script?.trim() ?? "";
@@ -146,22 +148,40 @@ function LeftPanel({
               <TypeIcon className="h-3 w-3" />
               {t(cfg.label)}
             </div>
-            <button
-              type="button"
-              onClick={onRunNow}
-              disabled={isRunningNow}
-              title={isRunningNow ? t("settings.cronViewRunningNow") : t("settings.cronViewRunNow")}
-              aria-label={
-                isRunningNow ? t("settings.cronViewRunningNow") : t("settings.cronViewRunNow")
-              }
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${cfg.accent} ${cfg.accentBg} ${cfg.accentBorder} hover:brightness-110 disabled:cursor-wait disabled:opacity-60`}
-            >
-              {isRunningNow ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-            </button>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onRunNow}
+                disabled={isRunningNow}
+                title={
+                  isRunningNow ? t("settings.cronViewRunningNow") : t("settings.cronViewRunNow")
+                }
+                aria-label={
+                  isRunningNow ? t("settings.cronViewRunningNow") : t("settings.cronViewRunNow")
+                }
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${cfg.accent} ${cfg.accentBg} ${cfg.accentBorder} hover:brightness-110 disabled:cursor-wait disabled:opacity-60`}
+              >
+                {isRunningNow ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+              </button>
+              {/* Desktop keeps the close button in the logs header (the modal's
+                  top-right corner there). On the stacked mobile layout the
+                  gateway CSS shows this hero copy right of run-now instead and
+                  hides the logs-header one (settings-cron-view-hero-close /
+                  settings-cron-logs-close). */}
+              <button
+                type="button"
+                onClick={onClose}
+                title={t("settings.cronViewClose")}
+                aria-label={t("settings.cronViewClose")}
+                className="settings-cron-view-hero-close hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
 
           {/* Name */}
@@ -520,7 +540,7 @@ function RightPanel({
           onClick={onClose}
           title={t("settings.cronViewClose")}
           aria-label={t("settings.cronViewClose")}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          className="settings-cron-logs-close flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
         >
           <X size={14} />
         </button>
@@ -784,6 +804,7 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
             onRunNow={() => {
               void handleRunNow(task.id);
             }}
+            onClose={requestClose}
           />
         </div>
 
