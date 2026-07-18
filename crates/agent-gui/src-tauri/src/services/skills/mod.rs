@@ -18,6 +18,7 @@ mod builtin;
 mod clawhub;
 mod create;
 mod external;
+mod external_mcp;
 mod install;
 mod jobs;
 mod library;
@@ -36,6 +37,7 @@ pub(crate) use builtin::*;
 pub(crate) use clawhub::*;
 pub(crate) use create::*;
 pub(crate) use external::*;
+pub(crate) use external_mcp::*;
 pub(crate) use install::*;
 pub(crate) use jobs::*;
 pub use library::{

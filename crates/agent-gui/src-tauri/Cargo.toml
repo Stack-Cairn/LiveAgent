@@ -43,6 +43,7 @@ notify = "8.2.0"
 rfd = "0.17.2"
 tauri-plugin-mcp-bridge = "0.12.0"
 dirs = "6.0.0"
+toml = "0.9.11"
 ignore = "0.4.27"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
 leveldb-core = "0.1.0"

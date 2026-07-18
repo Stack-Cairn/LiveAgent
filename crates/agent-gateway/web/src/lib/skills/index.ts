@@ -149,6 +149,7 @@ type SystemManageSkillResponse = {
   clawhubSlug?: string | null;
   clawhubDownloadUrl?: string | null;
   external?: ExternalToolScan[] | null;
+  externalMcp?: ExternalMcpToolScan[] | null;
 };
 
 export type ExternalSkillEntry = {
@@ -164,6 +165,28 @@ export type ExternalToolScan = {
   rootDir: string;
   exists: boolean;
   skills: ExternalSkillEntry[];
+  errors: string[];
+};
+
+export type ExternalMcpServerEntry = {
+  id: string;
+  transport: "stdio" | "http" | "sse";
+  command: string;
+  args: string[];
+  url: string;
+  env: Record<string, string>;
+  headers: Record<string, string>;
+  cwd?: string | null;
+  timeoutMs?: number | null;
+  /** 来源作用域："user" 或项目路径（Claude Code 的项目级配置） */
+  origin: string;
+};
+
+export type ExternalMcpToolScan = {
+  tool: string;
+  configPath: string;
+  exists: boolean;
+  servers: ExternalMcpServerEntry[];
   errors: string[];
 };
 
@@ -507,6 +530,11 @@ export async function manageSkill(
 export async function scanExternalSkills(): Promise<ExternalToolScan[]> {
   const response = await manageSkill({ action: "scan_external" });
   return response.external ?? [];
+}
+
+export async function scanExternalMcpServers(): Promise<ExternalMcpToolScan[]> {
+  const response = await manageSkill({ action: "scan_external_mcp" });
+  return response.externalMcp ?? [];
 }
 
 export async function startSkillInstallJob(

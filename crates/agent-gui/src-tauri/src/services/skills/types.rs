@@ -134,6 +134,34 @@ pub struct SystemExternalToolScan {
     pub errors: Vec<String>,
 }
 
+/// 从外部工具配置文件解析出的单个 MCP Server（字段与前端 McpServerConfig 对齐，
+/// 缺省项由前端导入时补默认值）。
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemExternalMcpServerEntry {
+    pub id: String,
+    pub transport: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub url: String,
+    pub env: std::collections::BTreeMap<String, String>,
+    pub headers: std::collections::BTreeMap<String, String>,
+    pub cwd: Option<String>,
+    pub timeout_ms: Option<u64>,
+    /// 来源作用域："user" 或项目路径（Claude Code 的项目级配置）。
+    pub origin: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemExternalMcpToolScan {
+    pub tool: String,
+    pub config_path: String,
+    pub exists: bool,
+    pub servers: Vec<SystemExternalMcpServerEntry>,
+    pub errors: Vec<String>,
+}
+
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemSkillInstallJobSnapshot {
@@ -177,6 +205,7 @@ pub struct SystemManageSkillResponse {
     pub clawhub_slug: Option<String>,
     pub clawhub_download_url: Option<String>,
     pub external: Option<Vec<SystemExternalToolScan>>,
+    pub external_mcp: Option<Vec<SystemExternalMcpToolScan>>,
 }
 
 impl SystemManageSkillResponse {

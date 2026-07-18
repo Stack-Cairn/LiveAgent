@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { HubBackdrop, HubHeader } from "../../components/hub/HubChrome";
-import { Cable, Cloud, Plug, Plus, Server, Sparkles } from "../../components/icons";
+import { Cable, Cloud, Download, Plug, Plus, Server, Sparkles } from "../../components/icons";
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
 import { type AppSettings, type McpServerConfig, updateMcp } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
+import { McpImportView } from "./McpImportView";
 import { McpRegistryBrowser } from "./McpRegistryBrowser";
 import { McpServerEditModal, McpServersForm } from "./McpServersForm";
 
@@ -16,7 +17,7 @@ type McpHubPageProps = {
   onOpenSidebar: () => void;
 };
 
-type McpHubView = "installed" | "store";
+type McpHubView = "installed" | "store" | "import";
 
 type EditingState = { mode: "add" } | { mode: "edit"; idx: number; server: McpServerConfig };
 
@@ -151,6 +152,12 @@ export function McpHubPage(props: McpHubPageProps) {
                     icon: Cloud,
                     count: null,
                   },
+                  {
+                    value: "import" as const,
+                    label: t("mcpHub.tabImport"),
+                    icon: Download,
+                    count: null,
+                  },
                 ].map((item) => {
                   const Icon = item.icon;
                   const active = view === item.value;
@@ -202,8 +209,10 @@ export function McpHubPage(props: McpHubPageProps) {
                   onAddServer={openAdd}
                   onEditServer={openEdit}
                 />
-              ) : (
+              ) : view === "store" ? (
                 <McpRegistryBrowser settings={settings} setSettings={setSettings} />
+              ) : (
+                <McpImportView settings={settings} setSettings={setSettings} />
               )}
             </div>
           </div>

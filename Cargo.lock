@@ -3215,6 +3215,7 @@ dependencies = [
  "tokio-cron-scheduler",
  "tokio-stream",
  "tokio-tungstenite 0.29.0",
+ "toml 0.9.12+spec-1.1.0",
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
