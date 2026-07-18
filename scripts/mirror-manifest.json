@@ -77,6 +77,8 @@
     "lib/tools/builtinToolCatalog.ts",
     "lib/skills/builtin.ts",
     "lib/shared/id.ts",
-    "pages/settings/SystemToolsSection.tsx"
+    "pages/settings/SystemToolsSection.tsx",
+    "pages/mcp-hub/McpHubPage.tsx",
+    "pages/mcp-hub/McpImportView.tsx"
   ]
 }

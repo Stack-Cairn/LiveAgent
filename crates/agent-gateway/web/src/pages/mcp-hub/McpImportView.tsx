@@ -285,7 +285,10 @@ export function McpImportView(props: {
                     {activeScan.errors.length > 0 ? (
                       <>
                         <span aria-hidden="true">·</span>
-                        <span>
+                        <span
+                          className="cursor-help underline decoration-dotted underline-offset-2"
+                          title={activeScan.errors.join("\n")}
+                        >
                           {t("mcpHub.importUnparsable").replace(
                             "{count}",
                             String(activeScan.errors.length),
