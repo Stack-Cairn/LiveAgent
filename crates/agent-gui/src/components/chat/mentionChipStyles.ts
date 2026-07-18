@@ -1,4 +1,11 @@
-export type MentionChipVariant = "file" | "dir" | "skill" | "commit" | "gitFile" | "pastedText";
+export type MentionChipVariant =
+  | "file"
+  | "dir"
+  | "skill"
+  | "commit"
+  | "gitFile"
+  | "codeRef"
+  | "pastedText";
 
 type MentionChipClassOptions = {
   interactive?: boolean;
@@ -14,12 +21,14 @@ const VARIANT_CLASS: Record<MentionChipVariant, string> = {
   skill: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
   commit: "bg-cyan-500/15 text-cyan-800 dark:text-cyan-200",
   gitFile: "bg-sky-500/15 text-sky-800 dark:text-sky-200",
+  codeRef: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
   pastedText: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
 };
 
 const INTERACTIVE_HOVER_CLASS: Partial<Record<MentionChipVariant, string>> = {
   commit: "hover:bg-cyan-500/20",
   gitFile: "hover:bg-sky-500/20",
+  codeRef: "hover:bg-indigo-500/20",
 };
 
 export function mentionChipClassName(

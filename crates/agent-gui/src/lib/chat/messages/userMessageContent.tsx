@@ -17,12 +17,17 @@ import { SkillIcon } from "../../../components/icons";
 import { useLocale } from "../../../i18n";
 
 import {
+  type CodeMentionReference,
+  codeMentionDisplayName,
+  codeMentionLineLabel,
+  codeMentionTitle,
   type FileMentionReference,
   fileMentionDisplayName,
   fileMentionTitle,
   MARKDOWN_REFERENCE_PATTERN,
   normalizeMarkdownReferenceDestination,
   normalizeMentionPath,
+  parseMarkdownCodeMentionReference,
   parseMarkdownFileMentionReference,
   unescapeMarkdownReferenceLabel,
 } from "./mentionReferences";
@@ -70,6 +75,7 @@ export type UserMessageSegment =
   | { type: "skill"; name: string }
   | { type: "commit"; commit: CommitDisplayReference }
   | { type: "gitFile"; file: GitFileDisplayReference }
+  | { type: "codeRef"; reference: CodeMentionReference }
   | {
       type: "pastedText";
       reference: PastedTextDisplayReference;
@@ -393,9 +399,11 @@ function tokenizeMentions(text: string): UserMessageSegment[] {
     const matchIndex = match.index ?? 0;
     const gitFile = markdownGitFileReference(label, destination);
     const commit = gitFile ? null : markdownCommitReference(label, destination);
+    const codeRef =
+      gitFile || commit ? null : parseMarkdownCodeMentionReference(label, destination);
     const reference =
-      gitFile || commit ? null : parseMarkdownFileMentionReference(label, destination);
-    if (!gitFile && !commit && !reference) continue;
+      gitFile || commit || codeRef ? null : parseMarkdownFileMentionReference(label, destination);
+    if (!gitFile && !commit && !codeRef && !reference) continue;
 
     if (matchIndex > cursor) {
       appendSegments(segments, tokenizeInlineMentions(text.slice(cursor, matchIndex)));
@@ -404,6 +412,8 @@ function tokenizeMentions(text: string): UserMessageSegment[] {
       segments.push({ type: "gitFile", file: gitFile });
     } else if (commit) {
       segments.push({ type: "commit", commit });
+    } else if (codeRef) {
+      segments.push({ type: "codeRef", reference: codeRef });
     } else if (reference) {
       segments.push({ type: "mention", reference });
     }
@@ -689,6 +699,17 @@ function MentionChip({ reference }: { reference: FileMentionReference }) {
   );
 }
 
+function CodeRefMentionChip({ reference }: { reference: CodeMentionReference }) {
+  const Icon = getFileTypeIcon(reference.path, "file");
+  const lineLabel = codeMentionLineLabel(reference);
+  return (
+    <span title={codeMentionTitle(reference)} className={mentionChipClassName("codeRef")}>
+      <Icon className="h-3 w-3 shrink-0 self-center" />
+      <span>{`${codeMentionDisplayName(reference)}：${lineLabel}`}</span>
+    </span>
+  );
+}
+
 function userMessageSegmentKey(part: UserMessageSegment, index: number) {
   if (part.type === "text") return `text:${index}:${part.value}`;
   if (part.type === "mention") {
@@ -698,6 +719,9 @@ function userMessageSegmentKey(part: UserMessageSegment, index: number) {
   if (part.type === "commit") return `commit:${index}:${part.commit.sha}:${part.commit.subject}`;
   if (part.type === "gitFile") {
     return `git-file:${index}:${part.file.commitSha}:${part.file.path}`;
+  }
+  if (part.type === "codeRef") {
+    return `code-ref:${index}:${part.reference.path}:${part.reference.startLine}:${part.reference.endLine}`;
   }
   return `pasted-text:${index}:${part.file.relativePath}:${part.reference.raw}`;
 }
@@ -878,6 +902,7 @@ export const UserMessageContent = memo(function UserMessageContent({
       part.type === "skill" ||
       part.type === "commit" ||
       part.type === "gitFile" ||
+      part.type === "codeRef" ||
       part.type === "pastedText",
   );
   if (!hasChip) return <>{text}</>;
@@ -903,6 +928,9 @@ export const UserMessageContent = memo(function UserMessageContent({
         }
         if (part.type === "gitFile") {
           return <GitFileMentionChip key={key} file={part.file} />;
+        }
+        if (part.type === "codeRef") {
+          return <CodeRefMentionChip key={key} reference={part.reference} />;
         }
         if (part.type === "pastedText") {
           return <PastedTextChip key={key} reference={part.reference} file={part.file} />;

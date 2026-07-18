@@ -82,3 +82,88 @@ export function parseMarkdownFileMentionReference(
   const displayName = fileMentionDisplayName(reference);
   return normalizedLabel === displayName ? reference : null;
 }
+
+export type CodeMentionReference = {
+  path: string;
+  startLine: number;
+  endLine: number;
+};
+
+function normalizeCodeMentionLine(value: number, fallback: number) {
+  return Number.isFinite(value) ? Math.max(1, Math.floor(value)) : fallback;
+}
+
+export function createCodeMentionReference(raw: {
+  path: string;
+  startLine: number;
+  endLine: number;
+}): CodeMentionReference | null {
+  const path = normalizeMentionPath(raw.path).replace(/\/+$/, "");
+  if (!validateRelativeMentionPath(path)) return null;
+  const startLine = normalizeCodeMentionLine(raw.startLine, 1);
+  const endLine = Math.max(startLine, normalizeCodeMentionLine(raw.endLine, startLine));
+  return { path, startLine, endLine };
+}
+
+export function codeMentionLineLabel(
+  reference: Pick<CodeMentionReference, "startLine" | "endLine">,
+) {
+  return reference.startLine === reference.endLine
+    ? `${reference.startLine}`
+    : `${reference.startLine}～${reference.endLine}`;
+}
+
+export function codeMentionDisplayName(reference: Pick<CodeMentionReference, "path">) {
+  const fileName = reference.path.split("/").pop() || reference.path;
+  return fileName;
+}
+
+export function codeMentionTitle(reference: CodeMentionReference) {
+  return `${reference.path}:${codeMentionLineLabel(reference)}`;
+}
+
+function codeMentionLineToken(reference: Pick<CodeMentionReference, "startLine" | "endLine">) {
+  return reference.startLine === reference.endLine
+    ? `${reference.startLine}`
+    : `${reference.startLine}-${reference.endLine}`;
+}
+
+function codeMentionTokenLabel(reference: CodeMentionReference) {
+  return `${codeMentionDisplayName(reference)}:${codeMentionLineToken(reference)}`;
+}
+
+function codeMentionTokenDestination(reference: CodeMentionReference) {
+  const fragment =
+    reference.startLine === reference.endLine
+      ? `L${reference.startLine}`
+      : `L${reference.startLine}-L${reference.endLine}`;
+  return `${reference.path}#${fragment}`;
+}
+
+/** Serialize a code reference as a markdown link the model can follow:
+ *  [ChatPage.tsx:100-128](crates/…/ChatPage.tsx#L100-L128) — path and line
+ *  range only, never the referenced content itself. */
+export function formatCodeMentionToken(reference: CodeMentionReference) {
+  const normalized = createCodeMentionReference(reference);
+  if (!normalized) return reference.path;
+  return `[${escapeMarkdownReferenceLabel(codeMentionTokenLabel(normalized))}](${formatMarkdownReferenceDestination(codeMentionTokenDestination(normalized))})`;
+}
+
+export function parseMarkdownCodeMentionReference(
+  label: string,
+  rawDestination: string,
+): CodeMentionReference | null {
+  const destination = normalizeMarkdownReferenceDestination(rawDestination);
+  const hashIndex = destination.lastIndexOf("#L");
+  if (hashIndex <= 0) return null;
+  const fragmentMatch = /^L(\d{1,7})(?:-L(\d{1,7}))?$/.exec(destination.slice(hashIndex + 1));
+  if (!fragmentMatch) return null;
+  const reference = createCodeMentionReference({
+    path: destination.slice(0, hashIndex),
+    startLine: Number(fragmentMatch[1]),
+    endLine: Number(fragmentMatch[2] ?? fragmentMatch[1]),
+  });
+  if (!reference) return null;
+  const normalizedLabel = unescapeMarkdownReferenceLabel(label.trim());
+  return normalizedLabel === codeMentionTokenLabel(reference) ? reference : null;
+}

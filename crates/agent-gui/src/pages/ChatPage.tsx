@@ -76,7 +76,9 @@ import {
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
 import type { MemoryExtractionStatusKey } from "../lib/chat/memory/extractionEngine";
 import {
+  type CodeMentionReference,
   escapeMarkdownReferenceLabel,
+  formatCodeMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
 } from "../lib/chat/messages/mentionReferences";
@@ -446,6 +448,9 @@ function buildTextFromComposerDraft(
       }
       if (segment.type === "gitFileMention") {
         return formatComposerGitFileMention(segment.file);
+      }
+      if (segment.type === "codeMention") {
+        return formatCodeMentionToken(segment.reference);
       }
       const file = pastedFileById?.get(segment.paste.id);
       return file ? `[${segment.paste.label}: ${file.relativePath}]` : segment.paste.text;
@@ -1557,6 +1562,10 @@ export function ChatPage(props: ChatPageProps) {
     composerRef.current?.insertGitFileMention(file);
     composerRef.current?.focus();
   }, []);
+  const handleInsertCodeMention = useCallback((reference: CodeMentionReference) => {
+    composerRef.current?.insertCodeMention(reference);
+    composerRef.current?.focus();
+  }, []);
   // Guards re-entry while a suggestion is still typing in: the cards stay
   // disabled and further clicks are ignored until the composer settles.
   const [isSuggestionTyping, setIsSuggestionTyping] = useState(false);
@@ -2453,6 +2462,7 @@ export function ChatPage(props: ChatPageProps) {
       skillMentions: [],
       commitMentions: [],
       gitFileMentions: [],
+      codeMentions: [],
       isEmpty: text.trim().length === 0,
     };
   }
@@ -5670,6 +5680,7 @@ export function ChatPage(props: ChatPageProps) {
               finalCloseRequested={workspaceEditorCleanupPending}
               theme={effectiveTheme}
               onPreviewFile={(request) => openWorkspaceFilePreview(request)}
+              onInsertCodeMention={handleInsertCodeMention}
               onHide={() => setWorkspaceEditorOpen(false)}
               onClose={() => {
                 setWorkspaceEditorOpen(false);

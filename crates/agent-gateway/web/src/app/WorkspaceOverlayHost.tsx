@@ -4,6 +4,7 @@ import type { WorkspaceCodeEditorOpenRequest } from "@/components/workspace-edit
 import type { WorkspaceFilePreviewOpenRequest } from "@/components/workspace-editor/WorkspaceFilePreviewOverlay";
 import type { WorkspaceSshTerminalOpenRequest } from "@/components/workspace-editor/WorkspaceSshTerminalOverlay";
 import { t as translate } from "@/i18n";
+import type { CodeMentionReference } from "@/lib/chat/mentionReferences";
 import { lockMonacoNlsLocale, preparePreferredMonacoNlsLocale } from "@/lib/monacoNls";
 import type { AppSettings, EffectiveTheme } from "@/lib/settings";
 import type { SftpClient } from "@/lib/sftp/types";
@@ -41,6 +42,7 @@ type WorkspaceOverlayHostProps = {
   workspaceEditorOpen: boolean;
   workspaceEditorCleanupPending: boolean;
   onWorkspaceEditorPreviewFile: (request: WorkspaceCodeEditorOpenRequest) => void;
+  onWorkspaceEditorInsertCodeMention?: (reference: CodeMentionReference) => void;
   onWorkspaceEditorHide: () => void;
   onWorkspaceEditorClose: () => void;
   workspaceFilePreviewMounted: boolean;
@@ -69,6 +71,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
     workspaceEditorOpen,
     workspaceEditorCleanupPending,
     onWorkspaceEditorPreviewFile,
+    onWorkspaceEditorInsertCodeMention,
     onWorkspaceEditorHide,
     onWorkspaceEditorClose,
     workspaceFilePreviewMounted,
@@ -104,6 +107,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
             finalCloseRequested={workspaceEditorCleanupPending}
             theme={theme}
             onPreviewFile={onWorkspaceEditorPreviewFile}
+            onInsertCodeMention={onWorkspaceEditorInsertCodeMention}
             onHide={onWorkspaceEditorHide}
             onClose={onWorkspaceEditorClose}
           />

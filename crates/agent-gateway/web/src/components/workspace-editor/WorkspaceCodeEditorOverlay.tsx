@@ -14,6 +14,10 @@ import {
   useState,
 } from "react";
 import { useLocale } from "@/i18n";
+import {
+  type CodeMentionReference,
+  createCodeMentionReference,
+} from "@/lib/chat/mentionReferences";
 import { cn } from "@/lib/shared/utils";
 import { invokeFs, isFsBackendError } from "@/lib/tools/fsBackend";
 import type { IconComponent } from "../icons";
@@ -24,6 +28,7 @@ import {
   Eye,
   FilePenLine,
   Loader2,
+  MessageSquareText,
   Redo2,
   RefreshCw,
   Replace,
@@ -111,7 +116,7 @@ type EditorContextMenuState = {
 
 const EDITOR_OVERLAY_ANIMATION_MS = 180;
 const EDITOR_CONTEXT_MENU_WIDTH = 220;
-const EDITOR_CONTEXT_MENU_HEIGHT = 300;
+const EDITOR_CONTEXT_MENU_HEIGHT = 340;
 
 type WorkspaceCodeEditorOverlayProps = {
   openRequest: WorkspaceCodeEditorOpenRequest | null;
@@ -120,6 +125,7 @@ type WorkspaceCodeEditorOverlayProps = {
   finalCloseRequested?: boolean;
   theme: "light" | "dark";
   onPreviewFile: (request: WorkspaceCodeEditorOpenRequest) => void;
+  onInsertCodeMention?: (reference: CodeMentionReference) => void;
   onHide: () => void;
   onClose: () => void;
 };
@@ -282,6 +288,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     finalCloseRequested = false,
     theme,
     onPreviewFile,
+    onInsertCodeMention,
     onHide,
     onClose,
   } = props;
@@ -635,6 +642,29 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     editor.focus();
     editor.trigger("contextMenu", commandId, null);
   }, []);
+
+  // 选区扩展到整行后作为代码引用（仅路径+行号）交给输入框；空选区退化为光标所在行。
+  const insertSelectionAsCodeMention = useCallback(() => {
+    setContextMenu(null);
+    const editor = editorRef.current;
+    const tab = activeTab;
+    if (!editor || !tab || !onInsertCodeMention) return;
+    const selection = editor.getSelection();
+    if (!selection) return;
+    const startLine = selection.startLineNumber;
+    const endLine =
+      // A selection ending at column 1 stops visually at the previous line.
+      selection.endLineNumber > startLine && selection.endColumn === 1
+        ? selection.endLineNumber - 1
+        : selection.endLineNumber;
+    const reference = createCodeMentionReference({
+      path: tab.path,
+      startLine,
+      endLine,
+    });
+    if (!reference) return;
+    onInsertCodeMention(reference);
+  }, [activeTab, onInsertCodeMention]);
 
   const openEditorContextMenu = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -1014,6 +1044,16 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
             shortcut={contextMenuShortcuts.selectAll}
             onClick={() => runEditorCommand("editor.action.selectAll")}
           />
+          {onInsertCodeMention ? (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                icon={MessageSquareText}
+                label={t("workspaceEditor.context.insertCodeMention")}
+                onClick={insertSelectionAsCodeMention}
+              />
+            </>
+          ) : null}
           <ContextMenuSeparator />
           <ContextMenuItem
             icon={Search}

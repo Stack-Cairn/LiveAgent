@@ -18,12 +18,17 @@ import {
 import { createPortal } from "react-dom";
 import { useLocale } from "../../i18n";
 import {
+  type CodeMentionReference,
+  codeMentionDisplayName,
+  codeMentionLineLabel,
+  createCodeMentionReference,
   createFileMentionReference,
   escapeMarkdownReferenceLabel,
   type FileMentionKind,
   type FileMentionReference,
   fileMentionDisplayName,
   fileMentionTitle,
+  formatCodeMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
 } from "../../lib/chat/messages/mentionReferences";
@@ -127,6 +132,7 @@ export interface MentionComposerHandle {
   insertSkillMention: (skill: MentionComposerSkillMention) => void;
   insertCommitMention: (commit: MentionComposerCommitMention) => void;
   insertGitFileMention: (file: MentionComposerGitFileMention) => void;
+  insertCodeMention: (reference: CodeMentionReference) => void;
   clear: () => void;
   focus: () => void;
   /**
@@ -152,7 +158,8 @@ export type MentionComposerDraftSegment =
   | { type: "largePaste"; paste: MentionComposerLargePaste }
   | { type: "skillMention"; skill: MentionComposerSkillMention }
   | { type: "commitMention"; commit: MentionComposerCommitMention }
-  | { type: "gitFileMention"; file: MentionComposerGitFileMention };
+  | { type: "gitFileMention"; file: MentionComposerGitFileMention }
+  | { type: "codeMention"; reference: CodeMentionReference };
 
 export type MentionComposerDraft = {
   segments: MentionComposerDraftSegment[];
@@ -162,6 +169,7 @@ export type MentionComposerDraft = {
   skillMentions: MentionComposerSkillMention[];
   commitMentions: MentionComposerCommitMention[];
   gitFileMentions: MentionComposerGitFileMention[];
+  codeMentions: CodeMentionReference[];
   isEmpty: boolean;
 };
 
@@ -221,6 +229,9 @@ const GIT_FILE_MENTION_REF_NAME_ATTR = "data-git-file-ref-name";
 const GIT_FILE_MENTION_REMOTE_NAME_ATTR = "data-git-file-remote-name";
 const GIT_FILE_MENTION_REMOTE_URL_ATTR = "data-git-file-remote-url";
 const GIT_FILE_MENTION_GITHUB_URL_ATTR = "data-git-file-github-url";
+const CODE_MENTION_PATH_ATTR = "data-code-mention-path";
+const CODE_MENTION_START_ATTR = "data-code-mention-start";
+const CODE_MENTION_END_ATTR = "data-code-mention-end";
 const LARGE_PASTE_TAG_ATTR = "data-large-paste-id";
 const LARGE_PASTE_CHAR_THRESHOLD = 8_000;
 const LARGE_PASTE_LINE_THRESHOLD = 200;
@@ -321,6 +332,11 @@ function serializeChildrenToSegments(
         if (file) {
           parts.push({ type: "gitFileMention", file });
         }
+      } else if (el.hasAttribute(CODE_MENTION_PATH_ATTR)) {
+        const reference = codeMentionFromElement(el);
+        if (reference) {
+          parts.push({ type: "codeMention", reference });
+        }
       } else if (el.hasAttribute(COMMIT_MENTION_SHA_ATTR)) {
         const commit = commitMentionFromElement(el);
         if (commit) {
@@ -380,6 +396,7 @@ function serializeChildren(
       if (segment.type === "skillMention") return formatSkillMentionToken(segment.skill);
       if (segment.type === "commitMention") return formatCommitMentionToken(segment.commit);
       if (segment.type === "gitFileMention") return formatGitFileMentionToken(segment.file);
+      if (segment.type === "codeMention") return formatCodeMentionToken(segment.reference);
       return segment.text;
     })
     .join("");
@@ -797,6 +814,16 @@ function gitFileMentionFromElement(el: HTMLElement): MentionComposerGitFileMenti
   });
 }
 
+function codeMentionFromElement(el: HTMLElement): CodeMentionReference | null {
+  const path = el.getAttribute(CODE_MENTION_PATH_ATTR)?.trim() ?? "";
+  if (!path) return null;
+  return createCodeMentionReference({
+    path,
+    startLine: Number(el.getAttribute(CODE_MENTION_START_ATTR) ?? "1"),
+    endLine: Number(el.getAttribute(CODE_MENTION_END_ATTR) ?? "1"),
+  });
+}
+
 function createMentionIcon(svgMarkup: string) {
   const template = document.createElement("template");
   template.innerHTML = svgMarkup.trim();
@@ -832,6 +859,7 @@ function isComposerChipElement(node: Node | null): node is HTMLElement {
       node.hasAttribute(SKILL_MENTION_NAME_ATTR) ||
       node.hasAttribute(COMMIT_MENTION_SHA_ATTR) ||
       node.hasAttribute(GIT_FILE_MENTION_PATH_ATTR) ||
+      node.hasAttribute(CODE_MENTION_PATH_ATTR) ||
       node.hasAttribute(LARGE_PASTE_TAG_ATTR))
   );
 }
@@ -1203,6 +1231,25 @@ function createGitFileMentionChip(fileInput: MentionComposerGitFileMention) {
   ref.className = "max-w-[8rem] truncate text-[calc(10px*var(--zone-font-scale,1))] opacity-70";
   ref.textContent = `@${file.refName || file.shortSha}`;
   chip.appendChild(ref);
+  return chip;
+}
+
+function createCodeMentionChip(referenceInput: CodeMentionReference) {
+  const reference = createCodeMentionReference(referenceInput);
+  if (!reference) return null;
+  const chip = document.createElement("span");
+  chip.setAttribute(CODE_MENTION_PATH_ATTR, reference.path);
+  chip.setAttribute(CODE_MENTION_START_ATTR, String(reference.startLine));
+  chip.setAttribute(CODE_MENTION_END_ATTR, String(reference.endLine));
+  chip.contentEditable = "false";
+  chip.className = mentionChipClassName("codeRef", { selectable: false });
+  const lineLabel = codeMentionLineLabel(reference);
+  chip.title = `${reference.path}:${lineLabel}`;
+  chip.setAttribute("aria-label", `${reference.path}:${lineLabel}`);
+
+  chip.appendChild(createFileTypeMentionIcon(reference.path, "file"));
+
+  chip.appendChild(document.createTextNode(`${codeMentionDisplayName(reference)}：${lineLabel}`));
   return chip;
 }
 
@@ -2086,6 +2133,7 @@ export const MentionComposer = memo(
           skillMentions: [],
           commitMentions: [],
           gitFileMentions: [],
+          codeMentions: [],
           isEmpty: true,
         };
       }
@@ -2095,6 +2143,7 @@ export const MentionComposer = memo(
       const skillMentions: MentionComposerSkillMention[] = [];
       const commitMentions: MentionComposerCommitMention[] = [];
       const gitFileMentions: MentionComposerGitFileMention[] = [];
+      const codeMentions: CodeMentionReference[] = [];
       const textParts: string[] = [];
       const textWithoutLargePastesParts: string[] = [];
       for (const segment of segments) {
@@ -2123,6 +2172,11 @@ export const MentionComposer = memo(
           const token = formatGitFileMentionToken(segment.file);
           textParts.push(token);
           textWithoutLargePastesParts.push(token);
+        } else if (segment.type === "codeMention") {
+          codeMentions.push(segment.reference);
+          const token = formatCodeMentionToken(segment.reference);
+          textParts.push(token);
+          textWithoutLargePastesParts.push(token);
         }
       }
 
@@ -2136,6 +2190,7 @@ export const MentionComposer = memo(
         skillMentions,
         commitMentions,
         gitFileMentions,
+        codeMentions,
         isEmpty: editorTextIsEmpty(el),
       };
     }, []);
@@ -2264,6 +2319,9 @@ export const MentionComposer = memo(
               el.appendChild(createCommitMentionChip(segment.commit));
             } else if (segment.type === "gitFileMention") {
               el.appendChild(createGitFileMentionChip(segment.file));
+            } else if (segment.type === "codeMention") {
+              const chip = createCodeMentionChip(segment.reference);
+              if (chip) el.appendChild(chip);
             } else if (segment.text) {
               el.appendChild(document.createTextNode(segment.text));
             }
@@ -2318,6 +2376,18 @@ export const MentionComposer = memo(
           resetPromptHistoryRecall();
           el.focus();
           insertNodeAtCursor(el, createGitFileMentionChip(file), { ensureSpaceAfterNode: true });
+          closeMentionSession();
+          refreshEmptyState();
+        },
+        insertCodeMention: (reference: CodeMentionReference) => {
+          const el = editorRef.current;
+          if (!el) return;
+          finishTypewriter();
+          resetPromptHistoryRecall();
+          el.focus();
+          const chip = createCodeMentionChip(reference);
+          if (!chip) return;
+          insertNodeAtCursor(el, chip, { ensureSpaceAfterNode: true });
           closeMentionSession();
           refreshEmptyState();
         },

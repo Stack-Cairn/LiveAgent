@@ -27,6 +27,7 @@ import { LocaleContext, t as translate } from "@/i18n";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
 import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
+import type { CodeMentionReference } from "@/lib/chat/mentionReferences";
 import { createActivityStore } from "@/lib/chat/stream/activityStore";
 import {
   type ChatCommandOutcome,
@@ -3697,6 +3698,10 @@ export default function GatewayApp() {
     composerRef.current?.insertGitFileMention(file);
     composerRef.current?.focus();
   }, []);
+  const handleInsertCodeMention = useCallback((reference: CodeMentionReference) => {
+    composerRef.current?.insertCodeMention(reference);
+    composerRef.current?.focus();
+  }, []);
   // Guards re-entry while a suggestion is still typing in: the cards stay
   // disabled and further clicks are ignored until the composer settles.
   const [isSuggestionTyping, setIsSuggestionTyping] = useState(false);
@@ -4369,6 +4374,7 @@ export default function GatewayApp() {
               workspaceEditorOpen={workspaceEditorOpen}
               workspaceEditorCleanupPending={workspaceEditorCleanupPending}
               onWorkspaceEditorPreviewFile={openWorkspaceFilePreview}
+              onWorkspaceEditorInsertCodeMention={handleInsertCodeMention}
               onWorkspaceEditorHide={handleWorkspaceEditorHide}
               onWorkspaceEditorClose={handleWorkspaceEditorClosed}
               workspaceFilePreviewMounted={workspaceFilePreviewMounted}

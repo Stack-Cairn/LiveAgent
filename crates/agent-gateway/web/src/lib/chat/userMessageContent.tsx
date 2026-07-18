@@ -16,6 +16,13 @@ import { SkillIcon } from "../../components/icons";
 import { useLocale } from "../../i18n";
 
 import {
+  type CodeMentionReference,
+  codeMentionDisplayName,
+  codeMentionLineLabel,
+  codeMentionTitle,
+  parseMarkdownCodeMentionReference,
+} from "./mentionReferences";
+import {
   type PastedTextDisplayReference,
   type PendingUploadedFile,
   parsePastedTextDisplayReferences,
@@ -63,6 +70,7 @@ type UserMessageSegment =
   | { type: "skill"; name: string }
   | { type: "commit"; commit: CommitDisplayReference }
   | { type: "gitFile"; file: GitFileDisplayReference }
+  | { type: "codeRef"; reference: CodeMentionReference }
   | {
       type: "pastedText";
       reference: PastedTextDisplayReference;
@@ -440,8 +448,11 @@ function tokenizeMentions(text: string): UserMessageSegment[] {
     const matchIndex = match.index ?? 0;
     const gitFile = markdownGitFileReference(label, destination);
     const commit = gitFile ? null : markdownCommitReference(label, destination);
-    const reference = gitFile || commit ? null : markdownFileReference(label, destination);
-    if (!gitFile && !commit && !reference) continue;
+    const codeRef =
+      gitFile || commit ? null : parseMarkdownCodeMentionReference(label, destination);
+    const reference =
+      gitFile || commit || codeRef ? null : markdownFileReference(label, destination);
+    if (!gitFile && !commit && !codeRef && !reference) continue;
 
     if (matchIndex > cursor) {
       appendSegments(segments, tokenizeInlineMentions(text.slice(cursor, matchIndex)));
@@ -450,6 +461,8 @@ function tokenizeMentions(text: string): UserMessageSegment[] {
       segments.push({ type: "gitFile", file: gitFile });
     } else if (commit) {
       segments.push({ type: "commit", commit });
+    } else if (codeRef) {
+      segments.push({ type: "codeRef", reference: codeRef });
     } else if (reference) {
       segments.push({ type: "mention", ...reference });
     }
@@ -743,6 +756,20 @@ function MentionChip({ path, isDir }: { path: string; isDir: boolean }) {
   );
 }
 
+function CodeRefMentionChip({ reference }: { reference: CodeMentionReference }) {
+  const Icon = getFileTypeIcon(reference.path, "file");
+  const lineLabel = codeMentionLineLabel(reference);
+  return (
+    <span
+      title={codeMentionTitle(reference)}
+      className="mention-chip mx-0.5 inline-flex items-baseline gap-1 rounded bg-indigo-500/15 px-1.5 text-indigo-700 align-baseline whitespace-nowrap dark:text-indigo-300"
+    >
+      <Icon className="h-3 w-3 shrink-0 self-center" />
+      <span>{`${codeMentionDisplayName(reference)}：${lineLabel}`}</span>
+    </span>
+  );
+}
+
 function GitFileMentionChip({ file }: { file: GitFileDisplayReference }) {
   const normalized = normalizeGitFileDisplayReference(file);
   const fileName = normalized.path.split("/").pop() || normalized.path;
@@ -925,6 +952,7 @@ export const UserMessageContent = memo(function UserMessageContent({
       part.type === "skill" ||
       part.type === "commit" ||
       part.type === "gitFile" ||
+      part.type === "codeRef" ||
       part.type === "pastedText",
   );
   if (!hasChip) return <>{text}</>;
@@ -949,6 +977,9 @@ export const UserMessageContent = memo(function UserMessageContent({
         }
         if (part.type === "gitFile") {
           return <GitFileMentionChip key={idx} file={part.file} />;
+        }
+        if (part.type === "codeRef") {
+          return <CodeRefMentionChip key={idx} reference={part.reference} />;
         }
         if (part.type === "pastedText") {
           return <PastedTextChip key={idx} reference={part.reference} file={part.file} />;

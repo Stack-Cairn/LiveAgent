@@ -4,7 +4,7 @@ import type {
   MentionComposerGitFileMention,
   MentionComposerLargePaste,
 } from "@/components/chat/MentionComposer";
-import { formatFileMentionToken } from "@/lib/chat/mentionReferences";
+import { formatCodeMentionToken, formatFileMentionToken } from "@/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import { withPastedTextDisplayMetadata } from "@/lib/chat/uploadedFiles";
 import { importReadableFiles } from "@/lib/uploadReadableFiles";
@@ -69,6 +69,9 @@ export function buildTextFromComposerDraft(
       }
       if (segment.type === "gitFileMention") {
         return formatComposerGitFileMention(segment.file);
+      }
+      if (segment.type === "codeMention") {
+        return formatCodeMentionToken(segment.reference);
       }
       const file = pastedFileById?.get(segment.paste.id);
       return file ? `[${segment.paste.label}: ${file.relativePath}]` : segment.paste.text;
