@@ -131,10 +131,7 @@ function classifyInstalledSkill(skill: SkillSummary): ClawHubCategorySlug[] {
   });
 }
 
-const STORE_CATEGORY_OPTIONS: readonly StoreCategoryValue[] = [
-  "all",
-  ...CLAWHUB_CATEGORY_SLUGS,
-];
+const STORE_CATEGORY_OPTIONS: readonly StoreCategoryValue[] = ["all", ...CLAWHUB_CATEGORY_SLUGS];
 
 /** 选中分类后若本地过滤结果少于该值且还有下一页，自动继续拉取补齐。 */
 const STORE_CATEGORY_FILL_TARGET = 12;
@@ -1095,11 +1092,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
 
   // 在批量模式下点击某张已安装卡片。Shift+点击时以上一次锚点为起点，把可见列表
   // 中该区间内的技能统一设为「与被点技能翻转后一致」的状态。
-  function handleBulkInstalledCardClick(
-    name: string,
-    orderedNames: string[],
-    shiftKey: boolean,
-  ) {
+  function handleBulkInstalledCardClick(name: string, orderedNames: string[], shiftKey: boolean) {
     if (isAlwaysEnabledSkillName(name)) return;
     const currentlyOn = selected.has(name);
     const target = !currentlyOn;
@@ -1366,31 +1359,31 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                     </button>
                   ) : null}
                   <div className="relative w-full min-w-0 max-w-md">
-                  <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <input
-                    type="text"
-                    value={
-                      view === "installed" ? filter : view === "store" ? storeQuery : importQuery
-                    }
-                    onChange={(e) => {
-                      const value = e.currentTarget.value;
-                      if (view === "installed") {
-                        setFilter(value);
-                      } else if (view === "store") {
-                        setStoreQuery(value);
-                      } else {
-                        setImportQuery(value);
+                    <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={
+                        view === "installed" ? filter : view === "store" ? storeQuery : importQuery
                       }
-                    }}
-                    placeholder={
-                      view === "installed"
-                        ? t("settings.skillsSearch")
-                        : view === "store"
-                          ? t("settings.skillsStoreSearch")
-                          : t("settings.skillsImportSearchPlaceholder")
-                    }
-                    className="h-10 w-full rounded-xl border border-border/40 bg-background/60 pl-10 pr-3 text-[13px] outline-hidden backdrop-blur-xl transition-all placeholder:text-muted-foreground/60 focus:border-border/60 focus:bg-background/85 focus:ring-2 focus:ring-foreground/10"
-                  />
+                      onChange={(e) => {
+                        const value = e.currentTarget.value;
+                        if (view === "installed") {
+                          setFilter(value);
+                        } else if (view === "store") {
+                          setStoreQuery(value);
+                        } else {
+                          setImportQuery(value);
+                        }
+                      }}
+                      placeholder={
+                        view === "installed"
+                          ? t("settings.skillsSearch")
+                          : view === "store"
+                            ? t("settings.skillsStoreSearch")
+                            : t("settings.skillsImportSearchPlaceholder")
+                      }
+                      className="h-10 w-full rounded-xl border border-border/40 bg-background/60 pl-10 pr-3 text-[13px] outline-hidden backdrop-blur-xl transition-all placeholder:text-muted-foreground/60 focus:border-border/60 focus:bg-background/85 focus:ring-2 focus:ring-foreground/10"
+                    />
                   </div>
                 </div>
               ) : null}
@@ -2946,11 +2939,7 @@ function SkillsStoreView(props: {
             </div>
           ) : null}
 
-          {items.length > 0 &&
-          filteredItems.length === 0 &&
-          !loading &&
-          !loadingMore &&
-          !cursor ? (
+          {items.length > 0 && filteredItems.length === 0 && !loading && !loadingMore && !cursor ? (
             <GlassPanel tone="muted" className="hub-panel-enter">
               <p className="py-2 text-center text-sm text-muted-foreground">
                 {t("settings.skillsStoreEmptyTitle")}
