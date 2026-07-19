@@ -59,9 +59,7 @@ export function sampleFloorEntries(
   for (let i = 0; i < maxMarkers; i++) {
     picked.add(Math.round((i * lastIndex) / (maxMarkers - 1 || 1)));
   }
-  return floors.filter(
-    (floor, index) => picked.has(index) || mustKeepRowKeys.has(floor.rowKey),
-  );
+  return floors.filter((floor, index) => picked.has(index) || mustKeepRowKeys.has(floor.rowKey));
 }
 
 /**

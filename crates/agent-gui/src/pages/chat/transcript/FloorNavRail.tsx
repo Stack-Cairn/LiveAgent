@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { Pin } from "../../../components/icons";
 import { useLocale } from "../../../i18n";
@@ -52,9 +59,7 @@ export function FloorNavRail(props: {
     if (!nav || typeof ResizeObserver === "undefined") return;
     const update = () => {
       const budget = Math.floor((nav.clientHeight - 24) / MARKER_SLOT_PX);
-      setMarkerBudget(
-        Math.max(MIN_COLLAPSED_MARKERS, Math.min(MAX_COLLAPSED_MARKERS, budget)),
-      );
+      setMarkerBudget(Math.max(MIN_COLLAPSED_MARKERS, Math.min(MAX_COLLAPSED_MARKERS, budget)));
     };
     update();
     const observer = new ResizeObserver(update);
