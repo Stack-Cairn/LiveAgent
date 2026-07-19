@@ -105,3 +105,65 @@ H = 18400`;
   assert.equal(normalizeLatexDelimiters(content, true), String.raw`推导中：$$
 H = 18400`);
 });
+
+test("converts single-dollar inline math to double-dollar", () => {
+  const content = String.raw`质能方程 $E = mc^2$，求根公式 $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$。`;
+  assert.equal(
+    normalizeLatexDelimiters(content),
+    String.raw`质能方程 $$E = mc^2$$，求根公式 $$x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$$。`,
+  );
+});
+
+test("keeps currency, shell variables, and escaped dollars literal", () => {
+  const currency = "价格 $5，成本 $10。总共 $15 元。";
+  assert.equal(normalizeLatexDelimiters(currency), currency);
+
+  const shell = "检查 $PATH 和 $HOME 是否已导出。";
+  assert.equal(normalizeLatexDelimiters(shell), shell);
+
+  const escaped = String.raw`费用 \$5 和 \$10。`;
+  assert.equal(normalizeLatexDelimiters(escaped), escaped);
+
+  const digitAfterClose = "单价 $3$5 促销。";
+  assert.equal(normalizeLatexDelimiters(digitAfterClose), digitAfterClose);
+});
+
+test("single-dollar math must close on the same line", () => {
+  const content = "起价 $99\n次日 $x$ 恢复原价。";
+  assert.equal(normalizeLatexDelimiters(content), "起价 $99\n次日 $$x$$ 恢复原价。");
+});
+
+test("mixed currency and math on one line converts only the math pair", () => {
+  const content = "价格 $5，令 $x$ 表示价格。";
+  assert.equal(normalizeLatexDelimiters(content), "价格 $5，令 $$x$$ 表示价格。");
+});
+
+test("existing double-dollar spans stay opaque next to single-dollar math", () => {
+  assert.equal(normalizeLatexDelimiters("已有 $$x^2$$ 与 $y$。"), "已有 $$x^2$$ 与 $$y$$。");
+});
+
+test("streaming leaves unterminated dollar math untouched", () => {
+  const inline = "计算 $E = mc^";
+  assert.equal(normalizeLatexDelimiters(inline, true), inline);
+
+  const display = "$$\nE = mc^2";
+  assert.equal(normalizeLatexDelimiters(display, true), display);
+});
+
+test("does not convert dollars inside code spans or fences", () => {
+  const content = [
+    "行内 `sum $a$ b` 保留，公式 $c$ 转换。",
+    "",
+    "```sh",
+    "echo $HOME $USER",
+    "```",
+  ].join("\n");
+  const expected = [
+    "行内 `sum $a$ b` 保留，公式 $$c$$ 转换。",
+    "",
+    "```sh",
+    "echo $HOME $USER",
+    "```",
+  ].join("\n");
+  assert.equal(normalizeLatexDelimiters(content), expected);
+});

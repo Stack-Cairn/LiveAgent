@@ -30,3 +30,13 @@ test("webui preserves code and supports an incomplete streaming formula", () => 
   assert.equal(normalizeLatexDelimiters(fenced, true), fenced);
   assert.equal(normalizeLatexDelimiters(String.raw`\(x`, true), "$$x");
 });
+
+test("webui converts single-dollar math and keeps currency literal", () => {
+  assert.equal(normalizeLatexDelimiters("质能方程 $E = mc^2$。"), "质能方程 $$E = mc^2$$。");
+
+  const currency = "价格 $5，成本 $10。";
+  assert.equal(normalizeLatexDelimiters(currency), currency);
+
+  const streamingInline = "计算 $E = mc^";
+  assert.equal(normalizeLatexDelimiters(streamingInline, true), streamingInline);
+});
