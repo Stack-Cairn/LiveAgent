@@ -1119,6 +1119,23 @@
     animation: settingsSectionTitleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* Provider dialog: panel switches (sections are keyed by panel id, so the
+   * class replays on every switch). */
+  .provider-panel-enter {
+    animation: providerPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes providerPanelIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   .settings-section-shell {
     position: relative;
     isolation: isolate;
@@ -1350,6 +1367,7 @@
     .settings-section-enter,
     .settings-section-title-enter,
     .settings-tools-view-enter,
+    .provider-panel-enter,
     .chat-history-scope-enter,
     .chat-hero-logo-enter,
     .chat-hero-logo-float,

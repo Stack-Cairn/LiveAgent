@@ -565,6 +565,7 @@ function buildProviderRuntimeConfig(
   return {
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey,
+    customHeaders: provider.customHeaders,
     requestFormat: provider.requestFormat,
     reasoning: reasoningSupported
       ? controls.thinkingEnabled

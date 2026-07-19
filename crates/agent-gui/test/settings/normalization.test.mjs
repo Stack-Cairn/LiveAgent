@@ -18,6 +18,53 @@ test("basic provider field normalizers trim values and remove duplicate models",
   );
 });
 
+test("custom provider normalization defaults and filters ordered custom headers", () => {
+  assert.deepEqual(settings.normalizeCustomProvider({}).customHeaders, []);
+
+  const provider = settings.normalizeCustomProvider({
+    customHeaders: [
+      { key: " X-Request-ID ", value: " request-123 " },
+      { key: "", value: "ignored" },
+      { key: "   ", value: "ignored" },
+      { key: "anthropic-beta", value: "feature-flag" },
+      null,
+    ],
+  });
+
+  assert.deepEqual(provider.customHeaders, [
+    { key: "X-Request-ID", value: " request-123 " },
+    { key: "anthropic-beta", value: "feature-flag" },
+  ]);
+});
+
+test("provider model capabilities preserve legacy data and filter unknown values", () => {
+  const legacy = settings.normalizeCustomProvider({
+    type: "codex",
+    models: [{ id: "legacy-model", contextWindow: 64_000, maxOutputToken: 4_096 }],
+  });
+  assert.equal(legacy.models[0].capabilities, undefined);
+
+  const normalized = settings.normalizeCustomProvider({
+    type: "codex",
+    models: [
+      {
+        id: "capable-model",
+        contextWindow: 128_000,
+        maxOutputToken: 8_192,
+        capabilities: ["reasoning", "unknown", "vision", "reasoning", 42, "tools"],
+      },
+      {
+        id: "unknown-only",
+        contextWindow: 32_000,
+        maxOutputToken: 2_048,
+        capabilities: ["audio", null],
+      },
+    ],
+  });
+
+  assert.deepEqual(normalized.models[0].capabilities, ["reasoning", "vision", "tools"]);
+  assert.deepEqual(normalized.models[1].capabilities, []);
+});
 test("codex provider normalization strips route suffixes and keeps only configured active models", () => {
   const provider = settings.normalizeCustomProvider({
     id: "codex-1",

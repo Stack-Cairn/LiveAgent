@@ -1,4 +1,9 @@
-import type { CodexRequestFormat, ProviderModelConfig, ReasoningLevel } from "../../settings";
+import type {
+  CodexRequestFormat,
+  CustomProvider,
+  ProviderModelConfig,
+  ReasoningLevel,
+} from "../../settings";
 
 export type CompactionTrigger = "pre-send" | "mid-stream" | "post-tool";
 
@@ -8,6 +13,7 @@ export type CompactionIntent = "optimization" | "protection";
 export type ProviderRuntimeConfig = {
   baseUrl: string;
   apiKey: string;
+  customHeaders?: CustomProvider["customHeaders"];
   requestFormat?: CodexRequestFormat;
   reasoning?: ReasoningLevel;
   promptCachingEnabled?: boolean;

@@ -24,6 +24,7 @@ import { finalizeProviderStreamOptions } from "./payloadPipeline";
 import {
   buildProviderAuthHeaders,
   buildProviderRequestMetadata,
+  mergeCustomHeaders,
   resolveProviderCacheRetention,
   toSimpleStreamReasoning,
 } from "./requestOptions";
@@ -137,7 +138,10 @@ export async function streamAssistantMessage(params: {
   const proxyRequest = await prepareProxyRequest(
     params.providerId,
     params.runtime.baseUrl.trim(),
-    buildProviderAuthHeaders(params.providerId, params.runtime.apiKey),
+    mergeCustomHeaders(
+      buildProviderAuthHeaders(params.providerId, params.runtime.apiKey),
+      params.runtime.customHeaders,
+    ),
     { useSystemProxy: params.runtime.useSystemProxy === true },
   );
 
@@ -327,7 +331,10 @@ export async function completeAssistantMessage(params: {
   const proxyRequest = await prepareProxyRequest(
     params.providerId,
     params.runtime.baseUrl.trim(),
-    buildProviderAuthHeaders(params.providerId, params.runtime.apiKey),
+    mergeCustomHeaders(
+      buildProviderAuthHeaders(params.providerId, params.runtime.apiKey),
+      params.runtime.customHeaders,
+    ),
     { useSystemProxy: params.runtime.useSystemProxy === true },
   );
 

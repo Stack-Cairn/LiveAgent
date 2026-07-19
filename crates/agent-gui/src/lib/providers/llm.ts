@@ -29,6 +29,8 @@ export {
   buildGeminiAuthHeaders,
   buildProviderAuthHeaders,
   buildProviderRequestMetadata,
+  isValidCustomHeaderKey,
+  mergeCustomHeaders,
   resolveProviderCacheRetention,
   toSimpleStreamReasoning,
 } from "./runtime/requestOptions";

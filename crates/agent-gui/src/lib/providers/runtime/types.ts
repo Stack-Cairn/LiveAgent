@@ -1,6 +1,7 @@
 import type { SimpleStreamOptions } from "@earendil-works/pi-ai";
 import type {
   CodexRequestFormat,
+  CustomProvider,
   ProviderId,
   ProviderModelConfig,
   ReasoningLevel,
@@ -19,6 +20,7 @@ export type ModelOption = {
 export type ProviderRuntimeConfig = {
   baseUrl: string;
   apiKey: string;
+  customHeaders?: CustomProvider["customHeaders"];
   requestFormat?: CodexRequestFormat;
   reasoning?: ReasoningLevel;
   promptCachingEnabled?: boolean;

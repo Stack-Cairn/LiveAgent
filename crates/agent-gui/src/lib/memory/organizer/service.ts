@@ -245,6 +245,7 @@ async function runOrganizerModelPrompt(params: {
     runtime: {
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
+      customHeaders: provider.customHeaders,
       requestFormat: provider.requestFormat,
       reasoning: DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning,
       promptCachingEnabled: true,

@@ -188,10 +188,13 @@ export type SelectedModel = {
   model: string;
 };
 
+export type ModelCapability = "reasoning" | "vision" | "tools";
+
 export type ProviderModelConfig = {
   id: string;
   contextWindow: number;
   maxOutputToken: number;
+  capabilities?: ModelCapability[];
 };
 
 export type ChatRuntimeControls = {
@@ -257,6 +260,7 @@ export type CustomProvider = {
   baseUrl: string;
   apiKey: string;
   apiKeyConfigured?: boolean;
+  customHeaders?: { key: string; value: string }[];
   models: ProviderModelConfig[];
   activeModels: string[];
   requestFormat?: CodexRequestFormat;
@@ -388,6 +392,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       type: "claude_code",
       baseUrl: "https://api.anthropic.com/v1",
       apiKey: "",
+      customHeaders: [],
       models: [],
       activeModels: [],
       reasoning: "off",
@@ -401,6 +406,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       type: "codex",
       baseUrl: "https://api.openai.com/v1",
       apiKey: "",
+      customHeaders: [],
       models: [],
       activeModels: [],
       requestFormat: "openai-responses",
@@ -415,6 +421,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       type: "gemini",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta",
       apiKey: "",
+      customHeaders: [],
       models: [],
       activeModels: [],
       reasoning: "off",
@@ -1085,6 +1092,21 @@ export function createProviderModelConfig(
   };
 }
 
+function normalizeModelCapabilities(input: unknown): ModelCapability[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+
+  const out: ModelCapability[] = [];
+  const seen = new Set<ModelCapability>();
+  for (const value of input) {
+    if (value !== "reasoning" && value !== "vision" && value !== "tools") continue;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    out.push(value);
+  }
+  return out;
+}
+
+// Capabilities are persisted for display only; runtime behavior will be connected in a later iteration.
 export function normalizeProviderModelConfig(
   input: unknown,
   providerId: ProviderId,
@@ -1104,6 +1126,7 @@ export function normalizeProviderModelConfig(
   if (!id) return null;
 
   const defaults = getProviderModelDefaults(providerId, id);
+  const capabilities = normalizeModelCapabilities(obj.capabilities);
   return {
     id,
     contextWindow: normalizePositiveInteger(obj.contextWindow, defaults.contextWindow),
@@ -1111,6 +1134,7 @@ export function normalizeProviderModelConfig(
       obj.maxOutputToken ?? obj.maxTokens,
       defaults.maxOutputToken,
     ),
+    ...(capabilities !== undefined ? { capabilities } : {}),
   };
 }
 
@@ -1175,6 +1199,17 @@ function normalizeProviderName(id: string, input: unknown): string {
   return name;
 }
 
+function normalizeCustomHeaders(input: unknown): { key: string; value: string }[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const header = item as Record<string, unknown>;
+    const key = typeof header.key === "string" ? header.key.trim() : "";
+    if (!key) return [];
+    return [{ key, value: typeof header.value === "string" ? header.value : "" }];
+  });
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const type = normalizeProviderId(obj.type);
@@ -1194,6 +1229,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : ""),
     apiKey,
     apiKeyConfigured: apiKey.length > 0 || obj.apiKeyConfigured === true,
+    customHeaders: normalizeCustomHeaders(obj.customHeaders),
     models,
     activeModels: normalizeModels(normalizeStringArray(obj.activeModels)).filter((modelId) =>
       validModelIds.has(modelId),

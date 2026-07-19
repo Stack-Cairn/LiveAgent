@@ -9,6 +9,7 @@ import type {
 } from "@earendil-works/pi-ai";
 import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
 import { buildMemoryToolsSuffixSection } from "../../memory/prompts/injection";
+import { mergeCustomHeaders } from "../../providers/customHeaders";
 import {
   createHostedSearchEventAggregator,
   createHostedSearchProbeId,
@@ -41,6 +42,7 @@ import {
 } from "../../runtimePlatform";
 import type {
   CodexRequestFormat,
+  CustomProvider,
   ProviderId,
   ProviderModelConfig,
   ReasoningLevel,
@@ -645,6 +647,7 @@ export async function runAssistantWithTools(params: {
   runtime: {
     baseUrl: string;
     apiKey: string;
+    customHeaders?: CustomProvider["customHeaders"];
     requestFormat?: CodexRequestFormat;
     reasoning?: ReasoningLevel;
     promptCachingEnabled?: boolean;
@@ -704,7 +707,10 @@ export async function runAssistantWithTools(params: {
     const proxyRequest = await prepareProxyRequest(
       params.providerId,
       params.runtime.baseUrl.trim(),
-      buildProviderAuthHeaders(params.providerId, params.runtime.apiKey),
+      mergeCustomHeaders(
+        buildProviderAuthHeaders(params.providerId, params.runtime.apiKey),
+        params.runtime.customHeaders,
+      ),
       { useSystemProxy: params.runtime.useSystemProxy === true },
     );
 

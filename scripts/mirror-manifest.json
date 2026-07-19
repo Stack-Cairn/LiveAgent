@@ -32,6 +32,7 @@
     "components/chat/promptHistory.ts",
     "components/Markdown.tsx",
     "lib/normalizeLatexDelimiters.ts",
+    "lib/providers/customHeaders.ts",
     "components/workspace-editor/workspaceMarkdownAssets.ts",
     "components/workspace-editor/WorkspaceMarkdownPreview.tsx",
     "lib/chat-scroll/scrollFollowCore.ts",

@@ -11,7 +11,9 @@ import {
   Eye,
   EyeOff,
   GeminiIcon,
+  Globe,
   Key,
+  List,
   Loader2,
   OpenaiChatgptIcon,
   Pencil,
@@ -19,7 +21,6 @@ import {
   RefreshCw,
   Search,
   Settings,
-  Settings2,
   Trash2,
   Waypoints,
   X,
@@ -45,11 +46,16 @@ import {
 } from "../../components/ui/select";
 import { useLocale } from "../../i18n";
 import { buildModelOptions } from "../../lib/chat/page/chatPageHelpers";
+import {
+  isReservedCustomHeaderKey,
+  isValidCustomHeaderKey,
+} from "../../lib/providers/customHeaders";
 import { parseModelValue, toModelValue } from "../../lib/providers/llm";
 import {
   CODEX_REQUEST_FORMAT_LABELS,
   type CodexRequestFormat,
   type CustomProvider,
+  type ModelCapability,
   type ProviderId,
   type ProviderModelConfig,
   updateCustomProviders,
@@ -81,12 +87,14 @@ type ModalProps = {
   onClose: () => void;
 };
 
-type ModelSettingsModalProps = {
-  model: ProviderModelConfig;
-  onClose: () => void;
-  onSave: (model: ProviderModelConfig) => void;
-};
+type ProviderDialogPanel = "general" | "network" | "headers";
 
+type ModelEditDraft = {
+  model: ProviderModelConfig;
+  contextWindow: string;
+  maxOutputToken: string;
+  capabilities: ModelCapability[];
+};
 type CcsProviderImportItem = {
   sourceId: string;
   appType: string;
@@ -105,6 +113,15 @@ type CcsProvidersResponse = {
 };
 
 const PROVIDER_TABS: ProviderId[] = ["claude_code", "codex", "gemini"];
+const CUSTOM_HEADER_KEY_PRESETS = [
+  "anthropic-beta",
+  "X-Request-ID",
+  "X-User-ID",
+  "X-Environment",
+  "HTTP-Referer",
+  "X-Title",
+] as const;
+const MODEL_CAPABILITIES: ModelCapability[] = ["reasoning", "vision", "tools"];
 const TITLE_MODEL_FOLLOW_CURRENT_VALUE = "__conversation_title_follow_current__";
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Anthropic",
@@ -145,10 +162,6 @@ function readCherryDataPath() {
   }
 }
 
-function normalizeModelDomId(modelId: string) {
-  return modelId.replace(/[^a-zA-Z0-9_-]+/g, "-");
-}
-
 function parsePositiveInteger(input: string): number | null {
   const value = Number(input.trim());
   if (!Number.isFinite(value)) return null;
@@ -156,86 +169,49 @@ function parsePositiveInteger(input: string): number | null {
   return normalized > 0 ? normalized : null;
 }
 
-function ModelSettingsModal({ model, onClose, onSave }: ModelSettingsModalProps) {
-  const { t } = useLocale();
-  const [contextWindow, setContextWindow] = useState(String(model.contextWindow));
-  const [maxOutputToken, setMaxOutputToken] = useState(String(model.maxOutputToken));
+type CustomHeaderKeyIssue = "reserved" | "invalid";
 
-  const parsedContextWindow = parsePositiveInteger(contextWindow);
-  const parsedMaxOutputToken = parsePositiveInteger(maxOutputToken);
-  const canSave = parsedContextWindow !== null && parsedMaxOutputToken !== null;
-
-  function handleSave() {
-    if (!canSave) return;
-    onSave({
-      ...model,
-      contextWindow: parsedContextWindow,
-      maxOutputToken: parsedMaxOutputToken,
-    });
-  }
-
-  return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative z-10 w-full max-w-md rounded-2xl border bg-background shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b px-6 py-4">
-          <div>
-            <div className="text-sm font-semibold">{t("settings.modelSettings")}</div>
-            <div className="mt-1 text-xs text-muted-foreground">{model.id}</div>
-          </div>
-          <Button variant="ghost" size="sm" className="h-8 px-2" onClick={onClose}>
-            {t("settings.cancel")}
-          </Button>
-        </div>
-
-        <div className="space-y-4 px-6 py-5">
-          <div className="space-y-1.5">
-            <Label>{t("settings.modelName")}</Label>
-            <Input value={model.id} disabled />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="model-context-window">{t("settings.contextWindow")}</Label>
-            <Input
-              id="model-context-window"
-              inputMode="numeric"
-              value={contextWindow}
-              onChange={(e) => setContextWindow(e.currentTarget.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="model-max-output-token">{t("settings.maxOutputToken")}</Label>
-            <Input
-              id="model-max-output-token"
-              inputMode="numeric"
-              value={maxOutputToken}
-              onChange={(e) => setMaxOutputToken(e.currentTarget.value)}
-            />
-          </div>
-
-          {!canSave ? (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {t("settings.positiveIntegerRequired")}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
-          <Button variant="outline" onClick={onClose}>
-            {t("settings.cancel")}
-          </Button>
-          <Button onClick={handleSave} disabled={!canSave}>
-            {t("settings.save")}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
+function getCustomHeaderKeyIssue(key: string, includeEmpty = false): CustomHeaderKeyIssue | null {
+  if (!key && !includeEmpty) return null;
+  if (isReservedCustomHeaderKey(key)) return "reserved";
+  return isValidCustomHeaderKey(key) ? null : "invalid";
 }
 
+function DialogSwitch(props: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  ariaLabel: string;
+}) {
+  const { checked, onCheckedChange, ariaLabel } = props;
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      onClick={() => onCheckedChange(!checked)}
+    >
+      <span
+        className={cn(
+          "relative block h-5 w-9 rounded-full bg-muted-foreground/35 transition-colors",
+          checked && "bg-primary",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-transform",
+            checked && "translate-x-4",
+          )}
+        />
+      </span>
+    </button>
+  );
+}
+function formatTokenCount(value: number): string {
+  if (value < 1_000) return String(value);
+  return String(Math.round(value / 1_000)) + "K";
+}
 function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProps) {
   const { t } = useLocale();
   const isGatewayWebui = isGatewayWebuiRuntime();
@@ -246,6 +222,9 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const [baseUrl, setBaseUrl] = useState(initialData?.baseUrl ?? "");
   const [apiKey, setApiKey] = useState(
     initialUsesRedactedApiKey ? REDACTED_API_KEY_DISPLAY : initialApiKey,
+  );
+  const [customHeaders, setCustomHeaders] = useState(() =>
+    (initialData?.customHeaders ?? []).map((header) => ({ ...header })),
   );
   const [models, setModels] = useState<ProviderModelConfig[]>(() =>
     normalizeFetchedModels(initialData?.models ?? [], providerType),
@@ -262,11 +241,16 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const [addingModel, setAddingModel] = useState(false);
   const [newModelName, setNewModelName] = useState("");
   const [modelSearch, setModelSearch] = useState("");
-  const [editingModel, setEditingModel] = useState<ProviderModelConfig | null>(null);
+  const [editingModel, setEditingModel] = useState<ModelEditDraft | null>(null);
+  const [activePanel, setActivePanel] = useState<ProviderDialogPanel>("general");
+  const [visibleHeaderValues, setVisibleHeaderValues] = useState<Set<number>>(new Set());
+  const [headerValidationSubmitted, setHeaderValidationSubmitted] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevFetchKey = useRef("");
+  const headerKeyRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const headerValueRefs = useRef<Array<HTMLInputElement | null>>([]);
   const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_API_KEY_DISPLAY;
   const apiKeyForRequest = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
   const canFetchModels = baseUrl.trim().length > 0 && apiKeyForRequest.length > 0;
@@ -325,17 +309,6 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     });
   }
 
-  function setVisibleModelsSelected(selected: boolean) {
-    setActiveModels((prev) => {
-      const visibleModelIds = new Set(visibleModels.map((model) => model.id));
-      const next = new Set(Array.from(prev).filter((model) => !visibleModelIds.has(model)));
-      if (selected) {
-        for (const model of visibleModels) next.add(model.id);
-      }
-      return next;
-    });
-  }
-
   function handleAddModel() {
     const model = newModelName.trim();
     if (!model) return;
@@ -354,22 +327,117 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       next.delete(model);
       return next;
     });
-    setEditingModel((prev) => (prev?.id === model ? null : prev));
+    setEditingModel((prev) => (prev?.model.id === model ? null : prev));
   }
 
   function openModelSettings(modelId: string) {
     const target = models.find((item) => item.id === modelId);
     if (!target) return;
-    setEditingModel(target);
+    setEditingModel((prev) =>
+      prev?.model.id === target.id
+        ? null
+        : {
+            model: target,
+            contextWindow: String(target.contextWindow),
+            maxOutputToken: String(target.maxOutputToken),
+            capabilities: [...(target.capabilities ?? [])],
+          },
+    );
   }
 
-  function saveModelSettings(nextModel: ProviderModelConfig) {
+  function toggleModelCapability(capability: ModelCapability) {
+    setEditingModel((prev) => {
+      if (!prev) return prev;
+      const capabilities = prev.capabilities.includes(capability)
+        ? prev.capabilities.filter((item) => item !== capability)
+        : [...prev.capabilities, capability];
+      return { ...prev, capabilities };
+    });
+  }
+
+  const editingModelContextWindow = editingModel
+    ? parsePositiveInteger(editingModel.contextWindow)
+    : null;
+  const editingModelMaxOutputToken = editingModel
+    ? parsePositiveInteger(editingModel.maxOutputToken)
+    : null;
+  const canSaveEditingModel =
+    editingModelContextWindow !== null && editingModelMaxOutputToken !== null;
+
+  function saveInlineModelSettings() {
+    if (
+      !editingModel ||
+      editingModelContextWindow === null ||
+      editingModelMaxOutputToken === null
+    ) {
+      return;
+    }
+    const nextModel: ProviderModelConfig = {
+      ...editingModel.model,
+      contextWindow: editingModelContextWindow,
+      maxOutputToken: editingModelMaxOutputToken,
+      capabilities: editingModel.capabilities,
+    };
     setModels((prev) => prev.map((item) => (item.id === nextModel.id ? nextModel : item)));
     setEditingModel(null);
+  }
+  function updateCustomHeader(index: number, field: "key" | "value", value: string) {
+    setCustomHeaders((prev) =>
+      prev.map((header, headerIndex) =>
+        headerIndex === index ? { ...header, [field]: value } : header,
+      ),
+    );
+    setHeaderValidationSubmitted(false);
+  }
+
+  function focusCustomHeader(index: number, field: "key" | "value") {
+    requestAnimationFrame(() => {
+      const target =
+        field === "key" ? headerKeyRefs.current[index] : headerValueRefs.current[index];
+      target?.focus();
+    });
+  }
+
+  function addCustomHeader(key = "", focusField: "key" | "value" = "key") {
+    const nextIndex = customHeaders.length;
+    setCustomHeaders((prev) => [...prev, { key, value: "" }]);
+    setHeaderValidationSubmitted(false);
+    focusCustomHeader(nextIndex, focusField);
+  }
+
+  function removeCustomHeader(index: number) {
+    setCustomHeaders((prev) => prev.filter((_, headerIndex) => headerIndex !== index));
+    setVisibleHeaderValues((prev) => {
+      const next = new Set<number>();
+      for (const visibleIndex of prev) {
+        if (visibleIndex < index) next.add(visibleIndex);
+        if (visibleIndex > index) next.add(visibleIndex - 1);
+      }
+      return next;
+    });
+    setHeaderValidationSubmitted(false);
+  }
+
+  function toggleCustomHeaderValue(index: number) {
+    setVisibleHeaderValues((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
   }
 
   function handleSave() {
     if (!name.trim()) return;
+    const invalidHeaderIndex = customHeaders.findIndex(
+      (header) => getCustomHeaderKeyIssue(header.key, true) !== null,
+    );
+    if (invalidHeaderIndex >= 0) {
+      setHeaderValidationSubmitted(true);
+      setActivePanel("headers");
+      focusCustomHeader(invalidHeaderIndex, "key");
+      return;
+    }
     const nextApiKey = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
     onSave({
       name: name.trim(),
@@ -380,6 +448,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         nextApiKey.length > 0 ||
         apiKeyIsRedactedDisplay ||
         (isGatewayWebui && initialData?.apiKeyConfigured === true),
+      customHeaders,
       models,
       activeModels: Array.from(activeModels),
       requestFormat: providerType === "codex" ? requestFormat : undefined,
@@ -407,273 +476,601 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         : orderedModels,
     [orderedModels, modelSearchQuery],
   );
-  const allVisibleModelsSelected =
-    visibleModels.length > 0 && visibleModels.every((model) => activeModels.has(model.id));
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 max-[720px]:p-0">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
-        <div className="flex items-center gap-3 border-b px-6 py-4">
-          <div className="flex h-9 w-9 items-center justify-center text-xl text-foreground">
-            <ProviderBrandIcon type={providerType} />
-          </div>
-          <div>
-            <div className="text-sm font-semibold">
-              {isEditing ? t("settings.editProvider") : t("settings.addProvider")}
+      <div className="relative z-10 flex h-[600px] max-h-[calc(100dvh-2rem)] w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4 max-[720px]:px-3.5 max-[720px]:py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center text-xl text-foreground">
+              <ProviderBrandIcon type={providerType} />
             </div>
-            <div className="text-xs text-muted-foreground">
-              {typeLabel} {t("settings.compatible")}
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <div className="text-sm font-semibold">
+                {isEditing ? t("settings.editProvider") : t("settings.addProvider")}
+              </div>
+              <span className="rounded-full border bg-muted/60 px-2.5 py-0.5 text-[11px] text-muted-foreground">
+                {typeLabel} {t("settings.compatible")}
+              </span>
             </div>
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={onClose}
+            title={t("settings.close")}
+            aria-label={t("settings.close")}
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
-          <div className="space-y-1.5">
-            <Label htmlFor="modal-name">{t("settings.providerName")}</Label>
-            <Input id="modal-name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="modal-baseurl">Base URL</Label>
-            <Input
-              id="modal-baseurl"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.currentTarget.value)}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="modal-apikey">API Key</Label>
-            <div className="relative">
-              <Input
-                id="modal-apikey"
-                type={showApiKey ? "text" : "password"}
-                value={apiKey}
-                className="pr-10"
-                onChange={(e) => setApiKey(e.currentTarget.value)}
-                onFocus={(e) => {
-                  if (apiKeyIsRedactedDisplay) e.currentTarget.select();
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => setShowApiKey((prev) => !prev)}
-                title={showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
-                aria-label={showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
-              >
-                {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
-
-          {providerType === "codex" ? (
-            <div className="space-y-1.5">
-              <Label>{t("settings.requestFormat")}</Label>
-              <Select
-                value={requestFormat}
-                onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue>{CODEX_REQUEST_FORMAT_LABELS[requestFormat]}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CODEX_REQUEST_FORMAT_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="h-4 w-4 shrink-0 cursor-pointer accent-primary"
-              checked={useSystemProxy}
-              onChange={(event) => setUseSystemProxy(event.currentTarget.checked)}
-            />
-            {t("settings.providerUseSystemProxy")}
-          </label>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>{t("settings.models")}</Label>
-              <div className="flex items-center gap-1">
-                {fetchingModels ? (
-                  <span className="mr-1 text-xs text-muted-foreground">
-                    {t("settings.fetching")}
-                  </span>
-                ) : null}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs"
-                  onClick={() => setVisibleModelsSelected(!allVisibleModelsSelected)}
-                  disabled={visibleModels.length === 0}
+        <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
+          <nav
+            className="flex w-[172px] shrink-0 flex-col gap-1 border-r bg-muted/30 p-2.5 max-[720px]:w-full max-[720px]:flex-row max-[720px]:overflow-x-auto max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:px-2.5 max-[720px]:py-2"
+            aria-label={t("settings.providerDialogNavigation")}
+          >
+            <button
+              type="button"
+              className={cn(
+                "flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs transition-colors hover:bg-accent/50 hover:text-foreground",
+                activePanel === "general" && "bg-primary/10 font-medium text-primary",
+              )}
+              onClick={() => setActivePanel("general")}
+              aria-current={activePanel === "general" ? "page" : undefined}
+            >
+              <Settings className="h-4 w-4 shrink-0 max-[720px]:h-3.5 max-[720px]:w-3.5" />
+              {t("settings.providerDialogGeneral")}
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs transition-colors hover:bg-accent/50 hover:text-foreground",
+                activePanel === "network" && "bg-primary/10 font-medium text-primary",
+              )}
+              onClick={() => setActivePanel("network")}
+              aria-current={activePanel === "network" ? "page" : undefined}
+            >
+              <Globe className="h-4 w-4 shrink-0 max-[720px]:h-3.5 max-[720px]:w-3.5" />
+              {t("settings.providerDialogNetwork")}
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs transition-colors hover:bg-accent/50 hover:text-foreground",
+                activePanel === "headers" && "bg-primary/10 font-medium text-primary",
+              )}
+              onClick={() => setActivePanel("headers")}
+              aria-current={activePanel === "headers" ? "page" : undefined}
+            >
+              <List className="h-4 w-4 shrink-0 max-[720px]:h-3.5 max-[720px]:w-3.5" />
+              <span className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
+                {t("settings.providerDialogHeaders")}
+              </span>
+              {customHeaders.length > 0 ? (
+                <span
+                  className={cn(
+                    "min-w-5 rounded-full bg-muted px-1.5 py-0.5 text-center text-[10px] tabular-nums text-muted-foreground",
+                    activePanel === "headers" && "bg-primary text-primary-foreground",
+                  )}
                 >
-                  {allVisibleModelsSelected ? t("settings.deselectAll") : t("settings.selectAll")}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={handleRefresh}
-                  disabled={fetchingModels || (isGatewayWebui && !canFetchModels)}
-                  title={t("settings.refreshModels")}
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${fetchingModels ? "animate-spin" : ""}`} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  onClick={() => setAddingModel(true)}
-                  title={t("settings.addModel")}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
+                  {customHeaders.length}
+                </span>
+              ) : null}
+            </button>
+          </nav>
 
-            {fetchError ? (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {fetchError}
-              </div>
-            ) : null}
+          <div className="min-w-0 flex-1 overflow-y-auto px-6 py-5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.875rem+env(safe-area-inset-bottom))] max-[720px]:pt-3.5">
+            {activePanel === "general" ? (
+              <section key="general" className="provider-panel-enter">
+                <div className="text-sm font-semibold">{t("settings.basicInformation")}</div>
 
-            {addingModel ? (
-              <div className="flex gap-2">
-                <Input
-                  autoFocus
-                  value={newModelName}
-                  className="h-8 text-sm"
-                  onChange={(e) => setNewModelName(e.currentTarget.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") handleAddModel();
-                    if (e.key === "Escape") setAddingModel(false);
-                  }}
-                />
-                <Button size="sm" className="h-8" onClick={handleAddModel}>
-                  {t("settings.add")}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8"
-                  onClick={() => setAddingModel(false)}
-                >
-                  {t("settings.cancel")}
-                </Button>
-              </div>
-            ) : null}
-
-            {models.length > 0 ? (
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={modelSearch}
-                  className="h-8 pl-8 pr-8 text-sm"
-                  placeholder={t("settings.searchModels")}
-                  aria-label={t("settings.searchModels")}
-                  autoComplete="off"
-                  spellCheck={false}
-                  onChange={(event) => setModelSearch(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setModelSearch("");
-                  }}
-                />
-                {modelSearch ? (
-                  <button
-                    type="button"
-                    className="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-                    onClick={() => setModelSearch("")}
-                    title={t("settings.clearModelSearch")}
-                    aria-label={t("settings.clearModelSearch")}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="max-h-[220px] divide-y overflow-y-auto rounded-lg border">
-              {visibleModels.length === 0 ? (
-                <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                  {models.length > 0 && modelSearchQuery
-                    ? t("settings.noMatchingModels")
-                    : baseUrl.trim() && apiKeyForRequest
-                      ? t("settings.fetchFailed")
-                      : t("settings.fetchHint")}
+                <div className="mt-3 space-y-1.5">
+                  <Label htmlFor="modal-name">{t("settings.providerName")}</Label>
+                  <Input
+                    id="modal-name"
+                    value={name}
+                    onChange={(event) => setName(event.currentTarget.value)}
+                  />
                 </div>
-              ) : (
-                visibleModels.map((model) => {
-                  const checkboxId = `model-${providerType}-${normalizeModelDomId(model.id)}`;
-                  return (
-                    <div
-                      key={model.id}
-                      className="group flex items-center gap-2 px-3 py-2 hover:bg-accent/30"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 shrink-0 cursor-pointer accent-primary"
-                        checked={activeModels.has(model.id)}
-                        onChange={() => toggleModel(model.id)}
-                        id={checkboxId}
+
+                <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="modal-baseurl">Base URL</Label>
+                    <Input
+                      id="modal-baseurl"
+                      value={baseUrl}
+                      onChange={(event) => setBaseUrl(event.currentTarget.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="modal-apikey">API Key</Label>
+                    <div className="relative">
+                      <Input
+                        id="modal-apikey"
+                        type={showApiKey ? "text" : "password"}
+                        value={apiKey}
+                        className="pr-10"
+                        onChange={(event) => setApiKey(event.currentTarget.value)}
+                        onFocus={(event) => {
+                          if (apiKeyIsRedactedDisplay) event.currentTarget.select();
+                        }}
                       />
-                      <label
-                        htmlFor={checkboxId}
-                        className="flex-1 cursor-pointer truncate text-sm"
-                      >
-                        {model.id}
-                      </label>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-                        onClick={() => openModelSettings(model.id)}
-                        title={t("settings.modelSettings")}
+                        className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                        onClick={() => setShowApiKey((prev) => !prev)}
+                        title={showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
+                        aria-label={
+                          showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")
+                        }
                       >
-                        <Settings2 className="h-3.5 w-3.5" />
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
-                      <button
-                        type="button"
-                        className="hidden h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-destructive group-hover:flex"
-                        onClick={() => removeModel(model.id)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                  </div>
+                </div>
+
+                {providerType === "codex" ? (
+                  <div className="mt-4 space-y-1.5">
+                    <Label>{t("settings.requestFormat")}</Label>
+                    <Select
+                      value={requestFormat}
+                      onValueChange={(value) => setRequestFormat(value as CodexRequestFormat)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue>{CODEX_REQUEST_FORMAT_LABELS[requestFormat]}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(CODEX_REQUEST_FORMAT_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+
+                <div className="mt-6 text-sm font-semibold">{t("settings.models")}</div>
+                <div className="mt-3 overflow-hidden rounded-xl border">
+                  <div className="flex items-center gap-2 border-b bg-muted/30 p-2.5 max-[720px]:flex-wrap">
+                    <div className="relative min-w-0 flex-1 max-[720px]:basis-full">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={modelSearch}
+                        className="h-9 pl-9 pr-9 text-sm"
+                        placeholder={t("settings.searchModels")}
+                        aria-label={t("settings.searchModels")}
+                        autoComplete="off"
+                        spellCheck={false}
+                        onChange={(event) => setModelSearch(event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") setModelSearch("");
+                        }}
+                      />
+                      {modelSearch ? (
+                        <button
+                          type="button"
+                          className="absolute right-0 top-0 flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          onClick={() => setModelSearch("")}
+                          title={t("settings.clearModelSearch")}
+                          aria-label={t("settings.clearModelSearch")}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:flex-1"
+                      onClick={handleRefresh}
+                      disabled={fetchingModels || (isGatewayWebui && !canFetchModels)}
+                    >
+                      <RefreshCw className={cn("h-3.5 w-3.5", fetchingModels && "animate-spin")} />
+                      {fetchingModels ? t("settings.fetching") : t("settings.refreshModels")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:flex-1"
+                      onClick={() => setAddingModel(true)}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      {t("settings.manualAddModel")}
+                    </Button>
+                  </div>
+
+                  {fetchError ? (
+                    <div className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {fetchError}
+                    </div>
+                  ) : null}
+
+                  {addingModel ? (
+                    <div className="flex gap-2 border-b bg-muted/20 p-2.5 max-[720px]:flex-wrap">
+                      <Input
+                        autoFocus
+                        value={newModelName}
+                        className="h-9 text-sm max-[720px]:h-10 max-[720px]:basis-full"
+                        placeholder={t("settings.modelName")}
+                        onChange={(event) => setNewModelName(event.currentTarget.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") handleAddModel();
+                          if (event.key === "Escape") setAddingModel(false);
+                        }}
+                      />
+                      <Button size="sm" className="h-9" onClick={handleAddModel}>
+                        {t("settings.add")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9"
+                        onClick={() => setAddingModel(false)}
+                      >
+                        {t("settings.cancel")}
+                      </Button>
+                    </div>
+                  ) : null}
+
+                  <div className="divide-y">
+                    {visibleModels.length === 0 ? (
+                      <div className="px-3 py-8 text-center text-xs text-muted-foreground">
+                        {models.length > 0 && modelSearchQuery
+                          ? t("settings.noMatchingModels")
+                          : baseUrl.trim() && apiKeyForRequest
+                            ? t("settings.fetchFailed")
+                            : t("settings.fetchHint")}
+                      </div>
+                    ) : (
+                      visibleModels.map((model) => {
+                        const isEditingModel = editingModel?.model.id === model.id;
+                        return (
+                          <div key={model.id} className="group hover:bg-accent/30">
+                            <div className="flex items-center gap-2 px-3 py-2 max-[720px]:flex-wrap">
+                              <DialogSwitch
+                                checked={activeModels.has(model.id)}
+                                onCheckedChange={() => toggleModel(model.id)}
+                                ariaLabel={model.id}
+                              />
+                              <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className="truncate text-sm font-medium">{model.id}</span>
+                                  {model.capabilities?.length ? (
+                                    <span className="flex shrink-0 items-center gap-1">
+                                      {model.capabilities.map((capability) => (
+                                        <span
+                                          key={capability}
+                                          className="rounded border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                                        >
+                                          {t("settings.capability." + capability)}
+                                        </span>
+                                      ))}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-[11px] tabular-nums text-muted-foreground max-[720px]:order-3 max-[720px]:ml-12 max-[720px]:basis-full">
+                                {formatTokenCount(model.contextWindow)} ctx ·{" "}
+                                {formatTokenCount(model.maxOutputToken)} out
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className={cn(
+                                  "h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground",
+                                  isEditingModel && "bg-primary/10 text-primary",
+                                )}
+                                onClick={() => openModelSettings(model.id)}
+                                title={t("settings.modelSettings")}
+                                aria-label={t("settings.modelSettings")}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => removeModel(model.id)}
+                                title={t("settings.delete")}
+                                aria-label={t("settings.delete")}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {isEditingModel && editingModel ? (
+                              <div className="mx-3 mb-3 rounded-lg border bg-muted/20 p-3">
+                                <div className="grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+                                  <div className="space-y-1.5">
+                                    <Label>{t("settings.contextWindow")}</Label>
+                                    <Input
+                                      inputMode="numeric"
+                                      aria-invalid={
+                                        editingModelContextWindow === null ? true : undefined
+                                      }
+                                      className={cn(
+                                        editingModelContextWindow === null &&
+                                          "ring-1 ring-inset ring-destructive focus-visible:ring-destructive",
+                                      )}
+                                      value={editingModel.contextWindow}
+                                      onChange={(event) =>
+                                        setEditingModel((prev) =>
+                                          prev
+                                            ? {
+                                                ...prev,
+                                                contextWindow: event.currentTarget.value,
+                                              }
+                                            : prev,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    <Label>{t("settings.maxOutputToken")}</Label>
+                                    <Input
+                                      inputMode="numeric"
+                                      aria-invalid={
+                                        editingModelMaxOutputToken === null ? true : undefined
+                                      }
+                                      className={cn(
+                                        editingModelMaxOutputToken === null &&
+                                          "ring-1 ring-inset ring-destructive focus-visible:ring-destructive",
+                                      )}
+                                      value={editingModel.maxOutputToken}
+                                      onChange={(event) =>
+                                        setEditingModel((prev) =>
+                                          prev
+                                            ? {
+                                                ...prev,
+                                                maxOutputToken: event.currentTarget.value,
+                                              }
+                                            : prev,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 text-xs font-medium text-muted-foreground">
+                                  {t("settings.capabilityTypes")}
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {MODEL_CAPABILITIES.map((capability) => {
+                                    const selected = editingModel.capabilities.includes(capability);
+                                    return (
+                                      <button
+                                        key={capability}
+                                        type="button"
+                                        className={cn(
+                                          "min-h-9 rounded-full border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary",
+                                          selected && "border-primary bg-primary/10 text-primary",
+                                        )}
+                                        aria-pressed={selected}
+                                        onClick={() => toggleModelCapability(capability)}
+                                      >
+                                        {t("settings.capability." + capability)}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+
+                                {!canSaveEditingModel ? (
+                                  <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                                    {t("settings.positiveIntegerRequired")}
+                                  </div>
+                                ) : null}
+
+                                <div className="mt-3 flex justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setEditingModel(null)}
+                                  >
+                                    {t("settings.cancel")}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={!canSaveEditingModel}
+                                    onClick={saveInlineModelSettings}
+                                  >
+                                    {t("settings.save")}
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </section>
+            ) : activePanel === "network" ? (
+              <section key="network" className="provider-panel-enter">
+                <div className="text-sm font-semibold">{t("settings.providerDialogNetwork")}</div>
+                <div className="mt-3 flex items-center gap-3 rounded-xl border bg-card px-4 py-3">
+                  <div className="min-w-0 flex-1 text-sm font-medium">
+                    {t("settings.providerUseSystemProxy")}
+                  </div>
+                  <DialogSwitch
+                    checked={useSystemProxy}
+                    onCheckedChange={setUseSystemProxy}
+                    ariaLabel={t("settings.providerUseSystemProxy")}
+                  />
+                </div>
+              </section>
+            ) : (
+              <section key="headers" className="provider-panel-enter">
+                <div className="text-sm font-semibold">{t("settings.customHeaders")}</div>
+
+                <div className="mt-3 overflow-hidden rounded-xl border max-[720px]:border-0 max-[720px]:overflow-visible">
+                  <div className="grid grid-cols-[220px_minmax(0,1fr)_40px_40px] items-center border-b bg-muted/40 max-[720px]:hidden text-[11px] font-medium uppercase tracking-[0.05em] text-muted-foreground">
+                    <div className="px-3 py-2">{t("settings.customHeaderName")}</div>
+                    <div className="px-3 py-2">{t("settings.customHeaderValue")}</div>
+                    <div />
+                    <div />
+                  </div>
+
+                  {customHeaders.length === 0 ? (
+                    <div className="px-4 py-10 text-center text-xs text-muted-foreground">
+                      {t("settings.noCustomHeaders")}
+                    </div>
+                  ) : (
+                    customHeaders.map((header, index) => {
+                      const issue = getCustomHeaderKeyIssue(header.key, headerValidationSubmitted);
+                      const issueTitle =
+                        issue === "reserved"
+                          ? t("settings.customHeaderReservedTitle")
+                          : issue === "invalid"
+                            ? t("settings.invalidCustomHeaderKey")
+                            : undefined;
+                      const valueVisible = visibleHeaderValues.has(index);
+
+                      return (
+                        <div
+                          key={index}
+                          className="grid grid-cols-[220px_minmax(0,1fr)_40px_40px] items-center border-b last:border-b-0 max-[720px]:mb-2 max-[720px]:grid-cols-[minmax(0,1fr)_40px_40px] max-[720px]:grid-rows-[auto_auto] max-[720px]:overflow-hidden max-[720px]:rounded-xl max-[720px]:border max-[720px]:bg-muted/20"
+                        >
+                          <Input
+                            ref={(element) => {
+                              headerKeyRefs.current[index] = element;
+                            }}
+                            value={header.key}
+                            className={cn(
+                              "h-10 rounded-none border-0 border-r bg-transparent px-3 font-mono text-xs shadow-none focus-visible:ring-1 focus-visible:ring-inset max-[720px]:col-span-3 max-[720px]:border-b max-[720px]:border-r-0 max-[720px]:bg-muted/40",
+                              issue &&
+                                "ring-1 ring-inset ring-destructive focus-visible:ring-destructive",
+                            )}
+                            placeholder={t("settings.customHeaderKeyPlaceholder")}
+                            aria-label={t("settings.customHeaderName")}
+                            aria-invalid={issue ? true : undefined}
+                            title={issueTitle}
+                            autoComplete="off"
+                            spellCheck={false}
+                            onChange={(event) =>
+                              updateCustomHeader(index, "key", event.currentTarget.value)
+                            }
+                          />
+                          <Input
+                            ref={(element) => {
+                              headerValueRefs.current[index] = element;
+                            }}
+                            type={valueVisible ? "text" : "password"}
+                            value={header.value}
+                            className="h-10 rounded-none border-0 bg-transparent px-3 font-mono text-xs shadow-none focus-visible:ring-1 focus-visible:ring-inset max-[720px]:col-start-1 max-[720px]:row-start-2"
+                            placeholder={t("settings.customHeaderValue")}
+                            aria-label={t("settings.customHeaderValue")}
+                            autoComplete="off"
+                            spellCheck={false}
+                            onChange={(event) =>
+                              updateCustomHeader(index, "value", event.currentTarget.value)
+                            }
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 rounded-none text-muted-foreground hover:text-foreground max-[720px]:row-start-2"
+                            onClick={() => toggleCustomHeaderValue(index)}
+                            title={
+                              valueVisible
+                                ? t("settings.hideCustomHeaderValue")
+                                : t("settings.showCustomHeaderValue")
+                            }
+                            aria-label={
+                              valueVisible
+                                ? t("settings.hideCustomHeaderValue")
+                                : t("settings.showCustomHeaderValue")
+                            }
+                          >
+                            {valueVisible ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-10 w-10 rounded-none text-muted-foreground hover:bg-destructive/10 hover:text-destructive max-[720px]:row-start-2"
+                            onClick={() => removeCustomHeader(index)}
+                            title={t("settings.removeCustomHeader")}
+                            aria-label={t("settings.removeCustomHeader")}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-9 gap-1.5"
+                  onClick={() => addCustomHeader()}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {t("settings.addCustomHeader")}
+                </Button>
+
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {CUSTOM_HEADER_KEY_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      className="min-h-9 rounded-full border border-dashed px-3 py-1.5 font-mono max-[720px]:min-h-10 max-[720px]:px-4 text-[11px] text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                      onClick={() => addCustomHeader(preset, "value")}
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+
+                <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                  {t("settings.customHeaderReservedHint")}
+                </p>
+              </section>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t px-6 py-4">
-          <Button variant="outline" onClick={onClose}>
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t bg-muted/20 px-5 py-3.5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[720px]:pt-3">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="max-[720px]:h-10 max-[720px]:flex-1"
+          >
             {t("settings.cancel")}
           </Button>
-          <Button onClick={handleSave} disabled={!name.trim()}>
+          <Button
+            onClick={handleSave}
+            disabled={!name.trim()}
+            className="max-[720px]:h-10 max-[720px]:flex-1"
+          >
             {t("settings.save")}
           </Button>
         </div>
-
-        {editingModel ? (
-          <ModelSettingsModal
-            model={editingModel}
-            onClose={() => setEditingModel(null)}
-            onSave={saveModelSettings}
-          />
-        ) : null}
       </div>
     </div>,
     document.body,
@@ -752,7 +1149,7 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
         />
 
         <div className="relative flex items-start gap-3 px-6 pb-4 pt-[22px]">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
             <div
               id="provider-custom-settings-title"
               className="text-[17px] font-semibold leading-tight tracking-tight text-foreground/95"
@@ -1074,7 +1471,7 @@ function CcsImportModal(props: {
       <div className="relative z-10 flex h-[min(35rem,85vh)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
         <div className="flex items-center gap-3 border-b px-6 py-4">
           <CcsSourceLogo className="h-9 w-9" />
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
             <div className="text-sm font-semibold">从 CC Switch 导入</div>
             <div className="mt-0.5 text-xs text-muted-foreground">
               左侧选择供应商类型，右侧勾选要导入的配置，导入后自动获取并激活模型
@@ -1092,7 +1489,7 @@ function CcsImportModal(props: {
           </button>
         </div>
 
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
           {groups.length === 0 ? (
             <div className="flex flex-1 items-center justify-center px-6 py-10 text-sm text-muted-foreground">
               未发现可导入的供应商
@@ -1121,7 +1518,7 @@ function CcsImportModal(props: {
                       <span className="flex w-5 shrink-0 items-center justify-center text-base">
                         <ProviderBrandIcon type={group.type} />
                       </span>
-                      <span className="min-w-0 flex-1">
+                      <span className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
                         <span className="block truncate text-sm font-medium">
                           {getProviderLabel(group.type)}
                         </span>
@@ -1172,7 +1569,7 @@ function CcsImportModal(props: {
                           disabled={!selectable || importing}
                           onChange={() => toggleRow(key)}
                         />
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
                           <div className="flex items-center gap-2">
                             <span className="truncate text-sm font-medium">{item.name}</span>
                             {exists ? (
@@ -1217,7 +1614,12 @@ function CcsImportModal(props: {
             共已选 {selectedCount} / {selectableKeys.length} 个可导入
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onClose} disabled={importing}>
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={importing}
+              className="max-[720px]:h-10 max-[720px]:flex-1"
+            >
               {result ? "关闭" : t("settings.cancel")}
             </Button>
             <Button
@@ -1465,7 +1867,7 @@ function ProviderList(props: {
                 <div className="flex w-5 shrink-0 items-center justify-center text-lg text-foreground">
                   <ProviderBrandIcon type={type} />
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
                   <div className="flex items-center gap-1.5">
                     <span className="truncate text-sm font-medium">{provider.name}</span>
                     {provider.useSystemProxy ? (

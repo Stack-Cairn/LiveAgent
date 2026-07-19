@@ -126,6 +126,15 @@ function sanitizeDebugValue(value: unknown, seen = new WeakSet<object>()): unkno
     for (const [key, nested] of Object.entries(record)) {
       if (isSensitiveDebugKey(key)) {
         out[key] = REDACTED_DEBUG_CREDENTIAL;
+      } else if (
+        key.toLowerCase() === "headers" &&
+        nested &&
+        typeof nested === "object" &&
+        !Array.isArray(nested)
+      ) {
+        out[key] = Object.fromEntries(
+          Object.keys(nested).map((name) => [name, REDACTED_DEBUG_CREDENTIAL]),
+        );
       } else if (isBase64Source && key === "data") {
         out[key] = `[redacted base64: ${sourceMimeType}, chars=${sourceData.length}]`;
       } else if (isTextDocumentSource && key === "data") {

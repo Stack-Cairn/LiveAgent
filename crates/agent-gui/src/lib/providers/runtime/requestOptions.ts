@@ -1,6 +1,9 @@
 import type { CacheRetention, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import type { ProviderId, ReasoningLevel } from "../../settings";
+import type { CustomProvider, ProviderId, ReasoningLevel } from "../../settings";
+import { mergeCustomHeaders as mergeCustomHeadersBase } from "../customHeaders";
 import { normalizeSessionId } from "./common";
+
+export { isValidCustomHeaderKey } from "../customHeaders";
 
 export function buildDualAuthHeaders(apiKey: string): Record<string, string> {
   return {
@@ -20,6 +23,13 @@ export function buildProviderAuthHeaders(
   apiKey: string,
 ): Record<string, string> {
   return providerId === "gemini" ? buildGeminiAuthHeaders(apiKey) : buildDualAuthHeaders(apiKey);
+}
+
+export function mergeCustomHeaders(
+  base: Record<string, string>,
+  customHeaders?: CustomProvider["customHeaders"],
+): Record<string, string> {
+  return mergeCustomHeadersBase(base, customHeaders);
 }
 
 export function toSimpleStreamReasoning(
