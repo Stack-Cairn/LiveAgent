@@ -65,6 +65,22 @@ pub struct GitRepositoryState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitDiscoveredRepository {
+    pub root: String,
+    pub name: String,
+    pub relative_path: String,
+    pub is_workspace_root: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitRepositoryDiscovery {
+    pub workdir: String,
+    pub repositories: Vec<GitDiscoveredRepository>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitBranch {
     pub name: String,
     pub full_name: String,
@@ -310,6 +326,164 @@ fn discover_repo(workdir: &str) -> Result<Option<String>, String> {
         return Ok(None);
     }
     Ok(Some(root))
+}
+
+// Subdirectory repository discovery, modeled on VSCode's git extension
+// (`git.repositoryScanMaxDepth` / `git.repositoryScanIgnoredFolders`): when
+// the workspace folder itself is not a git repository, repositories living in
+// its subdirectories are scanned so the review panel can still offer them.
+const GIT_REPO_SCAN_MAX_DEPTH: usize = 2;
+const GIT_REPO_SCAN_DIR_BUDGET: usize = 2048;
+const GIT_REPO_SCAN_MAX_REPOS: usize = 32;
+const GIT_REPO_SCAN_IGNORED_DIRS: &[&str] = &[
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "out",
+    "vendor",
+    "Pods",
+    "DerivedData",
+    "__pycache__",
+    "venv",
+];
+
+fn repo_scan_skips_dir_name(name: &str) -> bool {
+    name.starts_with('.') || GIT_REPO_SCAN_IGNORED_DIRS.contains(&name)
+}
+
+fn scan_subdirectory_repositories(workdir: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut queue: std::collections::VecDeque<(PathBuf, usize)> = std::collections::VecDeque::new();
+    queue.push_back((workdir.to_path_buf(), 0));
+    let mut budget = GIT_REPO_SCAN_DIR_BUDGET;
+    while let Some((dir, depth)) = queue.pop_front() {
+        if found.len() >= GIT_REPO_SCAN_MAX_REPOS || budget == 0 {
+            break;
+        }
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if found.len() >= GIT_REPO_SCAN_MAX_REPOS || budget == 0 {
+                break;
+            }
+            budget -= 1;
+            // Symlinked directories are skipped to keep the walk cycle-free.
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            if repo_scan_skips_dir_name(name) {
+                continue;
+            }
+            let candidate = entry.path();
+            // A `.git` entry (directory, or file for worktrees/submodules)
+            // marks a repository; found repositories are not descended into.
+            if candidate.join(".git").exists() {
+                found.push(candidate);
+                continue;
+            }
+            if depth + 1 < GIT_REPO_SCAN_MAX_DEPTH {
+                queue.push_back((candidate, depth + 1));
+            }
+        }
+    }
+    found
+}
+
+fn relative_display_path(base: &Path, target: &Path) -> String {
+    target
+        .strip_prefix(base)
+        .map(|relative| {
+            relative
+                .components()
+                .filter_map(|component| match component {
+                    Component::Normal(part) => Some(part.to_string_lossy().to_string()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join("/")
+        })
+        .unwrap_or_default()
+}
+
+fn path_basename(path: &Path) -> String {
+    path.file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.to_string_lossy().to_string())
+}
+
+pub(crate) fn git_discover_repositories_sync(
+    workdir: String,
+) -> Result<GitRepositoryDiscovery, String> {
+    let workdir = workdir.trim().to_string();
+    let mut repositories = Vec::new();
+    if workdir.is_empty() {
+        return Ok(GitRepositoryDiscovery {
+            workdir,
+            repositories,
+        });
+    }
+    let workdir_path = PathBuf::from(&workdir);
+    let mut seen_roots: HashSet<PathBuf> = HashSet::new();
+
+    if let Some(root) = discover_repo(&workdir)? {
+        let root_path = PathBuf::from(&root);
+        let canonical_root = fs::canonicalize(&root_path).unwrap_or(root_path.clone());
+        seen_roots.insert(canonical_root);
+        repositories.push(GitDiscoveredRepository {
+            root: root.clone(),
+            name: path_basename(&root_path),
+            relative_path: String::new(),
+            is_workspace_root: true,
+        });
+    }
+
+    if workdir_path.is_dir() {
+        for candidate in scan_subdirectory_repositories(&workdir_path) {
+            if repositories.len() >= GIT_REPO_SCAN_MAX_REPOS {
+                break;
+            }
+            let candidate_str = candidate.to_string_lossy().to_string();
+            // Verify the candidate really is a work tree (a stray `.git`
+            // entry must not surface as a repository); failures skip the
+            // candidate instead of aborting the whole discovery.
+            let Some(root) = discover_repo(&candidate_str).ok().flatten() else {
+                continue;
+            };
+            let canonical_root =
+                fs::canonicalize(PathBuf::from(&root)).unwrap_or_else(|_| PathBuf::from(&root));
+            let canonical_candidate = fs::canonicalize(&candidate).unwrap_or(candidate.clone());
+            // Nested paths already covered by a recorded repository (e.g. the
+            // workspace root repo) are deduplicated by their resolved root.
+            if canonical_root != canonical_candidate || !seen_roots.insert(canonical_root) {
+                continue;
+            }
+            repositories.push(GitDiscoveredRepository {
+                root: candidate_str,
+                name: path_basename(&candidate),
+                relative_path: relative_display_path(&workdir_path, &candidate),
+                is_workspace_root: false,
+            });
+        }
+    }
+
+    repositories.sort_by(|a, b| {
+        b.is_workspace_root
+            .cmp(&a.is_workspace_root)
+            .then_with(|| a.relative_path.cmp(&b.relative_path))
+    });
+    Ok(GitRepositoryDiscovery {
+        workdir,
+        repositories,
+    })
 }
 
 fn not_repo_state(workdir: &str) -> GitRepositoryState {
@@ -2333,6 +2507,7 @@ pub(crate) fn git_gateway_action_sync(
     let args = parse_gateway_args(args_json)?;
     let value = match action.as_str() {
         "status" => serde_json::to_value(git_status_sync(workdir)?),
+        "discover_repositories" => serde_json::to_value(git_discover_repositories_sync(workdir)?),
         "branches" => serde_json::to_value(git_branches_sync(workdir)?),
         "init" => serde_json::to_value(git_init_sync(
             workdir,
@@ -2419,6 +2594,13 @@ pub async fn git_status(workdir: String) -> Result<GitRepositoryState, String> {
     tauri::async_runtime::spawn_blocking(move || git_status_sync(workdir))
         .await
         .map_err(|error| format!("git_status join 失败：{error}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn git_discover_repositories(workdir: String) -> Result<GitRepositoryDiscovery, String> {
+    tauri::async_runtime::spawn_blocking(move || git_discover_repositories_sync(workdir))
+        .await
+        .map_err(|error| format!("git_discover_repositories join 失败：{error}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -2826,6 +3008,72 @@ mod tests {
         run_temp_git(temp.path(), &["add", "README.md"]);
         run_temp_git(temp.path(), &["commit", "-m", "initial"]);
         Some(temp)
+    }
+
+    #[test]
+    fn discovers_repositories_in_subdirectories() {
+        if Command::new("git").arg("--version").output().is_err() {
+            return;
+        }
+        let temp = tempfile::tempdir().expect("temp workspace");
+        let make_repo = |relative: &str| {
+            let dir = temp.path().join(relative);
+            fs::create_dir_all(&dir).expect("create repo dir");
+            run_temp_git(&dir, &["init"]);
+        };
+        make_repo("alpha");
+        make_repo("nested/beta");
+        make_repo("node_modules/skipped");
+        make_repo(".hidden/skipped");
+        fs::create_dir_all(temp.path().join("plain/dir")).expect("create plain dir");
+
+        let discovery =
+            git_discover_repositories_sync(temp.path().to_string_lossy().to_string())
+                .expect("discover repositories");
+        let relative_paths: Vec<&str> = discovery
+            .repositories
+            .iter()
+            .map(|repo| repo.relative_path.as_str())
+            .collect();
+        assert_eq!(relative_paths, vec!["alpha", "nested/beta"]);
+        assert!(discovery
+            .repositories
+            .iter()
+            .all(|repo| !repo.is_workspace_root));
+        assert_eq!(discovery.repositories[0].name, "alpha");
+        assert_eq!(discovery.repositories[1].name, "beta");
+    }
+
+    #[test]
+    fn discover_reports_workspace_root_repo_first() {
+        let Some(repo) = init_temp_repo() else {
+            return;
+        };
+        let nested = repo.path().join("packages/nested-repo");
+        fs::create_dir_all(&nested).expect("create nested repo dir");
+        run_temp_git(&nested, &["init"]);
+
+        let discovery = git_discover_repositories_sync(repo.path().to_string_lossy().to_string())
+            .expect("discover repositories");
+        assert!(!discovery.repositories.is_empty());
+        assert!(discovery.repositories[0].is_workspace_root);
+        assert_eq!(discovery.repositories[0].relative_path, "");
+        assert!(discovery
+            .repositories
+            .iter()
+            .any(|entry| entry.relative_path == "packages/nested-repo"));
+    }
+
+    #[test]
+    fn discover_returns_empty_for_plain_directory() {
+        if Command::new("git").arg("--version").output().is_err() {
+            return;
+        }
+        let temp = tempfile::tempdir().expect("temp dir");
+        fs::create_dir_all(temp.path().join("plain")).expect("create plain dir");
+        let discovery = git_discover_repositories_sync(temp.path().to_string_lossy().to_string())
+            .expect("discover repositories");
+        assert!(discovery.repositories.is_empty());
     }
 
     #[test]

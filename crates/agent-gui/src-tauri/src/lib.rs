@@ -186,6 +186,7 @@ macro_rules! app_invoke_handler {
             commands::sftp::sftp_cancel_transfer,
             commands::sftp::sftp_transfer_status,
             commands::git::git_status,
+            commands::git::git_discover_repositories,
             commands::git::git_branches,
             commands::git::git_init,
             commands::git::git_switch_branch,

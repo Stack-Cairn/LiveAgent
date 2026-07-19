@@ -4,17 +4,24 @@ import { useLocale } from "../../i18n";
 import type {
   GitBranch as GitBranchInfo,
   GitClient,
+  GitDiscoveredRepository,
   GitRepositoryState,
 } from "../../lib/git/types";
-import { emptyGitRepositoryState } from "../../lib/git/types";
+import {
+  emptyGitRepositoryState,
+  gitDiscoveredRepositoryLabel,
+  selectedGitRepositoryLabel,
+} from "../../lib/git/types";
 import { cn } from "../../lib/shared/utils";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import { useWorkspaceInvalidation } from "../../lib/workspace-activity/useWorkspaceInvalidation";
 import {
   Check,
+  ChevronRight,
   CloudDownload,
   Copy,
   Download,
+  Folder,
   GitBranch,
   Github,
   Loader2,
@@ -503,7 +510,7 @@ export function GitBranchSelector(props: {
   onStateChange?: (state: GitRepositoryState) => void;
 }) {
   const {
-    workdir,
+    workdir: workspaceCwd,
     gitClient,
     workspaceActivityClient,
     disabled,
@@ -512,6 +519,29 @@ export function GitBranchSelector(props: {
     onStateChange,
   } = props;
   const { t } = useLocale();
+  // Subdirectory repository support: when the workspace folder is not itself
+  // a git repository, repositories discovered in its subdirectories can be
+  // operated on instead. Both the discovered list and the picked root are
+  // keyed by workspace so a workspace switch resets them during render.
+  const [repoPick, setRepoPick] = useState<{ workspace: string; root: string }>(() => ({
+    workspace: workspaceCwd,
+    root: "",
+  }));
+  const [discoveredRepos, setDiscoveredRepos] = useState<{
+    workspace: string;
+    list: GitDiscoveredRepository[];
+  }>(() => ({ workspace: workspaceCwd, list: [] }));
+  if (repoPick.workspace !== workspaceCwd) {
+    setRepoPick({ workspace: workspaceCwd, root: "" });
+  }
+  if (discoveredRepos.workspace !== workspaceCwd) {
+    setDiscoveredRepos({ workspace: workspaceCwd, list: [] });
+  }
+  const selectedRepoRoot = repoPick.workspace === workspaceCwd ? repoPick.root : "";
+  const repositories = discoveredRepos.workspace === workspaceCwd ? discoveredRepos.list : [];
+  // Every git request below runs against the picked repository; the workspace
+  // folder itself is the default when no subdirectory repository is picked.
+  const workdir = selectedRepoRoot || workspaceCwd;
   const [state, setState] = useState<GitRepositoryState>(() => emptyGitRepositoryState(workdir));
   const [branches, setBranches] = useState<GitBranchInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -521,6 +551,9 @@ export function GitBranchSelector(props: {
   const [draftBranch, setDraftBranch] = useState("");
   const [filter, setFilter] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  // Controlled so picking a repository can close only the submenu while the
+  // root menu stays open for a manual branch pick on the new repository.
+  const [repoMenuOpen, setRepoMenuOpen] = useState(false);
   const [remoteAction, setRemoteAction] = useState<GitRemoteActionKind>("");
   const [branchAction, setBranchAction] = useState<GitBranchActionState | null>(null);
   const [actionDraft, setActionDraft] = useState("");
@@ -588,6 +621,52 @@ export function GitBranchSelector(props: {
     void refresh();
   }, [refresh]);
 
+  const repoDiscoveryRequestIdRef = useRef(0);
+  const discoverRepositories = useCallback(async () => {
+    const requestId = ++repoDiscoveryRequestIdRef.current;
+    const workspace = workspaceCwd;
+    if (!gitClient?.discoverRepositories || !workspace.trim()) {
+      return;
+    }
+    try {
+      const response = await gitClient.discoverRepositories(workspace);
+      if (repoDiscoveryRequestIdRef.current !== requestId) return;
+      setDiscoveredRepos({ workspace, list: response.repositories });
+      // When the workspace folder itself is not a repository, fall back to
+      // the first discovered subdirectory repository; an explicit pick that
+      // is still listed is kept.
+      setRepoPick((current) => {
+        if (current.workspace !== workspace) return current;
+        const hasWorkspaceRootRepo = response.repositories.some((repo) => repo.isWorkspaceRoot);
+        if (
+          current.root !== "" &&
+          response.repositories.some((repo) => !repo.isWorkspaceRoot && repo.root === current.root)
+        ) {
+          return current;
+        }
+        const fallbackRoot = hasWorkspaceRootRepo
+          ? ""
+          : (response.repositories.find((repo) => !repo.isWorkspaceRoot)?.root ?? "");
+        return current.root === fallbackRoot ? current : { workspace, root: fallbackRoot };
+      });
+    } catch {
+      if (repoDiscoveryRequestIdRef.current === requestId) {
+        setDiscoveredRepos({ workspace, list: [] });
+      }
+    }
+  }, [gitClient, workspaceCwd]);
+
+  useEffect(() => {
+    void discoverRepositories();
+  }, [discoverRepositories]);
+
+  const selectRepository = useCallback(
+    (root: string) => {
+      setRepoPick({ workspace: workspaceCwd, root });
+    },
+    [workspaceCwd],
+  );
+
   useEffect(() => {
     return () => window.clearTimeout(copyResetTimerRef.current);
   }, []);
@@ -602,9 +681,11 @@ export function GitBranchSelector(props: {
     [gitClient, refresh, workdir],
   );
 
+  // Invalidation stays keyed to the workspace folder: activity events cover
+  // subdirectory repositories because they live inside the workspace tree.
   useWorkspaceInvalidation({
     client: gitClient ? workspaceActivityClient : null,
-    workdir,
+    workdir: workspaceCwd,
     active: true,
     onInvalidate: handleWorkspaceInvalidate,
   });
@@ -681,6 +762,7 @@ export function GitBranchSelector(props: {
       if (!open) {
         resetCreateBranch();
         setFilter("");
+        setRepoMenuOpen(false);
       }
     },
     [resetCreateBranch],
@@ -1100,13 +1182,83 @@ export function GitBranchSelector(props: {
             <button
               type="button"
               className={HEADER_ICON_BUTTON_CLASS}
-              onClick={() => void refresh()}
+              onClick={() => {
+                // Manual refresh also re-scans for repositories so ones
+                // created mid-session show up.
+                void discoverRepositories();
+                void refresh();
+              }}
               title={t("git.branchSelector.refresh")}
               aria-label={t("git.branchSelector.refresh")}
             >
               <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
             </button>
           </div>
+          {repositories.length > 1 ? (
+            <div className="shrink-0 border-b border-border/60 p-1">
+              <DropdownMenuSub open={repoMenuOpen} onOpenChange={setRepoMenuOpen}>
+                <DropdownMenuSubTrigger
+                  clickToggle
+                  className="w-full gap-2 text-xs"
+                  title={t("git.branchSelector.switchRepository")}
+                  aria-label={t("git.branchSelector.switchRepository")}
+                >
+                  <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="shrink-0 text-muted-foreground">
+                    {t("git.branchSelector.repositoryLabel")}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {selectedGitRepositoryLabel(repositories, selectedRepoRoot) ||
+                      t("git.branchSelector.switchRepository")}
+                  </span>
+                  <span className="ml-auto shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] leading-4 text-muted-foreground">
+                    {repositories.length}
+                  </span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-52">
+                  {repositories.map((repo) => {
+                    const value = repo.isWorkspaceRoot ? "" : repo.root;
+                    const isCurrent = value === selectedRepoRoot;
+                    return (
+                      // Plain button (not a menu item): picking a repository
+                      // must close only the submenu and keep the root menu
+                      // open so the branch is still picked manually on the
+                      // newly selected repository.
+                      <button
+                        key={repo.root}
+                        type="button"
+                        disabled={mutating}
+                        className={cn(
+                          "flex w-full cursor-default select-none items-center gap-2 rounded-xs px-2 py-1.5 text-left text-xs outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+                          isCurrent && "text-muted-foreground",
+                        )}
+                        title={repo.root}
+                        onClick={(event) => {
+                          // Swallow the menu selection triggers so the root
+                          // menu stays open (see the footer create-branch
+                          // button for the same pattern).
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setRepoMenuOpen(false);
+                          if (!isCurrent) selectRepository(value);
+                        }}
+                      >
+                        {isCurrent ? (
+                          <Check className="h-3.5 w-3.5 shrink-0" />
+                        ) : (
+                          <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="min-w-0 flex-1 truncate">
+                          {gitDiscoveredRepositoryLabel(repo)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </div>
+          ) : null}
           {showFilter ? (
             <div className="shrink-0 border-b border-border/60 px-2 py-1.5">
               <div className="relative">

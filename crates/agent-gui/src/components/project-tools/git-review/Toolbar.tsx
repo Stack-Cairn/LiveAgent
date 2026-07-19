@@ -7,17 +7,22 @@
 // crates/agent-gateway/web/src). Keep changes in sync on both ends; only
 // relative or @tauri-apps/* imports are allowed here.
 
-import { useEffect, useId } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocale } from "../../../i18n";
+import type { GitBranch as GitBranchInfo } from "../../../lib/git/types";
+import { gitDiscoveredRepositoryLabel, selectedGitRepositoryLabel } from "../../../lib/git/types";
 import { cn } from "../../../lib/shared/utils";
 import {
   AlertTriangle,
   BrushCleaning,
+  Check,
   CheckCircle2,
+  ChevronDown,
   Cloud,
   Download,
   Eye,
+  Folder,
   GitBranch,
   History,
   Loader2,
@@ -29,10 +34,19 @@ import {
   XCircle,
 } from "../../icons";
 import { Button } from "../../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "../../ui/dropdown-menu";
 import { Input } from "../../ui/input";
 import { useRightDockToolContext } from "../RightDockContext";
 import {
+  basename,
   type GitBranchFromCommitState,
+  type GitBranchSwitchConflictState,
   type GitDiscardConfirmState,
   type GitOperationNotice,
   type GitRemoteSetupAction,
@@ -380,6 +394,183 @@ export function GitOperationNoticeToast({
   );
 }
 
+const GIT_REVIEW_REMOTE_BRANCH_DISPLAY_LIMIT = 40;
+
+// A checkout aborted by uncommitted local changes offers stash-and-switch
+// instead of surfacing the raw git error.
+export function GitBranchSwitchConflictModal(props: {
+  conflict: GitBranchSwitchConflictState | null;
+  loading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const { conflict, loading, onClose, onConfirm } = props;
+  const { t } = useLocale();
+  const titleId = useId();
+
+  if (!conflict) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+    >
+      <div
+        className="absolute inset-0 bg-black/55 backdrop-blur-sm"
+        onClick={loading ? undefined : onClose}
+      />
+      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
+        <div className="flex items-start gap-3 border-b border-border/60 px-5 py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div id={titleId} className="text-sm font-semibold text-foreground">
+              {t("projectTools.gitReview.switchBranchConflictTitle")}
+            </div>
+            <div className="mt-1 text-xs leading-5 text-muted-foreground">
+              {t("projectTools.gitReview.switchBranchConflictDescription").replace(
+                "{branch}",
+                conflict.branch,
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-4">
+          <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+            {t("chat.cancel")}
+          </Button>
+          <Button type="button" size="sm" onClick={onConfirm} disabled={loading}>
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            {t("projectTools.gitReview.stashAndSwitch")}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Head title as a branch switcher: branches load lazily when the menu opens
+// and switching runs through runOperation so status/history refresh and
+// errors surface exactly like the other toolbar operations.
+function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolean }) {
+  const { data, writeDisabled } = props;
+  const { busy, cwd, gitClient, state, switchBranch } = data;
+  const { t } = useLocale();
+  const [open, setOpen] = useState(false);
+  const [branches, setBranches] = useState<GitBranchInfo[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchesError, setBranchesError] = useState("");
+  const requestIdRef = useRef(0);
+  const operationBusy = busy !== "";
+
+  const loadBranches = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    if (!gitClient || !cwd.trim()) return;
+    setBranchesLoading(true);
+    setBranchesError("");
+    try {
+      const response = await gitClient.branches(cwd);
+      if (requestIdRef.current !== requestId) return;
+      setBranches(response.branches);
+    } catch (err) {
+      if (requestIdRef.current !== requestId) return;
+      setBranchesError(err instanceof Error ? err.message : String(err));
+      setBranches([]);
+    } finally {
+      if (requestIdRef.current === requestId) {
+        setBranchesLoading(false);
+      }
+    }
+  }, [cwd, gitClient]);
+
+  const title = state.head || t("projectTools.gitReviewTitle");
+  if (state.status !== "ready") {
+    return <div className="truncate text-sm font-semibold">{title}</div>;
+  }
+
+  const localBranches = branches.filter((branch) => branch.kind === "local");
+  const remoteBranches = branches.filter((branch) => branch.kind === "remote");
+
+  const renderBranchRow = (branch: GitBranchInfo, isCurrent: boolean, labelText: string) => (
+    <DropdownMenuItem
+      key={`${branch.kind}:${branch.fullName}`}
+      disabled={operationBusy}
+      onSelect={() => {
+        if (isCurrent || writeDisabled) return;
+        void switchBranch(branch.fullName, branch.kind);
+      }}
+      className={cn("gap-2 text-xs", (isCurrent || writeDisabled) && "text-muted-foreground")}
+      title={branch.fullName}
+    >
+      {isCurrent ? (
+        <Check className="h-3.5 w-3.5 shrink-0" />
+      ) : (
+        <GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      )}
+      <span className="min-w-0 flex-1 truncate">{labelText}</span>
+    </DropdownMenuItem>
+  );
+
+  return (
+    <DropdownMenu
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) void loadBranches();
+      }}
+    >
+      <DropdownMenuTrigger
+        disabled={operationBusy}
+        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded text-sm font-semibold outline-hidden transition-colors hover:text-foreground/75 disabled:pointer-events-none disabled:opacity-70"
+        title={t("projectTools.gitReview.switchBranch")}
+        aria-label={t("projectTools.gitReview.switchBranch")}
+      >
+        <span className="min-w-0 truncate">{title}</span>
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-70" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-56 max-w-72">
+        <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          {t("projectTools.gitReview.switchBranch")}
+        </DropdownMenuLabel>
+        {branchesLoading ? (
+          <div className="flex items-center justify-center px-2 py-3">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : branchesError ? (
+          <div className="px-2 py-2 text-xs text-destructive">{branchesError}</div>
+        ) : (
+          <>
+            {localBranches.length > 0 ? (
+              <DropdownMenuLabel className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                {t("git.branchSelector.localBranches")}
+              </DropdownMenuLabel>
+            ) : null}
+            {localBranches.map((branch) => renderBranchRow(branch, branch.current, branch.name))}
+            {remoteBranches.length > 0 ? (
+              <DropdownMenuLabel className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                {t("git.branchSelector.remoteBranches")}
+              </DropdownMenuLabel>
+            ) : null}
+            {remoteBranches.slice(0, GIT_REVIEW_REMOTE_BRANCH_DISPLAY_LIMIT).map((branch) => {
+              const isCurrentUpstream =
+                branch.current || (state.upstream !== "" && branch.fullName === state.upstream);
+              return renderBranchRow(branch, isCurrentUpstream, branch.fullName);
+            })}
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function GitReviewToolbar(props: {
   data: GitReviewData;
   stackedPane: GitReviewStackedPane;
@@ -402,13 +593,17 @@ export function GitReviewToolbar(props: {
     canWrite,
     cwd,
     disabledMessage,
+    discoverRepositories,
     gitClient,
     historyLoading,
     loadHistory,
     loading,
     refresh,
+    repositories,
     reviewMode,
     runOperation,
+    selectRepository,
+    selectedRepoRoot,
     setReviewMode,
     state,
   } = data;
@@ -418,15 +613,78 @@ export function GitReviewToolbar(props: {
 
   return (
     <div className="shrink-0 border-b border-border px-3 py-3">
+      <GitBranchSwitchConflictModal
+        conflict={data.branchSwitchConflict}
+        loading={busy === "switch_branch"}
+        onClose={data.dismissBranchSwitchConflict}
+        onConfirm={() => void data.stashAndSwitchBranch()}
+      />
       <div className="flex items-center gap-2">
         <GitBranch className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">
-            {state.head || t("projectTools.gitReviewTitle")}
-          </div>
-          <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground">
-            {state.repoRoot || disabledMessage || t("projectTools.gitReview.noRepository")}
-          </div>
+          {/* Repository first, branch second (the container before the item,
+              as in GitHub Desktop / VSCode), keeping the branch line adjacent
+              to its tracking card below. */}
+          {repositories.length > 1 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                disabled={operationBusy}
+                className="mb-0.5 inline-flex min-w-0 max-w-full items-center gap-1 rounded-md border border-border/60 bg-muted/40 py-px pl-1 pr-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground outline-hidden transition-colors hover:border-border hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                title={t("projectTools.gitReview.repositoryPicker")}
+                aria-label={t("projectTools.gitReview.repositoryPicker")}
+              >
+                <Folder className="h-3 w-3 shrink-0 opacity-70" />
+                <span className="min-w-0 truncate">
+                  {selectedGitRepositoryLabel(repositories, selectedRepoRoot) ||
+                    state.repoRoot ||
+                    t("projectTools.gitReview.noRepository")}
+                </span>
+                <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-56">
+                <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("projectTools.gitReview.repositoryPicker")}
+                </DropdownMenuLabel>
+                {repositories.map((repo) => {
+                  const value = repo.isWorkspaceRoot ? "" : repo.root;
+                  const selected = value === selectedRepoRoot;
+                  return (
+                    <DropdownMenuItem
+                      key={repo.root}
+                      disabled={operationBusy}
+                      onSelect={() => {
+                        if (!selected) selectRepository(value);
+                      }}
+                      className="gap-2 text-xs"
+                      title={repo.root}
+                    >
+                      {selected ? (
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="min-w-0 flex-1 truncate">
+                        {gitDiscoveredRepositoryLabel(repo)}
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div
+              className="flex min-w-0 items-center gap-1 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground"
+              title={state.repoRoot || undefined}
+            >
+              <Folder className="h-3 w-3 shrink-0 opacity-70" />
+              <span className="min-w-0 truncate">
+                {state.repoRoot
+                  ? basename(state.repoRoot)
+                  : disabledMessage || t("projectTools.gitReview.noRepository")}
+              </span>
+            </div>
+          )}
+          <GitReviewBranchMenu data={data} writeDisabled={writeDisabled} />
         </div>
         <Button
           size="sm"
@@ -454,6 +712,9 @@ export function GitReviewToolbar(props: {
           aria-label={t("projectTools.gitReview.refresh")}
           onClick={() => {
             if (data.isBusy()) return;
+            // Manual refresh also re-scans for repositories so ones created
+            // mid-session (e.g. a fresh clone in a subdirectory) show up.
+            void discoverRepositories();
             if (reviewMode === "history") {
               void loadHistory();
             } else {
@@ -510,14 +771,19 @@ export function GitReviewToolbar(props: {
         </Button>
       </div>
       {state.status === "ready" ? (
-        <div className="mt-2.5 overflow-hidden rounded-xl border border-white/20 bg-white/50 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.03]">
-          <div className="flex items-center gap-2 border-b border-black/[0.04] px-3 py-2 dark:border-white/[0.06]">
-            <GitBranch className="h-3 w-3 shrink-0 text-muted-foreground/70" />
-            <span className="min-w-0 truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium text-foreground/80">
-              {branchDiff?.baseRef || state.upstream || t("projectTools.gitReview.unresolved")}
-            </span>
-            <span className="ml-auto shrink-0 text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground/60">
+        <div className="mt-1.5 overflow-hidden rounded-xl border border-white/20 bg-white/50 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <div className="flex items-center gap-1.5 border-b border-black/[0.04] px-3 py-2 dark:border-white/[0.06]">
+            <span className="shrink-0 rounded bg-muted/70 px-1.5 py-0.5 text-[calc(10px*var(--zone-font-scale,1))] font-medium leading-none text-muted-foreground">
               {t("projectTools.gitReview.labelBase")}
+            </span>
+            <Cloud className="h-3 w-3 shrink-0 text-muted-foreground/60" />
+            <span
+              className="min-w-0 truncate font-mono text-[calc(11px*var(--zone-font-scale,1))] text-foreground/75"
+              title={
+                branchDiff?.baseRef || state.upstream || t("projectTools.gitReview.unresolved")
+              }
+            >
+              {branchDiff?.baseRef || state.upstream || t("projectTools.gitReview.unresolved")}
             </span>
           </div>
           <div className="grid grid-cols-5">

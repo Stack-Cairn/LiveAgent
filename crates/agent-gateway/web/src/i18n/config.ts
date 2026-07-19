@@ -481,6 +481,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.showBranchDiff": "显示分支 Diff",
     "projectTools.gitReview.operationFailed": "Git 操作失败。",
     "projectTools.gitReview.noRepository": "未找到 Git 仓库",
+    "projectTools.gitReview.repositoryPicker": "选择要审查的仓库",
+    "projectTools.gitReview.switchBranch": "切换分支",
+    "projectTools.gitReview.switchBranchConflictTitle": "无法切换分支",
+    "projectTools.gitReview.switchBranchConflictDescription":
+      "本地未提交的更改会被切换覆盖。可以先暂存更改，再切换到 {branch}。",
+    "projectTools.gitReview.stashAndSwitch": "暂存并切换",
     "projectTools.gitReview.refresh": "刷新",
     "projectTools.gitReview.fetch": "获取",
     "projectTools.gitReview.pull": "拉取",
@@ -600,6 +606,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "git.branchSelector.create": "创建",
     "git.branchSelector.createNewBranch": "创建新分支",
     "git.branchSelector.initRepository": "初始化仓库",
+    "git.branchSelector.switchRepository": "切换仓库",
+    "git.branchSelector.repositoryLabel": "仓库",
     "git.branchSelector.initRepositoryTitle": "初始化 Git 仓库",
     "git.branchSelector.initRepositoryDescription":
       "在当前目录创建 .git，并写入可选的本地 Git 用户信息。",
@@ -2333,6 +2341,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "projectTools.gitReview.showBranchDiff": "Show Branch Diff",
     "projectTools.gitReview.operationFailed": "Git operation failed.",
     "projectTools.gitReview.noRepository": "No Git repository",
+    "projectTools.gitReview.repositoryPicker": "Select repository to review",
+    "projectTools.gitReview.switchBranch": "Switch branch",
+    "projectTools.gitReview.switchBranchConflictTitle": "Cannot switch branch",
+    "projectTools.gitReview.switchBranchConflictDescription":
+      "Your uncommitted local changes would be overwritten by the switch. Stash them first, then switch to {branch}.",
+    "projectTools.gitReview.stashAndSwitch": "Stash & switch",
     "projectTools.gitReview.refresh": "Refresh",
     "projectTools.gitReview.fetch": "Fetch",
     "projectTools.gitReview.pull": "Pull",
@@ -2457,6 +2471,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "git.branchSelector.create": "Create",
     "git.branchSelector.createNewBranch": "Create New Branch",
     "git.branchSelector.initRepository": "Initialize Repository",
+    "git.branchSelector.switchRepository": "Switch repository",
+    "git.branchSelector.repositoryLabel": "Repository",
     "git.branchSelector.initRepositoryTitle": "Initialize Git Repository",
     "git.branchSelector.initRepositoryDescription":
       "Create .git in the current directory and optionally save local Git user details.",

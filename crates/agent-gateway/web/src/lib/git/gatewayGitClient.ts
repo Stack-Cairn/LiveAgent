@@ -6,6 +6,7 @@ import {
   normalizeGitDiffResponse,
   normalizeGitLogResponse,
   normalizeGitOperationResponse,
+  normalizeGitRepositoryDiscovery,
   normalizeGitRepositoryState,
 } from "./types";
 
@@ -13,6 +14,12 @@ export function createGatewayGitClient(api: GatewayWebSocketClientLike): GitClie
   return {
     async status(workdir) {
       return normalizeGitRepositoryState(await api.gitRequest("status", workdir), workdir);
+    },
+    async discoverRepositories(workdir) {
+      return normalizeGitRepositoryDiscovery(
+        await api.gitRequest("discover_repositories", workdir),
+        workdir,
+      );
     },
     async branches(workdir) {
       return normalizeGitBranchesResponse(await api.gitRequest("branches", workdir), workdir);

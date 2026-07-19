@@ -195,6 +195,21 @@ export function isMissingRemoteSetupError(message: string) {
   return message.includes("找不到 origin remote") || message.includes("还没有设置远端仓库");
 }
 
+// git aborts a checkout that would clobber uncommitted local changes; the
+// backend pins LC_ALL=C so the message text is stable English.
+export function isCheckoutOverwriteError(message: string) {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("would be overwritten by checkout") ||
+    lower.includes("commit your changes or stash them")
+  );
+}
+
+export type GitBranchSwitchConflictState = {
+  branch: string;
+  kind: string;
+};
+
 export function isRemoteSetupAction(
   action: GitOperationNoticeAction,
 ): action is GitRemoteSetupAction {

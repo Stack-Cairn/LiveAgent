@@ -6,12 +6,19 @@ import {
   normalizeGitDiffResponse,
   normalizeGitLogResponse,
   normalizeGitOperationResponse,
+  normalizeGitRepositoryDiscovery,
   normalizeGitRepositoryState,
 } from "./types";
 
 export const tauriGitClient: GitClient = {
   async status(workdir) {
     return normalizeGitRepositoryState(await invoke("git_status", { workdir }), workdir);
+  },
+  async discoverRepositories(workdir) {
+    return normalizeGitRepositoryDiscovery(
+      await invoke("git_discover_repositories", { workdir }),
+      workdir,
+    );
   },
   async branches(workdir) {
     return normalizeGitBranchesResponse(await invoke("git_branches", { workdir }), workdir);
