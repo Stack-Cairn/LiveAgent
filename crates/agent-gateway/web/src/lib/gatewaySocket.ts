@@ -2393,7 +2393,8 @@ export class GatewayWebSocketClient {
       base_url: baseUrl,
       api_key: apiKey,
       use_system_proxy: useSystemProxy,
-      custom_headers: customHeaders,
+      // v2 编码器（gatewaySocketV2/adapters.ts）只识别 custom_headers_json 字符串字段。
+      custom_headers_json: JSON.stringify(customHeaders),
     });
   }
 

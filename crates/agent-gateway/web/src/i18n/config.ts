@@ -1207,6 +1207,7 @@ export const translations: Record<Locale, Record<string, string>> = {
       "请求头名称无效。仅支持合法 HTTP Header 名称，例如 anthropic-beta、X-Request-ID。",
     "settings.customHeaderReservedHint":
       "Authorization、x-api-key、x-goog-api-key、anthropic-version、Content-Type、Host、Content-Length 由应用管理，自定义值不会覆盖它们。",
+    "settings.close": "关闭",
     "settings.hideApiKey": "隐藏 API Key",
     "settings.showApiKey": "显示 API Key",
     "settings.requestFormat": "请求格式",
@@ -3080,6 +3081,7 @@ export const translations: Record<Locale, Record<string, string>> = {
       "Invalid HTTP header name. Examples: anthropic-beta, X-Request-ID.",
     "settings.customHeaderReservedHint":
       "Authorization, x-api-key, x-goog-api-key, anthropic-version, Content-Type, Host, and Content-Length are managed by the app and cannot be overridden.",
+    "settings.close": "Close",
     "settings.hideApiKey": "Hide API Key",
     "settings.showApiKey": "Show API Key",
     "settings.requestFormat": "Request Format",

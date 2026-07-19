@@ -545,6 +545,39 @@ test("GatewayWebSocketClient sends mention query payloads", async () => {
   resetGatewayWebSocketClient();
 });
 
+// 回归：getProviderModels 必须把自定义头序列化进 custom_headers_json（v2 编码器只识别该字段）。
+test("GatewayWebSocketClient serializes provider custom headers into custom_headers_json", async () => {
+  installBrowser();
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const modelsPromise = client.getProviderModels(
+    "claude_code",
+    "https://relay.example.com/v1",
+    "secret-key",
+    true,
+    [{ key: "anthropic-beta", value: "context-1m-2025-08-07" }],
+  );
+  const socket = await connectAndAuth(codec);
+  await waitFor(() => findAgentRequest(codec, socket, "provider_models"), "provider_models frame");
+  const request = findAgentRequest(codec, socket, "provider_models");
+  assert.equal(request.json.agent_request.provider_models.provider_type, "claude_code");
+  assert.equal(request.json.agent_request.provider_models.use_system_proxy, true);
+  assert.deepEqual(JSON.parse(request.json.agent_request.provider_models.custom_headers_json), [
+    { key: "anthropic-beta", value: "context-1m-2025-08-07" },
+  ]);
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      request_id: request.requestId,
+      agent_response: { provider_models_resp: { models_json: JSON.stringify({ data: [] }) } },
+    }),
+  );
+
+  assert.deepEqual(await modelsPromise, { data: [] });
+  resetGatewayWebSocketClient();
+});
+
 test("GatewayWebSocketClient sends memory manage payloads", async () => {
   installBrowser();
   const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
