@@ -1449,7 +1449,7 @@ function Popup({
       <div className="px-3.5 pb-1.5 pt-3 text-xs font-medium text-muted-foreground">
         {trigger === "skill" ? "Skills" : "文件"}
       </div>
-      <div className="mention-popup-scroll relative flex max-h-[320px] flex-col gap-0.5 overflow-y-auto px-2 pb-2">
+      <div className="mention-popup-scroll relative flex max-h-[320px] flex-col gap-1 overflow-y-auto px-2 pb-2">
         {isLoading && (
           <div className="px-2 py-2 text-xs text-muted-foreground">Indexing files...</div>
         )}
@@ -1472,7 +1472,7 @@ function Popup({
               }
               ref={i === highlightIndex ? hlRef : undefined}
               className={cn(
-                "mention-popup-item group flex h-[30px] cursor-pointer items-center gap-3 rounded-lg px-3 text-xs leading-5 transition-colors",
+                "mention-popup-item group flex h-[34px] cursor-pointer items-center gap-3 rounded-lg px-3 text-xs leading-5 transition-colors",
                 i === highlightIndex
                   ? "bg-foreground/[0.07] text-foreground"
                   : "text-foreground/85 hover:bg-foreground/[0.05] dark:text-foreground/90",
