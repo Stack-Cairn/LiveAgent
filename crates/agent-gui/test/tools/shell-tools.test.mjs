@@ -207,6 +207,7 @@ test("Bash tool rejects background commands that keep stdio attached", async () 
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
+    runtimePlatform: "linux",
   });
 
   const result = await bundle.executeToolCall(
@@ -236,6 +237,7 @@ test("Bash tool rejects background commands when redirects belong to another com
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
+    runtimePlatform: "linux",
   });
 
   const result = await bundle.executeToolCall(
@@ -264,6 +266,7 @@ test("Bash tool rejects background commands with only stderr append redirected",
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
+    runtimePlatform: "linux",
   });
 
   const result = await bundle.executeToolCall(
@@ -454,6 +457,7 @@ test("ManagedProcess rejects nested shell background operators", async () => {
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
+    runtimePlatform: "linux",
   });
 
   const result = await bundle.executeToolCall({

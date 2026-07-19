@@ -2819,6 +2819,7 @@ mod tests {
         }
         let temp = tempfile::tempdir().expect("temp repo");
         run_temp_git(temp.path(), &["init"]);
+        run_temp_git(temp.path(), &["config", "core.autocrlf", "false"]);
         run_temp_git(temp.path(), &["config", "user.name", "LiveAgent Test"]);
         run_temp_git(temp.path(), &["config", "user.email", "test@example.com"]);
         fs::write(temp.path().join("README.md"), "initial\n").expect("write readme");

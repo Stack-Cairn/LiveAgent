@@ -1199,6 +1199,7 @@ mod tests {
     fn init_repo(root: &Path) -> Result<(), String> {
         fs::create_dir_all(root).map_err(|err| format!("failed to create repo: {err}"))?;
         git(root, &["init"])?;
+        git(root, &["config", "core.autocrlf", "false"])?;
         git(
             root,
             &["config", "user.email", "liveagent-test@example.com"],

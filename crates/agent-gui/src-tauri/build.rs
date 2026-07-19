@@ -47,5 +47,41 @@ fn main() {
         .compile_protos(&[proto_v1, proto_v2], &[gateway_root])
         .expect("compile gateway protos");
 
-    tauri_build::build()
+    let is_windows_msvc = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+    if is_windows_msvc {
+        let manifest_path = std::path::Path::new(
+            &std::env::var("OUT_DIR").expect("OUT_DIR for Windows app manifest"),
+        )
+        .join("windows-app-manifest.xml");
+        std::fs::write(
+            &manifest_path,
+            r#"<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+</assembly>
+"#,
+        )
+        .expect("write Windows app manifest");
+        let attributes = tauri_build::Attributes::new()
+            .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
+        tauri_build::try_build(attributes).expect("run Tauri build script");
+        println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+        println!(
+            "cargo:rustc-link-arg=/MANIFESTINPUT:{}",
+            manifest_path.display()
+        );
+    } else {
+        tauri_build::build();
+    }
 }

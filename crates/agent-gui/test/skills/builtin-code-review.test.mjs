@@ -12,7 +12,7 @@ const builtinRegistrySource = readFileSync(
 );
 
 test("built-in code review skill is registered under a collision-resistant name", () => {
-  assert.match(skillSource, /^---\nname: liveagent-code-review\n/m);
+  assert.match(skillSource, /^---\r?\nname: liveagent-code-review\r?\n/m);
   assert.match(builtinRegistrySource, /name: "liveagent-code-review"/);
   assert.match(
     builtinRegistrySource,
