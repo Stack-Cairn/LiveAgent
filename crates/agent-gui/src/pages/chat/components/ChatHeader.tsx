@@ -121,6 +121,8 @@ export const ChatHeader = memo(function ChatHeader(props: {
         "flex items-center justify-between gap-2 py-2.5 pr-4",
         !sidebarOpen && macOsTauri ? "pl-[232px]" : "pl-4",
       )}
+      // Windows 悬浮窗口控制胶囊占据右上角，头部右端让出同宽空间。
+      style={{ paddingRight: "calc(1rem + var(--win-chrome-reserve, 0px))" }}
     >
       <div className="flex min-w-0 items-center gap-1.5">
         {!sidebarOpen && !macOsTauri ? (

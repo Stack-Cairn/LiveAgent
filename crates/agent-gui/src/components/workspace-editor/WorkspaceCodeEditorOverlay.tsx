@@ -853,7 +853,10 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       )}
     >
       <MacOsTitleBarSpacer className="bg-muted/45" />
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-muted/45 px-3">
+      <div
+        className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-muted/45 px-3"
+        style={{ paddingRight: "calc(0.75rem + var(--win-chrome-reserve, 0px))" }}
+      >
         <FilePenLine className="h-4 w-4 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold leading-tight">
