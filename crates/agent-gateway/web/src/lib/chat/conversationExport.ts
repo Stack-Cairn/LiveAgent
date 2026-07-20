@@ -94,7 +94,9 @@ export function extractUiRoundText(
   return parts.join("\n").trim();
 }
 
-function formatAttachmentLines(attachments: readonly TranscriptExportAttachment[] | undefined): string {
+function formatAttachmentLines(
+  attachments: readonly TranscriptExportAttachment[] | undefined,
+): string {
   if (!Array.isArray(attachments) || attachments.length === 0) return "";
   const lines: string[] = [];
   for (const file of attachments) {
@@ -134,7 +136,10 @@ export function collectMessagesFromTranscriptRows(
       const attachments = Array.isArray(row.attachments)
         ? (row.attachments as readonly TranscriptExportAttachment[])
         : undefined;
-      const content = formatUserExportText(typeof row.text === "string" ? row.text : "", attachments);
+      const content = formatUserExportText(
+        typeof row.text === "string" ? row.text : "",
+        attachments,
+      );
       // Keep attachment-only turns (empty text) in the export.
       if (content) out.push({ role: "user", content });
       continue;
@@ -307,7 +312,9 @@ const ATTACHMENTS_FIELD = "liveAgentAttachments";
 function attachmentsFromMessage(message: Record<string, unknown>): TranscriptExportAttachment[] {
   const raw = message[ATTACHMENTS_FIELD];
   if (!Array.isArray(raw)) return [];
-  return raw.filter((item): item is TranscriptExportAttachment => !!item && typeof item === "object");
+  return raw.filter(
+    (item): item is TranscriptExportAttachment => !!item && typeof item === "object",
+  );
 }
 
 /** Extract plain text from common LiveAgent / pi-ai message shapes. */

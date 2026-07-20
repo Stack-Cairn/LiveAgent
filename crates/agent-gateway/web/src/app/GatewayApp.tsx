@@ -26,6 +26,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { LocaleContext, t as translate } from "@/i18n";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
 import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
+import { captureDisplayFrameToFile, readClipboardImageFiles } from "@/lib/chat/clipboardCapture";
+import { type ContextUsageSnapshot, estimateContextUsage } from "@/lib/chat/contextUsage";
+import {
+  buildConversationExportFilename,
+  collectActiveContextFromTranscriptRows,
+  collectExportMessages,
+  collectMessagesFromTranscriptRows,
+  conversationToMarkdown,
+  downloadTextFile,
+  formatUsdCost,
+  sumConversationCost,
+} from "@/lib/chat/conversationExport";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type { CodeMentionReference } from "@/lib/chat/mentionReferences";
 import { createActivityStore } from "@/lib/chat/stream/activityStore";
@@ -97,24 +109,6 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@/lib/settings";
-import {
-  captureDisplayFrameToFile,
-  readClipboardImageFiles,
-} from "@/lib/chat/clipboardCapture";
-import {
-  estimateContextUsage,
-  type ContextUsageSnapshot,
-} from "@/lib/chat/contextUsage";
-import {
-  buildConversationExportFilename,
-  collectActiveContextFromTranscriptRows,
-  collectExportMessages,
-  collectMessagesFromTranscriptRows,
-  conversationToMarkdown,
-  downloadTextFile,
-  formatUsdCost,
-  sumConversationCost,
-} from "@/lib/chat/conversationExport";
 import { createUuid } from "@/lib/shared/id";
 import { mergeAlwaysEnabledSkillNames } from "@/lib/skills";
 import { terminalSessionBelongsToProject } from "@/lib/terminal/sessionStore";
@@ -3966,8 +3960,7 @@ export default function GatewayApp() {
     const recomputeMeters = () => {
       if (cancelled) return;
       const rows =
-        transcriptStoreRegistry.peek(displayedConversationId)?.getSnapshot().rows ??
-        transcriptRows;
+        transcriptStoreRegistry.peek(displayedConversationId)?.getSnapshot().rows ?? transcriptRows;
 
       // Cost (export flattening is fine — export itself is on-demand).
       const costMessages = collectMessagesFromTranscriptRows(rows);
@@ -4090,8 +4083,7 @@ export default function GatewayApp() {
           return;
         }
         rows =
-          transcriptStoreRegistry.peek(exportConversationId)?.getSnapshot().rows ??
-          transcriptRows;
+          transcriptStoreRegistry.peek(exportConversationId)?.getSnapshot().rows ?? transcriptRows;
       } else if (getDisplayedConversationId().trim() !== exportConversationId) {
         setChatError(translate("chat.toolbar.exportIncomplete", settings.locale));
         return;

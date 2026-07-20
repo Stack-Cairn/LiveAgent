@@ -319,10 +319,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   );
 
   const importReadableFiles = useCallback(
-    async (
-      files: File[],
-      lock?: { conversationId: string; workdir: string } | null,
-    ) => {
+    async (files: File[], lock?: { conversationId: string; workdir: string } | null) => {
       if (files.length === 0) return;
       let lockedTarget: UploadTarget | null = null;
       if (lock?.conversationId?.trim() && lock.workdir?.trim()) {

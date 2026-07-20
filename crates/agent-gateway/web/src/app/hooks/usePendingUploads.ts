@@ -157,10 +157,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   }, [displayedConversationId]);
 
   const handleImportReadableFiles = useCallback(
-    async (
-      filesToImport: File[],
-      lock?: { conversationId?: string; workdir?: string } | null,
-    ) => {
+    async (filesToImport: File[], lock?: { conversationId?: string; workdir?: string } | null) => {
       if (filesToImport.length === 0) {
         return;
       }
@@ -172,8 +169,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         setChatError(translate("chat.upload.onlyInTools", locale));
         return;
       }
-      const workdir =
-        lock?.workdir?.trim() || displayedConversationWorkdirRef.current.trim();
+      const workdir = lock?.workdir?.trim() || displayedConversationWorkdirRef.current.trim();
       if (!workdir) {
         setChatError(translate("chat.upload.requireWorkdir", locale));
         return;

@@ -1916,7 +1916,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.toolbar.contextUsageUnknownWindow": "About {used} used (context window not set)",
     "chat.toolbar.compact": "Compact context",
     "chat.toolbar.compactRunning": "Compacting…",
-    "chat.toolbar.compactConfirm": "Context is not near the limit yet. Compact anyway? This calls the model to summarize.",
+    "chat.toolbar.compactConfirm":
+      "Context is not near the limit yet. Compact anyway? This calls the model to summarize.",
     "chat.toolbar.compactConfirmAction": "Compact anyway",
     "chat.toolbar.compactDesktopOnly": "Manual compact is only available on the desktop app",
     "chat.toolbar.compactUnavailable": "Compaction unavailable",
@@ -1943,7 +1944,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.toolbar.exportMarkdown": "Export Markdown",
     "chat.toolbar.exportSuccess": "Conversation exported",
     "chat.toolbar.exportFailed": "Export failed",
-    "chat.toolbar.exportIncomplete": "Full history is not loaded yet; cannot export the whole conversation. Try again later.",
+    "chat.toolbar.exportIncomplete":
+      "Full history is not loaded yet; cannot export the whole conversation. Try again later.",
     "chat.recentConversation": "Conversations",
     "chat.workspaceSection": "Workspaces",
     "chat.workspaceCreate": "New workspace",

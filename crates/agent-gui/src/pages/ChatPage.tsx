@@ -43,6 +43,7 @@ import { getAutomationState } from "../lib/automation";
 import { createHookRunScope } from "../lib/automation/hookRunner";
 import { captureDisplayFrameToFile, readClipboardImageFiles } from "../lib/chat/clipboardCapture";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
+import { sanitizeMessagesForContinuation } from "../lib/chat/context/requestContextSanitizer";
 import { estimateContextUsage } from "../lib/chat/contextUsage";
 import {
   buildPersistableMessagesFromSnapshot,
@@ -59,7 +60,6 @@ import {
   type RenderTimelineItem,
   truncateConversationFromMessage,
 } from "../lib/chat/conversation/conversationState";
-import { sanitizeMessagesForContinuation } from "../lib/chat/context/requestContextSanitizer";
 import type { LiveTranscriptStore } from "../lib/chat/conversation/liveTranscriptStore";
 import {
   createConversationHookLifecycle,
@@ -274,7 +274,6 @@ import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import { McpHubPage } from "./mcp-hub/McpHubPage";
 import type { SectionId } from "./settings/types";
 import { SkillsHubPage } from "./skills-hub/SkillsHubPage";
-
 
 const WorkspaceCodeEditorOverlay = lazy(async () => {
   await preparePreferredMonacoNlsLocale();
@@ -5517,8 +5516,7 @@ export function ChatPage(props: ChatPageProps) {
       const messages = collectExportMessages(
         entry?.state?.segments?.flatMap((segment) => segment.messages) ?? allConversationMessages,
       );
-      const title =
-        sidebarStore.peek(conversationId)?.title?.trim() || t("chat.pendingTitle");
+      const title = sidebarStore.peek(conversationId)?.title?.trim() || t("chat.pendingTitle");
       const markdown = conversationToMarkdown({ title, messages });
       downloadTextFile(buildConversationExportFilename(title), markdown);
       addNotify("warning", t("chat.toolbar.exportSuccess"));
@@ -5711,9 +5709,6 @@ export function ChatPage(props: ChatPageProps) {
     if (persistedCwd) return persistedCwd;
     return displayedConversationWorkdir || undefined;
   })();
-  
-
-  
 
   const isCompactionRunning = compactionStatus.phase === "running";
   const isConversationHydrating = hydratingConversationId === currentConversationId;

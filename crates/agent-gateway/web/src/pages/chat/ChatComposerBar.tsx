@@ -61,10 +61,7 @@ import {
 } from "../../components/ui/select";
 import { useLocale } from "../../i18n";
 import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
-import {
-  formatUploadedFileSize,
-  type PendingUploadedFile,
-} from "../../lib/chat/uploadedFiles";
+import { formatUploadedFileSize, type PendingUploadedFile } from "../../lib/chat/uploadedFiles";
 import type { GitClient } from "../../lib/git/types";
 import {
   type ChatRuntimeControls,
