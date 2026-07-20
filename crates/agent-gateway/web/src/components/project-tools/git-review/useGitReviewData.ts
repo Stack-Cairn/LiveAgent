@@ -211,29 +211,28 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
   useEffect(() => {
     if (committedCwdKeyRef.current === cwdKey) return;
     committedCwdKeyRef.current = cwdKey;
-    setState(emptyGitRepositoryState(cwd));
-    setBranchDiff(null);
-    setWorktreeDiff(null);
+    // Repository switch (the panel remounts per workspace, so only the repo
+    // pick or client availability changes mid-mount): keep the previously
+    // rendered data on screen and let the freshly-issued loads swap it in a
+    // single repaint. Resetting content to the empty state here flashed the
+    // whole panel — header card unmounting, lists collapsing — before the
+    // new repository's data landed. The render-phase epoch above already
+    // invalidated every in-flight response, signature and selection ref, so
+    // stale responses land as no-ops and the loads below reconcile the
+    // visible selection; only errors and transient flags are cleared (their
+    // owning requests were orphaned by the epoch bump and would otherwise
+    // leave spinners stuck on).
     setBranchError("");
     setError("");
     setLoading(false);
     setDiffLoading(false);
-    setSelectedPath("");
-    setHistoryCommits([]);
-    setHistoryGraphState(EMPTY_GIT_HISTORY_GRAPH_STATE);
     setHistoryLoading(false);
     setHistoryLoadingMore(false);
     setHistoryHasMore(false);
     setHistoryLoadMoreError("");
     setHistoryError("");
-    setSelectedCommitSha("");
-    setSelectedCommitFilePath("");
-    setExpandedCommitShas(new Set());
-    setCommitDiff(null);
     setCommitDiffLoading(false);
-    setHistoryDiffTitle("");
-    setHistoryDiffSubtitle("");
-  }, [cwd, cwdKey]);
+  }, [cwdKey]);
 
   const beginGitOperation = useCallback((name: string) => {
     if (busyRef.current) {
@@ -374,10 +373,14 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         return;
       }
       if (diffPathRef.current !== cleanPath) {
+        // Selection moved: reset the signatures so the incoming responses
+        // always apply, but keep the previous diff rendered while they load.
+        // Clearing it here blanked the pane on every selection/branch/repo
+        // change; DiffView only shows its loading placeholder when no diff is
+        // mounted, so keeping the old one makes the swap land in one repaint
+        // (the card header spinner still signals the load).
         branchDiffSignatureRef.current = "";
         worktreeDiffSignatureRef.current = "";
-        setBranchDiff(null);
-        setWorktreeDiff(null);
       }
       diffPathRef.current = cleanPath;
       if (!options.silent) {
@@ -488,7 +491,12 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
           }
           return;
         }
-        setState(nextState);
+        // Identity guard even on forced reloads: post-operation refreshes run
+        // with force to re-reconcile selection, but swapping in an identical
+        // state object would repaint the whole panel for no visual delta.
+        if (stateChanged) {
+          setState(nextState);
+        }
         if (nextState.status !== "ready") {
           selectedPathRef.current = "";
           setSelectedPath("");
@@ -670,7 +678,9 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         statusSignatureRef.current = nextStatusSignature;
 
         if (append) {
-          setState(response.state);
+          if (statusChanged) {
+            setState(response.state);
+          }
           if (response.state.status !== "ready") {
             historySignatureRef.current = "";
             historyCommitsRef.current = [];
@@ -707,14 +717,18 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
         if (historyChanged) {
           commitDetailsCacheRef.current.clear();
         }
-        if (force || statusChanged) {
+        if (statusChanged) {
           setState(response.state);
         }
         setHistoryHasMoreValue(
           !force && !historyChanged && !historyHasMoreRef.current ? false : pageHasMore,
         );
         setHistoryLoadMoreError("");
-        if (!force && !historyChanged) {
+        // Identity guard (mirrors refresh): even a forced reload keeps the
+        // commit list, graph state and selection untouched when the history
+        // signature is unchanged — replacing them with identical-but-new
+        // objects repainted every row and flashed the view after operations.
+        if (!historyChanged) {
           return;
         }
         historyCommitsRef.current = response.commits;
