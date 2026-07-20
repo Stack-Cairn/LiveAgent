@@ -24,6 +24,7 @@ import type {
 } from "../components/chat/MentionComposer";
 import { type NotifyItem, NotifyToast } from "../components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "../components/chat/SharedHistoryManagerModal";
+import { ToolApprovalModal } from "../components/chat/ToolApprovalModal";
 import { Ban, PanelRightClose, PanelRightOpen, Terminal, Upload } from "../components/icons";
 import { MacOsTitleBarSpacer, MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type {
@@ -97,6 +98,11 @@ import {
   getFirstUserMessageText,
   isAbortLikeError,
 } from "../lib/chat/page/chatPageHelpers";
+import type {
+  RequestToolApproval,
+  ToolApprovalDecision,
+  ToolApprovalRequest,
+} from "../lib/chat/runner/toolApprovalPolicy";
 import type { ScrollFollowHandle } from "../lib/chat-scroll/useScrollFollow";
 import { createStreamDebugLogger } from "../lib/debug/agentDebug";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
@@ -547,6 +553,12 @@ function resolveConversationTitleModelSelection(
   };
 }
 
+type PendingToolApproval = {
+  request: ToolApprovalRequest;
+  resolve: (decision: ToolApprovalDecision) => void;
+  settled: boolean;
+};
+
 function buildProviderRuntimeConfig(
   provider: AppSettings["customProviders"][number],
   model: string,
@@ -814,6 +826,35 @@ export function ChatPage(props: ChatPageProps) {
   // render needs (draft detection, pending-item effect, workspace root).
   const historyItems = useSidebarSelector(sidebarStore, selectConversations);
   const sidebarConversationsById = useSidebarSelector(sidebarStore, (s) => s.byId);
+  // 危险工具审批：runner 在 beforeToolCall 处等待队首请求被允许 / 拒绝。
+  // 并行工具可能同时请求多个确认，按 FIFO 逐个弹出。
+  const toolApprovalQueueRef = useRef<PendingToolApproval[]>([]);
+  const [activeToolApproval, setActiveToolApproval] = useState<PendingToolApproval | null>(null);
+  const settleToolApproval = useCallback((entry: PendingToolApproval, approved: boolean) => {
+    if (entry.settled) return;
+    entry.settled = true;
+    toolApprovalQueueRef.current = toolApprovalQueueRef.current.filter((item) => item !== entry);
+    entry.resolve({ approved });
+    setActiveToolApproval(toolApprovalQueueRef.current[0] ?? null);
+  }, []);
+  const requestToolApproval = useCallback<RequestToolApproval>(
+    (request) =>
+      new Promise((resolve) => {
+        const entry: PendingToolApproval = { request, resolve, settled: false };
+        if (request.signal?.aborted) {
+          resolve({ approved: false });
+          return;
+        }
+        toolApprovalQueueRef.current = [...toolApprovalQueueRef.current, entry];
+        setActiveToolApproval((prev) => prev ?? entry);
+        // 运行取消时撤下卡片并按拒绝处理，避免确认框悬挂在已结束的回合上。
+        request.signal?.addEventListener("abort", () => settleToolApproval(entry, false), {
+          once: true,
+        });
+      }),
+    [settleToolApproval],
+  );
+
   const [shareConversation, setShareConversation] = useState<ChatHistorySummary | null>(null);
   const [shareStatus, setShareStatus] = useState<ChatHistoryShareStatus | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -4546,6 +4587,13 @@ export function ChatPage(props: ChatPageProps) {
             associatedSshHostIds: effectiveAssociatedSshHostIds,
             sshManagerRemoteAllowed:
               !gatewayBridgeRequest || settings.remote.enableWebSshTerminal === true,
+            bashExternalCwdAllowed: settings.system.bashCwdPolicy !== "workspace-only",
+            toolApprovalPolicy:
+              settings.system.toolApprovalMode === "dangerous"
+                ? { mode: "dangerous", workdir: effectiveWorkdir }
+                : undefined,
+            // 远程会话无人在桌面前确认：不提供回调，危险调用由 runner 直接拒绝。
+            requestToolApproval: gatewayBridgeRequest ? undefined : requestToolApproval,
             onSshSessionsChanged: (change) => {
               if (change.action === "create") {
                 ensureSshTunnelToolTab(change.projectPathKey);
@@ -5421,6 +5469,13 @@ export function ChatPage(props: ChatPageProps) {
             setActiveView("mcp-hub");
           }}
         />
+
+        {activeToolApproval ? (
+          <ToolApprovalModal
+            request={activeToolApproval.request}
+            onDecision={(approved) => settleToolApproval(activeToolApproval, approved)}
+          />
+        ) : null}
 
         {shareConversation ? (
           <HistoryShareModal

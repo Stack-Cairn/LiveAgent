@@ -155,6 +155,11 @@ export type SystemProxyConfig = {
   passwordConfigured?: boolean;
 };
 
+/** off：维持现状；dangerous：危险工具调用需用户确认（无人可确认的会话直接拒绝）。 */
+export type ToolApprovalMode = "off" | "dangerous";
+/** unrestricted：Bash/ManagedProcess 的 cwd 可指向工作区外；workspace-only：锁定在工作区与已启用 Skills 内。 */
+export type BashCwdPolicy = "unrestricted" | "workspace-only";
+
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
@@ -167,6 +172,8 @@ export type SystemSettings = {
   // in the merged list but render disabled and can never be active.
   archivedWorkspaceProjectPaths: string[];
   systemProxy: SystemProxyConfig;
+  toolApprovalMode: ToolApprovalMode;
+  bashCwdPolicy: BashCwdPolicy;
 };
 
 export type WorkspaceProjectKind = "managed" | "folder" | "history";
@@ -1449,7 +1456,17 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
       obj.archivedWorkspaceProjectPaths,
     ),
     systemProxy: normalizeSystemProxyConfig(obj.systemProxy),
+    toolApprovalMode: normalizeToolApprovalMode(obj.toolApprovalMode),
+    bashCwdPolicy: normalizeBashCwdPolicy(obj.bashCwdPolicy),
   };
+}
+
+export function normalizeToolApprovalMode(input: unknown): ToolApprovalMode {
+  return input === "dangerous" ? "dangerous" : "off";
+}
+
+export function normalizeBashCwdPolicy(input: unknown): BashCwdPolicy {
+  return input === "workspace-only" ? "workspace-only" : "unrestricted";
 }
 
 export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
@@ -1977,6 +1994,8 @@ export function getDefaultSettings(): AppSettings {
       missingWorkspaceProjectPaths: [],
       archivedWorkspaceProjectPaths: [],
       systemProxy: getDefaultSystemProxyConfig(),
+      toolApprovalMode: "off",
+      bashCwdPolicy: "unrestricted",
     },
     customProviders,
     mcp: {

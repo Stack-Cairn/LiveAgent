@@ -127,6 +127,8 @@ type BuildBuiltinBaseToolRegistryParams = {
   fileState: FileToolState;
   skillsEnabled: boolean;
   skillsRootDir?: string;
+  /** false 时 Bash/ManagedProcess 的 cwd 锁定在工作区与已启用 Skills 内。 */
+  bashExternalCwdAllowed?: boolean;
   skillAccessPolicy?: SkillAccessPolicy;
   onManagedSkillsChanged?: (change: {
     action: "install" | "create";
@@ -176,6 +178,7 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       skillsRootDir: params.skillsRootDir,
       skillAccessPolicy: params.skillAccessPolicy,
       managedProcessEnabled: params.runtimeScope === "chat",
+      externalCwdAllowed: params.bashExternalCwdAllowed,
       resolveHomeDir,
     }),
     ...(params.skillsEnabled
@@ -298,6 +301,7 @@ export async function buildBuiltinToolRegistry(
       templates: subagentRuntime.templates,
       store: subagentRuntime.store,
       scheduler: subagentRuntime.scheduler,
+      toolApprovalPolicy: subagentRuntime.toolApprovalPolicy,
       baseTools: baseRegistry.tools,
       executeToolCall: baseRegistry.executeToolCall,
       metadataByName: baseRegistry.metadataByName,

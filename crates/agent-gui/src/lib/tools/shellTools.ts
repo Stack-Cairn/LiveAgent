@@ -371,6 +371,8 @@ export function createShellTools(params: {
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
   managedProcessEnabled?: boolean;
+  /** false 时 Bash/ManagedProcess 的 cwd 锁定在工作区与已启用 Skills 内。 */
+  externalCwdAllowed?: boolean;
   resolveHomeDir?: () => Promise<string>;
 }): BuiltinToolBundle {
   const timeoutPolicy = resolveBashTimeoutPolicy(params.providerId);
@@ -390,6 +392,14 @@ export function createShellTools(params: {
   const workdir = params.workdir;
   const allowSkillsRoot = params.skillsRootEnabled === true;
   const allowManagedProcess = params.managedProcessEnabled !== false;
+  const externalCwdAllowed = params.externalCwdAllowed !== false;
+
+  // workspace-only 模式下的越界报错补上设置来源，避免模型误以为是路径拼写问题。
+  function appendCwdPolicyHint(message: string) {
+    if (externalCwdAllowed) return message;
+    if (!/outside the workspace/i.test(message)) return message;
+    return `${message} Bash cwd is locked to the workspace by settings (Bash working directory: workspace only); run the command inside the workspace instead.`;
+  }
   const skillAccessPolicy = params.skillAccessPolicy;
   let cachedSkillsRootDir =
     typeof params.skillsRootDir === "string" ? params.skillsRootDir.trim() : "";
@@ -781,7 +791,7 @@ export function createShellTools(params: {
           label: "ManagedProcess.cwd",
           intent: "cwd",
           required: false,
-          allowExternal: true,
+          allowExternal: externalCwdAllowed,
         });
         const cwd = backendCwd(cwdResolved);
         const label =
@@ -961,7 +971,7 @@ export function createShellTools(params: {
         label: "Bash.cwd",
         intent: "cwd",
         required: false,
-        allowExternal: true,
+        allowExternal: externalCwdAllowed,
       });
       cwd = backendCwd(cwdResolved);
     } catch (err) {
@@ -972,7 +982,7 @@ export function createShellTools(params: {
         content: [
           {
             type: "text",
-            text: asErrorMessage(err),
+            text: appendCwdPolicyHint(asErrorMessage(err)),
           },
         ],
         details: {},

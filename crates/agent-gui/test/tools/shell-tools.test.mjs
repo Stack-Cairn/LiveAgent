@@ -158,6 +158,94 @@ test("Bash tool schema allows larger timeout values but clamps for Codex", async
   assert.match(result.content[0].text, /timeout_ms: 30000/);
 });
 
+test("Bash cwd is locked to the workspace when externalCwdAllowed is false", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          return {
+            exit_code: 0,
+            shell: "bash",
+            stdout: "ready\n",
+            stderr: "",
+            stdout_truncated: false,
+            stderr_truncated: false,
+            timed_out: false,
+            cancelled: false,
+            effective_timeout_ms: args.timeout_ms,
+            duration_ms: 12,
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "claude_code",
+    externalCwdAllowed: false,
+  });
+
+  const blocked = await bundle.executeToolCall({
+    ...createBashCall(),
+    arguments: { command: "ls", cwd: "/etc", timeout_ms: 1000 },
+  });
+  assert.equal(blocked.isError, true);
+  assert.match(blocked.content[0].text, /outside the workspace/);
+  assert.match(blocked.content[0].text, /locked to the workspace by settings/);
+  assert.equal(calls.length, 0, "no shell command may run for an external cwd");
+
+  const allowed = await bundle.executeToolCall({
+    ...createBashCall(),
+    arguments: { command: "ls", cwd: "src", timeout_ms: 1000 },
+  });
+  assert.equal(allowed.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.cwd, "src");
+});
+
+test("Bash external cwd stays allowed by default", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          return {
+            exit_code: 0,
+            shell: "bash",
+            stdout: "ready\n",
+            stderr: "",
+            stdout_truncated: false,
+            stderr_truncated: false,
+            timed_out: false,
+            cancelled: false,
+            effective_timeout_ms: args.timeout_ms,
+            duration_ms: 12,
+          };
+        },
+      },
+    },
+  });
+
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "claude_code",
+  });
+
+  const result = await bundle.executeToolCall({
+    ...createBashCall(),
+    arguments: { command: "ls", cwd: "/etc", timeout_ms: 1000 },
+  });
+  assert.equal(result.isError, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.cwd, "/etc");
+});
+
 test("Bash tool rejects unsupported root arguments", async () => {
   const calls = [];
   const loader = createTsModuleLoader({
