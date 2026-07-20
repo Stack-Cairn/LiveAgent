@@ -1060,13 +1060,17 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     setBulkMode(true);
     setPreviewInstalledSkill(null);
     if (initialName && !isAlwaysEnabledSkillName(initialName)) {
+      clearBulkUndoTimer();
+      setBulkUndo(null);
       setBulkSelection(new Set([initialName]));
       bulkAnchorRef.current = initialName;
     }
-  }, []);
+  }, [clearBulkUndoTimer]);
 
   const toggleBulkSelectionName = useCallback((name: string) => {
     if (isAlwaysEnabledSkillName(name)) return;
+    clearBulkUndoTimer();
+    setBulkUndo(null);
     setBulkSelection((prev) => {
       const next = new Set(prev);
       if (next.has(name)) next.delete(name);
@@ -1074,11 +1078,13 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       return next;
     });
     bulkAnchorRef.current = name;
-  }, []);
+  }, [clearBulkUndoTimer]);
 
   const setBulkSelectionRange = useCallback((names: readonly string[], select: boolean) => {
     const selectable = names.filter((name) => !isAlwaysEnabledSkillName(name));
     if (selectable.length === 0) return;
+    clearBulkUndoTimer();
+    setBulkUndo(null);
     setBulkSelection((prev) => {
       const next = new Set(prev);
       for (const name of selectable) {
@@ -1087,7 +1093,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       }
       return next;
     });
-  }, []);
+  }, [clearBulkUndoTimer]);
 
   function handleBulkInstalledCardClick(name: string, orderedNames: string[], shiftKey: boolean) {
     if (isAlwaysEnabledSkillName(name)) return;
@@ -2045,7 +2051,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         />
       ) : null}
 
-      {bulkMode && view === "installed" && !lockedByChatMode && !bulkUndo ? (
+      {bulkMode &&
+        view === "installed" &&
+        !lockedByChatMode &&
+        (!bulkUndo || bulkSelection.size > 0) ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center px-3">
           <div className="hub-panel-enter pointer-events-auto flex max-w-full flex-wrap items-center gap-2 rounded-full border border-border/50 bg-background/90 py-2 pl-4 pr-2 text-[12.5px] shadow-[0_8px_24px_-12px_rgba(15,23,42,0.35)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-white/[0.08]">
             {bulkSelection.size > 0 ? (
@@ -2143,7 +2152,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         </div>
       ) : null}
 
-      {bulkUndo ? (
+      {bulkUndo && bulkSelection.size === 0 ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex justify-center">
           <div className="hub-panel-enter pointer-events-auto flex items-center gap-3 rounded-full border border-border/50 bg-background/90 py-2 pl-4 pr-2 text-[12.5px] shadow-[0_8px_24px_-12px_rgba(15,23,42,0.35)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-white/[0.08]">
             <span className="text-foreground/85">
