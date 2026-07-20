@@ -1607,8 +1607,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   </GlassPanel>
                 </div>
               ) : (
-                <>
-                  {view === "installed" ? (
+                view === "installed" ? (
                     <div
                       className={cn(
                         "h-full min-h-0 overflow-y-auto px-0.5 pr-1 pt-1.5",
@@ -2040,8 +2039,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                       onRescan={() => void rescanExternalSkills()}
                       onImport={() => void importSelectedExternalSkills()}
                     />
-                  )}
-                </>
+                  )
               )}
             </div>
           </div>
