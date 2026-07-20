@@ -415,7 +415,9 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         providerType === "gemini" && initialData?.reasoning === "xhigh"
           ? "high"
           : (initialData?.reasoning ?? "off"),
-      promptCachingEnabled: initialData?.promptCachingEnabled ?? providerType === "claude_code",
+      // 缓存策略在桌面端配置；WebUI 保存时透传已有值，避免把字段抹掉。
+      promptCachingEnabled: initialData?.promptCachingEnabled ?? providerType !== "gemini",
+      promptCacheRetention: initialData?.promptCacheRetention,
       nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
       useSystemProxy,
     });

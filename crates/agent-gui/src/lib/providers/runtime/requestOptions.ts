@@ -71,11 +71,18 @@ export function toSimpleStreamReasoning(
 export function resolveProviderCacheRetention(
   providerId: ProviderId,
   promptCachingEnabled?: boolean,
-  override?: CacheRetention,
+  requestOverride?: CacheRetention,
+  providerPreference?: CacheRetention,
 ): CacheRetention | undefined {
-  if (providerId !== "claude_code") return undefined;
-  if (override) return override;
-  return promptCachingEnabled === false ? "none" : "short";
+  // OpenAI 侧的"缓存"体现为稳定的 prompt_cache_key 路由提示；开关关闭时
+  // 显式返回 none，阻止 pi-ai 按 sessionId 默认下发。
+  if (providerId !== "claude_code" && providerId !== "codex") return undefined;
+  if (promptCachingEnabled === false) return "none";
+  // 请求级 override 优先（压缩/标题等辅助请求强制 none）。
+  if (requestOverride) return requestOverride;
+  // 用户可选 long：官方 Anthropic API 上由缓存中间件映射为 1h TTL 断点。
+  if (providerId === "claude_code" && providerPreference === "long") return "long";
+  return "short";
 }
 
 export function buildProviderRequestMetadata(

@@ -84,7 +84,8 @@ test("codex provider normalization strips route suffixes and keeps only configur
   assert.equal(provider.baseUrl, "https://api.openai.com/v1");
   assert.equal(provider.apiKey, "key");
   assert.equal(provider.requestFormat, "openai-responses");
-  assert.equal(provider.promptCachingEnabled, false);
+  // OpenAI 缓存（稳定 prompt_cache_key）默认开启，可显式关闭。
+  assert.equal(provider.promptCachingEnabled, true);
   assert.equal(provider.nativeWebSearchEnabled, false);
   assert.deepEqual(provider.activeModels, ["gpt-5"]);
   assert.deepEqual(
@@ -113,6 +114,75 @@ test("claude provider normalization defaults routing, caching, and model limits"
   assert.equal(provider.nativeWebSearchEnabled, true);
   assert.equal(provider.models[0].contextWindow, 200_000);
   assert.equal(provider.models[0].maxOutputToken, 32_000);
+});
+
+test("codex provider normalization can disable prompt caching explicitly", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "codex-2",
+    type: "codex",
+    baseUrl: "https://relay.example/v1",
+    promptCachingEnabled: false,
+  });
+  assert.equal(provider.promptCachingEnabled, false);
+  assert.equal(provider.promptCacheRetention, undefined);
+});
+
+test("claude provider normalization keeps the long cache retention preference", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "claude-long",
+    type: "claude_code",
+    baseUrl: "https://api.anthropic.com/v1",
+    promptCacheRetention: "long",
+  });
+  assert.equal(provider.promptCacheRetention, "long");
+
+  const invalid = settings.normalizeCustomProvider({
+    id: "claude-invalid",
+    type: "claude_code",
+    baseUrl: "https://api.anthropic.com/v1",
+    promptCacheRetention: "forever",
+  });
+  assert.equal(invalid.promptCacheRetention, undefined);
+
+  const codex = settings.normalizeCustomProvider({
+    id: "codex-long",
+    type: "codex",
+    baseUrl: "https://api.openai.com/v1",
+    promptCacheRetention: "long",
+  });
+  assert.equal(codex.promptCacheRetention, undefined, "retention is Anthropic-only");
+});
+
+test("model config normalization keeps user pricing and drops invalid values", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "relay-1",
+    type: "codex",
+    baseUrl: "https://relay.example/v1",
+    models: [
+      {
+        id: "relay-model",
+        contextWindow: 128_000,
+        maxOutputToken: 8_192,
+        cost: { input: 1.5, output: "6", cacheRead: 0.15, cacheWrite: -3 },
+      },
+      { id: "no-cost-model", contextWindow: 128_000, maxOutputToken: 8_192 },
+      {
+        id: "zero-cost-model",
+        contextWindow: 128_000,
+        maxOutputToken: 8_192,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      },
+    ],
+  });
+
+  assert.deepEqual(provider.models[0].cost, {
+    input: 1.5,
+    output: 6,
+    cacheRead: 0.15,
+    cacheWrite: 0,
+  });
+  assert.equal(provider.models[1].cost, undefined);
+  assert.equal(provider.models[2].cost, undefined, "all-zero pricing stays unset");
 });
 
 test("gemini provider normalization keeps native routing and model limits", () => {

@@ -305,6 +305,10 @@ export function createModelFromConfig(
         )
       : configuredContextWindow;
   const maxTokens = modelConfig?.maxOutputToken ?? defaults.maxOutputToken;
+  // 用户自填单价优先于目录定价：中转/自定义模型的实际计费经常与官方目录不同。
+  const configuredCost = modelConfig?.cost;
+  const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  const customModelCost = configuredCost ?? zeroCost;
 
   if (providerId === "codex") {
     const { baseUrl: normalizedBaseUrl, preferredApi } = normalizeCodexBaseUrl(baseUrl);
@@ -329,6 +333,7 @@ export function createModelFromConfig(
           ...known,
           contextWindow,
           maxTokens,
+          ...(configuredCost ? { cost: configuredCost } : {}),
           ...(responsesCompat
             ? {
                 compat: {
@@ -358,7 +363,7 @@ export function createModelFromConfig(
       // 是否真的下发思考由用户的开关决定。
       reasoning: true,
       input: resolveCodexModelInput(api, modelId),
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      cost: customModelCost,
       contextWindow,
       maxTokens,
     };
@@ -393,6 +398,7 @@ export function createModelFromConfig(
         ...known,
         contextWindow,
         maxTokens,
+        ...(configuredCost ? { cost: configuredCost } : {}),
       };
     }
 
@@ -404,7 +410,7 @@ export function createModelFromConfig(
       baseUrl: normalizedBaseUrl,
       reasoning: true,
       input: ["text", "image"],
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      cost: customModelCost,
       contextWindow,
       maxTokens,
     };
@@ -418,6 +424,7 @@ export function createModelFromConfig(
         ...known,
         contextWindow,
         maxTokens,
+        ...(configuredCost ? { cost: configuredCost } : {}),
       },
       {
         providerId,
@@ -437,7 +444,7 @@ export function createModelFromConfig(
     baseUrl,
     reasoning: true,
     input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    cost: customModelCost,
     contextWindow,
     maxTokens,
     ...(thinkingOverrides.compat ? { compat: thinkingOverrides.compat } : {}),

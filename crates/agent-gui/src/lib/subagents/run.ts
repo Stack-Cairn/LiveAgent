@@ -56,6 +56,7 @@ export type SubagentProviderRuntime = {
   requestFormat?: CodexRequestFormat;
   reasoning?: ReasoningLevel;
   promptCachingEnabled?: boolean;
+  promptCacheRetention?: "short" | "long";
   nativeWebSearchEnabled?: boolean;
   useSystemProxy?: boolean;
   modelConfig?: ProviderModelConfig;

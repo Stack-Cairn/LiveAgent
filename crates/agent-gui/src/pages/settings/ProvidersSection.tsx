@@ -24,6 +24,7 @@ import {
   Trash2,
   Waypoints,
   X,
+  Zap,
 } from "../../components/icons";
 
 import { Button } from "../../components/ui/button";
@@ -96,6 +97,10 @@ type ModelEditDraft = {
   contextWindow: string;
   maxOutputToken: string;
   capabilities: ModelCapability[];
+  costInput: string;
+  costOutput: string;
+  costCacheRead: string;
+  costCacheWrite: string;
 };
 type CcsProviderImportItem = {
   sourceId: string;
@@ -160,6 +165,19 @@ function parsePositiveInteger(input: string): number | null {
   if (!Number.isFinite(value)) return null;
   const normalized = Math.floor(value);
   return normalized > 0 ? normalized : null;
+}
+
+// 单价输入：留空视为未配置（0），负数与非数字视为非法。
+function parseCostRate(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return 0;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value;
+}
+
+function formatCostRate(value: number | undefined): string {
+  return typeof value === "number" && value > 0 ? String(value) : "";
 }
 
 type CustomHeaderKeyIssue = "reserved" | "invalid";
@@ -229,6 +247,12 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     initialData?.requestFormat ?? "openai-responses",
   );
   const [useSystemProxy, setUseSystemProxy] = useState(initialData?.useSystemProxy ?? false);
+  const [promptCachingEnabled, setPromptCachingEnabled] = useState(
+    initialData?.promptCachingEnabled ?? providerType !== "gemini",
+  );
+  const [promptCacheRetention, setPromptCacheRetention] = useState<"short" | "long">(
+    initialData?.promptCacheRetention === "long" ? "long" : "short",
+  );
   const [fetchingModels, setFetchingModels] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [addingModel, setAddingModel] = useState(false);
@@ -339,6 +363,10 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
             contextWindow: String(target.contextWindow),
             maxOutputToken: String(target.maxOutputToken),
             capabilities: [...(target.capabilities ?? [])],
+            costInput: formatCostRate(target.cost?.input),
+            costOutput: formatCostRate(target.cost?.output),
+            costCacheRead: formatCostRate(target.cost?.cacheRead),
+            costCacheWrite: formatCostRate(target.cost?.cacheWrite),
           },
     );
   }
@@ -359,22 +387,51 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const editingModelMaxOutputToken = editingModel
     ? parsePositiveInteger(editingModel.maxOutputToken)
     : null;
+  const editingModelCost = editingModel
+    ? {
+        input: parseCostRate(editingModel.costInput),
+        output: parseCostRate(editingModel.costOutput),
+        cacheRead: parseCostRate(editingModel.costCacheRead),
+        cacheWrite: parseCostRate(editingModel.costCacheWrite),
+      }
+    : null;
+  const editingModelCostValid =
+    editingModelCost === null ||
+    (editingModelCost.input !== null &&
+      editingModelCost.output !== null &&
+      editingModelCost.cacheRead !== null &&
+      editingModelCost.cacheWrite !== null);
   const canSaveEditingModel =
-    editingModelContextWindow !== null && editingModelMaxOutputToken !== null;
+    editingModelContextWindow !== null &&
+    editingModelMaxOutputToken !== null &&
+    editingModelCostValid;
 
   function saveInlineModelSettings() {
     if (
       !editingModel ||
       editingModelContextWindow === null ||
-      editingModelMaxOutputToken === null
+      editingModelMaxOutputToken === null ||
+      !editingModelCostValid
     ) {
       return;
     }
+    const cost = editingModelCost
+      ? {
+          input: editingModelCost.input ?? 0,
+          output: editingModelCost.output ?? 0,
+          cacheRead: editingModelCost.cacheRead ?? 0,
+          cacheWrite: editingModelCost.cacheWrite ?? 0,
+        }
+      : undefined;
+    const hasCost =
+      cost !== undefined &&
+      (cost.input > 0 || cost.output > 0 || cost.cacheRead > 0 || cost.cacheWrite > 0);
     const nextModel: ProviderModelConfig = {
       ...editingModel.model,
       contextWindow: editingModelContextWindow,
       maxOutputToken: editingModelMaxOutputToken,
       capabilities: editingModel.capabilities,
+      cost: hasCost ? cost : undefined,
     };
     setModels((prev) => prev.map((item) => (item.id === nextModel.id ? nextModel : item)));
     setEditingModel(null);
@@ -472,7 +529,11 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         providerType === "gemini" && initialData?.reasoning === "xhigh"
           ? "high"
           : (initialData?.reasoning ?? "off"),
-      promptCachingEnabled: initialData?.promptCachingEnabled ?? providerType === "claude_code",
+      promptCachingEnabled: providerType === "gemini" ? false : promptCachingEnabled,
+      promptCacheRetention:
+        providerType === "claude_code" && promptCachingEnabled && promptCacheRetention === "long"
+          ? "long"
+          : undefined,
       nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
       useSystemProxy,
     });
@@ -910,6 +971,51 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                                   })}
                                 </div>
 
+                                <div className="mt-3 text-xs font-medium text-muted-foreground">
+                                  {t("settings.modelCost")}
+                                </div>
+                                <div className="mt-1 text-[11px] text-muted-foreground/80">
+                                  {t("settings.modelCostHint")}
+                                </div>
+                                <div className="mt-2 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+                                  {(
+                                    [
+                                      ["costInput", "settings.modelCostInput"],
+                                      ["costOutput", "settings.modelCostOutput"],
+                                      ["costCacheRead", "settings.modelCostCacheRead"],
+                                      ["costCacheWrite", "settings.modelCostCacheWrite"],
+                                    ] as const
+                                  ).map(([field, labelKey]) => (
+                                    <div key={field} className="space-y-1.5">
+                                      <Label>{t(labelKey)}</Label>
+                                      <Input
+                                        inputMode="decimal"
+                                        placeholder="0"
+                                        aria-invalid={
+                                          parseCostRate(editingModel[field]) === null
+                                            ? true
+                                            : undefined
+                                        }
+                                        className={cn(
+                                          parseCostRate(editingModel[field]) === null &&
+                                            "ring-1 ring-inset ring-destructive focus-visible:ring-destructive",
+                                        )}
+                                        value={editingModel[field]}
+                                        onChange={(event) =>
+                                          setEditingModel((prev) =>
+                                            prev
+                                              ? {
+                                                  ...prev,
+                                                  [field]: event.currentTarget.value,
+                                                }
+                                              : prev,
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
+
                                 {!canSaveEditingModel ? (
                                   <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                                     {t("settings.positiveIntegerRequired")}
@@ -970,6 +1076,66 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                     ariaLabel={t("settings.providerUseSystemProxy")}
                   />
                 </div>
+
+                {providerType !== "gemini" ? (
+                  <div
+                    className={cn(
+                      "mt-3 rounded-xl border bg-card px-4 py-3 transition-colors",
+                      promptCachingEnabled && "border-primary/35 bg-primary/[0.04]",
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors",
+                          promptCachingEnabled && "bg-primary/15 text-primary",
+                        )}
+                      >
+                        <Zap className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium">{t("settings.promptCaching")}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {providerType === "claude_code"
+                            ? t("settings.promptCachingDescClaude")
+                            : t("settings.promptCachingDescCodex")}
+                        </div>
+                      </div>
+                      <DialogSwitch
+                        checked={promptCachingEnabled}
+                        onCheckedChange={setPromptCachingEnabled}
+                        ariaLabel={t("settings.promptCaching")}
+                      />
+                    </div>
+                    {providerType === "claude_code" && promptCachingEnabled ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+                        <span className="text-xs text-muted-foreground">
+                          {t("settings.promptCacheRetention")}
+                        </span>
+                        {(
+                          [
+                            ["short", "settings.promptCacheRetentionShort"],
+                            ["long", "settings.promptCacheRetentionLong"],
+                          ] as const
+                        ).map(([value, labelKey]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            className={cn(
+                              "rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary",
+                              promptCacheRetention === value &&
+                                "border-primary bg-primary/10 text-primary",
+                            )}
+                            aria-pressed={promptCacheRetention === value}
+                            onClick={() => setPromptCacheRetention(value)}
+                          >
+                            {t(labelKey)}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className="mt-6 flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
@@ -1401,7 +1567,7 @@ function providerFromCcs(item: CcsProviderImportItem, existingIds: Set<string>):
           : "openai-responses"
         : undefined,
     reasoning: "off",
-    promptCachingEnabled: providerType === "claude_code",
+    promptCachingEnabled: providerType !== "gemini",
     nativeWebSearchEnabled: true,
     useSystemProxy: false,
   };
@@ -1467,7 +1633,7 @@ function providerFromCherry(
           : "openai-responses"
         : undefined,
     reasoning: existing?.reasoning ?? "off",
-    promptCachingEnabled: existing?.promptCachingEnabled ?? providerType === "claude_code",
+    promptCachingEnabled: existing?.promptCachingEnabled ?? providerType !== "gemini",
     nativeWebSearchEnabled: existing?.nativeWebSearchEnabled ?? true,
     useSystemProxy: existing?.useSystemProxy ?? false,
   };
