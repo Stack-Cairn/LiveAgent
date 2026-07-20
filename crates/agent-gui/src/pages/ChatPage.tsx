@@ -41,16 +41,21 @@ import { useLocale } from "../i18n";
 import type { AppUpdateController } from "../lib/appUpdates";
 import { getAutomationState } from "../lib/automation";
 import { createHookRunScope } from "../lib/automation/hookRunner";
+import { captureDisplayFrameToFile, readClipboardImageFiles } from "../lib/chat/clipboardCapture";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
+import { sanitizeMessagesForContinuation } from "../lib/chat/context/requestContextSanitizer";
+import { estimateContextUsage } from "../lib/chat/contextUsage";
 import {
   buildPersistableMessagesFromSnapshot,
   type SuppressedToolTraceSnapshot,
 } from "../lib/chat/conversation/chatAbort";
 import {
   appendMessagesToConversation,
+  appendSummaryToSystemPrompt,
   buildRequestContext,
   type ConversationViewState,
   createConversationStateFromContext,
+  getActiveSegment,
   type HistoryMessageRef,
   type RenderTimelineItem,
   truncateConversationFromMessage,
@@ -61,6 +66,14 @@ import {
   createGatewayBridgeEventController,
 } from "../lib/chat/conversation/run";
 import { createTurnCancellation } from "../lib/chat/conversation/turnCancellation";
+import {
+  buildConversationExportFilename,
+  collectExportMessages,
+  conversationToMarkdown,
+  downloadTextFile,
+  formatUsdCost,
+  sumConversationCost,
+} from "../lib/chat/conversationExport";
 import {
   branchChatHistory,
   type ChatHistoryShareStatus,
@@ -149,6 +162,7 @@ import {
   updateRightDockWidth,
   updateSkills,
   updateSshProjectHostIds,
+  updateSystem,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../lib/settings";
@@ -621,7 +635,7 @@ export function ChatPage(props: ChatPageProps) {
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const initialConversationRef = useRef(createConversationIdentity());
   const initialConversationStateRef = useRef(createConversationStateFromContext(context));
 
@@ -5080,6 +5094,449 @@ export function ChatPage(props: ChatPageProps) {
     composerBusyRef.current = isBusy;
   }, []);
 
+  const handleExecutionModeChange = useCallback(
+    (mode: "text" | "tools") => {
+      if (mode === "text") {
+        // Text runtime has no file tools — drop pending attachments so they
+        // are not sent as unfulfillable "Use Read …" prompts.
+        const conversationId = currentConversationIdRef.current.trim();
+        if (conversationId) {
+          setPendingUploadsForConversation(conversationId, []);
+        }
+      }
+      setSettings((prev) => {
+        if (mode === "text") {
+          if (prev.system.executionMode === "text") return prev;
+          return updateSystem(prev, { executionMode: "text" });
+        }
+        // Keep agent-dev selected when already in an agent mode.
+        if (prev.system.executionMode === "tools" || prev.system.executionMode === "agent-dev") {
+          return prev;
+        }
+        return updateSystem(prev, { executionMode: "tools" });
+      });
+    },
+    [currentConversationIdRef, setPendingUploadsForConversation, setSettings],
+  );
+
+  const activeSegmentMessages = useMemo(
+    () => getActiveSegment(conversationState)?.messages ?? [],
+    [conversationState],
+  );
+  const allConversationMessages = useMemo(
+    () => conversationState.segments.flatMap((segment) => segment.messages),
+    [conversationState],
+  );
+  const composerPromptTemplates = useMemo(
+    () =>
+      settings.agents
+        .filter((template) => template.prompt.trim())
+        .map((template) => ({
+          id: template.id,
+          name: template.name.trim() || template.id,
+          prompt: template.prompt,
+        })),
+    [settings.agents],
+  );
+
+  const handleManualCompact = useCallback(async () => {
+    const conversationId = currentConversationIdRef.current.trim();
+    if (!conversationId) return;
+    // Do not compact while two-phase open is still hydrating older segments —
+    // runtimeEntry.state may only hold the active segment and a full upsert
+    // would drop unloaded history.
+    if (
+      hydratingConversationId === conversationId ||
+      hydratingConversationIdRef.current === conversationId
+    ) {
+      return;
+    }
+
+    const runtimeEntry =
+      conversationRuntimeCacheRef.current.get(conversationId) ??
+      createConversationRuntimeEntry({
+        state: conversationState,
+        sessionId: currentConversationSessionId,
+        createdAt: currentConversationCreatedAt,
+        selectedModel: currentConversationSelectedModel,
+      });
+    // Hold the conversation run lock for the whole compact cycle so Gateway
+    // submit / delete / concurrent bindTurn cannot race mid-flight.
+    if (
+      isConversationRunning(conversationId) ||
+      runtimeEntry.isSending ||
+      compactionStatus.phase === "running"
+    ) {
+      return;
+    }
+    const baseState = runtimeEntry.state;
+    if ((getActiveSegment(baseState)?.messages.length ?? 0) === 0) {
+      addNotify("warning", t("chat.toolbar.compactSkipped"));
+      return;
+    }
+
+    const selectedModel =
+      runtimeEntry.selectedModel ?? currentConversationSelectedModel ?? activeSelectedModel;
+    if (!selectedModel) {
+      addNotify("error", t("chat.toolbar.compactUnavailable"));
+      return;
+    }
+    const provider = settings.customProviders.find(
+      (item) => item.id === selectedModel.customProviderId,
+    );
+    if (!provider) {
+      addNotify("error", t("chat.toolbar.compactUnavailable"));
+      return;
+    }
+
+    const providerId = provider.type;
+    const model = selectedModel.model;
+    const runtimeControls = normalizeChatRuntimeControlsForProvider(settings.chatRuntimeControls, {
+      providerId,
+      requestFormat: provider.requestFormat,
+      modelId: model,
+      baseUrl: provider.baseUrl,
+      modelConfig: findProviderModelConfig(provider, model),
+    });
+    const providerConfig = buildProviderRuntimeConfig(provider, model, runtimeControls);
+    const compaction = getCompactionController(conversationId);
+    const cancellation = createTurnCancellation();
+    const sessionId = runtimeEntry.sessionId || conversationId;
+    const createdAt = runtimeEntry.createdAt || Date.now();
+    const fallbackTitle =
+      sidebarStore.peek(conversationId)?.title?.trim() ||
+      buildFallbackConversationTitle(
+        getFirstUserMessageText(buildRequestContext(baseState)) || t("chat.pendingTitle"),
+      );
+    const conversationCwd =
+      runtimeEntry.workdir?.trim() ||
+      (isAgentMode ? activeWorkspaceProjectPath || workdir : "") ||
+      undefined;
+
+    const buildPreparedContext = (state: ConversationViewState, tools?: Context["tools"]) =>
+      buildPreparedConversationContext({
+        state,
+        tools,
+        activeAgentPrompt,
+        skillsPrompt: "",
+        memoryPrompt: "",
+      });
+    const buildResumeContext = (
+      state: ConversationViewState,
+      resumeMessage?: UserMessage,
+      tools?: Context["tools"],
+    ) =>
+      buildResumeConversationContext({
+        state,
+        resumeMessage,
+        tools,
+        activeAgentPrompt,
+        skillsPrompt: "",
+        memoryPrompt: "",
+      });
+
+    const transcriptStoreForCompact = getConversationLiveTranscriptStore(conversationId);
+    compaction.bindTurn({
+      providerId,
+      model,
+      runtime: {
+        baseUrl: providerConfig.baseUrl,
+        apiKey: providerConfig.apiKey,
+        requestFormat: providerConfig.requestFormat,
+        reasoning: providerConfig.reasoning,
+        promptCachingEnabled: providerConfig.promptCachingEnabled,
+        nativeWebSearchEnabled: providerConfig.nativeWebSearchEnabled,
+        useSystemProxy: providerConfig.useSystemProxy,
+        modelConfig: providerConfig.modelConfig,
+      },
+      cancellation,
+      buildPreparedContext,
+      buildResumeContext,
+      presend: {
+        baseState,
+        pendingUserText: "",
+        composeAppliedState: (state) => state,
+      },
+      sinks: {
+        applyState: (nextState) => {
+          updateConversationRuntimeEntry(conversationId, (prev) => ({
+            ...prev,
+            state: nextState,
+          }));
+        },
+        publishStatus: (status) =>
+          updateConversationRuntimeEntry(conversationId, (prev) => ({
+            ...prev,
+            compactionStatus: status,
+          })),
+        setBridgeToolStatus: (text) => {
+          updateToolStatus(text, transcriptStoreForCompact);
+        },
+        persist: (state) =>
+          persistConversation({
+            conversationId,
+            sessionId,
+            providerId,
+            model,
+            selectedModel,
+            cwd: conversationCwd,
+            state,
+            fallbackTitle,
+            createdAt,
+            titlePromise: null,
+          }),
+      },
+    });
+
+    // Wire Stop button: stopConversation() aborts the registered controller.
+    setConversationAbortController(conversationId, cancellation.userStop);
+    setConversationSendingState(conversationId, true);
+    // Publish Gateway running so remote WebUI cannot delete this chat mid-compact.
+    const compactRunId = createUuid();
+    const compactUserMessage = {
+      role: "user" as const,
+      content: "",
+      timestamp: Date.now(),
+    };
+    registerActiveGatewayRuntimeRun({
+      conversationId,
+      runId: compactRunId,
+      cwd: conversationCwd,
+      revision: 0,
+      state: "running",
+      userMessage: compactUserMessage,
+      transcriptStore: transcriptStoreForCompact,
+      toolStatusIsCompaction: true,
+    });
+    void queueGatewayRuntimeSnapshot(conversationId, { state: "running", force: true });
+    void invoke("gateway_chat_mark_local_started", {
+      request_id: compactRunId,
+      conversation_id: conversationId,
+    } as any).catch((error) => {
+      console.warn("gateway_chat_mark_local_started (manual compact) failed", error);
+    });
+    let gatewayFinalState: GatewayRuntimeSnapshotState = "completed";
+    try {
+      const result = await compaction.compactManually({
+        force: true,
+        budgetContext: buildPreparedContext(baseState),
+      });
+      if (result === "compacted") {
+        addNotify("warning", t("chat.toolbar.compactSuccess"));
+        gatewayFinalState = "completed";
+      } else if (result === "skipped") {
+        addNotify("warning", t("chat.toolbar.compactSkipped"));
+        gatewayFinalState = "completed";
+      } else {
+        // compactManually already settleFailed → compactionStatus effect notifies once
+        // with the detailed message; avoid a second generic "failed" toast.
+        gatewayFinalState = "failed";
+      }
+    } catch (error) {
+      if (isAbortLikeError(error)) {
+        gatewayFinalState = "cancelled";
+        // compactManually rethrows abort; clear running status so the UI and
+        // entry gate do not stay stuck until the conversation is reloaded.
+        try {
+          await compaction.handleTurnAbort();
+        } catch {
+          // ignore nested abort/cleanup failures
+        }
+      } else {
+        gatewayFinalState = "failed";
+        const message = error instanceof Error ? error.message : String(error);
+        addNotify(
+          "error",
+          t("chat.toolbar.compactFailed").replace("{message}", message || "error"),
+        );
+      }
+    } finally {
+      // Belt-and-suspenders: never leave compactionStatus.phase === "running".
+      updateConversationRuntimeEntry(conversationId, (prev) =>
+        prev.compactionStatus.phase === "running"
+          ? { ...prev, compactionStatus: { phase: "idle" } }
+          : prev,
+      );
+      // Clear sticky "stopping..." toolStatus from stopConversation().
+      updateToolStatus(null, transcriptStoreForCompact);
+      compaction.unbindTurn();
+      setConversationAbortController(conversationId, null);
+      setConversationSendingState(conversationId, false);
+      finishActiveGatewayRuntimeRun(conversationId, gatewayFinalState);
+    }
+  }, [
+    activeAgentPrompt,
+    activeSelectedModel,
+    activeWorkspaceProjectPath,
+    addNotify,
+    compactionStatus.phase,
+    conversationRuntimeCacheRef,
+    conversationState,
+    currentConversationCreatedAt,
+    currentConversationIdRef,
+    currentConversationSelectedModel,
+    currentConversationSessionId,
+    getCompactionController,
+    getConversationLiveTranscriptStore,
+    hydratingConversationId,
+    isAgentMode,
+    isConversationRunning,
+    persistConversation,
+    setConversationAbortController,
+    setConversationSendingState,
+    settings.chatRuntimeControls,
+    settings.customProviders,
+    sidebarStore,
+    t,
+    updateConversationRuntimeEntry,
+    updateToolStatus,
+    workdir,
+  ]);
+
+  const handlePasteClipboardImages = useCallback(async () => {
+    // Match composer upload enablement: use the displayed conversation cwd
+    // (workspace project / runtime workdir), not only settings.system.workdir.
+    if (!isAgentMode || !displayedConversationWorkdir) {
+      addNotify("warning", t("chat.upload.onlyInTools"));
+      return;
+    }
+    // Capture destination before permission UI; user may switch chats mid-await.
+    const lock = {
+      conversationId: currentConversationIdRef.current.trim(),
+      workdir: displayedConversationWorkdir,
+    };
+    if (!lock.conversationId) return;
+    const result = await readClipboardImageFiles();
+    if (!result.ok) {
+      if (result.reason === "empty") addNotify("warning", t("chat.toolbar.clipboardEmpty"));
+      else if (result.reason === "denied") addNotify("error", t("chat.toolbar.clipboardDenied"));
+      else addNotify("error", t("chat.toolbar.clipboardFailed"));
+      return;
+    }
+    await importReadableFiles(result.files, lock);
+  }, [
+    addNotify,
+    currentConversationIdRef,
+    displayedConversationWorkdir,
+    importReadableFiles,
+    isAgentMode,
+    t,
+  ]);
+
+  const handleCaptureScreenshot = useCallback(async () => {
+    if (!isAgentMode || !displayedConversationWorkdir) {
+      addNotify("warning", t("chat.upload.onlyInTools"));
+      return;
+    }
+    const lock = {
+      conversationId: currentConversationIdRef.current.trim(),
+      workdir: displayedConversationWorkdir,
+    };
+    if (!lock.conversationId) return;
+    const result = await captureDisplayFrameToFile();
+    if (!result.ok) {
+      if (result.reason === "cancelled")
+        addNotify("warning", t("chat.toolbar.screenshotCancelled"));
+      else if (result.reason === "unsupported")
+        addNotify("error", t("chat.toolbar.screenshotUnsupported"));
+      else addNotify("error", t("chat.toolbar.screenshotFailed"));
+      return;
+    }
+    await importReadableFiles([result.file], lock);
+  }, [
+    addNotify,
+    currentConversationIdRef,
+    displayedConversationWorkdir,
+    importReadableFiles,
+    isAgentMode,
+    t,
+  ]);
+
+  const handleClearComposerDraft = useCallback(() => {
+    const conversationId = currentConversationIdRef.current.trim();
+    composerRef.current?.clear();
+    if (conversationId) {
+      setPendingUploadsForConversation(conversationId, []);
+      // Also drop the per-conversation draft cache so switching away/back
+      // does not resurrect the just-cleared content.
+      clearCachedComposerDraft(conversationId);
+    }
+    composerRef.current?.focus();
+  }, [currentConversationIdRef, setPendingUploadsForConversation]);
+
+  const handleInsertPromptTemplate = useCallback(
+    (templateId: string) => {
+      const template = settings.agents.find((item) => item.id === templateId);
+      const prompt = template?.prompt?.trim();
+      if (!prompt) return;
+      const composer = composerRef.current;
+      if (!composer) return;
+      // Preserve structured segments (large-paste chips, skill/commit/file mentions).
+      const draft = composer.getDraft();
+      const needsGap = !draft.isEmpty && draft.text.trim().length > 0;
+      const appended = needsGap ? `\n\n${prompt}` : prompt;
+      composer.setDraft({
+        ...draft,
+        segments: [...draft.segments, { type: "text", text: appended }],
+        text: needsGap ? `${draft.text.trimEnd()}${appended}` : prompt,
+        textWithoutLargePastes: needsGap
+          ? `${draft.textWithoutLargePastes.trimEnd()}${appended}`
+          : prompt,
+        isEmpty: false,
+      });
+      composer.focus();
+    },
+    [settings.agents],
+  );
+
+  const handleExportMarkdown = useCallback(async () => {
+    const conversationId = currentConversationIdRef.current.trim() || currentConversationId.trim();
+    if (!conversationId) return;
+    // Two-phase open paints active segment first; refuse mid-hydration exports.
+    if (hydratingConversationId === conversationId) {
+      addNotify("warning", t("chat.toolbar.exportIncomplete"));
+      return;
+    }
+    const runtimeEntry = conversationRuntimeCacheRef.current.get(conversationId);
+    const conversationBusy =
+      isConversationRunning(conversationId) || runtimeEntry?.isSending === true;
+    // Live assistant tokens sit in liveTranscriptStore until settle — refuse silent
+    // partial exports during a run (also avoids hydrate activating over isSending).
+    if (conversationBusy) {
+      addNotify("warning", t("chat.toolbar.exportIncomplete"));
+      return;
+    }
+    try {
+      await hydrateConversationFull(conversationId);
+      if (hydrationFailedConversationIdRef.current === conversationId) {
+        addNotify("warning", t("chat.toolbar.exportIncomplete"));
+        return;
+      }
+      const entry = conversationRuntimeCacheRef.current.get(conversationId);
+      const messages = collectExportMessages(
+        entry?.state?.segments?.flatMap((segment) => segment.messages) ?? allConversationMessages,
+      );
+      const title = sidebarStore.peek(conversationId)?.title?.trim() || t("chat.pendingTitle");
+      const markdown = conversationToMarkdown({ title, messages });
+      downloadTextFile(buildConversationExportFilename(title), markdown);
+      addNotify("warning", t("chat.toolbar.exportSuccess"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      addNotify("error", `${t("chat.toolbar.exportFailed")}: ${message}`);
+    }
+  }, [
+    addNotify,
+    allConversationMessages,
+    conversationRuntimeCacheRef,
+    currentConversationId,
+    currentConversationIdRef,
+    hydrateConversationFull,
+    hydratingConversationId,
+    isConversationRunning,
+    sidebarStore,
+    t,
+  ]);
+
   const hasModels = modelOptions.length > 0;
 
   const currentModelLabel = (() => {
@@ -5097,6 +5554,35 @@ export function ChatPage(props: ChatPageProps) {
     if (!provider) return undefined;
     return findProviderModelConfig(provider, activeSelectedModel.model).contextWindow;
   })();
+  const contextUsageSnapshot = useMemo(() => {
+    const activeSegment = getActiveSegment(conversationState);
+    // Match the real request context: checkpoint summary is folded into system prompt,
+    // and the prepared runtime also appends the active Agent prompt (skills/memory are
+    // loaded at send-time and may be empty here). Strip aborted turns the same way
+    // buildRequestContext does so usage anchors do not land on excluded messages.
+    let effectiveSystemPrompt = appendSummaryToSystemPrompt(
+      conversationState.meta.systemPrompt,
+      activeSegment?.summary?.content,
+      activeSegment?.summary?.summaryMeta.fileLedger,
+    );
+    if (activeAgentPrompt.trim()) {
+      effectiveSystemPrompt = effectiveSystemPrompt
+        ? `${effectiveSystemPrompt}\n\n${activeAgentPrompt.trim()}`
+        : activeAgentPrompt.trim();
+    }
+    return estimateContextUsage({
+      messages: sanitizeMessagesForContinuation(activeSegmentMessages),
+      systemPrompt: effectiveSystemPrompt,
+      contextWindow: currentModelContextWindow ?? 0,
+    });
+  }, [activeAgentPrompt, activeSegmentMessages, conversationState, currentModelContextWindow]);
+  const sessionCostSummary = useMemo(
+    () => sumConversationCost(allConversationMessages),
+    [allConversationMessages],
+  );
+  const sessionCostLabel = sessionCostSummary.hasCost
+    ? formatUsdCost(sessionCostSummary.total, locale)
+    : null;
   const currentChatProvider = activeSelectedModel
     ? settings.customProviders.find((item) => item.id === activeSelectedModel.customProviderId)
     : undefined;
@@ -5223,6 +5709,7 @@ export function ChatPage(props: ChatPageProps) {
     if (persistedCwd) return persistedCwd;
     return displayedConversationWorkdir || undefined;
   })();
+
   const isCompactionRunning = compactionStatus.phase === "running";
   const isConversationHydrating = hydratingConversationId === currentConversationId;
   const isConversationHydrationFailed = hydrationFailedConversationId === currentConversationId;
@@ -5594,6 +6081,18 @@ export function ChatPage(props: ChatPageProps) {
                 onEditQueuedTurn={editQueuedTurn}
                 onRemoveQueuedTurn={removeQueuedTurn}
                 onHeightChange={setComposerOverlayHeight}
+                contextUsage={contextUsageSnapshot}
+                onExecutionModeChange={handleExecutionModeChange}
+                onManualCompact={handleManualCompact}
+                isCompacting={isCompactionRunning}
+                conversationId={currentConversationId}
+                onPasteClipboardImages={handlePasteClipboardImages}
+                onCaptureScreenshot={handleCaptureScreenshot}
+                promptTemplates={composerPromptTemplates}
+                onInsertPromptTemplate={handleInsertPromptTemplate}
+                onClearDraft={handleClearComposerDraft}
+                sessionCostLabel={sessionCostLabel}
+                onExportMarkdown={handleExportMarkdown}
               />
               {isFileDropActive ? (
                 <div

@@ -26,6 +26,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { LocaleContext, t as translate } from "@/i18n";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
 import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
+import { captureDisplayFrameToFile, readClipboardImageFiles } from "@/lib/chat/clipboardCapture";
+import { type ContextUsageSnapshot, estimateContextUsage } from "@/lib/chat/contextUsage";
+import {
+  buildConversationExportFilename,
+  collectActiveContextFromTranscriptRows,
+  collectExportMessages,
+  collectMessagesFromTranscriptRows,
+  conversationToMarkdown,
+  downloadTextFile,
+  formatUsdCost,
+  sumConversationCost,
+} from "@/lib/chat/conversationExport";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type { CodeMentionReference } from "@/lib/chat/mentionReferences";
 import { createActivityStore } from "@/lib/chat/stream/activityStore";
@@ -93,6 +105,7 @@ import {
   updateRightDockWidth,
   updateSkills,
   updateSshProjectHostIds,
+  updateSystem,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@/lib/settings";
@@ -3357,6 +3370,129 @@ export default function GatewayApp() {
     }
     return findProviderModelConfig(provider, activeSelectedModel.model).contextWindow;
   }, [settings.customProviders, activeSelectedModel]);
+
+  const handleExecutionModeChange = useCallback(
+    (mode: "text" | "tools") => {
+      if (mode === "text") {
+        // Text runtime has no file tools — drop pending attachments so they
+        // are not sent as unfulfillable "Use Read …" prompts.
+        const conversationId = getDisplayedConversationId().trim();
+        if (conversationId) {
+          updatePendingUploadsForConversation(conversationId, () => []);
+        }
+      }
+      setSettings((prev) => {
+        if (mode === "text") {
+          if (prev.system.executionMode === "text") return prev;
+          return updateSystem(prev, { executionMode: "text" });
+        }
+        if (prev.system.executionMode === "tools" || prev.system.executionMode === "agent-dev") {
+          return prev;
+        }
+        return updateSystem(prev, { executionMode: "tools" });
+      });
+    },
+    [getDisplayedConversationId, setSettings, updatePendingUploadsForConversation],
+  );
+
+  const composerPromptTemplates = useMemo(
+    () =>
+      (settings.agents ?? [])
+        .filter((template) => template.prompt?.trim())
+        .map((template) => ({
+          id: template.id,
+          name: template.name?.trim() || template.id,
+          prompt: template.prompt,
+        })),
+    [settings.agents],
+  );
+
+  const handlePasteClipboardImages = useCallback(async () => {
+    const workdir = displayedConversationWorkdirRef.current.trim();
+    if (!isAgentMode || !workdir) {
+      setChatError(translate("chat.upload.onlyInTools", settings.locale));
+      return;
+    }
+    const lock = {
+      conversationId: getDisplayedConversationId().trim(),
+      workdir,
+    };
+    if (!lock.conversationId) return;
+    const result = await readClipboardImageFiles();
+    if (!result.ok) {
+      const key =
+        result.reason === "empty"
+          ? "chat.toolbar.clipboardEmpty"
+          : result.reason === "denied"
+            ? "chat.toolbar.clipboardDenied"
+            : "chat.toolbar.clipboardFailed";
+      setChatError(translate(key, settings.locale));
+      return;
+    }
+    await handleImportReadableFiles(result.files, lock);
+  }, [getDisplayedConversationId, handleImportReadableFiles, isAgentMode, settings.locale]);
+
+  const handleCaptureScreenshot = useCallback(async () => {
+    const workdir = displayedConversationWorkdirRef.current.trim();
+    if (!isAgentMode || !workdir) {
+      setChatError(translate("chat.upload.onlyInTools", settings.locale));
+      return;
+    }
+    const lock = {
+      conversationId: getDisplayedConversationId().trim(),
+      workdir,
+    };
+    if (!lock.conversationId) return;
+    const result = await captureDisplayFrameToFile();
+    if (!result.ok) {
+      const key =
+        result.reason === "cancelled"
+          ? "chat.toolbar.screenshotCancelled"
+          : result.reason === "unsupported"
+            ? "chat.toolbar.screenshotUnsupported"
+            : "chat.toolbar.screenshotFailed";
+      setChatError(translate(key, settings.locale));
+      return;
+    }
+    await handleImportReadableFiles([result.file], lock);
+  }, [getDisplayedConversationId, handleImportReadableFiles, isAgentMode, settings.locale]);
+
+  const handleClearComposerDraft = useCallback(() => {
+    const conversationId = getDisplayedConversationId().trim();
+    composerRef.current?.clear();
+    if (conversationId) {
+      updatePendingUploadsForConversation(conversationId, () => []);
+      // Drop cache so conversation switch does not restore the cleared draft.
+      clearCachedComposerDraft(conversationId);
+    }
+    composerRef.current?.focus();
+  }, [getDisplayedConversationId, updatePendingUploadsForConversation]);
+
+  const handleInsertPromptTemplate = useCallback(
+    (templateId: string) => {
+      const template = (settings.agents ?? []).find((item) => item.id === templateId);
+      const prompt = template?.prompt?.trim();
+      if (!prompt) return;
+      const composer = composerRef.current;
+      if (!composer) return;
+      // Preserve structured segments (large-paste chips, skill/commit/file mentions).
+      const draft = composer.getDraft();
+      const needsGap = !draft.isEmpty && draft.text.trim().length > 0;
+      const appended = needsGap ? `\n\n${prompt}` : prompt;
+      composer.setDraft({
+        ...draft,
+        segments: [...draft.segments, { type: "text", text: appended }],
+        text: needsGap ? `${draft.text.trimEnd()}${appended}` : prompt,
+        textWithoutLargePastes: needsGap
+          ? `${draft.textWithoutLargePastes.trimEnd()}${appended}`
+          : prompt,
+        isEmpty: false,
+      });
+      composer.focus();
+    },
+    [settings.agents],
+  );
+
   const currentChatProvider = useMemo(() => {
     if (!activeSelectedModel) {
       return undefined;
@@ -3803,14 +3939,96 @@ export default function GatewayApp() {
   const transcriptRows = displayedTranscript.rows;
   const transcriptLiveStartIndex = displayedTranscript.liveStartIndex;
   const transcriptFloors = useMemo(() => buildFloorEntries(transcriptRows), [transcriptRows]);
+  const transcriptRevision = displayedTranscript.revision;
+  const selectedHistoryHasMore =
+    selectedHistory?.conversation_id === displayedConversationId &&
+    selectedHistory.has_more === true;
+  // Context / cost meters must not rescan the full transcript on every stream
+  // commit. Recompute immediately when idle; poll while a run is active.
+  const [composerContextUsage, setComposerContextUsage] = useState<ContextUsageSnapshot | null>(
+    null,
+  );
+  const [composerSessionCostLabel, setComposerSessionCostLabel] = useState<string | null>(null);
+  // While streaming, ignore per-token revision churn so the effect does not thrash.
+  const composerMeterSourceKey = displayedConversationBusy
+    ? `busy:${displayedConversationId}:${selectedHistoryHasMore}:${currentModelContextWindow ?? 0}`
+    : `idle:${displayedConversationId}:${transcriptRevision}:${selectedHistoryHasMore}:${currentModelContextWindow ?? 0}`;
+  useEffect(() => {
+    let cancelled = false;
+    let intervalId: number | null = null;
+
+    const recomputeMeters = () => {
+      if (cancelled) return;
+      const rows =
+        transcriptStoreRegistry.peek(displayedConversationId)?.getSnapshot().rows ?? transcriptRows;
+
+      // Cost (export flattening is fine — export itself is on-demand).
+      const costMessages = collectMessagesFromTranscriptRows(rows);
+      const costSummary = sumConversationCost(costMessages);
+      if (costSummary.hasCost) {
+        const amount = formatUsdCost(costSummary.total, settings.locale);
+        setComposerSessionCostLabel(
+          selectedHistoryHasMore
+            ? translate("chat.toolbar.sessionCostPartialValue", settings.locale).replace(
+                "{amount}",
+                amount,
+              )
+            : amount,
+        );
+      } else {
+        setComposerSessionCostLabel(null);
+      }
+
+      // Active-context window after latest checkpoint (includes tool/thinking).
+      const active = collectActiveContextFromTranscriptRows(rows);
+      const snap = estimateContextUsage({
+        messages: active.messages,
+        systemPrompt: active.summaryText,
+        contextWindow: currentModelContextWindow ?? 0,
+      });
+      // Truncated history window: never present ratio as if it were the full session.
+      if (selectedHistoryHasMore) {
+        setComposerContextUsage({
+          ...snap,
+          ratio: null,
+          level: "unknown",
+          percentLabel: null,
+        });
+      } else {
+        setComposerContextUsage(snap);
+      }
+    };
+
+    if (!displayedConversationId.trim()) {
+      setComposerContextUsage(null);
+      setComposerSessionCostLabel(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    recomputeMeters();
+    if (displayedConversationBusy) {
+      intervalId = window.setInterval(recomputeMeters, 1000);
+    }
+    return () => {
+      cancelled = true;
+      if (intervalId != null) window.clearInterval(intervalId);
+    };
+  }, [
+    composerMeterSourceKey,
+    currentModelContextWindow,
+    displayedConversationBusy,
+    displayedConversationId,
+    selectedHistoryHasMore,
+    settings.locale,
+    transcriptStoreRegistry,
+  ]);
   // Row count gates everything visual (empty state, error banner, loading
   // screen): entryCount can be non-zero while nothing renders (meta-only
   // entries), and hiding an error behind an invisible entry would strand it.
   const displayedTranscriptRowCount = transcriptRows.length;
   const transcriptHistoryLoading = historyDetailLoading && displayedTranscriptRowCount === 0;
-  const selectedHistoryHasMore =
-    selectedHistory?.conversation_id === displayedConversationId &&
-    selectedHistory.has_more === true;
   const loadingOlderHistory = fullHistoryLoading && displayedTranscriptRowCount > 0;
   const handleLoadFullHistory = useCallback(() => {
     if (!api || !displayedConversationId) {
@@ -3825,6 +4043,77 @@ export default function GatewayApp() {
       setFullHistoryLoading(false);
     });
   }, [api, displayedConversationId, refreshDisplayedConversationHistorySnapshot]);
+  const handleExportMarkdown = useCallback(async () => {
+    const exportConversationId = displayedConversationId.trim();
+    if (!exportConversationId) return;
+    // Refuse while history is still painting or a reply is streaming.
+    if (historyDetailLoading || fullHistoryLoading || displayedConversationBusy) {
+      setChatError(translate("chat.toolbar.exportIncomplete", settings.locale));
+      return;
+    }
+    try {
+      let rows = transcriptRows;
+      // Avoid silently exporting a truncated window when older turns are still on the server.
+      if (selectedHistoryHasMore) {
+        if (!api) {
+          // Offline with incomplete local window — refuse rather than export a partial file.
+          setChatError(translate("chat.toolbar.exportIncomplete", settings.locale));
+          return;
+        }
+        setFullHistoryLoading(true);
+        try {
+          await refreshDisplayedConversationHistorySnapshot(exportConversationId, api, {
+            forceFull: true,
+          });
+        } finally {
+          setFullHistoryLoading(false);
+        }
+        // User may have switched chats while the full-history fetch was in flight.
+        if (getDisplayedConversationId().trim() !== exportConversationId) {
+          setChatError(translate("chat.toolbar.exportIncomplete", settings.locale));
+          return;
+        }
+        const after = selectedHistoryRef.current;
+        if (after?.conversation_id !== exportConversationId) {
+          setChatError(translate("chat.toolbar.exportIncomplete", settings.locale));
+          return;
+        }
+        if (after.has_more === true) {
+          setChatError(translate("chat.toolbar.exportIncomplete", settings.locale));
+          return;
+        }
+        rows =
+          transcriptStoreRegistry.peek(exportConversationId)?.getSnapshot().rows ?? transcriptRows;
+      } else if (getDisplayedConversationId().trim() !== exportConversationId) {
+        setChatError(translate("chat.toolbar.exportIncomplete", settings.locale));
+        return;
+      }
+      const collected = collectMessagesFromTranscriptRows(rows);
+      const title =
+        sidebarConversationsById.get(exportConversationId)?.title?.trim() ||
+        translate("chat.pendingTitle", settings.locale);
+      const markdown = conversationToMarkdown({
+        title,
+        messages: collectExportMessages(collected),
+      });
+      downloadTextFile(buildConversationExportFilename(title), markdown);
+    } catch (error) {
+      setChatError(asErrorMessage(error, translate("chat.toolbar.exportFailed", settings.locale)));
+    }
+  }, [
+    api,
+    displayedConversationBusy,
+    displayedConversationId,
+    fullHistoryLoading,
+    getDisplayedConversationId,
+    historyDetailLoading,
+    refreshDisplayedConversationHistorySnapshot,
+    selectedHistoryHasMore,
+    settings.locale,
+    sidebarConversationsById,
+    transcriptRows,
+    transcriptStoreRegistry,
+  ]);
   useEffect(() => {
     if (typeof document === "undefined") {
       return;
@@ -4378,6 +4667,20 @@ export default function GatewayApp() {
                       onMoveQueuedTurnUp={moveQueuedTurnUp}
                       onEditQueuedTurn={editQueuedTurn}
                       onRemoveQueuedTurn={removeQueuedTurn}
+                      contextUsage={composerContextUsage}
+                      onExecutionModeChange={handleExecutionModeChange}
+                      conversationId={displayedConversationId}
+                      compactDisabledReason={translate(
+                        "chat.toolbar.compactDesktopOnly",
+                        settings.locale,
+                      )}
+                      onPasteClipboardImages={handlePasteClipboardImages}
+                      onCaptureScreenshot={handleCaptureScreenshot}
+                      promptTemplates={composerPromptTemplates}
+                      onInsertPromptTemplate={handleInsertPromptTemplate}
+                      onClearDraft={handleClearComposerDraft}
+                      sessionCostLabel={composerSessionCostLabel}
+                      onExportMarkdown={handleExportMarkdown}
                     />
                     {isFileDropActive ? (
                       <FileDropOverlay

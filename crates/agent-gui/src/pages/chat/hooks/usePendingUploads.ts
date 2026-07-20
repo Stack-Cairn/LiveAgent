@@ -237,6 +237,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     async (task: {
       emptySelectionMessage: string;
       errorFallback: string;
+      /** When set (e.g. after clipboard permission), do not re-read current conversation. */
+      lockedTarget?: UploadTarget | null;
       importer: (target: UploadTarget) => Promise<SystemPickReadableFilesResponse>;
     }) => {
       if (uploadTaskActiveRef.current) {
@@ -247,12 +249,12 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         setErrorMessage("文件上传仅在 tools 模式可用。");
         return;
       }
-      if (!workdir) {
+      if (!workdir && !task.lockedTarget?.targetWorkdir) {
         setErrorMessage("请先在项目栏选择或创建项目后再上传文件。");
         return;
       }
 
-      const uploadTarget = captureUploadTarget();
+      const uploadTarget = task.lockedTarget ?? captureUploadTarget();
       if (!uploadTarget) {
         return;
       }
@@ -317,11 +319,27 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   );
 
   const importReadableFiles = useCallback(
-    async (files: File[]) => {
+    async (files: File[], lock?: { conversationId: string; workdir: string } | null) => {
       if (files.length === 0) return;
+      let lockedTarget: UploadTarget | null = null;
+      if (lock?.conversationId?.trim() && lock.workdir?.trim()) {
+        const targetConversationId = lock.conversationId.trim();
+        const currentTargetUploads = getPendingUploadsForConversation(targetConversationId);
+        const remainingFileSlots = Math.max(0, MAX_UPLOAD_FILES - currentTargetUploads.length);
+        if (remainingFileSlots === 0) {
+          addNotify("warning", `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略多余文件`);
+          return;
+        }
+        lockedTarget = {
+          targetConversationId,
+          targetWorkdir: lock.workdir.trim(),
+          remainingFileSlots,
+        };
+      }
       await runUploadTask({
         emptySelectionMessage: "剪贴板文件均不受当前 Read 支持",
         errorFallback: "导入剪贴板文件失败",
+        lockedTarget,
         importer: async ({ targetWorkdir, remainingFileSlots }) => {
           const importBatch = files.slice(0, remainingFileSlots);
           const ignoredForLimit = files.length - importBatch.length;
@@ -340,7 +358,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         },
       });
     },
-    [addNotify, runUploadTask],
+    [addNotify, getPendingUploadsForConversation, runUploadTask],
   );
 
   const removePendingUpload = useCallback(

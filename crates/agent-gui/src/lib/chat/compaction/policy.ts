@@ -128,6 +128,8 @@ export function decideCompaction(params: {
   pressure: CompactionPressure;
   inFlight: boolean;
   now: number;
+  /** When true, skip threshold/cooldown gates (manual toolbar compact). */
+  force?: boolean;
 }): CompactionDecision {
   const contextWindow = Math.max(0, Math.floor(params.modelConfig?.contextWindow ?? 0));
   const maxOutputToken = Math.max(0, Math.floor(params.modelConfig?.maxOutputToken ?? 0));
@@ -169,6 +171,17 @@ export function decideCompaction(params: {
 
   if (params.inFlight) {
     return { ...base, shouldCompact: false, reason: "in-flight", threshold, thresholdMode };
+  }
+
+  // Manual force bypasses threshold + cooldown; still requires a usable window and messages.
+  if (params.force) {
+    return {
+      ...base,
+      shouldCompact: true,
+      reason: "manual",
+      threshold,
+      thresholdMode,
+    };
   }
 
   if (base.totalTokens < threshold) {

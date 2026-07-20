@@ -235,8 +235,164 @@ export class CompactionController {
     }
   }
 
+  /**
+   * Toolbar-driven compaction. Requires an active turn binding with sinks.
+   * When `force` is true, threshold/cooldown gates are skipped (still needs
+   * messages + a configured context window).
+   */
+  async compactManually(params: {
+    force?: boolean;
+    budgetContext: Context;
+    tools?: Context["tools"];
+    includeUploadedFilesMetadata?: boolean;
+  }): Promise<"compacted" | "skipped" | "failed"> {
+    const binding = this.binding;
+    if (!binding) return "skipped";
+    if (binding.cancellation.userStop.signal.aborted) {
+      throw createCompactionAbortError();
+    }
+    if (this.inFlight) return "skipped";
+
+    const now = Date.now();
+    const buildOptions: ContextBuildOptions = {
+      includeUploadedFilesMetadata: params.includeUploadedFilesMetadata,
+    };
+
+    // Prefer the live conversation state from sinks consumers: budgetContext
+    // is only for token accounting; we compact the state captured in presend
+    // when available, otherwise rebuild from the budget context owner.
+    const baseState = binding.presend?.baseState;
+    if (!baseState) return "skipped";
+
+    let workingState = baseState;
+    let pruned: PruneConversationResult | null = null;
+    if (shouldPruneBeforeCompaction(this.pressure, now)) {
+      const attempt = pruneConversationState(workingState, resolvePruneOptions(this.pressure));
+      if (attempt.applied) {
+        pruned = attempt;
+        workingState = attempt.state;
+      }
+    }
+
+    const budgetContext = pruned
+      ? binding.buildPreparedContext(workingState, params.tools, buildOptions)
+      : params.budgetContext;
+    this.ledger.rebase(budgetContext);
+    this.updateTurnMeta(workingState);
+    const decision = this.decide("optimization", this.ledger.total(), now, {
+      force: params.force === true,
+    });
+    this.logDecision(decision);
+
+    if (!decision.shouldCompact) {
+      if (pruned) {
+        const persisted = await this.persistManualState(binding, pruned.state);
+        if (!persisted) {
+          this.settleFailed("manual", "Failed to persist pruned context");
+          return "failed";
+        }
+        const appliedState = binding.presend?.composeAppliedState
+          ? binding.presend.composeAppliedState(pruned.state)
+          : pruned.state;
+        binding.sinks.applyState?.(appliedState);
+        return "compacted";
+      }
+      return "skipped";
+    }
+
+    this.rollbackSnapshot = {
+      state: baseState,
+      composerText: binding.presend?.composerText,
+      uploadedFiles: binding.presend?.uploadedFiles,
+    };
+    this.inFlight = true;
+    this.publishRunning("manual", workingState.activeSegmentIndex, decision);
+
+    const scope = binding.cancellation.deriveScope();
+    try {
+      const outcome = await runCompaction({
+        state: workingState,
+        intent: "optimization",
+        contextTokens: decision.totalTokens,
+        threshold: decision.threshold,
+        providerId: binding.providerId,
+        model: binding.model,
+        runtime: binding.runtime,
+        signal: scope.controller.signal,
+        debugLogger: binding.debugLogger,
+        complete: binding.complete,
+      });
+
+      const persisted = await this.persistManualState(binding, outcome.state);
+      if (!persisted) {
+        this.rollbackSnapshot = null;
+        this.settleFailed("manual", "Failed to persist compacted context");
+        return "failed";
+      }
+      this.rollbackSnapshot = null;
+      const appliedState = binding.presend?.composeAppliedState
+        ? binding.presend.composeAppliedState(outcome.state)
+        : outcome.state;
+      binding.sinks.applyState?.(appliedState);
+      this.settleCompleted("manual", outcome.newSegmentIndex);
+      binding.sinks.queueCheckpoint?.(outcome.state);
+      this.notePostCompactionPressure(
+        binding.buildPreparedContext(appliedState, params.tools, buildOptions),
+        appliedState,
+        decision.threshold,
+      );
+      return "compacted";
+    } catch (error) {
+      if (this.isAbortOutcome(scope.controller.signal, error)) {
+        throw error;
+      }
+      this.rollbackSnapshot = null;
+      const fallback =
+        pruned ?? pruneConversationState(baseState, resolvePruneOptions(this.pressure));
+      if (fallback.applied) {
+        // Persist first: never apply a pruned runtime state that did not land on disk,
+        // or a later auto-save could permanently drop pre-prune messages.
+        const persisted = await this.persistManualState(binding, fallback.state);
+        if (!persisted) {
+          this.settleFailed("manual", "Failed to persist pruned context");
+          return "failed";
+        }
+        const appliedState = binding.presend?.composeAppliedState
+          ? binding.presend.composeAppliedState(fallback.state)
+          : fallback.state;
+        binding.sinks.applyState?.(appliedState);
+        this.settleCompleted("manual", fallback.state.activeSegmentIndex);
+        binding.sinks.setBridgeToolStatus?.(buildPruneFallbackStatus(fallback.prunedMessageCount));
+        // Summarizer failed but prune degraded successfully — treat as compacted.
+        return "compacted";
+      }
+      console.warn("手动上下文压缩失败", error);
+      this.settleFailed("manual", error instanceof Error ? error.message : String(error));
+      return "failed";
+    } finally {
+      scope.release();
+      this.inFlight = false;
+      this.binding?.sinks.setBridgeToolStatus?.(null);
+    }
+  }
+
+  /** Manual compact treats persist resolving `false` as failure (unlike fire-and-forget best-effort). */
+  private async persistManualState(
+    binding: CompactionTurnBinding,
+    state: ConversationViewState,
+  ): Promise<boolean> {
+    if (!binding.sinks.persist) return true;
+    try {
+      const result = await binding.sinks.persist(state);
+      return result !== false;
+    } catch (error) {
+      console.warn("手动压缩持久化失败", error);
+      return false;
+    }
+  }
+
   async compactDuringRun(params: {
-    trigger: Exclude<CompactionTrigger, "pre-send">;
+    trigger: Exclude<CompactionTrigger, "pre-send" | "manual">;
     state: ConversationViewState;
     budgetContext?: Context;
     tools?: Context["tools"];
@@ -379,7 +535,12 @@ export class CompactionController {
     };
   }
 
-  private decide(intent: CompactionIntent, totalTokens: number, now = Date.now()) {
+  private decide(
+    intent: CompactionIntent,
+    totalTokens: number,
+    now = Date.now(),
+    options?: { force?: boolean },
+  ) {
     const binding = this.binding;
     if (!binding) {
       throw new Error("compaction decision requested without an active turn binding");
@@ -396,6 +557,7 @@ export class CompactionController {
       pressure: this.pressure,
       inFlight: this.inFlight,
       now,
+      force: options?.force === true,
     });
   }
 
