@@ -314,6 +314,10 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     /* ── Project Tools ── */
     "projectTools.terminalTitle": "终端",
+    "projectTools.panelCollapse": "收起项目工具面板",
+    "projectTools.panelExpand": "展开项目工具面板",
+    "projectTools.requiresAgentMode": "项目工具需要 Agent 项目模式",
+    "projectTools.requiresProject": "请先选择一个项目再使用项目工具",
     "projectTools.fileTreeTitle": "文件树",
     "projectTools.gitReviewTitle": "Git 审查",
     "projectTools.tunnelTitle": "内网穿透",
@@ -2250,6 +2254,10 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     /* ── Project Tools ── */
     "projectTools.terminalTitle": "Terminal",
+    "projectTools.panelCollapse": "Collapse project tools panel",
+    "projectTools.panelExpand": "Expand project tools panel",
+    "projectTools.requiresAgentMode": "Project tools require Agent project mode.",
+    "projectTools.requiresProject": "Select a project to use project tools.",
     "projectTools.fileTreeTitle": "File Tree",
     "projectTools.gitReviewTitle": "Git Review",
     "projectTools.tunnelTitle": "Tunnel",

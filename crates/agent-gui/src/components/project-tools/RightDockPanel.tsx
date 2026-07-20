@@ -732,7 +732,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         className={cn(
           "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
           isOpen
-            ? "pointer-events-auto translate-y-0 border-t border-border opacity-100 md:w-[var(--project-tools-panel-width)] md:translate-x-0 md:border-l md:border-t-0"
+            ? "pointer-events-auto translate-y-0 border-t border-border opacity-100 md:w-[var(--project-tools-panel-width)] md:translate-x-0 md:border-t-0"
             : "pointer-events-none translate-y-full border-t border-transparent opacity-0 md:translate-x-3 md:translate-y-0 md:border-l-0 md:border-t-0",
           effectiveWidthCollapsed ? "md:w-0" : "md:w-[var(--project-tools-panel-width)]",
         )}
@@ -749,6 +749,15 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
           {effectiveShouldRenderContent ? (
             <>
               <div className="project-tools-panel-handle" aria-hidden="true" />
+              {/* 分栏竖线：贯穿到顶，但顶端由透明渐入实色（~3rem 处），顶部
+                  条带视觉上保持连续；有头部时实色段恰好从横线处开始衔接。 */}
+              <div
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 hidden w-px md:block"
+                style={{
+                  background: "linear-gradient(to bottom, transparent, hsl(var(--border)) 3rem)",
+                }}
+              />
               <button
                 type="button"
                 aria-label={t("projectTools.resizePanel")}
@@ -768,61 +777,70 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   )}
                 />
               </button>
-              <div className="project-tools-panel-header flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+              {/* 空态（启动页）不渲染头部行：「新建」按钮浮动在启动页右上角。 */}
+              {!showRightDockChooser ? (
                 <div
-                  className="project-tools-panel-tabs-shell flex min-w-0 flex-1 flex-col justify-center gap-1"
-                  onWheel={handleTabsWheel}
+                  className="project-tools-panel-header flex h-11 shrink-0 items-center gap-2 border-b border-border px-3"
+                  style={{ paddingRight: "calc(0.75rem + var(--win-chrome-reserve, 0px))" }}
                 >
                   <div
-                    ref={tabsScrollRef}
-                    className="project-tools-panel-tabs flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden"
+                    className="project-tools-panel-tabs-shell flex min-w-0 flex-1 flex-col justify-center gap-1"
+                    onWheel={handleTabsWheel}
                   >
-                    <RightDockTabStrip
-                      tabs={orderedProjectTabs}
-                      currentActiveTab={currentActiveTab}
-                      backgroundTasksRunning={backgroundTasksRunning}
-                      onCloseBackgroundTasks={closeBackgroundTasks}
-                      activeSession={activeSession}
-                      pendingCloseSessionId={pendingCloseSessionId}
-                      closingSessionIds={closingSessionIds}
-                      draggingTabId={draggingTabId}
-                      renderTabDragHandle={renderTabDragHandle}
-                      getTabDragProps={getTabDragProps}
-                      getTabDragStyle={getTabDragStyle}
-                      consumeSuppressedTabClick={consumeSuppressedTabClick}
-                      onActivateTab={activateTab}
-                      onActivateTerminalSession={activateTerminalSession}
-                      onCloseToolTab={closeToolTab}
-                      onCloseTerminalRequest={handleCloseRequest}
-                    />
+                    <div
+                      ref={tabsScrollRef}
+                      className="project-tools-panel-tabs flex h-8 min-w-0 items-center gap-1 overflow-x-auto overflow-y-hidden"
+                    >
+                      <RightDockTabStrip
+                        tabs={orderedProjectTabs}
+                        currentActiveTab={currentActiveTab}
+                        backgroundTasksRunning={backgroundTasksRunning}
+                        onCloseBackgroundTasks={closeBackgroundTasks}
+                        activeSession={activeSession}
+                        pendingCloseSessionId={pendingCloseSessionId}
+                        closingSessionIds={closingSessionIds}
+                        draggingTabId={draggingTabId}
+                        renderTabDragHandle={renderTabDragHandle}
+                        getTabDragProps={getTabDragProps}
+                        getTabDragStyle={getTabDragStyle}
+                        consumeSuppressedTabClick={consumeSuppressedTabClick}
+                        onActivateTab={activateTab}
+                        onActivateTerminalSession={activateTerminalSession}
+                        onCloseToolTab={closeToolTab}
+                        onCloseTerminalRequest={handleCloseRequest}
+                      />
+                      {/* 新建按钮紧跟最后一个标签（浏览器标签栏式） */}
+                      <div className="shrink-0">
+                        <RightDockCreateMenu
+                          open={createMenuOpen}
+                          onOpenChange={setCreateMenuOpen}
+                          shellOptions={shellOptions}
+                          terminalReady={terminalReady}
+                          terminalDisabledMessage={terminalDisabledMessage}
+                          projectReady={projectReady}
+                          tunnelAvailable={tunnelAvailable}
+                          creating={creating}
+                          onCreateTerminal={createTerminal}
+                          onStartTool={startToolTab}
+                          onOpenBackgroundTasks={openBackgroundTasks}
+                        />
+                      </div>
+                    </div>
+                    <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
                   </div>
-                  <RightDockTabsScrollbar scrollRef={tabsScrollRef} />
+                  {onClose ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={onClose}
+                      title={t("projectTools.closePanel")}
+                      className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground md:hidden"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </div>
-                <RightDockCreateMenu
-                  open={createMenuOpen}
-                  onOpenChange={setCreateMenuOpen}
-                  shellOptions={shellOptions}
-                  terminalReady={terminalReady}
-                  terminalDisabledMessage={terminalDisabledMessage}
-                  projectReady={projectReady}
-                  tunnelAvailable={tunnelAvailable}
-                  creating={creating}
-                  onCreateTerminal={createTerminal}
-                  onStartTool={startToolTab}
-                  onOpenBackgroundTasks={openBackgroundTasks}
-                />
-                {onClose ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={onClose}
-                    title={t("projectTools.closePanel")}
-                    className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground md:hidden"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                ) : null}
-              </div>
+              ) : null}
 
               {pendingCloseSession ? (
                 <div className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
@@ -862,19 +880,35 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   {disabledMessage}
                 </div>
               ) : showRightDockChooser ? (
-                <RightDockChooser
-                  terminalReady={terminalReady}
-                  terminalDisabledMessage={terminalDisabledMessage}
-                  disabledMessage={disabledMessage}
-                  projectReady={projectReady}
-                  tunnelAvailable={tunnelAvailable}
-                  creating={creating}
-                  loading={loading}
-                  error={error}
-                  onCreateTerminal={createTerminal}
-                  onStartTool={startToolTab}
-                  onOpenBackgroundTasks={openBackgroundTasks}
-                />
+                <div className="relative flex min-h-0 flex-1 flex-col">
+                  {/* 桌面端不再浮动「+」——启动页卡片即完整的创建入口，终端卡
+                      片自带 shell 选择；这里只保留移动端的关闭按钮。 */}
+                  {onClose ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={onClose}
+                      title={t("projectTools.closePanel")}
+                      className="absolute right-2 top-2 z-10 h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground md:hidden"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                  <RightDockChooser
+                    shellOptions={shellOptions}
+                    terminalReady={terminalReady}
+                    terminalDisabledMessage={terminalDisabledMessage}
+                    disabledMessage={disabledMessage}
+                    projectReady={projectReady}
+                    tunnelAvailable={tunnelAvailable}
+                    creating={creating}
+                    loading={loading}
+                    error={error}
+                    onCreateTerminal={createTerminal}
+                    onStartTool={startToolTab}
+                    onOpenBackgroundTasks={openBackgroundTasks}
+                  />
+                </div>
               ) : (
                 <RightDockContent
                   currentActiveTab={currentActiveTab}

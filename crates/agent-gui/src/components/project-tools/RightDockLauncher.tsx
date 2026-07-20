@@ -1,7 +1,7 @@
 import { useLocale } from "../../i18n";
 import { cn } from "../../lib/shared/utils";
 import type { TerminalShellOption } from "../../lib/terminal/types";
-import { ChevronRight, Cpu, Plus, Terminal } from "../icons";
+import { ChevronDown, ChevronRight, Cpu, Plus, Terminal } from "../icons";
 import { buttonVariants } from "../ui/button";
 import {
   DropdownMenu,
@@ -34,6 +34,7 @@ type RightDockCreateMenuProps = RightDockLauncherActions & {
 };
 
 type RightDockChooserProps = RightDockLauncherActions & {
+  shellOptions: TerminalShellOption[];
   terminalReady: boolean;
   terminalDisabledMessage?: string;
   disabledMessage?: string;
@@ -105,7 +106,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
         title={t("projectTools.newProjectTool")}
         className={cn(
           buttonVariants({ variant: "ghost", size: "icon" }),
-          "h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground",
+          "h-7 w-7 rounded-md text-muted-foreground/80 hover:text-foreground",
         )}
       >
         <Plus className="h-4 w-4" />
@@ -134,6 +135,7 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
 
 export function RightDockChooser(props: RightDockChooserProps) {
   const {
+    shellOptions,
     terminalReady,
     terminalDisabledMessage,
     disabledMessage,
@@ -184,26 +186,67 @@ export function RightDockChooser(props: RightDockChooserProps) {
         <p className="text-xs text-muted-foreground">{t("projectTools.getStartedHint")}</p>
       </div>
       <div className="flex w-full max-w-xs flex-col gap-2">
-        {tools.map((tool) => (
-          <button
-            key={tool.key}
-            type="button"
-            onClick={tool.onClick}
-            disabled={tool.disabled}
-            title={tool.titleAttr}
-            className="group flex items-center gap-3 rounded-lg border border-border/60 bg-background px-3.5 py-3 text-left text-sm text-foreground transition-all hover:border-border hover:bg-muted/60 hover:shadow-sm disabled:pointer-events-none disabled:opacity-50"
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted/80 text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground">
-              {tool.icon}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-medium leading-tight">{tool.title}</div>
-              <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
-                {tool.description}
+        {tools.map((tool) => {
+          // 终端卡片在有多个 shell 时是分裂按钮：主区开默认 shell，右缘
+          // 箭头展开 shell 选择菜单（能力与原「+」菜单的子菜单一致）。
+          const splitShellMenu = tool.key === "terminal" && shellOptions.length > 1;
+          const card = (
+            <button
+              type="button"
+              onClick={tool.onClick}
+              disabled={tool.disabled}
+              title={tool.titleAttr}
+              className={cn(
+                "group flex w-full items-center gap-3 rounded-lg border border-border/60 bg-background px-3.5 py-3 text-left text-sm text-foreground transition-all hover:border-border hover:bg-muted/60 hover:shadow-sm disabled:pointer-events-none disabled:opacity-50",
+                splitShellMenu && "pr-12",
+              )}
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted/80 text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground">
+                {tool.icon}
               </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-medium leading-tight">{tool.title}</div>
+                <div className="mt-0.5 text-xs leading-tight text-muted-foreground">
+                  {tool.description}
+                </div>
+              </div>
+            </button>
+          );
+          if (!splitShellMenu) {
+            return <div key={tool.key}>{card}</div>;
+          }
+          return (
+            <div key={tool.key} className="relative">
+              {card}
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  disabled={tool.disabled}
+                  title={t("projectTools.newTerminal")}
+                  className={cn(
+                    buttonVariants({ variant: "ghost", size: "icon" }),
+                    "absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 rounded-md text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" sideOffset={6} className="min-w-36">
+                  {shellOptions.map((option) => (
+                    <DropdownMenuItem
+                      key={option.id}
+                      onSelect={() => onCreateTerminal(option.id)}
+                      disabled={tool.disabled}
+                      className="gap-2 text-xs"
+                      title={option.command || option.label}
+                    >
+                      <Terminal className="h-3.5 w-3.5" />
+                      {option.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
-          </button>
-        ))}
+          );
+        })}
       </div>
       {loading ? (
         <div className="text-center text-xs text-muted-foreground">{t("projectTools.loading")}</div>
