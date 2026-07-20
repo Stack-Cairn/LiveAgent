@@ -651,6 +651,7 @@ export async function runAssistantWithTools(params: {
     requestFormat?: CodexRequestFormat;
     reasoning?: ReasoningLevel;
     promptCachingEnabled?: boolean;
+    promptCacheRetention?: "short" | "long";
     nativeWebSearchEnabled?: boolean;
     useSystemProxy?: boolean;
     modelConfig?: ProviderModelConfig;
@@ -1200,7 +1201,12 @@ export async function runAssistantWithTools(params: {
         sessionId: options?.sessionId ?? params.sessionId,
         cacheRetention:
           options?.cacheRetention ??
-          resolveProviderCacheRetention(params.providerId, params.runtime.promptCachingEnabled),
+          resolveProviderCacheRetention(
+            params.providerId,
+            params.runtime.promptCachingEnabled,
+            undefined,
+            params.runtime.promptCacheRetention,
+          ),
         metadata: buildProviderRequestMetadata(params.providerId, params.sessionId),
         toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
         reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,

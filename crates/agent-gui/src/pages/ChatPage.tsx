@@ -572,7 +572,8 @@ function buildProviderRuntimeConfig(
         ? controls.reasoning
         : "off"
       : undefined,
-    promptCachingEnabled: true,
+    promptCachingEnabled: provider.promptCachingEnabled,
+    promptCacheRetention: provider.promptCacheRetention,
     nativeWebSearchEnabled: controls.nativeWebSearchEnabled,
     useSystemProxy: provider.useSystemProxy,
     modelConfig,
