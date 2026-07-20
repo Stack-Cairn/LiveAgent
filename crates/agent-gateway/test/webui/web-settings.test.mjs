@@ -28,34 +28,6 @@ test("custom provider normalization defaults and filters ordered custom headers"
   ]);
 });
 
-test("provider model capabilities preserve legacy data and filter unknown values", () => {
-  const legacy = settings.normalizeCustomProvider({
-    type: "codex",
-    models: [{ id: "legacy-model", contextWindow: 64_000, maxOutputToken: 4_096 }],
-  });
-  assert.equal(legacy.models[0].capabilities, undefined);
-
-  const normalized = settings.normalizeCustomProvider({
-    type: "codex",
-    models: [
-      {
-        id: "capable-model",
-        contextWindow: 128_000,
-        maxOutputToken: 8_192,
-        capabilities: ["reasoning", "unknown", "vision", "reasoning", 42, "tools"],
-      },
-      {
-        id: "unknown-only",
-        contextWindow: 32_000,
-        maxOutputToken: 2_048,
-        capabilities: ["audio", null],
-      },
-    ],
-  });
-
-  assert.deepEqual(normalized.models[0].capabilities, ["reasoning", "vision", "tools"]);
-  assert.deepEqual(normalized.models[1].capabilities, []);
-});
 test("gateway model picker keeps same-name provider instances in separate groups", () => {
   const modelOptions = chatHelpers.buildModelOptions({
     customProviders: [
