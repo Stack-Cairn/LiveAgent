@@ -1,6 +1,7 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 
+import type { ToolApprovalPolicy } from "../chat/runner/toolApprovalPolicy";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
 import {
@@ -189,6 +190,8 @@ export type SubagentRuntimeConfig = {
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  /** 子代理运行无人值守：策略开启时危险调用直接拒绝。 */
+  toolApprovalPolicy?: ToolApprovalPolicy;
 };
 
 export function createSubagentTools(params: {
@@ -202,6 +205,7 @@ export function createSubagentTools(params: {
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  toolApprovalPolicy?: ToolApprovalPolicy;
   baseTools: Tool[];
   executeToolCall: (toolCall: ToolCall, signal?: AbortSignal) => Promise<ToolResultMessage>;
   metadataByName: Map<string, BuiltinToolMetadata>;
@@ -313,6 +317,7 @@ export function createSubagentTools(params: {
       workdir: params.workdir,
       sessionId: params.sessionId,
       messageBusEnabled,
+      toolApprovalPolicy: params.toolApprovalPolicy,
       store,
       scheduler,
       worktree: worktreeIpc,

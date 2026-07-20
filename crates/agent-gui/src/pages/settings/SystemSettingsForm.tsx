@@ -9,6 +9,7 @@ import {
   MonitorSmartphone,
   Moon,
   ScanText,
+  ShieldAlert,
   Sun,
   Terminal,
   Wrench,
@@ -535,6 +536,64 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
               </button>
             );
           })}
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+            {t("settings.toolApproval")}
+          </div>
+          <AgentActivationSwitch
+            checked={settings.system.toolApprovalMode === "dangerous"}
+            title={t("settings.toolApprovalDangerous")}
+            onToggle={() =>
+              setSettings((prev) =>
+                updateSystem(prev, {
+                  toolApprovalMode:
+                    prev.system.toolApprovalMode === "dangerous" ? "off" : "dangerous",
+                }),
+              )
+            }
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">{t("settings.toolApprovalDesc")}</p>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-foreground">{t("settings.bashCwdPolicy")}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.bashCwdPolicyDesc")}
+            </div>
+          </div>
+          <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
+            {(
+              [
+                ["unrestricted", "settings.bashCwdUnrestricted"],
+                ["workspace-only", "settings.bashCwdWorkspaceOnly"],
+              ] as const
+            ).map(([value, labelKey]) => {
+              const selected = settings.system.bashCwdPolicy === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() =>
+                    setSettings((prev) => updateSystem(prev, { bashCwdPolicy: value }))
+                  }
+                  className={`rounded-md px-2.5 py-1 text-xs transition-colors ${
+                    selected
+                      ? "bg-background font-medium text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {t(labelKey)}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </section>
 

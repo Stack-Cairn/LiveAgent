@@ -115,6 +115,26 @@ test("claude provider normalization defaults routing, caching, and model limits"
   assert.equal(provider.models[0].maxOutputToken, 32_000);
 });
 
+test("system settings normalize tool approval and bash cwd policy", () => {
+  const defaults = settings.normalizeSystemSettings({});
+  assert.equal(defaults.toolApprovalMode, "off");
+  assert.equal(defaults.bashCwdPolicy, "unrestricted");
+
+  const configured = settings.normalizeSystemSettings({
+    toolApprovalMode: "dangerous",
+    bashCwdPolicy: "workspace-only",
+  });
+  assert.equal(configured.toolApprovalMode, "dangerous");
+  assert.equal(configured.bashCwdPolicy, "workspace-only");
+
+  const invalid = settings.normalizeSystemSettings({
+    toolApprovalMode: "always",
+    bashCwdPolicy: "everywhere",
+  });
+  assert.equal(invalid.toolApprovalMode, "off");
+  assert.equal(invalid.bashCwdPolicy, "unrestricted");
+});
+
 test("gemini provider normalization keeps native routing and model limits", () => {
   const provider = settings.normalizeCustomProvider({
     id: "gemini-1",

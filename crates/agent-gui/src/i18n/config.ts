@@ -1098,6 +1098,25 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.providerUseSystemProxy": "使用应用代理",
     "settings.providerUseSystemProxyDesc":
       "该供应商的模型请求经应用代理出网；应用代理未启用时保持直连。",
+    "chat.toolApproval.title": "确认执行危险操作",
+    "chat.toolApproval.kindDelete": "AI 请求删除文件 / 目录（递归且不可撤销）",
+    "chat.toolApproval.kindSsh": "AI 请求在 SSH 远端执行变更操作",
+    "chat.toolApproval.kindExternalCwd": "AI 请求在工作区之外运行命令",
+    "chat.toolApproval.kindGeneric": "AI 请求执行危险操作",
+    "chat.toolApproval.hint":
+      "拒绝后模型会收到说明并调整方案；允许则立即执行。会话停止时按拒绝处理。",
+    "chat.toolApproval.allow": "允许执行",
+    "chat.toolApproval.deny": "拒绝",
+    "settings.toolApproval": "危险操作确认",
+    "settings.toolApprovalDesc":
+      "删除文件、SSH 变更、工作区外命令等危险工具调用需要你在桌面端确认；远程会话与子代理中的危险调用会被直接拒绝。",
+    "settings.toolApprovalOff": "关闭（默认）",
+    "settings.toolApprovalDangerous": "危险操作需确认",
+    "settings.bashCwdPolicy": "Bash 工作目录范围",
+    "settings.bashCwdPolicyDesc":
+      "限制 Bash / 后台进程的工作目录只能位于工作区与已启用的 Skills 内，阻止命令在任意目录运行。",
+    "settings.bashCwdUnrestricted": "不限制（默认）",
+    "settings.bashCwdWorkspaceOnly": "仅限工作区",
     "settings.closeWindowBehavior": "关闭窗口",
     "settings.closeWindowMinimize": "最小化到托盘",
     "settings.closeWindowMinimizeDesc": "关闭窗口后应用继续在后台运行，可从托盘恢复。",
@@ -3069,6 +3088,26 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.providerUseSystemProxy": "Use app proxy",
     "settings.providerUseSystemProxyDesc":
       "Route this provider's model requests through the app proxy. Falls back to a direct connection while the app proxy is disabled.",
+    "chat.toolApproval.title": "Confirm dangerous operation",
+    "chat.toolApproval.kindDelete":
+      "The AI wants to delete a file/directory (recursive, irreversible)",
+    "chat.toolApproval.kindSsh": "The AI wants to run a mutating action on an SSH remote",
+    "chat.toolApproval.kindExternalCwd": "The AI wants to run a command outside the workspace",
+    "chat.toolApproval.kindGeneric": "The AI wants to run a dangerous operation",
+    "chat.toolApproval.hint":
+      "Denying tells the model to adjust its approach; allowing runs it immediately. Cancelled runs count as denied.",
+    "chat.toolApproval.allow": "Allow",
+    "chat.toolApproval.deny": "Deny",
+    "settings.toolApproval": "Dangerous-operation confirmation",
+    "settings.toolApprovalDesc":
+      "Deletes, SSH mutations, and commands outside the workspace require your confirmation on the desktop; remote sessions and subagents get such calls denied automatically.",
+    "settings.toolApprovalOff": "Off (default)",
+    "settings.toolApprovalDangerous": "Confirm dangerous operations",
+    "settings.bashCwdPolicy": "Bash working-directory scope",
+    "settings.bashCwdPolicyDesc":
+      "Restrict Bash / managed processes to run only inside the workspace and enabled Skills.",
+    "settings.bashCwdUnrestricted": "Unrestricted (default)",
+    "settings.bashCwdWorkspaceOnly": "Workspace only",
     "settings.closeWindowBehavior": "Close Window",
     "settings.closeWindowMinimize": "Minimize to tray",
     "settings.closeWindowMinimizeDesc":

@@ -9,6 +9,7 @@ import {
 } from "../chat/conversation/conversationState";
 import { createTurnCancellationFromSignal } from "../chat/conversation/turnCancellation";
 import { runAssistantWithTools } from "../chat/runner/agentRunner";
+import type { ToolApprovalPolicy } from "../chat/runner/toolApprovalPolicy";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type {
   CodexRequestFormat,
@@ -71,6 +72,8 @@ export type SubagentRunEnvironment = {
   workdir: string;
   sessionId?: string;
   messageBusEnabled: boolean;
+  /** 子代理运行无人值守：策略开启时危险调用直接拒绝（不弹确认）。 */
+  toolApprovalPolicy?: ToolApprovalPolicy;
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
   worktree: SubagentWorktreeIpc;
@@ -589,6 +592,9 @@ export async function executeSubagentRun(
       nativeWebSearch: env.runtime.nativeWebSearchEnabled !== false,
       tools: childTools,
       subagentScheduler: env.scheduler,
+      toolApprovalPolicy: env.toolApprovalPolicy
+        ? { ...env.toolApprovalPolicy, workdir: childWorkdir }
+        : undefined,
       executeToolCall: (childToolCall, childSignal) => {
         if (!childToolNames.has(childToolCall.name)) {
           return Promise.resolve(

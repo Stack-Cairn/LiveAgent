@@ -42,6 +42,10 @@ import {
   upsertToolCallToRound,
 } from "../../../lib/chat/messages/uiMessages";
 import { runAssistantWithTools } from "../../../lib/chat/runner/agentRunner";
+import type {
+  RequestToolApproval,
+  ToolApprovalPolicy,
+} from "../../../lib/chat/runner/toolApprovalPolicy";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText } from "../../../lib/providers/llm";
 import { resolveRuntimePlatform } from "../../../lib/runtimePlatform";
@@ -228,6 +232,9 @@ export type RunAgentConversationTurnParams = {
   associatedSshHostIds?: string[];
   sshManagerRemoteAllowed?: boolean;
   onSshSessionsChanged?: (change: SshManagerSessionChange) => void;
+  bashExternalCwdAllowed?: boolean;
+  toolApprovalPolicy?: ToolApprovalPolicy;
+  requestToolApproval?: RequestToolApproval;
   sessionId: string;
   conversationId: string;
   conversationCwd?: string;
@@ -293,6 +300,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     associatedSshHostIds,
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
+    bashExternalCwdAllowed,
+    toolApprovalPolicy,
+    requestToolApproval,
     sessionId,
     conversationId,
     conversationCwd,
@@ -402,6 +412,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     onManagedSkillsChanged,
     runtimeScope: "chat",
     currentChatModel: selectedModel,
+    bashExternalCwdAllowed,
     selectedSystemToolIds,
     getMcpSettings,
     applyMcpOps,
@@ -427,6 +438,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           templates: enabledSubagentTemplates(agentTemplates),
           store: subagentStore,
           scheduler: subagentScheduler,
+          toolApprovalPolicy,
         }
       : undefined,
   });
@@ -663,6 +675,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         nativeWebSearch: nativeWebSearchEnabled,
         tools: combinedTools,
         subagentScheduler,
+        toolApprovalPolicy,
+        requestToolApproval,
         executeToolCall: combinedExecutor,
         onTurnStart: (round) => {
           activeAgentRound = round;

@@ -63,6 +63,14 @@ import {
 } from "../search/providerNativeSearchStatus";
 import { comparableToolCall } from "./flattenedToolCallText";
 import { recoverAssistantSeedToolCalls } from "./seedToolCalls";
+import {
+  assessDangerousToolCall,
+  buildApprovalDeniedText,
+  buildUnattendedDenialText,
+  type DangerousToolAssessment,
+  type RequestToolApproval,
+  type ToolApprovalPolicy,
+} from "./toolApprovalPolicy";
 import { wrapStreamWithToolCallArgumentGuard } from "./toolCallArgumentGuard";
 
 function createLinkedAbortSignal(signals: Array<AbortSignal | undefined>): {
@@ -691,6 +699,10 @@ export async function runAssistantWithTools(params: {
   debugLogger?: StreamDebugLogger;
   subagentScheduler?: SubagentScheduler;
   allowEmptyWorkdir?: boolean;
+  /** 危险工具审批策略；缺省表示不启用审批门。 */
+  toolApprovalPolicy?: ToolApprovalPolicy;
+  /** 请求用户确认的回调；策略开启但无回调（远程/子代理）时危险调用直接拒绝。 */
+  requestToolApproval?: RequestToolApproval;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
@@ -1263,6 +1275,40 @@ export async function runAssistantWithTools(params: {
       });
     };
 
+    // 危险工具审批门：有回调则等待用户决定（响应取消信号），无回调（远程会话、
+    // 子代理运行）则直接拒绝——"有人能确认就问人，没人能确认就不执行"。
+    const gateDangerousToolCall = async (
+      toolCall: ToolCall,
+      assessment: DangerousToolAssessment,
+      hookSignal?: AbortSignal,
+    ): Promise<{ block: true; reason: string } | undefined> => {
+      const requestApproval = params.requestToolApproval;
+      if (!requestApproval) {
+        return { block: true, reason: buildUnattendedDenialText(toolCall, assessment) };
+      }
+      const linked = createLinkedAbortSignal([hookSignal, params.signal]);
+      try {
+        params.onToolStatus?.(`等待用户确认：${summarizeToolCall(toolCall)}`);
+        const decision = await requestApproval({
+          toolCall,
+          assessment,
+          signal: linked.signal,
+        });
+        if (linked.signal?.aborted) {
+          return { block: true, reason: "Cancelled before the tool call was approved." };
+        }
+        if (!decision.approved) {
+          return { block: true, reason: buildApprovalDeniedText(toolCall, assessment) };
+        }
+        return undefined;
+      } catch {
+        return { block: true, reason: buildApprovalDeniedText(toolCall, assessment) };
+      } finally {
+        linked.cleanup();
+        params.onToolStatus?.(null);
+      }
+    };
+
     // A truncated call whose repaired arguments also fail schema validation
     // never reaches beforeToolCall (pi-agent-core validates first), so the
     // model would see a schema error blaming its own call. Rewrite such tool
@@ -1304,7 +1350,7 @@ export async function runAssistantWithTools(params: {
       afterToolCall: async ({ toolCall }) => ({
         isError: toolResultErrorFlags.get(toolCall.id) ?? false,
       }),
-      beforeToolCall: async ({ assistantMessage, toolCall }) => {
+      beforeToolCall: async ({ assistantMessage, toolCall }, hookSignal) => {
         const effectiveToolCall = normalizeToolCallNameForExecution(toolCall);
         const effectiveAssistantMessage =
           normalizeAssistantToolCallNamesForExecution(assistantMessage);
@@ -1317,6 +1363,13 @@ export async function runAssistantWithTools(params: {
             block: true,
             reason: buildTruncatedToolCallText(effectiveToolCall.name, truncationReason),
           };
+        }
+        if (params.toolApprovalPolicy) {
+          const assessment = assessDangerousToolCall(params.toolApprovalPolicy, effectiveToolCall);
+          if (assessment) {
+            const blocked = await gateDangerousToolCall(effectiveToolCall, assessment, hookSignal);
+            if (blocked) return blocked;
+          }
         }
         if (effectiveToolCall.name !== "Agent") {
           return undefined;
