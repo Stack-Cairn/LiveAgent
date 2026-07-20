@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatHistorySidebar } from "@/components/chat/ChatHistorySidebar";
 import { useLocale } from "@/i18n";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
-import type { WorkspaceProject } from "@/lib/settings";
+import type { WorkModeId, WorkspaceProject } from "@/lib/settings";
 import {
   selectConversations,
   selectListState,
@@ -125,6 +125,8 @@ export type GatewaySidebarContainerProps = {
   onConversationsRemoved: (ids: readonly string[]) => void;
   onCloseSidebar: () => void;
   onOpenSettings: () => void;
+  activeWorkModeId: WorkModeId;
+  onWorkModeChange: (modeId: WorkModeId) => void;
   onOpenSkillsHub: () => void;
   onOpenMcpHub: () => void;
 };
@@ -353,6 +355,8 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       onLoadMore={handleLoadMore}
       onCloseSidebar={props.onCloseSidebar}
       onOpenSettings={props.onOpenSettings}
+      activeWorkModeId={props.activeWorkModeId}
+      onWorkModeChange={props.onWorkModeChange}
       onOpenSkillsHub={props.onOpenSkillsHub}
       onOpenMcpHub={props.onOpenMcpHub}
     />

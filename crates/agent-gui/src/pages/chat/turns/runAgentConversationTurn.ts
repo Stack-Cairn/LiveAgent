@@ -222,6 +222,8 @@ export type RunAgentConversationTurnParams = {
   }) => void | Promise<void>;
   agentTemplates: AppSettings["agents"];
   selectedSystemToolIds: SystemToolId[];
+  /** 当前工作模式裁剪掉的核心工具（如写作模式的终端类工具）。 */
+  excludedToolNames?: readonly string[];
   getMcpSettings: () => AppSettings["mcp"];
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
   remoteWebTunnelsEnabled?: boolean;
@@ -288,6 +290,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     onManagedSkillsChanged,
     agentTemplates,
     selectedSystemToolIds,
+    excludedToolNames,
     getMcpSettings,
     applyMcpOps,
     remoteWebTunnelsEnabled,
@@ -408,6 +411,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     runtimeScope: "chat",
     currentChatModel: selectedModel,
     selectedSystemToolIds,
+    excludedToolNames,
     getMcpSettings,
     applyMcpOps,
     remoteWebTunnelsEnabled,

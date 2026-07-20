@@ -143,6 +143,12 @@ type BuildBuiltinBaseToolRegistryParams = {
   getMcpSettings: () => McpSettings;
   /** Id-keyed merge commit into the authoritative settings; absent in read-only scopes. */
   applyMcpOps?: (ops: McpSettingsOp[]) => void;
+  /**
+   * Core tool names removed from this registry (e.g. the writing work mode
+   * drops Bash/ManagedProcess/ReadTerminal). Also applies to subagent
+   * registries built from the same params.
+   */
+  excludedToolNames?: readonly string[];
   onMcpLoadError?: (message: string) => void;
   mcpLoadFailureMode?: "continue" | "throw";
   memoryToolMode?: "rw" | "ro";
@@ -247,7 +253,16 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
     );
   }
 
-  return baseBundles;
+  const excludedToolNames = new Set(params.excludedToolNames ?? []);
+  if (excludedToolNames.size === 0) {
+    return baseBundles;
+  }
+  return baseBundles
+    .map((bundle) => ({
+      ...bundle,
+      tools: bundle.tools.filter((tool) => !excludedToolNames.has(tool.name)),
+    }))
+    .filter((bundle) => bundle.tools.length > 0);
 }
 
 export async function buildBuiltinToolRegistry(

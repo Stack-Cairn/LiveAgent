@@ -1,8 +1,25 @@
 import { type CSSProperties, useEffect, useState } from "react";
 
 import iconSimpleUrl from "../../../../src-tauri/icons/icon-simple.png";
-import { FolderTree, Lightbulb, Settings, Wrench } from "../../../components/icons";
+import {
+  BookOpen,
+  Edit3,
+  FolderTree,
+  GitBranch,
+  LayoutGrid,
+  Lightbulb,
+  ListChecks,
+  Palette,
+  Settings,
+  Wrench,
+} from "../../../components/icons";
 import { useLocale } from "../../../i18n";
+import {
+  getWorkModeDefinition,
+  type WorkModeDefinition,
+  type WorkModeSuggestionIconId,
+} from "../../../lib/settings";
+import { cn } from "../../../lib/shared/utils";
 import type { SectionId } from "../../settings/types";
 
 type GreetingPeriod = "morning" | "noon" | "afternoon" | "evening" | "night";
@@ -38,29 +55,19 @@ function useGreetingPeriod() {
   return period;
 }
 
-const SUGGESTION_CARDS = [
-  {
-    key: "explore",
-    icon: FolderTree,
-    chipClassName: "text-sky-600 dark:text-sky-400",
-    titleKey: "chat.suggestExploreTitle",
-    promptKey: "chat.suggestExplorePrompt",
-  },
-  {
-    key: "fix",
-    icon: Wrench,
-    chipClassName: "text-amber-600 dark:text-amber-400",
-    titleKey: "chat.suggestFixTitle",
-    promptKey: "chat.suggestFixPrompt",
-  },
-  {
-    key: "ideate",
-    icon: Lightbulb,
-    chipClassName: "text-emerald-600 dark:text-emerald-400",
-    titleKey: "chat.suggestIdeateTitle",
-    promptKey: "chat.suggestIdeatePrompt",
-  },
-] as const;
+// 工作模式建议卡片图标 id → 图标组件（模式定义位于镜像的 workModes.ts，
+// 不能直接携带各端的组件引用）。
+const SUGGESTION_ICONS: Record<WorkModeSuggestionIconId, typeof FolderTree> = {
+  folderTree: FolderTree,
+  wrench: Wrench,
+  lightbulb: Lightbulb,
+  listChecks: ListChecks,
+  penLine: Edit3,
+  bookOpen: BookOpen,
+  layoutGrid: LayoutGrid,
+  gitBranch: GitBranch,
+  palette: Palette,
+};
 
 export type ChatEmptyStateProps = {
   variant: "no-models" | "start-chat";
@@ -68,6 +75,8 @@ export type ChatEmptyStateProps = {
   onSuggestionSelect?: (text: string) => void;
   /** Locks the suggestion cards while a picked prompt is still typing in. */
   suggestionsDisabled?: boolean;
+  /** 当前工作模式：驱动问候语、建议卡片与光晕色；缺省为编程模式。 */
+  workMode?: WorkModeDefinition;
 };
 
 export function ChatEmptyState({
@@ -75,9 +84,11 @@ export function ChatEmptyState({
   onOpenSettings,
   onSuggestionSelect,
   suggestionsDisabled = false,
+  workMode,
 }: ChatEmptyStateProps) {
   const { t } = useLocale();
   const period = useGreetingPeriod();
+  const mode = workMode ?? getWorkModeDefinition("coding");
 
   return (
     <div className="relative flex w-full flex-col items-center">
@@ -87,7 +98,10 @@ export function ChatEmptyState({
         <div className="chat-hero-logo-float relative flex h-full w-full items-center justify-center">
           <div
             aria-hidden="true"
-            className="chat-hero-halo-breathe absolute inset-1 rounded-full bg-sky-500/10 blur-xl dark:bg-sky-400/10"
+            className={cn(
+              "chat-hero-halo-breathe absolute inset-1 rounded-full blur-xl",
+              mode.haloClassName,
+            )}
           />
           <img
             src={iconSimpleUrl}
@@ -124,29 +138,36 @@ export function ChatEmptyState({
       ) : (
         <>
           <div className="chat-hero-title-enter whitespace-nowrap text-center text-[calc(20px*var(--zone-font-scale,1))] font-semibold leading-7 tracking-tight text-foreground">
-            {t(GREETING_KEYS[period])}，{t("chat.greetingSubtitle")}
+            {t(GREETING_KEYS[period])}，{t(mode.greetingSubtitleKey)}
           </div>
           {onSuggestionSelect ? (
-            <div className="mt-7 grid w-full max-w-[520px] grid-cols-1 gap-2 px-6 sm:grid-cols-3 sm:px-4">
-              {SUGGESTION_CARDS.map((card, index) => (
-                <button
-                  key={card.key}
-                  type="button"
-                  disabled={suggestionsDisabled}
-                  onClick={() => onSuggestionSelect(t(card.promptKey))}
-                  style={{ "--chat-hero-delay": `${0.26 + index * 0.08}s` } as CSSProperties}
-                  className="chat-hero-card-enter flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5 text-left text-foreground/85 transition-colors hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
-                >
-                  <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center ${card.chipClassName}`}
+            // Keyed per mode so the card entrance replays on mode switches.
+            <div
+              key={mode.id}
+              className="mt-7 grid w-full max-w-[520px] grid-cols-1 gap-2 px-6 sm:grid-cols-3 sm:px-4"
+            >
+              {mode.suggestions.map((card, index) => {
+                const Icon = SUGGESTION_ICONS[card.icon];
+                return (
+                  <button
+                    key={card.key}
+                    type="button"
+                    disabled={suggestionsDisabled}
+                    onClick={() => onSuggestionSelect(t(card.promptKey))}
+                    style={{ "--chat-hero-delay": `${0.26 + index * 0.08}s` } as CSSProperties}
+                    className="chat-hero-card-enter flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5 text-left text-foreground/85 transition-colors hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
                   >
-                    <card.icon className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0 truncate text-[calc(14px*var(--zone-font-scale,1))] font-medium leading-5 text-foreground/90">
-                    {t(card.titleKey)}
-                  </span>
-                </button>
-              ))}
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center ${card.chipClassName}`}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 truncate text-[calc(14px*var(--zone-font-scale,1))] font-medium leading-5 text-foreground/90">
+                      {t(card.titleKey)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           ) : null}
         </>

@@ -8,7 +8,7 @@ import { ChatHistorySidebar } from "../../../components/chat/ChatHistorySidebar"
 import { useLocale } from "../../../i18n";
 import type { AppUpdateController } from "../../../lib/appUpdates";
 import { normalizeConversationTitle } from "../../../lib/chat/page/chatPageHelpers";
-import type { WorkspaceProject } from "../../../lib/settings";
+import type { WorkModeId, WorkspaceProject } from "../../../lib/settings";
 import {
   selectConversations,
   selectListState,
@@ -65,6 +65,8 @@ type ChatSidebarContainerProps = {
   onCloseSidebar: () => void;
   onOpenSettings: () => void;
   appUpdate?: AppUpdateController;
+  activeWorkModeId: WorkModeId;
+  onWorkModeChange: (modeId: WorkModeId) => void;
   onOpenSkillsHub: () => void;
   onOpenMcpHub: () => void;
 };
@@ -233,6 +235,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       onCloseSidebar={props.onCloseSidebar}
       onOpenSettings={props.onOpenSettings}
       appUpdate={props.appUpdate}
+      activeWorkModeId={props.activeWorkModeId}
+      onWorkModeChange={props.onWorkModeChange}
       onOpenSkillsHub={props.onOpenSkillsHub}
       onOpenMcpHub={props.onOpenMcpHub}
     />

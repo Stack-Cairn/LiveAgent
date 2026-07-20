@@ -123,6 +123,7 @@ import {
   getRightDockFileTreeState,
   getRightDockProjectState,
   getSshProjectHostIds,
+  getWorkModeDefinition,
   isAgentDevMode,
   isAgentExecutionMode,
   isRightDockSingletonTabOpen,
@@ -140,6 +141,7 @@ import {
   type SelectedModel,
   type SystemToolId,
   serializeSelectedModelJson,
+  setActiveWorkMode,
   setSelectedModel,
   updateChatRuntimeControlsForProvider,
   updateCustomSettings,
@@ -150,6 +152,8 @@ import {
   updateSkills,
   updateSshProjectHostIds,
   updateSystem,
+  WORK_MODE_IDS,
+  type WorkModeId,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../lib/settings";
@@ -671,12 +675,40 @@ export function ChatPage(props: ChatPageProps) {
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
   const skillsConfigured = settings.skills.enabled;
   const skillsEnabled = skillsConfigured && isAgentMode;
+  const activeWorkMode = useMemo(
+    () => getWorkModeDefinition(settings.customSettings.workMode.activeModeId),
+    [settings.customSettings.workMode.activeModeId],
+  );
   const activeAgentPrompt = useMemo(() => {
     const activeTemplate = settings.agents.find(
       (template) => template.enabled && template.prompt.trim(),
     );
-    return activeTemplate?.prompt.trim() ?? "";
-  }, [settings.agents]);
+    const templatePrompt = activeTemplate?.prompt.trim() ?? "";
+    // 模式指令在前、用户全局提示词在后：用户模板可以覆盖模式约定。
+    const modePrompt = activeWorkMode.prompt;
+    if (!modePrompt) return templatePrompt;
+    return templatePrompt ? `${modePrompt}\n\n${templatePrompt}` : modePrompt;
+  }, [settings.agents, activeWorkMode]);
+  const handleWorkModeChange = useCallback(
+    (modeId: WorkModeId) => {
+      setSettings((prev) => setActiveWorkMode(prev, modeId));
+    },
+    [setSettings],
+  );
+  // Ctrl/⌘+Alt+1/2/3 快速切换工作模式（避开浏览器 Ctrl+数字 的标签页快捷键）。
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || !event.altKey || event.repeat) return;
+      const index = ["Digit1", "Digit2", "Digit3"].indexOf(event.code);
+      if (index < 0) return;
+      const modeId = WORK_MODE_IDS[index];
+      if (!modeId) return;
+      event.preventDefault();
+      handleWorkModeChange(modeId);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleWorkModeChange]);
   const selectedSkillNames = useMemo(
     () => (skillsEnabled ? mergeAlwaysEnabledSkillNames(settings.skills.selected) : []),
     [skillsEnabled, settings.skills.selected],
@@ -4545,6 +4577,7 @@ export function ChatPage(props: ChatPageProps) {
             },
             agentTemplates: settings.agents,
             selectedSystemToolIds: effectiveSelectedSystemToolIds,
+            excludedToolNames: activeWorkMode.excludedToolNames,
             getMcpSettings,
             applyMcpOps: (ops) => {
               setSettings((prev) => applyMcpOpsToAppSettings(prev, ops));
@@ -5243,9 +5276,11 @@ export function ChatPage(props: ChatPageProps) {
       ? "正在补全完整历史，请稍候..."
       : isConversationHydrationFailed
         ? "当前会话完整历史加载失败，请重新打开会话..."
-        : enabledComposerSkills.length > 0
-          ? t("chat.inputHintWithSkills")
-          : t("chat.inputHint");
+        : activeWorkMode.composerHintKey
+          ? t(activeWorkMode.composerHintKey)
+          : enabledComposerSkills.length > 0
+            ? t("chat.inputHintWithSkills")
+            : t("chat.inputHint");
   const isComposerInputDisabled =
     isCompactionRunning ||
     isConversationHydrating ||
@@ -5421,6 +5456,8 @@ export function ChatPage(props: ChatPageProps) {
           onCloseSidebar={handleCloseSidebar}
           onOpenSettings={() => onOpenSettings()}
           appUpdate={appUpdate}
+          activeWorkModeId={settings.customSettings.workMode.activeModeId}
+          onWorkModeChange={handleWorkModeChange}
           onOpenSkillsHub={() => {
             cacheActiveComposerDraft();
             setRightDockOpen(false);
@@ -5588,6 +5625,7 @@ export function ChatPage(props: ChatPageProps) {
                 onOpenSettings={onOpenSettings}
                 onSuggestionSelect={handleEmptyStateSuggestion}
                 suggestionsDisabled={isSuggestionTyping}
+                workMode={activeWorkMode}
               />
 
               <ChatComposerBar

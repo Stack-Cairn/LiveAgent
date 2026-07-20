@@ -14,6 +14,13 @@ import { createUuid } from "../shared/id";
 import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
 import { SYSTEM_TOOL_OPTIONS, type SystemToolId } from "../tools/systemToolOptions";
 import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
+import {
+  getWorkModeDefinition,
+  normalizeWorkModeId,
+  WORK_MODE_IDS,
+  type WorkModeDefinition,
+  type WorkModeId,
+} from "./workModes";
 
 export type { SystemToolId } from "../tools/systemToolOptions";
 
@@ -130,11 +137,20 @@ export type FontScaleSettings = {
   rightDock: number;
 };
 
+// 工作模式状态随 customSettings 走网关同步：对话在桌面端运行，
+// WebUI 切换模式必须落到桌面端才对下一轮生效。
+export type WorkModeSettings = {
+  activeModeId: WorkModeId;
+  /** 每模式记住的模型选择；缺省 = 沿用切换时的全局 selectedModel。 */
+  modelByMode: Partial<Record<WorkModeId, SelectedModel>>;
+};
+
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
   chatSidebar: ChatSidebarSettings;
   rightDock: RightDockSettings;
   fontScale: FontScaleSettings;
+  workMode: WorkModeSettings;
 };
 
 export type UpdateSettings = {
@@ -1956,6 +1972,29 @@ export function normalizeFontScaleSettings(input: unknown): FontScaleSettings {
   };
 }
 
+// modelByMode 故意不按 providers 过滤：本地 UI 设置在 providers 尚未加载时
+// 也会走归一化，过滤会把每模式的模型记忆清空；失效条目在切换应用时由
+// 顶层 selectedModel 归一化兜底。
+export function normalizeWorkModeSettings(input: unknown): WorkModeSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const rawModels = (
+    obj.modelByMode && typeof obj.modelByMode === "object" && !Array.isArray(obj.modelByMode)
+      ? obj.modelByMode
+      : {}
+  ) as Record<string, unknown>;
+  const modelByMode: Partial<Record<WorkModeId, SelectedModel>> = {};
+  for (const modeId of WORK_MODE_IDS) {
+    const model = normalizeSelectedModel(rawModels[modeId]);
+    if (model) {
+      modelByMode[modeId] = model;
+    }
+  }
+  return {
+    activeModeId: normalizeWorkModeId(obj.activeModeId),
+    modelByMode,
+  };
+}
+
 export function normalizeCustomSettings(
   input: unknown,
   customProviders: CustomProvider[],
@@ -1975,6 +2014,7 @@ export function normalizeCustomSettings(
     },
     rightDock: normalizeRightDockSettings(obj.rightDock),
     fontScale: normalizeFontScaleSettings(obj.fontScale),
+    workMode: normalizeWorkModeSettings(obj.workMode),
   };
 }
 
@@ -2494,9 +2534,52 @@ export function setSelectedModel(
   prev: AppSettings,
   selectedModel: SelectedModel | undefined,
 ): AppSettings {
+  const workMode = prev.customSettings.workMode;
   return normalizeSettings({
     ...prev,
     selectedModel,
+    // 用户显式选择的模型记到当前模式名下，供 setActiveWorkMode 往返恢复。
+    customSettings: {
+      ...prev.customSettings,
+      workMode: selectedModel
+        ? {
+            ...workMode,
+            modelByMode: {
+              ...workMode.modelByMode,
+              [workMode.activeModeId]: selectedModel,
+            },
+          }
+        : workMode,
+    },
+  });
+}
+
+export function getActiveWorkMode(customSettings: CustomSettings): WorkModeDefinition {
+  return getWorkModeDefinition(customSettings.workMode.activeModeId);
+}
+
+/**
+ * 切换工作模式：离开前把当前全局模型记到旧模式名下，进入时恢复目标模式
+ * 记住的模型（没记过则沿用当前模型，保证切换永远无感、不弹未选模型空态）。
+ */
+export function setActiveWorkMode(prev: AppSettings, modeId: WorkModeId): AppSettings {
+  const workMode = prev.customSettings.workMode;
+  const normalizedModeId = normalizeWorkModeId(modeId);
+  if (workMode.activeModeId === normalizedModeId) return prev;
+  const modelByMode = { ...workMode.modelByMode };
+  if (prev.selectedModel) {
+    modelByMode[workMode.activeModeId] = prev.selectedModel;
+  }
+  return normalizeSettings({
+    ...prev,
+    selectedModel: modelByMode[normalizedModeId] ?? prev.selectedModel,
+    customSettings: {
+      ...prev.customSettings,
+      workMode: {
+        activeModeId: normalizedModeId,
+        modelByMode,
+      },
+    },
   });
 }
 
@@ -2506,3 +2589,14 @@ export {
   type McpSettingsOp,
   selectEnabledMcpServers,
 } from "./mcpOps";
+export {
+  DEFAULT_WORK_MODE_ID,
+  getWorkModeDefinition,
+  normalizeWorkModeId,
+  WORK_MODE_IDS,
+  WORK_MODES,
+  type WorkModeDefinition,
+  type WorkModeId,
+  type WorkModeSuggestion,
+  type WorkModeSuggestionIconId,
+} from "./workModes";
