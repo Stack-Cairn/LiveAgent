@@ -281,6 +281,77 @@ test("user stop chains into the summarizer; handleTurnAbort rolls back and persi
   assert.equal(await controller.handleTurnAbort(), false);
 });
 
+test("handleTurnAbort clears running status even without rollback snapshot", async () => {
+  // Manual compact abort path: compactManually may publish running then throw AbortError
+  // without a pre-send snapshot; UI must not stay stuck on "compacting".
+  const controller = new CompactionController();
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("please fix src/app.ts", 1),
+      user("continue with src/app.ts", 2),
+      user("check src/app.ts again", 3),
+      assistantWithUsage("working", 2_000, 4),
+    ],
+  });
+  const cancellation = cancellationModule.createTurnCancellation();
+  const events = [];
+  controller.bindTurn({
+    providerId: "anthropic",
+    model: "claude-x",
+    runtime: {
+      baseUrl: "https://example",
+      apiKey: "k",
+      modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 },
+    },
+    cancellation,
+    sinks: {
+      applyState: (next) => events.push(["applyState", next]),
+      applyStateMidRun: (next) => events.push(["applyStateMidRun", next]),
+      publishStatus: (status) => events.push(["publishStatus", status]),
+      setBridgeToolStatus: (text, isCompaction) => events.push(["bridge", text, isCompaction]),
+      persist: async () => true,
+    },
+    complete: async (params) =>
+      new Promise((_, reject) => {
+        params.signal?.addEventListener(
+          "abort",
+          () => {
+            const error = new Error("aborted by user");
+            error.name = "AbortError";
+            reject(error);
+          },
+          { once: true },
+        );
+      }),
+    buildPreparedContext: (next) => conversationState.buildRequestContext(next),
+    buildResumeContext: (next) => conversationState.buildRequestContext(next),
+    presend: {
+      baseState: state,
+      pendingUserText: "",
+      composeAppliedState: (next) => next,
+    },
+  });
+
+  const pending = controller.compactManually({
+    force: true,
+    budgetContext: conversationState.buildRequestContext(state),
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  cancellation.userStop.abort();
+  await assert.rejects(pending, /aborted|AbortError/i);
+
+  const rolledBack = await controller.handleTurnAbort();
+  // No pre-send snapshot for pure manual compact mid-summarizer without prior prune apply.
+  // Still must publish idle so entry gates unlock.
+  const phases = events.filter((e) => e[0] === "publishStatus").map(([, s]) => s.phase);
+  assert.ok(phases.includes("running"), `expected running, got ${phases.join(",")}`);
+  assert.ok(phases.includes("idle"), `expected idle after abort, got ${phases.join(",")}`);
+  // Second abort is a no-op once idle.
+  assert.equal(await controller.handleTurnAbort(), false);
+  void rolledBack;
+});
+
 test("summarizer failure degrades to prune and still returns a usable context", async () => {
   const controller = new CompactionController();
   // 大工具输出（200k 字符 ≈ 50k tokens > 40k 保护额度）必须在"最近 2 个用户轮次"之前才可被裁剪。
@@ -362,4 +433,272 @@ test("registry hands out one controller per conversation and disposes cleanly", 
   assert.notEqual(registry.get("conv-b"), a);
   registry.dispose("conv-a");
   assert.notEqual(registry.get("conv-a"), a);
+});
+
+test("compactManually force compresses below-threshold conversations", async () => {
+  const controller = new CompactionController();
+  const smallState = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("please fix src/app.ts", 1),
+      user("continue with src/app.ts", 2),
+      user("check src/app.ts again", 3),
+      assistantWithUsage("working", 2_000, 4),
+    ],
+  });
+  let completeCalls = 0;
+  const { recorder } = bindController(controller, {
+    complete: async () => {
+      completeCalls += 1;
+      return summaryResponse();
+    },
+    presend: {
+      baseState: smallState,
+      pendingUserText: "",
+      composeAppliedState: (state) => state,
+    },
+  });
+
+  const withoutForce = await controller.compactManually({
+    force: false,
+    budgetContext: conversationState.buildRequestContext(smallState),
+  });
+  assert.equal(withoutForce, "skipped");
+  assert.equal(completeCalls, 0);
+
+  const forced = await controller.compactManually({
+    force: true,
+    budgetContext: conversationState.buildRequestContext(smallState),
+  });
+  assert.equal(forced, "compacted");
+  assert.equal(completeCalls, 1);
+
+  const statuses = recorder.byKind("publishStatus").map(([, status]) => status);
+  assert.equal(statuses[0].phase, "running");
+  assert.equal(statuses[0].trigger, "manual");
+  assert.equal(statuses.at(-1).phase, "completed");
+  assert.equal(statuses.at(-1).trigger, "manual");
+});
+
+test("compactManually treats persist false as failed", async () => {
+  const controller = new CompactionController();
+  const smallState = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("please fix src/app.ts", 1),
+      user("continue with src/app.ts", 2),
+      user("check src/app.ts again", 3),
+      assistantWithUsage("working", 2_000, 4),
+    ],
+  });
+  const events = [];
+  let completeCalls = 0;
+  const cancellation = cancellationModule.createTurnCancellation();
+  controller.bindTurn({
+    providerId: "anthropic",
+    model: "claude-x",
+    runtime: {
+      baseUrl: "https://example",
+      apiKey: "k",
+      modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 },
+    },
+    cancellation,
+    sinks: {
+      applyState: (state) => events.push(["applyState", state]),
+      publishStatus: (status) => events.push(["publishStatus", status]),
+      setBridgeToolStatus: (text, isCompaction) => events.push(["bridge", text, isCompaction]),
+      queueCheckpoint: (state) => events.push(["queueCheckpoint", state]),
+      persist: async (state) => {
+        events.push(["persist", state]);
+        return false;
+      },
+    },
+    complete: async () => {
+      completeCalls += 1;
+      return summaryResponse();
+    },
+    buildPreparedContext: (state) => conversationState.buildRequestContext(state),
+    buildResumeContext: (state, resumeMessage) => {
+      const context = conversationState.buildRequestContext(state);
+      return resumeMessage
+        ? { ...context, messages: [...context.messages, resumeMessage] }
+        : context;
+    },
+    presend: {
+      baseState: smallState,
+      pendingUserText: "",
+      composeAppliedState: (state) => state,
+    },
+  });
+
+  const result = await controller.compactManually({
+    force: true,
+    budgetContext: conversationState.buildRequestContext(smallState),
+  });
+
+  assert.equal(result, "failed");
+  assert.equal(completeCalls, 1);
+  assert.equal(events.filter((e) => e[0] === "persist").length, 1);
+  assert.equal(events.filter((e) => e[0] === "queueCheckpoint").length, 0);
+  const phases = events.filter((e) => e[0] === "publishStatus").map(([, s]) => s.phase);
+  assert.ok(phases.includes("failed"));
+  assert.ok(!phases.includes("completed"));
+});
+
+test("compactManually prune fallback returns compacted after persist succeeds", async () => {
+  const controller = new CompactionController();
+  // Large tool output before recent user turns so prune can apply.
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("please fix src/app.ts", 1),
+      toolResultBig(200_000, 2),
+      user("continue with src/app.ts", 3),
+      user("check src/app.ts again", 4),
+      assistantWithUsage("working on src/app.ts", 190_000, 5),
+    ],
+  });
+  const events = [];
+  const cancellation = cancellationModule.createTurnCancellation();
+  controller.bindTurn({
+    providerId: "anthropic",
+    model: "claude-x",
+    runtime: {
+      baseUrl: "https://example",
+      apiKey: "k",
+      modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 },
+    },
+    cancellation,
+    sinks: {
+      applyState: (next) => events.push(["applyState", next]),
+      publishStatus: (status) => events.push(["publishStatus", status]),
+      setBridgeToolStatus: (text, isCompaction) => events.push(["bridge", text, isCompaction]),
+      queueCheckpoint: (next) => events.push(["queueCheckpoint", next]),
+      persist: async (next) => {
+        events.push(["persist", next]);
+        return true;
+      },
+    },
+    complete: async () => {
+      throw new Error("invalid api key");
+    },
+    buildPreparedContext: (next) => conversationState.buildRequestContext(next),
+    buildResumeContext: (next, resumeMessage) => {
+      const context = conversationState.buildRequestContext(next);
+      return resumeMessage
+        ? { ...context, messages: [...context.messages, resumeMessage] }
+        : context;
+    },
+    presend: {
+      baseState: state,
+      pendingUserText: "",
+      composeAppliedState: (next) => next,
+    },
+  });
+
+  const result = await controller.compactManually({
+    force: true,
+    budgetContext: conversationState.buildRequestContext(state),
+  });
+
+  assert.equal(result, "compacted");
+  const kinds = events.map((e) => e[0]);
+  const persistIndex = kinds.indexOf("persist");
+  const applyIndex = kinds.indexOf("applyState");
+  assert.ok(persistIndex >= 0, "persist must run");
+  assert.ok(applyIndex >= 0, "apply must run");
+  assert.ok(persistIndex < applyIndex, "persist before apply on prune fallback");
+  const phases = events.filter((e) => e[0] === "publishStatus").map(([, s]) => s.phase);
+  assert.ok(phases.includes("completed"));
+  assert.ok(!phases.includes("failed"));
+});
+
+test("compactManually prune fallback does not apply when persist fails", async () => {
+  const controller = new CompactionController();
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("please fix src/app.ts", 1),
+      toolResultBig(200_000, 2),
+      user("continue with src/app.ts", 3),
+      user("check src/app.ts again", 4),
+      assistantWithUsage("working on src/app.ts", 190_000, 5),
+    ],
+  });
+  const events = [];
+  const cancellation = cancellationModule.createTurnCancellation();
+  controller.bindTurn({
+    providerId: "anthropic",
+    model: "claude-x",
+    runtime: {
+      baseUrl: "https://example",
+      apiKey: "k",
+      modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 },
+    },
+    cancellation,
+    sinks: {
+      applyState: (next) => events.push(["applyState", next]),
+      publishStatus: (status) => events.push(["publishStatus", status]),
+      setBridgeToolStatus: (text, isCompaction) => events.push(["bridge", text, isCompaction]),
+      queueCheckpoint: (next) => events.push(["queueCheckpoint", next]),
+      persist: async (next) => {
+        events.push(["persist", next]);
+        return false;
+      },
+    },
+    complete: async () => {
+      throw new Error("invalid api key");
+    },
+    buildPreparedContext: (next) => conversationState.buildRequestContext(next),
+    buildResumeContext: (next, resumeMessage) => {
+      const context = conversationState.buildRequestContext(next);
+      return resumeMessage
+        ? { ...context, messages: [...context.messages, resumeMessage] }
+        : context;
+    },
+    presend: {
+      baseState: state,
+      pendingUserText: "",
+      composeAppliedState: (next) => next,
+    },
+  });
+
+  const result = await controller.compactManually({
+    force: true,
+    budgetContext: conversationState.buildRequestContext(state),
+  });
+
+  assert.equal(result, "failed");
+  assert.equal(events.filter((e) => e[0] === "applyState").length, 0);
+  assert.ok(events.filter((e) => e[0] === "persist").length >= 1);
+});
+
+test("compactManually skips when unbound or empty", async () => {
+  const controller = new CompactionController();
+  assert.equal(
+    await controller.compactManually({
+      force: true,
+      budgetContext: { systemPrompt: "sys", messages: [] },
+    }),
+    "skipped",
+  );
+
+  const emptyState = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [],
+  });
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+    presend: {
+      baseState: emptyState,
+      pendingUserText: "",
+      composeAppliedState: (state) => state,
+    },
+  });
+  const result = await controller.compactManually({
+    force: true,
+    budgetContext: conversationState.buildRequestContext(emptyState),
+  });
+  assert.equal(result, "skipped");
+  assert.equal(recorder.events.length, 0);
 });

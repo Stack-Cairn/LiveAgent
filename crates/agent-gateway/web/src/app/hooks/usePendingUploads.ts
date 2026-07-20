@@ -157,7 +157,10 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
   }, [displayedConversationId]);
 
   const handleImportReadableFiles = useCallback(
-    async (filesToImport: File[]) => {
+    async (
+      filesToImport: File[],
+      lock?: { conversationId?: string; workdir?: string } | null,
+    ) => {
       if (filesToImport.length === 0) {
         return;
       }
@@ -169,12 +172,15 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         setChatError(translate("chat.upload.onlyInTools", locale));
         return;
       }
-      const workdir = displayedConversationWorkdirRef.current.trim();
+      const workdir =
+        lock?.workdir?.trim() || displayedConversationWorkdirRef.current.trim();
       if (!workdir) {
         setChatError(translate("chat.upload.requireWorkdir", locale));
         return;
       }
-      const targetConversationId = displayedConversationIdRef.current;
+      // Prefer locked destination captured before async permission UI.
+      const targetConversationId =
+        lock?.conversationId?.trim() || displayedConversationIdRef.current;
       if (!targetConversationId) {
         setChatError("请先选择或创建会话后再上传文件。");
         return;

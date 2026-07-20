@@ -99,6 +99,13 @@ test("decideCompaction covers every reason", () => {
     "threshold-exceeded",
   );
 
+  // Manual force bypasses threshold/cooldown but still respects empty/in-flight/disabled.
+  const forced = decide({ totalTokens: 10, force: true });
+  assert.equal(forced.reason, "manual");
+  assert.equal(forced.shouldCompact, true);
+  assert.equal(decide({ force: true, activeMessageCount: 0 }).reason, "no-active-messages");
+  assert.equal(decide({ force: true, inFlight: true }).reason, "in-flight");
+
   const fire = decide({ totalTokens: 199_000 });
   assert.equal(fire.shouldCompact, true);
   assert.equal(fire.reason, "threshold-exceeded");

@@ -16,14 +16,20 @@ import {
 } from "../../components/chat/MentionComposer";
 import { GitBranchSelector } from "../../components/git/GitBranchSelector";
 import {
+  Camera,
   ChevronDown,
   ChevronUp,
+  ClipboardPaste,
   Clock3,
+  Download,
   Globe,
   GlobeOff,
   Lightbulb,
   LightbulbOff,
   Loader2,
+  MessageSquare,
+  Minimize2,
+  MoreHorizontal,
   Paperclip,
   Play,
   Send,
@@ -31,9 +37,21 @@ import {
   Square,
   SquarePen,
   Trash2,
+  Wrench,
   X,
 } from "../../components/icons";
 import { Button } from "../../components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "../../components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -42,7 +60,11 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { useLocale } from "../../i18n";
-import { formatUploadedFileSize, type PendingUploadedFile } from "../../lib/chat/uploadedFiles";
+import type { ContextUsageSnapshot } from "../../lib/chat/contextUsage";
+import {
+  formatUploadedFileSize,
+  type PendingUploadedFile,
+} from "../../lib/chat/uploadedFiles";
 import type { GitClient } from "../../lib/git/types";
 import {
   type ChatRuntimeControls,
@@ -51,6 +73,12 @@ import {
 } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
+
+export type ComposerPromptTemplateOption = {
+  id: string;
+  name: string;
+  prompt: string;
+};
 
 const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
   off: "settings.reasoning.off",
@@ -61,6 +89,22 @@ const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
   xhigh: "settings.reasoning.xhigh",
   max: "settings.reasoning.max",
 };
+
+function isReasoningLevel(value: unknown): value is ReasoningLevel {
+  return typeof value === "string" && Object.hasOwn(REASONING_I18N_KEYS, value);
+}
+
+function formatTokenCountLocal(tokens: number): string {
+  const value = Math.max(0, Math.floor(tokens));
+  if (value < 1_000) return String(value);
+  if (value < 10_000) {
+    const scaled = value / 1_000;
+    return `${scaled.toFixed(scaled >= 10 ? 0 : 1).replace(/\.0$/, "")}k`;
+  }
+  if (value < 1_000_000) return `${Math.round(value / 1_000)}k`;
+  const millions = value / 1_000_000;
+  return `${millions.toFixed(millions >= 10 ? 0 : 1).replace(/\.0$/, "")}M`;
+}
 
 function RuntimeControlTooltip(props: { label: string; children: ReactNode }) {
   return (
@@ -124,6 +168,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   workspaceActivityClient?: WorkspaceActivityClient | null;
   onSend: () => void;
   onStop: () => void;
+  /** WebUI: warm chat runtime on composer focus. */
   onPrepareChatRuntime?: () => void;
   onComposerBusyChange: (isBusy: boolean) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
@@ -138,6 +183,23 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   onMoveQueuedTurnUp: (id: string) => void;
   onEditQueuedTurn: (id: string) => void;
   onRemoveQueuedTurn: (id: string) => void;
+  onHeightChange?: (height: number) => void;
+  /** Estimated context usage for the active conversation. */
+  contextUsage?: ContextUsageSnapshot | null;
+  onExecutionModeChange?: (mode: "text" | "tools") => void;
+  onManualCompact?: () => void | Promise<void>;
+  isCompacting?: boolean;
+  /** Active conversation id — used to bind compact confirmation to the originating chat. */
+  conversationId?: string;
+  /** When set, compact button is disabled and this tooltip is shown. */
+  compactDisabledReason?: string | null;
+  onPasteClipboardImages?: () => void | Promise<void>;
+  onCaptureScreenshot?: () => void | Promise<void>;
+  promptTemplates?: readonly ComposerPromptTemplateOption[];
+  onInsertPromptTemplate?: (templateId: string) => void;
+  onClearDraft?: () => void;
+  sessionCostLabel?: string | null;
+  onExportMarkdown?: () => void;
 }) {
   const {
     composerRef,
@@ -170,10 +232,23 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     onMoveQueuedTurnUp,
     onEditQueuedTurn,
     onRemoveQueuedTurn,
+    onHeightChange,
+    contextUsage = null,
+    onExecutionModeChange,
+    onManualCompact,
+    isCompacting = false,
+    conversationId = "",
+    compactDisabledReason = null,
+    onPasteClipboardImages,
+    onCaptureScreenshot,
+    promptTemplates = [],
+    onInsertPromptTemplate,
+    onClearDraft,
+    sessionCostLabel = null,
+    onExportMarkdown,
   } = props;
   const { t } = useLocale();
-  const [composerIsEmpty, setComposerIsEmpty] = useState(true);
-  const composerLayerRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const queuePanelRef = useRef<HTMLDivElement | null>(null);
   const queueListRef = useRef<HTMLUListElement | null>(null);
   const queueScrollbarTrackRef = useRef<HTMLDivElement | null>(null);
@@ -183,6 +258,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     startY: number;
   } | null>(null);
   const queueHadTurnsRef = useRef(false);
+  const [composerIsEmpty, setComposerIsEmpty] = useState(true);
   const [queueCollapsed, setQueueCollapsed] = useState(false);
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
@@ -211,6 +287,51 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   const thinkingTooltip = !thinkingSupported
     ? t("chat.runtime.thinkingUnavailable")
     : t("chat.runtime.thinkingTooltip");
+  const [compactConfirmOpen, setCompactConfirmOpen] = useState(false);
+  const [compactConfirmConversationId, setCompactConfirmConversationId] = useState("");
+  const contextUsageTooltip = !contextUsage
+    ? t("chat.toolbar.contextUsage")
+    : contextUsage.contextWindow > 0
+      ? t("chat.toolbar.contextUsageDetail")
+          .replace("{used}", contextUsage.usedLabel)
+          .replace("{window}", formatTokenCountLocal(contextUsage.contextWindow))
+      : t("chat.toolbar.contextUsageUnknownWindow").replace("{used}", contextUsage.usedLabel);
+  const compactDisabled = Boolean(compactDisabledReason) || isCompacting || controlsDisabled;
+  const compactTooltip = isCompacting
+    ? t("chat.toolbar.compactRunning")
+    : compactDisabledReason
+      ? compactDisabledReason
+      : t("chat.toolbar.compact");
+  const hasDraftToClear = !composerIsEmpty || pendingUploadedFiles.length > 0;
+  const activeConversationId = conversationId.trim();
+
+  useEffect(() => {
+    // Composer is reused across chats; never leave a confirmation bound to the previous one.
+    setCompactConfirmOpen(false);
+    setCompactConfirmConversationId("");
+  }, [activeConversationId]);
+
+  function requestManualCompact() {
+    if (!onManualCompact || compactDisabled) return;
+    const ratio = contextUsage?.ratio;
+    if (ratio == null || ratio < 0.7) {
+      setCompactConfirmConversationId(activeConversationId);
+      setCompactConfirmOpen(true);
+      return;
+    }
+    void onManualCompact();
+  }
+
+  function confirmManualCompact() {
+    const boundId = compactConfirmConversationId.trim();
+    setCompactConfirmOpen(false);
+    setCompactConfirmConversationId("");
+    if (!onManualCompact) return;
+    // Drop the confirmation if the user switched chats before confirming.
+    if (boundId && activeConversationId && boundId !== activeConversationId) return;
+    if (compactDisabled) return;
+    void onManualCompact();
+  }
   const webSearchTooltip = t("chat.runtime.webSearchTooltip");
   const toggleQueueTooltip = queueCollapsed ? t("chat.queue.expand") : t("chat.queue.collapse");
 
@@ -372,48 +493,57 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   ]);
 
   useEffect(() => {
-    const composerLayer = composerLayerRef.current;
-    if (!composerLayer) {
-      return;
-    }
-    const chatFrame = composerLayer.closest(".gateway-chat-frame");
-    if (!(chatFrame instanceof HTMLElement)) {
-      return;
-    }
+    const root = rootRef.current;
+    if (!root) return;
 
-    const updateComposerOverlayHeight = () => {
-      const composerLayerHeight = composerLayer.getBoundingClientRect().height;
+    // WebUI reserves bottom space via CSS var on `.gateway-chat-frame`.
+    // Keep this independent of optional `onHeightChange` so multi-line input /
+    // attachments do not cover the transcript and "scroll to bottom" control.
+    const chatFrame = root.closest(".gateway-chat-frame");
+    const chatFrameEl = chatFrame instanceof HTMLElement ? chatFrame : null;
+
+    let animationFrame: number | null = null;
+    const measure = () => {
+      animationFrame = null;
+      const rootHeight = root.getBoundingClientRect().height;
       const queueHeight = queuePanelRef.current?.getBoundingClientRect().height ?? 0;
-      chatFrame.style.setProperty(
-        "--gateway-chat-composer-overlay-height",
-        `${Math.ceil(Math.max(0, composerLayerHeight - queueHeight))}px`,
-      );
+      const overlayHeight = Math.ceil(Math.max(0, rootHeight - queueHeight));
+      if (chatFrameEl) {
+        chatFrameEl.style.setProperty(
+          "--gateway-chat-composer-overlay-height",
+          `${overlayHeight}px`,
+        );
+      }
+      onHeightChange?.(overlayHeight);
+    };
+    const scheduleMeasure = () => {
+      if (animationFrame !== null) return;
+      animationFrame = window.requestAnimationFrame(measure);
     };
 
-    updateComposerOverlayHeight();
-
-    if (typeof ResizeObserver === "undefined") {
-      return () => {
-        chatFrame.style.removeProperty("--gateway-chat-composer-overlay-height");
-      };
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      updateComposerOverlayHeight();
-    });
-    resizeObserver.observe(composerLayer);
+    scheduleMeasure();
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
+    resizeObserver?.observe(root);
+    window.addEventListener("resize", scheduleMeasure);
 
     return () => {
-      resizeObserver.disconnect();
-      chatFrame.style.removeProperty("--gateway-chat-composer-overlay-height");
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", scheduleMeasure);
+      chatFrameEl?.style.removeProperty("--gateway-chat-composer-overlay-height");
+      onHeightChange?.(0);
     };
-  }, []);
+  }, [onHeightChange]);
 
   return (
     <div
-      ref={composerLayerRef}
-      className="gateway-composer-layer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center"
+      ref={rootRef}
+      className="gateway-composer-layer pointer-events-none absolute inset-x-0 bottom-0 z-20"
     >
+      {/* `.gateway-chat-column` places the bar in the middle grid track of the layer. */}
       <div className="gateway-chat-column pointer-events-auto relative">
         {/* Pending uploaded files — above the composer card */}
         {pendingUploadedFiles.length > 0 && (
@@ -475,77 +605,79 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                           : "max-h-[76px] overflow-y-hidden pr-1",
                       )}
                     >
-                      {queuedTurns.map((item, index) => (
-                        <li
-                          key={item.id}
-                          className="relative grid h-9 min-h-9 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 rounded-md border border-black/[0.035] bg-white/42 px-2 text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.56)] backdrop-blur-xl backdrop-saturate-[150%] transition-[border-color,background-color] dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-                        >
-                          <div className="flex shrink-0 items-center gap-0.5">
-                            {index > 0 ? (
-                              <button
-                                type="button"
-                                disabled={queueCollapsed}
-                                onClick={() => onMoveQueuedTurnUp(item.id)}
-                                aria-label={t("chat.queue.moveUp")}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
-                              >
-                                <ChevronUp className="h-3 w-3" />
-                              </button>
-                            ) : (
-                              <span aria-hidden className="h-6 w-6" />
-                            )}
-                            <Clock3 className="h-3 w-3 shrink-0 text-muted-foreground/65" />
-                          </div>
-                          <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                            <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-foreground/88">
-                              {item.previewText || t("chat.queue.emptyMessage")}
-                            </span>
-                            {item.fileCount > 0 ? (
-                              <span className="max-w-[4.5rem] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-[calc(9px*var(--zone-font-scale,1))] leading-4 text-muted-foreground">
-                                {t("chat.queue.fileCount").replace(
-                                  "{count}",
-                                  String(item.fileCount),
-                                )}
+                      {queuedTurns.map((item, index) => {
+                        return (
+                          <li
+                            key={item.id}
+                            className="relative grid h-9 min-h-9 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 rounded-md border border-black/[0.035] bg-white/42 px-2 text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.56)] backdrop-blur-xl backdrop-saturate-[150%] transition-[border-color,background-color] dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                          >
+                            <div className="flex shrink-0 items-center gap-0.5">
+                              {index > 0 ? (
+                                <button
+                                  type="button"
+                                  disabled={queueCollapsed}
+                                  onClick={() => onMoveQueuedTurnUp(item.id)}
+                                  aria-label={t("chat.queue.moveUp")}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+                                >
+                                  <ChevronUp className="h-3 w-3" />
+                                </button>
+                              ) : (
+                                <span aria-hidden className="h-6 w-6" />
+                              )}
+                              <Clock3 className="h-3 w-3 shrink-0 text-muted-foreground/65" />
+                            </div>
+                            <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                              <span className="block min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-foreground/88">
+                                {item.previewText || t("chat.queue.emptyMessage")}
                               </span>
-                            ) : null}
-                          </div>
-                          <div className="flex shrink-0 items-center gap-0.5">
-                            <RuntimeControlTooltip label={t("chat.queue.edit")}>
-                              <button
-                                type="button"
-                                disabled={queueCollapsed}
-                                onClick={() => onEditQueuedTurn(item.id)}
-                                aria-label={t("chat.queue.edit")}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
-                              >
-                                <SquarePen className="h-3 w-3" />
-                              </button>
-                            </RuntimeControlTooltip>
-                            <RuntimeControlTooltip label={t("chat.queue.runNow")}>
-                              <button
-                                type="button"
-                                disabled={queueCollapsed}
-                                onClick={() => onRunQueuedTurnNow(item.id)}
-                                aria-label={t("chat.queue.runNow")}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
-                              >
-                                <Play className="h-3 w-3" />
-                              </button>
-                            </RuntimeControlTooltip>
-                            <RuntimeControlTooltip label={t("chat.queue.delete")}>
-                              <button
-                                type="button"
-                                disabled={queueCollapsed}
-                                onClick={() => onRemoveQueuedTurn(item.id)}
-                                aria-label={t("chat.queue.delete")}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            </RuntimeControlTooltip>
-                          </div>
-                        </li>
-                      ))}
+                              {item.fileCount > 0 ? (
+                                <span className="max-w-[4.5rem] shrink-0 overflow-hidden text-ellipsis whitespace-nowrap text-[calc(9px*var(--zone-font-scale,1))] leading-4 text-muted-foreground">
+                                  {t("chat.queue.fileCount").replace(
+                                    "{count}",
+                                    String(item.fileCount),
+                                  )}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-0.5">
+                              <RuntimeControlTooltip label={t("chat.queue.edit")}>
+                                <button
+                                  type="button"
+                                  disabled={queueCollapsed}
+                                  onClick={() => onEditQueuedTurn(item.id)}
+                                  aria-label={t("chat.queue.edit")}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+                                >
+                                  <SquarePen className="h-3 w-3" />
+                                </button>
+                              </RuntimeControlTooltip>
+                              <RuntimeControlTooltip label={t("chat.queue.runNow")}>
+                                <button
+                                  type="button"
+                                  disabled={queueCollapsed}
+                                  onClick={() => onRunQueuedTurnNow(item.id)}
+                                  aria-label={t("chat.queue.runNow")}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+                                >
+                                  <Play className="h-3 w-3" />
+                                </button>
+                              </RuntimeControlTooltip>
+                              <RuntimeControlTooltip label={t("chat.queue.delete")}>
+                                <button
+                                  type="button"
+                                  disabled={queueCollapsed}
+                                  onClick={() => onRemoveQueuedTurn(item.id)}
+                                  aria-label={t("chat.queue.delete")}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </RuntimeControlTooltip>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                     {shouldShowQueueScrollbar ? (
                       <div
@@ -590,7 +722,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
           </div>
         ) : null}
 
-        <div className="composer-glass-card relative overflow-hidden rounded-[24px] border border-black/[0.055] bg-white/70 shadow-[0_12px_40px_-14px_rgba(15,23,42,0.22),0_2px_6px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-2xl backdrop-saturate-[165%] transition-all focus-within:border-black/[0.075] focus-within:bg-white/74 focus-within:shadow-[0_16px_46px_-14px_rgba(15,23,42,0.26),0_4px_12px_-4px_rgba(15,23,42,0.10),inset_0_1px_0_rgba(255,255,255,0.78)] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_12px_40px_-14px_rgba(0,0,0,0.72),0_2px_6px_-2px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] dark:focus-within:border-white/[0.15] dark:focus-within:bg-white/[0.08]">
+        <div className="composer-glass-card relative z-10 overflow-hidden rounded-[24px] border border-black/[0.055] bg-white/70 shadow-[0_12px_40px_-14px_rgba(15,23,42,0.22),0_2px_6px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-2xl backdrop-saturate-[165%] transition-all focus-within:border-black/[0.075] focus-within:bg-white/74 focus-within:shadow-[0_16px_46px_-14px_rgba(15,23,42,0.26),0_4px_12px_-4px_rgba(15,23,42,0.10),inset_0_1px_0_rgba(255,255,255,0.78)] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_12px_40px_-14px_rgba(0,0,0,0.72),0_2px_6px_-2px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] dark:focus-within:border-white/[0.15] dark:focus-within:bg-white/[0.08]">
           {/* macOS material rim-light */}
           <div
             aria-hidden
@@ -619,44 +751,90 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
           </div>
 
           <div className="relative flex items-center justify-between gap-2 px-3 pb-2 pt-1">
-            <div className="flex min-w-0 flex-1 items-center gap-1">
-              <RuntimeControlTooltip label={uploadTooltip}>
-                <button
-                  type="button"
-                  disabled={uploadDisabled}
-                  onClick={onPickReadableFiles}
-                  aria-label={
-                    isUploadingFiles
-                      ? t("chat.upload.uploading")
-                      : !isAgentMode
-                        ? t("chat.upload.onlyInTools")
-                        : !workdir
-                          ? t("chat.upload.requireWorkdir")
-                          : t("chat.upload.selectFiles")
-                  }
-                  className={cn(
-                    "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
-                    "disabled:pointer-events-none disabled:opacity-40",
-                    pendingUploadedFiles.length > 0
-                      ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
-                      : "text-muted-foreground hover:text-foreground dark:hover:text-white",
-                  )}
-                >
-                  {isUploadingFiles ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Paperclip className="h-4 w-4" />
-                  )}
-                  {pendingUploadedFiles.length > 0 ? (
-                    <span
-                      aria-hidden
-                      className="absolute -right-0.5 -top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-sky-500 px-[3px] text-[calc(9px*var(--zone-font-scale,1))] font-semibold leading-none text-white shadow-[0_0_0_1.5px_rgba(255,255,255,0.95)] dark:bg-sky-400 dark:text-slate-900 dark:shadow-[0_0_0_1.5px_rgba(20,22,28,0.9)]"
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 sm:gap-1">
+              <div className="relative inline-flex shrink-0 items-center">
+                <RuntimeControlTooltip label={uploadTooltip}>
+                  <button
+                    type="button"
+                    disabled={uploadDisabled}
+                    onClick={onPickReadableFiles}
+                    aria-label={
+                      isUploadingFiles
+                        ? t("chat.upload.uploading")
+                        : !isAgentMode
+                          ? t("chat.upload.onlyInTools")
+                          : !workdir
+                            ? t("chat.upload.requireWorkdir")
+                            : t("chat.upload.selectFiles")
+                    }
+                    className={cn(
+                      "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                      "disabled:pointer-events-none disabled:opacity-40",
+                      pendingUploadedFiles.length > 0
+                        ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
+                        : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                    )}
+                  >
+                    {isUploadingFiles ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Paperclip className="h-4 w-4" />
+                    )}
+                    {pendingUploadedFiles.length > 0 ? (
+                      <span
+                        aria-hidden
+                        className="absolute -right-0.5 -top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-sky-500 px-[3px] text-[calc(9px*var(--zone-font-scale,1))] font-semibold leading-none text-white shadow-[0_0_0_1.5px_rgba(255,255,255,0.95)] dark:bg-sky-400 dark:text-slate-900 dark:shadow-[0_0_0_1.5px_rgba(20,22,28,0.9)]"
+                      >
+                        {pendingUploadedFiles.length}
+                      </span>
+                    ) : null}
+                  </button>
+                </RuntimeControlTooltip>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    disabled={uploadDisabled}
+                    aria-label={t("chat.toolbar.attachMenu")}
+                    className={cn(
+                      "composer-toolbar-action -ml-0.5 inline-flex h-8 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-hidden transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60 disabled:pointer-events-none disabled:opacity-40",
+                    )}
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    side="top"
+                    align="start"
+                    className="sidebar-context-menu min-w-48 rounded-xl border-0 p-1"
+                  >
+                    <DropdownMenuItem
+                      className="gap-2 rounded-md"
+                      onSelect={() => onPickReadableFiles()}
                     >
-                      {pendingUploadedFiles.length}
-                    </span>
-                  ) : null}
-                </button>
-              </RuntimeControlTooltip>
+                      <Paperclip className="h-3.5 w-3.5" />
+                      {t("chat.toolbar.attachFiles")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="gap-2 rounded-md"
+                      disabled={!onPasteClipboardImages}
+                      onSelect={() => {
+                        void onPasteClipboardImages?.();
+                      }}
+                    >
+                      <ClipboardPaste className="h-3.5 w-3.5" />
+                      {t("chat.toolbar.attachClipboard")}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="gap-2 rounded-md"
+                      disabled={!onCaptureScreenshot}
+                      onSelect={() => {
+                        void onCaptureScreenshot?.();
+                      }}
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                      {t("chat.toolbar.attachScreenshot")}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
 
               <RuntimeControlTooltip label={webSearchTooltip}>
                 <button
@@ -738,12 +916,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                     disabled={controlsDisabled || !chatRuntimeControls.thinkingEnabled}
                   >
                     <SelectTrigger
-                      className="composer-reasoning-trigger group/reasoning h-8 w-auto shrink-0 gap-0.5 rounded-full border-0 bg-violet-50/55 pl-2 pr-1.5 text-xs font-medium text-foreground shadow-none outline-hidden transition-all duration-200 ease-out hover:bg-violet-50/80 disabled:opacity-45 dark:bg-violet-400/[0.07] dark:text-foreground dark:hover:bg-violet-400/[0.13] [&>svg:last-child]:h-3 [&>svg:last-child]:w-3 [&>svg:last-child]:opacity-50 [&>svg:last-child]:transition-transform [&>svg:last-child]:duration-200 [&[data-state=open]>svg:last-child]:rotate-180"
+                      className="composer-reasoning-trigger group/reasoning h-8 w-auto shrink-0 gap-0.5 rounded-full border-0 bg-violet-50/55 pl-2 pr-1.5 text-xs font-medium text-foreground shadow-none outline-hidden transition-all duration-200 ease-out hover:bg-violet-50/80 disabled:opacity-45 dark:bg-violet-400/[0.07] dark:text-foreground dark:hover:bg-violet-400/[0.13] [&_svg:last-child]:h-3 [&_svg:last-child]:w-3 [&_svg:last-child]:opacity-50 [&_svg:last-child]:transition-transform [&_svg:last-child]:duration-200 [&[data-popup-open]_svg:last-child]:rotate-180"
                       aria-label={t("chat.runtime.reasoning")}
                     >
                       <span className="flex min-w-0 items-center gap-1">
                         <Sparkle className="h-3.5 w-3.5 shrink-0 text-violet-500 transition-colors dark:text-violet-400" />
-                        <SelectValue />
+                        <SelectValue>{t(REASONING_I18N_KEYS[selectedReasoning])}</SelectValue>
                       </span>
                     </SelectTrigger>
                     <SelectContent className="sidebar-context-menu min-w-40 rounded-xl border-0">
@@ -752,9 +930,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                           key={value}
                           value={value}
                           className={cn(
-                            "mb-0.5 h-[30px] rounded-md py-0 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 transition-none last:mb-0 focus:bg-foreground/[0.05] focus:text-foreground",
+                            "mb-0.5 h-[30px] rounded-md py-0 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 transition-none last:mb-0 data-[highlighted]:bg-foreground/[0.05] data-[highlighted]:text-foreground",
                             value === selectedReasoning &&
-                              "bg-foreground/[0.07] focus:bg-foreground/[0.09]",
+                              "bg-foreground/[0.07] data-[highlighted]:bg-foreground/[0.09]",
                           )}
                         >
                           {t(REASONING_I18N_KEYS[value])}
@@ -773,6 +951,203 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                 canWrite={gitWriteEnabled}
                 disabledMessage={gitDisabledMessage}
               />
+
+              {onExecutionModeChange ? (
+                <div
+                  className="ml-0.5 inline-flex h-8 shrink-0 items-center rounded-full bg-muted/50 p-0.5 dark:bg-white/[0.05]"
+                  role="group"
+                  aria-label={t("settings.executionMode")}
+                >
+                  <RuntimeControlTooltip label={t("chat.toolbar.modeChatTooltip")}>
+                    <button
+                      type="button"
+                      disabled={controlsDisabled}
+                      onClick={() => onExecutionModeChange("text")}
+                      aria-pressed={!isAgentMode}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1 rounded-full px-2 text-[calc(11px*var(--zone-font-scale,1))] font-medium outline-hidden transition-colors",
+                        "disabled:pointer-events-none disabled:opacity-40",
+                        !isAgentMode
+                          ? "bg-background text-foreground shadow-sm dark:bg-white/10"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{t("chat.toolbar.modeChat")}</span>
+                    </button>
+                  </RuntimeControlTooltip>
+                  <RuntimeControlTooltip label={t("chat.toolbar.modeAgentTooltip")}>
+                    <button
+                      type="button"
+                      disabled={controlsDisabled}
+                      onClick={() => onExecutionModeChange("tools")}
+                      aria-pressed={isAgentMode}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1 rounded-full px-2 text-[calc(11px*var(--zone-font-scale,1))] font-medium outline-hidden transition-colors",
+                        "disabled:pointer-events-none disabled:opacity-40",
+                        isAgentMode
+                          ? "bg-background text-foreground shadow-sm dark:bg-white/10"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <Wrench className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{t("chat.toolbar.modeAgent")}</span>
+                    </button>
+                  </RuntimeControlTooltip>
+                </div>
+              ) : null}
+
+              {contextUsage ? (
+                <RuntimeControlTooltip label={contextUsageTooltip}>
+                  <div
+                    role="status"
+                    className={cn(
+                      // Hide on narrow screens — mirrored in the overflow menu.
+                      "hidden h-8 max-w-[5.5rem] shrink-0 items-center gap-1 rounded-full px-2 text-[calc(11px*var(--zone-font-scale,1))] font-medium tabular-nums sm:inline-flex",
+                      contextUsage.level === "critical"
+                        ? "bg-destructive/10 text-destructive"
+                        : contextUsage.level === "warn"
+                          ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                          : contextUsage.level === "unknown"
+                            ? "bg-muted/60 text-muted-foreground"
+                            : "bg-sky-500/10 text-sky-700 dark:text-sky-300",
+                    )}
+                    title={contextUsageTooltip}
+                  >
+                    <span className="truncate">{contextUsage.usedLabel}</span>
+                    {contextUsage.percentLabel ? (
+                      <span className="hidden opacity-80 md:inline">
+                        {contextUsage.percentLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                </RuntimeControlTooltip>
+              ) : null}
+
+              {onManualCompact || compactDisabledReason ? (
+                <div className="relative hidden sm:inline-flex">
+                  <RuntimeControlTooltip label={compactTooltip}>
+                    <button
+                      type="button"
+                      disabled={compactDisabled || !onManualCompact}
+                      onClick={requestManualCompact}
+                      aria-label={compactTooltip}
+                      className={cn(
+                        "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                        "disabled:pointer-events-none disabled:opacity-40",
+                        isCompacting
+                          ? "text-violet-600 dark:text-violet-300"
+                          : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                      )}
+                    >
+                      {isCompacting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Minimize2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </RuntimeControlTooltip>
+                </div>
+              ) : null}
+
+              <DropdownMenu>
+                <RuntimeControlTooltip label={t("chat.toolbar.more")}>
+                  {/* Keep local-only actions (export, cost, clear draft) available offline. */}
+                  <DropdownMenuTrigger
+                    aria-label={t("chat.toolbar.more")}
+                    className={cn(
+                      "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-hidden transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60",
+                    )}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </DropdownMenuTrigger>
+                </RuntimeControlTooltip>
+                <DropdownMenuContent
+                  side="top"
+                  align="start"
+                  className="sidebar-context-menu min-w-52 rounded-xl border-0 p-1"
+                >
+                  {contextUsage ? (
+                    <>
+                      <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                        {t("chat.toolbar.contextUsage")}
+                      </DropdownMenuLabel>
+                      <div className="px-2 pb-1.5 text-xs tabular-nums text-foreground">
+                        {contextUsageTooltip}
+                      </div>
+                      <DropdownMenuSeparator />
+                    </>
+                  ) : null}
+
+                  {onManualCompact || compactDisabledReason ? (
+                    <DropdownMenuItem
+                      className="gap-2 rounded-md sm:hidden"
+                      disabled={compactDisabled || !onManualCompact}
+                      onSelect={() => {
+                        requestManualCompact();
+                      }}
+                    >
+                      {isCompacting ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Minimize2 className="h-3.5 w-3.5" />
+                      )}
+                      {t("chat.toolbar.compact")}
+                    </DropdownMenuItem>
+                  ) : null}
+
+                  <DropdownMenuItem
+                    className="gap-2 rounded-md"
+                    disabled={!onClearDraft || !hasDraftToClear}
+                    onSelect={() => onClearDraft?.()}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {t("chat.toolbar.clearDraft")}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger className="gap-2 rounded-md">
+                      <Sparkle className="h-3.5 w-3.5" />
+                      {t("chat.toolbar.insertTemplate")}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="sidebar-context-menu min-w-44 rounded-xl border-0 p-1">
+                      {promptTemplates.length === 0 ? (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                          {t("chat.toolbar.noTemplates")}
+                        </div>
+                      ) : (
+                        promptTemplates.map((template) => (
+                          <DropdownMenuItem
+                            key={template.id}
+                            className="rounded-md"
+                            onSelect={() => onInsertPromptTemplate?.(template.id)}
+                          >
+                            <span className="truncate">{template.name || template.id}</span>
+                          </DropdownMenuItem>
+                        ))
+                      )}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                    {t("chat.toolbar.sessionCost")}
+                  </DropdownMenuLabel>
+                  <div className="px-2 pb-1.5 text-xs tabular-nums text-foreground">
+                    {sessionCostLabel?.trim() || t("chat.toolbar.sessionCostUnknown")}
+                  </div>
+
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="gap-2 rounded-md"
+                    disabled={!onExportMarkdown}
+                    onSelect={() => onExportMarkdown?.()}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    {t("chat.toolbar.exportMarkdown")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
@@ -828,6 +1203,34 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
             </div>
           </div>
         </div>
+
+        {/* Outside overflow-hidden glass card so confirm is not clipped. */}
+        {compactConfirmOpen ? (
+          <div className="absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-xl border border-border/70 bg-popover p-3 text-xs text-popover-foreground shadow-xl">
+            <p className="leading-relaxed text-muted-foreground">
+              {t("chat.toolbar.compactConfirm")}
+            </p>
+            <div className="mt-2 flex justify-end gap-1.5">
+              <button
+                type="button"
+                className="rounded-md px-2 py-1 text-muted-foreground hover:bg-muted"
+                onClick={() => {
+                  setCompactConfirmOpen(false);
+                  setCompactConfirmConversationId("");
+                }}
+              >
+                {t("chat.cancel")}
+              </button>
+              <button
+                type="button"
+                className="rounded-md bg-foreground px-2 py-1 text-background hover:bg-foreground/90"
+                onClick={confirmManualCompact}
+              >
+                {t("chat.toolbar.compactConfirmAction")}
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
