@@ -6,6 +6,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -24,6 +25,8 @@ import {
   Lightbulb,
   LightbulbOff,
   Loader2,
+  Maximize2,
+  Minimize2,
   Paperclip,
   Play,
   Send,
@@ -113,6 +116,16 @@ const DEFAULT_QUEUE_SCROLLBAR_STATE: QueueScrollbarState = {
   thumbTop: 0,
 };
 
+const COMPOSER_EXPAND_ANIMATION_MS = 280;
+const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0.22, 1)";
+
+function prefersReducedMotion() {
+  return (
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 export const ChatComposerBar = memo(function ChatComposerBar(props: {
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   isSending: boolean;
@@ -190,6 +203,13 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   } | null>(null);
   const queueHadTurnsRef = useRef(false);
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
+  const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+  const isComposerExpandedRef = useRef(false);
+  const glassCardRef = useRef<HTMLDivElement | null>(null);
+  /** 切换瞬间记录的卡片旧高度，供 FLIP 动画用；消费后立即置空。 */
+  const expandFromHeightRef = useRef<number | null>(null);
+  const expandAnimationRef = useRef<Animation | null>(null);
+  const scheduleHeightMeasureRef = useRef<(() => void) | null>(null);
   const [queueCollapsed, setQueueCollapsed] = useState(false);
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
@@ -220,10 +240,70 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     : t("chat.runtime.thinkingTooltip");
   const webSearchTooltip = t("chat.runtime.webSearchTooltip");
   const toggleQueueTooltip = queueCollapsed ? t("chat.queue.expand") : t("chat.queue.collapse");
+  const toggleComposerExpandTooltip = isComposerExpanded
+    ? t("chat.composer.collapse")
+    : t("chat.composer.expand");
 
   const toggleQueueCollapsed = useCallback(() => {
     setQueueCollapsed((current) => !current);
   }, []);
+
+  // ref 与 state 同步更新：高度上报的 RO/rAF 回调可能先于 effect 执行，
+  // 必须在布局变化前就能读到最新展开态。切换前记录卡片当前高度，
+  // 布局翻转后由 FLIP effect 从旧高度平滑过渡到新高度。
+  const setComposerExpanded = useCallback((next: boolean) => {
+    if (next === isComposerExpandedRef.current) return;
+    expandFromHeightRef.current = glassCardRef.current?.getBoundingClientRect().height ?? null;
+    isComposerExpandedRef.current = next;
+    setIsComposerExpanded(next);
+  }, []);
+
+  // FLIP：布局已按目标态落定，把卡片高度用 min/max 双钳制钉在动画值上，
+  // 从旧高度平滑过渡到新高度。不能直接动 height——展开态卡片是 flex-1
+  // (basis 0)，height 会被 flex 忽略；min/max 约束则两种布局都尊重。
+  // biome-ignore lint/correctness/useExhaustiveDependencies(isComposerExpanded): 函数体不读它，但它正是"布局已翻转"的触发信号。
+  useLayoutEffect(() => {
+    const card = glassCardRef.current;
+    const fromHeight = expandFromHeightRef.current;
+    expandFromHeightRef.current = null;
+    if (!card || fromHeight === null || typeof card.animate !== "function") return;
+    if (prefersReducedMotion()) return;
+
+    expandAnimationRef.current?.cancel();
+    const toHeight = card.getBoundingClientRect().height;
+    if (Math.abs(toHeight - fromHeight) < 1) return;
+
+    const animation = card.animate(
+      [
+        { minHeight: `${fromHeight}px`, maxHeight: `${fromHeight}px` },
+        { minHeight: `${toHeight}px`, maxHeight: `${toHeight}px` },
+      ],
+      { duration: COMPOSER_EXPAND_ANIMATION_MS, easing: COMPOSER_EXPAND_EASING },
+    );
+    expandAnimationRef.current = animation;
+    const clear = () => {
+      if (expandAnimationRef.current === animation) {
+        expandAnimationRef.current = null;
+      }
+      // 还原方向的高度上报在动画期间被冻结，落定后补测一次。
+      scheduleHeightMeasureRef.current?.();
+    };
+    animation.onfinish = clear;
+    animation.oncancel = clear;
+  }, [isComposerExpanded]);
+
+  useEffect(() => () => expandAnimationRef.current?.cancel(), []);
+
+  const toggleComposerExpanded = useCallback(() => {
+    setComposerExpanded(!isComposerExpandedRef.current);
+    composerRef.current?.focus();
+  }, [composerRef, setComposerExpanded]);
+
+  /** 发送（含排队）后退出全高编辑态，让路给回复内容。 */
+  const handleComposerSend = useCallback(() => {
+    setComposerExpanded(false);
+    onSend();
+  }, [onSend, setComposerExpanded]);
 
   const shouldShowQueueScrollbar = !queueCollapsed && queuedTurns.length > 2;
 
@@ -385,6 +465,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     let animationFrame: number | null = null;
     const measure = () => {
       animationFrame = null;
+      // 展开态占满聊天区，保留最近一次常规高度，避免底部预留跟着跳动；
+      // 展开/还原动画期间高度是中间值，同样不上报，动画结束后补测。
+      if (isComposerExpandedRef.current || expandAnimationRef.current) return;
       const rootHeight = root.getBoundingClientRect().height;
       const queueHeight = queuePanelRef.current?.getBoundingClientRect().height ?? 0;
       onHeightChange(Math.ceil(Math.max(0, rootHeight - queueHeight)));
@@ -393,6 +476,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
       if (animationFrame !== null) return;
       animationFrame = window.requestAnimationFrame(measure);
     };
+    scheduleHeightMeasureRef.current = scheduleMeasure;
 
     scheduleMeasure();
     const resizeObserver =
@@ -404,6 +488,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
       if (animationFrame !== null) {
         window.cancelAnimationFrame(animationFrame);
       }
+      if (scheduleHeightMeasureRef.current === scheduleMeasure) {
+        scheduleHeightMeasureRef.current = null;
+      }
       resizeObserver?.disconnect();
       window.removeEventListener("resize", scheduleMeasure);
       onHeightChange(0);
@@ -413,9 +500,19 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   return (
     <div
       ref={rootRef}
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4"
+      className={cn(
+        "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4",
+        // 展开态从头部下沿一路铺到底部，把整个聊天区让给输入框。
+        isComposerExpanded && "top-14",
+      )}
     >
-      <div className="pointer-events-auto relative w-full max-w-[768px]">
+      <div
+        className={cn(
+          "pointer-events-auto relative w-full max-w-[768px]",
+          // justify-end：展开动画途中卡片被钳在中间高度时保持贴底，向上生长。
+          isComposerExpanded && "flex min-h-0 flex-col justify-end",
+        )}
+      >
         {/* Pending uploaded files — above the composer card */}
         {pendingUploadedFiles.length > 0 && (
           <div className="upload-file-list mb-2.5 flex gap-2 overflow-x-auto px-0.5 pb-1">
@@ -593,7 +690,28 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
           </div>
         ) : null}
 
-        <div className="composer-glass-card relative z-10 overflow-hidden rounded-[24px] border border-black/[0.055] bg-white/70 shadow-[0_12px_40px_-14px_rgba(15,23,42,0.22),0_2px_6px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-2xl backdrop-saturate-[165%] transition-all focus-within:border-black/[0.075] focus-within:bg-white/74 focus-within:shadow-[0_16px_46px_-14px_rgba(15,23,42,0.26),0_4px_12px_-4px_rgba(15,23,42,0.10),inset_0_1px_0_rgba(255,255,255,0.78)] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_12px_40px_-14px_rgba(0,0,0,0.72),0_2px_6px_-2px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] dark:focus-within:border-white/[0.15] dark:focus-within:bg-white/[0.08]">
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: Escape 捕获仅在展开态生效，焦点始终在内部 textbox 上，包装层不参与 Tab 序。 */}
+        <div
+          ref={glassCardRef}
+          onKeyDown={
+            isComposerExpanded
+              ? (event) => {
+                  // mention 弹层消费 Escape 时会 preventDefault，此处让路。
+                  if (event.key === "Escape" && !event.defaultPrevented) {
+                    setComposerExpanded(false);
+                  }
+                }
+              : undefined
+          }
+          className={cn(
+            // 过渡只针对 focus-within 的配色/阴影；不能用 transition-all——
+            // 展开态切换 flex-grow 时会被一并动画，导致卡片先跳顶再长满的闪动。
+            // 常驻 flex-col：FLIP 动画把卡片钳在中间高度时，flex-1 的编辑器
+            // 区吸收多余空间，工具栏才能始终贴住卡片底边。
+            "composer-glass-card relative z-10 flex flex-col overflow-hidden rounded-[24px] border border-black/[0.055] bg-white/70 shadow-[0_12px_40px_-14px_rgba(15,23,42,0.22),0_2px_6px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-2xl backdrop-saturate-[165%] transition-[background-color,border-color,box-shadow] focus-within:border-black/[0.075] focus-within:bg-white/74 focus-within:shadow-[0_16px_46px_-14px_rgba(15,23,42,0.26),0_4px_12px_-4px_rgba(15,23,42,0.10),inset_0_1px_0_rgba(255,255,255,0.78)] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_12px_40px_-14px_rgba(0,0,0,0.72),0_2px_6px_-2px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] dark:focus-within:border-white/[0.15] dark:focus-within:bg-white/[0.08]",
+            isComposerExpanded && "min-h-0 flex-1",
+          )}
+        >
           {/* macOS material rim-light */}
           <div
             aria-hidden
@@ -605,10 +723,28 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
             className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/18 to-transparent opacity-70 dark:from-white/[0.04] dark:opacity-100"
           />
 
-          <div className="relative px-4 pt-3.5">
+          <button
+            type="button"
+            onClick={toggleComposerExpanded}
+            title={toggleComposerExpandTooltip}
+            aria-label={toggleComposerExpandTooltip}
+            aria-expanded={isComposerExpanded}
+            className="absolute right-3 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/70 outline-hidden transition-[background-color,color,scale] hover:bg-muted/60 hover:text-foreground active:scale-90 focus-visible:bg-muted/60"
+          >
+            {isComposerExpanded ? (
+              <Minimize2 className="h-4 w-4" />
+            ) : (
+              <Maximize2 className="h-4 w-4" />
+            )}
+          </button>
+
+          {/* 常驻 flex-1：动画把卡片钳在中间高度时由本区吸收伸缩，工具栏才能
+              全程贴住卡片底边。min-h-0 只在展开态加——折叠态靠自动最小高度
+              (= 编辑器钳制高) 撑起卡片的固有高度，加了会塌缩。 */}
+          <div className={cn("relative flex flex-1 px-4 pt-3.5", isComposerExpanded && "min-h-0")}>
             <MentionComposer
               ref={composerRef}
-              onSend={onSend}
+              onSend={handleComposerSend}
               onEmptyChange={setComposerIsEmpty}
               onBusyChange={onComposerBusyChange}
               onPasteFiles={onPasteFiles}
@@ -617,7 +753,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
               disabled={isInputDisabled}
               workdir={workdir}
               enabledSkills={enabledSkills}
-              className="px-0 py-0"
+              className={cn("px-0 py-0 pr-8", isComposerExpanded && "h-full max-h-none")}
             />
           </div>
 
@@ -791,7 +927,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                 disabled={isSending ? false : sendDisabled}
                 onClick={() => {
                   if (canQueueDraftWhileSending) {
-                    onSend();
+                    handleComposerSend();
                     return;
                   }
                   if (isSending) {
@@ -799,7 +935,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                     return;
                   }
                   if (sendDisabled) return;
-                  onSend();
+                  handleComposerSend();
                 }}
                 size="sm"
                 title={primaryActionTitle}

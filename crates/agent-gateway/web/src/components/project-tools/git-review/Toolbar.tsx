@@ -44,7 +44,6 @@ import {
 import { Input } from "../../ui/input";
 import { useRightDockToolContext } from "../RightDockContext";
 import {
-  basename,
   type GitBranchFromCommitState,
   type GitBranchSwitchConflictState,
   type GitDiscardConfirmState,
@@ -493,7 +492,11 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
 
   const title = state.head || t("projectTools.gitReviewTitle");
   if (state.status !== "ready") {
-    return <div className="truncate text-sm font-semibold">{title}</div>;
+    return (
+      <div className="flex min-w-0 flex-1 items-center px-2 text-[calc(12px*var(--zone-font-scale,1))] font-medium text-muted-foreground">
+        <span className="min-w-0 truncate">{title}</span>
+      </div>
+    );
   }
 
   const localBranches = branches.filter((branch) => branch.kind === "local");
@@ -529,12 +532,12 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
     >
       <DropdownMenuTrigger
         disabled={operationBusy}
-        className="inline-flex min-w-0 max-w-full items-center gap-1 rounded text-sm font-semibold outline-hidden transition-colors hover:text-foreground/75 disabled:pointer-events-none disabled:opacity-70"
+        className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-[calc(12px*var(--zone-font-scale,1))] font-medium outline-hidden transition-colors hover:bg-muted/70 focus-visible:bg-muted/70 disabled:pointer-events-none disabled:opacity-60"
         title={t("projectTools.gitReview.switchBranch")}
         aria-label={t("projectTools.gitReview.switchBranch")}
       >
-        <span className="min-w-0 truncate">{title}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-70" />
+        <span className="min-w-0 flex-1 truncate text-left">{title}</span>
+        <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground opacity-70" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-56 max-w-72">
         <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -568,6 +571,72 @@ function GitReviewBranchMenu(props: { data: GitReviewData; writeDisabled: boolea
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+// Which selector the header's single dropdown edits: the repository (the
+// container) or the branch (the item inside it).
+type GitReviewScope = "repository" | "branch";
+
+// Horizontal rolling scope rail above the selector dropdown: both scope
+// icons share one row and the active one always rolls into the first
+// (leftmost) slot — full-size and tinted — while the inactive one rolls in
+// behind it, smaller and dimmed. Clicking the trailing icon swaps the slots
+// with an odometer-style slide (the active icon passes above via z-index)
+// and the dropdown below switches to that scope's selector, so whichever
+// selector is active always gets the full header width.
+function GitReviewScopeDial(props: {
+  value: GitReviewScope;
+  onChange: (value: GitReviewScope) => void;
+  repositoryLabel: string;
+  branchLabel: string;
+}) {
+  const { value, onChange, repositoryLabel, branchLabel } = props;
+  const items = [
+    {
+      key: "repository" as const,
+      label: repositoryLabel,
+      Icon: Folder,
+      activeTone: "text-sky-600 dark:text-sky-300",
+    },
+    {
+      key: "branch" as const,
+      label: branchLabel,
+      Icon: GitBranch,
+      activeTone: "text-emerald-600 dark:text-emerald-300",
+    },
+  ];
+  return (
+    <div className="relative h-7 w-[52px] shrink-0">
+      {items.map((item) => {
+        const isActive = item.key === value;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            aria-pressed={isActive}
+            aria-label={item.label}
+            title={item.label}
+            onClick={() => {
+              if (!isActive) onChange(item.key);
+            }}
+            className={cn(
+              "group absolute top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center outline-hidden transition-[left] duration-200 ease-out motion-reduce:transition-none",
+              isActive ? "left-3 z-10" : "left-10",
+            )}
+          >
+            <item.Icon
+              className={cn(
+                "h-[18px] w-[18px] transition-all duration-200 ease-out motion-reduce:transition-none",
+                isActive
+                  ? cn("scale-100", item.activeTone)
+                  : "scale-[0.7] text-muted-foreground/50 group-hover:text-muted-foreground group-focus-visible:text-muted-foreground",
+              )}
+            />
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -610,6 +679,14 @@ export function GitReviewToolbar(props: {
   const { t } = useLocale();
   const { onInsertCodeReviewSkill } = useRightDockToolContext().git;
   const operationBusy = busy !== "";
+  // Which selector the dial exposes; branch is the everyday one, so it wins
+  // the full-width dropdown by default.
+  const [scope, setScope] = useState<GitReviewScope>("branch");
+  // The repository scope only earns UI when discovery found more than one
+  // repository to pick between; otherwise the dial collapses to a static
+  // branch icon and the branch selector owns the header.
+  const showRepositoryScope = repositories.length > 1;
+  const effectiveScope: GitReviewScope = showRepositoryScope ? scope : "branch";
 
   return (
     <div className="shrink-0 border-b border-border px-3 py-3">
@@ -619,29 +696,43 @@ export function GitReviewToolbar(props: {
         onClose={data.dismissBranchSwitchConflict}
         onConfirm={() => void data.stashAndSwitchBranch()}
       />
+      {/* Single header line: horizontal scope rail (only when there are
+          multiple repositories to pick between — with a single repository it
+          collapses to a static branch icon), then the active scope's dropdown
+          taking the remaining width, then the action buttons. */}
       <div className="flex items-center gap-2">
-        <GitBranch className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
-        <div className="min-w-0 flex-1">
-          {/* Repository first, branch second (the container before the item,
-              as in GitHub Desktop / VSCode), keeping the branch line adjacent
-              to its tracking card below. */}
-          {repositories.length > 1 ? (
+        {showRepositoryScope ? (
+          <GitReviewScopeDial
+            value={effectiveScope}
+            onChange={setScope}
+            repositoryLabel={t("projectTools.gitReview.repositoryPicker")}
+            branchLabel={t("projectTools.gitReview.switchBranch")}
+          />
+        ) : (
+          <div
+            className="flex h-7 w-7 shrink-0 items-center justify-center"
+            title={t("projectTools.gitReview.switchBranch")}
+          >
+            <GitBranch className="h-[18px] w-[18px] text-emerald-600 dark:text-emerald-300" />
+          </div>
+        )}
+        <div className="flex h-7 min-w-0 flex-1 items-stretch overflow-hidden rounded-md border border-border bg-muted/25">
+          {effectiveScope === "repository" ? (
             <DropdownMenu>
               <DropdownMenuTrigger
                 disabled={operationBusy}
-                className="mb-0.5 inline-flex min-w-0 max-w-full items-center gap-1 rounded-md border border-border/60 bg-muted/40 py-px pl-1 pr-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground outline-hidden transition-colors hover:border-border hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-[calc(12px*var(--zone-font-scale,1))] font-medium outline-hidden transition-colors hover:bg-muted/70 focus-visible:bg-muted/70 disabled:pointer-events-none disabled:opacity-60"
                 title={t("projectTools.gitReview.repositoryPicker")}
                 aria-label={t("projectTools.gitReview.repositoryPicker")}
               >
-                <Folder className="h-3 w-3 shrink-0 opacity-70" />
-                <span className="min-w-0 truncate">
+                <span className="min-w-0 flex-1 truncate text-left">
                   {selectedGitRepositoryLabel(repositories, selectedRepoRoot) ||
                     state.repoRoot ||
                     t("projectTools.gitReview.noRepository")}
                 </span>
-                <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground opacity-70" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-56">
+              <DropdownMenuContent align="start" className="min-w-56 max-w-72">
                 <DropdownMenuLabel className="px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                   {t("projectTools.gitReview.repositoryPicker")}
                 </DropdownMenuLabel>
@@ -672,19 +763,8 @@ export function GitReviewToolbar(props: {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div
-              className="flex min-w-0 items-center gap-1 text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground"
-              title={state.repoRoot || undefined}
-            >
-              <Folder className="h-3 w-3 shrink-0 opacity-70" />
-              <span className="min-w-0 truncate">
-                {state.repoRoot
-                  ? basename(state.repoRoot)
-                  : disabledMessage || t("projectTools.gitReview.noRepository")}
-              </span>
-            </div>
+            <GitReviewBranchMenu data={data} writeDisabled={writeDisabled} />
           )}
-          <GitReviewBranchMenu data={data} writeDisabled={writeDisabled} />
         </div>
         <Button
           size="sm"
