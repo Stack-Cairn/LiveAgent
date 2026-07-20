@@ -1653,6 +1653,17 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.storePreviewDetailPage": "详情页",
     "mcpHub.storePreviewHomepage": "主页",
     "mcpHub.storePreviewRepository": "仓库",
+    "mcpHub.featuredTitle": "精选连接",
+    "mcpHub.featuredObsidianDesc":
+      "连接 Obsidian 笔记库：通过 Local REST API 插件读写笔记、全文检索、追加内容与管理 Vault 文件。",
+    "mcpHub.featuredObsidianRequirement":
+      "需先在 Obsidian 中安装并启用 Local REST API 社区插件，且本机可运行 uvx（uv）。",
+    "mcpHub.featuredObsidianApiKeyLabel": "Obsidian API Key",
+    "mcpHub.featuredObsidianApiKeyDesc": "在 Obsidian 设置 → Local REST API 面板中复制 API Key。",
+    "mcpHub.featuredObsidianHostLabel": "Obsidian 地址",
+    "mcpHub.featuredObsidianHostDesc": "默认 127.0.0.1，连接本机 Obsidian 时无需修改。",
+    "mcpHub.featuredObsidianPortLabel": "端口",
+    "mcpHub.featuredObsidianPortDesc": "Local REST API 默认 HTTPS 端口为 27124。",
 
     /* ── Settings Skills ── */
     "settings.skillsDesc": "为 AI 扩展可调用的技能模块",
@@ -3570,6 +3581,18 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.storePreviewDetailPage": "Detail page",
     "mcpHub.storePreviewHomepage": "Homepage",
     "mcpHub.storePreviewRepository": "Repository",
+    "mcpHub.featuredTitle": "Featured connectors",
+    "mcpHub.featuredObsidianDesc":
+      "Connect your Obsidian vault: read, write, append, and search notes through the Local REST API plugin.",
+    "mcpHub.featuredObsidianRequirement":
+      "Requires the Local REST API community plugin enabled in Obsidian, plus uvx (uv) available on this machine.",
+    "mcpHub.featuredObsidianApiKeyLabel": "Obsidian API Key",
+    "mcpHub.featuredObsidianApiKeyDesc":
+      "Copy the API key from Obsidian Settings → Local REST API.",
+    "mcpHub.featuredObsidianHostLabel": "Obsidian host",
+    "mcpHub.featuredObsidianHostDesc": "Defaults to 127.0.0.1 for a local Obsidian.",
+    "mcpHub.featuredObsidianPortLabel": "Port",
+    "mcpHub.featuredObsidianPortDesc": "Local REST API HTTPS port, 27124 by default.",
 
     /* ── Settings Skills ── */
     "settings.skillsDesc": "Extend the AI with callable skill modules",

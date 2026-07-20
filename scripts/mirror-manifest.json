@@ -86,6 +86,7 @@
     "lib/skills/clawHub.ts",
     "lib/skills/index.ts",
     "lib/mcpRegistry/index.ts",
+    "lib/mcpRegistry/featured.ts",
     "lib/shared/id.ts",
     "pages/settings/SystemToolsSection.tsx",
     "pages/mcp-hub/McpHubPage.tsx",

@@ -417,3 +417,46 @@ test("server ids are made unique before adding a registry draft", () => {
   ]);
   assert.equal(unique.server.id, "demo-3");
 });
+
+test("featured obsidian connector ships a configurable stdio draft", () => {
+  const cards = registry.getFeaturedMcpRegistryCards((key) => key);
+  const obsidian = cards.find((card) => card.sourceId === "obsidian");
+  assert.ok(obsidian, "obsidian featured card exists");
+  assert.equal(obsidian.source, "featured");
+  assert.equal(obsidian.displayName, "Obsidian");
+  assert.equal(obsidian.description, "mcpHub.featuredObsidianDesc");
+
+  const draft = obsidian.installDraft;
+  assert.equal(draft.status, "needs_config");
+  assert.equal(draft.server.enabled, false);
+  assert.equal(draft.server.transport, "stdio");
+  assert.equal(draft.server.command, "uvx");
+  assert.deepEqual(draft.server.args, ["mcp-obsidian"]);
+  assert.equal(draft.server.env.OBSIDIAN_HOST, "127.0.0.1");
+  assert.equal(draft.server.env.OBSIDIAN_PORT, "27124");
+  assert.equal(draft.server.env.OBSIDIAN_PROTOCOL, "https");
+  assert.equal(draft.commandPreview, "uvx mcp-obsidian");
+
+  assert.deepEqual(
+    draft.requiredConfig.filter((input) => input.required).map((input) => input.name),
+    ["OBSIDIAN_API_KEY"],
+  );
+  const apiKeyInput = draft.requiredConfig.find((input) => input.name === "OBSIDIAN_API_KEY");
+  assert.equal(apiKeyInput.secret, true);
+  assert.equal(apiKeyInput.target, "env");
+});
+
+test("applying the featured obsidian config yields an enabled server", () => {
+  const [obsidian] = registry.getFeaturedMcpRegistryCards((key) => key);
+  const configured = registry.applyMcpRegistryInstallConfig(obsidian.installDraft, {
+    "env:OBSIDIAN_API_KEY": "secret-key",
+    "env:OBSIDIAN_PORT": "27125",
+  });
+
+  assert.equal(configured.status, "ready");
+  assert.equal(configured.server.enabled, true);
+  assert.equal(configured.server.env.OBSIDIAN_API_KEY, "secret-key");
+  assert.equal(configured.server.env.OBSIDIAN_PORT, "27125");
+  assert.equal(configured.server.env.OBSIDIAN_HOST, "127.0.0.1");
+  assert.equal(configured.requiredConfig.length, 0);
+});

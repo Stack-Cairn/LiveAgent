@@ -85,6 +85,7 @@
 | official registry | 从 `registry.modelcontextprotocol.io` 读取官方 server 列表与 package metadata。 |
 | Smithery | 搜索 Smithery server，并尝试解析 install draft 或 manual draft。 |
 | Glama | 搜索 Glama MCP server 列表。 |
+| featured（精选连接） | `lib/mcpRegistry/featured.ts` 本地内置的精选安装草稿（如 Obsidian · Local REST API），不发起网络请求，在 Store 未搜索时置顶展示，复用与 Store 相同的 needs_config 配置弹窗安装链路。 |
 
 Registry card 会被归一化为统一的 `McpRegistryCard`，其中 `installDraft` 表示可直接生成 server config，`manualDraft` 表示需要用户手工补全。
 
