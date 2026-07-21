@@ -34,8 +34,10 @@ function splitPath(path: string): { dir: string; base: string } {
   return { dir: normalized.slice(0, index + 1), base: normalized.slice(index + 1) };
 }
 
+// 移动端（< md）隐藏行内两个动作按钮：opacity-0 的按钮在触屏上仍可被误触，
+// 且没有 hover 可以显形；此时点按文件名默认用代码编辑器打开。
 const ROW_ACTION_CLASS =
-  "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 opacity-0 transition-all hover:bg-foreground/[0.07] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none group-hover/changed-file:opacity-100";
+  "hidden h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 opacity-0 transition-all hover:bg-foreground/[0.07] hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none group-hover/changed-file:opacity-100 md:flex";
 
 const ChangedFileRow = memo(function ChangedFileRow({ file }: { file: ChangedFileEntry }) {
   const { t } = useLocale();
