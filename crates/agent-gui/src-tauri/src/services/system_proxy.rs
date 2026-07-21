@@ -282,6 +282,21 @@ pub fn blocking_client_builder() -> Result<reqwest::blocking::ClientBuilder, Str
     blocking_client_builder_for_mode(&current_snapshot().mode)
 }
 
+/// Resolved proxy URL for consumers that configure their own HTTP client rather
+/// than using `client_builder()`/`cached_client()` (e.g. `tauri-plugin-updater`,
+/// which only accepts a `Url` on its builder). `Ok(None)` means the app proxy is
+/// disabled — callers must still explicitly disable their own client's proxy in
+/// that case instead of leaving it to fall back to OS proxy env vars.
+pub fn current_proxy_url() -> Result<Option<reqwest::Url>, String> {
+    match current_snapshot().mode {
+        ProxyMode::Disabled => Ok(None),
+        ProxyMode::Invalid(error) => Err(error),
+        ProxyMode::Enabled(config) => reqwest::Url::parse(&config.proxy_url())
+            .map(Some)
+            .map_err(|_| format!("应用代理地址无效：{}", config.display_target())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,5 +417,29 @@ mod tests {
         assert!(shell_proxy_envs_for_mode(&ProxyMode::Disabled)
             .expect("disabled proxy envs")
             .is_empty());
+    }
+
+    #[test]
+    fn current_proxy_url_reflects_mode() {
+        set_config(None);
+        assert_eq!(current_proxy_url().expect("disabled proxy url"), None);
+
+        set_config(Some(&json!({
+            "enabled": true, "type": "http", "host": "proxy.local", "port": 8080
+        })));
+        assert_eq!(
+            current_proxy_url()
+                .expect("enabled proxy url")
+                .map(|url| url.to_string()),
+            Some("http://proxy.local:8080/".to_string())
+        );
+
+        set_config(Some(&json!({
+            "enabled": true, "type": "http", "host": "bad host/@", "port": 8080
+        })));
+        assert!(current_proxy_url().is_err());
+
+        // reset so other tests in this module observe the default disabled state
+        set_config(None);
     }
 }

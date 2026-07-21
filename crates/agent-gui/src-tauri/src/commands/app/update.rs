@@ -452,6 +452,13 @@ fn build_updater(
         builder = builder.pubkey(public_key);
     }
 
+    // 更新下载/安装与 github_client() 的探测请求保持同一份应用代理配置；未启用时
+    // 显式 no_proxy()，避免插件内部 client 兜底读取 OS 代理环境变量。
+    builder = match crate::services::system_proxy::current_proxy_url()? {
+        Some(proxy_url) => builder.proxy(proxy_url),
+        None => builder.no_proxy(),
+    };
+
     builder
         .endpoints(vec![manifest_url])
         .map_err(|error| format!("invalid updater endpoint: {error}"))?
