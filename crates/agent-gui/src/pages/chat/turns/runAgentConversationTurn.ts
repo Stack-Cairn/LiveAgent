@@ -5,6 +5,7 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
+import { ASK_USER_QUESTION_TOOL_NAME } from "../../../lib/chat/askUserQuestion";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
@@ -401,6 +402,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     runtimePlatform,
     fileState,
     todoState,
+    askUserQuestionConversationId: conversationId,
     skillsEnabled: effectiveSkillsEnabled,
     skillsRootDir,
     skillAccessPolicy,
@@ -623,6 +625,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
 
   function queueToolCallDelta(toolCall: ToolCall, round: number) {
     if (!shouldShowToolEvent(toolCall)) return;
+    // 提问卡必须等问题与选项全部生成完毕再显示：跳过流式增量，双端
+    // （GUI 回合与网关 tool_call_delta）都只在 onToolCall 拿到完整参数后出现。
+    if (toolCall.name === ASK_USER_QUESTION_TOOL_NAME) return;
     pendingToolCallDeltas.set(toolCallDeltaKey(round, toolCall.id), { round, toolCall });
     schedulePendingToolCallDeltaFlush();
   }

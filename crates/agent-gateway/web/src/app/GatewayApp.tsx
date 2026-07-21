@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LocaleContext, t as translate } from "@/i18n";
+import { registerAskUserQuestionAnswerHandler } from "@/lib/chat/askUserQuestionBridge";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
 import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
@@ -591,6 +592,32 @@ export default function GatewayApp() {
       applyChatQueueSnapshot(snapshot);
     });
   }, [api, applyChatQueueSnapshot]);
+
+  // AskUserQuestion 卡片的应答出口：经网关 chat_queue.tool_answer 送达桌面端
+  // 的工具挂起表；桌面端 resolve 后照常以 tool_result 事件流回本端。
+  useEffect(() => {
+    if (!api) {
+      registerAskUserQuestionAnswerHandler(null);
+      return;
+    }
+    registerAskUserQuestionAnswerHandler(async (toolCallId, answers) => {
+      const conversationIdValue = getDisplayedConversationId();
+      if (!conversationIdValue) {
+        return { ok: false, message: "No active conversation." };
+      }
+      try {
+        const response = await api.chatQueueToolAnswer(
+          conversationIdValue,
+          toolCallId,
+          JSON.stringify(answers),
+        );
+        return { ok: response.accepted, message: response.message || undefined };
+      } catch (error) {
+        return { ok: false, message: asErrorMessage(error, "Failed to submit the answer.") };
+      }
+    });
+    return () => registerAskUserQuestionAnswerHandler(null);
+  }, [api]);
 
   function getVisibleComposerConversationId() {
     return resolveVisibleConversationId(selectedHistoryIdRef.current, conversationIdRef.current);

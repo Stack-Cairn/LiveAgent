@@ -32,6 +32,8 @@
     "components/chat/promptHistory.ts",
     "components/chat/NotifyToast.tsx",
     "components/chat/fileTypeIcons.tsx",
+    "components/chat/AskUserQuestionCard.tsx",
+    "lib/chat/askUserQuestion.ts",
     "components/Markdown.tsx",
     "lib/normalizeLatexDelimiters.ts",
     "lib/providers/customHeaders.ts",

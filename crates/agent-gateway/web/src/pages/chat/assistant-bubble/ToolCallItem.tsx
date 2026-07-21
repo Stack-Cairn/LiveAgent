@@ -1,8 +1,17 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { AskUserQuestionCard } from "../../../components/chat/AskUserQuestionCard";
 import { FileChangeBadge } from "../../../components/chat/FileChangeBadge";
 import { ChevronRight } from "../../../components/icons";
 import { useLocale } from "../../../i18n";
 import type { ToolResultMessage } from "../../../lib/agentTypes";
+import {
+  ASK_USER_QUESTION_TOOL_NAME,
+  type AskUserQuestionAnswer,
+  parseAskUserQuestionResultDetails,
+  readAskUserQuestionDeadlineAt,
+  sanitizeAskUserQuestionItems,
+} from "../../../lib/chat/askUserQuestion";
+import { submitAskUserQuestionAnswer } from "../../../lib/chat/askUserQuestionBridge";
 import { deriveFileChangeStats } from "../../../lib/chat/fileChangeStats";
 import { FILE_TOOL_TEXT_FIELDS } from "../../../lib/chat/toolPreview";
 import {
@@ -56,15 +65,43 @@ function ToolCallItem({
     isTodo && (Boolean(isRunning) || !result || Boolean(result.isError) || hasIncompleteTodo);
   const shouldCloseCompletedTodo =
     isTodo && Boolean(result && !result.isError) && todoItems.length > 0 && !hasIncompleteTodo;
+  const isAskUser = !isRedactedToolContent && item.toolCall.name === ASK_USER_QUESTION_TOOL_NAME;
+  const askDetails = isAskUser ? parseAskUserQuestionResultDetails(result?.details) : null;
+  // 参数生成完毕（桌面端仅在 onToolCall 后才发 tool_call 事件）才渲染卡片；
+  // 对历史/降级数据再以 isRunning/result 兜底，绝不展示半截问题。
+  const askSettled = isAskUser && (Boolean(isRunning) || Boolean(result));
+  const askQuestions =
+    isAskUser && askSettled
+      ? askDetails && askDetails.questions.length > 0
+        ? askDetails.questions
+        : sanitizeAskUserQuestionItems(item.toolCall.arguments?.questions)
+      : [];
+  // 提问卡运行期强制展开等待作答；应答落定后自动收起（同 Todo 完成收起）。
+  const shouldKeepAskOpen = !readOnly && isAskUser && (Boolean(isRunning) || !result);
+  const shouldCloseAnsweredAsk = isAskUser && Boolean(result);
+  // 权威应答截止时间：桌面端在网关上报的工具参数上盖章，倒计时与桌面计时
+  // 同源；重连/迟开页面也显示真实剩余时间。
+  const askDeadlineAt =
+    isAskUser && isRunning && !result
+      ? (readAskUserQuestionDeadlineAt(item.toolCall.arguments) ?? undefined)
+      : undefined;
+  const submitAskAnswers = useCallback(
+    (answers: AskUserQuestionAnswer[]) => submitAskUserQuestionAnswer(item.toolCall.id, answers),
+    [item.toolCall.id],
+  );
   const shouldAutoOpen =
     !isRedactedToolContent &&
-    (item.toolCall.name === "Image" || builtinResultKind === "display_image" || shouldKeepTodoOpen);
+    (item.toolCall.name === "Image" ||
+      builtinResultKind === "display_image" ||
+      shouldKeepTodoOpen ||
+      shouldKeepAskOpen);
   const [open, setOpen] = useState(readOnly || isRedactedToolContent ? false : shouldAutoOpen);
   const isSubagentCard = isSubagentCardToolCall(item.toolCall);
   const hasArgs = Object.keys(item.toolCall.arguments || {}).length > 0;
   const isStreamingFilePreviewTool = FILE_TOOL_TEXT_FIELDS[item.toolCall.name] !== undefined;
   const shouldShowArgs =
     !isRedactedToolContent &&
+    !isAskUser &&
     (!isSubagentCard || !result) &&
     (item.toolCall.name !== "TodoWrite" || !result) &&
     (isStreamingFilePreviewTool ? !result : hasArgs);
@@ -80,12 +117,14 @@ function ToolCallItem({
   const toolArgsSummary =
     isRedactedToolContent || isBash || inlineCommand
       ? ""
-      : isSubagentCard
-        ? getSubagentInlineSummary(item)
-        : summarizeToolCall(item.toolCall, {
-            includeName: false,
-            includeManagerAction: false,
-          });
+      : isAskUser
+        ? (askQuestions[0]?.prompt ?? "")
+        : isSubagentCard
+          ? getSubagentInlineSummary(item)
+          : summarizeToolCall(item.toolCall, {
+              includeName: false,
+              includeManagerAction: false,
+            });
   const fileChangeStats = useMemo(
     () => (isRedactedToolContent ? undefined : deriveFileChangeStats(item.toolCall)),
     [isRedactedToolContent, item.toolCall],
@@ -95,12 +134,18 @@ function ToolCallItem({
   const title =
     item.toolCall.name === "TodoWrite"
       ? { name: t("chat.tool.todoTitle"), action: "" }
-      : isRedactedToolContent
-        ? { name: getToolDisplayName(item.toolCall.name), action: "" }
-        : getToolDisplayTitle(item.toolCall);
+      : isAskUser
+        ? { name: t("chat.tool.askUserTitle"), action: "" }
+        : isRedactedToolContent
+          ? { name: getToolDisplayName(item.toolCall.name), action: "" }
+          : getToolDisplayTitle(item.toolCall);
 
   const statusLabel = isRunning
-    ? t("chat.tool.running")
+    ? isAskUser
+      ? askQuestions.length > 0
+        ? t("chat.askUser.waiting")
+        : t("chat.askUser.preparing")
+      : t("chat.tool.running")
     : result
       ? result.isError
         ? t("chat.tool.failed")
@@ -113,9 +158,9 @@ function ToolCallItem({
 
   useEffect(() => {
     if (readOnly || isRedactedToolContent) return;
-    if (shouldKeepTodoOpen) {
+    if (shouldKeepTodoOpen || shouldKeepAskOpen) {
       setOpen(true);
-    } else if (shouldCloseCompletedTodo) {
+    } else if (shouldCloseCompletedTodo || shouldCloseAnsweredAsk) {
       setOpen(false);
     } else if (shouldAutoOpen) {
       setOpen(true);
@@ -124,11 +169,15 @@ function ToolCallItem({
     isRedactedToolContent,
     readOnly,
     shouldAutoOpen,
+    shouldCloseAnsweredAsk,
     shouldCloseCompletedTodo,
+    shouldKeepAskOpen,
     shouldKeepTodoOpen,
   ]);
 
-  const canExpand = !isRedactedToolContent && (shouldShowArgs || Boolean(result));
+  const canExpand =
+    !isRedactedToolContent &&
+    (shouldShowArgs || Boolean(result) || (isAskUser && askQuestions.length > 0));
   const effectiveOpen = canExpand && open;
   const summaryClassName = cn(
     "flex w-full select-none items-center gap-2 text-left",
@@ -210,7 +259,20 @@ function ToolCallItem({
             </ToolSection>
           ) : null}
 
-          {result ? (
+          {isAskUser && askQuestions.length > 0 ? (
+            <AskUserQuestionCard
+              questions={askQuestions}
+              answers={askDetails?.answers}
+              cancelled={askDetails?.cancelled === true}
+              timedOut={askDetails?.timedOut === true}
+              interactive={Boolean(isRunning) && !result && !readOnly}
+              deadlineAt={askDeadlineAt}
+              onSubmit={submitAskAnswers}
+            />
+          ) : null}
+
+          {/* 提问卡自带应答态展示；仅参数校验失败（无 details）时回落默认错误区。 */}
+          {result && (!isAskUser || !askDetails) ? (
             <ToolSection
               label={isTodo ? undefined : t("chat.tool.return")}
               trailing={

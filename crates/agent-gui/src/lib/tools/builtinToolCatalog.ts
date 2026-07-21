@@ -38,7 +38,8 @@ export type ToolCatalogIconId =
   | "server"
   | "plug"
   | "wrench"
-  | "checklist";
+  | "checklist"
+  | "circleHelp";
 
 export type BuiltinToolCatalogEntry = {
   /** Catalog id (snake_case). Used for React keys and i18n key derivation. */
@@ -207,6 +208,14 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     isReadOnly: false,
     runtimeScopes: CHAT_ONLY,
     conditional: true,
+  },
+  {
+    id: "ask_user_question",
+    toolName: "AskUserQuestion",
+    icon: "circleHelp",
+    categoryId: "intelligence",
+    isReadOnly: true,
+    runtimeScopes: CHAT_ONLY,
   },
   /* ── Automation ── */
   {

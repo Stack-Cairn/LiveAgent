@@ -1596,6 +1596,21 @@ export class GatewayWebSocketClient {
     );
   }
 
+  /** 应答桌面端挂起的 AskUserQuestion：item_id 为 toolCallId，request_json 为选择数组。 */
+  async chatQueueToolAnswer(
+    conversationId: string,
+    toolCallId: string,
+    answersJson: string,
+  ): Promise<ChatQueueResponse> {
+    return normalizeChatQueueResponse(
+      await this.requestWithRecovery<RawChatQueueResponse>("chat_queue.tool_answer", {
+        conversation_id: conversationId,
+        item_id: toolCallId,
+        request_json: answersJson,
+      }),
+    );
+  }
+
   // Submit a chat command. Streaming does not hang off the command: the
   // conversation subscription (persistent, run-agnostic) carries the reply.
   async chatCommand(input: GatewayChatCommandInput): Promise<ChatCommandAccepted> {

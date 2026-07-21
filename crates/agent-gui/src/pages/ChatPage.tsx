@@ -190,6 +190,10 @@ import {
 } from "../lib/terminal/sessionStore";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import type { TerminalSession } from "../lib/terminal/types";
+import {
+  answerAskUserQuestion,
+  cancelPendingAskUserQuestionsForConversation,
+} from "../lib/tools/askUserQuestionTools";
 import { invokeFs } from "../lib/tools/fsBackend";
 import type { SkillAccessPolicy } from "../lib/tools/skillAccessPolicy";
 import { disposeTodoToolState } from "../lib/tools/todoTools";
@@ -2177,6 +2181,7 @@ export function ChatPage(props: ChatPageProps) {
           deleteConversationLocalCaches(conversationId);
           subagentStoresRef.current.dispose(conversationId);
           disposeTodoToolState(conversationId);
+          cancelPendingAskUserQuestionsForConversation(conversationId);
         },
       });
     },
@@ -2618,6 +2623,7 @@ export function ChatPage(props: ChatPageProps) {
       revision?: number;
       draftJson?: string;
       uploadedFilesJson?: string;
+      requestJson?: string;
     };
 
     const respond = (requestId: string, response: Record<string, unknown>) => {
@@ -2669,6 +2675,29 @@ export function ChatPage(props: ChatPageProps) {
           accepted: true,
           snapshotJson: snapshotJson(conversationId),
         });
+        return;
+      }
+
+      // WebUI 对 AskUserQuestion 卡片的应答：itemId 即 toolCallId，request_json
+      // 携带 {questionId, selectedLabel}[]，直接落到工具挂起表。
+      if (action === "tool_answer") {
+        if (!itemId) {
+          fail("tool_answer requires item_id", "invalid_request");
+          return;
+        }
+        let rawAnswers: unknown;
+        try {
+          rawAnswers = JSON.parse(request.requestJson || "[]");
+        } catch {
+          fail("invalid tool answer payload", "invalid_payload");
+          return;
+        }
+        const outcome = answerAskUserQuestion(itemId, rawAnswers, { conversationId });
+        if (!outcome.ok) {
+          fail(outcome.message || "question not pending", "not_found");
+          return;
+        }
+        respond(requestId, { accepted: true });
         return;
       }
 

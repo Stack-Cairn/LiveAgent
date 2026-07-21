@@ -12,6 +12,7 @@ import {
   Bot,
   Brain,
   CheckCircle2,
+  CircleHelp,
   Clock3,
   Eye,
   FilePenLine,
@@ -75,6 +76,7 @@ const TOOL_ICONS: Record<ToolCatalogIconId, IconComponent> = {
   plug: Plug,
   wrench: Wrench,
   checklist: ListChecks,
+  circleHelp: CircleHelp,
 };
 
 type CategoryAccent = {

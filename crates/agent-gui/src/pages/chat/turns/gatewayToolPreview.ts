@@ -1,12 +1,17 @@
 import type { ToolCall } from "@earendil-works/pi-ai";
 
 import {
+  ASK_USER_QUESTION_DEADLINE_ARG,
+  ASK_USER_QUESTION_TOOL_NAME,
+} from "../../../lib/chat/askUserQuestion";
+import {
   countTextLines,
   FILE_TOOL_TEXT_FIELDS,
   LIVE_TOOL_PREVIEW_META_KEY,
   type PreviewFieldMetrics,
   type StreamPreviewMeta,
 } from "../../../lib/chat/messages/toolPreview";
+import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
 
 const GATEWAY_TOOL_TEXT_PREVIEW_MAX_CHARS = 4000;
 
@@ -47,10 +52,18 @@ function buildHeadTailPreview(input: string, maxChars = GATEWAY_TOOL_TEXT_PREVIE
 // all pass through here, so every remote representation of a file tool's
 // args carries the same truncated text + true metrics + monotonic progress.
 export function buildGatewayToolCallPreviewArguments(
-  toolCall: Pick<ToolCall, "name" | "arguments">,
+  toolCall: Pick<ToolCall, "id" | "name" | "arguments">,
 ) {
-  const fieldsToPreview = FILE_TOOL_TEXT_FIELDS[toolCall.name];
   const sourceArgs = toolCall.arguments || {};
+  // AskUserQuestion：附带权威应答截止时间，WebUI 卡片倒计时与桌面计时同源
+  //（execute 挂起时复用同一预置值；见 askUserQuestionTools）。
+  if (toolCall.name === ASK_USER_QUESTION_TOOL_NAME) {
+    return {
+      ...sourceArgs,
+      [ASK_USER_QUESTION_DEADLINE_ARG]: ensureAskUserQuestionDeadlineAt(toolCall.id),
+    };
+  }
+  const fieldsToPreview = FILE_TOOL_TEXT_FIELDS[toolCall.name];
   if (!fieldsToPreview) {
     return sourceArgs;
   }

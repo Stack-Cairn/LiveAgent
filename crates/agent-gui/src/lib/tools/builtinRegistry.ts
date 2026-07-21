@@ -14,6 +14,7 @@ import {
   SUBAGENT_PARENT_ID,
   type SubagentRuntimeConfig,
 } from "../subagents";
+import { createAskUserQuestionTools } from "./askUserQuestionTools";
 import type {
   BuiltinToolBundle,
   BuiltinToolExecutionContext,
@@ -254,6 +255,8 @@ export async function buildBuiltinToolRegistry(
   params: BuildBuiltinBaseToolRegistryParams & {
     subagentRuntime?: SubagentRuntimeConfig;
     todoState?: TodoToolState;
+    /** chat 场景注入交互式提问工具；子代理/自动化场景无人值守，不注册。 */
+    askUserQuestionConversationId?: string;
   },
 ) {
   const baseBundles = await buildBaseBuiltinToolBundles(params);
@@ -261,10 +264,15 @@ export async function buildBuiltinToolRegistry(
     params.runtimeScope === "chat" && params.todoState
       ? [createTodoTools({ state: params.todoState })]
       : [];
+  const askUserQuestionBundles =
+    params.runtimeScope === "chat" && params.askUserQuestionConversationId
+      ? [createAskUserQuestionTools({ conversationId: params.askUserQuestionConversationId })]
+      : [];
+  const chatBundles = [...todoBundles, ...askUserQuestionBundles];
 
   const subagentRuntime = params.subagentRuntime;
   if (!subagentRuntime) {
-    return createBuiltinToolRegistry([...baseBundles, ...todoBundles]);
+    return createBuiltinToolRegistry([...baseBundles, ...chatBundles]);
   }
 
   const baseRegistry = createBuiltinToolRegistry(baseBundles);
@@ -286,7 +294,7 @@ export async function buildBuiltinToolRegistry(
   const parentBundles = parentMessageBundle ? [...baseBundles, parentMessageBundle] : baseBundles;
   return createBuiltinToolRegistry([
     ...parentBundles,
-    ...todoBundles,
+    ...chatBundles,
     createSubagentTools({
       providerId: subagentRuntime.providerId,
       model: subagentRuntime.model,

@@ -2,6 +2,7 @@ import type { IconComponent } from "../../../components/icons";
 import {
   Bot,
   Brain,
+  CircleHelp,
   Clock3,
   Eye,
   FilePenLine,
@@ -71,6 +72,8 @@ export function getToolMeta(name: string): {
       return { Icon: FolderTree, accent: "var(--tool-list-accent)", category: "list" };
     case "TodoWrite":
       return { Icon: ListChecks, accent: "var(--tool-list-accent)", category: "system" };
+    case "AskUserQuestion":
+      return { Icon: CircleHelp, accent: "var(--tool-list-accent)", category: "system" };
     default:
       return { Icon: Wrench, accent: "var(--tool-file-accent)", category: "other" };
   }
@@ -281,6 +284,7 @@ export function groupRoundBlocks(blocks: UiRound["blocks"]): GroupedRoundBlock[]
       if (
         block.item.toolCall.name === "Image" ||
         block.item.toolCall.name === "TodoWrite" ||
+        block.item.toolCall.name === "AskUserQuestion" ||
         isAgentToolName(block.item.toolCall.name)
       ) {
         flushPendingTools();
@@ -332,6 +336,7 @@ export function isBuiltinShareToolName(name: string) {
   }
   return [
     "Agent",
+    "AskUserQuestion",
     "Bash",
     "CronTaskManager",
     "Delete",
