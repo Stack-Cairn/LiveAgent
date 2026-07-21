@@ -1146,6 +1146,23 @@ export function useGitReviewData(options: UseGitReviewDataOptions) {
     [loadDiffForPath],
   );
 
+  // Chat-layer focus requests (reply-footer changed-files card): once the
+  // panel is active and the repository status is ready, jump to the changes
+  // view and select the requested file's diff. The handled callback retires
+  // the request so it never replays on a later remount.
+  const gitFocusRequest = context.git.focusRequest ?? null;
+  const onGitFocusRequestHandled = context.git.onFocusRequestHandled;
+  useEffect(() => {
+    if (!active || !gitFocusRequest) return;
+    if (state.status !== "ready") return;
+    setReviewMode("changes");
+    const path = gitFocusRequest.path.trim();
+    if (path) {
+      selectPath(path);
+    }
+    onGitFocusRequestHandled?.(gitFocusRequest.nonce);
+  }, [active, gitFocusRequest, onGitFocusRequestHandled, selectPath, state.status]);
+
   const selectCommitRow = useCallback(
     (commit: GitCommitSummary) => {
       selectedCommitShaRef.current = commit.sha;

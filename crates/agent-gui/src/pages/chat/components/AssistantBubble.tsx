@@ -1,6 +1,8 @@
 import { memo, useMemo } from "react";
 
+import { ChangedFilesCard } from "../../../components/chat/ChangedFilesCard";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
+import { collectChangedFiles } from "../../../lib/chat/messages/changedFiles";
 import type { UiRound } from "../../../lib/chat/messages/uiMessages";
 
 import { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
@@ -50,6 +52,12 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
     }
     return null;
   }, [rounds]);
+  // 回复末尾的已编辑文件卡：聚合整条回复所有 round 的 Write/Edit/Delete，
+  // 只在回复结束（行落定）后出现，流式过程中不渲染。
+  const changedFiles = useMemo(
+    () => (isLive ? null : collectChangedFiles(rounds)),
+    [isLive, rounds],
+  );
 
   return (
     <div className="flex w-full max-w-full items-start gap-3">
@@ -72,6 +80,7 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
             latestTodoItem={latestTodoItem}
           />
         ))}
+        {changedFiles ? <ChangedFilesCard summary={changedFiles} /> : null}
       </div>
     </div>
   );

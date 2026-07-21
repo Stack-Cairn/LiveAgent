@@ -43,10 +43,22 @@ export type RightDockFileTreeContext = {
   onRevealInFileTree: (path: string) => void;
 };
 
+// One-shot focus request from the chat layer (reply-footer changed-files
+// card): switch GitReview to the changes view and select `path`'s diff.
+// Consumers must call onFocusRequestHandled(nonce) after applying so the
+// request never replays on a later panel remount.
+export type GitReviewFocusRequest = {
+  /** Empty string = just open the changes view without picking a file. */
+  path: string;
+  nonce: number;
+};
+
 export type RightDockGitContext = {
   onInsertCodeReviewSkill?: () => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
+  focusRequest?: GitReviewFocusRequest | null;
+  onFocusRequestHandled?: (nonce: number) => void;
 };
 
 export type RightDockSshContext = {

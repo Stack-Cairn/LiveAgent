@@ -29,7 +29,11 @@ import { Button } from "../ui/button";
 import type { GitCommitContextPayload, GitFileContextPayload } from "./git-review";
 import type { LocalTunnelClient } from "./LocalTunnelPanel";
 import { RightDockContent } from "./RightDockContent";
-import { RightDockToolContext, type RightDockToolContextValue } from "./RightDockContext";
+import {
+  type GitReviewFocusRequest,
+  RightDockToolContext,
+  type RightDockToolContextValue,
+} from "./RightDockContext";
 import { RightDockChooser, RightDockCreateMenu } from "./RightDockLauncher";
 import { RightDockTabStrip } from "./RightDockTabStrip";
 import {
@@ -83,6 +87,8 @@ type RightDockPanelProps = {
   onInsertCodeReviewSkill?: () => void;
   onInsertCommitMention?: (commit: GitCommitContextPayload) => void;
   onInsertGitFileMention?: (file: GitFileContextPayload) => void;
+  gitReviewFocusRequest?: GitReviewFocusRequest | null;
+  onGitReviewFocusRequestHandled?: (nonce: number) => void;
   onClose?: () => void;
 };
 
@@ -360,6 +366,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     onInsertCodeReviewSkill,
     onInsertCommitMention,
     onInsertGitFileMention,
+    gitReviewFocusRequest,
+    onGitReviewFocusRequestHandled,
     onClose,
   } = props;
   const { t } = useLocale();
@@ -659,6 +667,8 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         onInsertCodeReviewSkill,
         onInsertCommitMention,
         onInsertGitFileMention,
+        focusRequest: gitReviewFocusRequest,
+        onFocusRequestHandled: onGitReviewFocusRequestHandled,
       },
       ssh: {
         hosts: sshHosts,
@@ -682,8 +692,10 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       forgetTerminalSession,
       gitClient,
       gitDisabledMessage,
+      gitReviewFocusRequest,
       gitWriteEnabled,
       onFileTreeStateChange,
+      onGitReviewFocusRequestHandled,
       onInsertCodeReviewSkill,
       onInsertCommitMention,
       onInsertFileMention,
