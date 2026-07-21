@@ -75,6 +75,8 @@ export function AskUserQuestionCard({
 }) {
   const { t } = useLocale();
   const [activeIndex, setActiveIndex] = useState(0);
+  // 切题方向（首次渲染为 null 不播动画）；keyed 内容区据此选滑入方向。
+  const [switchDirection, setSwitchDirection] = useState<"forward" | "backward" | null>(null);
   const [draftSelections, setDraftSelections] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [errorText, setErrorText] = useState("");
@@ -99,6 +101,13 @@ export function AskUserQuestionCard({
   const answeredCount = questions.filter((question) => selections[question.id]).length;
   const allAnswered = answeredCount === questions.length;
 
+  // 带方向切题：内容区按 question.id 重挂载并向对应方向滑入。
+  const goToQuestion = (index: number) => {
+    if (index === safeActiveIndex || index < 0 || index >= questions.length) return;
+    setSwitchDirection(index > safeActiveIndex ? "forward" : "backward");
+    setActiveIndex(index);
+  };
+
   const selectOption = (questionId: string, label: string) => {
     if (!canInteract) return;
     setErrorText("");
@@ -109,7 +118,7 @@ export function AskUserQuestionCard({
         (question, index) => index !== safeActiveIndex && !next[question.id],
       );
       if (nextUnanswered >= 0 && next[questionId]) {
-        setActiveIndex(nextUnanswered);
+        goToQuestion(nextUnanswered);
       }
       return next;
     });
@@ -147,7 +156,7 @@ export function AskUserQuestionCard({
               <button
                 key={question.id}
                 type="button"
-                onClick={() => setActiveIndex(index)}
+                onClick={() => goToQuestion(index)}
                 className={cn(
                   "flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-none transition-colors",
                   isActive
@@ -164,61 +173,75 @@ export function AskUserQuestionCard({
       ) : null}
 
       <div className="flex flex-col gap-2 px-3 py-2.5">
-        <div className="text-[calc(12.5px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/90">
-          {activeQuestion.prompt}
-        </div>
+        {/* key 触发重挂载，切题时按方向播放轻量滑入动画。 */}
+        <div
+          key={activeQuestion.id}
+          className={cn(
+            "flex flex-col gap-2",
+            switchDirection === "forward" ? "ask-question-enter-forward" : "",
+            switchDirection === "backward" ? "ask-question-enter-backward" : "",
+          )}
+        >
+          <div className="text-[calc(12.5px*var(--zone-font-scale,1))] font-medium leading-[1.55] text-foreground/90">
+            {activeQuestion.prompt}
+          </div>
 
-        <div className="flex flex-col gap-1.5" role="radiogroup" aria-label={activeQuestion.prompt}>
-          {activeQuestion.options.map((option) => {
-            const isSelected = selections[activeQuestion.id] === option.label;
-            return (
-              <button
-                key={option.label}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                disabled={!canInteract}
-                onClick={() => selectOption(activeQuestion.id, option.label)}
-                className={cn(
-                  "group/option flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
-                  isSelected
-                    ? "border-primary/45 bg-primary/[0.06] dark:border-primary/40 dark:bg-primary/[0.1]"
-                    : "border-border/40 dark:border-white/[0.07]",
-                  canInteract && !isSelected
-                    ? "hover:border-border/70 hover:bg-foreground/[0.03] dark:hover:border-white/[0.14]"
-                    : "",
-                  !canInteract && !isSelected && (isSettled || cancelled) ? "opacity-55" : "",
-                  canInteract ? "cursor-pointer" : "cursor-default",
-                )}
-              >
-                <span
+          <div
+            className="flex flex-col gap-1.5"
+            role="radiogroup"
+            aria-label={activeQuestion.prompt}
+          >
+            {activeQuestion.options.map((option) => {
+              const isSelected = selections[activeQuestion.id] === option.label;
+              return (
+                <button
+                  key={option.label}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  disabled={!canInteract}
+                  onClick={() => selectOption(activeQuestion.id, option.label)}
                   className={cn(
-                    "mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                    "group/option flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
                     isSelected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
+                      ? "border-primary/45 bg-primary/[0.06] dark:border-primary/40 dark:bg-primary/[0.1]"
+                      : "border-border/40 dark:border-white/[0.07]",
+                    canInteract && !isSelected
+                      ? "hover:border-border/70 hover:bg-foreground/[0.03] dark:hover:border-white/[0.14]"
+                      : "",
+                    !canInteract && !isSelected && (isSettled || cancelled) ? "opacity-55" : "",
+                    canInteract ? "cursor-pointer" : "cursor-default",
                   )}
                 >
-                  {isSelected ? <Check className="h-2.5 w-2.5" /> : null}
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground/85">
-                      {option.label}
+                  <span
+                    className={cn(
+                      "mt-[3px] flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                      isSelected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-muted-foreground/40 group-hover/option:border-muted-foreground/70",
+                    )}
+                  >
+                    {isSelected ? <Check className="h-2.5 w-2.5" /> : null}
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-[1.5] text-foreground/85">
+                        {option.label}
+                      </span>
+                      {option.recommended ? (
+                        <RecommendedTag label={t("chat.askUser.recommended")} />
+                      ) : null}
                     </span>
-                    {option.recommended ? (
-                      <RecommendedTag label={t("chat.askUser.recommended")} />
+                    {option.description ? (
+                      <span className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-muted-foreground/80">
+                        {option.description}
+                      </span>
                     ) : null}
                   </span>
-                  {option.description ? (
-                    <span className="text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-muted-foreground/80">
-                      {option.description}
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {cancelled ? (

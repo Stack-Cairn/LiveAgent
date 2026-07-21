@@ -1359,10 +1359,43 @@
     animation: toolExpandIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* AskUserQuestion 切题：按方向轻微滑入（forward 从右、backward 从左） */
+  @keyframes askQuestionSlideForward {
+    from {
+      opacity: 0;
+      transform: translateX(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes askQuestionSlideBackward {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .ask-question-enter-forward {
+    animation: askQuestionSlideForward 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .ask-question-enter-backward {
+    animation: askQuestionSlideBackward 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
   /* Respect reduced motion */
   @media (prefers-reduced-motion: reduce) {
     .tool-expand,
-    .lazy-collapse-reveal {
+    .lazy-collapse-reveal,
+    .ask-question-enter-forward,
+    .ask-question-enter-backward {
       animation: none !important;
     }
   }
