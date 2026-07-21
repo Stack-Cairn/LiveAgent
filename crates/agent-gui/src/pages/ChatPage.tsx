@@ -14,6 +14,10 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  type ChangedFilesActions,
+  ChangedFilesActionsProvider,
+} from "../components/chat/ChangedFilesCard";
 import { HistoryShareModal } from "../components/chat/HistoryShareModal";
 import type {
   MentionComposerCommitMention,
@@ -30,7 +34,9 @@ import type {
   GitCommitContextPayload,
   GitFileContextPayload,
 } from "../components/project-tools/git-review";
+import type { GitReviewFocusRequest } from "../components/project-tools/RightDockContext";
 import { RightDockPanel } from "../components/project-tools/RightDockPanel";
+import { expandedPathsForFileTreePath } from "../components/project-tools/rightDockModel";
 import { Button } from "../components/ui/button";
 import { useConfirmDialog } from "../components/ui/confirm-dialog";
 import type { WorkspaceCodeEditorOpenRequest } from "../components/workspace-editor/WorkspaceCodeEditorOverlay";
@@ -1650,6 +1656,59 @@ export function ChatPage(props: ChatPageProps) {
       terminalProjectPath,
       terminalProjectPathKey,
     ],
+  );
+  // ── 回复末尾「已编辑文件」卡的三个动作 ────────────────────────────────
+  const gitReviewFocusNonceRef = useRef(0);
+  const [gitReviewFocusRequest, setGitReviewFocusRequest] = useState<GitReviewFocusRequest | null>(
+    null,
+  );
+  const handleGitReviewFocusRequestHandled = useCallback((nonce: number) => {
+    setGitReviewFocusRequest((current) => (current && current.nonce === nonce ? null : current));
+  }, []);
+  const handleChangedFileOpenDiff = useCallback(
+    (path: string | null) => {
+      if (!terminalProjectPathKey) return;
+      setRightDockOpen(true);
+      setSettings((prev) => openRightDockSingletonTab(prev, terminalProjectPathKey, "gitReview"));
+      gitReviewFocusNonceRef.current += 1;
+      setGitReviewFocusRequest({
+        path: (path ?? "").trim(),
+        nonce: gitReviewFocusNonceRef.current,
+      });
+    },
+    [setSettings, terminalProjectPathKey],
+  );
+  const handleChangedFileReveal = useCallback(
+    (path: string) => {
+      if (!terminalProjectPathKey) return;
+      const selectedPath = path
+        .trim()
+        .replace(/\\/g, "/")
+        .replace(/^\/+|\/+$/g, "");
+      if (!selectedPath) return;
+      setRightDockOpen(true);
+      setSettings((prev) => {
+        const opened = openRightDockSingletonTab(prev, terminalProjectPathKey, "fileTree");
+        const current = getRightDockFileTreeState(opened.customSettings, terminalProjectPathKey);
+        return updateRightDockFileTreeState(opened, terminalProjectPathKey, {
+          query: "",
+          selectedPath,
+          expandedPaths: Array.from(
+            new Set([...current.expandedPaths, ...expandedPathsForFileTreePath(selectedPath)]),
+          ),
+          bumpRevision: true,
+        });
+      });
+    },
+    [setSettings, terminalProjectPathKey],
+  );
+  const changedFilesActions = useMemo<ChangedFilesActions>(
+    () => ({
+      onOpenFile: handleOpenWorkspaceFile,
+      onRevealInFileTree: handleChangedFileReveal,
+      onOpenDiff: handleChangedFileOpenDiff,
+    }),
+    [handleChangedFileOpenDiff, handleChangedFileReveal, handleOpenWorkspaceFile],
   );
   const handleOpenSshTerminal = useCallback(
     (session: TerminalSession, kind: WorkspaceSshTerminalOpenRequest["kind"] = "bash") => {
@@ -5561,34 +5620,36 @@ export function ChatPage(props: ChatPageProps) {
                 <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
               </div>
 
-              <ChatTranscript
-                conversationId={currentConversationId}
-                workspaceRoot={currentConversationWorkspaceRoot}
-                gitClient={tauriGitClient}
-                followRef={scrollFollowRef}
-                hasModels={hasModels}
-                historyItems={historyRenderItems}
-                isHistorySwitching={conversationOpenState.showOverlay}
-                isSending={isSending}
-                isAgentMode={isAgentMode}
-                showUsage={isAgentDevExecutionMode}
-                usageContextWindow={currentModelContextWindow}
-                liveTranscriptStore={liveTranscriptStore}
-                isCompactionRunning={isCompactionRunning}
-                bottomReservePx={composerOverlayHeight}
-                onResendFromEdit={handleResendFromEdit}
-                onBranchConversation={
-                  // 水合中/水合失败时 handler 只会静默 return——直接不传，
-                  // 让 AssistantRow 的 disabled 分支给出可见的禁用态。
-                  isConversationHydrating || isConversationHydrationFailed
-                    ? undefined
-                    : handleBranchConversation
-                }
-                branchPendingMessageId={branchPendingMessageId}
-                onOpenSettings={onOpenSettings}
-                onSuggestionSelect={handleEmptyStateSuggestion}
-                suggestionsDisabled={isSuggestionTyping}
-              />
+              <ChangedFilesActionsProvider value={changedFilesActions}>
+                <ChatTranscript
+                  conversationId={currentConversationId}
+                  workspaceRoot={currentConversationWorkspaceRoot}
+                  gitClient={tauriGitClient}
+                  followRef={scrollFollowRef}
+                  hasModels={hasModels}
+                  historyItems={historyRenderItems}
+                  isHistorySwitching={conversationOpenState.showOverlay}
+                  isSending={isSending}
+                  isAgentMode={isAgentMode}
+                  showUsage={isAgentDevExecutionMode}
+                  usageContextWindow={currentModelContextWindow}
+                  liveTranscriptStore={liveTranscriptStore}
+                  isCompactionRunning={isCompactionRunning}
+                  bottomReservePx={composerOverlayHeight}
+                  onResendFromEdit={handleResendFromEdit}
+                  onBranchConversation={
+                    // 水合中/水合失败时 handler 只会静默 return——直接不传，
+                    // 让 AssistantRow 的 disabled 分支给出可见的禁用态。
+                    isConversationHydrating || isConversationHydrationFailed
+                      ? undefined
+                      : handleBranchConversation
+                  }
+                  branchPendingMessageId={branchPendingMessageId}
+                  onOpenSettings={onOpenSettings}
+                  onSuggestionSelect={handleEmptyStateSuggestion}
+                  suggestionsDisabled={isSuggestionTyping}
+                />
+              </ChangedFilesActionsProvider>
 
               <ChatComposerBar
                 composerRef={composerRef}
@@ -5793,6 +5854,8 @@ export function ChatPage(props: ChatPageProps) {
         onSessionsChange={handleRightDockSessionsChange}
         onInsertFileMention={handleRightDockInsertFileMention}
         onOpenFile={handleOpenWorkspaceFile}
+        gitReviewFocusRequest={gitReviewFocusRequest}
+        onGitReviewFocusRequestHandled={handleGitReviewFocusRequestHandled}
         onInsertCodeReviewSkill={codeReviewSkill ? handleRightDockInsertCodeReviewSkill : undefined}
         onInsertCommitMention={handleRightDockInsertCommitMention}
         onInsertGitFileMention={handleRightDockInsertGitFileMention}

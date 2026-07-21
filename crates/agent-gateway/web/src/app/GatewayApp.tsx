@@ -119,8 +119,14 @@ function isLocalDraftConversationId(id: string) {
   return id.trim().startsWith(LOCAL_DRAFT_PREFIX);
 }
 
+import {
+  type ChangedFilesActions,
+  ChangedFilesActionsProvider,
+} from "@/components/chat/ChangedFilesCard";
 import { HistoryShareModal } from "@/components/chat/HistoryShareModal";
 import { GatewayTranscript, type GatewayTranscriptNavHandle } from "@/components/GatewayTranscript";
+import type { GitReviewFocusRequest } from "@/components/project-tools/RightDockContext";
+import { expandedPathsForFileTreePath } from "@/components/project-tools/rightDockModel";
 import { buildFloorEntries } from "@/lib/chat-floor-nav/floorModel";
 import { useScrollFollow } from "@/lib/chat-scroll/useScrollFollow";
 import { parseHistoryShareToken } from "@/lib/historyShare";
@@ -3658,6 +3664,59 @@ export default function GatewayApp() {
     () => (api ? createGatewayWorkspaceActivityClient(api) : null),
     [api],
   );
+  // ── 回复末尾「已编辑文件」卡的三个动作 ────────────────────────────────
+  const gitReviewFocusNonceRef = useRef(0);
+  const [gitReviewFocusRequest, setGitReviewFocusRequest] = useState<GitReviewFocusRequest | null>(
+    null,
+  );
+  const handleGitReviewFocusRequestHandled = useCallback((nonce: number) => {
+    setGitReviewFocusRequest((current) => (current && current.nonce === nonce ? null : current));
+  }, []);
+  const handleChangedFileOpenDiff = useCallback(
+    (path: string | null) => {
+      if (!terminalProjectPathKey) return;
+      setRightDockOpen(true);
+      setSettings((prev) => openRightDockSingletonTab(prev, terminalProjectPathKey, "gitReview"));
+      gitReviewFocusNonceRef.current += 1;
+      setGitReviewFocusRequest({
+        path: (path ?? "").trim(),
+        nonce: gitReviewFocusNonceRef.current,
+      });
+    },
+    [setSettings, terminalProjectPathKey],
+  );
+  const handleChangedFileReveal = useCallback(
+    (path: string) => {
+      if (!terminalProjectPathKey) return;
+      const selectedPath = path
+        .trim()
+        .replace(/\\/g, "/")
+        .replace(/^\/+|\/+$/g, "");
+      if (!selectedPath) return;
+      setRightDockOpen(true);
+      setSettings((prev) => {
+        const opened = openRightDockSingletonTab(prev, terminalProjectPathKey, "fileTree");
+        const current = getRightDockFileTreeState(opened.customSettings, terminalProjectPathKey);
+        return updateRightDockFileTreeState(opened, terminalProjectPathKey, {
+          query: "",
+          selectedPath,
+          expandedPaths: Array.from(
+            new Set([...current.expandedPaths, ...expandedPathsForFileTreePath(selectedPath)]),
+          ),
+          bumpRevision: true,
+        });
+      });
+    },
+    [setSettings, terminalProjectPathKey],
+  );
+  const changedFilesActions = useMemo<ChangedFilesActions>(
+    () => ({
+      onOpenFile: handleOpenWorkspaceFile,
+      onRevealInFileTree: handleChangedFileReveal,
+      onOpenDiff: handleChangedFileOpenDiff,
+    }),
+    [handleChangedFileOpenDiff, handleChangedFileReveal, handleOpenWorkspaceFile],
+  );
   // RightDockPanel is memo'd: every callback handed to it must be stable or
   // the memo boundary is void (see the panel-side context useMemo).
   const handleRightDockWidthChange = useCallback(
@@ -4207,40 +4266,42 @@ export default function GatewayApp() {
                         viewportRef={setTranscriptViewport}
                         className="gateway-transcript-scroll"
                       >
-                        <GatewayTranscript
-                          conversationId={displayedConversationId}
-                          rows={transcriptRows}
-                          liveStartIndex={transcriptLiveStartIndex}
-                          activeTurnKey={displayedTranscript.activeTurnKey}
-                          isViewportFollowing={transcriptFollow.isFollowing}
-                          navRef={transcriptNavRef}
-                          onAnchorUserRowChange={setActiveFloorKey}
-                          error={transcriptError}
-                          toolStatus={transcriptToolStatus}
-                          toolStatusIsCompaction={transcriptToolStatusIsCompaction}
-                          retryAttempts={displayedTranscript.retryAttempts}
-                          isStreaming={transcriptBusy}
-                          isLoading={transcriptHistoryLoading}
-                          loadingTitle={historyDetailLoadingTitle}
-                          hasModels={modelOptions.length > 0}
-                          onOpenSettings={openSettings}
-                          hasMoreHistory={selectedHistoryHasMore}
-                          isLoadingMoreHistory={loadingOlderHistory}
-                          onLoadFullHistory={
-                            selectedHistoryHasMore ? handleLoadFullHistory : undefined
-                          }
-                          isAgentMode={isAgentMode}
-                          showUsage={isAgentDevExecutionMode}
-                          usageContextWindow={currentModelContextWindow}
-                          workspaceRoot={displayedConversationWorkdir}
-                          gitClient={gitClient}
-                          onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
-                          onResendFromEdit={handleResendFromEdit}
-                          onBranchConversation={handleBranchConversation}
-                          branchPendingMessageId={branchPendingMessageId}
-                          onSuggestionSelect={handleEmptyStateSuggestion}
-                          suggestionsDisabled={isSuggestionTyping}
-                        />
+                        <ChangedFilesActionsProvider value={changedFilesActions}>
+                          <GatewayTranscript
+                            conversationId={displayedConversationId}
+                            rows={transcriptRows}
+                            liveStartIndex={transcriptLiveStartIndex}
+                            activeTurnKey={displayedTranscript.activeTurnKey}
+                            isViewportFollowing={transcriptFollow.isFollowing}
+                            navRef={transcriptNavRef}
+                            onAnchorUserRowChange={setActiveFloorKey}
+                            error={transcriptError}
+                            toolStatus={transcriptToolStatus}
+                            toolStatusIsCompaction={transcriptToolStatusIsCompaction}
+                            retryAttempts={displayedTranscript.retryAttempts}
+                            isStreaming={transcriptBusy}
+                            isLoading={transcriptHistoryLoading}
+                            loadingTitle={historyDetailLoadingTitle}
+                            hasModels={modelOptions.length > 0}
+                            onOpenSettings={openSettings}
+                            hasMoreHistory={selectedHistoryHasMore}
+                            isLoadingMoreHistory={loadingOlderHistory}
+                            onLoadFullHistory={
+                              selectedHistoryHasMore ? handleLoadFullHistory : undefined
+                            }
+                            isAgentMode={isAgentMode}
+                            showUsage={isAgentDevExecutionMode}
+                            usageContextWindow={currentModelContextWindow}
+                            workspaceRoot={displayedConversationWorkdir}
+                            gitClient={gitClient}
+                            onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
+                            onResendFromEdit={handleResendFromEdit}
+                            onBranchConversation={handleBranchConversation}
+                            branchPendingMessageId={branchPendingMessageId}
+                            onSuggestionSelect={handleEmptyStateSuggestion}
+                            suggestionsDisabled={isSuggestionTyping}
+                          />
+                        </ChangedFilesActionsProvider>
                       </ScrollArea>
                       {displayedTranscriptRowCount > 0 && !conversationOpenState.showOverlay ? (
                         <FloorNavRail
@@ -4470,6 +4531,8 @@ export default function GatewayApp() {
               onSessionsChange={handleProjectTerminalSessionsChange}
               onInsertFileMention={handleRightDockInsertFileMention}
               onOpenFile={handleOpenWorkspaceFile}
+              gitReviewFocusRequest={gitReviewFocusRequest}
+              onGitReviewFocusRequestHandled={handleGitReviewFocusRequestHandled}
               onInsertCodeReviewSkill={
                 codeReviewSkill ? handleRightDockInsertCodeReviewSkill : undefined
               }

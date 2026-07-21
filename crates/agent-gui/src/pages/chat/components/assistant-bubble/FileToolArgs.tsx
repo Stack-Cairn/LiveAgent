@@ -1,3 +1,5 @@
+import { useChangedFilesActions } from "../../../../components/chat/ChangedFilesCard";
+import { useLocale } from "../../../../i18n";
 import type {
   FileToolFieldPreview,
   FileToolPreview,
@@ -59,13 +61,30 @@ function StreamingTextPreviewSurface({
 }
 
 function PathSurface({ path }: { path: string }) {
+  const { t } = useLocale();
+  const onOpenFile = useChangedFilesActions()?.onOpenFile;
   return (
     <ToolSurface>
       <ToolSurfaceLabel label="path" />
-      <PathDisplay
-        path={path}
-        className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
-      />
+      {onOpenFile ? (
+        // 文件引用可点击：与回复末尾变更卡一致，直接打开工作区编辑器。
+        <button
+          type="button"
+          onClick={() => onOpenFile(path)}
+          title={t("chat.changedFiles.open")}
+          className="block w-full text-left focus-visible:outline-none"
+        >
+          <PathDisplay
+            path={path}
+            className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] transition-colors hover:text-foreground hover:underline"
+          />
+        </button>
+      ) : (
+        <PathDisplay
+          path={path}
+          className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
+        />
+      )}
     </ToolSurface>
   );
 }

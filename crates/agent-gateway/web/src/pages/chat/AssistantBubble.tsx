@@ -1,4 +1,6 @@
 import { memo, useMemo } from "react";
+import { ChangedFilesCard } from "../../components/chat/ChangedFilesCard";
+import { collectChangedFiles } from "../../lib/chat/changedFiles";
 import type { UiRound } from "../../lib/chat/uiMessages";
 import { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
 import { RoundContent } from "./assistant-bubble/RoundContent";
@@ -57,6 +59,12 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
     }
     return null;
   }, [rounds]);
+  // 回复末尾的已编辑文件卡：聚合整条回复所有 round 的 Write/Edit/Delete。
+  // 脱敏视图（分享页隐藏工具内容）不渲染文件清单。
+  const changedFiles = useMemo(
+    () => (redactToolContent ? null : collectChangedFiles(rounds)),
+    [redactToolContent, rounds],
+  );
 
   return (
     <div className="assistant-bubble-shell flex w-full max-w-full items-start gap-3">
@@ -81,6 +89,7 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
             latestTodoItem={latestTodoItem}
           />
         ))}
+        {changedFiles ? <ChangedFilesCard summary={changedFiles} /> : null}
       </div>
     </div>
   );
