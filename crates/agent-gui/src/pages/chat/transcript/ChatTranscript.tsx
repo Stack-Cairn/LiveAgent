@@ -55,6 +55,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
     onOpenSettings,
     onSuggestionSelect,
     suggestionsDisabled = false,
+    workMode,
   } = props;
   const { locale } = useLocale();
   const showNoModelsState = !hasModels;
@@ -233,6 +234,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
                 onOpenSettings={onOpenSettings}
                 onSuggestionSelect={onSuggestionSelect}
                 suggestionsDisabled={suggestionsDisabled}
+                workMode={workMode}
               />
             </div>
           ) : null}

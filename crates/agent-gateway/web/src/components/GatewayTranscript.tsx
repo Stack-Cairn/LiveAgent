@@ -56,6 +56,7 @@ import {
 import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
 
 import type { GatewayTranscriptRound } from "../lib/chatUi";
+import type { WorkModeDefinition } from "../lib/settings";
 import type { SectionId } from "../pages/settings/types";
 import { ChatEmptyState } from "./chat/ChatEmptyState";
 import {
@@ -122,6 +123,8 @@ type GatewayTranscriptProps = {
   branchPendingMessageId?: string | null;
   onSuggestionSelect?: (text: string) => void;
   suggestionsDisabled?: boolean;
+  /** 当前工作模式：驱动空态问候语、建议卡片与光晕色。 */
+  workMode?: WorkModeDefinition;
   readOnly?: boolean;
   redactToolContent?: boolean;
 };
@@ -1747,6 +1750,7 @@ export function GatewayTranscript({
   branchPendingMessageId,
   onSuggestionSelect,
   suggestionsDisabled = false,
+  workMode,
   readOnly = false,
   redactToolContent = false,
 }: GatewayTranscriptProps) {
@@ -1785,6 +1789,7 @@ export function GatewayTranscript({
             onOpenSettings={onOpenSettings}
             onSuggestionSelect={readOnly ? undefined : onSuggestionSelect}
             suggestionsDisabled={suggestionsDisabled}
+            workMode={workMode}
           />
         </div>
       </div>

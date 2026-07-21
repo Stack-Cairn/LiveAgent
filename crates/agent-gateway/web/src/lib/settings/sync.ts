@@ -995,6 +995,8 @@ export function applyGatewaySettingsSyncPayload(
       chatSidebar: current.customSettings.chatSidebar,
       // fontScale 是本机 UI 偏好，不参与网关同步
       fontScale: current.customSettings.fontScale,
+      // 旧版本对端的 payload 可能没有 workMode，缺席时保留本端状态。
+      workMode: incomingCustomSettings.workMode ?? current.customSettings.workMode,
     },
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,
     chatRuntimeControls: Object.hasOwn(source, "chatRuntimeControls")

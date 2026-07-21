@@ -15,6 +15,7 @@ import {
   normalizeSkillsSettings,
   normalizeTheme,
   normalizeUpdateSettings,
+  normalizeWorkModeSettings,
   resolveWorkspaceProjects,
   type SelectedModel,
   type SkillsSettings,
@@ -87,6 +88,7 @@ function readLocalUiSettings(): {
       },
       rightDock: normalizeRightDockSettings(obj.rightDock),
       fontScale: normalizeFontScaleSettings(obj.fontScale),
+      workMode: normalizeWorkModeSettings(obj.workMode),
     };
   }
 

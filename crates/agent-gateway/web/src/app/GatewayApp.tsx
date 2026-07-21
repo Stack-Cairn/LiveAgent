@@ -73,6 +73,7 @@ import {
   getRightDockFileTreeState,
   getRightDockProjectState,
   getSshProjectHostIds,
+  getWorkModeDefinition,
   isAgentDevMode,
   isRightDockSingletonTabOpen,
   isThinkingAlwaysOnForModel,
@@ -85,6 +86,7 @@ import {
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
   type SelectedModel,
+  setActiveWorkMode,
   setSelectedModel,
   updateChatRuntimeControlsForProvider,
   updateCustomSettings,
@@ -94,6 +96,8 @@ import {
   updateSkills,
   updateSshProjectHostIds,
   updateSystem,
+  WORK_MODE_IDS,
+  type WorkModeId,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@/lib/settings";
@@ -3442,6 +3446,31 @@ export default function GatewayApp() {
     [displayedConversationId, setSettings],
   );
 
+  const activeWorkMode = useMemo(
+    () => getWorkModeDefinition(settings.customSettings.workMode.activeModeId),
+    [settings.customSettings.workMode.activeModeId],
+  );
+  const handleWorkModeChange = useCallback(
+    (modeId: WorkModeId) => {
+      setSettings((prev) => setActiveWorkMode(prev, modeId));
+    },
+    [setSettings],
+  );
+  // Ctrl/⌘+Alt+1/2/3 快速切换工作模式（避开浏览器 Ctrl+数字 的标签页快捷键）。
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || !event.altKey || event.repeat) return;
+      const index = ["Digit1", "Digit2", "Digit3"].indexOf(event.code);
+      if (index < 0) return;
+      const modeId = WORK_MODE_IDS[index];
+      if (!modeId) return;
+      event.preventDefault();
+      handleWorkModeChange(modeId);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleWorkModeChange]);
+
   const skillsEnabled = settings.skills.enabled && isAgentMode;
   const selectedSkillNames = useMemo(
     () => (skillsEnabled ? mergeAlwaysEnabledSkillNames(settings.skills.selected) : []),
@@ -3855,9 +3884,11 @@ export default function GatewayApp() {
     ? translate("chat.compactingContextWait", settings.locale)
     : historyDetailLoading
       ? "正在加载会话历史，请稍候..."
-      : enabledComposerSkills.length > 0
-        ? translate("chat.inputHintWithSkills", settings.locale)
-        : translate("chat.inputHint", settings.locale);
+      : activeWorkMode.composerHintKey
+        ? translate(activeWorkMode.composerHintKey, settings.locale)
+        : enabledComposerSkills.length > 0
+          ? translate("chat.inputHintWithSkills", settings.locale)
+          : translate("chat.inputHint", settings.locale);
   const canDropUpload =
     status?.online === true &&
     isAgentMode &&
@@ -4038,6 +4069,8 @@ export default function GatewayApp() {
               onConversationsRemoved={handleSidebarConversationsRemoved}
               onCloseSidebar={() => setSidebarOpen(false)}
               onOpenSettings={() => openSettings()}
+              activeWorkModeId={settings.customSettings.workMode.activeModeId}
+              onWorkModeChange={handleWorkModeChange}
               onOpenSkillsHub={handleSidebarOpenSkillsHub}
               onOpenMcpHub={handleSidebarOpenMcpHub}
             />
@@ -4240,6 +4273,7 @@ export default function GatewayApp() {
                           branchPendingMessageId={branchPendingMessageId}
                           onSuggestionSelect={handleEmptyStateSuggestion}
                           suggestionsDisabled={isSuggestionTyping}
+                          workMode={activeWorkMode}
                         />
                       </ScrollArea>
                       {displayedTranscriptRowCount > 0 && !conversationOpenState.showOverlay ? (

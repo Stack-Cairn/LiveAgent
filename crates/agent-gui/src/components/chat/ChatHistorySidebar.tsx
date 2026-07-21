@@ -6,6 +6,8 @@ import { useLocale } from "../../i18n";
 import type { AppUpdateController } from "../../lib/appUpdates";
 import {
   DEFAULT_WORKSPACE_PROJECT_ID,
+  WORK_MODES,
+  type WorkModeId,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../../lib/settings";
@@ -115,6 +117,8 @@ type ChatHistorySidebarProps = {
   onCloseSidebar: () => void;
   onOpenSettings: () => void;
   appUpdate?: AppUpdateController;
+  activeWorkModeId: WorkModeId;
+  onWorkModeChange: (modeId: WorkModeId) => void;
   onOpenSkillsHub?: () => void;
   onOpenMcpHub?: () => void;
 };
@@ -973,6 +977,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onCloseSidebar,
     onOpenSettings,
     appUpdate,
+    activeWorkModeId,
+    onWorkModeChange,
     onOpenSkillsHub,
     onOpenMcpHub,
   } = props;
@@ -1425,13 +1431,40 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             <div className="flex min-w-0 -translate-y-0.5 items-center gap-2">
               <img
                 src={iconSimpleUrl}
-                alt=""
-                aria-hidden="true"
+                alt="Live Agent"
+                title="Live Agent"
                 draggable={false}
                 className="h-8 w-8 shrink-0 select-none rounded-xl object-contain"
               />
-              <div className="min-w-0">
-                <div className="truncate font-semibold tracking-tight">Live Agent</div>
+              {/* 工作模式切换器：品牌文字让位给一键模式切换（编程/写作/设计）。 */}
+              <div className="flex min-w-0 items-center rounded-xl border border-border/40 bg-background/60 p-0.5 shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
+                {WORK_MODES.map((mode) => {
+                  const isActiveMode = mode.id === activeWorkModeId;
+                  return (
+                    <button
+                      key={mode.id}
+                      type="button"
+                      onClick={() => onWorkModeChange(mode.id)}
+                      title={t(mode.descriptionKey)}
+                      aria-pressed={isActiveMode}
+                      className={cn(
+                        "flex h-7 min-w-0 items-center gap-1.5 rounded-[10px] px-2 text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-none transition-all",
+                        isActiveMode
+                          ? "bg-background/85 text-foreground shadow-[0_1px_0_rgba(255,255,255,0.55)_inset] ring-1 ring-border/45 dark:bg-white/[0.08] dark:ring-white/[0.09] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset]"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
+                          isActiveMode ? mode.accentClassName : "bg-foreground/15",
+                        )}
+                      />
+                      <span className="truncate">{t(mode.labelKey)}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

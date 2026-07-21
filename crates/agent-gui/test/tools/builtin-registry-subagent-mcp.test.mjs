@@ -159,6 +159,37 @@ test("registry without a subagent runtime exposes neither Agent nor SendMessage"
   assert.ok(names.includes("mcp_docs_search"));
 });
 
+test("excludedToolNames removes terminal tools without touching the rest", async () => {
+  const harness = createRegistryHarness();
+  const { loader } = harness;
+  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
+  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const registry = await buildBuiltinToolRegistry({
+    workdir: "/tmp/liveagent-work-mode-registry-test",
+    providerId: "codex",
+    fileState: createFileToolState(),
+    skillsEnabled: true,
+    runtimeScope: "chat",
+    selectedSystemToolIds: [],
+    // 写作工作模式的裁剪面：终端类工具整组下线。
+    excludedToolNames: ["Bash", "ManagedProcess", "ReadTerminal"],
+    getMcpSettings: () => ({ selected: ["docs"], servers: [DOCS_SERVER] }),
+  });
+  const names = registry.tools.map((tool) => tool.name);
+
+  assert.ok(!names.includes("Bash"));
+  assert.ok(!names.includes("ManagedProcess"));
+  assert.ok(!names.includes("ReadTerminal"));
+  assert.equal(registry.hasTool("Bash"), false);
+
+  assert.ok(names.includes("Read"));
+  assert.ok(names.includes("Write"));
+  assert.ok(names.includes("Edit"));
+  assert.ok(names.includes("SkillsManager"));
+  assert.ok(names.includes("MemoryManager"));
+  assert.ok(names.includes("mcp_docs_search"));
+});
+
 test("registry with a subagent runtime exposes Agent and the parent SendMessage", async () => {
   const harness = createRegistryHarness();
   const { registry } = await buildRegistry(harness, { withSubagentRuntime: true });

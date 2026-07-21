@@ -89,6 +89,7 @@
     "lib/shared/id.ts",
     "pages/settings/SystemToolsSection.tsx",
     "pages/mcp-hub/McpHubPage.tsx",
-    "pages/mcp-hub/McpImportView.tsx"
+    "pages/mcp-hub/McpImportView.tsx",
+    "lib/settings/workModes.ts"
   ]
 }
