@@ -39,8 +39,8 @@ import {
   Button,
   canRunOrganizerLocally,
   DrawerSelect,
-  type DrawerSelectOption,
   History,
+  ModelPicker,
   parseModelValue,
   pokeMemoryOrganizer,
   RefreshCw,
@@ -49,7 +49,6 @@ import {
   X,
 } from "./platform";
 
-const DRAWER_SELECT_NONE_VALUE = "__memory_drawer_none__";
 const MEMORY_ORGANIZER_TIME_DEBOUNCE_MS = 400;
 
 function memoryModelValue(model: AppSettings["memory"]["organizerModel"]) {
@@ -157,26 +156,24 @@ export function MemorySettingsDrawer(props: {
     settings.memory.organizerSchedule.frequency,
   ]);
 
-  const memoryModelDrawerOptions = useMemo<DrawerSelectOption[]>(
-    () => [
-      { value: DRAWER_SELECT_NONE_VALUE, label: t("settings.memoryModelNone") },
-      ...modelOptions.map((option) => ({
-        value: option.value,
-        label: option.label,
-        description: option.providerName,
-      })),
-    ],
-    [modelOptions, t],
-  );
-
-  function renderModelSelect(value: string, onChange: (value: string) => void, ariaLabel: string) {
+  // The two model selects share the picker but not the empty-value wording:
+  // clearing the organizer model turns the organizer off, while clearing the
+  // summary model means extraction follows the conversation's chat model.
+  function renderModelSelect(
+    value: string,
+    onChange: (value: string) => void,
+    ariaLabel: string,
+    noneLabel: string,
+  ) {
     return (
-      <DrawerSelect
-        value={value.length > 0 ? value : DRAWER_SELECT_NONE_VALUE}
-        onValueChange={(next) => onChange(next === DRAWER_SELECT_NONE_VALUE ? "" : next)}
-        options={memoryModelDrawerOptions}
+      <ModelPicker
+        value={value}
+        onChange={onChange}
+        options={modelOptions}
+        placeholder={noneLabel}
+        noneLabel={noneLabel}
         ariaLabel={ariaLabel}
-        placeholder={t("settings.memoryModelNone")}
+        triggerClassName="h-9 rounded-lg border-foreground/[0.08] bg-white/55 text-[13px] hover:border-foreground/[0.14] hover:bg-white/75 dark:bg-white/[0.04] dark:hover:bg-white/[0.06]"
       />
     );
   }
@@ -358,6 +355,7 @@ export function MemorySettingsDrawer(props: {
                     memoryOrganizerModel,
                     handleOrganizerModelChange,
                     t("settings.memoryOrganizerModel"),
+                    t("settings.memoryModelNone"),
                   )}
                 </label>
                 <div className="my-3 h-px bg-foreground/[0.05]" />
@@ -369,6 +367,7 @@ export function MemorySettingsDrawer(props: {
                     conversationSummaryModel,
                     handleSummaryModelChange,
                     t("settings.memorySummaryModel"),
+                    t("settings.memorySummaryModelFollow"),
                   )}
                 </label>
                 {modelOptions.length === 0 ? (

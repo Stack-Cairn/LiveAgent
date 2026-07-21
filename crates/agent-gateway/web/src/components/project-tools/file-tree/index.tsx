@@ -271,7 +271,6 @@ export function FileTreePanel(props: { active: boolean }) {
     (event: ReactMouseEvent, path: string) => {
       event.preventDefault();
       event.stopPropagation();
-      window.getSelection()?.removeAllRanges();
       const targetPath = nodesRef.current[path] ? path : ROOT_PATH;
       selectPath(targetPath);
       const rect = panelRef.current?.getBoundingClientRect();

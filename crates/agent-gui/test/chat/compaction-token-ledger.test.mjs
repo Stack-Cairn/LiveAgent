@@ -8,6 +8,7 @@ const ledgerModule = loader.loadModule("src/lib/chat/compaction/tokenLedger.ts")
 const {
   TokenLedger,
   estimateTextTokens,
+  estimateTextTokenUnits,
   estimateMessageTokens,
   getUsageTotalTokens,
   getMessageObservedTokens,
@@ -51,11 +52,36 @@ function toolResult(text) {
   };
 }
 
-test("estimateTextTokens is ceil(chars/4) of trimmed text", () => {
+test("estimateTextTokens is ceil(chars/4) of trimmed text for non-CJK content", () => {
   assert.equal(estimateTextTokens(""), 0);
   assert.equal(estimateTextTokens("   "), 0);
   assert.equal(estimateTextTokens("a".repeat(400)), 100);
   assert.equal(estimateTextTokens("a".repeat(401)), 101);
+});
+
+test("estimateTextTokens weighs CJK characters at 0.7 tokens each", () => {
+  // 100 个汉字按 chars/4 只算 25 token，真实 tokenizer 约 60~70：必须显著高于 25。
+  assert.equal(estimateTextTokens("你".repeat(100)), Math.ceil(100 * 0.7));
+  // 假名与谚文同样按 CJK 密度估算。
+  assert.equal(estimateTextTokens("あ".repeat(50)), Math.ceil(50 * 0.7));
+  assert.equal(estimateTextTokens("한".repeat(50)), Math.ceil(50 * 0.7));
+  // 中英混排：各按各的密度累加。
+  assert.equal(
+    estimateTextTokens(`${"你".repeat(40)}${"a".repeat(40)}`),
+    Math.ceil(40 * 0.7 + 40 / 4),
+  );
+  // 全角标点计入 CJK 密度。
+  assert.equal(estimateTextTokens("。".repeat(10)), Math.ceil(10 * 0.7));
+});
+
+test("estimateTextTokenUnits is additive across arbitrary splits", () => {
+  const text = `汉字 mixed ascii ${"你好".repeat(20)} tail`;
+  const whole = estimateTextTokenUnits(text);
+  const split =
+    estimateTextTokenUnits(text.slice(0, 7)) +
+    estimateTextTokenUnits(text.slice(7, 23)) +
+    estimateTextTokenUnits(text.slice(23));
+  assert.ok(Math.abs(whole - split) < 1e-9, `whole=${whole} split=${split}`);
 });
 
 test("estimateMessageTokens covers text, tool calls, tool results and details", () => {
@@ -167,9 +193,23 @@ test("post-checkpoint rebase shrinks the total to the fresh segment size", () =>
   assert.ok(ledger.total() < 1000);
 });
 
-test("totalWithPendingText adds the streamed-char estimate in O(1)", () => {
+test("totalWithPendingTokens adds the streamed token-unit estimate in O(1)", () => {
   const ledger = new TokenLedger();
   ledger.rebase({ systemPrompt: "", messages: [assistant("w", usage(4000))] });
-  assert.equal(ledger.totalWithPendingText(0), 4000);
-  assert.equal(ledger.totalWithPendingText(401), 4000 + 101);
+  assert.equal(ledger.totalWithPendingTokens(0), 4000);
+  assert.equal(ledger.totalWithPendingTokens(estimateTextTokenUnits("a".repeat(401))), 4000 + 101);
+  // 中文流按 CJK 密度累计：400 字远高于 400/4=100。
+  assert.equal(
+    ledger.totalWithPendingTokens(estimateTextTokenUnits("好".repeat(400))),
+    4000 + Math.ceil(400 * 0.7),
+  );
+});
+
+test("estimateMessageTokens weighs CJK message content by CJK density", () => {
+  const cjkMessage = user("这是一段用于估算的中文正文内容".repeat(20));
+  const asciiEquivalent = user("a".repeat(15 * 20));
+  assert.ok(
+    estimateMessageTokens(cjkMessage) > estimateMessageTokens(asciiEquivalent) * 2,
+    "CJK content must estimate significantly more tokens than same-length ASCII",
+  );
 });

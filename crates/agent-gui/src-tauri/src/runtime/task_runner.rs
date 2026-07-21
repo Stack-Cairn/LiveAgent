@@ -101,8 +101,13 @@ fn build_header_map(headers: &Option<BTreeMap<String, String>>) -> Result<Header
 
 /// `timeout_ms` bounds every request made by the returned client; `None`
 /// keeps the legacy 10s default used by hooks.
+///
+/// Hook / Cron HTTP 与其他应用出网点同策略：应用代理启用时经代理出网
+/// （环回地址豁免），配置异常 fail fast；未启用则直连并忽略环境代理，
+/// 避免 OS 级 HTTP(S)_PROXY 悄悄劫持自动化请求。
 pub(crate) fn build_http_client(timeout_ms: Option<u64>) -> Result<Client, String> {
-    Client::builder()
+    crate::services::system_proxy::blocking_client_builder()
+        .map_err(|e| format!("创建 Hook HTTP client 失败：{e}"))?
         .timeout(Duration::from_millis(
             timeout_ms.unwrap_or(DEFAULT_HTTP_TIMEOUT_MS).max(1),
         ))

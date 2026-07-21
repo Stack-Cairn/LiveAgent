@@ -403,7 +403,7 @@ Before submitting a PR, make sure all of the following checks pass (they match t
 Thanks to everyone who has contributed to LiveAgent!
 
 <a href="https://github.com/Stack-Cairn/LiveAgent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Stack-Cairn/LiveAgent" alt="Contributors" />
+  <img src="docs/images/contributors.svg" alt="Contributors" />
 </a>
 
 ---

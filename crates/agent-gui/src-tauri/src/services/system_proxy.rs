@@ -1,5 +1,6 @@
 //! 系统代理单一真源：设置保存/启动初始化时写入，shell env 注入与
-//! 各 reqwest 出网点（本地反代、更新检查、技能下载、MCP http/sse transport）按需读取。
+//! 各 reqwest 出网点（本地反代、图片反代、更新检查、技能下载、
+//! MCP http/sse transport、Hook / Cron HTTP、网络自检、Image.url 读取）按需读取。
 //! reqwest 侧与 shell env 共用 NO_PROXY_DEFAULT：环回地址永不走代理。
 //! 凭据绝不进入日志与错误信息（只输出 host:port）。
 

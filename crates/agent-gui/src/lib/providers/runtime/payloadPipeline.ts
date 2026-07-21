@@ -10,6 +10,7 @@ import {
 } from "../nativeResponsesAttachments";
 import { attachAnthropicAutomaticCaching } from "./anthropicCache";
 import { attachAnthropicLongContextBeta } from "./anthropicLongContext";
+import { attachCodexPromptCacheKey } from "./codexPromptCache";
 import { attachCodexResponsesStorage } from "./codexStorage";
 import { attachGeminiThoughtSignatureGuard } from "./geminiToolPayload";
 import { attachProviderNativeWebSearch } from "./nativeSearchPayload";
@@ -91,6 +92,7 @@ const finalizePayloadMiddlewares = composePayloadMiddlewares([
       context: params.context,
     }),
   (options, params) => attachCodexResponsesStorage(params.providerId, options),
+  (options, params) => attachCodexPromptCacheKey(params.providerId, options),
   (options, params) =>
     attachOpenAICompletionsFinishReasonCompatibility(options, {
       providerId: params.providerId,

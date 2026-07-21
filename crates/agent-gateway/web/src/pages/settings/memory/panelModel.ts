@@ -24,6 +24,7 @@ import type {
   MemoryOrganizerFrequency,
   MemoryOrganizerMode,
   MemoryOrganizerScope,
+  ProviderId,
 } from "../../../lib/settings";
 
 export type MemoryTab = "global" | "project" | "journal";
@@ -32,6 +33,8 @@ export type MemoryModelOption = {
   value: string;
   label: string;
   providerName: string;
+  providerId?: string;
+  providerType?: ProviderId;
 };
 
 export const MEMORY_ORGANIZER_FREQUENCIES: Array<{

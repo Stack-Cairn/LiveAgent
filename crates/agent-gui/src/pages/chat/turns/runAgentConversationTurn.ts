@@ -6,6 +6,7 @@ import type {
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
+import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import {
   isAbortedAssistantMessage,
@@ -632,6 +633,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   let midStreamProtectionDisabled = false;
   while (!result) {
     let streamedAgentText = "";
+    let streamedAgentTokenUnits = 0;
     let protectionCheckChars = 0;
     let midStreamCompactionRequested = false;
     let sawToolCallInRound = false;
@@ -665,6 +667,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onTurnStart: (round) => {
           activeAgentRound = round;
           streamedAgentText = "";
+          streamedAgentTokenUnits = 0;
           protectionCheckChars = 0;
           sawToolCallInRound = false;
           hookLifecycle.startTurn(round);
@@ -685,6 +688,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onTextDelta: (delta, round) => {
           gatewayBridgeEvents.queueToken(delta, { round });
           streamedAgentText += delta;
+          streamedAgentTokenUnits += estimateTextTokenUnits(delta);
           batchLiveRoundsUpdate(
             (prev) =>
               updateLiveRound(prev, round, (target) => {
@@ -706,7 +710,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
 
           protectionCheckChars = 0;
           // O(1) 账本判定，触发时才 abort 本地 scope 并在 catch 中构建压缩输入。
-          if (!compaction.shouldProtectMidStream(streamedAgentText.length)) return;
+          if (!compaction.shouldProtectMidStream(streamedAgentTokenUnits)) return;
           midStreamCompactionRequested = true;
           scope.controller.abort();
         },

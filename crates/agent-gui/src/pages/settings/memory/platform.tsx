@@ -30,6 +30,7 @@ export { Input } from "../../../components/ui/input";
 export { buildModelOptions } from "../../../lib/chat/page/chatPageHelpers";
 export { pokeMemoryOrganizer } from "../../../lib/memory/organizer/service";
 export { parseModelValue, toModelValue } from "../../../lib/providers/llm";
+export { ModelPicker } from "../modelPicker";
 export { AgentActivationSwitch } from "../shared";
 
 /** The desktop GUI runs the organizer in-process; Run Now can poke it. */
@@ -89,6 +90,10 @@ export function DrawerSelect(props: {
           sideOffset={6}
           collisionPadding={12}
           alignItemWithTrigger={false}
+          // The positioner carries a transform (own stacking context), so the
+          // popup's z-index is trapped inside it; without a z-index here the
+          // whole popup paints beneath the drawer backdrop (z-50).
+          className="z-[9999]"
         >
           <SelectPrimitive.Popup
             className={[

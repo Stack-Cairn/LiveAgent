@@ -29,6 +29,7 @@ export { Button } from "../../../components/ui/button";
 export { Input } from "../../../components/ui/input";
 export { buildModelOptions } from "../../../lib/chat/chatPageHelpers";
 export { parseModelValue, toModelValue } from "../../../lib/providers/llm";
+export { ModelPicker } from "../modelPicker";
 export { AgentActivationSwitch } from "../shared";
 
 /** The web UI has no in-process organizer runner; runs are picked up by the

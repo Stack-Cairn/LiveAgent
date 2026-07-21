@@ -35,9 +35,8 @@ import {
   validateCronExpression,
 } from "../../lib/automation";
 import { parseModelValue, toModelValue } from "../../lib/providers/llm";
-import { type ExecutionMode, isAgentExecutionMode, type ProviderId } from "../../lib/settings";
+import { type ExecutionMode, isAgentExecutionMode } from "../../lib/settings";
 import { useModalMotion } from "../../lib/shared/modalMotion";
-import { CronModelPicker } from "./cronModelPicker";
 import {
   createEmptyRequestDraft,
   type HttpRequestDraft,
@@ -45,14 +44,9 @@ import {
   parseHttpRequestDrafts,
   requestToDraft,
 } from "./httpRequestEditor";
+import { ModelPicker, type ModelPickerOption } from "./modelPicker";
 
-export type CronPromptModelOption = {
-  value: string;
-  label: string;
-  providerName: string;
-  providerId?: string;
-  providerType?: ProviderId;
-};
+export type CronPromptModelOption = ModelPickerOption;
 
 export type CronWorkspaceOption = {
   path: string;
@@ -778,10 +772,11 @@ export function CronTaskModal({
                     <Label className="text-xs font-medium text-muted-foreground">
                       {t("settings.cronPromptModelLabel")}
                     </Label>
-                    <CronModelPicker
+                    <ModelPicker
                       options={promptModelOptions}
                       value={selectedModelValue}
                       disabled={promptModelOptions.length === 0}
+                      placeholder={t("settings.cronPromptModelPlaceholder")}
                       onChange={(value) => {
                         setFormError(null);
                         setSelectedModelValue(value);

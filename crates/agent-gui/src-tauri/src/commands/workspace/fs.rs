@@ -16,6 +16,7 @@ use std::time::UNIX_EPOCH;
 use thiserror::Error;
 use zip::ZipArchive;
 
+use super::edit_match::{apply_edit_replacements, find_edit_matches};
 use crate::runtime::platform::expand_tilde_path;
 
 const READ_MAX_TEXT_BYTES: usize = 200 * 1024; // 200KB
@@ -2375,7 +2376,10 @@ fn read_url_image_source(source: &str) -> Result<ReadResponse, FsError> {
         }
     }
 
-    let client = reqwest::blocking::Client::builder()
+    // Image.url 供模型读取远程图片：与聊天图片反代同语义，应用代理启用时
+    // 经代理出网，代理配置异常时 fail fast，不静默直连。
+    let client = crate::services::system_proxy::blocking_client_builder()
+        .map_err(|e| FsError::Other(format!("Failed to create the HTTP client: {e}")))?
         .timeout(Duration::from_secs(IMAGE_SOURCE_HTTP_TIMEOUT_SECS))
         .build()
         .map_err(|e| FsError::Other(format!("Failed to create the HTTP client: {e}")))?;
@@ -3034,6 +3038,9 @@ pub struct EditTextResponse {
     pub path: String,
     pub replacements: usize,
     pub replace_all: bool,
+    /// Which matching pass located `old_string`: `exact`, `line-endings`,
+    /// `trailing-whitespace`, or `indentation`.
+    pub match_strategy: String,
     pub mtime_ms: u64,
     pub content_hash: String,
     pub total_lines: usize,
@@ -3094,11 +3101,14 @@ fn fs_edit_text_impl(
 
     let bytes = fs::read(&target)?;
     let text = String::from_utf8_lossy(&bytes);
-    let match_count = text.matches(&old_string).count();
 
-    if match_count == 0 {
+    // Exact match first, then increasingly lenient fallbacks (line endings,
+    // trailing whitespace, uniform indentation). See `edit_match` for the
+    // full pass cascade.
+    let Some(outcome) = find_edit_matches(&text, &old_string, &new_string) else {
         return Err(FsError::EditNoMatch { path: logical_path });
-    }
+    };
+    let match_count = outcome.replacements.len();
 
     let replace_all = replace_all.unwrap_or(false);
     if !replace_all && match_count > 1 {
@@ -3119,11 +3129,12 @@ fn fs_edit_text_impl(
         }
     }
 
-    let next = if replace_all {
-        text.replace(&old_string, &new_string)
+    let applied = if replace_all {
+        &outcome.replacements[..]
     } else {
-        text.replacen(&old_string, &new_string, 1)
+        &outcome.replacements[..1]
     };
+    let next = apply_edit_replacements(&text, applied);
 
     fs::write(&target, next.as_bytes())?;
     let md = fs::metadata(&target)?;
@@ -3132,6 +3143,7 @@ fn fs_edit_text_impl(
         path: logical_path,
         replacements: actual_replacements,
         replace_all,
+        match_strategy: outcome.strategy.as_str().to_string(),
         mtime_ms: metadata_mtime_ms(&md),
         content_hash: hash_bytes(next.as_bytes()),
         total_lines: count_text_lines(&next),
@@ -5780,6 +5792,194 @@ mod tests {
             .expect("status should succeed");
         assert!(status.exists);
         assert_eq!(write.file_id, status.file_id);
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    fn seed_edit_fixture(workdir: &Path, name: &str, content: &str) -> (u64, String) {
+        fs::write(workdir.join(name), content).expect("write edit fixture");
+        let md = fs::metadata(workdir.join(name)).expect("stat edit fixture");
+        (metadata_mtime_ms(&md), hash_bytes(content.as_bytes()))
+    }
+
+    fn run_edit(
+        workdir: &Path,
+        name: &str,
+        old_string: &str,
+        new_string: &str,
+        replace_all: Option<bool>,
+        version: (u64, String),
+    ) -> Result<EditTextResponse, FsCommandError> {
+        fs_edit_text_sync(
+            workdir.display().to_string(),
+            name.to_string(),
+            old_string.to_string(),
+            new_string.to_string(),
+            None,
+            replace_all,
+            Some(version.0),
+            Some(version.1),
+        )
+    }
+
+    #[test]
+    fn edit_exact_match_reports_exact_strategy() {
+        let workdir = unique_test_workdir("edit-exact");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let version = seed_edit_fixture(&workdir, "app.ts", "const a = 1;\nconst b = 2;\n");
+
+        let response = run_edit(
+            &workdir,
+            "app.ts",
+            "const b = 2;",
+            "const b = 3;",
+            None,
+            version,
+        )
+        .expect("exact edit should succeed");
+        assert_eq!(response.match_strategy, "exact");
+        assert_eq!(response.replacements, 1);
+        let next = fs::read_to_string(workdir.join("app.ts")).expect("read edited file");
+        assert_eq!(next, "const a = 1;\nconst b = 3;\n");
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn edit_crlf_file_accepts_lf_old_string_and_preserves_crlf() {
+        let workdir = unique_test_workdir("edit-crlf");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let version = seed_edit_fixture(
+            &workdir,
+            "app.ts",
+            "const a = 1;\r\nconst b = 2;\r\nconst c = 3;\r\n",
+        );
+
+        let response = run_edit(
+            &workdir,
+            "app.ts",
+            "const b = 2;\nconst c = 3;\n",
+            "const b = 20;\nconst c = 30;\n",
+            None,
+            version,
+        )
+        .expect("line-ending tolerant edit should succeed");
+        assert_eq!(response.match_strategy, "line-endings");
+        let next = fs::read_to_string(workdir.join("app.ts")).expect("read edited file");
+        assert_eq!(next, "const a = 1;\r\nconst b = 20;\r\nconst c = 30;\r\n");
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn edit_trailing_whitespace_drift_is_tolerated() {
+        let workdir = unique_test_workdir("edit-trailing-ws");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let version = seed_edit_fixture(&workdir, "main.rs", "fn main() {  \n    body();\n}\n");
+
+        let response = run_edit(
+            &workdir,
+            "main.rs",
+            "fn main() {\n    body();\n}\n",
+            "fn main() {\n    other();\n}\n",
+            None,
+            version,
+        )
+        .expect("trailing-whitespace tolerant edit should succeed");
+        assert_eq!(response.match_strategy, "trailing-whitespace");
+        let next = fs::read_to_string(workdir.join("main.rs")).expect("read edited file");
+        assert_eq!(next, "fn main() {\n    other();\n}\n");
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn edit_uniform_indentation_shift_preserves_file_indentation() {
+        let workdir = unique_test_workdir("edit-indent");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let version = seed_edit_fixture(
+            &workdir,
+            "flow.py",
+            "def run():\n        step_one()\n        step_two()\n",
+        );
+
+        let response = run_edit(
+            &workdir,
+            "flow.py",
+            "    step_one()\n    step_two()\n",
+            "    step_one()\n    step_three()\n",
+            None,
+            version,
+        )
+        .expect("indentation tolerant edit should succeed");
+        assert_eq!(response.match_strategy, "indentation");
+        let next = fs::read_to_string(workdir.join("flow.py")).expect("read edited file");
+        assert_eq!(
+            next,
+            "def run():\n        step_one()\n        step_three()\n"
+        );
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn edit_no_match_still_fails_after_fallbacks() {
+        let workdir = unique_test_workdir("edit-no-match");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let version = seed_edit_fixture(&workdir, "app.ts", "const a = 1;\n");
+
+        let error = run_edit(&workdir, "app.ts", "const missing = 0;", "x", None, version)
+            .expect_err("edit should fail without any match");
+        assert!(
+            matches!(error.code, FsErrorCode::EditNoMatch),
+            "unexpected error: {:?}",
+            error.code
+        );
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn edit_fuzzy_ambiguity_is_rejected_without_replace_all() {
+        let workdir = unique_test_workdir("edit-fuzzy-ambiguous");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let version = seed_edit_fixture(&workdir, "log.txt", "entry  \nother\nentry\t\n");
+
+        let error = run_edit(&workdir, "log.txt", "entry\n", "record\n", None, version)
+            .expect_err("ambiguous fuzzy edit should fail");
+        assert!(
+            matches!(error.code, FsErrorCode::EditAmbiguous),
+            "unexpected error: {:?}",
+            error.code
+        );
+        assert!(
+            error.message.contains("2 locations"),
+            "unexpected message: {}",
+            error.message
+        );
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn edit_replace_all_applies_fuzzy_matches_everywhere() {
+        let workdir = unique_test_workdir("edit-fuzzy-replace-all");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let version = seed_edit_fixture(&workdir, "log.txt", "entry\r\nother\r\nentry\r\n");
+
+        let response = run_edit(
+            &workdir,
+            "log.txt",
+            "entry\n",
+            "record\n",
+            Some(true),
+            version,
+        )
+        .expect("replace_all fuzzy edit should succeed");
+        assert_eq!(response.match_strategy, "line-endings");
+        assert_eq!(response.replacements, 2);
+        let next = fs::read_to_string(workdir.join("log.txt")).expect("read edited file");
+        assert_eq!(next, "record\r\nother\r\nrecord\r\n");
 
         let _ = fs::remove_dir_all(workdir);
     }

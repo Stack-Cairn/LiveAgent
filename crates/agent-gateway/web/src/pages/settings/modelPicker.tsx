@@ -18,10 +18,19 @@ import {
 import { useLocale } from "../../i18n";
 import type { ProviderId } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
-import type { CronPromptModelOption } from "./CronTaskModal";
 
-// Manually kept in sync with the GUI twin (Base UI flavor); grouped-collapse
-// behavior mirrors the main page model menu in pages/chat/ChatHeader.tsx.
+// Shared provider-grouped model picker used by the cron prompt-task form and
+// the memory settings drawer. Manually kept in sync with the GUI twin (Base UI
+// flavor); grouped-collapse behavior mirrors the main page model menu in
+// pages/chat/ChatHeader.tsx.
+
+export type ModelPickerOption = {
+  value: string;
+  label: string;
+  providerName: string;
+  providerId?: string;
+  providerType?: ProviderId;
+};
 
 function ProviderBrandIcon({ type, className }: { type?: ProviderId; className?: string }) {
   const cls = cn("h-4 w-4 shrink-0", className);
@@ -34,10 +43,10 @@ type ModelGroup = {
   id: string;
   name: string;
   providerType?: ProviderId;
-  opts: CronPromptModelOption[];
+  opts: ModelPickerOption[];
 };
 
-function groupOptionsByProvider(options: CronPromptModelOption[]): ModelGroup[] {
+function groupOptionsByProvider(options: ModelPickerOption[]): ModelGroup[] {
   const groups: ModelGroup[] = [];
   const byId = new Map<string, ModelGroup>();
   for (const option of options) {
@@ -53,16 +62,26 @@ function groupOptionsByProvider(options: CronPromptModelOption[]): ModelGroup[] 
   return groups;
 }
 
-export function CronModelPicker({
+export function ModelPicker({
   options,
   value,
   onChange,
   disabled,
+  placeholder,
+  noneLabel,
+  ariaLabel,
+  triggerClassName,
 }: {
-  options: CronPromptModelOption[];
+  options: ModelPickerOption[];
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** Trigger text when no model is selected. */
+  placeholder: string;
+  /** When set, a top entry with this label clears the selection (value ""). */
+  noneLabel?: string;
+  ariaLabel?: string;
+  triggerClassName?: string;
 }) {
   const { t } = useLocale();
   const [isOpen, setIsOpen] = useState(false);
@@ -112,7 +131,11 @@ export function CronModelPicker({
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger
         disabled={disabled}
-        className="flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label={ariaLabel}
+        className={cn(
+          "flex h-10 w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+          triggerClassName,
+        )}
       >
         <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <span
@@ -130,7 +153,7 @@ export function CronModelPicker({
             )}
           </span>
           <span className={cn("truncate", !selectedOption && "text-muted-foreground")}>
-            {selectedOption ? selectedOption.label : t("settings.cronPromptModelPlaceholder")}
+            {selectedOption ? selectedOption.label : placeholder}
           </span>
         </span>
         <ChevronDown
@@ -144,7 +167,7 @@ export function CronModelPicker({
         align="start"
         sideOffset={4}
         collisionPadding={8}
-        className="w-[var(--radix-dropdown-menu-trigger-width)] overflow-hidden rounded-xl p-0 text-xs"
+        className="z-[80] w-[var(--radix-dropdown-menu-trigger-width)] overflow-hidden rounded-xl p-0 text-xs"
       >
         <div className="px-2 py-1.5">
           <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
@@ -160,6 +183,23 @@ export function CronModelPicker({
           </div>
         </div>
         <div className="max-h-[min(14rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
+          {noneLabel && !normalizedSearch ? (
+            <DropdownMenuItem
+              onSelect={() => onChange("")}
+              className={cn(
+                "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none focus:bg-foreground/[0.05]",
+                value === "" && "bg-foreground/[0.07] font-medium focus:bg-foreground/[0.09]",
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <Sparkles
+                  className={cn("h-4 w-4 shrink-0 opacity-70", value === "" && "opacity-100")}
+                />
+                <span className="min-w-0 truncate">{noneLabel}</span>
+              </span>
+              {value === "" ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
+            </DropdownMenuItem>
+          ) : null}
           {filteredGroups.length === 0 ? (
             <div className="px-2 py-6 text-center text-xs text-muted-foreground">
               {t("chat.noModelFound")}
@@ -169,7 +209,9 @@ export function CronModelPicker({
               const expanded = isGroupExpanded(group.id);
               return (
                 <div key={group.id} className="flex flex-col gap-0.5">
-                  {groupIndex > 0 ? <DropdownMenuSeparator className="bg-border/30" /> : null}
+                  {groupIndex > 0 || (noneLabel && !normalizedSearch) ? (
+                    <DropdownMenuSeparator className="bg-border/30" />
+                  ) : null}
                   <DropdownMenuItem
                     onSelect={(event) => {
                       // 阻止 Radix 默认的选中即关闭：分组头只负责展开/收起

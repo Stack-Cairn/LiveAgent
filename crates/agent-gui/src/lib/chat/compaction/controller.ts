@@ -133,9 +133,11 @@ export class CompactionController {
   }
 
   // O(1)：账本读数 + 流式增量估算 + 纯决策，无状态构建、无序列化。
-  shouldProtectMidStream(pendingChars: number): boolean {
+  // pendingTokenUnits 由调用方按流式 delta 用 estimateTextTokenUnits 累加。
+  shouldProtectMidStream(pendingTokenUnits: number): boolean {
     if (!this.binding || this.inFlight) return false;
-    return this.decide("protection", this.ledger.totalWithPendingText(pendingChars)).shouldCompact;
+    return this.decide("protection", this.ledger.totalWithPendingTokens(pendingTokenUnits))
+      .shouldCompact;
   }
 
   async maybeCompactPreSend(params: {

@@ -121,18 +121,25 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
     Ok(state)
 }
 
-async fn handle_image_proxy(
-    State(state): State<Arc<ProxyServerState>>,
-    Query(query): Query<ImageProxyQuery>,
-    headers: HeaderMap,
-) -> Response {
+async fn handle_image_proxy(Query(query): Query<ImageProxyQuery>, headers: HeaderMap) -> Response {
     let target_url = match validate_image_proxy_url(&query.url) {
         Ok(url) => url,
         Err(message) => return error_response(StatusCode::BAD_REQUEST, &message, &headers),
     };
 
-    let image_request = state
-        .client
+    // 图片外链与商店链路同语义：恒随应用代理出网（未启用=直连，配置异常
+    // 502 fail fast）。<img> 请求无法携带自定义头，因此不走 per-request 开关。
+    let client = match crate::services::system_proxy::cached_client() {
+        Ok(client) => client,
+        Err(error) => {
+            return error_response(
+                StatusCode::BAD_GATEWAY,
+                &format!("App proxy unavailable: {error}"),
+                &headers,
+            );
+        }
+    };
+    let image_request = client
         .get(target_url.clone())
         .timeout(Duration::from_secs(IMAGE_PROXY_TIMEOUT_SECS));
 

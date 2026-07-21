@@ -1335,24 +1335,102 @@ function createLargePasteChip(paste: MentionComposerLargePaste) {
   return chip;
 }
 
-function insertNodeAtCursor(root: HTMLElement, node: Node) {
-  const anchor = createCaretAnchorText("");
-  const afterNode = document.createTextNode(anchor.text);
+function insertNodeAtCursor(root: HTMLElement, node: HTMLElement) {
   const sel = window.getSelection();
   if (sel && sel.rangeCount > 0) {
     const range = sel.getRangeAt(0);
-    if (root.contains(range.commonAncestorContainer)) {
-      range.deleteContents();
-      range.insertNode(afterNode);
+    if (editorRangeIsInsideRoot(root, range)) {
+      // A restored selection can carry boundaries inside a non-editable chip
+      // (clicks and double-clicks land there); hop them outside so the new
+      // chip never nests into an existing chip and never guts its label.
+      const startChip = closestComposerChipFromNode(root, range.startContainer);
+      if (startChip) {
+        range.setStartAfter(startChip);
+      }
+      const endChip = closestComposerChipFromNode(root, range.endContainer);
+      if (endChip) {
+        range.setEndBefore(endChip);
+      }
+      if (!range.collapsed) {
+        range.deleteContents();
+      }
       range.insertNode(node);
-      placeCaretInTextNode(afterNode, anchor.caretOffset);
+      // Reuse the split-off text node as the caret anchor instead of minting
+      // a fresh one, so mid-text inserts leave no empty text-node leftovers.
+      const anchor = ensureCaretAnchorAfterChip(node);
+      if (anchor) {
+        placeCaretInTextNode(anchor.textNode, anchor.offset);
+      }
       return;
     }
   }
 
   root.appendChild(node);
-  root.appendChild(afterNode);
-  placeCaretInTextNode(afterNode, anchor.caretOffset);
+  const anchor = ensureCaretAnchorAfterChip(node);
+  if (anchor) {
+    placeCaretInTextNode(anchor.textNode, anchor.offset);
+  }
+}
+
+/** Measure the caret rect without corrupting the selection.
+ *
+ *  Range.getClientRects() covers most caret positions but is empty at line
+ *  boundaries (e.g. right after a Shift+Enter line break). The old fallback
+ *  used Range.insertNode() at the caret, which splits the underlying text
+ *  node; the caret then ended up inside the degenerate empty text node left
+ *  by the split, and WebKit stops painting a caret there entirely — the
+ *  cursor visibly vanished after every Shift+Enter. Instead, insert the
+ *  probe at the nearest node boundary (never splitting text nodes) and put
+ *  the selection back exactly where it was afterwards. */
+function measureComposerCaretRect(range: Range): DOMRect | null {
+  const rects = range.getClientRects();
+  if (rects.length > 0) {
+    return rects[0];
+  }
+
+  const { startContainer, startOffset } = range;
+  let parent: Node | null;
+  let before: Node | null;
+  if (startContainer.nodeType === Node.TEXT_NODE) {
+    const textNode = startContainer as Text;
+    parent = textNode.parentNode;
+    if (startOffset <= 0) {
+      before = textNode;
+    } else if (startOffset >= textNode.length) {
+      before = textNode.nextSibling;
+    } else {
+      // Mid-text carets always produce client rects; never risk a split.
+      return null;
+    }
+  } else {
+    parent = startContainer;
+    before = startContainer.childNodes[startOffset] ?? null;
+  }
+  if (!parent) {
+    return null;
+  }
+
+  const marker = document.createElement("span");
+  marker.textContent = "\u200B";
+  marker.style.display = "inline-block";
+  marker.style.width = "0";
+  marker.style.height = "1em";
+  marker.style.overflow = "hidden";
+  parent.insertBefore(marker, before);
+  const markerRect = marker.getBoundingClientRect();
+  marker.remove();
+
+  // Even a non-splitting insert/remove can drop or shift a WebKit selection;
+  // restore the caret to the exact position that was measured.
+  const sel = window.getSelection();
+  if (sel) {
+    try {
+      sel.collapse(startContainer, startOffset);
+    } catch {
+      // The container vanished mid-frame; leave the selection untouched.
+    }
+  }
+  return markerRect;
 }
 
 function scrollSelectionIntoComposerView(root: HTMLElement) {
@@ -1367,29 +1445,21 @@ function scrollSelectionIntoComposerView(root: HTMLElement) {
     return;
   }
 
-  const marker = document.createElement("span");
-  marker.textContent = "\u200B";
-  marker.style.display = "inline-block";
-  marker.style.width = "0";
-  marker.style.height = "1em";
-  marker.style.overflow = "hidden";
+  const caretRect = measureComposerCaretRect(range);
+  if (!caretRect) {
+    return;
+  }
 
-  const markerRange = range.cloneRange();
-  markerRange.insertNode(marker);
-
-  const markerRect = marker.getBoundingClientRect();
   const rootRect = root.getBoundingClientRect();
   const margin = 4;
-  const bottomOverflow = markerRect.bottom - (rootRect.bottom - margin);
-  const topOverflow = rootRect.top + margin - markerRect.top;
+  const bottomOverflow = caretRect.bottom - (rootRect.bottom - margin);
+  const topOverflow = rootRect.top + margin - caretRect.top;
 
   if (bottomOverflow > 0) {
     root.scrollTop += bottomOverflow;
   } else if (topOverflow > 0) {
     root.scrollTop -= topOverflow;
   }
-
-  marker.remove();
 }
 
 function scheduleComposerSelectionScroll(root: HTMLElement | null) {
@@ -2040,6 +2110,32 @@ export const MentionComposer = memo(
       setComposerContextMenu(null);
     }, []);
 
+    const lastEditorSelectionRef = useRef<Range | null>(null);
+    const rememberEditorSelection = useCallback(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const range = editorSelectionRange(editor);
+      if (range) {
+        lastEditorSelectionRef.current = range.cloneRange();
+      }
+    }, []);
+    const focusEditorAtSavedSelection = useCallback(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const range = lastEditorSelectionRef.current;
+      editor.focus({ preventScroll: true });
+      if (!range || !editorRangeIsInsideRoot(editor, range)) return;
+      const selection = window.getSelection();
+      if (!selection) return;
+      selection.removeAllRanges();
+      selection.addRange(range.cloneRange());
+    }, []);
+
+    useEffect(() => {
+      document.addEventListener("selectionchange", rememberEditorSelection);
+      return () => document.removeEventListener("selectionchange", rememberEditorSelection);
+    }, [rememberEditorSelection]);
+
     const setBusy = useCallback(
       (nextBusy: boolean) => {
         if (isBusyRef.current === nextBusy) return;
@@ -2545,7 +2641,7 @@ export const MentionComposer = memo(
           if (!el) return;
           finishTypewriter();
           resetPromptHistoryRecall();
-          el.focus();
+          focusEditorAtSavedSelection();
           const chip = createFileMentionChip(path, kind);
           if (!chip) return;
           insertNodeAtCursor(el, chip);
@@ -2557,7 +2653,7 @@ export const MentionComposer = memo(
           if (!el) return;
           finishTypewriter();
           resetPromptHistoryRecall();
-          el.focus();
+          focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createSkillMentionChip(skill));
           closeMentionSession();
           refreshEmptyState();
@@ -2567,7 +2663,7 @@ export const MentionComposer = memo(
           if (!el) return;
           finishTypewriter();
           resetPromptHistoryRecall();
-          el.focus();
+          focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createCommitMentionChip(commit));
           closeMentionSession();
           refreshEmptyState();
@@ -2577,7 +2673,7 @@ export const MentionComposer = memo(
           if (!el) return;
           finishTypewriter();
           resetPromptHistoryRecall();
-          el.focus();
+          focusEditorAtSavedSelection();
           insertNodeAtCursor(el, createGitFileMentionChip(file));
           closeMentionSession();
           refreshEmptyState();
@@ -2587,7 +2683,7 @@ export const MentionComposer = memo(
           if (!el) return;
           finishTypewriter();
           resetPromptHistoryRecall();
-          el.focus();
+          focusEditorAtSavedSelection();
           const chip = createCodeMentionChip(reference);
           if (!chip) return;
           insertNodeAtCursor(el, chip);
@@ -2698,6 +2794,7 @@ export const MentionComposer = memo(
         closeComposerContextMenu,
         closeMentionSession,
         finishTypewriter,
+        focusEditorAtSavedSelection,
         insertLargePaste,
         placeCaretAtEditorEnd,
         refreshEmptyState,
@@ -3367,6 +3464,7 @@ export const MentionComposer = memo(
     }, [refreshEmptyState, refreshMention, scheduleBusyRelease]);
 
     const handleBlur = useCallback(() => {
+      rememberEditorSelection();
       isComposingRef.current = false;
       compositionEnterKeyRef.current = false;
       lastCompositionEndAtRef.current = 0;
@@ -3385,6 +3483,7 @@ export const MentionComposer = memo(
       closeCommitTooltip,
       closeComposerContextMenu,
       closeMentionSession,
+      rememberEditorSelection,
       setBusy,
     ]);
 

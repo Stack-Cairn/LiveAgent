@@ -1,5 +1,6 @@
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
+import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import {
   appendMessagesToConversation,
@@ -240,6 +241,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     textModeUsesLiveRounds = false;
 
     let streamedAssistantText = "";
+    let streamedAssistantTokenUnits = 0;
     let protectionCheckChars = 0;
     let compactionRequested = false;
     let streamAttempt = 0;
@@ -282,12 +284,13 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
               appendDraftAssistantText(delta, transcriptStore);
             }
             streamedAssistantText += delta;
+            streamedAssistantTokenUnits += estimateTextTokenUnits(delta);
             protectionCheckChars += delta.length;
             if (compactionRequested || protectionCompactionDisabled || protectionCheckChars < 160) {
               return;
             }
             protectionCheckChars = 0;
-            if (!compaction.shouldProtectMidStream(streamedAssistantText.length)) return;
+            if (!compaction.shouldProtectMidStream(streamedAssistantTokenUnits)) return;
             compactionRequested = true;
             scope.controller.abort();
           },
@@ -350,6 +353,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
         if (streamAttempt < 1) {
           streamAttempt += 1;
           streamedAssistantText = "";
+          streamedAssistantTokenUnits = 0;
           protectionCheckChars = 0;
           resetLiveTranscript(transcriptStore);
           textModeUsesLiveRounds = false;

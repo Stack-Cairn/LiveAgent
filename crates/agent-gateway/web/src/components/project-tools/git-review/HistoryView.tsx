@@ -788,7 +788,6 @@ export function GitReviewHistoryView(props: {
     ) => {
       event.preventDefault();
       event.stopPropagation();
-      window.getSelection()?.removeAllRanges();
       const panelRect = panelRef.current?.getBoundingClientRect();
       // Raw pointer position; the measured-clamp layout effect corrects it.
       const x = panelRect ? event.clientX - panelRect.left : event.clientX;

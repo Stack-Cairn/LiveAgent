@@ -403,7 +403,7 @@ LiveAgent/
 感谢所有为 LiveAgent 做出贡献的朋友们！
 
 <a href="https://github.com/Stack-Cairn/LiveAgent/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Stack-Cairn/LiveAgent" alt="Contributors" />
+  <img src="docs/images/contributors.svg" alt="Contributors" />
 </a>
 
 ---

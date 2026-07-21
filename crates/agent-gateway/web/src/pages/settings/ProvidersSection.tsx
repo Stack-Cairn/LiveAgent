@@ -16,6 +16,7 @@ import {
   Trash2,
   Waypoints,
   X,
+  Zap,
 } from "../../components/icons";
 
 import { Button } from "../../components/ui/button";
@@ -40,7 +41,6 @@ import {
   CODEX_REQUEST_FORMAT_LABELS,
   type CodexRequestFormat,
   type CustomProvider,
-  type ModelCapability,
   type ProviderId,
   type ProviderModelConfig,
   updateCustomProviders,
@@ -49,6 +49,7 @@ import {
 import { createUuid } from "../../lib/shared/id";
 import { useModalMotion } from "../../lib/shared/modalMotion";
 import { cn } from "../../lib/shared/utils";
+import { ModelPicker } from "./modelPicker";
 import {
   buildProviderModelsFetchKey,
   createDraftModelConfig,
@@ -74,11 +75,12 @@ type ModelEditDraft = {
   model: ProviderModelConfig;
   contextWindow: string;
   maxOutputToken: string;
-  capabilities: ModelCapability[];
+  costInput: string;
+  costOutput: string;
+  costCacheRead: string;
+  costCacheWrite: string;
 };
 const PROVIDER_TABS: ProviderId[] = ["claude_code", "codex", "gemini"];
-const TITLE_MODEL_FOLLOW_CURRENT_VALUE = "__conversation_title_follow_current__";
-const MODEL_CAPABILITIES: ModelCapability[] = ["reasoning", "vision", "tools"];
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Anthropic",
   codex: "OpenAI",
@@ -102,6 +104,19 @@ function parsePositiveInteger(input: string): number | null {
   if (!Number.isFinite(value)) return null;
   const normalized = Math.floor(value);
   return normalized > 0 ? normalized : null;
+}
+
+// 单价输入：留空视为未配置（0），负数与非数字视为非法。
+function parseCostRate(input: string): number | null {
+  const trimmed = input.trim();
+  if (!trimmed) return 0;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value;
+}
+
+function formatCostRate(value: number | undefined): string {
+  return typeof value === "number" && value > 0 ? String(value) : "";
 }
 
 type CustomHeaderKeyIssue = "reserved" | "invalid";
@@ -171,6 +186,12 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     initialData?.requestFormat ?? "openai-responses",
   );
   const [useSystemProxy, setUseSystemProxy] = useState(initialData?.useSystemProxy ?? false);
+  const [promptCachingEnabled, setPromptCachingEnabled] = useState(
+    initialData?.promptCachingEnabled ?? providerType !== "gemini",
+  );
+  const [promptCacheRetention, setPromptCacheRetention] = useState<"short" | "long">(
+    initialData?.promptCacheRetention === "long" ? "long" : "short",
+  );
   const [fetchingModels, setFetchingModels] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [addingModel, setAddingModel] = useState(false);
@@ -281,19 +302,12 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
             model: target,
             contextWindow: String(target.contextWindow),
             maxOutputToken: String(target.maxOutputToken),
-            capabilities: [...(target.capabilities ?? [])],
+            costInput: formatCostRate(target.cost?.input),
+            costOutput: formatCostRate(target.cost?.output),
+            costCacheRead: formatCostRate(target.cost?.cacheRead),
+            costCacheWrite: formatCostRate(target.cost?.cacheWrite),
           },
     );
-  }
-
-  function toggleModelCapability(capability: ModelCapability) {
-    setEditingModel((prev) => {
-      if (!prev) return prev;
-      const capabilities = prev.capabilities.includes(capability)
-        ? prev.capabilities.filter((item) => item !== capability)
-        : [...prev.capabilities, capability];
-      return { ...prev, capabilities };
-    });
   }
 
   const editingModelContextWindow = editingModel
@@ -302,22 +316,50 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const editingModelMaxOutputToken = editingModel
     ? parsePositiveInteger(editingModel.maxOutputToken)
     : null;
+  const editingModelCost = editingModel
+    ? {
+        input: parseCostRate(editingModel.costInput),
+        output: parseCostRate(editingModel.costOutput),
+        cacheRead: parseCostRate(editingModel.costCacheRead),
+        cacheWrite: parseCostRate(editingModel.costCacheWrite),
+      }
+    : null;
+  const editingModelCostValid =
+    editingModelCost === null ||
+    (editingModelCost.input !== null &&
+      editingModelCost.output !== null &&
+      editingModelCost.cacheRead !== null &&
+      editingModelCost.cacheWrite !== null);
   const canSaveEditingModel =
-    editingModelContextWindow !== null && editingModelMaxOutputToken !== null;
+    editingModelContextWindow !== null &&
+    editingModelMaxOutputToken !== null &&
+    editingModelCostValid;
 
   function saveInlineModelSettings() {
     if (
       !editingModel ||
       editingModelContextWindow === null ||
-      editingModelMaxOutputToken === null
+      editingModelMaxOutputToken === null ||
+      !editingModelCostValid
     ) {
       return;
     }
+    const cost = editingModelCost
+      ? {
+          input: editingModelCost.input ?? 0,
+          output: editingModelCost.output ?? 0,
+          cacheRead: editingModelCost.cacheRead ?? 0,
+          cacheWrite: editingModelCost.cacheWrite ?? 0,
+        }
+      : undefined;
+    const hasCost =
+      cost !== undefined &&
+      (cost.input > 0 || cost.output > 0 || cost.cacheRead > 0 || cost.cacheWrite > 0);
     const nextModel: ProviderModelConfig = {
       ...editingModel.model,
       contextWindow: editingModelContextWindow,
       maxOutputToken: editingModelMaxOutputToken,
-      capabilities: editingModel.capabilities,
+      cost: hasCost ? cost : undefined,
     };
     setModels((prev) => prev.map((item) => (item.id === nextModel.id ? nextModel : item)));
     setEditingModel(null);
@@ -415,7 +457,11 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         providerType === "gemini" && initialData?.reasoning === "xhigh"
           ? "high"
           : (initialData?.reasoning ?? "off"),
-      promptCachingEnabled: initialData?.promptCachingEnabled ?? providerType === "claude_code",
+      promptCachingEnabled: providerType === "gemini" ? false : promptCachingEnabled,
+      promptCacheRetention:
+        providerType === "claude_code" && promptCachingEnabled && promptCacheRetention === "long"
+          ? "long"
+          : undefined,
       nativeWebSearchEnabled: initialData?.nativeWebSearchEnabled ?? true,
       useSystemProxy,
     });
@@ -739,18 +785,6 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                               <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
                                 <div className="flex min-w-0 items-center gap-2">
                                   <span className="truncate text-sm font-medium">{model.id}</span>
-                                  {model.capabilities?.length ? (
-                                    <span className="flex shrink-0 items-center gap-1">
-                                      {model.capabilities.map((capability) => (
-                                        <span
-                                          key={capability}
-                                          className="rounded border bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                                        >
-                                          {t("settings.capability." + capability)}
-                                        </span>
-                                      ))}
-                                    </span>
-                                  ) : null}
                                 </div>
                               </div>
                               <div className="shrink-0 text-[11px] tabular-nums text-muted-foreground max-[720px]:order-3 max-[720px]:ml-12 max-[720px]:basis-full">
@@ -838,26 +872,48 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                                 </div>
 
                                 <div className="mt-3 text-xs font-medium text-muted-foreground">
-                                  {t("settings.capabilityTypes")}
+                                  {t("settings.modelCost")}
                                 </div>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {MODEL_CAPABILITIES.map((capability) => {
-                                    const selected = editingModel.capabilities.includes(capability);
-                                    return (
-                                      <button
-                                        key={capability}
-                                        type="button"
+                                <div className="mt-1 text-[11px] text-muted-foreground/80">
+                                  {t("settings.modelCostHint")}
+                                </div>
+                                <div className="mt-2 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
+                                  {(
+                                    [
+                                      ["costInput", "settings.modelCostInput"],
+                                      ["costOutput", "settings.modelCostOutput"],
+                                      ["costCacheRead", "settings.modelCostCacheRead"],
+                                      ["costCacheWrite", "settings.modelCostCacheWrite"],
+                                    ] as const
+                                  ).map(([field, labelKey]) => (
+                                    <div key={field} className="space-y-1.5">
+                                      <Label>{t(labelKey)}</Label>
+                                      <Input
+                                        inputMode="decimal"
+                                        placeholder="0"
+                                        aria-invalid={
+                                          parseCostRate(editingModel[field]) === null
+                                            ? true
+                                            : undefined
+                                        }
                                         className={cn(
-                                          "min-h-9 rounded-full border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary",
-                                          selected && "border-primary bg-primary/10 text-primary",
+                                          parseCostRate(editingModel[field]) === null &&
+                                            "ring-1 ring-inset ring-destructive focus-visible:ring-destructive",
                                         )}
-                                        aria-pressed={selected}
-                                        onClick={() => toggleModelCapability(capability)}
-                                      >
-                                        {t("settings.capability." + capability)}
-                                      </button>
-                                    );
-                                  })}
+                                        value={editingModel[field]}
+                                        onChange={(event) =>
+                                          setEditingModel((prev) =>
+                                            prev
+                                              ? {
+                                                  ...prev,
+                                                  [field]: event.currentTarget.value,
+                                                }
+                                              : prev,
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                  ))}
                                 </div>
 
                                 {!canSaveEditingModel ? (
@@ -920,6 +976,66 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                     ariaLabel={t("settings.providerUseSystemProxy")}
                   />
                 </div>
+
+                {providerType !== "gemini" ? (
+                  <div
+                    className={cn(
+                      "mt-3 rounded-xl border bg-card px-4 py-3 transition-colors",
+                      promptCachingEnabled && "border-primary/35 bg-primary/[0.04]",
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors",
+                          promptCachingEnabled && "bg-primary/15 text-primary",
+                        )}
+                      >
+                        <Zap className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium">{t("settings.promptCaching")}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {providerType === "claude_code"
+                            ? t("settings.promptCachingDescClaude")
+                            : t("settings.promptCachingDescCodex")}
+                        </div>
+                      </div>
+                      <DialogSwitch
+                        checked={promptCachingEnabled}
+                        onCheckedChange={setPromptCachingEnabled}
+                        ariaLabel={t("settings.promptCaching")}
+                      />
+                    </div>
+                    {providerType === "claude_code" && promptCachingEnabled ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
+                        <span className="text-xs text-muted-foreground">
+                          {t("settings.promptCacheRetention")}
+                        </span>
+                        {(
+                          [
+                            ["short", "settings.promptCacheRetentionShort"],
+                            ["long", "settings.promptCacheRetentionLong"],
+                          ] as const
+                        ).map(([value, labelKey]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            className={cn(
+                              "rounded-full border px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary",
+                              promptCacheRetention === value &&
+                                "border-primary bg-primary/10 text-primary",
+                            )}
+                            aria-pressed={promptCacheRetention === value}
+                            onClick={() => setPromptCacheRetention(value)}
+                          >
+                            {t(labelKey)}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <div className="mt-6 flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-2">
@@ -1188,13 +1304,20 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
   const conversationTitleModel = settings.customSettings.conversationTitleModel;
   const selectedValue = conversationTitleModel
     ? toModelValue(conversationTitleModel.customProviderId, conversationTitleModel.model)
-    : TITLE_MODEL_FOLLOW_CURRENT_VALUE;
-  const selectedOption = modelOptions.find((option) => option.value === selectedValue);
-  const selectedLabel = conversationTitleModel
-    ? selectedOption
-      ? `${selectedOption.providerName} / ${selectedOption.label}`
-      : conversationTitleModel.model
-    : t("settings.conversationTitleModelFollowCurrent");
+    : "";
+  // A stored model that is no longer among the active options still shows as
+  // selected (same fallback-entry approach as the cron prompt form).
+  const titleModelOptions =
+    conversationTitleModel && !modelOptions.some((option) => option.value === selectedValue)
+      ? [
+          ...modelOptions,
+          {
+            value: selectedValue,
+            label: conversationTitleModel.model,
+            providerName: conversationTitleModel.customProviderId,
+          },
+        ]
+      : modelOptions;
 
   useEffect(
     () => () => {
@@ -1214,12 +1337,10 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
   }
 
   function handleTitleModelChange(value: string) {
+    // "" comes from the picker's follow-current entry and parses to undefined.
     setSettings((prev) =>
       updateCustomSettings(prev, {
-        conversationTitleModel:
-          value === TITLE_MODEL_FOLLOW_CURRENT_VALUE
-            ? undefined
-            : (parseModelValue(value) ?? undefined),
+        conversationTitleModel: parseModelValue(value) ?? undefined,
       }),
     );
   }
@@ -1285,21 +1406,15 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
                 <Label className="text-[12.5px] font-medium text-foreground/85">
                   {t("settings.conversationTitleModel")}
                 </Label>
-                <Select value={selectedValue} onValueChange={handleTitleModelChange}>
-                  <SelectTrigger className="h-9 rounded-lg border-foreground/10 bg-white/70 shadow-sm dark:bg-background/40">
-                    <SelectValue>{selectedLabel}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    <SelectItem value={TITLE_MODEL_FOLLOW_CURRENT_VALUE}>
-                      {t("settings.conversationTitleModelFollowCurrent")}
-                    </SelectItem>
-                    {modelOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.providerName} / {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ModelPicker
+                  options={titleModelOptions}
+                  value={selectedValue}
+                  onChange={handleTitleModelChange}
+                  placeholder={t("settings.conversationTitleModelFollowCurrent")}
+                  noneLabel={t("settings.conversationTitleModelFollowCurrent")}
+                  ariaLabel={t("settings.conversationTitleModel")}
+                  triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+                />
                 {modelOptions.length === 0 ? (
                   <div className="mt-1 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
                     {t("settings.customSettingsModelEmpty")}

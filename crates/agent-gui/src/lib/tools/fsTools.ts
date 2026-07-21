@@ -14,6 +14,7 @@ import {
   type DeleteResultDetails,
   type DisplayImageItemDetails,
   type DisplayImageResultDetails,
+  type EditMatchStrategy,
   type EditResultDetails,
   type GlobResultDetails,
   type GrepResultDetails,
@@ -120,6 +121,7 @@ type EditCommandResponse = {
   path: string;
   replacements: number;
   replaceAll: boolean;
+  matchStrategy?: string | null;
   mtimeMs: number;
   contentHash: string;
   totalLines: number;
@@ -196,6 +198,39 @@ function formatLineWindow(startLine: number, numLines: number, totalLines: numbe
   if (totalLines === 0 || numLines === 0) return "empty";
   const endLine = startLine + numLines - 1;
   return `${startLine}-${endLine} / ${totalLines}`;
+}
+
+/** Narrow the wire value to the strategies the Rust cascade can emit. */
+function parseEditMatchStrategy(value: string | null | undefined): EditMatchStrategy | undefined {
+  switch (value) {
+    case "exact":
+    case "line-endings":
+    case "trailing-whitespace":
+    case "indentation":
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Teach the model when its old_string only matched through a lenient pass, so
+ * it can copy content more precisely next time instead of drifting further.
+ * The exhaustive switch (no default, `string` return type) fails to compile
+ * when EditMatchStrategy gains a member without a note here.
+ */
+function buildEditMatchStrategyNote(matchStrategy: EditMatchStrategy | undefined): string {
+  switch (matchStrategy) {
+    case undefined:
+    case "exact":
+      return "";
+    case "line-endings":
+      return "\nmatchStrategy=line-endings (old_string matched after normalizing CRLF/LF line endings; the file's original line-ending style was preserved)";
+    case "trailing-whitespace":
+      return "\nmatchStrategy=trailing-whitespace (old_string matched after ignoring per-line trailing whitespace)";
+    case "indentation":
+      return "\nmatchStrategy=indentation (old_string matched after a uniform indentation shift; the replacement was re-indented to the file's actual indentation)";
+  }
 }
 
 function pathDetails(resolved: ResolvedPath, fileId?: string | null) {
@@ -512,7 +547,7 @@ export function createFsTools(params: {
   const toolEdit: Tool = {
     name: "Edit",
     description:
-      "Perform an exact-string replacement in a file you have already Read. Validates version metadata before writing and rejects stale edits — if the file changed after the last Read, Read it again before retrying. If `old_string` matches multiple places, either narrow it until unique or set `replace_all=true` explicitly.",
+      "Perform an exact-string replacement in a file you have already Read. Validates version metadata before writing and rejects stale edits — if the file changed after the last Read, Read it again before retrying. When no exact match exists, Edit automatically retries with lenient matching (CRLF/LF line endings, per-line trailing whitespace, then a uniform indentation shift) and reports the used matchStrategy in the result, so do not pad old_string with guessed whitespace. If `old_string` matches multiple places, either narrow it until unique or set `replace_all=true` explicitly.",
     parameters: strictToolParameters({
       path: Type.String({
         description:
@@ -1489,11 +1524,13 @@ export function createFsTools(params: {
       throw error;
     }
 
+    const matchStrategy = parseEditMatchStrategy(res.matchStrategy);
     const details: EditResultDetails = {
       kind: "edit",
       ...pathDetails(resolved, res.fileId),
       replacements: res.replacements,
       replaceAll: res.replaceAll,
+      matchStrategy,
       expectedReplacements: expected_replacements,
       mtimeMs: res.mtimeMs,
       contentHash: res.contentHash,
@@ -1516,6 +1553,7 @@ export function createFsTools(params: {
             `Edit: ${formatResolvedTarget(resolved)}\n` +
             `replacements=${details.replacements}\n` +
             `replaceAll=${details.replaceAll}` +
+            buildEditMatchStrategyNote(matchStrategy) +
             (autoRead ? "\nautoRead=full" : ""),
         },
       ],

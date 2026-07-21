@@ -65,7 +65,7 @@ export function buildFsErrorText(
     case "stale_file":
       return buildStaleFileText(toolName, resolved);
     case "edit_no_match":
-      return `Edit found no occurrence of old_string in ${target}. Read the exact region again and copy old_string verbatim, including whitespace and indentation.`;
+      return `Edit found no occurrence of old_string in ${target}, even after line-ending, trailing-whitespace, and uniform-indentation tolerant matching. The content likely differs from what you expect: Read the exact region again and copy old_string verbatim from the fresh output, or locate the text with Grep first.`;
     case "edit_ambiguous":
       return `Edit failed for ${target}: ${error.message}. Extend old_string with surrounding lines until it is unique, or set replace_all=true deliberately.`;
     case "edit_count_mismatch":

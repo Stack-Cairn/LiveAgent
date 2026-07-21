@@ -223,7 +223,7 @@ export function buildToolsSuffix(
     }
     if (has("Edit")) {
       lines.push(
-        "- Edit performs exact-string replacement. If `old_string` matches multiple places, either narrow it until it is unique or pass `replace_all=true` explicitly.",
+        "- Edit performs exact-string replacement, with automatic fallbacks for line-ending (CRLF/LF), trailing-whitespace, and uniform-indentation drift — copy old_string from Read output as-is and do not pad it with guessed whitespace. If `old_string` matches multiple places, either narrow it until it is unique or pass `replace_all=true` explicitly.",
       );
     }
     if (has("Delete")) {
@@ -651,6 +651,7 @@ export async function runAssistantWithTools(params: {
     requestFormat?: CodexRequestFormat;
     reasoning?: ReasoningLevel;
     promptCachingEnabled?: boolean;
+    promptCacheRetention?: "short" | "long";
     nativeWebSearchEnabled?: boolean;
     useSystemProxy?: boolean;
     modelConfig?: ProviderModelConfig;
@@ -1200,7 +1201,12 @@ export async function runAssistantWithTools(params: {
         sessionId: options?.sessionId ?? params.sessionId,
         cacheRetention:
           options?.cacheRetention ??
-          resolveProviderCacheRetention(params.providerId, params.runtime.promptCachingEnabled),
+          resolveProviderCacheRetention(
+            params.providerId,
+            params.runtime.promptCachingEnabled,
+            undefined,
+            params.runtime.promptCacheRetention,
+          ),
         metadata: buildProviderRequestMetadata(params.providerId, params.sessionId),
         toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
         reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,

@@ -10,7 +10,9 @@ import {
   shrinkCompactionPayload,
   stringifyCompactionPayload,
 } from "./payload";
-import { buildRepairPromptText, COMPACTION_SYSTEM_PROMPT } from "./summaryPrompt";
+import { detectCompactionSummaryLanguage } from "./summaryLanguage";
+import { buildCompactionSystemPrompt, buildRepairPromptText } from "./summaryPrompt";
+import { estimateTextTokens } from "./tokenLedger";
 import type { ProviderRuntimeConfig } from "./types";
 import { buildVerificationSignals, validateCompactionSummary } from "./validate";
 
@@ -100,12 +102,14 @@ function createZeroUsage() {
 
 async function requestSummary(params: SummarizerRequest): Promise<AssistantMessage> {
   const serializedPayload = stringifyCompactionPayload(params.payload);
+  const summaryLanguage = detectCompactionSummaryLanguage(params.payload);
   params.debugLogger?.logResult({
     event: "compaction_payload_prepared",
     payloadChars: serializedPayload.length,
-    payloadTokens: Math.ceil(serializedPayload.length / 4),
+    payloadTokens: estimateTextTokens(serializedPayload),
     hardCapTokens: COMPACTION_PAYLOAD_TOKEN_CAP,
     messageCount: params.payload.active_segment_messages.length,
+    summaryLanguage: summaryLanguage ?? "english-default",
     repair: Boolean(params.repair),
   });
 
@@ -139,7 +143,7 @@ async function requestSummary(params: SummarizerRequest): Promise<AssistantMessa
     providerId: params.providerId,
     model: params.model,
     runtime: buildSummarizerRuntime(params.providerId, params.runtime),
-    context: { systemPrompt: COMPACTION_SYSTEM_PROMPT, messages },
+    context: { systemPrompt: buildCompactionSystemPrompt(summaryLanguage), messages },
     cacheRetention: "none",
     signal: params.signal,
     debugLogger: params.debugLogger,

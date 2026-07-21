@@ -536,7 +536,9 @@ async fn probe_tunnel_target(target_url: &str) -> TunnelHealthPayload {
         checked_at,
         rtt_ms: 0,
     };
+    // 探活目标与转发目标一致（本机/内网）：同样忽略环境代理，见 proxy.rs。
     let client = match reqwest::Client::builder()
+        .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(TUNNEL_LOCAL_PROBE_TIMEOUT)
         .build()

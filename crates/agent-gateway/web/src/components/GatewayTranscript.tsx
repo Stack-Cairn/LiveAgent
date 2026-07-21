@@ -1021,7 +1021,7 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
           {formatMessageTimestamp(row.timestamp)}
         </span>
         <div
-          className={`flex gap-0.5 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100 ${isRowBranchPending ? "opacity-100" : "opacity-0"}`}
+          className={`flex gap-0.5 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100 [@media(hover:none)]:opacity-100 ${isRowBranchPending ? "opacity-100" : "opacity-0"}`}
         >
           <button
             type="button"

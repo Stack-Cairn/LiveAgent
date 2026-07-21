@@ -16,6 +16,7 @@
 | Bundle | 主要路径 | 工具/能力 |
 |---|---|---|
 | File system | `fsTools.ts`、`fileToolState.ts` | Read/List/Glob/Grep/Write/Edit/Delete/Image 等文件能力，受 workdir 与 skills root 策略约束。 |
+| Edit 容错匹配 | Rust `commands/workspace/edit_match.rs` | Edit 的 `old_string` 定位按严格度递减依次尝试：精确匹配 → CRLF/LF 行尾归一（含 BOM 容错，替换按文件主导行尾风格重渲染）→ 整行行尾空白容错 → 整行统一缩进偏移（替换文本按文件真实缩进重排）。首个命中的 pass 生效，命中非精确 pass 时结果返回 `matchStrategy` 提示模型。注意：行级 pass（行尾空白 / 缩进偏移）用 `new_string` 整体重写命中的整行窗口，窗口内上下文行原有的行尾空白会随之被规范化掉。 |
 | Shell | `shellTools.ts`、`bashTimeoutPolicy.ts` | Bash/Shell 执行，chat scope 可启用 ManagedProcess。 |
 | SkillsManager | `skillTools.ts` | read/list/install/create/validate/package/clawhub_search/clawhub_install。 |
 | CronTaskManager | `cronTools.ts` | 创建、读取、更新、删除 cron task，查看日志。 |

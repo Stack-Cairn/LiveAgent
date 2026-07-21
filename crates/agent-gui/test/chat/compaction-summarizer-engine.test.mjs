@@ -101,7 +101,7 @@ test("runCompaction produces a zero-usage checkpoint and appends a new segment",
   const checkpoint = outcome.checkpointMessage;
   assert.equal(checkpoint.api, "liveagent-compaction");
   assert.equal(checkpoint.model, "claude-x");
-  assert.equal(checkpoint.promptVersion, "summary-v2");
+  assert.equal(checkpoint.promptVersion, "summary-v3");
   // usage 恒为零：summarizer 用量只进 compactionStats。
   assert.equal(checkpoint.usage.totalTokens, 0);
   assert.equal(checkpoint.usage.input, 0);
@@ -121,7 +121,7 @@ test("runCompaction produces a zero-usage checkpoint and appends a new segment",
   assert.ok(summary.content.startsWith("## Task"));
   assert.equal(summary.summaryMeta.strategy, "cumulative-checkpoint");
   assert.equal(summary.summaryMeta.generatedBy.providerId, "anthropic");
-  assert.equal(summary.summaryMeta.generatedBy.promptVersion, "summary-v2");
+  assert.equal(summary.summaryMeta.generatedBy.promptVersion, "summary-v3");
   assert.equal(summary.summaryMeta.stats.estimatedInputTokens, 190_000);
   assert.deepEqual(summary.summaryMeta.stats.summarizer, { inputTokens: 5000, outputTokens: 300 });
 });

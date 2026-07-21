@@ -264,7 +264,6 @@ export function GitReviewStatusView(props: {
     (event: ReactMouseEvent, entry: GitStatusEntry, section: ChangeListSection) => {
       event.preventDefault();
       event.stopPropagation();
-      window.getSelection()?.removeAllRanges();
       setChangesMenu(null);
       const panelRect = panelRef.current?.getBoundingClientRect();
       // Raw pointer position; the measured-clamp layout effect corrects it.
@@ -420,11 +419,6 @@ export function GitReviewStatusView(props: {
           selected && "border-l-emerald-500 bg-emerald-500/10",
           contextMenuOpen && "border-l-primary bg-primary/10 ring-1 ring-inset ring-primary/35",
         )}
-        onMouseDown={(event) => {
-          if (event.button === 2) {
-            window.getSelection()?.removeAllRanges();
-          }
-        }}
         onContextMenu={(event) => openChangeContextMenu(event, entry, section)}
       >
         <button

@@ -1,4 +1,5 @@
 import type { CompactionPayload } from "./payload";
+import { estimateTextTokens } from "./tokenLedger";
 
 const MIN_SUMMARY_TOKENS = 80;
 
@@ -170,8 +171,10 @@ export function validateCompactionSummary(
     }
   }
 
-  const totalChars = Object.values(parsed).join("").length;
-  if (sourceTokens >= 400 && totalChars < MIN_SUMMARY_TOKENS * 4) {
+  // 用 CJK 感知的估算做"过短"下限：中文摘要每字符 token 密度更高，
+  // 按纯字符数会把信息量足够的 CJK 摘要误判为过短。
+  const totalTokens = estimateTextTokens(Object.values(parsed).join(""));
+  if (sourceTokens >= 400 && totalTokens < MIN_SUMMARY_TOKENS) {
     errors.push("summary too short");
   }
 

@@ -1292,3 +1292,128 @@ test("custom provider headers accept undefined and empty arrays", () => {
   assert.deepEqual(providers.mergeCustomHeaders(base, undefined), base);
   assert.deepEqual(providers.mergeCustomHeaders(base, []), base);
 });
+
+test("resolveProviderCacheRetention maps provider settings and per-request overrides", () => {
+  const resolve = providers.resolveProviderCacheRetention;
+  assert.equal(resolve("claude_code", true), "short");
+  assert.equal(resolve("claude_code", undefined), "short");
+  assert.equal(resolve("claude_code", true, undefined, "long"), "long");
+  assert.equal(resolve("claude_code", false, undefined, "long"), "none");
+  // 请求级 override（压缩/标题等辅助请求）永远优先于供应商偏好。
+  assert.equal(resolve("claude_code", true, "none", "long"), "none");
+  assert.equal(resolve("codex", undefined), "short");
+  assert.equal(resolve("codex", false), "none");
+  assert.equal(resolve("codex", true, "none"), "none");
+  // long 档位仅对 Anthropic 生效。
+  assert.equal(resolve("codex", true, undefined, "long"), "short");
+  assert.equal(resolve("gemini", true), undefined);
+});
+
+test("codex payloads get a stable prompt_cache_key on relay hosts", async () => {
+  const options = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://relay.example/v1",
+    options: { sessionId: "conv-1234", cacheRetention: "short" },
+  });
+
+  const completionsPayload = await options.onPayload(
+    { messages: [] },
+    { api: "openai-completions", provider: "openai", id: "relay-model" },
+  );
+  assert.equal(completionsPayload.prompt_cache_key, "conv-1234");
+
+  const responsesPayload = await options.onPayload(
+    { input: "hello" },
+    { api: "openai-responses", provider: "openai", id: "relay-model" },
+  );
+  assert.equal(responsesPayload.prompt_cache_key, "conv-1234");
+});
+
+test("codex prompt_cache_key injection respects retention, existing keys, and length", async () => {
+  const disabled = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://relay.example/v1",
+    options: { sessionId: "conv-1234", cacheRetention: "none" },
+  });
+  const disabledPayload = await disabled.onPayload(
+    { messages: [] },
+    { api: "openai-completions", provider: "openai", id: "relay-model" },
+  );
+  assert.equal(disabledPayload.prompt_cache_key, undefined);
+
+  const preset = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://relay.example/v1",
+    options: {
+      sessionId: "conv-1234",
+      cacheRetention: "short",
+      onPayload: async (payload) => ({ ...payload, prompt_cache_key: "explicit-key" }),
+    },
+  });
+  const presetPayload = await preset.onPayload(
+    { messages: [] },
+    { api: "openai-completions", provider: "openai", id: "relay-model" },
+  );
+  assert.equal(presetPayload.prompt_cache_key, "explicit-key");
+
+  const clamped = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://relay.example/v1",
+    options: { sessionId: "k".repeat(80), cacheRetention: "short" },
+  });
+  const clampedPayload = await clamped.onPayload(
+    { messages: [] },
+    { api: "openai-completions", provider: "openai", id: "relay-model" },
+  );
+  assert.equal(clampedPayload.prompt_cache_key, "k".repeat(64));
+});
+
+test("custom model pricing from settings reaches the runtime model", () => {
+  const cost = { input: 2, output: 8, cacheRead: 0.2, cacheWrite: 2.5 };
+
+  const codexModel = providers.createModelFromConfig(
+    "codex",
+    "relay-gpt",
+    "https://relay.example/v1",
+    undefined,
+    { id: "relay-gpt", contextWindow: 128_000, maxOutputToken: 8_192, cost },
+  );
+  assert.deepEqual(codexModel.cost, cost);
+
+  const claudeModel = providers.createModelFromConfig(
+    "claude_code",
+    "relay-claude",
+    "https://relay.example/v1",
+    undefined,
+    { id: "relay-claude", contextWindow: 200_000, maxOutputToken: 32_000, cost },
+  );
+  assert.deepEqual(claudeModel.cost, cost);
+
+  const geminiModel = providers.createModelFromConfig(
+    "gemini",
+    "relay-gemini",
+    "https://relay.example/v1",
+    undefined,
+    { id: "relay-gemini", contextWindow: 1_000_000, maxOutputToken: 65_536, cost },
+  );
+  assert.deepEqual(geminiModel.cost, cost);
+
+  // 目录内模型同样允许用户覆盖单价：中转计费经常与官方定价不同。
+  const catalogOverride = providers.createModelFromConfig(
+    "codex",
+    "gpt-5",
+    "https://api.openai.com/v1",
+    undefined,
+    { id: "gpt-5", contextWindow: 400_000, maxOutputToken: 128_000, cost },
+  );
+  assert.deepEqual(catalogOverride.cost, cost);
+
+  const uncosted = providers.createModelFromConfig(
+    "codex",
+    "relay-gpt",
+    "https://relay.example/v1",
+    undefined,
+    { id: "relay-gpt", contextWindow: 128_000, maxOutputToken: 8_192 },
+  );
+  assert.deepEqual(uncosted.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+});

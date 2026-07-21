@@ -188,13 +188,20 @@ export type SelectedModel = {
   model: string;
 };
 
-export type ModelCapability = "reasoning" | "vision" | "tools";
+/** 单价均为 USD / 百万 token，与 pi-ai 模型目录的 cost 字段同单位。 */
+export type ProviderModelCost = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+};
 
 export type ProviderModelConfig = {
   id: string;
   contextWindow: number;
   maxOutputToken: number;
-  capabilities?: ModelCapability[];
+  /** 用户自填单价：目录外模型（中转/改名）没有官方定价时用于成本展示。 */
+  cost?: ProviderModelCost;
 };
 
 export type ChatRuntimeControls = {
@@ -266,6 +273,8 @@ export type CustomProvider = {
   requestFormat?: CodexRequestFormat;
   reasoning: ReasoningLevel;
   promptCachingEnabled: boolean;
+  /** 仅 Anthropic：ephemeral 缓存保留档位；long 在官方 API 上映射为 1h TTL。 */
+  promptCacheRetention?: "short" | "long";
   nativeWebSearchEnabled: boolean;
   useSystemProxy: boolean;
 };
@@ -411,7 +420,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       activeModels: [],
       requestFormat: "openai-responses",
       reasoning: "off",
-      promptCachingEnabled: false,
+      promptCachingEnabled: true,
       nativeWebSearchEnabled: true,
       useSystemProxy: false,
     },
@@ -1092,21 +1101,28 @@ export function createProviderModelConfig(
   };
 }
 
-function normalizeModelCapabilities(input: unknown): ModelCapability[] | undefined {
-  if (!Array.isArray(input)) return undefined;
-
-  const out: ModelCapability[] = [];
-  const seen = new Set<ModelCapability>();
-  for (const value of input) {
-    if (value !== "reasoning" && value !== "vision" && value !== "tools") continue;
-    if (seen.has(value)) continue;
-    seen.add(value);
-    out.push(value);
-  }
-  return out;
+function normalizeNonNegativeNumber(input: unknown): number {
+  const numeric =
+    typeof input === "number" ? input : typeof input === "string" ? Number(input) : NaN;
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
 }
 
-// Capabilities are persisted for display only; runtime behavior will be connected in a later iteration.
+function normalizeProviderModelCost(input: unknown): ProviderModelCost | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const obj = input as Record<string, unknown>;
+  const cost: ProviderModelCost = {
+    input: normalizeNonNegativeNumber(obj.input),
+    output: normalizeNonNegativeNumber(obj.output),
+    cacheRead: normalizeNonNegativeNumber(obj.cacheRead),
+    cacheWrite: normalizeNonNegativeNumber(obj.cacheWrite),
+  };
+  // 全零视为未配置，避免把"没填"持久化成显式的零单价。
+  if (cost.input <= 0 && cost.output <= 0 && cost.cacheRead <= 0 && cost.cacheWrite <= 0) {
+    return undefined;
+  }
+  return cost;
+}
+
 export function normalizeProviderModelConfig(
   input: unknown,
   providerId: ProviderId,
@@ -1126,7 +1142,7 @@ export function normalizeProviderModelConfig(
   if (!id) return null;
 
   const defaults = getProviderModelDefaults(providerId, id);
-  const capabilities = normalizeModelCapabilities(obj.capabilities);
+  const cost = normalizeProviderModelCost(obj.cost);
   return {
     id,
     contextWindow: normalizePositiveInteger(obj.contextWindow, defaults.contextWindow),
@@ -1134,7 +1150,7 @@ export function normalizeProviderModelConfig(
       obj.maxOutputToken ?? obj.maxTokens,
       defaults.maxOutputToken,
     ),
-    ...(capabilities !== undefined ? { capabilities } : {}),
+    ...(cost !== undefined ? { cost } : {}),
   };
 }
 
@@ -1236,7 +1252,12 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     ),
     requestFormat: codexRouting?.requestFormat,
     reasoning: normalizeReasoningLevel(obj.reasoning),
-    promptCachingEnabled: type === "claude_code" ? obj.promptCachingEnabled !== false : false,
+    // Anthropic/OpenAI 默认开启提示词缓存（OpenAI 侧体现为稳定的
+    // prompt_cache_key 路由提示）；Gemini 的隐式缓存由服务端自动处理。
+    promptCachingEnabled: type === "gemini" ? false : obj.promptCachingEnabled !== false,
+    ...(type === "claude_code" && obj.promptCacheRetention === "long"
+      ? { promptCacheRetention: "long" as const }
+      : {}),
     nativeWebSearchEnabled: obj.nativeWebSearchEnabled !== false,
     useSystemProxy: obj.useSystemProxy === true,
   };

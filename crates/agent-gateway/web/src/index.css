@@ -999,12 +999,20 @@
     }
   }
 
-  /* Mention composer placeholder */
+  /* Mention composer placeholder. left/right pin the box to the editor's own
+     padding box, and padding-right inherits its pr-8 (expand-button gutter) so
+     the placeholder wraps exactly like real typed text instead of running
+     under the button — the containing block's padding box already includes
+     that padding, so without this it overlaps regardless of which ancestor
+     is positioned. */
   .mention-composer.is-empty::before {
     content: attr(data-placeholder);
     color: hsl(var(--muted-foreground));
     pointer-events: none;
     position: absolute;
+    left: 0;
+    right: 0;
+    padding-right: inherit;
   }
 
   /* Composer typewriter: freshly typed characters fade in softly.

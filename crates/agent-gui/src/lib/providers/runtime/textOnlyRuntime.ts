@@ -89,6 +89,7 @@ function buildTextOnlyStreamOptions(params: {
       params.providerId,
       params.runtime.promptCachingEnabled,
       params.cacheRetention,
+      params.runtime.promptCacheRetention,
     ),
     metadata: buildProviderRequestMetadata(params.providerId, sessionId),
     reasoning:

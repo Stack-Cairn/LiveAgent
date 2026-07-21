@@ -99,6 +99,8 @@ export function MemoryPanel(props: {
         value: option.value,
         label: option.label,
         providerName: option.providerName,
+        providerId: option.providerId,
+        providerType: option.providerType,
       })),
     [props.settings],
   );

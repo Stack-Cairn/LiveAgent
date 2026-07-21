@@ -261,7 +261,10 @@ async fn run_tunnel_http_request(
         let method = reqwest::Method::from_bytes(method.trim().as_bytes())
             .map_err(|e| format!("invalid tunnel request method: {e}"))?;
         let body = reqwest::Body::wrap_stream(ReceiverStream::new(body_rx));
+        // 隧道目标恒为本机/内网服务：显式忽略环境代理，
+        // 防止 OS 级 HTTP(S)_PROXY 劫持本地转发导致隧道不可用。
         let client = reqwest::Client::builder()
+            .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|e| format!("failed to build local tunnel HTTP client: {e}"))?;
