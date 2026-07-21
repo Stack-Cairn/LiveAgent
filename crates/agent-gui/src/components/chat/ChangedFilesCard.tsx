@@ -145,7 +145,7 @@ export const ChangedFilesCard = memo(function ChangedFilesCard({
         ) : null}
       </div>
       {/* 最多露出 5 行，更多文件走内部滚动条。 */}
-      <div className="flex max-h-[calc(150px*var(--zone-font-scale,1))] flex-col gap-0.5 overflow-y-auto border-t border-border/35 px-1 py-1 dark:border-white/[0.05]">
+      <div className="flex max-h-[calc(150px*var(--zone-font-scale,1))] flex-col gap-0.5 overflow-y-auto overscroll-contain border-t border-border/35 px-1 py-1 dark:border-white/[0.05]">
         {summary.files.map((file) => (
           <ChangedFileRow key={file.lastToolCallId || file.path} file={file} />
         ))}
