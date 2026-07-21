@@ -138,6 +138,9 @@ export type ChatEvent = (
       type: "tool_status";
       status?: string | null;
       isCompaction?: boolean;
+      // Stream-retry history of the live run: null/absent = unchanged, an
+      // array (possibly empty) replaces the current list.
+      retryAttempts?: { attempt: number; maxAttempts: number; errorMessage: string }[] | null;
       round?: number;
       conversation_id?: string;
     }

@@ -7,6 +7,7 @@ import {
 import {
   createLiveTranscriptStore,
   type LiveTranscriptStore,
+  type RetryAttemptRecord,
 } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { LiveRound } from "../../../lib/chat/messages/uiMessages";
 
@@ -86,6 +87,8 @@ type LiveTranscriptArtifacts = {
   // store emit per frame.
   pendingToolStatus: { value: string | null } | null;
   toolStatusFlushCancel: (() => void) | null;
+  pendingRetryAttempts: { value: RetryAttemptRecord[] } | null;
+  retryAttemptsFlushCancel: (() => void) | null;
   abortSnapshot: AbortSnapshot | null;
 };
 
@@ -98,6 +101,8 @@ function createLiveTranscriptArtifacts(): LiveTranscriptArtifacts {
     lrFlushCancel: null,
     pendingToolStatus: null,
     toolStatusFlushCancel: null,
+    pendingRetryAttempts: null,
+    retryAttemptsFlushCancel: null,
     abortSnapshot: null,
   };
 }
@@ -160,6 +165,10 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
     artifacts.toolStatusFlushCancel?.();
     artifacts.toolStatusFlushCancel = null;
     artifacts.pendingToolStatus = null;
+
+    artifacts.retryAttemptsFlushCancel?.();
+    artifacts.retryAttemptsFlushCancel = null;
+    artifacts.pendingRetryAttempts = null;
   }, []);
 
   const flushPendingLiveUpdates = useCallback(
@@ -194,6 +203,14 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
         const pending = artifacts.pendingToolStatus;
         artifacts.pendingToolStatus = null;
         targetStore.setToolStatus(pending.value);
+      }
+
+      artifacts.retryAttemptsFlushCancel?.();
+      artifacts.retryAttemptsFlushCancel = null;
+      if (artifacts.pendingRetryAttempts) {
+        const pending = artifacts.pendingRetryAttempts;
+        artifacts.pendingRetryAttempts = null;
+        targetStore.setRetryAttempts(pending.value);
       }
     },
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
@@ -355,6 +372,31 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
     [liveTranscriptStore, resolveLiveTranscriptArtifacts],
   );
 
+  const updateRetryAttempts = useCallback(
+    (retryAttempts: RetryAttemptRecord[], targetStore: LiveTranscriptStore = liveTranscriptStore) => {
+      const artifacts = resolveLiveTranscriptArtifacts(targetStore);
+      if (!artifacts) {
+        targetStore.setRetryAttempts(retryAttempts);
+        return;
+      }
+
+      // Last-wins: only the newest list of a frame reaches the store. A
+      // pending flush (settle, abort snapshot) delivers it early.
+      artifacts.pendingRetryAttempts = { value: retryAttempts };
+      if (artifacts.retryAttemptsFlushCancel !== null) return;
+
+      artifacts.retryAttemptsFlushCancel = scheduleLiveTranscriptFlush(() => {
+        artifacts.retryAttemptsFlushCancel = null;
+        const pending = artifacts.pendingRetryAttempts;
+        artifacts.pendingRetryAttempts = null;
+        if (pending) {
+          targetStore.setRetryAttempts(pending.value);
+        }
+      });
+    },
+    [liveTranscriptStore, resolveLiveTranscriptArtifacts],
+  );
+
   useEffect(
     () => () => {
       for (const artifacts of liveTranscriptArtifactsRef.current.values()) {
@@ -376,5 +418,6 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     updateToolStatus,
+    updateRetryAttempts,
   };
 }

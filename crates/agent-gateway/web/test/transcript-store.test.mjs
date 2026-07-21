@@ -548,6 +548,85 @@ test("tool status mirrors into the snapshot and clears on run end", () => {
   assert.equal(store.getSnapshot().toolStatus, null);
 });
 
+test("retry attempts mirror into the snapshot, survive plain status updates and clear on run end", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent({
+    type: "tool_status",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 2,
+    status: "连接已断开，正在重试 (1/5)...",
+    retryAttempts: [{ attempt: 1, maxAttempts: 5, errorMessage: "503 service unavailable" }],
+  });
+  store.flush();
+  let snapshot = store.getSnapshot();
+  assert.equal(snapshot.retryAttempts.length, 1);
+  assert.equal(snapshot.retryAttempts[0].attempt, 1);
+  assert.equal(snapshot.retryAttempts[0].maxAttempts, 5);
+  assert.equal(snapshot.retryAttempts[0].errorMessage, "503 service unavailable");
+
+  // A status-only update (retryAttempts null) leaves the list untouched.
+  store.applyEvent({
+    type: "tool_status",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 3,
+    status: "模型生成中...",
+    retryAttempts: null,
+  });
+  store.flush();
+  snapshot = store.getSnapshot();
+  assert.equal(snapshot.toolStatus, "模型生成中...");
+  assert.equal(snapshot.retryAttempts.length, 1, "plain status update keeps retry history");
+
+  // An explicit empty array clears the list (fresh network attempt).
+  store.applyEvent({
+    type: "tool_status",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 4,
+    status: "模型生成中...",
+    retryAttempts: [],
+  });
+  store.flush();
+  assert.equal(store.getSnapshot().retryAttempts.length, 0);
+
+  store.applyEvent({
+    type: "tool_status",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 5,
+    status: "连接已断开，正在重试 (1/5)...",
+    retryAttempts: [{ attempt: 1, maxAttempts: 5, errorMessage: "rate limited" }],
+  });
+  store.applyEvent(runFinished("run-1", 6));
+  store.flush();
+  assert.equal(store.getSnapshot().retryAttempts.length, 0, "run end clears retry history");
+});
+
+test("retry attempts reset at the next run_started", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent({
+    type: "tool_status",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 2,
+    status: "连接已断开，正在重试 (2/5)...",
+    retryAttempts: [
+      { attempt: 1, maxAttempts: 5, errorMessage: "503" },
+      { attempt: 2, maxAttempts: 5, errorMessage: "timeout" },
+    ],
+  });
+  store.flush();
+  assert.equal(store.getSnapshot().retryAttempts.length, 2);
+
+  store.applyEvent(runStarted("run-2", 3));
+  store.flush();
+  assert.equal(store.getSnapshot().retryAttempts.length, 0);
+});
+
 test("replay idempotency: a resubscribe replaying applied events changes nothing", () => {
   const store = createTranscriptStore();
   const events = [

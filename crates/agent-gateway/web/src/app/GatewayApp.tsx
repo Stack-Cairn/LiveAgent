@@ -4203,6 +4203,7 @@ export default function GatewayApp() {
                           error={transcriptError}
                           toolStatus={transcriptToolStatus}
                           toolStatusIsCompaction={transcriptToolStatusIsCompaction}
+                          retryAttempts={displayedTranscript.retryAttempts}
                           isStreaming={transcriptBusy}
                           isLoading={transcriptHistoryLoading}
                           loadingTitle={historyDetailLoadingTitle}

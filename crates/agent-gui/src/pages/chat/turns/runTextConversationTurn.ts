@@ -6,7 +6,10 @@ import {
   appendMessagesToConversation,
   type ConversationViewState,
 } from "../../../lib/chat/conversation/conversationState";
-import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import type {
+  LiveTranscriptStore,
+  RetryAttemptRecord,
+} from "../../../lib/chat/conversation/liveTranscriptStore";
 import type {
   ConversationHookLifecycle,
   GatewayBridgeEventController,
@@ -92,6 +95,7 @@ export type RunTextConversationTurnParams = {
     store: LiveTranscriptStore,
   ) => void;
   updateGatewayBridgeToolStatus: (status: string | null, isCompaction?: boolean) => void;
+  updateRetryAttempts: (attempts: RetryAttemptRecord[], store: LiveTranscriptStore) => void;
   commitVisibleAbortedConversation: () => boolean;
   updateConversationRuntimeEntry: (
     conversationId: string,
@@ -130,6 +134,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     updateGatewayBridgeToolStatus,
+    updateRetryAttempts,
     commitVisibleAbortedConversation,
     updateConversationRuntimeEntry,
     persistConversationWithHistorySync,
@@ -260,6 +265,8 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
         status: nativeWebSearchStatus,
         onStatus: (status) => updateGatewayBridgeToolStatus(status),
       });
+      const retryAttemptsForAttempt: RetryAttemptRecord[] = [];
+      updateRetryAttempts(retryAttemptsForAttempt, transcriptStore);
       try {
         finalAssistant = await streamAssistantMessage({
           providerId,
@@ -304,6 +311,14 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           },
           signal: scope.controller.signal,
           debugLogger: streamAttempt === 0 ? conversationDebugLogger : recoveryDebugLogger,
+          onRetryStatus: (attempt, maxAttempts, errorMessage) => {
+            updateGatewayBridgeToolStatus(`连接已断开，正在重试 (${attempt}/${maxAttempts})...`);
+            retryAttemptsForAttempt.push({ attempt, maxAttempts, errorMessage });
+            updateRetryAttempts(retryAttemptsForAttempt.slice(), transcriptStore);
+          },
+          onRetryRecovered: () => {
+            updateGatewayBridgeToolStatus(null);
+          },
         });
         nativeWebSearchStatusController.finish();
       } catch (streamErr) {

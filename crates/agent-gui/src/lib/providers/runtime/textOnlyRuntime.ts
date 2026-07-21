@@ -71,6 +71,8 @@ function buildTextOnlyStreamOptions(params: {
   cacheRetention?: CacheRetention;
   nativeWebSearch?: boolean;
   debugLogger?: StreamDebugLogger;
+  onRetryStatus?: (attempt: number, maxAttempts: number, errorMessage: string) => void;
+  onRetryRecovered?: () => void;
 }): StreamOptionsEx {
   const sessionId = normalizeSessionId(params.sessionId);
   const nativeWebSearch =
@@ -102,6 +104,10 @@ function buildTextOnlyStreamOptions(params: {
     // Text-only mode cannot execute local tools. Provider-native web search is
     // hosted by the upstream provider, so it can stay on auto when explicitly enabled.
     toolChoice: usesOpenAIChatNativeWebSearch ? undefined : nativeWebSearch ? "auto" : "none",
+    streamRetry: {
+      onRetry: params.onRetryStatus,
+      onRetryRecovered: params.onRetryRecovered,
+    },
   };
   return finalizeProviderStreamOptions({
     providerId: params.providerId,
@@ -130,6 +136,8 @@ export async function streamAssistantMessage(params: {
   allowJsonOutput?: boolean;
   nativeWebSearch?: boolean;
   onHostedSearch?: (block: HostedSearchBlock) => void;
+  onRetryStatus?: (attempt: number, maxAttempts: number, errorMessage: string) => void;
+  onRetryRecovered?: () => void;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
@@ -180,6 +188,8 @@ export async function streamAssistantMessage(params: {
     cacheRetention: params.cacheRetention,
     nativeWebSearch: params.nativeWebSearch,
     debugLogger: params.debugLogger,
+    onRetryStatus: params.onRetryStatus,
+    onRetryRecovered: params.onRetryRecovered,
   });
 
   params.debugLogger?.logRequest(

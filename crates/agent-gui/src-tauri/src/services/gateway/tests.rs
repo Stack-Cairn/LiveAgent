@@ -628,6 +628,60 @@ fn build_chat_event_envelope_preserves_tool_result_arguments() {
 }
 
 #[test]
+fn build_chat_event_envelope_preserves_tool_status_retry_attempts() {
+    let envelope = build_chat_event_envelope(
+        "request-1".to_string(),
+        json!({
+            "type": "tool_status",
+            "conversation_id": "conversation-1",
+            "status": "第 1 轮：模型生成中...",
+            "isCompaction": false,
+            "retryAttempts": [
+                { "attempt": 1, "maxAttempts": 5, "errorMessage": "503 service unavailable" }
+            ]
+        }),
+    )
+    .expect("build chat tool_status event envelope");
+
+    let chat_event = match envelope.payload.expect("payload") {
+        super::proto::agent_envelope::Payload::ChatEvent(event) => event,
+        _ => panic!("expected chat event payload"),
+    };
+    assert_eq!(
+        chat_event.r#type,
+        super::proto::chat_event::ChatEventType::ToolStatus as i32
+    );
+
+    let data: Value = serde_json::from_str(&chat_event.data).expect("chat event data");
+    assert_eq!(data["status"], "第 1 轮：模型生成中...");
+    assert_eq!(data["retryAttempts"][0]["attempt"], 1);
+    assert_eq!(data["retryAttempts"][0]["maxAttempts"], 5);
+    assert_eq!(
+        data["retryAttempts"][0]["errorMessage"],
+        "503 service unavailable"
+    );
+
+    // Status-only events keep the key as an explicit null (WebUI treats
+    // null/absent as "leave the current list untouched").
+    let plain = build_chat_event_envelope(
+        "request-1".to_string(),
+        json!({
+            "type": "tool_status",
+            "conversation_id": "conversation-1",
+            "status": "Running",
+            "isCompaction": false
+        }),
+    )
+    .expect("build plain tool_status event envelope");
+    let plain_event = match plain.payload.expect("payload") {
+        super::proto::agent_envelope::Payload::ChatEvent(event) => event,
+        _ => panic!("expected chat event payload"),
+    };
+    let plain_data: Value = serde_json::from_str(&plain_event.data).expect("chat event data");
+    assert!(plain_data["retryAttempts"].is_null());
+}
+
+#[test]
 fn build_chat_event_envelope_preserves_title_final_flag() {
     let envelope = build_chat_event_envelope(
         "request-1".to_string(),

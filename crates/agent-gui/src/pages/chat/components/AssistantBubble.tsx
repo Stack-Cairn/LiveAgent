@@ -1,14 +1,17 @@
 import { memo, useMemo } from "react";
 
+import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { UiRound } from "../../../lib/chat/messages/uiMessages";
 
 import { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
 import { RoundContent } from "./assistant-bubble/RoundContent";
 
 export { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
+export { RetryDetailsBlock } from "./assistant-bubble/RoundContent";
 export { AssistantStatus, CompactingText, VibingText } from "./assistant-bubble/StatusText";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
+const EMPTY_RETRY_ATTEMPTS: RetryAttemptRecord[] = [];
 
 export const AssistantBubble = memo(function AssistantBubble(props: {
   rounds: (UiRound & {
@@ -23,6 +26,7 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
   renderMode?: "streaming" | "static";
   toolStatus?: string | null;
   toolStatusVariant?: "default" | "compaction";
+  retryAttempts?: RetryAttemptRecord[];
 }) {
   const {
     rounds,
@@ -32,6 +36,7 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
     renderMode,
     toolStatus,
     toolStatusVariant,
+    retryAttempts,
   } = props;
   const latestTodoItem = useMemo(() => {
     for (let roundIndex = rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
@@ -61,6 +66,7 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
             renderMode={renderMode}
             toolStatus={idx === rounds.length - 1 ? toolStatus : null}
             toolStatusVariant={idx === rounds.length - 1 ? toolStatusVariant : "default"}
+            retryAttempts={idx === rounds.length - 1 ? retryAttempts : EMPTY_RETRY_ATTEMPTS}
             runningToolCallIds={round.runningToolCallIds ?? EMPTY_RUNNING_TOOL_CALL_IDS}
             thinkingOpen={round.thinkingOpen}
             latestTodoItem={latestTodoItem}

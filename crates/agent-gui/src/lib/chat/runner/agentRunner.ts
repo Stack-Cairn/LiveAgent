@@ -34,6 +34,7 @@ import {
   isProviderNativeWebSearchToolName,
 } from "../../providers/nativeWebSearch";
 import { prepareProxyRequest } from "../../providers/proxy";
+import type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
 import {
   inferRuntimePlatform,
   normalizeRuntimePlatform,
@@ -688,6 +689,7 @@ export async function runAssistantWithTools(params: {
     emittedMessages: Message[];
   } | null>;
   onToolStatus?: (status: string | null) => void;
+  onRetryAttempts?: (round: number, attempts: RetryAttemptRecord[]) => void;
   signal?: AbortSignal;
   debugLogger?: StreamDebugLogger;
   subagentScheduler?: SubagentScheduler;
@@ -1166,6 +1168,8 @@ export async function runAssistantWithTools(params: {
     let streamRound = 0;
     const streamFn = (streamModel: typeof model, streamContext: Context, options?: any) => {
       const round = ++streamRound;
+      const retryAttemptsForRound: RetryAttemptRecord[] = [];
+      params.onRetryAttempts?.(round, retryAttemptsForRound);
       const streamTools =
         streamContext.tools ?? (agent?.state.tools as Context["tools"] | undefined) ?? llmTools;
       const effectiveContext = sanitizeContextForModelRequest({
@@ -1210,6 +1214,18 @@ export async function runAssistantWithTools(params: {
         metadata: buildProviderRequestMetadata(params.providerId, params.sessionId),
         toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
         reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
+        streamRetry: {
+          onRetry: (attempt, maxAttempts, errorMessage) => {
+            params.onToolStatus?.(
+              `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
+            );
+            retryAttemptsForRound.push({ attempt, maxAttempts, errorMessage });
+            params.onRetryAttempts?.(round, retryAttemptsForRound.slice());
+          },
+          onRetryRecovered: () => {
+            params.onToolStatus?.(`第 ${round} 轮：模型生成中...`);
+          },
+        },
       };
 
       streamOptions = finalizeProviderStreamOptions({

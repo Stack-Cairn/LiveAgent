@@ -1,4 +1,5 @@
 import type { ConversationViewState, HistoryMessageRef } from "../conversationState";
+import type { RetryAttemptRecord } from "../liveTranscriptStore";
 
 type QueueEventOptions = {
   allowAfterClose?: boolean;
@@ -52,6 +53,7 @@ export type GatewayBridgeEventController = {
   queueToken: (delta: string, extra?: Record<string, unknown>) => void;
   queueTitle: (nextTitle: string, allowAfterClose?: boolean) => void;
   queueToolStatus: (status: string | null, isCompaction?: boolean) => void;
+  queueRetryAttempts: (attempts: readonly RetryAttemptRecord[]) => void;
   queueCheckpoint: (state: ConversationViewState) => void;
   emitError: (message: string, conversationIdOverride?: string) => void;
   close: () => void;
@@ -65,6 +67,9 @@ export function createGatewayBridgeEventController(
   let forwardedText = false;
   let streamClosed = false;
   let lastToolStatusKey = "";
+  let lastToolStatus: string | null = null;
+  let lastToolStatusIsCompaction = false;
+  let lastRetryAttemptsKey = "[]";
 
   const queueEvent = (event: Record<string, unknown>, options?: QueueEventOptions) => {
     if (!params.enabled) return;
@@ -77,10 +82,34 @@ export function createGatewayBridgeEventController(
     const statusKey = `${normalizedStatus}::${isCompaction ? "1" : "0"}`;
     if (statusKey === lastToolStatusKey) return;
     lastToolStatusKey = statusKey;
+    lastToolStatus = normalizedStatus || null;
+    lastToolStatusIsCompaction = isCompaction;
     queueEvent({
       type: "tool_status",
       status: normalizedStatus || null,
       isCompaction,
+      conversation_id: params.conversationId,
+    });
+  };
+
+  // Rides on the tool_status wire event (re-sending the current status text)
+  // so the WebUI can mirror the desktop's expandable retry-details block
+  // without a new event type. Events without a retryAttempts array leave the
+  // WebUI's list untouched; an explicit empty array clears it.
+  const queueRetryAttempts = (attempts: readonly RetryAttemptRecord[]) => {
+    const payload = attempts.map((entry) => ({
+      attempt: entry.attempt,
+      maxAttempts: entry.maxAttempts,
+      errorMessage: entry.errorMessage,
+    }));
+    const attemptsKey = JSON.stringify(payload);
+    if (attemptsKey === lastRetryAttemptsKey) return;
+    lastRetryAttemptsKey = attemptsKey;
+    queueEvent({
+      type: "tool_status",
+      status: lastToolStatus,
+      isCompaction: lastToolStatusIsCompaction,
+      retryAttempts: payload,
       conversation_id: params.conversationId,
     });
   };
@@ -131,6 +160,7 @@ export function createGatewayBridgeEventController(
       );
     },
     queueToolStatus,
+    queueRetryAttempts,
     queueCheckpoint(state: ConversationViewState) {
       const activeSegment = state.segments[state.activeSegmentIndex];
       const summary = activeSegment?.summary;

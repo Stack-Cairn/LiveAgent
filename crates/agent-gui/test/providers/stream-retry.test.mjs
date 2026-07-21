@@ -120,6 +120,67 @@ test("withStreamRetry succeeds after N retryable errors without leaking failed-a
   assert.equal(final.content[0].text, "final answer");
 });
 
+test("withStreamRetry invokes onRetry per attempt and onRetryRecovered once content commits", async () => {
+  let calls = 0;
+  const retryCalls = [];
+  let recoveredCalls = 0;
+  const wrapped = withStreamRetry(
+    () => {
+      calls += 1;
+      if (calls < 3) return createErrorStream("503 service unavailable");
+      return createSuccessStream("final answer");
+    },
+    {
+      maxAttempts: 5,
+      onRetry: (attempt, maxAttempts) => retryCalls.push([attempt, maxAttempts]),
+      onRetryRecovered: () => {
+        recoveredCalls += 1;
+      },
+    },
+  );
+
+  await collectEvents(wrapped);
+  assert.deepEqual(retryCalls, [
+    [1, 4],
+    [2, 4],
+  ]);
+  assert.equal(recoveredCalls, 1);
+});
+
+test("withStreamRetry passes the failing attempt's error message as onRetry's third argument", async () => {
+  let calls = 0;
+  const retryErrorMessages = [];
+  const wrapped = withStreamRetry(
+    () => {
+      calls += 1;
+      if (calls < 3) return createErrorStream(`503 service unavailable (call ${calls})`);
+      return createSuccessStream("final answer");
+    },
+    {
+      maxAttempts: 5,
+      onRetry: (_attempt, _maxAttempts, errorMessage) => retryErrorMessages.push(errorMessage),
+    },
+  );
+
+  await collectEvents(wrapped);
+  assert.deepEqual(retryErrorMessages, [
+    "503 service unavailable (call 1)",
+    "503 service unavailable (call 2)",
+  ]);
+});
+
+test("withStreamRetry never calls onRetryRecovered when no retry occurred", async () => {
+  let recoveredCalls = 0;
+  const wrapped = withStreamRetry(() => createSuccessStream("first try"), {
+    onRetryRecovered: () => {
+      recoveredCalls += 1;
+    },
+  });
+
+  await collectEvents(wrapped);
+  assert.equal(recoveredCalls, 0);
+});
+
 test("withStreamRetry does not retry once content has been committed", async () => {
   let calls = 0;
   const wrapped = withStreamRetry(() => {
@@ -223,14 +284,15 @@ test("withStreamRetry with disabled:true never retries", async () => {
   assert.equal(calls, 1);
 });
 
-test("computeStreamRetryBackoffMs stays within the full-jitter cap and grows with attempt", () => {
+test("computeStreamRetryBackoffMs follows codex's uncapped base*2^(n-1)*jitter(0.9,1.1) formula", () => {
   for (let attempt = 1; attempt <= 6; attempt += 1) {
     const delay = computeStreamRetryBackoffMs(attempt);
-    assert.ok(delay >= 0);
-    assert.ok(delay <= 8000);
+    const base = 200 * 2 ** (attempt - 1);
+    assert.ok(delay >= base * 0.9);
+    assert.ok(delay <= base * 1.1);
   }
 });
 
-test("DEFAULT_STREAM_RETRY_MAX_ATTEMPTS is a sane positive default", () => {
-  assert.ok(DEFAULT_STREAM_RETRY_MAX_ATTEMPTS >= 1);
+test("DEFAULT_STREAM_RETRY_MAX_ATTEMPTS is 6 total attempts (5 retries), matching codex", () => {
+  assert.equal(DEFAULT_STREAM_RETRY_MAX_ATTEMPTS, 6);
 });

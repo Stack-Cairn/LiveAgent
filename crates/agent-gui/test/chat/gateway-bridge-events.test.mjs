@@ -149,6 +149,51 @@ test("gateway bridge tool status is normalized and de-duplicated", () => {
   );
 });
 
+test("gateway bridge retry attempts ride tool_status with the current status and de-duplicate", () => {
+  const { controller, sent } = createController();
+
+  // The initial clear (fresh round, nothing to clear remotely) is suppressed.
+  controller.queueRetryAttempts([]);
+  assert.deepEqual(sent, []);
+
+  controller.queueToolStatus("第 1 轮：模型生成中...");
+  controller.queueRetryAttempts([
+    { attempt: 1, maxAttempts: 5, errorMessage: "503 service unavailable" },
+  ]);
+  // Same list again: de-duplicated.
+  controller.queueRetryAttempts([
+    { attempt: 1, maxAttempts: 5, errorMessage: "503 service unavailable" },
+  ]);
+  // Explicit clear after a non-empty list is forwarded.
+  controller.queueRetryAttempts([]);
+
+  assert.deepEqual(
+    sent.map((item) => item.event),
+    [
+      {
+        type: "tool_status",
+        status: "第 1 轮：模型生成中...",
+        isCompaction: false,
+        conversation_id: "conversation-1",
+      },
+      {
+        type: "tool_status",
+        status: "第 1 轮：模型生成中...",
+        isCompaction: false,
+        retryAttempts: [{ attempt: 1, maxAttempts: 5, errorMessage: "503 service unavailable" }],
+        conversation_id: "conversation-1",
+      },
+      {
+        type: "tool_status",
+        status: "第 1 轮：模型生成中...",
+        isCompaction: false,
+        retryAttempts: [],
+        conversation_id: "conversation-1",
+      },
+    ],
+  );
+});
+
 test("gateway bridge close blocks normal events but allows forced title updates", () => {
   const { controller, sent } = createController();
 

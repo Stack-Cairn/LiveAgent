@@ -24,6 +24,7 @@ import {
 } from "./turnReducer";
 import type {
   HistoryApplyMode,
+  RetryAttemptRecord,
   TranscriptRow,
   TranscriptSnapshot,
   Turn,
@@ -46,7 +47,7 @@ import type {
 // row keys, row objects and the DOM container are all unchanged, so the
 // fold is a pure data transition and nothing remounts.
 
-export type { TranscriptRow, TranscriptSnapshot, Turn } from "./types";
+export type { RetryAttemptRecord, TranscriptRow, TranscriptSnapshot, Turn } from "./types";
 
 export type TranscriptStore = {
   getSnapshot(): TranscriptSnapshot;
@@ -83,6 +84,8 @@ export type TranscriptStore = {
   flush(): void;
 };
 
+const EMPTY_RETRY_ATTEMPTS: readonly RetryAttemptRecord[] = [];
+
 const EMPTY_SNAPSHOT: TranscriptSnapshot = {
   rows: [],
   liveStartIndex: -1,
@@ -91,9 +94,36 @@ const EMPTY_SNAPSHOT: TranscriptSnapshot = {
   activeRun: null,
   toolStatus: null,
   toolStatusIsCompaction: false,
+  retryAttempts: EMPTY_RETRY_ATTEMPTS,
   foldRevision: 0,
   revision: 0,
 };
+
+// tool_status events without a retryAttempts array leave the current list
+// untouched (null result); an array — including an empty one — replaces it.
+function normalizeRetryAttempts(raw: unknown): RetryAttemptRecord[] | null {
+  if (!Array.isArray(raw)) {
+    return null;
+  }
+  const attempts: RetryAttemptRecord[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    const value = entry as Record<string, unknown>;
+    const attempt = typeof value.attempt === "number" && Number.isFinite(value.attempt);
+    const maxAttempts = typeof value.maxAttempts === "number" && Number.isFinite(value.maxAttempts);
+    if (!attempt || !maxAttempts) {
+      continue;
+    }
+    attempts.push({
+      attempt: value.attempt as number,
+      maxAttempts: value.maxAttempts as number,
+      errorMessage: typeof value.errorMessage === "string" ? value.errorMessage : "",
+    });
+  }
+  return attempts;
+}
 
 // Streaming-delta commit cadence while the tab is hidden and rAF is frozen.
 const HIDDEN_COMMIT_DELAY_MS = 250;
@@ -148,6 +178,7 @@ export function createTranscriptStore(options?: {
   let activeRun: StreamRunActivity | null = null;
   let toolStatus: string | null = null;
   let toolStatusIsCompaction = false;
+  let retryAttempts: readonly RetryAttemptRecord[] = EMPTY_RETRY_ATTEMPTS;
   let foldRevision = 0;
   let localTurnSeq = 0;
   // Idempotency cursor: the highest log seq already applied. Re-subscribe
@@ -303,6 +334,7 @@ export function createTranscriptStore(options?: {
       activeRun,
       toolStatus,
       toolStatusIsCompaction,
+      retryAttempts,
       foldRevision,
       revision: snapshot.revision + 1,
     };
@@ -396,6 +428,14 @@ export function createTranscriptStore(options?: {
     }
     toolStatus = next;
     toolStatusIsCompaction = nextCompaction;
+    schedule(flush);
+  };
+
+  const setRetryAttempts = (next: readonly RetryAttemptRecord[], flush?: boolean) => {
+    if (retryAttempts.length === 0 && next.length === 0) {
+      return;
+    }
+    retryAttempts = next.length === 0 ? EMPTY_RETRY_ATTEMPTS : next;
     schedule(flush);
   };
 
@@ -567,6 +607,7 @@ export function createTranscriptStore(options?: {
     }
     activeRun = null;
     setToolStatus(null, false);
+    setRetryAttempts(EMPTY_RETRY_ATTEMPTS);
     schedule(true);
   };
 
@@ -663,6 +704,7 @@ export function createTranscriptStore(options?: {
           updatedAt: Date.now(),
         };
         setToolStatus(null, false, true);
+        setRetryAttempts(EMPTY_RETRY_ATTEMPTS, true);
         schedule(true);
         return;
       }
@@ -720,6 +762,12 @@ export function createTranscriptStore(options?: {
           typeof status === "string" ? status : null,
           (event as { isCompaction?: boolean }).isCompaction === true,
         );
+        const nextRetryAttempts = normalizeRetryAttempts(
+          (event as { retryAttempts?: unknown }).retryAttempts,
+        );
+        if (nextRetryAttempts !== null) {
+          setRetryAttempts(nextRetryAttempts);
+        }
         if (activeRun && activeRun.runId === runId) {
           activeRun = { ...activeRun, toolStatus, toolStatusIsCompaction };
         }
@@ -803,6 +851,7 @@ export function createTranscriptStore(options?: {
       }
       toolStatus = null;
       toolStatusIsCompaction = false;
+      retryAttempts = EMPTY_RETRY_ATTEMPTS;
       // Set the activity before the rebuild so the snapshot can target the
       // optimistic pending turn by client_request_id (its user bubble then
       // keeps its identity instead of a duplicate run turn appearing).

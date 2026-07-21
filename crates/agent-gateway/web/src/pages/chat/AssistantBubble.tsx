@@ -4,6 +4,7 @@ import { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
 import { RoundContent } from "./assistant-bubble/RoundContent";
 
 export { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
+export { RetryDetailsBlock } from "./assistant-bubble/RoundContent";
 export { AssistantStatus, CompactingText, VibingText } from "./assistant-bubble/StatusText";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];

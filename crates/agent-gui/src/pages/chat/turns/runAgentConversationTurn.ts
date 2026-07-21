@@ -17,7 +17,10 @@ import {
   appendRenderOnlyMessagesToConversation,
   type ConversationViewState,
 } from "../../../lib/chat/conversation/conversationState";
-import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import type {
+  LiveTranscriptStore,
+  RetryAttemptRecord,
+} from "../../../lib/chat/conversation/liveTranscriptStore";
 import type {
   ConversationHookLifecycle,
   GatewayBridgeEventController,
@@ -254,6 +257,7 @@ export type RunAgentConversationTurnParams = {
     store: LiveTranscriptStore,
   ) => void;
   updateToolStatus: (status: string | null, store: LiveTranscriptStore) => void;
+  updateRetryAttempts: (attempts: RetryAttemptRecord[], store: LiveTranscriptStore) => void;
   updatePersistableAgentProgress: (progress: {
     completedThroughRound: number;
     suppressedToolTrace: SuppressedToolTraceSnapshot[];
@@ -312,6 +316,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     resetLiveTranscript,
     batchLiveRoundsUpdate,
     updateToolStatus,
+    updateRetryAttempts,
     updatePersistableAgentProgress,
     commitVisibleAbortedConversation,
     updateConversationRuntimeEntry,
@@ -833,6 +838,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onToolStatus: (s) => {
           gatewayBridgeEvents.queueToolStatus(s, false);
           updateToolStatus(s, transcriptStore);
+        },
+        onRetryAttempts: (_round, attempts) => {
+          updateRetryAttempts(attempts, transcriptStore);
         },
         onBeforeNextTurn: async ({ round, assistant, toolResults, emittedMessages }) => {
           publishPersistableAgentProgress(round, assistant, toolResults);

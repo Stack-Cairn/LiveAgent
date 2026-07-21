@@ -50,9 +50,10 @@ import {
   AssistantBubble,
   AssistantStatus,
   CompactingText,
+  RetryDetailsBlock,
   VibingText,
 } from "@/pages/chat/AssistantBubble";
-import type { TranscriptRow } from "../lib/chat/transcript/types";
+import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
 
 import type { GatewayTranscriptRound } from "../lib/chatUi";
 import type { SectionId } from "../pages/settings/types";
@@ -93,6 +94,9 @@ type GatewayTranscriptProps = {
   error?: string | null;
   toolStatus?: string | null;
   toolStatusIsCompaction?: boolean;
+  // Live run's stream-retry history; renders as an expandable details block
+  // under the live status (mirrors the desktop app).
+  retryAttempts?: readonly RetryAttemptRecord[];
   isStreaming?: boolean;
   isLoading?: boolean;
   loadingTitle?: string;
@@ -1183,6 +1187,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   branchPendingMessageId?: string | null;
   toolStatus?: string | null;
   toolStatusIsCompaction: boolean;
+  retryAttempts?: readonly RetryAttemptRecord[];
   readOnly?: boolean;
   redactToolContent?: boolean;
 }) {
@@ -1210,6 +1215,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     branchPendingMessageId,
     toolStatus,
     toolStatusIsCompaction,
+    retryAttempts,
     readOnly = false,
     redactToolContent = false,
   } = props;
@@ -1552,7 +1558,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
             >
               <div className="flex w-full max-w-full items-start gap-3">
                 <AssistantAvatar />
-                <div className="min-w-0 flex-1 pt-1">
+                <div className="min-w-0 flex-1 space-y-2 pt-1">
                   {displayedToolStatusIsCompaction ? (
                     <div className="flex items-center py-1">
                       <CompactingText />
@@ -1584,6 +1590,9 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                       <VibingText />
                     </div>
                   )}
+                  {retryAttempts && retryAttempts.length > 0 ? (
+                    <RetryDetailsBlock attempts={retryAttempts} />
+                  ) : null}
                 </div>
               </div>
             </article>
@@ -1647,6 +1656,14 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                   redactToolContent={redactToolContent}
                 />
                 {shouldShowLiveStatus ? <LiveStatusFooter status={liveStatusText} /> : null}
+                {isLatestLiveStreaming &&
+                !shouldShowPendingLiveBubble &&
+                retryAttempts &&
+                retryAttempts.length > 0 ? (
+                  <div className="ml-9 pt-1">
+                    <RetryDetailsBlock attempts={retryAttempts} />
+                  </div>
+                ) : null}
                 {!readOnly && !isLatestLiveStreaming ? (
                   <GatewayAssistantMessageActions
                     row={row}
@@ -1710,6 +1727,7 @@ export function GatewayTranscript({
   error,
   toolStatus,
   toolStatusIsCompaction = false,
+  retryAttempts,
   isStreaming = false,
   isLoading = false,
   loadingTitle,
@@ -1807,6 +1825,7 @@ export function GatewayTranscript({
           branchPendingMessageId={branchPendingMessageId}
           toolStatus={toolStatus}
           toolStatusIsCompaction={toolStatusIsCompaction}
+          retryAttempts={retryAttempts}
           readOnly={readOnly}
           redactToolContent={redactToolContent}
         />

@@ -517,6 +517,10 @@ pub(crate) fn build_chat_event_envelope(
             json!({
                 "status": object.get("status").cloned().unwrap_or(Value::Null),
                 "isCompaction": object.get("isCompaction").and_then(Value::as_bool).unwrap_or(false),
+                // Optional stream-retry history (array of {attempt,
+                // maxAttempts, errorMessage}); absent/null means "unchanged"
+                // on the WebUI, an empty array clears its list.
+                "retryAttempts": object.get("retryAttempts").cloned().unwrap_or(Value::Null),
                 "round": optional_number_field(object, "round"),
             }),
         ),

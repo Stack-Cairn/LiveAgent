@@ -1,9 +1,13 @@
+import type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
 import type { LiveRound } from "../messages/uiMessages";
+
+export type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
 
 export type LiveTranscriptState = {
   draftAssistantText: string;
   toolStatus: string | null;
   liveRounds: LiveRound[];
+  retryAttempts: RetryAttemptRecord[];
 };
 
 export type LiveTranscriptStore = {
@@ -12,13 +16,17 @@ export type LiveTranscriptStore = {
   reset: () => void;
   appendDraftAssistantText: (delta: string) => void;
   setToolStatus: (toolStatus: string | null) => void;
+  setRetryAttempts: (retryAttempts: RetryAttemptRecord[]) => void;
   updateLiveRounds: (updater: (prev: LiveRound[]) => LiveRound[]) => void;
 };
+
+const EMPTY_RETRY_ATTEMPTS: RetryAttemptRecord[] = [];
 
 const EMPTY_STATE: LiveTranscriptState = {
   draftAssistantText: "",
   toolStatus: null,
   liveRounds: [],
+  retryAttempts: EMPTY_RETRY_ATTEMPTS,
 };
 
 export function createLiveTranscriptStore(
@@ -45,7 +53,8 @@ export function createLiveTranscriptStore(
       if (
         state.draftAssistantText.length === 0 &&
         state.toolStatus === null &&
-        state.liveRounds.length === 0
+        state.liveRounds.length === 0 &&
+        state.retryAttempts.length === 0
       ) {
         return;
       }
@@ -65,6 +74,14 @@ export function createLiveTranscriptStore(
       state = {
         ...state,
         toolStatus,
+      };
+      emitChange();
+    },
+    setRetryAttempts: (retryAttempts) => {
+      if (state.retryAttempts === retryAttempts) return;
+      state = {
+        ...state,
+        retryAttempts,
       };
       emitChange();
     },

@@ -5,6 +5,15 @@ import type { ChatEntry, GatewayTranscriptRound } from "@/lib/chatUi";
 
 export type UserChatEntry = Extract<ChatEntry, { kind: "user" }>;
 
+// One failed-and-retried network attempt of the live run's model request,
+// mirrored from the desktop's stream-retry layer over the tool_status event.
+// attempt/maxAttempts are retry ordinals (1..5 of 5), not total attempts.
+export type RetryAttemptRecord = {
+  attempt: number;
+  maxAttempts: number;
+  errorMessage: string;
+};
+
 // A turn is one prompt/response exchange of the live stream: the user bubble
 // (a single slot — a second user_message for the same run can only upsert it,
 // never append a sibling) plus every assistant-side entry its run produced.
@@ -99,6 +108,9 @@ export type TranscriptSnapshot = {
   activeRun: StreamRunActivity | null;
   toolStatus: string | null;
   toolStatusIsCompaction: boolean;
+  // Live run's stream-retry history (cleared at run boundaries and whenever
+  // the desktop starts a fresh network attempt).
+  retryAttempts: readonly RetryAttemptRecord[];
   // Bumped whenever turns fold into the virtualized region.
   foldRevision: number;
   revision: number;

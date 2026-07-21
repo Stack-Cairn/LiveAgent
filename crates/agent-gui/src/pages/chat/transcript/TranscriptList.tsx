@@ -497,6 +497,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
                 isAgentMode={isAgentMode}
                 isCompactionRunning={row.live ? isCompactionRunning : false}
                 toolStatus={row.live ? displayedToolStatus : null}
+                retryAttempts={row.live ? liveState.retryAttempts : undefined}
                 onResendFromEdit={onResendFromEdit}
                 onBranchConversation={onBranchConversation}
               />

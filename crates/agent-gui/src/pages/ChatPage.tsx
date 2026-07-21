@@ -1410,6 +1410,7 @@ export function ChatPage(props: ChatPageProps) {
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     updateToolStatus,
+    updateRetryAttempts,
   } = useLiveTranscriptController({
     currentConversationId,
   });
@@ -3728,6 +3729,12 @@ export function ChatPage(props: ChatPageProps) {
       }
       void queueGatewayRuntimeSnapshot(conversationId);
     };
+    // Mirrors the live retry-attempt list to remote WebUI clients alongside
+    // the local live-transcript update.
+    const updateGatewayBridgeRetryAttempts: typeof updateRetryAttempts = (attempts, store) => {
+      gatewayBridgeEvents.queueRetryAttempts(attempts);
+      updateRetryAttempts(attempts, store);
+    };
     const setConversationErrorState = (message: string | null) => {
       updateConversationRuntimeEntry(conversationId, (prev) => ({
         ...prev,
@@ -4576,6 +4583,7 @@ export function ChatPage(props: ChatPageProps) {
             resetLiveTranscript,
             batchLiveRoundsUpdate,
             updateToolStatus,
+            updateRetryAttempts: updateGatewayBridgeRetryAttempts,
             updatePersistableAgentProgress: (progress) => {
               persistableAgentProgress = progress;
             },
@@ -4625,6 +4633,7 @@ export function ChatPage(props: ChatPageProps) {
             appendDraftAssistantText,
             batchLiveRoundsUpdate,
             updateGatewayBridgeToolStatus,
+            updateRetryAttempts: updateGatewayBridgeRetryAttempts,
             commitVisibleAbortedConversation,
             updateConversationRuntimeEntry,
             persistConversationWithHistorySync,
