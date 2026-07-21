@@ -2046,7 +2046,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.usageCacheWrite": "Cache Write",
     "chat.usageCost": "Cost",
     "chat.upload.button": "Upload Files",
-    "chat.upload.selectFiles": "Select and import one or more readable files into the workspace",
+    "chat.upload.selectFiles": "Select and attach one or more readable files to this conversation",
     "chat.upload.uploading": "Uploading...",
     "chat.upload.onlyInTools": "File upload is only available in tools mode",
     "chat.upload.requireWorkdir": "Select a project first",

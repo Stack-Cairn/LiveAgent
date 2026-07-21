@@ -106,7 +106,7 @@ export async function importPastedTextsAsFiles(params: {
   const response = await importReadableFiles(token, normalizedWorkdir, textFiles);
   if (response.files.length !== pastes.length) {
     const skipped = response.skipped.length > 0 ? `\n${response.skipped.join("\n")}` : "";
-    throw new Error(`部分大段粘贴内容未能导入工作区。${skipped}`);
+    throw new Error(`部分大段粘贴内容未能导入为附件。${skipped}`);
   }
 
   const files = response.files.map((file, index) => {

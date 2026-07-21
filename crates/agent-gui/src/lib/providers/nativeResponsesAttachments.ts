@@ -76,28 +76,28 @@ type GeminiNativeAttachmentCandidate = {
 };
 
 const WORKSPACE_UPLOAD_INSTRUCTION = [
-  "Selected files are available in the workspace at these relative paths.",
-  "Use Read with the paths below before analyzing or modifying them:",
+  "The user attached the files below to this message.",
+  "Use Read with these exact paths before analyzing or modifying them:",
 ].join("\n");
 
 const NATIVE_UPLOAD_INSTRUCTION = [
-  "Selected files are attached to this OpenAI Responses request as native inputs when supported, and are also available in the workspace paths below.",
-  "Analyze the native attachments directly first. Use Read only when you need exact workspace file access, edits, or native attachment content is unavailable:",
+  "The attached files are inlined into this OpenAI Responses request as native inputs when supported, and are also readable at the exact paths below.",
+  "Analyze the native attachments directly first. Use Read only when you need exact file access, edits, or native attachment content is unavailable:",
 ].join("\n");
 
 const OPENAI_CHAT_COMPLETIONS_NATIVE_UPLOAD_INSTRUCTION = [
-  "Selected images are attached to this OpenAI Chat Completions request as native image inputs when supported, and are also available in the workspace paths below.",
-  "Analyze the native image attachments directly first. Use Read only when you need exact workspace file access, edits, or native attachment content is unavailable:",
+  "The attached images are inlined into this OpenAI Chat Completions request as native image inputs when supported, and are also readable at the exact paths below.",
+  "Analyze the native image attachments directly first. Use Read only when you need exact file access, edits, or native attachment content is unavailable:",
 ].join("\n");
 
 const ANTHROPIC_NATIVE_UPLOAD_INSTRUCTION = [
-  "Selected files are attached to this Anthropic Messages request as native image/document inputs when supported, and are also available in the workspace paths below.",
-  "Analyze the native attachments directly first. Use Read only when you need exact workspace file access, edits, or native attachment content is unavailable:",
+  "The attached files are inlined into this Anthropic Messages request as native image/document inputs when supported, and are also readable at the exact paths below.",
+  "Analyze the native attachments directly first. Use Read only when you need exact file access, edits, or native attachment content is unavailable:",
 ].join("\n");
 
 const GEMINI_NATIVE_UPLOAD_INSTRUCTION = [
-  "Selected files are attached to this Gemini request as native inlineData inputs when supported, and are also available in the workspace paths below.",
-  "Analyze the native attachments directly first. Use Read only when you need exact workspace file access, edits, or native attachment content is unavailable:",
+  "The attached files are inlined into this Gemini request as native inlineData inputs when supported, and are also readable at the exact paths below.",
+  "Analyze the native attachments directly first. Use Read only when you need exact file access, edits, or native attachment content is unavailable:",
 ].join("\n");
 
 const GEMINI_INLINE_NATIVE_ATTACHMENT_MAX_REQUEST_BYTES = 20 * 1024 * 1024;

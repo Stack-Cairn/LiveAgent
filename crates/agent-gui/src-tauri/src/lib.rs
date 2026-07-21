@@ -453,6 +453,7 @@ pub fn run() {
                 if let Err(error) = commands::settings::initialize_system_proxy_from_db() {
                     eprintln!("failed to initialize system proxy state: {error}");
                 }
+                commands::system::gc_upload_staging_on_startup();
                 app.manage(services::proxy::start_proxy_server()?);
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");

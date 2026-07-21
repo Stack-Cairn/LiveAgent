@@ -38,7 +38,7 @@
 | 上下文压缩 | 在 pre-send、mid-stream、post-tool 等阶段生成 summary checkpoint，避免超上下文。 | `pages/chat/conversationContextBuilders.ts`、`lib/chat/conversation/compaction/*` |
 | 记忆注入 | 每轮根据 workdir 读取 memory overview，并附加到 system prompt。 | `lib/chat/memory/memoryPrompt.ts`、`src-tauri/src/services/memory.rs` |
 | Skills 注入 | 根据 Settings Skills 选择与 always-on builtin skills 生成 skills prompt。 | `lib/skills/index.ts`、`pages/chat/useChatSkills.ts` |
-| 上传 | GUI 直接调用 Tauri import readable files/image preview，文件落入 workspace uploads。 | `pages/chat/usePendingUploads.ts`、`src-tauri/src/commands/system.rs` |
+| 上传 | GUI 直接调用 Tauri import readable files/image preview；工作区外文件复制到 `~/.liveagent/uploads` 暂存区（不污染工作区），工作区内文件原地引用。 | `pages/chat/usePendingUploads.ts`、`src-tauri/src/commands/system.rs` |
 | Gateway bridge | 本地运行时接收远程 command，把 token/thinking/tool/done/error 等事件发布给 Gateway；listener 与 worker id 在组件生命周期内保持稳定。 | `pages/chat/gateway/useGatewayBridgeListeners.ts`、`lib/chat/conversation/run/gatewayBridgeEvents.ts` |
 
 ## Tauri Invoke Surface

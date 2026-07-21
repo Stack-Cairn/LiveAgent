@@ -482,7 +482,7 @@ async function importPastedTextsAsFiles(workdir: string, pastes: MentionComposer
 
   if (response.files.length !== pastes.length) {
     const skipped = response.skipped.length > 0 ? `\n${response.skipped.join("\n")}` : "";
-    throw new Error(`部分大段粘贴内容未能导入工作区。${skipped}`);
+    throw new Error(`部分大段粘贴内容未能导入为附件。${skipped}`);
   }
 
   const files = response.files.map((file, index) => {
@@ -3872,7 +3872,7 @@ export function ChatPage(props: ChatPageProps) {
         text = buildTextFromComposerDraft(composerDraft, imported.fileByPasteId).trim();
         uploadedFiles = mergePendingUploadedFiles(uploadedFiles, imported.files);
       } catch (error) {
-        const message = asErrorMessage(error, "大段粘贴内容导入工作区失败");
+        const message = asErrorMessage(error, "大段粘贴内容导入附件失败");
         setConversationErrorState(message);
         setErrorMessage(message);
         gatewayBridgeEvents.emitError(message, conversationId);

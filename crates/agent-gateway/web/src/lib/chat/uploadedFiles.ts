@@ -112,10 +112,12 @@ export function parsePastedTextDisplayReferences(text: string): PastedTextDispla
 
 export function buildUploadedFilesInstruction(files: PendingUploadedFile[]) {
   if (files.length === 0) return "";
-  const lines = files.map((file) => `- ${file.relativePath} (${file.kind})`);
+  // 暂存在工作区外的附件必须用绝对路径读取；工作区内选中的文件绝对路径
+  // 同样可读，因此统一给绝对路径（缺失时回退展示用相对路径）。
+  const lines = files.map((file) => `- ${file.absolutePath || file.relativePath} (${file.kind})`);
   return [
-    "Selected files are available in the workspace at these relative paths.",
-    "Use Read with the paths below before analyzing or modifying them:",
+    "The user attached the files below to this message.",
+    "Use Read with these exact paths before analyzing or modifying them:",
     ...lines,
   ].join("\n");
 }

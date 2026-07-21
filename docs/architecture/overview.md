@@ -28,7 +28,7 @@
 | WebUI 远程对话 | WebUI optimistic echo 后先经 `/ws/v2` 发 `chat_prepare`，Gateway 通过关联原生 Ping/Pong 验证桌面端信封流并唤醒桌面 Chat Runtime；随后 `chat_command`（`chat.submit`/`chat.edit_resend`）accepted 并经 `/ws/v2/agent` 信封流下发。桌面端本地运行并持续回传 `ChatEvent`/`ChatControlEvent`，Gateway 按 seq 经会话订阅（`chat.subscribe`/`chat.event`）推送给 WebUI。 | `web/src/lib/gatewaySocket.ts`、`internal/protocol/pbws/browser_local.go`、`internal/chatcmd/chatcmd.go`、`proto/v1/gateway.proto`、`src-tauri/src/services/gateway/*` |
 | 设置同步 | GUI load/save 设置到本地 SQLite，同时发布脱敏 settings snapshot 到 Gateway；WebUI 读取/更新 settings 时走 Gateway，普通 sync 不带真实 provider API key。 | `src/lib/settings/*`、`src-tauri/src/commands/settings.rs`、`src/lib/settings/sync.ts`、`web/src/lib/settings/sync.ts` |
 | 历史同步 | GUI 持久化 `chatHistory` 和 `chatHistorySegment`，操作后发布 history sync；Gateway 转发给 WebUI，WebUI 刷新列表或详情缓存。 | `src-tauri/src/commands/chat_history.rs`、`src-tauri/src/services/gateway.rs`、`web/src/lib/historySync.ts` |
-| 上传文件 | GUI 直接通过 Tauri 导入工作区 uploads；WebUI 走 Gateway HTTP multipart，Gateway 将 bytes 转成 `UploadReadableFilesRequest` 信封，桌面端导入本地工作区后返回文件引用。 | `src-tauri/src/commands/system.rs`、`internal/handler/upload.go`、`web/src/lib/uploadReadableFiles.ts` |
+| 上传文件 | GUI 直接通过 Tauri 导入；WebUI 走 Gateway HTTP multipart，Gateway 将 bytes 转成 `UploadReadableFilesRequest` 信封。桌面端统一把文件写入 `~/.liveagent/uploads` 暂存区（工作区外）后返回文件引用。 | `src-tauri/src/commands/system.rs`、`internal/handler/upload.go`、`web/src/lib/uploadReadableFiles.ts` |
 | 记忆召回 | 每轮 Chat 可调用 Rust `MemoryStore` 生成 overview 注入 system prompt；工具层暴露 `MemoryManager` 读写；Settings Memory 展示和管理同一套 store。 | `src-tauri/src/services/memory.rs`、`src/lib/chat/memory/*`、`src/lib/tools/memoryTools.ts`、`src/pages/settings/MemoryPanel.tsx` |
 
 ## 当前主要持久化

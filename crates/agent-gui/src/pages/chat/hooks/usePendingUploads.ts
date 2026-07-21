@@ -145,9 +145,9 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       return;
     }
     // Switching conversations must not invalidate any conversation's
-    // uploads — each entry is relative to its own workdir. Only a workdir
-    // change within the same conversation (a draft switching projects)
-    // makes that conversation's relative paths stale.
+    // uploads. Only a workdir change within the same conversation (a draft
+    // switching projects) invalidates them: staged uploads stay readable,
+    // but files picked inside the old workspace are not.
     if (previous.conversationId !== conversationId) return;
     if (previous.workdir === workdir) return;
     setPendingUploadsForConversation(conversationId, []);
@@ -189,8 +189,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       const { targetConversationId, targetWorkdir } = target;
       const isTargetDisplayed = currentConversationIdRef.current.trim() === targetConversationId;
       // An import that settles after its upload context was invalidated must
-      // not resurrect cleared attachments: the files landed under the old
-      // workdir, so their relative paths are stale there.
+      // not resurrect cleared attachments: files picked inside the old
+      // workspace are not readable from the new one.
       if (!isAgentModeRef.current || (isTargetDisplayed && workdirRef.current !== targetWorkdir)) {
         addNotify("warning", "上传目标已失效，已忽略本次导入的文件");
         return;

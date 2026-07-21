@@ -483,14 +483,61 @@ fn rel_to_workdir_forward_slash(workdir: &Path, abs: &Path) -> Result<String, St
         .map_err(|_| format!("路径超出工作目录：{}", abs.display()))
 }
 
-fn upload_import_root(workdir: &Path) -> Result<PathBuf, String> {
+/// 上传暂存区基目录（`~/.liveagent/uploads`）。上传的附件是会话资产而非
+/// 工作区文件：落到应用存储域，避免污染工作区的 git 状态与文件树。
+fn upload_staging_base() -> Result<PathBuf, String> {
+    Ok(app_storage_dir()?.join("uploads"))
+}
+
+/// 暂存文件保留天数：过期批次由启动 GC 清理。附件路径持久化在历史消息里，
+/// 因此不与单个会话的删除绑定，按时效回收是与"暂存区"语义一致的做法。
+const UPLOAD_STAGING_RETENTION: std::time::Duration =
+    std::time::Duration::from_secs(30 * 24 * 60 * 60);
+
+fn upload_import_root_in(base: &Path) -> Result<PathBuf, String> {
     let batch = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let root = workdir.join("uploads").join(batch.to_string());
+    let root = base.join(batch.to_string());
     fs::create_dir_all(&root).map_err(|e| format!("创建上传目录失败 {}: {e}", root.display()))?;
     Ok(root)
+}
+
+fn upload_import_root() -> Result<PathBuf, String> {
+    upload_import_root_in(&upload_staging_base()?)
+}
+
+fn gc_upload_staging_in(base: &Path, now: SystemTime, retention: std::time::Duration) -> usize {
+    let Ok(entries) = fs::read_dir(base) else {
+        return 0;
+    };
+    let mut removed = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let expired = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+            .and_then(|modified| now.duration_since(modified).ok())
+            .is_some_and(|age| age > retention);
+        if expired && fs::remove_dir_all(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
+/// 启动时清理过期的上传批次；失败只记录，绝不阻断启动。
+pub fn gc_upload_staging_on_startup() {
+    tauri::async_runtime::spawn_blocking(|| {
+        if let Ok(base) = upload_staging_base() {
+            gc_upload_staging_in(&base, SystemTime::now(), UPLOAD_STAGING_RETENTION);
+        }
+    });
 }
 
 fn build_readable_file_entry(
@@ -499,7 +546,19 @@ fn build_readable_file_entry(
     kind: &str,
     size_bytes: u64,
 ) -> Result<SystemReadableFileEntry, String> {
-    let relative_path = rel_to_workdir_forward_slash(workdir, destination)?;
+    // 工作区内的文件用真实相对路径；暂存区文件用 `uploads/<batch>/<name>`
+    // 形式的展示路径（UI 徽标、粘贴引用与去重 key 都吃这个字段），模型侧
+    // 的读取路径始终以 absolute_path 为准。
+    let relative_path = match rel_to_workdir_forward_slash(workdir, destination) {
+        Ok(relative) => relative,
+        Err(_) => {
+            let base = upload_staging_base()?;
+            let staged = destination
+                .strip_prefix(&base)
+                .map_err(|_| format!("路径超出工作目录：{}", destination.display()))?;
+            format!("uploads/{}", staged.to_string_lossy().replace('\\', "/"))
+        }
+    };
     let file_name = destination
         .file_name()
         .and_then(|value| value.to_str())
@@ -533,6 +592,14 @@ fn canonicalize_uploaded_file_path(absolute_path: &str) -> Result<PathBuf, Strin
     }
 
     fs::canonicalize(&path).map_err(|e| format!("无法解析图片路径：{e}"))
+}
+
+/// 附件读取的授权范围：当前工作目录，或应用上传暂存区。
+fn is_allowed_attachment_target(workdir: &Path, target: &Path) -> bool {
+    if target.starts_with(workdir) {
+        return true;
+    }
+    upload_staging_base().is_ok_and(|base| target.starts_with(base))
 }
 
 fn canonicalize_uploaded_attachment_path(
@@ -569,8 +636,11 @@ fn canonicalize_uploaded_attachment_path(
         fs::canonicalize(&candidate).map_err(|e| format!("无法解析附件路径：{e}"))?
     };
 
-    if !target.starts_with(workdir) {
-        return Err(format!("附件路径超出当前工作目录：{}", target.display()));
+    if !is_allowed_attachment_target(workdir, &target) {
+        return Err(format!(
+            "附件路径超出当前工作目录与上传暂存区：{}",
+            target.display()
+        ));
     }
     Ok(target)
 }
@@ -728,7 +798,7 @@ fn import_readable_file_paths_into_workdir(
             let import_root = match import_root.as_ref() {
                 Some(root) => root.clone(),
                 None => {
-                    let root = upload_import_root(workdir)?;
+                    let root = upload_import_root()?;
                     import_root = Some(root.clone());
                     root
                 }
@@ -741,7 +811,7 @@ fn import_readable_file_paths_into_workdir(
             let target = unique_path_for_copy(import_root.join(sanitized_name));
             fs::copy(&source, &target).map_err(|e| {
                 format!(
-                    "复制文件到工作区失败 {} -> {}: {e}",
+                    "复制文件到上传暂存区失败 {} -> {}: {e}",
                     source.display(),
                     target.display()
                 )
@@ -805,7 +875,7 @@ pub(crate) fn system_import_uploaded_readable_files_sync(
         let import_root = match import_root.as_ref() {
             Some(root) => root.clone(),
             None => {
-                let root = upload_import_root(&workdir)?;
+                let root = upload_import_root()?;
                 import_root = Some(root.clone());
                 root
             }
@@ -875,8 +945,11 @@ pub(crate) fn system_read_uploaded_image_preview_sync(
 ) -> Result<SystemUploadedImagePreviewResponse, String> {
     let workdir = canonicalize_upload_workdir(&workdir)?;
     let target = canonicalize_uploaded_file_path(&absolute_path)?;
-    if !target.starts_with(&workdir) {
-        return Err(format!("图片路径超出当前工作目录：{}", target.display()));
+    if !is_allowed_attachment_target(&workdir, &target) {
+        return Err(format!(
+            "图片路径超出当前工作目录与上传暂存区：{}",
+            target.display()
+        ));
     }
     let mime_type = infer_image_upload_mime(&target)
         .ok_or_else(|| format!("{} 不是受支持的图片文件", target.display()))?;
@@ -1326,32 +1399,68 @@ mod tests {
     }
 
     #[test]
-    fn upload_import_root_uses_workdir_uploads_directory() {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let workdir = std::env::temp_dir().join(format!(
-            "liveagent-upload-root-test-{}-{unique}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&workdir).expect("create test workdir");
+    fn upload_import_root_stays_outside_the_workspace() {
+        let root = upload_import_root().expect("create upload root");
 
-        let root = upload_import_root(&workdir).expect("create upload root");
-
+        let staging_base = upload_staging_base().expect("resolve staging base");
         assert!(
-            root.starts_with(workdir.join("uploads")),
-            "upload root should be under workdir/uploads: {}",
-            root.display()
-        );
-        assert!(
-            !root.starts_with(workdir.join(".liveagent")),
-            "upload root must not use workdir/.liveagent: {}",
+            root.starts_with(&staging_base),
+            "upload root should live in the app staging area: {}",
             root.display()
         );
         assert!(root.exists(), "upload root should be created");
 
-        let _ = fs::remove_dir_all(&workdir);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn gc_upload_staging_removes_only_expired_batches() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("uploads");
+        let expired = base.join("100");
+        let fresh = base.join("200");
+        fs::create_dir_all(&expired).expect("create expired batch");
+        fs::create_dir_all(&fresh).expect("create fresh batch");
+        fs::write(expired.join("old.txt"), b"old").expect("write expired file");
+
+        let retention = std::time::Duration::from_secs(60);
+        let now = SystemTime::now() + std::time::Duration::from_secs(120);
+        let removed = gc_upload_staging_in(&base, now, retention);
+
+        assert_eq!(removed, 2, "both stale batches are collected");
+        assert!(!expired.exists());
+        assert!(!fresh.exists());
+
+        fs::create_dir_all(&fresh).expect("recreate fresh batch");
+        let kept = gc_upload_staging_in(&base, SystemTime::now(), retention);
+        assert_eq!(kept, 0, "batches inside the retention window survive");
+        assert!(fresh.exists());
+    }
+
+    #[test]
+    fn readable_file_entries_report_staging_display_paths() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        let staging = upload_staging_base().expect("resolve staging base");
+        let batch = staging.join("test-batch-entry");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        fs::create_dir_all(&batch).expect("create staging batch");
+        let staged = batch.join("notes.txt");
+        fs::write(&staged, b"hello").expect("write staged file");
+
+        let entry =
+            build_readable_file_entry(&workdir, &staged, "text", 5).expect("build staged entry");
+        assert_eq!(entry.relative_path, "uploads/test-batch-entry/notes.txt");
+        assert_eq!(entry.absolute_path, staged.to_string_lossy());
+
+        let inside = workdir.join("src").join("main.rs");
+        fs::create_dir_all(inside.parent().expect("parent")).expect("create src dir");
+        fs::write(&inside, b"fn main() {}").expect("write workspace file");
+        let workspace_entry =
+            build_readable_file_entry(&workdir, &inside, "text", 12).expect("build entry");
+        assert_eq!(workspace_entry.relative_path, "src/main.rs");
+
+        let _ = fs::remove_dir_all(&batch);
     }
 
     #[test]
@@ -1385,7 +1494,9 @@ mod tests {
 
         assert_eq!(
             response.path,
-            project_folder_display_path(&existing.canonicalize().expect("canonicalize existing dir"))
+            project_folder_display_path(
+                &existing.canonicalize().expect("canonicalize existing dir")
+            )
         );
     }
 
@@ -1475,7 +1586,13 @@ mod tests {
             first_parent, second_parent,
             "files selected in one upload should share a batch directory"
         );
+        assert!(
+            !first_parent.starts_with(&workdir),
+            "uploads must not land inside the workspace: {}",
+            first_parent.display()
+        );
 
+        let _ = fs::remove_dir_all(&first_parent);
         let _ = fs::remove_dir_all(&workdir);
     }
 
@@ -1524,6 +1641,9 @@ mod tests {
             "alpha"
         );
 
+        if let Some(parent) = Path::new(&response.files[0].absolute_path).parent() {
+            let _ = fs::remove_dir_all(parent);
+        }
         let _ = fs::remove_dir_all(&workdir);
     }
 
@@ -1559,9 +1679,33 @@ mod tests {
         .expect_err("outside file must be rejected");
 
         assert!(
-            error.contains("附件路径超出当前工作目录"),
+            error.contains("附件路径超出当前工作目录与上传暂存区"),
             "error = {error}"
         );
+    }
+
+    #[test]
+    fn read_uploaded_native_attachment_allows_staging_files() {
+        let temp = tempdir().expect("create temp dir");
+        let workdir = temp.path().join("workspace");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        let staging = upload_staging_base().expect("resolve staging base");
+        let batch = staging.join("test-batch-native");
+        fs::create_dir_all(&batch).expect("create staging batch");
+        let staged = batch.join("note.txt");
+        fs::write(&staged, b"staged").expect("write staged file");
+
+        let response = system_read_uploaded_native_attachment_sync(
+            workdir.to_string_lossy().into_owned(),
+            Some(staged.to_string_lossy().into_owned()),
+            None,
+            Some("text".to_string()),
+        )
+        .expect("staging attachment must be readable");
+
+        assert_eq!(response.data, BASE64_STANDARD.encode(b"staged"));
+
+        let _ = fs::remove_dir_all(&batch);
     }
 
     #[test]
@@ -1597,6 +1741,11 @@ mod tests {
         assert_eq!(response.files[0].file_name, "notes.txt");
         assert!(response.files[0].relative_path.starts_with("uploads/"));
         assert!(
+            !Path::new(&response.files[0].absolute_path).starts_with(&workdir),
+            "external uploads must be staged outside the workspace: {}",
+            response.files[0].absolute_path
+        );
+        assert!(
             response
                 .skipped
                 .iter()
@@ -1605,6 +1754,9 @@ mod tests {
             response.skipped
         );
 
+        if let Some(parent) = Path::new(&response.files[0].absolute_path).parent() {
+            let _ = fs::remove_dir_all(parent);
+        }
         let _ = fs::remove_dir_all(&temp_root);
     }
 

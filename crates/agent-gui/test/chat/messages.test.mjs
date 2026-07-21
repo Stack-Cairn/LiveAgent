@@ -208,8 +208,8 @@ test("uploaded file helpers preserve display text and strip model-hidden metadat
   assert.equal(message.timestamp, 1234);
   assert.equal(uploadedFiles.getUserMessageDisplayText(message), "Please review");
   assert.deepEqual(uploadedFiles.getUserMessageAttachments(message), [fileA]);
-  assert.match(message.content, /Selected files are available in the workspace/);
-  assert.match(message.content, /src\/App\.tsx \(text\)/);
+  assert.match(message.content, /The user attached the files below/);
+  assert.match(message.content, /Use Read with these exact paths/);
 
   const stripped = uploadedFiles.stripUploadedFilesMessageMetadata(message);
   assert.equal(uploadedFiles.getUserMessageDisplayText(stripped), message.content);

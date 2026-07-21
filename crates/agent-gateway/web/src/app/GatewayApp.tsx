@@ -3486,11 +3486,11 @@ export default function GatewayApp() {
     currentConversationRuntimeWorkdir ||
     (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
   displayedConversationWorkdirRef.current = displayedConversationWorkdir;
-  // Pending uploads live under their conversation's workdir uploads/ tree.
   // Switching conversations keeps every conversation's uploads, but a workdir
-  // change within the same conversation (a draft switching projects) makes its
-  // relative paths stale, and a mode flip away from tools invalidates all of
-  // them — mirroring the GUI-side rule in usePendingUploads.
+  // change within the same conversation (a draft switching projects)
+  // invalidates them (staged uploads stay readable, workspace picks do not),
+  // and a mode flip away from tools invalidates all of them — mirroring the
+  // GUI-side rule in usePendingUploads.
   useEffect(() => {
     const executionMode = settings.system.executionMode;
     const previous = pendingUploadContextRef.current;

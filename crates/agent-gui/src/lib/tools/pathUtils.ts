@@ -10,7 +10,7 @@ import {
 // `workspace:` / `skill:` / `skill://` references are literal tool-produced
 // strings and are never encoded or decoded.
 
-export type PathScope = "workspace" | "skill" | "external";
+export type PathScope = "workspace" | "skill" | "external" | "uploads";
 
 export type PathIntent = "read" | "write" | "edit" | "delete" | "list" | "search" | "cwd" | "image";
 
@@ -209,6 +209,21 @@ function fixedSkillsRelativePathFromAbsolute(value: string) {
   return normalized.slice(index + marker.length);
 }
 
+// Uploaded attachments are staged under ~/.liveagent/uploads (outside the
+// workspace). Tools may read them; every mutating intent is rejected.
+const UPLOAD_STAGING_MARKER = "/.liveagent/uploads/";
+const UPLOAD_STAGING_READ_INTENTS = new Set<PathIntent>(["read", "list", "search", "image"]);
+
+function uploadStagingSplitFromAbsolute(value: string) {
+  const normalized = normalizeComparablePath(value);
+  const index = normalized.indexOf(UPLOAD_STAGING_MARKER);
+  if (index < 0) return null;
+  return {
+    root: normalized.slice(0, index + UPLOAD_STAGING_MARKER.length - 1),
+    relativePath: normalized.slice(index + UPLOAD_STAGING_MARKER.length),
+  };
+}
+
 function operationForIntent(intent: PathIntent, label: string) {
   switch (intent) {
     case "write":
@@ -357,6 +372,28 @@ export class ToolPathResolver {
     };
   }
 
+  private resolveUploadStagingPath(
+    split: { root: string; relativePath: string },
+    options: ResolveOptions,
+  ): ResolvedPath {
+    if (!UPLOAD_STAGING_READ_INTENTS.has(options.intent)) {
+      throw new Error(
+        `${options.label} targets the upload staging area, which only supports read access (Read/List/Grep/Image): uploads/${split.relativePath}. Copy the file into the workspace first if it needs changes.`,
+      );
+    }
+    const sanitized = sanitizeRelativePath(split.relativePath, options.label, true);
+    const absolutePath = joinNormalizedPath(split.root, sanitized);
+    return {
+      scope: "uploads",
+      input: absolutePath,
+      root: split.root,
+      absolutePath,
+      relativePath: sanitized,
+      displayPath: `uploads/${sanitized}`,
+      intent: options.intent,
+    };
+  }
+
   private resolveExternalAbsolutePath(value: string, options: ResolveOptions): ResolvedPath {
     const absolutePath = normalizeComparablePath(value);
     if (!options.allowExternal) {
@@ -402,6 +439,11 @@ export class ToolPathResolver {
         );
       }
       return this.resolveSkillRelativePath(fixedSkillRel, options);
+    }
+
+    const uploadSplit = uploadStagingSplitFromAbsolute(absolutePath);
+    if (uploadSplit !== null) {
+      return this.resolveUploadStagingPath(uploadSplit, options);
     }
 
     return this.resolveExternalAbsolutePath(absolutePath, options);

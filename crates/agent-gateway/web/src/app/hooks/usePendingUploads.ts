@@ -200,8 +200,8 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       try {
         const result = await importReadableFiles(token, workdir, importBatch);
         // An import that settles after its upload context was invalidated
-        // must not resurrect cleared attachments: the files landed under the
-        // old workdir, so their relative paths are stale there.
+        // must not resurrect cleared attachments: files picked inside the
+        // old workspace are not readable from the new one.
         if (
           executionModeRef.current === "text" ||
           (isDisplayedConversation(targetConversationId) &&
