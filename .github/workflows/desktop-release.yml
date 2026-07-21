@@ -294,6 +294,20 @@ jobs:
           LIVEAGENT_UPDATE_REPOSITORY: ${{ github.repository }}
         run: pnpm tauri build --config src-tauri/tauri.linux.release.conf.json --config "$LIVEAGENT_TAURI_VERSION_CONFIG" --target x86_64-unknown-linux-gnu --bundles appimage deb rpm
 
+      - name: Strip bundled Wayland libraries and re-sign AppImage
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          appimage_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.AppImage' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          test -n "$appimage_path"
+          appimage_path="$(realpath "$appimage_path")"
+          scripts/release/postprocess-linux-appimage.sh "$appimage_path"
+          test ! -e "$appimage_path.sig"
+          pnpm --dir crates/agent-gui tauri signer sign "$appimage_path"
+          test -s "$appimage_path.sig"
+
       - name: Stage Linux artifacts
         run: |
           set -euo pipefail
