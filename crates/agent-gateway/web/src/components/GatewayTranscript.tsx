@@ -155,7 +155,7 @@ type GatewayTranscriptVirtualItem =
   | { key: string; kind: "pendingBubble" };
 
 function resolveNearestScrollViewport(element: HTMLElement | null) {
-  return element?.closest("[data-radix-scroll-area-viewport]") as HTMLDivElement | null;
+  return element?.closest("[data-scroll-viewport]") as HTMLDivElement | null;
 }
 
 function LiveStatusFooter(props: { status: string; isCompaction?: boolean }) {

@@ -167,7 +167,7 @@ export function ModelPicker({
         align="start"
         sideOffset={4}
         collisionPadding={8}
-        className="z-[80] w-[var(--radix-dropdown-menu-trigger-width)] overflow-hidden rounded-xl p-0 text-xs"
+        className="z-[80] w-(--anchor-width) overflow-hidden rounded-xl p-0 text-xs"
       >
         <div className="px-2 py-1.5">
           <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
@@ -182,13 +182,14 @@ export function ModelPicker({
             />
           </div>
         </div>
-        <div className="max-h-[min(14rem,var(--radix-dropdown-menu-content-available-height))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
+        <div className="max-h-[min(14rem,var(--available-height,14rem))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
           {noneLabel && !normalizedSearch ? (
             <DropdownMenuItem
               onSelect={() => onChange("")}
               className={cn(
-                "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none focus:bg-foreground/[0.05]",
-                value === "" && "bg-foreground/[0.07] font-medium focus:bg-foreground/[0.09]",
+                "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
+                value === "" &&
+                  "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
               )}
             >
               <span className="flex min-w-0 items-center gap-2">
@@ -213,14 +214,11 @@ export function ModelPicker({
                     <DropdownMenuSeparator className="bg-border/30" />
                   ) : null}
                   <DropdownMenuItem
-                    onSelect={(event) => {
-                      // 阻止 Radix 默认的选中即关闭：分组头只负责展开/收起
-                      event.preventDefault();
-                      toggleGroup(group.id);
-                    }}
+                    closeOnClick={false}
+                    onSelect={() => toggleGroup(group.id)}
                     aria-expanded={expanded}
                     title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
-                    className="sticky top-0 z-10 flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-0 text-xs font-medium text-muted-foreground/80 backdrop-blur-xl transition-colors focus:bg-muted/40 supports-[backdrop-filter]:bg-popover/40"
+                    className="sticky top-0 z-10 flex h-[30px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-0 text-xs font-medium text-muted-foreground/80 backdrop-blur-xl transition-colors data-[highlighted]:bg-muted/40 supports-[backdrop-filter]:bg-popover/40"
                   >
                     <ProviderBrandIcon
                       type={group.providerType}
@@ -245,9 +243,9 @@ export function ModelPicker({
                             key={option.value}
                             onSelect={() => onChange(option.value)}
                             className={cn(
-                              "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none focus:bg-foreground/[0.05]",
+                              "h-[30px] max-w-full shrink-0 justify-between gap-3 overflow-hidden rounded-md py-0 text-xs font-normal leading-5 text-foreground transition-none data-[highlighted]:bg-foreground/[0.05]",
                               isSelected &&
-                                "bg-foreground/[0.07] font-medium focus:bg-foreground/[0.09]",
+                                "bg-foreground/[0.07] font-medium data-[highlighted]:bg-foreground/[0.09]",
                             )}
                           >
                             <span className="flex min-w-0 items-center gap-2">

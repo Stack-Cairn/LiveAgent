@@ -1,5 +1,5 @@
+import { AlertDialog } from "@base-ui/react/alert-dialog";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { AlertTriangle, X } from "../icons";
 import { Button } from "./button";
 
@@ -54,100 +54,90 @@ function ConfirmDialog(
   } = props;
   const toneClasses = toneClassNames[tone];
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="alertdialog"
-      aria-modal="true"
-      aria-label={typeof title === "string" ? title : undefined}
+  return (
+    <AlertDialog.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) onCancel();
+      }}
     >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onCancel}
-        aria-hidden="true"
-      />
-
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <div
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneClasses.icon}`}
-            >
-              <AlertTriangle className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="break-words text-base font-semibold text-foreground">{title}</div>
-              {subtitle ? (
-                <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
-                  {subtitle}
+      <AlertDialog.Portal>
+        <AlertDialog.Backdrop className="fixed inset-0 z-[120] bg-black/55 backdrop-blur-sm" />
+        <AlertDialog.Viewport className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <AlertDialog.Popup className="relative w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl outline-none">
+            <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+              <div className="flex min-w-0 items-start gap-3">
+                <div
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${toneClasses.icon}`}
+                >
+                  <AlertTriangle className="h-5 w-5" />
                 </div>
-              ) : null}
+                <div className="min-w-0">
+                  <AlertDialog.Title className="break-words text-base font-semibold text-foreground">
+                    {title}
+                  </AlertDialog.Title>
+                  {subtitle ? (
+                    <div className="mt-1 break-words text-xs leading-5 text-muted-foreground">
+                      {subtitle}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <AlertDialog.Close
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+                    title={closeLabel}
+                    aria-label={closeLabel}
+                  />
+                }
+              >
+                <X className="h-4 w-4" />
+              </AlertDialog.Close>
             </div>
-          </div>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onCancel}
-            className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-            title={closeLabel}
-            aria-label={closeLabel}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {description || detail ? (
-          <div className="space-y-3 px-5 py-5">
-            {description ? (
-              <div className={`rounded-xl border px-4 py-3 text-sm leading-6 ${toneClasses.panel}`}>
-                {description}
-              </div>
+            {description || detail ? (
+              <AlertDialog.Description className="space-y-3 px-5 py-5" render={<div />}>
+                {description ? (
+                  <div
+                    className={`rounded-xl border px-4 py-3 text-sm leading-6 ${toneClasses.panel}`}
+                  >
+                    {description}
+                  </div>
+                ) : null}
+                {detail ? (
+                  <div className="break-words rounded-xl border border-border/60 bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                    {detail}
+                  </div>
+                ) : null}
+              </AlertDialog.Description>
             ) : null}
-            {detail ? (
-              <div className="break-words rounded-xl border border-border/60 bg-muted/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
-                {detail}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
 
-        <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            autoFocus
-            className="w-full sm:w-auto"
-          >
-            {cancelLabel}
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={onConfirm}
-            className="w-full sm:w-auto"
-          >
-            {confirmLabel}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+            <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
+              <AlertDialog.Close
+                render={
+                  <Button type="button" variant="outline" autoFocus className="w-full sm:w-auto" />
+                }
+              >
+                {cancelLabel}
+              </AlertDialog.Close>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={onConfirm}
+                className="w-full sm:w-auto"
+              >
+                {confirmLabel}
+              </Button>
+            </div>
+          </AlertDialog.Popup>
+        </AlertDialog.Viewport>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
   );
 }
 

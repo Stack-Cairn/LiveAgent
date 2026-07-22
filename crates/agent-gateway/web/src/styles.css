@@ -350,12 +350,12 @@ html[data-liveagent-webui="gateway"] .git-review-floating-scrollbar[data-draggin
   background-color: var(--gateway-scrollbar-thumb-active);
 }
 
-html[data-liveagent-webui="gateway"] [data-radix-scroll-area-viewport] {
+html[data-liveagent-webui="gateway"] [data-scroll-viewport] {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-html[data-liveagent-webui="gateway"] [data-radix-scroll-area-viewport]::-webkit-scrollbar {
+html[data-liveagent-webui="gateway"] [data-scroll-viewport]::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
@@ -472,7 +472,7 @@ html[data-liveagent-webui="gateway"] .composer-dropdown {
   width: min(420px, calc(100vw - 24px));
   min-width: min(260px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
-  max-height: min(420px, var(--radix-dropdown-menu-content-available-height, 420px));
+  max-height: min(420px, var(--available-height, 420px));
   flex-direction: column;
 }
 
@@ -803,8 +803,8 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   line-height: 1rem;
 }
 
-.gateway-transcript-scroll [data-radix-scroll-area-viewport],
-.gateway-transcript-scroll [data-radix-scroll-area-viewport] > div {
+.gateway-transcript-scroll [data-scroll-viewport],
+.gateway-transcript-scroll [data-scroll-viewport] > div {
   overflow-anchor: none;
 }
 
@@ -841,7 +841,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   grid-column: 2;
 }
 
-.gateway-transcript-scroll [data-radix-scroll-area-viewport] > div {
+.gateway-transcript-scroll [data-scroll-viewport] > div {
   display: block !important;
   width: 100% !important;
   min-width: 0 !important;
@@ -3300,7 +3300,7 @@ html[data-liveagent-webui="gateway"]
     width: min(92vw, 420px);
     min-width: min(92vw, 260px);
     max-width: calc(100vw - 20px);
-    max-height: min(74dvh, var(--radix-dropdown-menu-content-available-height, 420px));
+    max-height: min(74dvh, var(--available-height, 420px));
   }
 
   .chat-user-bubble-wrap,

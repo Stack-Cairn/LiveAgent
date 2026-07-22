@@ -30,7 +30,7 @@ GATEWAY_DOCKER_IMAGE ?= liveagent-gateway:local
 RELEASE_TAG ?=
 
 .PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
-.PHONY: dev-gateway dev-webui
+.PHONY: dev-gateway dev-webui ensure-webui-embed-stub
 .PHONY: proto proto-check webui gateway-build gateway-docker-build gateway-docker-run gateway-docker-smoke build-linux build-linux-amd build-linux-arm
 .PHONY: clean check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
 
@@ -106,11 +106,26 @@ check-github-release-tag:
 	@node scripts/release/prepare-app-version-from-tag.mjs "$(RELEASE_TAG)" --json >/dev/null
 
 ## Gateway development
-dev-gateway:
+# go:embed requires web/dist at compile time. Dev serves the SPA from Vite, so
+# a tiny stub is enough to let `go run` start without a full WebUI build.
+dev-gateway: ensure-webui-embed-stub
 	go -C $(AGENT_GATEWAY_DIR) run ./cmd/gateway --token=$(DEV_GATEWAY_TOKEN) --http-addr=$(DEV_GATEWAY_HTTP_ADDR)
 
 dev-webui:
 	npm_config_proxy_api=$(DEV_WEBUI_PROXY_API) pnpm --dir $(AGENT_GATEWAY_WEB_DIR) dev
+
+ensure-webui-embed-stub:
+	@if [ ! -f "$(AGENT_GATEWAY_WEB_DIR)/dist/index.html" ]; then \
+		mkdir -p "$(AGENT_GATEWAY_WEB_DIR)/dist"; \
+		printf '%s\n' \
+			'<!doctype html>' \
+			'<html lang="en">' \
+			'<head><meta charset="utf-8"><title>LiveAgent Gateway</title></head>' \
+			'<body><p>WebUI embed stub. Run <code>make dev-webui</code> for the real SPA.</p></body>' \
+			'</html>' \
+			> "$(AGENT_GATEWAY_WEB_DIR)/dist/index.html"; \
+		echo "created $(AGENT_GATEWAY_WEB_DIR)/dist stub for go:embed"; \
+	fi
 
 ## Gateway build and generated assets
 proto:

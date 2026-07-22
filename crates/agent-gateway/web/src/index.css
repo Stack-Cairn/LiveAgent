@@ -889,7 +889,7 @@
     /* Slide from the anchor side; flipped placements override per data-side. */
     --sidebar-menu-slide-x: -6px;
     --sidebar-menu-slide-y: 0px;
-    transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+    transform-origin: var(--transform-origin);
   }
 
   .sidebar-context-menu[data-side="left"] {
@@ -1208,12 +1208,12 @@
   /* Branch selector dropdown shares the reasoning-select motion. */
   .composer-branch-dropdown[data-state="open"] {
     animation: composerReasoningDropdownIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    transform-origin: var(--radix-dropdown-menu-content-transform-origin, bottom left);
+    transform-origin: var(--transform-origin, bottom left);
   }
 
   .composer-branch-dropdown[data-state="closed"] {
     animation: composerReasoningDropdownOut 0.12s cubic-bezier(0.4, 0, 1, 1) forwards;
-    transform-origin: var(--radix-dropdown-menu-content-transform-origin, bottom left);
+    transform-origin: var(--transform-origin, bottom left);
   }
 
   /* Chat header model selector: grow out of the trigger with a soft slide.

@@ -97,9 +97,8 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      {/* Native trigger button styled via buttonVariants: the Base UI (GUI) and
-          Radix (web) triggers both render a plain <button>, so this markup can
-          stay byte-identical on both ends without asChild/render adapters. */}
+      {/* Native trigger button styled via buttonVariants: Base UI Trigger
+          renders a plain <button>, so this stays identical on GUI and web. */}
       <DropdownMenuTrigger
         disabled={!(projectReady || tunnelAvailable) || creating}
         title={t("projectTools.newProjectTool")}

@@ -801,7 +801,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
                     align="start"
                     sideOffset={6}
                     collisionPadding={12}
-                    className="z-[80] w-max max-w-[calc(100vw-2rem)] min-w-[var(--radix-dropdown-menu-trigger-width)] rounded-xl border-border/70 bg-popover/95 p-1 shadow-[0_18px_46px_-24px_hsl(160_84%_25%_/_0.42),0_8px_24px_-18px_hsl(0_0%_0%_/_0.32)] backdrop-blur-xl"
+                    className="z-[80] w-max max-w-[calc(100vw-2rem)] min-w-[var(--anchor-width)] rounded-xl border-border/70 bg-popover/95 p-1 shadow-[0_18px_46px_-24px_hsl(160_84%_25%_/_0.42),0_8px_24px_-18px_hsl(0_0%_0%_/_0.32)] backdrop-blur-xl"
                   >
                     <div className="max-h-72 overflow-y-auto p-0.5">
                       {createHosts.map((host) => {

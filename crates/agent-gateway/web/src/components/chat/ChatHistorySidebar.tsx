@@ -586,14 +586,16 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
           <>
             <div className="relative min-w-0">
               {isMobileMenuLayout ? (
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    className="chat-history-row-title-menu-anchor absolute inset-0 h-full w-full rounded-[1rem] opacity-0 pointer-events-none"
-                  />
-                </DropdownMenuTrigger>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-hidden="true"
+                      tabIndex={-1}
+                      className="chat-history-row-title-menu-anchor absolute inset-0 h-full w-full rounded-[1rem] opacity-0 pointer-events-none"
+                    />
+                  }
+                />
               ) : null}
 
               <button
@@ -676,20 +678,24 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                         <Pin className="h-3.5 w-3.5" />
                       )}
                     </Button>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className={PROJECT_ICON_BUTTON_CLASS}
-                        disabled={isInteractionDisabled || isBusy}
-                        title={t("chat.conversationMore")}
-                        aria-label={t("chat.conversationMore")}
-                        onPointerDown={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </Button>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className={PROJECT_ICON_BUTTON_CLASS}
+                          disabled={isInteractionDisabled || isBusy}
+                          title={t("chat.conversationMore")}
+                          aria-label={t("chat.conversationMore")}
+                          onPointerDown={(e: React.PointerEvent<HTMLButtonElement>) =>
+                            e.stopPropagation()
+                          }
+                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => e.stopPropagation()}
+                        />
+                      }
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" />
                     </DropdownMenuTrigger>
                   </>
                 ) : null}
@@ -1118,18 +1124,20 @@ const ProjectRow = memo(function ProjectRow(props: {
                   onOpenChange={handleMenuOpenChange}
                   modal={false}
                 >
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className={PROJECT_ICON_BUTTON_CLASS}
-                      title={t("chat.workspaceMore")}
-                      aria-label={t("chat.workspaceMore")}
-                      disabled={isInteractionDisabled}
-                    >
-                      <MoreHorizontal className="h-3.5 w-3.5" />
-                    </Button>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className={PROJECT_ICON_BUTTON_CLASS}
+                        title={t("chat.workspaceMore")}
+                        aria-label={t("chat.workspaceMore")}
+                        disabled={isInteractionDisabled}
+                      />
+                    }
+                  >
+                    <MoreHorizontal className="h-3.5 w-3.5" />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     side="right"

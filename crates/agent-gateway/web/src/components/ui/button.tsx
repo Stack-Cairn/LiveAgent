@@ -1,4 +1,4 @@
-import { Slot } from "@radix-ui/react-slot";
+import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
@@ -30,17 +30,30 @@ const buttonVariants = cva(
   },
 );
 
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+type ButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "className"> &
   VariantProps<typeof buttonVariants> & {
-    asChild?: boolean;
+    className?: string;
+    /** Base UI composition: replace the host element. */
+    render?:
+      | React.ReactElement
+      | ((
+          props: React.HTMLAttributes<HTMLElement>,
+          state: Record<string, unknown>,
+        ) => React.ReactElement);
   };
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
-    return (
-      <Comp className={cn(buttonVariants({ variant, size }), className)} ref={ref} {...props} />
-    );
+export const Button = React.forwardRef<HTMLElement, ButtonProps>(
+  ({ className, variant, size, render, type = "button", ...props }, ref) => {
+    return useRender({
+      defaultTagName: "button",
+      render,
+      ref,
+      props: {
+        type: render ? undefined : type,
+        ...props,
+        className: cn(buttonVariants({ variant, size }), className),
+      },
+    });
   },
 );
 
