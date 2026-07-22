@@ -563,9 +563,9 @@ export function ChatPage(props: ChatPageProps) {
     [settings.ssh, terminalProjectPathKey],
   );
   const terminalDisabledMessage = !isAgentMode
-    ? "Project tools require Agent project mode."
+    ? t("projectTools.requiresAgentMode")
     : !terminalProjectPath
-      ? "Select a project to use project tools."
+      ? t("projectTools.requiresProject")
       : undefined;
   const tunnelEnabled = settings.remote.enableWebTunnels === true;
   const tunnelDisabledMessage = !settings.remote.enableWebTunnels
@@ -1648,8 +1648,8 @@ export function ChatPage(props: ChatPageProps) {
                       aria-expanded={rightDockOpen}
                       title={
                         rightDockOpen
-                          ? "Collapse project tools panel"
-                          : (terminalDisabledMessage ?? "Expand project tools panel")
+                          ? t("projectTools.panelCollapse")
+                          : (terminalDisabledMessage ?? t("projectTools.panelExpand"))
                       }
                       className={`relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
                         rightDockOpen ? "bg-muted text-foreground" : ""
