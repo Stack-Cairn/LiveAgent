@@ -147,11 +147,11 @@ import {
 } from "@/lib/sidebar/webSidebarBackend";
 import { findWorkspaceProject, mergeWorkspaceProjectsWithHistory } from "@/lib/workspaceProjects";
 import { FloorNavRail } from "@/pages/chat/transcript/FloorNavRail";
+import { WorkspaceCloneModal } from "@/pages/chat/WorkspaceCloneModal";
 import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
 import { SharedHistoryPage } from "@/pages/SharedHistoryPage";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
-import { WorkspaceCloneModal } from "@/pages/chat/WorkspaceCloneModal";
 import { buildTextFromComposerDraft, importPastedTextsAsFiles } from "./chatDraft";
 import {
   asErrorMessage,

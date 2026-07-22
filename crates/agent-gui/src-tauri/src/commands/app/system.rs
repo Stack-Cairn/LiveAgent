@@ -1115,7 +1115,7 @@ fn is_windows_reserved_project_name(name: &str) -> bool {
                 .is_ok_and(|value| (1..=9).contains(&value)))
 }
 
-fn validate_project_folder_name(name: &str) -> Result<&str, String> {
+pub(crate) fn validate_project_folder_name(name: &str) -> Result<&str, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("项目名不能为空".to_string());

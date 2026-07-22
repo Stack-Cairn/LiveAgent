@@ -1936,7 +1936,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.recentConversation": "Conversations",
     "chat.workspaceSection": "Workspaces",
     "chat.workspaceCreate": "New workspace",
-    "chat.workspaceCreateDescription": "Open an existing folder or create a new workspace from a remote Git repository.",
+    "chat.workspaceCreateDescription":
+      "Open an existing folder or create a new workspace from a remote Git repository.",
     "chat.workspaceOpenFolder": "Open local folder",
     "chat.workspaceOpenFolderDescription": "Add an existing folder as a workspace.",
     "chat.workspaceOr": "or",
@@ -1946,7 +1947,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceCloneUrlPlaceholder": "https://github.com/owner/repository.git",
     "chat.workspaceCloneParent": "Location",
     "chat.workspaceCloneParentPlaceholder": "Choose the parent folder for the repository",
-    "chat.workspaceCloneParentPickerDescription": "Choose the parent folder where the new workspace will be saved.",
+    "chat.workspaceCloneParentPickerDescription":
+      "Choose the parent folder where the new workspace will be saved.",
     "chat.workspaceCloneChooseParent": "Choose folder",
     "chat.workspaceCloneName": "Workspace name",
     "chat.workspaceCloneNamePlaceholder": "repository",

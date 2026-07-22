@@ -271,7 +271,7 @@ export function WorkspaceCloneModal({
                 <div className="space-y-1.5">
                   <Label htmlFor="workspace-clone-branch">{t("chat.workspaceCloneBranch")}</Label>
                   <Select
-                    value={branch || null}
+                    value={branch || undefined}
                     onValueChange={setBranch}
                     disabled={!branches.length || branchesLoading}
                   >

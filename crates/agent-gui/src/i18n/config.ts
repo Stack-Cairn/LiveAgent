@@ -52,7 +52,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.recentConversation": "最近会话",
     "chat.workspaceSection": "工作空间",
     "chat.workspaceCreate": "新建工作空间",
-    "chat.workspaceCreateDescription": "打开现有文件夹，或从远程 Git 仓库创建新的工作空间。",
+    "chat.workspaceCreateDescription": "打开已有文件夹，或从远程 Git 仓库创建新的工作空间。",
     "chat.workspaceOpenFolder": "打开本地文件夹",
     "chat.workspaceOpenFolderDescription": "将已有文件夹添加为工作空间。",
     "chat.workspaceOr": "或",
@@ -2061,7 +2061,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.recentConversation": "Conversations",
     "chat.workspaceSection": "Workspaces",
     "chat.workspaceCreate": "New workspace",
-    "chat.workspaceCreateDescription": "Open an existing folder or create a new workspace from a remote Git repository.",
+    "chat.workspaceCreateDescription":
+      "Open an existing folder or create a new workspace from a remote Git repository.",
     "chat.workspaceOpenFolder": "Open local folder",
     "chat.workspaceOpenFolderDescription": "Add an existing folder as a workspace.",
     "chat.workspaceOr": "or",
@@ -2071,7 +2072,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceCloneUrlPlaceholder": "https://github.com/owner/repository.git",
     "chat.workspaceCloneParent": "Location",
     "chat.workspaceCloneParentPlaceholder": "Choose the parent folder for the repository",
-    "chat.workspaceCloneParentPickerDescription": "Choose the parent folder where the new workspace will be saved.",
+    "chat.workspaceCloneParentPickerDescription":
+      "Choose the parent folder where the new workspace will be saved.",
     "chat.workspaceCloneChooseParent": "Choose folder",
     "chat.workspaceCloneName": "Workspace name",
     "chat.workspaceCloneNamePlaceholder": "repository",
