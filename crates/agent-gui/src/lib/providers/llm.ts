@@ -25,8 +25,9 @@ export {
   type ProviderPayloadMiddleware,
 } from "./runtime/payloadPipeline";
 export {
-  buildDualAuthHeaders,
+  buildAnthropicAuthHeaders,
   buildGeminiAuthHeaders,
+  buildOpenAIAuthHeaders,
   buildProviderRequestHeaders,
   buildProviderRequestMetadata,
   isValidCustomHeaderKey,

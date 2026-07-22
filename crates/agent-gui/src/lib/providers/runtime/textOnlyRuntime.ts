@@ -148,7 +148,12 @@ export async function streamAssistantMessage(params: {
     params.providerId,
     params.runtime.baseUrl.trim(),
     mergeCustomHeaders(
-      buildProviderRequestHeaders(params.providerId, params.runtime.apiKey, params.sessionId),
+      buildProviderRequestHeaders(
+        params.providerId,
+        params.runtime.apiKey,
+        params.sessionId,
+        params.runtime.requestFormat,
+      ),
       params.runtime.customHeaders,
     ),
     { useSystemProxy: params.runtime.useSystemProxy === true },
@@ -343,7 +348,12 @@ export async function completeAssistantMessage(params: {
     params.providerId,
     params.runtime.baseUrl.trim(),
     mergeCustomHeaders(
-      buildProviderRequestHeaders(params.providerId, params.runtime.apiKey, params.sessionId),
+      buildProviderRequestHeaders(
+        params.providerId,
+        params.runtime.apiKey,
+        params.sessionId,
+        params.runtime.requestFormat,
+      ),
       params.runtime.customHeaders,
     ),
     { useSystemProxy: params.runtime.useSystemProxy === true },

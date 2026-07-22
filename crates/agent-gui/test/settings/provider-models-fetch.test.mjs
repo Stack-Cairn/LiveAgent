@@ -77,43 +77,45 @@ test("buildProviderModelsUrl defaults to /v1/models and falls back to official e
   );
 });
 
-test("buildProviderModelsAttempts orders default before official with provider headers", () => {
+test("buildProviderModelsAttempts carries only each provider's standard auth header", () => {
   const gemini = providerUtils.buildProviderModelsAttempts(
     "gemini",
     "https://relay.example.com",
     "test-key",
   );
+  // gemini 的 default/v1 与 official/v1beta URL 不同，保留两次尝试；请求头一致。
   assert.equal(gemini.length, 2);
   assert.deepEqual(
     gemini.map((attempt) => attempt.kind),
     ["default", "official"],
   );
-  assert.equal(gemini[0].headers.Authorization, "Bearer test-key");
-  assert.equal(gemini[0].headers["x-goog-api-key"], "test-key");
-  assert.equal(gemini[1].headers.Authorization, undefined);
-  assert.equal(gemini[1].headers["x-goog-api-key"], "test-key");
+  for (const attempt of gemini) {
+    assert.equal(attempt.headers.Authorization, undefined);
+    assert.equal(attempt.headers["x-api-key"], undefined);
+    assert.equal(attempt.headers["x-goog-api-key"], "test-key");
+  }
 
   const claude = providerUtils.buildProviderModelsAttempts(
     "claude_code",
     "https://relay.example.com",
     "test-key",
   );
-  assert.equal(claude.length, 2);
-  assert.equal(claude[0].headers.Authorization, "Bearer test-key");
+  // 请求头不再随 default/official 变化，URL 相同的尝试被签名去重收敛为一次。
+  assert.equal(claude.length, 1);
+  assert.equal(claude[0].headers.Authorization, undefined);
+  assert.equal(claude[0].headers["x-api-key"], "test-key");
+  assert.equal(claude[0].headers["x-goog-api-key"], undefined);
   assert.equal(claude[0].headers["anthropic-version"], "2023-06-01");
-  assert.equal(claude[1].headers.Authorization, undefined);
-  assert.equal(claude[1].headers["x-api-key"], "test-key");
-  assert.equal(claude[1].headers["anthropic-version"], "2023-06-01");
 
   const codex = providerUtils.buildProviderModelsAttempts(
     "codex",
     "https://relay.example.com",
     "test-key",
   );
-  assert.equal(codex.length, 2);
-  assert.equal(codex[0].headers["x-api-key"], "test-key");
-  assert.equal(codex[1].headers["x-api-key"], undefined);
-  assert.equal(codex[1].headers.Authorization, "Bearer test-key");
+  assert.equal(codex.length, 1);
+  assert.equal(codex[0].headers.Authorization, "Bearer test-key");
+  assert.equal(codex[0].headers["x-api-key"], undefined);
+  assert.equal(codex[0].headers["x-goog-api-key"], undefined);
 
   const inferenceOnlyHeaders = [
     "x-app",
@@ -251,22 +253,18 @@ test("fetchModelsFromApi surfaces the informative failure when every attempt fai
   );
 });
 
-test("fetchModelsFromApi retries claude_code with official anthropic headers", async () => {
+test("fetchModelsFromApi requests claude_code once with only the standard anthropic header", async () => {
   await withFetchStub(
-    (_url, callIndex) =>
-      callIndex === 1
-        ? jsonResponse(401, { error: "authorization header rejected" })
-        : jsonResponse(200, { data: [{ id: "claude-opus-4-8" }] }),
+    () => jsonResponse(200, { data: [{ id: "claude-opus-4-8" }] }),
     async (calls) => {
       const models = await providerUtils.fetchModelsFromApi(
         "claude_code",
         "https://relay.example.com",
         "test-key",
       );
-      assert.equal(calls.length, 2);
-      assert.equal(calls[0].options.headers.Authorization, "Bearer test-key");
-      assert.equal(calls[1].options.headers.Authorization, undefined);
-      assert.equal(calls[1].options.headers["x-api-key"], "test-key");
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].options.headers.Authorization, undefined);
+      assert.equal(calls[0].options.headers["x-api-key"], "test-key");
       assert.deepEqual(
         models.map((model) => model.id),
         ["claude-opus-4-8"],

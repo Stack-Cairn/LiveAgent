@@ -1,5 +1,10 @@
 import type { CacheRetention, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import type { CustomProvider, ProviderId, ReasoningLevel } from "../../settings";
+import type {
+  CodexRequestFormat,
+  CustomProvider,
+  ProviderId,
+  ReasoningLevel,
+} from "../../settings";
 import { createUuid } from "../../shared/id";
 import {
   ANTHROPIC_DEFAULT_REQUEST_HEADERS,
@@ -13,10 +18,16 @@ import { normalizeSessionId } from "./common";
 
 export { isValidCustomHeaderKey } from "../customHeaders";
 
-export function buildDualAuthHeaders(apiKey: string): Record<string, string> {
+// 每个供应商只带自家标准的 API Key 请求头，绝不双头齐发。
+export function buildAnthropicAuthHeaders(apiKey: string): Record<string, string> {
+  return {
+    "x-api-key": apiKey,
+  };
+}
+
+export function buildOpenAIAuthHeaders(apiKey: string): Record<string, string> {
   return {
     Authorization: `Bearer ${apiKey}`,
-    "x-api-key": apiKey,
   };
 }
 
@@ -27,13 +38,16 @@ export function buildGeminiAuthHeaders(apiKey: string): Record<string, string> {
 }
 
 function buildProviderAuthHeaders(providerId: ProviderId, apiKey: string): Record<string, string> {
-  return providerId === "gemini" ? buildGeminiAuthHeaders(apiKey) : buildDualAuthHeaders(apiKey);
+  if (providerId === "gemini") return buildGeminiAuthHeaders(apiKey);
+  if (providerId === "claude_code") return buildAnthropicAuthHeaders(apiKey);
+  return buildOpenAIAuthHeaders(apiKey);
 }
 
 export function buildProviderRequestHeaders(
   providerId: ProviderId,
   apiKey: string,
   sessionId?: string,
+  requestFormat?: CodexRequestFormat,
 ): Record<string, string> {
   const authHeaders = buildProviderAuthHeaders(providerId, apiKey);
   if (providerId === "claude_code") {
@@ -44,6 +58,10 @@ export function buildProviderRequestHeaders(
     };
   }
   if (providerId === "codex") {
+    // 标准 Chat Completions 是无状态协议，只需 Authorization——
+    // codex_cli_rs UA 与 session_id/conversation_id 是 Responses（Codex CLI）
+    // 链路专属身份头，不得泄漏进 completions 格式的请求。
+    if (requestFormat === "openai-completions") return authHeaders;
     const requestSessionId = normalizeSessionId(sessionId) ?? createUuid();
     return {
       ...authHeaders,

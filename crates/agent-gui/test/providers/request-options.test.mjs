@@ -66,8 +66,9 @@ test("llm facade preserves provider runtime exports", () => {
     "attachCodexResponsesStorage",
     "attachPayloadDebugLogging",
     "attachProviderNativeWebSearch",
-    "buildDualAuthHeaders",
+    "buildAnthropicAuthHeaders",
     "buildGeminiAuthHeaders",
+    "buildOpenAIAuthHeaders",
     "buildProviderRequestHeaders",
     "buildProviderRequestMetadata",
     "isValidCustomHeaderKey",
@@ -131,9 +132,11 @@ test("image proxy URL builder encodes the source URL", () => {
 });
 
 test("provider request helpers normalize auth, metadata, errors, and model values", () => {
-  assert.deepEqual(providers.buildDualAuthHeaders("secret"), {
-    Authorization: "Bearer secret",
+  assert.deepEqual(providers.buildAnthropicAuthHeaders("secret"), {
     "x-api-key": "secret",
+  });
+  assert.deepEqual(providers.buildOpenAIAuthHeaders("secret"), {
+    Authorization: "Bearer secret",
   });
   assert.deepEqual(providers.buildGeminiAuthHeaders("secret"), {
     "x-goog-api-key": "secret",
@@ -141,7 +144,6 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   assert.deepEqual(
     providers.buildProviderRequestHeaders("claude_code", "secret", "conversation-1"),
     {
-      Authorization: "Bearer secret",
       "x-api-key": "secret",
       "x-app": "cli",
       "User-Agent": "claude-cli/2.1.71 (external, cli)",
@@ -164,11 +166,33 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   );
   assert.deepEqual(providers.buildProviderRequestHeaders("codex", "secret", "conversation-1"), {
     Authorization: "Bearer secret",
-    "x-api-key": "secret",
     "User-Agent": "codex_cli_rs/0.72.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal",
     session_id: "conversation-1",
     conversation_id: "conversation-1",
   });
+  // Responses 格式显式指定时保持 Codex CLI 身份头。
+  assert.deepEqual(
+    providers.buildProviderRequestHeaders("codex", "secret", "conversation-1", "openai-responses"),
+    {
+      Authorization: "Bearer secret",
+      "User-Agent": "codex_cli_rs/0.72.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal",
+      session_id: "conversation-1",
+      conversation_id: "conversation-1",
+    },
+  );
+  // 标准 Chat Completions 是无状态协议：只带 Authorization，
+  // 不带 codex_cli_rs UA 与 session_id/conversation_id。
+  assert.deepEqual(
+    providers.buildProviderRequestHeaders(
+      "codex",
+      "secret",
+      "conversation-1",
+      "openai-completions",
+    ),
+    {
+      Authorization: "Bearer secret",
+    },
+  );
   assert.deepEqual(providers.buildProviderRequestHeaders("gemini", "secret", "conversation-1"), {
     "x-goog-api-key": "secret",
   });

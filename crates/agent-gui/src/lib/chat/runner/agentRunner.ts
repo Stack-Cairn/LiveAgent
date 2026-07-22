@@ -709,7 +709,12 @@ export async function runAssistantWithTools(params: {
       params.providerId,
       params.runtime.baseUrl.trim(),
       mergeCustomHeaders(
-        buildProviderRequestHeaders(params.providerId, params.runtime.apiKey, params.sessionId),
+        buildProviderRequestHeaders(
+          params.providerId,
+          params.runtime.apiKey,
+          params.sessionId,
+          params.runtime.requestFormat,
+        ),
         params.runtime.customHeaders,
       ),
       { useSystemProxy: params.runtime.useSystemProxy === true },

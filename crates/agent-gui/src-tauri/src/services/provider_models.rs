@@ -234,7 +234,7 @@ fn build_provider_models_attempts(
     let base_url = normalize_provider_base_url(provider_type, base_url)?;
     let candidates = [false, true].map(|official| ProviderModelsAttempt {
         url: build_provider_models_url(provider_type, &base_url, official),
-        headers: build_provider_models_headers(provider_type, api_key, official),
+        headers: build_provider_models_headers(provider_type, api_key),
     });
     let mut attempts = Vec::new();
     for candidate in candidates {
@@ -248,31 +248,25 @@ fn build_provider_models_attempts(
     Ok(attempts)
 }
 
+// 每个供应商只带自家标准的 API Key 请求头：claude_code 用 x-api-key、
+// codex 用 authorization Bearer、gemini 用 x-goog-api-key，绝不双头齐发。
+// official/default 两次尝试仅在 URL 上有差异（gemini v1 vs v1beta），
+// 请求头完全一致，重复的尝试由 build_provider_models_attempts 去重收敛。
 fn build_provider_models_headers(
     provider_type: &str,
     api_key: &str,
-    official: bool,
 ) -> Vec<(&'static str, String)> {
     let mut headers = vec![("content-type", "application/json".to_string())];
     match provider_type {
         "gemini" => {
             headers.push(("x-goog-api-key", api_key.to_string()));
-            if !official {
-                headers.push(("authorization", format!("Bearer {api_key}")));
-            }
         }
         "claude_code" => {
             headers.push(("x-api-key", api_key.to_string()));
             headers.push(("anthropic-version", ANTHROPIC_API_VERSION.to_string()));
-            if !official {
-                headers.push(("authorization", format!("Bearer {api_key}")));
-            }
         }
         _ => {
             headers.push(("authorization", format!("Bearer {api_key}")));
-            if !official {
-                headers.push(("x-api-key", api_key.to_string()));
-            }
         }
     }
     headers
@@ -341,12 +335,10 @@ mod tests {
             "key",
         )
         .expect("gemini attempts");
+        // 请求头不再随 official/default 变化，URL 相同的尝试会被去重收敛。
+        assert_eq!(gemini.len(), 1);
         assert_eq!(
             gemini[0].url.as_str(),
-            "https://relay.example.com/v1beta/models"
-        );
-        assert_eq!(
-            gemini[1].url.as_str(),
             "https://relay.example.com/v1beta/models"
         );
 
@@ -356,6 +348,7 @@ mod tests {
             "key",
         )
         .expect("codex attempts");
+        assert_eq!(codex.len(), 1);
         assert_eq!(codex[0].url.as_str(), "https://relay.example.com/v1/models");
     }
 
@@ -376,25 +369,45 @@ mod tests {
     #[test]
     fn provider_model_headers_exclude_inference_identity() {
         for provider_type in ["claude_code", "codex", "gemini"] {
-            for official in [false, true] {
-                let headers = build_provider_models_headers(provider_type, "key", official);
-                let names = headers
-                    .iter()
-                    .map(|(name, _)| name.to_ascii_lowercase())
-                    .collect::<Vec<_>>();
+            let headers = build_provider_models_headers(provider_type, "key");
+            let names = headers
+                .iter()
+                .map(|(name, _)| name.to_ascii_lowercase())
+                .collect::<Vec<_>>();
 
-                assert!(!names.iter().any(|name| name.starts_with("x-stainless-")));
-                for forbidden in [
-                    "x-app",
-                    "user-agent",
-                    "anthropic-beta",
-                    "anthropic-dangerous-direct-browser-access",
-                    "session_id",
-                    "conversation_id",
-                ] {
-                    assert!(!names.iter().any(|name| name == forbidden));
-                }
+            assert!(!names.iter().any(|name| name.starts_with("x-stainless-")));
+            for forbidden in [
+                "x-app",
+                "user-agent",
+                "anthropic-beta",
+                "anthropic-dangerous-direct-browser-access",
+                "session_id",
+                "conversation_id",
+            ] {
+                assert!(!names.iter().any(|name| name == forbidden));
             }
+        }
+    }
+
+    #[test]
+    fn provider_model_headers_carry_single_standard_auth_header() {
+        for (provider_type, expected) in [
+            ("claude_code", "x-api-key"),
+            ("codex", "authorization"),
+            ("gemini", "x-goog-api-key"),
+        ] {
+            let headers = build_provider_models_headers(provider_type, "key");
+            let auth_names = headers
+                .iter()
+                .map(|(name, _)| name.to_ascii_lowercase())
+                .filter(|name| {
+                    matches!(
+                        name.as_str(),
+                        "authorization" | "x-api-key" | "x-goog-api-key"
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(auth_names, vec![expected.to_string()], "{provider_type}");
         }
     }
 
