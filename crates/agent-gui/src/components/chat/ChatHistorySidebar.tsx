@@ -1222,7 +1222,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         // Cancelled mid-batch: exitSelectionMode already reset the selection UI.
         return;
       }
-      const failedIds = result.failedIds.filter((id) => orderedConversationIds.includes(id));
+      const orderedConversationIdSet = new Set(orderedConversationIds);
+      const failedIds = result.failedIds.filter((id) => orderedConversationIdSet.has(id));
       setSelectedConversationIds(new Set(failedIds));
       selectionAnchorRef.current = failedIds[0] ?? null;
       if (failedIds.length === 0) {
