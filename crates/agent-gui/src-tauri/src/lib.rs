@@ -192,6 +192,8 @@ macro_rules! app_invoke_handler {
             commands::git::git_discover_repositories,
             commands::git::git_branches,
             commands::git::git_init,
+            commands::git::git_clone_repository,
+            commands::git::git_list_remote_branches,
             commands::git::git_switch_branch,
             commands::git::git_create_branch,
             commands::git::git_diff,

@@ -132,6 +132,7 @@ import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
 import { useWorkspaceOverlays } from "./chat/workspace/useWorkspaceOverlays";
 import { useWorkspaceProjectRemoval } from "./chat/workspace/useWorkspaceProjectRemoval";
+import { WorkspaceCloneModal } from "./chat/workspace/WorkspaceCloneModal";
 import { useWorkspaceProjects } from "./chat/workspace/useWorkspaceProjects";
 import { McpHubPage } from "./mcp-hub/McpHubPage";
 import type { SectionId } from "./settings/types";
@@ -255,6 +256,11 @@ export function ChatPage(props: ChatPageProps) {
     ensureSshTunnelToolTab,
     handleBrowseWorkspaceProjectInSystemFileManager,
     handleOpenCreateWorkspaceProject,
+    workspaceCreateModalOpen,
+    setWorkspaceCreateModalOpen,
+    handleOpenWorkspaceFolder,
+    handleCloneWorkspaceProject,
+    handleLoadWorkspaceRemoteBranches,
     handleStartRenamingWorkspaceProject,
     handleCommitWorkspaceProjectRename,
     handleCancelWorkspaceProjectRename,
@@ -1521,6 +1527,16 @@ export function ChatPage(props: ChatPageProps) {
             setActiveView("mcp-hub");
           }}
         />
+
+        {workspaceCreateModalOpen ? (
+          <WorkspaceCloneModal
+            initialParent={activeWorkspaceProjectPath || workdir}
+            onOpenFolder={handleOpenWorkspaceFolder}
+            onClone={handleCloneWorkspaceProject}
+            onClose={() => setWorkspaceCreateModalOpen(false)}
+            onLoadBranches={handleLoadWorkspaceRemoteBranches}
+          />
+        ) : null}
 
         {shareConversation ? (
           <HistoryShareModal

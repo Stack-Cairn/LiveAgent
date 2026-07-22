@@ -151,6 +151,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
 import { SharedHistoryPage } from "@/pages/SharedHistoryPage";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
+import { WorkspaceCloneModal } from "@/pages/chat/WorkspaceCloneModal";
 import { buildTextFromComposerDraft, importPastedTextsAsFiles } from "./chatDraft";
 import {
   asErrorMessage,
@@ -279,6 +280,7 @@ export default function GatewayApp() {
   const [pendingCommandRevision, setPendingCommandRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [workspaceCreateModalOpen, setWorkspaceCreateModalOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
   const [overlay, setOverlay] = useState<OverlayState>("closed");
   const { settings, setSettings, settingsSyncReady, settingsSyncError, settingsSaveState } =
@@ -1149,8 +1151,41 @@ export default function GatewayApp() {
   );
 
   const handleOpenCreateWorkspaceProject = useCallback(() => {
+    setWorkspaceCreateModalOpen(true);
+  }, []);
+
+  const handleOpenWorkspaceFolder = useCallback(() => {
+    setWorkspaceCreateModalOpen(false);
     setProjectPickerOpen(true);
   }, []);
+
+  const handleCloneWorkspaceProject = useCallback(
+    async (remoteUrl: string, parent: string, name: string, branch: string) => {
+      if (!api) {
+        throw new Error("网关未连接。");
+      }
+      const response = await api.gitRequest<{ state?: { workdir?: string } }>("clone", parent, {
+        name,
+        remoteUrl,
+        branch: branch || undefined,
+      });
+      const path = response.state?.workdir?.trim();
+      if (!path) {
+        throw new Error("克隆完成后未返回工作空间路径。");
+      }
+      activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));
+      void sidebarStore.refreshWorkdirs("new-workdir");
+    },
+    [activateWorkspaceProject, api, sidebarStore],
+  );
+
+  const handleLoadWorkspaceRemoteBranches = useCallback(
+    (remoteUrl: string) =>
+      api?.gitRequest<{ defaultBranch: string; branches: string[] }>("list_remote_branches", "", {
+        remoteUrl,
+      }) ?? Promise.reject(new Error("网关未连接。")),
+    [api],
+  );
 
   const handleWorkdirPickerSelect = useCallback(
     (path: string) => {
@@ -4175,6 +4210,18 @@ export default function GatewayApp() {
                 initialWorkdir={activeWorkspaceProjectPath || settings.system.workdir.trim()}
                 onClose={() => setProjectPickerOpen(false)}
                 onSelect={handleWorkdirPickerSelect}
+              />
+            ) : null}
+
+            {workspaceCreateModalOpen ? (
+              <WorkspaceCloneModal
+                initialParent={activeWorkspaceProjectPath || settings.system.workdir.trim()}
+                canClone={settings.remote.enableWebGit}
+                cloneDisabledMessage={translate("chat.workspaceCloneWebDisabled", settings.locale)}
+                onOpenFolder={handleOpenWorkspaceFolder}
+                onClone={handleCloneWorkspaceProject}
+                onLoadBranches={handleLoadWorkspaceRemoteBranches}
+                onClose={() => setWorkspaceCreateModalOpen(false)}
               />
             ) : null}
 

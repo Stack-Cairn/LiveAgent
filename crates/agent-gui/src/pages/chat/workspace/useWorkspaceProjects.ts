@@ -120,6 +120,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
   const historyScopeKey = sidebarScopeKey(sidebarScope);
   const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
   const [projectRenameDraft, setProjectRenameDraft] = useState("");
+  const [workspaceCreateModalOpen, setWorkspaceCreateModalOpen] = useState(false);
 
   const setWorkspaceProjectDirectoryMissing = useCallback(
     (project: WorkspaceProject, missing: boolean) => {
@@ -341,7 +342,11 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [checkWorkspaceProjectDirectory, setErrorMessage, t],
   );
 
-  const handleOpenCreateWorkspaceProject = useCallback(async () => {
+  const handleOpenCreateWorkspaceProject = useCallback(() => {
+    setWorkspaceCreateModalOpen(true);
+  }, []);
+
+  const handleOpenWorkspaceFolder = useCallback(async () => {
     try {
       const picked = await invoke<string | null>("system_pick_folder", {
         initial_workdir: activeWorkspaceProjectPath || workdir,
@@ -352,8 +357,32 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     } catch (error) {
       setErrorMessage(asErrorMessage(error, "选择项目目录失败"));
     }
-  }, [activateWorkspaceProject, activeWorkspaceProjectPath, workdir]);
+  }, [activateWorkspaceProject, activeWorkspaceProjectPath, workdir, setErrorMessage]);
 
+  const handleCloneWorkspaceProject = useCallback(
+    async (remoteUrl: string, parent: string, name: string, branch: string) => {
+      const response = await invoke<{ state?: { workdir?: string } }>("git_clone_repository", {
+        parent,
+        name,
+        remote_url: remoteUrl,
+        branch: branch || undefined,
+      });
+      const path = response.state?.workdir?.trim();
+      if (!path) {
+        throw new Error("克隆完成后未返回工作空间路径。");
+      }
+      activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));
+    },
+    [activateWorkspaceProject],
+  );
+
+  const handleLoadWorkspaceRemoteBranches = useCallback(
+    (remoteUrl: string) =>
+      invoke<{ defaultBranch: string; branches: string[] }>("git_list_remote_branches", {
+        remote_url: remoteUrl,
+      }),
+    [],
+  );
   const commitWorkspaceProjectRename = useCallback(
     (project: WorkspaceProject, nextNameInput: string) => {
       if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
@@ -515,6 +544,11 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     ensureSshTunnelToolTab,
     handleBrowseWorkspaceProjectInSystemFileManager,
     handleOpenCreateWorkspaceProject,
+    workspaceCreateModalOpen,
+    setWorkspaceCreateModalOpen,
+    handleOpenWorkspaceFolder,
+    handleCloneWorkspaceProject,
+    handleLoadWorkspaceRemoteBranches,
     handleStartRenamingWorkspaceProject,
     handleCommitWorkspaceProjectRename,
     handleCancelWorkspaceProjectRename,

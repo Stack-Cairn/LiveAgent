@@ -22,6 +22,11 @@ node_modules
 dist
 dist-ssr
 target
+
+# Local environment credentials
+.env
+.env.*
+!.env.example
 *.local
 .vscode
 target
