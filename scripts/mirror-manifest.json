@@ -97,6 +97,7 @@
     "lib/skills/skillTriggerHint.ts",
     "lib/mcpRegistry/index.ts",
     "lib/shared/id.ts",
+    "lib/shared/fontFamily.ts",
     "pages/settings/SystemToolsSection.tsx",
     "pages/settings/SshSection.tsx",
     "lib/terminal/types.ts",

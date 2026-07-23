@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const fontFamily = loader.loadModule("src/lib/system/fontFamily.ts");
+const fontFamily = loader.loadModule("src/lib/shared/fontFamily.ts");
 
 test("font family normalizer keeps freeform stacks and rejects unsafe values", () => {
   assert.equal(fontFamily.normalizeFontFamily(""), "");
@@ -31,25 +31,38 @@ test("font family resolvers preserve the established defaults", () => {
   assert.equal(fontFamily.quoteFontFamilyName("Inter"), "Inter");
 });
 
-test("applying font families updates CSS variables and emits code font changes", () => {
+test("applying font families updates CSS variables and only emits code changes", () => {
   const previousWindow = globalThis.window;
   const windowTarget = new EventTarget();
   globalThis.window = windowTarget;
   const values = new Map();
-  const root = { style: { setProperty: (name, value) => values.set(name, value) } };
-  let codeFontFamily;
-  windowTarget.addEventListener(fontFamily.CODE_FONT_FAMILY_CHANGED_EVENT, (event) => {
-    codeFontFamily = event.detail.codeFontFamily;
+  const root = {
+    style: {
+      getPropertyValue: (name) => values.get(name) ?? "",
+      setProperty: (name, value) => values.set(name, value),
+    },
+  };
+  const codeFonts = [];
+  windowTarget.addEventListener(fontFamily.CODE_FONT_FAMILY_CHANGE_EVENT, (event) => {
+    codeFonts.push(event.detail);
   });
   try {
     fontFamily.applyFontFamilies(
       { interfaceFontFamily: "Inter", chatFontFamily: "Charter", codeFontFamily: "Menlo" },
       root,
     );
+    fontFamily.applyFontFamilies(
+      { interfaceFontFamily: "Inter", chatFontFamily: "Charter", codeFontFamily: "Menlo" },
+      root,
+    );
+    fontFamily.applyFontFamilies(
+      { interfaceFontFamily: "Inter", chatFontFamily: "Charter", codeFontFamily: "Monaco" },
+      root,
+    );
     assert.equal(values.get("--app-font-family"), "Inter");
     assert.equal(values.get("--chat-font-family"), "Charter");
-    assert.equal(values.get("--code-font-family"), "Menlo");
-    assert.equal(codeFontFamily, "Menlo");
+    assert.equal(values.get("--code-font-family"), "Monaco");
+    assert.deepEqual(codeFonts, ["Menlo", "Monaco"]);
   } finally {
     globalThis.window = previousWindow;
   }

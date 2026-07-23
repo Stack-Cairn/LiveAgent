@@ -3,7 +3,7 @@ import "@xterm/xterm/css/xterm.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { type CSSProperties, useEffect, useRef } from "react";
-import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/fontFamily";
+import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/shared/fontFamily";
 import { cn } from "../../lib/shared/utils";
 import type {
   TerminalClient,
@@ -205,7 +205,7 @@ export function XTermViewport({
         // xterm fit can throw while the panel is hidden or measuring at zero size.
       }
     };
-    fitAndResizeRef.current = fitAndResize;
+
     const handleCodeFontFamilyChange = (event: Event) => {
       const codeFontFamily = (event as CustomEvent<string>).detail;
       if (typeof codeFontFamily !== "string") return;

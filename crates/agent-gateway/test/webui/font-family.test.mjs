@@ -3,7 +3,7 @@ import test from "node:test";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
-const fontFamily = loader.loadModule("src/lib/fontFamily.ts");
+const fontFamily = loader.loadModule("src/lib/shared/fontFamily.ts");
 
 test("font family normalizer keeps freeform stacks and rejects unsafe values", () => {
   assert.equal(fontFamily.normalizeFontFamily(""), "");
