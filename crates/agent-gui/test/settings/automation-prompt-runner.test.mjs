@@ -239,3 +239,19 @@ test("CronTaskManager create pins the agent's current workspace by default", () 
     /createCronTools\(\{\s*currentChatModel: params\.currentChatModel,\s*workdir: params\.workdir,\s*\}\)/,
   );
 });
+
+test("Cron reasoning levels follow the selected model across GUI and WebUI", () => {
+  for (const source of [guiCronModalSource, webCronModalSource]) {
+    assert.match(source, /providers: CustomProvider\[\]/);
+    assert.match(source, /const selectedModel = parseModelValue\(selectedModelValue\)/);
+    assert.match(source, /getChatRuntimeReasoningLevelsForProvider\(\{/);
+    assert.match(source, /isThinkingAlwaysOnForModel\(/);
+    assert.match(source, /return thinkingAlwaysOn \? supportedLevels : \["off", \.\.\.supportedLevels\]/);
+    assert.match(source, /\{cronReasoningLevels\.map\(\(level\) => \(/);
+    assert.match(source, /coerceCronReasoningLevel\(nextReasoningLevels, current\)/);
+    assert.match(
+      source,
+      /if \(levels\.includes\(DEFAULT_CRON_REASONING\)\) return DEFAULT_CRON_REASONING;\s*return levels\[0\] \?\? DEFAULT_CRON_REASONING;/,
+    );
+  }
+});
