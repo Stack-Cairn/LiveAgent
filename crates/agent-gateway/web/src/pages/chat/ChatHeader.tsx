@@ -1,10 +1,12 @@
 import { Popover } from "@base-ui/react";
 import { memo, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  ArrowDownAZ,
   Check,
   ChevronDown,
   ClaudeIcon,
   GeminiIcon,
+  Layers,
   MonitorSmartphone,
   Moon,
   OpenaiChatgptIcon,
@@ -16,7 +18,13 @@ import {
 
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
-import { groupModelOptionsByProvider } from "../../lib/chat/chatPageHelpers";
+import {
+  groupModelOptionsByProvider,
+  type ProviderSortMode,
+  persistProviderSortMode,
+  readStoredProviderSortMode,
+  sortModelOptionGroups,
+} from "../../lib/chat/chatPageHelpers";
 import { type ModelOption, parseModelValue } from "../../lib/providers/llm";
 import {
   type AppSettings,
@@ -86,6 +94,9 @@ export const ChatHeader = memo(function ChatHeader(props: {
   const [isModelPickerOpen, setIsModelPickerOpen] = useState(false);
   const [modelSearch, setModelSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [providerSortMode, setProviderSortMode] = useState<ProviderSortMode>(() =>
+    readStoredProviderSortMode(),
+  );
   const searchInputRef = useRef<HTMLInputElement>(null);
   const executionModeRadioName = useId();
 
@@ -97,7 +108,22 @@ export const ChatHeader = memo(function ChatHeader(props: {
   }, [isModelPickerOpen]);
 
   const normalizedSearch = modelSearch.trim().toLowerCase();
-  const groups = useMemo(() => groupModelOptionsByProvider(modelOptions), [modelOptions]);
+  const groups = useMemo(
+    () => sortModelOptionGroups(groupModelOptionsByProvider(modelOptions), providerSortMode),
+    [modelOptions, providerSortMode],
+  );
+
+  // 副作用放在 updater 外：StrictMode 会双调用传给 setState 的函数
+  const nextProviderSortMode: ProviderSortMode = providerSortMode === "type" ? "alpha" : "type";
+  const toggleProviderSortMode = () => {
+    persistProviderSortMode(nextProviderSortMode);
+    setProviderSortMode(nextProviderSortMode);
+  };
+  const sortToggleTitle =
+    nextProviderSortMode === "alpha"
+      ? t("chat.sortProvidersByName")
+      : t("chat.sortProvidersByType");
+
   const selectedOption = modelOptions.find((option) => option.value === selectedValue);
   const selectedGroupId = selectedOption?.providerId;
   // 默认全部折叠，仅当前选中模型所在分组展开；搜索时强制展开所有匹配分组
@@ -219,16 +245,31 @@ export const ChatHeader = memo(function ChatHeader(props: {
                   );
                 })()}
                 <div className="px-2 py-1.5">
-                  <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
-                    <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
-                    <input
-                      ref={searchInputRef}
-                      value={modelSearch}
-                      onChange={(event) => setModelSearch(event.target.value)}
-                      placeholder={t("chat.searchModel")}
-                      className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
-                      onKeyDown={(event) => event.stopPropagation()}
-                    />
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">
+                      <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                      <input
+                        ref={searchInputRef}
+                        value={modelSearch}
+                        onChange={(event) => setModelSearch(event.target.value)}
+                        placeholder={t("chat.searchModel")}
+                        className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
+                        onKeyDown={(event) => event.stopPropagation()}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleProviderSortMode}
+                      title={sortToggleTitle}
+                      aria-label={sortToggleTitle}
+                      className="flex w-7 shrink-0 cursor-pointer items-center justify-center self-stretch rounded-md border border-border/50 bg-muted/40 text-muted-foreground/70 transition-colors hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    >
+                      {nextProviderSortMode === "alpha" ? (
+                        <ArrowDownAZ className="h-3.5 w-3.5" />
+                      ) : (
+                        <Layers className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                   </div>
                 </div>
                 <div className="max-h-[min(20rem,var(--available-height,20rem))] overflow-y-auto overscroll-contain px-1 pb-1 [scrollbar-gutter:stable]">
