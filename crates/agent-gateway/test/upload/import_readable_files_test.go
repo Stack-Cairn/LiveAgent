@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/liveagent/agent-gateway/internal/config"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/server"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
@@ -21,13 +21,13 @@ func TestImportReadableFilesForwardsMultipartToAgent(t *testing.T) {
 
 	sm := session.NewManager()
 	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
-	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot())
+	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(agentSession)
 
 	handler := server.NewHTTPServer(&config.Config{
 		Token:          "upload-token",
 		RequestTimeout: time.Second,
-	}, sm)
+	}, sm, nil)
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -52,7 +52,7 @@ func TestImportReadableFilesForwardsMultipartToAgent(t *testing.T) {
 		t.Fatalf("close multipart writer: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "http://gateway.test/api/files/import", &body)
+	req := httptest.NewRequest(http.MethodPost, "http://gateway.test/api/files/import?agent_id=desktop-agent", &body)
 	req.Header.Set("Authorization", "Bearer upload-token")
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	rec := httptest.NewRecorder()
@@ -63,7 +63,7 @@ func TestImportReadableFilesForwardsMultipartToAgent(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 	}()
 
-	var outbound *gatewayv1.GatewayEnvelope
+	var outbound *gatewayv2.GatewayEnvelope
 	select {
 	case delivered := <-agentSession.Outbound():
 		delivered.Ack(nil)
@@ -97,12 +97,12 @@ func TestImportReadableFilesForwardsMultipartToAgent(t *testing.T) {
 		t.Fatalf("second file content = %q", string(secondFile.GetContent()))
 	}
 
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgentForSession(agentSession, &gatewayv2.AgentEnvelope{
 		RequestId: outbound.GetRequestId(),
 		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv1.AgentEnvelope_UploadReadableFilesResp{
-			UploadReadableFilesResp: &gatewayv1.UploadReadableFilesResponse{
-				Files: []*gatewayv1.ChatUploadedFile{
+		Payload: &gatewayv2.AgentEnvelope_UploadReadableFilesResp{
+			UploadReadableFilesResp: &gatewayv2.UploadReadableFilesResponse{
+				Files: []*gatewayv2.ChatUploadedFile{
 					{
 						RelativePath: "uploads/notes.txt",
 						AbsolutePath: "/workspace/project/uploads/notes.txt",
@@ -156,15 +156,36 @@ func TestImportReadableFilesForwardsMultipartToAgent(t *testing.T) {
 	}
 }
 
+func TestImportReadableFilesRequiresAgentID(t *testing.T) {
+	t.Parallel()
+
+	handler := server.NewHTTPServer(&config.Config{
+		Token:          "upload-token",
+		RequestTimeout: time.Second,
+	}, session.NewManager(), nil)
+
+	req := httptest.NewRequest(http.MethodPost, "http://gateway.test/api/files/import", nil)
+	req.Header.Set("Authorization", "Bearer upload-token")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("agent_id is required")) {
+		t.Fatalf("body = %q, want agent_id validation error", rec.Body.String())
+	}
+}
+
 func TestImportReadableFilesRejectsOfflineAgentBeforeParsing(t *testing.T) {
 	t.Parallel()
 
 	handler := server.NewHTTPServer(&config.Config{
 		Token:          "upload-token",
 		RequestTimeout: time.Second,
-	}, session.NewManager())
+	}, session.NewManager(), nil)
 
-	req := httptest.NewRequest(http.MethodPost, "http://gateway.test/api/files/import", nil)
+	req := httptest.NewRequest(http.MethodPost, "http://gateway.test/api/files/import?agent_id=desktop-agent", nil)
 	req.Header.Set("Authorization", "Bearer upload-token")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

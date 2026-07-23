@@ -26,6 +26,7 @@ export type ChatEntry =
       kind: "user";
       text: string;
       attachments: PendingUploadedFile[];
+      messageId?: string;
       messageRef?: HistoryMessageRef;
       timestamp?: number;
     }
@@ -742,6 +743,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
           kind: "user",
           text,
           attachments,
+          messageId: messageRef?.messageId,
           messageRef,
           timestamp: readMessageTimestamp(message.timestamp),
         });

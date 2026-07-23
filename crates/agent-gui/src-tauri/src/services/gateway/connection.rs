@@ -95,7 +95,7 @@ impl GatewayController {
         }
     }
 
-    /// v2 主链路（v1 gRPC 回退已随 v1 协议移除）：hello 握手完成鉴权与会话登记后双向收发
+    /// v2 主链路：hello 握手完成鉴权与会话登记后双向收发
     /// 信封（双通道合并、状态迁移、对账、分发），外加传输层存活看门狗。任何失败（网关不可达、
     /// 握手失败、鉴权被拒、链路中断）一律上抛错误消息，由外层 run 循环统一退避重连。
     pub(crate) async fn connect_and_serve(
@@ -103,10 +103,14 @@ impl GatewayController {
         config: RemoteSettingsPayload,
         config_rx: &mut watch::Receiver<RemoteSettingsPayload>,
     ) -> Result<(), String> {
-        let ws_url = build_ws_url(&config.gateway_url, config.grpc_port, GATEWAY_WS_AGENT_PATH)?;
+        let ws_url = build_ws_url(
+            &config.gateway_url,
+            config.gateway_port,
+            GATEWAY_WS_AGENT_PATH,
+        )?;
         let hello = build_client_hello(
             &config.token,
-            effective_agent_id(&config),
+            effective_agent_id(&config)?,
             crate::app_version().to_string(),
         );
 
@@ -135,7 +139,7 @@ impl GatewayController {
                 status.enabled = true;
                 status.configured = true;
                 status.gateway_url = config.gateway_url.clone();
-                status.agent_id = effective_agent_id(&config);
+                status.agent_id = config.agent_id.clone();
                 status.session_id = Some(server_hello.session_id.clone());
                 status.connected_since = Some(connected_at);
                 status.last_heartbeat = Some(connected_at);
@@ -529,19 +533,12 @@ pub(crate) fn is_remote_configured(config: &RemoteSettingsPayload) -> bool {
     !config.gateway_url.trim().is_empty() && !config.token.trim().is_empty()
 }
 
-pub(crate) fn effective_agent_id(config: &RemoteSettingsPayload) -> String {
-    if !config.agent_id.trim().is_empty() {
-        return config.agent_id.trim().to_string();
+pub(crate) fn effective_agent_id(config: &RemoteSettingsPayload) -> Result<String, String> {
+    let agent_id = config.agent_id.trim();
+    if agent_id.is_empty() {
+        return Err("Agent ID 尚未初始化".to_string());
     }
-    fallback_agent_id()
-}
-
-pub(crate) fn fallback_agent_id() -> String {
-    std::env::var("HOSTNAME")
-        .ok()
-        .or_else(|| std::env::var("COMPUTERNAME").ok())
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "liveagent-desktop".to_string())
+    Ok(agent_id.to_string())
 }
 
 pub(crate) fn set_disconnected_status(
@@ -553,7 +550,7 @@ pub(crate) fn set_disconnected_status(
     status.enabled = config.enabled;
     status.configured = is_remote_configured(config);
     status.gateway_url = config.gateway_url.clone();
-    status.agent_id = effective_agent_id(config);
+    status.agent_id = config.agent_id.trim().to_string();
     status.session_id = None;
     status.connected_since = None;
     status.last_heartbeat = None;

@@ -178,9 +178,12 @@ docker run -d \
   --name liveagent-gateway \
   --restart unless-stopped \
   -p 3000:8080 \
+  -v liveagent-gateway-data:/var/lib/liveagent \
   -e LIVEAGENT_GATEWAY_TOKEN=your-token \
   ghcr.io/stack-cairn/liveagent-gateway:latest
 ```
+
+命名卷用于持久化 Gateway 数据库和独立签发的 Agent Token，重建容器时不会丢失。
 
 **一键升级到最新版** — 拉取新镜像 → 删除旧容器 → 以相同参数重建(若你修改过端口映射或 token,请同步替换下方参数):
 
@@ -191,6 +194,7 @@ docker pull ghcr.io/stack-cairn/liveagent-gateway:latest \
     --name liveagent-gateway \
     --restart unless-stopped \
     -p 3000:8080 \
+    -v liveagent-gateway-data:/var/lib/liveagent \
     -e LIVEAGENT_GATEWAY_TOKEN=your-token \
     ghcr.io/stack-cairn/liveagent-gateway:latest \
   && docker image prune -f
@@ -321,7 +325,7 @@ LiveAgent/
 │   └── agent-gateway/            # Go 网关服务
 │       ├── cmd/gateway/          #   入口
 │       ├── internal/             #   核心实现
-│       ├── proto/v1/             #   Protobuf 定义
+│       ├── proto/v2/             #   Protobuf 定义
 │       └── web/                  #   嵌入式 WebUI
 │
 ├── docs/                         # 项目文档

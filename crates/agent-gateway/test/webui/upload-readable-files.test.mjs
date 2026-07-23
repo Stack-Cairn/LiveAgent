@@ -20,7 +20,7 @@ function createNamedBlob(name, content, type = "text/plain") {
   return blob;
 }
 
-test("importReadableFiles validates token and workdir before network calls", async () => {
+test("importReadableFiles validates token, agent id, and workdir before network calls", async () => {
   installWindow();
   let fetchCalled = false;
   globalThis.fetch = async () => {
@@ -29,14 +29,22 @@ test("importReadableFiles validates token and workdir before network calls", asy
   };
 
   await assert.rejects(
-    () => upload.importReadableFiles(" ", "/workspace", [createNamedBlob("a.txt", "a")]),
+    () =>
+      upload.importReadableFiles(" ", "desktop-agent", "/workspace", [
+        createNamedBlob("a.txt", "a"),
+      ]),
     /Gateway token is required/,
   );
   await assert.rejects(
-    () => upload.importReadableFiles("token", " ", [createNamedBlob("a.txt", "a")]),
+    () => upload.importReadableFiles("token", " ", "/workspace", [createNamedBlob("a.txt", "a")]),
+    /agent_id is required/,
+  );
+  await assert.rejects(
+    () =>
+      upload.importReadableFiles("token", "desktop-agent", " ", [createNamedBlob("a.txt", "a")]),
     /项目目录未选择，无法导入文件。/,
   );
-  assert.deepEqual(await upload.importReadableFiles("token", "/workspace", []), {
+  assert.deepEqual(await upload.importReadableFiles("token", "desktop-agent", "/workspace", []), {
     files: [],
     skipped: [],
   });
@@ -103,13 +111,16 @@ test("importReadableFiles posts multipart form and normalizes response files", a
     };
   };
 
-  const result = await upload.importReadableFiles(" token ", " /workspace ", [
+  const result = await upload.importReadableFiles(" token ", " desktop-agent ", " /workspace ", [
     createNamedBlob("a.txt", "hello"),
     createNamedBlob("b.txt", "world"),
   ]);
 
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].url, "https://gateway.example/api/files/import");
+  assert.equal(
+    requests[0].url,
+    "https://gateway.example/api/files/import?agent_id=desktop-agent",
+  );
   assert.equal(requests[0].init.method, "POST");
   assert.equal(requests[0].init.headers.Authorization, "Bearer token");
   assert.ok(requests[0].init.body instanceof FormData);
@@ -177,7 +188,10 @@ test("importReadableFiles surfaces gateway error payloads", async () => {
   });
 
   await assert.rejects(
-    () => upload.importReadableFiles("token", "/workspace", [createNamedBlob("a.txt", "a")]),
+    () =>
+      upload.importReadableFiles("token", "desktop-agent", "/workspace", [
+        createNamedBlob("a.txt", "a"),
+      ]),
     /agent offline/,
   );
 });

@@ -62,12 +62,9 @@ pub async fn settings_save_remote(
     payload: Value,
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
-    let normalized = parse_remote_settings_payload(payload)?;
-    let persisted = serde_json::to_value(&normalized)
-        .map_err(|e| format!("序列化 {REMOTE_SETTINGS_TABLE} 失败：{e}"))?;
-    tauri::async_runtime::spawn_blocking(move || {
+    let normalized = tauri::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
-        save_remote(&mut conn, persisted)
+        save_remote(&mut conn, payload)
     })
     .await
     .map_err(|e| format!("settings_save_remote join 失败：{e}"))??;
@@ -126,4 +123,3 @@ pub async fn settings_reset_ssh_known_host(
     .await
     .map_err(|e| format!("settings_reset_ssh_known_host join 失败：{e}"))?
 }
-

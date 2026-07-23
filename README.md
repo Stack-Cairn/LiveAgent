@@ -177,9 +177,12 @@ docker run -d \
   --name liveagent-gateway \
   --restart unless-stopped \
   -p 3000:8080 \
+  -v liveagent-gateway-data:/var/lib/liveagent \
   -e LIVEAGENT_GATEWAY_TOKEN=your-token \
   ghcr.io/stack-cairn/liveagent-gateway:latest
 ```
+
+The named volume persists the Gateway database and independently issued Agent tokens across container upgrades.
 
 **One-command upgrade to the latest version** — pull the new image → remove the old container → recreate it with the same arguments (if you changed the port mappings or token, adjust the arguments below accordingly):
 
@@ -190,6 +193,7 @@ docker pull ghcr.io/stack-cairn/liveagent-gateway:latest \
     --name liveagent-gateway \
     --restart unless-stopped \
     -p 3000:8080 \
+    -v liveagent-gateway-data:/var/lib/liveagent \
     -e LIVEAGENT_GATEWAY_TOKEN=your-token \
     ghcr.io/stack-cairn/liveagent-gateway:latest \
   && docker image prune -f
@@ -321,7 +325,7 @@ LiveAgent/
 │   └── agent-gateway/            # Go gateway service
 │       ├── cmd/gateway/          #   Entry point
 │       ├── internal/             #   Core implementation
-│       ├── proto/v1/             #   Protobuf definitions
+│       ├── proto/v2/             #   Protobuf definitions
 │       └── web/                  #   Embedded WebUI
 │
 ├── docs/                         # Project docs

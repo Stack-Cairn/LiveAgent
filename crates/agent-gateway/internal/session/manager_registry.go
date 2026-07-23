@@ -2,53 +2,126 @@ package session
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-func (m *Manager) RecordAuthentication(agentID, agentVersion, sessionID string) {
+// RecordAuthentication 登记一次具名 Agent 的鉴权结果；同一 agent_id 的后续连接
+// 复用该登记项（entry 跨断线存活）。空 id 不会创建会话登记项。
+func (m *Manager) RecordAuthentication(agentID, agentVersion, sessionID string) AuthSnapshot {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return AuthSnapshot{}
+	}
 	m.registry.mu.Lock()
 	defer m.registry.mu.Unlock()
-	m.registry.lastAuth = AuthSnapshot{
+	entry := m.registry.entryLocked(agentID)
+	entry.lastAuth = AuthSnapshot{
 		AgentID:      agentID,
-		AgentVersion: agentVersion,
-		SessionID:    sessionID,
+		AgentVersion: strings.TrimSpace(agentVersion),
+		SessionID:    strings.TrimSpace(sessionID),
 	}
-	m.registry.authValid = true
+	entry.authValid = true
+	return entry.lastAuth
 }
 
-func (m *Manager) LatestAuthSnapshot() AuthSnapshot {
+// LatestAuthSnapshot 返回指定 agent_id 的最近鉴权快照；空或未知 id 返回空快照。
+func (m *Manager) LatestAuthSnapshot(agentID string) AuthSnapshot {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
-	return m.registry.lastAuth
+	entry := m.registry.agents[strings.TrimSpace(agentID)]
+	if entry == nil {
+		return AuthSnapshot{}
+	}
+	return entry.lastAuth
 }
 
-func (m *Manager) IsOnline() bool {
+// IsOnline 报告具名 agent_id 是否在线；空 id 一律返回 false。
+func (m *Manager) IsOnline(agentID string) bool {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return false
+	}
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
-	return m.registry.session != nil
+	entry := m.registry.agents[agentID]
+	return entry != nil && entry.session != nil
 }
 
+// AnyAgentOnline 仅用于全局健康与后台存活判断，不承担 Agent 寻址。
+func (m *Manager) AnyAgentOnline() bool {
+	m.registry.mu.RLock()
+	defer m.registry.mu.RUnlock()
+	for _, entry := range m.registry.agents {
+		if entry.session != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// SetSession 把会话登记到其 agent_id 的登记项，只顶掉该 id 的旧会话；
+// 不同 agent_id 的会话互不影响。
 func (m *Manager) SetSession(s *AgentSession) {
-	m.registry.mu.Lock()
-	previous := m.registry.session
-	if m.registry.authValid {
-		s.AgentID = m.registry.lastAuth.AgentID
-		s.AgentVersion = m.registry.lastAuth.AgentVersion
-		s.SessionID = m.registry.lastAuth.SessionID
+	m.setSession(s, nil, false)
+}
+
+// SetAuthenticatedSessionIfCurrent 把鉴权结果和会话作为一个注册动作提交。
+// isCurrent 在 registry 写锁内执行；返回 false 时不会创建离线登记项。
+func (m *Manager) SetAuthenticatedSessionIfCurrent(
+	s *AgentSession,
+	isCurrent func() bool,
+) bool {
+	return m.setSession(s, isCurrent, true)
+}
+
+func (m *Manager) setSession(
+	s *AgentSession,
+	isCurrent func() bool,
+	recordAuthentication bool,
+) bool {
+	if s == nil || strings.TrimSpace(s.AgentID) == "" {
+		if s != nil {
+			s.Close()
+		}
+		return false
 	}
-	if previous != s {
-		m.registry.sessionEpoch += 1
-		clearRuntimeStatusLocked(m.registry)
+	s.AgentID = strings.TrimSpace(s.AgentID)
+	m.registry.mu.Lock()
+	if isCurrent != nil && !isCurrent() {
+		m.registry.mu.Unlock()
+		s.Close()
+		return false
+	}
+	entry := m.registry.entryLocked(s.AgentID)
+	if recordAuthentication {
+		entry.lastAuth = AuthSnapshot{
+			AgentID:      s.AgentID,
+			AgentVersion: strings.TrimSpace(s.AgentVersion),
+			SessionID:    strings.TrimSpace(s.SessionID),
+		}
+		entry.authValid = true
+	}
+	previous := entry.session
+	if entry.authValid {
+		s.AgentID = entry.lastAuth.AgentID
+		s.AgentVersion = entry.lastAuth.AgentVersion
+		s.SessionID = entry.lastAuth.SessionID
 	}
 	sessionChanged := previous != s
-	m.registry.session = s
+	if sessionChanged {
+		entry.sessionEpoch += 1
+		clearRuntimeStatusLocked(entry)
+	}
+	entry.session = s
+	agentID := entry.id
 	m.registry.mu.Unlock()
 
 	if sessionChanged {
-		m.clearTerminalSessionSnapshot()
+		m.clearTerminalSessionSnapshot(agentID)
 	}
 	if previous != nil && previous != s {
 		previous.Close()
@@ -57,32 +130,44 @@ func (m *Manager) SetSession(s *AgentSession) {
 		// Replay the watched-workdir set: a freshly connected agent starts
 		// with an empty watch set and only learns a non-empty one from this
 		// push. An empty set needs no replay.
-		if m.hasWorkspaceWatchInterest() {
-			go m.pushWorkspaceWatchSet()
+		if m.hasWorkspaceWatchInterest(agentID) {
+			go m.pushWorkspaceWatchSet(agentID)
 		}
 	}
 	if sessionChanged {
-		m.broadcastStatus()
+		m.broadcastStatus(agentID)
 	}
+	return true
+}
+
+// clearSessionEntry 摘除 session 所属登记项的在线会话；session 已被顶替时无操作。
+// 返回登记项 id 与是否实际摘除。
+func (m *Manager) clearSessionEntry(session *AgentSession) (string, bool) {
+	m.registry.mu.Lock()
+	entry := m.registry.entryForSessionLocked(session)
+	if entry == nil {
+		m.registry.mu.Unlock()
+		return "", false
+	}
+	entry.session = nil
+	clearRuntimeStatusLocked(entry)
+	agentID := entry.id
+	m.registry.mu.Unlock()
+	return agentID, true
 }
 
 func (m *Manager) ClearSession(session *AgentSession) {
-	m.registry.mu.Lock()
-	if m.registry.session != session {
-		m.registry.mu.Unlock()
+	if session == nil {
 		return
 	}
-	m.registry.session = nil
-	clearRuntimeStatusLocked(m.registry)
-	m.registry.mu.Unlock()
-
-	if session == nil {
+	agentID, cleared := m.clearSessionEntry(session)
+	if !cleared {
 		return
 	}
 
 	session.Close()
-	m.clearTerminalSessionSnapshot()
-	go m.onAgentSessionCleared()
+	m.clearTerminalSessionSnapshot(agentID)
+	go m.onAgentSessionCleared(agentID)
 }
 
 func (m *Manager) ClearSessionIfHeartbeatStale(session *AgentSession, timeout time.Duration) bool {
@@ -92,95 +177,239 @@ func (m *Manager) ClearSessionIfHeartbeatStale(session *AgentSession, timeout ti
 
 	now := time.Now()
 	m.registry.mu.Lock()
-	if m.registry.session != session {
+	entry := m.registry.entryForSessionLocked(session)
+	if entry == nil {
 		m.registry.mu.Unlock()
 		return false
 	}
-	if lastPing := m.registry.session.LastPing; !lastPing.IsZero() && now.Sub(lastPing) <= timeout {
+	if lastPing := entry.session.LastPing; !lastPing.IsZero() && now.Sub(lastPing) <= timeout {
 		m.registry.mu.Unlock()
 		return false
 	}
-	m.registry.session = nil
-	clearRuntimeStatusLocked(m.registry)
+	entry.session = nil
+	clearRuntimeStatusLocked(entry)
+	agentID := entry.id
 	m.registry.mu.Unlock()
 
 	session.Close()
-	m.clearTerminalSessionSnapshot()
-	go m.onAgentSessionCleared()
+	m.clearTerminalSessionSnapshot(agentID)
+	go m.onAgentSessionCleared(agentID)
 	return true
 }
 
-func (m *Manager) Status() Status {
+// DisconnectAgent 在同一注册表临界区摘除 agent_id 的控制会话与终端数据面；
+// 返回是否有任一传输被断开。实际关闭在锁外执行，避免回调阻塞注册表。
+func (m *Manager) DisconnectAgent(agentID string) bool {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return false
+	}
+	m.registry.mu.Lock()
+	var session *AgentSession
+	var terminalRevoke func()
+	if entry := m.registry.agents[agentID]; entry != nil {
+		session = entry.session
+		if session != nil {
+			entry.session = nil
+			clearRuntimeStatusLocked(entry)
+		}
+		entry.terminalStreamMu.Lock()
+		terminalRevoke = entry.terminalStreamRevoke
+		entry.terminalStreamToAgent = nil
+		entry.terminalStreamRevoke = nil
+		entry.terminalStreamMu.Unlock()
+	}
+	m.registry.mu.Unlock()
+
+	if session != nil {
+		session.Close()
+		go m.onAgentSessionCleared(agentID)
+	}
+	if terminalRevoke != nil {
+		terminalRevoke()
+	}
+	if session != nil || terminalRevoke != nil {
+		m.clearTerminalSessionSnapshot(agentID)
+	}
+	return session != nil || terminalRevoke != nil
+}
+
+// ForgetAgent 从进程目录移除 agent_id，并关闭其当前会话。持久化目录删除后调用
+// 此方法，避免已删除客户端继续作为离线条目出现在 agent_list 中。
+func (m *Manager) ForgetAgent(agentID string) bool {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return false
+	}
+	m.registry.mu.Lock()
+	entry := m.registry.agents[agentID]
+	if entry == nil {
+		m.registry.mu.Unlock()
+		m.purgeAgentTunnels(agentID)
+		return false
+	}
+	delete(m.registry.agents, agentID)
+	session := entry.session
+	entry.terminalStreamMu.Lock()
+	terminalRevoke := entry.terminalStreamRevoke
+	entry.terminalStreamToAgent = nil
+	entry.terminalStreamRevoke = nil
+	entry.terminalStreamMu.Unlock()
+	m.registry.mu.Unlock()
+
+	if session != nil {
+		session.Close()
+		go m.onAgentSessionCleared(agentID)
+	}
+	if terminalRevoke != nil {
+		terminalRevoke()
+	}
+	m.purgeAgentTunnels(agentID)
+	return session != nil || terminalRevoke != nil
+}
+
+// Status 返回具名 agent_id 的状态；空或未知 id 返回零值。
+func (m *Manager) Status(agentID string) Status {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return Status{}
+	}
+	m.registry.mu.RLock()
+	defer m.registry.mu.RUnlock()
+	entry := m.registry.agents[agentID]
+	if entry == nil {
+		return Status{}
+	}
+	return statusLocked(entry, time.Now())
+}
+
+// AgentStatuses 返回全部登记项的状态（含离线项，供目录渲染），按 agent_id 排序。
+func (m *Manager) AgentStatuses() []Status {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
 
 	now := time.Now()
-	status := Status{}
-	if m.registry.authValid {
-		status.AgentID = m.registry.lastAuth.AgentID
-		status.AgentVersion = m.registry.lastAuth.AgentVersion
-		status.SessionID = m.registry.lastAuth.SessionID
+	statuses := make([]Status, 0, len(m.registry.agents))
+	for _, entry := range m.registry.agents {
+		statuses = append(statuses, statusLocked(entry, now))
 	}
-	if m.registry.session == nil {
+	sort.Slice(statuses, func(i, j int) bool { return statuses[i].AgentID < statuses[j].AgentID })
+	return statuses
+}
+
+// AgentDirectoryStatusSnapshot 为管理目录查询生成同一时刻的状态索引和在线 ID。
+// 返回值无需排序，避免数据库分页请求额外执行全量 O(n log n) 排序。
+func (m *Manager) AgentDirectoryStatusSnapshot() (map[string]Status, []string) {
+	m.registry.mu.RLock()
+	defer m.registry.mu.RUnlock()
+
+	now := time.Now()
+	statuses := make(map[string]Status, len(m.registry.agents))
+	onlineAgentIDs := make([]string, 0, len(m.registry.agents))
+	for _, entry := range m.registry.agents {
+		status := statusLocked(entry, now)
+		statuses[status.AgentID] = status
+		if status.Online {
+			onlineAgentIDs = append(onlineAgentIDs, status.AgentID)
+		}
+	}
+	return statuses, onlineAgentIDs
+}
+
+// ConnectedAgentIDs 返回当前在线的 agent_id 列表，按字典序。
+func (m *Manager) ConnectedAgentIDs() []string {
+	m.registry.mu.RLock()
+	defer m.registry.mu.RUnlock()
+
+	ids := make([]string, 0, len(m.registry.agents))
+	for _, entry := range m.registry.agents {
+		if entry.session != nil {
+			ids = append(ids, entry.id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func statusLocked(entry *agentEntry, now time.Time) Status {
+	status := Status{}
+	if entry.authValid {
+		status.AgentID = entry.lastAuth.AgentID
+		status.AgentVersion = entry.lastAuth.AgentVersion
+		status.SessionID = entry.lastAuth.SessionID
+	}
+	if entry.session == nil {
+		if status.AgentID == "" {
+			status.AgentID = entry.id
+		}
 		return status
 	}
 	status.Online = true
 	status.AgentReady = true
-	status.AgentID = m.registry.session.AgentID
-	status.AgentVersion = m.registry.session.AgentVersion
-	status.SessionID = m.registry.session.SessionID
-	status.ConnectedSince = m.registry.session.ConnectedAt.Unix()
-	status.LastHeartbeat = m.registry.session.LastPing.Unix()
-	status.RuntimeState = m.registry.runtimeState
-	status.RuntimeWorkerID = m.registry.runtimeWorkerID
-	status.RuntimeVisible = m.registry.runtimeVisible
-	status.RuntimeActiveRunCount = m.registry.runtimeActiveRunCount
-	if !m.registry.runtimeLastHeartbeat.IsZero() {
-		status.RuntimeLastHeartbeat = m.registry.runtimeLastHeartbeat.Unix()
+	status.AgentID = entry.session.AgentID
+	status.AgentVersion = entry.session.AgentVersion
+	status.SessionID = entry.session.SessionID
+	status.ConnectedSince = entry.session.ConnectedAt.Unix()
+	status.LastHeartbeat = entry.session.LastPing.Unix()
+	status.RuntimeState = entry.runtimeState
+	status.RuntimeWorkerID = entry.runtimeWorkerID
+	status.RuntimeVisible = entry.runtimeVisible
+	status.RuntimeActiveRunCount = entry.runtimeActiveRunCount
+	if !entry.runtimeLastHeartbeat.IsZero() {
+		status.RuntimeLastHeartbeat = entry.runtimeLastHeartbeat.Unix()
 	}
-	status.ChatRuntimeReady = runtimeReadyLocked(m.registry, now)
+	status.ChatRuntimeReady = runtimeReadyLocked(entry, now)
 	return status
 }
 
-func (m *Manager) ChatRuntimeReady() bool {
+func (m *Manager) ChatRuntimeReady(agentID string) bool {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
-	return runtimeReadyLocked(m.registry, time.Now())
-}
-
-func (m *Manager) ChatRuntimeProbeEpoch() (uint64, bool) {
-	m.registry.mu.RLock()
-	defer m.registry.mu.RUnlock()
-	if m.registry.session == nil {
-		return 0, false
-	}
-	return m.registry.sessionEpoch, true
-}
-
-func (m *Manager) RecordChatRuntimeProbe(sessionEpoch uint64) bool {
-	m.registry.mu.Lock()
-	defer m.registry.mu.Unlock()
-	if sessionEpoch == 0 || m.registry.session == nil || m.registry.sessionEpoch != sessionEpoch {
+	entry, err := m.registry.resolveOnlineLocked(agentID)
+	if err != nil {
 		return false
 	}
-	m.registry.chatRuntimeProbeAt = time.Now()
+	return runtimeReadyLocked(entry, time.Now())
+}
+
+// ChatRuntimeProbeEpoch 返回目标 Agent 的会话 epoch；探活完成后以同一 agent_id +
+// epoch 调 RecordChatRuntimeProbe，把结果绑定到发起探活的那次连接。
+func (m *Manager) ChatRuntimeProbeEpoch(agentID string) (uint64, bool) {
+	m.registry.mu.RLock()
+	defer m.registry.mu.RUnlock()
+	entry, err := m.registry.resolveOnlineLocked(agentID)
+	if err != nil {
+		return 0, false
+	}
+	return entry.sessionEpoch, true
+}
+
+func (m *Manager) RecordChatRuntimeProbe(agentID string, sessionEpoch uint64) bool {
+	m.registry.mu.Lock()
+	defer m.registry.mu.Unlock()
+	entry, err := m.registry.resolveOnlineLocked(agentID)
+	if err != nil || sessionEpoch == 0 || entry.sessionEpoch != sessionEpoch {
+		return false
+	}
+	entry.chatRuntimeProbeAt = time.Now()
 	return true
 }
 
-func (m *Manager) ChatRuntimeProbeFresh(maxAge time.Duration) bool {
+func (m *Manager) ChatRuntimeProbeFresh(agentID string, maxAge time.Duration) bool {
 	if maxAge <= 0 {
 		return false
 	}
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
-	return m.registry.session != nil &&
-		!m.registry.chatRuntimeProbeAt.IsZero() &&
-		time.Since(m.registry.chatRuntimeProbeAt) <= maxAge
+	entry, err := m.registry.resolveOnlineLocked(agentID)
+	return err == nil &&
+		!entry.chatRuntimeProbeAt.IsZero() &&
+		time.Since(entry.chatRuntimeProbeAt) <= maxAge
 }
 
 func (m *Manager) UpdateRuntimeStatus(
 	session *AgentSession,
-	event *gatewayv1.RuntimeStatusEvent,
+	event *gatewayv2.RuntimeStatusEvent,
 ) {
 	if event == nil {
 		return
@@ -190,28 +419,30 @@ func (m *Manager) UpdateRuntimeStatus(
 	now := time.Now()
 
 	m.registry.mu.Lock()
-	if m.registry.session == nil || (session != nil && m.registry.session != session) {
+	entry := m.registry.entryForSessionLocked(session)
+	if entry == nil {
 		m.registry.mu.Unlock()
 		return
 	}
-	previousReady := runtimeReadyLocked(m.registry, now)
-	changed := m.registry.runtimeState != state ||
-		m.registry.runtimeWorkerID != workerID ||
-		m.registry.runtimeVisible != event.GetVisible() ||
-		m.registry.runtimeActiveRunCount != event.GetActiveRunCount()
-	m.registry.runtimeState = state
-	m.registry.runtimeWorkerID = workerID
-	m.registry.runtimeLastHeartbeat = now
-	m.registry.runtimeVisible = event.GetVisible()
-	m.registry.runtimeActiveRunCount = event.GetActiveRunCount()
-	changed = changed || previousReady != runtimeReadyLocked(m.registry, now)
+	previousReady := runtimeReadyLocked(entry, now)
+	changed := entry.runtimeState != state ||
+		entry.runtimeWorkerID != workerID ||
+		entry.runtimeVisible != event.GetVisible() ||
+		entry.runtimeActiveRunCount != event.GetActiveRunCount()
+	entry.runtimeState = state
+	entry.runtimeWorkerID = workerID
+	entry.runtimeLastHeartbeat = now
+	entry.runtimeVisible = event.GetVisible()
+	entry.runtimeActiveRunCount = event.GetActiveRunCount()
+	changed = changed || previousReady != runtimeReadyLocked(entry, now)
+	agentID := entry.id
 	m.registry.mu.Unlock()
 
 	// Runtime readiness is part of the public Status contract. Push semantic
 	// transitions, but do not fan out a status frame for every heartbeat tick;
 	// the low-frequency status poll reconciles timestamp-only changes.
 	if changed {
-		m.broadcastStatus()
+		m.broadcastStatus(agentID)
 	}
 }
 
@@ -223,41 +454,42 @@ func (m *Manager) UpdateRuntimeStatus(
 func (m *Manager) touchRuntimeActivity(session *AgentSession) {
 	m.registry.mu.Lock()
 	defer m.registry.mu.Unlock()
-	if m.registry.session != session || m.registry.runtimeLastHeartbeat.IsZero() {
+	entry := m.registry.entryForSessionLocked(session)
+	if entry == nil || entry.runtimeLastHeartbeat.IsZero() {
 		return
 	}
-	m.registry.runtimeLastHeartbeat = time.Now()
+	entry.runtimeLastHeartbeat = time.Now()
 }
 
 func (m *Manager) TouchHeartbeat(session *AgentSession) {
 	m.registry.mu.Lock()
 	defer m.registry.mu.Unlock()
-	if m.registry.session == session {
-		m.registry.session.LastPing = time.Now()
+	if entry := m.registry.entryForSessionLocked(session); entry != nil {
+		entry.session.LastPing = time.Now()
 	}
 }
 
-func clearRuntimeStatusLocked(registry *sessionRegistry) {
-	registry.runtimeState = ""
-	registry.runtimeWorkerID = ""
-	registry.runtimeLastHeartbeat = time.Time{}
-	registry.runtimeVisible = false
-	registry.runtimeActiveRunCount = 0
-	registry.chatRuntimeProbeAt = time.Time{}
+func clearRuntimeStatusLocked(entry *agentEntry) {
+	entry.runtimeState = ""
+	entry.runtimeWorkerID = ""
+	entry.runtimeLastHeartbeat = time.Time{}
+	entry.runtimeVisible = false
+	entry.runtimeActiveRunCount = 0
+	entry.chatRuntimeProbeAt = time.Time{}
 }
 
-func runtimeReadyLocked(registry *sessionRegistry, now time.Time) bool {
-	if registry == nil || registry.session == nil {
+func runtimeReadyLocked(entry *agentEntry, now time.Time) bool {
+	if entry == nil || entry.session == nil {
 		return false
 	}
-	if registry.session.LastPing.IsZero() || now.Sub(registry.session.LastPing) > agentSessionHeartbeatTTL {
+	if entry.session.LastPing.IsZero() || now.Sub(entry.session.LastPing) > agentSessionHeartbeatTTL {
 		return false
 	}
-	if registry.runtimeLastHeartbeat.IsZero() ||
-		now.Sub(registry.runtimeLastHeartbeat) > chatRuntimeReadyTTL {
+	if entry.runtimeLastHeartbeat.IsZero() ||
+		now.Sub(entry.runtimeLastHeartbeat) > chatRuntimeReadyTTL {
 		return false
 	}
-	switch normalizeRuntimeState(registry.runtimeState) {
+	switch normalizeRuntimeState(entry.runtimeState) {
 	case "ready", "draining", "busy":
 		return true
 	default:
@@ -274,20 +506,23 @@ func normalizeRuntimeState(state string) string {
 	}
 }
 
-func (m *Manager) SendToAgentContext(ctx context.Context, env *gatewayv1.GatewayEnvelope) error {
-	m.registry.mu.RLock()
-	session := m.registry.session
-	m.registry.mu.RUnlock()
-	if session == nil {
-		return ErrAgentOffline
-	}
-	return session.SendToAgentContext(ctx, env)
-}
-
-func (m *Manager) currentSessionEpoch() uint64 {
+// resolveSession 按非空 agentID 精确解析在线会话。
+func (m *Manager) resolveSession(agentID string) (*AgentSession, error) {
 	m.registry.mu.RLock()
 	defer m.registry.mu.RUnlock()
-	return m.registry.sessionEpoch
+	entry, err := m.registry.resolveOnlineLocked(agentID)
+	if err != nil {
+		return nil, err
+	}
+	return entry.session, nil
+}
+
+func (m *Manager) SendToAgentContext(ctx context.Context, agentID string, env *gatewayv2.GatewayEnvelope) error {
+	session, err := m.resolveSession(agentID)
+	if err != nil {
+		return err
+	}
+	return session.SendToAgentContext(ctx, env)
 }
 
 // RegisterStreamAndSendContext binds response correlation and request delivery
@@ -298,14 +533,13 @@ func (m *Manager) currentSessionEpoch() uint64 {
 // unmatchable. Capturing the session once closes that TOCTOU window.
 func (m *Manager) RegisterStreamAndSendContext(
 	ctx context.Context,
+	agentID string,
 	requestID string,
-	env *gatewayv1.GatewayEnvelope,
-) (<-chan *gatewayv1.AgentEnvelope, <-chan struct{}, func(), error) {
-	m.registry.mu.RLock()
-	session := m.registry.session
-	m.registry.mu.RUnlock()
-	if session == nil {
-		return nil, nil, nil, ErrAgentOffline
+	env *gatewayv2.GatewayEnvelope,
+) (<-chan *gatewayv2.AgentEnvelope, <-chan struct{}, func(), error) {
+	session, err := m.resolveSession(agentID)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	stream, err := session.registerStream(requestID)

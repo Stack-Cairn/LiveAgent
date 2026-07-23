@@ -16,6 +16,12 @@ const ANTHROPIC_API_VERSION = "2023-06-01";
 
 // Gateway WebUI 判定移至 lib/runtimeEnv 单一真源；此处再导出保持既有调用方不变。
 export { isGatewayWebuiRuntime };
+export function formatTokenCount(value: number): string {
+  if (value < 1_000) return String(value);
+  if (value < 1_000_000) return `${String(Math.round(value / 1_000))}K`;
+  const millions = value / 1_000_000;
+  return `${Number.isInteger(millions) ? String(millions) : millions.toFixed(1)}M`;
+}
 
 function normalizeModelBaseUrl(type: ProviderId, baseUrl: string) {
   let normalizedUrl = normalizeBaseUrl(baseUrl);
@@ -202,7 +208,7 @@ async function fetchModelsThroughGateway(
 
   const items = extractModelListItems(data);
   if (items !== null) {
-    return normalizeFetchedModels(items, type);
+    return normalizeApiFetchedModels(items, type);
   }
 
   const maybeError =
@@ -224,6 +230,23 @@ export function normalizeFetchedModels(
     return normalizeGeminiFetchedModels(items);
   }
   return normalizeProviderModelConfigs(items, providerType);
+}
+
+function normalizeApiFetchedModels(
+  items: unknown,
+  providerType: ProviderId,
+): ProviderModelConfig[] {
+  const models = normalizeFetchedModels(items, providerType);
+  if (providerType !== "claude_code") return models;
+
+  return models.map((model) => {
+    const defaults = createProviderModelConfig(providerType, model.id);
+    const roundsToOneMillion =
+      model.contextWindow < 1_000_000 && Math.round(model.contextWindow / 1_000) === 1_000;
+    return defaults.contextWindow === 1_000_000 && roundsToOneMillion
+      ? { ...model, contextWindow: defaults.contextWindow }
+      : model;
+  });
 }
 
 function normalizePositiveInteger(value: unknown): number | undefined {
@@ -258,8 +281,12 @@ function normalizeGeminiFetchedModels(items: unknown): ProviderModelConfig[] {
     seen.add(id);
 
     const draft = createProviderModelConfig("gemini", id);
+    const ownedBy =
+      (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
+      (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
     out.push({
       id,
+      ...(ownedBy ? { ownedBy } : {}),
       contextWindow: normalizePositiveInteger(obj.inputTokenLimit) ?? draft.contextWindow,
       maxOutputToken: normalizePositiveInteger(obj.outputTokenLimit) ?? draft.maxOutputToken,
     });
@@ -279,7 +306,21 @@ export function mergeFetchedModels(
   for (const model of fetched) {
     if (seen.has(model.id)) continue;
     seen.add(model.id);
-    merged.push(existingById.get(model.id) ?? model);
+    const existingModel = existingById.get(model.id);
+    const shouldNormalizeOneMillion =
+      existingModel !== undefined &&
+      model.contextWindow === 1_000_000 &&
+      existingModel.contextWindow < 1_000_000 &&
+      Math.round(existingModel.contextWindow / 1_000) === 1_000;
+    merged.push(
+      existingModel
+        ? {
+            ...existingModel,
+            ...(shouldNormalizeOneMillion ? { contextWindow: model.contextWindow } : {}),
+            ...(model.ownedBy ? { ownedBy: model.ownedBy } : {}),
+          }
+        : model,
+    );
   }
 
   for (const model of existing) {
@@ -304,6 +345,32 @@ export function sortModelsBySelection(
   }
 
   return [...selected, ...unselected];
+}
+
+export function getModelBulkActionCounts(
+  selectedModels: ReadonlySet<string>,
+  activeModels: ReadonlySet<string>,
+): { enableCount: number; disableCount: number } {
+  let enableCount = 0;
+  let disableCount = 0;
+  for (const modelId of selectedModels) {
+    if (activeModels.has(modelId)) disableCount += 1;
+    else enableCount += 1;
+  }
+  return { enableCount, disableCount };
+}
+
+export function applyModelBulkActiveState(
+  activeModels: ReadonlySet<string>,
+  selectedModels: ReadonlySet<string>,
+  enabled: boolean,
+): Set<string> {
+  const next = new Set(activeModels);
+  for (const modelId of selectedModels) {
+    if (enabled) next.add(modelId);
+    else next.delete(modelId);
+  }
+  return next;
 }
 
 export function createDraftModelConfig(
@@ -380,7 +447,7 @@ export async function fetchModelsFromApi(
       emptyResult ??= [];
       continue;
     }
-    const models = normalizeFetchedModels(items, type);
+    const models = normalizeApiFetchedModels(items, type);
     if (models.length > 0) return models;
     emptyResult = models;
   }

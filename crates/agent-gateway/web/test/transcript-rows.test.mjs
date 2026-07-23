@@ -221,7 +221,12 @@ function settledTurn(key, runId, userText, replyText, userRef) {
 }
 
 test("replace keeps pending/streaming turns and trims their persisted echoes", () => {
-  const streaming = { ...settledTurn("req:c9", "run-9", "active prompt", null), phase: "streaming" };
+  const base = settledTurn("req:c9", "run-9", "active prompt", null);
+  const streaming = {
+    ...base,
+    user: { ...base.user, messageId: "m9" },
+    phase: "streaming",
+  };
   const result = alignHistory({
     historyEntries: [],
     turns: [streaming],
@@ -239,6 +244,75 @@ test("replace keeps pending/streaming turns and trims their persisted echoes", (
     ["hu:m1", "ht:hu:m1>0"],
     "persisted echo of the active prompt trimmed",
   );
+});
+
+test("replace trims a partially persisted reply for the active exchange", () => {
+  const base = settledTurn(
+    "req:c9",
+    "run-9",
+    "active prompt",
+    "persisted partial plus live tail",
+  );
+  const streaming = {
+    ...base,
+    user: { ...base.user, messageId: "m9" },
+    phase: "streaming",
+  };
+  const result = alignHistory({
+    historyEntries: [],
+    turns: [streaming],
+    entries: [
+      { id: "hu:m1", kind: "user", text: "old", attachments: [], messageRef: ref("m1") },
+      { id: "ht:hu:m1>0", kind: "assistant", text: "old reply", round: 1 },
+      {
+        id: "hu:m9",
+        kind: "user",
+        text: "active prompt",
+        attachments: [],
+        messageRef: ref("m9", 2),
+      },
+      { id: "ht:hu:m9>0", kind: "assistant", text: "persisted partial", round: 1 },
+    ],
+    mode: "replace",
+  });
+  assert.equal(result.turns.length, 1, "streaming turn remains authoritative");
+  assert.equal(result.turns[0].user.messageRef?.messageId, "m9");
+  assert.deepEqual(
+    result.historyEntries.map((entry) => entry.id),
+    ["hu:m1", "ht:hu:m1>0"],
+    "the whole persisted copy of the active exchange is trimmed",
+  );
+});
+
+test("replace keeps an older completed exchange when the active prompt repeats its text", () => {
+  const base = settledTurn("req:c9", "run-9", "same prompt", "old completed reply plus new tail");
+  const streaming = {
+    ...base,
+    user: { ...base.user, messageId: "m9" },
+    phase: "streaming",
+  };
+  const result = alignHistory({
+    historyEntries: [],
+    turns: [streaming],
+    entries: [
+      {
+        id: "hu:m1",
+        kind: "user",
+        text: "same prompt",
+        attachments: [],
+        messageRef: ref("m1"),
+      },
+      { id: "ht:hu:m1>0", kind: "assistant", text: "old completed reply", round: 1 },
+    ],
+    mode: "replace",
+  });
+
+  assert.deepEqual(
+    result.historyEntries.map((entry) => entry.id),
+    ["hu:m1", "ht:hu:m1>0"],
+    "matching prompt text alone must not consume the previous exchange",
+  );
+  assert.equal(result.turns[0].user.messageRef, undefined);
 });
 
 test("replace drops settled turns in favor of the parsed history", () => {

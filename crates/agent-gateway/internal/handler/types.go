@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 type ChatSelectedModelBody struct {
@@ -203,38 +203,38 @@ func NormalizeChatUploadedFiles(input []ChatUploadedFileBody) []ChatUploadedFile
 	return out
 }
 
-func ToProtoChatSelectedModel(input *ChatSelectedModelBody) *gatewayv1.ChatSelectedModel {
+func ToProtoChatSelectedModel(input *ChatSelectedModelBody) *gatewayv2.ChatSelectedModel {
 	if input == nil {
 		return nil
 	}
 
-	return &gatewayv1.ChatSelectedModel{
+	return &gatewayv2.ChatSelectedModel{
 		CustomProviderId: input.CustomProviderID,
 		Model:            input.Model,
 		ProviderType:     input.ProviderType,
 	}
 }
 
-func ToProtoChatRuntimeControls(input *ChatRuntimeControlsBody) *gatewayv1.ChatRuntimeControls {
+func ToProtoChatRuntimeControls(input *ChatRuntimeControlsBody) *gatewayv2.ChatRuntimeControls {
 	if input == nil {
 		return nil
 	}
 
-	return &gatewayv1.ChatRuntimeControls{
+	return &gatewayv2.ChatRuntimeControls{
 		ThinkingEnabled:        boolValue(input.ThinkingEnabled, true),
 		NativeWebSearchEnabled: boolValue(input.NativeWebSearchEnabled, true),
 		Reasoning:              normalizeChatRuntimeReasoning(input.Reasoning),
 	}
 }
 
-func ToProtoChatUploadedFiles(input []ChatUploadedFileBody) []*gatewayv1.ChatUploadedFile {
+func ToProtoChatUploadedFiles(input []ChatUploadedFileBody) []*gatewayv2.ChatUploadedFile {
 	if len(input) == 0 {
 		return nil
 	}
 
-	out := make([]*gatewayv1.ChatUploadedFile, 0, len(input))
+	out := make([]*gatewayv2.ChatUploadedFile, 0, len(input))
 	for _, item := range input {
-		out = append(out, &gatewayv1.ChatUploadedFile{
+		out = append(out, &gatewayv2.ChatUploadedFile{
 			RelativePath: item.RelativePath,
 			AbsolutePath: item.AbsolutePath,
 			FileName:     item.FileName,

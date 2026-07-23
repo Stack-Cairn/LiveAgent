@@ -1,24 +1,11 @@
 syntax = "proto3";
 
-package liveagent.gateway.v1;
+package liveagent.gateway.v2;
 
-option go_package = "github.com/liveagent/agent-gateway/internal/proto/v1;gatewayv1";
+option go_package = "github.com/liveagent/agent-gateway/internal/proto/v2;gatewayv2";
 
-// 本文件是三端共享的业务消息单一事实源（v2 帧壳见 proto/v2/gateway_ws.proto，
-// 其载荷全部复用这里的消息）。v1 gRPC 服务 AgentGateway 已随 v1 协议移除；
-// 消息全部保留、永不弃用，编号只增不改。
-
-message AuthRequest {
-  string token = 1;
-  string agent_id = 2;
-  string agent_version = 3;
-}
-
-message AuthResponse {
-  bool success = 1;
-  string message = 2;
-  string session_id = 3;
-}
+// 三端共享的 v2 业务消息单一事实源。WebSocket 帧壳见 gateway_ws.proto；
+// 已发布消息的字段编号只增不改。
 
 message GatewayEnvelope {
   string request_id = 1;

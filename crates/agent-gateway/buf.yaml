@@ -1,5 +1,4 @@
-# buf 模块配置（v2 schema）。模块根设在 crates/agent-gateway/ 而非 proto/，保持 import 路径
-# "proto/v1/gateway.proto" 与历史 protoc 及 Rust build.rs 一致，Go 生成物与既有提交字节级一致。
+# buf 模块配置（v2 schema）。模块根设在 crates/agent-gateway/，供 v2 帧壳导入共享业务消息。
 version: v2
 modules:
   - path: .
@@ -12,13 +11,12 @@ lint:
   except:
     # 历史布局 proto/<版本>/ 早于 buf；迁目录会改 import 路径、破坏 Rust build.rs 与生成物，不翻新。
     - PACKAGE_DIRECTORY_MATCH
-  # v1 契约早于 buf lint，历史命名不翻新（wire 兼容优先）；豁免为全量 lint 确认后的最小集，
-  # 仅限 v1 文件——v2 及新增 proto 必须完整满足 STANDARD。
+  # 共享业务消息沿用已发布的枚举命名；只对该迁移文件保留最小豁免。
   ignore_only:
     ENUM_VALUE_PREFIX:
-      - proto/v1/gateway.proto
+      - proto/v2/gateway.proto
     ENUM_ZERO_VALUE_SUFFIX:
-      - proto/v1/gateway.proto
+      - proto/v2/gateway.proto
 breaking:
   use:
     # WIRE_JSON：兼守二进制与 JSON 线格式兼容（chat 事件与公开分享页仍走 JSON 载荷）。

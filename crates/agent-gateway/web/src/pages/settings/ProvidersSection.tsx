@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  Check,
   ClaudeIcon,
   Eye,
   EyeOff,
@@ -29,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import { useVerticalListReorder } from "../../components/ui/useVerticalListReorder";
 import { useLocale } from "../../i18n";
 import { buildModelOptions } from "../../lib/chat/chatPageHelpers";
 import {
@@ -37,6 +39,7 @@ import {
   isValidCustomHeaderKey,
 } from "../../lib/providers/customHeaders";
 import { parseModelValue, toModelValue } from "../../lib/providers/llm";
+import { sortModelsByActiveStateAndVendor } from "../../lib/providers/modelVendor";
 import {
   CODEX_REQUEST_FORMAT_LABELS,
   type CodexRequestFormat,
@@ -51,13 +54,15 @@ import { useModalMotion } from "../../lib/shared/modalMotion";
 import { cn } from "../../lib/shared/utils";
 import { ModelPicker } from "./modelPicker";
 import {
+  applyModelBulkActiveState,
   buildProviderModelsFetchKey,
   createDraftModelConfig,
   fetchModelsFromApi,
+  formatTokenCount,
+  getModelBulkActionCounts,
   isGatewayWebuiRuntime,
   mergeFetchedModels,
   normalizeFetchedModels,
-  sortModelsBySelection,
 } from "./providerUtils";
 import { ConfirmDeletePopover } from "./shared";
 import type { SettingsSectionProps } from "./types";
@@ -158,10 +163,50 @@ function DialogSwitch(props: {
     </button>
   );
 }
-function formatTokenCount(value: number): string {
-  if (value < 1_000) return String(value);
-  return String(Math.round(value / 1_000)) + "K";
+
+function reconcileModelOrder(
+  order: readonly string[] | undefined,
+  models: readonly ProviderModelConfig[],
+) {
+  if (!order) return undefined;
+  const byId = new Set(models.map((model) => model.id));
+  const seen = new Set<string>();
+  const next = order.filter((id) => {
+    if (!byId.has(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  for (const model of models) {
+    if (!seen.has(model.id)) next.push(model.id);
+  }
+  return next;
 }
+
+function itemsByIdOrder<T extends { id: string }>(items: readonly T[], order: readonly string[]) {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return order.flatMap((id) => {
+    const item = byId.get(id);
+    return item ? [item] : [];
+  });
+}
+
+function orderModels(
+  models: readonly ProviderModelConfig[],
+  order: readonly string[] | undefined,
+  activeModelIds: ReadonlySet<string>,
+) {
+  if (!order) return sortModelsByActiveStateAndVendor(models, activeModelIds);
+  const ordered = itemsByIdOrder(models, order);
+  const included = new Set(ordered.map((model) => model.id));
+  return [
+    ...ordered,
+    ...sortModelsByActiveStateAndVendor(
+      models.filter((model) => !included.has(model.id)),
+      activeModelIds,
+    ),
+  ];
+}
+
 function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProps) {
   const { t } = useLocale();
   const isGatewayWebui = isGatewayWebuiRuntime();
@@ -178,6 +223,9 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   );
   const [models, setModels] = useState<ProviderModelConfig[]>(() =>
     normalizeFetchedModels(initialData?.models ?? [], providerType),
+  );
+  const [modelOrder, setModelOrder] = useState<string[] | undefined>(() =>
+    initialData?.modelOrder ? [...initialData.modelOrder] : undefined,
   );
   const [activeModels, setActiveModels] = useState<Set<string>>(
     new Set(initialData?.activeModels ?? []),
@@ -197,6 +245,10 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const [addingModel, setAddingModel] = useState(false);
   const [newModelName, setNewModelName] = useState("");
   const [modelSearch, setModelSearch] = useState("");
+  const [modelBulkMode, setModelBulkMode] = useState(false);
+  const [modelBulkSelection, setModelBulkSelection] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [editingModel, setEditingModel] = useState<ModelEditDraft | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [activePanel, setActivePanel] = useState<ProviderDialogPanel>("general");
@@ -251,6 +303,17 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     };
   }, [apiKeyForRequest, baseUrl, doFetch, useSystemProxy]);
 
+  useEffect(() => {
+    if (!modelOrder) return;
+    const next = reconcileModelOrder(modelOrder, models);
+    if (
+      next &&
+      (next.length !== modelOrder.length || next.some((id, index) => id !== modelOrder[index]))
+    ) {
+      setModelOrder(next);
+    }
+  }, [modelOrder, models]);
+
   function handleRefresh() {
     const trimUrl = baseUrl.trim();
     const trimKey = apiKeyForRequest;
@@ -271,6 +334,44 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     });
   }
 
+  function exitModelBulkMode() {
+    setModelBulkMode(false);
+    setModelBulkSelection(new Set());
+  }
+
+  function toggleModelBulkMode() {
+    if (modelBulkMode) {
+      exitModelBulkMode();
+      return;
+    }
+    setEditingModel(null);
+    setAddingModel(false);
+    setModelBulkSelection(new Set());
+    setModelBulkMode(true);
+  }
+
+  function toggleModelBulkSelection(modelId: string) {
+    setModelBulkSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  }
+
+  function selectVisibleModels() {
+    setModelBulkSelection((prev) => {
+      const next = new Set(prev);
+      for (const model of visibleModels) next.add(model.id);
+      return next;
+    });
+  }
+
+  function applyModelBulkState(enabled: boolean) {
+    setActiveModels((prev) => applyModelBulkActiveState(prev, modelBulkSelection, enabled));
+    setModelBulkSelection(new Set());
+  }
+
   function handleAddModel() {
     const model = newModelName.trim();
     if (!model) return;
@@ -285,6 +386,12 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   function removeModel(model: string) {
     setModels((prev) => prev.filter((item) => item.id !== model));
     setActiveModels((prev) => {
+      const next = new Set(prev);
+      next.delete(model);
+      return next;
+    });
+    setModelBulkSelection((prev) => {
+      if (!prev.has(model)) return prev;
       const next = new Set(prev);
       next.delete(model);
       return next;
@@ -435,6 +542,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     );
     if (invalidHeaderIndex >= 0) {
       setHeaderValidationSubmitted(true);
+      exitModelBulkMode();
       setActivePanel("request");
       focusCustomHeader(invalidHeaderIndex, "key");
       return;
@@ -451,6 +559,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         (isGatewayWebui && initialData?.apiKeyConfigured === true),
       customHeaders,
       models,
+      modelOrder,
       activeModels: Array.from(activeModels),
       requestFormat: providerType === "codex" ? requestFormat : undefined,
       reasoning:
@@ -471,8 +580,8 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const isEditing = Boolean(initialData);
   const typeLabel = getProviderLabel(providerType);
   const orderedModels = useMemo(
-    () => sortModelsBySelection(models, activeModels),
-    [models, activeModels],
+    () => orderModels(models, modelOrder, activeModels),
+    [models, modelOrder, activeModels],
   );
   const modelSearchQuery = modelSearch.trim().toLowerCase();
   const visibleModels = useMemo(
@@ -482,6 +591,36 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         : orderedModels,
     [orderedModels, modelSearchQuery],
   );
+  const allVisibleModelsSelected =
+    visibleModels.length > 0 && visibleModels.every((model) => modelBulkSelection.has(model.id));
+  const { enableCount: modelBulkEnableCount, disableCount: modelBulkDisableCount } = useMemo(
+    () => getModelBulkActionCounts(modelBulkSelection, activeModels),
+    [modelBulkSelection, activeModels],
+  );
+  const modelReorderDisabledHint = modelBulkMode
+    ? t("settings.modelReorderDisabledBulk")
+    : modelSearchQuery
+      ? t("settings.modelReorderDisabledSearch")
+      : t("settings.reorderNeedsTwoItems");
+  const handleModelReorder = useCallback((nextIds: string[]) => {
+    setModels((current) => {
+      return itemsByIdOrder(current, nextIds);
+    });
+    setModelOrder(nextIds);
+  }, []);
+  const {
+    draggingItemId: draggingModelId,
+    getItemProps: getModelReorderProps,
+    renderDragHandle: renderModelDragHandle,
+    scrollContainerRef: modelScrollContainerRef,
+  } = useVerticalListReorder({
+    itemIds: orderedModels.map((model) => model.id),
+    canReorder: !modelBulkMode && !modelSearchQuery,
+    reorderLabel: t("settings.reorderModel"),
+    reorderHint: t("settings.reorderVerticalHint"),
+    disabledHint: modelReorderDisabledHint,
+    onReorder: handleModelReorder,
+  });
   const headerSuggestQuery = headerSuggest
     ? (customHeaders[headerSuggest.index]?.key ?? "").trim().toLowerCase()
     : "";
@@ -575,7 +714,10 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                 "flex h-10 items-center gap-2 rounded-lg px-3 text-left text-sm text-muted-foreground max-[720px]:min-w-max max-[720px]:flex-1 max-[720px]:justify-center max-[720px]:px-2 max-[720px]:text-xs transition-colors hover:bg-accent/50 hover:text-foreground",
                 activePanel === "request" && "bg-primary/10 font-medium text-primary",
               )}
-              onClick={() => setActivePanel("request")}
+              onClick={() => {
+                exitModelBulkMode();
+                setActivePanel("request");
+              }}
               aria-current={activePanel === "request" ? "page" : undefined}
             >
               <Globe className="h-4 w-4 shrink-0 max-[720px]:h-3.5 max-[720px]:w-3.5" />
@@ -596,6 +738,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
           </nav>
 
           <div
+            ref={modelScrollContainerRef}
             className="settings-modal-body min-w-0 flex-1 overflow-y-auto px-6 py-5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.875rem+env(safe-area-inset-bottom))] max-[720px]:pt-3.5"
             onScroll={() => setHeaderSuggest(null)}
           >
@@ -704,9 +847,27 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                     </div>
                     <Button
                       type="button"
+                      variant={modelBulkMode ? "secondary" : "outline"}
+                      size="sm"
+                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
+                      aria-pressed={modelBulkMode}
+                      title={
+                        modelBulkMode
+                          ? t("settings.skillsBulkDone")
+                          : t("settings.skillsBulkSelect")
+                      }
+                      onClick={toggleModelBulkMode}
+                    >
+                      <List className="h-3.5 w-3.5" />
+                      {modelBulkMode
+                        ? t("settings.skillsBulkDone")
+                        : t("settings.skillsBulkSelect")}
+                    </Button>
+                    <Button
+                      type="button"
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:flex-1"
+                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
                       onClick={handleRefresh}
                       disabled={fetchingModels || (isGatewayWebui && !canFetchModels)}
                     >
@@ -717,13 +878,38 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:flex-1"
+                      className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
                       onClick={() => setAddingModel(true)}
                     >
                       <Plus className="h-3.5 w-3.5" />
                       {t("settings.manualAddModel")}
                     </Button>
                   </div>
+
+                  {modelBulkMode ? (
+                    <div className="flex flex-wrap items-center justify-end gap-1.5 border-b bg-background px-2.5 py-2 dark:bg-popover">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2.5 text-xs"
+                        disabled={visibleModels.length === 0 || allVisibleModelsSelected}
+                        onClick={selectVisibleModels}
+                      >
+                        {t("settings.skillsBulkSelectAll")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2.5 text-xs"
+                        disabled={modelBulkSelection.size === 0}
+                        onClick={() => setModelBulkSelection(new Set())}
+                      >
+                        {t("settings.skillsBulkClear")}
+                      </Button>
+                    </div>
+                  ) : null}
 
                   {fetchError ? (
                     <div className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -772,22 +958,81 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                       visibleModels.map((model) => {
                         const isEditingModel = editingModel?.model.id === model.id;
                         return (
+                          // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useAriaPropsSupportedByRole: The row becomes an accessible checkbox only while bulk mode is active.
                           <div
                             key={model.id}
-                            className="settings-model-row group hover:bg-accent/30"
+                            {...getModelReorderProps(model.id)}
+                            className={cn(
+                              "settings-model-row group hover:bg-accent/30",
+                              draggingModelId === model.id && "bg-accent shadow-lg",
+                              modelBulkMode && "cursor-pointer",
+                              modelBulkSelection.has(model.id) && "bg-primary/5",
+                            )}
+                            role={modelBulkMode ? "checkbox" : undefined}
+                            aria-checked={
+                              modelBulkMode ? modelBulkSelection.has(model.id) : undefined
+                            }
+                            tabIndex={modelBulkMode ? 0 : undefined}
+                            onClick={() => {
+                              if (modelBulkMode) toggleModelBulkSelection(model.id);
+                            }}
+                            onKeyDown={(event) => {
+                              if (
+                                !modelBulkMode ||
+                                event.target !== event.currentTarget ||
+                                (event.key !== "Enter" && event.key !== " ")
+                              ) {
+                                return;
+                              }
+                              event.preventDefault();
+                              toggleModelBulkSelection(model.id);
+                            }}
                           >
-                            <div className="flex items-center gap-2 px-3 py-2 max-[720px]:flex-wrap">
-                              <DialogSwitch
-                                checked={activeModels.has(model.id)}
-                                onCheckedChange={() => toggleModel(model.id)}
-                                ariaLabel={model.id}
-                              />
-                              <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
+                            <div className="flex items-center gap-2 px-3 py-2 max-[720px]:grid max-[720px]:grid-cols-[auto_minmax(0,1fr)_2.5rem_2.5rem]">
+                              <div className="flex shrink-0 items-center gap-1">
+                                {renderModelDragHandle(model.id, model.id)}
+                                {modelBulkMode ? (
+                                  <label
+                                    className="relative flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
+                                    title={t("settings.skillsHubBulkSelectLabel")}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onKeyDown={(event) => event.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      className="peer sr-only"
+                                      checked={modelBulkSelection.has(model.id)}
+                                      aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${model.id}`}
+                                      onChange={() => toggleModelBulkSelection(model.id)}
+                                    />
+                                    <span
+                                      aria-hidden="true"
+                                      className={cn(
+                                        "pointer-events-none flex h-5 w-5 items-center justify-center rounded-full border transition-colors",
+                                        modelBulkSelection.has(model.id)
+                                          ? "border-primary bg-primary text-primary-foreground"
+                                          : "border-border bg-background group-hover:border-foreground/40",
+                                      )}
+                                    >
+                                      {modelBulkSelection.has(model.id) ? (
+                                        <Check className="h-3 w-3" />
+                                      ) : null}
+                                    </span>
+                                  </label>
+                                ) : (
+                                  <DialogSwitch
+                                    checked={activeModels.has(model.id)}
+                                    onCheckedChange={() => toggleModel(model.id)}
+                                    ariaLabel={model.id}
+                                  />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1 max-[720px]:col-[2/5] max-[720px]:row-start-1">
                                 <div className="flex min-w-0 items-center gap-2">
                                   <span className="truncate text-sm font-medium">{model.id}</span>
                                 </div>
                               </div>
-                              <div className="shrink-0 text-[11px] tabular-nums text-muted-foreground max-[720px]:order-3 max-[720px]:ml-12 max-[720px]:basis-full">
+                              <div className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0">
                                 {formatTokenCount(model.contextWindow)} ctx ·{" "}
                                 {formatTokenCount(model.maxOutputToken)} out
                               </div>
@@ -796,10 +1041,14 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                                 variant="ghost"
                                 size="icon"
                                 className={cn(
-                                  "h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground",
+                                  "h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground max-[720px]:col-start-3 max-[720px]:row-start-2",
                                   isEditingModel && "bg-primary/10 text-primary",
                                 )}
-                                onClick={() => openModelSettings(model.id)}
+                                disabled={modelBulkMode}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openModelSettings(model.id);
+                                }}
                                 title={t("settings.modelSettings")}
                                 aria-label={t("settings.modelSettings")}
                               >
@@ -809,8 +1058,12 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                className="h-10 w-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() => removeModel(model.id)}
+                                className="h-10 w-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive max-[720px]:col-start-4 max-[720px]:row-start-2"
+                                disabled={modelBulkMode}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  removeModel(model.id);
+                                }}
                                 title={t("settings.delete")}
                                 aria-label={t("settings.delete")}
                               >
@@ -1261,6 +1514,56 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
           </div>
         </div>
 
+        {modelBulkMode && activePanel === "general" ? (
+          <div className="flex shrink-0 flex-wrap items-center justify-center gap-1.5 border-t bg-background px-4 py-2 text-xs dark:bg-popover max-[420px]:gap-1 max-[420px]:px-2.5">
+            <span className="whitespace-nowrap text-foreground/85">
+              {t("settings.skillsBulkSelectedCount").replace(
+                "{count}",
+                String(modelBulkSelection.size),
+              )}
+            </span>
+            <span className="text-muted-foreground/50 max-[420px]:hidden" aria-hidden="true">
+              ·
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2.5 text-xs max-[420px]:px-2"
+              disabled={modelBulkEnableCount === 0}
+              onClick={() => applyModelBulkState(true)}
+            >
+              {`${t("settings.skillsBulkEnable")} (${modelBulkEnableCount})`}
+            </Button>
+            <span className="text-muted-foreground/50 max-[420px]:hidden" aria-hidden="true">
+              ·
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2.5 text-xs max-[420px]:px-2"
+              disabled={modelBulkDisableCount === 0}
+              onClick={() => applyModelBulkState(false)}
+            >
+              {`${t("settings.skillsBulkDisable")} (${modelBulkDisableCount})`}
+            </Button>
+            <span className="text-muted-foreground/50 max-[420px]:hidden" aria-hidden="true">
+              ·
+            </span>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-7 gap-1 px-2.5 text-xs max-[420px]:px-2"
+              onClick={exitModelBulkMode}
+            >
+              <X className="h-3.5 w-3.5" />
+              {t("settings.skillsBulkDone")}
+            </Button>
+          </div>
+        ) : null}
+
         <div className="settings-modal-footer flex shrink-0 items-center justify-end gap-2 border-t bg-muted/20 px-5 py-3.5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[720px]:pt-3">
           <Button
             variant="outline"
@@ -1424,10 +1727,24 @@ function ProviderList(props: {
   onAdd: () => void;
   onEdit: (provider: CustomProvider) => void;
   onDelete: (id: string) => void;
+  onReorder: (type: ProviderId, nextIds: string[]) => void;
 }) {
   const { t } = useLocale();
-  const { type, providers, onAdd, onEdit, onDelete } = props;
+  const { type, providers, onAdd, onEdit, onDelete, onReorder } = props;
   const filtered = providers.filter((provider) => provider.type === type);
+  const {
+    draggingItemId: draggingProviderId,
+    getItemProps: getProviderReorderProps,
+    renderDragHandle: renderProviderDragHandle,
+    scrollContainerRef: providerScrollContainerRef,
+  } = useVerticalListReorder({
+    itemIds: filtered.map((provider) => provider.id),
+    canReorder: true,
+    reorderLabel: t("settings.reorderProvider"),
+    reorderHint: t("settings.reorderVerticalHint"),
+    disabledHint: t("settings.reorderNeedsTwoItems"),
+    onReorder: (nextIds) => onReorder(type, nextIds),
+  });
 
   return (
     <div className="settings-provider-list flex h-full min-h-0 flex-col gap-4">
@@ -1448,7 +1765,7 @@ function ProviderList(props: {
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+      <div ref={providerScrollContainerRef} className="min-h-0 flex-1 overflow-y-auto pr-1">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
             <div className="mb-3 flex items-center justify-center text-3xl text-foreground">
@@ -1462,8 +1779,13 @@ function ProviderList(props: {
             {filtered.map((provider) => (
               <div
                 key={provider.id}
-                className="settings-card-row group flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/30"
+                {...getProviderReorderProps(provider.id)}
+                className={cn(
+                  "settings-card-row group flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-colors hover:bg-accent/30",
+                  draggingProviderId === provider.id && "bg-accent shadow-lg",
+                )}
               >
+                {renderProviderDragHandle(provider.id, provider.name)}
                 <div className="flex w-5 shrink-0 items-center justify-center text-lg text-foreground">
                   <ProviderBrandIcon type={type} />
                 </div>
@@ -1570,6 +1892,24 @@ export function ProvidersSection(props: SettingsSectionProps) {
     );
   }
 
+  function handleProviderReorder(type: ProviderId, nextIds: string[]) {
+    setSettings((prev) => {
+      const providersOfType = prev.customProviders.filter((provider) => provider.type === type);
+      const reordered = itemsByIdOrder(providersOfType, nextIds);
+      const included = new Set(reordered.map((provider) => provider.id));
+      for (const provider of providersOfType) {
+        if (!included.has(provider.id)) reordered.push(provider);
+      }
+      let index = 0;
+      return updateCustomProviders(
+        prev,
+        prev.customProviders.map((provider) =>
+          provider.type === type ? (reordered[index++] ?? provider) : provider,
+        ),
+      );
+    });
+  }
+
   const activeTabIndex = Math.max(0, PROVIDER_TABS.indexOf(activeTab));
 
   return (
@@ -1623,6 +1963,7 @@ export function ProvidersSection(props: SettingsSectionProps) {
                 onAdd={openAdd}
                 onEdit={openEdit}
                 onDelete={handleDelete}
+                onReorder={handleProviderReorder}
               />
             </div>
           ))}

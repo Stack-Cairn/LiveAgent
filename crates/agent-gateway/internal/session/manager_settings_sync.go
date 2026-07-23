@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"strings"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-func (m *Manager) SubscribeSettingsSync() (<-chan *gatewayv1.SettingsSyncEvent, func()) {
-	ch := make(chan *gatewayv1.SettingsSyncEvent, 64)
+func (m *Manager) SubscribeSettingsSync() (<-chan Tagged[*gatewayv2.SettingsSyncEvent], func()) {
+	ch := make(chan Tagged[*gatewayv2.SettingsSyncEvent], 64)
 
 	m.syncHub.settingsMu.Lock()
 	subID := m.syncHub.nextSettingsSubID
@@ -27,47 +27,34 @@ func (m *Manager) SubscribeSettingsSync() (<-chan *gatewayv1.SettingsSyncEvent, 
 	return ch, cleanup
 }
 
-func (m *Manager) WebTerminalEnabled() bool {
-	m.syncHub.settingsSnapshotMu.RLock()
-	defer m.syncHub.settingsSnapshotMu.RUnlock()
+// settingsRemoteBool 读取目标 Agent settings 快照里 remote.<key> 的布尔门控；
+// Agent 不存在或未同步过 settings 时一律 false（默认拒绝）。
+func (m *Manager) settingsRemoteBool(agentID, key string) bool {
+	entry := m.entryFor(agentID)
+	if entry == nil {
+		return false
+	}
+	entry.settingsSnapshotMu.RLock()
+	defer entry.settingsSnapshotMu.RUnlock()
 
-	remote, ok := m.syncHub.settingsSnapshot["remote"].(map[string]any)
+	remote, ok := entry.settingsSnapshot["remote"].(map[string]any)
 	if !ok {
 		return false
 	}
-	enabled, ok := remote["enableWebTerminal"].(bool)
+	enabled, ok := remote[key].(bool)
 	return ok && enabled
 }
 
-func (m *Manager) WebSshTerminalEnabled() bool {
-	m.syncHub.settingsSnapshotMu.RLock()
-	defer m.syncHub.settingsSnapshotMu.RUnlock()
-
-	remote, ok := m.syncHub.settingsSnapshot["remote"].(map[string]any)
-	if !ok {
-		return false
-	}
-	enabled, ok := remote["enableWebSshTerminal"].(bool)
-	return ok && enabled
+func (m *Manager) WebTerminalEnabled(agentID string) bool {
+	return m.settingsRemoteBool(agentID, "enableWebTerminal")
 }
 
-func (m *Manager) WebGitEnabled() bool {
-	m.syncHub.settingsSnapshotMu.RLock()
-	defer m.syncHub.settingsSnapshotMu.RUnlock()
-
-	remote, ok := m.syncHub.settingsSnapshot["remote"].(map[string]any)
-	if !ok {
-		return false
-	}
-	enabled, ok := remote["enableWebGit"].(bool)
-	return ok && enabled
+func (m *Manager) WebSshTerminalEnabled(agentID string) bool {
+	return m.settingsRemoteBool(agentID, "enableWebSshTerminal")
 }
 
-func (m *Manager) updateSettingsSnapshot(event *gatewayv1.SettingsSyncEvent) {
-	if event == nil {
-		return
-	}
-	m.ApplySettingsJSON(event.GetSettingsJson())
+func (m *Manager) WebGitEnabled(agentID string) bool {
+	return m.settingsRemoteBool(agentID, "enableWebGit")
 }
 
 func parseSettingsJSON(settingsJSON string) (map[string]any, bool) {
@@ -82,52 +69,61 @@ func parseSettingsJSON(settingsJSON string) (map[string]any, bool) {
 	return payload, true
 }
 
-func (m *Manager) ApplySettingsJSON(settingsJSON string) {
+func (m *Manager) ApplySettingsJSON(agentID, settingsJSON string) {
 	payload, ok := parseSettingsJSON(settingsJSON)
 	if !ok {
 		return
 	}
-	m.syncHub.settingsSnapshotMu.Lock()
+	entry := m.entryOrCreate(agentID)
+	if entry == nil {
+		return
+	}
+	entry.settingsSnapshotMu.Lock()
 	if _, hasIncomingRemote := payload["remote"]; !hasIncomingRemote {
-		if existingRemote, hasExistingRemote := m.syncHub.settingsSnapshot["remote"]; hasExistingRemote {
+		if existingRemote, hasExistingRemote := entry.settingsSnapshot["remote"]; hasExistingRemote {
 			payload["remote"] = existingRemote
 		}
 	}
-	m.syncHub.settingsSnapshot = payload
-	m.syncHub.settingsSnapshotMu.Unlock()
+	entry.settingsSnapshot = payload
+	entry.settingsSnapshotMu.Unlock()
 }
 
-func (m *Manager) ApplySettingsJSONPreservingRemote(settingsJSON string) {
+func (m *Manager) ApplySettingsJSONPreservingRemote(agentID, settingsJSON string) {
 	payload, ok := parseSettingsJSON(settingsJSON)
 	if !ok {
 		return
 	}
-	m.syncHub.settingsSnapshotMu.Lock()
-	if existingRemote, ok := m.syncHub.settingsSnapshot["remote"]; ok {
+	entry := m.entryOrCreate(agentID)
+	if entry == nil {
+		return
+	}
+	entry.settingsSnapshotMu.Lock()
+	if existingRemote, ok := entry.settingsSnapshot["remote"]; ok {
 		payload["remote"] = existingRemote
 	} else {
 		delete(payload, "remote")
 	}
-	m.syncHub.settingsSnapshot = payload
-	m.syncHub.settingsSnapshotMu.Unlock()
+	entry.settingsSnapshot = payload
+	entry.settingsSnapshotMu.Unlock()
 }
 
-func (m *Manager) broadcastSettingsSync(event *gatewayv1.SettingsSyncEvent) {
+func (m *Manager) broadcastSettingsSync(agentID string, event *gatewayv2.SettingsSyncEvent) {
 	if event == nil {
 		return
 	}
-	m.updateSettingsSnapshot(event)
+	m.ApplySettingsJSON(agentID, event.GetSettingsJson())
 
 	m.syncHub.settingsMu.Lock()
-	subscribers := make([]chan *gatewayv1.SettingsSyncEvent, 0, len(m.syncHub.settingsSubscribers))
+	subscribers := make([]chan Tagged[*gatewayv2.SettingsSyncEvent], 0, len(m.syncHub.settingsSubscribers))
 	for _, ch := range m.syncHub.settingsSubscribers {
 		subscribers = append(subscribers, ch)
 	}
 	m.syncHub.settingsMu.Unlock()
 
+	tagged := Tagged[*gatewayv2.SettingsSyncEvent]{AgentID: agentID, Event: event}
 	for _, ch := range subscribers {
 		select {
-		case ch <- event:
+		case ch <- tagged:
 		default:
 		}
 	}

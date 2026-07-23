@@ -463,21 +463,36 @@ export function createTranscriptStore(options?: {
   };
 
   const applyUserMessage = (event: ConversationStreamEvent, runId: string) => {
-    const payload = event as { message?: unknown; uploaded_files?: unknown; message_ref?: unknown };
+    const payload = event as {
+      message?: unknown;
+      message_id?: unknown;
+      messageId?: unknown;
+      uploaded_files?: unknown;
+      message_ref?: unknown;
+    };
     const clientRequestId = readEventClientRequestId(event);
     const text = typeof payload.message === "string" ? payload.message : "";
+    const messageIdRaw = payload.message_id ?? payload.messageId;
+    const messageId = typeof messageIdRaw === "string" ? messageIdRaw.trim() : "";
     const attachments = normalizeLiveUploadedFiles(payload.uploaded_files);
     if (!text.trim() && attachments.length === 0) {
       return;
     }
-    // The message's persisted identity (desktop stamps it at persist time).
-    // Bound immediately so a follow-up edit-resend can anchor its rebase on
-    // this turn without waiting for the post-run history refresh.
+    // The message's persisted identity (desktop stamps it at persist time):
+    // the bare id aligns live turns with their history twins, the full ref
+    // additionally lets a follow-up edit-resend anchor its rebase on this
+    // turn without waiting for the post-run history refresh.
     const messageRef = readHistoryMessageRef(payload.message_ref);
-    const bindUserRef = (user: UserChatEntry): UserChatEntry =>
-      messageRef && user.messageRef?.messageId !== messageRef.messageId
-        ? { ...user, messageRef }
-        : user;
+    const bindUserIdentity = (user: UserChatEntry): UserChatEntry => {
+      let next = user;
+      if (messageId && next.messageId !== messageId) {
+        next = { ...next, messageId };
+      }
+      if (messageRef && next.messageRef?.messageId !== messageRef.messageId) {
+        next = { ...next, messageRef };
+      }
+      return next;
+    };
     if (messageRef) {
       // Fresh-open overlap: the fetched history may already render this very
       // message's persisted echo while its run replays into a live turn. The
@@ -506,12 +521,13 @@ export function createTranscriptStore(options?: {
             kind: "user",
             text,
             attachments,
+            messageId: messageId || undefined,
             messageRef,
             timestamp: Date.now(),
           },
         };
       } else {
-        const boundUser = bindUserRef(next.user);
+        const boundUser = bindUserIdentity(next.user);
         if (boundUser !== next.user) {
           next = { ...next, user: boundUser };
         }
@@ -534,13 +550,14 @@ export function createTranscriptStore(options?: {
             kind: "user",
             text,
             attachments,
+            messageId: messageId || undefined,
             messageRef,
             timestamp: Date.now(),
           },
         });
         schedule(true);
       } else {
-        const boundUser = bindUserRef(runTurn.user);
+        const boundUser = bindUserIdentity(runTurn.user);
         if (boundUser !== runTurn.user) {
           replaceTurn(runTurn, { ...runTurn, user: boundUser });
           schedule(true);
@@ -565,6 +582,7 @@ export function createTranscriptStore(options?: {
           kind: "user",
           text,
           attachments,
+          messageId: messageId || undefined,
           messageRef,
           timestamp: Date.now(),
         },
@@ -866,23 +884,6 @@ export function createTranscriptStore(options?: {
         applyRebased(event);
         return;
       }
-      case "user_message_ref": {
-        // Gateway-seeded binding for a swallowed desktop echo: the seeded
-        // user_message could not carry the persisted identity (ids are minted
-        // at desktop persist time), this event retrofits it onto the run's
-        // turn so a follow-up edit-resend can anchor its rebase.
-        const ref = readHistoryMessageRef((event as { message_ref?: unknown }).message_ref);
-        if (!ref) {
-          return;
-        }
-        const turn = findTurnByRunId(runId) ?? findTurnByCri(readEventClientRequestId(event));
-        if (!turn?.user || turn.user.messageRef?.messageId === ref.messageId) {
-          return;
-        }
-        replaceTurn(turn, { ...turn, user: { ...turn.user, messageRef: ref } });
-        schedule(true);
-        return;
-      }
       case "snapshot": {
         const payload = event as { entries_json?: string; as_of_seq?: number };
         const asOfSeq =
@@ -1046,6 +1047,29 @@ export function createTranscriptStore(options?: {
         continue;
       }
       applyOne(event);
+    }
+    // history.get and chat.subscribe race when a conversation is opened.
+    // If history painted first, the replay/snapshot above has only now
+    // materialized the active turn; run the same guarded replace alignment
+    // once more so the persisted copy of that running exchange is removed.
+    // This is deliberately gated on a user-bearing active turn: an
+    // assistant-only mid-run snapshot cannot be paired safely by position.
+    if (
+      historyEntries.length > 0 &&
+      turns.some(
+        (turn) => (turn.phase === "pending" || turn.phase === "streaming") && turn.user !== null,
+      )
+    ) {
+      const aligned = alignHistory({
+        historyEntries,
+        turns,
+        entries: historyEntries,
+        mode: "replace",
+      });
+      if (aligned.changed) {
+        historyEntries = aligned.historyEntries;
+        turns = aligned.turns;
+      }
     }
     lastSeq = Math.max(lastSeq, result.latestSeq);
   };

@@ -150,6 +150,16 @@ async function connectAndAuth(codec, index = 0) {
   assert.equal(hello.json.hello.token, "token");
   assert.equal(hello.json.hello.client_name, "webui");
   socket.receiveBinary(codec.encodeServerFrame({ request_id: hello.requestId, hello: { ok: true } }));
+  if (index === 0) {
+    await waitFor(() => findFrame(codec, socket, "agentList"), "agent_list frame");
+    const listRequest = findFrame(codec, socket, "agentList");
+    socket.receiveBinary(
+      codec.encodeServerFrame({
+        request_id: listRequest.requestId,
+        agent_list: { agents: [{ agent_id: "desktop-agent", online: true }] },
+      }),
+    );
+  }
   return socket;
 }
 
@@ -351,6 +361,7 @@ async function connectTerminalStream(codec, index = 0) {
   assert.equal(hello.case, "hello");
   assert.equal(hello.json.hello.token, "token");
   assert.equal(hello.json.hello.role, "CLIENT_ROLE_BROWSER");
+  assert.equal(hello.json.hello.agent_id, "desktop-agent");
   socket.receiveBinary(codec.encodeTerminalServerFrame({ hello: { ok: true } }));
   return socket;
 }
@@ -363,7 +374,7 @@ test("BrowserGatewayTerminalStreamClient connects to /ws/v2/terminal and attache
     "src/lib/terminal/gatewayTerminalStreamClient.ts",
   );
 
-  const client = new BrowserGatewayTerminalStreamClient("token");
+  const client = new BrowserGatewayTerminalStreamClient("token", () => "desktop-agent");
   const attachPromise = client.attach(terminalTestSession, { maxBytes: 8192 });
   const socket = await connectTerminalStream(codec);
   await waitFor(() => socket.sent.length >= 2, "terminal stream attach frame");
@@ -404,7 +415,7 @@ test("BrowserGatewayTerminalStreamClient retries attach while desktop stream is 
     "src/lib/terminal/gatewayTerminalStreamClient.ts",
   );
 
-  const client = new BrowserGatewayTerminalStreamClient("token");
+  const client = new BrowserGatewayTerminalStreamClient("token", () => "desktop-agent");
   const attachPromise = client.attach(terminalTestSession);
   const socket = await connectTerminalStream(codec);
   await waitFor(() => socket.sent.length >= 2, "terminal stream attach frame");
@@ -453,7 +464,7 @@ test("BrowserGatewayTerminalStreamClient rejects the attach when the hello is re
     "src/lib/terminal/gatewayTerminalStreamClient.ts",
   );
 
-  const client = new BrowserGatewayTerminalStreamClient("token");
+  const client = new BrowserGatewayTerminalStreamClient("token", () => "desktop-agent");
   const attachPromise = assert.rejects(client.attach(terminalTestSession), /unauthorized/);
   await waitFor(() => FakeWebSocket.instances.length >= 1, "terminal stream socket");
   const socket = FakeWebSocket.instances[0];
@@ -1164,6 +1175,53 @@ test("GatewayWebSocketClient suppresses transient recoverable disconnect status 
       String(event.error ?? "").includes("Gateway WebSocket disconnected"),
     ),
     false,
+  );
+
+  unsubscribe();
+  resetGatewayWebSocketClient();
+});
+
+test("GatewayWebSocketClient preserves client names across live status updates", async () => {
+  installBrowser();
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const snapshots = [];
+  const unsubscribe = client.subscribeAgents((agents) => snapshots.push(agents));
+  const initialList = client.listAgents();
+  const socket = await connectAndAuth(codec);
+  await initialList;
+
+  const refreshedList = client.listAgents();
+  await waitFor(
+    () => frames(codec, socket).filter((frame) => frame.case === "agentList").length >= 2,
+    "second agent_list frame",
+  );
+  const listRequests = frames(codec, socket).filter((frame) => frame.case === "agentList");
+  const listRequest = listRequests[listRequests.length - 1];
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      request_id: listRequest.requestId,
+      agent_list: {
+        agents: [{ agent_id: "desktop-agent", online: true, name: "Office desktop" }],
+      },
+    }),
+  );
+  await refreshedList;
+
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      agent_id: "desktop-agent",
+      status: { agent_id: "desktop-agent", online: false },
+    }),
+  );
+  await waitFor(
+    () =>
+      snapshots.some(
+        (agents) => agents[0]?.online === false && agents[0]?.name === "Office desktop",
+      ),
+    "status update with preserved name",
   );
 
   unsubscribe();

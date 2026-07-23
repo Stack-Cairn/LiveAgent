@@ -717,37 +717,6 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   min-width: 0;
 }
 
-.gateway-online-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-family: "OpenAI Sans Semibold Web", "PingFang SC", "Microsoft YaHei", sans-serif;
-  font-size: 12px;
-  line-height: 1;
-  background: hsl(var(--muted) / 0.8);
-  color: hsl(var(--muted-foreground));
-}
-
-.gateway-online-pill::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: hsl(var(--muted-foreground) / 0.55);
-}
-
-.gateway-online-pill-active {
-  background: hsl(152 60% 42% / 0.1);
-  color: hsl(152 60% 36%);
-}
-
-.gateway-online-pill-active::before {
-  background: hsl(152 60% 42%);
-  box-shadow: 0 0 0 4px hsl(152 60% 42% / 0.14);
-}
-
 .gateway-banner-error {
   margin: 12px 20px 0;
   border: 1px solid hsl(var(--destructive) / 0.16);
@@ -3577,21 +3546,6 @@ html[data-liveagent-webui="gateway"]
   html[data-liveagent-webui="gateway"] .model-selector-trigger,
   html[data-liveagent-webui="gateway"] .model-selector-current-label {
     font-size: 13px;
-  }
-
-  .gateway-online-pill {
-    width: 24px;
-    height: 24px;
-    justify-content: center;
-    gap: 0;
-    padding: 0;
-    overflow: hidden;
-    font-size: 0;
-  }
-
-  .gateway-online-pill::before {
-    width: 7px;
-    height: 7px;
   }
 
   html[data-liveagent-webui="gateway"] .gateway-project-tools-panel-toggle {

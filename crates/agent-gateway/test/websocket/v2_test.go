@@ -13,7 +13,6 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/pbws"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -23,7 +22,7 @@ func TestV2HelloRejectsBadToken(t *testing.T) {
 	t.Parallel()
 
 	sm := session.NewManager()
-	handler := pbws.NewServer(newV2TestConfig(), sm).BrowserHandler()
+	handler := pbws.NewServer(newV2TestConfig(), sm, nil).BrowserHandler()
 	conn, cleanup := dialV2(t, handler)
 	defer cleanup()
 
@@ -52,7 +51,7 @@ func TestV2HelloRejectsWrongVersion(t *testing.T) {
 	t.Parallel()
 
 	sm := session.NewManager()
-	handler := pbws.NewServer(newV2TestConfig(), sm).BrowserHandler()
+	handler := pbws.NewServer(newV2TestConfig(), sm, nil).BrowserHandler()
 	conn, cleanup := dialV2(t, handler)
 	defer cleanup()
 
@@ -75,6 +74,7 @@ func TestV2StatusGet(t *testing.T) {
 
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "status-1",
+		AgentId:   "desktop-agent",
 		Payload:   &gatewayv2.WebClientFrame_StatusGet{StatusGet: &gatewayv2.StatusGetRequest{}},
 	})
 	frame := receiveWebFrameWithID(t, conn, "status-1")
@@ -93,14 +93,15 @@ func TestV2AgentRequestPassthroughRoundtrip(t *testing.T) {
 	sm, agentSession, conn, cleanup := newV2BrowserTest(t)
 	defer cleanup()
 
-	// page_size 越界应被网关钳制到 v1 相同的上限（200）。
+	// page_size 越界应被网关钳制到协议上限（200）。
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "hist-1",
+		AgentId:   "desktop-agent",
 		Payload: &gatewayv2.WebClientFrame_AgentRequest{
-			AgentRequest: &gatewayv1.GatewayEnvelope{
+			AgentRequest: &gatewayv2.GatewayEnvelope{
 				RequestId: "hist-1",
-				Payload: &gatewayv1.GatewayEnvelope_HistoryList{
-					HistoryList: &gatewayv1.HistoryListRequest{PageSize: 999},
+				Payload: &gatewayv2.GatewayEnvelope_HistoryList{
+					HistoryList: &gatewayv2.HistoryListRequest{PageSize: 999},
 				},
 			},
 		},
@@ -118,10 +119,10 @@ func TestV2AgentRequestPassthroughRoundtrip(t *testing.T) {
 		t.Fatalf("page = %d, want defaulted to 1", got)
 	}
 
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: outbound.GetRequestId(),
-		Payload: &gatewayv1.AgentEnvelope_HistoryListResp{
-			HistoryListResp: &gatewayv1.HistoryListResponse{TotalCount: 3},
+		Payload: &gatewayv2.AgentEnvelope_HistoryListResp{
+			HistoryListResp: &gatewayv2.HistoryListResponse{TotalCount: 3},
 		},
 	})
 
@@ -148,10 +149,11 @@ func TestV2GuardRejectsNonWhitelistedArms(t *testing.T) {
 	// chat_command 必须走网关编排帧，不允许直通。
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "bad-1",
+		AgentId:   "desktop-agent",
 		Payload: &gatewayv2.WebClientFrame_AgentRequest{
-			AgentRequest: &gatewayv1.GatewayEnvelope{
-				Payload: &gatewayv1.GatewayEnvelope_ChatCommand{
-					ChatCommand: &gatewayv1.ChatCommandRequest{Type: "chat.submit"},
+			AgentRequest: &gatewayv2.GatewayEnvelope{
+				Payload: &gatewayv2.GatewayEnvelope_ChatCommand{
+					ChatCommand: &gatewayv2.ChatCommandRequest{Type: "chat.submit"},
 				},
 			},
 		},
@@ -164,10 +166,11 @@ func TestV2GuardRejectsNonWhitelistedArms(t *testing.T) {
 	// 内部推送臂同理。
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "bad-2",
+		AgentId:   "desktop-agent",
 		Payload: &gatewayv2.WebClientFrame_AgentRequest{
-			AgentRequest: &gatewayv1.GatewayEnvelope{
-				Payload: &gatewayv1.GatewayEnvelope_Ping{
-					Ping: &gatewayv1.PingRequest{},
+			AgentRequest: &gatewayv2.GatewayEnvelope{
+				Payload: &gatewayv2.GatewayEnvelope_Ping{
+					Ping: &gatewayv2.PingRequest{},
 				},
 			},
 		},
@@ -186,6 +189,7 @@ func TestV2ChatSubscribeAndStreamEvents(t *testing.T) {
 
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "sub-1",
+		AgentId:   "desktop-agent",
 		Payload: &gatewayv2.WebClientFrame_ChatSubscribe{
 			ChatSubscribe: &gatewayv2.ChatSubscribeRequest{ConversationId: "conv-1"},
 		},
@@ -198,11 +202,11 @@ func TestV2ChatSubscribeAndStreamEvents(t *testing.T) {
 
 	dispatchStarted(sm, "run-1", "conv-1")
 	tokenData, _ := json.Marshal(map[string]any{"text": "hello"})
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "run-1",
-		Payload: &gatewayv1.AgentEnvelope_ChatEvent{
-			ChatEvent: &gatewayv1.ChatEvent{
-				Type:           gatewayv1.ChatEvent_TOKEN,
+		Payload: &gatewayv2.AgentEnvelope_ChatEvent{
+			ChatEvent: &gatewayv2.ChatEvent{
+				Type:           gatewayv2.ChatEvent_TOKEN,
 				ConversationId: "conv-1",
 				Data:           string(tokenData),
 			},
@@ -234,12 +238,17 @@ func TestV2ChatSubscribeAndStreamEvents(t *testing.T) {
 }
 
 // TestV2EndToEndBinaryPath 打通首条全二进制路径：假 agent 经 /ws/v2/agent 接入，
-// 浏览器经 /ws/v2 直通请求，全程无 JSON、无 gRPC。
+// 浏览器经 /ws/v2 直通请求，全程使用 Protobuf 二进制帧。
 func TestV2EndToEndBinaryPath(t *testing.T) {
 	t.Parallel()
 
 	sm := session.NewManager()
-	srv := pbws.NewServer(newV2TestConfig(), sm)
+	store := newAgentTokenStore(t)
+	agentToken, err := store.Issue("desktop-agent", "")
+	if err != nil {
+		t.Fatalf("issue desktop agent token: %v", err)
+	}
+	srv := pbws.NewServer(newV2TestConfig(), sm, store)
 
 	mux := http.NewServeMux()
 	mux.Handle("/ws/v2", srv.BrowserHandler())
@@ -253,7 +262,7 @@ func TestV2EndToEndBinaryPath(t *testing.T) {
 			Hello: &gatewayv2.ClientHello{
 				ProtocolVersion: pbws.ProtocolVersion,
 				Role:            gatewayv2.ClientRole_CLIENT_ROLE_AGENT,
-				Token:           "ws-token",
+				Token:           agentToken,
 				AgentId:         "desktop-agent",
 				AgentVersion:    "1.0.0",
 			},
@@ -271,17 +280,18 @@ func TestV2EndToEndBinaryPath(t *testing.T) {
 
 	sendProtoFrame(t, browserConn, &gatewayv2.WebClientFrame{
 		RequestId: "e2e-1",
+		AgentId:   "desktop-agent",
 		Payload: &gatewayv2.WebClientFrame_AgentRequest{
-			AgentRequest: &gatewayv1.GatewayEnvelope{
-				Payload: &gatewayv1.GatewayEnvelope_SettingsGet{
-					SettingsGet: &gatewayv1.SettingsGetRequest{},
+			AgentRequest: &gatewayv2.GatewayEnvelope{
+				Payload: &gatewayv2.GatewayEnvelope_SettingsGet{
+					SettingsGet: &gatewayv2.SettingsGetRequest{},
 				},
 			},
 		},
 	})
 
 	// agent 侧应收到直通信封（跳过心跳 Ping）。
-	var inbound *gatewayv1.GatewayEnvelope
+	var inbound *gatewayv2.GatewayEnvelope
 	for attempt := 0; attempt < 8; attempt++ {
 		envelope := receiveAgentServerFrame(t, agentConn).GetEnvelope()
 		if envelope == nil || envelope.GetPing() != nil {
@@ -296,10 +306,10 @@ func TestV2EndToEndBinaryPath(t *testing.T) {
 
 	sendProtoFrame(t, agentConn, &gatewayv2.AgentClientFrame{
 		Payload: &gatewayv2.AgentClientFrame_Envelope{
-			Envelope: &gatewayv1.AgentEnvelope{
+			Envelope: &gatewayv2.AgentEnvelope{
 				RequestId: inbound.GetRequestId(),
-				Payload: &gatewayv1.AgentEnvelope_SettingsGetResp{
-					SettingsGetResp: &gatewayv1.SettingsGetResponse{SettingsJson: `{"ok":true}`},
+				Payload: &gatewayv2.AgentEnvelope_SettingsGetResp{
+					SettingsGetResp: &gatewayv2.SettingsGetResponse{SettingsJson: `{"ok":true}`},
 				},
 			},
 		},

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 func NewAgentSession(auth AuthSnapshot) *AgentSession {
@@ -15,14 +15,14 @@ func NewAgentSession(auth AuthSnapshot) *AgentSession {
 		ConnectedAt:  time.Now(),
 		LastPing:     time.Now(),
 		toAgent:      make(chan *OutboundEnvelope, 512),
-		pingCh:       make(chan *gatewayv1.GatewayEnvelope, 1),
+		pingCh:       make(chan *gatewayv2.GatewayEnvelope, 1),
 		done:         make(chan struct{}),
 		streams:      make(map[string]*agentStream),
 	}
 }
 
 type OutboundEnvelope struct {
-	*gatewayv1.GatewayEnvelope
+	*gatewayv2.GatewayEnvelope
 
 	ctx    context.Context
 	result chan error
@@ -49,14 +49,14 @@ func (s *AgentSession) Outbound() <-chan *OutboundEnvelope {
 	return s.toAgent
 }
 
-func (s *AgentSession) Pings() <-chan *gatewayv1.GatewayEnvelope {
+func (s *AgentSession) Pings() <-chan *gatewayv2.GatewayEnvelope {
 	return s.pingCh
 }
 
 // SendPing queues a heartbeat on a dedicated lane that can never be starved
 // by the shared outbound queue. Single producer (heartbeatLoop): a still-queued
 // older ping is replaced so the freshest timestamp wins.
-func (s *AgentSession) SendPing(env *gatewayv1.GatewayEnvelope) error {
+func (s *AgentSession) SendPing(env *gatewayv2.GatewayEnvelope) error {
 	select {
 	case <-s.done:
 		return ErrAgentOffline
@@ -94,11 +94,11 @@ func (s *AgentSession) Close() {
 	})
 }
 
-func (s *AgentSession) SendToAgent(env *gatewayv1.GatewayEnvelope) error {
+func (s *AgentSession) SendToAgent(env *gatewayv2.GatewayEnvelope) error {
 	return s.enqueueToAgent(context.Background(), env, nil)
 }
 
-func (s *AgentSession) SendToAgentContext(ctx context.Context, env *gatewayv1.GatewayEnvelope) error {
+func (s *AgentSession) SendToAgentContext(ctx context.Context, env *gatewayv2.GatewayEnvelope) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -121,7 +121,7 @@ func (s *AgentSession) SendToAgentContext(ctx context.Context, env *gatewayv1.Ga
 
 func (s *AgentSession) enqueueToAgent(
 	ctx context.Context,
-	env *gatewayv1.GatewayEnvelope,
+	env *gatewayv2.GatewayEnvelope,
 	result chan error,
 ) error {
 	s.streamsMu.Lock()
@@ -145,7 +145,7 @@ func (s *AgentSession) enqueueToAgent(
 	}
 }
 
-func (s *AgentSession) TrySendToAgent(env *gatewayv1.GatewayEnvelope) (bool, error) {
+func (s *AgentSession) TrySendToAgent(env *gatewayv2.GatewayEnvelope) (bool, error) {
 	s.streamsMu.Lock()
 	closed := s.closed
 	s.streamsMu.Unlock()
@@ -171,7 +171,7 @@ func (s *AgentSession) TrySendToAgent(env *gatewayv1.GatewayEnvelope) (bool, err
 
 func (s *AgentSession) registerStream(requestID string) (*agentStream, error) {
 	stream := &agentStream{
-		ch:   make(chan *gatewayv1.AgentEnvelope, 64),
+		ch:   make(chan *gatewayv2.AgentEnvelope, 64),
 		done: make(chan struct{}),
 	}
 
@@ -197,7 +197,7 @@ func (s *AgentSession) unregisterStream(requestID string, stream *agentStream) {
 	s.streamsMu.Unlock()
 }
 
-func (s *AgentSession) dispatch(env *gatewayv1.AgentEnvelope) {
+func (s *AgentSession) dispatch(env *gatewayv2.AgentEnvelope) {
 	s.streamsMu.Lock()
 	stream := s.streams[env.GetRequestId()]
 	s.streamsMu.Unlock()
@@ -213,7 +213,7 @@ func (s *agentStream) close() {
 	})
 }
 
-func (s *agentStream) send(env *gatewayv1.AgentEnvelope) bool {
+func (s *agentStream) send(env *gatewayv2.AgentEnvelope) bool {
 	select {
 	case <-s.done:
 		return false

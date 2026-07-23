@@ -9,6 +9,19 @@ export type RelativeInstalledAt =
   | { kind: "date"; timestamp: number };
 
 const RECENT_INSTALL_DAYS = 6;
+export const LOCAL_SKILL_CARD_DESCRIPTION_MAX_CHARACTERS = 120;
+
+export function truncateLocalSkillCardDescription(description: string): string {
+  const normalized = description.trim();
+  if (normalized.length <= LOCAL_SKILL_CARD_DESCRIPTION_MAX_CHARACTERS) return normalized;
+
+  const characters = Array.from(normalized);
+  if (characters.length <= LOCAL_SKILL_CARD_DESCRIPTION_MAX_CHARACTERS) return normalized;
+  return `${characters
+    .slice(0, LOCAL_SKILL_CARD_DESCRIPTION_MAX_CHARACTERS - 1)
+    .join("")
+    .trimEnd()}…`;
+}
 
 export function getInstalledSkillCardSource(
   skill: Pick<SkillSummary, "name" | "source" | "builtIn">,

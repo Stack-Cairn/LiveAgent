@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 const (
@@ -31,23 +31,24 @@ var tunnelSlugPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{22,64}$`)
 // tunnel set: slug allocation, live streams, connection counts, and health.
 // The desired specs themselves are owned and persisted by the agent.
 type tunnelRuntime struct {
-	mu       sync.Mutex
-	records  map[string]*tunnelRecord
-	slugToID map[string]string
-	streams  map[string]*tunnelStream
-	revision uint64
-	relay    *gatewayv1.TunnelHealth
+	mu        sync.Mutex
+	records   map[string]*tunnelRecord
+	slugToID  map[string]string
+	streams   map[string]*tunnelStream
+	revisions map[string]uint64
+	relays    map[string]*gatewayv2.TunnelHealth
 
 	subMu       sync.Mutex
 	nextSubID   int
-	subscribers map[int]chan *gatewayv1.TunnelStateSnapshot
+	subscribers map[int]chan Tagged[*gatewayv2.TunnelStateSnapshot]
 
 	pingMu       sync.Mutex
-	pendingPings map[string]chan int64
+	pendingPings map[string]pendingTunnelPing
 }
 
 type tunnelRecord struct {
 	id                string
+	agentID           string
 	slug              string
 	name              string
 	targetURL         string
@@ -55,15 +56,23 @@ type tunnelRecord struct {
 	createdAt         time.Time
 	expiresAt         time.Time
 	activeConnections int
-	local             *gatewayv1.TunnelHealth
+	local             *gatewayv2.TunnelHealth
+}
+
+type pendingTunnelPing struct {
+	agentID string
+	ch      chan int64
 }
 
 type tunnelStream struct {
 	streamID string
 	tunnelID string
-	ch       chan *gatewayv1.TunnelFrame
-	done     chan struct{}
-	once     sync.Once
+	// agentID 是流所属 record 的归属 Agent；入站帧按它校验，防止 Agent A
+	// 伪造 stream_id 向 Agent B 的访问者注入数据。
+	agentID string
+	ch      chan *gatewayv2.TunnelFrame
+	done    chan struct{}
+	once    sync.Once
 }
 
 // TunnelStreamLease is one visitor connection's claim on a tunnel.
@@ -72,6 +81,7 @@ type TunnelStreamLease struct {
 	stream    *tunnelStream
 	slug      string
 	targetURL string
+	agentID   string
 	once      sync.Once
 }
 
@@ -80,8 +90,10 @@ func newTunnelRuntime() *tunnelRuntime {
 		records:      make(map[string]*tunnelRecord),
 		slugToID:     make(map[string]string),
 		streams:      make(map[string]*tunnelStream),
-		subscribers:  make(map[int]chan *gatewayv1.TunnelStateSnapshot),
-		pendingPings: make(map[string]chan int64),
+		revisions:    make(map[string]uint64),
+		relays:       make(map[string]*gatewayv2.TunnelHealth),
+		subscribers:  make(map[int]chan Tagged[*gatewayv2.TunnelStateSnapshot]),
+		pendingPings: make(map[string]pendingTunnelPing),
 	}
 }
 
@@ -122,7 +134,7 @@ func (l *TunnelStreamLease) StreamID() string {
 	return l.stream.streamID
 }
 
-func (l *TunnelStreamLease) Frames() <-chan *gatewayv1.TunnelFrame {
+func (l *TunnelStreamLease) Frames() <-chan *gatewayv2.TunnelFrame {
 	if l == nil || l.stream == nil {
 		return nil
 	}
@@ -136,6 +148,14 @@ func (l *TunnelStreamLease) Done() <-chan struct{} {
 	return l.stream.done
 }
 
+// AgentID 返回租约所属隧道的归属 Agent（访问者帧的路由目标）。
+func (l *TunnelStreamLease) AgentID() string {
+	if l == nil {
+		return ""
+	}
+	return l.agentID
+}
+
 func (l *TunnelStreamLease) Release() {
 	if l == nil {
 		return
@@ -145,23 +165,18 @@ func (l *TunnelStreamLease) Release() {
 	})
 }
 
-func (m *Manager) WebTunnelsEnabled() bool {
-	m.syncHub.settingsSnapshotMu.RLock()
-	defer m.syncHub.settingsSnapshotMu.RUnlock()
-
-	remote, ok := m.syncHub.settingsSnapshot["remote"].(map[string]any)
-	if !ok {
-		return false
-	}
-	enabled, ok := remote["enableWebTunnels"].(bool)
-	return ok && enabled
+func (m *Manager) WebTunnelsEnabled(agentID string) bool {
+	return m.settingsRemoteBool(agentID, "enableWebTunnels")
 }
 
-// ApplyDesiredState reconciles the runtime against the agent's full desired
-// tunnel set: allocates slugs for new tunnels (honoring valid unused hints),
-// updates changed ones, and drops removed ones (canceling their streams).
-func (m *Manager) ApplyDesiredState(desired *gatewayv1.TunnelDesiredState) {
-	if desired == nil {
+// ApplyDesiredState reconciles agentID's runtime records against that agent's
+// full desired tunnel set: allocates slugs for new tunnels (honoring valid
+// unused hints), updates changed ones, and drops removed ones (canceling
+// their streams). Records of other agents are untouched; the per-agent cap
+// applies to each agent's own set.
+func (m *Manager) ApplyDesiredState(agentID string, desired *gatewayv2.TunnelDesiredState) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || desired == nil {
 		return
 	}
 	now := time.Now()
@@ -188,9 +203,15 @@ func (m *Manager) ApplyDesiredState(desired *gatewayv1.TunnelDesiredState) {
 		}
 		seen[id] = true
 		record := m.tunnels.records[id]
+		if record != nil && record.agentID != agentID {
+			// 隧道 id 撞上他人的 record：拒绝接管（id 是 Agent 本地生成的，
+			// 跨 Agent 撞车只能来自伪造或配置复制），保持原归属不变。
+			continue
+		}
 		if record == nil {
 			record = &tunnelRecord{
 				id:        id,
+				agentID:   agentID,
 				slug:      m.allocateTunnelSlugLocked(spec.GetSlugHint()),
 				createdAt: now,
 			}
@@ -203,7 +224,7 @@ func (m *Manager) ApplyDesiredState(desired *gatewayv1.TunnelDesiredState) {
 		record.expiresAt = expiresAt
 	}
 	for id, record := range m.tunnels.records {
-		if seen[id] {
+		if seen[id] || record.agentID != agentID {
 			continue
 		}
 		canceled = append(canceled, m.dropTunnelRecordLocked(record)...)
@@ -211,20 +232,21 @@ func (m *Manager) ApplyDesiredState(desired *gatewayv1.TunnelDesiredState) {
 	m.tunnels.mu.Unlock()
 
 	m.cancelTunnelStreams(canceled)
-	m.broadcastTunnelState()
-	go m.probeRelay()
+	m.broadcastTunnelState(agentID)
+	go m.probeRelay(agentID)
 }
 
-// ApplyProbeReport merges agent-reported local-service health into the runtime.
-func (m *Manager) ApplyProbeReport(report *gatewayv1.TunnelProbeReport) {
-	if report == nil || len(report.GetResults()) == 0 {
+// ApplyProbeReport merges one authenticated Agent report into only that Agent records.
+func (m *Manager) ApplyProbeReport(agentID string, report *gatewayv2.TunnelProbeReport) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || report == nil || len(report.GetResults()) == 0 {
 		return
 	}
 	changed := false
 	m.tunnels.mu.Lock()
 	for _, result := range report.GetResults() {
 		record := m.tunnels.records[strings.TrimSpace(result.GetTunnelId())]
-		if record == nil || result.GetLocal() == nil {
+		if record == nil || record.agentID != agentID || result.GetLocal() == nil {
 			continue
 		}
 		record.local = cloneTunnelHealth(result.GetLocal())
@@ -232,7 +254,7 @@ func (m *Manager) ApplyProbeReport(report *gatewayv1.TunnelProbeReport) {
 	}
 	m.tunnels.mu.Unlock()
 	if changed {
-		m.broadcastTunnelState()
+		m.broadcastTunnelState(agentID)
 	}
 }
 
@@ -256,11 +278,12 @@ func (m *Manager) dropTunnelRecordLocked(record *tunnelRecord) []*tunnelStream {
 	return dropped
 }
 
+// cancelTunnelStreams 向各流的归属 Agent 发送 CANCEL（过期清扫可能跨多个 Agent）。
 func (m *Manager) cancelTunnelStreams(streams []*tunnelStream) {
 	for _, stream := range streams {
-		_ = m.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+		_ = m.SendTunnelFrameToAgent(stream.agentID, &gatewayv2.TunnelFrame{
 			StreamId: stream.streamID,
-			Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
+			Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
 		})
 	}
 }
@@ -295,18 +318,25 @@ func randomURLToken(byteCount int) string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
-// TunnelStateSnapshot builds the authoritative state pushed to every client.
-func (m *Manager) TunnelStateSnapshot() *gatewayv1.TunnelStateSnapshot {
-	online := m.IsOnline()
+// TunnelStateSnapshot builds the authoritative state for one named Agent.
+func (m *Manager) TunnelStateSnapshot(agentID string) *gatewayv2.TunnelStateSnapshot {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return &gatewayv2.TunnelStateSnapshot{}
+	}
+	online := m.IsOnline(agentID)
 	m.tunnels.mu.Lock()
 	defer m.tunnels.mu.Unlock()
-	return m.tunnelStateSnapshotLocked(online)
+	return m.tunnelStateSnapshotLocked(agentID, online)
 }
 
-func (m *Manager) tunnelStateSnapshotLocked(online bool) *gatewayv1.TunnelStateSnapshot {
-	tunnels := make([]*gatewayv1.TunnelStatus, 0, len(m.tunnels.records))
+func (m *Manager) tunnelStateSnapshotLocked(agentID string, online bool) *gatewayv2.TunnelStateSnapshot {
+	tunnels := make([]*gatewayv2.TunnelStatus, 0, len(m.tunnels.records))
 	for _, record := range m.tunnels.records {
-		tunnels = append(tunnels, &gatewayv1.TunnelStatus{
+		if record.agentID != agentID {
+			continue
+		}
+		tunnels = append(tunnels, &gatewayv2.TunnelStatus{
 			Id:                record.id,
 			Slug:              record.slug,
 			Name:              record.name,
@@ -325,17 +355,17 @@ func (m *Manager) tunnelStateSnapshotLocked(online bool) *gatewayv1.TunnelStateS
 		}
 		return tunnels[i].GetId() < tunnels[j].GetId()
 	})
-	m.tunnels.revision += 1
-	return &gatewayv1.TunnelStateSnapshot{
+	m.tunnels.revisions[agentID] += 1
+	return &gatewayv2.TunnelStateSnapshot{
 		Tunnels:     tunnels,
-		Revision:    m.tunnels.revision,
+		Revision:    m.tunnels.revisions[agentID],
 		AgentOnline: online,
-		Relay:       cloneTunnelHealth(m.tunnels.relay),
+		Relay:       cloneTunnelHealth(m.tunnels.relays[agentID]),
 	}
 }
 
-func (m *Manager) SubscribeTunnelState() (<-chan *gatewayv1.TunnelStateSnapshot, func()) {
-	ch := make(chan *gatewayv1.TunnelStateSnapshot, 16)
+func (m *Manager) SubscribeTunnelState() (<-chan Tagged[*gatewayv2.TunnelStateSnapshot], func()) {
+	ch := make(chan Tagged[*gatewayv2.TunnelStateSnapshot], 16)
 
 	m.tunnels.subMu.Lock()
 	subID := m.tunnels.nextSubID
@@ -353,13 +383,18 @@ func (m *Manager) SubscribeTunnelState() (<-chan *gatewayv1.TunnelStateSnapshot,
 	return ch, cleanup
 }
 
-// broadcastTunnelState pushes the current snapshot to /ws subscribers and to
-// the agent (which persists allocated slugs and re-emits it to the GUI).
-func (m *Manager) broadcastTunnelState() {
-	snapshot := m.TunnelStateSnapshot()
+// broadcastTunnelState pushes one Agent snapshot to /ws subscribers and back
+// to the same Agent, which persists allocated slugs and re-emits it to the GUI.
+func (m *Manager) broadcastTunnelState(agentID string) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return
+	}
+	snapshot := m.TunnelStateSnapshot(agentID)
+	tagged := Tagged[*gatewayv2.TunnelStateSnapshot]{AgentID: agentID, Event: snapshot}
 
 	m.tunnels.subMu.Lock()
-	subscribers := make([]chan *gatewayv1.TunnelStateSnapshot, 0, len(m.tunnels.subscribers))
+	subscribers := make([]chan Tagged[*gatewayv2.TunnelStateSnapshot], 0, len(m.tunnels.subscribers))
 	for _, ch := range m.tunnels.subscribers {
 		subscribers = append(subscribers, ch)
 	}
@@ -367,21 +402,17 @@ func (m *Manager) broadcastTunnelState() {
 
 	for _, ch := range subscribers {
 		select {
-		case ch <- snapshot:
+		case ch <- tagged:
 		default:
 		}
 	}
 
-	// Best-effort, non-blocking: the agent only mines snapshots for allocated
-	// slugs and UI display, and a fresher snapshot follows every state change.
-	m.registry.mu.RLock()
-	session := m.registry.session
-	m.registry.mu.RUnlock()
-	if session != nil {
-		_, _ = session.TrySendToAgent(&gatewayv1.GatewayEnvelope{
+	// Best-effort and non-blocking. A fresher snapshot follows every state change.
+	if session, err := m.resolveSession(agentID); err == nil {
+		_, _ = session.TrySendToAgent(&gatewayv2.GatewayEnvelope{
 			RequestId: "tunnel-state-" + uuid.NewString(),
 			Timestamp: time.Now().Unix(),
-			Payload: &gatewayv1.GatewayEnvelope_TunnelState{
+			Payload: &gatewayv2.GatewayEnvelope_TunnelState{
 				TunnelState: snapshot,
 			},
 		})
@@ -389,14 +420,12 @@ func (m *Manager) broadcastTunnelState() {
 }
 
 // AcquireTunnel claims a visitor stream slot on the tunnel behind slug.
+// The lease is bound to the tunnel's owning agent; visitor frames route there.
 func (m *Manager) AcquireTunnel(slug string, streamID string) (*TunnelStreamLease, error) {
 	slug = strings.TrimSpace(slug)
 	streamID = strings.TrimSpace(streamID)
 	if slug == "" || streamID == "" {
 		return nil, ErrTunnelNotFound
-	}
-	if !m.IsOnline() {
-		return nil, ErrAgentOffline
 	}
 	now := time.Now()
 
@@ -407,6 +436,10 @@ func (m *Manager) AcquireTunnel(slug string, streamID string) (*TunnelStreamLeas
 	if record == nil {
 		return nil, ErrTunnelNotFound
 	}
+	// 在线判定按 record 归属 Agent，与其他 Agent 的状态无关。
+	if !m.IsOnline(record.agentID) {
+		return nil, ErrAgentOffline
+	}
 	if !record.expiresAt.IsZero() && !record.expiresAt.After(now) {
 		return nil, ErrTunnelExpired
 	}
@@ -416,7 +449,8 @@ func (m *Manager) AcquireTunnel(slug string, streamID string) (*TunnelStreamLeas
 	stream := &tunnelStream{
 		streamID: streamID,
 		tunnelID: record.id,
-		ch:       make(chan *gatewayv1.TunnelFrame, tunnelStreamChannelDepth),
+		agentID:  record.agentID,
+		ch:       make(chan *gatewayv2.TunnelFrame, tunnelStreamChannelDepth),
 		done:     make(chan struct{}),
 	}
 	if existing := m.tunnels.streams[streamID]; existing != nil {
@@ -430,6 +464,7 @@ func (m *Manager) AcquireTunnel(slug string, streamID string) (*TunnelStreamLeas
 		stream:    stream,
 		slug:      record.slug,
 		targetURL: record.targetURL,
+		agentID:   record.agentID,
 	}, nil
 }
 
@@ -448,30 +483,34 @@ func (m *Manager) releaseTunnelStream(stream *tunnelStream) {
 	m.tunnels.mu.Unlock()
 }
 
-func (m *Manager) SendTunnelFrameToAgent(frame *gatewayv1.TunnelFrame) error {
+// SendTunnelFrameToAgent 把访问者帧送往目标 Agent。
+func (m *Manager) SendTunnelFrameToAgent(agentID string, frame *gatewayv2.TunnelFrame) error {
 	if frame == nil {
 		return fmt.Errorf("tunnel frame is required")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), tunnelAgentSendTimeout)
 	defer cancel()
-	return m.SendToAgentContext(ctx, &gatewayv1.GatewayEnvelope{
+	return m.SendToAgentContext(ctx, agentID, &gatewayv2.GatewayEnvelope{
 		RequestId: "tunnel-frame-" + uuid.NewString(),
 		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv1.GatewayEnvelope_TunnelFrame{
+		Payload: &gatewayv2.GatewayEnvelope_TunnelFrame{
 			TunnelFrame: frame,
 		},
 	})
 }
 
 // dispatchTunnelFrame routes an agent frame to its visitor stream. It runs on
-// the agent stream read loop, so it must never block: a full stream channel
-// closes the stream (the visitor handler cancels) instead of waiting.
-func (m *Manager) dispatchTunnelFrame(frame *gatewayv1.TunnelFrame) {
-	if frame == nil {
+// the agent read loop, so it must never block: a full stream channel closes
+// the stream (the visitor handler cancels) instead of waiting. Frames whose
+// stream belongs to a different agent are rejected — an agent can only feed
+// its own visitors.
+func (m *Manager) dispatchTunnelFrame(agentID string, frame *gatewayv2.TunnelFrame) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || frame == nil {
 		return
 	}
-	if frame.GetKind() == gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_PONG {
-		m.resolveRelayPong(frame.GetStreamId())
+	if frame.GetKind() == gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_PONG {
+		m.resolveRelayPong(agentID, frame.GetStreamId())
 		return
 	}
 	streamID := strings.TrimSpace(frame.GetStreamId())
@@ -484,15 +523,19 @@ func (m *Manager) dispatchTunnelFrame(frame *gatewayv1.TunnelFrame) {
 	if stream == nil {
 		return
 	}
+	if stream.agentID != agentID {
+		// 跨 Agent 伪造 stream_id：直接丢弃，不给探测反馈。
+		return
+	}
 	select {
 	case <-stream.done:
 	case stream.ch <- frame:
 	default:
 		m.releaseTunnelStream(stream)
 		go func() {
-			_ = m.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+			_ = m.SendTunnelFrameToAgent(agentID, &gatewayv2.TunnelFrame{
 				StreamId: streamID,
-				Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
+				Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
 				Error:    "tunnel stream backlog exceeded",
 			})
 		}()
@@ -501,20 +544,20 @@ func (m *Manager) dispatchTunnelFrame(frame *gatewayv1.TunnelFrame) {
 
 // probeRelay measures the gateway<->agent frame path with a PING/PONG round
 // trip and folds the result into the broadcast snapshot.
-func (m *Manager) probeRelay() {
+func (m *Manager) probeRelay(agentID string) {
 	checkedAt := time.Now()
-	health := &gatewayv1.TunnelHealth{Status: "failed", CheckedAt: checkedAt.Unix()}
+	health := &gatewayv2.TunnelHealth{Status: "failed", CheckedAt: checkedAt.Unix()}
 
-	if !m.IsOnline() {
+	if !m.IsOnline(agentID) {
 		health.Error = "agent offline"
-		m.setRelayHealth(health)
+		m.setRelayHealth(agentID, health)
 		return
 	}
 
 	pingID := "ping-" + uuid.NewString()
 	pongCh := make(chan int64, 1)
 	m.tunnels.pingMu.Lock()
-	m.tunnels.pendingPings[pingID] = pongCh
+	m.tunnels.pendingPings[pingID] = pendingTunnelPing{agentID: agentID, ch: pongCh}
 	m.tunnels.pingMu.Unlock()
 	defer func() {
 		m.tunnels.pingMu.Lock()
@@ -522,12 +565,12 @@ func (m *Manager) probeRelay() {
 		m.tunnels.pingMu.Unlock()
 	}()
 
-	if err := m.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+	if err := m.SendTunnelFrameToAgent(agentID, &gatewayv2.TunnelFrame{
 		StreamId: pingID,
-		Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_PING,
+		Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_PING,
 	}); err != nil {
 		health.Error = err.Error()
-		m.setRelayHealth(health)
+		m.setRelayHealth(agentID, health)
 		return
 	}
 
@@ -540,45 +583,104 @@ func (m *Manager) probeRelay() {
 	case <-timer.C:
 		health.Error = "relay probe timed out"
 	}
-	m.setRelayHealth(health)
+	m.setRelayHealth(agentID, health)
 }
 
-func (m *Manager) resolveRelayPong(streamID string) {
+func (m *Manager) resolveRelayPong(agentID, streamID string) {
+	streamID = strings.TrimSpace(streamID)
 	m.tunnels.pingMu.Lock()
-	ch := m.tunnels.pendingPings[strings.TrimSpace(streamID)]
-	delete(m.tunnels.pendingPings, strings.TrimSpace(streamID))
+	pending, ok := m.tunnels.pendingPings[streamID]
+	if ok && pending.agentID == strings.TrimSpace(agentID) {
+		delete(m.tunnels.pendingPings, streamID)
+	} else {
+		ok = false
+	}
 	m.tunnels.pingMu.Unlock()
-	if ch != nil {
+	if ok {
 		select {
-		case ch <- time.Now().UnixMilli():
+		case pending.ch <- time.Now().UnixMilli():
 		default:
 		}
 	}
 }
 
-func (m *Manager) setRelayHealth(health *gatewayv1.TunnelHealth) {
+func (m *Manager) setRelayHealth(agentID string, health *gatewayv2.TunnelHealth) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return
+	}
+	// 永久删除后，删除前已发出的异步探测可能迟到；不存在的登记项不得重新
+	// 写回 relay 状态。普通离线仍保留 registry entry，因此不受影响。
+	m.registry.mu.RLock()
+	_, registered := m.registry.agents[agentID]
+	m.registry.mu.RUnlock()
+	if !registered {
+		return
+	}
 	m.tunnels.mu.Lock()
-	m.tunnels.relay = health
+	m.tunnels.relays[agentID] = health
 	m.tunnels.mu.Unlock()
-	m.broadcastTunnelState()
+	m.broadcastTunnelState(agentID)
 }
 
-// onAgentSessionCleared drops live visitor streams (their frames can no longer
-// be relayed) and pushes an offline snapshot; the specs stay so `/t/*` answers
-// 503 instead of 404 and clients keep rendering the tunnels as offline.
-func (m *Manager) onAgentSessionCleared() {
+// onAgentSessionCleared drops agentID's live visitor streams (their frames can
+// no longer be relayed) and pushes an offline snapshot; the specs stay so
+// `/t/*` answers 503 instead of 404 and clients keep rendering the tunnels as
+// offline. Streams and tunnels of other agents are untouched.
+func (m *Manager) onAgentSessionCleared(agentID string) {
+	agentID = strings.TrimSpace(agentID)
 	m.tunnels.mu.Lock()
 	for streamID, stream := range m.tunnels.streams {
+		if stream.agentID != agentID {
+			continue
+		}
 		delete(m.tunnels.streams, streamID)
+		if record := m.tunnels.records[stream.tunnelID]; record != nil && record.activeConnections > 0 {
+			record.activeConnections -= 1
+		}
 		stream.close()
 	}
-	m.tunnels.relay = nil
+	delete(m.tunnels.relays, agentID)
 	m.tunnels.mu.Unlock()
-	m.broadcastTunnelState()
+	m.broadcastTunnelState(agentID)
 	// Managed-process subscribers re-render with agent_online=false.
-	m.rebroadcastManagedProcessState()
+	m.rebroadcastManagedProcessState(agentID)
 	// /ws clients learn the agent went offline by push, not by poll.
-	m.broadcastStatus()
+	m.broadcastStatus(agentID)
+}
+
+// purgeAgentTunnels 仅用于永久删除 Agent：普通断线继续保留 specs，删除则同步
+// 移除公开 slug、记录、访问流、探测状态和 relay 状态，使旧 /t/* 立即变为 404。
+func (m *Manager) purgeAgentTunnels(agentID string) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
+		return
+	}
+	var canceled []*tunnelStream
+	m.tunnels.mu.Lock()
+	for _, record := range m.tunnels.records {
+		if record.agentID == agentID {
+			canceled = append(canceled, m.dropTunnelRecordLocked(record)...)
+		}
+	}
+	delete(m.tunnels.relays, agentID)
+	m.tunnels.mu.Unlock()
+
+	m.tunnels.pingMu.Lock()
+	for pingID, pending := range m.tunnels.pendingPings {
+		if pending.agentID != agentID {
+			continue
+		}
+		delete(m.tunnels.pendingPings, pingID)
+		select {
+		case pending.ch <- 0:
+		default:
+		}
+	}
+	m.tunnels.pingMu.Unlock()
+
+	m.cancelTunnelStreams(canceled)
+	m.broadcastTunnelState(agentID)
 }
 
 func (m *Manager) tunnelExpirySweepLoop() {
@@ -591,29 +693,31 @@ func (m *Manager) tunnelExpirySweepLoop() {
 
 func (m *Manager) sweepExpiredTunnels(now time.Time) {
 	var canceled []*tunnelStream
-	removed := false
+	affectedAgentIDs := make(map[string]struct{})
 	m.tunnels.mu.Lock()
 	for _, record := range m.tunnels.records {
 		if record.expiresAt.IsZero() || record.expiresAt.After(now) {
 			continue
 		}
+		affectedAgentIDs[record.agentID] = struct{}{}
 		canceled = append(canceled, m.dropTunnelRecordLocked(record)...)
-		removed = true
 	}
 	m.tunnels.mu.Unlock()
 
-	if !removed {
+	if len(affectedAgentIDs) == 0 {
 		return
 	}
 	m.cancelTunnelStreams(canceled)
-	m.broadcastTunnelState()
+	for agentID := range affectedAgentIDs {
+		m.broadcastTunnelState(agentID)
+	}
 }
 
-func cloneTunnelHealth(health *gatewayv1.TunnelHealth) *gatewayv1.TunnelHealth {
+func cloneTunnelHealth(health *gatewayv2.TunnelHealth) *gatewayv2.TunnelHealth {
 	if health == nil {
 		return nil
 	}
-	return &gatewayv1.TunnelHealth{
+	return &gatewayv2.TunnelHealth{
 		Status:     health.GetStatus(),
 		HttpStatus: health.GetHttpStatus(),
 		Error:      health.GetError(),

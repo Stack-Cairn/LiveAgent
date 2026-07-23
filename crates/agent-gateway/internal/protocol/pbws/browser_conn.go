@@ -13,7 +13,6 @@ import (
 
 	"github.com/liveagent/agent-gateway/internal/config"
 	"github.com/liveagent/agent-gateway/internal/observability"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -39,8 +38,13 @@ type browserConn struct {
 
 	terminalInterest *shared.TerminalInterestTracker
 
+	// dispatchLimiter 限制在途派发数（慢请求 goroutine 上限）；rateLimiter 限制
+	// 入站帧速率（快帧 CPU 上限）。两者合围单连接的资源占用。
+	dispatchLimiter *wscore.DispatchLimiter
+	rateLimiter     *wscore.InboundRateLimiter
+
 	chatStreamsMu sync.Mutex
-	chatStreams   map[string]func() // conversation_id -> 订阅取消
+	chatStreams   map[string]func() // agent_id + conversation_id -> 订阅取消
 
 	workspaceSubsMu sync.Mutex
 	workspaceSubs   map[string]*workspaceSubscription
@@ -50,11 +54,18 @@ type browserConn struct {
 func (s *Server) BrowserHandler() http.Handler {
 	upgrader := s.upgrader()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
+		release, ok := acquireConnSlot(&s.browserConns, s.maxBrowserConnections())
+		if !ok {
+			http.Error(w, "too many browser connections", http.StatusServiceUnavailable)
 			return
 		}
-		conn.SetReadLimit(s.readLimit())
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			release()
+			return
+		}
+		defer release()
+		conn.SetReadLimit(browserReadLimit)
 
 		c := &browserConn{
 			cfg:              s.cfg,
@@ -63,6 +74,10 @@ func (s *Server) BrowserHandler() http.Handler {
 			conn:             conn,
 			idPrefix:         browserIDPrefix(),
 			terminalInterest: shared.NewTerminalInterestTracker(),
+			dispatchLimiter:  wscore.NewDispatchLimiter(maxInflightDispatches),
+			rateLimiter: wscore.NewInboundRateLimiter(
+				browserInboundFramesPerSecond, browserInboundBurst, browserRateLimitMaxViolations,
+			),
 		}
 		c.core = wscore.NewConn(conn, wscore.Config{
 			WriteTimeout:    s.cfg.WebSocketWriteTimeout,
@@ -108,6 +123,15 @@ func (c *browserConn) serve() {
 		}
 		c.core.TouchInboundActivity()
 
+		// 入站限速：超限丢帧回错，连续违规判定失控客户端、关闭连接。
+		if allowed, exceeded := c.rateLimiter.Allow(); !allowed {
+			if exceeded {
+				return
+			}
+			_ = c.sendLocalError(frame.GetRequestId(), "too many requests")
+			continue
+		}
+
 		switch payload := frame.GetPayload().(type) {
 		case *gatewayv2.WebClientFrame_Pong:
 			continue
@@ -124,7 +148,15 @@ func (c *browserConn) serve() {
 			continue
 		default:
 			_ = payload
-			go c.dispatch(frame)
+			// try-acquire 失败即拒绝：绝不阻塞读循环等槽位（会拖死 pong/存活检测）。
+			if !c.dispatchLimiter.TryAcquire() {
+				_ = c.sendLocalError(frame.GetRequestId(), "too many concurrent requests")
+				continue
+			}
+			go func(frame *gatewayv2.WebClientFrame) {
+				defer c.dispatchLimiter.Release()
+				c.dispatch(frame)
+			}(frame)
 		}
 	}
 }
@@ -161,7 +193,7 @@ func (c *browserConn) handshake() bool {
 		_ = writeDirectMessage(c.conn, c.srv.writeTimeout(), &gatewayv2.WebServerFrame{
 			RequestId: frame.GetRequestId(),
 			Payload: &gatewayv2.WebServerFrame_Hello{
-				Hello: c.srv.serverHello(false, verdict.message, ""),
+				Hello: c.srv.serverHello(false, verdict.message, "", browserReadLimit),
 			},
 		})
 		closeUnauthorized(c.conn, c.srv.writeTimeout())
@@ -180,7 +212,7 @@ func (c *browserConn) handshake() bool {
 	if err := c.send(wscore.FrameResponse, "hello", &gatewayv2.WebServerFrame{
 		RequestId: frame.GetRequestId(),
 		Payload: &gatewayv2.WebServerFrame_Hello{
-			Hello: c.srv.serverHello(true, "", ""),
+			Hello: c.srv.serverHello(true, "", "", browserReadLimit),
 		},
 	}); err != nil {
 		c.core.Close()
@@ -193,29 +225,65 @@ func (c *browserConn) handshake() bool {
 func (c *browserConn) dispatch(frame *gatewayv2.WebClientFrame) {
 	observability.Usage.V2BrowserRequestsTotal.Add(1)
 	requestID := strings.TrimSpace(frame.GetRequestId())
+	// 目标型请求必须显式声明 Agent；目录与全局会话查询不需要目标 id。
+	agentID := strings.TrimSpace(frame.GetAgentId())
 
 	switch payload := frame.GetPayload().(type) {
 	case *gatewayv2.WebClientFrame_AgentRequest:
-		c.handleAgentRequest(requestID, payload.AgentRequest)
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleAgentRequest(requestID, agentID, payload.AgentRequest)
 	case *gatewayv2.WebClientFrame_StatusGet:
-		c.handleStatusGet(requestID)
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleStatusGet(requestID, agentID)
 	case *gatewayv2.WebClientFrame_ChatCommand:
-		c.handleChatCommand(requestID, payload.ChatCommand)
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleChatCommand(requestID, agentID, payload.ChatCommand)
 	case *gatewayv2.WebClientFrame_ChatPrepare:
-		c.handleChatPrepare(requestID, payload.ChatPrepare)
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleChatPrepare(requestID, agentID, payload.ChatPrepare)
 	case *gatewayv2.WebClientFrame_ChatSubscribe:
-		c.handleChatSubscribe(requestID, payload.ChatSubscribe)
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleChatSubscribe(requestID, agentID, payload.ChatSubscribe)
 	case *gatewayv2.WebClientFrame_ChatUnsubscribe:
-		c.handleChatUnsubscribe(requestID, payload.ChatUnsubscribe)
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleChatUnsubscribe(requestID, agentID, payload.ChatUnsubscribe)
 	case *gatewayv2.WebClientFrame_ChatActivities:
 		c.handleChatActivities(requestID)
 	case *gatewayv2.WebClientFrame_WorkspaceSubscribe:
-		c.handleWorkspaceSubscribe(requestID, payload.WorkspaceSubscribe)
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleWorkspaceSubscribe(requestID, agentID, payload.WorkspaceSubscribe)
 	case *gatewayv2.WebClientFrame_WorkspaceUnsubscribe:
-		c.handleWorkspaceUnsubscribe(requestID, payload.WorkspaceUnsubscribe)
+		if !c.requireAgentID(requestID, agentID) {
+			return
+		}
+		c.handleWorkspaceUnsubscribe(requestID, agentID, payload.WorkspaceUnsubscribe)
+	case *gatewayv2.WebClientFrame_AgentList:
+		c.handleAgentList(requestID)
 	default:
 		_ = c.sendLocalError(requestID, "unsupported frame payload")
 	}
+}
+
+func (c *browserConn) requireAgentID(requestID, agentID string) bool {
+	if agentID != "" {
+		return true
+	}
+	_ = c.sendLocalError(requestID, "agent_id is required")
+	return false
 }
 
 // send 编码并投递一帧（拥塞策略由帧类别声明，wscore 统一执行）。
@@ -233,12 +301,12 @@ func (c *browserConn) send(class wscore.FrameClass, kind string, frame *gatewayv
 	})
 }
 
-// sendLocalError 回送网关本地错误（对应 v1 的 type:"error" 信封，走控制队列保证拥塞下可达）。
+// sendLocalError 回送网关本地结构化错误，走控制队列保证拥塞下可达。
 func (c *browserConn) sendLocalError(requestID string, message string) error {
 	return c.send(wscore.FrameControl, "local_error", &gatewayv2.WebServerFrame{
 		RequestId: requestID,
 		Payload: &gatewayv2.WebServerFrame_LocalError{
-			LocalError: &gatewayv1.ErrorResponse{Message: message},
+			LocalError: &gatewayv2.ErrorResponse{Message: message},
 		},
 	})
 }

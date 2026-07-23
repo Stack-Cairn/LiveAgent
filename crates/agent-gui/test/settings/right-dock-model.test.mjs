@@ -431,6 +431,19 @@ describe("tab drag engine", () => {
     assert.equal(velocity(0), -rightDockModel.TAB_AUTO_SCROLL_MAX_STEP_PX);
     assert.equal(velocity(999), rightDockModel.TAB_AUTO_SCROLL_MAX_STEP_PX);
   });
+
+  test("horizontal keyboard reorder keeps the existing Left/Right behavior", () => {
+    assert.deepEqual(rightDockModel.reorderTabIdsByKeyboard(["a", "b", "c"], "b", "ArrowLeft"), [
+      "b",
+      "a",
+      "c",
+    ]);
+    assert.deepEqual(rightDockModel.reorderTabIdsByKeyboard(["a", "b", "c"], "b", "ArrowRight"), [
+      "a",
+      "c",
+      "b",
+    ]);
+  });
 });
 
 test("rightDockNeighborTabId picks the right neighbour, then the left, then null", () => {

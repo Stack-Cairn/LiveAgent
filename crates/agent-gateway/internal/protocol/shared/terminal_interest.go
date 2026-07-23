@@ -1,15 +1,15 @@
-// Package shared 存放 v1/v2 协议层共用、且不属于 session 或 wscore 的连接级构件。
+// Package shared 存放 v2 协议层共用、且不属于 session 或 wscore 的连接级构件。
 package shared
 
 import (
 	"strings"
 	"sync"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 // TerminalInterestTracker 记录单条连接的终端会话/项目关注集，决定事件是否转发：
-// 元数据事件广播，原始输出仅推给显式附着的连接。自 v1 平移，行为不变；并发安全。
+// 元数据事件广播，原始输出仅推给显式附着的连接。沿用既有实现，行为不变；并发安全。
 type TerminalInterestTracker struct {
 	mu       sync.RWMutex
 	projects map[string]struct{}
@@ -67,7 +67,7 @@ func (t *TerminalInterestTracker) Forget(sessionID string, projectPathKey string
 }
 
 // ShouldForward 判定终端事件是否应推送给本连接。
-func (t *TerminalInterestTracker) ShouldForward(event *gatewayv1.TerminalEvent) bool {
+func (t *TerminalInterestTracker) ShouldForward(event *gatewayv2.TerminalEvent) bool {
 	if event == nil {
 		return false
 	}

@@ -78,6 +78,7 @@ import { cn } from "../../lib/shared/utils";
 import {
   cancelSkillInstallJob,
   discoverSkills,
+  type ExternalSkillEntry,
   type ExternalToolScan,
   getSkillInstallJobStatus,
   isAlwaysEnabledSkillName,
@@ -120,6 +121,7 @@ import {
 import {
   getInstalledSkillCardSource,
   getRelativeInstalledAt,
+  truncateLocalSkillCardDescription,
 } from "../../lib/skills/skillCardMetadata";
 import { getSkillTriggerHint } from "../../lib/skills/skillTriggerHint";
 
@@ -506,11 +508,26 @@ function ScanActivityDots() {
   );
 }
 
+const FROST_SPINNER_SEGMENTS = [
+  "01",
+  "02",
+  "03",
+  "04",
+  "05",
+  "06",
+  "07",
+  "08",
+  "09",
+  "10",
+  "11",
+  "12",
+] as const;
+
 function FrostSpinner() {
   return (
     <span className="hub-frost-spinner shrink-0" aria-hidden="true">
-      {Array.from({ length: 12 }).map((_, i) => (
-        <i key={i} />
+      {FROST_SPINNER_SEGMENTS.map((segment) => (
+        <i key={segment} />
       ))}
     </span>
   );
@@ -934,11 +951,7 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
               </span>
             </div>
           ) : (
-            <div
-              className="flex shrink-0 items-center"
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => event.stopPropagation()}
-            >
+            <div className="flex shrink-0 items-center">
               <label
                 className="relative flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
                 title={t("settings.skillsHubBulkSelectLabel")}
@@ -948,6 +961,7 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
                   checked={bulkSelected}
                   aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${skill.name}`}
                   onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
                   onChange={(event) => {
                     event.stopPropagation();
                     onToggleBulkSelection(skill.name);
@@ -969,11 +983,7 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
             </div>
           )
         ) : (
-          <div
-            className="flex shrink-0 items-center gap-1.5"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
+          <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
               aria-label={`${t("settings.skillsHubBulkSelectLabel")}: ${skill.name}`}
@@ -982,6 +992,7 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
                 event.stopPropagation();
                 onEnterBulkMode(skill.name);
               }}
+              onKeyDown={(event) => event.stopPropagation()}
               className={cn(
                 // Google Photos-style bulk entry: hover-faint, touch semi-visible.
                 "relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background/90 text-muted-foreground shadow-sm transition-all hover:border-primary/50 hover:text-foreground",
@@ -1002,6 +1013,7 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
                 event.stopPropagation();
                 onToggle(skill.name, !checked);
               }}
+              onKeyDown={(event) => event.stopPropagation()}
               className={cn(
                 "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full ring-1 transition-all",
                 checked
@@ -1059,11 +1071,7 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
         <MetadataIcon className="h-3 w-3 shrink-0" />
         <span className="truncate">{metadataLabel}</span>
         {!alwaysEnabled && !bulkMode ? (
-          <div
-            className="ml-auto shrink-0"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
+          <div className="ml-auto shrink-0">
             <ConfirmDeletePopover name={skill.name} onConfirm={() => onDelete(skill)}>
               {(open) => (
                 <button
@@ -1073,6 +1081,7 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
                     event.stopPropagation();
                     open();
                   }}
+                  onKeyDown={(event) => event.stopPropagation()}
                   className={cn(
                     "flex h-6 w-6 items-center justify-center rounded-md border border-border/35 bg-background/65 text-muted-foreground transition-all",
                     "hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive",
@@ -1239,6 +1248,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
   const [importProgress, setImportProgress] = useState<{ done: number; total: number } | null>(
     null,
   );
+  const [importingExternalBaseDir, setImportingExternalBaseDir] = useState<string | null>(null);
   const [importErrors, setImportErrors] = useState<
     Array<{ baseDir: string; name: string; message: string }>
   >([]);
@@ -1511,54 +1521,61 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     [isExternalSkillInstalled],
   );
 
-  const importSelectedExternalSkills = useCallback(async () => {
-    if (importProgress) return;
-    const selectedSkills = (externalScans ?? [])
-      .flatMap((scan) => scan.skills)
-      .filter((skill) => selectedExternal.has(skill.baseDir));
-    const alreadyInstalledSelected = selectedSkills.filter((skill) =>
-      installedSkillNames.has(skill.name),
-    );
-    const targets = selectedSkills.filter((skill) => !installedSkillNames.has(skill.name));
-    if (targets.length === 0) {
-      if (alreadyInstalledSelected.length > 0) {
-        showImportToast(t("settings.skillsImportAlreadyInstalled"));
+  const importSelectedExternalSkills = useCallback(
+    async (skill?: ExternalSkillEntry) => {
+      if (importProgress) return;
+      const selectedSkills = skill
+        ? [skill]
+        : (externalScans ?? [])
+            .flatMap((scan) => scan.skills)
+            .filter((item) => selectedExternal.has(item.baseDir));
+      const alreadyInstalledSelected = selectedSkills.filter((skill) =>
+        installedSkillNames.has(skill.name),
+      );
+      const targets = selectedSkills.filter((skill) => !installedSkillNames.has(skill.name));
+      if (targets.length === 0) {
+        if (alreadyInstalledSelected.length > 0) {
+          showImportToast(t("settings.skillsImportAlreadyInstalled"));
+        }
+        return;
       }
-      return;
-    }
-    setImportErrors([]);
-    setImportedCount(null);
-    const failures: Array<{ baseDir: string; name: string; message: string }> = [];
-    for (let index = 0; index < targets.length; index += 1) {
-      setImportProgress({ done: index, total: targets.length });
-      try {
-        await manageSkill({
-          action: "install",
-          source: targets[index].baseDir,
-          conflict: "backup",
-        });
-      } catch (err) {
-        failures.push({
-          baseDir: targets[index].baseDir,
-          name: targets[index].name,
-          message: err instanceof Error ? err.message : String(err),
-        });
+      setImportErrors([]);
+      setImportedCount(null);
+      const failures: Array<{ baseDir: string; name: string; message: string }> = [];
+      for (let index = 0; index < targets.length; index += 1) {
+        setImportingExternalBaseDir(targets[index].baseDir);
+        setImportProgress({ done: index, total: targets.length });
+        try {
+          await manageSkill({
+            action: "install",
+            source: targets[index].baseDir,
+            conflict: "backup",
+          });
+        } catch (err) {
+          failures.push({
+            baseDir: targets[index].baseDir,
+            name: targets[index].name,
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
-    }
-    setImportProgress(null);
-    setImportErrors(failures);
-    setImportedCount(targets.length - failures.length);
-    setSelectedExternal(new Set());
-    await refresh({ silent: true });
-  }, [
-    externalScans,
-    selectedExternal,
-    importProgress,
-    refresh,
-    installedSkillNames,
-    showImportToast,
-    t,
-  ]);
+      setImportingExternalBaseDir(null);
+      setImportProgress(null);
+      setImportErrors(failures);
+      setImportedCount(targets.length - failures.length);
+      if (!skill) setSelectedExternal(new Set());
+      await refresh({ silent: true });
+    },
+    [
+      externalScans,
+      selectedExternal,
+      importProgress,
+      refresh,
+      installedSkillNames,
+      showImportToast,
+      t,
+    ],
+  );
 
   // Drop installed skills from import selection (cannot re-import).
   useEffect(() => {
@@ -2761,6 +2778,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   ) : (
                     <SkillsImportView
                       scans={externalScans ?? []}
+                      importingExternalBaseDir={importingExternalBaseDir}
                       loading={externalLoading}
                       error={externalError}
                       query={importQuery}
@@ -2781,7 +2799,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                       onToggle={toggleExternalSkill}
                       onBatchToggle={batchToggleExternalSkills}
                       onRescan={() => void rescanExternalSkills()}
-                      onImport={() => void importSelectedExternalSkills()}
+                      onImport={(skill) => void importSelectedExternalSkills(skill)}
                     />
                   )}
                 </Fragment>
@@ -2932,6 +2950,7 @@ function SkillsImportView(props: {
   selected: ReadonlySet<string>;
   installedNames: ReadonlySet<string>;
   importProgress: { done: number; total: number } | null;
+  importingExternalBaseDir: string | null;
   importErrors: Array<{ baseDir: string; name: string; message: string }>;
   importedCount: number | null;
   importToast: string | null;
@@ -2940,7 +2959,7 @@ function SkillsImportView(props: {
   onToggle: (baseDir: string) => void;
   onBatchToggle: (baseDirs: string[], on: boolean) => void;
   onRescan: () => void;
-  onImport: () => void;
+  onImport: (skill?: ExternalSkillEntry) => void;
 }) {
   const {
     scans,
@@ -2950,6 +2969,7 @@ function SkillsImportView(props: {
     selected,
     installedNames,
     importProgress,
+    importingExternalBaseDir,
     importErrors,
     importedCount,
     importToast,
@@ -3158,7 +3178,7 @@ function SkillsImportView(props: {
                     size="sm"
                     className="gap-1.5 rounded-full"
                     disabled={selected.size === 0 || importing || loading}
-                    onClick={onImport}
+                    onClick={() => onImport()}
                   >
                     {importing ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -3253,21 +3273,25 @@ function SkillsImportView(props: {
                           : t("settings.skillsImportSelectAll")}
                       </Button>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                       {activeScan.skills.map((skill) => {
                         const alreadyInstalled = installedNames.has(skill.name);
                         const checked = !alreadyInstalled && selected.has(skill.baseDir);
                         const locked = alreadyInstalled || importing;
+                        const installing = importing && skill.baseDir === importingExternalBaseDir;
                         return (
-                          <button
+                          // biome-ignore lint/a11y/useSemanticElements: The card contains a separate import control.
+                          <div
                             key={skill.baseDir}
-                            type="button"
-                            disabled={locked}
+                            role="button"
+                            tabIndex={locked ? -1 : 0}
+                            aria-disabled={locked}
+                            aria-pressed={checked}
                             onMouseDown={(event) => {
                               if (bulkMode && event.shiftKey) event.preventDefault();
                             }}
                             onClick={(event) => {
-                              if (alreadyInstalled) return;
+                              if (locked) return;
                               const orderedBaseDirs = activeScan.skills
                                 .filter((item) => !installedNames.has(item.name))
                                 .map((item) => item.baseDir);
@@ -3289,44 +3313,96 @@ function SkillsImportView(props: {
                               onToggle(skill.baseDir);
                               bulkAnchorRef.current = skill.baseDir;
                             }}
+                            onKeyDown={(event) => {
+                              if (
+                                event.target !== event.currentTarget ||
+                                (event.key !== "Enter" && event.key !== " ")
+                              ) {
+                                return;
+                              }
+                              event.preventDefault();
+                              event.currentTarget.click();
+                            }}
                             className={cn(
-                              "group flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all disabled:cursor-not-allowed",
+                              "skill-card-enter group flex h-full min-h-[13rem] w-full flex-col rounded-2xl border p-3.5 text-left transition-all focus:outline-none focus:ring-2 focus:ring-foreground/10",
                               alreadyInstalled
-                                ? "border-border/50 bg-muted/30 opacity-90"
+                                ? "border-border/55 bg-background/80 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_4px_18px_-12px_rgba(15,23,42,0.18)] dark:border-white/[0.10] dark:bg-white/[0.07] dark:shadow-[0_1px_0_rgba(255,255,255,0.07)_inset,0_4px_18px_-12px_rgba(0,0,0,0.55)]"
                                 : checked
                                   ? "border-primary/60 bg-primary/5 shadow-sm shadow-primary/10"
-                                  : "border-border/40 bg-background/60 hover:border-border/70 hover:bg-background/85",
+                                  : "border-border/40 bg-background/60 hover:-translate-y-0.5 hover:border-border/55 hover:bg-background/75 hover:shadow-[0_4px_16px_-10px_rgba(15,23,42,0.18)] dark:border-white/[0.05] dark:bg-white/[0.03] dark:hover:border-white/[0.10] dark:hover:bg-white/[0.06] dark:hover:shadow-[0_4px_16px_-10px_rgba(0,0,0,0.55)]",
                               importing && !alreadyInstalled ? "opacity-60" : null,
                             )}
                           >
-                            <span
-                              className={cn(
-                                "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
-                                alreadyInstalled
-                                  ? "border-border/50 bg-muted/40 opacity-50"
-                                  : checked
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "border-border/70 bg-background",
-                              )}
-                            >
-                              {!alreadyInstalled && checked ? <Check className="h-3 w-3" /> : null}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <span className="flex items-center gap-1.5">
-                                <span className="truncate text-[13px] font-medium text-foreground">
-                                  {skill.name}
+                            <div className="flex h-full flex-col gap-3">
+                              <div className="flex items-start gap-3">
+                                <span
+                                  className={cn(
+                                    "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                                    alreadyInstalled
+                                      ? "border-border/50 bg-muted/40 opacity-50"
+                                      : checked
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-border/70 bg-background",
+                                  )}
+                                >
+                                  {!alreadyInstalled && checked ? (
+                                    <Check className="h-3 w-3" />
+                                  ) : null}
                                 </span>
-                                {alreadyInstalled ? (
-                                  <span className="shrink-0 rounded-full bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                    {t("settings.skillsImportInstalledBadge")}
-                                  </span>
-                                ) : null}
-                              </span>
-                              <span className="mt-0.5 line-clamp-2 block text-[11px] leading-relaxed text-muted-foreground">
-                                {skill.description}
-                              </span>
-                            </span>
-                          </button>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="truncate text-[13px] font-semibold leading-tight text-foreground">
+                                      {skill.name}
+                                    </span>
+                                    {alreadyInstalled ? (
+                                      <span className="shrink-0 rounded-full bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                        {t("settings.skillsImportInstalledBadge")}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+                              <p
+                                className="line-clamp-3 min-h-[3rem] text-[11.5px] leading-[1.45] text-muted-foreground"
+                                title={skill.description}
+                              >
+                                {truncateLocalSkillCardDescription(skill.description)}
+                              </p>
+                              <div className="mt-auto space-y-2.5">
+                                <span
+                                  className="block truncate px-0.5 text-[10.5px] text-muted-foreground/75"
+                                  title={skill.baseDir}
+                                >
+                                  {skill.baseDir}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant={alreadyInstalled ? "outline" : "default"}
+                                  size="sm"
+                                  className="h-10 w-full gap-1.5 rounded-xl"
+                                  disabled={locked}
+                                  aria-busy={installing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    onImport(skill);
+                                  }}
+                                >
+                                  {installing ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : alreadyInstalled ? (
+                                    <Check className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <Download className="h-3.5 w-3.5" />
+                                  )}
+                                  {installing
+                                    ? t("settings.skillsImportProgress")
+                                    : alreadyInstalled
+                                      ? t("settings.skillsImportInstalledBadge")
+                                      : t("settings.skillsBulkImportAction")}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
@@ -3356,7 +3432,7 @@ function SkillsImportView(props: {
                   type="button"
                   disabled={importing || loading}
                   className="inline-flex h-7 items-center rounded-full bg-foreground px-3 text-[12px] font-medium text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-40"
-                  onClick={onImport}
+                  onClick={() => onImport()}
                 >
                   {importing && importProgress ? (
                     <>
@@ -4572,8 +4648,11 @@ function StorePreviewSkeleton() {
       <div className="rounded-2xl border border-border/40 bg-background/60 p-3">
         <div className="skills-skeleton-pulse mb-3 h-2.5 w-12 rounded-full" />
         <div className="divide-y divide-border/30">
-          {STORE_PREVIEW_FIELD_WIDTHS.map((width, i) => (
-            <div key={i} className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 py-2.5">
+          {STORE_PREVIEW_FIELD_WIDTHS.map((width) => (
+            <div
+              key={width}
+              className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 py-2.5"
+            >
               <div className="skills-skeleton-pulse h-2.5 w-14 rounded-full" />
               <div className={cn("skills-skeleton-pulse h-2.5 rounded-full", width)} />
             </div>

@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-func runReport(runID string, conversationID string, state string) *gatewayv1.ChatRunReport {
-	return &gatewayv1.ChatRunReport{
+func runReport(runID string, conversationID string, state string) *gatewayv2.ChatRunReport {
+	return &gatewayv2.ChatRunReport{
 		RunId:          runID,
 		ConversationId: conversationID,
 		State:          state,
@@ -16,10 +16,10 @@ func runReport(runID string, conversationID string, state string) *gatewayv1.Cha
 }
 
 func runsReport(
-	active []*gatewayv1.ChatRunReport,
-	finished []*gatewayv1.ChatRunReport,
-) *gatewayv1.RuntimeStatusEvent {
-	return &gatewayv1.RuntimeStatusEvent{
+	active []*gatewayv2.ChatRunReport,
+	finished []*gatewayv2.ChatRunReport,
+) *gatewayv2.RuntimeStatusEvent {
+	return &gatewayv2.RuntimeStatusEvent{
 		ActiveRunCount: uint32(len(active)),
 		ActiveRuns:     active,
 		FinishedRuns:   finished,
@@ -28,7 +28,7 @@ func runsReport(
 
 func lastEvent(t *testing.T, m *Manager, conversationID string) *ConversationEvent {
 	t.Helper()
-	sub := m.SubscribeConversationStream(conversationID, 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, conversationID, 0, "")
 	sub.Cleanup()
 	if len(sub.Events) == 0 {
 		t.Fatalf("no events for %s", conversationID)
@@ -40,9 +40,9 @@ func lastEvent(t *testing.T, m *Manager, conversationID string) *ConversationEve
 // the desktop's finished_runs report with its real final state.
 func TestRunReportAdoptsMissedTerminal(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 
-	m.convStreams.onRuntimeStatus(runsReport(nil, []*gatewayv1.ChatRunReport{
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport(nil, []*gatewayv2.ChatRunReport{
 		runReport("run-1", "conv-1", "completed"),
 	}), time.Now())
 
@@ -60,8 +60,8 @@ func TestRunReportAdoptsMissedTerminal(t *testing.T) {
 	// A finished report with an unknown state is not trusted verbatim: the
 	// run fails with desktop_run_lost instead.
 	m2 := NewManager()
-	m2.ingestChatControl("run-2", startedControl("run-2", "conv-2"))
-	m2.convStreams.onRuntimeStatus(runsReport(nil, []*gatewayv1.ChatRunReport{
+	m2.ingestChatControl(conversationTestAgentID, "run-2", startedControl("run-2", "conv-2"))
+	m2.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport(nil, []*gatewayv2.ChatRunReport{
 		runReport("run-2", "conv-2", "exploded"),
 	}), time.Now())
 	last2 := lastEvent(t, m2, "conv-2")
@@ -77,16 +77,16 @@ func TestRunReportAdoptsMissedTerminal(t *testing.T) {
 // expiry restarts the window.
 func TestRunReportFinalizesLostRunAfterGrace(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	t0 := time.Now()
 	empty := runsReport(nil, nil)
 
-	m.convStreams.onRuntimeStatus(empty, t0.Add(8*time.Second))
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, empty, t0.Add(8*time.Second))
 	if activities := m.ActiveConversationActivities(); len(activities) != 1 {
 		t.Fatalf("run finalized below grace, activities=%d", len(activities))
 	}
 
-	m.convStreams.onRuntimeStatus(empty, t0.Add(16*time.Second))
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, empty, t0.Add(16*time.Second))
 	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
 		t.Fatalf("lost run not finalized after grace, activities=%d", len(activities))
 	}
@@ -100,12 +100,12 @@ func TestRunReportFinalizesLostRunAfterGrace(t *testing.T) {
 	// Reported active again before grace expiry: the run survives and the
 	// absence window restarts from the vouch.
 	m2 := NewManager()
-	m2.ingestChatControl("run-2", startedControl("run-2", "conv-2"))
+	m2.ingestChatControl(conversationTestAgentID, "run-2", startedControl("run-2", "conv-2"))
 	t1 := time.Now()
-	m2.convStreams.onRuntimeStatus(runsReport([]*gatewayv1.ChatRunReport{
+	m2.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport([]*gatewayv2.ChatRunReport{
 		runReport("run-2", "conv-2", "running"),
 	}, nil), t1.Add(8*time.Second))
-	m2.convStreams.onRuntimeStatus(runsReport(nil, nil), t1.Add(20*time.Second))
+	m2.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport(nil, nil), t1.Add(20*time.Second))
 	if activities := m2.ActiveConversationActivities(); len(activities) != 1 {
 		t.Fatalf("grace window must restart after a vouch, activities=%d", len(activities))
 	}
@@ -116,20 +116,20 @@ func TestRunReportFinalizesLostRunAfterGrace(t *testing.T) {
 // relay; once the events go quiet past the grace window it is adopted.
 func TestInferredLossNotAdoptedWhileEventsFlow(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "hello"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "hello"))
 
 	lost := runReport("run-1", "conv-1", "failed")
 	lost.ErrorCode = "desktop_run_lost"
 	lost.Message = "The desktop runtime stopped reporting this run."
-	report := runsReport(nil, []*gatewayv1.ChatRunReport{lost})
+	report := runsReport(nil, []*gatewayv2.ChatRunReport{lost})
 
-	m.convStreams.onRuntimeStatus(report, time.Now())
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, report, time.Now())
 	if activities := m.ActiveConversationActivities(); len(activities) != 1 {
 		t.Fatalf("inferred loss adopted despite fresh events, activities=%d", len(activities))
 	}
 
-	m.convStreams.onRuntimeStatus(report, time.Now().Add(16*time.Second))
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, report, time.Now().Add(16*time.Second))
 	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
 		t.Fatalf("inferred loss not adopted after events went quiet, activities=%d", len(activities))
 	}
@@ -144,10 +144,10 @@ func TestInferredLossNotAdoptedWhileEventsFlow(t *testing.T) {
 // genuine failure the run produced always terminates it.
 func TestInferredFailedControlIgnoredWhileEventsFlow(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "hello"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "hello"))
 
-	m.ingestChatControl("run-1", &gatewayv1.ChatControlEvent{
+	m.ingestChatControl(conversationTestAgentID, "run-1", &gatewayv2.ChatControlEvent{
 		RequestId:      "run-1",
 		ConversationId: "conv-1",
 		Type:           "failed",
@@ -158,7 +158,7 @@ func TestInferredFailedControlIgnoredWhileEventsFlow(t *testing.T) {
 		t.Fatalf("inferred failed control killed a streaming run, activities=%d", len(activities))
 	}
 
-	m.ingestChatControl("run-1", &gatewayv1.ChatControlEvent{
+	m.ingestChatControl(conversationTestAgentID, "run-1", &gatewayv2.ChatControlEvent{
 		RequestId:      "run-1",
 		ConversationId: "conv-1",
 		Type:           "failed",
@@ -176,23 +176,23 @@ func TestInferredFailedControlIgnoredWhileEventsFlow(t *testing.T) {
 // until the genuine terminal arrives.
 func TestChatEventResurrectsInferredLostRun(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.convStreams.onRuntimeStatus(runsReport(nil, nil), time.Now().Add(16*time.Second))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport(nil, nil), time.Now().Add(16*time.Second))
 	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
 		t.Fatalf("precondition: run not finalized as lost, activities=%d", len(activities))
 	}
 
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "still alive"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "still alive"))
 
 	activities := m.ActiveConversationActivities()
 	if len(activities) != 1 || activities[0].RunID != "run-1" {
 		t.Fatalf("run not resurrected by its own event, activities=%#v", activities)
 	}
-	stream := m.convStreams.streams["conv-1"]
+	stream := m.convStreams.streams[conversationStreamKey(conversationTestAgentID, "conv-1")]
 	if stream == nil || !stream.snapshotDirty || !stream.runNeedsSnapshot {
 		t.Fatalf("resurrection must mark the stream snapshot-hungry")
 	}
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	sub.Cleanup()
 	if len(sub.Events) < 2 {
 		t.Fatalf("expected restart + token events, got %d", len(sub.Events))
@@ -207,7 +207,8 @@ func TestChatEventResurrectsInferredLostRun(t *testing.T) {
 	lost := runReport("run-1", "conv-1", "failed")
 	lost.ErrorCode = "desktop_run_lost"
 	m.convStreams.onRuntimeStatus(
-		runsReport(nil, []*gatewayv1.ChatRunReport{lost}),
+		conversationTestAgentID,
+		runsReport(nil, []*gatewayv2.ChatRunReport{lost}),
 		time.Now().Add(time.Hour),
 	)
 	if activities := m.ActiveConversationActivities(); len(activities) != 1 {
@@ -215,7 +216,7 @@ func TestChatEventResurrectsInferredLostRun(t *testing.T) {
 	}
 
 	// The genuine terminal still settles it.
-	m.ingestChatEvent("run-1", doneEvent("conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1"))
 	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
 		t.Fatalf("genuine done must settle a revived run, activities=%d", len(activities))
 	}
@@ -234,15 +235,15 @@ func TestAuthoritativeTerminalCorrectsInferredLostRun(t *testing.T) {
 		{
 			name: "done event",
 			finish: func(m *Manager) {
-				m.ingestChatEvent("run-1", doneEvent("conv-1"))
+				m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1"))
 			},
 			wantStatus: "completed",
 		},
 		{
 			name: "error event",
 			finish: func(m *Manager) {
-				m.ingestChatEvent("run-1", &gatewayv1.ChatEvent{
-					Type:           gatewayv1.ChatEvent_ERROR,
+				m.ingestChatEvent(conversationTestAgentID, "run-1", &gatewayv2.ChatEvent{
+					Type:           gatewayv2.ChatEvent_ERROR,
 					ConversationId: "conv-1",
 					Data:           `{"message":"provider failed"}`,
 				})
@@ -252,14 +253,14 @@ func TestAuthoritativeTerminalCorrectsInferredLostRun(t *testing.T) {
 		{
 			name: "completed control",
 			finish: func(m *Manager) {
-				m.ingestChatControl("run-1", completedControl("run-1", "conv-1"))
+				m.ingestChatControl(conversationTestAgentID, "run-1", completedControl("run-1", "conv-1"))
 			},
 			wantStatus: "completed",
 		},
 		{
 			name: "terminal snapshot",
 			finish: func(m *Manager) {
-				m.ingestRuntimeSnapshot(&gatewayv1.ChatRuntimeSnapshot{
+				m.ingestRuntimeSnapshot(conversationTestAgentID, &gatewayv2.ChatRuntimeSnapshot{
 					RunId:          "run-1",
 					ConversationId: "conv-1",
 					State:          "completed",
@@ -272,8 +273,8 @@ func TestAuthoritativeTerminalCorrectsInferredLostRun(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			m := NewManager()
-			m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-			m.convStreams.onRuntimeStatus(runsReport(nil, nil), time.Now().Add(16*time.Second))
+			m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+			m.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport(nil, nil), time.Now().Add(16*time.Second))
 
 			test.finish(m)
 
@@ -284,7 +285,7 @@ func TestAuthoritativeTerminalCorrectsInferredLostRun(t *testing.T) {
 			if last.Payload["error_code"] == "desktop_run_lost" {
 				t.Fatalf("authoritative terminal retained inferred loss: %#v", last.Payload)
 			}
-			record := m.convStreams.runs["run-1"]
+			record := m.convStreams.runs[agentScopedKey(conversationTestAgentID, "run-1")]
 			if record == nil || record.lostInferred || record.revived {
 				t.Fatalf("terminal run flags not settled: %#v", record)
 			}
@@ -299,9 +300,9 @@ func TestAuthoritativeTerminalCorrectsInferredLostRun(t *testing.T) {
 // to inferred losses.
 func TestGenuineTerminalStragglersStayDropped(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", doneEvent("conv-1"))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "late"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "late"))
 
 	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
 		t.Fatalf("straggler resurrected a completed run, activities=%d", len(activities))
@@ -316,10 +317,10 @@ func TestGenuineTerminalStragglersStayDropped(t *testing.T) {
 // up on.
 func TestStartedControlResurrectsInferredLostRun(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.convStreams.onRuntimeStatus(runsReport(nil, nil), time.Now().Add(16*time.Second))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport(nil, nil), time.Now().Add(16*time.Second))
 
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	activities := m.ActiveConversationActivities()
 	if len(activities) != 1 || activities[0].RunID != "run-1" {
 		t.Fatalf("started republish must resurrect the lost run, activities=%#v", activities)
@@ -330,13 +331,13 @@ func TestStartedControlResurrectsInferredLostRun(t *testing.T) {
 // not know them yet, so reconcile never finalizes them.
 func TestRunReportSkipsQueuedRuns(t *testing.T) {
 	m := NewManager()
-	m.StartChatCommand("run-1", "conv-1", "/workspace", "client-1", []map[string]any{
+	m.StartChatCommand(conversationTestAgentID, "run-1", "conv-1", "/workspace", "client-1", []map[string]any{
 		{"type": "user_message", "message": "hello"},
 	})
 
 	t0 := time.Now()
-	m.convStreams.onRuntimeStatus(runsReport(nil, nil), t0)
-	m.convStreams.onRuntimeStatus(runsReport(nil, nil), t0.Add(time.Hour))
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport(nil, nil), t0)
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport(nil, nil), t0.Add(time.Hour))
 
 	activities := m.ActiveConversationActivities()
 	if len(activities) != 1 || activities[0].State != RunActivityQueued {
@@ -348,15 +349,15 @@ func TestRunReportSkipsQueuedRuns(t *testing.T) {
 // another conversation is finalized at grace.
 func TestRunReportPerConversationLiveness(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-a", startedControl("run-a", "conv-a"))
-	m.ingestChatControl("run-b", startedControl("run-b", "conv-b"))
+	m.ingestChatControl(conversationTestAgentID, "run-a", startedControl("run-a", "conv-a"))
+	m.ingestChatControl(conversationTestAgentID, "run-b", startedControl("run-b", "conv-b"))
 	t0 := time.Now()
-	vouchA := runsReport([]*gatewayv1.ChatRunReport{
+	vouchA := runsReport([]*gatewayv2.ChatRunReport{
 		runReport("run-a", "conv-a", "running"),
 	}, nil)
 
-	m.convStreams.onRuntimeStatus(vouchA, t0)
-	m.convStreams.onRuntimeStatus(vouchA, t0.Add(16*time.Second))
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, vouchA, t0)
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, vouchA, t0.Add(16*time.Second))
 
 	activities := m.ActiveConversationActivities()
 	if len(activities) != 1 || activities[0].RunID != "run-a" {
@@ -374,16 +375,17 @@ func TestReaperSparesOnlyVouchedRuns(t *testing.T) {
 	m := NewManager()
 	m.convStreams.staleRunTimeout = 10 * time.Millisecond
 	m.SetSession(&AgentSession{
+		AgentID: conversationTestAgentID,
 		toAgent: make(chan *OutboundEnvelope, 1),
 		done:    make(chan struct{}),
 		streams: make(map[string]*agentStream),
 	})
 
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	time.Sleep(20 * time.Millisecond)
 
-	m.ingestChatControl("run-other", startedControl("run-other", "conv-other"))
-	m.convStreams.onRuntimeStatus(runsReport([]*gatewayv1.ChatRunReport{
+	m.ingestChatControl(conversationTestAgentID, "run-other", startedControl("run-other", "conv-other"))
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, runsReport([]*gatewayv2.ChatRunReport{
 		runReport("run-other", "conv-other", "running"),
 	}, nil), time.Now())
 
@@ -398,7 +400,7 @@ func TestReaperSparesOnlyVouchedRuns(t *testing.T) {
 // agent_offline; below it they are kept.
 func TestReaperFinalizesRunsAfterOfflineTimeout(t *testing.T) {
 	m := NewManager() // no session: isOnline() == false
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	t0 := time.Now()
 
 	m.convStreams.reap(t0.Add(29 * time.Minute))

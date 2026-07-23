@@ -25,7 +25,7 @@ import { normalizeIntegerDraftInput, parseIntegerDraftValue } from "./remoteInpu
 import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";
 
-const REMOTE_GRPC_PORT_MAX = 65_535;
+const REMOTE_GATEWAY_PORT_MAX = 65_535;
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -160,14 +160,14 @@ function buildGatewayEndpointPreview(settings: AppSettings["remote"]) {
 
   try {
     const url = new URL(gatewayUrl);
-    const port = String(settings.grpcPort || 443);
+    const port = String(settings.gatewayPort || 443);
     url.port = port;
     url.pathname = "";
     url.search = "";
     url.hash = "";
     return url.toString().replace(/\/$/, "");
   } catch {
-    return `${gatewayUrl}:${settings.grpcPort || 443}`;
+    return `${gatewayUrl}:${settings.gatewayPort || 443}`;
   }
 }
 
@@ -180,12 +180,12 @@ function formatTimestamp(value?: number | null) {
 export function RemoteSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
-  const remoteGrpcPortDraft = usePositiveIntegerDraft(
-    settings.remote.grpcPort,
-    { min: 1, max: REMOTE_GRPC_PORT_MAX },
-    (grpcPort) =>
+  const remoteGatewayPortDraft = usePositiveIntegerDraft(
+    settings.remote.gatewayPort,
+    { min: 1, max: REMOTE_GATEWAY_PORT_MAX },
+    (gatewayPort) =>
       updateRemoteSettings(setSettings, {
-        grpcPort,
+        gatewayPort,
       }),
   );
   const remoteHeartbeatDraft = usePositiveIntegerDraft(
@@ -318,9 +318,9 @@ export function RemoteSection(props: SettingsSectionProps) {
             <Input
               type="text"
               inputMode="numeric"
-              value={remoteGrpcPortDraft.draft}
-              onBlur={remoteGrpcPortDraft.handleBlur}
-              onChange={(e) => remoteGrpcPortDraft.handleChange(e.target.value)}
+              value={remoteGatewayPortDraft.draft}
+              onBlur={remoteGatewayPortDraft.handleBlur}
+              onChange={(e) => remoteGatewayPortDraft.handleChange(e.target.value)}
               placeholder="443"
               className="w-24 shrink-0 font-mono text-[13px]"
             />

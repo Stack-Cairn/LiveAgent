@@ -7,17 +7,17 @@ import "sync"
 type statusSubscriberHub struct {
 	mu          sync.Mutex
 	nextSubID   uint64
-	subscribers map[uint64]chan Status
+	subscribers map[uint64]chan Tagged[Status]
 }
 
 func newStatusSubscriberHub() *statusSubscriberHub {
 	return &statusSubscriberHub{
-		subscribers: make(map[uint64]chan Status),
+		subscribers: make(map[uint64]chan Tagged[Status]),
 	}
 }
 
-func (m *Manager) SubscribeStatus() (<-chan Status, func()) {
-	ch := make(chan Status, 8)
+func (m *Manager) SubscribeStatus() (<-chan Tagged[Status], func()) {
+	ch := make(chan Tagged[Status], 8)
 
 	m.statusSubs.mu.Lock()
 	subID := m.statusSubs.nextSubID
@@ -35,22 +35,26 @@ func (m *Manager) SubscribeStatus() (<-chan Status, func()) {
 	return ch, cleanup
 }
 
-// broadcastStatus pushes the current status snapshot to /ws subscribers.
+// broadcastStatus pushes agentID's status snapshot to /ws subscribers.
 // Sends are non-blocking: a stalled subscriber misses intermediate snapshots
 // and reconciles from its fallback status poll.
-func (m *Manager) broadcastStatus() {
-	snapshot := m.Status()
+func (m *Manager) broadcastStatus(agentID string) {
+	snapshot := m.Status(agentID)
+	if snapshot.AgentID == "" {
+		return
+	}
 
 	m.statusSubs.mu.Lock()
-	subscribers := make([]chan Status, 0, len(m.statusSubs.subscribers))
+	subscribers := make([]chan Tagged[Status], 0, len(m.statusSubs.subscribers))
 	for _, ch := range m.statusSubs.subscribers {
 		subscribers = append(subscribers, ch)
 	}
 	m.statusSubs.mu.Unlock()
 
+	tagged := Tagged[Status]{AgentID: agentID, Event: snapshot}
 	for _, ch := range subscribers {
 		select {
-		case ch <- snapshot:
+		case ch <- tagged:
 		default:
 		}
 	}

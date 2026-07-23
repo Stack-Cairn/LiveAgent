@@ -10,7 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/liveagent/agent-gateway/internal/auth/agenttoken"
 	"github.com/liveagent/agent-gateway/internal/config"
+	"github.com/liveagent/agent-gateway/internal/db"
 	"github.com/liveagent/agent-gateway/internal/observability"
 	"github.com/liveagent/agent-gateway/internal/server"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -25,16 +27,31 @@ func fatal(msg string, args ...any) {
 func main() {
 	observability.SetupLogging()
 	cfg := config.Load()
-	//nolint:staticcheck // 读取弃用字段正是为了对旧启动脚本发出弃用警告。
-	if cfg.GRPCAddr != "" {
-		slog.Warn("-grpc-addr is deprecated and ignored: the v1 gRPC listener was removed; desktop clients connect via /ws/v2/agent on the HTTP port")
-	}
 	sm := session.NewManager()
+
+	// 统一连接池：库由 internal/db 打开并集中管理，各持久化子系统在共享池上
+	// 初始化自己的表；main 持有生命周期（退出时统一关闭）。
+	database, err := db.Open(cfg.AgentDB)
+	if err != nil {
+		fatal("open gateway db failed", "path", cfg.AgentDB, "err", err)
+	}
+	defer func() { _ = database.Close() }()
+
+	tokens, err := agenttoken.NewStore(database)
+	if err != nil {
+		fatal("init agent token store failed", "err", err)
+	}
+	slog.Info("agent registry db ready", "path", cfg.AgentDB)
+	slog.Info("agent authentication accepts gateway token or per-agent token")
 
 	httpServer := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           server.NewHTTPServer(cfg, sm),
+		Handler:           server.NewHTTPServer(cfg, sm, tokens),
 		ReadHeaderTimeout: 10 * time.Second,
+		// 空闲 keep-alive 连接必须回收，否则 REST/静态资源访问方挂住连接会把 fd
+		// 慢性耗尽到 ulimit。刻意不设全局 Read/WriteTimeout：流式上传与隧道长响应
+		// 需要；WS 连接已被 hijack、自管理超时，不受影响。
+		IdleTimeout: 120 * time.Second,
 	}
 
 	errCh := make(chan error, 1)

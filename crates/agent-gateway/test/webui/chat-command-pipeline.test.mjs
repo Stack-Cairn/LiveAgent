@@ -402,6 +402,29 @@ test("run signals with a known runId settle regardless of clientRequestId", asyn
   assert.equal(pipeline.hasPending("conv-1"), false);
 });
 
+test("reset clears pending commands and ignores their late acknowledgements", async () => {
+  const { pipeline, stores, outcomes } = createHarness();
+  let rejectAccept;
+  const acceptGate = new Promise((_, reject) => {
+    rejectAccept = reject;
+  });
+  const submitPromise = pipeline.submit({
+    conversationId: "conv-1",
+    clientRequestId: "client-1",
+    message: "old agent request",
+    submit: () => acceptGate,
+  });
+
+  assert.equal(pipeline.hasPending("conv-1"), true);
+  pipeline.reset();
+  assert.equal(pipeline.hasPending("conv-1"), false);
+  assert.deepEqual(tailTexts(stores.get("conv-1")), []);
+
+  rejectAccept(new Error("old agent disconnected"));
+  assert.equal((await submitPromise).kind, "settled");
+  assert.equal(outcomes.failed.length, 0);
+});
+
 
 test("optimistic:false suppresses the transcript echo for queue-destined sends", async () => {
   const { pipeline, stores } = createHarness();

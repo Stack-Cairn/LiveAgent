@@ -3,11 +3,11 @@ package session
 import (
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-func (m *Manager) SubscribeSftpEvents() (<-chan *gatewayv1.SftpEvent, func()) {
-	ch := make(chan *gatewayv1.SftpEvent, 4096)
+func (m *Manager) SubscribeSftpEvents() (<-chan Tagged[*gatewayv2.SftpEvent], func()) {
+	ch := make(chan Tagged[*gatewayv2.SftpEvent], 4096)
 
 	m.syncHub.sftpMu.Lock()
 	subID := m.syncHub.nextSftpSubID
@@ -26,21 +26,22 @@ func (m *Manager) SubscribeSftpEvents() (<-chan *gatewayv1.SftpEvent, func()) {
 	return ch, cleanup
 }
 
-func (m *Manager) broadcastSftpEvent(event *gatewayv1.SftpEvent) {
+func (m *Manager) broadcastSftpEvent(agentID string, event *gatewayv2.SftpEvent) {
 	if event == nil {
 		return
 	}
 
 	m.syncHub.sftpMu.Lock()
-	subscribers := make([]chan *gatewayv1.SftpEvent, 0, len(m.syncHub.sftpSubscribers))
+	subscribers := make([]chan Tagged[*gatewayv2.SftpEvent], 0, len(m.syncHub.sftpSubscribers))
 	for _, ch := range m.syncHub.sftpSubscribers {
 		subscribers = append(subscribers, ch)
 	}
 	m.syncHub.sftpMu.Unlock()
 
+	tagged := Tagged[*gatewayv2.SftpEvent]{AgentID: agentID, Event: event}
 	for _, ch := range subscribers {
 		select {
-		case ch <- event:
+		case ch <- tagged:
 		case <-time.After(50 * time.Millisecond):
 		}
 	}

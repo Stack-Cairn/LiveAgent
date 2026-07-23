@@ -40,7 +40,10 @@ COPY --from=gateway-builder /out/liveagent-gateway /usr/local/bin/liveagent-gate
 
 USER liveagent
 
-ENV PORT=8080
+ENV PORT=8080 \
+    LIVEAGENT_GATEWAY_DATA_DIR=/var/lib/liveagent
+
+VOLUME ["/var/lib/liveagent"]
 
 EXPOSE 8080
 

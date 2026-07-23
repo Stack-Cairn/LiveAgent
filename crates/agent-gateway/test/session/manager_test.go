@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
@@ -25,10 +25,10 @@ func dispatchChatControl(
 	controlType string,
 	state string,
 ) {
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: requestID,
-		Payload: &gatewayv1.AgentEnvelope_ChatControl{
-			ChatControl: &gatewayv1.ChatControlEvent{
+		Payload: &gatewayv2.AgentEnvelope_ChatControl{
+			ChatControl: &gatewayv2.ChatControlEvent{
 				RequestId:      requestID,
 				ConversationId: conversationID,
 				Type:           controlType,
@@ -60,25 +60,25 @@ func TestClearSessionDoesNotCloseReplacement(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	first := session.NewAgentSession(sm.LatestAuthSnapshot())
+	first := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(first)
-	second := session.NewAgentSession(sm.LatestAuthSnapshot())
+	second := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(second)
 
 	assertDoneClosed(t, first.Done())
 	assertDoneOpen(t, second.Done())
 
 	sm.ClearSession(first)
-	if status := sm.Status(); !status.Online {
+	if status := sm.Status("desktop-agent"); !status.Online {
 		t.Fatalf("status online = false after clearing stale session")
 	}
 	assertDoneOpen(t, second.Done())
 
-	env := &gatewayv1.GatewayEnvelope{RequestId: "still-current"}
+	env := &gatewayv2.GatewayEnvelope{RequestId: "still-current"}
 	// SendToAgentContext 等待送达 Ack；在旁路读取并 Ack 出站信封后再收敛。
 	sendErr := make(chan error, 1)
 	go func() {
-		sendErr <- sm.SendToAgentContext(context.Background(), env)
+		sendErr <- sm.SendToAgentContext(context.Background(), "desktop-agent", env)
 	}()
 	select {
 	case got := <-second.Outbound():
@@ -95,10 +95,10 @@ func TestClearSessionDoesNotCloseReplacement(t *testing.T) {
 
 	sm.ClearSession(second)
 	assertDoneClosed(t, second.Done())
-	if status := sm.Status(); status.Online {
+	if status := sm.Status("desktop-agent"); status.Online {
 		t.Fatalf("status online = true after clearing current session")
 	}
-	if err := sm.SendToAgentContext(context.Background(), env); !errors.Is(err, session.ErrAgentOffline) {
+	if err := sm.SendToAgentContext(context.Background(), "desktop-agent", env); !errors.Is(err, session.ErrAgentOffline) {
 		t.Fatalf("SendToAgent after clearing current session = %v, want ErrAgentOffline", err)
 	}
 }
@@ -107,9 +107,9 @@ func TestClearSessionIfHeartbeatStaleClosesOnlyCurrentSession(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	first := session.NewAgentSession(sm.LatestAuthSnapshot())
+	first := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(first)
-	second := session.NewAgentSession(sm.LatestAuthSnapshot())
+	second := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(second)
 
 	time.Sleep(time.Millisecond)
@@ -117,7 +117,7 @@ func TestClearSessionIfHeartbeatStaleClosesOnlyCurrentSession(t *testing.T) {
 		t.Fatalf("stale first session should not close replacement session")
 	}
 	assertDoneOpen(t, second.Done())
-	if status := sm.Status(); !status.Online {
+	if status := sm.Status("desktop-agent"); !status.Online {
 		t.Fatalf("status online = false after stale old-session heartbeat timeout")
 	}
 
@@ -126,10 +126,10 @@ func TestClearSessionIfHeartbeatStaleClosesOnlyCurrentSession(t *testing.T) {
 		t.Fatalf("current stale session was not cleared")
 	}
 	assertDoneClosed(t, second.Done())
-	if status := sm.Status(); status.Online {
+	if status := sm.Status("desktop-agent"); status.Online {
 		t.Fatalf("status online = true after current session heartbeat timeout")
 	}
-	if err := sm.SendToAgentContext(context.Background(), &gatewayv1.GatewayEnvelope{RequestId: "after-timeout"}); !errors.Is(err, session.ErrAgentOffline) {
+	if err := sm.SendToAgentContext(context.Background(), "desktop-agent", &gatewayv2.GatewayEnvelope{RequestId: "after-timeout"}); !errors.Is(err, session.ErrAgentOffline) {
 		t.Fatalf("SendToAgent after heartbeat timeout = %v, want ErrAgentOffline", err)
 	}
 }
@@ -138,47 +138,47 @@ func TestChatRuntimeReadyRequiresFreshRuntimeHeartbeat(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sess := session.NewAgentSession(sm.LatestAuthSnapshot())
+	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(sess)
 
-	if status := sm.Status(); !status.Online || status.ChatRuntimeReady {
+	if status := sm.Status("desktop-agent"); !status.Online || status.ChatRuntimeReady {
 		t.Fatalf("initial status = %#v, want online without chat runtime readiness", status)
 	}
 
-	sm.UpdateRuntimeStatus(sess, &gatewayv1.RuntimeStatusEvent{
+	sm.UpdateRuntimeStatus(sess, &gatewayv2.RuntimeStatusEvent{
 		WorkerId:       "runtime-1",
 		State:          "ready",
 		Visible:        true,
 		ActiveRunCount: 0,
 		Timestamp:      time.Now().Unix(),
 	})
-	if status := sm.Status(); !status.ChatRuntimeReady ||
+	if status := sm.Status("desktop-agent"); !status.ChatRuntimeReady ||
 		status.RuntimeState != "ready" ||
 		status.RuntimeWorkerID != "runtime-1" ||
 		status.RuntimeLastHeartbeat == 0 {
 		t.Fatalf("ready runtime status = %#v", status)
 	}
 
-	sm.UpdateRuntimeStatus(sess, &gatewayv1.RuntimeStatusEvent{
+	sm.UpdateRuntimeStatus(sess, &gatewayv2.RuntimeStatusEvent{
 		WorkerId:  "runtime-1",
 		State:     "suspended",
 		Timestamp: time.Now().Unix(),
 	})
-	if status := sm.Status(); status.ChatRuntimeReady || status.RuntimeState != "suspended" {
+	if status := sm.Status("desktop-agent"); status.ChatRuntimeReady || status.RuntimeState != "suspended" {
 		t.Fatalf("suspended runtime status = %#v, want not ready", status)
 	}
 
-	sm.UpdateRuntimeStatus(sess, &gatewayv1.RuntimeStatusEvent{
+	sm.UpdateRuntimeStatus(sess, &gatewayv2.RuntimeStatusEvent{
 		WorkerId:  "runtime-1",
 		State:     "busy",
 		Timestamp: time.Now().Unix(),
 	})
-	if !sm.ChatRuntimeReady() {
+	if !sm.ChatRuntimeReady("desktop-agent") {
 		t.Fatalf("busy runtime should be ready to manage chat runs")
 	}
 
 	sm.ClearSession(sess)
-	if status := sm.Status(); status.ChatRuntimeReady || status.RuntimeState != "" {
+	if status := sm.Status("desktop-agent"); status.ChatRuntimeReady || status.RuntimeState != "" {
 		t.Fatalf("cleared session status = %#v, want runtime readiness reset", status)
 	}
 }
@@ -187,12 +187,12 @@ func TestRuntimeStatusUpdateBroadcastsStatus(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sess := session.NewAgentSession(sm.LatestAuthSnapshot())
+	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(sess)
 	updates, cleanup := sm.SubscribeStatus()
 	defer cleanup()
 
-	sm.UpdateRuntimeStatus(sess, &gatewayv1.RuntimeStatusEvent{
+	sm.UpdateRuntimeStatus(sess, &gatewayv2.RuntimeStatusEvent{
 		WorkerId:       "runtime-broadcast",
 		State:          "ready",
 		Visible:        true,
@@ -201,7 +201,8 @@ func TestRuntimeStatusUpdateBroadcastsStatus(t *testing.T) {
 	})
 
 	select {
-	case status := <-updates:
+	case tagged := <-updates:
+		status := tagged.Event
 		if !status.Online || !status.ChatRuntimeReady ||
 			status.RuntimeWorkerID != "runtime-broadcast" ||
 			status.RuntimeActiveRunCount != 2 {
@@ -213,7 +214,7 @@ func TestRuntimeStatusUpdateBroadcastsStatus(t *testing.T) {
 
 	// A heartbeat with identical semantic state only refreshes the internal TTL
 	// and must not spam every subscribed WebSocket.
-	sm.UpdateRuntimeStatus(sess, &gatewayv1.RuntimeStatusEvent{
+	sm.UpdateRuntimeStatus(sess, &gatewayv2.RuntimeStatusEvent{
 		WorkerId:       "runtime-broadcast",
 		State:          "ready",
 		Visible:        true,
@@ -231,9 +232,9 @@ func TestDispatchFromStaleSessionIsIgnored(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	first := session.NewAgentSession(sm.LatestAuthSnapshot())
+	first := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(first)
-	second := session.NewAgentSession(sm.LatestAuthSnapshot())
+	second := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(second)
 
 	// RegisterStreamAndSendContext 等待送达 Ack；没有服务泵，用一次性 drain 代替。
@@ -241,16 +242,16 @@ func TestDispatchFromStaleSessionIsIgnored(t *testing.T) {
 		outbound := <-second.Outbound()
 		outbound.Ack(nil)
 	}()
-	ch, done, cleanup, err := sm.RegisterStreamAndSendContext(context.Background(), "request-1", &gatewayv1.GatewayEnvelope{RequestId: "request-1"})
+	ch, done, cleanup, err := sm.RegisterStreamAndSendContext(context.Background(), "desktop-agent", "request-1", &gatewayv2.GatewayEnvelope{RequestId: "request-1"})
 	if err != nil {
 		t.Fatalf("RegisterStreamAndSendContext: %v", err)
 	}
 	defer cleanup()
 
-	staleEnv := &gatewayv1.AgentEnvelope{
+	staleEnv := &gatewayv2.AgentEnvelope{
 		RequestId: "request-1",
-		Payload: &gatewayv1.AgentEnvelope_Error{
-			Error: &gatewayv1.ErrorResponse{Code: 500, Message: "stale"},
+		Payload: &gatewayv2.AgentEnvelope_Error{
+			Error: &gatewayv2.ErrorResponse{Code: 500, Message: "stale"},
 		},
 	}
 	sm.DispatchFromAgentForSession(first, staleEnv)
@@ -262,10 +263,10 @@ func TestDispatchFromStaleSessionIsIgnored(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	currentEnv := &gatewayv1.AgentEnvelope{
+	currentEnv := &gatewayv2.AgentEnvelope{
 		RequestId: "request-1",
-		Payload: &gatewayv1.AgentEnvelope_Error{
-			Error: &gatewayv1.ErrorResponse{Code: 500, Message: "current"},
+		Payload: &gatewayv2.AgentEnvelope_Error{
+			Error: &gatewayv2.ErrorResponse{Code: 500, Message: "current"},
 		},
 	}
 	sm.DispatchFromAgentForSession(second, currentEnv)
@@ -285,7 +286,7 @@ func TestSendToAgentUnblocksWhenSessionCloses(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sess := session.NewAgentSession(sm.LatestAuthSnapshot())
+	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(sess)
 
 	errCh := make(chan error, 1)
@@ -296,7 +297,7 @@ func TestSendToAgentUnblocksWhenSessionCloses(t *testing.T) {
 			}
 		}()
 		for i := 0; i < 128; i += 1 {
-			_ = sm.SendToAgentContext(context.Background(), &gatewayv1.GatewayEnvelope{RequestId: fmt.Sprintf("request-%d", i)})
+			_ = sm.SendToAgentContext(context.Background(), "desktop-agent", &gatewayv2.GatewayEnvelope{RequestId: fmt.Sprintf("request-%d", i)})
 		}
 		errCh <- nil
 	}()
@@ -318,11 +319,11 @@ func TestSendToAgentContextTimeoutKeepsSessionAlive(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sess := session.NewAgentSession(sm.LatestAuthSnapshot())
+	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(sess)
 
 	for i := 0; i < cap(sess.Outbound()); i += 1 {
-		if err := sess.SendToAgent(&gatewayv1.GatewayEnvelope{RequestId: fmt.Sprintf("queued-%d", i)}); err != nil {
+		if err := sess.SendToAgent(&gatewayv2.GatewayEnvelope{RequestId: fmt.Sprintf("queued-%d", i)}); err != nil {
 			t.Fatalf("prime outbound queue: %v", err)
 		}
 	}
@@ -330,11 +331,11 @@ func TestSendToAgentContextTimeoutKeepsSessionAlive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	err := sm.SendToAgentContext(ctx, &gatewayv1.GatewayEnvelope{RequestId: "blocked"})
+	err := sm.SendToAgentContext(ctx, "desktop-agent", &gatewayv2.GatewayEnvelope{RequestId: "blocked"})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("SendToAgentContext with full queue = %v, want context deadline exceeded", err)
 	}
-	if status := sm.Status(); !status.Online {
+	if status := sm.Status("desktop-agent"); !status.Online {
 		t.Fatalf("status online = false after SendToAgentContext timeout; congestion must not kill the session")
 	}
 	select {
@@ -348,19 +349,19 @@ func TestSendPingBypassesFullOutboundQueue(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sess := session.NewAgentSession(sm.LatestAuthSnapshot())
+	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(sess)
 
 	for i := 0; i < cap(sess.Outbound()); i += 1 {
-		if err := sess.SendToAgent(&gatewayv1.GatewayEnvelope{RequestId: fmt.Sprintf("queued-%d", i)}); err != nil {
+		if err := sess.SendToAgent(&gatewayv2.GatewayEnvelope{RequestId: fmt.Sprintf("queued-%d", i)}); err != nil {
 			t.Fatalf("prime outbound queue: %v", err)
 		}
 	}
 
-	if err := sess.SendPing(&gatewayv1.GatewayEnvelope{RequestId: "ping-1"}); err != nil {
+	if err := sess.SendPing(&gatewayv2.GatewayEnvelope{RequestId: "ping-1"}); err != nil {
 		t.Fatalf("SendPing with full outbound queue: %v", err)
 	}
-	if err := sess.SendPing(&gatewayv1.GatewayEnvelope{RequestId: "ping-2"}); err != nil {
+	if err := sess.SendPing(&gatewayv2.GatewayEnvelope{RequestId: "ping-2"}); err != nil {
 		t.Fatalf("SendPing replacing queued ping: %v", err)
 	}
 
@@ -374,7 +375,7 @@ func TestSendPingBypassesFullOutboundQueue(t *testing.T) {
 	}
 
 	sess.Close()
-	if err := sess.SendPing(&gatewayv1.GatewayEnvelope{RequestId: "ping-3"}); !errors.Is(err, session.ErrAgentOffline) {
+	if err := sess.SendPing(&gatewayv2.GatewayEnvelope{RequestId: "ping-3"}); !errors.Is(err, session.ErrAgentOffline) {
 		t.Fatalf("SendPing after close = %v, want ErrAgentOffline", err)
 	}
 }
@@ -383,31 +384,31 @@ func TestChatQueueEventsReplayLatestSnapshotToNewSubscribers(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent")))
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "queue-event-1",
-		Payload: &gatewayv1.AgentEnvelope_ChatQueueEvent{
-			ChatQueueEvent: &gatewayv1.ChatQueueEvent{
+		Payload: &gatewayv2.AgentEnvelope_ChatQueueEvent{
+			ChatQueueEvent: &gatewayv2.ChatQueueEvent{
 				ConversationId: " conversation-1 ",
 				SnapshotJson:   `{"conversationId":"conversation-1","revision":2,"items":[{"id":"queue-1"}]}`,
 				Revision:       2,
 			},
 		},
 	})
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "queue-event-stale",
-		Payload: &gatewayv1.AgentEnvelope_ChatQueueEvent{
-			ChatQueueEvent: &gatewayv1.ChatQueueEvent{
+		Payload: &gatewayv2.AgentEnvelope_ChatQueueEvent{
+			ChatQueueEvent: &gatewayv2.ChatQueueEvent{
 				ConversationId: "conversation-1",
 				SnapshotJson:   `{"conversationId":"conversation-1","revision":1,"items":[]}`,
 				Revision:       1,
 			},
 		},
 	})
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "queue-event-zero",
-		Payload: &gatewayv1.AgentEnvelope_ChatQueueEvent{
-			ChatQueueEvent: &gatewayv1.ChatQueueEvent{
+		Payload: &gatewayv2.AgentEnvelope_ChatQueueEvent{
+			ChatQueueEvent: &gatewayv2.ChatQueueEvent{
 				ConversationId: "conversation-1",
 				SnapshotJson:   `{"conversationId":"conversation-1","revision":0,"items":[]}`,
 				Revision:       0,
@@ -415,7 +416,7 @@ func TestChatQueueEventsReplayLatestSnapshotToNewSubscribers(t *testing.T) {
 		},
 	})
 
-	cached, ok := sm.ChatQueueSnapshot("conversation-1")
+	cached, ok := sm.ChatQueueSnapshot("desktop-agent", "conversation-1")
 	if !ok || cached.GetRevision() != 2 || !strings.Contains(cached.GetSnapshotJson(), "queue-1") {
 		t.Fatalf("cached queue snapshot = %#v ok=%v, want revision 2 with queue-1", cached, ok)
 	}
@@ -423,7 +424,8 @@ func TestChatQueueEventsReplayLatestSnapshotToNewSubscribers(t *testing.T) {
 	events, cleanup := sm.SubscribeChatQueueEvents()
 	defer cleanup()
 	select {
-	case event := <-events:
+	case tagged := <-events:
+		event := tagged.Event
 		if event.GetConversationId() != "conversation-1" ||
 			event.GetRevision() != 2 ||
 			!strings.Contains(event.GetSnapshotJson(), "queue-1") {
@@ -438,11 +440,11 @@ func TestChatQueueSnapshotAllowsNewSessionToResetRevision(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent")))
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "queue-event-1",
-		Payload: &gatewayv1.AgentEnvelope_ChatQueueEvent{
-			ChatQueueEvent: &gatewayv1.ChatQueueEvent{
+		Payload: &gatewayv2.AgentEnvelope_ChatQueueEvent{
+			ChatQueueEvent: &gatewayv2.ChatQueueEvent{
 				ConversationId: "conversation-1",
 				SnapshotJson:   `{"conversationId":"conversation-1","revision":5,"items":[{"id":"queue-1"}]}`,
 				Revision:       5,
@@ -450,11 +452,11 @@ func TestChatQueueSnapshotAllowsNewSessionToResetRevision(t *testing.T) {
 		},
 	})
 
-	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent")))
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "queue-event-reset",
-		Payload: &gatewayv1.AgentEnvelope_ChatQueueEvent{
-			ChatQueueEvent: &gatewayv1.ChatQueueEvent{
+		Payload: &gatewayv2.AgentEnvelope_ChatQueueEvent{
+			ChatQueueEvent: &gatewayv2.ChatQueueEvent{
 				ConversationId: "conversation-1",
 				SnapshotJson:   `{"conversationId":"conversation-1","revision":0,"items":[]}`,
 				Revision:       0,
@@ -462,18 +464,18 @@ func TestChatQueueSnapshotAllowsNewSessionToResetRevision(t *testing.T) {
 		},
 	})
 
-	cached, ok := sm.ChatQueueSnapshot("conversation-1")
+	cached, ok := sm.ChatQueueSnapshot("desktop-agent", "conversation-1")
 	if !ok || cached.GetRevision() != 0 || strings.Contains(cached.GetSnapshotJson(), "queue-1") {
 		t.Fatalf("cached queue snapshot after new session = %#v ok=%v, want empty revision 0", cached, ok)
 	}
 }
 
 func dispatchChatToken(sm *session.Manager, requestID string, conversationID string, text string) {
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: requestID,
-		Payload: &gatewayv1.AgentEnvelope_ChatEvent{
-			ChatEvent: &gatewayv1.ChatEvent{
-				Type:           gatewayv1.ChatEvent_TOKEN,
+		Payload: &gatewayv2.AgentEnvelope_ChatEvent{
+			ChatEvent: &gatewayv2.ChatEvent{
+				Type:           gatewayv2.ChatEvent_TOKEN,
 				ConversationId: conversationID,
 				Data:           fmt.Sprintf(`{"text":%q}`, text),
 			},
@@ -482,11 +484,11 @@ func dispatchChatToken(sm *session.Manager, requestID string, conversationID str
 }
 
 func dispatchChatDone(sm *session.Manager, requestID string, conversationID string) {
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: requestID,
-		Payload: &gatewayv1.AgentEnvelope_ChatEvent{
-			ChatEvent: &gatewayv1.ChatEvent{
-				Type:           gatewayv1.ChatEvent_DONE,
+		Payload: &gatewayv2.AgentEnvelope_ChatEvent{
+			ChatEvent: &gatewayv2.ChatEvent{
+				Type:           gatewayv2.ChatEvent_DONE,
 				ConversationId: conversationID,
 				Data:           "{}",
 			},
@@ -498,7 +500,7 @@ func TestConversationStreamSeqContinuesAcrossDispatchedRuns(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent")))
 
 	dispatchChatControl(sm, "run-1", "conversation-1", "started", "running")
 	dispatchChatToken(sm, "run-1", "conversation-1", "first")
@@ -506,7 +508,7 @@ func TestConversationStreamSeqContinuesAcrossDispatchedRuns(t *testing.T) {
 	dispatchChatControl(sm, "run-2", "conversation-1", "started", "running")
 	dispatchChatToken(sm, "run-2", "conversation-1", "second")
 
-	sub := sm.SubscribeConversationStream("conversation-1", 0, "")
+	sub := sm.SubscribeConversationStream("desktop-agent", "conversation-1", 0, "")
 	defer sub.Cleanup()
 
 	var lastSeq int64
@@ -532,16 +534,16 @@ func TestDispatchedHistoryRunningIdleAreDropped(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent")))
 
 	historyEvents, cleanup := sm.SubscribeHistorySync()
 	defer cleanup()
 
 	for _, kind := range []string{"running", "idle"} {
-		sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+		sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 			RequestId: "history-sync",
-			Payload: &gatewayv1.AgentEnvelope_HistorySync{
-				HistorySync: &gatewayv1.HistorySyncEvent{
+			Payload: &gatewayv2.AgentEnvelope_HistorySync{
+				HistorySync: &gatewayv2.HistorySyncEvent{
 					Kind:           kind,
 					ConversationId: "conversation-1",
 				},
@@ -558,20 +560,20 @@ func TestDispatchedHistoryRunningIdleAreDropped(t *testing.T) {
 		t.Fatalf("history running must not create activity, got %#v", activities)
 	}
 
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "history-sync",
-		Payload: &gatewayv1.AgentEnvelope_HistorySync{
-			HistorySync: &gatewayv1.HistorySyncEvent{
+		Payload: &gatewayv2.AgentEnvelope_HistorySync{
+			HistorySync: &gatewayv2.HistorySyncEvent{
 				Kind:           "upsert",
 				ConversationId: "conversation-1",
-				Conversation:   &gatewayv1.ConversationSummary{Id: "conversation-1"},
+				Conversation:   &gatewayv2.ConversationSummary{Id: "conversation-1"},
 			},
 		},
 	})
 	select {
-	case event := <-historyEvents:
-		if event.GetKind() != "upsert" {
-			t.Fatalf("history event kind = %q, want upsert", event.GetKind())
+	case tagged := <-historyEvents:
+		if tagged.Event.GetKind() != "upsert" {
+			t.Fatalf("history event kind = %q, want upsert", tagged.Event.GetKind())
 		}
 	case <-time.After(time.Second):
 		t.Fatalf("upsert history event was not forwarded")
@@ -582,7 +584,7 @@ func TestAgentDisconnectPreservesActiveConversationActivity(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sess := session.NewAgentSession(sm.LatestAuthSnapshot())
+	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(sess)
 
 	dispatchChatControl(sm, "run-1", "conversation-1", "started", "running")
@@ -598,13 +600,13 @@ func TestTerminalSnapshotFinishesRunAndStaleRunningIsIgnored(t *testing.T) {
 	t.Parallel()
 
 	sm := newTestSessionManager()
-	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot()))
+	sm.SetSession(session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent")))
 
 	dispatchChatControl(sm, "run-1", "conversation-1", "started", "running")
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "run-1",
-		Payload: &gatewayv1.AgentEnvelope_ChatRuntimeSnapshot{
-			ChatRuntimeSnapshot: &gatewayv1.ChatRuntimeSnapshot{
+		Payload: &gatewayv2.AgentEnvelope_ChatRuntimeSnapshot{
+			ChatRuntimeSnapshot: &gatewayv2.ChatRuntimeSnapshot{
 				RunId:          "run-1",
 				ConversationId: "conversation-1",
 				State:          "completed",
@@ -616,10 +618,10 @@ func TestTerminalSnapshotFinishesRunAndStaleRunningIsIgnored(t *testing.T) {
 	}
 
 	// A stale "running" snapshot after the terminal must not resurrect the run.
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: "run-1",
-		Payload: &gatewayv1.AgentEnvelope_ChatRuntimeSnapshot{
-			ChatRuntimeSnapshot: &gatewayv1.ChatRuntimeSnapshot{
+		Payload: &gatewayv2.AgentEnvelope_ChatRuntimeSnapshot{
+			ChatRuntimeSnapshot: &gatewayv2.ChatRuntimeSnapshot{
 				RunId:          "run-1",
 				ConversationId: "conversation-1",
 				State:          "running",
@@ -630,7 +632,7 @@ func TestTerminalSnapshotFinishesRunAndStaleRunningIsIgnored(t *testing.T) {
 		t.Fatalf("stale running snapshot resurrected the run: %#v", activities)
 	}
 
-	sub := sm.SubscribeConversationStream("conversation-1", 0, "")
+	sub := sm.SubscribeConversationStream("desktop-agent", "conversation-1", 0, "")
 	defer sub.Cleanup()
 	finished := 0
 	for _, event := range sub.Events {

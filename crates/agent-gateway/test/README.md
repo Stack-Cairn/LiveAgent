@@ -4,7 +4,7 @@ All project-level gateway tests live under `crates/agent-gateway/test` and are s
 
 | Directory | Coverage |
 | --- | --- |
-| `auth/` | HTTP bearer parsing and gRPC interceptor auth behavior |
+| `auth/` | HTTP bearer parsing and WebSocket token auth behavior |
 | `http/` | Gateway HTTP route auth, `/api/status`, and SPA fallback |
 | `upload/` | `/api/files/import` validation, multipart parsing, and agent forwarding |
 | `websocket/` | WebSocket auth, request forwarding, chat streaming, and cancellation-facing events |

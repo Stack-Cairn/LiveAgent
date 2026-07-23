@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-func (m *Manager) SubscribeTerminalEvents() (<-chan *gatewayv1.TerminalEvent, func()) {
-	ch := make(chan *gatewayv1.TerminalEvent, 4096)
+func (m *Manager) SubscribeTerminalEvents() (<-chan Tagged[*gatewayv2.TerminalEvent], func()) {
+	ch := make(chan Tagged[*gatewayv2.TerminalEvent], 4096)
 
 	m.syncHub.terminalMu.Lock()
 	subID := m.syncHub.nextTerminalSubID
@@ -29,30 +29,64 @@ func (m *Manager) SubscribeTerminalEvents() (<-chan *gatewayv1.TerminalEvent, fu
 	return ch, cleanup
 }
 
-func (m *Manager) RegisterTerminalStreamToAgent(ch chan *gatewayv1.TerminalStreamFrame) func() {
-	m.syncHub.terminalStreamMu.Lock()
-	m.syncHub.terminalStreamToAgent = ch
-	m.syncHub.terminalStreamMu.Unlock()
+// RegisterTerminalStreamToAgentIfCurrent 把终端数据面鉴权结果与连接作为一个注册
+// 动作提交。isCurrent 在 registry 写锁内执行，凭证已轮换或删除时不会留下登记项。
+// 同 Agent 重连会撤销旧终端连接；不同 Agent 互不影响。
+func (m *Manager) RegisterTerminalStreamToAgentIfCurrent(
+	agentID string,
+	ch chan *gatewayv2.TerminalStreamFrame,
+	revoke func(),
+	isCurrent func() bool,
+) (func(), bool) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || ch == nil || revoke == nil {
+		return func() {}, false
+	}
+
+	m.registry.mu.Lock()
+	if isCurrent != nil && !isCurrent() {
+		m.registry.mu.Unlock()
+		return func() {}, false
+	}
+	entry := m.registry.entryLocked(agentID)
+	entry.terminalStreamMu.Lock()
+	previousRevoke := entry.terminalStreamRevoke
+	entry.terminalStreamToAgent = ch
+	entry.terminalStreamRevoke = revoke
+	entry.terminalStreamMu.Unlock()
+	m.registry.mu.Unlock()
+
+	if previousRevoke != nil {
+		previousRevoke()
+	}
 
 	return func() {
-		m.syncHub.terminalStreamMu.Lock()
-		if m.syncHub.terminalStreamToAgent == ch {
-			m.syncHub.terminalStreamToAgent = nil
+		entry.terminalStreamMu.Lock()
+		if entry.terminalStreamToAgent == ch {
+			entry.terminalStreamToAgent = nil
+			entry.terminalStreamRevoke = nil
 		}
-		m.syncHub.terminalStreamMu.Unlock()
-	}
+		entry.terminalStreamMu.Unlock()
+	}, true
 }
 
-func (m *Manager) SendTerminalFrameToAgent(ctx context.Context, frame *gatewayv1.TerminalStreamFrame) error {
+// SendTerminalFrameToAgent 把浏览器终端帧送往目标 Agent 的数据面连接。
+// 终端数据面独立于控制会话：只要求通道已登记，不要求控制会话在线
+// （终端数据面是独立连接，两者的建立顺序不定）。
+func (m *Manager) SendTerminalFrameToAgent(ctx context.Context, agentID string, frame *gatewayv2.TerminalStreamFrame) error {
 	if frame == nil {
 		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	m.syncHub.terminalStreamMu.Lock()
-	ch := m.syncHub.terminalStreamToAgent
-	m.syncHub.terminalStreamMu.Unlock()
+	entry := m.entryFor(agentID)
+	if entry == nil {
+		return ErrAgentOffline
+	}
+	entry.terminalStreamMu.Lock()
+	ch := entry.terminalStreamToAgent
+	entry.terminalStreamMu.Unlock()
 	if ch == nil {
 		return ErrAgentOffline
 	}
@@ -64,8 +98,8 @@ func (m *Manager) SendTerminalFrameToAgent(ctx context.Context, frame *gatewayv1
 	}
 }
 
-func (m *Manager) SubscribeTerminalStreamFrames() (<-chan *gatewayv1.TerminalStreamFrame, func()) {
-	ch := make(chan *gatewayv1.TerminalStreamFrame, 4096)
+func (m *Manager) SubscribeTerminalStreamFrames() (<-chan Tagged[*gatewayv2.TerminalStreamFrame], func()) {
+	ch := make(chan Tagged[*gatewayv2.TerminalStreamFrame], 4096)
 
 	m.syncHub.terminalStreamMu.Lock()
 	subID := m.syncHub.nextTerminalStreamSubID
@@ -82,14 +116,15 @@ func (m *Manager) SubscribeTerminalStreamFrames() (<-chan *gatewayv1.TerminalStr
 	return ch, cleanup
 }
 
-func (m *Manager) BroadcastTerminalStreamFrame(frame *gatewayv1.TerminalStreamFrame) {
+func (m *Manager) BroadcastTerminalStreamFrame(agentID string, frame *gatewayv2.TerminalStreamFrame) {
 	if frame == nil {
 		return
 	}
+	tagged := Tagged[*gatewayv2.TerminalStreamFrame]{AgentID: agentID, Event: frame}
 	m.syncHub.terminalStreamMu.Lock()
 	for id, ch := range m.syncHub.terminalStreamSubscribers {
 		select {
-		case ch <- frame:
+		case ch <- tagged:
 		default:
 			delete(m.syncHub.terminalStreamSubscribers, id)
 			close(ch)
@@ -98,11 +133,11 @@ func (m *Manager) BroadcastTerminalStreamFrame(frame *gatewayv1.TerminalStreamFr
 	m.syncHub.terminalStreamMu.Unlock()
 }
 
-func cloneTerminalSession(session *gatewayv1.TerminalSession) *gatewayv1.TerminalSession {
+func cloneTerminalSession(session *gatewayv2.TerminalSession) *gatewayv2.TerminalSession {
 	if session == nil {
 		return nil
 	}
-	return &gatewayv1.TerminalSession{
+	return &gatewayv2.TerminalSession{
 		Id:             session.GetId(),
 		ProjectPathKey: session.GetProjectPathKey(),
 		Cwd:            session.GetCwd(),
@@ -121,11 +156,11 @@ func cloneTerminalSession(session *gatewayv1.TerminalSession) *gatewayv1.Termina
 	}
 }
 
-func cloneTerminalSshMetadata(ssh *gatewayv1.TerminalSshMetadata) *gatewayv1.TerminalSshMetadata {
+func cloneTerminalSshMetadata(ssh *gatewayv2.TerminalSshMetadata) *gatewayv2.TerminalSshMetadata {
 	if ssh == nil {
 		return nil
 	}
-	return &gatewayv1.TerminalSshMetadata{
+	return &gatewayv2.TerminalSshMetadata{
 		HostId:               ssh.GetHostId(),
 		HostName:             ssh.GetHostName(),
 		Username:             ssh.GetUsername(),
@@ -139,14 +174,18 @@ func cloneTerminalSshMetadata(ssh *gatewayv1.TerminalSshMetadata) *gatewayv1.Ter
 	}
 }
 
-func (m *Manager) TerminalSessionKind(sessionID string) string {
+func (m *Manager) TerminalSessionKind(agentID, sessionID string) string {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return ""
 	}
-	m.syncHub.terminalMu.Lock()
-	defer m.syncHub.terminalMu.Unlock()
-	session := m.syncHub.terminalSessions[sessionID]
+	entry := m.entryFor(agentID)
+	if entry == nil {
+		return ""
+	}
+	entry.terminalSessionsMu.Lock()
+	defer entry.terminalSessionsMu.Unlock()
+	session := entry.terminalSessions[sessionID]
 	if session == nil {
 		return ""
 	}
@@ -156,14 +195,14 @@ func (m *Manager) TerminalSessionKind(sessionID string) string {
 	return "local"
 }
 
-func terminalSessionSortKey(session *gatewayv1.TerminalSession) (string, uint64, string) {
+func terminalSessionSortKey(session *gatewayv2.TerminalSession) (string, uint64, string) {
 	if session == nil {
 		return "", 0, ""
 	}
 	return strings.TrimSpace(session.GetProjectPathKey()), session.GetCreatedAt(), strings.TrimSpace(session.GetId())
 }
 
-func sortTerminalSessions(sessions []*gatewayv1.TerminalSession) {
+func sortTerminalSessions(sessions []*gatewayv2.TerminalSession) {
 	sort.Slice(sessions, func(i, j int) bool {
 		leftProject, leftCreatedAt, leftID := terminalSessionSortKey(sessions[i])
 		rightProject, rightCreatedAt, rightID := terminalSessionSortKey(sessions[j])
@@ -177,7 +216,7 @@ func sortTerminalSessions(sessions []*gatewayv1.TerminalSession) {
 	})
 }
 
-func terminalSessionMatchesProject(session *gatewayv1.TerminalSession, projectPathKey string) bool {
+func terminalSessionMatchesProject(session *gatewayv2.TerminalSession, projectPathKey string) bool {
 	projectPathKey = strings.TrimSpace(projectPathKey)
 	if projectPathKey == "" {
 		return true
@@ -188,17 +227,27 @@ func terminalSessionMatchesProject(session *gatewayv1.TerminalSession, projectPa
 	return strings.TrimSpace(session.GetProjectPathKey()) == projectPathKey
 }
 
-func (m *Manager) clearTerminalSessionSnapshot() {
-	m.syncHub.terminalMu.Lock()
-	m.syncHub.terminalSessions = make(map[string]*gatewayv1.TerminalSession)
-	m.syncHub.terminalMu.Unlock()
+// clearTerminalSessionSnapshot 清空 agent_id 的终端会话快照（该 Agent 会话更替时，
+// 旧连接的终端进程已随桌面端断开失效）。
+func (m *Manager) clearTerminalSessionSnapshot(agentID string) {
+	entry := m.entryFor(agentID)
+	if entry == nil {
+		return
+	}
+	entry.terminalSessionsMu.Lock()
+	entry.terminalSessions = make(map[string]*gatewayv2.TerminalSession)
+	entry.terminalSessionsMu.Unlock()
 }
 
-func (m *Manager) TerminalSessionSnapshot(projectPathKey string) []*gatewayv1.TerminalSession {
+func (m *Manager) TerminalSessionSnapshot(agentID, projectPathKey string) []*gatewayv2.TerminalSession {
 	projectPathKey = strings.TrimSpace(projectPathKey)
-	m.syncHub.terminalMu.Lock()
-	sessions := make([]*gatewayv1.TerminalSession, 0, len(m.syncHub.terminalSessions))
-	for _, session := range m.syncHub.terminalSessions {
+	entry := m.entryFor(agentID)
+	if entry == nil {
+		return nil
+	}
+	entry.terminalSessionsMu.Lock()
+	sessions := make([]*gatewayv2.TerminalSession, 0, len(entry.terminalSessions))
+	for _, session := range entry.terminalSessions {
 		if !terminalSessionMatchesProject(session, projectPathKey) {
 			continue
 		}
@@ -206,23 +255,24 @@ func (m *Manager) TerminalSessionSnapshot(projectPathKey string) []*gatewayv1.Te
 			sessions = append(sessions, cloned)
 		}
 	}
-	m.syncHub.terminalMu.Unlock()
+	entry.terminalSessionsMu.Unlock()
 	sortTerminalSessions(sessions)
 	return sessions
 }
 
 func (m *Manager) replaceTerminalSessionSnapshot(
+	entry *agentEntry,
 	projectPathKey string,
-	sessions []*gatewayv1.TerminalSession,
+	sessions []*gatewayv2.TerminalSession,
 ) {
 	projectPathKey = strings.TrimSpace(projectPathKey)
-	m.syncHub.terminalMu.Lock()
+	entry.terminalSessionsMu.Lock()
 	if projectPathKey == "" {
-		m.syncHub.terminalSessions = make(map[string]*gatewayv1.TerminalSession)
+		entry.terminalSessions = make(map[string]*gatewayv2.TerminalSession)
 	} else {
-		for id, session := range m.syncHub.terminalSessions {
+		for id, session := range entry.terminalSessions {
 			if terminalSessionMatchesProject(session, projectPathKey) {
-				delete(m.syncHub.terminalSessions, id)
+				delete(entry.terminalSessions, id)
 			}
 		}
 	}
@@ -231,32 +281,37 @@ func (m *Manager) replaceTerminalSessionSnapshot(
 		if id == "" {
 			continue
 		}
-		m.syncHub.terminalSessions[id] = cloneTerminalSession(session)
+		entry.terminalSessions[id] = cloneTerminalSession(session)
 	}
-	m.syncHub.terminalMu.Unlock()
+	entry.terminalSessionsMu.Unlock()
 }
 
 func (m *Manager) ApplyTerminalResponseSnapshot(
+	agentID string,
 	action string,
 	projectPathKey string,
-	resp *gatewayv1.TerminalResponse,
+	resp *gatewayv2.TerminalResponse,
 ) {
 	if resp == nil {
 		return
 	}
 	action = strings.TrimSpace(action)
 	projectPathKey = strings.TrimSpace(projectPathKey)
+	entry := m.entryOrCreate(agentID)
+	if entry == nil {
+		return
+	}
 
 	switch action {
 	case "list":
-		m.replaceTerminalSessionSnapshot(projectPathKey, resp.GetSessions())
+		m.replaceTerminalSessionSnapshot(entry, projectPathKey, resp.GetSessions())
 	case "close_project":
-		m.replaceTerminalSessionSnapshot(projectPathKey, nil)
+		m.replaceTerminalSessionSnapshot(entry, projectPathKey, nil)
 	case "close":
 		if sessionID := strings.TrimSpace(resp.GetSession().GetId()); sessionID != "" {
-			m.syncHub.terminalMu.Lock()
-			delete(m.syncHub.terminalSessions, sessionID)
-			m.syncHub.terminalMu.Unlock()
+			entry.terminalSessionsMu.Lock()
+			delete(entry.terminalSessions, sessionID)
+			entry.terminalSessionsMu.Unlock()
 		}
 	case "create", "create_ssh", "answer_ssh_prompt", "attach", "snapshot", "input", "resize", "rename":
 		session := resp.GetSession()
@@ -264,16 +319,13 @@ func (m *Manager) ApplyTerminalResponseSnapshot(
 		if sessionID == "" {
 			return
 		}
-		m.syncHub.terminalMu.Lock()
-		m.syncHub.terminalSessions[sessionID] = cloneTerminalSession(session)
-		m.syncHub.terminalMu.Unlock()
+		entry.terminalSessionsMu.Lock()
+		entry.terminalSessions[sessionID] = cloneTerminalSession(session)
+		entry.terminalSessionsMu.Unlock()
 	}
 }
 
-func (m *Manager) applyTerminalEventSnapshot(event *gatewayv1.TerminalEvent) {
-	if event == nil {
-		return
-	}
+func (m *Manager) applyTerminalEventSnapshot(entry *agentEntry, event *gatewayv2.TerminalEvent) {
 	kind := strings.TrimSpace(event.GetKind())
 	sessionID := strings.TrimSpace(event.GetSessionId())
 	if sessionID == "" && event.GetSession() != nil {
@@ -283,32 +335,37 @@ func (m *Manager) applyTerminalEventSnapshot(event *gatewayv1.TerminalEvent) {
 		return
 	}
 
-	m.syncHub.terminalMu.Lock()
+	entry.terminalSessionsMu.Lock()
 	if kind == "closed" {
-		delete(m.syncHub.terminalSessions, sessionID)
+		delete(entry.terminalSessions, sessionID)
 	} else if session := cloneTerminalSession(event.GetSession()); session != nil {
-		m.syncHub.terminalSessions[sessionID] = session
+		entry.terminalSessions[sessionID] = session
 	}
-	m.syncHub.terminalMu.Unlock()
+	entry.terminalSessionsMu.Unlock()
 }
 
-func (m *Manager) broadcastTerminalEvent(event *gatewayv1.TerminalEvent) {
+func (m *Manager) broadcastTerminalEvent(agentID string, event *gatewayv2.TerminalEvent) {
 	if event == nil {
 		return
 	}
+	entry := m.entryOrCreate(agentID)
+	if entry == nil {
+		return
+	}
 
-	m.applyTerminalEventSnapshot(event)
+	m.applyTerminalEventSnapshot(entry, event)
 
 	m.syncHub.terminalMu.Lock()
-	subscribers := make([]chan *gatewayv1.TerminalEvent, 0, len(m.syncHub.terminalSubscribers))
+	subscribers := make([]chan Tagged[*gatewayv2.TerminalEvent], 0, len(m.syncHub.terminalSubscribers))
 	for _, ch := range m.syncHub.terminalSubscribers {
 		subscribers = append(subscribers, ch)
 	}
 	m.syncHub.terminalMu.Unlock()
 
+	tagged := Tagged[*gatewayv2.TerminalEvent]{AgentID: agentID, Event: event}
 	for _, ch := range subscribers {
 		select {
-		case ch <- event:
+		case ch <- tagged:
 		case <-time.After(50 * time.Millisecond):
 		}
 	}

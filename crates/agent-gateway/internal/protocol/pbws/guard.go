@@ -4,13 +4,12 @@ import (
 	"errors"
 	"strings"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// 直通白名单与限额校验：v1 路由表天然充当的"浏览器可发起哪些操作"白名单，在 v2 信封直通后
-// 由本文件承接——未列入白名单的载荷臂（内部推送臂、须走网关编排的 chat_command、ping 等）
+// 直通白名单与限额校验：本文件明确限定浏览器可发起的操作——未列入白名单的载荷臂（内部推送臂、须走网关编排的 chat_command、ping 等）
 // 一律拒绝；功能开关门控与字段限额在转发前施加；list 类响应后处理经 finalize 钩子执行。
 
 const (
@@ -20,75 +19,76 @@ const (
 )
 
 // vetAgentRequest 校验并（必要时）原地修正一条直通请求；返回错误则拒绝转发，错误信息面向客户端。
-func vetAgentRequest(sm *session.Manager, env *gatewayv1.GatewayEnvelope) error {
+// 门控按目标 Agent 的视图判定（sm 为绑定 agent_id 的只读视图）。
+func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error {
 	switch payload := env.GetPayload().(type) {
 	case nil:
 		return errors.New("agent_request payload is required")
 
 	// ---- 普通直通臂（无门控） ----
-	case *gatewayv1.GatewayEnvelope_HistoryList:
+	case *gatewayv2.GatewayEnvelope_HistoryList:
 		clampHistoryList(payload.HistoryList)
 		return nil
-	case *gatewayv1.GatewayEnvelope_HistoryGet,
-		*gatewayv1.GatewayEnvelope_HistoryRename,
-		*gatewayv1.GatewayEnvelope_HistoryDelete,
-		*gatewayv1.GatewayEnvelope_HistoryPrefix,
-		*gatewayv1.GatewayEnvelope_HistoryPin,
-		*gatewayv1.GatewayEnvelope_HistoryShareGet,
-		*gatewayv1.GatewayEnvelope_HistoryShareSet,
-		*gatewayv1.GatewayEnvelope_HistoryWorkdirs,
-		*gatewayv1.GatewayEnvelope_HistoryBranch,
-		*gatewayv1.GatewayEnvelope_ProviderList,
-		*gatewayv1.GatewayEnvelope_ProviderModels,
-		*gatewayv1.GatewayEnvelope_SettingsGet,
-		*gatewayv1.GatewayEnvelope_SettingsUpdate,
-		*gatewayv1.GatewayEnvelope_SettingsResetSshKnownHost,
-		*gatewayv1.GatewayEnvelope_SkillFilesList,
-		*gatewayv1.GatewayEnvelope_SkillMetadataRead,
-		*gatewayv1.GatewayEnvelope_SkillTextRead,
-		*gatewayv1.GatewayEnvelope_SkillManage,
-		*gatewayv1.GatewayEnvelope_FileMentionList,
-		*gatewayv1.GatewayEnvelope_UploadedImagePreview,
-		*gatewayv1.GatewayEnvelope_MemoryManage,
-		*gatewayv1.GatewayEnvelope_CronManage,
-		*gatewayv1.GatewayEnvelope_FsRoots,
-		*gatewayv1.GatewayEnvelope_FsListDirs,
-		*gatewayv1.GatewayEnvelope_FsCreateProjectFolder,
-		*gatewayv1.GatewayEnvelope_FsList,
-		*gatewayv1.GatewayEnvelope_FsWriteText,
-		*gatewayv1.GatewayEnvelope_FsCreateDir,
-		*gatewayv1.GatewayEnvelope_FsRename,
-		*gatewayv1.GatewayEnvelope_FsDelete,
-		*gatewayv1.GatewayEnvelope_FsReadEditableText,
-		*gatewayv1.GatewayEnvelope_FsReadWorkspaceImage,
-		*gatewayv1.GatewayEnvelope_ChatQueue:
+	case *gatewayv2.GatewayEnvelope_HistoryGet,
+		*gatewayv2.GatewayEnvelope_HistoryRename,
+		*gatewayv2.GatewayEnvelope_HistoryDelete,
+		*gatewayv2.GatewayEnvelope_HistoryPrefix,
+		*gatewayv2.GatewayEnvelope_HistoryPin,
+		*gatewayv2.GatewayEnvelope_HistoryShareGet,
+		*gatewayv2.GatewayEnvelope_HistoryShareSet,
+		*gatewayv2.GatewayEnvelope_HistoryWorkdirs,
+		*gatewayv2.GatewayEnvelope_HistoryBranch,
+		*gatewayv2.GatewayEnvelope_ProviderList,
+		*gatewayv2.GatewayEnvelope_ProviderModels,
+		*gatewayv2.GatewayEnvelope_SettingsGet,
+		*gatewayv2.GatewayEnvelope_SettingsUpdate,
+		*gatewayv2.GatewayEnvelope_SettingsResetSshKnownHost,
+		*gatewayv2.GatewayEnvelope_SkillFilesList,
+		*gatewayv2.GatewayEnvelope_SkillMetadataRead,
+		*gatewayv2.GatewayEnvelope_SkillTextRead,
+		*gatewayv2.GatewayEnvelope_SkillManage,
+		*gatewayv2.GatewayEnvelope_FileMentionList,
+		*gatewayv2.GatewayEnvelope_UploadedImagePreview,
+		*gatewayv2.GatewayEnvelope_MemoryManage,
+		*gatewayv2.GatewayEnvelope_CronManage,
+		*gatewayv2.GatewayEnvelope_FsRoots,
+		*gatewayv2.GatewayEnvelope_FsListDirs,
+		*gatewayv2.GatewayEnvelope_FsCreateProjectFolder,
+		*gatewayv2.GatewayEnvelope_FsList,
+		*gatewayv2.GatewayEnvelope_FsWriteText,
+		*gatewayv2.GatewayEnvelope_FsCreateDir,
+		*gatewayv2.GatewayEnvelope_FsRename,
+		*gatewayv2.GatewayEnvelope_FsDelete,
+		*gatewayv2.GatewayEnvelope_FsReadEditableText,
+		*gatewayv2.GatewayEnvelope_FsReadWorkspaceImage,
+		*gatewayv2.GatewayEnvelope_ChatQueue:
 		return nil
 
 	// ---- 带功能门控 / 限额的直通臂 ----
-	case *gatewayv1.GatewayEnvelope_GitRequest:
+	case *gatewayv2.GatewayEnvelope_GitRequest:
 		action := strings.TrimSpace(payload.GitRequest.GetAction())
 		if gitActionIsWrite(action) && !sm.WebGitEnabled() {
 			return errors.New("web git is disabled in desktop Remote settings")
 		}
 		return nil
-	case *gatewayv1.GatewayEnvelope_TerminalRequest:
+	case *gatewayv2.GatewayEnvelope_TerminalRequest:
 		req := payload.TerminalRequest
 		action := strings.TrimSpace(req.GetAction())
 		if !shared.TerminalRequestAllowed(sm, action, strings.TrimSpace(req.GetSessionId())) {
 			return errors.New(shared.TerminalPermissionError(action))
 		}
 		return nil
-	case *gatewayv1.GatewayEnvelope_SftpRequest:
+	case *gatewayv2.GatewayEnvelope_SftpRequest:
 		if !sm.WebSshTerminalEnabled() {
 			return errors.New("web SSH SFTP is disabled in desktop Remote settings")
 		}
 		return nil
-	case *gatewayv1.GatewayEnvelope_TunnelMutation:
+	case *gatewayv2.GatewayEnvelope_TunnelMutation:
 		if !sm.WebTunnelsEnabled() {
 			return errors.New("web tunnels are disabled in desktop Remote settings")
 		}
 		return nil
-	case *gatewayv1.GatewayEnvelope_ManagedProcessRequest:
+	case *gatewayv2.GatewayEnvelope_ManagedProcessRequest:
 		req := payload.ManagedProcessRequest
 		action := strings.TrimSpace(req.GetAction())
 		if strings.TrimSpace(req.GetProcessId()) == "" && action != "clear" && action != "snapshot" {
@@ -115,8 +115,8 @@ func gitActionIsWrite(action string) bool {
 	}
 }
 
-// clampHistoryList 施加与 v1 相同的分页默认值与上限。
-func clampHistoryList(req *gatewayv1.HistoryListRequest) {
+// clampHistoryList 施加历史列表的分页默认值与上限。
+func clampHistoryList(req *gatewayv2.HistoryListRequest) {
 	if req == nil {
 		return
 	}

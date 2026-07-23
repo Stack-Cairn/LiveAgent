@@ -1,4 +1,14 @@
 import {
+  applyDragInsertIndex,
+  clampDragOffset,
+  computeDragAutoScrollVelocity,
+  computeDragInsertIndex,
+  computeDragShiftOffsets,
+  REORDER_AUTO_SCROLL_EDGE_PX,
+  REORDER_AUTO_SCROLL_MAX_STEP_PX,
+  reorderIdsByKeyboard,
+} from "../../lib/reorder/reorderModel";
+import {
   RIGHT_DOCK_SINGLETON_TAB_IDS,
   RIGHT_DOCK_TOOL_KINDS,
   type RightDockProjectState,
@@ -190,22 +200,11 @@ export function computeTabDragInsertIndex(
   draggedId: string,
   draggedOffset: number,
 ) {
-  const draggedIndex = slots.findIndex((slot) => slot.id === draggedId);
-  const dragged = slots[draggedIndex];
-  if (!dragged) return 0;
-  const draggedLeft = dragged.left + draggedOffset;
-  const draggedRight = draggedLeft + dragged.width;
-  let index = 0;
-  for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
-    if (slotIndex === draggedIndex) continue;
-    const slot = slots[slotIndex];
-    if (!slot) continue;
-    const midpoint = slot.left + slot.width / 2;
-    const staysBefore =
-      slotIndex < draggedIndex ? midpoint <= draggedLeft : midpoint < draggedRight;
-    if (staysBefore) index += 1;
-  }
-  return index;
+  return computeDragInsertIndex(
+    slots.map((slot) => ({ id: slot.id, start: slot.left, size: slot.width })),
+    draggedId,
+    draggedOffset,
+  );
 }
 
 // Final id order produced by dropping the dragged tab at `insertIndex` among
@@ -215,10 +214,7 @@ export function applyTabDragInsertIndex(
   draggedId: string,
   insertIndex: number,
 ) {
-  const others = order.filter((id) => id !== draggedId);
-  if (others.length === order.length) return [...order];
-  const index = Math.max(0, Math.min(others.length, insertIndex));
-  return [...others.slice(0, index), draggedId, ...others.slice(index)];
+  return applyDragInsertIndex(order, draggedId, insertIndex);
 }
 
 // translateX per non-dragged tab while the dragged tab hovers at
@@ -230,24 +226,12 @@ export function computeTabShiftOffsets(
   insertIndex: number,
   gap: number,
 ) {
-  const draggedIndex = slots.findIndex((slot) => slot.id === draggedId);
-  const dragged = slots[draggedIndex];
-  if (!dragged) return {};
-  const step = dragged.width + gap;
-  const shifts: Record<string, number> = {};
-  let otherIndex = 0;
-  for (let index = 0; index < slots.length; index += 1) {
-    if (index === draggedIndex) continue;
-    const slot = slots[index];
-    if (!slot) continue;
-    if (index < draggedIndex && otherIndex >= insertIndex) {
-      shifts[slot.id] = step;
-    } else if (index > draggedIndex && otherIndex < insertIndex) {
-      shifts[slot.id] = -step;
-    }
-    otherIndex += 1;
-  }
-  return shifts;
+  return computeDragShiftOffsets(
+    slots.map((slot) => ({ id: slot.id, start: slot.left, size: slot.width })),
+    draggedId,
+    insertIndex,
+    gap,
+  );
 }
 
 // Keeps the dragged tab inside the strip's content bounds.
@@ -256,21 +240,15 @@ export function clampTabDragOffset(
   draggedId: string,
   offset: number,
 ) {
-  const dragged = slots.find((slot) => slot.id === draggedId);
-  if (!dragged) return 0;
-  let minLeft = dragged.left;
-  let maxRight = dragged.left + dragged.width;
-  for (const slot of slots) {
-    minLeft = Math.min(minLeft, slot.left);
-    maxRight = Math.max(maxRight, slot.left + slot.width);
-  }
-  const minOffset = minLeft - dragged.left;
-  const maxOffset = maxRight - dragged.width - dragged.left;
-  return Math.min(maxOffset, Math.max(minOffset, offset));
+  return clampDragOffset(
+    slots.map((slot) => ({ id: slot.id, start: slot.left, size: slot.width })),
+    draggedId,
+    offset,
+  );
 }
 
-export const TAB_AUTO_SCROLL_EDGE_PX = 40;
-export const TAB_AUTO_SCROLL_MAX_STEP_PX = 12;
+export const TAB_AUTO_SCROLL_EDGE_PX = REORDER_AUTO_SCROLL_EDGE_PX;
+export const TAB_AUTO_SCROLL_MAX_STEP_PX = REORDER_AUTO_SCROLL_MAX_STEP_PX;
 
 // Per-frame auto-scroll velocity while dragging: zero in the middle of the
 // strip, ramping up with pointer depth into either edge zone so the scroll
@@ -280,43 +258,11 @@ export function computeTabAutoScrollVelocity(
   containerRight: number,
   clientX: number,
 ) {
-  const edge = Math.min(TAB_AUTO_SCROLL_EDGE_PX, Math.max(8, (containerRight - containerLeft) / 4));
-  if (clientX < containerLeft + edge) {
-    const depth = Math.min(1, (containerLeft + edge - clientX) / edge);
-    return -(1 + depth * (TAB_AUTO_SCROLL_MAX_STEP_PX - 1));
-  }
-  if (clientX > containerRight - edge) {
-    const depth = Math.min(1, (clientX - (containerRight - edge)) / edge);
-    return 1 + depth * (TAB_AUTO_SCROLL_MAX_STEP_PX - 1);
-  }
-  return 0;
+  return computeDragAutoScrollVelocity(containerLeft, containerRight, clientX);
 }
 
 export function reorderTabIdsByKeyboard(tabIds: readonly string[], tabId: string, key: string) {
-  const currentIndex = tabIds.indexOf(tabId);
-  if (currentIndex < 0) return null;
-
-  let targetIndex = currentIndex;
-  if (key === "ArrowLeft") {
-    targetIndex = currentIndex - 1;
-  } else if (key === "ArrowRight") {
-    targetIndex = currentIndex + 1;
-  } else if (key === "Home") {
-    targetIndex = 0;
-  } else if (key === "End") {
-    targetIndex = tabIds.length - 1;
-  } else {
-    return null;
-  }
-
-  targetIndex = Math.max(0, Math.min(tabIds.length - 1, targetIndex));
-  if (targetIndex === currentIndex) return null;
-
-  const nextTabIds = [...tabIds];
-  const [movedTabId] = nextTabIds.splice(currentIndex, 1);
-  if (!movedTabId) return null;
-  nextTabIds.splice(targetIndex, 0, movedTabId);
-  return nextTabIds;
+  return reorderIdsByKeyboard(tabIds, tabId, key, "horizontal");
 }
 
 export function rightDockSingletonTabId(kind: RightDockSingletonTabKind) {

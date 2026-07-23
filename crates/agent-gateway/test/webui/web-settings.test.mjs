@@ -7,6 +7,7 @@ const webSettings = loader.loadModule("src/lib/webSettings.ts");
 const settings = loader.loadModule("@/lib/settings/index.ts");
 const settingsSync = loader.loadModule("@/lib/settings/sync.ts");
 const chatHelpers = loader.loadModule("@/lib/chat/chatPageHelpers.ts");
+const adminApi = loader.loadModule("@/lib/adminApi.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
 
 test("custom provider normalization defaults and filters ordered custom headers", () => {
@@ -96,6 +97,91 @@ function installWindow(origin = "https://gateway.example") {
   };
   return store;
 }
+
+test("agent directory requests database-paged status filters", async () => {
+  installWindow("https://gateway.example");
+  const originalFetch = globalThis.fetch;
+  let requestUrl;
+  let authorization;
+  globalThis.fetch = async (input, init) => {
+    requestUrl = new URL(String(input));
+    authorization = init?.headers?.Authorization;
+    return new Response(
+      JSON.stringify({
+        agents: [
+          {
+            agent_id: "shared-token-agent",
+            name: "",
+            online: false,
+            has_token: false,
+            registered_at: "2026-07-22T00:00:00Z",
+          },
+        ],
+        page: 3,
+        page_size: 50,
+        total: 1,
+        has_more: false,
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+
+  try {
+    const result = await adminApi.listAdminAgents(" gateway-token ", 3, 50, "offline");
+    assert.equal(requestUrl.pathname, "/api/agents");
+    assert.equal(requestUrl.searchParams.get("page"), "3");
+    assert.equal(requestUrl.searchParams.get("page_size"), "50");
+    assert.equal(requestUrl.searchParams.get("status"), "offline");
+    assert.equal(authorization, "Bearer gateway-token");
+    assert.equal(result.page, 3);
+    assert.equal(result.agents[0].has_token, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("agent management validates generated IDs and uses the single-record API", async () => {
+  installWindow("https://gateway.example");
+  const agentId = "agent-550e8400-e29b-41d4-a716-446655440000";
+  assert.equal(adminApi.isGeneratedAgentID(` ${agentId} `), true);
+  assert.equal(adminApi.isGeneratedAgentID("agent-550e8400-e29b-11d4-a716-446655440000"), false);
+  assert.equal(adminApi.isGeneratedAgentID("agent-550E8400-E29B-41D4-A716-446655440000"), false);
+  assert.equal(adminApi.isGeneratedAgentID("manual-agent"), false);
+
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (input, init = {}) => {
+    requests.push({ url: new URL(String(input)), init });
+    if (init.method === "POST") {
+      return new Response(JSON.stringify({ token: "agt_plaintext" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  };
+
+  try {
+    const issued = await adminApi.issueAdminToken(" gateway-token ", agentId, "  办公室电脑  ");
+    await adminApi.updateAdminAgentName("gateway-token", agentId, "   ");
+    await adminApi.deleteAdminAgent("gateway-token", agentId);
+
+    assert.equal(issued, "agt_plaintext");
+    assert.equal(requests.length, 3);
+    assert.equal(requests[0].url.pathname, `/api/agents/${agentId}/token`);
+    assert.equal(requests[0].init.method, "POST");
+    assert.equal(requests[0].init.headers.Authorization, "Bearer gateway-token");
+    assert.equal(requests[0].init.headers["Content-Type"], "application/json");
+    assert.equal(requests[0].init.body, JSON.stringify({ name: "办公室电脑" }));
+    assert.equal(requests[1].url.pathname, `/api/agents/${agentId}`);
+    assert.equal(requests[1].init.method, "PATCH");
+    assert.equal(requests[1].init.body, JSON.stringify({ name: "" }));
+    assert.equal(requests[2].url.pathname, `/api/agents/${agentId}`);
+    assert.equal(requests[2].init.method, "DELETE");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("getWebDefaultSettings enables remote settings from the gateway token", () => {
   installWindow("https://gateway.example");
@@ -1357,18 +1443,16 @@ test("web remote settings normalize single-slash http gateway URLs", () => {
   const remote = settings.normalizeRemoteSettings({
     enabled: true,
     gatewayUrl: " https:/gateway.example/ ",
-    grpcEndpoint: " https:/grpc.example/ ",
     token: " token ",
   });
 
   assert.equal(remote.gatewayUrl, "https://gateway.example");
-  assert.equal(remote.grpcEndpoint, "https://grpc.example");
   assert.equal(remote.token, "token");
 
   const remoteWithOversizedPort = settings.normalizeRemoteSettings({
-    grpcPort: "70000",
+    gatewayPort: "70000",
   });
-  assert.equal(remoteWithOversizedPort.grpcPort, 65_535);
+  assert.equal(remoteWithOversizedPort.gatewayPort, 65_535);
 });
 
 test("web provider normalization keeps native web search toggle", () => {

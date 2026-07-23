@@ -58,6 +58,19 @@ for (const { label, loader } of implementations) {
     assert.equal(hint.endsWith("…"), true);
   });
 
+  test(`${label} caps local card descriptions without splitting Unicode characters`, () => {
+    const limit = cardMetadata.LOCAL_SKILL_CARD_DESCRIPTION_MAX_CHARACTERS;
+    assert.equal(cardMetadata.truncateLocalSkillCardDescription("  concise description  "), "concise description");
+    assert.equal(cardMetadata.truncateLocalSkillCardDescription("技".repeat(limit)), "技".repeat(limit));
+
+    const truncated = cardMetadata.truncateLocalSkillCardDescription(
+      `${"技".repeat(limit - 2)}😀tail`,
+    );
+    assert.equal(Array.from(truncated).length, limit);
+    assert.equal(truncated.endsWith("…"), true);
+    assert.equal(truncated.includes("�"), false);
+  });
+
   test(`${label} derives stable, distributed card identities`, () => {
     const first = cardIdentity.getInstalledSkillCardIdentity("karpathy-guidelines", "development");
     const repeated = cardIdentity.getInstalledSkillCardIdentity("karpathy-guidelines", "development");

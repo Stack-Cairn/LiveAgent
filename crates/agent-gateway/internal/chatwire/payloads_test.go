@@ -5,12 +5,12 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 func TestEventPayloadPreservesHostedSearch(t *testing.T) {
-	payload := EventPayload(&gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_HOSTED_SEARCH,
+	payload := EventPayload(&gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_HOSTED_SEARCH,
 		ConversationId: "conversation-1",
 		Data:           `{"id":"search-1","provider":"codex","status":"completed","queries":["设计模式定义"],"sources":[{"url":"https://example.com/pattern","title":"设计模式"}],"round":2}`,
 	}, 7)
@@ -36,8 +36,8 @@ func TestEventPayloadPreservesHostedSearch(t *testing.T) {
 }
 
 func TestEventPayloadPreservesToolCallDeltaType(t *testing.T) {
-	payload := EventPayload(&gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_TOOL_CALL,
+	payload := EventPayload(&gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_TOOL_CALL,
 		ConversationId: "conversation-1",
 		Data:           `{"type":"tool_call_delta","id":"call-write","name":"Write","arguments":{"path":"src/app.ts","content":"con"},"round":1}`,
 	}, 8)
@@ -64,8 +64,8 @@ func TestEventPayloadPreservesToolCallDeltaType(t *testing.T) {
 // caused the chars regression this suite guards against.
 func TestEventPayloadLeavesToolCallArgsUntouched(t *testing.T) {
 	longContent := strings.Repeat("x", 500)
-	payload := EventPayload(&gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_TOOL_CALL,
+	payload := EventPayload(&gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_TOOL_CALL,
 		ConversationId: "conversation-1",
 		Data: `{"type":"tool_call_delta","id":"call-write","name":"Write","arguments":{"path":"src/app.ts","content":"` +
 			longContent +

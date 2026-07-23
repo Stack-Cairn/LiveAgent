@@ -2121,26 +2121,26 @@ test("mcp and remote settings normalize transport, selection, ports, and tokens"
   const remote = settings.normalizeRemoteSettings({
     enabled: true,
     gatewayUrl: " http:/127.0.0.1:8787/ ",
-    grpcPort: "0",
-    grpcEndpoint: " tcp.proxy.rlwy.net:12345/ ",
+    gatewayPort: "0",
     token: " secret ",
+    agentId: " agent-550e8400-e29b-41d4-a716-446655440000 ",
     autoReconnect: false,
     heartbeatInterval: "15.8",
     enableWebSshTerminal: true,
   });
 
   assert.equal(remote.gatewayUrl, "http://127.0.0.1:8787");
-  assert.equal(remote.grpcPort, 443);
-  assert.equal(remote.grpcEndpoint, "tcp.proxy.rlwy.net:12345");
+  assert.equal(remote.gatewayPort, 443);
   assert.equal(remote.token, "secret");
+  assert.equal(remote.agentId, "agent-550e8400-e29b-41d4-a716-446655440000");
   assert.equal(remote.autoReconnect, false);
   assert.equal(remote.heartbeatInterval, 15);
   assert.equal(remote.enableWebSshTerminal, true);
 
   const remoteWithOversizedPort = settings.normalizeRemoteSettings({
-    grpcPort: "70000",
+    gatewayPort: "70000",
   });
-  assert.equal(remoteWithOversizedPort.grpcPort, 65_535);
+  assert.equal(remoteWithOversizedPort.gatewayPort, 65_535);
 });
 
 test("font scale settings normalize invalid values to 1 and clamp out-of-range values", () => {

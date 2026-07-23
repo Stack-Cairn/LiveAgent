@@ -151,6 +151,30 @@ test("optimistic user bubble binds to its run keeping its key", () => {
   assert.equal(users[0].key, optimisticKey, "user bubble keeps its identity");
 });
 
+test("a desktop identity echo binds the live turn to its persisted message id", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(userMessage("run-1", 1, "same prompt"));
+  store.applyEvent(runStarted("run-1", 2));
+  store.applyEvent(userMessage("run-1", 3, "same prompt", { message_id: "m1" }));
+  store.applyHistorySnapshot(
+    [
+      {
+        id: "hu:m1",
+        kind: "user",
+        text: "same prompt",
+        attachments: [],
+        messageRef: messageRef("m1"),
+      },
+    ],
+    { mode: "replace" },
+  );
+  store.flush();
+
+  const users = allRows(store.getSnapshot()).filter((row) => row.kind === "user");
+  assert.equal(users.length, 1);
+  assert.equal(users[0].messageRef?.messageId, "m1");
+});
+
 test("failed run appends an error entry and clears busy", () => {
   const store = createTranscriptStore();
   store.applyEvent(runStarted("run-1", 1));
@@ -485,6 +509,7 @@ test("replace keeps the active exchange and trims its persisted echo", () => {
   store.addOptimisticUserEntry({ clientRequestId: "client-2", text: "new prompt" });
   store.applyEvent(userMessage("run-2", 1, "new prompt", { client_request_id: "client-2" }));
   store.applyEvent(runStarted("run-2", 2, { client_request_id: "client-2" }));
+  store.applyEvent(userMessage("run-2", 3, "new prompt", { message_id: "m2" }));
   store.flush();
   const userKey = allRows(store.getSnapshot()).find((row) => row.kind === "user" && row.text === "new prompt")?.key;
   assert.ok(userKey);
@@ -611,6 +636,144 @@ test("reset sync rebuilds the active turn from a runtime snapshot", () => {
   const text = allRows(snapshot).map((row) => rowText(row)).join("");
   assert.match(text, /rebuilt from snapshot/);
   assert.doesNotMatch(text, /will be lost/);
+});
+
+test("active sync trims a history-first copy of the running exchange", () => {
+  const store = createTranscriptStore();
+  store.applyHistorySnapshot(
+    [
+      {
+        id: "hu:m1",
+        kind: "user",
+        text: "明天是什么天气",
+        attachments: [],
+        messageRef: messageRef("m1"),
+      },
+      {
+        id: "ht:hu:m1>0",
+        kind: "assistant",
+        text: "请告诉我你所在的城市",
+        round: 1,
+      },
+    ],
+    { mode: "replace" },
+  );
+
+  store.applySync({
+    conversationId: "conv-1",
+    streamEpoch: "epoch-1",
+    latestSeq: 2,
+    reset: true,
+    activity: {
+      runId: "run-1",
+      state: "running",
+      startedSeq: 2,
+      toolStatus: "Vibing",
+      toolStatusIsCompaction: false,
+      updatedAt: 1,
+    },
+    snapshot: {
+      runId: "run-1",
+      revision: 2,
+      entriesJson: JSON.stringify([
+        {
+          id: "snapshot-user",
+          kind: "user",
+          text: "明天是什么天气",
+          attachments: [],
+          messageId: "m1",
+        },
+        {
+          id: "snapshot-assistant",
+          kind: "assistant",
+          text: "请告诉我你所在的城市",
+          round: 1,
+        },
+      ]),
+      toolStatus: "Vibing",
+      toolStatusIsCompaction: false,
+      asOfSeq: 2,
+    },
+    events: [],
+  });
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.equal(
+    allRows(snapshot).filter((row) => row.kind === "user").length,
+    1,
+    "history and runtime snapshot describe one prompt",
+  );
+  assert.equal(
+    allRows(snapshot).filter((row) => row.kind === "assistant").length,
+    1,
+    "the partial reply also renders from one source",
+  );
+  assert.equal(snapshot.activeRun?.runId, "run-1");
+});
+
+test("active sync preserves an older completed exchange with the same prompt text", () => {
+  const store = createTranscriptStore();
+  store.applyHistorySnapshot(
+    [
+      {
+        id: "hu:m1",
+        kind: "user",
+        text: "重复问题",
+        attachments: [],
+        messageRef: messageRef("m1"),
+      },
+      { id: "ht:hu:m1>0", kind: "assistant", text: "相同回答", round: 1 },
+    ],
+    { mode: "replace" },
+  );
+
+  store.applySync({
+    conversationId: "conv-1",
+    streamEpoch: "epoch-1",
+    latestSeq: 2,
+    reset: true,
+    activity: {
+      runId: "run-2",
+      state: "running",
+      startedSeq: 2,
+      toolStatus: "Vibing",
+      toolStatusIsCompaction: false,
+      updatedAt: 2,
+    },
+    snapshot: {
+      runId: "run-2",
+      revision: 2,
+      entriesJson: JSON.stringify([
+        {
+          id: "snapshot-user",
+          kind: "user",
+          text: "重复问题",
+          attachments: [],
+          messageId: "m2",
+        },
+        {
+          id: "snapshot-assistant",
+          kind: "assistant",
+          text: "相同回答，继续生成",
+          round: 1,
+        },
+      ]),
+      toolStatus: "Vibing",
+      toolStatusIsCompaction: false,
+      asOfSeq: 2,
+    },
+    events: [],
+  });
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.equal(allRows(snapshot).filter((row) => row.kind === "user").length, 2);
+  assert.equal(allRows(snapshot).filter((row) => row.kind === "assistant").length, 2);
+  const text = allRows(snapshot).map((row) => rowText(row)).join("\n");
+  assert.match(text, /相同回答/);
+  assert.match(text, /相同回答，继续生成/);
+  assert.equal(snapshot.activeRun?.runId, "run-2");
 });
 
 test("reset keeps the optimistic pending bubble and binds it on replay", () => {
@@ -1695,10 +1858,11 @@ test("hidden tab: flush() commits immediately and cancels the pending timer", as
 });
 
 // ---------------------------------------------------------------------------
-// Edit-resend identity binding (message_ref / user_message_ref / rebase
-// divergence). Regression suite for the "consecutive GUI edits render every
-// past version as its own user bubble" bug: the new prompt's stable identity
-// must enter the stream so the NEXT rebased can anchor on it.
+// Edit-resend identity binding (message_ref on user_message / forwarded
+// identity echo / rebase divergence). Regression suite for the "consecutive
+// GUI edits render every past version as its own user bubble" bug: the new
+// prompt's stable identity must enter the stream so the NEXT rebased can
+// anchor on it.
 
 function wireMessageRef(messageId, messageIndex = 0) {
   return {
@@ -1750,28 +1914,27 @@ test("user_message binds its message_ref so consecutive GUI edits truncate inste
   assert.equal(users[0].messageRef?.messageId, "m3", "latest bubble carries its own ref");
 });
 
-test("user_message_ref retrofits the persisted identity onto a seeded turn", () => {
+test("forwarded identity echo retrofits the persisted ref onto a seeded turn", () => {
   const store = createTranscriptStore();
   store.addOptimisticUserEntry({ clientRequestId: "client-1", text: "webui prompt" });
   // Gateway-seeded user_message (no ref — ids are minted at desktop persist
-  // time), then the binding event distilled from the swallowed desktop echo.
+  // time), then the identity-bearing desktop echo the gateway forwards once.
+  // The single user slot upserts identity instead of adding a bubble.
   store.applyEvent(userMessage("run-1", 1, "webui prompt", { client_request_id: "client-1" }));
   store.applyEvent(runStarted("run-1", 2, { client_request_id: "client-1" }));
-  store.applyEvent({
-    type: "user_message_ref",
-    conversation_id: "conv-1",
-    run_id: "run-1",
-    seq: 3,
-    client_request_id: "client-1",
-    message_ref: wireMessageRef("m7"),
-  });
+  store.applyEvent(
+    userMessage("run-1", 3, "webui prompt", {
+      message_id: "m7",
+      message_ref: wireMessageRef("m7"),
+    }),
+  );
   store.applyEvent(token("run-1", 4, "reply"));
   store.applyEvent(runFinished("run-1", 5));
   store.flush();
 
   const users = allRows(store.getSnapshot()).filter((row) => row.kind === "user");
-  assert.equal(users.length, 1);
-  assert.equal(users[0].messageRef?.messageId, "m7", "binding event attached the ref");
+  assert.equal(users.length, 1, "forwarded echo upserts, never adds a second bubble");
+  assert.equal(users[0].messageRef?.messageId, "m7", "forwarded echo attached the ref");
 
   // The bound ref anchors the next edit's truncation.
   store.applyEvent(rebasedEvent(6, "m7"));

@@ -198,6 +198,8 @@ export type ProviderModelCost = {
 
 export type ProviderModelConfig = {
   id: string;
+  /** /models 元数据；缺失时保持旧设置格式兼容。 */
+  ownedBy?: string;
   contextWindow: number;
   maxOutputToken: number;
   /** 用户自填单价：目录外模型（中转/改名）没有官方定价时用于成本展示。 */
@@ -269,6 +271,7 @@ export type CustomProvider = {
   apiKeyConfigured?: boolean;
   customHeaders?: { key: string; value: string }[];
   models: ProviderModelConfig[];
+  modelOrder?: string[];
   activeModels: string[];
   requestFormat?: CodexRequestFormat;
   reasoning: ReasoningLevel;
@@ -294,8 +297,7 @@ const SYSTEM_THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
 export type RemoteSettings = {
   enabled: boolean;
   gatewayUrl: string;
-  grpcPort: number;
-  grpcEndpoint: string;
+  gatewayPort: number;
   token: string;
   agentId: string;
   autoReconnect: boolean;
@@ -998,20 +1000,12 @@ function normalizeIntegerInRange(
   return Math.min(max, Math.max(min, value));
 }
 
-function normalizeGrpcEndpoint(input: unknown): string {
-  const value = normalizeOptionalText(input);
-  if (!value) return "";
-  if (/^https?:/i.test(value)) return normalizeBaseUrl(value);
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
 export function normalizeRemoteSettings(input: unknown): RemoteSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     enabled: obj.enabled === true,
     gatewayUrl: normalizeBaseUrl(typeof obj.gatewayUrl === "string" ? obj.gatewayUrl : ""),
-    grpcPort: normalizeIntegerInRange(obj.grpcPort, 1, 65_535, 443),
-    grpcEndpoint: normalizeGrpcEndpoint(obj.grpcEndpoint),
+    gatewayPort: normalizeIntegerInRange(obj.gatewayPort, 1, 65_535, 443),
     token: normalizeApiKey(typeof obj.token === "string" ? obj.token : ""),
     agentId: normalizeOptionalText(obj.agentId),
     autoReconnect: obj.autoReconnect !== false,
@@ -1143,8 +1137,12 @@ export function normalizeProviderModelConfig(
 
   const defaults = getProviderModelDefaults(providerId, id);
   const cost = normalizeProviderModelCost(obj.cost);
+  const ownedBy =
+    (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
+    (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
   return {
     id,
+    ...(ownedBy ? { ownedBy } : {}),
     contextWindow: normalizePositiveInteger(obj.contextWindow, defaults.contextWindow),
     maxOutputToken: normalizePositiveInteger(
       obj.maxOutputToken ?? obj.maxTokens,
@@ -1153,7 +1151,6 @@ export function normalizeProviderModelConfig(
     ...(cost !== undefined ? { cost } : {}),
   };
 }
-
 export function normalizeProviderModelConfigs(
   input: unknown,
   providerId: ProviderId,
@@ -1226,12 +1223,34 @@ function normalizeCustomHeaders(input: unknown): { key: string; value: string }[
   });
 }
 
+function normalizeProviderModelOrder(
+  input: unknown,
+  models: readonly ProviderModelConfig[],
+): string[] | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const validIds = new Set(models.map((model) => model.id));
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const id of normalizeStringArray(input)) {
+    if (!validIds.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    order.push(id);
+  }
+  for (const model of models) {
+    if (seen.has(model.id)) continue;
+    seen.add(model.id);
+    order.push(model.id);
+  }
+  return order;
+}
+
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const type = normalizeProviderId(obj.type);
   const codexRouting =
     type === "codex" ? normalizeCodexRouting(obj.baseUrl, obj.requestFormat) : undefined;
   const models = normalizeProviderModelConfigs(obj.models, type);
+  const modelOrder = normalizeProviderModelOrder(obj.modelOrder, models);
   const validModelIds = new Set(models.map((model) => model.id));
   const apiKey = normalizeApiKey(typeof obj.apiKey === "string" ? obj.apiKey : "");
   const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : createUuid();
@@ -1247,6 +1266,7 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     apiKeyConfigured: apiKey.length > 0 || obj.apiKeyConfigured === true,
     customHeaders: normalizeCustomHeaders(obj.customHeaders),
     models,
+    ...(modelOrder ? { modelOrder } : {}),
     activeModels: normalizeModels(normalizeStringArray(obj.activeModels)).filter((modelId) =>
       validModelIds.has(modelId),
     ),
@@ -2012,8 +2032,7 @@ export function getDefaultSettings(): AppSettings {
     remote: {
       enabled: false,
       gatewayUrl: "",
-      grpcPort: 443,
-      grpcEndpoint: "",
+      gatewayPort: 443,
       token: "",
       agentId: "",
       autoReconnect: true,

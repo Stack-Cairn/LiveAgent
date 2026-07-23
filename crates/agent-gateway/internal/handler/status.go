@@ -7,16 +7,16 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// statusResponse 在 agent 状态之上追加协议使用计数；内嵌保持既有字段展平不变，protocol_usage 为纯增量字段，旧客户端自动忽略。
+// statusResponse 是全局鉴权检查与 Agent 目录响应，不承担具体 Agent 寻址。
 type statusResponse struct {
-	session.Status
+	Agents        []session.Status `json:"agents"`
 	ProtocolUsage map[string]int64 `json:"protocol_usage"`
 }
 
 func Status(sm *session.Manager) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, statusResponse{
-			Status:        sm.Status(),
+			Agents:        sm.AgentStatuses(),
 			ProtocolUsage: observability.Usage.Snapshot(),
 		})
 	}

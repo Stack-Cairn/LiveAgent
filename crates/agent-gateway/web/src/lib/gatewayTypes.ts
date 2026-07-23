@@ -11,6 +11,7 @@ export type AgentStatus = {
   agent_ready?: boolean;
   chat_runtime_ready?: boolean;
   agent_id?: string;
+  name?: string;
   agent_version?: string;
   session_id?: string;
   connected_since?: number;
@@ -62,6 +63,7 @@ export type ChatUserMessageEvent = {
   type: "user_message";
   client_request_id?: string;
   conversation_id?: string;
+  message_id?: string;
   message?: string;
   uploaded_files?: unknown;
   // The new message's own persisted identity (desktop mints it at persist
@@ -76,15 +78,6 @@ export type ChatRebasedEvent = {
   conversation_id?: string;
   base_message_ref?: unknown;
   reason?: string;
-};
-
-// Gateway-seeded binding for a swallowed desktop user_message echo: retrofits
-// the persisted message identity onto the run's already-rendered user bubble.
-export type ChatUserMessageRefEvent = {
-  type: "user_message_ref";
-  client_request_id?: string;
-  conversation_id?: string;
-  message_ref?: unknown;
 };
 
 export type ChatEvent = (
@@ -159,7 +152,6 @@ export type ChatEvent = (
   | { type: "error"; message: string; round?: number; conversation_id?: string }
   | ChatUserMessageEvent
   | ChatRebasedEvent
-  | ChatUserMessageRefEvent
 ) & { seq?: number; workdir?: string };
 
 export type CronManagePayload = {

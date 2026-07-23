@@ -11,7 +11,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/liveagent/agent-gateway/internal/config"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/server"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
@@ -60,81 +60,81 @@ func (a *fakeAgent) run() {
 	}
 }
 
-func (a *fakeAgent) reply(frame *gatewayv1.TunnelFrame) {
-	a.sm.DispatchFromAgentForSession(a.sess, &gatewayv1.AgentEnvelope{
+func (a *fakeAgent) reply(frame *gatewayv2.TunnelFrame) {
+	a.sm.DispatchFromAgentForSession(a.sess, &gatewayv2.AgentEnvelope{
 		RequestId: "fake-agent-frame",
 		Timestamp: time.Now().Unix(),
-		Payload:   &gatewayv1.AgentEnvelope_TunnelFrame{TunnelFrame: frame},
+		Payload:   &gatewayv2.AgentEnvelope_TunnelFrame{TunnelFrame: frame},
 	})
 }
 
-func (a *fakeAgent) handleFrame(frame *gatewayv1.TunnelFrame) {
+func (a *fakeAgent) handleFrame(frame *gatewayv2.TunnelFrame) {
 	streamID := frame.GetStreamId()
 	switch frame.GetKind() {
-	case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_PING:
-		a.reply(&gatewayv1.TunnelFrame{
+	case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_PING:
+		a.reply(&gatewayv2.TunnelFrame{
 			StreamId: streamID,
-			Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_PONG,
+			Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_PONG,
 		})
-	case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_START:
+	case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_START:
 		if strings.HasPrefix(frame.GetPath(), "/sse") {
-			a.reply(&gatewayv1.TunnelFrame{
+			a.reply(&gatewayv2.TunnelFrame{
 				StreamId: streamID,
-				Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_START,
+				Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_START,
 				Status:   200,
-				Headers: []*gatewayv1.TunnelHeader{
+				Headers: []*gatewayv2.TunnelHeader{
 					{Name: "Content-Type", Value: "text/event-stream; charset=utf-8"},
 				},
 			})
 			for _, chunk := range []string{"event: tick\ndata: 1\n\n", "event: tick\ndata: 2\n\n"} {
-				a.reply(&gatewayv1.TunnelFrame{
+				a.reply(&gatewayv2.TunnelFrame{
 					StreamId: streamID,
-					Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY,
+					Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY,
 					Body:     []byte(chunk),
 				})
 			}
-			a.reply(&gatewayv1.TunnelFrame{
+			a.reply(&gatewayv2.TunnelFrame{
 				StreamId: streamID,
-				Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_END,
+				Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_END,
 			})
 			return
 		}
-		a.reply(&gatewayv1.TunnelFrame{
+		a.reply(&gatewayv2.TunnelFrame{
 			StreamId: streamID,
-			Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_START,
+			Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_START,
 			Status:   200,
-			Headers: []*gatewayv1.TunnelHeader{
+			Headers: []*gatewayv2.TunnelHeader{
 				{Name: "Content-Type", Value: "text/plain; charset=utf-8"},
 			},
 		})
-		a.reply(&gatewayv1.TunnelFrame{
+		a.reply(&gatewayv2.TunnelFrame{
 			StreamId: streamID,
-			Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY,
+			Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY,
 			Body:     []byte("hello " + frame.GetMethod() + " " + frame.GetPath()),
 		})
-		a.reply(&gatewayv1.TunnelFrame{
+		a.reply(&gatewayv2.TunnelFrame{
 			StreamId: streamID,
-			Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_END,
+			Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_END,
 		})
-	case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL:
-		a.reply(&gatewayv1.TunnelFrame{
+	case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL:
+		a.reply(&gatewayv2.TunnelFrame{
 			StreamId: streamID,
-			Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL_OK,
+			Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL_OK,
 		})
-	case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME:
+	case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME:
 		if string(frame.GetBody()) == "close-me" {
 			// Emulate the local service closing the socket with its own code.
-			a.reply(&gatewayv1.TunnelFrame{
+			a.reply(&gatewayv2.TunnelFrame{
 				StreamId:      streamID,
-				Kind:          gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
+				Kind:          gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
 				WsCloseCode:   4321,
 				WsCloseReason: "goodbye",
 			})
 			return
 		}
-		a.reply(&gatewayv1.TunnelFrame{
+		a.reply(&gatewayv2.TunnelFrame{
 			StreamId:      streamID,
-			Kind:          gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME,
+			Kind:          gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME,
 			Body:          append([]byte("echo:"), frame.GetBody()...),
 			WsMessageType: frame.GetWsMessageType(),
 		})
@@ -146,7 +146,7 @@ func startTunnelTestServer(t *testing.T, sm *session.Manager) *httptest.Server {
 	handler := server.NewHTTPServer(&config.Config{
 		Token:          "dev-token",
 		RequestTimeout: 2 * time.Second,
-	}, sm)
+	}, sm, nil)
 	ts := httptest.NewServer(handler)
 	t.Cleanup(ts.Close)
 	return ts
@@ -154,12 +154,12 @@ func startTunnelTestServer(t *testing.T, sm *session.Manager) *httptest.Server {
 
 func applyOneTunnel(t *testing.T, sm *session.Manager) string {
 	t.Helper()
-	sm.ApplyDesiredState(&gatewayv1.TunnelDesiredState{
-		Tunnels: []*gatewayv1.TunnelSpec{
+	sm.ApplyDesiredState("fake-agent", &gatewayv2.TunnelDesiredState{
+		Tunnels: []*gatewayv2.TunnelSpec{
 			{Id: "tun-e2e", TargetUrl: "http://localhost:3999", Name: "e2e"},
 		},
 	})
-	snapshot := sm.TunnelStateSnapshot()
+	snapshot := sm.TunnelStateSnapshot("fake-agent")
 	if len(snapshot.GetTunnels()) != 1 {
 		t.Fatalf("tunnels = %d, want 1", len(snapshot.GetTunnels()))
 	}
@@ -267,8 +267,8 @@ func TestTunnelTrafficWhileControlPlaneBusy(t *testing.T) {
 			case <-stop:
 				return
 			default:
-				sm.ApplyDesiredState(&gatewayv1.TunnelDesiredState{
-					Tunnels: []*gatewayv1.TunnelSpec{
+				sm.ApplyDesiredState("fake-agent", &gatewayv2.TunnelDesiredState{
+					Tunnels: []*gatewayv2.TunnelSpec{
 						{Id: "tun-e2e", TargetUrl: "http://localhost:3999", Name: "e2e", SlugHint: slug},
 					},
 				})
@@ -322,27 +322,27 @@ func TestTunnelHTMLRewriteInjectsShimAndDropsContentLength(t *testing.T) {
 				outbound.Ack(nil)
 				frame := outbound.GetTunnelFrame()
 				if frame == nil ||
-					frame.GetKind() != gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_START {
+					frame.GetKind() != gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_START {
 					continue
 				}
-				agent.reply(&gatewayv1.TunnelFrame{
+				agent.reply(&gatewayv2.TunnelFrame{
 					StreamId: frame.GetStreamId(),
-					Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_START,
+					Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_START,
 					Status:   200,
-					Headers: []*gatewayv1.TunnelHeader{
+					Headers: []*gatewayv2.TunnelHeader{
 						{Name: "Content-Type", Value: "text/html; charset=utf-8"},
 						{Name: "Content-Length", Value: "999"},
 						{Name: "Content-Security-Policy", Value: "script-src 'self'"},
 					},
 				})
-				agent.reply(&gatewayv1.TunnelFrame{
+				agent.reply(&gatewayv2.TunnelFrame{
 					StreamId: frame.GetStreamId(),
-					Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY,
+					Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY,
 					Body:     []byte(html),
 				})
-				agent.reply(&gatewayv1.TunnelFrame{
+				agent.reply(&gatewayv2.TunnelFrame{
 					StreamId: frame.GetStreamId(),
-					Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_END,
+					Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_END,
 				})
 			}
 		}

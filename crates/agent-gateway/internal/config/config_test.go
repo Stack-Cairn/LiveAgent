@@ -4,6 +4,7 @@ import (
 	"flag"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -111,6 +112,76 @@ func TestLoadUsesRailwayPortForHTTPDefault(t *testing.T) {
 
 	if cfg.HTTPAddr != ":8080" {
 		t.Fatalf("HTTPAddr = %q, want :8080", cfg.HTTPAddr)
+	}
+}
+
+func TestLoadDefaultsToAutoDB(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	dataDir := t.TempDir()
+	t.Setenv("LIVEAGENT_GATEWAY_DATA_DIR", dataDir)
+	resetFlagsForTest(t)
+	cfg := Load()
+	if cfg.AgentDB != filepath.Join(dataDir, "gateway.db") {
+		t.Fatalf("AgentDB = %q, want automatic data-dir path", cfg.AgentDB)
+	}
+}
+
+func TestLoadEmptyAgentDBStillUsesAutomaticPath(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	dataDir := t.TempDir()
+	t.Setenv("LIVEAGENT_GATEWAY_DATA_DIR", dataDir)
+	resetFlagsForTest(t)
+	os.Args = []string{"gateway", "-agent-db", ""}
+	cfg := Load()
+	if cfg.AgentDB != filepath.Join(dataDir, "gateway.db") {
+		t.Fatalf("AgentDB = %q, want automatic path when explicitly empty", cfg.AgentDB)
+	}
+}
+
+func TestLoadAcceptsLegacyFlagsAndMapsMessageLimit(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	os.Args = []string{
+		"gateway",
+		"-grpc-addr", ":50051",
+		"-grpc-max-message-bytes", "33554432",
+		"-command-queue-timeout", "45s",
+	}
+
+	cfg := Load()
+	if cfg.MaxMessageBytes != 32*1024*1024 {
+		t.Fatalf("MaxMessageBytes = %d, want legacy flag value", cfg.MaxMessageBytes)
+	}
+	for _, name := range []string{"grpc-addr", "grpc-max-message-bytes", "command-queue-timeout"} {
+		if flag.CommandLine.Lookup(name) != nil {
+			t.Fatalf("legacy flag %q should not be registered", name)
+		}
+	}
+}
+
+func TestLoadCurrentMessageLimitTakesPriorityOverLegacyFlag(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	resetFlagsForTest(t)
+	os.Args = []string{
+		"gateway",
+		"-max-message-bytes", "16777216",
+		"-grpc-max-message-bytes", "33554432",
+	}
+
+	cfg := Load()
+	if cfg.MaxMessageBytes != 16*1024*1024 {
+		t.Fatalf("MaxMessageBytes = %d, want current flag value", cfg.MaxMessageBytes)
+	}
+}
+
+func TestLoadMapsLegacyMessageLimitEnvironment(t *testing.T) {
+	t.Setenv("LIVEAGENT_GATEWAY_TOKEN", "dev-token")
+	t.Setenv("LIVEAGENT_GATEWAY_GRPC_MAX_MESSAGE_BYTES", "33554432")
+	resetFlagsForTest(t)
+
+	cfg := Load()
+	if cfg.MaxMessageBytes != 32*1024*1024 {
+		t.Fatalf("MaxMessageBytes = %d, want legacy environment value", cfg.MaxMessageBytes)
 	}
 }
 

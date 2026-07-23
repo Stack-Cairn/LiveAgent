@@ -74,13 +74,18 @@ function normalizeUploadedFile(value: unknown): PendingUploadedFile | null {
 
 export async function importReadableFiles(
   token: string,
+  agentId: string,
   workdir: string,
   files: File[],
 ): Promise<ImportReadableFilesResponse> {
   const normalizedToken = token.trim();
+  const normalizedAgentId = agentId.trim();
   const normalizedWorkdir = workdir.trim();
   if (!normalizedToken) {
     throw new Error("Gateway token is required");
+  }
+  if (!normalizedAgentId) {
+    throw new Error("agent_id is required");
   }
   if (!normalizedWorkdir) {
     throw new Error("项目目录未选择，无法导入文件。");
@@ -95,7 +100,10 @@ export async function importReadableFiles(
     formData.append("files", file, file.name);
   }
 
-  const response = await fetch(`${window.location.origin}/api/files/import`, {
+  const url = new URL(`${window.location.origin}/api/files/import`);
+  url.searchParams.set("agent_id", normalizedAgentId);
+
+  const response = await fetch(url.toString(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${normalizedToken}`,

@@ -1,7 +1,7 @@
 package websocket_test
 
-// v2 直通 git 门控：写操作受桌面端 Remote 设置 enable_web_git 门控（v1
-// websocket_git_handlers 同款语义），读操作始终放行。
+// v2 直通 git 门控：写操作受桌面端 Remote 设置 enable_web_git 门控，
+// 读操作始终放行。
 
 import (
 	"strings"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/pbws"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -26,12 +25,12 @@ func newV2GitBrowserTest(
 	if webGitEnabled {
 		webGitSetting = "true"
 	}
-	sm.ApplySettingsJSON(`{"remote":{"enableWebGit":` + webGitSetting + `}}`)
+	sm.ApplySettingsJSON("desktop-agent", `{"remote":{"enableWebGit":`+webGitSetting+`}}`)
 	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
-	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot())
+	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(agentSession)
 
-	handler := pbws.NewServer(newV2TestConfig(), sm).BrowserHandler()
+	handler := pbws.NewServer(newV2TestConfig(), sm, nil).BrowserHandler()
 	conn, cleanup := dialV2(t, handler)
 	helloV2(t, conn, "ws-token")
 	return sm, agentSession, conn, cleanup
@@ -41,11 +40,12 @@ func sendGitAgentRequest(t *testing.T, conn *websocket.Conn, id string, action s
 	t.Helper()
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: id,
+		AgentId:   "desktop-agent",
 		Payload: &gatewayv2.WebClientFrame_AgentRequest{
-			AgentRequest: &gatewayv1.GatewayEnvelope{
+			AgentRequest: &gatewayv2.GatewayEnvelope{
 				RequestId: id,
-				Payload: &gatewayv1.GatewayEnvelope_GitRequest{
-					GitRequest: &gatewayv1.GitRequest{
+				Payload: &gatewayv2.GatewayEnvelope_GitRequest{
+					GitRequest: &gatewayv2.GitRequest{
 						Action:   action,
 						Workdir:  "/workspace/project",
 						ArgsJson: "{}",

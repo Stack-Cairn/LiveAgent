@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 func TestGatewayErrorStatusPassesExpectedClientErrors(t *testing.T) {
@@ -21,7 +21,7 @@ func TestGatewayErrorStatusPassesExpectedClientErrors(t *testing.T) {
 	}
 
 	for code, want := range cases {
-		got := GatewayErrorStatus(&gatewayv1.ErrorResponse{Code: code})
+		got := GatewayErrorStatus(&gatewayv2.ErrorResponse{Code: code})
 		if got != want {
 			t.Fatalf("GatewayErrorStatus(%d) = %d, want %d", code, got, want)
 		}

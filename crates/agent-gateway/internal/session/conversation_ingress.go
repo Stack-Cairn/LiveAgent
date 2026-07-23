@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/liveagent/agent-gateway/internal/chatwire"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 // Ingress normalization: the three agent-facing envelope payloads (ChatEvent,
@@ -13,8 +13,12 @@ import (
 // the conversation stream store. Payload shaping and tool-result trimming
 // happen exactly once, so every subscriber observes identical events.
 
-func (m *Manager) ingestChatEvent(requestID string, event *gatewayv1.ChatEvent) {
+func (m *Manager) ingestChatEvent(agentID, requestID string, event *gatewayv2.ChatEvent) {
 	if event == nil {
+		return
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
 		return
 	}
 	s := m.convStreams
@@ -23,19 +27,23 @@ func (m *Manager) ingestChatEvent(requestID string, event *gatewayv1.ChatEvent) 
 		return
 	}
 	now := time.Now()
-	epoch := m.currentSessionEpoch()
+	epoch := m.sessionEpochOf(agentID)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	conversationID := s.resolveConversationLocked(runID, strings.TrimSpace(event.GetConversationId()), now)
+	conversationID := s.resolveConversationLocked(agentID, runID, strings.TrimSpace(event.GetConversationId()), now)
 	if conversationID == "" {
 		return
 	}
-	existingStream := s.streams[conversationID]
+	existingStream := s.streams[conversationStreamKey(agentID, conversationID)]
 	streamWasUnknown := existingStream == nil ||
 		(existingStream.lastSeq == 0 && existingStream.activity == nil)
-	stream := s.streamLocked(conversationID, now)
+	stream := s.streamLocked(agentID, conversationID, now)
+	// 入站事件按已认证会话身份盖章会话流归属（伪造不可能：id 来自握手）。
+	if agentID != "" {
+		stream.agentID = agentID
+	}
 	s.noteAgentEpochLocked(stream, epoch)
 
 	payload := chatwire.EventPayload(event, 0)
@@ -44,24 +52,27 @@ func (m *Manager) ingestChatEvent(requestID string, event *gatewayv1.ChatEvent) 
 		eventType = chatwire.EventTypeName(event.GetType())
 	}
 
-	if event.GetType() == gatewayv1.ChatEvent_USER_MESSAGE {
-		if record := s.runs[runID]; record != nil && record.userMessageSeeded {
-			// The gateway already appended this run's user_message at accept
-			// time; swallow the agent echo so the message appears once. The
-			// echo still carries the message's persisted identity the seed
-			// could not know (ids are minted at desktop persist time): append
-			// it as a binding event so subscribers can anchor a later
-			// edit-resend rebase against this turn.
-			if ref, ok := payload["message_ref"].(map[string]any); ok && !record.messageRefSeeded {
-				if messageID, _ := ref["message_id"].(string); strings.TrimSpace(messageID) != "" {
-					record.messageRefSeeded = true
-					s.appendSeededPayloadsLocked(stream, runID, record.clientRequestID, []map[string]any{{
-						"type":        StreamEventUserMessageRef,
-						"message_ref": ref,
-					}}, now)
+	if event.GetType() == gatewayv2.ChatEvent_USER_MESSAGE {
+		if record := s.runs[agentScopedKey(agentID, runID)]; record != nil && record.userMessageSeeded {
+			messageID, _ := payload["message_id"].(string)
+			if strings.TrimSpace(messageID) == "" {
+				// The full stable ref (edit-resend rebase anchoring) carries
+				// the same id; either field proves the echo has new identity.
+				if ref, ok := payload["message_ref"].(map[string]any); ok {
+					refMessageID, _ := ref["message_id"].(string)
+					messageID = refMessageID
 				}
 			}
-			return
+			if strings.TrimSpace(messageID) == "" || record.userMessageIdentityForwarded {
+				// The gateway already appended this run's user_message at accept
+				// time. A plain or replayed agent echo adds no new identity.
+				return
+			}
+			// Forward one authoritative desktop echo carrying the stable message
+			// identity (message_id, plus message_ref so a follow-up edit-resend
+			// can anchor its rebase). WebUI upserts it into the run's single user
+			// slot, so this enriches identity without creating a second bubble.
+			record.userMessageIdentityForwarded = true
 		}
 	}
 
@@ -75,12 +86,12 @@ func (m *Manager) ingestChatEvent(requestID string, event *gatewayv1.ChatEvent) 
 	}
 
 	switch event.GetType() {
-	case gatewayv1.ChatEvent_DONE:
+	case gatewayv2.ChatEvent_DONE:
 		delete(payload, "type")
 		delete(payload, "seq")
 		s.runFinishedLocked(stream, runID, "completed", "", "", payload, now)
 		return
-	case gatewayv1.ChatEvent_ERROR:
+	case gatewayv2.ChatEvent_ERROR:
 		message, _ := payload["message"].(string)
 		delete(payload, "type")
 		delete(payload, "seq")
@@ -89,7 +100,7 @@ func (m *Manager) ingestChatEvent(requestID string, event *gatewayv1.ChatEvent) 
 		return
 	}
 
-	if event.GetType() == gatewayv1.ChatEvent_USER_MESSAGE {
+	if event.GetType() == gatewayv2.ChatEvent_USER_MESSAGE {
 		// A GUI-local edit-resend: the desktop truncated its own history and
 		// stamped the truncation base onto its user_message. Broadcast the
 		// same rebased event the webui edit path seeds, so every subscriber
@@ -99,7 +110,7 @@ func (m *Manager) ingestChatEvent(requestID string, event *gatewayv1.ChatEvent) 
 			messageID, _ := ref["message_id"].(string)
 			contentHash, _ := ref["content_hash"].(string)
 			if strings.TrimSpace(messageID) != "" || strings.TrimSpace(contentHash) != "" {
-				record := s.runRecordLocked(runID, conversationID)
+				record := s.runRecordLocked(agentID, runID, conversationID)
 				if !record.rebaseSeeded {
 					record.rebaseSeeded = true
 					s.appendSeededPayloadsLocked(stream, runID, record.clientRequestID, []map[string]any{{
@@ -119,14 +130,14 @@ func (m *Manager) ingestChatEvent(requestID string, event *gatewayv1.ChatEvent) 
 		// supersession bookkeeping); do not attribute events to another run.
 		return
 	}
-	if streamWasUnknown && event.GetType() != gatewayv1.ChatEvent_USER_MESSAGE {
+	if streamWasUnknown && event.GetType() != gatewayv2.ChatEvent_USER_MESSAGE {
 		// A mid-run delta recreated this stream (gateway restarted while the
 		// run was streaming): the run's earlier events are unrecoverable from
 		// the log, so late joiners must hydrate from the runtime snapshot.
 		stream.runNeedsSnapshot = true
 	}
 
-	if event.GetType() == gatewayv1.ChatEvent_TOOL_STATUS {
+	if event.GetType() == gatewayv2.ChatEvent_TOOL_STATUS {
 		status, _ := payload["status"].(string)
 		isCompaction, _ := payload["isCompaction"].(bool)
 		stream.activity.ToolStatus = strings.TrimSpace(status)
@@ -138,8 +149,12 @@ func (m *Manager) ingestChatEvent(requestID string, event *gatewayv1.ChatEvent) 
 	s.appendEventLocked(stream, runID, eventType, payload, now)
 }
 
-func (m *Manager) ingestChatControl(requestID string, control *gatewayv1.ChatControlEvent) {
+func (m *Manager) ingestChatControl(agentID, requestID string, control *gatewayv2.ChatControlEvent) {
 	if control == nil {
+		return
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
 		return
 	}
 	s := m.convStreams
@@ -157,18 +172,22 @@ func (m *Manager) ingestChatControl(requestID string, control *gatewayv1.ChatCon
 	errorCode := strings.TrimSpace(control.GetErrorCode())
 	message := strings.TrimSpace(control.GetMessage())
 	now := time.Now()
-	epoch := m.currentSessionEpoch()
+	epoch := m.sessionEpochOf(agentID)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	conversationID := s.resolveConversationLocked(runID, strings.TrimSpace(control.GetConversationId()), now)
+	conversationID := s.resolveConversationLocked(agentID, runID, strings.TrimSpace(control.GetConversationId()), now)
 	if conversationID == "" {
 		// A control for a run the gateway has no conversation for yet (the
 		// binding signal must carry a conversation id); ignore.
 		return
 	}
-	stream := s.streamLocked(conversationID, now)
+	stream := s.streamLocked(agentID, conversationID, now)
+	// 入站事件按已认证会话身份盖章会话流归属（伪造不可能：id 来自握手）。
+	if agentID != "" {
+		stream.agentID = agentID
+	}
 	s.noteAgentEpochLocked(stream, epoch)
 
 	switch controlType {
@@ -193,7 +212,7 @@ func (m *Manager) ingestChatControl(requestID string, control *gatewayv1.ChatCon
 		// already falsified once — genuine terminals always pass.
 		if inferredLoss &&
 			stream.activity != nil && stream.activity.RunID == runID {
-			record := s.runs[runID]
+			record := s.runs[agentScopedKey(agentID, runID)]
 			eventsFresh := !stream.lastEventAt.IsZero() &&
 				now.Sub(stream.lastEventAt) < s.runReportLostTimeout
 			if eventsFresh || (record != nil && record.revived) {
@@ -204,7 +223,7 @@ func (m *Manager) ingestChatControl(requestID string, control *gatewayv1.ChatCon
 	case "queued_in_gui":
 		s.markRunQueuedInGUILocked(stream, runID, now)
 	case "accepted", "delivered", "claimed", "starting":
-		record := s.runRecordLocked(runID, conversationID)
+		record := s.runRecordLocked(agentID, runID, conversationID)
 		s.markRunQueuedLocked(stream, runID, record.clientRequestID, now)
 	}
 }
@@ -222,7 +241,7 @@ func (s *conversationStreamStore) markRunQueuedInGUILocked(
 	if stream.runFinishedRecently(runID) {
 		return
 	}
-	record := s.runRecordLocked(runID, stream.conversationID)
+	record := s.runRecordLocked(stream.agentID, runID, stream.conversationID)
 	record.queuedInGUI = true
 	seeded := record.userMessageSeeded
 	record.userMessageSeeded = false
@@ -243,6 +262,7 @@ func (s *conversationStreamStore) markRunQueuedInGUILocked(
 		s.publishActivityLocked(stream, now)
 	}
 	s.fireCommandUpdateLocked(ChatCommandUpdate{
+		AgentID:         stream.agentID,
 		RunID:           runID,
 		ClientRequestID: record.clientRequestID,
 		ConversationID:  stream.conversationID,
@@ -250,8 +270,12 @@ func (s *conversationStreamStore) markRunQueuedInGUILocked(
 	})
 }
 
-func (m *Manager) ingestRuntimeSnapshot(snapshot *gatewayv1.ChatRuntimeSnapshot) {
+func (m *Manager) ingestRuntimeSnapshot(agentID string, snapshot *gatewayv2.ChatRuntimeSnapshot) {
 	if snapshot == nil {
+		return
+	}
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" {
 		return
 	}
 	s := m.convStreams
@@ -262,15 +286,19 @@ func (m *Manager) ingestRuntimeSnapshot(snapshot *gatewayv1.ChatRuntimeSnapshot)
 	}
 	state := strings.TrimSpace(snapshot.GetState())
 	now := time.Now()
-	epoch := m.currentSessionEpoch()
+	epoch := m.sessionEpochOf(agentID)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	conversationID = s.resolveConversationLocked(runID, conversationID, now)
-	existingStream := s.streams[conversationID]
+	conversationID = s.resolveConversationLocked(agentID, runID, conversationID, now)
+	existingStream := s.streams[conversationStreamKey(agentID, conversationID)]
 	streamWasUnknown := existingStream == nil || (existingStream.lastSeq == 0 && existingStream.activity == nil)
-	stream := s.streamLocked(conversationID, now)
+	stream := s.streamLocked(agentID, conversationID, now)
+	// 入站事件按已认证会话身份盖章会话流归属（伪造不可能：id 来自握手）。
+	if agentID != "" {
+		stream.agentID = agentID
+	}
 	s.noteAgentEpochLocked(stream, epoch)
 	if stream.runFinishedRecently(runID) {
 		// Both running and terminal snapshots are authoritative runtime
@@ -363,18 +391,20 @@ func (s *conversationStreamStore) publishSnapshotLocked(
 // binding a pending webui command when the first agent signal carries a
 // conversation id.
 func (s *conversationStreamStore) resolveConversationLocked(
+	agentID string,
 	runID string,
 	conversationID string,
 	now time.Time,
 ) string {
-	if pending := s.pendingRuns[runID]; pending != nil && conversationID != "" {
+	runKey := agentScopedKey(agentID, runID)
+	if pending := s.pendingRuns[runKey]; pending != nil && conversationID != "" {
 		s.bindPendingRunLocked(pending, conversationID, now)
 	}
 	if conversationID != "" {
-		s.runRecordLocked(runID, conversationID)
+		s.runRecordLocked(agentID, runID, conversationID)
 		return conversationID
 	}
-	if record := s.runs[runID]; record != nil {
+	if record := s.runs[runKey]; record != nil {
 		return record.conversationID
 	}
 	return ""
@@ -385,19 +415,21 @@ func (s *conversationStreamStore) bindPendingRunLocked(
 	conversationID string,
 	now time.Time,
 ) {
-	delete(s.pendingRuns, pending.runID)
-	stream := s.streamLocked(conversationID, now)
+	delete(s.pendingRuns, agentScopedKey(pending.agentID, pending.runID))
+	stream := s.streamLocked(pending.agentID, conversationID, now)
 	if pending.workdir != "" {
 		stream.workdir = pending.workdir
 	}
-	record := s.runRecordLocked(pending.runID, conversationID)
+	record := s.runRecordLocked(pending.agentID, pending.runID, conversationID)
 	record.clientRequestID = pending.clientRequestID
 	s.markRunQueuedLocked(stream, pending.runID, pending.clientRequestID, now)
 	acceptedSeq := s.appendSeededPayloadsLocked(
 		stream, pending.runID, pending.clientRequestID, pending.seeded, now,
 	)
 	record.userMessageSeeded = seededPayloadsIncludeUserMessage(pending.seeded)
+	record.rebaseSeeded = seededPayloadsIncludeRebased(pending.seeded)
 	s.updateChatCommandDedupeLocked(
+		pending.agentID,
 		pending.clientRequestID,
 		pending.runID,
 		conversationID,
@@ -405,6 +437,7 @@ func (s *conversationStreamStore) bindPendingRunLocked(
 		now,
 	)
 	s.fireCommandUpdateLocked(ChatCommandUpdate{
+		AgentID:         pending.agentID,
 		RunID:           pending.runID,
 		ClientRequestID: pending.clientRequestID,
 		ConversationID:  conversationID,

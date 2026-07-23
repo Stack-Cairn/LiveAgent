@@ -110,8 +110,7 @@ mod tests {
         let normalized = normalize_remote_settings_payload(RemoteSettingsPayload {
             enabled: true,
             gateway_url: " https:/agent.cnweb.org/ ".to_string(),
-            grpc_port: 443,
-            grpc_endpoint: " tcp.proxy.rlwy.net:12345/ ".to_string(),
+            gateway_port: 443,
             token: " agent-token-dev ".to_string(),
             agent_id: " mac-mini ".to_string(),
             auto_reconnect: true,
@@ -123,9 +122,157 @@ mod tests {
         });
 
         assert_eq!(normalized.gateway_url, "https://agent.cnweb.org");
-        assert_eq!(normalized.grpc_endpoint, "tcp.proxy.rlwy.net:12345");
         assert_eq!(normalized.token, "agent-token-dev");
         assert_eq!(normalized.agent_id, "mac-mini");
+    }
+
+    #[test]
+    fn ensure_remote_agent_id_migrates_legacy_grpc_port() {
+        let mut conn = open_memory_db();
+        let legacy = json!({
+            "enabled": true,
+            "gatewayUrl": "https://gateway.example.com",
+            "grpcPort": 8443,
+            "token": "gateway-token"
+        });
+        conn.execute(
+            &format!(
+                "INSERT INTO {REMOTE_SETTINGS_TABLE} (config_id, payload_json, updated_at)
+                 VALUES ('default', ?1, ?2)"
+            ),
+            params![legacy.to_string(), now_ms()],
+        )
+        .expect("seed legacy remote settings");
+
+        ensure_remote_agent_id(&mut conn).expect("migrate legacy remote settings");
+        let migrated = load_remote_settings(&conn).expect("load migrated remote settings");
+        let stored_json = conn
+            .query_row(
+                &format!(
+                    "SELECT payload_json FROM {REMOTE_SETTINGS_TABLE} WHERE config_id = 'default'"
+                ),
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("load stored remote payload");
+
+        assert_eq!(migrated.gateway_port, 8443);
+        assert!(is_generated_agent_id(&migrated.agent_id));
+        assert!(stored_json.contains("\"gatewayPort\":8443"));
+        assert!(!stored_json.contains("grpcPort"));
+    }
+
+    #[test]
+    fn ensure_remote_agent_id_generates_once_and_survives_reopen() {
+        let mut conn = open_memory_db();
+
+        let first = ensure_remote_agent_id(&mut conn).expect("generate Agent ID");
+        let second = ensure_remote_agent_id(&mut conn).expect("reload Agent ID");
+        let stored = load_remote_settings(&conn).expect("load remote settings");
+
+        assert!(is_generated_agent_id(&first), "generated id = {first}");
+        assert_eq!(second, first);
+        assert_eq!(stored.agent_id, first);
+    }
+
+    #[test]
+    fn ensure_remote_agent_id_replaces_manual_id_and_preserves_remote_settings() {
+        let mut conn = open_memory_db();
+        persist_remote_settings(
+            &conn,
+            &RemoteSettingsPayload {
+                enabled: true,
+                gateway_url: "https://gateway.example.com".to_string(),
+                gateway_port: 8443,
+                token: "gateway-token".to_string(),
+                agent_id: "liveagent".to_string(),
+                auto_reconnect: false,
+                heartbeat_interval: 45,
+                enable_web_terminal: true,
+                enable_web_ssh_terminal: true,
+                enable_web_git: true,
+                enable_web_tunnels: true,
+            },
+        )
+        .expect("seed manual Agent ID");
+
+        let generated = ensure_remote_agent_id(&mut conn).expect("replace manual Agent ID");
+        let stored = load_remote_settings(&conn).expect("load remote settings");
+
+        assert!(is_generated_agent_id(&generated));
+        assert_eq!(stored.agent_id, generated);
+        assert_eq!(stored.gateway_url, "https://gateway.example.com");
+        assert_eq!(stored.gateway_port, 8443);
+        assert_eq!(stored.token, "gateway-token");
+        assert!(!stored.auto_reconnect);
+        assert_eq!(stored.heartbeat_interval, 45);
+        assert!(stored.enable_web_terminal);
+        assert!(stored.enable_web_ssh_terminal);
+        assert!(stored.enable_web_git);
+        assert!(stored.enable_web_tunnels);
+    }
+
+    #[test]
+    fn save_remote_cannot_override_persisted_agent_id() {
+        let mut conn = open_memory_db();
+        let generated = ensure_remote_agent_id(&mut conn).expect("generate Agent ID");
+
+        let saved = save_remote(
+            &mut conn,
+            json!({
+                "enabled": true,
+                "gatewayUrl": "https://gateway.example.com",
+                "gatewayPort": 443,
+                "token": "gateway-token",
+                "agentId": "attacker-controlled",
+                "autoReconnect": true,
+                "heartbeatInterval": 30
+            }),
+        )
+        .expect("save remote settings");
+        let stored = load_remote_settings(&conn).expect("load remote settings");
+
+        assert_eq!(saved.agent_id, generated);
+        assert_eq!(stored.agent_id, generated);
+    }
+
+    #[test]
+    fn independent_installations_generate_different_agent_ids() {
+        let mut first = open_memory_db();
+        let mut second = open_memory_db();
+
+        let first_id = ensure_remote_agent_id(&mut first).expect("generate first Agent ID");
+        let second_id = ensure_remote_agent_id(&mut second).expect("generate second Agent ID");
+
+        assert_ne!(first_id, second_id);
+    }
+
+    #[test]
+    fn concurrent_initialization_keeps_one_agent_id() {
+        let dir = tempfile::tempdir().expect("create temp directory");
+        let path = dir.path().join("settings.sqlite");
+        let conn = Connection::open(&path).expect("open shared settings db");
+        initialize_schema(&conn).expect("initialize schema");
+        drop(conn);
+
+        let workers = (0..8)
+            .map(|_| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    let mut conn = Connection::open(path).expect("open shared settings db");
+                    conn.busy_timeout(Duration::from_secs(5))
+                        .expect("configure busy timeout");
+                    ensure_remote_agent_id(&mut conn).expect("initialize Agent ID")
+                })
+            })
+            .collect::<Vec<_>>();
+        let ids = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("join Agent ID initializer"))
+            .collect::<Vec<_>>();
+
+        assert!(ids.iter().all(|agent_id| agent_id == &ids[0]));
+        assert!(is_generated_agent_id(&ids[0]));
     }
 
     #[test]

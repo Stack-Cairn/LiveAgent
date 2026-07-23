@@ -73,6 +73,24 @@ export class ChatCommandPipeline {
     return new Set(this.pending.keys());
   }
 
+  reset(): void {
+    for (const pending of this.pending.values()) {
+      const store = this.hooks.getTranscriptStore(pending.conversationId);
+      if (pending.isEditResend) {
+        store.restoreEditResendTranscript?.(pending.clientRequestId);
+      }
+      store.removeOptimisticUserEntry(pending.clientRequestId);
+      this.settledOutcomes.set(pending, { kind: "settled" });
+    }
+    for (const timeout of this.timeouts.values()) {
+      clearTimeout(timeout);
+    }
+    this.pending.clear();
+    this.byRunId.clear();
+    this.timeouts.clear();
+    this.hooks.onPendingChanged?.();
+  }
+
   async submit(request: ChatCommandRequest): Promise<ChatCommandOutcome> {
     if (request.optimistic !== false) {
       this.hooks.getTranscriptStore(request.conversationId).addOptimisticUserEntry({

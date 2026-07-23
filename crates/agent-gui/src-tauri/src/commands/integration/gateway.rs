@@ -17,15 +17,19 @@ pub async fn gateway_connect(
     payload: Option<Value>,
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
-    let mut config = match payload {
-        Some(value) => parse_remote_settings_payload(value)?,
-        None => tauri::async_runtime::spawn_blocking(move || {
-            let conn = open_db()?;
-            load_remote_settings(&conn)
-        })
-        .await
-        .map_err(|e| format!("gateway_connect join 失败：{e}"))??,
-    };
+    let mut config = tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_db()?;
+        let persisted = load_remote_settings(&conn)?;
+        let mut requested = match payload {
+            Some(value) => parse_remote_settings_payload(value)?,
+            None => persisted.clone(),
+        };
+        // Agent ID 始终取本地持久化身份，调用方不能借连接命令临时覆盖。
+        requested.agent_id = persisted.agent_id;
+        Ok::<_, String>(requested)
+    })
+    .await
+    .map_err(|e| format!("gateway_connect join 失败：{e}"))??;
     config.enabled = true;
     gateway_controller.apply_config(config)
 }

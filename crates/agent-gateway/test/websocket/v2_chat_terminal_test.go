@@ -9,7 +9,6 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/pbws"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -26,10 +25,11 @@ func TestV2ChatCommandAcceptedFlow(t *testing.T) {
 
 	sendProtoFrame(t, conn, &gatewayv2.WebClientFrame{
 		RequestId: "cmd-1",
+		AgentId:   "desktop-agent",
 		Payload: &gatewayv2.WebClientFrame_ChatCommand{
-			ChatCommand: &gatewayv1.ChatCommandRequest{
+			ChatCommand: &gatewayv2.ChatCommandRequest{
 				Type: "chat.submit",
-				Request: &gatewayv1.ChatRequest{
+				Request: &gatewayv2.ChatRequest{
 					ConversationId:  "conv-cmd",
 					ClientRequestId: "client-cmd-1",
 					Message:         "hello v2",
@@ -55,13 +55,34 @@ func TestV2ChatCommandAcceptedFlow(t *testing.T) {
 	}
 }
 
+func TestV2TerminalBrowserRequiresAgentID(t *testing.T) {
+	t.Parallel()
+
+	handler := pbws.NewServer(newV2TestConfig(), session.NewManager(), nil).TerminalHandler()
+	conn, cleanup := dialV2(t, handler)
+	defer cleanup()
+	sendProtoFrame(t, conn, &gatewayv2.TerminalClientFrame{
+		Payload: &gatewayv2.TerminalClientFrame_Hello{
+			Hello: &gatewayv2.ClientHello{
+				ProtocolVersion: pbws.ProtocolVersion,
+				Role:            gatewayv2.ClientRole_CLIENT_ROLE_BROWSER,
+				Token:           "ws-token",
+			},
+		},
+	})
+	hello := receiveTerminalServerFrame(t, conn).GetHello()
+	if hello == nil || hello.GetOk() || hello.GetMessage() != "agent_id is required" {
+		t.Fatalf("terminal hello without agent_id = %v, want rejection", hello)
+	}
+}
+
 // TestV2TerminalBrowserGating 覆盖终端链路浏览器角色：默认设置下 attach 被权限门控拒绝；
 // 开启 Web 终端后 attach 转发失败（agent 离线）也以 error 帧回报。
 func TestV2TerminalBrowserGating(t *testing.T) {
 	t.Parallel()
 
 	sm := session.NewManager()
-	handler := pbws.NewServer(newV2TestConfig(), sm).TerminalHandler()
+	handler := pbws.NewServer(newV2TestConfig(), sm, nil).TerminalHandler()
 
 	dialTerminal := func() (*websocket.Conn, func()) {
 		conn, cleanup := dialV2(t, handler)
@@ -71,6 +92,7 @@ func TestV2TerminalBrowserGating(t *testing.T) {
 					ProtocolVersion: pbws.ProtocolVersion,
 					Role:            gatewayv2.ClientRole_CLIENT_ROLE_BROWSER,
 					Token:           "ws-token",
+					AgentId:         "desktop-agent",
 				},
 			},
 		})
@@ -84,7 +106,7 @@ func TestV2TerminalBrowserGating(t *testing.T) {
 	attach := func(conn *websocket.Conn) {
 		sendProtoFrame(t, conn, &gatewayv2.TerminalClientFrame{
 			Payload: &gatewayv2.TerminalClientFrame_Frame{
-				Frame: &gatewayv1.TerminalStreamFrame{
+				Frame: &gatewayv2.TerminalStreamFrame{
 					Kind:      "attach",
 					SessionId: "sess-1",
 					StreamId:  "stream-1",
@@ -103,7 +125,7 @@ func TestV2TerminalBrowserGating(t *testing.T) {
 	cleanup()
 
 	// 开启 Web 终端：attach 通过门控，但 agent 离线 → 离线错误。
-	sm.ApplySettingsJSON(`{"remote":{"enableWebTerminal":true}}`)
+	sm.ApplySettingsJSON("desktop-agent", `{"remote":{"enableWebTerminal":true}}`)
 	conn, cleanup = dialTerminal()
 	defer cleanup()
 	attach(conn)
@@ -118,7 +140,7 @@ func TestV2AgentHelloRejectsBrowserRole(t *testing.T) {
 	t.Parallel()
 
 	sm := session.NewManager()
-	srv := pbws.NewServer(newV2TestConfig(), sm)
+	srv := pbws.NewServer(newV2TestConfig(), sm, nil)
 	mux := http.NewServeMux()
 	mux.Handle("/ws/v2/agent", srv.AgentHandler())
 

@@ -3,15 +3,31 @@ package config
 import (
 	"flag"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
-const DefaultGRPCMaxMessageBytes = 64 * 1024 * 1024
+const DefaultMaxMessageBytes = 64 * 1024 * 1024
+
+// 三条 v2 链路并发连接上限的默认值；浏览器/终端按"每 Agent 数个会话"的
+// 使用形态放大（100 Agent × 若干浏览器页签/终端页）。
+const (
+	DefaultMaxAgentConnections    = 256
+	DefaultMaxBrowserConnections  = 128
+	DefaultMaxTerminalConnections = 512
+)
 
 type Config struct {
-	Token                    string
+	Token string
+	// AgentDB 是每 Agent 凭证 SQLite 数据库路径；默认自动创建于用户配置目录。
+	AgentDB string
+	// 三条 v2 链路的并发连接上限（升级前检查，超限 503）；0/负值回落默认。
+	// 默认值按 100+ 桌面 Agent 的目标规模取整。
+	MaxAgentConnections      int
+	MaxBrowserConnections    int
+	MaxTerminalConnections   int
 	HTTPAddr                 string
 	TLSCert                  string
 	TLSKey                   string
@@ -25,25 +41,18 @@ type Config struct {
 	WebSocketHeartbeatGrace  time.Duration
 	WebSocketWriteTimeout    time.Duration
 	WebSocketWriteQueueSize  int
-	GRPCMaxMessageBytes      int
+	MaxMessageBytes          int
 	RelayBufferSeconds       int
-
-	// GRPCAddr is accepted but unused.
-	//
-	// Deprecated: v1 gRPC 链路已随协议 v2 统一移除，网关不再监听 gRPC 端口；保留本 flag 仅为不破坏既有启动脚本，下个版本删除。
-	GRPCAddr string
-
-	// CommandQueueTimeout is accepted but unused.
-	//
-	// Deprecated: 离线命令队列（生产不可达路径）已随死代码清理移除；保留本 flag 仅为不破坏既有启动脚本，下个版本删除。
-	CommandQueueTimeout time.Duration
 }
 
 func Load() *Config {
 	cfg := &Config{}
 
-	flag.StringVar(&cfg.Token, "token", getenv("LIVEAGENT_GATEWAY_TOKEN", ""), "shared authentication token")
-	flag.StringVar(&cfg.GRPCAddr, "grpc-addr", getenv("LIVEAGENT_GATEWAY_GRPC_ADDR", ""), "deprecated, no-op (v1 gRPC removed; kept for startup-script compatibility)")
+	flag.StringVar(&cfg.Token, "token", getenv("LIVEAGENT_GATEWAY_TOKEN", ""), "gateway authentication token")
+	flag.StringVar(&cfg.AgentDB, "agent-db", getenv("LIVEAGENT_GATEWAY_AGENT_DB", defaultAgentDBPath()), "per-agent token SQLite database path (auto-created by default)")
+	flag.IntVar(&cfg.MaxAgentConnections, "max-agent-connections", getenvInt("LIVEAGENT_GATEWAY_MAX_AGENT_CONNECTIONS", DefaultMaxAgentConnections), "maximum concurrent desktop agent connections")
+	flag.IntVar(&cfg.MaxBrowserConnections, "max-browser-connections", getenvInt("LIVEAGENT_GATEWAY_MAX_BROWSER_CONNECTIONS", DefaultMaxBrowserConnections), "maximum concurrent browser connections")
+	flag.IntVar(&cfg.MaxTerminalConnections, "max-terminal-connections", getenvInt("LIVEAGENT_GATEWAY_MAX_TERMINAL_CONNECTIONS", DefaultMaxTerminalConnections), "maximum concurrent terminal data-plane connections")
 	flag.StringVar(&cfg.HTTPAddr, "http-addr", getenv("LIVEAGENT_GATEWAY_HTTP_ADDR", defaultHTTPAddr()), "HTTP listen address")
 	flag.StringVar(&cfg.TLSCert, "tls-cert", getenv("LIVEAGENT_GATEWAY_TLS_CERT", ""), "TLS certificate path")
 	flag.StringVar(&cfg.TLSKey, "tls-key", getenv("LIVEAGENT_GATEWAY_TLS_KEY", ""), "TLS private key path")
@@ -57,12 +66,26 @@ func Load() *Config {
 	flag.DurationVar(&cfg.WebSocketHeartbeatGrace, "websocket-heartbeat-grace", getenvDuration("LIVEAGENT_GATEWAY_WS_HEARTBEAT_GRACE", 5*time.Second), "extra slack added to the browser WebSocket idle timeout (idle = 3x period + grace)")
 	flag.DurationVar(&cfg.WebSocketWriteTimeout, "websocket-write-timeout", getenvDuration("LIVEAGENT_GATEWAY_WS_WRITE_TIMEOUT", 10*time.Second), "write timeout for browser WebSocket connections")
 	flag.IntVar(&cfg.WebSocketWriteQueueSize, "websocket-write-queue-size", getenvInt("LIVEAGENT_GATEWAY_WS_WRITE_QUEUE_SIZE", 512), "write queue buffer size for browser WebSocket connections")
-	flag.IntVar(&cfg.GRPCMaxMessageBytes, "grpc-max-message-bytes", getenvInt("LIVEAGENT_GATEWAY_GRPC_MAX_MESSAGE_BYTES", DefaultGRPCMaxMessageBytes), "maximum gRPC message size in bytes")
+	flag.IntVar(
+		&cfg.MaxMessageBytes,
+		"max-message-bytes",
+		getenvInt(
+			"LIVEAGENT_GATEWAY_MAX_MESSAGE_BYTES",
+			getenvInt("LIVEAGENT_GATEWAY_GRPC_MAX_MESSAGE_BYTES", DefaultMaxMessageBytes),
+		),
+		"maximum WebSocket protobuf message size in bytes",
+	)
 	flag.IntVar(&cfg.RelayBufferSeconds, "relay-buffer-seconds", getenvInt("LIVEAGENT_GATEWAY_RELAY_BUFFER_SECONDS", 30), "seconds of chat events to buffer for brief reconnections")
-	flag.DurationVar(&cfg.CommandQueueTimeout, "command-queue-timeout", getenvDuration("LIVEAGENT_GATEWAY_COMMAND_QUEUE_TIMEOUT", 30*time.Second), "deprecated, no-op (kept for startup-script compatibility)")
+	os.Args = normalizeLegacyArgs(os.Args)
 	flag.Parse()
 
 	cfg.Token = strings.TrimSpace(cfg.Token)
+	cfg.AgentDB = strings.TrimSpace(cfg.AgentDB)
+	// Agent 凭证数据库是网关始终启用的基础能力；即使启动参数显式传空，也
+	// 回退到自动路径，不能通过空值关闭。
+	if cfg.AgentDB == "" {
+		cfg.AgentDB = defaultAgentDBPath()
+	}
 	cfg.TLSCert = strings.TrimSpace(cfg.TLSCert)
 	cfg.TLSKey = strings.TrimSpace(cfg.TLSKey)
 
@@ -70,8 +93,17 @@ func Load() *Config {
 		flag.Usage()
 		panic("gateway token is required")
 	}
-	if cfg.GRPCMaxMessageBytes <= 0 {
-		cfg.GRPCMaxMessageBytes = DefaultGRPCMaxMessageBytes
+	if cfg.MaxMessageBytes <= 0 {
+		cfg.MaxMessageBytes = DefaultMaxMessageBytes
+	}
+	if cfg.MaxAgentConnections <= 0 {
+		cfg.MaxAgentConnections = DefaultMaxAgentConnections
+	}
+	if cfg.MaxBrowserConnections <= 0 {
+		cfg.MaxBrowserConnections = DefaultMaxBrowserConnections
+	}
+	if cfg.MaxTerminalConnections <= 0 {
+		cfg.MaxTerminalConnections = DefaultMaxTerminalConnections
 	}
 	if cfg.ChatPrepareTimeout <= 0 {
 		cfg.ChatPrepareTimeout = 2 * time.Second
@@ -100,11 +132,75 @@ func Load() *Config {
 	if cfg.RelayBufferSeconds <= 0 {
 		cfg.RelayBufferSeconds = 30
 	}
-	if cfg.CommandQueueTimeout <= 0 {
-		cfg.CommandQueueTimeout = 30 * time.Second
-	}
 
 	return cfg
+}
+
+// normalizeLegacyArgs 在进入新版 FlagSet 前统一清理已删除参数。旧名称不再注册、
+// 不出现在帮助中，也不会恢复 v1/gRPC 或离线命令队列；真正未知的参数仍由 flag
+// 正常拒绝。消息大小参数仍有对应语义，因此转换为新名称；显式的新名称优先。
+func normalizeLegacyArgs(args []string) []string {
+	if len(args) == 0 {
+		return args
+	}
+
+	hasCurrentMessageLimit := false
+	for _, arg := range args[1:] {
+		if arg == "-max-message-bytes" || arg == "--max-message-bytes" ||
+			strings.HasPrefix(arg, "-max-message-bytes=") ||
+			strings.HasPrefix(arg, "--max-message-bytes=") {
+			hasCurrentMessageLimit = true
+			break
+		}
+	}
+
+	normalized := make([]string, 0, len(args))
+	normalized = append(normalized, args[0])
+	for index := 1; index < len(args); index++ {
+		arg := args[index]
+		if arg == "--" {
+			normalized = append(normalized, args[index:]...)
+			break
+		}
+		switch {
+		case arg == "-grpc-addr" || arg == "--grpc-addr" ||
+			arg == "-command-queue-timeout" || arg == "--command-queue-timeout":
+			if index+1 < len(args) {
+				index++
+			}
+		case strings.HasPrefix(arg, "-grpc-addr=") ||
+			strings.HasPrefix(arg, "--grpc-addr=") ||
+			strings.HasPrefix(arg, "-command-queue-timeout=") ||
+			strings.HasPrefix(arg, "--command-queue-timeout="):
+			continue
+		case arg == "-grpc-max-message-bytes" || arg == "--grpc-max-message-bytes":
+			if index+1 < len(args) {
+				if !hasCurrentMessageLimit {
+					normalized = append(normalized, "-max-message-bytes", args[index+1])
+				}
+				index++
+			}
+		case strings.HasPrefix(arg, "-grpc-max-message-bytes=") ||
+			strings.HasPrefix(arg, "--grpc-max-message-bytes="):
+			if !hasCurrentMessageLimit {
+				value := strings.SplitN(arg, "=", 2)[1]
+				normalized = append(normalized, "-max-message-bytes="+value)
+			}
+		default:
+			normalized = append(normalized, arg)
+		}
+	}
+	return normalized
+}
+
+func defaultAgentDBPath() string {
+	if dataDir := strings.TrimSpace(os.Getenv("LIVEAGENT_GATEWAY_DATA_DIR")); dataDir != "" {
+		return filepath.Join(dataDir, "gateway.db")
+	}
+	if configDir, err := os.UserConfigDir(); err == nil && strings.TrimSpace(configDir) != "" {
+		return filepath.Join(configDir, "liveagent", "gateway.db")
+	}
+	return filepath.Join(".", "liveagent-gateway.db")
 }
 
 func getenv(key, fallback string) string {

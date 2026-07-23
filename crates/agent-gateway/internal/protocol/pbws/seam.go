@@ -5,8 +5,7 @@ import (
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// session 层 Go seam 类型到 v2 proto 消息的映射；字段与 v1 JSON 线格式一一对应，
-// 保证两代协议对同一状态的表述一致。
+// session 层 Go seam 类型到 v2 proto 消息的映射。
 
 // statusEvent 映射 session.Status。
 func statusEvent(status session.Status) *gatewayv2.StatusEvent {
@@ -40,7 +39,7 @@ func chatActivityEvent(event session.ConversationActivityEvent) *gatewayv2.ChatA
 	}
 }
 
-// chatRunActivity 映射 session.RunActivity（空值字段语义与 v1 手写 map 一致）。
+// chatRunActivity 映射 session.RunActivity，并保留空值字段语义。
 func chatRunActivity(activity *session.RunActivity) *gatewayv2.ChatRunActivity {
 	if activity == nil {
 		return nil

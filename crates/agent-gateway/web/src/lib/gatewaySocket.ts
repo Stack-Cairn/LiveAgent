@@ -1223,6 +1223,33 @@ function shouldRecoverMemoryManageRequest(payload: MemoryManagePayload) {
   return RECOVERABLE_MEMORY_MANAGE_COMMANDS.has(command);
 }
 
+const ACTIVE_AGENT_STORAGE_KEY = "liveagent.gateway.activeAgent";
+const AGENT_ID_OPTIONAL_REQUEST_TYPES = new Set(["agent.list", "chat.activities"]);
+
+function requestRequiresAgentId(type: string): boolean {
+  return !AGENT_ID_OPTIONAL_REQUEST_TYPES.has(type);
+}
+
+function loadPersistedActiveAgent(): string {
+  try {
+    return (globalThis.localStorage?.getItem(ACTIVE_AGENT_STORAGE_KEY) ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function persistActiveAgent(agentId: string) {
+  try {
+    if (agentId) {
+      globalThis.localStorage?.setItem(ACTIVE_AGENT_STORAGE_KEY, agentId);
+    } else {
+      globalThis.localStorage?.removeItem(ACTIVE_AGENT_STORAGE_KEY);
+    }
+  } catch {
+    // 隐私模式等场景不可写：选择只在本页生命周期内生效。
+  }
+}
+
 export class GatewayWebSocketClient {
   readonly terminalStream: BrowserGatewayTerminalStreamClient;
   private socket: WebSocket | null = null;
@@ -1277,9 +1304,168 @@ export class GatewayWebSocketClient {
     this.noteForegroundWakeup(event);
   };
 
+  // activeAgentId 始终是明确目标；首次连接从 Agent 目录自动选择并持久化。
+  private activeAgentId = "";
+  private activeAgentSelectionPromise: Promise<string> | null = null;
+  // agents 目录：由打标 status 事件与 agent_list 响应维护，含离线条目。
+  private agents = new Map<string, AgentStatus>();
+  private agentsListeners = new Set<(agents: AgentStatus[]) => void>();
+  private pendingAgentEvents = new Map<string, Array<{ type: string; payload: unknown }>>();
+
   constructor(private readonly token: string) {
-    this.terminalStream = new BrowserGatewayTerminalStreamClient(token);
+    this.activeAgentId = loadPersistedActiveAgent();
+    this.terminalStream = new BrowserGatewayTerminalStreamClient(token, () => this.activeAgentId);
     this.installReconnectWakeups();
+  }
+
+  getActiveAgent(): string {
+    return this.activeAgentId;
+  }
+
+  // setActiveAgent 只接受明确目标；切换后重连，以目标 Agent 的快照重画状态。
+  setActiveAgent(agentId: string): void {
+    const next = agentId.trim();
+    if (!next) {
+      throw new Error("agent_id is required");
+    }
+    this.switchActiveAgent(next, true);
+  }
+
+  private switchActiveAgent(agentId: string, reconnect: boolean): void {
+    if (agentId === this.activeAgentId) {
+      return;
+    }
+    this.activeAgentId = agentId;
+    persistActiveAgent(agentId);
+    if (reconnect && this.socket && this.authenticated) {
+      this.handleDisconnect(new Error("active agent switched"));
+    } else if (!reconnect && this.socket && this.authenticated) {
+      this.flushPendingAgentEvents(agentId);
+      this.conversationStreams.handleConnected();
+      this.handleWorkspaceActivityConnected();
+    }
+  }
+
+  // listAgents 拉取 Agent 目录（含离线与仅签发凭证的条目）。
+  async listAgents(): Promise<AgentStatus[]> {
+    if (!this.activeAgentId) {
+      await this.ensureConnected();
+      await this.ensureActiveAgent();
+      await this.ensureConnected();
+      return this.snapshotAgents();
+    }
+    const result = await this.requestWithRecovery<{ agents: AgentStatus[] }>("agent.list", {});
+    const agents = Array.isArray(result?.agents) ? result.agents : [];
+    this.updateAgentDirectory(agents);
+    this.reconcileActiveAgent(agents);
+    return this.snapshotAgents();
+  }
+
+  subscribeAgents(listener: (agents: AgentStatus[]) => void): () => void {
+    this.agentsListeners.add(listener);
+    if (this.agents.size > 0) {
+      listener(this.snapshotAgents());
+    }
+    return () => {
+      this.agentsListeners.delete(listener);
+    };
+  }
+
+  private updateAgentDirectory(agents: AgentStatus[]): void {
+    this.agents.clear();
+    for (const agent of agents) {
+      const agentId = (agent.agent_id ?? "").trim();
+      if (agentId) {
+        this.agents.set(agentId, agent);
+      }
+    }
+    this.emitAgents();
+  }
+
+  private reconcileActiveAgent(agents: AgentStatus[], reconnect = true): string {
+    const current = this.activeAgentId;
+    if (current && agents.some((agent) => (agent.agent_id ?? "").trim() === current)) {
+      return current;
+    }
+    const preferred = [...agents]
+      .filter((agent) => (agent.agent_id ?? "").trim() !== "")
+      .sort((left, right) => {
+        if (left.online !== right.online) {
+          return left.online ? -1 : 1;
+        }
+        return (left.agent_id ?? "").localeCompare(right.agent_id ?? "");
+      })[0];
+    const agentId = (preferred?.agent_id ?? "").trim();
+    if (agentId) {
+      this.switchActiveAgent(agentId, reconnect);
+    } else if (current) {
+      this.switchActiveAgent("", reconnect);
+    }
+    return agentId;
+  }
+
+  private async ensureActiveAgent(): Promise<string> {
+    if (this.activeAgentId) {
+      return this.activeAgentId;
+    }
+    if (this.activeAgentSelectionPromise) {
+      return this.activeAgentSelectionPromise;
+    }
+    this.activeAgentSelectionPromise = (async () => {
+      const result = await this.sendConnectedRequest<{ agents: AgentStatus[] }>(
+        "agent.list",
+        {},
+        undefined,
+        "",
+      );
+      const agents = Array.isArray(result?.agents) ? result.agents : [];
+      this.updateAgentDirectory(agents);
+      const agentId = this.reconcileActiveAgent(agents, false);
+      if (!agentId) {
+        throw new Error("No Agent is available");
+      }
+      return agentId;
+    })().finally(() => {
+      this.activeAgentSelectionPromise = null;
+    });
+    return this.activeAgentSelectionPromise;
+  }
+
+  private matchesActiveAgent(agentId: string): boolean {
+    return this.activeAgentId !== "" && agentId === this.activeAgentId;
+  }
+
+  private bufferAgentEvent(agentId: string, type: string, payload: unknown): void {
+    const buffered = this.pendingAgentEvents.get(agentId) ?? [];
+    if (buffered.length >= 256) {
+      buffered.shift();
+    }
+    buffered.push({ type, payload });
+    this.pendingAgentEvents.set(agentId, buffered);
+  }
+
+  private flushPendingAgentEvents(agentId: string): void {
+    const buffered = this.pendingAgentEvents.get(agentId) ?? [];
+    this.pendingAgentEvents.clear();
+    for (const event of buffered) {
+      this.handleEvent(event.type, event.payload);
+    }
+  }
+
+  private snapshotAgents(): AgentStatus[] {
+    return [...this.agents.values()].sort((a, b) =>
+      (a.agent_id ?? "").localeCompare(b.agent_id ?? ""),
+    );
+  }
+
+  private emitAgents() {
+    if (this.agentsListeners.size === 0) {
+      return;
+    }
+    const snapshot = this.snapshotAgents();
+    for (const listener of this.agentsListeners) {
+      listener(snapshot);
+    }
   }
 
   noteForegroundWakeup(event?: Event) {
@@ -2140,7 +2326,7 @@ export class GatewayWebSocketClient {
     if (filter?.cwdEmpty === true) {
       payload.cwd_empty = true;
     }
-    // running_conversations v1 由网关顺带附上，v2 改由 chat_activities 帧提供：并行取回合并，返回形状不变。
+    // running_conversations 由 chat_activities 帧提供：并行取回合并，返回形状不变。
     const [list, runningConversations] = await Promise.all([
       this.requestWithRecovery<HistoryList>("history.list", payload),
       this.listChatActivities().catch(() => [] as RunningConversationSummary[]),
@@ -2756,6 +2942,21 @@ export class GatewayWebSocketClient {
     options?: GatewayRequestOptions,
   ): Promise<T> {
     await this.ensureConnected();
+    let agentId = this.activeAgentId;
+    if (requestRequiresAgentId(type)) {
+      agentId = await this.ensureActiveAgent();
+      // 首次自动选中会主动重连，以便只回放目标 Agent 的快照。
+      await this.ensureConnected();
+    }
+    return this.sendConnectedRequest<T>(type, payload, options, agentId);
+  }
+
+  private sendConnectedRequest<T>(
+    type: string,
+    payload: unknown,
+    options: GatewayRequestOptions | undefined,
+    agentId: string,
+  ): Promise<T> {
     const requestId = this.nextRequestId(type);
     return new Promise<T>((resolve, reject) => {
       const host = getRuntimeHost();
@@ -2782,7 +2983,7 @@ export class GatewayWebSocketClient {
       });
 
       try {
-        this.sendFrame(encodeRequestFrame(requestId, type, payload));
+        this.sendFrame(encodeRequestFrame(requestId, type, payload, agentId));
       } catch (error) {
         host.clearTimeout(timeoutId);
         this.pending.delete(requestId);
@@ -2908,8 +3109,14 @@ export class GatewayWebSocketClient {
             this.clearReconnectNoticeTimer();
             this.reconnectAttempt = 0;
             this.setConnectionState(true);
-            this.conversationStreams.handleConnected();
-            this.handleWorkspaceActivityConnected();
+            if (this.activeAgentId) {
+              this.conversationStreams.handleConnected();
+              this.handleWorkspaceActivityConnected();
+            } else {
+              void this.ensureActiveAgent().catch(() => {
+                // 没有可选 Agent 时由具体业务请求展示错误。
+              });
+            }
             if (!settled) {
               settled = true;
               resolve();
@@ -2978,7 +3185,7 @@ export class GatewayWebSocketClient {
       if (decoded.ok) {
         pending.resolve({ ok: true });
       } else {
-        // 服务端将以 4401 关闭：标记鉴权失败阻断自动重连，交由上层以 v1 同款鉴权错误 UX 呈现。
+        // 服务端将以 4401 关闭：标记鉴权失败并阻断自动重连，交由上层展示鉴权错误。
         this.authRejected = true;
         pending.reject(new Error(decoded.message || "unauthorized"));
       }
@@ -2986,7 +3193,7 @@ export class GatewayWebSocketClient {
     }
 
     if (decoded.kind === "ping") {
-      // 应用层心跳：回送 pong（镜像 v1 的 JSON ping/pong）。
+      // 应用层心跳：回送 protobuf pong。
       try {
         this.sendFrame(encodePongFrame(decoded.timestamp || Date.now()));
       } catch {
@@ -2996,6 +3203,20 @@ export class GatewayWebSocketClient {
     }
 
     if (decoded.kind === "event") {
+      if (decoded.type === "status.event" && decoded.agentId) {
+        // 打标状态帧始终更新目录；业务监听只接收当前明确目标。
+        const nextStatus = decoded.payload as AgentStatus;
+        const name = this.agents.get(decoded.agentId)?.name?.trim();
+        this.agents.set(decoded.agentId, name ? { ...nextStatus, name } : nextStatus);
+        this.emitAgents();
+      }
+      if (decoded.agentId && !this.activeAgentId) {
+        this.bufferAgentEvent(decoded.agentId, decoded.type, decoded.payload);
+        return;
+      }
+      if (decoded.agentId && !this.matchesActiveAgent(decoded.agentId)) {
+        return;
+      }
       this.handleEvent(decoded.type, decoded.payload);
       return;
     }
@@ -3014,7 +3235,7 @@ export class GatewayWebSocketClient {
     pending.resolve(decoded.payload);
   }
 
-  // 分发广播事件；payload 已由适配层还原为 v1 JSON 线格式，既有归一化器原样复用。
+  // 分发广播事件；payload 已由适配层还原为既有归一化器需要的对象形状。
   private handleEvent(type: string, payload: unknown) {
     if (type === "history.event") {
       const event = payload as GatewayHistoryEvent;
@@ -3138,6 +3359,7 @@ export class GatewayWebSocketClient {
     }
     this.socket = null;
     this.authenticated = false;
+    this.pendingAgentEvents.clear();
     this.setConnectionState(false);
 
     const pending = [...this.pending.values()];
@@ -3245,6 +3467,11 @@ export type GatewayWebSocketClientLike = {
   terminalStream: TerminalStreamClient;
   getStatus(): Promise<AgentStatus>;
   prepareChatRuntime(reason?: string): Promise<AgentStatus>;
+  // 多 Agent 寻址：活跃 Agent 选择、目录查询与目录订阅。
+  getActiveAgent(): string;
+  setActiveAgent(agentId: string): void;
+  listAgents(): Promise<AgentStatus[]>;
+  subscribeAgents(listener: (agents: AgentStatus[]) => void): () => void;
   subscribeStatus(listener: StatusListener): () => void;
   subscribeHistory(listener: HistoryListener): () => void;
   subscribeSettings(listener: SettingsListener): () => void;

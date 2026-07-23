@@ -2,7 +2,7 @@
 //!
 //! - [`types`]：对外事件 / DTO 类型与事件名常量
 //! - [`controller`]：`GatewayController` 生命周期与公开 API（new/start/apply_config/publish_*）
-//! - [`connection`]：gRPC 连接主循环、出站通道与端点构建
+//! - [`connection`]：WebSocket 连接主循环、出站通道与端点构建
 //! - [`envelope_handler`]：网关入站信封（`GatewayEnvelope`）分发
 //! - [`terminal`]：终端请求处理、终端流与 proto 转换
 //! - [`sftp`]：SFTP 请求处理与 proto 转换
@@ -30,23 +30,16 @@ use crate::services::memory::MemoryStore;
 use crate::services::tunnel::{TunnelProxy, TunnelStore};
 use crate::services::workspace_watch::WorkspaceWatchService;
 
-/// 网关 proto 生成模块。v2 帧壳经 prost `super::v1::` 路径复用 v1 业务消息，两版本必须并列嵌套。
-/// （纯消息生成，无 gRPC 服务；直接 include OUT_DIR 产物，不再依赖运行时 tonic。）
+/// 网关 v2 protobuf 生成模块。业务消息与帧壳属于同一包。
+/// 仅生成消息，不生成客户端或服务端。
 pub mod gateway_proto {
-    // v1 整包生成；AuthRequest/AuthResponse 等历史消息按 proto 纪律保留但不再构造：抑制 dead_code。
-    #[allow(dead_code)]
-    pub mod v1 {
-        include!(concat!(env!("OUT_DIR"), "/liveagent.gateway.v1.rs"));
-    }
-    // v2 整包生成，浏览器链路专用帧类型桌面端不构造：抑制 dead_code。
     #[allow(dead_code)]
     pub mod v2 {
         include!(concat!(env!("OUT_DIR"), "/liveagent.gateway.v2.rs"));
     }
 }
 
-/// 兼容别名：既有代码一律以 `proto::` 引用 v1 业务消息，别名使其零改动。
-pub use gateway_proto::v1 as proto;
+pub use gateway_proto::v2 as proto;
 
 mod chat;
 mod chat_inbox;
@@ -92,7 +85,7 @@ pub(crate) const GATEWAY_OUTBOUND_CONTROL_QUEUE_DEPTH: usize = 64;
 pub(crate) const GATEWAY_RECONNECT_MIN: Duration = Duration::from_millis(250);
 pub(crate) const GATEWAY_RECONNECT_MAX: Duration = Duration::from_secs(5);
 pub(crate) const GATEWAY_RECONNECT_STABLE_AFTER: Duration = Duration::from_secs(30);
-// v2 主链路存活看门狗（取代 v1 gRPC 的 h2 keepalive）：ServerHello 未给心跳周期时的回退值，
+// v2 主链路存活看门狗：ServerHello 未给心跳周期时的回退值，
 // 以及静默超 3×心跳周期发 WS Ping 探活后的宽限时长。
 pub(crate) const GATEWAY_WS_DEFAULT_HEARTBEAT_PERIOD: Duration = Duration::from_secs(30);
 pub(crate) const GATEWAY_WS_PROBE_GRACE: Duration = Duration::from_secs(10);

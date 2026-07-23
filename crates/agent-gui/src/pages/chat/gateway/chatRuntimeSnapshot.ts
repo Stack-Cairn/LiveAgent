@@ -32,6 +32,7 @@ export type GatewayRuntimeSnapshotEntry =
       kind: "user";
       text: string;
       attachments: PendingUploadedFile[];
+      messageId: string;
     }
   | { id: string; kind: "assistant"; text: string; round?: number; meta?: GatewayAssistantMeta }
   | { id: string; kind: "thinking"; text: string; round?: number }
@@ -253,11 +254,13 @@ function buildUserEntry(message: Message): GatewayRuntimeSnapshotEntry | null {
   if (!text.trim() && attachments.length === 0) {
     return null;
   }
+  const messageId = readMessageId(message, "runtime-user");
   return {
-    id: readMessageId(message, "runtime-user"),
+    id: messageId,
     kind: "user",
     text,
     attachments,
+    messageId,
   };
 }
 

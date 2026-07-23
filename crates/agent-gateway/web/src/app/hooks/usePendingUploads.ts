@@ -21,6 +21,7 @@ import { formatTranslation } from "../historyUtils";
 
 type UsePendingUploadsParams = {
   token: string;
+  resolveAgentID: () => Promise<string>;
   historyShareToken: string | null;
   settingsSyncReady: boolean;
   settingsOpen: boolean;
@@ -39,6 +40,7 @@ type UsePendingUploadsParams = {
 export function usePendingUploads(params: UsePendingUploadsParams) {
   const {
     token,
+    resolveAgentID,
     historyShareToken,
     settingsSyncReady,
     settingsOpen,
@@ -201,11 +203,13 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       const ignoredForLimit = filesToImport.length - importBatch.length;
       setUploadingFiles(true);
       try {
-        const result = await importReadableFiles(token, workdir, importBatch);
+        const agentID = await resolveAgentID();
+        const result = await importReadableFiles(token, agentID, workdir, importBatch);
         // An import that settles after its upload context was invalidated
         // must not resurrect cleared attachments: files picked inside the
         // old workspace are not readable from the new one.
         if (
+          (await resolveAgentID()) !== agentID ||
           executionModeRef.current === "text" ||
           (isDisplayedConversation(targetConversationId) &&
             displayedConversationWorkdirRef.current.trim() !== workdir)
@@ -256,6 +260,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       getPendingUploadsForConversation,
       isDisplayedConversation,
       locale,
+      resolveAgentID,
       setPendingUploadsForConversation,
       setUploadingFiles,
       token,

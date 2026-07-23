@@ -10,13 +10,13 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/liveagent/agent-gateway/internal/config"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/shared"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
 func TestNewHTTPServerServesRootWithoutRedirect(t *testing.T) {
-	handler := NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager())
+	handler := NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager(), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "http://gateway.test/", nil)
 	rec := httptest.NewRecorder()
@@ -37,7 +37,7 @@ func TestNewHTTPServerServesRootWithoutRedirect(t *testing.T) {
 }
 
 func TestNewHTTPServerServesSpaFallbackWithoutRedirect(t *testing.T) {
-	handler := NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager())
+	handler := NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager(), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "http://gateway.test/history/session-123", nil)
 	rec := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestNewHTTPServerServesSpaFallbackWithoutRedirect(t *testing.T) {
 }
 
 func TestNewHTTPServerDoesNotFallbackMissingStaticAssetsToIndex(t *testing.T) {
-	handler := NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager())
+	handler := NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager(), nil)
 
 	for _, target := range []string{
 		"http://gateway.test/assets/missing-module.js",
@@ -79,7 +79,7 @@ func TestNewHTTPServerDoesNotFallbackMissingStaticAssetsToIndex(t *testing.T) {
 }
 
 func TestWebSocketRejectsForeignOrigin(t *testing.T) {
-	ts := httptest.NewServer(NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager()))
+	ts := httptest.NewServer(NewHTTPServer(&config.Config{Token: "dev-token"}, session.NewManager(), nil))
 	defer ts.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws/v2"
@@ -101,13 +101,13 @@ func TestWebSocketRejectsForeignOrigin(t *testing.T) {
 func TestPublicHistoryShareResolvesWithoutAuthorization(t *testing.T) {
 	sm := session.NewManager()
 	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
-	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot())
+	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(agentSession)
 
 	handler := NewHTTPServer(&config.Config{
 		Token:          "dev-token",
 		RequestTimeout: time.Second,
-	}, sm)
+	}, sm, nil)
 	req := httptest.NewRequest(http.MethodGet, "http://gateway.test/api/public/history-shares/share-token", nil)
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
@@ -116,7 +116,7 @@ func TestPublicHistoryShareResolvesWithoutAuthorization(t *testing.T) {
 		close(done)
 	}()
 
-	var outbound *gatewayv1.GatewayEnvelope
+	var outbound *gatewayv2.GatewayEnvelope
 	select {
 	case delivered := <-agentSession.Outbound():
 		delivered.Ack(nil)
@@ -132,16 +132,16 @@ func TestPublicHistoryShareResolvesWithoutAuthorization(t *testing.T) {
 		t.Fatalf("public share token = %q", shareReq.GetToken())
 	}
 
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: outbound.GetRequestId(),
 		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv1.AgentEnvelope_HistoryShareResolveResp{
-			HistoryShareResolveResp: &gatewayv1.HistoryShareResolveResponse{
+		Payload: &gatewayv2.AgentEnvelope_HistoryShareResolveResp{
+			HistoryShareResolveResp: &gatewayv2.HistoryShareResolveResponse{
 				ConversationId:    "conversation-1",
 				MessagesJson:      `[{"role":"user","content":"hello"}]`,
 				TotalMessageCount: 1,
 				RedactToolContent: true,
-				Conversation: &gatewayv1.ConversationSummary{
+				Conversation: &gatewayv2.ConversationSummary{
 					Id:           "conversation-1",
 					Title:        "Shared conversation",
 					CreatedAt:    10,
@@ -198,13 +198,13 @@ func publicHistoryShareErrorStatusForTest(t *testing.T, code int, message string
 
 	sm := session.NewManager()
 	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
-	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot())
+	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(agentSession)
 
 	handler := NewHTTPServer(&config.Config{
 		Token:          "dev-token",
 		RequestTimeout: time.Second,
-	}, sm)
+	}, sm, nil)
 	req := httptest.NewRequest(http.MethodGet, "http://gateway.test/api/public/history-shares/disabled-token", nil)
 	rec := httptest.NewRecorder()
 	done := make(chan struct{})
@@ -213,7 +213,7 @@ func publicHistoryShareErrorStatusForTest(t *testing.T, code int, message string
 		close(done)
 	}()
 
-	var outbound *gatewayv1.GatewayEnvelope
+	var outbound *gatewayv2.GatewayEnvelope
 	select {
 	case delivered := <-agentSession.Outbound():
 		delivered.Ack(nil)
@@ -222,11 +222,11 @@ func publicHistoryShareErrorStatusForTest(t *testing.T, code int, message string
 		t.Fatal("timed out waiting for public share request")
 	}
 
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: outbound.GetRequestId(),
 		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv1.AgentEnvelope_Error{
-			Error: &gatewayv1.ErrorResponse{
+		Payload: &gatewayv2.AgentEnvelope_Error{
+			Error: &gatewayv2.ErrorResponse{
 				Code:    int32(code),
 				Message: message,
 			},
@@ -245,7 +245,7 @@ func TestPublicHistoryShareReturnsUnavailableWhenAgentOffline(t *testing.T) {
 	handler := NewHTTPServer(&config.Config{
 		Token:          "dev-token",
 		RequestTimeout: time.Second,
-	}, session.NewManager())
+	}, session.NewManager(), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "http://gateway.test/api/public/history-shares/share-token", nil)
 	rec := httptest.NewRecorder()

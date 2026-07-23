@@ -88,7 +88,12 @@ test("decodeServerFrame dispatches on the oneof arm", () => {
     roundtrip(serverFrame({ request_id: "req-1", local_error: { message: "agent offline" } })),
     { agentOnline: false },
   );
-  assert.deepEqual(localError, { kind: "error", requestId: "req-1", message: "agent offline" });
+  assert.deepEqual(localError, {
+    kind: "error",
+    requestId: "req-1",
+    agentId: "",
+    message: "agent offline",
+  });
 
   // status 臂：带 request_id 是响应，空 request_id 是广播。
   const statusResponse = decodeServerFrame(
@@ -106,9 +111,9 @@ test("decodeServerFrame dispatches on the oneof arm", () => {
     roundtrip(serverFrame({ request_id: "req-3", ack: { ok: true } })),
     { agentOnline: false },
   );
-  assert.deepEqual(ack, { kind: "response", requestId: "req-3", payload: { ok: true } });
+  assert.deepEqual(ack, { kind: "response", requestId: "req-3", agentId: "", payload: { ok: true } });
 
-  // agent_response 的 error 臂映射为 v1 同款错误。
+  // agent_response 的 error 臂映射为统一请求错误。
   const agentError = decodeServerFrame(
     roundtrip(
       serverFrame({
@@ -118,14 +123,35 @@ test("decodeServerFrame dispatches on the oneof arm", () => {
     ),
     { agentOnline: false },
   );
-  assert.deepEqual(agentError, { kind: "error", requestId: "req-4", message: "boom" });
+  assert.deepEqual(agentError, { kind: "error", requestId: "req-4", agentId: "", message: "boom" });
 
   // 空载荷帧被忽略。
   const empty = decodeServerFrame(pb.create(v2.WebServerFrameSchema, {}), { agentOnline: false });
   assert.equal(empty, null);
 });
 
-test("chat_event payload_json roundtrips to the identical v1 event object", () => {
+test("agent_list status entries preserve optional client names", () => {
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "agents-with-names",
+        agent_list: {
+          agents: [
+            { agent_id: "agent-a", online: true, name: "Office desktop" },
+            { agent_id: "agent-b", online: false },
+          ],
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+
+  assert.equal(decoded.kind, "response");
+  assert.equal(decoded.payload.agents[0].name, "Office desktop");
+  assert.equal(decoded.payload.agents[1].name, undefined);
+});
+
+test("chat_event payload_json roundtrips to the expected event object", () => {
   const payload = {
     type: "token",
     conversation_id: "conversation-1",
@@ -192,7 +218,7 @@ test("process_state injects the client-tracked agent_online flag", () => {
   assert.equal(online.payload.agent_online, true);
   assert.equal(online.payload.revision, 7);
   assert.equal(online.payload.processes[0].started_at, 1700000000000);
-  // 未置位的 optional finished_at / exit_code 不出现（v1 同语义）。
+  // 未置位的 optional finished_at / exit_code 不出现在结果中。
   assert.equal("finished_at" in online.payload.processes[0], false);
   assert.equal("exit_code" in online.payload.processes[0], false);
 
@@ -200,9 +226,9 @@ test("process_state injects the client-tracked agent_online flag", () => {
   assert.equal(offline.payload.agent_online, false);
 });
 
-test("encodeRequestFrame maps v1 request types onto GatewayEnvelope arms", () => {
+test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
   const listFrame = decodeClientFrame(
-    encodeRequestFrame("req-1", "history.list", { page: 2, page_size: 50, cwd: "/tmp/p" }),
+    encodeRequestFrame("req-1", "history.list", { page: 2, page_size: 50, cwd: "/tmp/p" }, "agent-a"),
   );
   assert.equal(listFrame.requestId, "req-1");
   assert.equal(listFrame.payload.case, "agentRequest");
@@ -222,7 +248,7 @@ test("encodeRequestFrame maps v1 request types onto GatewayEnvelope arms", () =>
       project_path_key: "/workspace",
       cols: 120,
       rows: 40,
-    }),
+    }, "agent-a"),
   );
   assert.equal(terminalFrame.payload.value.payload.case, "terminalRequest");
   assert.equal(terminalFrame.payload.value.payload.value.action, "create");
@@ -247,11 +273,15 @@ test("encodeRequestFrame maps v1 request types onto GatewayEnvelope arms", () =>
         ],
         queue_policy: "auto",
       },
-    }),
+    }, "agent-a"),
   );
   assert.equal(commandFrame.payload.case, "chatCommand");
   assert.equal(commandFrame.payload.value.request.uploadedFiles[0].sizeBytes, 4102444800000n);
 
+  assert.throws(
+    () => encodeRequestFrame("missing-agent", "status.get", {}),
+    /agent_id is required/,
+  );
   assert.throws(
     () => encodeRequestFrame("req-4", "not.a.request", {}),
     /unsupported gateway request type/,

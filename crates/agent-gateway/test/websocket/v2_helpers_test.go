@@ -14,7 +14,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/liveagent/agent-gateway/internal/config"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/protocol/pbws"
 	"github.com/liveagent/agent-gateway/internal/session"
@@ -65,7 +64,7 @@ func sendProtoFrame(t *testing.T, conn *websocket.Conn, frame proto.Message) {
 	}
 }
 
-// receiveWebFrame 读取一条 WebServerFrame，跳过与断言无关的周期/广播帧（对应 v1 harness
+// receiveWebFrame 读取一条 WebServerFrame，跳过与断言无关的周期/广播帧（测试 helper
 // 过滤集）；带关联 id 的 status 是 status_get / chat_prepare 的响应，不过滤。
 func receiveWebFrame(t *testing.T, conn *websocket.Conn) *gatewayv2.WebServerFrame {
 	t.Helper()
@@ -146,17 +145,17 @@ func newV2BrowserTest(t *testing.T) (*session.Manager, *session.AgentSession, *w
 
 	sm := session.NewManager()
 	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
-	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot())
+	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(agentSession)
 
-	handler := pbws.NewServer(newV2TestConfig(), sm).BrowserHandler()
+	handler := pbws.NewServer(newV2TestConfig(), sm, nil).BrowserHandler()
 	conn, cleanup := dialV2(t, handler)
 	helloV2(t, conn, "ws-token")
 	return sm, agentSession, conn, cleanup
 }
 
 // readOutboundEnvelope 取出网关发往桌面端的下一条信封并 Ack。
-func readOutboundEnvelope(t *testing.T, agentSession *session.AgentSession) *gatewayv1.GatewayEnvelope {
+func readOutboundEnvelope(t *testing.T, agentSession *session.AgentSession) *gatewayv2.GatewayEnvelope {
 	t.Helper()
 	select {
 	case outbound := <-agentSession.Outbound():
@@ -180,11 +179,11 @@ func answerChatRuntimeProbe(
 	if !strings.HasPrefix(requestID, "chat-runtime-wake-") || envelope.GetPing() == nil {
 		t.Fatalf("chat runtime probe = %#v, want chat-runtime-wake-* Ping", envelope)
 	}
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: requestID,
 		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv1.AgentEnvelope_Pong{
-			Pong: &gatewayv1.PongResponse{Timestamp: envelope.GetPing().GetTimestamp()},
+		Payload: &gatewayv2.AgentEnvelope_Pong{
+			Pong: &gatewayv2.PongResponse{Timestamp: envelope.GetPing().GetTimestamp()},
 		},
 	})
 	return requestID
@@ -192,10 +191,10 @@ func answerChatRuntimeProbe(
 
 // dispatchStarted 以假桌面端身份上报 run 的 started 控制事件。
 func dispatchStarted(sm *session.Manager, runID string, conversationID string) {
-	sm.DispatchFromAgent(&gatewayv1.AgentEnvelope{
+	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
 		RequestId: runID,
-		Payload: &gatewayv1.AgentEnvelope_ChatControl{
-			ChatControl: &gatewayv1.ChatControlEvent{
+		Payload: &gatewayv2.AgentEnvelope_ChatControl{
+			ChatControl: &gatewayv2.ChatControlEvent{
 				RequestId:      runID,
 				ConversationId: conversationID,
 				Type:           "started",
