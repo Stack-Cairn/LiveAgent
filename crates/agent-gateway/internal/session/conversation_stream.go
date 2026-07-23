@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 // The conversation stream store is the authoritative relay state for chat:
@@ -64,6 +64,7 @@ const (
 // means the conversation is idle.
 type RunActivity struct {
 	ConversationID         string
+	AgentID                string
 	RunID                  string
 	ClientRequestID        string
 	State                  string
@@ -109,6 +110,7 @@ type ConversationEvent struct {
 // ConversationActivityEvent is the broadcast shape for the chat.activity hub.
 type ConversationActivityEvent struct {
 	ConversationID  string
+	AgentID         string
 	RunID           string
 	ClientRequestID string
 	Running         bool
@@ -120,6 +122,7 @@ type ConversationActivityEvent struct {
 // ChatCommandUpdate notifies the connection that issued a chat command about
 // pre-stream outcomes.
 type ChatCommandUpdate struct {
+	AgentID         string
 	RunID           string
 	ClientRequestID string
 	ConversationID  string
@@ -136,9 +139,11 @@ type streamSubscriber struct {
 }
 
 type conversationStream struct {
-	conversationID    string
-	streamEpoch       string
-	workdir           string
+	conversationID string
+	streamEpoch    string
+	workdir        string
+	// agentID 是会话流的归属 Agent；streams 以 agent_id + conversation_id 组合键索引。
+	agentID           string
 	lastSeq           int64
 	events            []*ConversationEvent
 	eventsBytes       int
@@ -158,6 +163,7 @@ type conversationStream struct {
 }
 
 type chatRunRecord struct {
+	agentID         string
 	conversationID  string
 	clientRequestID string
 	// userMessageSeeded marks runs whose user_message the gateway appended at
@@ -168,6 +174,10 @@ type chatRunRecord struct {
 	// run started via supersession still protects its seeded user_message
 	// from retention eviction.
 	firstSeededSeq int64
+	// userMessageIdentityForwarded records that the desktop's authoritative
+	// message_id enrichment was appended after a gateway-seeded user_message.
+	// Reconnect replays of the desktop echo are swallowed after the first one.
+	userMessageIdentityForwarded bool
 	// deferredSeeds holds seeded payloads of a command accepted while another
 	// run was active: appended only when this run actually starts (or fails),
 	// dropped when it parks in the desktop prompt queue — so a queue-bound
@@ -226,6 +236,7 @@ type chatCommandUpdateRecord struct {
 
 type pendingChatRun struct {
 	runID           string
+	agentID         string
 	clientRequestID string
 	workdir         string
 	seeded          []map[string]any
@@ -245,7 +256,7 @@ type conversationStreamStore struct {
 	activityHub *chatActivityHub
 
 	reaperOnce sync.Once
-	isOnline   func() bool
+	isOnline   func(string) bool
 
 	// tunable in tests
 	eventRetention       time.Duration
@@ -258,7 +269,7 @@ type conversationStreamStore struct {
 	reaperInterval       time.Duration
 }
 
-func newConversationStreamStore(isOnline func() bool) *conversationStreamStore {
+func newConversationStreamStore(isOnline func(string) bool) *conversationStreamStore {
 	return &conversationStreamStore{
 		streams:              make(map[string]*conversationStream),
 		pendingRuns:          make(map[string]*pendingChatRun),
@@ -279,16 +290,28 @@ func newConversationStreamStore(isOnline func() bool) *conversationStreamStore {
 	}
 }
 
-func (s *conversationStreamStore) streamLocked(conversationID string, now time.Time) *conversationStream {
-	stream := s.streams[conversationID]
+func agentScopedKey(agentID, value string) string {
+	return strings.TrimSpace(agentID) + "\x00" + strings.TrimSpace(value)
+}
+
+func conversationStreamKey(agentID, conversationID string) string {
+	return agentScopedKey(agentID, conversationID)
+}
+
+func (s *conversationStreamStore) streamLocked(agentID, conversationID string, now time.Time) *conversationStream {
+	agentID = strings.TrimSpace(agentID)
+	conversationID = strings.TrimSpace(conversationID)
+	key := conversationStreamKey(agentID, conversationID)
+	stream := s.streams[key]
 	if stream == nil {
 		stream = &conversationStream{
+			agentID:        agentID,
 			conversationID: conversationID,
 			streamEpoch:    uuid.NewString(),
 			subscribers:    make(map[int]*streamSubscriber),
 			updatedAt:      now,
 		}
-		s.streams[conversationID] = stream
+		s.streams[key] = stream
 		s.startReaper()
 	}
 	return stream
@@ -334,6 +357,7 @@ func (s *conversationStreamStore) evictStreamLocked(stream *conversationStream, 
 // Cleanup or when the subscriber overflows (check Overflowed, then
 // re-subscribe with after_seq to resume without loss).
 type ConversationSubscription struct {
+	AgentID        string
 	ConversationID string
 	StreamEpoch    string
 	LatestSeq      int64
@@ -347,13 +371,18 @@ type ConversationSubscription struct {
 }
 
 func (m *Manager) SubscribeConversationStream(
+	agentID string,
 	conversationID string,
 	afterSeq int64,
 	clientEpoch string,
 ) *ConversationSubscription {
 	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
 	conversationID = strings.TrimSpace(conversationID)
 	clientEpoch = strings.TrimSpace(clientEpoch)
+	if agentID == "" || conversationID == "" {
+		return nil
+	}
 	if afterSeq < 0 {
 		afterSeq = 0
 	}
@@ -361,7 +390,7 @@ func (m *Manager) SubscribeConversationStream(
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	stream := s.streamLocked(conversationID, now)
+	stream := s.streamLocked(agentID, conversationID, now)
 	s.evictStreamLocked(stream, now)
 
 	reset := clientEpoch != "" && clientEpoch != stream.streamEpoch
@@ -410,7 +439,7 @@ func (m *Manager) SubscribeConversationStream(
 	cleanup := func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		current := s.streams[conversationID]
+		current := s.streams[conversationStreamKey(agentID, conversationID)]
 		if current == nil {
 			return
 		}
@@ -429,6 +458,7 @@ func (m *Manager) SubscribeConversationStream(
 	}
 
 	return &ConversationSubscription{
+		AgentID:        agentID,
 		ConversationID: conversationID,
 		StreamEpoch:    stream.streamEpoch,
 		LatestSeq:      stream.lastSeq,
@@ -443,7 +473,8 @@ func (m *Manager) SubscribeConversationStream(
 }
 
 // ActiveConversationActivities returns the current activity of every
-// conversation with an active run (for history.list hydration).
+// conversation with an active run (for history.list hydration). Each entry
+// is stamped with its stream's owning agent.
 func (m *Manager) ActiveConversationActivities() []RunActivity {
 	s := m.convStreams
 	s.mu.Lock()
@@ -451,7 +482,9 @@ func (m *Manager) ActiveConversationActivities() []RunActivity {
 	activities := make([]RunActivity, 0, len(s.streams))
 	for _, stream := range s.streams {
 		if stream.activity != nil {
-			activities = append(activities, *stream.activity)
+			activity := *stream.activity
+			activity.AgentID = stream.agentID
+			activities = append(activities, activity)
 		}
 	}
 	return activities
@@ -572,7 +605,7 @@ func (s *conversationStreamStore) runStartedLocked(
 			// The gateway-accepted command actually started: append the
 			// run_started log event now. StartedSeq keeps covering the seeded
 			// user_message so the whole run stays replayable.
-			s.flushDeferredSeedsLocked(stream, runID, s.runRecordLocked(runID, stream.conversationID), now)
+			s.flushDeferredSeedsLocked(stream, runID, s.runRecordLocked(stream.agentID, runID, stream.conversationID), now)
 			payload := map[string]any{}
 			if stream.activity.ClientRequestID != "" {
 				payload["client_request_id"] = stream.activity.ClientRequestID
@@ -600,7 +633,7 @@ func (s *conversationStreamStore) runStartedLocked(
 	if workdir = strings.TrimSpace(workdir); workdir != "" {
 		stream.workdir = workdir
 	}
-	record := s.runRecordLocked(runID, stream.conversationID)
+	record := s.runRecordLocked(stream.agentID, runID, stream.conversationID)
 	s.flushDeferredSeedsLocked(stream, runID, record, now)
 	payload := map[string]any{}
 	if record.clientRequestID != "" {
@@ -666,7 +699,7 @@ func (s *conversationStreamStore) runFinishedLocked(
 			payload[key] = value
 		}
 	}
-	record := s.runRecordLocked(runID, stream.conversationID)
+	record := s.runRecordLocked(stream.agentID, runID, stream.conversationID)
 	if record.clientRequestID != "" {
 		payload["client_request_id"] = record.clientRequestID
 	}
@@ -682,7 +715,7 @@ func (s *conversationStreamStore) runFinishedLocked(
 	if len(stream.finishedRuns) > conversationFinishedRunMemory {
 		evicted := stream.finishedRuns[0]
 		stream.finishedRuns = stream.finishedRuns[1:]
-		delete(s.runs, evicted)
+		delete(s.runs, agentScopedKey(stream.agentID, evicted))
 	}
 	if stream.latestSnapshot != nil && stream.latestSnapshot.RunID == runID {
 		stream.latestSnapshot = nil
@@ -706,7 +739,7 @@ func (s *conversationStreamStore) resurrectRunLocked(
 	stream *conversationStream,
 	runID string,
 ) bool {
-	record := s.runs[runID]
+	record := s.runs[agentScopedKey(stream.agentID, runID)]
 	if record == nil || !record.lostInferred {
 		return false
 	}
@@ -756,11 +789,12 @@ func (s *conversationStreamStore) markRunQueuedLocked(
 	s.publishActivityLocked(stream, now)
 }
 
-func (s *conversationStreamStore) runRecordLocked(runID string, conversationID string) *chatRunRecord {
-	record := s.runs[runID]
+func (s *conversationStreamStore) runRecordLocked(agentID, runID, conversationID string) *chatRunRecord {
+	key := agentScopedKey(agentID, runID)
+	record := s.runs[key]
 	if record == nil {
-		record = &chatRunRecord{conversationID: conversationID}
-		s.runs[runID] = record
+		record = &chatRunRecord{agentID: agentID, conversationID: conversationID}
+		s.runs[key] = record
 	} else if record.conversationID == "" {
 		record.conversationID = conversationID
 	}
@@ -770,6 +804,7 @@ func (s *conversationStreamStore) runRecordLocked(runID string, conversationID s
 func (s *conversationStreamStore) publishActivityLocked(stream *conversationStream, now time.Time) {
 	event := ConversationActivityEvent{
 		ConversationID: stream.conversationID,
+		AgentID:        stream.agentID,
 		Workdir:        stream.workdir,
 		UpdatedAt:      now,
 	}
@@ -790,14 +825,20 @@ func (s *conversationStreamStore) publishActivityLocked(stream *conversationStre
 // WatchChatCommand registers a watcher for pre-stream command outcomes
 // (bound / queued_in_gui / failed). The latest update is replayed immediately
 // so a reconnecting deduplicated submit cannot miss an earlier transition.
-func (m *Manager) WatchChatCommand(runID string) (<-chan ChatCommandUpdate, func()) {
+func (m *Manager) WatchChatCommand(agentID string, runID string) (<-chan ChatCommandUpdate, func()) {
 	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
 	runID = strings.TrimSpace(runID)
+	key := agentScopedKey(agentID, runID)
 	ch := make(chan ChatCommandUpdate, 4)
+	if agentID == "" || runID == "" {
+		close(ch)
+		return ch, func() {}
+	}
 
 	s.mu.Lock()
-	s.commandWatchers[runID] = append(s.commandWatchers[runID], ch)
-	if record, ok := s.commandUpdates[runID]; ok {
+	s.commandWatchers[key] = append(s.commandWatchers[key], ch)
+	if record, ok := s.commandUpdates[key]; ok {
 		ch <- record.update
 	}
 	s.mu.Unlock()
@@ -805,29 +846,32 @@ func (m *Manager) WatchChatCommand(runID string) (<-chan ChatCommandUpdate, func
 	cleanup := func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		watchers := s.commandWatchers[runID]
+		watchers := s.commandWatchers[key]
 		for i, watcher := range watchers {
 			if watcher == ch {
-				s.commandWatchers[runID] = append(watchers[:i], watchers[i+1:]...)
+				s.commandWatchers[key] = append(watchers[:i], watchers[i+1:]...)
 				// All sends happen under s.mu after a registration check, so
 				// closing here is safe and releases the forwarder goroutine.
 				close(ch)
 				break
 			}
 		}
-		if len(s.commandWatchers[runID]) == 0 {
-			delete(s.commandWatchers, runID)
+		if len(s.commandWatchers[key]) == 0 {
+			delete(s.commandWatchers, key)
 		}
 	}
 	return ch, cleanup
 }
 
 func (s *conversationStreamStore) fireCommandUpdateLocked(update ChatCommandUpdate) {
-	if strings.TrimSpace(update.RunID) == "" {
+	update.AgentID = strings.TrimSpace(update.AgentID)
+	update.RunID = strings.TrimSpace(update.RunID)
+	if update.AgentID == "" || update.RunID == "" {
 		return
 	}
-	s.commandUpdates[update.RunID] = chatCommandUpdateRecord{update: update, at: time.Now()}
-	for _, watcher := range s.commandWatchers[update.RunID] {
+	key := agentScopedKey(update.AgentID, update.RunID)
+	s.commandUpdates[key] = chatCommandUpdateRecord{update: update, at: time.Now()}
+	for _, watcher := range s.commandWatchers[key] {
 		select {
 		case watcher <- update:
 		default:
@@ -837,6 +881,7 @@ func (s *conversationStreamStore) fireCommandUpdateLocked(update ChatCommandUpda
 
 // ChatCommandStart is the accepted-command result returned to the transport.
 type ChatCommandStart struct {
+	AgentID        string
 	RunID          string
 	ConversationID string
 	AcceptedSeq    int64
@@ -847,25 +892,28 @@ type ChatCommandStart struct {
 // client_request_id. The lookup and StartChatCommand share the same store mutex;
 // callers may use this as a fast path, while StartChatCommand remains the
 // authoritative atomic check for concurrent submissions.
-func (m *Manager) LookupChatCommand(clientRequestID string) (ChatCommandStart, bool) {
+func (m *Manager) LookupChatCommand(agentID string, clientRequestID string) (ChatCommandStart, bool) {
 	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
 	clientRequestID = strings.TrimSpace(clientRequestID)
-	if clientRequestID == "" {
+	if agentID == "" || clientRequestID == "" {
 		return ChatCommandStart{}, false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.lookupChatCommandLocked(clientRequestID)
+	return s.lookupChatCommandLocked(agentID, clientRequestID)
 }
 
 func (s *conversationStreamStore) lookupChatCommandLocked(
+	agentID string,
 	clientRequestID string,
 ) (ChatCommandStart, bool) {
-	record := s.commandDedup[clientRequestID]
+	record := s.commandDedup[agentScopedKey(agentID, clientRequestID)]
 	if record == nil || strings.TrimSpace(record.runID) == "" {
 		return ChatCommandStart{}, false
 	}
 	return ChatCommandStart{
+		AgentID:        agentID,
 		RunID:          record.runID,
 		ConversationID: record.conversationID,
 		AcceptedSeq:    record.acceptedSeq,
@@ -874,23 +922,26 @@ func (s *conversationStreamStore) lookupChatCommandLocked(
 }
 
 func (s *conversationStreamStore) updateChatCommandDedupeLocked(
+	agentID string,
 	clientRequestID string,
 	runID string,
 	conversationID string,
 	acceptedSeq int64,
 	now time.Time,
 ) {
+	agentID = strings.TrimSpace(agentID)
 	clientRequestID = strings.TrimSpace(clientRequestID)
-	if clientRequestID == "" || strings.TrimSpace(runID) == "" {
+	if agentID == "" || clientRequestID == "" || strings.TrimSpace(runID) == "" {
 		return
 	}
-	record := s.commandDedup[clientRequestID]
+	key := agentScopedKey(agentID, clientRequestID)
+	record := s.commandDedup[key]
 	if record == nil {
 		record = &chatCommandDedupeRecord{
 			runID:     strings.TrimSpace(runID),
 			createdAt: now,
 		}
-		s.commandDedup[clientRequestID] = record
+		s.commandDedup[key] = record
 	}
 	if record.runID != strings.TrimSpace(runID) {
 		return
@@ -906,8 +957,10 @@ func (s *conversationStreamStore) updateChatCommandDedupeLocked(
 // StartChatCommand registers a webui-issued chat command. For a known
 // conversation the seeded payloads (rebased/user_message) are appended to the
 // log immediately; for a draft conversation they are buffered until the first
-// agent signal binds the run to a real conversation id.
+// agent signal binds the run to a real conversation id. agentID 是解析后的
+// 目标 Agent，盖到会话流上供事件打标与取消路由。
 func (m *Manager) StartChatCommand(
+	agentID string,
 	runID string,
 	conversationID string,
 	workdir string,
@@ -915,36 +968,46 @@ func (m *Manager) StartChatCommand(
 	seededPayloads []map[string]any,
 ) ChatCommandStart {
 	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
 	runID = strings.TrimSpace(runID)
+	key := agentScopedKey(agentID, runID)
 	conversationID = strings.TrimSpace(conversationID)
 	workdir = strings.TrimSpace(workdir)
 	clientRequestID = strings.TrimSpace(clientRequestID)
 	now := time.Now()
 
+	if agentID == "" || runID == "" {
+		return ChatCommandStart{}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if existing, ok := s.lookupChatCommandLocked(clientRequestID); ok {
+	if existing, ok := s.lookupChatCommandLocked(agentID, clientRequestID); ok {
 		return existing
 	}
-	s.updateChatCommandDedupeLocked(clientRequestID, runID, conversationID, 0, now)
+	s.updateChatCommandDedupeLocked(agentID, clientRequestID, runID, conversationID, 0, now)
 	s.startReaper()
 
 	if conversationID == "" {
-		s.pendingRuns[runID] = &pendingChatRun{
+		s.pendingRuns[key] = &pendingChatRun{
 			runID:           runID,
+			agentID:         agentID,
 			clientRequestID: clientRequestID,
 			workdir:         workdir,
 			seeded:          seededPayloads,
 			createdAt:       now,
 		}
-		return ChatCommandStart{RunID: runID}
+		return ChatCommandStart{AgentID: agentID, RunID: runID}
 	}
 
-	stream := s.streamLocked(conversationID, now)
+	stream := s.streamLocked(agentID, conversationID, now)
+	if agentID != "" {
+		stream.agentID = agentID
+	}
 	if workdir != "" {
 		stream.workdir = workdir
 	}
-	record := s.runRecordLocked(runID, conversationID)
+	record := s.runRecordLocked(agentID, runID, conversationID)
 	record.clientRequestID = clientRequestID
 
 	if stream.activity != nil {
@@ -956,12 +1019,13 @@ func (m *Manager) StartChatCommand(
 		// and the agent's own echo becomes authoritative.
 		record.deferredSeeds = seededPayloads
 		start := ChatCommandStart{
+			AgentID:        agentID,
 			RunID:          runID,
 			ConversationID: conversationID,
 			AcceptedSeq:    stream.lastSeq,
 		}
 		s.updateChatCommandDedupeLocked(
-			clientRequestID, start.RunID, start.ConversationID, start.AcceptedSeq, now,
+			agentID, clientRequestID, start.RunID, start.ConversationID, start.AcceptedSeq, now,
 		)
 		return start
 	}
@@ -972,12 +1036,13 @@ func (m *Manager) StartChatCommand(
 	acceptedSeq := s.appendSeededPayloadsLocked(stream, runID, clientRequestID, seededPayloads, now)
 	record.userMessageSeeded = seededPayloadsIncludeUserMessage(seededPayloads)
 	start := ChatCommandStart{
+		AgentID:        agentID,
 		RunID:          runID,
 		ConversationID: conversationID,
 		AcceptedSeq:    acceptedSeq,
 	}
 	s.updateChatCommandDedupeLocked(
-		clientRequestID, start.RunID, start.ConversationID, start.AcceptedSeq, now,
+		agentID, clientRequestID, start.RunID, start.ConversationID, start.AcceptedSeq, now,
 	)
 	return start
 }
@@ -1025,7 +1090,7 @@ func (s *conversationStreamStore) appendSeededPayloadsLocked(
 		}
 		event := s.appendEventLocked(stream, runID, eventType, cloned, now)
 		acceptedSeq = event.Seq
-		if record := s.runs[runID]; record != nil && record.firstSeededSeq == 0 {
+		if record := s.runs[agentScopedKey(stream.agentID, runID)]; record != nil && record.firstSeededSeq == 0 {
 			record.firstSeededSeq = event.Seq
 		}
 	}
@@ -1043,17 +1108,23 @@ func seededPayloadsIncludeUserMessage(seededPayloads []map[string]any) bool {
 
 // FailChatCommand fails a command that never produced a bound run (agent
 // unreachable, startup watchdog) or force-finishes its run when bound.
-func (m *Manager) FailChatCommand(runID string, errorCode string, message string) {
+func (m *Manager) FailChatCommand(agentID string, runID string, errorCode string, message string) {
 	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
 	runID = strings.TrimSpace(runID)
+	if agentID == "" || runID == "" {
+		return
+	}
+	key := agentScopedKey(agentID, runID)
 	now := time.Now()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if pending := s.pendingRuns[runID]; pending != nil {
-		delete(s.pendingRuns, runID)
+	if pending := s.pendingRuns[key]; pending != nil {
+		delete(s.pendingRuns, key)
 		s.fireCommandUpdateLocked(ChatCommandUpdate{
+			AgentID:         agentID,
 			RunID:           runID,
 			ClientRequestID: pending.clientRequestID,
 			Phase:           "failed",
@@ -1063,11 +1134,11 @@ func (m *Manager) FailChatCommand(runID string, errorCode string, message string
 		return
 	}
 
-	record := s.runs[runID]
+	record := s.runs[key]
 	if record == nil || record.conversationID == "" {
 		return
 	}
-	stream := s.streams[record.conversationID]
+	stream := s.streams[conversationStreamKey(agentID, record.conversationID)]
 	if stream == nil {
 		return
 	}
@@ -1080,12 +1151,17 @@ func (m *Manager) FailChatCommand(runID string, errorCode string, message string
 // ChatCommandSettled reports whether a command reached a state the startup
 // watchdog must not interfere with: its run started, finished, or was parked
 // in the desktop prompt queue.
-func (m *Manager) ChatCommandSettled(runID string) bool {
+func (m *Manager) ChatCommandSettled(agentID string, runID string) bool {
 	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
 	runID = strings.TrimSpace(runID)
+	if agentID == "" || runID == "" {
+		return false
+	}
+	key := agentScopedKey(agentID, runID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	record := s.runs[runID]
+	record := s.runs[key]
 	if record == nil {
 		return false
 	}
@@ -1095,7 +1171,7 @@ func (m *Manager) ChatCommandSettled(runID string) bool {
 	if record.conversationID == "" {
 		return false
 	}
-	stream := s.streams[record.conversationID]
+	stream := s.streams[conversationStreamKey(agentID, record.conversationID)]
 	if stream == nil {
 		return false
 	}
@@ -1110,15 +1186,19 @@ func (m *Manager) ChatCommandSettled(runID string) bool {
 // MarkConversationCancelling flips the active run into the cancelling state
 // and returns its run id for the caller's watchdog. The agent's real terminal
 // signal wins; ForceFinishRun is the fallback.
-func (m *Manager) MarkConversationCancelling(conversationID string, runID string) (string, bool) {
+func (m *Manager) MarkConversationCancelling(agentID string, conversationID string, runID string) (string, bool) {
 	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
 	conversationID = strings.TrimSpace(conversationID)
 	runID = strings.TrimSpace(runID)
+	if agentID == "" || conversationID == "" {
+		return "", false
+	}
 	now := time.Now()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	stream := s.streams[conversationID]
+	stream := s.streams[conversationStreamKey(agentID, conversationID)]
 	if stream == nil || stream.activity == nil {
 		return "", false
 	}
@@ -1133,18 +1213,23 @@ func (m *Manager) MarkConversationCancelling(conversationID string, runID string
 
 // ForceFinishRun finishes a run from a gateway-side watchdog. No-op when the
 // run already finished (exactly-once guard).
-func (m *Manager) ForceFinishRun(runID string, status string, errorCode string, message string) {
+func (m *Manager) ForceFinishRun(agentID string, runID string, status string, errorCode string, message string) {
 	s := m.convStreams
+	agentID = strings.TrimSpace(agentID)
 	runID = strings.TrimSpace(runID)
+	if agentID == "" || runID == "" {
+		return
+	}
+	key := agentScopedKey(agentID, runID)
 	now := time.Now()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	record := s.runs[runID]
+	record := s.runs[key]
 	if record == nil || record.conversationID == "" {
 		return
 	}
-	stream := s.streams[record.conversationID]
+	stream := s.streams[conversationStreamKey(agentID, record.conversationID)]
 	if stream == nil {
 		return
 	}
@@ -1158,7 +1243,11 @@ func (m *Manager) ForceFinishRun(runID string, status string, errorCode string, 
 // signals the gateway missed, and a run absent from both is finalized once
 // nothing has vouched for it within the grace window. Every vouch bumps
 // activity.UpdatedAt, so its staleness measures continuous absence.
-func (s *conversationStreamStore) onRuntimeStatus(event *gatewayv1.RuntimeStatusEvent, now time.Time) {
+func (s *conversationStreamStore) onRuntimeStatus(agentID string, event *gatewayv2.RuntimeStatusEvent, now time.Time) {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || event == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1166,7 +1255,7 @@ func (s *conversationStreamStore) onRuntimeStatus(event *gatewayv1.RuntimeStatus
 	for _, report := range event.GetActiveRuns() {
 		activeSet[report.GetRunId()] = true
 	}
-	finished := make(map[string]*gatewayv1.ChatRunReport, len(event.GetFinishedRuns()))
+	finished := make(map[string]*gatewayv2.ChatRunReport, len(event.GetFinishedRuns()))
 	for _, report := range event.GetFinishedRuns() {
 		finished[report.GetRunId()] = report
 	}
@@ -1174,7 +1263,7 @@ func (s *conversationStreamStore) onRuntimeStatus(event *gatewayv1.RuntimeStatus
 	// Reconcile only tracked activities; finished reports never resurrect a
 	// stream for a run this store is not tracking.
 	for _, stream := range s.streams {
-		if stream.activity == nil {
+		if stream.activity == nil || (agentID != "" && stream.agentID != agentID) {
 			continue
 		}
 		runID := stream.activity.RunID
@@ -1187,7 +1276,7 @@ func (s *conversationStreamStore) onRuntimeStatus(event *gatewayv1.RuntimeStatus
 			stream.activity.UpdatedAt = now
 			continue
 		}
-		record := s.runs[runID]
+		record := s.runs[agentScopedKey(stream.agentID, runID)]
 		revived := record != nil && record.revived
 		eventsFresh := !stream.lastEventAt.IsZero() &&
 			now.Sub(stream.lastEventAt) < s.runReportLostTimeout
@@ -1251,12 +1340,11 @@ func (s *conversationStreamStore) reap(now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	online := s.isOnline != nil && s.isOnline()
-
-	for conversationID, stream := range s.streams {
+	for streamKey, stream := range s.streams {
 		s.evictStreamLocked(stream, now)
 
 		if stream.activity != nil {
+			online := s.isOnline != nil && s.isOnline(stream.agentID)
 			// A run is stale only when NOTHING vouches for it: no stream
 			// events and no activity transition/report-vouch within the
 			// timeout (onRuntimeStatus bumps UpdatedAt for reported runs).
@@ -1279,9 +1367,9 @@ func (s *conversationStreamStore) reap(now time.Time) {
 			len(stream.subscribers) == 0 &&
 			now.Sub(stream.updatedAt) > s.idleRetention {
 			for _, finished := range stream.finishedRuns {
-				delete(s.runs, finished)
+				delete(s.runs, agentScopedKey(stream.agentID, finished))
 			}
-			delete(s.streams, conversationID)
+			delete(s.streams, streamKey)
 		}
 	}
 

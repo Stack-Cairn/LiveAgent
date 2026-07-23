@@ -34,10 +34,7 @@ export function AssistantStatus({
     >
       <Loader2
         aria-hidden="true"
-        className={cn(
-          "h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none",
-          iconClassName,
-        )}
+        className={cn("h-3.5 w-3.5 shrink-0 animate-spin", iconClassName)}
       />
       <span className={cn("shimmer", textClassName)}>{children}</span>
     </span>

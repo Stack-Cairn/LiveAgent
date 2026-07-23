@@ -12,12 +12,12 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 // EventPayload shapes a ChatEvent into a wire payload, decoding the JSON data
 // blob and trimming oversized tool-result content.
-func EventPayload(event *gatewayv1.ChatEvent, seq int64, workdirInput ...string) map[string]any {
+func EventPayload(event *gatewayv2.ChatEvent, seq int64, workdirInput ...string) map[string]any {
 	protoType := EventTypeName(event.GetType())
 	payload := map[string]any{
 		"type": protoType,
@@ -133,25 +133,25 @@ func countLines(s string) int {
 }
 
 // EventTypeName maps the protobuf ChatEvent type enum to its wire name.
-func EventTypeName(eventType gatewayv1.ChatEvent_ChatEventType) string {
+func EventTypeName(eventType gatewayv2.ChatEvent_ChatEventType) string {
 	switch eventType {
-	case gatewayv1.ChatEvent_TOKEN:
+	case gatewayv2.ChatEvent_TOKEN:
 		return "token"
-	case gatewayv1.ChatEvent_THINKING:
+	case gatewayv2.ChatEvent_THINKING:
 		return "thinking"
-	case gatewayv1.ChatEvent_TOOL_CALL:
+	case gatewayv2.ChatEvent_TOOL_CALL:
 		return "tool_call"
-	case gatewayv1.ChatEvent_TOOL_RESULT:
+	case gatewayv2.ChatEvent_TOOL_RESULT:
 		return "tool_result"
-	case gatewayv1.ChatEvent_DONE:
+	case gatewayv2.ChatEvent_DONE:
 		return "done"
-	case gatewayv1.ChatEvent_ERROR:
+	case gatewayv2.ChatEvent_ERROR:
 		return "error"
-	case gatewayv1.ChatEvent_TOOL_STATUS:
+	case gatewayv2.ChatEvent_TOOL_STATUS:
 		return "tool_status"
-	case gatewayv1.ChatEvent_HOSTED_SEARCH:
+	case gatewayv2.ChatEvent_HOSTED_SEARCH:
 		return "hosted_search"
-	case gatewayv1.ChatEvent_USER_MESSAGE:
+	case gatewayv2.ChatEvent_USER_MESSAGE:
 		return "user_message"
 	default:
 		return "message"

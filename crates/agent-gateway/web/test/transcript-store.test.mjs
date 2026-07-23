@@ -151,6 +151,30 @@ test("optimistic user bubble binds to its run keeping its key", () => {
   assert.equal(users[0].key, optimisticKey, "user bubble keeps its identity");
 });
 
+test("a desktop identity echo binds the live turn to its persisted message id", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(userMessage("run-1", 1, "same prompt"));
+  store.applyEvent(runStarted("run-1", 2));
+  store.applyEvent(userMessage("run-1", 3, "same prompt", { message_id: "m1" }));
+  store.applyHistorySnapshot(
+    [
+      {
+        id: "hu:m1",
+        kind: "user",
+        text: "same prompt",
+        attachments: [],
+        messageRef: messageRef("m1"),
+      },
+    ],
+    { mode: "replace" },
+  );
+  store.flush();
+
+  const users = allRows(store.getSnapshot()).filter((row) => row.kind === "user");
+  assert.equal(users.length, 1);
+  assert.equal(users[0].messageRef?.messageId, "m1");
+});
+
 test("failed run appends an error entry and clears busy", () => {
   const store = createTranscriptStore();
   store.applyEvent(runStarted("run-1", 1));
@@ -485,6 +509,7 @@ test("replace keeps the active exchange and trims its persisted echo", () => {
   store.addOptimisticUserEntry({ clientRequestId: "client-2", text: "new prompt" });
   store.applyEvent(userMessage("run-2", 1, "new prompt", { client_request_id: "client-2" }));
   store.applyEvent(runStarted("run-2", 2, { client_request_id: "client-2" }));
+  store.applyEvent(userMessage("run-2", 3, "new prompt", { message_id: "m2" }));
   store.flush();
   const userKey = allRows(store.getSnapshot()).find((row) => row.kind === "user" && row.text === "new prompt")?.key;
   assert.ok(userKey);
@@ -611,6 +636,144 @@ test("reset sync rebuilds the active turn from a runtime snapshot", () => {
   const text = allRows(snapshot).map((row) => rowText(row)).join("");
   assert.match(text, /rebuilt from snapshot/);
   assert.doesNotMatch(text, /will be lost/);
+});
+
+test("active sync trims a history-first copy of the running exchange", () => {
+  const store = createTranscriptStore();
+  store.applyHistorySnapshot(
+    [
+      {
+        id: "hu:m1",
+        kind: "user",
+        text: "明天是什么天气",
+        attachments: [],
+        messageRef: messageRef("m1"),
+      },
+      {
+        id: "ht:hu:m1>0",
+        kind: "assistant",
+        text: "请告诉我你所在的城市",
+        round: 1,
+      },
+    ],
+    { mode: "replace" },
+  );
+
+  store.applySync({
+    conversationId: "conv-1",
+    streamEpoch: "epoch-1",
+    latestSeq: 2,
+    reset: true,
+    activity: {
+      runId: "run-1",
+      state: "running",
+      startedSeq: 2,
+      toolStatus: "Vibing",
+      toolStatusIsCompaction: false,
+      updatedAt: 1,
+    },
+    snapshot: {
+      runId: "run-1",
+      revision: 2,
+      entriesJson: JSON.stringify([
+        {
+          id: "snapshot-user",
+          kind: "user",
+          text: "明天是什么天气",
+          attachments: [],
+          messageId: "m1",
+        },
+        {
+          id: "snapshot-assistant",
+          kind: "assistant",
+          text: "请告诉我你所在的城市",
+          round: 1,
+        },
+      ]),
+      toolStatus: "Vibing",
+      toolStatusIsCompaction: false,
+      asOfSeq: 2,
+    },
+    events: [],
+  });
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.equal(
+    allRows(snapshot).filter((row) => row.kind === "user").length,
+    1,
+    "history and runtime snapshot describe one prompt",
+  );
+  assert.equal(
+    allRows(snapshot).filter((row) => row.kind === "assistant").length,
+    1,
+    "the partial reply also renders from one source",
+  );
+  assert.equal(snapshot.activeRun?.runId, "run-1");
+});
+
+test("active sync preserves an older completed exchange with the same prompt text", () => {
+  const store = createTranscriptStore();
+  store.applyHistorySnapshot(
+    [
+      {
+        id: "hu:m1",
+        kind: "user",
+        text: "重复问题",
+        attachments: [],
+        messageRef: messageRef("m1"),
+      },
+      { id: "ht:hu:m1>0", kind: "assistant", text: "相同回答", round: 1 },
+    ],
+    { mode: "replace" },
+  );
+
+  store.applySync({
+    conversationId: "conv-1",
+    streamEpoch: "epoch-1",
+    latestSeq: 2,
+    reset: true,
+    activity: {
+      runId: "run-2",
+      state: "running",
+      startedSeq: 2,
+      toolStatus: "Vibing",
+      toolStatusIsCompaction: false,
+      updatedAt: 2,
+    },
+    snapshot: {
+      runId: "run-2",
+      revision: 2,
+      entriesJson: JSON.stringify([
+        {
+          id: "snapshot-user",
+          kind: "user",
+          text: "重复问题",
+          attachments: [],
+          messageId: "m2",
+        },
+        {
+          id: "snapshot-assistant",
+          kind: "assistant",
+          text: "相同回答，继续生成",
+          round: 1,
+        },
+      ]),
+      toolStatus: "Vibing",
+      toolStatusIsCompaction: false,
+      asOfSeq: 2,
+    },
+    events: [],
+  });
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.equal(allRows(snapshot).filter((row) => row.kind === "user").length, 2);
+  assert.equal(allRows(snapshot).filter((row) => row.kind === "assistant").length, 2);
+  const text = allRows(snapshot).map((row) => rowText(row)).join("\n");
+  assert.match(text, /相同回答/);
+  assert.match(text, /相同回答，继续生成/);
+  assert.equal(snapshot.activeRun?.runId, "run-2");
 });
 
 test("reset keeps the optimistic pending bubble and binds it on replay", () => {

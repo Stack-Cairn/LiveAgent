@@ -473,6 +473,8 @@ pub(crate) fn build_chat_event_envelope(
             proto::chat_event::ChatEventType::UserMessage as i32,
             json!({
                 "message": required_raw_string_field(object, "message")?,
+                "message_id": optional_string_field(object, "message_id")
+                    .or_else(|| optional_string_field(object, "messageId")),
                 "uploaded_files": object.get("uploaded_files")
                     .or_else(|| object.get("uploadedFiles"))
                     .cloned()

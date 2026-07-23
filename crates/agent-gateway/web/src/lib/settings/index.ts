@@ -280,8 +280,7 @@ const SYSTEM_THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
 export type RemoteSettings = {
   enabled: boolean;
   gatewayUrl: string;
-  grpcPort: number;
-  grpcEndpoint: string;
+  gatewayPort: number;
   token: string;
   agentId: string;
   autoReconnect: boolean;
@@ -970,20 +969,12 @@ function normalizeIntegerInRange(
   return Math.min(max, Math.max(min, value));
 }
 
-function normalizeGrpcEndpoint(input: unknown): string {
-  const value = normalizeOptionalText(input);
-  if (!value) return "";
-  if (/^https?:/i.test(value)) return normalizeBaseUrl(value);
-  return value.endsWith("/") ? value.slice(0, -1) : value;
-}
-
 export function normalizeRemoteSettings(input: unknown): RemoteSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     enabled: obj.enabled === true,
     gatewayUrl: normalizeBaseUrl(typeof obj.gatewayUrl === "string" ? obj.gatewayUrl : ""),
-    grpcPort: normalizeIntegerInRange(obj.grpcPort, 1, 65_535, 443),
-    grpcEndpoint: normalizeGrpcEndpoint(obj.grpcEndpoint),
+    gatewayPort: normalizeIntegerInRange(obj.gatewayPort, 1, 65_535, 443),
     token: normalizeApiKey(typeof obj.token === "string" ? obj.token : ""),
     agentId: normalizeOptionalText(obj.agentId),
     autoReconnect: obj.autoReconnect !== false,
@@ -2165,8 +2156,7 @@ export function getDefaultSettings(): AppSettings {
     remote: {
       enabled: false,
       gatewayUrl: "",
-      grpcPort: 443,
-      grpcEndpoint: "",
+      gatewayPort: 443,
       token: "",
       agentId: "",
       autoReconnect: true,

@@ -5,26 +5,40 @@ import (
 	"strings"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 type chatQueueSnapshotRecord struct {
-	event        *gatewayv1.ChatQueueEvent
+	event        *gatewayv2.ChatQueueEvent
 	sessionEpoch uint64
 }
 
-func (m *Manager) SubscribeChatQueueEvents() (<-chan *gatewayv1.ChatQueueEvent, func()) {
+// SubscribeChatQueueEvents 订阅提示队列事件并回放全部 Agent 的现存快照
+// （快照按 Agent 存于各自 entry，回放帧携带来源标签）。
+func (m *Manager) SubscribeChatQueueEvents() (<-chan Tagged[*gatewayv2.ChatQueueEvent], func()) {
+	replay := make([]Tagged[*gatewayv2.ChatQueueEvent], 0)
+	for _, agentID := range m.knownAgentIDs() {
+		entry := m.entryFor(agentID)
+		if entry == nil {
+			continue
+		}
+		entry.chatQueueSnapshotsMu.Lock()
+		conversationIDs := make([]string, 0, len(entry.chatQueueSnapshots))
+		for conversationID := range entry.chatQueueSnapshots {
+			conversationIDs = append(conversationIDs, conversationID)
+		}
+		sort.Strings(conversationIDs)
+		for _, conversationID := range conversationIDs {
+			replay = append(replay, Tagged[*gatewayv2.ChatQueueEvent]{
+				AgentID: agentID,
+				Event:   cloneChatQueueEvent(entry.chatQueueSnapshots[conversationID].event),
+			})
+		}
+		entry.chatQueueSnapshotsMu.Unlock()
+	}
+
 	m.syncHub.chatQueueMu.Lock()
-	replay := make([]*gatewayv1.ChatQueueEvent, 0, len(m.syncHub.chatQueueSnapshots))
-	conversationIDs := make([]string, 0, len(m.syncHub.chatQueueSnapshots))
-	for conversationID := range m.syncHub.chatQueueSnapshots {
-		conversationIDs = append(conversationIDs, conversationID)
-	}
-	sort.Strings(conversationIDs)
-	for _, conversationID := range conversationIDs {
-		replay = append(replay, cloneChatQueueEvent(m.syncHub.chatQueueSnapshots[conversationID].event))
-	}
-	ch := make(chan *gatewayv1.ChatQueueEvent, 128+len(replay))
+	ch := make(chan Tagged[*gatewayv2.ChatQueueEvent], 128+len(replay))
 	subID := m.syncHub.nextChatQueueSubID
 	m.syncHub.nextChatQueueSubID += 1
 	m.syncHub.chatQueueSubscribers[subID] = ch
@@ -43,23 +57,39 @@ func (m *Manager) SubscribeChatQueueEvents() (<-chan *gatewayv1.ChatQueueEvent, 
 	return ch, cleanup
 }
 
-func (m *Manager) ChatQueueSnapshot(conversationID string) (*gatewayv1.ChatQueueEvent, bool) {
+// knownAgentIDs 返回全部登记项 id（含离线），按字典序。
+func (m *Manager) knownAgentIDs() []string {
+	m.registry.mu.RLock()
+	ids := make([]string, 0, len(m.registry.agents))
+	for id := range m.registry.agents {
+		ids = append(ids, id)
+	}
+	m.registry.mu.RUnlock()
+	sort.Strings(ids)
+	return ids
+}
+
+func (m *Manager) ChatQueueSnapshot(agentID, conversationID string) (*gatewayv2.ChatQueueEvent, bool) {
 	key := strings.TrimSpace(conversationID)
 	if key == "" {
 		return nil, false
 	}
+	entry := m.entryFor(agentID)
+	if entry == nil {
+		return nil, false
+	}
 
-	m.syncHub.chatQueueMu.Lock()
-	defer m.syncHub.chatQueueMu.Unlock()
+	entry.chatQueueSnapshotsMu.Lock()
+	defer entry.chatQueueSnapshotsMu.Unlock()
 
-	record, ok := m.syncHub.chatQueueSnapshots[key]
+	record, ok := entry.chatQueueSnapshots[key]
 	if !ok {
 		return nil, false
 	}
 	return cloneChatQueueEvent(record.event), true
 }
 
-func (m *Manager) broadcastChatQueueEvent(event *gatewayv1.ChatQueueEvent) {
+func (m *Manager) broadcastChatQueueEvent(agentID string, event *gatewayv2.ChatQueueEvent) {
 	if event == nil {
 		return
 	}
@@ -68,24 +98,31 @@ func (m *Manager) broadcastChatQueueEvent(event *gatewayv1.ChatQueueEvent) {
 	if conversationID != "" {
 		normalized.ConversationId = conversationID
 	}
-	sessionEpoch := m.currentSessionEpoch()
+	entry := m.entryOrCreate(agentID)
+	if entry == nil {
+		return
+	}
+	sessionEpoch := m.sessionEpochOf(agentID)
 
-	m.syncHub.chatQueueMu.Lock()
 	if conversationID != "" {
-		if existing := m.syncHub.chatQueueSnapshots[conversationID]; existing.event != nil && existing.sessionEpoch == sessionEpoch {
+		entry.chatQueueSnapshotsMu.Lock()
+		if existing := entry.chatQueueSnapshots[conversationID]; existing.event != nil && existing.sessionEpoch == sessionEpoch {
 			existingRevision := existing.event.GetRevision()
 			incomingRevision := normalized.GetRevision()
 			if existingRevision > 0 && (incomingRevision == 0 || incomingRevision < existingRevision) {
-				m.syncHub.chatQueueMu.Unlock()
+				entry.chatQueueSnapshotsMu.Unlock()
 				return
 			}
 		}
-		m.syncHub.chatQueueSnapshots[conversationID] = chatQueueSnapshotRecord{
+		entry.chatQueueSnapshots[conversationID] = chatQueueSnapshotRecord{
 			event:        cloneChatQueueEvent(normalized),
 			sessionEpoch: sessionEpoch,
 		}
+		entry.chatQueueSnapshotsMu.Unlock()
 	}
-	subscribers := make([]chan *gatewayv1.ChatQueueEvent, 0, len(m.syncHub.chatQueueSubscribers))
+
+	m.syncHub.chatQueueMu.Lock()
+	subscribers := make([]chan Tagged[*gatewayv2.ChatQueueEvent], 0, len(m.syncHub.chatQueueSubscribers))
 	for _, ch := range m.syncHub.chatQueueSubscribers {
 		subscribers = append(subscribers, ch)
 	}
@@ -93,17 +130,27 @@ func (m *Manager) broadcastChatQueueEvent(event *gatewayv1.ChatQueueEvent) {
 
 	for _, ch := range subscribers {
 		select {
-		case ch <- cloneChatQueueEvent(normalized):
+		case ch <- Tagged[*gatewayv2.ChatQueueEvent]{AgentID: agentID, Event: cloneChatQueueEvent(normalized)}:
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
 }
 
-func cloneChatQueueEvent(event *gatewayv1.ChatQueueEvent) *gatewayv1.ChatQueueEvent {
+// sessionEpochOf 返回 agent_id 当前会话的 epoch；离线为 0。
+func (m *Manager) sessionEpochOf(agentID string) uint64 {
+	m.registry.mu.RLock()
+	defer m.registry.mu.RUnlock()
+	if entry := m.registry.agents[normalizeAgentKey(agentID)]; entry != nil && entry.session != nil {
+		return entry.sessionEpoch
+	}
+	return 0
+}
+
+func cloneChatQueueEvent(event *gatewayv2.ChatQueueEvent) *gatewayv2.ChatQueueEvent {
 	if event == nil {
 		return nil
 	}
-	return &gatewayv1.ChatQueueEvent{
+	return &gatewayv2.ChatQueueEvent{
 		ConversationId: event.GetConversationId(),
 		SnapshotJson:   event.GetSnapshotJson(),
 		Revision:       event.GetRevision(),

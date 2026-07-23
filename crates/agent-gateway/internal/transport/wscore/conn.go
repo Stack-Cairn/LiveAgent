@@ -10,7 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// 写泵行为常量，逐字保持 v1 取值。
+// 写泵行为常量，保持既有稳定取值。
 const (
 	// DefaultQueueSize 是数据队列默认容量。
 	DefaultQueueSize = 512

@@ -14,7 +14,7 @@ func newCommandTestManager(t *testing.T) (*session.Manager, *session.AgentSessio
 	t.Helper()
 	sm := session.NewManager()
 	sm.RecordAuthentication("desktop-agent", "test", "session-test")
-	sess := session.NewAgentSession(sm.LatestAuthSnapshot())
+	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
 	sm.SetSession(sess)
 	t.Cleanup(func() { sm.ClearSession(sess) })
 	return sm, sess
@@ -41,7 +41,7 @@ func TestDispatchAcceptedCommandUsesDeliveryTimeout(t *testing.T) {
 	t.Parallel()
 
 	sm, _ := newCommandTestManager(t)
-	start := sm.StartChatCommand("run-delivery-timeout", "conv-1", "", "client-1", nil)
+	start := sm.StartChatCommand("desktop-agent", "run-delivery-timeout", "conv-1", "", "client-1", nil)
 	cfg := &config.Config{ChatDeliveryTimeout: 30 * time.Millisecond}
 	body := handler.ChatRequestBody{
 		ConversationID:  "conv-1",
@@ -51,14 +51,14 @@ func TestDispatchAcceptedCommandUsesDeliveryTimeout(t *testing.T) {
 
 	startedAt := time.Now()
 	DispatchAcceptedCommand(
-		context.Background(), cfg, sm, nil, start, body, nil, "trace-delivery-timeout",
+		context.Background(), cfg, sm, "desktop-agent", nil, start, body, nil, "trace-delivery-timeout",
 	)
 	elapsed := time.Since(startedAt)
 	if elapsed < 20*time.Millisecond || elapsed > 500*time.Millisecond {
 		t.Fatalf("delivery timeout elapsed = %s, want about 30ms", elapsed)
 	}
 
-	sub := sm.SubscribeConversationStream("conv-1", 0, "")
+	sub := sm.SubscribeConversationStream("desktop-agent", "conv-1", 0, "")
 	defer sub.Cleanup()
 	if len(sub.Events) == 0 {
 		t.Fatal("delivery timeout did not terminalize the accepted run")
@@ -74,20 +74,20 @@ func TestChatStartupWatchdogUsesShortCombinedWindow(t *testing.T) {
 	t.Parallel()
 
 	sm, _ := newCommandTestManager(t)
-	sm.StartChatCommand("run-start-timeout", "conv-1", "", "client-1", nil)
+	sm.StartChatCommand("desktop-agent", "run-start-timeout", "conv-1", "", "client-1", nil)
 	cfg := &config.Config{
 		ChatStartTimeout:       15 * time.Millisecond,
 		ChatRenderStartTimeout: 20 * time.Millisecond,
 	}
 
 	startedAt := time.Now()
-	WatchAcceptedCommandStartup(context.Background(), cfg, sm, "run-start-timeout")
+	WatchAcceptedCommandStartup(context.Background(), cfg, sm, "desktop-agent", "run-start-timeout")
 	elapsed := time.Since(startedAt)
 	if elapsed < 25*time.Millisecond || elapsed > 500*time.Millisecond {
 		t.Fatalf("startup watchdog elapsed = %s, want about 35ms", elapsed)
 	}
 
-	sub := sm.SubscribeConversationStream("conv-1", 0, "")
+	sub := sm.SubscribeConversationStream("desktop-agent", "conv-1", 0, "")
 	defer sub.Cleanup()
 	last := sub.Events[len(sub.Events)-1]
 	if last.Type != session.StreamEventRunFinished || last.Payload["error_code"] != "startup_timeout" {

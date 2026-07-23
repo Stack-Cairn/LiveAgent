@@ -5,28 +5,30 @@ import (
 	"testing"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-func tokenEvent(conversationID string, text string) *gatewayv1.ChatEvent {
+const conversationTestAgentID = "test-agent"
+
+func tokenEvent(conversationID string, text string) *gatewayv2.ChatEvent {
 	data, _ := json.Marshal(map[string]any{"text": text})
-	return &gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_TOKEN,
+	return &gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_TOKEN,
 		ConversationId: conversationID,
 		Data:           string(data),
 	}
 }
 
-func doneEvent(conversationID string) *gatewayv1.ChatEvent {
-	return &gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_DONE,
+func doneEvent(conversationID string) *gatewayv2.ChatEvent {
+	return &gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_DONE,
 		ConversationId: conversationID,
 		Data:           `{"title":"Final title"}`,
 	}
 }
 
-func startedControl(runID string, conversationID string) *gatewayv1.ChatControlEvent {
-	return &gatewayv1.ChatControlEvent{
+func startedControl(runID string, conversationID string) *gatewayv2.ChatControlEvent {
+	return &gatewayv2.ChatControlEvent{
 		RequestId:      runID,
 		ConversationId: conversationID,
 		Type:           "started",
@@ -34,8 +36,8 @@ func startedControl(runID string, conversationID string) *gatewayv1.ChatControlE
 	}
 }
 
-func completedControl(runID string, conversationID string) *gatewayv1.ChatControlEvent {
-	return &gatewayv1.ChatControlEvent{
+func completedControl(runID string, conversationID string) *gatewayv2.ChatControlEvent {
+	return &gatewayv2.ChatControlEvent{
 		RequestId:      runID,
 		ConversationId: conversationID,
 		Type:           "completed",
@@ -71,13 +73,13 @@ func eventTypes(events []*ConversationEvent) []string {
 
 func TestConversationStreamSeqMonotonicAcrossRuns(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "hello"))
-	m.ingestChatEvent("run-1", doneEvent("conv-1"))
-	m.ingestChatControl("run-2", startedControl("run-2", "conv-1"))
-	m.ingestChatEvent("run-2", tokenEvent("conv-1", "again"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "hello"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-2", startedControl("run-2", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-2", tokenEvent("conv-1", "again"))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 
 	var lastSeq int64
@@ -109,15 +111,19 @@ func TestRunFinishedExactlyOnceForDuplicateTerminals(t *testing.T) {
 		second func(m *Manager)
 	}{
 		{
-			name:   "done event then completed control",
-			first:  func(m *Manager) { m.ingestChatEvent("run-1", doneEvent("conv-1")) },
-			second: func(m *Manager) { m.ingestChatControl("run-1", completedControl("run-1", "conv-1")) },
+			name:  "done event then completed control",
+			first: func(m *Manager) { m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1")) },
+			second: func(m *Manager) {
+				m.ingestChatControl(conversationTestAgentID, "run-1", completedControl("run-1", "conv-1"))
+			},
 		},
 		{
-			name:  "completed control then terminal snapshot",
-			first: func(m *Manager) { m.ingestChatControl("run-1", completedControl("run-1", "conv-1")) },
+			name: "completed control then terminal snapshot",
+			first: func(m *Manager) {
+				m.ingestChatControl(conversationTestAgentID, "run-1", completedControl("run-1", "conv-1"))
+			},
 			second: func(m *Manager) {
-				m.ingestRuntimeSnapshot(&gatewayv1.ChatRuntimeSnapshot{
+				m.ingestRuntimeSnapshot(conversationTestAgentID, &gatewayv2.ChatRuntimeSnapshot{
 					RunId: "run-1", ConversationId: "conv-1", State: "completed",
 				})
 			},
@@ -125,28 +131,28 @@ func TestRunFinishedExactlyOnceForDuplicateTerminals(t *testing.T) {
 		{
 			name: "terminal snapshot then done event",
 			first: func(m *Manager) {
-				m.ingestRuntimeSnapshot(&gatewayv1.ChatRuntimeSnapshot{
+				m.ingestRuntimeSnapshot(conversationTestAgentID, &gatewayv2.ChatRuntimeSnapshot{
 					RunId: "run-1", ConversationId: "conv-1", State: "cancelled",
 				})
 			},
-			second: func(m *Manager) { m.ingestChatEvent("run-1", doneEvent("conv-1")) },
+			second: func(m *Manager) { m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1")) },
 		},
 		{
 			name:   "force finish then late done",
-			first:  func(m *Manager) { m.ForceFinishRun("run-1", "cancelled", "", "") },
-			second: func(m *Manager) { m.ingestChatEvent("run-1", doneEvent("conv-1")) },
+			first:  func(m *Manager) { m.ForceFinishRun(conversationTestAgentID, "run-1", "cancelled", "", "") },
+			second: func(m *Manager) { m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1")) },
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := NewManager()
-			m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-			m.ingestChatEvent("run-1", tokenEvent("conv-1", "hello"))
+			m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+			m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "hello"))
 			tc.first(m)
 			tc.second(m)
 
-			sub := m.SubscribeConversationStream("conv-1", 0, "")
+			sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 			defer sub.Cleanup()
 			finished := 0
 			for _, event := range sub.Events {
@@ -166,15 +172,15 @@ func TestRunFinishedExactlyOnceForDuplicateTerminals(t *testing.T) {
 
 func TestSupersessionFinishesPreviousRunFirst(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-a", startedControl("run-a", "conv-1"))
-	m.ingestChatEvent("run-a", tokenEvent("conv-1", "a"))
+	m.ingestChatControl(conversationTestAgentID, "run-a", startedControl("run-a", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-a", tokenEvent("conv-1", "a"))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 
 	// A queued prompt auto-send: run-b starts before run-a's terminal arrives.
-	m.ingestChatControl("run-b", startedControl("run-b", "conv-1"))
-	m.ingestChatEvent("run-b", tokenEvent("conv-1", "b"))
+	m.ingestChatControl(conversationTestAgentID, "run-b", startedControl("run-b", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-b", tokenEvent("conv-1", "b"))
 
 	live := drainEvents(t, sub.EventCh, 3)
 	types := eventTypes(live)
@@ -192,8 +198,8 @@ func TestSupersessionFinishesPreviousRunFirst(t *testing.T) {
 	}
 
 	// The late terminal for run-a is swallowed.
-	m.ingestChatControl("run-a", completedControl("run-a", "conv-1"))
-	m.ingestChatEvent("run-b", tokenEvent("conv-1", "b2"))
+	m.ingestChatControl(conversationTestAgentID, "run-a", completedControl("run-a", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-b", tokenEvent("conv-1", "b2"))
 	next := drainEvents(t, sub.EventCh, 1)
 	if next[0].Type != "token" || next[0].RunID != "run-b" {
 		t.Fatalf("late terminal leaked: got %s/%s", next[0].Type, next[0].RunID)
@@ -202,16 +208,16 @@ func TestSupersessionFinishesPreviousRunFirst(t *testing.T) {
 
 func TestSubscribeResumeAndResetSemantics(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "one"))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "two"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "one"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "two"))
 
-	base := m.SubscribeConversationStream("conv-1", 0, "")
+	base := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	base.Cleanup()
 	epoch := base.StreamEpoch
 	latest := base.LatestSeq
 
-	resume := m.SubscribeConversationStream("conv-1", latest-1, epoch)
+	resume := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", latest-1, epoch)
 	resume.Cleanup()
 	if resume.Reset {
 		t.Fatalf("resume within buffer should not reset")
@@ -220,13 +226,13 @@ func TestSubscribeResumeAndResetSemantics(t *testing.T) {
 		t.Fatalf("resume replay = %v", eventTypes(resume.Events))
 	}
 
-	ahead := m.SubscribeConversationStream("conv-1", latest+100, epoch)
+	ahead := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", latest+100, epoch)
 	ahead.Cleanup()
 	if !ahead.Reset || len(ahead.Events) != int(latest) {
 		t.Fatalf("client ahead of gateway must reset with full replay, got reset=%v events=%d", ahead.Reset, len(ahead.Events))
 	}
 
-	wrongEpoch := m.SubscribeConversationStream("conv-1", latest, "different-epoch")
+	wrongEpoch := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", latest, "different-epoch")
 	wrongEpoch.Cleanup()
 	if !wrongEpoch.Reset {
 		t.Fatalf("epoch mismatch must reset")
@@ -234,10 +240,10 @@ func TestSubscribeResumeAndResetSemantics(t *testing.T) {
 
 	// Gap: force eviction of the early events.
 	m.convStreams.mu.Lock()
-	stream := m.convStreams.streams["conv-1"]
+	stream := m.convStreams.streams[conversationStreamKey(conversationTestAgentID, "conv-1")]
 	stream.evictedThroughSeq = 2
 	m.convStreams.mu.Unlock()
-	gap := m.SubscribeConversationStream("conv-1", 1, epoch)
+	gap := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 1, epoch)
 	gap.Cleanup()
 	if !gap.Reset {
 		t.Fatalf("resume below evicted floor must reset")
@@ -246,14 +252,14 @@ func TestSubscribeResumeAndResetSemantics(t *testing.T) {
 
 func TestStartChatCommandSeedsAndAgentEchoSwallowed(t *testing.T) {
 	m := NewManager()
-	start := m.StartChatCommand("run-1", "conv-1", "/workspace", "client-1", []map[string]any{
+	start := m.StartChatCommand(conversationTestAgentID, "run-1", "conv-1", "/workspace", "client-1", []map[string]any{
 		{"type": "user_message", "message": "hello"},
 	})
 	if start.AcceptedSeq <= 0 {
 		t.Fatalf("accepted seq = %d, want > 0", start.AcceptedSeq)
 	}
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	if len(sub.Events) != 1 || sub.Events[0].Type != "user_message" {
 		t.Fatalf("seeded replay = %v", eventTypes(sub.Events))
@@ -266,14 +272,14 @@ func TestStartChatCommandSeedsAndAgentEchoSwallowed(t *testing.T) {
 	}
 
 	// Agent starts the run and echoes the user message: the echo is swallowed.
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	userEcho, _ := json.Marshal(map[string]any{"message": "hello"})
-	m.ingestChatEvent("run-1", &gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_USER_MESSAGE,
+	m.ingestChatEvent(conversationTestAgentID, "run-1", &gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_USER_MESSAGE,
 		ConversationId: "conv-1",
 		Data:           string(userEcho),
 	})
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "hi"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "hi"))
 
 	live := drainEvents(t, sub.EventCh, 2)
 	types := eventTypes(live)
@@ -282,19 +288,48 @@ func TestStartChatCommandSeedsAndAgentEchoSwallowed(t *testing.T) {
 	}
 }
 
+func TestSeededUserMessageForwardsStableIdentityOnce(t *testing.T) {
+	m := NewManager()
+	m.StartChatCommand(conversationTestAgentID, "run-1", "conv-1", "/workspace", "client-1", []map[string]any{
+		{"type": "user_message", "message": "hello"},
+	})
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	identityEcho, _ := json.Marshal(map[string]any{
+		"message":    "hello",
+		"message_id": "user-stable-1",
+	})
+	event := &gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_USER_MESSAGE,
+		ConversationId: "conv-1",
+		Data:           string(identityEcho),
+	}
+	m.ingestChatEvent(conversationTestAgentID, "run-1", event)
+	m.ingestChatEvent(conversationTestAgentID, "run-1", event)
+
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
+	defer sub.Cleanup()
+	if got, want := eventTypes(sub.Events), []string{"user_message", StreamEventRunStarted, "user_message"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+		t.Fatalf("replay = %v, want %v", got, want)
+	}
+	identity := sub.Events[2]
+	if identity.Payload["message_id"] != "user-stable-1" {
+		t.Fatalf("identity payload = %#v", identity.Payload)
+	}
+}
+
 func TestPendingRunBindsOnFirstAgentSignal(t *testing.T) {
 	m := NewManager()
-	updates, cleanupWatch := m.WatchChatCommand("run-1")
+	updates, cleanupWatch := m.WatchChatCommand(conversationTestAgentID, "run-1")
 	defer cleanupWatch()
 
-	start := m.StartChatCommand("run-1", "", "/workspace", "client-1", []map[string]any{
+	start := m.StartChatCommand(conversationTestAgentID, "run-1", "", "/workspace", "client-1", []map[string]any{
 		{"type": "user_message", "message": "hello"},
 	})
 	if start.ConversationID != "" || start.AcceptedSeq != 0 {
 		t.Fatalf("pending start = %#v", start)
 	}
 
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-new"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-new"))
 
 	select {
 	case update := <-updates:
@@ -305,7 +340,7 @@ func TestPendingRunBindsOnFirstAgentSignal(t *testing.T) {
 		t.Fatalf("no bound update")
 	}
 
-	sub := m.SubscribeConversationStream("conv-new", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-new", 0, "")
 	defer sub.Cleanup()
 	types := eventTypes(sub.Events)
 	want := []string{"user_message", "run_started"}
@@ -316,13 +351,13 @@ func TestPendingRunBindsOnFirstAgentSignal(t *testing.T) {
 
 func TestQueuedInGUICompensatesSeededEntries(t *testing.T) {
 	m := NewManager()
-	updates, cleanupWatch := m.WatchChatCommand("run-1")
+	updates, cleanupWatch := m.WatchChatCommand(conversationTestAgentID, "run-1")
 	defer cleanupWatch()
 
-	m.StartChatCommand("run-1", "conv-1", "", "client-1", []map[string]any{
+	m.StartChatCommand(conversationTestAgentID, "run-1", "conv-1", "", "client-1", []map[string]any{
 		{"type": "user_message", "message": "queued prompt"},
 	})
-	m.ingestChatControl("run-1", &gatewayv1.ChatControlEvent{
+	m.ingestChatControl(conversationTestAgentID, "run-1", &gatewayv2.ChatControlEvent{
 		RequestId:      "run-1",
 		ConversationId: "conv-1",
 		Type:           "queued_in_gui",
@@ -337,7 +372,7 @@ func TestQueuedInGUICompensatesSeededEntries(t *testing.T) {
 		t.Fatalf("no queued_in_gui update")
 	}
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	types := eventTypes(sub.Events)
 	if len(types) != 2 || types[0] != "user_message" || types[1] != StreamEventRunQueued {
@@ -346,15 +381,15 @@ func TestQueuedInGUICompensatesSeededEntries(t *testing.T) {
 	if sub.Activity != nil {
 		t.Fatalf("queued_in_gui must clear activity, got %#v", sub.Activity)
 	}
-	if m.ChatCommandSettled("run-1") != true {
+	if m.ChatCommandSettled(conversationTestAgentID, "run-1") != true {
 		t.Fatalf("queued_in_gui command must count as settled")
 	}
 
 	// Later auto-send: the agent echo must now pass through.
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	userEcho, _ := json.Marshal(map[string]any{"message": "queued prompt"})
-	m.ingestChatEvent("run-1", &gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_USER_MESSAGE,
+	m.ingestChatEvent(conversationTestAgentID, "run-1", &gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_USER_MESSAGE,
 		ConversationId: "conv-1",
 		Data:           string(userEcho),
 	})
@@ -367,10 +402,10 @@ func TestQueuedInGUICompensatesSeededEntries(t *testing.T) {
 
 func TestFailChatCommandPendingAndBound(t *testing.T) {
 	m := NewManager()
-	updates, cleanupWatch := m.WatchChatCommand("run-pending")
+	updates, cleanupWatch := m.WatchChatCommand(conversationTestAgentID, "run-pending")
 	defer cleanupWatch()
-	m.StartChatCommand("run-pending", "", "", "client-1", nil)
-	m.FailChatCommand("run-pending", "desktop_runtime_unavailable", "agent offline")
+	m.StartChatCommand(conversationTestAgentID, "run-pending", "", "", "client-1", nil)
+	m.FailChatCommand(conversationTestAgentID, "run-pending", "desktop_runtime_unavailable", "agent offline")
 	select {
 	case update := <-updates:
 		if update.Phase != "failed" || update.ErrorCode != "desktop_runtime_unavailable" {
@@ -380,17 +415,17 @@ func TestFailChatCommandPendingAndBound(t *testing.T) {
 		t.Fatalf("no failed update")
 	}
 
-	m.StartChatCommand("run-bound", "conv-1", "", "client-2", []map[string]any{
+	m.StartChatCommand(conversationTestAgentID, "run-bound", "conv-1", "", "client-2", []map[string]any{
 		{"type": "user_message", "message": "hello"},
 	})
-	m.FailChatCommand("run-bound", "startup_timeout", "did not start")
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	m.FailChatCommand(conversationTestAgentID, "run-bound", "startup_timeout", "did not start")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	last := sub.Events[len(sub.Events)-1]
 	if last.Type != StreamEventRunFinished || last.Payload["status"] != "failed" {
 		t.Fatalf("bound failure tail = %s %#v", last.Type, last.Payload)
 	}
-	if !m.ChatCommandSettled("run-bound") {
+	if !m.ChatCommandSettled(conversationTestAgentID, "run-bound") {
 		t.Fatalf("failed command should be settled")
 	}
 }
@@ -401,7 +436,7 @@ func TestStartChatCommandDeduplicatesAtomically(t *testing.T) {
 	m := NewManager()
 	results := make(chan ChatCommandStart, 2)
 	start := func(runID string, message string) {
-		results <- m.StartChatCommand(runID, "conv-1", "/workspace", "client-shared", []map[string]any{
+		results <- m.StartChatCommand(conversationTestAgentID, runID, "conv-1", "/workspace", "client-shared", []map[string]any{
 			{"type": "user_message", "message": message},
 		})
 	}
@@ -416,12 +451,12 @@ func TestStartChatCommandDeduplicatesAtomically(t *testing.T) {
 	if first.Deduped == second.Deduped {
 		t.Fatalf("dedupe flags = %v and %v, want exactly one canonical creator", first.Deduped, second.Deduped)
 	}
-	canonical, ok := m.LookupChatCommand("client-shared")
+	canonical, ok := m.LookupChatCommand(conversationTestAgentID, "client-shared")
 	if !ok || canonical.RunID != first.RunID || !canonical.Deduped {
 		t.Fatalf("canonical lookup = %#v, ok=%v", canonical, ok)
 	}
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	userMessages := 0
 	for _, event := range sub.Events {
@@ -438,21 +473,21 @@ func TestDeduplicatedPendingCommandReplaysBoundUpdate(t *testing.T) {
 	t.Parallel()
 
 	m := NewManager()
-	start := m.StartChatCommand("run-original", "", "/workspace", "client-bound", []map[string]any{
+	start := m.StartChatCommand(conversationTestAgentID, "run-original", "", "/workspace", "client-bound", []map[string]any{
 		{"type": "user_message", "message": "hello"},
 	})
 	if start.Deduped {
 		t.Fatalf("initial command unexpectedly deduped: %#v", start)
 	}
-	m.ingestChatControl("run-original", startedControl("run-original", "conv-bound"))
+	m.ingestChatControl(conversationTestAgentID, "run-original", startedControl("run-original", "conv-bound"))
 
-	retry := m.StartChatCommand("run-retry", "", "/other", "client-bound", []map[string]any{
+	retry := m.StartChatCommand(conversationTestAgentID, "run-retry", "", "/other", "client-bound", []map[string]any{
 		{"type": "user_message", "message": "duplicate"},
 	})
 	if !retry.Deduped || retry.RunID != "run-original" || retry.ConversationID != "conv-bound" || retry.AcceptedSeq <= 0 {
 		t.Fatalf("deduplicated bound command = %#v", retry)
 	}
-	updates, cleanup := m.WatchChatCommand(retry.RunID)
+	updates, cleanup := m.WatchChatCommand(conversationTestAgentID, retry.RunID)
 	defer cleanup()
 	select {
 	case update := <-updates:
@@ -468,14 +503,14 @@ func TestDeduplicatedPendingCommandReplaysFailedUpdate(t *testing.T) {
 	t.Parallel()
 
 	m := NewManager()
-	m.StartChatCommand("run-failed", "", "", "client-failed", nil)
-	m.FailChatCommand("run-failed", "desktop_runtime_unavailable", "delivery timed out")
+	m.StartChatCommand(conversationTestAgentID, "run-failed", "", "", "client-failed", nil)
+	m.FailChatCommand(conversationTestAgentID, "run-failed", "desktop_runtime_unavailable", "delivery timed out")
 
-	retry := m.StartChatCommand("run-retry", "", "", "client-failed", nil)
+	retry := m.StartChatCommand(conversationTestAgentID, "run-retry", "", "", "client-failed", nil)
 	if !retry.Deduped || retry.RunID != "run-failed" {
 		t.Fatalf("deduplicated failed command = %#v", retry)
 	}
-	updates, cleanup := m.WatchChatCommand(retry.RunID)
+	updates, cleanup := m.WatchChatCommand(conversationTestAgentID, retry.RunID)
 	defer cleanup()
 	select {
 	case update := <-updates:
@@ -492,8 +527,8 @@ func TestActivityHubCarriesRunIDs(t *testing.T) {
 	activity, cleanup := m.SubscribeChatActivity()
 	defer cleanup()
 
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", doneEvent("conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1"))
 
 	running := <-activity
 	if !running.Running || running.RunID != "run-1" || running.State != RunActivityRunning {
@@ -505,7 +540,7 @@ func TestActivityHubCarriesRunIDs(t *testing.T) {
 	}
 
 	// A late subscriber replays current activity.
-	m.ingestChatControl("run-2", startedControl("run-2", "conv-2"))
+	m.ingestChatControl(conversationTestAgentID, "run-2", startedControl("run-2", "conv-2"))
 	late, lateCleanup := m.SubscribeChatActivity()
 	defer lateCleanup()
 	replayed := <-late
@@ -517,22 +552,22 @@ func TestActivityHubCarriesRunIDs(t *testing.T) {
 func TestEvictionProtectsActiveRunUntilHardCap(t *testing.T) {
 	m := NewManager()
 	m.convStreams.eventRetention = time.Millisecond
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "one"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "one"))
 	time.Sleep(5 * time.Millisecond)
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "two"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "two"))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	sub.Cleanup()
 	if len(sub.Events) != 3 {
 		t.Fatalf("active run events must survive retention, got %v", eventTypes(sub.Events))
 	}
 
 	// After the run finishes, retention applies again.
-	m.ingestChatEvent("run-1", doneEvent("conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", doneEvent("conv-1"))
 	time.Sleep(5 * time.Millisecond)
 	m.convStreams.mu.Lock()
-	stream := m.convStreams.streams["conv-1"]
+	stream := m.convStreams.streams[conversationStreamKey(conversationTestAgentID, "conv-1")]
 	m.convStreams.evictStreamLocked(stream, time.Now())
 	remaining := len(stream.events)
 	evictedThrough := stream.evictedThroughSeq
@@ -545,12 +580,12 @@ func TestEvictionProtectsActiveRunUntilHardCap(t *testing.T) {
 	// evicted floor so subscribers get a reset.
 	m2 := NewManager()
 	m2.convStreams.maxEvents = 4
-	m2.ingestChatControl("run-1", startedControl("run-1", "conv-x"))
+	m2.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-x"))
 	for i := 0; i < 10; i++ {
-		m2.ingestChatEvent("run-1", tokenEvent("conv-x", "t"))
+		m2.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-x", "t"))
 	}
 	m2.convStreams.mu.Lock()
-	streamX := m2.convStreams.streams["conv-x"]
+	streamX := m2.convStreams.streams[conversationStreamKey(conversationTestAgentID, "conv-x")]
 	if len(streamX.events) > 4 {
 		m2.convStreams.mu.Unlock()
 		t.Fatalf("hard cap not enforced: %d events", len(streamX.events))
@@ -565,7 +600,7 @@ func TestEvictionProtectsActiveRunUntilHardCap(t *testing.T) {
 func TestReaperForceFinishesStaleRunsOnlyWhenOnline(t *testing.T) {
 	m := NewManager()
 	m.convStreams.staleRunTimeout = time.Millisecond
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	time.Sleep(5 * time.Millisecond)
 
 	// Agent offline: the run is left alone.
@@ -576,6 +611,7 @@ func TestReaperForceFinishesStaleRunsOnlyWhenOnline(t *testing.T) {
 
 	// Agent online: the silent run is force-finished.
 	m.SetSession(&AgentSession{
+		AgentID: conversationTestAgentID,
 		toAgent: make(chan *OutboundEnvelope, 1),
 		done:    make(chan struct{}),
 		streams: make(map[string]*agentStream),
@@ -585,7 +621,7 @@ func TestReaperForceFinishesStaleRunsOnlyWhenOnline(t *testing.T) {
 		t.Fatalf("online reap must finish stale runs, activities=%d", len(activities))
 	}
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	sub.Cleanup()
 	last := sub.Events[len(sub.Events)-1]
 	if last.Type != StreamEventRunFinished || last.Payload["error_code"] != "stale_run" {
@@ -595,23 +631,23 @@ func TestReaperForceFinishesStaleRunsOnlyWhenOnline(t *testing.T) {
 
 func TestCancellingStateAndWatchdog(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 
-	runID, ok := m.MarkConversationCancelling("conv-1", "")
+	runID, ok := m.MarkConversationCancelling(conversationTestAgentID, "conv-1", "")
 	if !ok || runID != "run-1" {
 		t.Fatalf("cancelling = %q %v", runID, ok)
 	}
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	if sub.Activity == nil || sub.Activity.State != RunActivityCancelling {
 		t.Fatalf("activity = %#v, want cancelling", sub.Activity)
 	}
 
 	// The agent's real terminal wins over the watchdog.
-	m.ingestChatControl("run-1", &gatewayv1.ChatControlEvent{
+	m.ingestChatControl(conversationTestAgentID, "run-1", &gatewayv2.ChatControlEvent{
 		RequestId: "run-1", ConversationId: "conv-1", Type: "cancelled", State: "cancelled",
 	})
-	m.ForceFinishRun("run-1", "cancelled", "cancel_timeout", "watchdog")
+	m.ForceFinishRun(conversationTestAgentID, "run-1", "cancelled", "cancel_timeout", "watchdog")
 
 	finished := 0
 	for _, event := range drainEvents(t, sub.EventCh, 1) {
@@ -631,7 +667,7 @@ func TestGatewayRestartSnapshotRebuildsStream(t *testing.T) {
 	// A fresh manager simulates a restarted gateway: the first thing it sees
 	// for the conversation is a runtime snapshot of an in-flight run.
 	m := NewManager()
-	m.ingestRuntimeSnapshot(&gatewayv1.ChatRuntimeSnapshot{
+	m.ingestRuntimeSnapshot(conversationTestAgentID, &gatewayv2.ChatRuntimeSnapshot{
 		RunId:          "run-1",
 		ConversationId: "conv-1",
 		State:          "running",
@@ -640,7 +676,7 @@ func TestGatewayRestartSnapshotRebuildsStream(t *testing.T) {
 		ToolStatus:     "Vibing",
 	})
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	if sub.Activity == nil || sub.Activity.RunID != "run-1" {
 		t.Fatalf("activity = %#v", sub.Activity)
@@ -653,7 +689,7 @@ func TestGatewayRestartSnapshotRebuildsStream(t *testing.T) {
 	}
 
 	// Live continuation streams normally afterwards.
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "more"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "more"))
 	live := drainEvents(t, sub.EventCh, 1)
 	if live[0].Type != "token" {
 		t.Fatalf("live continuation = %v", eventTypes(live))
@@ -662,12 +698,12 @@ func TestGatewayRestartSnapshotRebuildsStream(t *testing.T) {
 
 func TestSubscriberOverflowClosesAndResumes(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 
 	for i := 0; i < conversationSubscriberBuffer+8; i++ {
-		m.ingestChatEvent("run-1", tokenEvent("conv-1", "x"))
+		m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "x"))
 	}
 
 	deadline := time.After(2 * time.Second)
@@ -693,7 +729,7 @@ func TestSubscriberOverflowClosesAndResumes(t *testing.T) {
 	}
 
 	// Resume from the last seen seq replays the tail without loss.
-	resume := m.SubscribeConversationStream("conv-1", int64(received)+1, sub.StreamEpoch)
+	resume := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", int64(received)+1, sub.StreamEpoch)
 	resume.Cleanup()
 	if resume.Reset {
 		t.Fatalf("resume after overflow should not reset while buffer covers the gap")
@@ -708,17 +744,18 @@ func TestReaperSparesSilentRunsWhileReportsVouch(t *testing.T) {
 	m := NewManager()
 	m.convStreams.staleRunTimeout = 10 * time.Millisecond
 	m.SetSession(&AgentSession{
+		AgentID: conversationTestAgentID,
 		toAgent: make(chan *OutboundEnvelope, 1),
 		done:    make(chan struct{}),
 		streams: make(map[string]*agentStream),
 	})
 
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	time.Sleep(20 * time.Millisecond)
 
 	// A silent long tool call: no events, but the run report vouches for it.
-	m.convStreams.onRuntimeStatus(&gatewayv1.RuntimeStatusEvent{
-		ActiveRuns: []*gatewayv1.ChatRunReport{
+	m.convStreams.onRuntimeStatus(conversationTestAgentID, &gatewayv2.RuntimeStatusEvent{
+		ActiveRuns: []*gatewayv2.ChatRunReport{
 			{RunId: "run-1", ConversationId: "conv-1", State: "running"},
 		},
 	}, time.Now())
@@ -742,19 +779,19 @@ func TestSupersessionKeepsSeededUserMessageReplayable(t *testing.T) {
 
 	// Run A streams while a webui command for the same conversation is
 	// accepted and seeded; B later starts via supersession.
-	m.ingestChatControl("run-a", startedControl("run-a", "conv-1"))
-	m.StartChatCommand("run-b", "conv-1", "", "client-b", []map[string]any{
+	m.ingestChatControl(conversationTestAgentID, "run-a", startedControl("run-a", "conv-1"))
+	m.StartChatCommand(conversationTestAgentID, "run-b", "conv-1", "", "client-b", []map[string]any{
 		{"type": "user_message", "message": "seeded prompt"},
 	})
-	m.ingestChatEvent("run-a", tokenEvent("conv-1", "working"))
-	m.ingestChatControl("run-b", startedControl("run-b", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-a", tokenEvent("conv-1", "working"))
+	m.ingestChatControl(conversationTestAgentID, "run-b", startedControl("run-b", "conv-1"))
 
 	// Age everything past retention, then trigger eviction: run B's activity
 	// window must still protect the seeded user_message.
 	time.Sleep(5 * time.Millisecond)
-	m.ingestChatEvent("run-b", tokenEvent("conv-1", "reply"))
+	m.ingestChatEvent(conversationTestAgentID, "run-b", tokenEvent("conv-1", "reply"))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	hasSeed := false
 	for _, event := range sub.Events {
@@ -769,7 +806,7 @@ func TestSupersessionKeepsSeededUserMessageReplayable(t *testing.T) {
 
 func TestWatchChatCommandCleanupClosesChannel(t *testing.T) {
 	m := NewManager()
-	updates, cleanup := m.WatchChatCommand("run-1")
+	updates, cleanup := m.WatchChatCommand(conversationTestAgentID, "run-1")
 	cleanup()
 	select {
 	case _, ok := <-updates:
@@ -783,15 +820,15 @@ func TestWatchChatCommandCleanupClosesChannel(t *testing.T) {
 
 func TestSeedsDeferredWhileAnotherRunIsActive(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-a", startedControl("run-a", "conv-1"))
-	m.ingestChatEvent("run-a", tokenEvent("conv-1", "streaming"))
+	m.ingestChatControl(conversationTestAgentID, "run-a", startedControl("run-a", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-a", tokenEvent("conv-1", "streaming"))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 
 	// Command accepted mid-run: nothing may reach the log yet — a seeded
 	// user_message here would flash a bubble until queued_in_gui compensates.
-	start := m.StartChatCommand("run-b", "conv-1", "", "client-b", []map[string]any{
+	start := m.StartChatCommand(conversationTestAgentID, "run-b", "conv-1", "", "client-b", []map[string]any{
 		{"type": "user_message", "message": "queued while busy"},
 	})
 	if start.AcceptedSeq != sub.LatestSeq {
@@ -799,21 +836,21 @@ func TestSeedsDeferredWhileAnotherRunIsActive(t *testing.T) {
 	}
 
 	// The desktop parks it: still nothing in the log (no run_queued needed).
-	m.ingestChatControl("run-b", &gatewayv1.ChatControlEvent{
+	m.ingestChatControl(conversationTestAgentID, "run-b", &gatewayv2.ChatControlEvent{
 		RequestId: "run-b", ConversationId: "conv-1", Type: "queued_in_gui",
 	})
-	m.ingestChatEvent("run-a", tokenEvent("conv-1", "more"))
+	m.ingestChatEvent(conversationTestAgentID, "run-a", tokenEvent("conv-1", "more"))
 	live := drainEvents(t, sub.EventCh, 1)
 	if live[0].Type != "token" {
 		t.Fatalf("expected only run-a token after deferred accept + park, got %v", eventTypes(live))
 	}
 
 	// The queued item eventually auto-sends: the agent echo is authoritative.
-	m.ingestChatEvent("run-a", doneEvent("conv-1"))
-	m.ingestChatControl("run-b", startedControl("run-b", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-a", doneEvent("conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-b", startedControl("run-b", "conv-1"))
 	echo, _ := json.Marshal(map[string]any{"message": "queued while busy"})
-	m.ingestChatEvent("run-b", &gatewayv1.ChatEvent{
-		Type: gatewayv1.ChatEvent_USER_MESSAGE, ConversationId: "conv-1", Data: string(echo),
+	m.ingestChatEvent(conversationTestAgentID, "run-b", &gatewayv2.ChatEvent{
+		Type: gatewayv2.ChatEvent_USER_MESSAGE, ConversationId: "conv-1", Data: string(echo),
 	})
 	tail := drainEvents(t, sub.EventCh, 3)
 	types := eventTypes(tail)
@@ -824,23 +861,23 @@ func TestSeedsDeferredWhileAnotherRunIsActive(t *testing.T) {
 
 func TestDeferredSeedsFlushWhenRunStartsDirectly(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-a", startedControl("run-a", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-a", startedControl("run-a", "conv-1"))
 
-	m.StartChatCommand("run-b", "conv-1", "", "client-b", []map[string]any{
+	m.StartChatCommand(conversationTestAgentID, "run-b", "conv-1", "", "client-b", []map[string]any{
 		{"type": "user_message", "message": "interrupt prompt"},
 	})
 
 	// The desktop runs the command immediately (interrupt policy): the
 	// deferred seeds surface right before run_started, and the agent's echo
 	// is swallowed as usual.
-	m.ingestChatControl("run-b", startedControl("run-b", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-b", startedControl("run-b", "conv-1"))
 	echo, _ := json.Marshal(map[string]any{"message": "interrupt prompt"})
-	m.ingestChatEvent("run-b", &gatewayv1.ChatEvent{
-		Type: gatewayv1.ChatEvent_USER_MESSAGE, ConversationId: "conv-1", Data: string(echo),
+	m.ingestChatEvent(conversationTestAgentID, "run-b", &gatewayv2.ChatEvent{
+		Type: gatewayv2.ChatEvent_USER_MESSAGE, ConversationId: "conv-1", Data: string(echo),
 	})
-	m.ingestChatEvent("run-b", tokenEvent("conv-1", "reply"))
+	m.ingestChatEvent(conversationTestAgentID, "run-b", tokenEvent("conv-1", "reply"))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	types := eventTypes(sub.Events)
 	want := []string{"run_started", "run_finished", "user_message", "run_started", "token"}
@@ -866,15 +903,15 @@ func TestDeferredSeedsFlushWhenRunStartsDirectly(t *testing.T) {
 	}
 }
 
-func editResendUserMessageEvent(conversationID string, message string, ref map[string]any) *gatewayv1.ChatEvent {
+func editResendUserMessageEvent(conversationID string, message string, ref map[string]any) *gatewayv2.ChatEvent {
 	payload := map[string]any{"message": message}
 	if ref != nil {
 		payload["base_message_ref"] = ref
 		payload["reason"] = "edit_resend"
 	}
 	data, _ := json.Marshal(payload)
-	return &gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_USER_MESSAGE,
+	return &gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_USER_MESSAGE,
 		ConversationId: conversationID,
 		Data:           string(data),
 	}
@@ -905,11 +942,11 @@ func countEventType(events []*ConversationEvent, eventType string) int {
 // the ref-bearing user_message seeds one rebased event after run_started.
 func TestGUIEditResendSeedsRebasedAfterRunStarted(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", editResendUserMessageEvent("conv-1", "edited prompt", testBaseMessageRef()))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "reply"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", editResendUserMessageEvent("conv-1", "edited prompt", testBaseMessageRef()))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "reply"))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	types := eventTypes(sub.Events)
 	want := []string{StreamEventRunStarted, StreamEventRebased, "user_message", "token"}
@@ -935,9 +972,9 @@ func TestGUIEditResendSeedsRebasedAfterRunStarted(t *testing.T) {
 // synthesized run_started.
 func TestGUIEditResendSeedsRebasedBeforeRunStarted(t *testing.T) {
 	m := NewManager()
-	m.ingestChatEvent("run-1", editResendUserMessageEvent("conv-1", "edited prompt", testBaseMessageRef()))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", editResendUserMessageEvent("conv-1", "edited prompt", testBaseMessageRef()))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	types := eventTypes(sub.Events)
 	want := []string{StreamEventRebased, StreamEventRunStarted, "user_message"}
@@ -955,11 +992,11 @@ func TestGUIEditResendSeedsRebasedBeforeRunStarted(t *testing.T) {
 // one rebased event is seeded for the run.
 func TestGUIEditResendRebasedSeededOnce(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", editResendUserMessageEvent("conv-1", "edited prompt", testBaseMessageRef()))
-	m.ingestChatEvent("run-1", editResendUserMessageEvent("conv-1", "edited prompt", testBaseMessageRef()))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", editResendUserMessageEvent("conv-1", "edited prompt", testBaseMessageRef()))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", editResendUserMessageEvent("conv-1", "edited prompt", testBaseMessageRef()))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	if got := countEventType(sub.Events, StreamEventRebased); got != 1 {
 		t.Fatalf("rebased count = %d (types %v), want 1", got, eventTypes(sub.Events))
@@ -970,17 +1007,17 @@ func TestGUIEditResendRebasedSeededOnce(t *testing.T) {
 // key, as null when unset — or an empty ref) must not seed a truncation.
 func TestUserMessageWithoutRefSeedsNoRebased(t *testing.T) {
 	m := NewManager()
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", editResendUserMessageEvent("conv-1", "plain prompt", nil))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", editResendUserMessageEvent("conv-1", "plain prompt", nil))
 
 	nullRef, _ := json.Marshal(map[string]any{
 		"message":          "null ref prompt",
 		"base_message_ref": nil,
 	})
-	m.ingestChatControl("run-1", completedControl("run-1", "conv-1"))
-	m.ingestChatControl("run-2", startedControl("run-2", "conv-1"))
-	m.ingestChatEvent("run-2", &gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_USER_MESSAGE,
+	m.ingestChatControl(conversationTestAgentID, "run-1", completedControl("run-1", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-2", startedControl("run-2", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-2", &gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_USER_MESSAGE,
 		ConversationId: "conv-1",
 		Data:           string(nullRef),
 	})
@@ -989,15 +1026,15 @@ func TestUserMessageWithoutRefSeedsNoRebased(t *testing.T) {
 		"message":          "empty ref prompt",
 		"base_message_ref": map[string]any{"message_id": "", "content_hash": "  "},
 	})
-	m.ingestChatControl("run-2", completedControl("run-2", "conv-1"))
-	m.ingestChatControl("run-3", startedControl("run-3", "conv-1"))
-	m.ingestChatEvent("run-3", &gatewayv1.ChatEvent{
-		Type:           gatewayv1.ChatEvent_USER_MESSAGE,
+	m.ingestChatControl(conversationTestAgentID, "run-2", completedControl("run-2", "conv-1"))
+	m.ingestChatControl(conversationTestAgentID, "run-3", startedControl("run-3", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-3", &gatewayv2.ChatEvent{
+		Type:           gatewayv2.ChatEvent_USER_MESSAGE,
 		ConversationId: "conv-1",
 		Data:           string(emptyRef),
 	})
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	if got := countEventType(sub.Events, StreamEventRebased); got != 0 {
 		t.Fatalf("rebased count = %d (types %v), want 0", got, eventTypes(sub.Events))
@@ -1009,15 +1046,15 @@ func TestUserMessageWithoutRefSeedsNoRebased(t *testing.T) {
 func TestWebuiEditResendEchoSeedsNoSecondRebased(t *testing.T) {
 	m := NewManager()
 	ref := testBaseMessageRef()
-	m.StartChatCommand("run-1", "conv-1", "/workspace", "client-1", []map[string]any{
+	m.StartChatCommand(conversationTestAgentID, "run-1", "conv-1", "/workspace", "client-1", []map[string]any{
 		{"type": StreamEventRebased, "base_message_ref": ref, "reason": "edit_resend"},
 		{"type": "user_message", "message": "edited prompt", "base_message_ref": ref, "reason": "edit_resend"},
 	})
-	m.ingestChatControl("run-1", startedControl("run-1", "conv-1"))
-	m.ingestChatEvent("run-1", editResendUserMessageEvent("conv-1", "edited prompt", ref))
-	m.ingestChatEvent("run-1", tokenEvent("conv-1", "reply"))
+	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", editResendUserMessageEvent("conv-1", "edited prompt", ref))
+	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "reply"))
 
-	sub := m.SubscribeConversationStream("conv-1", 0, "")
+	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
 	defer sub.Cleanup()
 	if got := countEventType(sub.Events, StreamEventRebased); got != 1 {
 		t.Fatalf("rebased count = %d (types %v), want 1", got, eventTypes(sub.Events))

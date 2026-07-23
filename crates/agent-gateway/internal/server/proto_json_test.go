@@ -3,13 +3,13 @@ package server
 import (
 	"testing"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 // 公开分享页 JSON 合同：protojson 会把 int64 编成字符串、int32 编成 float64，
 // coerce 链必须矫正为原生数值（前端时间戳/计数渲染依赖）。
 func TestProtoJSONPayloadPreservesFrontendNumberTypes(t *testing.T) {
-	payload := conversationSummaryPayload(&gatewayv1.ConversationSummary{
+	payload := conversationSummaryPayload(&gatewayv2.ConversationSummary{
 		Id:           "conversation-1",
 		CreatedAt:    42,
 		UpdatedAt:    84,

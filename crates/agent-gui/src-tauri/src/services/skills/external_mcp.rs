@@ -59,8 +59,8 @@ pub(crate) fn scan_mcp_config_file(path: &str) -> Result<SystemExternalMcpToolSc
         ));
     }
     let display = file.display().to_string();
-    let text = std::fs::read_to_string(&file)
-        .map_err(|err| format!("Failed to read {display}: {err}"))?;
+    let text =
+        std::fs::read_to_string(&file).map_err(|err| format!("Failed to read {display}: {err}"))?;
 
     let is_toml = file
         .extension()
@@ -558,7 +558,11 @@ mod tests {
 
         assert_eq!(scan.tool, LOCAL_FILE_MCP_TOOL);
         assert!(scan.exists);
-        assert!(scan.errors.is_empty(), "unexpected errors: {:?}", scan.errors);
+        assert!(
+            scan.errors.is_empty(),
+            "unexpected errors: {:?}",
+            scan.errors
+        );
         assert_eq!(scan.servers.len(), 2);
         let files = scan.servers.iter().find(|s| s.id == "files").unwrap();
         assert_eq!(files.transport, "stdio");
@@ -601,7 +605,11 @@ url = "https://mcp.example.com"
         );
         let scan = scan_mcp_config_file(&path).expect("scan file");
 
-        assert!(scan.errors.is_empty(), "unexpected errors: {:?}", scan.errors);
+        assert!(
+            scan.errors.is_empty(),
+            "unexpected errors: {:?}",
+            scan.errors
+        );
         assert_eq!(scan.servers.len(), 2);
         let commander = scan.servers.iter().find(|s| s.id == "commander").unwrap();
         assert_eq!(commander.transport, "stdio");
@@ -643,7 +651,11 @@ url = "https://mcp.example.com"
     fn scan_mcp_config_file_rejects_invalid_and_empty_sources() {
         let tmp = TempDir::new("liveagent-mcp-file-invalid-test").expect("temp dir");
 
-        let missing = tmp.path().join("missing.json").to_string_lossy().into_owned();
+        let missing = tmp
+            .path()
+            .join("missing.json")
+            .to_string_lossy()
+            .into_owned();
         assert!(scan_mcp_config_file(&missing)
             .unwrap_err()
             .contains("Cannot access config file"));

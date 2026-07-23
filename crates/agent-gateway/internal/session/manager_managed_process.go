@@ -3,38 +3,43 @@ package session
 import (
 	"sync"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 // managedProcessHub caches the latest ManagedProcess snapshot published by
-// the agent and fans it out to websocket subscribers. Delivery is
+// each agent and fans it out to websocket subscribers. Delivery is
 // latest-wins and non-blocking: a congested subscriber just skips ahead to
 // the next snapshot.
 type managedProcessHub struct {
 	mu          sync.Mutex
-	latest      *gatewayv1.ManagedProcessSnapshot
-	subscribers map[uint64]chan *gatewayv1.ManagedProcessSnapshot
+	latest      map[string]*gatewayv2.ManagedProcessSnapshot
+	subscribers map[uint64]chan Tagged[*gatewayv2.ManagedProcessSnapshot]
 	nextSubID   uint64
 }
 
 func newManagedProcessHub() *managedProcessHub {
 	return &managedProcessHub{
-		subscribers: make(map[uint64]chan *gatewayv1.ManagedProcessSnapshot),
+		latest:      make(map[string]*gatewayv2.ManagedProcessSnapshot),
+		subscribers: make(map[uint64]chan Tagged[*gatewayv2.ManagedProcessSnapshot]),
 	}
 }
 
-// ManagedProcessSnapshotCached returns the last snapshot seen from the agent
-// (nil before the first publish), so webui clients can render the latest
-// known state even while the agent is offline.
-func (m *Manager) ManagedProcessSnapshotCached() *gatewayv1.ManagedProcessSnapshot {
+// ManagedProcessSnapshotCached returns the last snapshot seen from a named agentID
+// (nil before the first publish), so webui clients can render the latest known state
+// even while that Agent is offline.
+func (m *Manager) ManagedProcessSnapshotCached(agentID string) *gatewayv2.ManagedProcessSnapshot {
+	agentID = normalizeAgentKey(agentID)
+	if agentID == "" {
+		return nil
+	}
 	m.managedProcesses.mu.Lock()
 	defer m.managedProcesses.mu.Unlock()
-	return m.managedProcesses.latest
+	return m.managedProcesses.latest[agentID]
 }
 
-func (m *Manager) SubscribeManagedProcessState() (<-chan *gatewayv1.ManagedProcessSnapshot, func()) {
+func (m *Manager) SubscribeManagedProcessState() (<-chan Tagged[*gatewayv2.ManagedProcessSnapshot], func()) {
 	hub := m.managedProcesses
-	ch := make(chan *gatewayv1.ManagedProcessSnapshot, 16)
+	ch := make(chan Tagged[*gatewayv2.ManagedProcessSnapshot], 16)
 
 	hub.mu.Lock()
 	subID := hub.nextSubID
@@ -52,42 +57,45 @@ func (m *Manager) SubscribeManagedProcessState() (<-chan *gatewayv1.ManagedProce
 	return ch, cleanup
 }
 
-func (m *Manager) broadcastManagedProcessSnapshot(snapshot *gatewayv1.ManagedProcessSnapshot) {
+func (m *Manager) broadcastManagedProcessSnapshot(agentID string, snapshot *gatewayv2.ManagedProcessSnapshot) {
 	if snapshot == nil {
 		return
 	}
+	key := normalizeAgentKey(agentID)
 	hub := m.managedProcesses
 	hub.mu.Lock()
 	// Agent-side publishes are spawned per change and can arrive reordered;
 	// revisions are agent-stamped and restart-safe, so drop strictly older
 	// snapshots (equal ones still flow for agent-online re-stamps).
-	if hub.latest != nil && snapshot.GetRevision() < hub.latest.GetRevision() {
+	if latest := hub.latest[key]; latest != nil && snapshot.GetRevision() < latest.GetRevision() {
 		hub.mu.Unlock()
 		return
 	}
-	hub.latest = snapshot
-	subscribers := make([]chan *gatewayv1.ManagedProcessSnapshot, 0, len(hub.subscribers))
+	hub.latest[key] = snapshot
+	subscribers := make([]chan Tagged[*gatewayv2.ManagedProcessSnapshot], 0, len(hub.subscribers))
 	for _, ch := range hub.subscribers {
 		subscribers = append(subscribers, ch)
 	}
 	hub.mu.Unlock()
 
+	tagged := Tagged[*gatewayv2.ManagedProcessSnapshot]{AgentID: agentID, Event: snapshot}
 	for _, ch := range subscribers {
 		select {
-		case ch <- snapshot:
+		case ch <- tagged:
 		default:
 		}
 	}
 }
 
-// rebroadcastManagedProcessState replays the cached snapshot so subscribers
-// re-render with the current agent-online flag (stamped at write time).
-func (m *Manager) rebroadcastManagedProcessState() {
+// rebroadcastManagedProcessState replays agentID's cached snapshot so
+// subscribers re-render with the current agent-online flag (stamped at write
+// time).
+func (m *Manager) rebroadcastManagedProcessState(agentID string) {
 	m.managedProcesses.mu.Lock()
-	latest := m.managedProcesses.latest
+	latest := m.managedProcesses.latest[normalizeAgentKey(agentID)]
 	m.managedProcesses.mu.Unlock()
 	if latest == nil {
 		return
 	}
-	m.broadcastManagedProcessSnapshot(latest)
+	m.broadcastManagedProcessSnapshot(agentID, latest)
 }

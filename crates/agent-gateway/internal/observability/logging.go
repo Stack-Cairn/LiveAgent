@@ -1,4 +1,4 @@
-// Package observability 汇集网关的可观测性基础设施（slog 进程级初始化、v1/v2 协议使用打点）。
+// Package observability 汇集网关的可观测性基础设施（slog 初始化与 v2 协议打点）。
 package observability
 
 import (

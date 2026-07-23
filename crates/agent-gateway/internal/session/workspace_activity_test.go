@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 // newWorkspaceTestManager builds a manager with a live session. SetSession
@@ -54,8 +54,8 @@ func assertNoWorkspaceWatchPush(t *testing.T, session *AgentSession) {
 	}
 }
 
-func workspaceActivityEvent(workdir string, revision uint64) *gatewayv1.WorkspaceActivityEvent {
-	return &gatewayv1.WorkspaceActivityEvent{
+func workspaceActivityEvent(workdir string, revision uint64) *gatewayv2.WorkspaceActivityEvent {
+	return &gatewayv2.WorkspaceActivityEvent{
 		Workdir:  workdir,
 		Revision: revision,
 		Fs:       true,
@@ -66,16 +66,16 @@ func workspaceActivityEvent(workdir string, revision uint64) *gatewayv1.Workspac
 func TestSubscribeWorkspaceActivityPushesWatchSetWithRefcount(t *testing.T) {
 	m, session := newWorkspaceTestManager(t)
 
-	_, cleanupA1 := m.SubscribeWorkspaceActivity("/repo/a")
+	_, cleanupA1 := m.SubscribeWorkspaceActivity("test-agent", "/repo/a")
 	if set := awaitWorkspaceWatchSet(t, session); len(set) != 1 || set[0] != "/repo/a" {
 		t.Fatalf("watch set after first subscribe = %v, want [/repo/a]", set)
 	}
 
 	// Second subscriber on the same workdir must not re-push the set.
-	_, cleanupA2 := m.SubscribeWorkspaceActivity("/repo/a")
+	_, cleanupA2 := m.SubscribeWorkspaceActivity("test-agent", "/repo/a")
 	assertNoWorkspaceWatchPush(t, session)
 
-	_, cleanupB := m.SubscribeWorkspaceActivity("/repo/b")
+	_, cleanupB := m.SubscribeWorkspaceActivity("test-agent", "/repo/b")
 	set := awaitWorkspaceWatchSet(t, session)
 	if len(set) != 2 || set[0] != "/repo/a" || set[1] != "/repo/b" {
 		t.Fatalf("watch set after second workdir = %v, want [/repo/a /repo/b]", set)
@@ -104,7 +104,7 @@ func TestSubscribeWorkspaceActivityPushesWatchSetWithRefcount(t *testing.T) {
 func TestSetSessionReplaysNonEmptyWorkspaceActivityWatchSet(t *testing.T) {
 	m, session := newWorkspaceTestManager(t)
 
-	_, cleanup := m.SubscribeWorkspaceActivity("/repo/a")
+	_, cleanup := m.SubscribeWorkspaceActivity("test-agent", "/repo/a")
 	defer cleanup()
 	if set := awaitWorkspaceWatchSet(t, session); len(set) != 1 || set[0] != "/repo/a" {
 		t.Fatalf("watch set after subscribe = %v, want [/repo/a]", set)
@@ -121,13 +121,13 @@ func TestSetSessionReplaysNonEmptyWorkspaceActivityWatchSet(t *testing.T) {
 func TestBroadcastWorkspaceActivityFiltersByWorkdir(t *testing.T) {
 	m, _ := newWorkspaceTestManager(t)
 
-	eventsA, cleanupA := m.SubscribeWorkspaceActivity("/repo/a")
+	eventsA, cleanupA := m.SubscribeWorkspaceActivity("test-agent", "/repo/a")
 	defer cleanupA()
-	eventsB, cleanupB := m.SubscribeWorkspaceActivity("/repo/b")
+	eventsB, cleanupB := m.SubscribeWorkspaceActivity("test-agent", "/repo/b")
 	defer cleanupB()
 
-	m.broadcastWorkspaceActivity(workspaceActivityEvent("/repo/a", 1))
-	m.broadcastWorkspaceActivity(workspaceActivityEvent("/repo/missing", 2))
+	m.broadcastWorkspaceActivity("test-agent", workspaceActivityEvent("/repo/a", 1))
+	m.broadcastWorkspaceActivity("test-agent", workspaceActivityEvent("/repo/missing", 2))
 
 	select {
 	case event := <-eventsA:
@@ -152,14 +152,14 @@ func TestBroadcastWorkspaceActivityDoesNotBlockOnSlowSubscriber(t *testing.T) {
 
 	// Never read from the channel: once its buffer is full, broadcasts must
 	// drop instead of blocking.
-	_, cleanup := m.SubscribeWorkspaceActivity("/repo/a")
+	_, cleanup := m.SubscribeWorkspaceActivity("test-agent", "/repo/a")
 	defer cleanup()
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		for i := 0; i < workspaceActivityChannelDepth*3; i++ {
-			m.broadcastWorkspaceActivity(workspaceActivityEvent("/repo/a", uint64(i+1)))
+			m.broadcastWorkspaceActivity("test-agent", workspaceActivityEvent("/repo/a", uint64(i+1)))
 		}
 	}()
 
@@ -173,11 +173,11 @@ func TestBroadcastWorkspaceActivityDoesNotBlockOnSlowSubscriber(t *testing.T) {
 func TestBroadcastWorkspaceActivityIgnoresNilAndEmptyWorkdir(t *testing.T) {
 	m, _ := newWorkspaceTestManager(t)
 
-	events, cleanup := m.SubscribeWorkspaceActivity("/repo/a")
+	events, cleanup := m.SubscribeWorkspaceActivity("test-agent", "/repo/a")
 	defer cleanup()
 
-	m.broadcastWorkspaceActivity(nil)
-	m.broadcastWorkspaceActivity(workspaceActivityEvent("   ", 1))
+	m.broadcastWorkspaceActivity("test-agent", nil)
+	m.broadcastWorkspaceActivity("test-agent", workspaceActivityEvent("   ", 1))
 
 	select {
 	case event := <-events:

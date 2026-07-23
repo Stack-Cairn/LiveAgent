@@ -21,7 +21,7 @@ use super::gateway_proto::v2;
 use super::*;
 
 impl GatewayController {
-    /// v2 终端数据面（/ws/v2/terminal，角色 AGENT）：PTY/注册表侧播种口与 gRPC 版完全一致；
+    /// v2 终端数据面（/ws/v2/terminal，角色 AGENT）：PTY/注册表侧播种口与 WebSocket 版完全一致；
     /// 由 connect_and_serve 在主链路建立后生成本任务，与主链路同生命周期。
     pub(crate) fn spawn_terminal_stream_ws(
         self: &Arc<Self>,
@@ -34,7 +34,7 @@ impl GatewayController {
         })
     }
 
-    /// v2 终端流重连主循环，骨架与 gRPC 版一致（同一组退避常量）。
+    /// v2 终端流重连主循环，骨架与 WebSocket 版一致（同一组退避常量）。
     pub(crate) async fn run_terminal_stream_ws(
         self: Arc<Self>,
         config: RemoteSettingsPayload,
@@ -82,8 +82,8 @@ impl GatewayController {
         self.set_terminal_stream_sender(None);
     }
 
-    /// 单次 v2 终端流连接：hello ok=true 即就绪（v1 的合成 "gateway-ready" detach 握手帧不复存在），
-    /// 随后双向透传 TerminalStreamFrame；周期 WS Ping 取代 v1 的 detach 保活帧。
+    /// 单次 v2 终端流连接：hello ok=true 即就绪，随后双向透传
+    /// TerminalStreamFrame，并通过周期 WS Ping 保活。
     pub(crate) async fn run_terminal_stream_ws_once(
         self: Arc<Self>,
         config: RemoteSettingsPayload,
@@ -91,12 +91,12 @@ impl GatewayController {
     ) -> Result<(), String> {
         let ws_url = build_ws_url(
             &config.gateway_url,
-            config.grpc_port,
+            config.gateway_port,
             GATEWAY_WS_TERMINAL_PATH,
         )?;
         let hello = build_client_hello(
             &config.token,
-            effective_agent_id(&config),
+            effective_agent_id(&config)?,
             crate::app_version().to_string(),
         );
 

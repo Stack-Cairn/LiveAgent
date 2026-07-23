@@ -816,6 +816,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }
     }
     await gatewayBridgeEvents.queueUserMessage(text, uploadedFiles, {
+      messageId: pendingUserMessage.id,
       baseMessageRef: overrides?.editResendBaseMessageRef,
     });
     acknowledgeGatewayRunStarted();

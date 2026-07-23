@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strconv"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -101,6 +101,6 @@ func coerceProtoJSONScalarOrMessage(value any, field protoreflect.FieldDescripto
 	return value
 }
 
-func conversationSummaryPayload(conversation *gatewayv1.ConversationSummary) map[string]any {
+func conversationSummaryPayload(conversation *gatewayv2.ConversationSummary) map[string]any {
 	return protoJSONPayload(conversation, true)
 }

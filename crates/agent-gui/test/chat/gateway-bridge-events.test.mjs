@@ -339,6 +339,7 @@ test("gateway bridge user message carries the edit-resend truncation base", () =
   const { controller, sent } = createController();
 
   controller.queueUserMessage("edited prompt", [], {
+    messageId: "user-new-1",
     baseMessageRef: {
       segmentIndex: 0,
       messageIndex: 2,
@@ -355,6 +356,7 @@ test("gateway bridge user message carries the edit-resend truncation base", () =
       event: {
         type: "user_message",
         message: "edited prompt",
+        message_id: "user-new-1",
         uploaded_files: [],
         conversation_id: "conversation-1",
         base_message_ref: {
@@ -384,6 +386,7 @@ test("gateway bridge user message omits the truncation base for plain sends", ()
     conversation_id: "conversation-1",
   });
   assert.equal("base_message_ref" in sent[0].event, false);
+  assert.equal("message_id" in sent[0].event, false);
   assert.equal("reason" in sent[0].event, false);
 });
 

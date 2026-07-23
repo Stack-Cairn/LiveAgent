@@ -25,6 +25,7 @@ pub(crate) fn signal_process_tree_by_pid(pid: u32, force: bool) {
     let process_group = format!("-{pid}");
     let _ = Command::new("kill")
         .arg(signal)
+        .arg("--")
         .arg(process_group)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

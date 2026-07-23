@@ -114,9 +114,10 @@ pub(crate) fn config_db_path() -> Result<PathBuf, String> {
 
 pub(crate) fn open_db() -> Result<Connection, String> {
     let db_path = config_db_path()?;
-    let conn = Connection::open(db_path).map_err(|e| format!("打开设置数据库失败：{e}"))?;
+    let mut conn = Connection::open(db_path).map_err(|e| format!("打开设置数据库失败：{e}"))?;
     conn.busy_timeout(Duration::from_secs(5))
         .map_err(|e| format!("设置 SQLite busy_timeout 失败：{e}"))?;
     initialize_schema(&conn)?;
+    ensure_remote_agent_id(&mut conn)?;
     Ok(conn)
 }

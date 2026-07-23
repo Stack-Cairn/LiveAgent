@@ -1,11 +1,11 @@
 package session
 
 import (
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
-func (m *Manager) SubscribeHistorySync() (<-chan *gatewayv1.HistorySyncEvent, func()) {
-	ch := make(chan *gatewayv1.HistorySyncEvent, 128)
+func (m *Manager) SubscribeHistorySync() (<-chan Tagged[*gatewayv2.HistorySyncEvent], func()) {
+	ch := make(chan Tagged[*gatewayv2.HistorySyncEvent], 128)
 
 	m.syncHub.historyMu.Lock()
 	subID := m.syncHub.nextHistorySubID
@@ -24,21 +24,22 @@ func (m *Manager) SubscribeHistorySync() (<-chan *gatewayv1.HistorySyncEvent, fu
 	return ch, cleanup
 }
 
-func (m *Manager) broadcastHistorySync(event *gatewayv1.HistorySyncEvent) {
+func (m *Manager) broadcastHistorySync(agentID string, event *gatewayv2.HistorySyncEvent) {
 	if event == nil {
 		return
 	}
 
 	m.syncHub.historyMu.Lock()
-	subscribers := make([]chan *gatewayv1.HistorySyncEvent, 0, len(m.syncHub.historySubscribers))
+	subscribers := make([]chan Tagged[*gatewayv2.HistorySyncEvent], 0, len(m.syncHub.historySubscribers))
 	for _, ch := range m.syncHub.historySubscribers {
 		subscribers = append(subscribers, ch)
 	}
 	m.syncHub.historyMu.Unlock()
 
+	tagged := Tagged[*gatewayv2.HistorySyncEvent]{AgentID: agentID, Event: event}
 	for _, ch := range subscribers {
 		select {
-		case ch <- event:
+		case ch <- tagged:
 		default:
 		}
 	}

@@ -3,19 +3,19 @@ package shared
 import (
 	"testing"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 func TestTerminalInterestTrackerFiltersOutputBySession(t *testing.T) {
 	t.Parallel()
 
 	tracker := NewTerminalInterestTracker()
-	outputEvent := &gatewayv1.TerminalEvent{
+	outputEvent := &gatewayv2.TerminalEvent{
 		Kind:           "output",
 		SessionId:      "session-1",
 		ProjectPathKey: "project-1",
 	}
-	metadataEvent := &gatewayv1.TerminalEvent{
+	metadataEvent := &gatewayv2.TerminalEvent{
 		Kind:           "created",
 		SessionId:      "session-1",
 		ProjectPathKey: "project-1",

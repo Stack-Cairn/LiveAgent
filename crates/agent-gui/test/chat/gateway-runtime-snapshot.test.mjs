@@ -61,6 +61,7 @@ test("gateway runtime snapshot projects live rounds into chat entries", () => {
     ["user", "thinking", "assistant", "tool_call", "tool_result", "assistant"],
   );
   assert.equal(entries[0].text, "Run the checks");
+  assert.equal(entries[0].messageId, "user-1");
   assert.equal(entries[1].text, "I will inspect the repo.");
   assert.equal(entries[2].text, "I found the issue.");
   assert.equal(entries[3].toolCall.name, "Shell");
@@ -121,4 +122,5 @@ test("gateway runtime snapshot falls back to draft assistant text", () => {
     ["user", "assistant"],
   );
   assert.equal(entries[1].text, "streaming text");
+  assert.equal(entries[0].messageId, "user-2");
 });

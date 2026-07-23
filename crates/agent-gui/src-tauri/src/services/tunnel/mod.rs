@@ -197,7 +197,7 @@ impl GatewayController {
     }
 
     /// Sweeps expired specs and pushes the full desired tunnel set to the
-    /// gateway. Called on gRPC connect and after every local mutation.
+    /// gateway. Called on WebSocket connect and after every local mutation.
     pub(crate) async fn publish_desired_tunnels(self: &Arc<Self>) -> Result<(), String> {
         let expired = self.tunnel_store().take_expired_specs()?;
         if !expired.is_empty() {

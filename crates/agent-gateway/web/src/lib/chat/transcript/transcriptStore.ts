@@ -454,9 +454,16 @@ export function createTranscriptStore(options?: {
   };
 
   const applyUserMessage = (event: ConversationStreamEvent, runId: string) => {
-    const payload = event as { message?: unknown; uploaded_files?: unknown };
+    const payload = event as {
+      message?: unknown;
+      message_id?: unknown;
+      messageId?: unknown;
+      uploaded_files?: unknown;
+    };
     const clientRequestId = readEventClientRequestId(event);
     const text = typeof payload.message === "string" ? payload.message : "";
+    const messageIdRaw = payload.message_id ?? payload.messageId;
+    const messageId = typeof messageIdRaw === "string" ? messageIdRaw.trim() : "";
     const attachments = normalizeLiveUploadedFiles(payload.uploaded_files);
     if (!text.trim() && attachments.length === 0) {
       return;
@@ -475,9 +482,12 @@ export function createTranscriptStore(options?: {
             kind: "user",
             text,
             attachments,
+            messageId: messageId || undefined,
             timestamp: Date.now(),
           },
         };
+      } else if (messageId && next.user.messageId !== messageId) {
+        next = { ...next, user: { ...next.user, messageId } };
       }
       if (next !== ownTurn) {
         replaceTurn(ownTurn, next);
@@ -497,8 +507,15 @@ export function createTranscriptStore(options?: {
             kind: "user",
             text,
             attachments,
+            messageId: messageId || undefined,
             timestamp: Date.now(),
           },
+        });
+        schedule(true);
+      } else if (messageId && runTurn.user.messageId !== messageId) {
+        replaceTurn(runTurn, {
+          ...runTurn,
+          user: { ...runTurn.user, messageId },
         });
         schedule(true);
       }
@@ -521,6 +538,7 @@ export function createTranscriptStore(options?: {
           kind: "user",
           text,
           attachments,
+          messageId: messageId || undefined,
           timestamp: Date.now(),
         },
       },
@@ -955,6 +973,29 @@ export function createTranscriptStore(options?: {
         continue;
       }
       applyOne(event);
+    }
+    // history.get and chat.subscribe race when a conversation is opened.
+    // If history painted first, the replay/snapshot above has only now
+    // materialized the active turn; run the same guarded replace alignment
+    // once more so the persisted copy of that running exchange is removed.
+    // This is deliberately gated on a user-bearing active turn: an
+    // assistant-only mid-run snapshot cannot be paired safely by position.
+    if (
+      historyEntries.length > 0 &&
+      turns.some(
+        (turn) => (turn.phase === "pending" || turn.phase === "streaming") && turn.user !== null,
+      )
+    ) {
+      const aligned = alignHistory({
+        historyEntries,
+        turns,
+        entries: historyEntries,
+        mode: "replace",
+      });
+      if (aligned.changed) {
+        historyEntries = aligned.historyEntries;
+        turns = aligned.turns;
+      }
     }
     lastSeq = Math.max(lastSeq, result.latestSeq);
   };

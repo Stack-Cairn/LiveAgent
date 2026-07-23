@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// OriginAllowed 是 WebSocket 升级的同源校验（v1/v2 共用，自 internal/server/http_origin.go
+// OriginAllowed 是 WebSocket 升级的同源校验（v2 共用，自 internal/server/http_origin.go
 // 平移，行为不变）：无 Origin 头（非浏览器）、同源、或两端均为回环地址（本机开发）时放行。
 func OriginAllowed(r *http.Request) bool {
 	origin := strings.TrimSpace(r.Header.Get("Origin"))

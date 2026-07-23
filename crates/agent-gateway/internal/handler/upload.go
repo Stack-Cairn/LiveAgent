@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
@@ -18,7 +18,12 @@ func ImportReadableFiles(
 	requestTimeout time.Duration,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !sm.IsOnline() {
+		agentID := strings.TrimSpace(r.URL.Query().Get("agent_id"))
+		if agentID == "" {
+			writeError(w, http.StatusBadRequest, "agent_id is required")
+			return
+		}
+		if !sm.IsOnline(agentID) {
 			writeError(w, http.StatusServiceUnavailable, "agent offline")
 			return
 		}
@@ -50,7 +55,7 @@ func ImportReadableFiles(
 			return
 		}
 
-		uploads := make([]*gatewayv1.UploadReadableFile, 0, len(fileHeaders))
+		uploads := make([]*gatewayv2.UploadReadableFile, 0, len(fileHeaders))
 		for _, header := range fileHeaders {
 			file, err := header.Open()
 			if err != nil {
@@ -69,7 +74,7 @@ func ImportReadableFiles(
 				return
 			}
 
-			uploads = append(uploads, &gatewayv1.UploadReadableFile{
+			uploads = append(uploads, &gatewayv2.UploadReadableFile{
 				FileName: header.Filename,
 				MimeType: strings.TrimSpace(header.Header.Get("Content-Type")),
 				Content:  content,
@@ -80,11 +85,11 @@ func ImportReadableFiles(
 		defer cancel()
 
 		requestID := newRequestID()
-		ch, done, cleanup, err := sm.RegisterStreamAndSendContext(ctx, requestID, &gatewayv1.GatewayEnvelope{
+		ch, done, cleanup, err := sm.RegisterStreamAndSendContext(ctx, agentID, requestID, &gatewayv2.GatewayEnvelope{
 			RequestId: requestID,
 			Timestamp: time.Now().Unix(),
-			Payload: &gatewayv1.GatewayEnvelope_UploadReadableFiles{
-				UploadReadableFiles: &gatewayv1.UploadReadableFilesRequest{
+			Payload: &gatewayv2.GatewayEnvelope_UploadReadableFiles{
+				UploadReadableFiles: &gatewayv2.UploadReadableFilesRequest{
 					Workdir: workdir,
 					Files:   uploads,
 				},

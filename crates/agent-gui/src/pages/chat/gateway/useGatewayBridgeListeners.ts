@@ -627,7 +627,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
 
     const handleNetworkOnline = () => {
       // Not forced: browsers fire spurious `online` events (VPN toggle,
-      // interface re-priority) while the gRPC stream is healthy and possibly
+      // interface re-priority) while the WebSocket stream is healthy and possibly
       // mid-run — force-aborting the runner would discard every queued
       // outbound envelope. If the network really dropped, the offline/stale-
       // heartbeat check inside the nudge (or the transport keepalive)

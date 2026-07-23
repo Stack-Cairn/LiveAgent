@@ -1,6 +1,6 @@
-// Package wscore 提供 v1/v2 WebSocket 协议共用的连接运行时（优先级双队列写泵、拥塞掉帧、
+// Package wscore 提供 v2 WebSocket 协议共用的连接运行时（优先级双队列写泵、拥塞掉帧、
 // 有限重试、空闲驱逐与心跳）。对帧格式无感：帧以已编码字节入队，协议层负责编码并声明
-// 拥塞策略（Frame.Class）。行为与常量逐字移植自 v1，由等价单元测试固定，无语义变化。
+// 拥塞策略（Frame.Class）。行为与常量沿用经过单元测试固定的实现，无语义变化。
 package wscore
 
 import "errors"
@@ -27,7 +27,7 @@ type Frame struct {
 	Class FrameClass
 	// RequestID 为关联响应的请求 id，仅用于诊断。
 	RequestID string
-	// Kind 是帧类型标签（v1 信封 type / v2 oneof 臂名），仅用于掉帧日志与测试断言。
+	// Kind 是帧类型标签（v2 oneof 臂名 / v2 oneof 臂名），仅用于掉帧日志与测试断言。
 	Kind string
 	// MessageType 为 websocket.TextMessage 或 websocket.BinaryMessage。
 	MessageType int

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// v1 写泵语义测试的等价移植（原 internal/server/websocket_write_test.go）：队列路由、
+// 写泵语义回归测试（原 internal/server/websocket_write_test.go）：队列路由、
 // 拥塞掉帧、关联响应关连接、心跳静默丢弃等行为必须逐一保持。
 
 func newTestConn(queueSize int, writeTimeout time.Duration) *Conn {

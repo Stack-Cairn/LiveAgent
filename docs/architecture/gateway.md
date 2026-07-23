@@ -3,7 +3,7 @@
 ## 职责边界
 
 Gateway 是远程访问中继，不是 Agent 执行环境。它同时面对桌面 Agent 和浏览器 WebUI，
-两端统一走 WebSocket+Protobuf（v2 协议；v1 gRPC 与 JSON WebSocket 已移除）：
+两端统一走 WebSocket+Protobuf（v2 协议）：
 
 | 方向 | 协议 | 作用 |
 |---|---|---|
@@ -47,7 +47,7 @@ Chat 走 `/ws/v2` 且是严格新协议：`chat_prepare` 用关联 Ping/Pong 探
 
 ## Proto 定义与代码生成
 
-`proto/v1/gateway.proto` 是三端共享的权威业务消息定义（Go 生成于 `internal/proto/v1/*`；包名沿用 v1，消息即 v2 载荷，`service AgentGateway` 已随 v1 gRPC 删除）；v2 帧壳定义于 `proto/v2/gateway_ws.proto`（Go 生成于 `internal/proto/v2/*`）。代码生成统一由 `buf` 驱动（`make proto`），CI 有生成物漂移与 breaking 检查门禁。
+`proto/v2/gateway.proto` 是三端共享的权威业务消息定义，`proto/v2/gateway_ws.proto` 定义 WebSocket 帧壳；Go 统一生成于 `internal/proto/v2/*`。代码生成统一由 `buf` 驱动（`make proto`），CI 有生成物漂移与 breaking 检查门禁。
 
 ## Session Manager
 
@@ -77,7 +77,7 @@ Chat 走 `/ws/v2` 且是严格新协议：`chat_prepare` 用关联 Ping/Pong 探
 | request/response | WebUI 发带 id 的 request，Gateway 返回同 id response 或 error。 |
 | broadcast | Gateway 主动推送 `status`、`history.event`、`settings.event`、`terminal`、`sftp` 等非 Chat 同步事件。 |
 | chat prepare | `chat.prepare` 向当前 `AgentConnect` stream 发送带 `chat-runtime-wake-` request id 的 Ping；桌面 Rust emit WebView wake 并可靠返回关联 Pong，Gateway 收到真实往返后才响应，并记录绑定当前 session epoch 的短时新鲜度。 |
-| chat command | 提交/编辑/取消走 WS `chat.command`；新 command 在 accepted 前必须有原生往返 probe，紧随成功 prepare 的 command 可复用同一 session 2 秒内的新鲜结果，旧客户端或过期结果仍现场探测。accepted ACK 走控制优先队列，避免被 token 数据积压阻塞。流式事件走按 conversation 持久订阅 `chat.subscribe`，经 `chat.event` 推送（订阅缓冲溢出时发 `chat.subscription_reset` 提示客户端按游标重订阅）。 |
+| chat command | 提交/编辑/取消走 WS `chat.command`；新 command 在 accepted 前必须有原生往返 probe，紧随成功 prepare 的 command 可复用同一 session 2 秒内的新鲜结果，旧客户端或过期结果仍现场探测。accepted ACK 走控制优先队列，避免被 token 数据积压阻塞。流式事件走按 conversation 持久订阅 `chat.subscribe`， 订阅与退订均按 `(agent_id, conversation_id)` 作用域并要求非空 `agent_id`，经 `chat.event` 推送（订阅缓冲溢出时发 `chat.subscription_reset` 提示客户端按游标重订阅）。 |
 | terminal stream | 不走主链路 request；attach/input/resize/detach 走 `/ws/v2/terminal` proto frame，页面侧 `BrowserGatewayTerminalStreamClient` 为同一 token 复用一条 terminal stream 并按 session fan-out。 |
 
 WebSocket server 的实现分层：`internal/transport/wscore` 管写泵/背压/心跳；协议层在 `internal/protocol/pbws`（帧编解码、直通白名单、事件扇出）。域逻辑（终端门控/响应后处理、chat 编排）在 `internal/protocol/shared` 与 `internal/chatcmd`。

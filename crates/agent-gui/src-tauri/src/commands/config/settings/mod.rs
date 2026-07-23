@@ -8,6 +8,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use uuid::Uuid;
 
 use crate::runtime::project_path::project_path_key as normalize_project_path_key;
 use crate::services::automation::AutomationScheduler;

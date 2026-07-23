@@ -26,7 +26,6 @@
 |---|---|---|
 | `LIVEAGENT_GATEWAY_TOKEN` | 是 | WebUI、HTTP API、桌面端 v2 WebSocket 的共享访问 token。 |
 | `PORT` | Railway 自动提供 | HTTP/WebUI/桌面端 WebSocket 监听端口，未提供时 Dockerfile 默认 `8080`。 |
-| `LIVEAGENT_GATEWAY_GRPC_ADDR` | 否 | **已弃用 no-op**：v1 gRPC 监听已移除，设置后启动时打印警告；保留仅为兼容旧启动脚本。 |
 | `LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT` | 否 | `chat.prepare` 与 command accepted 前关联原生 Ping/Pong 的最大等待时间，默认 `2s`。 |
 | `LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT` | 否 | accepted 后把 `ChatCommandRequest` 投递到当前桌面 Agent stream 的最大等待时间，默认 `5s`。 |
 | `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | 否 | Chat command 进入桌面运行态的第一段 watchdog，默认 `5s`。 |
@@ -58,19 +57,23 @@ Railway 自部署路径：
 |---|---|---|
 | WebUI / HTTP / 桌面端 WebSocket（`/ws/v2*`） | Public Networking HTTPS 域名 | 桌面端设置 `Gateway URL=https://<service>.up.railway.app`，网关端口填 `443`。 |
 
-v2 起全部实时链路统一走同一 HTTPS 域名与端口，不再需要 TCP Proxy 或独立 gRPC 地址。
+全部实时链路统一走同一 HTTPS 域名与端口。
 
 Gateway 运行时变量由用户在自己的平台配置：
 
 | 变量 | 说明 |
 |---|---|
-| `LIVEAGENT_GATEWAY_TOKEN` | WebUI、HTTP API、桌面端 v2 WebSocket 的共享访问 token。 |
+| `LIVEAGENT_GATEWAY_TOKEN` | WebUI、管理 API 与 Agent 链路使用的网关 Token；Agent 也可使用独立凭证。 |
+| `LIVEAGENT_GATEWAY_AGENT_DB` | Agent 凭证 SQLite 路径；缺省自动创建，无需手动设置。 |
+| `LIVEAGENT_GATEWAY_DATA_DIR` | 自动数据库的父目录；官方容器默认 `/var/lib/liveagent`，直接运行二进制时默认使用用户配置目录。 |
 | `LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT` | 默认 `2s`；通常无需调大，超时应暴露半开连接并让客户端快速恢复。 |
 | `LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT` | 默认 `5s`；控制 accepted 后投递桌面 stream 的上限。 |
 | `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | 默认 `5s`；控制远程 command 启动 watchdog 的第一阶段。 |
 | `LIVEAGENT_GATEWAY_CHAT_RENDER_START_TIMEOUT` | 默认 `10s`；控制启动 watchdog 的附加阶段。 |
 
-Gateway 的 conversation stream replay 与 `client_request_id` 去重当前都是进程内有界状态，不需要 SQLite 持久卷。事件窗口默认保留最近 10 分钟、最多 4096 条或约 8 MiB；command 去重记录保留 24 小时，但 Gateway 进程重启后不会保留。
+Gateway 的 conversation stream replay 与 `client_request_id` 去重当前都是进程内有界状态，本身不需要持久卷。事件窗口默认保留最近 10 分钟、最多 4096 条或约 8 MiB；command 去重记录保留 24 小时，但 Gateway 进程重启后不会保留。Gateway 默认自动创建每 Agent 凭证数据库（SQLite）；可用 `-agent-db` 指定路径。生产部署需要把数据库目录挂载到持久卷；官方 Docker 命令使用 `-v liveagent-gateway-data:/var/lib/liveagent`，否则重建容器会丢失已签发的凭证（见 [multi-agent.md](multi-agent.md)）。
+
+升级时旧启动脚本中的 `-grpc-addr` 和 `-command-queue-timeout` 会在新版参数解析前被移除，不会出现在 `--help`，也不会恢复已删除的 v1/gRPC 或离线命令队列。`-grpc-max-message-bytes` 与 `LIVEAGENT_GATEWAY_GRPC_MAX_MESSAGE_BYTES` 会映射到当前 WebSocket protobuf 消息上限；新名称 `-max-message-bytes` 和 `LIVEAGENT_GATEWAY_MAX_MESSAGE_BYTES` 优先。其他未知参数仍会报错，避免隐藏配置拼写错误。
 
 ## GitHub Secrets
 

@@ -11,6 +11,7 @@ export type AgentStatus = {
   agent_ready?: boolean;
   chat_runtime_ready?: boolean;
   agent_id?: string;
+  name?: string;
   agent_version?: string;
   session_id?: string;
   connected_since?: number;
@@ -62,6 +63,7 @@ export type ChatUserMessageEvent = {
   type: "user_message";
   client_request_id?: string;
   conversation_id?: string;
+  message_id?: string;
   message?: string;
   uploaded_files?: unknown;
   base_message_ref?: unknown;

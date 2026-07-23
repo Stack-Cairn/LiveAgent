@@ -156,6 +156,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { SettingsSyncLoading } from "@/pages/SettingsSyncLoading";
 import { SharedHistoryPage } from "@/pages/SharedHistoryPage";
 import { WorkdirPickerModal } from "@/pages/settings/WorkdirPickerModal";
+import { AgentSelector } from "./AgentSelector";
 import { buildTextFromComposerDraft, importPastedTextsAsFiles } from "./chatDraft";
 import {
   asErrorMessage,
@@ -241,6 +242,9 @@ export default function GatewayApp() {
   const { api, terminalClient, sftpClient, gitClient } = useGatewayClients(token);
   const [workspaceCloneTasks, setWorkspaceCloneTasks] = useState<WorkspaceCloneTask[]>([]);
   const dismissedWorkspaceCloneTaskIds = useRef(new Set<string>());
+  const [activeAgentId, setActiveAgentId] = useState(() => api?.getActiveAgent() ?? "");
+  const activeAgentIdRef = useRef(activeAgentId);
+  const activeAgentScope = activeAgentId || api?.getActiveAgent() || "";
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   // True only after an authenticated gateway connection has been established
@@ -293,7 +297,7 @@ export default function GatewayApp() {
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
   const [overlay, setOverlay] = useState<OverlayState>("closed");
   const { settings, setSettings, settingsSyncReady, settingsSyncError, settingsSaveState } =
-    useGatewaySettingsSync({ token, api });
+    useGatewaySettingsSync({ token, api, activeAgentId: activeAgentScope });
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
   const isAgentMode = settings.system.executionMode !== "text";
   const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>(
@@ -455,6 +459,7 @@ export default function GatewayApp() {
     () => chatCommandPipeline.pendingConversationIds(),
     [chatCommandPipeline],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Agent ID 是侧边栏 Store 的数据隔离边界。
   const sidebarStore = useMemo(
     () =>
       createSidebarStore(
@@ -468,7 +473,13 @@ export default function GatewayApp() {
           : createIdleSidebarBackend(),
         { pageSize: HISTORY_LIST_PAGE_SIZE },
       ),
-    [activityStore, api, getActivityKeepConversationIds, getSidebarProtectedConversationIds],
+    [
+      activeAgentScope,
+      activityStore,
+      api,
+      getActivityKeepConversationIds,
+      getSidebarProtectedConversationIds,
+    ],
   );
   useEffect(() => {
     if (!api) {
@@ -545,6 +556,22 @@ export default function GatewayApp() {
     [],
   );
 
+  const resolveActiveAgentID = useCallback(async () => {
+    const currentApi = apiRef.current;
+    if (!currentApi) {
+      throw new Error("Gateway 尚未连接。");
+    }
+    let agentID = currentApi.getActiveAgent().trim();
+    if (!agentID) {
+      await currentApi.listAgents();
+      agentID = currentApi.getActiveAgent().trim();
+    }
+    if (!agentID) {
+      throw new Error("没有可用的 Agent。");
+    }
+    return agentID;
+  }, []);
+
   const {
     pendingUploadedFiles,
     isUploadingFiles,
@@ -563,6 +590,7 @@ export default function GatewayApp() {
     handleFileDrop: handlePendingFileDrop,
   } = usePendingUploads({
     token,
+    resolveAgentID: resolveActiveAgentID,
     historyShareToken,
     settingsSyncReady,
     settingsOpen,
@@ -2242,11 +2270,16 @@ export default function GatewayApp() {
       isImportingPastedTextRef.current = true;
       setUploadingFiles(true);
       try {
+        const agentID = await resolveActiveAgentID();
         const imported = await importPastedTextsAsFiles({
           token,
+          agentId: agentID,
           workdir,
           pastes: draft.largePastes,
         });
+        if (apiRef.current?.getActiveAgent().trim() !== agentID) {
+          throw new Error("Agent 已切换，已取消发送本次大段粘贴内容。");
+        }
         text = buildTextFromComposerDraft(draft, imported.fileByPasteId).trim();
         uploadedFiles = mergePendingUploadedFiles(files, imported.files);
       } finally {
@@ -3487,6 +3520,7 @@ export default function GatewayApp() {
     // effect stops the old one.
     openController.cancel();
     clearSession();
+    chatCommandPipeline.reset();
     transcriptStoreRegistry.clear();
     activityStore.clear();
     draftClientRequestsRef.current.clear();
@@ -3524,6 +3558,7 @@ export default function GatewayApp() {
     setSelectedHistory(null);
   }, [
     activityStore,
+    chatCommandPipeline,
     clearPendingUploads,
     clearSession,
     invalidateHistoryLoad,
@@ -3532,8 +3567,89 @@ export default function GatewayApp() {
     transcriptStoreRegistry,
   ]);
 
-  const userMenuLabel = (status?.agent_id || "当前用户").trim() || "当前用户";
+  const userMenuLabel = (status?.name || status?.agent_id || "当前用户").trim() || "当前用户";
   const userAvatarLabel = userMenuLabel.slice(0, 1).toUpperCase();
+  const handleActiveAgentChange = useCallback(
+    (agentId: string) => {
+      const nextAgentId = agentId.trim();
+      const previousAgentId = activeAgentIdRef.current.trim();
+      activeAgentIdRef.current = nextAgentId;
+      setActiveAgentId(nextAgentId);
+      setStatusError(null);
+      setChatError(null);
+      setSidebarActionError(null);
+      if (!previousAgentId || previousAgentId === nextAgentId) {
+        return;
+      }
+
+      invalidateHistoryLoad();
+      markVisibleConversationRevision();
+      openController.cancel();
+      chatCommandPipeline.reset();
+      transcriptStoreRegistry.clear();
+      activityStore.clear();
+      draftClientRequestsRef.current.clear();
+      conversationWorkdirsRef.current.clear();
+      composerDraftCacheRef.current.clear();
+      composerDraftOwnerRef.current = "";
+      composerRef.current?.clear();
+      clearPendingUploads();
+      pendingUploadContextRef.current = null;
+      protectedConversationRef.current = "";
+      submitInFlightRef.current = false;
+      conversationIdRef.current = "";
+      selectedHistoryIdRef.current = "";
+      selectedHistoryRef.current = null;
+      previousDisplayedConversationIdRef.current = "";
+      pendingDisplayedConversationAutoBottomRef.current = null;
+      displayedConversationWorkdirRef.current = "";
+      sharedHistoryItemsRef.current = [];
+      sharedHistoryListRequestRef.current = null;
+      queuedChatTurnsRef.current = [];
+      chatQueueConversationIdRef.current = "";
+      chatQueueRevisionRef.current = 0;
+      queuedChatEditSessionRef.current = null;
+      statusRef.current = null;
+      setStatus(null);
+      setSidebarAgentStatusFresh(false);
+      setGatewayConnectionLost(false);
+      setConversationId("");
+      setSelectedHistoryId("");
+      setSelectedHistory(null);
+      setConversationModelOverrides(new Map());
+      setFullHistoryLoading(false);
+      setQueuedChatTurns([]);
+      setChatQueueRevision(0);
+      setSharedHistoryItems([]);
+      setSharedHistoryListError(null);
+      setShareConversation(null);
+      setShareStatus(null);
+      setShareLoading(false);
+      setShareUpdating(false);
+      setShareError(null);
+      setSharedManagerOpen(false);
+      setSharedManagerStatuses({});
+      setSharedManagerLoadingIds(new Set());
+      setSharedManagerUpdatingIds(new Set());
+      setSharedManagerErrors({});
+      setProjectPickerOpen(false);
+      setSettingsOpen(false);
+      setOverlay("closed");
+      setActiveView("chat");
+      setRightDockOpen(false);
+      setNotifyItems([]);
+      resetProjectToolsRuntimeRef.current();
+    },
+    [
+      activityStore,
+      chatCommandPipeline,
+      clearPendingUploads,
+      invalidateHistoryLoad,
+      markVisibleConversationRevision,
+      openController,
+      transcriptStoreRegistry,
+    ],
+  );
 
   const localeContextValue = useMemo(
     () => ({
@@ -4268,7 +4384,7 @@ export default function GatewayApp() {
               isOpen={sidebarOpen}
               fontScale={settings.customSettings.fontScale.sidebar}
               activeView={activeView}
-              showProjects={isAgentMode}
+              showProjects={isAgentMode && status?.online === true}
               projects={workspaceProjects}
               activeProjectId={activeWorkspaceProject?.id}
               missingProjectPathKeys={missingWorkspaceProjectPathKeys}
@@ -4428,15 +4544,6 @@ export default function GatewayApp() {
                       }))
                     }
                     onOpenSidebar={() => setSidebarOpen(true)}
-                    preThemeActions={
-                      <span
-                        className={`gateway-online-pill${status?.online ? " gateway-online-pill-active" : ""}`}
-                        title={status?.online ? "Online" : "Offline"}
-                        aria-label={status?.online ? "Online" : "Offline"}
-                      >
-                        {status?.online ? "Online" : "Offline"}
-                      </span>
-                    }
                     trailingActions={
                       <>
                         <Button
@@ -4470,7 +4577,12 @@ export default function GatewayApp() {
                           onOpenChange={setUserMenuOpen}
                           userMenuLabel={userMenuLabel}
                           userAvatarLabel={userAvatarLabel}
-                          sessionId={status?.session_id}
+                          agentStatus={
+                            status === null ? "unknown" : status.online ? "online" : "offline"
+                          }
+                          agentSelector={
+                            <AgentSelector api={api} onAgentChange={handleActiveAgentChange} />
+                          }
                           onLogout={handleLogout}
                         />
                       </>
@@ -4787,6 +4899,11 @@ export default function GatewayApp() {
                 onBack={closeSettings}
                 initialSection={settingsSection}
                 hiddenSections={["remote"]}
+                onAgentDirectoryChanged={async () => {
+                  if (!api) return;
+                  await api.listAgents();
+                  handleActiveAgentChange(api.getActiveAgent());
+                }}
               />
             </div>
           ) : null}

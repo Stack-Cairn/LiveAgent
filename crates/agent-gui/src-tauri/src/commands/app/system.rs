@@ -320,9 +320,7 @@ fn classify_upload_text_bytes(bytes: &[u8], prefix_truncated: bool) -> UploadTex
     if bytes.contains(&0) {
         return UploadTextClass::Binary;
     }
-    let stripped = bytes
-        .strip_prefix(&[0xEF, 0xBB, 0xBF])
-        .unwrap_or(bytes);
+    let stripped = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
     match std::str::from_utf8(stripped) {
         Ok(_) => return UploadTextClass::Utf8,
         Err(error) => {
@@ -661,7 +659,10 @@ fn upload_import_root_in(base: &Path) -> Result<PathBuf, String> {
             Err(e) => return Err(format!("创建上传目录失败 {}: {e}", root.display())),
         }
     }
-    Err(format!("创建上传目录失败：{} 下批次名冲突过多", base.display()))
+    Err(format!(
+        "创建上传目录失败：{} 下批次名冲突过多",
+        base.display()
+    ))
 }
 
 fn upload_import_root() -> Result<PathBuf, String> {
@@ -958,8 +959,7 @@ fn import_readable_file_paths_into_workdir(
                 .unwrap_or("file");
             let sanitized_name = sanitize_uploaded_file_name(source_name);
             let target = unique_path_for_copy(import_root.join(sanitized_name));
-            if detected.needs_utf8_transcode
-                && metadata.len() <= UPLOADED_TEXT_TRANSCODE_MAX_BYTES
+            if detected.needs_utf8_transcode && metadata.len() <= UPLOADED_TEXT_TRANSCODE_MAX_BYTES
             {
                 let bytes = fs::read(&source)
                     .map_err(|e| format!("读取文件失败 {}: {e}", source.display()))?;
@@ -1564,7 +1564,10 @@ mod tests {
 
     #[test]
     fn sanitize_uploaded_file_name_avoids_windows_reserved_names() {
-        assert_eq!(sanitize_uploaded_file_name("safe name.txt"), "safe name.txt");
+        assert_eq!(
+            sanitize_uploaded_file_name("safe name.txt"),
+            "safe name.txt"
+        );
         assert_eq!(sanitize_uploaded_file_name("CON.txt"), "CON_file.txt");
         assert_eq!(sanitize_uploaded_file_name("aux"), "aux_file");
         assert_eq!(sanitize_uploaded_file_name("LPT9.log"), "LPT9_file.log");
@@ -1578,11 +1581,23 @@ mod tests {
             sanitize_uploaded_file_name("第三季度 财务:报表.xlsx"),
             "第三季度 财务_报表.xlsx"
         );
-        assert_eq!(sanitize_uploaded_file_name("русский файл.txt"), "русский файл.txt");
-        assert_eq!(sanitize_uploaded_file_name("面试题（最终版）.docx"), "面试题（最终版）.docx");
+        assert_eq!(
+            sanitize_uploaded_file_name("русский файл.txt"),
+            "русский файл.txt"
+        );
+        assert_eq!(
+            sanitize_uploaded_file_name("面试题（最终版）.docx"),
+            "面试题（最终版）.docx"
+        );
         // 路径分隔符与遍历序列被压成单段组件；控制字符被替换。
-        assert_eq!(sanitize_uploaded_file_name("../../秘密.txt"), "_.._秘密.txt");
-        assert_eq!(sanitize_uploaded_file_name("恶意\u{7}响铃.txt"), "恶意_响铃.txt");
+        assert_eq!(
+            sanitize_uploaded_file_name("../../秘密.txt"),
+            "_.._秘密.txt"
+        );
+        assert_eq!(
+            sanitize_uploaded_file_name("恶意\u{7}响铃.txt"),
+            "恶意_响铃.txt"
+        );
         // 全部非法字符时回退到占位名。
         assert_eq!(sanitize_uploaded_file_name("..."), "file");
     }

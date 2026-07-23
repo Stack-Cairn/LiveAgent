@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
@@ -127,8 +127,8 @@ func TestTunnelResponseHeadersRewriteLocationAndCookies(t *testing.T) {
 	t.Parallel()
 
 	rw := tunnelRewrite{slug: "abc", targetURL: "http://localhost:3000"}
-	frame := &gatewayv1.TunnelFrame{
-		Headers: []*gatewayv1.TunnelHeader{
+	frame := &gatewayv2.TunnelFrame{
+		Headers: []*gatewayv2.TunnelHeader{
 			{Name: "Location", Value: "http://localhost:3000/login?next=%2F"},
 			{Name: "Set-Cookie", Value: "sid=1; Path=/; HttpOnly"},
 			{Name: "Transfer-Encoding", Value: "chunked"},

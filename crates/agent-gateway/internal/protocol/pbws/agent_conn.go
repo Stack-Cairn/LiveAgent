@@ -2,6 +2,7 @@ package pbws
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -9,21 +10,28 @@ import (
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/liveagent/agent-gateway/internal/auth/agenttoken"
 	"github.com/liveagent/agent-gateway/internal/observability"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// AgentHandler 返回 /ws/v2/agent 的 HTTP 处理器（承接 v1 gRPC Authenticate+AgentConnect 职能）：
-// hello 一并完成鉴权与会话登记，之后进入双向信封流。
+// AgentHandler 返回 /ws/v2/agent 的 HTTP 处理器：hello 一并完成鉴权与
+// 会话登记，之后进入双向信封流。
 func (s *Server) AgentHandler() http.Handler {
 	upgrader := s.upgrader()
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
+		release, ok := acquireConnSlot(&s.agentConns, s.maxAgentConnections())
+		if !ok {
+			http.Error(w, "too many agent connections", http.StatusServiceUnavailable)
 			return
 		}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			release()
+			return
+		}
+		defer release()
 		conn.SetReadLimit(s.readLimit())
 		s.serveAgent(conn)
 	})
@@ -32,7 +40,7 @@ func (s *Server) AgentHandler() http.Handler {
 func (s *Server) serveAgent(conn *websocket.Conn) {
 	defer func() { _ = conn.Close() }()
 
-	// ---- 握手：hello 即鉴权 + 会话登记（等价 Authenticate RPC）----
+	// ---- 握手：hello 同时完成鉴权与会话登记 ----
 	frame, ok := readAgentFrame(conn)
 	if !ok {
 		return
@@ -42,18 +50,52 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 	if !verdict.ok {
 		_ = writeDirectMessage(conn, s.writeTimeout(), &gatewayv2.AgentServerFrame{
 			Payload: &gatewayv2.AgentServerFrame_Hello{
-				Hello: s.serverHello(false, verdict.message, ""),
+				Hello: s.serverHello(false, verdict.message, "", s.readLimit()),
 			},
 		})
 		closeUnauthorized(conn, s.writeTimeout())
 		return
 	}
+	authEpoch, err := s.authenticateAgentHello(hello)
+	if err != nil {
+		message := "gateway storage unavailable"
+		if errors.Is(err, agenttoken.ErrUnauthorized) {
+			message = "unauthorized"
+		}
+		_ = writeDirectMessage(conn, s.writeTimeout(), &gatewayv2.AgentServerFrame{
+			Payload: &gatewayv2.AgentServerFrame_Hello{
+				Hello: s.serverHello(false, message, "", s.readLimit()),
+			},
+		})
+		if errors.Is(err, agenttoken.ErrUnauthorized) {
+			closeUnauthorized(conn, s.writeTimeout())
+		}
+		return
+	}
 
 	sessionID := uuid.NewString()
-	s.sm.RecordAuthentication(hello.GetAgentId(), hello.GetAgentVersion(), sessionID)
+	authSnapshot := session.AuthSnapshot{
+		AgentID:      hello.GetAgentId(),
+		AgentVersion: hello.GetAgentVersion(),
+		SessionID:    sessionID,
+	}
+	sess := session.NewAgentSession(authSnapshot)
+	toAgent := sess.Outbound()
+	if !s.sm.SetAuthenticatedSessionIfCurrent(sess, func() bool {
+		return s.tokens.AuthenticationCurrent(hello.GetAgentId(), authEpoch)
+	}) {
+		_ = writeDirectMessage(conn, s.writeTimeout(), &gatewayv2.AgentServerFrame{
+			Payload: &gatewayv2.AgentServerFrame_Hello{
+				Hello: s.serverHello(false, "unauthorized", "", s.readLimit()),
+			},
+		})
+		closeUnauthorized(conn, s.writeTimeout())
+		return
+	}
+	defer s.sm.ClearSession(sess)
 	if err := writeDirectMessage(conn, s.writeTimeout(), &gatewayv2.AgentServerFrame{
 		Payload: &gatewayv2.AgentServerFrame_Hello{
-			Hello: s.serverHello(true, "", sessionID),
+			Hello: s.serverHello(true, "", sessionID, s.readLimit()),
 		},
 	}); err != nil {
 		return
@@ -62,12 +104,6 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 	observability.Usage.V2AgentConnectsTotal.Add(1)
 	observability.Usage.V2AgentActive.Add(1)
 	defer observability.Usage.V2AgentActive.Add(-1)
-
-	// ---- 会话接管（等价 AgentConnect 流建立）----
-	sess := session.NewAgentSession(s.sm.LatestAuthSnapshot())
-	toAgent := sess.Outbound()
-	s.sm.SetSession(sess)
-	defer s.sm.ClearSession(sess)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -171,7 +207,7 @@ func readAgentFrame(conn *websocket.Conn) (*gatewayv2.AgentClientFrame, bool) {
 }
 
 // writeAgentEnvelope 序列化并写出一条 GatewayEnvelope 帧（单写者无需互斥；WriteControl 与之并发安全）。
-func (s *Server) writeAgentEnvelope(conn *websocket.Conn, env *gatewayv1.GatewayEnvelope) bool {
+func (s *Server) writeAgentEnvelope(conn *websocket.Conn, env *gatewayv2.GatewayEnvelope) bool {
 	data, err := proto.Marshal(&gatewayv2.AgentServerFrame{
 		Payload: &gatewayv2.AgentServerFrame_Envelope{Envelope: env},
 	})
@@ -222,11 +258,11 @@ func (s *Server) agentHeartbeatLoop(ctx context.Context, conn *websocket.Conn, s
 }
 
 func (s *Server) sendAgentHeartbeat(sess *session.AgentSession) bool {
-	return sess.SendPing(&gatewayv1.GatewayEnvelope{
+	return sess.SendPing(&gatewayv2.GatewayEnvelope{
 		RequestId: "ping-" + uuid.NewString(),
 		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv1.GatewayEnvelope_Ping{
-			Ping: &gatewayv1.PingRequest{
+		Payload: &gatewayv2.GatewayEnvelope_Ping{
+			Ping: &gatewayv2.PingRequest{
 				Timestamp: time.Now().Unix(),
 			},
 		},

@@ -31,7 +31,7 @@ import { normalizeIntegerDraftInput, parseIntegerDraftValue } from "./remoteInpu
 import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";
 
-const REMOTE_GRPC_PORT_MAX = 65_535;
+const REMOTE_GATEWAY_PORT_MAX = 65_535;
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -59,10 +59,12 @@ function CopyButton({ value }: { value: string }) {
 }
 
 function PasswordInput({
+  id,
   value,
   onChange,
   placeholder,
 }: {
+  id?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
@@ -72,6 +74,7 @@ function PasswordInput({
   return (
     <div className="relative flex-1">
       <Input
+        id={id}
         type={visible ? "text" : "password"}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -137,7 +140,7 @@ type GatewayRuntimeStatus = {
   connectedSince?: number | null;
   lastHeartbeat?: number | null;
   lastError?: string | null;
-  /** 当前链路协议："v2"（WebSocket+Protobuf）或 "v1"（弃用的 gRPC 回退）。 */
+  /** 当前链路协议："v2"（WebSocket+Protobuf）或 "v1"（弃用的 WebSocket 回退）。 */
   protocol?: string | null;
 };
 
@@ -204,14 +207,14 @@ function buildGatewayEndpointPreview(settings: AppSettings["remote"]) {
 
   try {
     const url = new URL(gatewayUrl);
-    const port = String(settings.grpcPort || 443);
+    const port = String(settings.gatewayPort || 443);
     url.port = port;
     url.pathname = "";
     url.search = "";
     url.hash = "";
     return url.toString().replace(/\/$/, "");
   } catch {
-    return `${gatewayUrl}:${settings.grpcPort || 443}`;
+    return `${gatewayUrl}:${settings.gatewayPort || 443}`;
   }
 }
 
@@ -224,12 +227,12 @@ function formatTimestamp(value?: number | null) {
 export function RemoteSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
-  const remoteGrpcPortDraft = usePositiveIntegerDraft(
-    settings.remote.grpcPort,
-    { min: 1, max: REMOTE_GRPC_PORT_MAX },
-    (grpcPort) =>
+  const remoteGatewayPortDraft = usePositiveIntegerDraft(
+    settings.remote.gatewayPort,
+    { min: 1, max: REMOTE_GATEWAY_PORT_MAX },
+    (gatewayPort) =>
       updateRemoteSettings(setSettings, {
-        grpcPort,
+        gatewayPort,
       }),
   );
   const remoteHeartbeatDraft = usePositiveIntegerDraft(
@@ -275,16 +278,7 @@ export function RemoteSection(props: SettingsSectionProps) {
     return () => {
       cancelled = true;
     };
-  }, [
-    remoteConfigured,
-    settings.remote.agentId,
-    settings.remote.autoReconnect,
-    settings.remote.enabled,
-    settings.remote.gatewayUrl,
-    settings.remote.grpcPort,
-    settings.remote.heartbeatInterval,
-    settings.remote.token,
-  ]);
+  }, [remoteConfigured, settings.remote.enabled, settings.remote.gatewayUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -367,12 +361,16 @@ export function RemoteSection(props: SettingsSectionProps) {
         <SectionCardHeader icon={Server} title={t("settings.remoteGatewayConnection")} />
 
         <div className="space-y-1.5">
-          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="remote-gateway-url"
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+          >
             <Link2 className="h-3 w-3" />
             {t("settings.remoteGatewayUrl")}
           </label>
           <div className="flex items-center gap-2">
             <Input
+              id="remote-gateway-url"
               type="url"
               value={settings.remote.gatewayUrl}
               onChange={(e) =>
@@ -387,9 +385,9 @@ export function RemoteSection(props: SettingsSectionProps) {
             <Input
               type="text"
               inputMode="numeric"
-              value={remoteGrpcPortDraft.draft}
-              onBlur={remoteGrpcPortDraft.handleBlur}
-              onChange={(e) => remoteGrpcPortDraft.handleChange(e.target.value)}
+              value={remoteGatewayPortDraft.draft}
+              onBlur={remoteGatewayPortDraft.handleBlur}
+              onChange={(e) => remoteGatewayPortDraft.handleChange(e.target.value)}
               placeholder="443"
               className="w-24 shrink-0 font-mono text-[13px]"
             />
@@ -412,11 +410,15 @@ export function RemoteSection(props: SettingsSectionProps) {
         <SectionCardHeader icon={Shield} title={t("settings.remoteAuth")} />
 
         <div className="space-y-1.5">
-          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="remote-gateway-token"
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+          >
             <Key className="h-3 w-3" />
             {t("settings.remoteToken")}
           </label>
           <PasswordInput
+            id="remote-gateway-token"
             value={settings.remote.token}
             onChange={(value) =>
               updateRemoteSettings(setSettings, {
@@ -431,21 +433,25 @@ export function RemoteSection(props: SettingsSectionProps) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <label
+            htmlFor="remote-agent-id"
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+          >
             <MonitorSmartphone className="h-3 w-3" />
             {t("settings.remoteAgentId")}
           </label>
-          <Input
-            type="text"
-            value={settings.remote.agentId}
-            onChange={(e) =>
-              updateRemoteSettings(setSettings, {
-                agentId: e.target.value,
-              })
-            }
-            placeholder={t("settings.remoteAgentIdPlaceholder")}
-            className="font-mono text-[13px]"
-          />
+          <div className="relative">
+            <Input
+              id="remote-agent-id"
+              type="text"
+              readOnly
+              value={settings.remote.agentId}
+              className="bg-muted/30 pr-12 font-mono text-[13px]"
+            />
+            <div className="absolute right-1 top-1/2 -translate-y-1/2">
+              <CopyButton value={settings.remote.agentId} />
+            </div>
+          </div>
           <p className="text-[11px] leading-relaxed text-muted-foreground/70">
             {t("settings.remoteAgentIdHint")}
           </p>

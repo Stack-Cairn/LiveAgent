@@ -50,7 +50,7 @@ impl GatewayController {
                 enabled: false,
                 configured: false,
                 gateway_url: String::new(),
-                agent_id: fallback_agent_id(),
+                agent_id: String::new(),
                 session_id: None,
                 connected_since: None,
                 last_heartbeat: None,
@@ -307,7 +307,7 @@ impl GatewayController {
             status.enabled = normalized.enabled;
             status.configured = is_remote_configured(&normalized);
             status.gateway_url = normalized.gateway_url.clone();
-            status.agent_id = effective_agent_id(&normalized);
+            status.agent_id = normalized.agent_id.clone();
             if !normalized.enabled {
                 set_disconnected_status(status, &normalized, None);
             } else if config_changed {
@@ -337,7 +337,7 @@ impl GatewayController {
                 enabled: false,
                 configured: false,
                 gateway_url: String::new(),
-                agent_id: fallback_agent_id(),
+                agent_id: String::new(),
                 session_id: None,
                 connected_since: None,
                 last_heartbeat: None,

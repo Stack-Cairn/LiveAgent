@@ -6,6 +6,10 @@ type QueueEventOptions = {
 };
 
 type QueueUserMessageOptions = {
+  // Stable id of the newly-created user message. It is persisted in the
+  // normal history JSON and lets remote viewers join the live run without
+  // guessing its history twin from prompt/reply text.
+  messageId?: string;
   // Edit-resend: the edited (truncation-base) user message. The gateway
   // broadcasts a `rebased` event from it so every other connected client
   // truncates its transcript at the same point.
@@ -123,6 +127,7 @@ export function createGatewayBridgeEventController(
       return queueEvent({
         type: "user_message",
         message,
+        ...(options?.messageId?.trim() ? { message_id: options.messageId.trim() } : {}),
         uploaded_files: uploadedFiles.map((file) =>
           file && typeof file === "object" ? { ...(file as Record<string, unknown>) } : file,
         ),

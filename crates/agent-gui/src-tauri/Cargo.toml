@@ -18,7 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 serde_json = "1.0.150"
 tauri-build = { version = "2.6.3", features = [] }
-tonic-prost-build = "0.14.6"
+prost-build = "0.14.4"
 
 [dependencies]
 tauri = { version = "2.11.5", features = ["tray-icon", "image-png"] }

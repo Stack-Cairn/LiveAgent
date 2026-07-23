@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
@@ -73,29 +73,29 @@ func serveTunnelHTTP(
 	defer func() {
 		cancel()
 		if !completed {
-			_ = sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+			_ = sm.SendTunnelFrameToAgent(lease.AgentID(), &gatewayv2.TunnelFrame{
 				StreamId: streamID,
-				Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
+				Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
 			})
 		}
 		lease.Release()
 	}()
 
-	start := &gatewayv1.TunnelFrame{
+	start := &gatewayv2.TunnelFrame{
 		StreamId:  streamID,
-		Kind:      gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_START,
+		Kind:      gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_START,
 		TargetUrl: lease.TargetURL(),
 		Method:    r.Method,
 		Path:      restPath,
 		Headers:   tunnelRequestHeaders(r, lease.Slug()),
 	}
-	if err := sm.SendTunnelFrameToAgent(start); err != nil {
+	if err := sm.SendTunnelFrameToAgent(lease.AgentID(), start); err != nil {
 		writeTunnelAcquireError(w, err)
 		return
 	}
 
 	bodyResult := make(chan error, 1)
-	go streamTunnelHTTPRequestBody(ctx, sm, streamID, r.Body, bodyResult)
+	go streamTunnelHTTPRequestBody(ctx, sm, lease.AgentID(), streamID, r.Body, bodyResult)
 
 	responseStarted := false
 	responseHeadersWritten := false
@@ -151,7 +151,7 @@ func serveTunnelHTTP(
 				continue
 			}
 			switch frame.GetKind() {
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_START:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_START:
 				if responseStarted {
 					continue
 				}
@@ -168,7 +168,7 @@ func serveTunnelHTTP(
 					writeResponseHeaders()
 					flushTunnelResponse(w)
 				}
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_BODY:
 				if !responseStarted {
 					responseStarted = true
 					responseHeaders = http.Header{}
@@ -192,7 +192,7 @@ func serveTunnelHTTP(
 					return
 				}
 				flushTunnelResponse(w)
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_END:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_RESPONSE_END:
 				if rewriteKind != tunnelResponseRewriteNone {
 					body := rewriteBuffer
 					if rewritten, changed := rewriteTunnelResponseBody(body, rewrite, rewriteKind); changed {
@@ -214,14 +214,14 @@ func serveTunnelHTTP(
 				completed = true
 				flushTunnelResponse(w)
 				return
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_ERROR:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_ERROR:
 				if !responseStarted {
 					writeTunnelError(w, http.StatusBadGateway, frame.GetError())
 				} else if rewriteKind != tunnelResponseRewriteNone {
 					flushRewriteBuffer()
 				}
 				return
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL:
 				if !responseStarted {
 					writeTunnelError(w, http.StatusServiceUnavailable, "tunnel canceled")
 				} else if rewriteKind != tunnelResponseRewriteNone {
@@ -247,9 +247,9 @@ func serveTunnelWebSocket(
 		return
 	}
 
-	if err := sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+	if err := sm.SendTunnelFrameToAgent(lease.AgentID(), &gatewayv2.TunnelFrame{
 		StreamId:  streamID,
-		Kind:      gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL,
+		Kind:      gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL,
 		TargetUrl: lease.TargetURL(),
 		Method:    r.Method,
 		Path:      restPath,
@@ -262,9 +262,9 @@ func serveTunnelWebSocket(
 
 	wsSubprotocol, dialErr := awaitTunnelWebSocketDial(lease)
 	if dialErr != nil {
-		_ = sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+		_ = sm.SendTunnelFrameToAgent(lease.AgentID(), &gatewayv2.TunnelFrame{
 			StreamId: streamID,
-			Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
+			Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
 			Error:    dialErr.Error(),
 		})
 		lease.Release()
@@ -282,9 +282,9 @@ func serveTunnelWebSocket(
 	}
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		_ = sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+		_ = sm.SendTunnelFrameToAgent(lease.AgentID(), &gatewayv2.TunnelFrame{
 			StreamId:    streamID,
-			Kind:        gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
+			Kind:        gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
 			WsCloseCode: websocket.CloseGoingAway,
 		})
 		lease.Release()
@@ -304,26 +304,26 @@ func pumpTunnelWebSocket(
 	closeSent := false
 	defer func() {
 		if !closeSent {
-			_ = sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+			_ = sm.SendTunnelFrameToAgent(lease.AgentID(), &gatewayv2.TunnelFrame{
 				StreamId:    streamID,
-				Kind:        gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
+				Kind:        gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
 				WsCloseCode: websocket.CloseGoingAway,
 			})
 		}
 		_ = ws.Close()
 	}()
 
-	visitorFrames := make(chan *gatewayv1.TunnelFrame, 64)
-	visitorClose := make(chan *gatewayv1.TunnelFrame, 1)
+	visitorFrames := make(chan *gatewayv2.TunnelFrame, 64)
+	visitorClose := make(chan *gatewayv2.TunnelFrame, 1)
 	readerDone := make(chan struct{})
 	go func() {
 		defer close(readerDone)
 		for {
 			messageType, body, err := ws.ReadMessage()
 			if err != nil {
-				closeFrame := &gatewayv1.TunnelFrame{
+				closeFrame := &gatewayv2.TunnelFrame{
 					StreamId:    streamID,
-					Kind:        gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
+					Kind:        gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
 					WsCloseCode: websocket.CloseGoingAway,
 				}
 				var closeErr *websocket.CloseError
@@ -334,13 +334,13 @@ func pumpTunnelWebSocket(
 				visitorClose <- closeFrame
 				return
 			}
-			wireType := gatewayv1.TunnelWsMessageType_TUNNEL_WS_MESSAGE_TYPE_BINARY
+			wireType := gatewayv2.TunnelWsMessageType_TUNNEL_WS_MESSAGE_TYPE_BINARY
 			if messageType == websocket.TextMessage {
-				wireType = gatewayv1.TunnelWsMessageType_TUNNEL_WS_MESSAGE_TYPE_TEXT
+				wireType = gatewayv2.TunnelWsMessageType_TUNNEL_WS_MESSAGE_TYPE_TEXT
 			}
-			frame := &gatewayv1.TunnelFrame{
+			frame := &gatewayv2.TunnelFrame{
 				StreamId:      streamID,
-				Kind:          gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME,
+				Kind:          gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME,
 				Body:          body,
 				WsMessageType: wireType,
 			}
@@ -359,34 +359,34 @@ func pumpTunnelWebSocket(
 			return
 		case closeFrame := <-visitorClose:
 			closeSent = true
-			_ = sm.SendTunnelFrameToAgent(closeFrame)
+			_ = sm.SendTunnelFrameToAgent(lease.AgentID(), closeFrame)
 			return
 		case <-readerDone:
 			closeSent = true
-			_ = sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+			_ = sm.SendTunnelFrameToAgent(lease.AgentID(), &gatewayv2.TunnelFrame{
 				StreamId:    streamID,
-				Kind:        gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
+				Kind:        gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE,
 				WsCloseCode: websocket.CloseGoingAway,
 			})
 			return
 		case frame := <-visitorFrames:
 			if frame != nil {
-				_ = sm.SendTunnelFrameToAgent(frame)
+				_ = sm.SendTunnelFrameToAgent(lease.AgentID(), frame)
 			}
 		case frame := <-lease.Frames():
 			if frame == nil {
 				continue
 			}
 			switch frame.GetKind() {
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_FRAME:
 				messageType := websocket.BinaryMessage
-				if frame.GetWsMessageType() == gatewayv1.TunnelWsMessageType_TUNNEL_WS_MESSAGE_TYPE_TEXT {
+				if frame.GetWsMessageType() == gatewayv2.TunnelWsMessageType_TUNNEL_WS_MESSAGE_TYPE_TEXT {
 					messageType = websocket.TextMessage
 				}
 				if err := ws.WriteMessage(messageType, frame.GetBody()); err != nil {
 					return
 				}
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE:
 				closeSent = true
 				code := int(frame.GetWsCloseCode())
 				if code == 0 {
@@ -399,8 +399,8 @@ func pumpTunnelWebSocket(
 					deadline,
 				)
 				return
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
-				gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_ERROR:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
+				gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_ERROR:
 				closeSent = true
 				deadline := time.Now().Add(time.Second)
 				_ = ws.WriteControl(
@@ -428,12 +428,12 @@ func awaitTunnelWebSocketDial(lease *session.TunnelStreamLease) (string, error) 
 				continue
 			}
 			switch frame.GetKind() {
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL_OK:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL_OK:
 				return strings.TrimSpace(frame.GetWsSubprotocol()), nil
-			case gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL_ERROR,
-				gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_ERROR,
-				gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
-				gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE:
+			case gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_DIAL_ERROR,
+				gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_ERROR,
+				gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
+				gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_WS_CLOSE:
 				message := strings.TrimSpace(frame.GetError())
 				if message == "" {
 					message = "local tunnel websocket dial failed"
@@ -447,6 +447,7 @@ func awaitTunnelWebSocketDial(lease *session.TunnelStreamLease) (string, error) 
 func streamTunnelHTTPRequestBody(
 	ctx context.Context,
 	sm *session.Manager,
+	agentID string,
 	streamID string,
 	body io.ReadCloser,
 	result chan<- error,
@@ -465,18 +466,18 @@ func streamTunnelHTTPRequestBody(
 			sent += n
 			if sent > tunnelRequestBodyMaxBytes {
 				resultErr = errTunnelRequestBodyTooLarge
-				_ = sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+				_ = sm.SendTunnelFrameToAgent(agentID, &gatewayv2.TunnelFrame{
 					StreamId: streamID,
-					Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
+					Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
 					Error:    errTunnelRequestBodyTooLarge.Error(),
 				})
 				return
 			}
 			chunk := make([]byte, n)
 			copy(chunk, buffer[:n])
-			if sendErr := sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+			if sendErr := sm.SendTunnelFrameToAgent(agentID, &gatewayv2.TunnelFrame{
 				StreamId: streamID,
-				Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_BODY,
+				Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_BODY,
 				Body:     chunk,
 			}); sendErr != nil {
 				resultErr = sendErr
@@ -484,17 +485,17 @@ func streamTunnelHTTPRequestBody(
 			}
 		}
 		if errors.Is(err, io.EOF) {
-			_ = sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+			_ = sm.SendTunnelFrameToAgent(agentID, &gatewayv2.TunnelFrame{
 				StreamId: streamID,
-				Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_END,
+				Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_HTTP_REQUEST_END,
 			})
 			return
 		}
 		if err != nil {
 			resultErr = err
-			_ = sm.SendTunnelFrameToAgent(&gatewayv1.TunnelFrame{
+			_ = sm.SendTunnelFrameToAgent(agentID, &gatewayv2.TunnelFrame{
 				StreamId: streamID,
-				Kind:     gatewayv1.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
+				Kind:     gatewayv2.TunnelFrameKind_TUNNEL_FRAME_KIND_CANCEL,
 				Error:    err.Error(),
 			})
 			return
@@ -563,25 +564,25 @@ func isWebSocketUpgrade(r *http.Request) bool {
 		strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
 }
 
-func tunnelRequestHeaders(r *http.Request, slug string) []*gatewayv1.TunnelHeader {
+func tunnelRequestHeaders(r *http.Request, slug string) []*gatewayv2.TunnelHeader {
 	headers := filteredTunnelRequestHeaders(r.Header, false)
 	return appendTunnelForwardedHeaders(headers, r, slug)
 }
 
-func tunnelWebSocketRequestHeaders(r *http.Request, slug string) []*gatewayv1.TunnelHeader {
+func tunnelWebSocketRequestHeaders(r *http.Request, slug string) []*gatewayv2.TunnelHeader {
 	headers := filteredTunnelRequestHeaders(r.Header, true)
 	return appendTunnelForwardedHeaders(headers, r, slug)
 }
 
-func filteredTunnelRequestHeaders(headers http.Header, websocketUpgrade bool) []*gatewayv1.TunnelHeader {
-	out := make([]*gatewayv1.TunnelHeader, 0, len(headers))
+func filteredTunnelRequestHeaders(headers http.Header, websocketUpgrade bool) []*gatewayv2.TunnelHeader {
+	out := make([]*gatewayv2.TunnelHeader, 0, len(headers))
 	for name, values := range headers {
 		canonical := http.CanonicalHeaderKey(strings.TrimSpace(name))
 		if canonical == "" || shouldDropTunnelRequestHeader(canonical, websocketUpgrade) {
 			continue
 		}
 		for _, value := range values {
-			out = append(out, &gatewayv1.TunnelHeader{
+			out = append(out, &gatewayv2.TunnelHeader{
 				Name:  canonical,
 				Value: value,
 			})
@@ -637,10 +638,10 @@ func shouldDropTunnelResponseHeader(name string) bool {
 }
 
 func appendTunnelForwardedHeaders(
-	headers []*gatewayv1.TunnelHeader,
+	headers []*gatewayv2.TunnelHeader,
 	r *http.Request,
 	slug string,
-) []*gatewayv1.TunnelHeader {
+) []*gatewayv2.TunnelHeader {
 	if r == nil {
 		return headers
 	}
@@ -649,19 +650,19 @@ func appendTunnelForwardedHeaders(
 		proto = "https"
 	}
 	headers = append(headers,
-		&gatewayv1.TunnelHeader{Name: "X-Forwarded-Host", Value: r.Host},
-		&gatewayv1.TunnelHeader{Name: "X-Forwarded-Proto", Value: proto},
+		&gatewayv2.TunnelHeader{Name: "X-Forwarded-Host", Value: r.Host},
+		&gatewayv2.TunnelHeader{Name: "X-Forwarded-Proto", Value: proto},
 	)
 	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
-		headers = append(headers, &gatewayv1.TunnelHeader{Name: "X-Forwarded-Origin", Value: origin})
+		headers = append(headers, &gatewayv2.TunnelHeader{Name: "X-Forwarded-Origin", Value: origin})
 	}
 	if slug = strings.TrimSpace(slug); slug != "" {
-		headers = append(headers, &gatewayv1.TunnelHeader{Name: "X-Forwarded-Prefix", Value: "/t/" + slug})
+		headers = append(headers, &gatewayv2.TunnelHeader{Name: "X-Forwarded-Prefix", Value: "/t/" + slug})
 	}
 	return headers
 }
 
-func tunnelResponseHeaders(frame *gatewayv1.TunnelFrame, rw tunnelRewrite) http.Header {
+func tunnelResponseHeaders(frame *gatewayv2.TunnelFrame, rw tunnelRewrite) http.Header {
 	headers := http.Header{}
 	for _, header := range frame.GetHeaders() {
 		name := http.CanonicalHeaderKey(strings.TrimSpace(header.GetName()))

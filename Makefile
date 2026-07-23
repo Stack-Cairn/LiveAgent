@@ -133,12 +133,12 @@ proto:
 	cd $(AGENT_GATEWAY_DIR) && buf generate
 
 # buf breaking 的对比基线（本地默认与当前 HEAD 对比；CI 覆写为 origin/main）。
-BUF_BREAKING_AGAINST ?= ../../.git#subdir=$(AGENT_GATEWAY_DIR)
+BUF_BREAKING_AGAINST ?= ../../.git\#subdir=$(AGENT_GATEWAY_DIR)
 
 proto-check:
 	@command -v buf >/dev/null || (echo "buf is required. Run: mise install" && exit 1)
 	cd $(AGENT_GATEWAY_DIR) && buf lint
-	cd $(AGENT_GATEWAY_DIR) && buf breaking --against '$(BUF_BREAKING_AGAINST)'
+	node scripts/check-buf-breaking.mjs "$(AGENT_GATEWAY_DIR)" "$(BUF_BREAKING_AGAINST)"
 
 webui:
 	pnpm --dir $(AGENT_GATEWAY_WEB_DIR) install --offline

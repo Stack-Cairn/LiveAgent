@@ -82,10 +82,11 @@ export function buildTextFromComposerDraft(
 
 export async function importPastedTextsAsFiles(params: {
   token: string;
+  agentId: string;
   workdir: string;
   pastes: MentionComposerLargePaste[];
 }) {
-  const { token, workdir, pastes } = params;
+  const { token, agentId, workdir, pastes } = params;
   const normalizedWorkdir = workdir.trim();
   if (!normalizedWorkdir) {
     throw new Error("项目目录未选择，无法发送大段粘贴内容。");
@@ -103,7 +104,7 @@ export async function importPastedTextsAsFiles(params: {
         type: "text/plain",
       }),
   );
-  const response = await importReadableFiles(token, normalizedWorkdir, textFiles);
+  const response = await importReadableFiles(token, agentId, normalizedWorkdir, textFiles);
   if (response.files.length !== pastes.length) {
     const skipped = response.skipped.length > 0 ? `\n${response.skipped.join("\n")}` : "";
     throw new Error(`部分大段粘贴内容未能导入为附件。${skipped}`);

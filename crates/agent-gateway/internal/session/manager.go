@@ -5,9 +5,10 @@ import (
 	"sync"
 	"time"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
+var ErrAgentIDRequired = errors.New("agent_id is required")
 var ErrAgentOffline = errors.New("agent offline")
 var ErrTunnelNotFound = errors.New("tunnel not found")
 var ErrTunnelExpired = errors.New("tunnel expired")
@@ -43,7 +44,7 @@ type AgentSession struct {
 	LastPing     time.Time
 
 	toAgent chan *OutboundEnvelope
-	pingCh  chan *gatewayv1.GatewayEnvelope
+	pingCh  chan *gatewayv2.GatewayEnvelope
 	done    chan struct{}
 
 	closeOnce sync.Once
@@ -54,7 +55,7 @@ type AgentSession struct {
 }
 
 type agentStream struct {
-	ch        chan *gatewayv1.AgentEnvelope
+	ch        chan *gatewayv2.AgentEnvelope
 	done      chan struct{}
 	closeOnce sync.Once
 }

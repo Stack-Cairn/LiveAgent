@@ -30,8 +30,9 @@ import { hasSettingsSyncChanged, resolveAppWorkspaceProjects } from "../historyU
 export function useGatewaySettingsSync(params: {
   token: string;
   api: GatewayWebSocketClientLike | null;
+  activeAgentId: string;
 }) {
-  const { token, api } = params;
+  const { token, api, activeAgentId } = params;
   const [settings, setSettingsState] = useState<AppSettings>(() => loadWebSettings(loadToken()));
   const [settingsSyncReady, setSettingsSyncReady] = useState(() => token.trim() === "");
   const [settingsSyncError, setSettingsSyncError] = useState<string | null>(null);
@@ -216,7 +217,7 @@ export function useGatewaySettingsSync(params: {
       cancelled = true;
       unsubscribe();
     };
-  }, [api, applyGatewaySettings, token]);
+  }, [api, activeAgentId, applyGatewaySettings, token]);
 
   return {
     settings,

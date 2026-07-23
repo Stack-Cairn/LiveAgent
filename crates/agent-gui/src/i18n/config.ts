@@ -1675,8 +1675,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.remoteTokenPlaceholder": "输入与 Gateway 配置一致的 Token",
     "settings.remoteTokenHint": "与 Gateway 启动时配置的 --token 参数保持一致，用于双向认证",
     "settings.remoteAgentId": "Agent 标识",
-    "settings.remoteAgentIdPlaceholder": "例如：macbook-pro",
-    "settings.remoteAgentIdHint": "本地 Agent 的唯一标识，在 WebUI 中显示，留空则自动使用主机名",
+    "settings.remoteAgentIdHint": "由此安装自动生成并持久化，连接不同 Gateway 时保持不变",
     "settings.remoteAdvanced": "高级选项",
     "settings.remoteAutoReconnect": "自动重连",
     "settings.remoteAutoReconnectHint": "连接断开后自动尝试重新连接 Gateway",
@@ -3797,9 +3796,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.remoteTokenHint":
       "Must match the --token argument used when starting the Gateway, used for mutual authentication",
     "settings.remoteAgentId": "Agent ID",
-    "settings.remoteAgentIdPlaceholder": "e.g. macbook-pro",
     "settings.remoteAgentIdHint":
-      "Unique identifier for this Agent shown in WebUI. Leave empty to use hostname",
+      "Generated and persisted by this installation; it stays stable across Gateway connections",
     "settings.remoteAdvanced": "Advanced Options",
     "settings.remoteAutoReconnect": "Auto Reconnect",
     "settings.remoteAutoReconnectHint": "Automatically reconnect to Gateway after connection drops",

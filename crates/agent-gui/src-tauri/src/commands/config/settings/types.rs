@@ -25,10 +25,8 @@ pub struct RemoteSettingsPayload {
     pub enabled: bool,
     #[serde(default)]
     pub gateway_url: String,
-    #[serde(default = "default_remote_grpc_port")]
-    pub grpc_port: u16,
-    #[serde(default)]
-    pub grpc_endpoint: String,
+    #[serde(default = "default_remote_gateway_port", alias = "grpcPort")]
+    pub gateway_port: u16,
     #[serde(default)]
     pub token: String,
     #[serde(default)]

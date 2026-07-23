@@ -1,14 +1,11 @@
 // Package chatcmd 承载网关侧 chat 命令编排（请求体归一化、运行时探活、命令投递与启动看门狗、
-// proto 信封构造）；v1/v2 协议层共用（自 internal/server/chat_commands.go 平移，行为不变），
+// proto 信封构造），供 v2 协议层复用，
 // 协议层只做载荷编解码，编排逻辑一律收敛于此。
 package chatcmd
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -16,11 +13,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/liveagent/agent-gateway/internal/config"
 	"github.com/liveagent/agent-gateway/internal/handler"
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
-// MessageRef 是 chat.edit_resend 引用的既有消息定位（JSON 线格式与 v1 一致）。
+// MessageRef 是 chat.edit_resend 引用的既有消息定位。
 type MessageRef struct {
 	SegmentIndex int    `json:"segment_index"`
 	MessageIndex int    `json:"message_index"`
@@ -100,6 +97,7 @@ func DispatchAcceptedCommand(
 	parent context.Context,
 	cfg *config.Config,
 	sm *session.Manager,
+	agentID string,
 	cleanupWatch func(),
 	start session.ChatCommandStart,
 	body handler.ChatRequestBody,
@@ -117,16 +115,16 @@ func DispatchAcceptedCommand(
 	if baseMessageRef != nil {
 		commandType = "chat.edit_resend"
 	}
-	if err := sm.SendToAgentContext(ctx, buildCommandEnvelope(start.RunID, commandType, body, baseMessageRef)); err != nil {
+	if err := sm.SendToAgentContext(ctx, agentID, buildCommandEnvelope(start.RunID, commandType, body, baseMessageRef)); err != nil {
 		message := "chat command failed"
 		if err != nil && strings.TrimSpace(err.Error()) != "" {
 			message = strings.TrimSpace(err.Error())
 		}
-		sm.FailChatCommand(start.RunID, "desktop_runtime_unavailable", message)
+		sm.FailChatCommand(agentID, start.RunID, "desktop_runtime_unavailable", message)
 		return
 	}
 	LogCommandSpan(traceID, "command_delivered", start.RunID, start.ConversationID, body.ClientRequestID, commandType)
-	WatchAcceptedCommandStartup(parent, cfg, sm, start.RunID)
+	WatchAcceptedCommandStartup(parent, cfg, sm, agentID, start.RunID)
 }
 
 // ProbeRuntime 验证桌面端连接可完成真实往返；探活请求 id 的特殊前缀同时是唤醒
@@ -134,20 +132,21 @@ func DispatchAcceptedCommand(
 func ProbeRuntime(
 	ctx context.Context,
 	sm *session.Manager,
+	agentID string,
 ) error {
 	if sm == nil {
 		return session.ErrAgentOffline
 	}
-	sessionEpoch, online := sm.ChatRuntimeProbeEpoch()
+	sessionEpoch, online := sm.ChatRuntimeProbeEpoch(agentID)
 	if !online {
 		return session.ErrAgentOffline
 	}
 	requestID := runtimeWakeRequestPrefix + uuid.NewString()
-	response, err := sm.AwaitUnaryResponse(ctx, requestID, &gatewayv1.GatewayEnvelope{
+	response, err := sm.AwaitUnaryResponse(ctx, agentID, requestID, &gatewayv2.GatewayEnvelope{
 		RequestId: requestID,
 		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv1.GatewayEnvelope_Ping{
-			Ping: &gatewayv1.PingRequest{Timestamp: time.Now().Unix()},
+		Payload: &gatewayv2.GatewayEnvelope_Ping{
+			Ping: &gatewayv2.PingRequest{Timestamp: time.Now().Unix()},
 		},
 	})
 	if err != nil {
@@ -156,18 +155,18 @@ func ProbeRuntime(
 	if response == nil || response.GetPong() == nil {
 		return errors.New("desktop agent returned an invalid chat runtime probe response")
 	}
-	if !sm.RecordChatRuntimeProbe(sessionEpoch) {
+	if !sm.RecordChatRuntimeProbe(agentID, sessionEpoch) {
 		return session.ErrAgentOffline
 	}
 	return nil
 }
 
 // ProbeRuntimeForCommand 在近期已有成功探活时直接复用结果。
-func ProbeRuntimeForCommand(ctx context.Context, sm *session.Manager) error {
-	if sm != nil && sm.ChatRuntimeProbeFresh(runtimeProbeReuseWindow) {
+func ProbeRuntimeForCommand(ctx context.Context, sm *session.Manager, agentID string) error {
+	if sm != nil && sm.ChatRuntimeProbeFresh(agentID, runtimeProbeReuseWindow) {
 		return nil
 	}
-	return ProbeRuntime(ctx, sm)
+	return ProbeRuntime(ctx, sm, agentID)
 }
 
 // WatchAcceptedCommandStartup 对启动窗口内未落定（开始、结束或进入桌面提示队列）的命令判失败。
@@ -175,24 +174,26 @@ func WatchAcceptedCommandStartup(
 	parent context.Context,
 	cfg *config.Config,
 	sm *session.Manager,
+	agentID string,
 	runID string,
 ) {
-	if sm == nil || strings.TrimSpace(runID) == "" {
+	agentID = strings.TrimSpace(agentID)
+	if sm == nil || agentID == "" || strings.TrimSpace(runID) == "" {
 		return
 	}
 	if !waitCommandWatchdog(parent, StartTimeout(cfg)) {
 		return
 	}
-	if sm.ChatCommandSettled(runID) {
+	if sm.ChatCommandSettled(agentID, runID) {
 		return
 	}
 	if !waitCommandWatchdog(parent, RenderStartTimeout(cfg)) {
 		return
 	}
-	if sm.ChatCommandSettled(runID) {
+	if sm.ChatCommandSettled(agentID, runID) {
 		return
 	}
-	sm.FailChatCommand(runID, "startup_timeout",
+	sm.FailChatCommand(agentID, runID, "startup_timeout",
 		"The desktop app did not start the remote chat request. Please retry.")
 }
 
@@ -284,12 +285,12 @@ func buildCommandEnvelope(
 	commandType string,
 	body handler.ChatRequestBody,
 	baseMessageRef *MessageRef,
-) *gatewayv1.GatewayEnvelope {
-	return &gatewayv1.GatewayEnvelope{
+) *gatewayv2.GatewayEnvelope {
+	return &gatewayv2.GatewayEnvelope{
 		RequestId: strings.TrimSpace(requestID),
 		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv1.GatewayEnvelope_ChatCommand{
-			ChatCommand: &gatewayv1.ChatCommandRequest{
+		Payload: &gatewayv2.GatewayEnvelope_ChatCommand{
+			ChatCommand: &gatewayv2.ChatCommandRequest{
 				Type:           strings.TrimSpace(commandType),
 				Request:        buildProtoRequest(body),
 				BaseMessageRef: BuildProtoMessageRef(baseMessageRef),
@@ -299,19 +300,19 @@ func buildCommandEnvelope(
 }
 
 // BuildCancelCommandPayload 构造 chat.cancel 的 GatewayEnvelope 载荷臂。
-func BuildCancelCommandPayload(conversationID string) *gatewayv1.GatewayEnvelope_ChatCommand {
-	return &gatewayv1.GatewayEnvelope_ChatCommand{
-		ChatCommand: &gatewayv1.ChatCommandRequest{
+func BuildCancelCommandPayload(conversationID string) *gatewayv2.GatewayEnvelope_ChatCommand {
+	return &gatewayv2.GatewayEnvelope_ChatCommand{
+		ChatCommand: &gatewayv2.ChatCommandRequest{
 			Type: "chat.cancel",
-			Cancel: &gatewayv1.CancelChatRequest{
+			Cancel: &gatewayv2.CancelChatRequest{
 				ConversationId: strings.TrimSpace(conversationID),
 			},
 		},
 	}
 }
 
-func buildProtoRequest(body handler.ChatRequestBody) *gatewayv1.ChatRequest {
-	return &gatewayv1.ChatRequest{
+func buildProtoRequest(body handler.ChatRequestBody) *gatewayv2.ChatRequest {
+	return &gatewayv2.ChatRequest{
 		ConversationId:      body.ConversationID,
 		ClientRequestId:     body.ClientRequestID,
 		Message:             body.Message,
@@ -326,11 +327,11 @@ func buildProtoRequest(body handler.ChatRequestBody) *gatewayv1.ChatRequest {
 }
 
 // BuildProtoMessageRef 把 MessageRef 转为 proto 表示（nil 安全）。
-func BuildProtoMessageRef(ref *MessageRef) *gatewayv1.ChatMessageRef {
+func BuildProtoMessageRef(ref *MessageRef) *gatewayv2.ChatMessageRef {
 	if ref == nil {
 		return nil
 	}
-	return &gatewayv1.ChatMessageRef{
+	return &gatewayv2.ChatMessageRef{
 		SegmentIndex: int32(ref.SegmentIndex),
 		MessageIndex: int32(ref.MessageIndex),
 		SegmentId:    strings.TrimSpace(ref.SegmentID),
@@ -342,7 +343,7 @@ func BuildProtoMessageRef(ref *MessageRef) *gatewayv1.ChatMessageRef {
 
 // RequestBodyFromProto 把 v2 直带的 proto ChatRequest 还原为编排层请求体
 // （buildProtoRequest 的逆向；调用方随后统一走 NormalizeRequestBody）。
-func RequestBodyFromProto(req *gatewayv1.ChatRequest) handler.ChatRequestBody {
+func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 	if req == nil {
 		return handler.ChatRequestBody{}
 	}
@@ -384,7 +385,7 @@ func RequestBodyFromProto(req *gatewayv1.ChatRequest) handler.ChatRequestBody {
 }
 
 // MessageRefFromProto 把 proto 消息引用还原为编排层表示（nil 安全）。
-func MessageRefFromProto(ref *gatewayv1.ChatMessageRef) *MessageRef {
+func MessageRefFromProto(ref *gatewayv2.ChatMessageRef) *MessageRef {
 	if ref == nil {
 		return nil
 	}
@@ -415,55 +416,6 @@ func ValidateMessageRef(ref *MessageRef) error {
 	}
 	if ref.Role != "user" {
 		return errors.New("base_message_ref role must be user")
-	}
-	return nil
-}
-
-// DecodeCommandPayload 解码 v1 JSON 线格式的 chat.command 载荷（{type, payload:{...}}）；
-// v2 直带 proto ChatCommandRequest，不经此路。
-func DecodeCommandPayload(raw json.RawMessage) (string, handler.ChatRequestBody, *MessageRef, error) {
-	type commandEnvelope struct {
-		Type    string          `json:"type"`
-		Payload json.RawMessage `json:"payload"`
-	}
-	type commandPayload struct {
-		BaseMessageRef *MessageRef `json:"base_message_ref,omitempty"`
-		handler.ChatRequestBody
-	}
-
-	var envelope commandEnvelope
-	if err := decodeStrictJSON(raw, &envelope); err != nil {
-		return "", handler.ChatRequestBody{}, nil, err
-	}
-
-	commandType := strings.TrimSpace(envelope.Type)
-	if commandType == "" {
-		return "", handler.ChatRequestBody{}, nil, errors.New("chat command type is required")
-	}
-	if len(envelope.Payload) == 0 || string(envelope.Payload) == "null" {
-		return "", handler.ChatRequestBody{}, nil, errors.New("chat command payload is required")
-	}
-	if commandType == "chat.cancel" {
-		return commandType, handler.ChatRequestBody{}, nil, nil
-	}
-
-	var payload commandPayload
-	if err := decodeStrictJSON(envelope.Payload, &payload); err != nil {
-		return "", handler.ChatRequestBody{}, nil, err
-	}
-
-	return commandType, payload.ChatRequestBody, payload.BaseMessageRef, nil
-}
-
-func decodeStrictJSON(raw []byte, value any) error {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(value); err != nil {
-		return err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return errors.New("invalid trailing JSON")
 	}
 	return nil
 }

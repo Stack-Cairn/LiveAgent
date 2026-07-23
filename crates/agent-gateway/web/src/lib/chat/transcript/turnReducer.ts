@@ -650,6 +650,8 @@ export function rebuildTurnFromSnapshot(turn: Turn, parsed: ChatEntry[]): Turn {
     if (entry.kind === "user") {
       if (!user) {
         user = { ...entry, id: seededUserEntryId(turn.runId || turn.key) };
+      } else if (entry.messageId && user.messageId !== entry.messageId) {
+        user = { ...user, messageId: entry.messageId };
       }
       continue;
     }

@@ -25,26 +25,22 @@ fn main() {
         });
     println!("cargo:rustc-env=LIVEAGENT_APP_VERSION={app_version}");
 
-    // v1/v2 proto 共用 agent-gateway 目录为 include 根，import 路径与 Go 侧 buf 模块一致；
-    // v2 经该路径 import v1 复用其消息。
+    // v2 业务消息与 WebSocket 帧壳共用 agent-gateway 目录为 include 根。
     let gateway_root = std::path::Path::new(&manifest_dir)
         .join("..")
         .join("..")
         .join("agent-gateway");
-    let proto_v1 = gateway_root.join("proto").join("v1").join("gateway.proto");
-    let proto_v2 = gateway_root
+    let proto_v2 = gateway_root.join("proto").join("v2").join("gateway.proto");
+    let proto_v2_ws = gateway_root
         .join("proto")
         .join("v2")
         .join("gateway_ws.proto");
 
-    println!("cargo:rerun-if-changed={}", proto_v1.display());
     println!("cargo:rerun-if-changed={}", proto_v2.display());
+    println!("cargo:rerun-if-changed={}", proto_v2_ws.display());
 
-    tonic_prost_build::configure()
-        .build_server(false)
-        // v1 gRPC 服务已随 v1 协议移除，proto 只含消息；桌面端仅消费消息类型。
-        .build_client(false)
-        .compile_protos(&[proto_v1, proto_v2], &[gateway_root])
+    prost_build::Config::new()
+        .compile_protos(&[proto_v2, proto_v2_ws], &[gateway_root])
         .expect("compile gateway protos");
 
     let is_windows_msvc = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")

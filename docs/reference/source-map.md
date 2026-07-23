@@ -86,8 +86,8 @@
 | Session manager | `crates/agent-gateway/internal/session/manager.go`、`agent_session.go`、`manager_state.go`、`manager_registry.go`、`manager_*_sync.go`、`manager_terminal.go`、`manager_chat_runs.go` |
 | Auth | `crates/agent-gateway/internal/auth/*` |
 | Handlers | `crates/agent-gateway/internal/handler/*` |
-| Proto source | `crates/agent-gateway/proto/v1/gateway.proto`（业务消息）、`proto/v2/gateway_ws.proto`（v2 帧壳） |
-| Generated proto | `crates/agent-gateway/internal/proto/v1/*`、`internal/proto/v2/*` |
+| Proto source | `crates/agent-gateway/proto/v2/gateway.proto`（业务消息）、`proto/v2/gateway_ws.proto`（v2 帧壳） |
+| Generated proto | `crates/agent-gateway/internal/proto/v2/*` |
 
 ## WebUI
 

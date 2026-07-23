@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	gatewayv1 "github.com/liveagent/agent-gateway/internal/proto/v1"
+	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
 
@@ -30,9 +30,9 @@ func newRequestID() string {
 
 func waitForEnvelope(
 	ctx context.Context,
-	ch <-chan *gatewayv1.AgentEnvelope,
+	ch <-chan *gatewayv2.AgentEnvelope,
 	done <-chan struct{},
-) (*gatewayv1.AgentEnvelope, error) {
+) (*gatewayv2.AgentEnvelope, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -46,7 +46,7 @@ func waitForEnvelope(
 	}
 }
 
-func GatewayErrorStatus(errResp *gatewayv1.ErrorResponse) int {
+func GatewayErrorStatus(errResp *gatewayv2.ErrorResponse) int {
 	if errResp == nil {
 		return http.StatusBadGateway
 	}
