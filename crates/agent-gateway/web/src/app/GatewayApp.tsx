@@ -4785,6 +4785,7 @@ export default function GatewayApp() {
                       onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
                       onPickReadableFiles={() => fileInputRef.current?.click()}
                       onPasteFiles={handleImportReadableFiles}
+                      onLoadUploadedImagePreview={handleLoadUploadedImagePreview}
                       loadHistoryPrompts={loadComposerHistoryPrompts}
                       pendingUploadedFiles={pendingUploadedFiles}
                       onRemovePendingUpload={(relativePath) => {
