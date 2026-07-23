@@ -19,7 +19,7 @@ const MAX_FONT_FAMILY_LENGTH = 200;
 
 // Reject values that could break out of a CSS declaration or inject external resources.
 const UNSAFE_FONT_FAMILY_PATTERN = /[;{}<>\\]|url\s*\(|@import|expression\s*\(/i;
-const ALLOWED_FONT_FAMILY_PATTERN = /^[\w\s,"'\-\.\+]+$/u;
+const ALLOWED_FONT_FAMILY_PATTERN = /^[\w\s,"'\-.+]+$/u;
 
 type LocalFontData = {
   family?: string;
@@ -86,7 +86,7 @@ export function applyFontFamilies(
 export function quoteFontFamilyName(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "";
-  if (/^[a-zA-Z0-9_\-]+$/.test(trimmed)) return trimmed;
+  if (/^[a-zA-Z0-9_-]+$/.test(trimmed)) return trimmed;
   return `"${trimmed.replace(/"/g, '\\"')}"`;
 }
 

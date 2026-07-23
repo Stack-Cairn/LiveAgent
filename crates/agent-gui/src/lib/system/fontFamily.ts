@@ -1,10 +1,11 @@
 export {
+  applyFontFamilies,
   CODE_FONT_FAMILY_CHANGE_EVENT,
   DEFAULT_APP_FONT_FAMILY,
   DEFAULT_CHAT_FONT_FAMILY,
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_INTERFACE_FONT_FAMILY,
-  applyFontFamilies,
+  type FontFamilySettings,
   getCodeFontFamily,
   listLocalFontFamilies,
   normalizeFontFamily,
@@ -13,5 +14,4 @@ export {
   resolveChatFontFamily,
   resolveCodeFontFamily,
   resolveFontFamily,
-  type FontFamilySettings,
 } from "../shared/fontFamily";
