@@ -35,7 +35,13 @@ import {
   validateCronExpression,
 } from "../../lib/automation";
 import { parseModelValue, toModelValue } from "../../lib/providers/llm";
-import { type ExecutionMode, isAgentExecutionMode } from "../../lib/settings";
+import {
+  type CustomProvider,
+  type ExecutionMode,
+  getChatRuntimeReasoningLevelsForProvider,
+  isAgentExecutionMode,
+  isThinkingAlwaysOnForModel,
+} from "../../lib/settings";
 import { useModalMotion } from "../../lib/shared/modalMotion";
 import {
   createEmptyRequestDraft,
@@ -107,6 +113,35 @@ function isCronReasoningLevel(value: string): value is CronReasoningLevel {
   return (CRON_REASONING_LEVELS as readonly string[]).includes(value);
 }
 
+function getCronReasoningLevels(
+  selectedModelValue: string,
+  providers: CustomProvider[],
+): CronReasoningLevel[] {
+  const selectedModel = parseModelValue(selectedModelValue);
+  const provider = selectedModel
+    ? providers.find((item) => item.id === selectedModel.customProviderId)
+    : undefined;
+  if (!selectedModel || !provider) return [...CRON_REASONING_LEVELS];
+
+  const modelConfig = provider.models.find((model) => model.id === selectedModel.model);
+  const supportedLevels = getChatRuntimeReasoningLevelsForProvider({
+    providerId: provider.type,
+    baseUrl: provider.baseUrl,
+    requestFormat: provider.requestFormat,
+    modelId: selectedModel.model,
+    modelConfig,
+  }).filter(isCronReasoningLevel);
+  const thinkingAlwaysOn = isThinkingAlwaysOnForModel(
+    provider.type,
+    selectedModel.model,
+    provider.baseUrl,
+    provider.requestFormat,
+    modelConfig,
+  );
+
+  return thinkingAlwaysOn ? supportedLevels : ["off", ...supportedLevels];
+}
+
 /**
  * Fields the modal edits. `enabled` is deliberately not part of the payload:
  * toggling is its own operation, so saving an edit can never write back a
@@ -118,6 +153,7 @@ type CronTaskModalProps = {
   mode: "add" | "edit";
   initialData?: CronTask;
   modelOptions: CronPromptModelOption[];
+  providers: CustomProvider[];
   workspaceOptions: CronWorkspaceOption[];
   executionMode: ExecutionMode;
   /**
@@ -134,6 +170,7 @@ export function CronTaskModal({
   mode,
   initialData,
   modelOptions,
+  providers,
   workspaceOptions,
   executionMode,
   onPickWorkdir,
@@ -206,6 +243,8 @@ export function CronTaskModal({
           },
         ]
       : modelOptions;
+
+  const cronReasoningLevels = getCronReasoningLevels(selectedModelValue, providers);
 
   const selectedWorkspaceOption = customWorkdir
     ? null
@@ -780,6 +819,10 @@ export function CronTaskModal({
                       onChange={(value) => {
                         setFormError(null);
                         setSelectedModelValue(value);
+                        const nextReasoningLevels = getCronReasoningLevels(value, providers);
+                        setReasoning((current) =>
+                          nextReasoningLevels.includes(current) ? current : DEFAULT_CRON_REASONING,
+                        );
                       }}
                     />
                   </div>
@@ -800,7 +843,7 @@ export function CronTaskModal({
                         <SelectValue>{t(REASONING_LEVEL_I18N_KEYS[reasoning])}</SelectValue>
                       </SelectTrigger>
                       <SelectContent className="max-h-60">
-                        {CRON_REASONING_LEVELS.map((level) => (
+                        {cronReasoningLevels.map((level) => (
                           <SelectItem key={level} value={level}>
                             {t(REASONING_LEVEL_I18N_KEYS[level])}
                           </SelectItem>

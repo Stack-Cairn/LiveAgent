@@ -9,13 +9,17 @@ import {
   resolveAnthropicKnownModelLimits,
   shouldSendAnthropicLongContextHeader,
 } from "../providers/anthropicModels";
-import { getAvailableThinkingLevelsForModel } from "../providers/runtime/modelFactory";
+import {
+  getAvailableThinkingLevelsForModel,
+  isThinkingAlwaysOnForModel,
+} from "../providers/runtime/modelFactory";
 import { createUuid } from "../shared/id";
 import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
 import { SYSTEM_TOOL_OPTIONS, type SystemToolId } from "../tools/systemToolOptions";
 import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
 
 export type { SystemToolId } from "../tools/systemToolOptions";
+export { isThinkingAlwaysOnForModel };
 
 export type ProviderId = "codex" | "claude_code" | "gemini";
 

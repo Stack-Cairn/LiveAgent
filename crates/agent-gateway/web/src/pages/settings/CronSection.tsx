@@ -328,6 +328,7 @@ export function CronSection(props: SettingsSectionProps) {
           mode={modal.mode}
           initialData={modal.task}
           modelOptions={modelOptions}
+          providers={settings.customProviders}
           workspaceOptions={workspaceOptions}
           executionMode={settings.system.executionMode}
           onPickWorkdir={pickWorkdirDirectory}

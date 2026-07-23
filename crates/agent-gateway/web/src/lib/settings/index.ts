@@ -823,6 +823,8 @@ export function getChatRuntimeReasoningLevelsForProvider(params: {
   providerId?: ProviderId;
   requestFormat?: CodexRequestFormat;
   modelId?: string;
+  baseUrl?: string;
+  modelConfig?: ProviderModelConfig;
 }): ReasoningLevel[] {
   return getKnownModelThinkingLevels(params.providerId ?? "claude_code", params.modelId);
 }
@@ -1153,6 +1155,9 @@ export function getKnownModelThinkingLevels(
 export function isThinkingAlwaysOnForModel(
   providerId: ProviderId,
   modelId: string | undefined,
+  _baseUrl?: string,
+  _requestFormat?: CodexRequestFormat,
+  _modelConfig?: ProviderModelConfig,
 ): boolean {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return false;
