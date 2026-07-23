@@ -196,6 +196,11 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   assert.deepEqual(providers.buildProviderRequestHeaders("gemini", "secret", "conversation-1"), {
     "x-goog-api-key": "secret",
   });
+  // xai：Bearer + grok CLI 身份 UA，不带 Codex CLI 的 session 头。
+  assert.deepEqual(providers.buildProviderRequestHeaders("xai", "secret", "conversation-1"), {
+    Authorization: "Bearer secret",
+    "User-Agent": "grok-shell/0.2.110 (linux; x86_64)",
+  });
   const generatedCodexHeaders = providers.buildProviderRequestHeaders("codex", "secret");
   assert.match(generatedCodexHeaders.session_id, /^[0-9a-f-]{36}$/i);
   assert.equal(generatedCodexHeaders.conversation_id, generatedCodexHeaders.session_id);
@@ -270,6 +275,11 @@ test("provider-specific custom header suggestions include standard model headers
   assert.ok(codexPresets.includes("session_id"));
   assert.ok(codexPresets.includes("conversation_id"));
   assert.ok(!codexPresets.includes("anthropic-version"));
+
+  const xaiPresets = customHeaderHelpers.getCustomHeaderKeyPresets("xai");
+  assert.ok(xaiPresets.includes("User-Agent"));
+  assert.ok(!xaiPresets.includes("session_id"));
+  assert.ok(!xaiPresets.includes("anthropic-version"));
 });
 
 test("local proxy preserves explicit user-agent and content-type values for the upstream hop", () => {
