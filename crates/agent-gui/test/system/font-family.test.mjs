@@ -31,6 +31,63 @@ test("font family resolvers preserve the established defaults", () => {
   assert.equal(fontFamily.quoteFontFamilyName("Inter"), "Inter");
 });
 
+test("font family select helpers map default/custom sentinels and build options", () => {
+  const options = fontFamily.buildFontFamilySelectOptions(["PingFang SC", "Inter"]);
+  assert.equal(
+    fontFamily.toFontFamilySelectValue("", options),
+    fontFamily.FONT_FAMILY_DEFAULT_SELECT_VALUE,
+  );
+  assert.equal(fontFamily.toFontFamilySelectValue("Inter", options), "Inter");
+  assert.equal(
+    fontFamily.toFontFamilySelectValue("Maple Mono", options),
+    fontFamily.FONT_FAMILY_CUSTOM_SELECT_VALUE,
+  );
+  assert.equal(
+    fontFamily.toFontFamilySelectValue("", options, true),
+    fontFamily.FONT_FAMILY_CUSTOM_SELECT_VALUE,
+  );
+  assert.equal(
+    fontFamily.fromFontFamilySelectValue(fontFamily.FONT_FAMILY_DEFAULT_SELECT_VALUE),
+    "",
+  );
+  assert.equal(
+    fontFamily.fromFontFamilySelectValue(fontFamily.FONT_FAMILY_CUSTOM_SELECT_VALUE),
+    "",
+  );
+  assert.equal(fontFamily.fromFontFamilySelectValue("Menlo"), "Menlo");
+  assert.equal(fontFamily.isKnownFontFamilySelectValue("Inter", options), true);
+  assert.equal(fontFamily.isKnownFontFamilySelectValue("Maple Mono", options), false);
+
+  assert.deepEqual(
+    options.map((option) => option.value),
+    [
+      "Arial",
+      '"Cascadia Code"',
+      "Consolas",
+      '"Fira Code"',
+      "Georgia",
+      '"Helvetica Neue"',
+      '"Hiragino Sans GB"',
+      '"IBM Plex Mono"',
+      "Inter",
+      '"JetBrains Mono"',
+      "Menlo",
+      '"Microsoft YaHei"',
+      "Monaco",
+      '"Noto Sans SC"',
+      '"PingFang SC"',
+      '"SF Mono"',
+      '"SF Pro Text"',
+      '"Songti SC"',
+      '"Source Code Pro"',
+      '"Source Han Sans SC"',
+      "STSong",
+      '"Times New Roman"',
+    ],
+  );
+  assert.equal(options.find((option) => option.value === '"PingFang SC"')?.label, "PingFang SC");
+});
+
 test("applying font families updates CSS variables and only emits code changes", () => {
   const previousWindow = globalThis.window;
   const windowTarget = new EventTarget();

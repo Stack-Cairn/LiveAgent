@@ -8,6 +8,40 @@ export const DEFAULT_CODE_FONT_FAMILY =
 
 // Shared between GUI and WebUI so mirrored XTerm can listen without platform adapters.
 export const CODE_FONT_FAMILY_CHANGE_EVENT = "liveagent:code-font-family-change";
+// SelectItem rejects empty strings, so built-in stacks / freeform input use sentinels.
+export const FONT_FAMILY_DEFAULT_SELECT_VALUE = "__default__";
+export const FONT_FAMILY_CUSTOM_SELECT_VALUE = "__custom__";
+
+// Curated families always offered even when queryLocalFonts is unavailable.
+export const COMMON_FONT_FAMILIES = [
+  "Inter",
+  "SF Pro Text",
+  "PingFang SC",
+  "Hiragino Sans GB",
+  "Microsoft YaHei",
+  "Noto Sans SC",
+  "Source Han Sans SC",
+  "Helvetica Neue",
+  "Arial",
+  "Georgia",
+  "Times New Roman",
+  "Songti SC",
+  "STSong",
+  "SF Mono",
+  "Menlo",
+  "Monaco",
+  "Cascadia Code",
+  "Consolas",
+  "JetBrains Mono",
+  "Fira Code",
+  "Source Code Pro",
+  "IBM Plex Mono",
+] as const;
+
+export type FontFamilySelectOption = {
+  value: string;
+  label: string;
+};
 
 export type FontFamilySettings = {
   interfaceFontFamily: string;
@@ -88,6 +122,61 @@ export function quoteFontFamilyName(name: string): string {
   if (!trimmed) return "";
   if (/^[a-zA-Z0-9_-]+$/.test(trimmed)) return trimmed;
   return `"${trimmed.replace(/"/g, '\\"')}"`;
+}
+
+export function buildFontFamilySelectOptions(
+  localFamilies: readonly string[] = [],
+): FontFamilySelectOption[] {
+  const byValue = new Map<string, string>();
+
+  for (const family of COMMON_FONT_FAMILIES) {
+    const value = quoteFontFamilyName(family);
+    if (value) byValue.set(value, family);
+  }
+
+  for (const family of localFamilies) {
+    const trimmed = typeof family === "string" ? family.trim() : "";
+    if (!trimmed) continue;
+    const value = quoteFontFamilyName(trimmed);
+    if (value && !byValue.has(value)) byValue.set(value, trimmed);
+  }
+
+  return [...byValue.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((left, right) =>
+      left.label.localeCompare(right.label, undefined, { sensitivity: "base" }),
+    );
+}
+
+export function isKnownFontFamilySelectValue(
+  value: string,
+  options: readonly FontFamilySelectOption[],
+): boolean {
+  const normalized = normalizeFontFamily(value);
+  if (!normalized) return true;
+  return options.some((option) => option.value === normalized);
+}
+
+export function toFontFamilySelectValue(
+  value: string,
+  options: readonly FontFamilySelectOption[],
+  preferCustom = false,
+): string {
+  const normalized = normalizeFontFamily(value);
+  if (!normalized) {
+    return preferCustom ? FONT_FAMILY_CUSTOM_SELECT_VALUE : FONT_FAMILY_DEFAULT_SELECT_VALUE;
+  }
+  if (!preferCustom && options.some((option) => option.value === normalized)) {
+    return normalized;
+  }
+  return FONT_FAMILY_CUSTOM_SELECT_VALUE;
+}
+
+export function fromFontFamilySelectValue(value: string): string {
+  if (value === FONT_FAMILY_DEFAULT_SELECT_VALUE || value === FONT_FAMILY_CUSTOM_SELECT_VALUE) {
+    return "";
+  }
+  return normalizeFontFamily(value);
 }
 
 export async function listLocalFontFamilies(): Promise<string[]> {
