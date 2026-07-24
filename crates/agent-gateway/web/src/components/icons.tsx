@@ -3,6 +3,7 @@ import { type ComponentType, type SVGProps, useId } from "react";
 import McpLogoSource from "~icons/gravity-ui/logo-mcp";
 import ConnectionIconSource from "~icons/gravity-ui/plug-connection";
 import ClaudeSource from "~icons/logos/claude-icon";
+import GrokSource from "~icons/logos/grok-icon";
 import OpenAISource from "~icons/logos/openai-icon";
 import ArchiveSource from "~icons/lucide/archive";
 import ArchiveRestoreSource from "~icons/lucide/archive-restore";
@@ -455,25 +456,11 @@ export const AlertTriangle = createIcon(AlertTriangleSource);
 export const ClaudeIcon = createIcon(ClaudeSource);
 export const GeminiIcon = createIcon(GeminiIconSource);
 /**
- * Official xAI / Grok brand mark (from CC-Switch `src/icons/extracted/xai.svg`).
- * Monochrome via currentColor so it tracks light/dark UI chrome.
+ * Grok brand mark from the Iconify `logos` set (`logos:grok-icon`).
+ * The set ships it unfilled, so pin currentColor to track light/dark chrome.
  */
-function GrokIconSource({ title, ...props }: SVGProps<SVGSVGElement> & { title?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="1em"
-      height="1em"
-      fill="currentColor"
-      fillRule="evenodd"
-      xmlns="http://www.w3.org/2000/svg"
-      {...props}
-      aria-hidden={title ? undefined : true}
-    >
-      <title>{title ?? "Grok"}</title>
-      <path d="M6.469 8.776L16.512 23h-4.464L2.005 8.776H6.47zm-.004 7.9l2.233 3.164L6.467 23H2l4.465-6.324zM22 2.582V23h-3.659V7.764L22 2.582zM22 1l-9.952 14.095-2.233-3.163L17.533 1H22z" />
-    </svg>
-  );
+function GrokIconSource(props: SVGProps<SVGSVGElement> & { title?: string }) {
+  return <GrokSource fill="currentColor" {...props} />;
 }
 export const GrokIcon = createIcon(GrokIconSource);
 export const Archive = createIcon(ArchiveSource);
