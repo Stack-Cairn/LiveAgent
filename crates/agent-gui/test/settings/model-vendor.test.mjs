@@ -119,3 +119,35 @@ test("sortModelsByActiveStateAndVendor puts active models first before vendor so
     ["gpt-z", "gpt-a", "unknown-active", "claude-z", "claude-a", "gemini-z"],
   );
 });
+
+test("findNewModelIds detects every model added by one refresh and removes duplicates", () => {
+  assert.deepEqual(
+    modelVendor.findNewModelIds(
+      [{ id: "gpt-a" }],
+      [{ id: "gpt-a" }, { id: "claude-z" }, { id: "gpt-z" }, { id: "claude-z" }],
+    ),
+    ["claude-z", "gpt-z"],
+  );
+});
+
+test("model order snapshots stay stable across active changes and append new rows", () => {
+  const models = [{ id: "claude-z" }, { id: "gpt-a" }, { id: "gemini-z" }];
+  const snapshot = modelVendor.createModelOrderSnapshot(models, undefined, new Set(["gpt-a"]));
+
+  assert.deepEqual(snapshot, ["gpt-a", "claude-z", "gemini-z"]);
+  assert.deepEqual(
+    modelVendor
+      .applyModelOrderSnapshot([...models, { id: "gpt-z" }], snapshot)
+      .map((model) => model.id),
+    ["gpt-a", "claude-z", "gemini-z", "gpt-z"],
+  );
+
+  assert.deepEqual(
+    modelVendor.createModelOrderSnapshot(
+      [...models, { id: "gpt-z" }],
+      undefined,
+      new Set(["gpt-a", "gpt-z"]),
+    ),
+    ["gpt-z", "gpt-a", "claude-z", "gemini-z"],
+  );
+});
