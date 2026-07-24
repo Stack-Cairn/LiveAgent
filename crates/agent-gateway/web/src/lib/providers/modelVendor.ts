@@ -157,3 +157,52 @@ export function sortModelsByActiveStateAndVendor<T extends ModelVendorInput>(
   }
   return [...sortModelsByVendor(active), ...sortModelsByVendor(inactive)];
 }
+
+export function findNewModelIds<T extends Pick<ModelVendorInput, "id">>(
+  previousModels: readonly T[],
+  nextModels: readonly T[],
+): string[] {
+  const previousIds = new Set(previousModels.map((model) => model.id));
+  const newIds = new Set<string>();
+  for (const model of nextModels) {
+    if (!previousIds.has(model.id)) newIds.add(model.id);
+  }
+  return Array.from(newIds);
+}
+
+export function applyModelOrderSnapshot<T extends ModelVendorInput>(
+  models: readonly T[],
+  order: readonly string[],
+): T[] {
+  const byId = new Map(models.map((model) => [model.id, model]));
+  const included = new Set<string>();
+  const ordered = order.flatMap((id) => {
+    const model = byId.get(id);
+    if (!model || included.has(id)) return [];
+    included.add(id);
+    return [model];
+  });
+  for (const model of models) {
+    if (!included.has(model.id)) ordered.push(model);
+  }
+  return ordered;
+}
+
+export function createModelOrderSnapshot<T extends ModelVendorInput>(
+  models: readonly T[],
+  configuredOrder: readonly string[] | undefined,
+  activeModelIds: ReadonlySet<string>,
+): string[] {
+  if (!configuredOrder) {
+    return sortModelsByActiveStateAndVendor(models, activeModelIds).map((model) => model.id);
+  }
+
+  const configuredModels = applyModelOrderSnapshot(models, configuredOrder);
+  const configuredIds = new Set(configuredOrder);
+  const configuredPrefix = configuredModels.filter((model) => configuredIds.has(model.id));
+  const missingModels = models.filter((model) => !configuredIds.has(model.id));
+  return [
+    ...configuredPrefix,
+    ...sortModelsByActiveStateAndVendor(missingModels, activeModelIds),
+  ].map((model) => model.id);
+}

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../../src-tauri/icons/custom/ccswitch.png";
 import cherryStudioLogoUrl from "../../../src-tauri/icons/custom/cherrystudio.png";
@@ -56,7 +56,11 @@ import {
   isValidCustomHeaderKey,
 } from "../../lib/providers/customHeaders";
 import { parseModelValue, toModelValue } from "../../lib/providers/llm";
-import { sortModelsByActiveStateAndVendor } from "../../lib/providers/modelVendor";
+import {
+  applyModelOrderSnapshot,
+  createModelOrderSnapshot,
+  findNewModelIds,
+} from "../../lib/providers/modelVendor";
 import {
   CODEX_REQUEST_FORMAT_LABELS,
   type CodexRequestFormat,
@@ -102,6 +106,21 @@ type ModelEditDraft = {
   contextWindow: string;
   maxOutputToken: string;
 };
+
+type NewModelPhase = "visible" | "fading";
+
+type PendingModelLayout = {
+  topById: Map<string, number>;
+  scrollContainer: HTMLDivElement | null;
+  scrollTop: number | null;
+  animate: boolean;
+};
+
+const NEW_MODEL_SORT_DELAY_MS = 1_200;
+const NEW_MODEL_BADGE_DURATION_MS = 3_200;
+const NEW_MODEL_BADGE_FADE_MS = 500;
+const MODEL_FLIP_DURATION_MS = 420;
+
 type CcsProviderImportItem = {
   sourceId: string;
   appType: string;
@@ -234,23 +253,6 @@ function itemsByIdOrder<T extends { id: string }>(items: readonly T[], order: re
   });
 }
 
-function orderModels(
-  models: readonly ProviderModelConfig[],
-  order: readonly string[] | undefined,
-  activeModelIds: ReadonlySet<string>,
-) {
-  if (!order) return sortModelsByActiveStateAndVendor(models, activeModelIds);
-  const ordered = itemsByIdOrder(models, order);
-  const included = new Set(ordered.map((model) => model.id));
-  return [
-    ...ordered,
-    ...sortModelsByActiveStateAndVendor(
-      models.filter((model) => !included.has(model.id)),
-      activeModelIds,
-    ),
-  ];
-}
-
 function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProps) {
   const { t } = useLocale();
   const isGatewayWebui = isGatewayWebuiRuntime();
@@ -273,6 +275,12 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   );
   const [activeModels, setActiveModels] = useState<Set<string>>(
     new Set(initialData?.activeModels ?? []),
+  );
+  const [modelDisplayOrder, setModelDisplayOrder] = useState<string[]>(() =>
+    createModelOrderSnapshot(models, initialData?.modelOrder, activeModels),
+  );
+  const [newModelPhases, setNewModelPhases] = useState<ReadonlyMap<string, NewModelPhase>>(
+    () => new Map(),
   );
   const [requestFormat, setRequestFormat] = useState<CodexRequestFormat>(
     initialData?.requestFormat ?? "openai-responses",
@@ -308,6 +316,20 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const prevFetchKey = useRef("");
   const headerKeyRefs = useRef<Array<HTMLInputElement | null>>([]);
   const headerValueRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const modelListRef = useRef<HTMLDivElement | null>(null);
+  const pendingModelLayoutRef = useRef<PendingModelLayout | null>(null);
+  const modelSortTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const modelBadgeTimersRef = useRef(new Map<string, Array<ReturnType<typeof setTimeout>>>());
+  const modelsRef = useRef(models);
+  const modelOrderRef = useRef(modelOrder);
+  const activeModelsRef = useRef(activeModels);
+  const draggingModelIdRef = useRef<string | null>(null);
+  const commitModelsWithNewRowsRef = useRef<(nextModels: ProviderModelConfig[]) => void>(
+    () => undefined,
+  );
+  modelsRef.current = models;
+  modelOrderRef.current = modelOrder;
+  activeModelsRef.current = activeModels;
   const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_API_KEY_DISPLAY;
   const apiKeyForRequest = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
   const canFetchModels = baseUrl.trim().length > 0 && apiKeyForRequest.length > 0;
@@ -318,7 +340,8 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       setFetchError(null);
       try {
         const list = await fetchModelsFromApi(providerType, url, key, { useSystemProxy });
-        setModels((prev) => mergeFetchedModels(list, prev));
+        const mergedModels = mergeFetchedModels(list, modelsRef.current);
+        commitModelsWithNewRowsRef.current(mergedModels);
       } catch (err) {
         setFetchError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -356,6 +379,107 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       setModelOrder(next);
     }
   }, [modelOrder, models]);
+
+  useEffect(() => {
+    setModelDisplayOrder((current) => {
+      const next = applyModelOrderSnapshot(models, current).map((model) => model.id);
+      return next.length === current.length && next.every((id, index) => id === current[index])
+        ? current
+        : next;
+    });
+  }, [models]);
+
+  useEffect(
+    () => () => {
+      if (modelSortTimerRef.current) clearTimeout(modelSortTimerRef.current);
+      for (const timers of modelBadgeTimersRef.current.values()) {
+        for (const timer of timers) clearTimeout(timer);
+      }
+      modelBadgeTimersRef.current.clear();
+    },
+    [],
+  );
+
+  function captureModelLayout(animate = true) {
+    const rows = modelListRef.current?.querySelectorAll<HTMLElement>("[data-model-row-id]");
+    const topById = new Map<string, number>();
+    for (const row of rows ?? []) {
+      for (const animation of row.getAnimations()) animation.cancel();
+      const id = row.dataset.modelRowId;
+      if (id) topById.set(id, row.getBoundingClientRect().top);
+    }
+    const scrollContainer = modelScrollContainerRef.current;
+    pendingModelLayoutRef.current = {
+      topById,
+      scrollContainer,
+      scrollTop: scrollContainer?.scrollTop ?? null,
+      animate,
+    };
+  }
+
+  function markModelAsNew(modelId: string) {
+    for (const timer of modelBadgeTimersRef.current.get(modelId) ?? []) clearTimeout(timer);
+    setNewModelPhases((current) => {
+      const next = new Map(current);
+      next.set(modelId, "visible");
+      return next;
+    });
+    const fadeTimer = setTimeout(() => {
+      setNewModelPhases((current) => {
+        if (!current.has(modelId)) return current;
+        const next = new Map(current);
+        next.set(modelId, "fading");
+        return next;
+      });
+    }, NEW_MODEL_BADGE_DURATION_MS);
+    const removeTimer = setTimeout(() => {
+      setNewModelPhases((current) => {
+        if (!current.has(modelId)) return current;
+        const next = new Map(current);
+        next.delete(modelId);
+        return next;
+      });
+      modelBadgeTimersRef.current.delete(modelId);
+    }, NEW_MODEL_BADGE_DURATION_MS + NEW_MODEL_BADGE_FADE_MS);
+    modelBadgeTimersRef.current.set(modelId, [fadeTimer, removeTimer]);
+  }
+
+  function settleNewModels() {
+    if (draggingModelIdRef.current) {
+      modelSortTimerRef.current = setTimeout(settleNewModels, 200);
+      return;
+    }
+    captureModelLayout();
+    setModelDisplayOrder(
+      createModelOrderSnapshot(modelsRef.current, modelOrderRef.current, activeModelsRef.current),
+    );
+    modelSortTimerRef.current = null;
+  }
+
+  function scheduleNewModelSettlement() {
+    if (modelSortTimerRef.current) clearTimeout(modelSortTimerRef.current);
+    modelSortTimerRef.current = setTimeout(settleNewModels, NEW_MODEL_SORT_DELAY_MS);
+  }
+
+  function commitModelsWithNewRows(nextModels: ProviderModelConfig[]) {
+    const newModelIds = findNewModelIds(modelsRef.current, nextModels);
+    if (newModelIds.length === 0) {
+      setModels(nextModels);
+      return;
+    }
+
+    captureModelLayout();
+    const nextIds = new Set(nextModels.map((model) => model.id));
+    const newIdSet = new Set(newModelIds);
+    setModels(nextModels);
+    setModelDisplayOrder((current) => [
+      ...current.filter((id) => nextIds.has(id) && !newIdSet.has(id)),
+      ...newModelIds,
+    ]);
+    for (const modelId of newModelIds) markModelAsNew(modelId);
+    scheduleNewModelSettlement();
+  }
+  commitModelsWithNewRowsRef.current = commitModelsWithNewRows;
 
   function handleRefresh() {
     const trimUrl = baseUrl.trim();
@@ -418,8 +542,8 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   function handleAddModel() {
     const model = newModelName.trim();
     if (!model) return;
-    if (!models.some((item) => item.id === model)) {
-      setModels((prev) => [...prev, createDraftModelConfig(providerType, model)]);
+    if (!modelsRef.current.some((item) => item.id === model)) {
+      commitModelsWithNewRows([...modelsRef.current, createDraftModelConfig(providerType, model)]);
     }
     setActiveModels((prev) => new Set([...prev, model]));
     setNewModelName("");
@@ -427,6 +551,14 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   }
 
   function removeModel(model: string) {
+    for (const timer of modelBadgeTimersRef.current.get(model) ?? []) clearTimeout(timer);
+    modelBadgeTimersRef.current.delete(model);
+    setNewModelPhases((current) => {
+      if (!current.has(model)) return current;
+      const next = new Map(current);
+      next.delete(model);
+      return next;
+    });
     setModels((prev) => prev.filter((item) => item.id !== model));
     setActiveModels((prev) => {
       const next = new Set(prev);
@@ -595,9 +727,32 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const isEditing = Boolean(initialData);
   const typeLabel = getProviderLabel(providerType);
   const orderedModels = useMemo(
-    () => orderModels(models, modelOrder, activeModels),
-    [models, modelOrder, activeModels],
+    () => applyModelOrderSnapshot(models, modelDisplayOrder),
+    [models, modelDisplayOrder],
   );
+  useLayoutEffect(() => {
+    // The rendered row order is the commit boundary for restoring scroll and running FLIP.
+    void orderedModels;
+    const pending = pendingModelLayoutRef.current;
+    if (!pending) return;
+    pendingModelLayoutRef.current = null;
+    if (pending.scrollTop !== null && pending.scrollContainer) {
+      pending.scrollContainer.scrollTop = pending.scrollTop;
+    }
+    if (!pending.animate || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const rows = modelListRef.current?.querySelectorAll<HTMLElement>("[data-model-row-id]");
+    for (const row of rows ?? []) {
+      const id = row.dataset.modelRowId;
+      const previousTop = id ? pending.topById.get(id) : undefined;
+      if (previousTop === undefined) continue;
+      const delta = previousTop - row.getBoundingClientRect().top;
+      if (Math.abs(delta) < 1) continue;
+      row.animate([{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }], {
+        duration: MODEL_FLIP_DURATION_MS,
+        easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+      });
+    }
+  }, [orderedModels]);
   const modelSearchQuery = modelSearch.trim().toLowerCase();
   const visibleModels = useMemo(
     () =>
@@ -618,10 +773,13 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       ? t("settings.modelReorderDisabledSearch")
       : t("settings.reorderNeedsTwoItems");
   const handleModelReorder = useCallback((nextIds: string[]) => {
+    if (modelSortTimerRef.current) clearTimeout(modelSortTimerRef.current);
+    modelSortTimerRef.current = null;
     setModels((current) => {
       return itemsByIdOrder(current, nextIds);
     });
     setModelOrder(nextIds);
+    setModelDisplayOrder(nextIds);
   }, []);
   const {
     draggingItemId: draggingModelId,
@@ -636,6 +794,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     disabledHint: modelReorderDisabledHint,
     onReorder: handleModelReorder,
   });
+  draggingModelIdRef.current = draggingModelId;
   const headerSuggestQuery = headerSuggest
     ? (customHeaders[headerSuggest.index]?.key ?? "").trim().toLowerCase()
     : "";
@@ -751,7 +910,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
 
           <div
             ref={modelScrollContainerRef}
-            className="min-w-0 flex-1 overflow-y-auto px-6 py-5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.875rem+env(safe-area-inset-bottom))] max-[720px]:pt-3.5"
+            className="min-w-0 flex-1 overflow-y-auto [overflow-anchor:none] px-6 py-5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.875rem+env(safe-area-inset-bottom))] max-[720px]:pt-3.5"
             onScroll={() => setHeaderSuggest(null)}
           >
             {activePanel === "general" ? (
@@ -957,7 +1116,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                     </div>
                   ) : null}
 
-                  <div className="divide-y">
+                  <div ref={modelListRef} className="divide-y">
                     {visibleModels.length === 0 ? (
                       <div className="px-3 py-8 text-center text-xs text-muted-foreground">
                         {models.length > 0 && modelSearchQuery
@@ -969,16 +1128,20 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                     ) : (
                       visibleModels.map((model) => {
                         const isEditingModel = editingModel?.model.id === model.id;
+                        const newModelPhase = newModelPhases.get(model.id);
                         return (
                           // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useAriaPropsSupportedByRole: The row becomes an accessible checkbox only while bulk mode is active.
                           <div
                             key={model.id}
                             {...getModelReorderProps(model.id)}
+                            data-model-row-id={model.id}
                             className={cn(
-                              "group hover:bg-accent/30",
+                              "group transition-colors duration-500 hover:bg-accent/30",
                               draggingModelId === model.id && "bg-accent shadow-lg",
                               modelBulkMode && "cursor-pointer",
                               modelBulkSelection.has(model.id) && "bg-primary/5",
+                              newModelPhase === "visible" && "bg-primary/10 hover:bg-primary/15",
+                              newModelPhase === "fading" && "bg-primary/[0.04]",
                             )}
                             role={modelBulkMode ? "checkbox" : undefined}
                             aria-checked={
@@ -1042,6 +1205,16 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                               <div className="min-w-0 flex-1 max-[720px]:col-[2/5] max-[720px]:row-start-1">
                                 <div className="flex min-w-0 items-center gap-2">
                                   <span className="truncate text-sm font-medium">{model.id}</span>
+                                  {newModelPhase ? (
+                                    <span
+                                      className={cn(
+                                        "shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold leading-none tracking-wide text-primary transition-all duration-500 max-[420px]:px-1.5",
+                                        newModelPhase === "fading" && "scale-95 opacity-0",
+                                      )}
+                                    >
+                                      {t("settings.newModelBadge")}
+                                    </span>
+                                  ) : null}
                                 </div>
                               </div>
                               <div className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground max-[720px]:col-[1/3] max-[720px]:row-start-2 max-[720px]:min-w-0">
