@@ -856,7 +856,7 @@ export function attachOpenAIResponsesNativeAttachments<
   },
 ): TOptions {
   if (
-    params.providerId !== "codex" ||
+    (params.providerId !== "codex" && params.providerId !== "xai") ||
     !params.context ||
     !isOpenAIResponsesModel(params.model) ||
     !params.workdir?.trim()

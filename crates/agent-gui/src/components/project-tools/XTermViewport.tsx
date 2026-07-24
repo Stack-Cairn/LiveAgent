@@ -3,6 +3,7 @@ import "@xterm/xterm/css/xterm.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { type CSSProperties, useEffect, useRef } from "react";
+import { CODE_FONT_FAMILY_CHANGE_EVENT, getCodeFontFamily } from "../../lib/shared/fontFamily";
 import { cn } from "../../lib/shared/utils";
 import type {
   TerminalClient,
@@ -158,8 +159,7 @@ export function XTermViewport({
       cursorStyle: "block",
       cursorInactiveStyle: "outline",
       disableStdin: true,
-      fontFamily:
-        '"SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono", monospace',
+      fontFamily: getCodeFontFamily(),
       fontSize: 13,
       fontWeight: "normal",
       fontWeightBold: "bold",
@@ -206,6 +206,14 @@ export function XTermViewport({
       }
     };
     fitAndResizeRef.current = fitAndResize;
+
+    const handleCodeFontFamilyChange = (event: Event) => {
+      const codeFontFamily = (event as CustomEvent<string>).detail;
+      if (typeof codeFontFamily !== "string") return;
+      term.options.fontFamily = codeFontFamily;
+      window.setTimeout(fitAndResize, 0);
+    };
+    window.addEventListener(CODE_FONT_FAMILY_CHANGE_EVENT, handleCodeFontFamilyChange);
 
     const resizeObserver = new ResizeObserver(() => {
       if (resizeTimerRef.current !== null) {
@@ -493,6 +501,7 @@ export function XTermViewport({
       streamInputUnsubscribe?.();
       streamHandle?.dispose();
       term.dispose();
+      window.removeEventListener(CODE_FONT_FAMILY_CHANGE_EVENT, handleCodeFontFamilyChange);
     };
   }, [client, session.id, session.projectPathKey]);
 

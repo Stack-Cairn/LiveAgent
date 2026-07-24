@@ -19,6 +19,7 @@ import {
   createCodeMentionReference,
 } from "../../lib/chat/messages/mentionReferences";
 import { cn } from "../../lib/shared/utils";
+import { readClipboardText } from "../../lib/system/clipboardText";
 import { invokeFs, isFsBackendError } from "../../lib/tools/fsBackend";
 import type { IconComponent } from "../icons";
 import {
@@ -644,6 +645,27 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     editor.trigger("contextMenu", commandId, null);
   }, []);
 
+  // 粘贴不走 Monaco 的 clipboardPasteAction：它内部读 navigator.clipboard，
+  // WKWebView 对外部应用复制的内容会弹出原生"粘贴"确认气泡。改为先经
+  // Rust 侧读剪贴板，再把文本喂给 Monaco 的 paste 处理器。
+  const pasteClipboardIntoEditor = useCallback(() => {
+    setContextMenu(null);
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    void readClipboardText().then((text) => {
+      const current = editorRef.current;
+      if (!current) return;
+      if (text === null) {
+        // 两条剪贴板通道都不可用，退回 Monaco 内建粘贴兜底。
+        current.trigger("contextMenu", "editor.action.clipboardPasteAction", null);
+        return;
+      }
+      if (!text) return;
+      current.trigger("contextMenu", "paste", { text });
+    });
+  }, []);
+
   // 选区扩展到整行后作为代码引用（仅路径+行号）交给输入框；空选区退化为光标所在行。
   const insertSelectionAsCodeMention = useCallback(() => {
     setContextMenu(null);
@@ -1035,7 +1057,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
             icon={ClipboardPaste}
             label={t("workspaceEditor.context.paste")}
             shortcut={contextMenuShortcuts.paste}
-            onClick={() => runEditorCommand("editor.action.clipboardPasteAction")}
+            onClick={pasteClipboardIntoEditor}
           />
           <ContextMenuSeparator />
           <ContextMenuItem

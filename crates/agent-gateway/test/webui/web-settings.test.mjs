@@ -194,6 +194,28 @@ test("getWebDefaultSettings enables remote settings from the gateway token", () 
   assert.equal(settings.remote.token, "token");
 });
 
+test("web settings normalize independent font families and migrate the retired interface field", () => {
+  const migrated = settings.normalizeSettings({ customSettings: { fontFamily: "Inter" } });
+  assert.equal(migrated.customSettings.interfaceFontFamily, "Inter");
+  assert.equal(Object.hasOwn(migrated.customSettings, "fontFamily"), false);
+
+  const normalized = settings.normalizeSettings({
+    customSettings: {
+      interfaceFontFamily: 'Inter, "PingFang SC", sans-serif',
+      chatFontFamily: "rounded",
+      codeFontFamily: "Menlo",
+    },
+  });
+  assert.equal(normalized.customSettings.interfaceFontFamily, 'Inter, "PingFang SC", sans-serif');
+  assert.equal(normalized.customSettings.chatFontFamily, "rounded");
+  assert.equal(normalized.customSettings.codeFontFamily, "Menlo");
+  assert.equal(
+    settings.normalizeSettings({ customSettings: { codeFontFamily: "invalid;}" } }).customSettings
+      .codeFontFamily,
+    "",
+  );
+});
+
 test("web settings normalization canonicalizes project keyed maps with Windows path compatibility", () => {
   const normalized = settings.normalizeSettings({
     ssh: {
@@ -293,6 +315,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
       codex_openai_responses: "high",
       codex_openai_completions: "high",
       gemini: "high",
+      xai: "high",
     },
   });
 
@@ -425,6 +448,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
         codex_openai_responses: "xhigh",
         codex_openai_completions: "xhigh",
         gemini: "high",
+        xai: "xhigh",
       },
     },
   );
@@ -448,7 +472,10 @@ test("web chat runtime controls default and follow model-aware reasoning support
         claude_code: "xhigh",
         codex_openai_responses: "xhigh",
         codex_openai_completions: "xhigh",
+        // gemini / xai 未在 reasoningByProvider 输入里显式给出，也未参与本次调用
+        // 的当前 provider key，因此只继承顶层 reasoning 原值，不做钳制。
         gemini: "xhigh",
+        xai: "xhigh",
       },
     },
   );
@@ -468,6 +495,7 @@ test("web chat runtime controls default and follow model-aware reasoning support
         codex_openai_responses: "xhigh",
         codex_openai_completions: "high",
         gemini: "high",
+        xai: "high",
       },
     },
   );
@@ -1568,4 +1596,66 @@ test("web right dock migrates the legacy tabs shape", () => {
   assert.equal(project.tools.fileTree.uiState.query, "q");
   assert.deepEqual(project.tabOrder, ["sess-1", RIGHT_DOCK_TAB_IDS.fileTree]);
   assert.equal(project.activeTabId, "sess-1");
+});
+
+test("xai model limits use the generated catalog without changing thinking detection", () => {
+  const grok45 = settings.getProviderModelDefaults("xai", "grok-4.5");
+  assert.equal(grok45.contextWindow, 500_000);
+  // 上游"输出=窗口"的退化条目在生成期统一钳到 32K。
+  assert.equal(grok45.maxOutputToken, 32_000);
+  // 上游（models.dev）已下架的旧模型与未收录模型一样吃供应商兜底值。
+  assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 258_000);
+  assert.equal(settings.getProviderModelDefaults("xai", "grok-unknown").contextWindow, 258_000);
+  // 思考档位检测刻意不吃模型目录（限额目录不含请求路径元数据），
+  // 而是无条件应用与桌面端同步的 XAI 档位映射。
+  assert.ok(settings.getKnownModelThinkingLevels("xai", "grok-4.5").includes("high"));
+});
+
+test("xai thinking levels mirror the desktop XAI thinking map", () => {
+  // 与桌面端 modelFactory XAI_THINKING_LEVEL_MAP 对齐：档位含 xhigh、思考恒开。
+  // 否则 normalizeChatRuntimeControlsForProvider 的钳制会把桌面端设置的
+  // xhigh 在 web 侧压回 high，跨端行为分叉。
+  const levels = settings.getKnownModelThinkingLevels("xai", "grok-4.5");
+  assert.ok(levels.includes("xhigh"));
+  assert.ok(!levels.includes("off"));
+  assert.ok(!levels.includes("max"));
+  assert.equal(settings.isThinkingAlwaysOnForModel("xai", "grok-4.5"), true);
+  // 钳制路径：当前供应商为 xai 时 xhigh 不再被压回 high。
+  const clamped = settings.normalizeChatRuntimeControlsForProvider(
+    { reasoning: "xhigh", reasoningByProvider: { xai: "xhigh" } },
+    { providerId: "xai", modelId: "grok-4.5" },
+  );
+  assert.equal(clamped.reasoning, "xhigh");
+});
+
+test("gateway sync keeps all web font families local", () => {
+  const current = settings.normalizeSettings({
+    customSettings: {
+      interfaceFontFamily: "Inter",
+      chatFontFamily: "Noto Sans",
+      codeFontFamily: "Menlo",
+    },
+  });
+  const incoming = settingsSync.buildGatewaySettingsSyncPayload(
+    settings.normalizeSettings({
+      customSettings: {
+        interfaceFontFamily: "Arial",
+        chatFontFamily: "Open Sans",
+        codeFontFamily: "Monaco",
+      },
+    }),
+  );
+
+  assert.deepEqual(
+    {
+      interfaceFontFamily: incoming.customSettings.interfaceFontFamily,
+      chatFontFamily: incoming.customSettings.chatFontFamily,
+      codeFontFamily: incoming.customSettings.codeFontFamily,
+    },
+    { interfaceFontFamily: "", chatFontFamily: "", codeFontFamily: "" },
+  );
+  assert.deepEqual(
+    settingsSync.applyGatewaySettingsSyncPayload(current, incoming).customSettings,
+    current.customSettings,
+  );
 });

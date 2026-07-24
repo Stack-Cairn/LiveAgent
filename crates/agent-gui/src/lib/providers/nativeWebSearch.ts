@@ -24,7 +24,11 @@ export function isProviderNativeWebSearchToolName(toolName: string | undefined) 
     normalized === "web_search_20260209" ||
     normalized === "web_search_20260318" ||
     normalized === "web_search_preview" ||
-    normalized.startsWith("web_search_call")
+    normalized.startsWith("web_search_call") ||
+    normalized === "x_search" ||
+    normalized === "x_keyword_search" ||
+    normalized === "x_semantic_search" ||
+    normalized.startsWith("x_search_call")
   );
 }
 
@@ -161,6 +165,7 @@ export function providerSupportsNativeWebSearch(
 
   return (
     (providerId === "codex" && api === "openai-responses") ||
+    (providerId === "xai" && api === "openai-responses") ||
     (providerId === "claude_code" && api === "anthropic-messages") ||
     (providerId === "gemini" && api === "google-generative-ai")
   );

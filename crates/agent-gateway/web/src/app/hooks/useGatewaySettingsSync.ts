@@ -7,6 +7,7 @@ import {
   type HooksSnapshot,
   initAutomation,
 } from "@/lib/automation";
+import { applyFontFamilies } from "@/lib/fontFamily";
 import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
 import { setPreferredMonacoNlsLocale } from "@/lib/monacoNls";
 import {
@@ -64,6 +65,18 @@ export function useGatewaySettingsSync(params: {
     const root = document.documentElement;
     root.classList.toggle("dark", resolveEffectiveTheme(settings.theme) === "dark");
   }, [settings.theme, systemThemeVersion]);
+
+  useEffect(() => {
+    applyFontFamilies({
+      interfaceFontFamily: settings.customSettings.interfaceFontFamily,
+      chatFontFamily: settings.customSettings.chatFontFamily,
+      codeFontFamily: settings.customSettings.codeFontFamily,
+    });
+  }, [
+    settings.customSettings.interfaceFontFamily,
+    settings.customSettings.chatFontFamily,
+    settings.customSettings.codeFontFamily,
+  ]);
 
   useEffect(() => {
     setSettingsState((prev) =>

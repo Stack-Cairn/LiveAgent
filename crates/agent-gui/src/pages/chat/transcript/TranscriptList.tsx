@@ -81,7 +81,7 @@ const SummaryCard = memo(function SummaryCard(props: { item: RenderSummaryCard }
         </button>
         {expanded ? (
           <div className="checkpoint-expand border-t border-black/[0.05] px-3.5 py-3 dark:border-white/[0.06]">
-            <Markdown content={item.content} className="font-openai-chat text-sm" />
+            <Markdown content={item.content} className="font-chat text-sm" />
           </div>
         ) : null}
       </div>

@@ -5,6 +5,7 @@ import {
   ClaudeIcon,
   FolderOpen,
   GeminiIcon,
+  GrokIcon,
   OpenaiChatgptIcon,
   RefreshCw,
   Settings,
@@ -56,17 +57,19 @@ type CherryStudioImportModalProps = {
   onConfirm: (items: CherryProviderImportItem[]) => void;
 };
 
-const PROVIDER_ORDER: ProviderId[] = ["claude_code", "codex", "gemini"];
+const PROVIDER_ORDER: ProviderId[] = ["claude_code", "codex", "gemini", "xai"];
 
 const PROVIDER_LABELS: Record<ProviderId, string> = {
   claude_code: "Anthropic",
   codex: "OpenAI",
   gemini: "Gemini",
+  xai: "Grok",
 };
 
 function ProviderTypeIcon({ type }: { type: ProviderId }) {
   if (type === "claude_code") return <ClaudeIcon height="1em" />;
   if (type === "gemini") return <GeminiIcon height="1em" />;
+  if (type === "xai") return <GrokIcon height="1em" />;
   return <OpenaiChatgptIcon height="1em" className="fill-current dark:text-white" />;
 }
 

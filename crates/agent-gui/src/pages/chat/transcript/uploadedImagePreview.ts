@@ -10,8 +10,14 @@ const uploadedImagePreviewCache = new Map<string, string>();
 const uploadedImagePreviewRequests = new Map<string, Promise<string | null>>();
 const UPLOADED_IMAGE_PREVIEW_CACHE_LIMIT = 64;
 
-function getUploadedImagePreviewCacheKey(workspaceRoot: string, absolutePath: string) {
-  return `${workspaceRoot}\n${absolutePath}`;
+function getUploadedImagePreviewCacheKey(
+  workspaceRoot: string,
+  absolutePath: string,
+  cacheVariant = "",
+) {
+  return cacheVariant
+    ? `${workspaceRoot}\n${absolutePath}\n${cacheVariant}`
+    : `${workspaceRoot}\n${absolutePath}`;
 }
 
 function readUploadedImagePreviewCache(cacheKey: string) {
@@ -33,9 +39,13 @@ function writeUploadedImagePreviewCache(cacheKey: string, value: string) {
   }
 }
 
-async function loadUploadedImagePreview(params: { workspaceRoot: string; absolutePath: string }) {
-  const { workspaceRoot, absolutePath } = params;
-  const cacheKey = getUploadedImagePreviewCacheKey(workspaceRoot, absolutePath);
+async function loadUploadedImagePreview(params: {
+  workspaceRoot: string;
+  absolutePath: string;
+  cacheVariant?: string;
+}) {
+  const { workspaceRoot, absolutePath, cacheVariant } = params;
+  const cacheKey = getUploadedImagePreviewCacheKey(workspaceRoot, absolutePath, cacheVariant);
   const cached = readUploadedImagePreviewCache(cacheKey);
   if (cached !== undefined) return cached;
 
@@ -67,12 +77,21 @@ async function loadUploadedImagePreview(params: { workspaceRoot: string; absolut
   return request;
 }
 
-export function useUploadedImagePreview(absolutePath?: string, workspaceRoot?: string) {
+export function useUploadedImagePreview(
+  absolutePath?: string,
+  workspaceRoot?: string,
+  cacheVariant?: string,
+) {
   const normalizedPath = typeof absolutePath === "string" ? absolutePath.trim() : "";
   const normalizedWorkspaceRoot = typeof workspaceRoot === "string" ? workspaceRoot.trim() : "";
+  const normalizedCacheVariant = typeof cacheVariant === "string" ? cacheVariant.trim() : "";
   const cacheKey =
     normalizedPath && normalizedWorkspaceRoot
-      ? getUploadedImagePreviewCacheKey(normalizedWorkspaceRoot, normalizedPath)
+      ? getUploadedImagePreviewCacheKey(
+          normalizedWorkspaceRoot,
+          normalizedPath,
+          normalizedCacheVariant,
+        )
       : "";
   const [imageSrc, setImageSrc] = useState<string | null | undefined>(() => {
     if (!cacheKey) return null;
@@ -96,6 +115,7 @@ export function useUploadedImagePreview(absolutePath?: string, workspaceRoot?: s
     void loadUploadedImagePreview({
       workspaceRoot: normalizedWorkspaceRoot,
       absolutePath: normalizedPath,
+      cacheVariant: normalizedCacheVariant,
     }).then((value) => {
       if (!cancelled) {
         setImageSrc(value);
@@ -104,7 +124,7 @@ export function useUploadedImagePreview(absolutePath?: string, workspaceRoot?: s
     return () => {
       cancelled = true;
     };
-  }, [cacheKey, normalizedPath, normalizedWorkspaceRoot]);
+  }, [cacheKey, normalizedCacheVariant, normalizedPath, normalizedWorkspaceRoot]);
 
   return {
     imageSrc: imageSrc ?? null,

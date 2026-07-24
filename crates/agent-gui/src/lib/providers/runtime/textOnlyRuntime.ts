@@ -95,7 +95,7 @@ function buildTextOnlyStreamOptions(params: {
     ),
     metadata: buildProviderRequestMetadata(params.providerId, sessionId),
     reasoning:
-      (params.providerId === "codex" &&
+      ((params.providerId === "codex" || params.providerId === "xai") &&
         (params.model.api === "openai-responses" || params.model.api === "openai-completions")) ||
       (params.providerId === "claude_code" && params.model.api === "anthropic-messages") ||
       (params.providerId === "gemini" && params.model.api === "google-generative-ai")

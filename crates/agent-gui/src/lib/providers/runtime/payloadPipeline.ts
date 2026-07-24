@@ -16,6 +16,7 @@ import { attachGeminiThoughtSignatureGuard } from "./geminiToolPayload";
 import { attachProviderNativeWebSearch } from "./nativeSearchPayload";
 import { attachOpenAICompletionsFinishReasonCompatibility } from "./openAICompletionsStream";
 import type { StreamOptionsEx } from "./types";
+import { attachXaiResponsesPayloadCompat } from "./xaiResponsesPayload";
 
 export type ProviderPayloadMiddleware = (
   options: StreamOptionsEx,
@@ -101,6 +102,11 @@ const finalizePayloadMiddlewares = composePayloadMiddlewares([
     }),
   (options, params) =>
     attachProviderNativeWebSearch(params.providerId, options, params.nativeWebSearch, {
+      baseUrl: params.baseUrl,
+    }),
+  (options, params) =>
+    attachXaiResponsesPayloadCompat(options, {
+      providerId: params.providerId,
       baseUrl: params.baseUrl,
     }),
   (options, params) => {

@@ -59,7 +59,7 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
       />
       <textarea
         ref={textareaRef}
-        className="w-full resize-none rounded-lg bg-transparent p-2 font-openai-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none"
+        className="w-full resize-none rounded-lg bg-transparent p-2 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none"
         value={draftText}
         onChange={(e) => setDraftText(e.target.value)}
         rows={Math.max(2, draftText.split("\n").length)}

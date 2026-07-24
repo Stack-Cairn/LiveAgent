@@ -84,3 +84,14 @@ test("isProviderNativeWebSearchToolName matches every hidden tool name, case-ins
   assert.equal(isProviderNativeWebSearchToolName("unrelated_tool"), false);
   assert.equal(isProviderNativeWebSearchToolName(undefined), false);
 });
+
+test("isProviderNativeWebSearchToolName recognizes xAI server-side search tool names", () => {
+  assert.equal(isProviderNativeWebSearchToolName("x_search"), true);
+  assert.equal(isProviderNativeWebSearchToolName("x_keyword_search"), true);
+  assert.equal(isProviderNativeWebSearchToolName("x_semantic_search"), true);
+  assert.equal(isProviderNativeWebSearchToolName("X_Keyword_Search"), true);
+  assert.equal(isProviderNativeWebSearchToolName("x_search_call"), true);
+  assert.equal(isProviderNativeWebSearchToolName("x_search_call_output"), true);
+  assert.equal(isProviderNativeWebSearchToolName("x_searcher"), false);
+  assert.equal(isProviderNativeWebSearchToolName("x_unrelated_tool"), false);
+});

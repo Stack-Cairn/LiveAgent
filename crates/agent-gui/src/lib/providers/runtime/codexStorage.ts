@@ -8,6 +8,7 @@ export function attachCodexResponsesStorage(
 ): StreamOptionsEx {
   const previousOnPayload = options.onPayload;
 
+  // xai 走 xaiResponsesPayloadCompat 处理 store；此处仅 Codex 官方 Responses。
   if (providerId !== "codex") {
     return options;
   }

@@ -32,6 +32,7 @@ import {
   type GatewaySettingsSyncPayload,
 } from "./lib/settings/sync";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
+import { applyFontFamilies } from "./lib/system/fontFamily";
 import { ChatPage } from "./pages/ChatPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import type { SectionId } from "./pages/settings/types";
@@ -169,6 +170,18 @@ export default function App() {
     const root = document.documentElement;
     root.classList.toggle("dark", effectiveTheme === "dark");
   }, [effectiveTheme]);
+
+  useEffect(() => {
+    applyFontFamilies({
+      interfaceFontFamily: settings.customSettings.interfaceFontFamily,
+      chatFontFamily: settings.customSettings.chatFontFamily,
+      codeFontFamily: settings.customSettings.codeFontFamily,
+    });
+  }, [
+    settings.customSettings.interfaceFontFamily,
+    settings.customSettings.chatFontFamily,
+    settings.customSettings.codeFontFamily,
+  ]);
 
   useEffect(() => {
     if (!settingsReady) return;

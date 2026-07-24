@@ -1405,4 +1405,54 @@ mod tests {
             .iter()
             .any(|item| item.provider_type == "claude_code"));
     }
+
+    #[test]
+    fn ccs_maps_grokbuild_app_type_to_xai() {
+        assert_eq!(
+            ccs_provider_type_from_app_type("grokbuild"),
+            Some("xai")
+        );
+        assert_eq!(ccs_provider_type_from_app_type("grok"), Some("xai"));
+        assert_eq!(ccs_provider_type_from_app_type("xai"), Some("xai"));
+        assert_eq!(ccs_provider_type_from_app_type("Grok-Build"), Some("xai"));
+    }
+
+    #[test]
+    fn ccs_imports_grokbuild_toml_config_fields() {
+        // 与 CC-Switch Grok Build 写入 providers.settings_config 的形状对齐：
+        // config 是 TOML 文本，含 [models].default 与 [model."<id>"] 表。
+        let config = json!({
+            "config": "[models]\ndefault = \"grok-4.5\"\n\n[model]\n[model.\"grok-4.5\"]\nmodel = \"grok-4.5\"\nbase_url = \"https://api.x.ai/v1\"\nname = \"packy\"\napi_backend = \"responses\"\ncontext_window = 500000\napi_key = \"sk-test-key\"\n"
+        });
+        let item = ccs_provider_from_value(
+            "d262e762-test",
+            "grokbuild",
+            "PackyCode",
+            &config,
+        )
+        .expect("grokbuild provider should import");
+
+        assert_eq!(item.provider_type, "xai");
+        assert_eq!(item.app_type, "grokbuild");
+        assert_eq!(item.base_url, "https://api.x.ai/v1");
+        assert_eq!(item.api_key, "sk-test-key");
+        assert_eq!(item.request_format, "openai-responses");
+        assert!(item.models.iter().any(|m| m == "grok-4.5"));
+    }
+
+    #[test]
+    fn ccs_imports_empty_official_grokbuild_seed() {
+        let config = json!({ "config": "" });
+        let item = ccs_provider_from_value(
+            "grokbuild-official",
+            "grokbuild",
+            "Grok Official",
+            &config,
+        )
+        .expect("official grok seed should still map");
+        assert_eq!(item.provider_type, "xai");
+        assert_eq!(item.base_url, "");
+        assert_eq!(item.api_key, "");
+        assert_eq!(item.request_format, "openai-responses");
+    }
 }

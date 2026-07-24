@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ClaudeIcon,
   GeminiIcon,
+  GrokIcon,
   OpenaiChatgptIcon,
   Search,
   Sparkles,
@@ -36,6 +37,7 @@ function ProviderBrandIcon({ type, className }: { type?: ProviderId; className?:
   const cls = cn("h-4 w-4 shrink-0", className);
   if (type === "claude_code") return <ClaudeIcon className={cls} />;
   if (type === "gemini") return <GeminiIcon className={cls} />;
+  if (type === "xai") return <GrokIcon className={cls} />;
   return <OpenaiChatgptIcon className={cn(cls, "fill-current dark:text-white")} />;
 }
 

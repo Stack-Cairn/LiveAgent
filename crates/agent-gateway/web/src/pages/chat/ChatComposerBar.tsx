@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ComposerAttachmentCard } from "../../components/chat/ComposerAttachmentCard";
 import { getUploadedFileTypeIcon } from "../../components/chat/fileTypeIcons";
 import {
   MentionComposer,
@@ -35,7 +36,6 @@ import {
   Square,
   SquarePen,
   Trash2,
-  X,
 } from "../../components/icons";
 import { Button } from "../../components/ui/button";
 import {
@@ -46,7 +46,13 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { useLocale } from "../../i18n";
-import { formatUploadedFileSize, type PendingUploadedFile } from "../../lib/chat/uploadedFiles";
+import type { PendingUploadedFile } from "../../lib/chat/uploadedFiles";
+import {
+  getUploadedImagePreviewCacheKey,
+  loadUploadedImagePreview,
+  readUploadedImagePreviewCache,
+  type UploadedImagePreviewLoader,
+} from "../../lib/chat/uploadedImagePreview";
 import type { GitClient } from "../../lib/git/types";
 import {
   type ChatRuntimeControls,
@@ -92,6 +98,81 @@ function RuntimeControlTooltip(props: { label: string; children: ReactNode }) {
         </Tooltip.Positioner>
       </Tooltip.Portal>
     </Tooltip.Root>
+  );
+}
+
+function useComposerUploadedImagePreview(
+  file: PendingUploadedFile,
+  workdir: string,
+  loader?: UploadedImagePreviewLoader,
+) {
+  const shouldPreviewImage =
+    file.kind === "image" && typeof file.absolutePath === "string" && file.absolutePath.trim();
+  const cacheKey = shouldPreviewImage ? getUploadedImagePreviewCacheKey(workdir, file) : "";
+  const [imageSrc, setImageSrc] = useState<string | null | undefined>(() => {
+    if (!cacheKey) return null;
+    return readUploadedImagePreviewCache(workdir, file);
+  });
+
+  useEffect(() => {
+    if (!cacheKey) {
+      setImageSrc(null);
+      return;
+    }
+
+    const cached = readUploadedImagePreviewCache(workdir, file);
+    if (cached !== undefined) {
+      setImageSrc(cached);
+      return;
+    }
+    if (!loader) {
+      setImageSrc(null);
+      return;
+    }
+
+    let cancelled = false;
+    setImageSrc(undefined);
+    void loadUploadedImagePreview({ workspaceRoot: workdir, file, loader }).then((value) => {
+      if (!cancelled) setImageSrc(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, file, loader, workdir]);
+
+  return {
+    imageSrc: imageSrc ?? null,
+    isLoading: Boolean(cacheKey && loader) && imageSrc === undefined,
+  };
+}
+
+function PendingComposerAttachment(props: {
+  file: PendingUploadedFile;
+  workdir: string;
+  disabled: boolean;
+  removeLabel: string;
+  imagePreviewLoader?: UploadedImagePreviewLoader;
+  onRemove: (relativePath: string) => void;
+}) {
+  const { file, workdir, disabled, removeLabel, imagePreviewLoader, onRemove } = props;
+  const { imageSrc, isLoading } = useComposerUploadedImagePreview(
+    file,
+    workdir,
+    imagePreviewLoader,
+  );
+  const TypeIcon = getUploadedFileTypeIcon(file);
+
+  return (
+    <ComposerAttachmentCard
+      fileName={file.fileName}
+      pathTitle={file.relativePath}
+      imageSrc={imageSrc}
+      isImageLoading={isLoading}
+      fallbackIcon={<TypeIcon className="h-4 w-4" />}
+      disabled={disabled}
+      removeLabel={removeLabel}
+      onRemove={() => onRemove(file.relativePath)}
+    />
   );
 }
 
@@ -147,6 +228,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   onPickReadableFiles: () => void;
   onPasteFiles: (files: File[]) => void;
+  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
   /** Prompts previously sent in this conversation for ↑/↓ recall. */
   loadHistoryPrompts?: () => readonly string[];
   pendingUploadedFiles: PendingUploadedFile[];
@@ -180,6 +262,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     onChatRuntimeControlsChange,
     onPickReadableFiles,
     onPasteFiles,
+    onLoadUploadedImagePreview,
     loadHistoryPrompts,
     pendingUploadedFiles,
     onRemovePendingUpload,
@@ -516,44 +599,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
           isComposerExpanded && "flex min-h-0 flex-col justify-end",
         )}
       >
-        {/* Pending uploaded files — above the composer card */}
-        {pendingUploadedFiles.length > 0 && (
-          <div className="upload-file-list mb-2.5 flex gap-2 overflow-x-auto px-0.5 pb-1">
-            {pendingUploadedFiles.map((file) => {
-              const TypeIcon = getUploadedFileTypeIcon(file);
-              return (
-                <div
-                  key={file.relativePath}
-                  title={file.relativePath}
-                  className="group flex w-[calc(25%-6px)] min-w-[calc(25%-6px)] items-center gap-2 rounded-xl border border-white/45 bg-white/55 px-2.5 py-1.5 text-[calc(11px*var(--zone-font-scale,1))] shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06)] backdrop-blur-2xl backdrop-saturate-150 transition-all hover:bg-white/75 hover:shadow-[0_4px_14px_-4px_rgba(15,23,42,0.10)] dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.10]"
-                >
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-black/[0.04] dark:bg-white/[0.10]">
-                    <TypeIcon className="h-3.5 w-3.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[calc(12px*var(--zone-font-scale,1))] font-medium tracking-tight text-foreground/90">
-                      {file.fileName}
-                    </div>
-                    <div className="truncate text-[calc(10px*var(--zone-font-scale,1))] text-muted-foreground">
-                      {formatUploadedFileSize(file.sizeBytes)}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isInputDisabled}
-                    onClick={() => onRemovePendingUpload(file.relativePath)}
-                    className="shrink-0 rounded-full p-1 text-muted-foreground/70 opacity-0 transition-all hover:bg-foreground/5 hover:text-foreground group-hover:opacity-100 disabled:pointer-events-none"
-                    aria-label={`${t("chat.upload.removeFile")} ${file.fileName}`}
-                    title={t("chat.upload.removeFile")}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
         {queuedTurns.length > 0 ? (
           <div
             ref={queuePanelRef}
@@ -727,6 +772,22 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
             className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/18 to-transparent opacity-70 dark:from-white/[0.04] dark:opacity-100"
           />
 
+          {pendingUploadedFiles.length > 0 ? (
+            <div className="upload-file-list relative z-10 flex shrink-0 gap-2 overflow-x-auto pb-1 pl-4 pr-12 pt-3.5">
+              {pendingUploadedFiles.map((file) => (
+                <PendingComposerAttachment
+                  key={`${file.relativePath}-${file.absolutePath ?? file.fileName}`}
+                  file={file}
+                  workdir={workdir}
+                  disabled={isInputDisabled}
+                  removeLabel={t("chat.upload.removeFile")}
+                  imagePreviewLoader={onLoadUploadedImagePreview}
+                  onRemove={onRemovePendingUpload}
+                />
+              ))}
+            </div>
+          ) : null}
+
           <button
             type="button"
             onClick={toggleComposerExpanded}
@@ -746,7 +807,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
               全程贴住卡片底边。min-h-0 只在展开态加——折叠态靠自动最小高度
               (= 编辑器钳制高) 撑起卡片的固有高度，加了会塌缩。 */}
           <div
-            className={cn("relative flex flex-1 px-4 pt-3.5", isComposerExpanded && "min-h-0")}
+            className={cn(
+              "relative flex flex-1 px-4",
+              pendingUploadedFiles.length > 0 ? "pt-2" : "pt-3.5",
+              isComposerExpanded && "min-h-0",
+            )}
             onFocusCapture={onPrepareChatRuntime}
           >
             <MentionComposer

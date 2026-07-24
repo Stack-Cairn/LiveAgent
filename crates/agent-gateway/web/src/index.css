@@ -117,9 +117,20 @@
   font-display: swap;
 }
 
+/*
+ * Route Tailwind's mono theme font through the user-configurable code font.
+ * A hand-written `.font-mono` override only covers bare class usage — variant
+ * forms (`[&_pre>code]:font-mono`), `@apply font-mono`, and preflight's
+ * code/kbd/samp/pre rule all resolve from the built-in `--font-mono` theme
+ * variable, so the override must happen at the theme level.
+ */
+@theme {
+  --font-mono: var(--code-font-family);
+}
+
 @layer utilities {
-  .font-openai-chat {
-    font-family: "OpenAI Sans Semibold", "PingFang SC", "Microsoft YaHei", sans-serif;
+  .font-chat {
+    font-family: var(--chat-font-family);
   }
 
   /*
@@ -140,6 +151,11 @@
 @layer base {
   :root {
     color-scheme: light;
+    --app-font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+    --chat-font-family: "OpenAI Sans Semibold", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --code-font-family:
+      "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono",
+      monospace;
 
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
@@ -309,8 +325,16 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--app-font-family);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
   }
 
   input,

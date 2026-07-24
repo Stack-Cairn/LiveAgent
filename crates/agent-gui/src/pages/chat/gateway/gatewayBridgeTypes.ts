@@ -105,7 +105,12 @@ export type GatewayBridgeRuntimeRefs = {
 
 export function normalizeGatewayProviderType(value: string): ProviderId | null {
   const normalized = value.trim();
-  if (normalized === "codex" || normalized === "claude_code" || normalized === "gemini") {
+  if (
+    normalized === "codex" ||
+    normalized === "claude_code" ||
+    normalized === "gemini" ||
+    normalized === "xai"
+  ) {
     return normalized;
   }
   return null;

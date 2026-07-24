@@ -82,7 +82,7 @@ LiveAgent is a **local-first** AI agent desktop client. It deeply integrates lar
 
 - **An agent that actually gets things done** — beyond chat: read and write files, make precise edits, run Bash, and supervise long-running processes
 - **A fully open ecosystem** — bridge any external tool via the MCP protocol, and load Skills packages on demand
-- **Local and remote, both** — the desktop app works fully standalone; deploy the Gateway and control it from any browser
+- **Both local and remote** — the desktop app works fully standalone; deploy the Gateway and control it from any browser
 
 ---
 

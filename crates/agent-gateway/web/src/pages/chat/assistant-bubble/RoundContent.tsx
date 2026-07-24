@@ -314,7 +314,7 @@ export const RoundContent = memo(function RoundContent(props: {
           <Markdown
             key={block.key}
             content={block.text}
-            className="font-openai-chat"
+            className="font-chat"
             renderMode={renderMode}
             showCaret={Boolean(isLive && isActive && isStreaming)}
             readOnly={readOnly}

@@ -196,6 +196,11 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   assert.deepEqual(providers.buildProviderRequestHeaders("gemini", "secret", "conversation-1"), {
     "x-goog-api-key": "secret",
   });
+  // xai：Bearer + grok CLI 身份 UA，不带 Codex CLI 的 session 头。
+  assert.deepEqual(providers.buildProviderRequestHeaders("xai", "secret", "conversation-1"), {
+    Authorization: "Bearer secret",
+    "User-Agent": "grok-shell/0.2.110 (linux; x86_64)",
+  });
   const generatedCodexHeaders = providers.buildProviderRequestHeaders("codex", "secret");
   assert.match(generatedCodexHeaders.session_id, /^[0-9a-f-]{36}$/i);
   assert.equal(generatedCodexHeaders.conversation_id, generatedCodexHeaders.session_id);
@@ -270,6 +275,11 @@ test("provider-specific custom header suggestions include standard model headers
   assert.ok(codexPresets.includes("session_id"));
   assert.ok(codexPresets.includes("conversation_id"));
   assert.ok(!codexPresets.includes("anthropic-version"));
+
+  const xaiPresets = customHeaderHelpers.getCustomHeaderKeyPresets("xai");
+  assert.ok(xaiPresets.includes("User-Agent"));
+  assert.ok(!xaiPresets.includes("session_id"));
+  assert.ok(!xaiPresets.includes("anthropic-version"));
 });
 
 test("local proxy preserves explicit user-agent and content-type values for the upstream hop", () => {
@@ -1392,52 +1402,35 @@ test("codex prompt_cache_key injection respects retention, existing keys, and le
   assert.equal(clampedPayload.prompt_cache_key, "k".repeat(64));
 });
 
-test("custom model pricing from settings reaches the runtime model", () => {
-  const cost = { input: 2, output: 8, cacheRead: 0.2, cacheWrite: 2.5 };
+test("runtime models always carry zero pricing (billing removed)", () => {
+  // 计费功能已移除：pi-ai 的 Model.cost 是结构必填字段，构造侧统一喂零价，
+  // 目录内外模型一致，usage.cost 恒为 0。
+  const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
-  const codexModel = providers.createModelFromConfig(
-    "codex",
-    "relay-gpt",
-    "https://relay.example/v1",
-    undefined,
-    { id: "relay-gpt", contextWindow: 128_000, maxOutputToken: 8_192, cost },
-  );
-  assert.deepEqual(codexModel.cost, cost);
-
-  const claudeModel = providers.createModelFromConfig(
-    "claude_code",
-    "relay-claude",
-    "https://relay.example/v1",
-    undefined,
-    { id: "relay-claude", contextWindow: 200_000, maxOutputToken: 32_000, cost },
-  );
-  assert.deepEqual(claudeModel.cost, cost);
-
-  const geminiModel = providers.createModelFromConfig(
-    "gemini",
-    "relay-gemini",
-    "https://relay.example/v1",
-    undefined,
-    { id: "relay-gemini", contextWindow: 1_000_000, maxOutputToken: 65_536, cost },
-  );
-  assert.deepEqual(geminiModel.cost, cost);
-
-  // 目录内模型同样允许用户覆盖单价：中转计费经常与官方定价不同。
-  const catalogOverride = providers.createModelFromConfig(
-    "codex",
-    "gpt-5",
-    "https://api.openai.com/v1",
-    undefined,
-    { id: "gpt-5", contextWindow: 400_000, maxOutputToken: 128_000, cost },
-  );
-  assert.deepEqual(catalogOverride.cost, cost);
-
-  const uncosted = providers.createModelFromConfig(
+  const customModel = providers.createModelFromConfig(
     "codex",
     "relay-gpt",
     "https://relay.example/v1",
     undefined,
     { id: "relay-gpt", contextWindow: 128_000, maxOutputToken: 8_192 },
   );
-  assert.deepEqual(uncosted.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+  assert.deepEqual(customModel.cost, zeroCost);
+
+  const knownModel = providers.createModelFromConfig(
+    "codex",
+    "gpt-5",
+    "https://api.openai.com/v1",
+    undefined,
+    { id: "gpt-5", contextWindow: 400_000, maxOutputToken: 128_000 },
+  );
+  assert.deepEqual(knownModel.cost, zeroCost);
+
+  const claudeModel = providers.createModelFromConfig(
+    "claude_code",
+    "claude-sonnet-4-6",
+    "https://api.anthropic.com/v1",
+    undefined,
+    { id: "claude-sonnet-4-6", contextWindow: 1_000_000, maxOutputToken: 128_000 },
+  );
+  assert.deepEqual(claudeModel.cost, zeroCost);
 });

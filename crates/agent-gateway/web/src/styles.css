@@ -1,13 +1,5 @@
-@font-face {
-  font-family: "OpenAI Sans Semibold Web";
-  src: url("./assets/font/OpenAISans-Semibold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: normal;
-  font-display: swap;
-}
-
-.font-openai-chat {
-  font-family: "OpenAI Sans Semibold Web", "PingFang SC", "Microsoft YaHei", sans-serif;
+.font-chat {
+  font-family: var(--chat-font-family);
 }
 
 html[data-liveagent-webui="gateway"] .chat-history-new-conversation-button {
@@ -17,7 +9,7 @@ html[data-liveagent-webui="gateway"] .chat-history-new-conversation-button {
 }
 
 html[data-liveagent-webui="gateway"] .chat-history-new-conversation-label {
-  font-family: "OpenAI Sans Semibold Web", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-family);
   font-size: inherit;
   line-height: inherit;
   font-weight: inherit;
@@ -34,7 +26,7 @@ html[data-liveagent-webui="gateway"] .model-selector-dropdown,
 html[data-liveagent-webui="gateway"] .model-selector-menu-title,
 html[data-liveagent-webui="gateway"] .model-selector-group-label,
 html[data-liveagent-webui="gateway"] .model-selector-item {
-  font-family: "OpenAI Sans Semibold Web", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-family);
 }
 
 html[data-liveagent-webui="gateway"] .model-selector-trigger,
@@ -446,7 +438,7 @@ pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: "SFMono-Regular", "SF Mono", "IBM Plex Mono", "Menlo", monospace;
+  font-family: var(--code-font-family);
 }
 
 .gateway-transcript-list .thinking-block-pre {
@@ -1789,7 +1781,7 @@ html[data-liveagent-webui="gateway"] .settings-tools-view-enter {
   background: transparent;
   box-shadow: none;
   padding: 0;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--code-font-family);
   font-size: 13px;
   line-height: 1.6;
   color: hsl(var(--foreground));
@@ -1813,7 +1805,7 @@ html[data-liveagent-webui="gateway"] .settings-tools-view-enter {
   padding: 1px 5px;
   border-radius: 4px;
   background: hsl(var(--muted) / 0.6);
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-family: var(--code-font-family);
 }
 
 .dark .login-input-hint code {
@@ -3714,7 +3706,7 @@ html[data-liveagent-webui="gateway"]
     radial-gradient(circle at 56% 85%, rgba(var(--status-emerald), 0.1), transparent 30%),
     linear-gradient(135deg, #02040c 0%, #06101f 48%, #030712 100%);
   color: var(--status-text);
-  font-family: "OpenAI Sans Semibold Web", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-family);
 }
 
 .status-board-shell::before,

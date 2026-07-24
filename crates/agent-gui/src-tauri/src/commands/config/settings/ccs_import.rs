@@ -124,7 +124,12 @@ fn list_ccswitch_liveagent_providers_from_db(
         .prepare(
             "SELECT id, app_type, name, settings_config
              FROM providers
-             WHERE app_type IN ('codex', 'claude', 'claude-code', 'claude_code', 'gemini')
+             WHERE app_type IN (
+               'codex',
+               'claude', 'claude-code', 'claude_code',
+               'gemini',
+               'grokbuild', 'grok-build', 'grok_build', 'grok', 'xai'
+             )
              ORDER BY
                CASE app_type
                  WHEN 'claude' THEN 0
@@ -132,7 +137,12 @@ fn list_ccswitch_liveagent_providers_from_db(
                  WHEN 'claude_code' THEN 0
                  WHEN 'codex' THEN 1
                  WHEN 'gemini' THEN 2
-                 ELSE 3
+                 WHEN 'grokbuild' THEN 3
+                 WHEN 'grok-build' THEN 3
+                 WHEN 'grok_build' THEN 3
+                 WHEN 'grok' THEN 3
+                 WHEN 'xai' THEN 3
+                 ELSE 4
                END,
                COALESCE(sort_index, 999999), created_at ASC, id ASC",
         )
@@ -178,7 +188,10 @@ fn ccs_provider_from_value(
         name: strip_ccswitch_suffix(name).to_string(),
         base_url,
         api_key,
-        request_format: if provider_type == "codex" && ccs_is_chat_protocol(config) {
+        request_format: if provider_type == "xai" {
+            // Grok / xAI 在 LiveAgent 固定 Responses。
+            "openai-responses".to_string()
+        } else if provider_type == "codex" && ccs_is_chat_protocol(config) {
             "openai-completions".to_string()
         } else {
             "openai-responses".to_string()
@@ -192,6 +205,8 @@ fn ccs_provider_type_from_app_type(app_type: &str) -> Option<&'static str> {
         "codex" => Some("codex"),
         "claude" | "claude-code" | "claude_code" => Some("claude_code"),
         "gemini" => Some("gemini"),
+        // CC-Switch Grok Build 应用桶（与上游 AppType::GrokBuild 别名对齐）。
+        "grokbuild" | "grok-build" | "grok_build" | "grok" | "xai" => Some("xai"),
         _ => None,
     }
 }
@@ -225,6 +240,18 @@ fn ccs_extract_models(provider_type: &str, config: &Value) -> Vec<String> {
                 }
             }
         }
+        "xai" => {
+            // Grok Build：settings_config.config 为 TOML，[models].default 与
+            // [model."<id>"].model 为模型 id。
+            if let Some(config_text) = config.get("config").and_then(Value::as_str) {
+                if let Some(model) = ccs_extract_toml_string_value(config_text, "default") {
+                    push_model(model);
+                }
+                if let Some(model) = ccs_extract_toml_string_value(config_text, "model") {
+                    push_model(model);
+                }
+            }
+        }
         _ => {}
     }
 
@@ -254,6 +281,19 @@ fn ccs_extract_base_url(provider_type: &str, config: &Value) -> Option<String> {
         "gemini" => ccs_string_at_path(config, &["env", "GEMINI_BASE_URL"])
             .or_else(|| ccs_string_at_path(config, &["env", "GOOGLE_GEMINI_BASE_URL"]))
             .or_else(|| ccs_string_at_path(config, &["config", "base_url"])),
+        "xai" => ccs_string_at(config, &["base_url", "baseURL"])
+            .or_else(|| {
+                config
+                    .get("config")
+                    .and_then(|value| ccs_string_at(value, &["base_url", "baseURL"]))
+            })
+            .or_else(|| {
+                // Grok Build：config 字段是完整 TOML 文本。
+                config
+                    .get("config")
+                    .and_then(Value::as_str)
+                    .and_then(|text| ccs_extract_toml_string_value(text, "base_url"))
+            }),
         _ => ccs_string_at(config, &["base_url", "baseURL"])
             .or_else(|| {
                 config
@@ -276,6 +316,29 @@ fn ccs_extract_api_key(provider_type: &str, config: &Value) -> Option<String> {
             .or_else(|| ccs_string_at_path(config, &["env", "ANTHROPIC_API_KEY"])),
         "gemini" => ccs_string_at_path(config, &["env", "GEMINI_API_KEY"])
             .or_else(|| ccs_string_at_path(config, &["env", "GOOGLE_API_KEY"])),
+        "xai" => config
+            .pointer("/env/OPENAI_API_KEY")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                config
+                    .pointer("/auth/OPENAI_API_KEY")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .or_else(|| ccs_string_at(config, &["apiKey", "api_key"]))
+            .or_else(|| {
+                config
+                    .get("config")
+                    .and_then(|value| ccs_string_at(value, &["apiKey", "api_key"]))
+            })
+            .or_else(|| {
+                // Grok Build TOML：api_key = "..."
+                config
+                    .get("config")
+                    .and_then(Value::as_str)
+                    .and_then(|text| ccs_extract_toml_string_value(text, "api_key"))
+            }),
         _ => config
             .pointer("/env/OPENAI_API_KEY")
             .and_then(Value::as_str)

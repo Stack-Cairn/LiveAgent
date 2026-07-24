@@ -679,6 +679,7 @@ function isParentAgentToolCall(toolCall: ToolCall) {
   return toolCall.name === "Agent" && !isSubagentCardToolCall(toolCall);
 }
 
+// 与 agent-gui lib/providers/nativeWebSearch.ts 的同名判定保持一致（手动同步）。
 function isProviderNativeWebSearchToolName(toolName: string | undefined) {
   const normalized = toolName?.trim().toLowerCase() ?? "";
   return (
@@ -687,8 +688,13 @@ function isProviderNativeWebSearchToolName(toolName: string | undefined) {
     normalized === "web_search" ||
     normalized === "web_search_20250305" ||
     normalized === "web_search_20260209" ||
+    normalized === "web_search_20260318" ||
     normalized === "web_search_preview" ||
-    normalized.startsWith("web_search_call")
+    normalized.startsWith("web_search_call") ||
+    normalized === "x_search" ||
+    normalized === "x_keyword_search" ||
+    normalized === "x_semantic_search" ||
+    normalized.startsWith("x_search_call")
   );
 }
 

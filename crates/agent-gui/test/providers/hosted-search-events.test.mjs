@@ -380,3 +380,152 @@ test("hosted search aggregation extracts OpenAI url_citation annotations and mar
     [{ url: "https://example.com/openai", sourceType: "citation" }],
   );
 });
+
+test("codex aggregator tracks xAI x_search_call items and extracts action sources", () => {
+  const aggregator = hostedSearchEvents.createHostedSearchEventAggregator({
+    providerId: "codex",
+  });
+
+  aggregator.accept({
+    type: "response.output_item.added",
+    item: {
+      type: "x_search_call",
+      id: "xs-1",
+      status: "in_progress",
+      action: { query: "武汉今天的天气" },
+    },
+  });
+
+  let block = aggregator.getBlocks().find((candidate) => candidate.id === "xs-1");
+  assert.equal(block.status, "searching");
+  assert.deepEqual(block.queries, ["武汉今天的天气"]);
+
+  aggregator.accept({
+    type: "response.output_item.done",
+    item: {
+      type: "x_search_call",
+      id: "xs-1",
+      status: "completed",
+      action: {
+        query: "武汉今天的天气",
+        sources: [{ url: "https://example.com/weather", title: "Weather" }, "https://example.com/extra"],
+      },
+    },
+  });
+
+  block = aggregator.getBlocks().find((candidate) => candidate.id === "xs-1");
+  assert.equal(block.status, "completed");
+  assert.deepEqual(
+    block.sources.map((source) => ({ url: source.url, title: source.title })),
+    [
+      { url: "https://example.com/weather", title: "Weather" },
+      { url: "https://example.com/extra", title: undefined },
+    ],
+  );
+});
+
+test("codex aggregator treats xAI custom_tool_call search items as hosted search activity", () => {
+  const aggregator = hostedSearchEvents.createHostedSearchEventAggregator({
+    providerId: "codex",
+  });
+
+  aggregator.accept({
+    type: "response.output_item.added",
+    item: {
+      type: "custom_tool_call",
+      id: "ct-1",
+      name: "x_keyword_search",
+      status: "in_progress",
+      input: JSON.stringify({ query: "grok news" }),
+    },
+  });
+
+  let block = aggregator.getBlocks().find((candidate) => candidate.id === "ct-1");
+  assert.equal(block.status, "searching");
+  assert.deepEqual(block.queries, ["grok news"]);
+
+  aggregator.accept({
+    type: "response.output_item.done",
+    item: {
+      type: "custom_tool_call",
+      id: "ct-1",
+      name: "x_keyword_search",
+      status: "completed",
+      input: JSON.stringify({ query: "grok news" }),
+    },
+  });
+
+  block = aggregator.getBlocks().find((candidate) => candidate.id === "ct-1");
+  assert.equal(block.status, "completed");
+
+  aggregator.accept({
+    type: "response.output_item.added",
+    item: {
+      type: "custom_tool_call",
+      id: "ct-2",
+      name: "x_semantic_search",
+      status: "in_progress",
+      arguments: JSON.stringify({ query: "semantic query" }),
+    },
+  });
+
+  block = aggregator.getBlocks().find((candidate) => candidate.id === "ct-2");
+  assert.equal(block.status, "searching");
+  assert.deepEqual(block.queries, ["semantic query"]);
+
+  aggregator.accept({
+    type: "response.output_item.added",
+    item: {
+      type: "custom_tool_call",
+      id: "ct-3",
+      name: "unrelated_custom_tool",
+      status: "in_progress",
+      input: JSON.stringify({ query: "not a search" }),
+    },
+  });
+  assert.equal(
+    aggregator.getBlocks().find((candidate) => candidate.id === "ct-3"),
+    undefined,
+  );
+});
+
+test("codex aggregator extracts web_search_call action sources delivered via include", () => {
+  const aggregator = hostedSearchEvents.createHostedSearchEventAggregator({
+    providerId: "codex",
+  });
+
+  aggregator.accept({
+    type: "response.output_item.done",
+    item: {
+      type: "web_search_call",
+      id: "ws-1",
+      status: "completed",
+      action: {
+        query: "today news",
+        sources: [{ url: "https://example.com/news", title: "News" }],
+      },
+    },
+  });
+
+  const block = aggregator.getBlocks().find((candidate) => candidate.id === "ws-1");
+  assert.equal(block.status, "completed");
+  assert.deepEqual(block.queries, ["today news"]);
+  assert.deepEqual(
+    block.sources.map((source) => ({ url: source.url, title: source.title })),
+    [{ url: "https://example.com/news", title: "News" }],
+  );
+});
+
+test("codex aggregator maps response.x_search_call lifecycle events onto block status", () => {
+  const aggregator = hostedSearchEvents.createHostedSearchEventAggregator({
+    providerId: "codex",
+  });
+
+  aggregator.accept({ type: "response.x_search_call.searching", item_id: "xs-9" });
+  let block = aggregator.getBlocks().find((candidate) => candidate.id === "xs-9");
+  assert.equal(block.status, "searching");
+
+  aggregator.accept({ type: "response.x_search_call.completed", item_id: "xs-9" });
+  block = aggregator.getBlocks().find((candidate) => candidate.id === "xs-9");
+  assert.equal(block.status, "completed");
+});

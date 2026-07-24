@@ -2,6 +2,7 @@ import { type ComponentType, type SVGProps, useId } from "react";
 import McpLogoSource from "~icons/gravity-ui/logo-mcp";
 import ConnectionIconSource from "~icons/gravity-ui/plug-connection";
 import ClaudeSource from "~icons/logos/claude-icon";
+import GrokSource from "~icons/logos/grok-icon";
 import OpenAISource from "~icons/logos/openai-icon";
 import ActivitySource from "~icons/lucide/activity";
 import ArchiveSource from "~icons/lucide/archive";
@@ -456,6 +457,14 @@ function GeminiIconSource({ title, ...props }: SVGProps<SVGSVGElement> & { title
 export const AlertTriangle = createIcon(AlertTriangleSource);
 export const ClaudeIcon = createIcon(ClaudeSource);
 export const GeminiIcon = createIcon(GeminiIconSource);
+/**
+ * Grok brand mark from the Iconify `logos` set (`logos:grok-icon`).
+ * The set ships it unfilled, so pin currentColor to track light/dark chrome.
+ */
+function GrokIconSource(props: SVGProps<SVGSVGElement> & { title?: string }) {
+  return <GrokSource fill="currentColor" {...props} />;
+}
+export const GrokIcon = createIcon(GrokIconSource);
 export const Archive = createIcon(ArchiveSource);
 export const ArchiveRestore = createIcon(ArchiveRestoreSource);
 export const ArrowDownAZ = createIcon(ArrowDownAZSource);

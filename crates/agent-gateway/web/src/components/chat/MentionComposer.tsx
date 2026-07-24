@@ -192,6 +192,7 @@ export interface MentionComposerProps {
 
 const MAX_SUGGESTIONS = 30;
 const MENTION_INDEX_MAX_RESULTS = 5000;
+const MENTION_REFETCH_DEBOUNCE_MS = 150;
 const MENTION_TAG_ATTR = "data-mention-path";
 const MENTION_KIND_ATTR = "data-mention-kind";
 const SKILL_MENTION_NAME_ATTR = "data-skill-name";
@@ -449,6 +450,28 @@ function editorSelectionRange(root: HTMLElement) {
 
 function normalizeMentionQuery(query: string) {
   return removeCaretAnchors(query).trim().replace(/\\/g, "/").toLowerCase();
+}
+
+type MentionFetchSnapshot = {
+  trigger: MentionContext["trigger"];
+  query: string;
+  truncated: boolean;
+};
+
+// A cached snapshot answers narrower queries client-side only when the backend
+// returned every match for the query it was fetched with. A truncated snapshot
+// can be missing matches for any other query, so extending the query must go
+// back to the backend instead of narrowing locally.
+export function mentionSnapshotCoversQuery(
+  fetched: MentionFetchSnapshot | null,
+  trigger: MentionContext["trigger"],
+  normalizedQuery: string,
+): boolean {
+  if (!fetched) return true;
+  if (fetched.trigger !== trigger) return false;
+  if (!normalizedQuery.startsWith(fetched.query)) return false;
+  if (!fetched.truncated) return true;
+  return normalizedQuery === fetched.query;
 }
 
 function normalizeLargePastePreview(text: string) {
@@ -1921,22 +1944,31 @@ export const MentionComposer = memo(
     const mentionSessionRequestSeqRef = useRef(0);
     const mentionActiveRef = useRef(false);
     const mentionSessionQueryRef = useRef("");
-    const mentionFetchRef = useRef<{ trigger: MentionContext["trigger"]; query: string } | null>(
-      null,
-    );
+    const mentionFetchRef = useRef<MentionFetchSnapshot | null>(null);
+    const mentionRefetchTimerRef = useRef<number | null>(null);
+    const [mentionRefetchPending, setMentionRefetchPending] = useState(false);
 
     // ---- Mention state ----
     const [mentionCtx, setMentionCtx] = useState<MentionContext | null>(null);
     const [highlightIdx, setHighlightIdx] = useState(0);
 
+    const cancelMentionRefetch = useCallback(() => {
+      if (mentionRefetchTimerRef.current !== null) {
+        window.clearTimeout(mentionRefetchTimerRef.current);
+        mentionRefetchTimerRef.current = null;
+      }
+      setMentionRefetchPending(false);
+    }, []);
+
     const resetMentionSession = useCallback(() => {
       mentionSessionRequestSeqRef.current += 1;
       mentionSessionQueryRef.current = "";
       mentionFetchRef.current = null;
+      cancelMentionRefetch();
       setMentionSessionEntries([]);
       setMentionSessionLoading(false);
       setMentionSessionError(null);
-    }, []);
+    }, [cancelMentionRefetch]);
 
     const closeMentionSession = useCallback(() => {
       mentionActiveRef.current = false;
@@ -1946,12 +1978,23 @@ export const MentionComposer = memo(
     }, [resetMentionSession]);
 
     const startMentionSession = useCallback(
-      (ctx: MentionContext) => {
+      (ctx: MentionContext, opts?: { keepEntries?: boolean }) => {
+        cancelMentionRefetch();
         const requestSeq = ++mentionSessionRequestSeqRef.current;
+        const isFileFetch = ctx.trigger === "file" && Boolean(normalizedWorkdir);
         mentionSessionQueryRef.current = ctx.query;
-        mentionFetchRef.current = { trigger: ctx.trigger, query: normalizeMentionQuery(ctx.query) };
-        setMentionSessionEntries([]);
-        setMentionSessionLoading(ctx.trigger === "file" && Boolean(normalizedWorkdir));
+        mentionFetchRef.current = {
+          trigger: ctx.trigger,
+          query: normalizeMentionQuery(ctx.query),
+          // Pessimistic while the fetch is in flight so keystrokes racing the
+          // response keep refetching; the response corrects it. Skill and
+          // workdir-less sessions never fetch, so their snapshot is complete.
+          truncated: isFileFetch,
+        };
+        if (!opts?.keepEntries) {
+          setMentionSessionEntries([]);
+        }
+        setMentionSessionLoading(isFileFetch);
         setMentionSessionError(null);
 
         if (ctx.trigger === "skill") {
@@ -1969,6 +2012,9 @@ export const MentionComposer = memo(
           .then((resp) => {
             if (requestSeq !== mentionSessionRequestSeqRef.current) return;
             setMentionSessionEntries(resp.entries);
+            if (mentionFetchRef.current) {
+              mentionFetchRef.current = { ...mentionFetchRef.current, truncated: resp.truncated };
+            }
           })
           .catch(() => {
             if (requestSeq !== mentionSessionRequestSeqRef.current) return;
@@ -1980,7 +2026,22 @@ export const MentionComposer = memo(
             setMentionSessionLoading(false);
           });
       },
-      [normalizedWorkdir],
+      [cancelMentionRefetch, normalizedWorkdir],
+    );
+
+    const scheduleMentionRefetch = useCallback(
+      (ctx: MentionContext) => {
+        if (mentionRefetchTimerRef.current !== null) {
+          window.clearTimeout(mentionRefetchTimerRef.current);
+        }
+        setMentionRefetchPending(true);
+        mentionRefetchTimerRef.current = window.setTimeout(() => {
+          mentionRefetchTimerRef.current = null;
+          setMentionRefetchPending(false);
+          startMentionSession(ctx, { keepEntries: true });
+        }, MENTION_REFETCH_DEBOUNCE_MS);
+      },
+      [startMentionSession],
     );
 
     const mentionSessionSearchIndex = useMemo<MentionSearchEntry[]>(
@@ -1999,6 +2060,9 @@ export const MentionComposer = memo(
     useEffect(() => {
       return () => {
         mentionSessionRequestSeqRef.current += 1;
+        if (mentionRefetchTimerRef.current !== null) {
+          window.clearTimeout(mentionRefetchTimerRef.current);
+        }
         if (busyReleaseTimerRef.current !== null) {
           window.clearTimeout(busyReleaseTimerRef.current);
         }
@@ -2053,7 +2117,7 @@ export const MentionComposer = memo(
       });
     }, [suggestions.length]);
 
-    const popupLoading = mentionSessionLoading;
+    const popupLoading = mentionSessionLoading || mentionRefetchPending;
     const popupError = suggestions.length === 0 ? mentionSessionError : null;
     const popupEmptyLabel =
       mentionCtx?.trigger === "skill"
@@ -2259,14 +2323,16 @@ export const MentionComposer = memo(
         if (ctx.query === mentionSessionQueryRef.current) return;
         mentionSessionQueryRef.current = ctx.query;
         setHighlightIdx(0);
-        // The backend filters entries by the query used at fetch time, so the
-        // cached snapshot only narrows further; refetch once that breaks.
+        // The cached snapshot only answers the new query when it was complete
+        // for the fetched one; anything else goes back to the backend. File
+        // refetches are debounced so fast typing does not walk a large
+        // workspace once per keystroke.
         const fetched = mentionFetchRef.current;
-        if (
-          fetched &&
-          (fetched.trigger !== ctx.trigger ||
-            !normalizeMentionQuery(ctx.query).startsWith(fetched.query))
-        ) {
+        if (mentionSnapshotCoversQuery(fetched, ctx.trigger, normalizeMentionQuery(ctx.query))) {
+          cancelMentionRefetch();
+        } else if (fetched?.trigger === "file" && ctx.trigger === "file") {
+          scheduleMentionRefetch(ctx);
+        } else {
           startMentionSession(ctx);
         }
       };
@@ -2277,7 +2343,13 @@ export const MentionComposer = memo(
         if (!nextEl || document.activeElement !== nextEl) return;
         applyContext(detectMention(nextEl, enabledSkills.length > 0));
       });
-    }, [closeMentionSession, enabledSkills.length, startMentionSession]);
+    }, [
+      cancelMentionRefetch,
+      closeMentionSession,
+      enabledSkills.length,
+      scheduleMentionRefetch,
+      startMentionSession,
+    ]);
 
     useImperativeHandle(
       ref,

@@ -57,6 +57,36 @@ func TestNormalizeChatSelectedModelAcceptsGemini(t *testing.T) {
 	}
 }
 
+func TestNormalizeChatSelectedModelAcceptsXai(t *testing.T) {
+	t.Parallel()
+
+	got, err := NormalizeChatSelectedModel(&ChatSelectedModelBody{
+		CustomProviderID: " builtin-xai ",
+		Model:            " grok-4.5 ",
+		ProviderType:     " xai ",
+	})
+	if err != nil {
+		t.Fatalf("NormalizeChatSelectedModel() error = %v", err)
+	}
+	if got.CustomProviderID != "builtin-xai" ||
+		got.Model != "grok-4.5" ||
+		got.ProviderType != "xai" {
+		t.Fatalf("NormalizeChatSelectedModel() = %#v", got)
+	}
+}
+
+func TestNormalizeChatSelectedModelRejectsUnknownProviderType(t *testing.T) {
+	t.Parallel()
+
+	if _, err := NormalizeChatSelectedModel(&ChatSelectedModelBody{
+		CustomProviderID: "provider",
+		Model:            "model",
+		ProviderType:     "grok",
+	}); err == nil {
+		t.Fatalf("NormalizeChatSelectedModel() expected error for unknown provider type")
+	}
+}
+
 func TestNormalizeChatRuntimeControlsDefaultsAndTrims(t *testing.T) {
 	t.Parallel()
 

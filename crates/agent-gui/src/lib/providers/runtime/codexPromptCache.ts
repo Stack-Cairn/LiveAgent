@@ -22,6 +22,7 @@ export function attachCodexPromptCacheKey(
   providerId: ProviderId,
   options: StreamOptionsEx,
 ): StreamOptionsEx {
+  // xai 不使用 OpenAI prompt_cache_key 路由；仅 Codex 需要。
   if (providerId !== "codex") return options;
   if (options.cacheRetention === "none") return options;
   const sessionId = normalizeSessionId(options.sessionId);

@@ -165,7 +165,7 @@ export function attachProviderNativeWebSearch(
         return nextPayload;
       }
 
-      if (providerId === "codex") {
+      if (providerId === "codex" || providerId === "xai") {
         if (model.api === "openai-completions") {
           return appendOpenAIChatCompletionsNativeWebSearch(nextPayload, {
             baseUrl: params?.baseUrl,

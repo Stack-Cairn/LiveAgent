@@ -350,7 +350,10 @@ function syncableCustomSettings(
       projectsCollapsed: false,
       recentCollapsed: false,
     },
-    // fontScale 是本机 UI 偏好：固定为默认值，避免本地调整触发网关广播
+    // Typography is a local UI preference; keep its synced shape stable so visual changes do not broadcast.
+    interfaceFontFamily: "",
+    chatFontFamily: "",
+    codeFontFamily: "",
     fontScale: { sidebar: 1, chat: 1, rightDock: 1 },
   };
 }
@@ -993,7 +996,10 @@ export function applyGatewaySettingsSyncPayload(
           )
         : current.customSettings.rightDock,
       chatSidebar: current.customSettings.chatSidebar,
-      // fontScale 是本机 UI 偏好，不参与网关同步
+      // Typography and font scale are local UI preferences and never accept gateway values.
+      interfaceFontFamily: current.customSettings.interfaceFontFamily,
+      chatFontFamily: current.customSettings.chatFontFamily,
+      codeFontFamily: current.customSettings.codeFontFamily,
       fontScale: current.customSettings.fontScale,
     },
     skills: (source.skills as AppSettings["skills"] | undefined) ?? current.skills,

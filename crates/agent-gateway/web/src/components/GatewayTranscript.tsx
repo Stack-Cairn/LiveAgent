@@ -279,11 +279,7 @@ function CheckpointCard(props: {
 
           {isExpanded ? (
             <div className="checkpoint-expand border-t border-black/[0.05] px-3.5 py-3 dark:border-white/[0.06]">
-              <Markdown
-                content={item.content}
-                className="font-openai-chat text-sm"
-                readOnly={readOnly}
-              />
+              <Markdown content={item.content} className="font-chat text-sm" readOnly={readOnly} />
             </div>
           ) : null}
         </div>
@@ -671,7 +667,7 @@ function GatewayUserMessageBubbleBody(props: {
   const { visibleFiles, pastedTextFiles } = splitUserAttachmentsForDisplay(attachments, text);
 
   return (
-    <div className="chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-openai-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))]">
+    <div className="chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))]">
       <GatewayUserAttachmentCards
         files={visibleFiles}
         workspaceRoot={workspaceRoot}
@@ -754,7 +750,7 @@ const EditableUserMessageBubble = memo(function EditableUserMessageBubble(props:
       />
       <textarea
         ref={textareaRef}
-        className="chat-user-bubble-editor-textarea w-full resize-none overflow-hidden rounded-lg bg-transparent p-2 font-openai-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none"
+        className="chat-user-bubble-editor-textarea w-full resize-none overflow-hidden rounded-lg bg-transparent p-2 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none"
         value={draftText}
         onChange={(event) => setDraftText(event.target.value)}
         rows={1}

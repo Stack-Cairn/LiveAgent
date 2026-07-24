@@ -9,8 +9,7 @@ function hasDisplayableUsage(usage: Usage | undefined): usage is Usage {
     usage.input > 0 ||
     usage.output > 0 ||
     usage.cacheRead > 0 ||
-    usage.cacheWrite > 0 ||
-    (usage.cost?.total ?? 0) > 0
+    usage.cacheWrite > 0
   );
 }
 
@@ -18,16 +17,6 @@ function formatUsageNumber(value: number, locale: string) {
   return new Intl.NumberFormat(locale, {
     maximumFractionDigits: 0,
   }).format(value);
-}
-
-function formatUsageCost(value: number, locale: string) {
-  if (value <= 0) return "$0";
-
-  const maximumFractionDigits = value >= 1 ? 2 : value >= 0.01 ? 4 : 6;
-  return `$${new Intl.NumberFormat(locale, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits,
-  }).format(value)}`;
 }
 
 export function UsagePanel(props: { usage?: Usage; contextWindow?: number }) {
@@ -76,15 +65,6 @@ export function UsagePanel(props: { usage?: Usage; contextWindow?: number }) {
             key: "cache-write",
             label: t("chat.usageCacheWrite"),
             value: formatUsageNumber(usage.cacheWrite, locale),
-          },
-        ]
-      : []),
-    ...((usage.cost?.total ?? 0) > 0
-      ? [
-          {
-            key: "cost",
-            label: t("chat.usageCost"),
-            value: formatUsageCost(usage.cost?.total ?? 0, locale),
           },
         ]
       : []),

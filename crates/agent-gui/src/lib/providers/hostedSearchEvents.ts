@@ -142,8 +142,10 @@ function requestBodyMatchesProbe(probe: FetchProbe, body: unknown) {
   if (!probe.sessionId) return true;
   if (!isRecord(body)) return false;
 
-  if (probe.providerId === "codex") {
+  if (probe.providerId === "codex" || probe.providerId === "xai") {
     const promptCacheKey = readString(body.prompt_cache_key);
+    // xAI Responses 会剥离 prompt_cache_key；有 requestId 头时已在上游匹配。
+    if (!promptCacheKey && probe.providerId === "xai") return true;
     return promptCacheKey === probe.sessionId;
   }
 
@@ -315,6 +317,10 @@ type SearchEventParser = {
 // ---------------------------------------------------------------------------
 // OpenAI Responses: web_search_call lifecycle events + url_citation annotations.
 // Every event carries a complete, self-contained payload — no cross-event state.
+// xAI (api.x.ai) reuses the same wire shape but reports server-side search via
+// its own item types: x_search_call(_output) items, plus custom_tool_call items
+// named x_keyword_search / x_semantic_search. Result sources arrive on
+// action.sources when the request includes web_search_call.action.sources.
 // ---------------------------------------------------------------------------
 
 function mapOpenAIWebSearchCallStatus(rawStatus: string, isDoneEvent: boolean): HostedSearchStatus {
@@ -324,32 +330,101 @@ function mapOpenAIWebSearchCallStatus(rawStatus: string, isDoneEvent: boolean): 
   return isDoneEvent ? "completed" : "searching";
 }
 
+function extractResponsesSourceList(raw: unknown): HostedSearchSource[] {
+  if (!Array.isArray(raw)) return [];
+  const sources: HostedSearchSource[] = [];
+  for (const entry of raw) {
+    if (typeof entry === "string") {
+      const url = entry.trim();
+      if (url && isHttpUrl(url)) sources.push({ url, sourceType: "source" });
+      continue;
+    }
+    if (!isRecord(entry)) continue;
+    const url = readString(entry.url ?? entry.uri);
+    if (!url || !isHttpUrl(url)) continue;
+    const title = readString(entry.title);
+    sources.push({ url, ...(title ? { title } : {}), sourceType: "source" });
+  }
+  return sources;
+}
+
+function isXaiSearchCallItemType(itemType: string) {
+  return itemType === "x_search_call" || itemType === "x_search_call_output";
+}
+
+function isXaiCustomSearchToolName(name: string) {
+  const normalized = name.trim().toLowerCase();
+  return normalized === "x_keyword_search" || normalized === "x_semantic_search";
+}
+
+function readXaiCustomSearchQuery(item: Record<string, unknown>) {
+  const raw = readRawString(item.input) || readRawString(item.arguments);
+  const parsed = maybeParseJson(raw);
+  return isRecord(parsed) ? readString(parsed.query) : "";
+}
+
+const RESPONSES_SEARCH_CALL_LIFECYCLE_PREFIXES = [
+  "response.web_search_call.",
+  "response.x_search_call.",
+] as const;
+
 function parseOpenAIResponsesSearchEvent(raw: unknown): HostedSearchUpdate[] {
   if (!isRecord(raw)) return [];
   const type = readString(raw.type);
 
   if (type === "response.output_item.added" || type === "response.output_item.done") {
     const item = isRecord(raw.item) ? raw.item : {};
-    if (readString(item.type) !== "web_search_call") return [];
-    const action = isRecord(item.action) ? item.action : {};
-    const query = readString(action.query);
-    const id = readString(item.id) || readString(item.call_id);
-    return [
-      {
-        ...(id ? { id } : {}),
-        provider: "codex",
-        status: mapOpenAIWebSearchCallStatus(readString(item.status), type.endsWith(".done")),
-        queries: query ? [query] : [],
-        sources: [],
-      },
-    ];
+    const itemType = readString(item.type);
+    const isDoneEvent = type.endsWith(".done");
+
+    if (itemType === "web_search_call" || isXaiSearchCallItemType(itemType)) {
+      const action = isRecord(item.action) ? item.action : {};
+      const query = readString(action.query);
+      const id =
+        readString(item.id) || readString(item.call_id) || readString(item.x_search_call_id);
+      return [
+        {
+          ...(id ? { id } : {}),
+          provider: "codex",
+          status: mapOpenAIWebSearchCallStatus(
+            readString(item.status),
+            isDoneEvent || itemType.endsWith("_output"),
+          ),
+          queries: query ? [query] : [],
+          sources: [
+            ...extractResponsesSourceList(action.sources),
+            ...extractResponsesSourceList(item.sources),
+          ],
+        },
+      ];
+    }
+
+    if (itemType === "custom_tool_call" && isXaiCustomSearchToolName(readString(item.name))) {
+      const query = readXaiCustomSearchQuery(item);
+      const id = readString(item.id) || readString(item.call_id) || readString(item.item_id);
+      return [
+        {
+          ...(id ? { id } : {}),
+          provider: "codex",
+          status: mapOpenAIWebSearchCallStatus(readString(item.status), isDoneEvent),
+          queries: query ? [query] : [],
+          sources: [],
+        },
+      ];
+    }
+
+    return [];
   }
 
-  // Defensive coverage for the dedicated response.web_search_call.* lifecycle
-  // events (in_progress/searching/completed) some OpenAI-compatible gateways
-  // emit alongside (or instead of) output_item add/done.
-  if (type.startsWith("response.web_search_call.")) {
-    const suffix = type.slice("response.web_search_call.".length).toLowerCase();
+  // Defensive coverage for the dedicated response.web_search_call.* /
+  // response.x_search_call.* lifecycle events (in_progress/searching/completed)
+  // some OpenAI-compatible gateways emit alongside (or instead of) output_item
+  // add/done.
+  const lifecyclePrefix = RESPONSES_SEARCH_CALL_LIFECYCLE_PREFIXES.find((prefix) =>
+    type.startsWith(prefix),
+  );
+  if (lifecyclePrefix) {
+    const suffix = type.slice(lifecyclePrefix.length).toLowerCase();
     const id = readString(raw.item_id) || readString(raw.output_item_id);
     return [
       {
@@ -577,7 +652,9 @@ function createGeminiSearchEventParser(): SearchEventParser {
 }
 
 function createHostedSearchEventParser(providerId: ProviderId): SearchEventParser {
-  if (providerId === "codex") return createOpenAIResponsesSearchEventParser();
+  if (providerId === "codex" || providerId === "xai") {
+    return createOpenAIResponsesSearchEventParser();
+  }
   if (providerId === "claude_code") return createAnthropicSearchEventParser();
   if (providerId === "gemini") return createGeminiSearchEventParser();
   return { parse: () => [] };

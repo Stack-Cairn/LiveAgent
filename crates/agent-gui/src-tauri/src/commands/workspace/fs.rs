@@ -4471,11 +4471,11 @@ pub fn fs_mention_list_sync(
     let wd = canonicalize_workdir(&workdir).map_err(|e| e.to_string())?;
     let max_results = max_results.unwrap_or(DEFAULT_MENTION_MAX_RESULTS).max(1);
     let query = normalize_mention_query(query);
-    let candidate_limit = if query.is_empty() {
-        max_results
-    } else {
-        QUERY_MENTION_CANDIDATE_LIMIT.max(max_results)
-    };
+    // Collect more candidates than requested even for an empty query: the
+    // walker yields depth-first, so capping at max_results would drop shallow
+    // entries whenever an early directory is large enough to fill the cap on
+    // its own. Ranking picks the shallowest entries out of the larger pool.
+    let candidate_limit = QUERY_MENTION_CANDIDATE_LIMIT.max(max_results);
 
     let visibility = requested_visibility(show_hidden, false);
     let normally_visible = visibility
@@ -4508,10 +4508,7 @@ pub fn fs_mention_list_sync(
 
         if entries.len() >= candidate_limit {
             truncated = true;
-            if query.is_empty() {
-                break;
-            }
-            continue;
+            break;
         }
 
         entries.push(MentionFileEntry {
@@ -4523,9 +4520,7 @@ pub fn fs_mention_list_sync(
         });
     }
 
-    entries.sort_by(|a, b| {
-        mention_sort_key(&a.path, &a.kind, &query).cmp(&mention_sort_key(&b.path, &b.kind, &query))
-    });
+    entries.sort_by_cached_key(|entry| mention_sort_key(&entry.path, &entry.kind, &query));
     if entries.len() > max_results {
         entries.truncate(max_results);
         truncated = true;
@@ -5653,6 +5648,51 @@ mod tests {
         assert_eq!(paths.first(), Some(&"src/needle.ts"));
         assert!(paths.contains(&"src/deep/other-needle.ts"));
         assert!(!paths.contains(&"src/unrelated.ts"));
+
+        let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn mention_list_truncation_keeps_shallow_entries_and_queries_reach_dropped_files() {
+        let workdir = unique_test_workdir("mention-truncated");
+        // The walker yields "aaa/deep" before the shallow sibling, so a
+        // walk-order cap would fill up on filler files alone.
+        fs::create_dir_all(workdir.join("aaa/deep")).expect("create dirs");
+        for index in 0..30 {
+            fs::write(workdir.join(format!("aaa/deep/filler-{index:02}.txt")), "")
+                .expect("write filler");
+        }
+        fs::write(workdir.join("aaa/deep/target-needle.ts"), "").expect("write needle");
+        fs::write(workdir.join("zzz-shallow.ts"), "").expect("write shallow");
+
+        let response = fs_mention_list_sync(workdir.display().to_string(), Some(5), None, None)
+            .expect("mention list should succeed");
+        assert!(response.truncated);
+        assert_eq!(response.entries.len(), 5);
+        let paths = response
+            .entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            paths.contains(&"zzz-shallow.ts"),
+            "shallow entry must survive truncation: {paths:?}"
+        );
+
+        // Files dropped from the truncated snapshot must stay reachable by
+        // query; the composer relies on this when it refetches while typing.
+        let queried = fs_mention_list_sync(
+            workdir.display().to_string(),
+            Some(5),
+            Some("target-needle".to_string()),
+            None,
+        )
+        .expect("mention query should succeed");
+        assert_eq!(
+            queried.entries.first().map(|entry| entry.path.as_str()),
+            Some("aaa/deep/target-needle.ts")
+        );
+        assert!(!queried.truncated);
 
         let _ = fs::remove_dir_all(workdir);
     }
