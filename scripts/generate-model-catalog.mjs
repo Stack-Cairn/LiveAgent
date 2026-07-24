@@ -1,0 +1,222 @@
+#!/usr/bin/env node
+// Generates the model metadata catalog (context window / max output)
+// consumed by both frontends, from the models.dev open database. The output
+// is written byte-identically to:
+//   crates/agent-gui/src/lib/models/catalog.generated.ts
+//   crates/agent-gateway/web/src/lib/models/catalog.generated.ts
+// and is enforced in sync by scripts/check-mirror.mjs.
+//
+// Usage: node scripts/generate-model-catalog.mjs [--source <url|file>] [--check]
+//   --source  alternate api.json URL or local file path (offline debugging)
+//   --check   compare against the checked-in snapshot without writing;
+//             exits 1 when the data differs
+//
+// Refresh: make update-model-catalog
+
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const OUTPUT_PATHS = [
+  join(repoRoot, "crates", "agent-gui", "src", "lib", "models", "catalog.generated.ts"),
+  join(repoRoot, "crates", "agent-gateway", "web", "src", "lib", "models", "catalog.generated.ts"),
+];
+
+const DEFAULT_SOURCE = "https://models.dev/api.json";
+// Fixed provider order: these are the native catalogs behind the app's four
+// provider types (claude_code→anthropic, gemini→google, codex→openai, xai).
+const PROVIDERS = ["anthropic", "google", "openai", "xai"];
+// Guard against a truncated upstream response replacing a healthy snapshot.
+const MIN_MODELS_PER_PROVIDER = { anthropic: 8, google: 15, openai: 20, xai: 3 };
+// Models that must exist; their absence signals an upstream schema change.
+const SENTINELS = [
+  ["anthropic", "claude-sonnet-4-6"],
+  ["openai", "gpt-5"],
+];
+
+// Single semantic rule shared with lib/models/modelCatalog.ts (bound together
+// by the catalog invariant tests): community catalogs record "output == context"
+// for providers that publish no separate output cap, which would zero out the
+// input budget of any consumer that reserves the full output. Repair such
+// degenerate pairs with a uniform reservation cap.
+const MAX_OUTPUT_TOKEN_CAP = 32_000;
+function normalizeMaxOutputToken(contextWindow, maxOutputToken) {
+  if (maxOutputToken < contextWindow) return maxOutputToken;
+  return Math.min(MAX_OUTPUT_TOKEN_CAP, Math.max(1, Math.floor(contextWindow / 4)));
+}
+
+function fail(message) {
+  console.error(`generate-model-catalog: ${message}`);
+  process.exit(1);
+}
+
+function parseArgs(argv) {
+  const args = { source: DEFAULT_SOURCE, check: false };
+  for (let i = 2; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--check") {
+      args.check = true;
+    } else if (arg === "--source") {
+      i += 1;
+      if (!argv[i]) fail("--source requires a value");
+      args.source = argv[i];
+    } else {
+      fail(`unknown argument: ${arg}`);
+    }
+  }
+  return args;
+}
+
+async function loadUpstream(source) {
+  if (/^https?:\/\//.test(source)) {
+    let response;
+    try {
+      response = await fetch(source, { signal: AbortSignal.timeout(60_000) });
+    } catch (error) {
+      fail(`fetch failed: ${error?.message ?? error}`);
+    }
+    if (!response.ok) fail(`fetch failed: HTTP ${response.status} from ${source}`);
+    try {
+      return await response.json();
+    } catch (error) {
+      fail(`invalid JSON from ${source}: ${error?.message ?? error}`);
+    }
+  }
+  try {
+    return JSON.parse(readFileSync(resolve(source), "utf8"));
+  } catch (error) {
+    fail(`cannot read ${source}: ${error?.message ?? error}`);
+  }
+  return undefined;
+}
+
+function extractModels(providerId, providerData) {
+  const rawModels = providerData?.models;
+  if (!rawModels || typeof rawModels !== "object") {
+    fail(`provider ${providerId}: missing models map`);
+  }
+  const entries = [];
+  const seen = new Set();
+  for (const [id, model] of Object.entries(rawModels)) {
+    const contextWindow = model?.limit?.context;
+    const rawOutput = model?.limit?.output;
+    if (!model?.modalities?.output?.includes?.("text")) {
+      console.error(`skip ${providerId}/${id} (non-text output)`);
+      continue;
+    }
+    if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
+      console.error(`skip ${providerId}/${id} (invalid limit.context)`);
+      continue;
+    }
+    if (!Number.isInteger(rawOutput) || rawOutput <= 0) {
+      console.error(`skip ${providerId}/${id} (invalid limit.output)`);
+      continue;
+    }
+    if (seen.has(id)) fail(`provider ${providerId}: duplicate model id ${id}`);
+    seen.add(id);
+    entries.push({
+      id,
+      contextWindow,
+      maxOutputToken: normalizeMaxOutputToken(contextWindow, rawOutput),
+    });
+  }
+  entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return entries;
+}
+
+function renderEntry(entry) {
+  return `    { id: ${JSON.stringify(entry.id)}, contextWindow: ${entry.contextWindow}, maxOutputToken: ${entry.maxOutputToken} },`;
+}
+
+function renderCatalog(catalog, snapshotDate) {
+  const lines = [
+    "// Generated by scripts/generate-model-catalog.mjs — DO NOT EDIT.",
+    "// Source: https://models.dev/api.json (providers: anthropic, google, openai, xai)",
+    "// Refresh: make update-model-catalog",
+    "",
+    "export type CatalogModelEntry = {",
+    "  id: string;",
+    "  contextWindow: number;",
+    "  maxOutputToken: number;",
+    "};",
+    "",
+    `export type CatalogProviderId = ${PROVIDERS.map((p) => JSON.stringify(p)).join(" | ")};`,
+    "",
+    `export const MODEL_CATALOG_SNAPSHOT_DATE = "${snapshotDate}";`,
+    "",
+    "export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {",
+  ];
+  for (const providerId of PROVIDERS) {
+    lines.push(`  ${providerId}: [`);
+    for (const entry of catalog[providerId]) lines.push(renderEntry(entry));
+    lines.push("  ],");
+  }
+  lines.push("};", "");
+  return lines.join("\n");
+}
+
+function stripSnapshotDate(content) {
+  return content.replace(/^export const MODEL_CATALOG_SNAPSHOT_DATE = ".*";$/m, "");
+}
+
+function readExisting(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+const args = parseArgs(process.argv);
+const upstream = await loadUpstream(args.source);
+
+const catalog = {};
+for (const providerId of PROVIDERS) {
+  const providerData = upstream?.[providerId];
+  if (!providerData) fail(`provider ${providerId}: missing from upstream data`);
+  const entries = extractModels(providerId, providerData);
+  if (entries.length < MIN_MODELS_PER_PROVIDER[providerId]) {
+    fail(
+      `provider ${providerId}: only ${entries.length} models after filtering ` +
+        `(expected >= ${MIN_MODELS_PER_PROVIDER[providerId]}); upstream data looks truncated`,
+    );
+  }
+  catalog[providerId] = entries;
+}
+for (const [providerId, modelId] of SENTINELS) {
+  if (!catalog[providerId].some((entry) => entry.id === modelId)) {
+    fail(`sentinel model ${providerId}/${modelId} missing; upstream schema may have changed`);
+  }
+}
+
+const existingContents = OUTPUT_PATHS.map(readExisting);
+const today = new Date().toISOString().slice(0, 10);
+const nextContent = renderCatalog(catalog, today);
+
+const unchanged =
+  existingContents.every((content) => content !== null) &&
+  existingContents.every(
+    (content) => stripSnapshotDate(content) === stripSnapshotDate(nextContent),
+  ) &&
+  existingContents[0] === existingContents[1];
+
+if (args.check) {
+  if (!unchanged) {
+    console.error("catalog snapshot is stale; run: make update-model-catalog");
+    process.exit(1);
+  }
+  console.log("catalog snapshot is up to date.");
+  process.exit(0);
+}
+
+if (unchanged) {
+  console.log("catalog unchanged");
+  process.exit(0);
+}
+
+for (const path of OUTPUT_PATHS) writeFileSync(path, nextContent);
+const [guiBytes, webBytes] = OUTPUT_PATHS.map((path) => readFileSync(path));
+if (!guiBytes.equals(webBytes)) fail("post-write self-check failed: outputs differ");
+const total = PROVIDERS.reduce((sum, providerId) => sum + catalog[providerId].length, 0);
+console.log(`catalog updated (${total} models, snapshot ${today})`);

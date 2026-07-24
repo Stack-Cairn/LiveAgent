@@ -31,6 +31,8 @@ export const CODEX_DEFAULT_USER_AGENT =
 export const CODEX_SESSION_ID_HEADER = "session_id";
 export const CODEX_CONVERSATION_ID_HEADER = "conversation_id";
 
+export const XAI_DEFAULT_USER_AGENT = "grok-shell/0.2.110 (linux; x86_64)";
+
 const COMMON_CUSTOM_HEADER_KEY_PRESETS = [
   "X-Request-ID",
   "X-User-ID",
@@ -51,11 +53,16 @@ const CODEX_CUSTOM_HEADER_KEY_PRESETS: readonly string[] = [
   ...COMMON_CUSTOM_HEADER_KEY_PRESETS,
 ];
 
+const XAI_CUSTOM_HEADER_KEY_PRESETS: readonly string[] = [
+  "User-Agent",
+  ...COMMON_CUSTOM_HEADER_KEY_PRESETS,
+];
+
 const CUSTOM_HEADER_KEY_PRESETS: Record<CustomProvider["type"], readonly string[]> = {
   claude_code: ANTHROPIC_CUSTOM_HEADER_KEY_PRESETS,
   codex: CODEX_CUSTOM_HEADER_KEY_PRESETS,
   gemini: COMMON_CUSTOM_HEADER_KEY_PRESETS,
-  xai: COMMON_CUSTOM_HEADER_KEY_PRESETS,
+  xai: XAI_CUSTOM_HEADER_KEY_PRESETS,
 };
 
 export function getCustomHeaderKeyPresets(providerId: CustomProvider["type"]): readonly string[] {

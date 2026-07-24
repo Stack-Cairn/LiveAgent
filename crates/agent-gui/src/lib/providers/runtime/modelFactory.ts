@@ -316,10 +316,9 @@ export function createModelFromConfig(
         )
       : configuredContextWindow;
   const maxTokens = modelConfig?.maxOutputToken ?? defaults.maxOutputToken;
-  // 用户自填单价优先于目录定价：中转/自定义模型的实际计费经常与官方目录不同。
-  const configuredCost = modelConfig?.cost;
+  // 计费功能已整体移除：pi-ai 的 Model.cost 是结构必填字段，统一喂零价，
+  // 流式侧算出的 usage.cost 恒为 0（known 分支同样覆盖，防止目录单价复活计费）。
   const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-  const customModelCost = configuredCost ?? zeroCost;
 
   if (providerId === "codex" || providerId === "xai") {
     const { baseUrl: normalizedBaseUrl, preferredApi } = normalizeCodexBaseUrl(baseUrl);
@@ -355,7 +354,7 @@ export function createModelFromConfig(
           ...known,
           contextWindow,
           maxTokens,
-          ...(configuredCost ? { cost: configuredCost } : {}),
+          cost: zeroCost,
           ...(isXaiTarget ? { thinkingLevelMap: { ...XAI_THINKING_LEVEL_MAP } } : {}),
           ...(responsesCompat
             ? {
@@ -386,7 +385,7 @@ export function createModelFromConfig(
       // 是否真的下发思考由用户的开关决定。
       reasoning: true,
       input: resolveCodexModelInput(api, modelId),
-      cost: customModelCost,
+      cost: zeroCost,
       contextWindow,
       maxTokens,
     };
@@ -424,7 +423,7 @@ export function createModelFromConfig(
         ...known,
         contextWindow,
         maxTokens,
-        ...(configuredCost ? { cost: configuredCost } : {}),
+        cost: zeroCost,
       };
     }
 
@@ -436,7 +435,7 @@ export function createModelFromConfig(
       baseUrl: normalizedBaseUrl,
       reasoning: true,
       input: ["text", "image"],
-      cost: customModelCost,
+      cost: zeroCost,
       contextWindow,
       maxTokens,
     };
@@ -450,7 +449,7 @@ export function createModelFromConfig(
         ...known,
         contextWindow,
         maxTokens,
-        ...(configuredCost ? { cost: configuredCost } : {}),
+        cost: zeroCost,
       },
       {
         providerId,
@@ -470,7 +469,7 @@ export function createModelFromConfig(
     baseUrl,
     reasoning: true,
     input: ["text"],
-    cost: customModelCost,
+    cost: zeroCost,
     contextWindow,
     maxTokens,
     ...(thinkingOverrides.compat ? { compat: thinkingOverrides.compat } : {}),

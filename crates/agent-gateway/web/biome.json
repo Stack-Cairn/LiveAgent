@@ -10,7 +10,8 @@
       "src/**",
       "!!**/dist",
       "!!**/node_modules",
-      "!src/lib/proto/gen/**"
+      "!src/lib/proto/gen/**",
+      "!src/lib/models/catalog.generated.ts"
     ]
   },
   "formatter": {

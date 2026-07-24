@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "node --test test/**/*.test.mjs",
-    "test:frontend": "node --test test/settings/*.test.mjs test/chat/*.test.mjs test/debug/*.test.mjs test/memory/*.test.mjs test/providers/*.test.mjs test/subagents/*.test.mjs test/tools/*.test.mjs test/i18n/*.test.mjs test/skills/*.test.mjs test/input-context-menu/*.test.mjs test/system/*.test.mjs",
+    "test:frontend": "node --test test/settings/*.test.mjs test/chat/*.test.mjs test/debug/*.test.mjs test/memory/*.test.mjs test/models/*.test.mjs test/providers/*.test.mjs test/subagents/*.test.mjs test/tools/*.test.mjs test/i18n/*.test.mjs test/skills/*.test.mjs test/input-context-menu/*.test.mjs test/system/*.test.mjs",
     "test:backend": "node --test test/backend/*.test.mjs",
     "test:release": "node --test test/backend/release-*.test.mjs",
     "export:models": "node ./test/get-providers-get-models-example.js --save",

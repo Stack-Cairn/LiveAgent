@@ -13,6 +13,7 @@ import {
   CODEX_SESSION_ID_HEADER,
   isAnthropicOAuthApiKey,
   mergeCustomHeaders as mergeCustomHeadersBase,
+  XAI_DEFAULT_USER_AGENT,
 } from "../customHeaders";
 import { normalizeSessionId } from "./common";
 
@@ -70,7 +71,14 @@ export function buildProviderRequestHeaders(
       [CODEX_CONVERSATION_ID_HEADER]: requestSessionId,
     };
   }
-  // xai 与其它 OpenAI 兼容端：仅 Bearer，不带 Codex CLI 身份头。
+  if (providerId === "xai") {
+    // xai 走 Bearer + grok CLI 身份 UA，不带 Codex CLI 的 session 头。
+    return {
+      ...authHeaders,
+      "User-Agent": XAI_DEFAULT_USER_AGENT,
+    };
+  }
+  // 其它 OpenAI 兼容端：仅 Bearer，不带 CLI 身份头。
   return authHeaders;
 }
 

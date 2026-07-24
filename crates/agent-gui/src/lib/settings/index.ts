@@ -1,8 +1,13 @@
-import type { KnownProvider, ModelThinkingLevel } from "@earendil-works/pi-ai";
-import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../../i18n/config";
 import {
+  getProviderFallbackLimits,
+  normalizeModelLimits,
+  resolveModelLimits,
+} from "../models/modelCatalog";
+import {
   ANTHROPIC_LONG_CONTEXT_WINDOW,
+  ANTHROPIC_STANDARD_CONTEXT_WINDOW,
   hasAnthropicLongContextSuffix,
   isAnthropicAdaptiveModelId,
   resolveAnthropicContextWindow,
@@ -199,22 +204,12 @@ export type SelectedModel = {
   model: string;
 };
 
-/** 单价均为 USD / 百万 token，与 pi-ai 模型目录的 cost 字段同单位。 */
-export type ProviderModelCost = {
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-};
-
 export type ProviderModelConfig = {
   id: string;
   /** /models 元数据；缺失时保持旧设置格式兼容。 */
   ownedBy?: string;
   contextWindow: number;
   maxOutputToken: number;
-  /** 用户自填单价：目录外模型（中转/改名）没有官方定价时用于成本展示。 */
-  cost?: ProviderModelCost;
 };
 
 export type ChatRuntimeControls = {
@@ -348,12 +343,6 @@ const CODEX_RESPONSES_SUFFIX = "/responses";
 const CODEX_RESPONSE_SUFFIX = "/response";
 const CODEX_CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const DEFAULT_MCP_TIMEOUT_MS = 60_000;
-const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
-const DEFAULT_CLAUDE_MAX_OUTPUT_TOKEN = 32_000;
-const DEFAULT_CODEX_CONTEXT_WINDOW = 258_000;
-const DEFAULT_CODEX_MAX_OUTPUT_TOKEN = 142_000;
-const DEFAULT_GEMINI_CONTEXT_WINDOW = 1_048_576;
-const DEFAULT_GEMINI_MAX_OUTPUT_TOKEN = 65_536;
 export const DEFAULT_CHAT_RUNTIME_CONTROLS: ChatRuntimeControls = {
   thinkingEnabled: true,
   nativeWebSearchEnabled: true,
@@ -1049,16 +1038,6 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
   };
 }
 
-function toKnownProvider(providerId: ProviderId): KnownProvider {
-  if (providerId === "codex") return "openai";
-  // pi-ai 自带 xai 目录（grok 真实窗口差异极大：grok-4.5=500K、grok-3=131K、
-  // grok-code-fast-1=32K），限额回查必须走它，不能落到 openai 目录查不到后
-  // 吃统一兜底值。
-  if (providerId === "xai") return "xai";
-  if (providerId === "gemini") return "google";
-  return "anthropic";
-}
-
 function getKnownModelLimits(
   providerId: ProviderId,
   modelId: string | undefined,
@@ -1066,16 +1045,13 @@ function getKnownModelLimits(
 ): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
-  // Anthropic 走规范化目录回查（装饰 id/[1m] 后缀也能继承默认值），并对旧世代
-  // 钳出退役后的有效窗口；contextWindow > 200K 即请求侧启用 1M beta 的开关。
-  if (toKnownProvider(providerId) === "anthropic") {
+  // Anthropic 的有效窗口叠加了 1M beta/adaptive 世代的请求侧策略
+  // （contextWindow > 200K 即请求侧启用 1M beta 的开关），走策略层回查；
+  // 其余供应商直接读目录（数据已在生成期过统一语义规则）。
+  if (providerId === "claude_code") {
     return resolveAnthropicKnownModelLimits(trimmedId, baseUrl);
   }
-  const known = getBuiltinModels(toKnownProvider(providerId)).find(
-    (model) => model.id === trimmedId,
-  );
-  if (!known) return undefined;
-  return { contextWindow: known.contextWindow, maxOutputToken: known.maxTokens };
+  return resolveModelLimits(providerId, trimmedId);
 }
 
 export function getProviderModelDefaults(
@@ -1086,36 +1062,23 @@ export function getProviderModelDefaults(
   const known = getKnownModelLimits(providerId, modelId, baseUrl);
   if (known) return known;
 
-  if (providerId === "codex" || providerId === "xai") {
-    return {
-      contextWindow: DEFAULT_CODEX_CONTEXT_WINDOW,
-      maxOutputToken: DEFAULT_CODEX_MAX_OUTPUT_TOKEN,
-    };
-  }
-
-  if (providerId === "gemini") {
-    return {
-      contextWindow: DEFAULT_GEMINI_CONTEXT_WINDOW,
-      maxOutputToken: DEFAULT_GEMINI_MAX_OUTPUT_TOKEN,
-    };
-  }
-
-  if (modelId && (hasAnthropicLongContextSuffix(modelId) || isAnthropicAdaptiveModelId(modelId))) {
+  if (
+    providerId === "claude_code" &&
+    modelId &&
+    (hasAnthropicLongContextSuffix(modelId) || isAnthropicAdaptiveModelId(modelId))
+  ) {
     return {
       contextWindow:
         hasAnthropicLongContextSuffix(modelId) &&
         baseUrl &&
         !shouldSendAnthropicLongContextHeader(baseUrl)
-          ? DEFAULT_CLAUDE_CONTEXT_WINDOW
+          ? ANTHROPIC_STANDARD_CONTEXT_WINDOW
           : ANTHROPIC_LONG_CONTEXT_WINDOW,
-      maxOutputToken: DEFAULT_CLAUDE_MAX_OUTPUT_TOKEN,
+      maxOutputToken: getProviderFallbackLimits(providerId).maxOutputToken,
     };
   }
 
-  return {
-    contextWindow: DEFAULT_CLAUDE_CONTEXT_WINDOW,
-    maxOutputToken: DEFAULT_CLAUDE_MAX_OUTPUT_TOKEN,
-  };
+  return getProviderFallbackLimits(providerId);
 }
 
 export function createProviderModelConfig(
@@ -1129,28 +1092,6 @@ export function createProviderModelConfig(
     contextWindow: defaults.contextWindow,
     maxOutputToken: defaults.maxOutputToken,
   };
-}
-
-function normalizeNonNegativeNumber(input: unknown): number {
-  const numeric =
-    typeof input === "number" ? input : typeof input === "string" ? Number(input) : NaN;
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
-}
-
-function normalizeProviderModelCost(input: unknown): ProviderModelCost | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
-  const obj = input as Record<string, unknown>;
-  const cost: ProviderModelCost = {
-    input: normalizeNonNegativeNumber(obj.input),
-    output: normalizeNonNegativeNumber(obj.output),
-    cacheRead: normalizeNonNegativeNumber(obj.cacheRead),
-    cacheWrite: normalizeNonNegativeNumber(obj.cacheWrite),
-  };
-  // 全零视为未配置，避免把"没填"持久化成显式的零单价。
-  if (cost.input <= 0 && cost.output <= 0 && cost.cacheRead <= 0 && cost.cacheWrite <= 0) {
-    return undefined;
-  }
-  return cost;
 }
 
 export function normalizeProviderModelConfig(
@@ -1172,19 +1113,24 @@ export function normalizeProviderModelConfig(
   if (!id) return null;
 
   const defaults = getProviderModelDefaults(providerId, id);
-  const cost = normalizeProviderModelCost(obj.cost);
   const ownedBy =
     (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
     (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
-  return {
-    id,
-    ...(ownedBy ? { ownedBy } : {}),
+  const storedLimits = {
     contextWindow: normalizePositiveInteger(obj.contextWindow, defaults.contextWindow),
     maxOutputToken: normalizePositiveInteger(
       obj.maxOutputToken ?? obj.maxTokens,
       defaults.maxOutputToken,
     ),
-    ...(cost !== undefined ? { cost } : {}),
+  };
+  // 退化限额（输出吃满窗口）可能来自坏目录数据落库期或手工配置，读侧统一修复；
+  // 规则与目录生成期同源（normalizeModelLimits），对所有供应商一视同仁。
+  const limits = normalizeModelLimits(storedLimits);
+  return {
+    id,
+    ...(ownedBy ? { ownedBy } : {}),
+    contextWindow: limits.contextWindow,
+    maxOutputToken: limits.maxOutputToken,
   };
 }
 export function normalizeProviderModelConfigs(

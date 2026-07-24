@@ -49,13 +49,6 @@ export type Usage = {
   cacheRead: number;
   cacheWrite: number;
   totalTokens: number;
-  cost?: {
-    input: number;
-    output: number;
-    cacheRead: number;
-    cacheWrite: number;
-    total: number;
-  };
 };
 
 export type StopReason = "stop" | "length" | "toolUse" | "error" | "aborted";
