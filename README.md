@@ -166,7 +166,7 @@ Choose by distribution from [Releases](https://github.com/Stack-Cairn/LiveAgent/
 
 The desktop app works out of the box and depends on no server. Deploy the Gateway only if you want to **control your local agent from a browser**.
 
-**Note: when deployed behind an Nginx reverse proxy, set the Gateway address on the Settings → Remote page to the HTTPS URL and use port 443.**
+**Note: When deployed behind an Nginx reverse proxy, set the Gateway address on the Settings → Remote page to the HTTPS URL and use port 443.**
 
 ```bash
 # Pull the image (built by GitHub Actions, multi-arch: amd64 / arm64)
@@ -184,7 +184,7 @@ docker run -d \
 
 The named volume persists the Gateway database and independently issued Agent tokens across container upgrades.
 
-**One-command upgrade to the latest version** — pull the new image → remove the old container → recreate it with the same arguments (if you changed the port mappings or token, adjust the arguments below accordingly):
+**One-command upgrade to the latest version:** — pull the new image → remove the old container → recreate it with the same arguments (if you changed the port mappings or token, adjust the arguments below accordingly):
 
 ```bash
 docker pull ghcr.io/stack-cairn/liveagent-gateway:latest \
