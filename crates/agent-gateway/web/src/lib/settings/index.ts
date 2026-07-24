@@ -2,6 +2,13 @@ import type { KnownProvider, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../../i18n/config";
+import {
+  findCatalogModel,
+  getProviderFallbackLimits,
+  normalizeModelIdCandidates,
+  normalizeModelLimits,
+  resolveModelLimits,
+} from "../models/modelCatalog";
 import { createUuid } from "../shared/id";
 import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
 import { SYSTEM_TOOL_OPTIONS, type SystemToolId } from "../tools/systemToolOptions";
@@ -317,12 +324,6 @@ const CODEX_RESPONSES_SUFFIX = "/responses";
 const CODEX_RESPONSE_SUFFIX = "/response";
 const CODEX_CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const DEFAULT_MCP_TIMEOUT_MS = 60_000;
-const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
-const DEFAULT_CLAUDE_MAX_OUTPUT_TOKEN = 32_000;
-const DEFAULT_CODEX_CONTEXT_WINDOW = 258_000;
-const DEFAULT_CODEX_MAX_OUTPUT_TOKEN = 142_000;
-const DEFAULT_GEMINI_CONTEXT_WINDOW = 1_048_576;
-const DEFAULT_GEMINI_MAX_OUTPUT_TOKEN = 65_536;
 export const DEFAULT_CHAT_RUNTIME_CONTROLS: ChatRuntimeControls = {
   thinkingEnabled: true,
   nativeWebSearchEnabled: true,
@@ -1015,53 +1016,25 @@ function toKnownProvider(providerId: ProviderId): KnownProvider {
   return "anthropic";
 }
 
-// 仅限限额（contextWindow/maxOutputToken）回查的目录：xai 走 pi-ai 的 xai
-// 目录拿 grok 真实窗口（grok-4.5=500K、grok-3=131K、grok-code-fast-1=32K），
-// 不能落到 openai 目录查不到后吃统一兜底值。思考档位检测
-// （findKnownModelForThinking）刻意不用该目录——其 compat/reasoning 反映的是
-// pi-ai completions 路径，与 LiveAgent 强制 Responses + thinkingLevelMap 不符。
-function toLimitsCatalogProvider(providerId: ProviderId): KnownProvider {
-  return providerId === "xai" ? "xai" : toKnownProvider(providerId);
-}
-
+// 思考档位检测用的 pi-ai 目录回查（限额/单价不走这里——那些来自
+// lib/models/modelCatalog 的生成目录）：其 compat/thinkingLevelMap 反映
+// pi-ai 请求路径元数据。xai 刻意不回查（resolveThinkingModel 早退），
+// pi-ai 目录的 xai compat 反映 completions 路径，与 LiveAgent 强制
+// Responses + thinkingLevelMap 不符。
 function findKnownModel(providerId: ProviderId, modelId: string | undefined) {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
   return getBuiltinModels(toKnownProvider(providerId)).find((model) => model.id === trimmedId);
 }
 
-function findKnownModelLimitsEntry(providerId: ProviderId, modelId: string | undefined) {
-  const trimmedId = modelId?.trim();
-  if (!trimmedId) return undefined;
-  return getBuiltinModels(toLimitsCatalogProvider(providerId)).find(
-    (model) => model.id === trimmedId,
-  );
-}
-
-// —— 以下 Anthropic id 规范化与启发式与桌面端 anthropicModels.ts/modelFactory.ts
-// 手动保持同步 ——
+// —— 以下 Anthropic 启发式与桌面端 anthropicModels.ts/modelFactory.ts
+// 手动保持同步；装饰 id 候选链与目录模块共用同一实现 ——
 // 中转/网关常给官方 Anthropic 模型 id 加装饰（日期后缀、@版本、大小写变化、
 // AnyRouter 系的 [1m] 长上下文后缀），逐字匹配漏检后档位列表会塌缩、丢掉
 // xhigh/max，上下文窗口默认值也与桌面端实际请求脱节。
-function normalizeAnthropicModelIdCandidates(modelId: string): string[] {
-  const candidates: string[] = [];
-  const push = (value: string) => {
-    if (value && !candidates.includes(value)) candidates.push(value);
-  };
-  push(modelId);
-  const lower = modelId.toLowerCase();
-  push(lower);
-  const withoutAtVersion = lower.split("@")[0];
-  push(withoutAtVersion);
-  const withoutContextSuffix = withoutAtVersion.replace(/\[1m\]$/i, "");
-  push(withoutContextSuffix);
-  push(withoutContextSuffix.replace(/-20\d{6}$/, ""));
-  return candidates;
-}
-
 function findKnownAnthropicModel(modelId: string) {
   const models = getBuiltinModels("anthropic");
-  for (const candidate of normalizeAnthropicModelIdCandidates(modelId)) {
+  for (const candidate of normalizeModelIdCandidates(modelId)) {
     const known = models.find((model) => model.id === candidate);
     if (known) return known;
   }
@@ -1100,18 +1073,27 @@ function isClaudeFamilyMajorVersionAtLeast(normalizedModelId: string, minimumMaj
   return Number.isFinite(major) && major >= minimumMajor;
 }
 
+// adaptive 世代（Opus/Sonnet 4.6+、Claude 5、Mythos Preview）即 1M GA 世代；
+// 与桌面端 anthropicModels.ts 的 isAnthropicAdaptiveModelId 手动同步。目录里
+// forceAdaptiveThinking 的模型集合与该启发式等价，限额路径以此判定摆脱目录
+// compat 依赖。
+function isAnthropicAdaptiveModelId(modelId: string): boolean {
+  const id = modelId.trim().toLowerCase();
+  return (
+    id.includes("mythos-preview") ||
+    isClaudeFamilyVersionAtLeast(id, "opus", 6) ||
+    isClaudeFamilyVersionAtLeast(id, "sonnet", 6) ||
+    isClaudeFamilyMajorVersionAtLeast(id, 5)
+  );
+}
+
 // 目录彻底未命中的三方改名 id（如 claude-4.6-sonnet）退回 id 启发式，推断
 // xhigh/max 档位声明；与桌面端 deriveAnthropicThinkingOverridesForCustomModel 同步。
 function deriveAnthropicThinkingLevelMapForCustomModel(
   modelId: string,
 ): Record<string, string> | undefined {
+  if (!isAnthropicAdaptiveModelId(modelId)) return undefined;
   const id = modelId.trim().toLowerCase();
-  const adaptive =
-    id.includes("mythos-preview") ||
-    isClaudeFamilyVersionAtLeast(id, "opus", 6) ||
-    isClaudeFamilyVersionAtLeast(id, "sonnet", 6) ||
-    isClaudeFamilyMajorVersionAtLeast(id, 5);
-  if (!adaptive) return undefined;
   const supportsXHigh =
     isClaudeFamilyVersionAtLeast(id, "opus", 7) || isClaudeFamilyMajorVersionAtLeast(id, 5);
   return supportsXHigh ? { xhigh: "xhigh", max: "max" } : { max: "max" };
@@ -1147,21 +1129,21 @@ function getKnownModelLimits(
 ): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
-  if (toKnownProvider(providerId) === "anthropic") {
-    const known = findKnownAnthropicModel(trimmedId);
+  // Anthropic 的有效窗口叠加 1M beta/adaptive 世代策略（与桌面端
+  // anthropicModels.ts 手动同步）；其余供应商直接读生成目录（数据已在
+  // 生成期过统一语义规则）。
+  if (providerId === "claude_code") {
+    const known = findCatalogModel("claude_code", trimmedId);
     if (!known) return undefined;
-    const contextWindow =
-      known.compat?.forceAdaptiveThinking === true
-        ? known.contextWindow
-        : /\[1m\]$/i.test(trimmedId) &&
-            (baseUrl === undefined || shouldSendAnthropicLongContextHeader(baseUrl))
-          ? Math.max(known.contextWindow, ANTHROPIC_LONG_CONTEXT_WINDOW)
-          : Math.min(known.contextWindow, ANTHROPIC_STANDARD_CONTEXT_WINDOW);
-    return { contextWindow, maxOutputToken: known.maxTokens };
+    const contextWindow = isAnthropicAdaptiveModelId(trimmedId)
+      ? known.contextWindow
+      : /\[1m\]$/i.test(trimmedId) &&
+          (baseUrl === undefined || shouldSendAnthropicLongContextHeader(baseUrl))
+        ? Math.max(known.contextWindow, ANTHROPIC_LONG_CONTEXT_WINDOW)
+        : Math.min(known.contextWindow, ANTHROPIC_STANDARD_CONTEXT_WINDOW);
+    return { contextWindow, maxOutputToken: known.maxOutputToken };
   }
-  const known = findKnownModelLimitsEntry(providerId, modelId);
-  if (!known) return undefined;
-  return { contextWindow: known.contextWindow, maxOutputToken: known.maxTokens };
+  return resolveModelLimits(providerId, trimmedId);
 }
 
 // Grok / xAI 思考档：与桌面端 modelFactory 的 XAI_THINKING_LEVEL_MAP 手动同步
@@ -1237,38 +1219,21 @@ export function getProviderModelDefaults(
   const known = getKnownModelLimits(providerId, modelId, baseUrl);
   if (known) return known;
 
-  if (providerId === "codex" || providerId === "xai") {
-    return {
-      contextWindow: DEFAULT_CODEX_CONTEXT_WINDOW,
-      maxOutputToken: DEFAULT_CODEX_MAX_OUTPUT_TOKEN,
-    };
-  }
-
-  if (providerId === "gemini") {
-    return {
-      contextWindow: DEFAULT_GEMINI_CONTEXT_WINDOW,
-      maxOutputToken: DEFAULT_GEMINI_MAX_OUTPUT_TOKEN,
-    };
-  }
-
   if (
+    providerId === "claude_code" &&
     modelId &&
-    (/\[1m\]$/i.test(modelId.trim()) ||
-      deriveAnthropicThinkingLevelMapForCustomModel(modelId) !== undefined)
+    (/\[1m\]$/i.test(modelId.trim()) || isAnthropicAdaptiveModelId(modelId))
   ) {
     return {
       contextWindow:
         /\[1m\]$/i.test(modelId.trim()) && baseUrl && !shouldSendAnthropicLongContextHeader(baseUrl)
-          ? DEFAULT_CLAUDE_CONTEXT_WINDOW
+          ? ANTHROPIC_STANDARD_CONTEXT_WINDOW
           : ANTHROPIC_LONG_CONTEXT_WINDOW,
-      maxOutputToken: DEFAULT_CLAUDE_MAX_OUTPUT_TOKEN,
+      maxOutputToken: getProviderFallbackLimits(providerId).maxOutputToken,
     };
   }
 
-  return {
-    contextWindow: DEFAULT_CLAUDE_CONTEXT_WINDOW,
-    maxOutputToken: DEFAULT_CLAUDE_MAX_OUTPUT_TOKEN,
-  };
+  return getProviderFallbackLimits(providerId);
 }
 
 export function createProviderModelConfig(
@@ -1329,14 +1294,21 @@ export function normalizeProviderModelConfig(
   const ownedBy =
     (typeof obj.ownedBy === "string" ? obj.ownedBy.trim() : "") ||
     (typeof obj.owned_by === "string" ? obj.owned_by.trim() : "");
-  return {
-    id,
-    ...(ownedBy ? { ownedBy } : {}),
+  const storedLimits = {
     contextWindow: normalizePositiveInteger(obj.contextWindow, defaults.contextWindow),
     maxOutputToken: normalizePositiveInteger(
       obj.maxOutputToken ?? obj.maxTokens,
       defaults.maxOutputToken,
     ),
+  };
+  // 退化限额（输出吃满窗口）可能来自坏目录数据落库期或手工配置，读侧统一修复；
+  // 规则与目录生成期同源（normalizeModelLimits），对所有供应商一视同仁。
+  const limits = normalizeModelLimits(storedLimits);
+  return {
+    id,
+    ...(ownedBy ? { ownedBy } : {}),
+    contextWindow: limits.contextWindow,
+    maxOutputToken: limits.maxOutputToken,
     ...(cost !== undefined ? { cost } : {}),
   };
 }
@@ -1375,10 +1347,8 @@ export function findProviderModelConfig(
   }
   if (provider.type !== "claude_code") return matched;
   const defaults = getProviderModelDefaults(provider.type, normalizedId, provider.baseUrl);
-  const known = findKnownAnthropicModel(normalizedId);
-  const isAdaptive =
-    known?.compat?.forceAdaptiveThinking === true ||
-    deriveAnthropicThinkingLevelMapForCustomModel(normalizedId) !== undefined;
+  const known = findCatalogModel("claude_code", normalizedId);
+  const isAdaptive = isAnthropicAdaptiveModelId(normalizedId);
   const hasLongContextSuffix = /\[1m\]$/i.test(normalizedId);
   const contextWindow = isAdaptive
     ? Math.max(matched.contextWindow, defaults.contextWindow)
@@ -1390,7 +1360,7 @@ export function findProviderModelConfig(
           !shouldSendAnthropicLongContextHeader(provider.baseUrl) &&
           known.contextWindow > ANTHROPIC_STANDARD_CONTEXT_WINDOW
         ? defaults.contextWindow
-        : matched.contextWindow === DEFAULT_CLAUDE_CONTEXT_WINDOW
+        : matched.contextWindow === ANTHROPIC_STANDARD_CONTEXT_WINDOW
           ? defaults.contextWindow
           : matched.contextWindow;
   return {

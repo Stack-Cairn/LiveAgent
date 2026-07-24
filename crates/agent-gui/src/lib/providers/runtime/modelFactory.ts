@@ -1,6 +1,7 @@
 import type { Model, ModelThinkingLevel, OpenAICompletionsCompat } from "@earendil-works/pi-ai";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
+import { resolveModelCost } from "../../models/modelCatalog";
 import {
   type CodexRequestFormat,
   getProviderModelDefaults,
@@ -316,10 +317,13 @@ export function createModelFromConfig(
         )
       : configuredContextWindow;
   const maxTokens = modelConfig?.maxOutputToken ?? defaults.maxOutputToken;
-  // 用户自填单价优先于目录定价：中转/自定义模型的实际计费经常与官方目录不同。
+  // 单价优先级：用户自填 > 生成目录（models.dev 快照）> 流式库目录条目 > 零价。
+  // 中转/自定义模型的实际计费经常与官方目录不同，故自填永远最高。
   const configuredCost = modelConfig?.cost;
+  const catalogCost = resolveModelCost(providerId, modelId);
+  const resolvedCost = configuredCost ?? catalogCost;
   const zeroCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-  const customModelCost = configuredCost ?? zeroCost;
+  const customModelCost = resolvedCost ?? zeroCost;
 
   if (providerId === "codex" || providerId === "xai") {
     const { baseUrl: normalizedBaseUrl, preferredApi } = normalizeCodexBaseUrl(baseUrl);
@@ -355,7 +359,7 @@ export function createModelFromConfig(
           ...known,
           contextWindow,
           maxTokens,
-          ...(configuredCost ? { cost: configuredCost } : {}),
+          ...(resolvedCost ? { cost: resolvedCost } : {}),
           ...(isXaiTarget ? { thinkingLevelMap: { ...XAI_THINKING_LEVEL_MAP } } : {}),
           ...(responsesCompat
             ? {
@@ -424,7 +428,7 @@ export function createModelFromConfig(
         ...known,
         contextWindow,
         maxTokens,
-        ...(configuredCost ? { cost: configuredCost } : {}),
+        ...(resolvedCost ? { cost: resolvedCost } : {}),
       };
     }
 
@@ -450,7 +454,7 @@ export function createModelFromConfig(
         ...known,
         contextWindow,
         maxTokens,
-        ...(configuredCost ? { cost: configuredCost } : {}),
+        ...(resolvedCost ? { cost: resolvedCost } : {}),
       },
       {
         providerId,

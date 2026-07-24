@@ -88,6 +88,8 @@
     "lib/managed-process/types.ts",
     "lib/tools/systemToolOptions.ts",
     "lib/tools/builtinToolCatalog.ts",
+    "lib/models/catalog.generated.ts",
+    "lib/models/modelCatalog.ts",
     "lib/skills/builtin.ts",
     "lib/skills/clawHub.ts",
     "lib/skills/clawHubCategories.ts",

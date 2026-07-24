@@ -2333,10 +2333,53 @@ test("gateway sync merge keeps system proxy password against redacted payloads",
   assert.equal(mergedHost.system.systemProxy.password, "secret");
 });
 
-test("xai provider model defaults come from the pi-ai xai catalog", () => {
+test("xai provider model defaults come from the generated model catalog", () => {
   assert.equal(settings.getProviderModelDefaults("xai", "grok-4.5").contextWindow, 500_000);
-  assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 131_072);
-  assert.equal(settings.getProviderModelDefaults("xai", "grok-code-fast-1").contextWindow, 32_768);
-  // 目录未收录的模型仍吃 Codex 系兜底窗口。
+  // 上游（models.dev）已下架的旧模型与目录未收录的模型一样吃供应商兜底值。
+  assert.equal(settings.getProviderModelDefaults("xai", "grok-3").contextWindow, 258_000);
   assert.equal(settings.getProviderModelDefaults("xai", "grok-unknown").contextWindow, 258_000);
+});
+
+test("degenerate catalog limits (output == context window) are clamped in the snapshot", () => {
+  // 社区目录对不公布输出上限的供应商记"输出=窗口"（grok-4.5 上游 500K/500K），
+  // 照单全收会把压缩阈值挤到下限。生成期统一钳到 min(32K, 窗口/4)。
+  const grok45 = settings.getProviderModelDefaults("xai", "grok-4.5");
+  assert.equal(grok45.contextWindow, 500_000);
+  assert.equal(grok45.maxOutputToken, 32_000);
+  const grokBuild = settings.getProviderModelDefaults("xai", "grok-build-0.1");
+  assert.equal(grokBuild.contextWindow, 256_000);
+  assert.equal(grokBuild.maxOutputToken, 32_000);
+  // 非退化条目原样透传（grok-4.3 = 1M/30K）。
+  const grok43 = settings.getProviderModelDefaults("xai", "grok-4.3");
+  assert.equal(grok43.contextWindow, 1_000_000);
+  assert.equal(grok43.maxOutputToken, 30_000);
+});
+
+test("persisted degenerate limits are repaired at normalize time for every provider", () => {
+  // 坏目录数据落库期间加入的模型：读侧修复，不需要用户重新添加。
+  const repaired = settings.normalizeProviderModelConfig(
+    { id: "grok-4.5", contextWindow: 500_000, maxOutputToken: 500_000 },
+    "xai",
+  );
+  assert.equal(repaired.contextWindow, 500_000);
+  assert.equal(repaired.maxOutputToken, 32_000);
+  // 用户显式配置的合法输出上限保持不动。
+  const custom = settings.normalizeProviderModelConfig(
+    { id: "grok-4.5", contextWindow: 500_000, maxOutputToken: 64_000 },
+    "xai",
+  );
+  assert.equal(custom.maxOutputToken, 64_000);
+  // 小窗口退化条目按窗口 1/4 保底留输入预算。
+  const tiny = settings.normalizeProviderModelConfig(
+    { id: "relay-grok", contextWindow: 8_192, maxOutputToken: 8_192 },
+    "xai",
+  );
+  assert.equal(tiny.contextWindow, 8_192);
+  assert.equal(tiny.maxOutputToken, 2_048);
+  // 修复规则对所有供应商统一生效（不是 xai 特例）。
+  const codex = settings.normalizeProviderModelConfig(
+    { id: "custom-model", contextWindow: 128_000, maxOutputToken: 128_000 },
+    "codex",
+  );
+  assert.equal(codex.maxOutputToken, 32_000);
 });

@@ -32,7 +32,7 @@ RELEASE_TAG ?=
 .PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
 .PHONY: dev-gateway dev-webui ensure-webui-embed-stub
 .PHONY: proto proto-check webui gateway-build gateway-docker-build gateway-docker-run gateway-docker-smoke build-linux build-linux-amd build-linux-arm
-.PHONY: clean check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
+.PHONY: clean update-model-catalog check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
 
 all: build gateway-build
 
@@ -187,6 +187,9 @@ gateway-build-windows: build-windows
 clean:
 	rm -rf $(AGENT_GATEWAY_DIR)/bin/ $(AGENT_GATEWAY_WEB_DIR)/dist/
 
+update-model-catalog:
+	node scripts/generate-model-catalog.mjs
+
 check-rust-target-%:
 	@rustup target list --installed | grep -qx "$*" || (echo "Rust target $* is not installed. Run: rustup target add $*" && exit 1)
 
@@ -257,4 +260,5 @@ help:
 	@printf "\n%s\n" "Maintenance"
 	@printf "  %-34s %s\n" "make all" "同时构建 GUI 和 agent-gateway"
 	@printf "  %-34s %s\n" "make clean" "清理 agent-gateway 构建产物"
+	@printf "  %-34s %s\n" "make update-model-catalog" "刷新 models.dev 模型目录快照"
 	@printf "  %-34s %s\n" "make help" "查看可用命令"

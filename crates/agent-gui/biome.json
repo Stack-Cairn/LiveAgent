@@ -9,7 +9,8 @@
     "includes": [
       "src/**",
       "!!**/dist",
-      "!!**/node_modules"
+      "!!**/node_modules",
+      "!src/lib/models/catalog.generated.ts"
     ]
   },
   "formatter": {
