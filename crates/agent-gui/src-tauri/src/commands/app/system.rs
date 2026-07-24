@@ -1521,6 +1521,27 @@ pub async fn system_append_debug_jsonl(
     .map_err(|e| format!("system_append_debug_jsonl join 失败：{e}"))?
 }
 
+// 桌面端读系统剪贴板的唯一通道：WKWebView 的 navigator.clipboard.readText()
+// 对来自其他应用的剪贴板内容会弹出原生"粘贴"确认气泡（DOM paste access），
+// 自定义右键菜单的粘贴必须绕开 webview 直接读原生剪贴板。
+fn system_clipboard_read_text_sync() -> Result<String, String> {
+    let mut clipboard =
+        arboard::Clipboard::new().map_err(|e| format!("clipboard unavailable: {e}"))?;
+    match clipboard.get_text() {
+        Ok(text) => Ok(text),
+        // 剪贴板无文本内容（空/图片/文件）时按空文本处理，前端据此静默收起菜单。
+        Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
+        Err(e) => Err(format!("clipboard read failed: {e}")),
+    }
+}
+
+#[tauri::command]
+pub async fn system_clipboard_read_text() -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(system_clipboard_read_text_sync)
+        .await
+        .map_err(|e| format!("system_clipboard_read_text join failed: {e}"))?
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub fn system_begin_power_activity(
     activity_id: String,

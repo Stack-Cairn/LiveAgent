@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { useLocale } from "../../i18n";
 import { useMenuExitPresence } from "../../lib/shared/menuMotion";
 import { cn } from "../../lib/shared/utils";
+import { readClipboardText } from "../../lib/system/clipboardText";
 import { ClipboardPaste, Copy, ScanText, Scissors } from "../icons";
 import {
   clampMenuPosition,
@@ -335,12 +336,9 @@ export function useNativeInputContextMenu(): {
     const snap = snapshot;
     if (!snap) return;
 
-    let text: string | null = null;
-    try {
-      text = (await navigator.clipboard?.readText?.()) ?? "";
-    } catch {
-      text = null;
-    }
+    // Native-first read: the webview clipboard API pops WebKit's paste
+    // confirmation for externally-copied content (see readClipboardText).
+    const text = await readClipboardText();
 
     // Refocus after the await — the read may have shifted focus.
     const el = prepareTarget();

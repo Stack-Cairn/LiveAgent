@@ -41,6 +41,8 @@ thiserror = "2.0.18"
 walkdir = "2.5.0"
 notify = "8.2.0"
 rfd = "0.17.2"
+# Text-only clipboard reads (image-data default feature intentionally off).
+arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }
 tauri-plugin-mcp-bridge = "0.12.0"
 dirs = "6.0.0"
 toml = "0.9.11"

@@ -34,6 +34,7 @@ import {
 } from "../../lib/chat/messages/mentionReferences";
 import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
+import { readClipboardText } from "../../lib/system/clipboardText";
 import { invokeFs } from "../../lib/tools/fsBackend";
 import { Blend, ClipboardPaste, Copy, ScanText, Scissors, SKILL_ICON_SVG_MARKUP } from "../icons";
 import { getFileTypeIcon, getFileTypeIconSvg } from "./fileTypeIcons";
@@ -2972,12 +2973,9 @@ export const MentionComposer = memo(
       resetPromptHistoryRecall();
       el.focus({ preventScroll: true });
 
-      let text: string | null = null;
-      try {
-        text = (await navigator.clipboard?.readText?.()) ?? "";
-      } catch {
-        text = null;
-      }
+      // Native-first read: the webview clipboard API pops WebKit's paste
+      // confirmation for externally-copied content (see readClipboardText).
+      const text = await readClipboardText();
 
       restoreComposerContextSelection();
 
