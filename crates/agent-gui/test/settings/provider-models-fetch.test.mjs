@@ -61,6 +61,14 @@ test("buildProviderModelsUrl defaults to /v1/models and falls back to official e
       "https://generativelanguage.googleapis.com/v1beta",
       "default",
     ),
+    "https://generativelanguage.googleapis.com/v1/models",
+  );
+  assert.equal(
+    providerUtils.buildProviderModelsUrl(
+      "gemini",
+      "https://generativelanguage.googleapis.com/v1beta",
+      "official",
+    ),
     "https://generativelanguage.googleapis.com/v1beta/models",
   );
   assert.equal(
@@ -77,45 +85,39 @@ test("buildProviderModelsUrl defaults to /v1/models and falls back to official e
   );
 });
 
-test("buildProviderModelsAttempts carries only each provider's standard auth header", () => {
-  const gemini = providerUtils.buildProviderModelsAttempts(
-    "gemini",
-    "https://relay.example.com",
-    "test-key",
-  );
-  // gemini 的 default/v1 与 official/v1beta URL 不同，保留两次尝试；请求头一致。
-  assert.equal(gemini.length, 2);
-  assert.deepEqual(
-    gemini.map((attempt) => attempt.kind),
-    ["default", "official"],
-  );
-  for (const attempt of gemini) {
-    assert.equal(attempt.headers.Authorization, undefined);
-    assert.equal(attempt.headers["x-api-key"], undefined);
-    assert.equal(attempt.headers["x-goog-api-key"], "test-key");
+test("buildProviderModelsAttempts uses Authorization first and official auth second", () => {
+  const attemptsByProvider = ["claude_code", "codex", "gemini", "xai"].map((type) => [
+    type,
+    providerUtils.buildProviderModelsAttempts(type, "test-key"),
+  ]);
+
+  for (const [type, attempts] of attemptsByProvider) {
+    assert.equal(attempts[0].kind, "default", type);
+    assert.equal(attempts[0].headers.Authorization, "Bearer test-key");
+    assert.equal(attempts[0].headers["x-api-key"], undefined);
+    assert.equal(attempts[0].headers["x-goog-api-key"], undefined);
   }
 
-  const claude = providerUtils.buildProviderModelsAttempts(
-    "claude_code",
-    "https://relay.example.com",
-    "test-key",
-  );
-  // 请求头不再随 default/official 变化，URL 相同的尝试被签名去重收敛为一次。
-  assert.equal(claude.length, 1);
-  assert.equal(claude[0].headers.Authorization, undefined);
-  assert.equal(claude[0].headers["x-api-key"], "test-key");
-  assert.equal(claude[0].headers["x-goog-api-key"], undefined);
-  assert.equal(claude[0].headers["anthropic-version"], "2023-06-01");
-
-  const codex = providerUtils.buildProviderModelsAttempts(
-    "codex",
-    "https://relay.example.com",
-    "test-key",
-  );
-  assert.equal(codex.length, 1);
-  assert.equal(codex[0].headers.Authorization, "Bearer test-key");
-  assert.equal(codex[0].headers["x-api-key"], undefined);
-  assert.equal(codex[0].headers["x-goog-api-key"], undefined);
+  // codex/xai 官方形式与首次尝试一致，收敛为一次；claude_code/gemini 带官方鉴权头重试。
+  const attemptsFor = Object.fromEntries(attemptsByProvider);
+  for (const type of ["codex", "xai"]) {
+    assert.deepEqual(
+      attemptsFor[type].map((attempt) => attempt.kind),
+      ["default"],
+      type,
+    );
+  }
+  for (const type of ["claude_code", "gemini"]) {
+    assert.deepEqual(
+      attemptsFor[type].map((attempt) => attempt.kind),
+      ["default", "official"],
+      type,
+    );
+    assert.equal(attemptsFor[type][1].headers.Authorization, undefined);
+  }
+  assert.equal(attemptsFor.claude_code[1].headers["x-api-key"], "test-key");
+  assert.equal(attemptsFor.claude_code[1].headers["anthropic-version"], "2023-06-01");
+  assert.equal(attemptsFor.gemini[1].headers["x-goog-api-key"], "test-key");
 
   const inferenceOnlyHeaders = [
     "x-app",
@@ -125,10 +127,12 @@ test("buildProviderModelsAttempts carries only each provider's standard auth hea
     "session_id",
     "conversation_id",
   ];
-  for (const attempt of [...gemini, ...claude, ...codex]) {
-    const headerNames = Object.keys(attempt.headers).map((name) => name.toLowerCase());
-    assert.ok(!headerNames.some((name) => name.startsWith("x-stainless-")));
-    for (const name of inferenceOnlyHeaders) assert.ok(!headerNames.includes(name), name);
+  for (const [, attempts] of attemptsByProvider) {
+    for (const attempt of attempts) {
+      const headerNames = Object.keys(attempt.headers).map((name) => name.toLowerCase());
+      assert.ok(!headerNames.some((name) => name.startsWith("x-stainless-")));
+      for (const name of inferenceOnlyHeaders) assert.ok(!headerNames.includes(name), name);
+    }
   }
 });
 
@@ -183,12 +187,16 @@ test("fetchModelsFromApi falls back to the official gemini endpoint on 404", asy
     async (calls) => {
       const models = await providerUtils.fetchModelsFromApi(
         "gemini",
-        "https://relay.example.com",
+        "https://generativelanguage.googleapis.com/v1beta",
         "test-key",
       );
       assert.equal(calls.length, 2);
       assert.ok(calls[0].url.endsWith("/proxy/gemini/v1/models"));
       assert.ok(calls[1].url.endsWith("/proxy/gemini/v1beta/models"));
+      assert.equal(calls[0].options.headers.Authorization, "Bearer test-key");
+      assert.equal(calls[0].options.headers["x-goog-api-key"], undefined);
+      assert.equal(calls[1].options.headers.Authorization, undefined);
+      assert.equal(calls[1].options.headers["x-goog-api-key"], "test-key");
       assert.deepEqual(
         models.map((model) => model.id),
         ["gemini-2.5-pro"],
@@ -253,24 +261,47 @@ test("fetchModelsFromApi surfaces the informative failure when every attempt fai
   );
 });
 
-test("fetchModelsFromApi requests claude_code once with only the standard anthropic header", async () => {
+test("fetchModelsFromApi retries claude_code with official anthropic auth", async () => {
   await withFetchStub(
-    () => jsonResponse(200, { data: [{ id: "claude-opus-4-8" }] }),
+    (_url, callIndex) =>
+      callIndex === 1
+        ? jsonResponse(401, { error: "authorization rejected" })
+        : jsonResponse(200, { data: [{ id: "claude-opus-4-8" }] }),
     async (calls) => {
       const models = await providerUtils.fetchModelsFromApi(
         "claude_code",
         "https://relay.example.com",
         "test-key",
       );
-      assert.equal(calls.length, 1);
-      assert.equal(calls[0].options.headers.Authorization, undefined);
-      assert.equal(calls[0].options.headers["x-api-key"], "test-key");
+      assert.equal(calls.length, 2);
+      assert.equal(calls[0].options.headers.Authorization, "Bearer test-key");
+      assert.equal(calls[0].options.headers["x-api-key"], undefined);
+      assert.equal(calls[1].options.headers.Authorization, undefined);
+      assert.equal(calls[1].options.headers["x-api-key"], "test-key");
       assert.deepEqual(
         models.map((model) => model.id),
         ["claude-opus-4-8"],
       );
     },
   );
+});
+
+test("fetchModelsFromApi requests OpenAI-compatible providers exactly once", async () => {
+  for (const type of ["codex", "xai"]) {
+    await withFetchStub(
+      () => jsonResponse(503, { error: "temporary failure" }),
+      async (calls) => {
+        // 官方形式与首次尝试完全一致，失败后不得原样重发同一请求。
+        await assert.rejects(
+          providerUtils.fetchModelsFromApi(type, `https://${type}.example.com/v1`, "test-key"),
+          /temporary failure/,
+        );
+        assert.equal(calls.length, 1);
+        assert.ok(calls[0].url.endsWith(`/proxy/${type}/v1/models`));
+        assert.equal(calls[0].options.headers.Authorization, "Bearer test-key");
+      },
+    );
+  }
 });
 
 test("fetchModelsFromApi canonicalizes a known 1M Claude model before display", async () => {
