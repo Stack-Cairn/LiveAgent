@@ -1,7 +1,8 @@
 import { hubFetch } from "../hubFetch";
 import type { McpServerConfig } from "../settings";
 
-export type McpRegistrySource = "official" | "smithery" | "glama";
+// "featured" 是本地内置的精选连接（见 ./featured.ts），不参与 registry 搜索。
+export type McpRegistrySource = "official" | "smithery" | "glama" | "featured";
 
 export type McpRegistryConfigInput = {
   name: string;
@@ -943,3 +944,5 @@ export function applyMcpRegistryInstallConfig(
     commandPreview: commandPreview(server),
   };
 }
+
+export { getFeaturedMcpRegistryCards } from "./featured";
