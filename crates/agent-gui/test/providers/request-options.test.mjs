@@ -428,6 +428,26 @@ test("custom Codex Chat Completions models infer reasoning-capable IDs", () => {
   assert.equal(model.compat.supportsStore, false);
 });
 
+test("MiMo models force Chat Completions without Responses storage", async () => {
+  const model = providers.createModelFromConfig(
+    "codex",
+    "mimo-v2.5-pro",
+    "https://token-plan-cn.xiaomimimo.com",
+    "openai-responses",
+  );
+
+  assert.equal(model.api, "openai-completions");
+  assert.equal(model.compat.supportsStore, false);
+
+  const options = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://token-plan-cn.xiaomimimo.com",
+    options: {},
+  });
+  const payload = await options.onPayload({ model: model.id, messages: [] }, model);
+  assert.equal(Object.hasOwn(payload, "store"), false);
+});
+
 test("custom Codex Chat Completions models behind proxy use upstream compat detection", () => {
   const model = providers.createModelFromConfig(
     "codex",
