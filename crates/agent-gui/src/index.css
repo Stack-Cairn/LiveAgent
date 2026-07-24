@@ -117,13 +117,20 @@
   font-display: swap;
 }
 
+/*
+ * Route Tailwind's mono theme font through the user-configurable code font.
+ * A hand-written `.font-mono` override only covers bare class usage — variant
+ * forms (`[&_pre>code]:font-mono`), `@apply font-mono`, and preflight's
+ * code/kbd/samp/pre rule all resolve from the built-in `--font-mono` theme
+ * variable, so the override must happen at the theme level.
+ */
+@theme {
+  --font-mono: var(--code-font-family);
+}
+
 @layer utilities {
   .font-chat {
     font-family: var(--chat-font-family);
-  }
-
-  .font-mono {
-    font-family: var(--code-font-family);
   }
 
   /*
