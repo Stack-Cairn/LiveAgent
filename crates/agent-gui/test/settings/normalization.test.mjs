@@ -2419,6 +2419,16 @@ test("cross-provider models resolve real catalog limits instead of provider fall
     settings.getProviderModelDefaults("claude_code", "GROK-4.5@prod").contextWindow,
     500_000,
   );
+  // 国内厂商模型（deepseek/glm/qwen/kimi/MiniMax 等分区）没有自己的应用供应商
+  // 类型，配在任一类型下都经跨供应商回查取真实限额。
+  const deepseekUnderClaude = settings.getProviderModelDefaults("claude_code", "deepseek-chat");
+  assert.equal(deepseekUnderClaude.contextWindow, 1_000_000);
+  assert.equal(deepseekUnderClaude.maxOutputToken, 384_000);
+  const glmUnderCodex = settings.getProviderModelDefaults("codex", "glm-4.7");
+  assert.equal(glmUnderCodex.contextWindow, 204_800);
+  assert.equal(glmUnderCodex.maxOutputToken, 131_072);
+  // 混合大小写目录 id（MiniMax-M2.1）：小写配置经索引小写别名命中。
+  assert.equal(settings.getProviderModelDefaults("codex", "minimax-m2.1").contextWindow, 204_800);
   // 全目录未收录的模型仍吃本供应商兜底值。
   assert.equal(
     settings.getProviderModelDefaults("claude_code", "some-custom-model").contextWindow,

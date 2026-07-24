@@ -5,18 +5,38 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const catalog = loader.loadModule("src/lib/models/modelCatalog.ts");
 
-const PROVIDERS = ["anthropic", "google", "openai", "xai"];
-// 与 scripts/generate-model-catalog.mjs 的质量门同值：上游被截断时刷新会硬错，
-// 这里锁住已入库快照的完整性。
-const MIN_MODELS_PER_PROVIDER = { anthropic: 8, google: 15, openai: 20, xai: 3 };
+// 与 scripts/generate-model-catalog.mjs 的 SECTIONS 同值（键、序、质量门）：
+// 上游被截断时刷新会硬错，这里锁住已入库快照的完整性。前四家是应用供应商
+// 类型的原生目录；其余为国内厂商分区，只经跨供应商回查消费。
+const MIN_MODELS_PER_PROVIDER = {
+  anthropic: 8,
+  google: 15,
+  openai: 20,
+  xai: 3,
+  deepseek: 3,
+  zhipuai: 10,
+  moonshotai: 8,
+  minimax: 5,
+  stepfun: 4,
+  xiaomi: 4,
+  longcat: 1,
+  alibaba: 40,
+  tencent: 4,
+};
+const PROVIDERS = Object.keys(MIN_MODELS_PER_PROVIDER);
 
 test("generated catalog upholds the data invariants", () => {
-  // 跨供应商回查（findCatalogModelAcrossProviders）依赖 id 全目录唯一，
-  // 否则同名模型在不同供应商下会产生歧义命中。
-  const allIds = PROVIDERS.flatMap((providerId) =>
-    catalog.MODEL_CATALOG[providerId].map((entry) => entry.id),
+  assert.deepEqual(
+    Object.keys(catalog.MODEL_CATALOG),
+    PROVIDERS,
+    "catalog sections must match the generator's SECTIONS (keys and order)",
   );
-  assert.equal(new Set(allIds).size, allIds.length, "ids must be unique across providers");
+  // 跨供应商回查（findCatalogModelAcrossProviders）与索引的小写别名依赖
+  // id 全目录按小写唯一，否则同名模型在不同分区下会产生歧义命中。
+  const allIds = PROVIDERS.flatMap((providerId) =>
+    catalog.MODEL_CATALOG[providerId].map((entry) => entry.id.toLowerCase()),
+  );
+  assert.equal(new Set(allIds).size, allIds.length, "ids must be lowercase-unique across sections");
   for (const providerId of PROVIDERS) {
     const entries = catalog.MODEL_CATALOG[providerId];
     assert.ok(
@@ -102,6 +122,14 @@ test("cross-provider lookup resolves models configured under a foreign provider"
     maxOutputToken: 32_000,
   });
   assert.equal(catalog.resolveModelLimitsAcrossProviders("model-not-in-catalog"), undefined);
+  // 国内厂商分区（无对应应用供应商类型）经跨供应商回查可命中。
+  assert.equal(catalog.findCatalogModelAcrossProviders("deepseek-chat")?.id, "deepseek-chat");
+  assert.equal(catalog.findCatalogModelAcrossProviders("glm-4.6")?.id, "glm-4.6");
+  assert.equal(catalog.findCatalogModelAcrossProviders("qwen-max")?.id, "qwen-max");
+  assert.equal(catalog.findCatalogModelAcrossProviders("kimi-k2.5")?.id, "kimi-k2.5");
+  // 混合大小写目录 id（MiniMax/LongCat）：小写配置经索引别名命中，返回原始 id。
+  assert.equal(catalog.findCatalogModelAcrossProviders("minimax-m2.5")?.id, "MiniMax-M2.5");
+  assert.equal(catalog.findCatalogModelAcrossProviders("longcat-2.0")?.id, "LongCat-2.0");
 });
 
 test("repairStaleCrossProviderLimits replaces only stale provider-fallback pairs", () => {

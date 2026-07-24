@@ -24,15 +24,50 @@ const OUTPUT_PATHS = [
 ];
 
 const DEFAULT_SOURCE = "https://models.dev/api.json";
-// Fixed provider order: these are the native catalogs behind the app's four
-// provider types (claude_code→anthropic, gemini→google, codex→openai, xai).
-const PROVIDERS = ["anthropic", "google", "openai", "xai"];
-// Guard against a truncated upstream response replacing a healthy snapshot.
-const MIN_MODELS_PER_PROVIDER = { anthropic: 8, google: 15, openai: 20, xai: 3 };
-// Models that must exist; their absence signals an upstream schema change.
+
+// Catalog sections. Each section unions one or more upstream models.dev
+// provider keys (first source wins on a same-id conflict — used to prefer the
+// China endpoint's limits for vendors that publish both).
+//
+// The first four sections are the native catalogs behind the app's provider
+// types (claude_code→anthropic, gemini→google, codex→openai, xai); scoped
+// lookup (findCatalogModel) only ever reads these. The remaining sections are
+// mainland-China vendors with no app provider type of their own: they are
+// consumed exclusively through findCatalogModelAcrossProviders, so models
+// served through claude_code/codex-compatible relays resolve real limits.
+//
+// Section order is also the adjudication order for duplicate ids across
+// sections: ids are deduplicated case-insensitively, first section wins.
+// Pure vendor-official catalogs therefore come first; "alibaba" (Bailian) and
+// "tencent" (coding plan) host third-party models (glm/kimi/MiniMax/deepseek
+// deployments with platform-clamped limits), so they come last and their
+// copies of another vendor's models are dropped in favor of the official ones.
+const SECTIONS = [
+  { key: "anthropic", sources: ["anthropic"], min: 8 },
+  { key: "google", sources: ["google"], min: 15 },
+  { key: "openai", sources: ["openai"], min: 20 },
+  { key: "xai", sources: ["xai"], min: 3 },
+  { key: "deepseek", sources: ["deepseek"], min: 3 },
+  // zai (Z.AI, international brand) is a superset of zhipuai with identical
+  // ids and limits for the overlap; keep the domestic brand as the key.
+  { key: "zhipuai", sources: ["zai", "zhipuai"], min: 10 },
+  { key: "moonshotai", sources: ["moonshotai-cn", "moonshotai"], min: 8 },
+  { key: "minimax", sources: ["minimax-cn", "minimax"], min: 5 },
+  { key: "stepfun", sources: ["stepfun"], min: 4 },
+  { key: "xiaomi", sources: ["xiaomi"], min: 4 },
+  { key: "longcat", sources: ["longcat"], min: 1 },
+  { key: "alibaba", sources: ["alibaba-cn", "alibaba"], min: 40 },
+  { key: "tencent", sources: ["tencent-coding-plan"], min: 4 },
+];
+
+// Models that must exist; their absence signals an upstream schema change
+// (or, for unioned sections, a source-key rename).
 const SENTINELS = [
   ["anthropic", "claude-sonnet-4-6"],
   ["openai", "gpt-5"],
+  ["deepseek", "deepseek-chat"],
+  ["zhipuai", "glm-4.6"],
+  ["alibaba", "qwen-max"],
 ];
 
 // Single semantic rule shared with lib/models/modelCatalog.ts (bound together
@@ -91,35 +126,54 @@ async function loadUpstream(source) {
   return undefined;
 }
 
-function extractModels(providerId, providerData) {
-  const rawModels = providerData?.models;
-  if (!rawModels || typeof rawModels !== "object") {
-    fail(`provider ${providerId}: missing models map`);
-  }
+// claimedLower: lowercased id -> owning section key. Lowercase-unique ids
+// across the whole catalog are what make cross-provider lookup unambiguous
+// and let the runtime index add case-insensitive aliases; the invariant is
+// re-asserted by test/models/model-catalog.test.mjs.
+function extractSection(section, upstream, claimedLower) {
   const entries = [];
-  const seen = new Set();
-  for (const [id, model] of Object.entries(rawModels)) {
-    const contextWindow = model?.limit?.context;
-    const rawOutput = model?.limit?.output;
-    if (!model?.modalities?.output?.includes?.("text")) {
-      console.error(`skip ${providerId}/${id} (non-text output)`);
-      continue;
+  for (const source of section.sources) {
+    const providerData = upstream?.[source];
+    if (!providerData) fail(`section ${section.key}: source ${source} missing from upstream data`);
+    const rawModels = providerData.models;
+    if (!rawModels || typeof rawModels !== "object") {
+      fail(`section ${section.key}: source ${source} missing models map`);
     }
-    if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
-      console.error(`skip ${providerId}/${id} (invalid limit.context)`);
-      continue;
+    for (const [id, model] of Object.entries(rawModels)) {
+      // Aggregator-namespaced deployments (e.g. Bailian's "siliconflow/…",
+      // "kimi/…") are not vendor model ids; relays never serve them verbatim.
+      if (id.includes("/")) {
+        console.error(`skip ${source}/${id} (aggregator-prefixed id)`);
+        continue;
+      }
+      const contextWindow = model?.limit?.context;
+      const rawOutput = model?.limit?.output;
+      if (!model?.modalities?.output?.includes?.("text")) {
+        console.error(`skip ${source}/${id} (non-text output)`);
+        continue;
+      }
+      if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
+        console.error(`skip ${source}/${id} (invalid limit.context)`);
+        continue;
+      }
+      if (!Number.isInteger(rawOutput) || rawOutput <= 0) {
+        console.error(`skip ${source}/${id} (invalid limit.output)`);
+        continue;
+      }
+      const lower = id.toLowerCase();
+      const claimedBy = claimedLower.get(lower);
+      if (claimedBy === section.key) continue; // CN/global union overlap: first source wins.
+      if (claimedBy) {
+        console.error(`skip ${source}/${id} (id claimed by section ${claimedBy})`);
+        continue;
+      }
+      claimedLower.set(lower, section.key);
+      entries.push({
+        id,
+        contextWindow,
+        maxOutputToken: normalizeMaxOutputToken(contextWindow, rawOutput),
+      });
     }
-    if (!Number.isInteger(rawOutput) || rawOutput <= 0) {
-      console.error(`skip ${providerId}/${id} (invalid limit.output)`);
-      continue;
-    }
-    if (seen.has(id)) fail(`provider ${providerId}: duplicate model id ${id}`);
-    seen.add(id);
-    entries.push({
-      id,
-      contextWindow,
-      maxOutputToken: normalizeMaxOutputToken(contextWindow, rawOutput),
-    });
   }
   entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return entries;
@@ -130,9 +184,10 @@ function renderEntry(entry) {
 }
 
 function renderCatalog(catalog, snapshotDate) {
+  const keys = SECTIONS.map((section) => section.key);
   const lines = [
     "// Generated by scripts/generate-model-catalog.mjs — DO NOT EDIT.",
-    "// Source: https://models.dev/api.json (providers: anthropic, google, openai, xai)",
+    `// Source: https://models.dev/api.json (sections: ${keys.join(", ")})`,
     "// Refresh: make update-model-catalog",
     "",
     "export type CatalogModelEntry = {",
@@ -141,15 +196,15 @@ function renderCatalog(catalog, snapshotDate) {
     "  maxOutputToken: number;",
     "};",
     "",
-    `export type CatalogProviderId = ${PROVIDERS.map((p) => JSON.stringify(p)).join(" | ")};`,
+    `export type CatalogProviderId = ${keys.map((key) => JSON.stringify(key)).join(" | ")};`,
     "",
     `export const MODEL_CATALOG_SNAPSHOT_DATE = "${snapshotDate}";`,
     "",
     "export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {",
   ];
-  for (const providerId of PROVIDERS) {
-    lines.push(`  ${providerId}: [`);
-    for (const entry of catalog[providerId]) lines.push(renderEntry(entry));
+  for (const key of keys) {
+    lines.push(`  ${key}: [`);
+    for (const entry of catalog[key]) lines.push(renderEntry(entry));
     lines.push("  ],");
   }
   lines.push("};", "");
@@ -172,21 +227,20 @@ const args = parseArgs(process.argv);
 const upstream = await loadUpstream(args.source);
 
 const catalog = {};
-for (const providerId of PROVIDERS) {
-  const providerData = upstream?.[providerId];
-  if (!providerData) fail(`provider ${providerId}: missing from upstream data`);
-  const entries = extractModels(providerId, providerData);
-  if (entries.length < MIN_MODELS_PER_PROVIDER[providerId]) {
+const claimedLower = new Map();
+for (const section of SECTIONS) {
+  const entries = extractSection(section, upstream, claimedLower);
+  if (entries.length < section.min) {
     fail(
-      `provider ${providerId}: only ${entries.length} models after filtering ` +
-        `(expected >= ${MIN_MODELS_PER_PROVIDER[providerId]}); upstream data looks truncated`,
+      `section ${section.key}: only ${entries.length} models after filtering ` +
+        `(expected >= ${section.min}); upstream data looks truncated`,
     );
   }
-  catalog[providerId] = entries;
+  catalog[section.key] = entries;
 }
-for (const [providerId, modelId] of SENTINELS) {
-  if (!catalog[providerId].some((entry) => entry.id === modelId)) {
-    fail(`sentinel model ${providerId}/${modelId} missing; upstream schema may have changed`);
+for (const [sectionKey, modelId] of SENTINELS) {
+  if (!catalog[sectionKey].some((entry) => entry.id === modelId)) {
+    fail(`sentinel model ${sectionKey}/${modelId} missing; upstream schema may have changed`);
   }
 }
 
@@ -218,5 +272,5 @@ if (unchanged) {
 for (const path of OUTPUT_PATHS) writeFileSync(path, nextContent);
 const [guiBytes, webBytes] = OUTPUT_PATHS.map((path) => readFileSync(path));
 if (!guiBytes.equals(webBytes)) fail("post-write self-check failed: outputs differ");
-const total = PROVIDERS.reduce((sum, providerId) => sum + catalog[providerId].length, 0);
+const total = SECTIONS.reduce((sum, section) => sum + catalog[section.key].length, 0);
 console.log(`catalog updated (${total} models, snapshot ${today})`);

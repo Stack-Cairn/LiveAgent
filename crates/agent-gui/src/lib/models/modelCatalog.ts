@@ -75,7 +75,14 @@ const catalogIndexByProvider = new Map<CatalogProviderId, Map<string, CatalogMod
 function getCatalogIndex(catalogProvider: CatalogProviderId): Map<string, CatalogModelEntry> {
   let index = catalogIndexByProvider.get(catalogProvider);
   if (!index) {
-    index = new Map(MODEL_CATALOG[catalogProvider].map((entry) => [entry.id, entry]));
+    index = new Map();
+    for (const entry of MODEL_CATALOG[catalogProvider]) {
+      index.set(entry.id, entry);
+      // 目录含混合大小写 id（MiniMax-M2/LongCat-2.0 等）：补小写别名，让候选链
+      // 的 lower 候选可命中；生成期按小写去重保证别名不会跨条目歧义。
+      const lower = entry.id.toLowerCase();
+      if (!index.has(lower)) index.set(lower, entry);
+    }
     catalogIndexByProvider.set(catalogProvider, index);
   }
   return index;
@@ -95,10 +102,12 @@ export function findCatalogModel(
   return undefined;
 }
 
-// 中转聚合常把 A 家模型挂在 B 家供应商类型下（如 Anthropic 兼容中转供 grok），
-// 供应商作用域查不到时按 id 跨供应商回查，避免真实限额被本供应商兜底值顶掉。
-// 目录 id 无跨供应商重名（目录不变量测试锁死）；候选链放外层——更精确的 id
-// 形态优先于供应商声明序。
+// 中转聚合常把 A 家模型挂在 B 家供应商类型下（grok/deepseek/glm/qwen 等挂在
+// Anthropic/OpenAI 兼容中转），供应商作用域查不到时按 id 跨供应商回查，避免
+// 真实限额被本供应商兜底值顶掉。国内厂商分区（deepseek/zhipuai/alibaba 等）
+// 没有对应的应用供应商类型，只经这里消费。目录 id 全局小写唯一（生成期跨
+// 分区去重+目录不变量测试锁死）；候选链放外层——更精确的 id 形态优先于
+// 供应商声明序。
 const CATALOG_PROVIDER_IDS = Object.keys(MODEL_CATALOG) as CatalogProviderId[];
 
 export function findCatalogModelAcrossProviders(
