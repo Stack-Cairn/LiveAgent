@@ -297,6 +297,18 @@ function inferCodexApi(requestFormat?: CodexRequestFormat, preferredApi?: CodexA
   return requestFormat ?? preferredApi ?? "openai-responses";
 }
 
+function isMiMoTarget(params: { baseUrl: string; upstreamBaseUrl?: string; modelId: string }) {
+  const modelId = params.modelId.trim().toLowerCase();
+  if (modelId.startsWith("mimo-")) return true;
+
+  try {
+    const baseUrl = new URL(params.upstreamBaseUrl?.trim() || params.baseUrl);
+    return baseUrl.hostname === "api.xiaomimimo.com";
+  } catch {
+    return false;
+  }
+}
+
 export function createModelFromConfig(
   providerId: ProviderId,
   modelId: string,
@@ -330,6 +342,10 @@ export function createModelFromConfig(
         upstreamBaseUrl,
         modelId,
       });
+    // MiMo only exposes its OpenAI-compatible Chat Completions endpoint.
+    const isMiMoCodex =
+      providerId === "codex" &&
+      isMiMoTarget({ baseUrl: normalizedBaseUrl, upstreamBaseUrl, modelId });
     // 正式 xai 供应商，或 Codex 直连 api.x.ai：固定 Responses（agentic 搜索等）。
     const isXaiTarget = isXaiProviderTarget({
       providerId,
@@ -339,7 +355,9 @@ export function createModelFromConfig(
       ? "openai-completions"
       : isXaiTarget
         ? "openai-responses"
-        : inferCodexApi(requestFormat, preferredApi);
+        : isMiMoCodex
+          ? "openai-completions"
+          : inferCodexApi(requestFormat, preferredApi);
     const responsesCompat =
       api === "openai-responses"
         ? resolveCodexOpenAIResponsesCompat({
