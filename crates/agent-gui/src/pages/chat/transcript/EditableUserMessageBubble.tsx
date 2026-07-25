@@ -1,7 +1,8 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import { useLocale } from "../../../i18n";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
+import { splitUserAttachmentsForDisplay } from "./transcriptUtils";
 import { UserAttachmentCards } from "./UserAttachmentCards";
 
 export const EditableUserMessageBubble = memo(function EditableUserMessageBubble(props: {
@@ -44,6 +45,19 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
     setDraftAttachments(attachments);
   }, [attachments]);
 
+  // A large paste is stored as an uploaded text file *plus* a
+  // "[Pasted text N: path]" marker inlined into the message text (rendered
+  // as a chip once sent, see UserMessageRow). Editing must hide that same
+  // file's attachment card while its marker is still present in the text,
+  // otherwise the paste shows up twice: once as a card, once as raw marker
+  // text in the textarea below. The full (unfiltered) list — including
+  // pasted-text files — is still what gets submitted, so nothing is lost on
+  // resend; only the card list is narrowed for display.
+  const visibleAttachments = useMemo(
+    () => splitUserAttachmentsForDisplay(draftAttachments, draftText).visibleFiles,
+    [draftAttachments, draftText],
+  );
+
   const canSubmit = draftText.trim().length > 0 || draftAttachments.length > 0;
 
   return (
@@ -51,7 +65,7 @@ export const EditableUserMessageBubble = memo(function EditableUserMessageBubble
       className={`w-full max-w-[min(85%,calc(50em+2.5rem))] rounded-2xl border border-border bg-[hsl(var(--chat-user-bg))] p-3 ${compactedClass}`}
     >
       <UserAttachmentCards
-        files={draftAttachments}
+        files={visibleAttachments}
         workspaceRoot={workspaceRoot}
         onRemove={(relativePath) => {
           setDraftAttachments((prev) => prev.filter((file) => file.relativePath !== relativePath));

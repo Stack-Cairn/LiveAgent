@@ -3,6 +3,9 @@ export const MAX_UPLOAD_FILES = 9;
 export const PROTECTED_DRAFT_CONVERSATION = "__protected_draft__";
 export const HISTORY_LIST_PAGE_SIZE = 80;
 export const HISTORY_DETAIL_INITIAL_MAX_MESSAGES = 360;
+// One "load earlier history" click grows the loaded window by this many
+// persisted messages (same size as the initial tail window).
+export const HISTORY_DETAIL_LOAD_EARLIER_PAGE_MESSAGES = 360;
 export const PROJECT_HISTORY_DELETE_PAGE_SIZE = 200;
 export const SHARED_HISTORY_LIST_PAGE_SIZE = 200;
 export const CHAT_RUNTIME_PREPARE_TIMEOUT_MS = 2_500;

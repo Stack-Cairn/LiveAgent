@@ -15,7 +15,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function createHarness(overrides = {}) {
   const states = [];
   const calls = { openInitial: [], hydrateFull: [] };
-  const controller = createConversationOpenController({
+  const deps = {
     openInitial: async (id, seq) => {
       calls.openInitial.push({ id, seq });
       return overrides.openInitial ? overrides.openInitial(id, seq) : "painted";
@@ -34,7 +34,11 @@ function createHarness(overrides = {}) {
       states.push(state);
     },
     overlayDelayMs: overrides.overlayDelayMs ?? 20,
-  });
+  };
+  if (overrides.omitHydrateFull) {
+    delete deps.hydrateFull;
+  }
+  const controller = createConversationOpenController(deps);
   return { controller, states, calls };
 }
 
@@ -48,6 +52,32 @@ test("cache hit resolves synchronously with no overlay and no hydration", async 
   assert.equal(states.at(-1).phase, "ready");
   assert.equal(states.at(-1).errorCode, null);
   assert.equal(calls.hydrateFull.length, 0);
+});
+
+test("painted-complete resolves ready with no hydration scheduled", async () => {
+  const { controller, states, calls } = createHarness({
+    openInitial: async () => "painted-complete",
+  });
+  controller.open("conv");
+  await sleep(30);
+  assert.equal(states.at(-1).phase, "ready");
+  assert.equal(states.at(-1).errorCode, null);
+  assert.equal(
+    states.some((state) => state.phase === "hydrating"),
+    false,
+  );
+  assert.equal(calls.hydrateFull.length, 0);
+});
+
+test("painted without a hydrateFull dep resolves ready directly", async () => {
+  const { controller, states } = createHarness({ omitHydrateFull: true });
+  controller.open("conv");
+  await sleep(30);
+  assert.equal(states.at(-1).phase, "ready");
+  assert.equal(
+    states.some((state) => state.phase === "hydrating"),
+    false,
+  );
 });
 
 test("slow open shows the overlay only after the delay, then hydrates at idle", async () => {

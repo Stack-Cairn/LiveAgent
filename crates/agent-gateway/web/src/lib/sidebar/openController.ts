@@ -1,9 +1,11 @@
 // The unified two-phase conversation-open controller: paint an initial slice
 // fast (active segment / message tail, or a synchronous cache hit), then
-// hydrate the full transcript at idle. The switch overlay appears only after
-// overlayDelayMs of still-loading — there is no minimum overlay duration, so
-// cache hits switch synchronously with no flash. Byte-mirrored between
-// agent-gui and agent-gateway/web.
+// hydrate the full transcript at idle. Ends whose phase 1 already paints
+// everything they intend to load (e.g. a lazy history window) resolve
+// "painted-complete" and skip phase 2 entirely. The switch overlay appears
+// only after overlayDelayMs of still-loading — there is no minimum overlay
+// duration, so cache hits switch synchronously with no flash. Byte-mirrored
+// between agent-gui and agent-gateway/web.
 
 export type ConversationOpenPhase = "idle" | "opening" | "hydrating" | "ready" | "failed";
 
@@ -24,11 +26,19 @@ export type ConversationOpenController = {
 export type ConversationOpenControllerDeps = {
   // Phase 1: make the conversation visible. Resolve "cache-hit" when it was
   // activated synchronously from a runtime cache (already complete — phase 2
-  // is skipped), or "painted" when an initial slice was fetched and rendered.
-  // Reject on failure. Must itself drop stale work when seq is outdated.
-  openInitial(conversationId: string, seq: number): Promise<"cache-hit" | "painted">;
-  // Phase 2: quiet full hydration. Must check seq before committing.
-  hydrateFull(conversationId: string, seq: number): Promise<void>;
+  // is skipped), "painted" when an initial slice was fetched and rendered
+  // (phase 2 hydrates the rest at idle), or "painted-complete" when the
+  // fetched slice already covers everything this end intends to load
+  // (phase 2 is skipped). Reject on failure. Must itself drop stale work
+  // when seq is outdated.
+  openInitial(
+    conversationId: string,
+    seq: number,
+  ): Promise<"cache-hit" | "painted" | "painted-complete">;
+  // Phase 2: quiet full hydration. Must check seq before committing. Only
+  // consulted after a plain "painted" phase 1; ends that never resolve
+  // "painted" may omit it.
+  hydrateFull?(conversationId: string, seq: number): Promise<void>;
   scheduleIdle(task: () => void): () => void;
   onStateChange(state: ConversationOpenState): void;
   overlayDelayMs?: number;
@@ -71,12 +81,15 @@ export function createConversationOpenController(
     }
   };
 
-  const scheduleHydration = (conversationId: string, seq: number) => {
+  const scheduleHydration = (
+    conversationId: string,
+    seq: number,
+    hydrateFull: (conversationId: string, seq: number) => Promise<void>,
+  ) => {
     clearIdleTask();
     cancelIdle = deps.scheduleIdle(() => {
       cancelIdle = null;
-      deps
-        .hydrateFull(conversationId, seq)
+      hydrateFull(conversationId, seq)
         .then(() => {
           if (seq !== sequence) return;
           setState({ conversationId, phase: "ready", showOverlay: false, errorCode: null });
@@ -113,12 +126,15 @@ export function createConversationOpenController(
         .then((result) => {
           if (seq !== sequence) return;
           clearOverlayTimer();
-          if (result === "cache-hit") {
-            setState({ conversationId, phase: "ready", showOverlay: false, errorCode: null });
+          const hydrateFull = deps.hydrateFull;
+          if (result === "painted" && hydrateFull) {
+            setState({ conversationId, phase: "hydrating", showOverlay: false, errorCode: null });
+            scheduleHydration(conversationId, seq, hydrateFull);
             return;
           }
-          setState({ conversationId, phase: "hydrating", showOverlay: false, errorCode: null });
-          scheduleHydration(conversationId, seq);
+          // "cache-hit" and "painted-complete" own their full paint already;
+          // a "painted" without a hydrateFull dep has nothing left to run.
+          setState({ conversationId, phase: "ready", showOverlay: false, errorCode: null });
         })
         .catch(() => {
           if (seq !== sequence) return;
