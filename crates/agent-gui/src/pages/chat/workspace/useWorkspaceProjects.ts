@@ -23,6 +23,7 @@ import type { SidebarStore } from "../../../lib/sidebar/store";
 import type { SidebarScope } from "../../../lib/sidebar/types";
 import { useSidebarSelector } from "../../../lib/sidebar/useSidebarSelector";
 import { invokeFs } from "../../../lib/tools/fsBackend";
+import type { WorkspacePromptConfig } from "../../../lib/workspace-prompt/config";
 import {
   findWorkspaceProject,
   mergeWorkspaceProjectsWithHistory,
@@ -493,6 +494,71 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [setSettings],
   );
 
+  const [workspaceSettingsProject, setWorkspaceSettingsProject] =
+    useState<WorkspaceProject | null>(null);
+
+  const handleOpenWorkspaceProjectSettings = useCallback((project: WorkspaceProject) => {
+    setWorkspaceSettingsProject(project);
+  }, []);
+
+  const handleCloseWorkspaceProjectSettings = useCallback(() => {
+    setWorkspaceSettingsProject(null);
+  }, []);
+
+  const handleSaveWorkspaceProjectPromptConfig = useCallback(
+    (project: WorkspaceProject, config: WorkspacePromptConfig) => {
+      const pathKey = workspaceProjectPathKey(project.path);
+      if (!pathKey) return;
+      const isDefaultConfig =
+        !config.prompt && config.includeGlobalPrompt && !config.includeProjectInstructions;
+
+      setSettings((prev) => {
+        const existing = prev.system.workspaceProjects.find(
+          (item) => item.id === project.id || workspaceProjectPathKey(item.path) === pathKey,
+        );
+        // History-derived rows only materialize into settings once they carry
+        // a non-default prompt config (mirrors the pin materialization rule).
+        if (!existing && isDefaultConfig) {
+          return prev;
+        }
+
+        const {
+          prompt: _prompt,
+          includeGlobalPrompt: _includeGlobalPrompt,
+          includeProjectInstructions: _includeProjectInstructions,
+          ...source
+        } = existing ?? project;
+        const updatedProject: WorkspaceProject = {
+          ...source,
+          id: existing?.id ?? project.id,
+          updatedAt: Date.now(),
+          ...(config.prompt ? { prompt: config.prompt } : {}),
+          ...(config.includeGlobalPrompt ? {} : { includeGlobalPrompt: false }),
+          ...(config.includeProjectInstructions ? { includeProjectInstructions: true } : {}),
+        };
+        const workspaceProjects = existing
+          ? prev.system.workspaceProjects.map((item) =>
+              item.id === existing.id || workspaceProjectPathKey(item.path) === pathKey
+                ? updatedProject
+                : item,
+            )
+          : [...prev.system.workspaceProjects, updatedProject];
+
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              workspaceProjects,
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+    },
+    [setSettings],
+  );
+
   const handleSidebarProjectsCollapsedChange = useCallback(
     (projectsCollapsed: boolean) => {
       setSettings((prev) =>
@@ -555,6 +621,10 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     handleCommitWorkspaceProjectRename,
     handleCancelWorkspaceProjectRename,
     handleSetWorkspaceProjectPinned,
+    workspaceSettingsProject,
+    handleOpenWorkspaceProjectSettings,
+    handleCloseWorkspaceProjectSettings,
+    handleSaveWorkspaceProjectPromptConfig,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
   };

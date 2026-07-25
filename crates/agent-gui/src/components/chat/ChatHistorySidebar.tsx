@@ -41,6 +41,7 @@ import {
   PinOff,
   Plus,
   Settings,
+  Settings2,
   Share2,
   Trash2,
   X,
@@ -97,6 +98,7 @@ type ChatHistorySidebarProps = {
   onBrowseProjectInFileTree?: (project: WorkspaceProject) => void;
   onBrowseProjectInSystemFileManager?: (project: WorkspaceProject) => void;
   onStartRenamingProject?: (project: WorkspaceProject) => void;
+  onOpenProjectSettings?: (project: WorkspaceProject) => void;
   onProjectRenameDraftChange?: (value: string) => void;
   onCommitProjectRename?: () => void;
   onCancelProjectRename?: () => void;
@@ -507,6 +509,7 @@ const ProjectRow = memo(function ProjectRow(props: {
   onBrowseProjectInFileTree?: (project: WorkspaceProject) => void;
   onBrowseProjectInSystemFileManager?: (project: WorkspaceProject) => void;
   onStartRenamingProject: (project: WorkspaceProject) => void;
+  onOpenProjectSettings?: (project: WorkspaceProject) => void;
   onProjectRenameDraftChange: (value: string) => void;
   onCommitProjectRename: () => void;
   onCancelProjectRename: () => void;
@@ -533,6 +536,7 @@ const ProjectRow = memo(function ProjectRow(props: {
     onBrowseProjectInFileTree,
     onBrowseProjectInSystemFileManager,
     onStartRenamingProject,
+    onOpenProjectSettings,
     onProjectRenameDraftChange,
     onCommitProjectRename,
     onCancelProjectRename,
@@ -580,6 +584,10 @@ const ProjectRow = memo(function ProjectRow(props: {
   const handleBrowseInFileTree = useCallback(() => {
     onBrowseProjectInFileTree?.(project);
   }, [onBrowseProjectInFileTree, project]);
+
+  const handleOpenSettings = useCallback(() => {
+    onOpenProjectSettings?.(project);
+  }, [onOpenProjectSettings, project]);
 
   const handleBrowseInSystemFileManager = useCallback(() => {
     onBrowseProjectInSystemFileManager?.(project);
@@ -847,22 +855,28 @@ const ProjectRow = memo(function ProjectRow(props: {
                     className="sidebar-context-menu"
                   >
                     {!isDefaultProject ? (
-                      <>
-                        <DropdownMenuItem
-                          onSelect={() => onStartRenamingProject(project)}
-                          className="gap-2"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                          {t("chat.workspaceRename")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={handleRequestRemove}
-                          className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {t("chat.workspaceRemove")}
-                        </DropdownMenuItem>
-                      </>
+                      <DropdownMenuItem
+                        onSelect={() => onStartRenamingProject(project)}
+                        className="gap-2"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                        {t("chat.workspaceRename")}
+                      </DropdownMenuItem>
+                    ) : null}
+                    {onOpenProjectSettings && !isArchived ? (
+                      <DropdownMenuItem onSelect={handleOpenSettings} className="gap-2">
+                        <Settings2 className="h-3.5 w-3.5" />
+                        {t("chat.workspaceSettings")}
+                      </DropdownMenuItem>
+                    ) : null}
+                    {!isDefaultProject ? (
+                      <DropdownMenuItem
+                        onSelect={handleRequestRemove}
+                        className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {t("chat.workspaceRemove")}
+                      </DropdownMenuItem>
                     ) : null}
                     {!isArchived && canArchive ? (
                       <DropdownMenuItem onSelect={handleArchive} className="gap-2">
@@ -1020,6 +1034,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onProjectRenameDraftChange,
     onCommitProjectRename,
     onCancelProjectRename,
+    onOpenProjectSettings,
     onSetProjectPinned,
     onRemoveProject,
     onArchiveProject,
@@ -1118,6 +1133,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   });
   const handleStartRenamingProject = useStableEvent((project: WorkspaceProject) => {
     onStartRenamingProject?.(project);
+  });
+  const handleOpenProjectSettings = useStableEvent((project: WorkspaceProject) => {
+    onOpenProjectSettings?.(project);
   });
   const handleProjectRenameDraftChange = useStableEvent((value: string) => {
     onProjectRenameDraftChange?.(value);
@@ -1824,6 +1842,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                             : undefined
                         }
                         onStartRenamingProject={handleStartRenamingProject}
+                        onOpenProjectSettings={
+                          onOpenProjectSettings ? handleOpenProjectSettings : undefined
+                        }
                         onProjectRenameDraftChange={handleProjectRenameDraftChange}
                         onCommitProjectRename={handleCommitProjectRename}
                         onCancelProjectRename={handleCancelProjectRename}
@@ -1894,6 +1915,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                     : undefined
                                 }
                                 onStartRenamingProject={handleStartRenamingProject}
+                                onOpenProjectSettings={
+                                  onOpenProjectSettings ? handleOpenProjectSettings : undefined
+                                }
                                 onProjectRenameDraftChange={handleProjectRenameDraftChange}
                                 onCommitProjectRename={handleCommitProjectRename}
                                 onCancelProjectRename={handleCancelProjectRename}

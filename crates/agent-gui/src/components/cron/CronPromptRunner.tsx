@@ -24,6 +24,11 @@ import {
 import { buildBuiltinToolRegistry } from "../../lib/tools/builtinRegistry";
 import { createFileToolState } from "../../lib/tools/fileToolState";
 import type { SkillAccessPolicy } from "../../lib/tools/skillAccessPolicy";
+import {
+  composeAgentPrompt,
+  resolveWorkspacePromptConfig,
+} from "../../lib/workspace-prompt/config";
+import { readProjectInstructions } from "../../lib/workspace-prompt/instructions";
 import { appendSystemPrompt } from "../../pages/chat";
 import {
   createCompletePromptRunInput,
@@ -156,6 +161,20 @@ async function executeCronPromptRun(
 
   const skillsContext = await buildCronSkillsContext(settings);
   const activeAgentPrompt = getActiveAgentPrompt(settings);
+  // Scheduled runs honor the same workspace prompt layering as chat turns in
+  // the pinned workdir.
+  const workspacePromptConfig = resolveWorkspacePromptConfig(
+    settings.system.workspaceProjects,
+    workdir,
+  );
+  const workspaceProjectInstructions = workspacePromptConfig.includeProjectInstructions
+    ? await readProjectInstructions(workdir)
+    : null;
+  const effectiveAgentPrompt = composeAgentPrompt({
+    globalPrompt: workspacePromptConfig.includeGlobalPrompt ? activeAgentPrompt : "",
+    workspacePrompt: workspacePromptConfig.prompt,
+    projectInstructions: workspaceProjectInstructions,
+  });
   const runtimePlatform = await resolveRuntimePlatform();
   const builtinRegistry = await buildBuiltinToolRegistry({
     workdir,
@@ -176,8 +195,8 @@ async function executeCronPromptRun(
   });
 
   let systemPrompt = buildCronSystemPrompt(request.taskName);
-  if (activeAgentPrompt) {
-    systemPrompt = appendSystemPrompt(systemPrompt, activeAgentPrompt);
+  if (effectiveAgentPrompt) {
+    systemPrompt = appendSystemPrompt(systemPrompt, effectiveAgentPrompt);
   }
   if (skillsContext.prompt) {
     systemPrompt = appendSystemPrompt(systemPrompt, skillsContext.prompt);

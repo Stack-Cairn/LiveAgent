@@ -64,6 +64,11 @@ import {
 } from "../../../lib/skills";
 import type { SubagentStoreManager } from "../../../lib/subagents";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
+import {
+  composeAgentPrompt,
+  resolveWorkspacePromptConfig,
+} from "../../../lib/workspace-prompt/config";
+import { readProjectInstructions } from "../../../lib/workspace-prompt/instructions";
 import { appendManagedSkillSelections, asErrorMessage } from "../chatPageUtils";
 import {
   buildTextFromComposerDraft,
@@ -826,6 +831,21 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       messageRef: findHistoryMessageRefByMessageId(nextConversationState, pendingUserMessage.id),
     });
     acknowledgeGatewayRunStarted();
+    // Workspace-scoped prompt layers resolved per turn so edits from either
+    // end apply to the next send without touching persisted conversation state.
+    const workspacePromptConfig = resolveWorkspacePromptConfig(
+      settings.system.workspaceProjects,
+      effectiveProjectPathKey,
+    );
+    const workspaceProjectInstructions =
+      effectiveIsAgentMode && workspacePromptConfig.includeProjectInstructions
+        ? await readProjectInstructions(effectiveWorkdir)
+        : null;
+    const effectiveAgentPrompt = composeAgentPrompt({
+      globalPrompt: workspacePromptConfig.includeGlobalPrompt ? activeAgentPrompt : "",
+      workspacePrompt: workspacePromptConfig.prompt,
+      projectInstructions: workspaceProjectInstructions,
+    });
     let skillsPrompt = "";
     let memoryPrompt = "";
     let skillsRootDirForTools = skillsRootDir;
@@ -847,7 +867,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return buildPreparedConversationContext({
         state,
         tools,
-        activeAgentPrompt,
+        activeAgentPrompt: effectiveAgentPrompt,
         skillsPrompt,
         memoryPrompt,
         includeAbortedMessages: options?.includeAbortedMessages,
@@ -865,7 +885,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         state,
         resumeMessage,
         tools,
-        activeAgentPrompt,
+        activeAgentPrompt: effectiveAgentPrompt,
         skillsPrompt,
         memoryPrompt,
         includeAbortedMessages: options?.includeAbortedMessages,

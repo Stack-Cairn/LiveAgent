@@ -47,6 +47,7 @@ type ChatSidebarContainerProps = {
   onBrowseProjectInFileTree: (project: WorkspaceProject) => void;
   onBrowseProjectInSystemFileManager: (project: WorkspaceProject) => void;
   onStartRenamingProject: (project: WorkspaceProject) => void;
+  onOpenProjectSettings: (project: WorkspaceProject) => void;
   onProjectRenameDraftChange: (value: string) => void;
   onCommitProjectRename: () => void;
   onCancelProjectRename: () => void;
@@ -229,6 +230,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       onBrowseProjectInFileTree={props.onBrowseProjectInFileTree}
       onBrowseProjectInSystemFileManager={props.onBrowseProjectInSystemFileManager}
       onStartRenamingProject={props.onStartRenamingProject}
+      onOpenProjectSettings={props.onOpenProjectSettings}
       onProjectRenameDraftChange={props.onProjectRenameDraftChange}
       onCommitProjectRename={props.onCommitProjectRename}
       onCancelProjectRename={props.onCancelProjectRename}

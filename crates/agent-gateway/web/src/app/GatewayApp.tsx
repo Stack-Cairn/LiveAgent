@@ -126,6 +126,7 @@ import {
   ChangedFilesActionsProvider,
 } from "@/components/chat/ChangedFilesCard";
 import { HistoryShareModal } from "@/components/chat/HistoryShareModal";
+import { WorkspaceSettingsModal } from "@/components/chat/WorkspaceSettingsModal";
 import { GatewayTranscript, type GatewayTranscriptNavHandle } from "@/components/GatewayTranscript";
 import type { GitReviewFocusRequest } from "@/components/project-tools/RightDockContext";
 import { expandedPathsForFileTreePath } from "@/components/project-tools/rightDockModel";
@@ -145,6 +146,7 @@ import {
   normalizeGatewayConversationSummary,
   normalizeRunningConversationItems,
 } from "@/lib/sidebar/webSidebarBackend";
+import type { WorkspacePromptConfig } from "@/lib/workspace-prompt/config";
 import { findWorkspaceProject, mergeWorkspaceProjectsWithHistory } from "@/lib/workspaceProjects";
 import { FloorNavRail } from "@/pages/chat/transcript/FloorNavRail";
 import { WorkspaceCloneModal } from "@/pages/chat/WorkspaceCloneModal";
@@ -1389,6 +1391,71 @@ export default function GatewayApp() {
           updatedAt: now,
           isPinned,
           pinnedAt: isPinned ? now : null,
+        };
+        const workspaceProjects = existing
+          ? prev.system.workspaceProjects.map((item) =>
+              item.id === existing.id || workspaceProjectPathKey(item.path) === pathKey
+                ? updatedProject
+                : item,
+            )
+          : [...prev.system.workspaceProjects, updatedProject];
+
+        return {
+          ...prev,
+          system: resolveWorkspaceProjects(
+            {
+              ...prev.system,
+              workspaceProjects,
+            },
+            getDefaultWorkspaceProjectPath(prev.system),
+          ),
+        };
+      });
+    },
+    [setSettings],
+  );
+
+  const [workspaceSettingsProject, setWorkspaceSettingsProject] =
+    useState<WorkspaceProject | null>(null);
+
+  const handleOpenWorkspaceProjectSettings = useCallback((project: WorkspaceProject) => {
+    setWorkspaceSettingsProject(project);
+  }, []);
+
+  const handleCloseWorkspaceProjectSettings = useCallback(() => {
+    setWorkspaceSettingsProject(null);
+  }, []);
+
+  const handleSaveWorkspaceProjectPromptConfig = useCallback(
+    (project: WorkspaceProject, config: WorkspacePromptConfig) => {
+      const pathKey = workspaceProjectPathKey(project.path);
+      if (!pathKey) return;
+      const isDefaultConfig =
+        !config.prompt && config.includeGlobalPrompt && !config.includeProjectInstructions;
+
+      setSettings((prev) => {
+        const existing = prev.system.workspaceProjects.find(
+          (item) => item.id === project.id || workspaceProjectPathKey(item.path) === pathKey,
+        );
+        // History-derived rows only materialize into settings once they carry
+        // a non-default prompt config (mirrors the pin materialization rule).
+        if (!existing && isDefaultConfig) {
+          return prev;
+        }
+
+        const {
+          prompt: _prompt,
+          includeGlobalPrompt: _includeGlobalPrompt,
+          includeProjectInstructions: _includeProjectInstructions,
+          ...source
+        } = existing ?? project;
+        const updatedProject: WorkspaceProject = {
+          ...source,
+          id: existing?.id ?? project.id,
+          updatedAt: Date.now(),
+          ...(config.prompt ? { prompt: config.prompt } : {}),
+          ...(config.includeGlobalPrompt ? {} : { includeGlobalPrompt: false }),
+          ...(config.includeProjectInstructions ? { includeProjectInstructions: true } : {}),
         };
         const workspaceProjects = existing
           ? prev.system.workspaceProjects.map((item) =>
@@ -4405,6 +4472,7 @@ export default function GatewayApp() {
               onNewConversationForProject={handleNewConversationForProject}
               onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
               onStartRenamingProject={handleStartRenamingWorkspaceProject}
+              onOpenProjectSettings={handleOpenWorkspaceProjectSettings}
               onProjectRenameDraftChange={setProjectRenameDraft}
               onCommitProjectRename={handleCommitWorkspaceProjectRename}
               onCancelProjectRename={handleCancelWorkspaceProjectRename}
@@ -4480,6 +4548,14 @@ export default function GatewayApp() {
               onDismiss={handleDismissWorkspaceCloneTask}
               onOpenWorkspace={handleOpenClonedWorkspace}
             />
+
+            {workspaceSettingsProject ? (
+              <WorkspaceSettingsModal
+                project={workspaceSettingsProject}
+                onSave={handleSaveWorkspaceProjectPromptConfig}
+                onClose={handleCloseWorkspaceProjectSettings}
+              />
+            ) : null}
 
             {confirmDialog}
 
