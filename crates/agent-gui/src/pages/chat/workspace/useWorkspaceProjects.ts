@@ -494,8 +494,9 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [setSettings],
   );
 
-  const [workspaceSettingsProject, setWorkspaceSettingsProject] =
-    useState<WorkspaceProject | null>(null);
+  const [workspaceSettingsProject, setWorkspaceSettingsProject] = useState<WorkspaceProject | null>(
+    null,
+  );
 
   const handleOpenWorkspaceProjectSettings = useCallback((project: WorkspaceProject) => {
     setWorkspaceSettingsProject(project);

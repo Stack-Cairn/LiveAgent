@@ -73,14 +73,16 @@ export function workspacePromptImportAcceptAttribute() {
 
 // Normalizes imported file text for the workspace prompt textarea. Empty
 // content is rejected so the caller can surface a clear error.
-export function normalizeImportedWorkspacePromptContent(content: string): {
-  ok: true;
-  content: string;
-  truncated: boolean;
-} | {
-  ok: false;
-  reason: "empty";
-} {
+export function normalizeImportedWorkspacePromptContent(content: string):
+  | {
+      ok: true;
+      content: string;
+      truncated: boolean;
+    }
+  | {
+      ok: false;
+      reason: "empty";
+    } {
   const trimmed = content.replace(/^\uFEFF/, "").trim();
   if (!trimmed) return { ok: false, reason: "empty" };
   if (trimmed.length <= WORKSPACE_PROMPT_IMPORT_MAX_CHARS) {

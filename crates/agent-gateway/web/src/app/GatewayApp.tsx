@@ -1415,8 +1415,9 @@ export default function GatewayApp() {
     [setSettings],
   );
 
-  const [workspaceSettingsProject, setWorkspaceSettingsProject] =
-    useState<WorkspaceProject | null>(null);
+  const [workspaceSettingsProject, setWorkspaceSettingsProject] = useState<WorkspaceProject | null>(
+    null,
+  );
 
   const handleOpenWorkspaceProjectSettings = useCallback((project: WorkspaceProject) => {
     setWorkspaceSettingsProject(project);

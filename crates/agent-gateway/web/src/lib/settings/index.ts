@@ -586,7 +586,8 @@ function normalizeWorkspaceProject(input: unknown): WorkspaceProject | null {
     typeof obj.pinnedAt === "number" && Number.isFinite(obj.pinnedAt) && obj.pinnedAt > 0
       ? obj.pinnedAt
       : undefined;
-  const prompt = typeof obj.prompt === "string" && obj.prompt.trim() ? obj.prompt.trim() : undefined;
+  const prompt =
+    typeof obj.prompt === "string" && obj.prompt.trim() ? obj.prompt.trim() : undefined;
   // Only the non-default choices are persisted; absence keeps legacy behavior.
   const excludeGlobalPrompt = obj.includeGlobalPrompt === false;
   const includeProjectInstructions = obj.includeProjectInstructions === true;
