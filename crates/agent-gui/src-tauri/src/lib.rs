@@ -143,6 +143,7 @@ macro_rules! app_invoke_handler {
             commands::app::app_toggle_window_pin,
             commands::app::app_confirmed_exit,
             commands::app::app_macos_traffic_light_metrics,
+            commands::taskbar::taskbar_set_activity,
             // Hooks
             commands::hook::hook_run_script,
             commands::hook::hook_run_http_requests,
