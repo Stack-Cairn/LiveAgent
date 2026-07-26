@@ -128,6 +128,8 @@ export interface MentionComposerHandle {
   getDraft: () => MentionComposerDraft;
   hasContent: () => boolean;
   setText: (text: string) => void;
+  /** Update the temporary dictation segment; pass null to commit it as plain text. */
+  setVoiceTranscript: (text: string | null) => void;
   setDraft: (draft: MentionComposerDraft) => void;
   insertFileMention: (path: string, kind: "file" | "dir") => void;
   insertSkillMention: (skill: MentionComposerSkillMention) => void;
@@ -235,6 +237,7 @@ const CODE_MENTION_PATH_ATTR = "data-code-mention-path";
 const CODE_MENTION_START_ATTR = "data-code-mention-start";
 const CODE_MENTION_END_ATTR = "data-code-mention-end";
 const LARGE_PASTE_TAG_ATTR = "data-large-paste-id";
+const VOICE_TRANSCRIPT_ATTR = "data-voice-transcript";
 const LARGE_PASTE_CHAR_THRESHOLD = 8_000;
 const LARGE_PASTE_LINE_THRESHOLD = 200;
 const LARGE_PASTE_PREVIEW_CHARS = 160;
@@ -916,6 +919,7 @@ function isComposerChipElement(node: Node | null): node is HTMLElement {
       node.hasAttribute(COMMIT_MENTION_SHA_ATTR) ||
       node.hasAttribute(GIT_FILE_MENTION_PATH_ATTR) ||
       node.hasAttribute(CODE_MENTION_PATH_ATTR) ||
+      node.hasAttribute(VOICE_TRANSCRIPT_ATTR) ||
       node.hasAttribute(LARGE_PASTE_TAG_ATTR))
   );
 }
@@ -2093,6 +2097,7 @@ export const MentionComposer = memo(
   ) {
     const { locale, t } = useLocale();
     const editorRef = useRef<HTMLDivElement>(null);
+    const voiceTranscriptRef = useRef<HTMLSpanElement | null>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const composerContextMenuRef = useRef<HTMLDivElement>(null);
     const composerContextMenuRangeRef = useRef<Range | null>(null);
@@ -2667,6 +2672,44 @@ export const MentionComposer = memo(
             closeMentionSession();
             refreshEmptyState();
           }
+        },
+        setVoiceTranscript: (text: string | null) => {
+          const el = editorRef.current;
+          if (!el) return;
+
+          const current = voiceTranscriptRef.current;
+          if (text === null) {
+            voiceTranscriptRef.current = null;
+            if (!current || !el.contains(current)) return;
+            const value = current.textContent ?? "";
+            if (value) {
+              current.replaceWith(document.createTextNode(value));
+            } else {
+              current.remove();
+            }
+            el.normalize();
+            refreshEmptyState();
+            return;
+          }
+
+          let segment = current;
+          if (!segment || !el.contains(segment)) {
+            cancelTypewriter();
+            resetPromptHistoryRecall();
+            closeCommitTooltip();
+            closeComposerContextMenu();
+            closeMentionSession();
+            segment = document.createElement("span");
+            segment.setAttribute(VOICE_TRANSCRIPT_ATTR, "");
+            segment.contentEditable = "false";
+            segment.spellcheck = false;
+            el.appendChild(segment);
+            voiceTranscriptRef.current = segment;
+            ensureTrailingCaretAnchor(el);
+          }
+          segment.textContent = text;
+          refreshEmptyState();
+          scheduleComposerSelectionScroll(el);
         },
         setDraft: (draft: MentionComposerDraft) => {
           const el = editorRef.current;

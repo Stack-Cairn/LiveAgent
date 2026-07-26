@@ -8,6 +8,36 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const voice = loader.loadModule("src/lib/voice/speechRecognition.ts");
 const crateRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const repoRoot = path.resolve(crateRoot, "../..");
+
+function createFakeRecognition() {
+  return {
+    lang: "",
+    continuous: false,
+    interimResults: false,
+    maxAlternatives: 0,
+    startCalls: 0,
+    stopCalls: 0,
+    abortCalls: 0,
+    onstart: null,
+    onend: null,
+    onerror: null,
+    onresult: null,
+    start() {
+      this.startCalls += 1;
+    },
+    stop() {
+      this.stopCalls += 1;
+    },
+    abort() {
+      this.abortCalls += 1;
+    },
+  };
+}
+
+function recognitionResult(transcript, isFinal) {
+  return { 0: { transcript }, isFinal, length: 1 };
+}
 
 test("composeVoiceTranscript appends English with a space", () => {
   assert.equal(voice.composeVoiceTranscript("Hello", "world", ""), "Hello world");
@@ -43,6 +73,13 @@ test("mapSpeechRecognitionError maps known codes to i18n keys", () => {
     "chat.voice.languageUnsupported",
   );
   assert.equal(voice.mapSpeechRecognitionError("weird"), "chat.voice.failed");
+});
+
+test("composeVoiceTranscriptSuffix preserves existing editor whitespace", () => {
+  assert.equal(voice.composeVoiceTranscriptSuffix("Hello", "world", ""), " world");
+  assert.equal(voice.composeVoiceTranscriptSuffix("Hello ", "world", ""), "world");
+  assert.equal(voice.composeVoiceTranscriptSuffix("你好", "世界", ""), "世界");
+  assert.equal(voice.composeVoiceTranscriptSuffix("", "hello", "now"), "hello now");
 });
 
 test("only no-speech is recoverable during a continuous session", () => {
@@ -85,6 +122,97 @@ test("isMobileClient excludes phones and desktop-mode iPads from built-in voice 
   }
 });
 
+test("insecure browser contexts are rejected before requesting microphone permission", () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  try {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { isSecureContext: false },
+    });
+    assert.equal(voice.isSpeechRecognitionSecureContext(), false);
+
+    globalThis.window.isSecureContext = true;
+    assert.equal(voice.isSpeechRecognitionSecureContext(), true);
+  } finally {
+    if (originalWindow) {
+      Object.defineProperty(globalThis, "window", originalWindow);
+    } else {
+      delete globalThis.window;
+    }
+  }
+});
+
+test("automatic restart keeps committed text and notifies session start only once", () => {
+  const recognition = createFakeRecognition();
+  const updates = [];
+  let recognitionStarts = 0;
+  let sessionStarts = 0;
+  let ends = 0;
+  const session = voice.createSpeechRecognitionSession(recognition, {
+    onRecognitionStart: () => {
+      recognitionStarts += 1;
+    },
+    onSessionStart: () => {
+      sessionStarts += 1;
+    },
+    onUpdate: (payload) => updates.push(payload),
+    onEnd: () => {
+      ends += 1;
+    },
+  });
+
+  assert.equal(session.start(), true);
+  recognition.onstart();
+  recognition.onresult({
+    resultIndex: 0,
+    results: [recognitionResult("world", true)],
+  });
+  recognition.onend();
+  recognition.onstart();
+  recognition.onresult({
+    resultIndex: 0,
+    results: [recognitionResult("again", true)],
+  });
+
+  assert.equal(recognition.startCalls, 2);
+  assert.equal(recognitionStarts, 2);
+  assert.equal(sessionStarts, 1);
+  assert.deepEqual(updates.at(-1), { committed: "world again", interim: "" });
+
+  session.stop();
+  recognition.onend();
+  assert.equal(recognition.stopCalls, 1);
+  assert.equal(ends, 1);
+});
+
+test("multiple interim results are joined and fatal errors do not restart", () => {
+  const recognition = createFakeRecognition();
+  const updates = [];
+  const errors = [];
+  let ends = 0;
+  const session = voice.createSpeechRecognitionSession(recognition, {
+    onUpdate: (payload) => updates.push(payload),
+    onError: (code) => errors.push(code),
+    onEnd: () => {
+      ends += 1;
+    },
+  });
+
+  session.start();
+  recognition.onstart();
+  recognition.onresult({
+    resultIndex: 0,
+    results: [recognitionResult("alpha", false), recognitionResult("beta", false)],
+  });
+  assert.deepEqual(updates.at(-1), { committed: "", interim: "alpha beta" });
+
+  recognition.onerror({ error: "network" });
+  recognition.onend();
+  assert.deepEqual(errors, ["network"]);
+  assert.equal(recognition.startCalls, 1);
+  assert.equal(ends, 1);
+});
+
 test("macOS bundle declares speech privacy usage and hardened-runtime audio input", () => {
   const infoPlist = fs.readFileSync(path.join(crateRoot, "src-tauri/Info.plist"), "utf8");
   assert.match(infoPlist, /<key>NSMicrophoneUsageDescription<\/key>/);
@@ -105,13 +233,34 @@ test("macOS bundle declares speech privacy usage and hardened-runtime audio inpu
   }
 });
 
-test("sending cancels recognition before the composer is cleared", () => {
+test("voice updates preserve structured composer nodes and sending finalizes before cancel", () => {
   const composerSource = fs.readFileSync(
     path.join(crateRoot, "src/pages/chat/components/ChatComposerBar.tsx"),
     "utf8",
   );
+  const mentionComposerSource = fs.readFileSync(
+    path.join(crateRoot, "src/components/chat/MentionComposer.tsx"),
+    "utf8",
+  );
+  assert.match(composerSource, /setVoiceTranscript\(next\)/);
+  assert.doesNotMatch(composerSource, /setText\(next\)/);
+  assert.match(mentionComposerSource, /const VOICE_TRANSCRIPT_ATTR = "data-voice-transcript"/);
+  assert.match(mentionComposerSource, /segment\.contentEditable = "false"/);
   assert.match(
     composerSource,
-    /const handleComposerSend = useCallback\(\(\) => \{\s*cancelVoiceInput\(\);\s*setComposerExpanded\(false\);\s*onSend\(\);/,
+    /const handleComposerSend = useCallback\(\(\) => \{\s*cancelActiveVoiceInput\(\);\s*setComposerExpanded\(false\);\s*onSend\(\);/,
   );
+});
+
+test("gateway keeps mobile hidden and gives insecure desktop contexts a targeted hint", () => {
+  const gatewayComposerSource = fs.readFileSync(
+    path.join(repoRoot, "crates/agent-gateway/web/src/pages/chat/ChatComposerBar.tsx"),
+    "utf8",
+  );
+  assert.match(gatewayComposerSource, /const showBuiltInVoiceInput = useMemo\(\(\) => !isMobileClient\(\), \[\]\)/);
+  assert.match(
+    gatewayComposerSource,
+    /enabled: showBuiltInVoiceInput && voiceContextSecure/,
+  );
+  assert.match(gatewayComposerSource, /t\("chat\.voice\.insecureContext"\)/);
 });

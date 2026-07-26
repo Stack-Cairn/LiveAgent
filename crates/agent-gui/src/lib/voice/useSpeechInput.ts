@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  appendSpeechChunk,
   createSpeechRecognition,
-  isRecoverableSpeechRecognitionError,
+  createSpeechRecognitionSession,
   isSpeechRecognitionSupported,
   mapSpeechRecognitionError,
-  type SpeechRecognitionLike,
+  type SpeechRecognitionSession,
 } from "./speechRecognition";
 
 export type SpeechInputPhase = "idle" | "listening" | "unsupported";
@@ -49,9 +48,7 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
   const [committed, setCommitted] = useState("");
   const [interim, setInterim] = useState("");
 
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const wantListeningRef = useRef(false);
-  const committedRef = useRef("");
+  const sessionRef = useRef<SpeechRecognitionSession | null>(null);
   const languageRef = useRef(language);
   const onStartRef = useRef(onStart);
   const onUpdateRef = useRef(onUpdate);
@@ -65,58 +62,38 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
   onEndRef.current = onEnd;
 
   const emitUpdate = useCallback((nextCommitted: string, nextInterim: string) => {
-    committedRef.current = nextCommitted;
     setCommitted(nextCommitted);
     setInterim(nextInterim);
     onUpdateRef.current?.({ committed: nextCommitted, interim: nextInterim });
   }, []);
 
-  const disposeRecognition = useCallback(() => {
-    const recognition = recognitionRef.current;
-    recognitionRef.current = null;
-    if (!recognition) return;
-    recognition.onstart = null;
-    recognition.onend = null;
-    recognition.onerror = null;
-    recognition.onresult = null;
-    try {
-      recognition.abort();
-    } catch {
-      // ignore
-    }
+  const disposeSession = useCallback(() => {
+    const session = sessionRef.current;
+    sessionRef.current = null;
+    session?.dispose();
   }, []);
 
   useEffect(() => {
     if (!enabled || !supported) {
-      wantListeningRef.current = false;
-      disposeRecognition();
+      disposeSession();
       setPhase("unsupported");
       setInterim("");
       return;
     }
     setPhase((prev) => (prev === "listening" ? prev : "idle"));
-  }, [disposeRecognition, enabled, supported]);
+  }, [disposeSession, enabled, supported]);
 
   const stop = useCallback(() => {
-    wantListeningRef.current = false;
-    const recognition = recognitionRef.current;
-    if (recognition) {
-      try {
-        recognition.stop();
-      } catch {
-        // ignore
-      }
-    }
+    sessionRef.current?.stop();
     setPhase((prev) => (prev === "unsupported" ? prev : "idle"));
     setInterim("");
   }, []);
 
   const cancel = useCallback(() => {
-    wantListeningRef.current = false;
-    disposeRecognition();
+    disposeSession();
     setPhase((prev) => (prev === "unsupported" ? prev : "idle"));
     setInterim("");
-  }, [disposeRecognition]);
+  }, [disposeSession]);
 
   const start = useCallback(() => {
     if (!supported) {
@@ -127,15 +104,12 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
     }
 
     setErrorKey(null);
-    wantListeningRef.current = true;
-    committedRef.current = "";
     setCommitted("");
     setInterim("");
 
-    disposeRecognition();
+    disposeSession();
     const recognition = createSpeechRecognition();
     if (!recognition) {
-      wantListeningRef.current = false;
       setPhase("unsupported");
       setErrorKey("chat.voice.unsupported");
       onErrorRef.current?.("chat.voice.unsupported");
@@ -147,81 +121,32 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
-    let didNotifySessionStart = false;
-    recognition.onstart = () => {
-      setPhase("listening");
-      if (!didNotifySessionStart) {
-        didNotifySessionStart = true;
-        onStartRef.current?.();
-      }
-    };
-
-    recognition.onerror = (event) => {
-      const code = typeof event?.error === "string" ? event.error : "unknown";
-      // Continuous mode may emit no-speech between phrases; keep that session alive.
-      if (isRecoverableSpeechRecognitionError(code) && wantListeningRef.current) {
-        return;
-      }
-      // User-initiated abort/stop should not surface as an error toast.
-      if (code === "aborted" && !wantListeningRef.current) {
-        return;
-      }
-      const key = mapSpeechRecognitionError(code);
-      wantListeningRef.current = false;
-      setPhase("idle");
-      setErrorKey(key);
-      onErrorRef.current?.(key);
-    };
-
-    recognition.onresult = (event) => {
-      let nextCommitted = committedRef.current;
-      let nextInterim = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const result = event.results[i];
-        const piece = result?.[0]?.transcript ?? "";
-        if (!piece) continue;
-        if (result.isFinal) {
-          nextCommitted = appendSpeechChunk(nextCommitted, piece);
-          nextInterim = "";
-        } else {
-          nextInterim = appendSpeechChunk(nextInterim, piece);
-        }
-      }
-      emitUpdate(nextCommitted, nextInterim);
-    };
-
-    recognition.onend = () => {
-      // Some engines stop after a pause even with continuous=true; restart
-      // while the user still wants the session open.
-      if (wantListeningRef.current) {
-        try {
-          recognition.start();
-          return;
-        } catch {
-          wantListeningRef.current = false;
-          setErrorKey("chat.voice.failed");
-          onErrorRef.current?.("chat.voice.failed");
-        }
-      }
-      setPhase("idle");
-      setInterim("");
-      onEndRef.current?.();
-    };
-
-    recognitionRef.current = recognition;
-    try {
-      recognition.start();
-    } catch {
-      wantListeningRef.current = false;
-      setPhase("idle");
-      setErrorKey("chat.voice.failed");
-      onErrorRef.current?.("chat.voice.failed");
-      disposeRecognition();
+    const session = createSpeechRecognitionSession(recognition, {
+      onRecognitionStart: () => setPhase("listening"),
+      onSessionStart: () => onStartRef.current?.(),
+      onUpdate: ({ committed: nextCommitted, interim: nextInterim }) => {
+        emitUpdate(nextCommitted, nextInterim);
+      },
+      onError: (code) => {
+        const key = mapSpeechRecognitionError(code);
+        setPhase("idle");
+        setErrorKey(key);
+        onErrorRef.current?.(key);
+      },
+      onEnd: () => {
+        setPhase("idle");
+        setInterim("");
+        onEndRef.current?.();
+      },
+    });
+    sessionRef.current = session;
+    if (!session.start()) {
+      disposeSession();
     }
-  }, [disposeRecognition, emitUpdate, supported]);
+  }, [disposeSession, emitUpdate, supported]);
 
   const toggle = useCallback(() => {
-    if (wantListeningRef.current || phase === "listening") {
+    if (sessionRef.current?.isListeningRequested() || phase === "listening") {
       stop();
       return;
     }
@@ -232,10 +157,9 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
 
   useEffect(() => {
     return () => {
-      wantListeningRef.current = false;
-      disposeRecognition();
+      disposeSession();
     };
-  }, [disposeRecognition]);
+  }, [disposeSession]);
 
   return {
     supported,

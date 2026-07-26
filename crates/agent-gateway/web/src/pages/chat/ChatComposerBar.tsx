@@ -63,7 +63,12 @@ import {
   type ReasoningLevel,
 } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
-import { composeVoiceTranscript, isMobileClient, useSpeechInput } from "../../lib/voice";
+import {
+  composeVoiceTranscriptSuffix,
+  isMobileClient,
+  isSpeechRecognitionSecureContext,
+  useSpeechInput,
+} from "../../lib/voice";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 
 const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
@@ -292,11 +297,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   const { t, locale } = useLocale();
   // Mobile browsers already expose system IME dictation; hide built-in mic there.
   const showBuiltInVoiceInput = useMemo(() => !isMobileClient(), []);
+  const voiceContextSecure = useMemo(() => isSpeechRecognitionSecureContext(), []);
   const voiceBaseRef = useRef("");
+  const finishVoiceTranscript = useCallback(() => {
+    composerRef.current?.setVoiceTranscript(null);
+  }, [composerRef]);
   const applyVoiceTranscript = useCallback(
     (committed: string, interim: string) => {
-      const next = composeVoiceTranscript(voiceBaseRef.current, committed, interim);
-      composerRef.current?.setText(next);
+      const next = composeVoiceTranscriptSuffix(voiceBaseRef.current, committed, interim);
+      composerRef.current?.setVoiceTranscript(next);
     },
     [composerRef],
   );
@@ -309,18 +318,28 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     cancel: cancelVoiceInput,
   } = useSpeechInput({
     language: locale === "en-US" ? "en-US" : "zh-CN",
-    enabled: showBuiltInVoiceInput,
+    enabled: showBuiltInVoiceInput && voiceContextSecure,
     onStart: () => {
       clearVoiceError();
-      voiceBaseRef.current = (composerRef.current?.getText() ?? "").trimEnd();
+      finishVoiceTranscript();
+      voiceBaseRef.current = composerRef.current?.getText() ?? "";
+      composerRef.current?.setVoiceTranscript("");
     },
     onUpdate: ({ committed, interim }) => {
       applyVoiceTranscript(committed, interim);
     },
+    onError: () => {
+      finishVoiceTranscript();
+    },
     onEnd: () => {
+      finishVoiceTranscript();
       composerRef.current?.focus();
     },
   });
+  const cancelActiveVoiceInput = useCallback(() => {
+    finishVoiceTranscript();
+    cancelVoiceInput();
+  }, [cancelVoiceInput, finishVoiceTranscript]);
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const isComposerExpandedRef = useRef(false);
@@ -347,14 +366,15 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   );
   const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
   const controlsDisabled = isInputDisabled;
-  const voiceDisabled = isInputDisabled || !voiceSupported;
+  const showVoiceControl = showBuiltInVoiceInput && (!voiceContextSecure || voiceSupported);
+  const voiceDisabled = isInputDisabled || !voiceContextSecure;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
 
   useEffect(() => {
     if (isInputDisabled) {
-      cancelVoiceInput();
+      cancelActiveVoiceInput();
     }
-  }, [cancelVoiceInput, isInputDisabled]);
+  }, [cancelActiveVoiceInput, isInputDisabled]);
   // 档位为空但恒开（deepseek-reasoner 型"恒开不可调"）也算支持思考——
   // 亮灯但开关与档位均不可操作；两者皆无才是真不支持。
   const thinkingSupported = reasoningOptions.length > 0 || thinkingAlwaysOn;
@@ -383,8 +403,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     ? t("chat.runtime.thinkingUnavailable")
     : t("chat.runtime.thinkingTooltip");
   const webSearchTooltip = t("chat.runtime.webSearchTooltip");
-  const voiceTooltip = !voiceSupported
-    ? t("chat.voice.unsupported")
+  const voiceTooltip = !voiceContextSecure
+    ? t("chat.voice.insecureContext")
     : voiceErrorKey
       ? t(voiceErrorKey)
       : voiceListening
@@ -461,10 +481,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
 
   /** 发送（含排队）后退出全高编辑态，让路给回复内容。 */
   const handleComposerSend = useCallback(() => {
-    cancelVoiceInput();
+    cancelActiveVoiceInput();
     setComposerExpanded(false);
     onSend();
-  }, [cancelVoiceInput, onSend, setComposerExpanded]);
+  }, [cancelActiveVoiceInput, onSend, setComposerExpanded]);
 
   const shouldShowQueueScrollbar = !queueCollapsed && queuedTurns.length > 2;
 
@@ -1017,7 +1037,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                 </button>
               </RuntimeControlTooltip>
 
-              {showBuiltInVoiceInput ? (
+              {showVoiceControl ? (
                 <RuntimeControlTooltip label={voiceTooltip}>
                   <button
                     type="button"
@@ -1027,8 +1047,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                       toggleVoiceInput();
                     }}
                     aria-label={
-                      !voiceSupported
-                        ? t("chat.voice.unsupported")
+                      !voiceContextSecure
+                        ? t("chat.voice.insecureContext")
                         : voiceListening
                           ? t("chat.voice.stop")
                           : t("chat.voice.start")
@@ -1046,7 +1066,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                   >
                     {voiceListening ? (
                       <Mic className="h-4 w-4 animate-pulse" />
-                    ) : voiceSupported ? (
+                    ) : voiceContextSecure ? (
                       <Mic className="h-4 w-4" />
                     ) : (
                       <MicOff className="h-4 w-4" />

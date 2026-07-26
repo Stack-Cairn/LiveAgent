@@ -1,9 +1,12 @@
 export {
   appendSpeechChunk,
   composeVoiceTranscript,
+  composeVoiceTranscriptSuffix,
   createSpeechRecognition,
+  createSpeechRecognitionSession,
   isMobileClient,
   isRecoverableSpeechRecognitionError,
+  isSpeechRecognitionSecureContext,
   isSpeechRecognitionSupported,
   mapSpeechRecognitionError,
 } from "./speechRecognition";

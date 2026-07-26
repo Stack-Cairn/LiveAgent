@@ -34,6 +34,23 @@ export type SpeechRecognitionEventLike = {
   };
 };
 
+export type SpeechRecognitionSessionCallbacks = {
+  /** Fires for every underlying engine start, including automatic restarts. */
+  onRecognitionStart?: () => void;
+  /** Fires once for an explicit listening session, never for automatic restarts. */
+  onSessionStart?: () => void;
+  onUpdate?: (payload: { committed: string; interim: string }) => void;
+  onError?: (errorCode: string) => void;
+  onEnd?: () => void;
+};
+
+export type SpeechRecognitionSession = {
+  start: () => boolean;
+  stop: () => void;
+  dispose: () => void;
+  isListeningRequested: () => boolean;
+};
+
 type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
 
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
@@ -70,6 +87,12 @@ export function isMobileClient(): boolean {
   return false;
 }
 
+/** Web Speech microphone capture is blocked in non-secure browser contexts. */
+export function isSpeechRecognitionSecureContext(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.isSecureContext !== false;
+}
+
 export function createSpeechRecognition(): SpeechRecognitionLike | null {
   const Ctor = getSpeechRecognitionCtor();
   if (!Ctor) return null;
@@ -101,6 +124,111 @@ export function mapSpeechRecognitionError(errorCode: string): string {
   }
 }
 
+/**
+ * Own one explicit dictation session. Some engines end after a pause even in
+ * continuous mode, so the same recognition object is restarted without
+ * replaying the consumer's session-start callback or clearing committed text.
+ */
+export function createSpeechRecognitionSession(
+  recognition: SpeechRecognitionLike,
+  callbacks: SpeechRecognitionSessionCallbacks,
+): SpeechRecognitionSession {
+  let wantsListening = false;
+  let didNotifySessionStart = false;
+  let committed = "";
+  let disposed = false;
+
+  const reportTerminalError = (errorCode: string) => {
+    wantsListening = false;
+    callbacks.onError?.(errorCode);
+  };
+
+  recognition.onstart = () => {
+    callbacks.onRecognitionStart?.();
+    if (!didNotifySessionStart) {
+      didNotifySessionStart = true;
+      callbacks.onSessionStart?.();
+    }
+  };
+
+  recognition.onerror = (event) => {
+    const code = typeof event?.error === "string" ? event.error : "unknown";
+    if (isRecoverableSpeechRecognitionError(code) && wantsListening) return;
+    if (code === "aborted" && !wantsListening) return;
+    reportTerminalError(code);
+  };
+
+  recognition.onresult = (event) => {
+    let nextCommitted = committed;
+    let nextInterim = "";
+    for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      const result = event.results[i];
+      const piece = result?.[0]?.transcript ?? "";
+      if (!piece) continue;
+      if (result.isFinal) {
+        nextCommitted = appendSpeechChunk(nextCommitted, piece);
+        nextInterim = "";
+      } else {
+        nextInterim = appendSpeechChunk(nextInterim, piece);
+      }
+    }
+    committed = nextCommitted;
+    callbacks.onUpdate?.({ committed: nextCommitted, interim: nextInterim });
+  };
+
+  recognition.onend = () => {
+    if (disposed) return;
+    if (wantsListening) {
+      try {
+        recognition.start();
+        return;
+      } catch {
+        reportTerminalError("unknown");
+      }
+    }
+    callbacks.onEnd?.();
+  };
+
+  return {
+    start: () => {
+      if (disposed) return false;
+      wantsListening = true;
+      committed = "";
+      try {
+        recognition.start();
+        return true;
+      } catch {
+        reportTerminalError("unknown");
+        return false;
+      }
+    },
+    stop: () => {
+      if (disposed) return;
+      wantsListening = false;
+      try {
+        recognition.stop();
+      } catch {
+        // ignore
+      }
+    },
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      wantsListening = false;
+      recognition.onstart = null;
+      recognition.onend = null;
+      recognition.onerror = null;
+      recognition.onresult = null;
+      try {
+        recognition.abort();
+      } catch {
+        // ignore
+      }
+    },
+    isListeningRequested: () => wantsListening,
+  };
+}
+
 /** Errors that may end a continuous session without invalidating it. */
 export function isRecoverableSpeechRecognitionError(errorCode: string): boolean {
   return errorCode === "no-speech";
@@ -120,6 +248,19 @@ function joinSpeechParts(left: string, right: string): string {
 /** Join pre-existing composer text with newly recognized speech. */
 export function composeVoiceTranscript(base: string, committed: string, interim = ""): string {
   return joinSpeechParts(joinSpeechParts(base, committed), interim);
+}
+
+/** Build only the text appended by dictation, leaving existing editor DOM untouched. */
+export function composeVoiceTranscriptSuffix(
+  base: string,
+  committed: string,
+  interim = "",
+): string {
+  const speech = joinSpeechParts(committed, interim);
+  if (!speech) return "";
+  const head = base.trimEnd();
+  if (!head || /\s$/.test(base) || CJK_TAIL.test(head)) return speech;
+  return ` ${speech}`;
 }
 
 export function appendSpeechChunk(existing: string, chunk: string): string {
