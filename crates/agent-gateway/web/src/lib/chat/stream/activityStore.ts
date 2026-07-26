@@ -32,11 +32,12 @@ export type ActivityStore = {
   isRunning(conversationId: string): boolean;
   get(conversationId: string): ConversationActivity | null;
   applyActivityEvent(event: ConversationActivityEvent): void;
-  // Local settlement by run identity: a run_finished (or an activity-less
-  // subscribe sync) proves the stored run ended even when the chat.activity
-  // "stopped" broadcast was missed. Only the exact run is cleared — a newer
-  // run's entry is never touched.
+  // Authoritative settlement by exact run identity.
   settleRun(conversationId: string, runId: string): void;
+  // Optimistic stop additionally leaves a one-run tombstone, so a late
+  // cancelling push or stale hydration snapshot cannot resurrect it.
+  settleRunLocally(conversationId: string, runId: string): void;
+  releaseSettledRun(conversationId: string, runId: string): boolean;
   // history.list / chat.activities hydration: authoritative snapshot of
   // every active run at response time. Entries absent from the batch are
   // dropped unless listed in keepConversationIds (locally pending commands
@@ -58,6 +59,7 @@ export function createActivityStore(options?: { now?: () => number }): ActivityS
   const now = options?.now ?? Date.now;
   let activities = new Map<string, ConversationActivity>();
   let snapshot: ActivitySnapshot = { activities, revision: 0 };
+  const settledRuns = new Map<string, { runId: string; terminalObserved: boolean }>();
   const listeners = new Set<() => void>();
 
   const emit = () => {
@@ -69,6 +71,16 @@ export function createActivityStore(options?: { now?: () => number }): ActivityS
 
   const normalizeState = (state: string | undefined | null): RunActivityState => {
     return state === "queued" || state === "cancelling" ? state : "running";
+  };
+
+  const settleStoredRun = (conversationId: string, runId: string) => {
+    const current = activities.get(conversationId);
+    if (!current || current.runId !== runId) {
+      return;
+    }
+    activities = new Map(activities);
+    activities.delete(conversationId);
+    emit();
   };
 
   return {
@@ -91,6 +103,10 @@ export function createActivityStore(options?: { now?: () => number }): ActivityS
         return;
       }
       if (!event.running || !event.runId) {
+        const settled = settledRuns.get(event.conversationId);
+        if (event.runId && settled?.runId === event.runId) {
+          settled.terminalObserved = true;
+        }
         if (!activities.has(event.conversationId)) {
           return;
         }
@@ -99,6 +115,10 @@ export function createActivityStore(options?: { now?: () => number }): ActivityS
         emit();
         return;
       }
+      if (settledRuns.get(event.conversationId)?.runId === event.runId) {
+        return;
+      }
+      settledRuns.delete(event.conversationId);
       const next: ConversationActivity = {
         runId: event.runId,
         state: event.state ?? "running",
@@ -123,24 +143,45 @@ export function createActivityStore(options?: { now?: () => number }): ActivityS
       if (!runId) {
         return;
       }
-      const current = activities.get(conversationId);
-      if (!current || current.runId !== runId) {
+      const settled = settledRuns.get(conversationId);
+      if (settled?.runId === runId) {
+        settled.terminalObserved = true;
+      }
+      settleStoredRun(conversationId, runId);
+    },
+
+    settleRunLocally: (conversationId, runId) => {
+      if (!runId) {
         return;
       }
-      activities = new Map(activities);
-      activities.delete(conversationId);
-      emit();
+      settledRuns.set(conversationId, { runId, terminalObserved: false });
+      settleStoredRun(conversationId, runId);
+    },
+
+    releaseSettledRun: (conversationId, runId) => {
+      const settled = settledRuns.get(conversationId);
+      if (settled?.runId !== runId || settled.terminalObserved) {
+        return false;
+      }
+      settledRuns.delete(conversationId);
+      return true;
     },
 
     hydrate: (items, hydrateOptions) => {
       const nowMs = now();
       const incoming = new Map<string, ConversationActivity>();
+      let hasValidAuthoritativeItem = false;
       for (const item of items) {
         const conversationId = item.conversationId.trim();
         const runId = item.runId.trim();
         if (!conversationId || !runId) {
           continue;
         }
+        hasValidAuthoritativeItem = true;
+        if (settledRuns.get(conversationId)?.runId === runId) {
+          continue;
+        }
+        settledRuns.delete(conversationId);
         incoming.set(conversationId, {
           runId,
           state: normalizeState(item.state),
@@ -151,7 +192,7 @@ export function createActivityStore(options?: { now?: () => number }): ActivityS
       }
 
       // An empty authoritative snapshot means idle everywhere.
-      if (incoming.size === 0) {
+      if (!hasValidAuthoritativeItem) {
         if (activities.size === 0) {
           return;
         }
@@ -212,6 +253,7 @@ export function createActivityStore(options?: { now?: () => number }): ActivityS
     },
 
     clear: () => {
+      settledRuns.clear();
       if (activities.size === 0) {
         return;
       }

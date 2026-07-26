@@ -149,7 +149,7 @@ test("a stop intent aborts a controller and handler registered later", () => {
     handlerCalls.push(options);
   };
   runtime.setConversationStopHandler("conversation-1", firstHandler);
-  assert.deepEqual(handlerCalls, [{ force: false, requestVersion: 1 }]);
+  assert.deepEqual(handlerCalls, [{ force: true, requestVersion: 1 }]);
 
   const replacementHandlerCalls = [];
   const replacementHandler = (options) => {
@@ -163,12 +163,44 @@ test("a stop intent aborts a controller and handler registered later", () => {
     true,
   );
   assert.deepEqual(replacementHandlerCalls, [
-    { force: false, requestVersion: 1 },
+    { force: true, requestVersion: 1 },
     { force: true, requestVersion: 2 },
   ]);
   assert.equal(runtime.consumeConversationStop("conversation-1", 1), false);
   assert.equal(runtime.isConversationStopRequested("conversation-1"), true);
   assert.equal(runtime.consumeConversationStop("conversation-1", 2), true);
+
+  const oldRunController = new AbortController();
+  const newRunController = new AbortController();
+  runtime.setConversationAbortController("conversation-1", oldRunController);
+  runtime.setConversationSendingState("conversation-1", true);
+  runtime.setConversationAbortController("conversation-1", newRunController);
+  assert.equal(runtime.releaseConversationRun("conversation-1", oldRunController), false);
+  assert.equal(runtime.isConversationRunning("conversation-1"), true);
+  assert.equal(runtime.getConversationAbortController("conversation-1"), newRunController);
+  assert.equal(runtime.releaseConversationRun("conversation-1", newRunController), true);
+  assert.equal(runtime.isConversationRunning("conversation-1"), false);
+  assert.equal(
+    runtime.isConversationRunCurrent("conversation-1", newRunController),
+    true,
+    "UI release keeps the run identity until its asynchronous cleanup finishes",
+  );
+  assert.equal(runtime.finishConversationRun("conversation-1", oldRunController), false);
+  assert.equal(runtime.finishConversationRun("conversation-1", newRunController), true);
+  assert.equal(runtime.isConversationRunCurrent("conversation-1", newRunController), false);
+
+  runtime.requestConversationStop("conversation-2");
+  runtime.setConversationStopHandler("conversation-2", (options) => {
+    assert.equal(options.force, true);
+    runtime.consumeConversationStop("conversation-2", options.requestVersion);
+  });
+  const immediateNextRunController = new AbortController();
+  runtime.setConversationAbortController("conversation-2", immediateNextRunController);
+  assert.equal(
+    immediateNextRunController.signal.aborted,
+    false,
+    "a stop already owned by the previous run must not abort the immediate next run",
+  );
   hookHarness.cleanup();
 });
 
@@ -178,8 +210,8 @@ test("a stop during queued processing never auto-starts the next turn", async ()
   const sendCalls = [];
   const stopRequests = new Set();
   const activeStopOptions = [];
-  const controllerWrites = [];
-  const sendingStateWrites = [];
+  const controller = new AbortController();
+  const releaseCalls = [];
   let stopRequestVersion = 0;
   let draftText = "first queued turn";
   const composer = {
@@ -263,13 +295,11 @@ test("a stop during queued processing never auto-starts the next turn", async ()
       },
       runningConversationIds: new Set(),
       getConversationAbortController() {
-        return null;
+        return controller;
       },
-      setConversationAbortController(conversationId, controller) {
-        controllerWrites.push({ conversationId, controller });
-      },
-      setConversationSendingState(conversationId, value) {
-        sendingStateWrites.push({ conversationId, value });
+      releaseConversationRun(conversationId, expectedController) {
+        releaseCalls.push({ conversationId, expectedController });
+        return expectedController === controller;
       },
       requestConversationStop(conversationId) {
         stopRequestVersion += 1;
@@ -286,8 +316,11 @@ test("a stop during queued processing never auto-starts the next turn", async ()
       consumeConversationStop(conversationId) {
         return stopRequests.delete(conversationId);
       },
-      requestActiveConversationStop(_conversationId, options) {
+      requestActiveConversationStop(conversationId, options) {
         activeStopOptions.push(options);
+        if (options.force) {
+          stopRequests.delete(conversationId);
+        }
         return true;
       },
       getConversationLiveTranscriptStore() {
@@ -317,15 +350,11 @@ test("a stop during queued processing never auto-starts the next turn", async ()
   assert.equal(sendCalls.length, 1);
 
   queue.stopConversation("conversation-1");
-  queue.stopConversation("conversation-1");
-  assert.deepEqual(activeStopOptions, [{ force: false }, { force: true }]);
-  assert.deepEqual(controllerWrites, [
-    { conversationId: "conversation-1", controller: null },
+  assert.deepEqual(activeStopOptions, [{ force: true }]);
+  assert.equal(controller.signal.aborted, true);
+  assert.deepEqual(releaseCalls, [
+    { conversationId: "conversation-1", expectedController: controller },
   ]);
-  assert.deepEqual(sendingStateWrites, [
-    { conversationId: "conversation-1", value: false },
-  ]);
-  stopRequests.delete("conversation-1");
   sendGate.resolve(true);
   await flushPromises();
   await flushPromises();
@@ -344,11 +373,9 @@ test("slow chat finalization cannot delay synchronous UI release", async () => {
   const released = [];
 
   releaseChatRunUi({
-    clearAbortController() {
-      released.push("controller");
-    },
-    clearSendingState() {
-      released.push("sending");
+    releaseRun() {
+      released.push("run");
+      return true;
     },
     clearToolStatus() {
       released.push("tool");
@@ -356,7 +383,15 @@ test("slow chat finalization cannot delay synchronous UI release", async () => {
   });
   const settling = settleChatRunFinalization(gate.promise, 20);
 
-  assert.deepEqual(released, ["controller", "sending", "tool"]);
+  assert.deepEqual(released, ["run", "tool"]);
+  assert.equal(
+    releaseChatRunUi({
+      releaseRun: () => false,
+      clearToolStatus: () => released.push("stale-tool"),
+    }),
+    false,
+  );
+  assert.deepEqual(released, ["run", "tool"], "a stale run cannot clear the new run's tool UI");
   assert.equal(await settling, "timed_out");
   gate.resolve();
 });

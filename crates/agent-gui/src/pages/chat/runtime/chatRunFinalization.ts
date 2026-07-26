@@ -1,13 +1,14 @@
 export const CHAT_RUN_FINALIZATION_TIMEOUT_MS = 2_000;
 
 export function releaseChatRunUi(params: {
-  clearAbortController: () => void;
-  clearSendingState: () => void;
+  releaseRun: () => boolean;
   clearToolStatus: () => void;
 }) {
-  params.clearAbortController();
-  params.clearSendingState();
+  if (!params.releaseRun()) {
+    return false;
+  }
   params.clearToolStatus();
+  return true;
 }
 
 export async function settleChatRunFinalization(

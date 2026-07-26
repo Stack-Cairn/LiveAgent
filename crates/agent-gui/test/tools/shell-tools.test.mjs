@@ -602,6 +602,115 @@ test("ManagedProcess abort stops a process returned after cancellation", async (
   );
 });
 
+test("stopping a chat terminates ManagedProcess tasks started earlier in the turn", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          if (command === "managed_process_start") {
+            return {
+              process: {
+                id: "proc-turn",
+                label: "dev",
+                command: args.command,
+                cwd: "/repo",
+                shell: "zsh",
+                pid: 123,
+                log_path: "/tmp/proc-turn.log",
+                started_at: 10,
+                finished_at: null,
+                exit_code: null,
+                running: true,
+              },
+            };
+          }
+          if (command === "managed_process_stop") {
+            return { stopped: true, process: null };
+          }
+          throw new Error("unexpected invoke " + command);
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const userStop = new AbortController();
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "claude_code",
+    userStopSignal: userStop.signal,
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "managed-turn-start",
+    name: "ManagedProcess",
+    arguments: { action: "start", command: "deno run main.ts" },
+  });
+  assert.equal(result.isError, false);
+
+  userStop.abort();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    calls.filter(
+      (call) =>
+        call.command === "managed_process_stop" && call.args.process_id === "proc-turn",
+    ).length,
+    1,
+  );
+});
+
+test("stopping a chat preserves explicitly isolated ManagedProcess tasks", async () => {
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+          if (command !== "managed_process_start") {
+            throw new Error("unexpected invoke " + command);
+          }
+          return {
+            process: {
+              id: "proc-isolated",
+              label: "service",
+              command: args.command,
+              cwd: "/repo",
+              shell: "zsh",
+              pid: 456,
+              log_path: "/tmp/proc-isolated.log",
+              started_at: 10,
+              finished_at: null,
+              exit_code: null,
+              running: true,
+            },
+          };
+        },
+      },
+    },
+  });
+  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const userStop = new AbortController();
+  const bundle = createShellTools({
+    workdir: "/repo",
+    providerId: "claude_code",
+    userStopSignal: userStop.signal,
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "managed-isolated-start",
+    name: "ManagedProcess",
+    arguments: { action: "start", command: "deno run service.ts", isolated: true },
+  });
+  assert.equal(result.isError, false);
+
+  userStop.abort();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.some((call) => call.command === "managed_process_stop"), false);
+});
+
 test("ManagedProcess rejects nested shell background operators", async () => {
   const calls = [];
   const loader = createTsModuleLoader({

@@ -53,11 +53,10 @@ type UseChatTurnQueueParams = {
   isConversationRunning: (conversationId: string) => boolean;
   runningConversationIds: ReadonlySet<string>;
   getConversationAbortController: (conversationId: string) => AbortController | null;
-  setConversationAbortController: (
+  releaseConversationRun: (
     conversationId: string,
-    controller: AbortController | null,
-  ) => void;
-  setConversationSendingState: (conversationId: string, value: boolean) => void;
+    expectedController: AbortController,
+  ) => boolean;
   requestConversationStop: (conversationId: string) => boolean;
   getConversationStopRequestVersion: (conversationId: string) => number;
   isConversationStopRequested: (conversationId: string) => boolean;
@@ -94,8 +93,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     isConversationRunning,
     runningConversationIds,
     getConversationAbortController,
-    setConversationAbortController,
-    setConversationSendingState,
+    releaseConversationRun,
     requestConversationStop,
     getConversationStopRequestVersion,
     isConversationStopRequested,
@@ -115,6 +113,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   const [queuedChatTurns, setQueuedChatTurns] = useState<QueuedChatTurn[]>([]);
   const queuedChatTurnsRef = useRef<QueuedChatTurn[]>([]);
   const queuedChatProcessingConversationIdsRef = useRef(new Set<string>());
+  const queuedChatStoppedConversationIdsRef = useRef(new Set<string>());
   const queuedChatStopVersionsRef = useRef(new Map<string, number>());
   const queuedChatProcessingStatesRef = useRef(
     new Map<
@@ -274,6 +273,15 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       const previous = queuedChatTurnsRef.current;
       const next = updater(previous).slice();
       queuedChatTurnsRef.current = next;
+      const nextConversationIds = new Set(next.map((item) => item.conversationId));
+      for (const item of previous) {
+        if (
+          !nextConversationIds.has(item.conversationId) &&
+          !queuedChatProcessingStatesRef.current.has(item.conversationId)
+        ) {
+          queuedChatStoppedConversationIdsRef.current.delete(item.conversationId);
+        }
+      }
       setQueuedChatTurns(next);
       chatQueueRevisionRef.current += 1;
       const conversationIds = new Set<string>();
@@ -318,11 +326,14 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   function stopConversation(conversationId: string) {
     const targetConversationId = conversationId.trim();
     if (!targetConversationId) return false;
-    const force = requestConversationStop(targetConversationId);
+    requestConversationStop(targetConversationId);
     const stopRequestVersion = getConversationStopRequestVersion(targetConversationId);
     const nextStopVersion = (queuedChatStopVersionsRef.current.get(targetConversationId) ?? 0) + 1;
     queuedChatStopVersionsRef.current.set(targetConversationId, nextStopVersion);
     const processingState = queuedChatProcessingStatesRef.current.get(targetConversationId);
+    if (queuedChatTurnsRef.current.some((item) => item.conversationId === targetConversationId)) {
+      queuedChatStoppedConversationIdsRef.current.add(targetConversationId);
+    }
     if (processingState) {
       processingState.stopRequestVersion = stopRequestVersion;
       cancelGatewayQueuedTurnRequest(processingState.inFlightTurn);
@@ -334,11 +345,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       updateToolStatus("正在停止当前任务...", transcriptStore);
       controller.abort();
     }
-    const handled = requestActiveConversationStop(targetConversationId, { force });
-    if (force) {
-      queuedChatProcessingConversationIdsRef.current.delete(targetConversationId);
-      setConversationAbortController(targetConversationId, null);
-      setConversationSendingState(targetConversationId, false);
+    const handled = requestActiveConversationStop(targetConversationId, { force: true });
+    queuedChatProcessingConversationIdsRef.current.delete(targetConversationId);
+    if (controller && releaseConversationRun(targetConversationId, controller)) {
       updateToolStatus(null, transcriptStore);
     }
     return handled || Boolean(controller);
@@ -422,6 +431,14 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   function requestQueuedChatTurnProcessing(conversationId: string) {
     const targetConversationId = conversationId.trim();
     if (!targetConversationId) return;
+    if (queuedChatStoppedConversationIdsRef.current.delete(targetConversationId)) {
+      queuedChatProcessingConversationIdsRef.current.delete(targetConversationId);
+      if (isConversationStopRequested(targetConversationId)) {
+        const stopRequestVersion = getConversationStopRequestVersion(targetConversationId);
+        consumeConversationStop(targetConversationId, stopRequestVersion);
+      }
+      return;
+    }
     if (isConversationStopRequested(targetConversationId)) {
       queuedChatProcessingConversationIdsRef.current.delete(targetConversationId);
       const stopRequestVersion = getConversationStopRequestVersion(targetConversationId);
@@ -451,6 +468,11 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       }
       queuedChatProcessingStatesRef.current.delete(targetConversationId);
       queuedChatProcessingConversationIdsRef.current.delete(targetConversationId);
+      if (
+        !queuedChatTurnsRef.current.some((item) => item.conversationId === targetConversationId)
+      ) {
+        queuedChatStoppedConversationIdsRef.current.delete(targetConversationId);
+      }
     };
     let inFlightQueuedTurn: QueuedChatTurn | null = null;
     void Promise.resolve()
@@ -579,6 +601,14 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         !previousRunningConversationIds.has(conversationId) ||
         runningConversationIds.has(conversationId)
       ) {
+        continue;
+      }
+      if (queuedChatStoppedConversationIdsRef.current.delete(conversationId)) {
+        queuedChatProcessingConversationIdsRef.current.delete(conversationId);
+        if (isConversationStopRequested(conversationId)) {
+          const stopRequestVersion = getConversationStopRequestVersion(conversationId);
+          consumeConversationStop(conversationId, stopRequestVersion);
+        }
         continue;
       }
       if (isConversationStopRequested(conversationId)) {

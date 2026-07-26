@@ -59,18 +59,23 @@ export function useGatewayRuntimeSnapshots(params: UseGatewayRuntimeSnapshotsPar
 
   const activeGatewayRuntimeRunsRef = useRef(new Map<string, ActiveGatewayRuntimeRun>());
   const gatewayRuntimeSnapshotChainsRef = useRef(new Map<string, Promise<void>>());
-  const gatewayRuntimeSnapshotTimersRef = useRef(new Map<string, number>());
+  const gatewayRuntimeSnapshotTimersRef = useRef(
+    new Map<string, { run: ActiveGatewayRuntimeRun; timerId: number }>(),
+  );
 
-  function clearGatewayRuntimeSnapshotTimer(conversationId: string) {
+  function clearGatewayRuntimeSnapshotTimer(
+    conversationId: string,
+    expectedRun?: ActiveGatewayRuntimeRun,
+  ) {
     const targetConversationId = conversationId.trim();
     if (!targetConversationId) {
       return;
     }
-    const timerId = gatewayRuntimeSnapshotTimersRef.current.get(targetConversationId);
-    if (timerId === undefined) {
+    const pending = gatewayRuntimeSnapshotTimersRef.current.get(targetConversationId);
+    if (!pending || (expectedRun && pending.run !== expectedRun)) {
       return;
     }
-    window.clearTimeout(timerId);
+    window.clearTimeout(pending.timerId);
     gatewayRuntimeSnapshotTimersRef.current.delete(targetConversationId);
   }
 
@@ -115,13 +120,22 @@ export function useGatewayRuntimeSnapshots(params: UseGatewayRuntimeSnapshotsPar
     const state = options?.state ?? run.state;
     run.state = state;
     if (options?.force) {
-      clearGatewayRuntimeSnapshotTimer(run.conversationId);
-    } else if (gatewayRuntimeSnapshotTimersRef.current.has(run.conversationId)) {
-      return gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve();
+      clearGatewayRuntimeSnapshotTimer(run.conversationId, run);
+    } else {
+      const pending = gatewayRuntimeSnapshotTimersRef.current.get(run.conversationId);
+      if (pending?.run === run) {
+        return gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve();
+      }
+      if (pending) {
+        clearGatewayRuntimeSnapshotTimer(run.conversationId);
+      }
     }
 
     const publish = () => {
-      gatewayRuntimeSnapshotTimersRef.current.delete(run.conversationId);
+      const pending = gatewayRuntimeSnapshotTimersRef.current.get(run.conversationId);
+      if (pending?.run === run) {
+        gatewayRuntimeSnapshotTimersRef.current.delete(run.conversationId);
+      }
       const previous =
         gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve();
       const next = previous
@@ -141,7 +155,7 @@ export function useGatewayRuntimeSnapshots(params: UseGatewayRuntimeSnapshotsPar
     }
 
     const timerId = window.setTimeout(publish, GATEWAY_RUNTIME_SNAPSHOT_DEBOUNCE_MS);
-    gatewayRuntimeSnapshotTimersRef.current.set(run.conversationId, timerId);
+    gatewayRuntimeSnapshotTimersRef.current.set(run.conversationId, { run, timerId });
     return gatewayRuntimeSnapshotChainsRef.current.get(run.conversationId) ?? Promise.resolve();
   }
 
@@ -168,27 +182,28 @@ export function useGatewayRuntimeSnapshots(params: UseGatewayRuntimeSnapshotsPar
   function finishActiveGatewayRuntimeRun(
     conversationId: string,
     state: GatewayRuntimeSnapshotState,
+    expectedRun: ActiveGatewayRuntimeRun | null,
   ) {
     const targetConversationId = conversationId.trim();
     if (!targetConversationId) {
       return Promise.resolve();
     }
-    const run = activeGatewayRuntimeRunsRef.current.get(targetConversationId);
+    const run = expectedRun;
     if (!run) {
       return Promise.resolve();
     }
     return queueGatewayRuntimeSnapshotForRun(run, { state, force: true }).finally(() => {
       if (activeGatewayRuntimeRunsRef.current.get(targetConversationId) === run) {
         activeGatewayRuntimeRunsRef.current.delete(targetConversationId);
+        clearGatewayRuntimeSnapshotTimer(targetConversationId, run);
       }
-      clearGatewayRuntimeSnapshotTimer(targetConversationId);
     });
   }
 
   useEffect(
     () => () => {
-      for (const timerId of gatewayRuntimeSnapshotTimersRef.current.values()) {
-        window.clearTimeout(timerId);
+      for (const pending of gatewayRuntimeSnapshotTimersRef.current.values()) {
+        window.clearTimeout(pending.timerId);
       }
       gatewayRuntimeSnapshotTimersRef.current.clear();
       activeGatewayRuntimeRunsRef.current.clear();

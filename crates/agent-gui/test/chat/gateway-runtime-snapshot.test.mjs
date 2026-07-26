@@ -13,6 +13,31 @@ const { buildGatewayToolCallPreviewArguments } = loader.loadModule(
 );
 const toolPreview = loader.loadModule("src/lib/chat/messages/toolPreview.ts");
 
+function createSnapshotHookHarness() {
+  const refs = [];
+  const cleanups = [];
+  let refIndex = 0;
+  return {
+    react: {
+      useRef(initialValue) {
+        const index = refIndex++;
+        refs[index] ??= { current: initialValue };
+        return refs[index];
+      },
+      useEffect(effect) {
+        cleanups.push(effect());
+      },
+    },
+    render(run) {
+      refIndex = 0;
+      return run();
+    },
+    cleanup() {
+      for (const cleanup of cleanups) cleanup?.();
+    },
+  };
+}
+
 test("gateway runtime snapshot projects live rounds into chat entries", () => {
   const entries = buildGatewayRuntimeSnapshotEntries({
     userMessage: {
@@ -123,4 +148,68 @@ test("gateway runtime snapshot falls back to draft assistant text", () => {
   );
   assert.equal(entries[1].text, "streaming text");
   assert.equal(entries[0].messageId, "user-2");
+});
+
+test("a superseded run finalizes its own gateway snapshot without touching the new run", async () => {
+  const calls = [];
+  const hookHarness = createSnapshotHookHarness();
+  const hookLoader = createTsModuleLoader({
+    mocks: {
+      react: hookHarness.react,
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          calls.push({ command, args });
+        },
+      },
+    },
+  });
+  const { useGatewayRuntimeSnapshots } = hookLoader.loadModule(
+    "src/pages/chat/gateway/useGatewayRuntimeSnapshots.ts",
+  );
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    clearTimeout,
+    clearInterval,
+    setTimeout,
+    setInterval,
+  };
+  try {
+    const snapshots = hookHarness.render(() =>
+      useGatewayRuntimeSnapshots({
+        canShareHistory: false,
+        remoteRuntimeStatus: { connectedSince: 0, sessionId: null },
+        currentConversationIdRef: { current: "conv-1" },
+        queuedChatTurnsRef: { current: [] },
+        publishChatQueueSnapshots() {},
+        collectChatQueueSnapshotConversationIds() {
+          return new Set();
+        },
+      }),
+    );
+    const transcriptStore = {
+      getSnapshot() {
+        return { draftAssistantText: "", toolStatus: null, liveRounds: [] };
+      },
+    };
+    const createRun = (runId) => ({
+      conversationId: "conv-1",
+      runId,
+      revision: 0,
+      state: "running",
+      userMessage: { role: "user", id: `user-${runId}`, content: runId },
+      transcriptStore,
+      toolStatusIsCompaction: false,
+    });
+    const oldRun = snapshots.registerActiveGatewayRuntimeRun(createRun("run-old"));
+    const newRun = snapshots.registerActiveGatewayRuntimeRun(createRun("run-new"));
+
+    await snapshots.finishActiveGatewayRuntimeRun("conv-1", "cancelled", oldRun);
+
+    assert.equal(snapshots.activeGatewayRuntimeRunsRef.current.get("conv-1"), newRun);
+    assert.equal(calls.at(-1)?.args.input.runId, "run-old");
+    assert.equal(calls.at(-1)?.args.input.state, "cancelled");
+  } finally {
+    hookHarness.cleanup();
+    globalThis.window = previousWindow;
+  }
 });
