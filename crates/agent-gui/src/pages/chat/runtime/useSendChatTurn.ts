@@ -729,8 +729,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
     function isCurrentConversationRun() {
       return (
-        conversationRunStarted &&
-        isConversationRunCurrent(conversationId, cancellation.userStop)
+        conversationRunStarted && isConversationRunCurrent(conversationId, cancellation.userStop)
       );
     }
 
@@ -1578,10 +1577,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         commitErroredConversation(msg || "Request failed");
       }
       gatewayBridgeEvents.emitError(remoteErrorMessage, conversationId);
-      if (
-        isCurrentConversationRun() &&
-        titleJobRef.current?.conversationId === conversationId
-      ) {
+      if (isCurrentConversationRun() && titleJobRef.current?.conversationId === conversationId) {
         titleJobRef.current = null;
       }
     } finally {

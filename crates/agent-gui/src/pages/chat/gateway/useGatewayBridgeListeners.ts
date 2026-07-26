@@ -31,10 +31,7 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
   ) => Promise<boolean>;
   isConversationRunning: (conversationId: string) => boolean;
   getConversationAbortController: (conversationId: string) => AbortController | null;
-  releaseConversationRun: (
-    conversationId: string,
-    expectedController: AbortController,
-  ) => boolean;
+  releaseConversationRun: (conversationId: string, expectedController: AbortController) => boolean;
   requestConversationStop: (conversationId: string) => boolean;
   requestActiveConversationStop: (conversationId: string, options: { force: boolean }) => boolean;
   consumeConversationStop: (conversationId: string, expectedVersion?: number) => boolean;

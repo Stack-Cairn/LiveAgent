@@ -828,11 +828,7 @@ export function createTranscriptStore(options?: {
       event.type === "run_queued" ||
       event.type === "rebased" ||
       event.type === "user_message";
-    if (
-      locallySettledRunId &&
-      runId === locallySettledRunId &&
-      !structuralEventAfterLocalStop
-    ) {
+    if (locallySettledRunId && runId === locallySettledRunId && !structuralEventAfterLocalStop) {
       return;
     }
     const seq = readEventSeq(event);
@@ -972,10 +968,8 @@ export function createTranscriptStore(options?: {
       locallySettledActivity = null;
       locallySettledRunTerminalObserved = false;
     }
-    const syncActivity =
-      result.activity?.runId === locallySettledRunId ? null : result.activity;
-    const syncSnapshot =
-      result.snapshot?.runId === locallySettledRunId ? null : result.snapshot;
+    const syncActivity = result.activity?.runId === locallySettledRunId ? null : result.activity;
+    const syncSnapshot = result.snapshot?.runId === locallySettledRunId ? null : result.snapshot;
     // Runs whose settled turn kept its streamed entries across a reset (the
     // replay cannot rebuild them from the start): their replayed content
     // deltas must not re-apply on top of the kept entries.

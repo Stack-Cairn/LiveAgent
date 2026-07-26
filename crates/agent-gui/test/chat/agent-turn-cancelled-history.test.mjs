@@ -216,6 +216,7 @@ test("agent turn preserves suppressed parent Agent trace for cancellation persis
       },
     },
     cancellation: {
+      userStop: new AbortController(),
       deriveScope() {
         return { controller: new AbortController(), release: noOp };
       },

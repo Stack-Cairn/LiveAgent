@@ -53,10 +53,7 @@ type UseChatTurnQueueParams = {
   isConversationRunning: (conversationId: string) => boolean;
   runningConversationIds: ReadonlySet<string>;
   getConversationAbortController: (conversationId: string) => AbortController | null;
-  releaseConversationRun: (
-    conversationId: string,
-    expectedController: AbortController,
-  ) => boolean;
+  releaseConversationRun: (conversationId: string, expectedController: AbortController) => boolean;
   requestConversationStop: (conversationId: string) => boolean;
   getConversationStopRequestVersion: (conversationId: string) => number;
   isConversationStopRequested: (conversationId: string) => boolean;
