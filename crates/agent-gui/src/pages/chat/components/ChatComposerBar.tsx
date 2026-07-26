@@ -255,7 +255,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     errorKey: voiceErrorKey,
     toggle: toggleVoiceInput,
     clearError: clearVoiceError,
-    stop: stopVoiceInput,
+    cancel: cancelVoiceInput,
   } = useSpeechInput({
     language: locale === "en-US" ? "en-US" : "zh-CN",
     onStart: () => {
@@ -299,10 +299,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
 
   useEffect(() => {
-    if (isInputDisabled && voiceListening) {
-      stopVoiceInput();
+    if (isInputDisabled) {
+      cancelVoiceInput();
     }
-  }, [isInputDisabled, stopVoiceInput, voiceListening]);
+  }, [cancelVoiceInput, isInputDisabled]);
   // 档位为空但恒开（deepseek-reasoner 型"恒开不可调"）也算支持思考——
   // 亮灯但开关与档位均不可操作；两者皆无才是真不支持。
   const thinkingSupported = reasoningOptions.length > 0 || thinkingAlwaysOn;
@@ -409,9 +409,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
 
   /** 发送（含排队）后退出全高编辑态，让路给回复内容。 */
   const handleComposerSend = useCallback(() => {
+    cancelVoiceInput();
     setComposerExpanded(false);
     onSend();
-  }, [onSend, setComposerExpanded]);
+  }, [cancelVoiceInput, onSend, setComposerExpanded]);
 
   const shouldShowQueueScrollbar = !queueCollapsed && queuedTurns.length > 2;
 

@@ -1,6 +1,6 @@
 // Thin wrapper around the browser Web Speech API (SpeechRecognition /
-// webkitSpeechRecognition). Both the Tauri WebView and the Gateway WebUI use
-// this path so recognition stays local to the surface that owns the mic.
+// webkitSpeechRecognition). The surface owns microphone permission and UI;
+// the browser or operating system may still use a remote recognition service.
 
 export type SpeechRecognitionLike = {
   lang: string;
@@ -83,19 +83,27 @@ export function createSpeechRecognition(): SpeechRecognitionLike | null {
 export function mapSpeechRecognitionError(errorCode: string): string {
   switch (errorCode) {
     case "not-allowed":
-    case "service-not-allowed":
       return "chat.voice.permissionDenied";
+    case "service-not-allowed":
+      return "chat.voice.serviceUnavailable";
     case "no-speech":
       return "chat.voice.noSpeech";
     case "audio-capture":
       return "chat.voice.noMicrophone";
     case "network":
       return "chat.voice.networkError";
+    case "language-not-supported":
+      return "chat.voice.languageUnsupported";
     case "aborted":
       return "chat.voice.aborted";
     default:
       return "chat.voice.failed";
   }
+}
+
+/** Errors that may end a continuous session without invalidating it. */
+export function isRecoverableSpeechRecognitionError(errorCode: string): boolean {
+  return errorCode === "no-speech";
 }
 
 const CJK_TAIL = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]$/;

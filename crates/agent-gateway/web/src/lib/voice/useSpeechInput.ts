@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   appendSpeechChunk,
   createSpeechRecognition,
+  isRecoverableSpeechRecognitionError,
   isSpeechRecognitionSupported,
   mapSpeechRecognitionError,
   type SpeechRecognitionLike,
@@ -12,10 +13,7 @@ export type SpeechInputPhase = "idle" | "listening" | "unsupported";
 export type UseSpeechInputOptions = {
   /** BCP-47 language tag, e.g. zh-CN / en-US. */
   language: string;
-  /**
-   * When false, the hook stays idle and reports unsupported. Used to disable
-   * built-in voice input on mobile WebUI (system IME dictation is preferred).
-   */
+  /** When false, the hook stays idle and reports unsupported. */
   enabled?: boolean;
   /** Called when recognition session actually starts. */
   onStart?: () => void;
@@ -38,6 +36,7 @@ export type UseSpeechInputResult = {
   interim: string;
   start: () => void;
   stop: () => void;
+  cancel: () => void;
   toggle: () => void;
   clearError: () => void;
 };
@@ -112,6 +111,13 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
     setInterim("");
   }, []);
 
+  const cancel = useCallback(() => {
+    wantListeningRef.current = false;
+    disposeRecognition();
+    setPhase((prev) => (prev === "unsupported" ? prev : "idle"));
+    setInterim("");
+  }, [disposeRecognition]);
+
   const start = useCallback(() => {
     if (!supported) {
       setPhase("unsupported");
@@ -141,15 +147,19 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
+    let didNotifySessionStart = false;
     recognition.onstart = () => {
       setPhase("listening");
-      onStartRef.current?.();
+      if (!didNotifySessionStart) {
+        didNotifySessionStart = true;
+        onStartRef.current?.();
+      }
     };
 
     recognition.onerror = (event) => {
       const code = typeof event?.error === "string" ? event.error : "unknown";
-      // continuous mode often emits no-speech between phrases; keep listening.
-      if (code === "no-speech" && wantListeningRef.current) {
+      // Continuous mode may emit no-speech between phrases; keep that session alive.
+      if (isRecoverableSpeechRecognitionError(code) && wantListeningRef.current) {
         return;
       }
       // User-initiated abort/stop should not surface as an error toast.
@@ -157,12 +167,10 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
         return;
       }
       const key = mapSpeechRecognitionError(code);
+      wantListeningRef.current = false;
+      setPhase("idle");
       setErrorKey(key);
       onErrorRef.current?.(key);
-      if (code === "not-allowed" || code === "service-not-allowed" || code === "audio-capture") {
-        wantListeningRef.current = false;
-        setPhase("idle");
-      }
     };
 
     recognition.onresult = (event) => {
@@ -176,7 +184,7 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
           nextCommitted = appendSpeechChunk(nextCommitted, piece);
           nextInterim = "";
         } else {
-          nextInterim = piece.trim();
+          nextInterim = appendSpeechChunk(nextInterim, piece);
         }
       }
       emitUpdate(nextCommitted, nextInterim);
@@ -190,7 +198,9 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
           recognition.start();
           return;
         } catch {
-          // fall through to idle
+          wantListeningRef.current = false;
+          setErrorKey("chat.voice.failed");
+          onErrorRef.current?.("chat.voice.failed");
         }
       }
       setPhase("idle");
@@ -236,6 +246,7 @@ export function useSpeechInput(options: UseSpeechInputOptions): UseSpeechInputRe
     interim,
     start,
     stop,
+    cancel,
     toggle,
     clearError,
   };

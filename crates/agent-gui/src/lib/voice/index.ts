@@ -3,6 +3,7 @@ export {
   composeVoiceTranscript,
   createSpeechRecognition,
   isMobileClient,
+  isRecoverableSpeechRecognitionError,
   isSpeechRecognitionSupported,
   mapSpeechRecognitionError,
 } from "./speechRecognition";
