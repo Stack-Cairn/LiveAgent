@@ -205,6 +205,11 @@ export type WorkspaceProject = {
   lastConversationAt?: number;
   isPinned?: boolean;
   pinnedAt?: number | null;
+  // Workspace-scoped prompt settings. Absent fields keep the legacy behavior:
+  // no workspace prompt, global AGENTS prompt applies, no instruction-file pickup.
+  prompt?: string;
+  includeGlobalPrompt?: boolean;
+  includeProjectInstructions?: boolean;
 };
 
 export type SelectedModel = {
@@ -607,6 +612,11 @@ function normalizeWorkspaceProject(input: unknown): WorkspaceProject | null {
     typeof obj.pinnedAt === "number" && Number.isFinite(obj.pinnedAt) && obj.pinnedAt > 0
       ? obj.pinnedAt
       : undefined;
+  const prompt =
+    typeof obj.prompt === "string" && obj.prompt.trim() ? obj.prompt.trim() : undefined;
+  // Only the non-default choices are persisted; absence keeps legacy behavior.
+  const excludeGlobalPrompt = obj.includeGlobalPrompt === false;
+  const includeProjectInstructions = obj.includeProjectInstructions === true;
   return {
     id,
     name,
@@ -616,6 +626,9 @@ function normalizeWorkspaceProject(input: unknown): WorkspaceProject | null {
     updatedAt,
     ...(lastConversationAt ? { lastConversationAt } : {}),
     ...(isPinned ? { isPinned: true, pinnedAt: pinnedAt ?? updatedAt } : {}),
+    ...(prompt ? { prompt } : {}),
+    ...(excludeGlobalPrompt ? { includeGlobalPrompt: false } : {}),
+    ...(includeProjectInstructions ? { includeProjectInstructions: true } : {}),
   };
 }
 

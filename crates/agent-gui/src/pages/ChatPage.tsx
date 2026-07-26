@@ -17,6 +17,7 @@ import { HistoryShareModal } from "../components/chat/HistoryShareModal";
 import type { MentionComposerHandle } from "../components/chat/MentionComposer";
 import { NotifyToast } from "../components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "../components/chat/SharedHistoryManagerModal";
+import { WorkspaceSettingsModal } from "../components/chat/WorkspaceSettingsModal";
 import { PanelRightClose, PanelRightOpen } from "../components/icons";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type {
@@ -267,6 +268,10 @@ export function ChatPage(props: ChatPageProps) {
     handleCommitWorkspaceProjectRename,
     handleCancelWorkspaceProjectRename,
     handleSetWorkspaceProjectPinned,
+    workspaceSettingsProject,
+    handleOpenWorkspaceProjectSettings,
+    handleCloseWorkspaceProjectSettings,
+    handleSaveWorkspaceProjectPromptConfig,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
   } = useWorkspaceProjects({
@@ -1493,6 +1498,7 @@ export function ChatPage(props: ChatPageProps) {
           onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
           onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
           onStartRenamingProject={handleStartRenamingWorkspaceProject}
+          onOpenProjectSettings={handleOpenWorkspaceProjectSettings}
           onProjectRenameDraftChange={setProjectRenameDraft}
           onCommitProjectRename={handleCommitWorkspaceProjectRename}
           onCancelProjectRename={handleCancelWorkspaceProjectRename}
@@ -1542,6 +1548,14 @@ export function ChatPage(props: ChatPageProps) {
           />
         ) : null}
         <WorkspaceCloneTaskOverlay onOpenWorkspace={handleOpenClonedWorkspace} />
+
+        {workspaceSettingsProject ? (
+          <WorkspaceSettingsModal
+            project={workspaceSettingsProject}
+            onSave={handleSaveWorkspaceProjectPromptConfig}
+            onClose={handleCloseWorkspaceProjectSettings}
+          />
+        ) : null}
 
         {shareConversation ? (
           <HistoryShareModal

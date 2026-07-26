@@ -107,6 +107,7 @@ export type GatewaySidebarContainerProps = {
   onNewConversationForProject: (project: WorkspaceProject) => void;
   onBrowseProjectInFileTree: (project: WorkspaceProject) => void;
   onStartRenamingProject: (project: WorkspaceProject) => void;
+  onOpenProjectSettings: (project: WorkspaceProject) => void;
   onProjectRenameDraftChange: (value: string) => void;
   onCommitProjectRename: () => void;
   onCancelProjectRename: () => void;
@@ -354,6 +355,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       onNewConversationForProject={props.onNewConversationForProject}
       onBrowseProjectInFileTree={props.onBrowseProjectInFileTree}
       onStartRenamingProject={props.onStartRenamingProject}
+      onOpenProjectSettings={props.onOpenProjectSettings}
       onProjectRenameDraftChange={props.onProjectRenameDraftChange}
       onCommitProjectRename={props.onCommitProjectRename}
       onCancelProjectRename={props.onCancelProjectRename}
