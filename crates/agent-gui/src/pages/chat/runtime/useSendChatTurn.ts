@@ -133,6 +133,9 @@ type UseSendChatTurnParams = {
   buildRuntimeEntryFromVisibleState: ChatPageRuntimeStore["buildRuntimeEntryFromVisibleState"];
   updateConversationRuntimeEntry: ChatPageRuntimeStore["updateConversationRuntimeEntry"];
   setConversationAbortController: ChatPageRuntimeStore["setConversationAbortController"];
+  releaseConversationRun: ChatPageRuntimeStore["releaseConversationRun"];
+  isConversationRunCurrent: ChatPageRuntimeStore["isConversationRunCurrent"];
+  finishConversationRun: ChatPageRuntimeStore["finishConversationRun"];
   getConversationStopRequestVersion: ChatPageRuntimeStore["getConversationStopRequestVersion"];
   isConversationStopRequested: ChatPageRuntimeStore["isConversationStopRequested"];
   consumeConversationStop: ChatPageRuntimeStore["consumeConversationStop"];
@@ -207,6 +210,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     buildRuntimeEntryFromVisibleState,
     updateConversationRuntimeEntry,
     setConversationAbortController,
+    releaseConversationRun,
+    isConversationRunCurrent,
+    finishConversationRun,
     getConversationStopRequestVersion,
     isConversationStopRequested,
     consumeConversationStop,
@@ -644,6 +650,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     let conversationRunStarted = false;
     let conversationUiReleased = false;
     let gatewayRunStarted = false;
+    let gatewayRuntimeRun: ReturnType<typeof registerActiveGatewayRuntimeRun> | null = null;
     let localGatewayRunStarted = false;
     let remoteGatewayCancelRequested = false;
     let gatewayRuntimeFinalState: GatewayRuntimeSnapshotState = "completed";
@@ -657,7 +664,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       if (!(gatewayBridgeRequest || hasRemoteGatewayTarget)) {
         return null;
       }
-      return registerActiveGatewayRuntimeRun({
+      gatewayRuntimeRun = registerActiveGatewayRuntimeRun({
         conversationId,
         runId: gatewayBridgeRequestId,
         clientRequestId: gatewayBridgeRequest?.clientRequestId,
@@ -669,6 +676,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         transcriptStore,
         toolStatusIsCompaction: false,
       });
+      return gatewayRuntimeRun;
     }
 
     function acknowledgeGatewayRunStarted() {
@@ -709,12 +717,22 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }
     }
 
+    function isCurrentConversationRun() {
+      return (
+        conversationRunStarted && isConversationRunCurrent(conversationId, cancellation.userStop)
+      );
+    }
+
+    function finishConversationRunIdentity() {
+      if (!conversationRunStarted) return false;
+      return finishConversationRun(conversationId, cancellation.userStop);
+    }
+
     function releaseConversationRunUi() {
       if (!conversationRunStarted || conversationUiReleased) return;
       conversationUiReleased = true;
       releaseChatRunUi({
-        clearAbortController: () => setConversationAbortController(conversationId, null),
-        clearSendingState: () => setConversationSendingState(conversationId, false),
+        releaseRun: () => releaseConversationRun(conversationId, cancellation.userStop),
         clearToolStatus: () => updateToolStatus(null, transcriptStore),
       });
     }
@@ -749,12 +767,15 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       cancellation.userStop.abort();
       requestRemoteGatewayCancellation();
       if (!options.force) return;
+      // The active handler now owns this exact stop request. Consume it before
+      // releasing the composer so an immediate next send cannot inherit the
+      // old run's stop intent while this run is still unwinding in `finally`.
+      consumeConversationStop(conversationId, options.requestVersion);
       releaseConversationRunUi();
-      // Force stop is the escape hatch for a stuck run: it intentionally
-      // skips the persist barrier (which may itself be hung) so the gateway
-      // still learns the run is cancelled. The run's own finally block will
-      // additionally do the ordered persist-first finalization if it ever
-      // completes.
+      // A user stop releases the UI synchronously and intentionally skips the
+      // persist barrier here (it may itself be hung) so Gateway/WebUI also
+      // learn the run is cancelled promptly. The run's own finally block will
+      // still perform ordered persist-first finalization if it completes.
       void settleChatRunFinalization(finishGatewayRuntimeRun("cancelled"));
     };
 
@@ -763,7 +784,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         ensureGatewayRunForTerminalState(state);
       }
       if (gatewayRunStarted) {
-        await finishActiveGatewayRuntimeRun(conversationId, state);
+        await finishActiveGatewayRuntimeRun(conversationId, state, gatewayRuntimeRun);
       }
     }
 
@@ -792,14 +813,19 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       gatewayBridgeEvents.emitError("Cancelled", conversationId);
       releaseConversationRunUi();
       if (compactionBound) {
-        compaction.unbindTurn();
+        if (isCurrentConversationRun()) {
+          compaction.unbindTurn();
+        }
         compactionBound = false;
       }
-      clearAbortSnapshot(transcriptStore);
+      if (isCurrentConversationRun()) {
+        clearAbortSnapshot(transcriptStore);
+      }
       await finalizeConversationRun("cancelled");
       clearConversationStopHandler(conversationId, handleConversationStop);
       consumeConversationStop(conversationId, runStopRequestVersion);
       pruneIdleConversationCaches([conversationId]);
+      finishConversationRunIdentity();
       return true;
     }
 
@@ -846,6 +872,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }));
     }
     const restoreComposerOnStartFailure = () => {
+      if (!isCurrentConversationRun()) {
+        return;
+      }
       if (!composerClearedOnStart) {
         return;
       }
@@ -890,6 +919,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         await finalizeConversationRun("failed");
         clearConversationStopHandler(conversationId, handleConversationStop);
         restoreComposerOnStartFailure();
+        finishConversationRunIdentity();
         return false;
       }
     }
@@ -924,6 +954,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         await finalizeConversationRun("failed");
         clearConversationStopHandler(conversationId, handleConversationStop);
         restoreComposerOnStartFailure();
+        finishConversationRunIdentity();
         return true;
       }
       try {
@@ -942,6 +973,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         await finalizeConversationRun("failed");
         clearConversationStopHandler(conversationId, handleConversationStop);
         restoreComposerOnStartFailure();
+        finishConversationRunIdentity();
         return true;
       }
     } else {
@@ -1053,15 +1085,26 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       sinks: {
         applyState: applyConversationState,
         applyStateMidRun: rebaseConversationStateDuringRun,
-        publishStatus: (status) =>
+        publishStatus: (status) => {
+          if (!isCurrentConversationRun()) return;
           updateConversationRuntimeEntry(conversationId, (prev) => ({
             ...prev,
             compactionStatus: status,
-          })),
-        setBridgeToolStatus: updateGatewayBridgeToolStatus,
-        queueCheckpoint: (state) => gatewayBridgeEvents.queueCheckpoint(state),
-        persist: (state) =>
-          persistConversation({
+          }));
+        },
+        setBridgeToolStatus: (status, isCompaction) => {
+          if (isCurrentConversationRun()) {
+            updateGatewayBridgeToolStatus(status, isCompaction);
+          }
+        },
+        queueCheckpoint: (state) => {
+          if (isCurrentConversationRun()) {
+            gatewayBridgeEvents.queueCheckpoint(state);
+          }
+        },
+        persist: async (state) => {
+          if (!isCurrentConversationRun()) return false;
+          return await persistConversation({
             conversationId,
             sessionId,
             providerId,
@@ -1072,8 +1115,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             fallbackTitle,
             createdAt,
             titlePromise,
-          }),
+          });
+        },
         restoreComposer: (composerText, restoredUploads) => {
+          if (!isCurrentConversationRun()) return;
           if (isConversationVisible() && typeof composerText === "string") {
             composerRef.current?.setText(composerText);
             composerRef.current?.focus();
@@ -1081,6 +1126,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           setPendingUploadsForConversation(conversationId, restoredUploads);
         },
         persistRollback: async (state) => {
+          if (!isCurrentConversationRun()) return;
           abortedConversationCommitted = true;
           await persistConversationWithHistorySync({
             conversationId,
@@ -1128,6 +1174,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         await finalizeConversationRun("failed");
         clearConversationStopHandler(conversationId, handleConversationStop);
         restoreComposerOnStartFailure();
+        finishConversationRunIdentity();
         return true;
       }
 
@@ -1179,6 +1226,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       conversationId,
       workdir: effectiveWorkdir,
       onWarning: (warning) => {
+        if (!isCurrentConversationRun()) return;
         updateConversationRuntimeEntry(conversationId, (prev) => ({
           ...prev,
           hookWarning: formatHookWarningMessage(settings.locale, t, warning),
@@ -1200,6 +1248,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     };
     const commitVisibleAbortedConversation = () => {
       if (abortedConversationCommitted) return true;
+      if (!isCurrentConversationRun()) return false;
 
       const snapshot = getAbortSnapshot(transcriptStore);
       const partialMessages = buildPersistableMessagesFromSnapshot({
@@ -1236,6 +1285,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     };
 
     const commitErroredConversation = (rawMessage: string) => {
+      if (!isCurrentConversationRun()) return;
       const snapshot = getAbortSnapshot(transcriptStore);
       const partialMessages = buildPersistableMessagesFromSnapshot({
         executionMode: effectiveExecutionMode,
@@ -1277,6 +1327,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
     function applyConversationState(nextState: ConversationViewState) {
       nextConversationState = nextState;
+      if (!isCurrentConversationRun()) return;
       updateConversationRuntimeEntry(conversationId, (prev) => ({
         ...prev,
         state: nextState,
@@ -1287,8 +1338,64 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       // Once a compaction/prune result is committed into visible history, the
       // corresponding live transcript becomes stale and must be cleared.
       applyConversationState(nextState);
-      resetLiveTranscript(transcriptStore);
+      if (isCurrentConversationRun()) {
+        resetLiveTranscript(transcriptStore);
+      }
     }
+
+    const runScopedResetLiveTranscript: typeof resetLiveTranscript = (store) => {
+      if (isCurrentConversationRun()) {
+        resetLiveTranscript(store);
+      }
+    };
+    const runScopedAppendDraftAssistantText: typeof appendDraftAssistantText = (delta, store) => {
+      if (isCurrentConversationRun()) {
+        appendDraftAssistantText(delta, store);
+      }
+    };
+    const runScopedBatchLiveRoundsUpdate: typeof batchLiveRoundsUpdate = (updater, store) => {
+      if (isCurrentConversationRun()) {
+        batchLiveRoundsUpdate(updater, store);
+      }
+    };
+    const runScopedUpdateToolStatus: typeof updateToolStatus = (status, store) => {
+      if (isCurrentConversationRun()) {
+        updateToolStatus(status, store);
+      }
+    };
+    const runScopedUpdateGatewayBridgeToolStatus: typeof updateGatewayBridgeToolStatus = (
+      status,
+      isCompaction,
+    ) => {
+      if (isCurrentConversationRun()) {
+        updateGatewayBridgeToolStatus(status, isCompaction);
+      }
+    };
+    const runScopedUpdateRetryAttempts: typeof updateRetryAttempts = (attempts, store) => {
+      if (isCurrentConversationRun()) {
+        updateGatewayBridgeRetryAttempts(attempts, store);
+      }
+    };
+    const runScopedUpdateConversationRuntimeEntry: typeof updateConversationRuntimeEntry = (
+      targetConversationId,
+      updater,
+      fallback,
+    ) => {
+      if (isCurrentConversationRun()) {
+        return updateConversationRuntimeEntry(targetConversationId, updater, fallback);
+      }
+      return (
+        conversationRuntimeCacheRef.current.get(targetConversationId.trim()) ??
+        buildRuntimeEntryFromVisibleState()
+      );
+    };
+    const runScopedPersistConversationWithHistorySync: typeof persistConversationWithHistorySync =
+      async (persistParams) => {
+        if (!isCurrentConversationRun()) {
+          return false;
+        }
+        return await persistConversationWithHistorySync(persistParams);
+      };
 
     try {
       if (effectiveIsAgentMode) {
@@ -1349,16 +1456,16 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             buildPreparedContext,
             compaction,
             cancellation,
-            resetLiveTranscript,
-            batchLiveRoundsUpdate,
-            updateToolStatus,
-            updateRetryAttempts: updateGatewayBridgeRetryAttempts,
+            resetLiveTranscript: runScopedResetLiveTranscript,
+            batchLiveRoundsUpdate: runScopedBatchLiveRoundsUpdate,
+            updateToolStatus: runScopedUpdateToolStatus,
+            updateRetryAttempts: runScopedUpdateRetryAttempts,
             updatePersistableAgentProgress: (progress) => {
               persistableAgentProgress = progress;
             },
             commitVisibleAbortedConversation,
-            updateConversationRuntimeEntry,
-            persistConversationWithHistorySync,
+            updateConversationRuntimeEntry: runScopedUpdateConversationRuntimeEntry,
+            persistConversationWithHistorySync: runScopedPersistConversationWithHistorySync,
           },
         });
       } else {
@@ -1389,14 +1496,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             buildPreparedContext,
             compaction,
             cancellation,
-            resetLiveTranscript,
-            appendDraftAssistantText,
-            batchLiveRoundsUpdate,
-            updateGatewayBridgeToolStatus,
-            updateRetryAttempts: updateGatewayBridgeRetryAttempts,
+            resetLiveTranscript: runScopedResetLiveTranscript,
+            appendDraftAssistantText: runScopedAppendDraftAssistantText,
+            batchLiveRoundsUpdate: runScopedBatchLiveRoundsUpdate,
+            updateGatewayBridgeToolStatus: runScopedUpdateGatewayBridgeToolStatus,
+            updateRetryAttempts: runScopedUpdateRetryAttempts,
             commitVisibleAbortedConversation,
-            updateConversationRuntimeEntry,
-            persistConversationWithHistorySync,
+            updateConversationRuntimeEntry: runScopedUpdateConversationRuntimeEntry,
+            persistConversationWithHistorySync: runScopedPersistConversationWithHistorySync,
           },
         });
       }
@@ -1410,11 +1517,21 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         hookScope.cancel();
         requestRemoteGatewayCancellation();
         runCleanupPromise = (async () => {
+          if (!isCurrentConversationRun()) {
+            return;
+          }
           const rolledBack = await compaction.handleTurnAbort();
+          if (!isCurrentConversationRun()) {
+            return;
+          }
           if (!rolledBack) {
             commitVisibleAbortedConversation();
           }
-          if (shouldCreatePendingHistoryItem && !abortedConversationCommitted) {
+          if (
+            shouldCreatePendingHistoryItem &&
+            !abortedConversationCommitted &&
+            isCurrentConversationRun()
+          ) {
             sidebarStore.removeLocal(conversationId);
           }
         })();
@@ -1423,18 +1540,22 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         commitErroredConversation(msg || "Request failed");
       }
       gatewayBridgeEvents.emitError(remoteErrorMessage, conversationId);
-      if (titleJobRef.current?.conversationId === conversationId) {
+      if (isCurrentConversationRun() && titleJobRef.current?.conversationId === conversationId) {
         titleJobRef.current = null;
       }
     } finally {
       releaseConversationRunUi();
       if (compactionBound) {
-        compaction.unbindTurn();
+        if (isCurrentConversationRun()) {
+          compaction.unbindTurn();
+        }
         compactionBound = false;
       }
       hookLifecycle.endAgent();
       hookScope.close();
-      clearAbortSnapshot(transcriptStore);
+      if (isCurrentConversationRun()) {
+        clearAbortSnapshot(transcriptStore);
+      }
       const stopped = runStopRequestVersion !== null || cancellation.userStop.signal.aborted;
       if (stopped) {
         gatewayRuntimeFinalState = "cancelled";
@@ -1450,6 +1571,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       } else {
         requestQueuedChatTurnProcessing(conversationId);
       }
+      finishConversationRunIdentity();
     }
     return true;
   }

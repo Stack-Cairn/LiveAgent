@@ -400,6 +400,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     workdir: effectiveWorkdir,
     providerId,
     runtimePlatform,
+    userStopSignal: cancellation.userStop.signal,
     fileState,
     todoState,
     askUserQuestionConversationId: conversationId,

@@ -425,6 +425,48 @@ test("reset clears pending commands and ignores their late acknowledgements", as
   assert.equal(outcomes.failed.length, 0);
 });
 
+test("settlePending clears the pre-start spinner and absorbs a late acknowledgement", async () => {
+  const { pipeline } = createHarness();
+  let acceptCommand;
+  const acceptGate = new Promise((resolve) => {
+    acceptCommand = resolve;
+  });
+  const submitPromise = pipeline.submit({
+    conversationId: "conv-1",
+    clientRequestId: "client-1",
+    message: "cancel me",
+    submit: () => acceptGate,
+  });
+
+  assert.equal(pipeline.hasPending("conv-1"), true);
+  const settledPending = pipeline.settlePending("conv-1");
+  assert.equal(settledPending?.runId, null);
+  assert.equal(pipeline.hasPending("conv-1"), false);
+
+  acceptCommand({ runId: "run-1", conversationId: "conv-1", acceptedSeq: 1 });
+  assert.equal((await submitPromise).kind, "settled");
+});
+
+test("a failed cancellation can restore the exact pending command", async () => {
+  const { pipeline } = createHarness();
+  const submitPromise = pipeline.submit({
+    conversationId: "conv-1",
+    clientRequestId: "client-1",
+    message: "keep waiting",
+    submit: async () => ({ runId: "run-1", conversationId: "conv-1", acceptedSeq: 1 }),
+  });
+  await submitPromise;
+
+  const settledPending = pipeline.settlePending("conv-1");
+  assert.equal(settledPending?.runId, "run-1");
+  assert.equal(pipeline.hasPending("conv-1"), false);
+  assert.equal(pipeline.restorePending(settledPending), true);
+  assert.equal(pipeline.hasPending("conv-1"), true);
+
+  pipeline.handleRunSignal("conv-1", "run-1");
+  assert.equal(pipeline.hasPending("conv-1"), false);
+});
+
 
 test("optimistic:false suppresses the transcript echo for queue-destined sends", async () => {
   const { pipeline, stores } = createHarness();

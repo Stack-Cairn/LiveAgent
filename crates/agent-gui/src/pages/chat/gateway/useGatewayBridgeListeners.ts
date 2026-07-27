@@ -31,6 +31,7 @@ type UseGatewayBridgeListenersParams = GatewayBridgeRuntimeRefs & {
   ) => Promise<boolean>;
   isConversationRunning: (conversationId: string) => boolean;
   getConversationAbortController: (conversationId: string) => AbortController | null;
+  releaseConversationRun: (conversationId: string, expectedController: AbortController) => boolean;
   requestConversationStop: (conversationId: string) => boolean;
   requestActiveConversationStop: (conversationId: string, options: { force: boolean }) => boolean;
   consumeConversationStop: (conversationId: string, expectedVersion?: number) => boolean;
@@ -715,10 +716,13 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
       }
       latestParamsRef.current.requestConversationStop(conversationId);
       const handled = latestParamsRef.current.requestActiveConversationStop(conversationId, {
-        force: false,
+        force: true,
       });
       const controller = latestParamsRef.current.getConversationAbortController(conversationId);
       controller?.abort();
+      if (controller) {
+        latestParamsRef.current.releaseConversationRun(conversationId, controller);
+      }
       // A cancel that found nothing to stop (no bridge request in flight, no
       // handler, no controller, not running) must not leave the persistent
       // stop intent behind — it would silently swallow the next send().

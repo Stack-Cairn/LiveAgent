@@ -2347,16 +2347,40 @@ export default function GatewayApp() {
     if (!api || !activeConversationId || isLocalDraftConversationId(activeConversationId)) {
       return;
     }
-    // No local terminal marking: the stream's run_finished settles the UI
-    // (cancelling state shows until the agent confirms or the gateway
-    // watchdog forces the terminal event).
+    const transcriptStore = transcriptStoreRegistry.peek(activeConversationId);
+    const activityAtCancel = activityStore.get(activeConversationId);
+    const pendingCommand = chatCommandPipeline.settlePending(activeConversationId);
     const runId =
-      transcriptStoreRegistry.peek(activeConversationId)?.getSnapshot().activeRun?.runId ??
-      activityStore.get(activeConversationId)?.runId ??
+      transcriptStore?.getSnapshot().activeRun?.runId ??
+      activityAtCancel?.runId ??
+      pendingCommand?.runId ??
       undefined;
+    if (runId) {
+      transcriptStore?.settleRunLocally(runId);
+      activityStore.settleRunLocally(activeConversationId, runId);
+    }
     try {
       await api.cancelChat(activeConversationId, runId);
     } catch (error) {
+      if (pendingCommand) {
+        chatCommandPipeline.restorePending(pendingCommand);
+      }
+      if (runId) {
+        transcriptStore?.releaseLocallySettledRun(runId);
+        const activityReleased = activityStore.releaseSettledRun(activeConversationId, runId);
+        if (activityReleased && activityAtCancel?.runId === runId) {
+          activityStore.applyActivityEvent({
+            conversationId: activeConversationId,
+            runId,
+            running: true,
+            state: activityAtCancel.state,
+            workdir: activityAtCancel.workdir,
+            clientRequestId: null,
+            updatedAt: activityAtCancel.updatedAt,
+          });
+        }
+      }
+      api.resyncConversation(activeConversationId);
       if (!isAbortError(error)) {
         setChatError(asErrorMessage(error, "cancel chat request failed"));
       }

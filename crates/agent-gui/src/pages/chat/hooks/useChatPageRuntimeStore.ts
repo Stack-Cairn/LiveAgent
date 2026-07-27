@@ -83,6 +83,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
   const persistedConversationStateRef = useRef(new Map<string, ConversationViewState>());
   const runningConversationIdsRef = useRef(new Set<string>());
   const conversationAbortControllersRef = useRef(new Map<string, AbortController>());
+  const conversationRunIdentitiesRef = useRef(new Map<string, AbortController>());
   const conversationStopRequestsRef = useRef(new Set<string>());
   const conversationStopRequestVersionsRef = useRef(new Map<string, number>());
   const conversationStopHandlersRef = useRef(
@@ -189,6 +190,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
       if (!key) return;
       if (controller) {
         conversationAbortControllersRef.current.set(key, controller);
+        conversationRunIdentitiesRef.current.set(key, controller);
         if (conversationStopRequestsRef.current.has(key)) {
           controller.abort();
         }
@@ -248,7 +250,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
         conversationStopHandlersRef.current.set(key, handler);
         if (conversationStopRequestsRef.current.has(key)) {
           handler({
-            force: false,
+            force: true,
             requestVersion: conversationStopRequestVersionsRef.current.get(key) ?? 0,
           });
         }
@@ -315,6 +317,42 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     [setRunningConversationIds, updateConversationRuntimeEntry],
   );
 
+  const releaseConversationRun = useCallback(
+    (conversationId: string, expectedController: AbortController) => {
+      const key = conversationId.trim();
+      if (!key || conversationRunIdentitiesRef.current.get(key) !== expectedController) {
+        return false;
+      }
+      if (conversationAbortControllersRef.current.get(key) === expectedController) {
+        conversationAbortControllersRef.current.delete(key);
+      }
+      setConversationSendingState(key, false);
+      return true;
+    },
+    [setConversationSendingState],
+  );
+
+  const isConversationRunCurrent = useCallback(
+    (conversationId: string, expectedController: AbortController) =>
+      conversationRunIdentitiesRef.current.get(conversationId.trim()) === expectedController,
+    [],
+  );
+
+  const finishConversationRun = useCallback(
+    (conversationId: string, expectedController: AbortController) => {
+      const key = conversationId.trim();
+      if (!key || conversationRunIdentitiesRef.current.get(key) !== expectedController) {
+        return false;
+      }
+      conversationRunIdentitiesRef.current.delete(key);
+      if (conversationAbortControllersRef.current.get(key) === expectedController) {
+        conversationAbortControllersRef.current.delete(key);
+      }
+      return true;
+    },
+    [],
+  );
+
   useEffect(() => {
     setConversationRuntimeCacheEntry(
       conversationRuntimeCacheRef.current,
@@ -376,5 +414,8 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     clearConversationStopHandler,
     requestActiveConversationStop,
     setConversationSendingState,
+    releaseConversationRun,
+    isConversationRunCurrent,
+    finishConversationRun,
   };
 }

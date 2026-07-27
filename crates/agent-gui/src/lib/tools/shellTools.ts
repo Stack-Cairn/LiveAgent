@@ -348,6 +348,7 @@ export function createShellTools(params: {
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
   managedProcessEnabled?: boolean;
+  userStopSignal?: AbortSignal;
   resolveHomeDir?: () => Promise<string>;
 }): BuiltinToolBundle {
   const timeoutPolicy = resolveBashTimeoutPolicy(params.providerId);
@@ -365,9 +366,35 @@ export function createShellTools(params: {
   const workdir = params.workdir;
   const allowSkillsRoot = params.skillsRootEnabled === true;
   const allowManagedProcess = params.managedProcessEnabled !== false;
+  const managedProcessIdsStartedByTurn = new Set<string>();
   const skillAccessPolicy = params.skillAccessPolicy;
   let cachedSkillsRootDir =
     typeof params.skillsRootDir === "string" ? params.skillsRootDir.trim() : "";
+
+  async function stopManagedProcessStartedByTurn(processId: string) {
+    managedProcessIdsStartedByTurn.delete(processId);
+    try {
+      await invoke("managed_process_stop", { process_id: processId });
+    } catch (error) {
+      console.warn(`Failed to stop ManagedProcess ${processId} after chat cancellation`, error);
+    }
+  }
+
+  async function stopManagedProcessesStartedByTurn() {
+    const processIds = Array.from(managedProcessIdsStartedByTurn);
+    managedProcessIdsStartedByTurn.clear();
+    await Promise.allSettled(processIds.map(stopManagedProcessStartedByTurn));
+  }
+
+  if (allowManagedProcess && params.userStopSignal && !params.userStopSignal.aborted) {
+    params.userStopSignal.addEventListener(
+      "abort",
+      () => {
+        void stopManagedProcessesStartedByTurn();
+      },
+      { once: true },
+    );
+  }
 
   async function resolveSkillsRootDir() {
     if (!allowSkillsRoot) {
@@ -778,11 +805,23 @@ export function createShellTools(params: {
           signal,
           {
             onLateResult: (lateResponse) =>
-              invoke("managed_process_stop", { process_id: lateResponse.process.id } as any).then(
-                () => undefined,
-              ),
+              stopManagedProcessStartedByTurn(lateResponse.process.id),
           },
         );
+        if (!isolated) {
+          const processId = response.process.id;
+          if (params.userStopSignal?.aborted) {
+            await stopManagedProcessStartedByTurn(processId);
+            throw new Error("Cancelled");
+          }
+          managedProcessIdsStartedByTurn.add(processId);
+          if (params.userStopSignal?.aborted) {
+            if (managedProcessIdsStartedByTurn.has(processId)) {
+              await stopManagedProcessStartedByTurn(processId);
+            }
+            throw new Error("Cancelled");
+          }
+        }
         return buildManagedProcessToolResult({
           toolCall,
           details: response,
@@ -850,6 +889,7 @@ export function createShellTools(params: {
         { process_id: processId },
         signal,
       );
+      managedProcessIdsStartedByTurn.delete(processId);
       return buildManagedProcessToolResult({
         toolCall,
         details: response,

@@ -125,6 +125,7 @@ type BuildBuiltinBaseToolRegistryParams = {
   workdir: string;
   providerId: ProviderId;
   runtimePlatform?: RuntimePlatform;
+  userStopSignal?: AbortSignal;
   fileState: FileToolState;
   skillsEnabled: boolean;
   skillsRootDir?: string;
@@ -177,6 +178,7 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
       skillsRootDir: params.skillsRootDir,
       skillAccessPolicy: params.skillAccessPolicy,
       managedProcessEnabled: params.runtimeScope === "chat",
+      userStopSignal: params.userStopSignal,
       resolveHomeDir,
     }),
     ...(params.skillsEnabled

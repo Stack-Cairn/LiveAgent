@@ -81,6 +81,8 @@ export type TranscriptStore = {
   // Fold the settled turns outside of run_started (conversation switched
   // away; keeps the next mount clean).
   foldSettledTurns(): void;
+  settleRunLocally(runId: string): void;
+  releaseLocallySettledRun(runId: string): boolean;
   flush(): void;
 };
 
@@ -189,6 +191,9 @@ export function createTranscriptStore(options?: {
     turns: Turn[];
   } | null = null;
   let activeRun: StreamRunActivity | null = null;
+  let locallySettledRunId: string | null = null;
+  let locallySettledActivity: StreamRunActivity | null = null;
+  let locallySettledRunTerminalObserved = false;
   let toolStatus: string | null = null;
   let toolStatusIsCompaction = false;
   let retryAttempts: readonly RetryAttemptRecord[] = EMPTY_RETRY_ATTEMPTS;
@@ -817,6 +822,15 @@ export function createTranscriptStore(options?: {
 
   function applyOne(event: ConversationStreamEvent) {
     editResendStash = null;
+    const runId = readEventRunId(event);
+    const structuralEventAfterLocalStop =
+      event.type === "run_finished" ||
+      event.type === "run_queued" ||
+      event.type === "rebased" ||
+      event.type === "user_message";
+    if (locallySettledRunId && runId === locallySettledRunId && !structuralEventAfterLocalStop) {
+      return;
+    }
     const seq = readEventSeq(event);
     if (seq > 0) {
       if (seq <= lastSeq) {
@@ -825,7 +839,11 @@ export function createTranscriptStore(options?: {
       }
       lastSeq = seq;
     }
-    const runId = readEventRunId(event);
+    if (event.type === "run_started" && runId && runId !== locallySettledRunId) {
+      locallySettledRunId = null;
+      locallySettledActivity = null;
+      locallySettledRunTerminalObserved = false;
+    }
     switch (event.type) {
       case "run_started": {
         // Fold the previous exchange into the virtualized region in the same
@@ -864,6 +882,10 @@ export function createTranscriptStore(options?: {
       }
       case "run_finished": {
         applyRunFinished(event);
+        if (runId === locallySettledRunId) {
+          locallySettledActivity = null;
+          locallySettledRunTerminalObserved = true;
+        }
         return;
       }
       case "run_queued": {
@@ -877,6 +899,10 @@ export function createTranscriptStore(options?: {
         if (activeRun?.runId === runId) {
           activeRun = null;
           schedule(true);
+        }
+        if (runId === locallySettledRunId) {
+          locallySettledActivity = null;
+          locallySettledRunTerminalObserved = true;
         }
         return;
       }
@@ -937,6 +963,13 @@ export function createTranscriptStore(options?: {
     // A completed (re)subscribe is the convergence point: re-arm the
     // divergence signal so a later stray burst can trigger another resync.
     divergenceSignaled = false;
+    if (result.activity && result.activity.runId !== locallySettledRunId) {
+      locallySettledRunId = null;
+      locallySettledActivity = null;
+      locallySettledRunTerminalObserved = false;
+    }
+    const syncActivity = result.activity?.runId === locallySettledRunId ? null : result.activity;
+    const syncSnapshot = result.snapshot?.runId === locallySettledRunId ? null : result.snapshot;
     // Runs whose settled turn kept its streamed entries across a reset (the
     // replay cannot rebuild them from the start): their replayed content
     // deltas must not re-apply on top of the kept entries.
@@ -963,7 +996,7 @@ export function createTranscriptStore(options?: {
             result.events.some(
               (event) => event.type === "run_started" && readEventRunId(event) === turn.runId,
             );
-          if (result.activity && result.activity.runId === turn.runId) {
+          if (syncActivity && syncActivity.runId === turn.runId) {
             // Still running server-side: the snapshot/replay rebuilds the
             // content into this same turn object. When the incoming snapshot
             // targets this run, keep the delta-built entries so the rebuild
@@ -971,14 +1004,14 @@ export function createTranscriptStore(options?: {
             // Without a snapshot or a from-the-start replay the rebuild is
             // partial: mark it stale so the post-run enrich adopts the
             // persisted reply wholesale.
-            if (result.snapshot?.runId === turn.runId) {
+            if (syncSnapshot?.runId === turn.runId) {
               return turn;
             }
             return { ...turn, entries: [], contentStale: !replayRebuildsRun };
           }
           // The run ended while this client was away: settle the turn (never
           // strand it as a pending zombie).
-          if (result.activity) {
+          if (syncActivity) {
             // Superseded by the now-active run: rebuild this turn's content
             // from history via the idle enrich after the active run settles
             // (that busy window outlasts the desktop's post-run flush).
@@ -1009,26 +1042,26 @@ export function createTranscriptStore(options?: {
       // Set the activity before the rebuild so the snapshot can target the
       // optimistic pending turn by client_request_id (its user bubble then
       // keeps its identity instead of a duplicate run turn appearing).
-      activeRun = result.activity;
-      if (result.snapshot) {
-        rebuildActiveTurnFromSnapshot(result.snapshot.entriesJson, result.snapshot.runId);
-        lastSeq = Math.max(lastSeq, result.snapshot.asOfSeq);
+      activeRun = syncActivity;
+      if (syncSnapshot) {
+        rebuildActiveTurnFromSnapshot(syncSnapshot.entriesJson, syncSnapshot.runId);
+        lastSeq = Math.max(lastSeq, syncSnapshot.asOfSeq);
       }
     } else {
-      activeRun = result.activity;
-      if (result.snapshot) {
+      activeRun = syncActivity;
+      if (syncSnapshot) {
         // Late join mid-run where the buffer cannot cover the run start.
         // The snapshot folds every event through asOfSeq into its entries;
         // advancing the cursor drops the overlapping replay below.
-        const existing = findTurnByRunId(result.snapshot.runId);
+        const existing = findTurnByRunId(syncSnapshot.runId);
         if (!existing || existing.entries.length === 0) {
-          rebuildActiveTurnFromSnapshot(result.snapshot.entriesJson, result.snapshot.runId);
-          lastSeq = Math.max(lastSeq, result.snapshot.asOfSeq);
+          rebuildActiveTurnFromSnapshot(syncSnapshot.entriesJson, syncSnapshot.runId);
+          lastSeq = Math.max(lastSeq, syncSnapshot.asOfSeq);
         }
       }
     }
-    if (result.activity) {
-      setToolStatus(result.activity.toolStatus, result.activity.toolStatusIsCompaction);
+    if (syncActivity) {
+      setToolStatus(syncActivity.toolStatus, syncActivity.toolStatusIsCompaction);
     } else if (result.reset) {
       setToolStatus(null, false);
     }
@@ -1071,7 +1104,9 @@ export function createTranscriptStore(options?: {
         turns = aligned.turns;
       }
     }
-    lastSeq = Math.max(lastSeq, result.latestSeq);
+    if (!locallySettledRunId) {
+      lastSeq = Math.max(lastSeq, result.latestSeq);
+    }
   };
 
   return {
@@ -1216,6 +1251,55 @@ export function createTranscriptStore(options?: {
       historyEntries = result.historyEntries;
       turns = result.turns;
       schedule(true);
+    },
+
+    settleRunLocally: (runId) => {
+      const normalizedRunId = runId.trim();
+      if (!normalizedRunId) {
+        return;
+      }
+      locallySettledRunId = normalizedRunId;
+      locallySettledRunTerminalObserved = false;
+      let changed = false;
+      const turn = findTurnByRunId(normalizedRunId);
+      if (turn && turn.phase === "streaming") {
+        replaceTurn(turn, { ...turn, phase: "settled" });
+        changed = true;
+      }
+      if (activeRun?.runId === normalizedRunId) {
+        locallySettledActivity = activeRun;
+        activeRun = null;
+        setToolStatus(null, false, true);
+        setRetryAttempts(EMPTY_RETRY_ATTEMPTS, true);
+        changed = true;
+      }
+      if (changed) {
+        schedule(true);
+      }
+    },
+
+    releaseLocallySettledRun: (runId) => {
+      const normalizedRunId = runId.trim();
+      if (locallySettledRunId !== normalizedRunId) {
+        return false;
+      }
+      if (locallySettledRunTerminalObserved) {
+        return false;
+      }
+      locallySettledRunId = null;
+      const activity = locallySettledActivity;
+      locallySettledActivity = null;
+      if (!activity || activity.runId !== normalizedRunId) {
+        return true;
+      }
+      activeRun = activity;
+      const turn = findTurnByRunId(normalizedRunId);
+      if (turn && turn.phase === "settled") {
+        replaceTurn(turn, { ...turn, phase: "streaming" });
+      }
+      setToolStatus(activity.toolStatus, activity.toolStatusIsCompaction, true);
+      schedule(true);
+      return true;
     },
 
     foldSettledTurns: () => {

@@ -136,6 +136,7 @@ test("gateway bridge listener keeps one worker across renders and handles native
     let secondAbortCalls = 0;
     const stopRequestIds = [];
     const activeStopCalls = [];
+    const releaseCalls = [];
     const consumedStopIds = [];
     const baseParams = {
       currentConversationIdRef,
@@ -154,6 +155,10 @@ test("gateway bridge listener keeps one worker across renders and handles native
       },
       getConversationAbortController() {
         return { abort: () => firstAbortCalls++ };
+      },
+      releaseConversationRun(conversationId, controller) {
+        releaseCalls.push({ conversationId, controller });
+        return true;
       },
       requestConversationStop(conversationId) {
         stopRequestIds.push(conversationId);
@@ -227,8 +232,10 @@ test("gateway bridge listener keeps one worker across renders and handles native
     assert.equal(secondAbortCalls, 1, "listeners must dispatch through the latest callback refs");
     assert.deepEqual(stopRequestIds, ["conversation-1"]);
     assert.deepEqual(activeStopCalls, [
-      { conversationId: "conversation-1", options: { force: false } },
+      { conversationId: "conversation-1", options: { force: true } },
     ]);
+    assert.equal(releaseCalls.length, 1);
+    assert.equal(releaseCalls[0].conversationId, "conversation-1");
     assert.deepEqual(
       consumedStopIds,
       [],

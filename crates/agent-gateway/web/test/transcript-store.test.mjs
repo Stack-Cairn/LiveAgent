@@ -2060,3 +2060,120 @@ test("ref-bearing replay converges regardless of history/replay arrival order", 
     "replay-first converges to the final version",
   );
 });
+
+test("local stop settles immediately and suppresses late events for only that run", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(userMessage("run-1", 1, "hello"));
+  store.applyEvent(runStarted("run-1", 2));
+  store.applyEvent(token("run-1", 3, "before stop"));
+  store.flush();
+  assert.equal(store.getSnapshot().activeRun?.runId, "run-1");
+
+  store.settleRunLocally("run-1");
+  store.flush();
+  assert.equal(store.getSnapshot().activeRun, null);
+  const textAtStop = allRows(store.getSnapshot()).map(rowText).join("\n");
+
+  store.applyEvent(token("run-1", 4, " late token"));
+  store.applySync({
+    conversationId: "conv-1",
+    streamEpoch: "epoch-1",
+    latestSeq: 4,
+    reset: false,
+    activity: {
+      runId: "run-1",
+      state: "cancelling",
+      startedSeq: 2,
+      toolStatus: "still cancelling",
+      toolStatusIsCompaction: false,
+      updatedAt: 4,
+    },
+    snapshot: null,
+    events: [],
+  });
+  store.flush();
+  assert.equal(store.getSnapshot().activeRun, null);
+  assert.equal(allRows(store.getSnapshot()).map(rowText).join("\n"), textAtStop);
+
+  store.applyEvent(runFinished("run-1", 5, "cancelled"));
+  store.applyEvent(userMessage("run-2", 6, "next"));
+  store.applyEvent(runStarted("run-2", 7));
+  store.flush();
+  assert.equal(store.getSnapshot().activeRun?.runId, "run-2");
+});
+
+test("a failed local stop can restore the same active run before resync", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent(token("run-1", 2, "working"));
+  store.flush();
+
+  store.settleRunLocally("run-1");
+  store.flush();
+  assert.equal(store.getSnapshot().activeRun, null);
+
+  store.releaseLocallySettledRun("run-1");
+  store.flush();
+  assert.equal(store.getSnapshot().activeRun?.runId, "run-1");
+  store.applyEvent(token("run-1", 3, " again"));
+  store.flush();
+  assert.match(allRows(store.getSnapshot()).map(rowText).join("\n"), /working again/);
+});
+
+test("a terminal event keeps a failed cancel request from restoring a finished run", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent(token("run-1", 2, "working"));
+  store.settleRunLocally("run-1");
+  store.applyEvent(runFinished("run-1", 3, "cancelled"));
+  store.flush();
+
+  assert.equal(store.releaseLocallySettledRun("run-1"), false);
+  store.applySync({
+    conversationId: "conv-1",
+    streamEpoch: "epoch-1",
+    latestSeq: 4,
+    reset: false,
+    activity: {
+      runId: "run-1",
+      state: "cancelling",
+      startedSeq: 1,
+      toolStatus: null,
+      toolStatusIsCompaction: false,
+      updatedAt: 4,
+    },
+    snapshot: null,
+    events: [],
+  });
+  store.flush();
+  assert.equal(store.getSnapshot().activeRun, null);
+});
+
+test("a duplicate older run start cannot release the local-stop tombstone", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-old", 1));
+  store.applyEvent(runFinished("run-old", 2, "completed"));
+  store.applyEvent(runStarted("run-1", 3));
+  store.applyEvent(token("run-1", 4, "working"));
+  store.settleRunLocally("run-1");
+
+  store.applyEvent(runStarted("run-old", 1));
+  store.applySync({
+    conversationId: "conv-1",
+    streamEpoch: "epoch-1",
+    latestSeq: 4,
+    reset: false,
+    activity: {
+      runId: "run-1",
+      state: "cancelling",
+      startedSeq: 3,
+      toolStatus: null,
+      toolStatusIsCompaction: false,
+      updatedAt: 4,
+    },
+    snapshot: null,
+    events: [],
+  });
+  store.flush();
+  assert.equal(store.getSnapshot().activeRun, null);
+});

@@ -229,6 +229,116 @@ test("settleRun clears the entry only on exact run identity", () => {
   assert.equal(notifications, 2);
 });
 
+test("a locally settled run cannot be resurrected by cancelling pushes or hydration", () => {
+  const store = createActivityStore();
+  store.applyActivityEvent({
+    conversationId: "conv-1",
+    runId: "run-1",
+    running: true,
+    state: "running",
+    workdir: null,
+    clientRequestId: null,
+    updatedAt: 10,
+  });
+
+  store.settleRunLocally("conv-1", "run-1");
+  store.applyActivityEvent({
+    conversationId: "conv-1",
+    runId: "run-1",
+    running: true,
+    state: "cancelling",
+    workdir: null,
+    clientRequestId: null,
+    updatedAt: 11,
+  });
+  store.hydrate([
+    { conversationId: "conv-1", runId: "run-1", state: "cancelling", updatedAt: 11 },
+  ]);
+  assert.equal(store.isRunning("conv-1"), false);
+
+  store.releaseSettledRun("conv-1", "run-1");
+  store.applyActivityEvent({
+    conversationId: "conv-1",
+    runId: "run-1",
+    running: true,
+    state: "running",
+    workdir: null,
+    clientRequestId: null,
+    updatedAt: 12,
+  });
+  assert.equal(store.isRunning("conv-1"), true, "failed cancellation can be resynced");
+
+  store.settleRunLocally("conv-1", "run-1");
+  store.applyActivityEvent({
+    conversationId: "conv-1",
+    runId: "run-2",
+    running: true,
+    state: "running",
+    workdir: null,
+    clientRequestId: null,
+    updatedAt: 13,
+  });
+  assert.equal(store.get("conv-1")?.runId, "run-2", "a newer run is never suppressed");
+});
+
+test("terminal confirmation prevents a failed cancel request from reviving the finished run", () => {
+  const store = createActivityStore();
+  store.applyActivityEvent({
+    conversationId: "conv-1",
+    runId: "run-1",
+    running: true,
+    state: "running",
+    workdir: null,
+    clientRequestId: null,
+    updatedAt: 10,
+  });
+
+  store.settleRunLocally("conv-1", "run-1");
+  store.settleRun("conv-1", "run-1");
+  assert.equal(store.releaseSettledRun("conv-1", "run-1"), false);
+  store.applyActivityEvent({
+    conversationId: "conv-1",
+    runId: "run-1",
+    running: true,
+    state: "cancelling",
+    workdir: null,
+    clientRequestId: null,
+    updatedAt: 11,
+  });
+  assert.equal(store.isRunning("conv-1"), false);
+});
+
+test("filtering a stopped run from hydration preserves a recent push for another conversation", () => {
+  let now = 1_000;
+  const store = createActivityStore({ now: () => now });
+  store.applyActivityEvent({
+    conversationId: "conv-a",
+    runId: "run-a",
+    running: true,
+    state: "running",
+    workdir: null,
+    clientRequestId: null,
+    updatedAt: 10,
+  });
+  store.settleRunLocally("conv-a", "run-a");
+  now += 1;
+  store.applyActivityEvent({
+    conversationId: "conv-b",
+    runId: "run-b",
+    running: true,
+    state: "running",
+    workdir: null,
+    clientRequestId: null,
+    updatedAt: 11,
+  });
+
+  store.hydrate([
+    { conversationId: "conv-a", runId: "run-a", state: "cancelling", updatedAt: 10 },
+  ]);
+  assert.equal(store.get("conv-b")?.runId, "run-b");
+  assert.equal(store.isRunning("conv-a"), false);
+});
+
 test("an empty hydration snapshot means idle everywhere", () => {
   const store = createActivityStore();
   store.applyActivityEvent({
