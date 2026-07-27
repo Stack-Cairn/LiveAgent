@@ -121,6 +121,7 @@ import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
+import { useTaskbarActivity } from "./chat/hooks/useTaskbarActivity";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
 import {
   getQueuedConversationIds,
@@ -205,6 +206,8 @@ export function ChatPage(props: ChatPageProps) {
     errorCode: null,
   });
   const { confirm: requestConfirmDialog, dialog: confirmDialog } = useConfirmDialog();
+
+  useTaskbarActivity(runningConversationIds.size);
 
   const isAgentMode = isAgentExecutionMode(settings.system.executionMode);
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
