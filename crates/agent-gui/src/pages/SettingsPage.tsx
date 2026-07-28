@@ -6,6 +6,7 @@ import {
   Clock3,
   Cloud,
   Cpu,
+  History,
   Info,
   Key,
   Keyboard,
@@ -18,6 +19,7 @@ import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSp
 import { useLocale } from "../i18n";
 import { AboutSection } from "./settings/AboutSection";
 import { AgentsSection } from "./settings/AgentsSection";
+import { ConversationsSection } from "./settings/ConversationsSection";
 import { CronSection } from "./settings/CronSection";
 import { GlobalShortcutsSection } from "./settings/GlobalShortcutsSection";
 import { HooksSection } from "./settings/HooksSection";
@@ -43,8 +45,6 @@ function getSaveIndicator(state: SettingsPageProps["saveState"], t: (key: string
         text: t("settings.saveError"),
         title: state.message,
       };
-    case "saved":
-    case "idle":
     default:
       return {
         dotClass: "bg-emerald-500",
@@ -97,6 +97,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { id: "system", icon: <Settings2 className="h-3.5 w-3.5" /> },
       { id: "providers", icon: <Cpu className="h-3.5 w-3.5" /> },
+      { id: "conversations", icon: <History className="h-3.5 w-3.5" /> },
       { id: "agents", icon: <BookOpen className="h-3.5 w-3.5" /> },
     ],
   },
@@ -143,19 +144,23 @@ export function SettingsPage(props: SettingsPageProps) {
   const { t } = useLocale();
   const [section, setSection] = useState<SectionId>(initialSection);
 
-  const sectionLabels: Record<SectionId, string> = {
-    system: t("settings.navSystem"),
-    shortcuts: t("settings.navShortcuts"),
-    systemTools: t("settings.navSystemTools"),
-    providers: t("settings.navProviders"),
-    agents: t("settings.navAgents"),
-    ssh: t("settings.navSsh"),
-    memory: t("settings.navMemory"),
-    hooks: t("settings.navHooks"),
-    cron: t("settings.navCron"),
-    remote: t("settings.navRemote"),
-    about: t("settings.navAbout"),
-  };
+  const sectionLabels = useMemo<Record<SectionId, string>>(
+    () => ({
+      system: t("settings.navSystem"),
+      shortcuts: t("settings.navShortcuts"),
+      systemTools: t("settings.navSystemTools"),
+      providers: t("settings.navProviders"),
+      conversations: t("settings.navConversations"),
+      agents: t("settings.navAgents"),
+      ssh: t("settings.navSsh"),
+      memory: t("settings.navMemory"),
+      hooks: t("settings.navHooks"),
+      cron: t("settings.navCron"),
+      remote: t("settings.navRemote"),
+      about: t("settings.navAbout"),
+    }),
+    [t],
+  );
 
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const navGroups = useMemo(
@@ -186,6 +191,8 @@ export function SettingsPage(props: SettingsPageProps) {
     switch (section) {
       case "providers":
         return <ProvidersSection settings={settings} setSettings={setSettings} />;
+      case "conversations":
+        return <ConversationsSection />;
       case "system":
         return <SystemSettingsForm settings={settings} setSettings={setSettings} />;
       case "shortcuts":

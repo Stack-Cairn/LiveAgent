@@ -220,6 +220,16 @@ export async function listChatHistory(
   });
 }
 
+export type CodexImportResult = {
+  scannedCount: number;
+  importedCount: number;
+  skippedLines: number;
+};
+
+export async function importCodexChatHistory() {
+  return invoke<CodexImportResult>("chat_history_import_codex");
+}
+
 export async function listChatHistoryWorkdirs() {
   return invoke<ChatHistoryWorkdirsResponse>("chat_history_workdirs");
 }
