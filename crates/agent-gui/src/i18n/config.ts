@@ -144,7 +144,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.codexImportDone": "已导入 {count} 个 Codex 对话",
     "chat.history.codexImportFailed": "Codex 对话导入失败",
     "chat.history.codexImportDialogTitle": "导入 Codex 对话",
-    "chat.history.codexImportDialogSubtitle": "勾选要导入的工作区与会话，临时会话已合并到 default 工作区。",
+    "chat.history.codexImportDialogSubtitle":
+      "勾选要导入的工作区与会话，临时会话已合并到 default 工作区。",
     "chat.history.codexImportDialogWorkspaces": "工作区",
     "chat.history.codexImportDialogNoWorkspace": "无工作区",
     "chat.history.codexImportDialogAll": "全选",

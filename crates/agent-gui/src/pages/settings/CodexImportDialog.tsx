@@ -3,9 +3,12 @@ import { createPortal } from "react-dom";
 import { Check, Folder, MessageSquareText, X } from "../../components/icons";
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
-import { cn } from "../../lib/shared/utils";
+import type {
+  CodexImportPreview,
+  CodexImportPreviewSession,
+} from "../../lib/chat/history/chatHistory";
 import { useModalMotion } from "../../lib/shared/modalMotion";
-import type { CodexImportPreview, CodexImportPreviewSession } from "../../lib/chat/history/chatHistory";
+import { cn } from "../../lib/shared/utils";
 
 type CodexImportDialogProps = {
   preview: CodexImportPreview;
@@ -80,8 +83,11 @@ export function CodexImportDialog({ preview, onClose, onConfirm }: CodexImportDi
     const allSelected = importable.every((s) => selected.has(s.id));
     setSelected((prev) => {
       const next = new Set(prev);
-      if (allSelected) importable.forEach((s) => next.delete(s.id));
-      else importable.forEach((s) => next.add(s.id));
+      if (allSelected) {
+        for (const s of importable) next.delete(s.id);
+      } else {
+        for (const s of importable) next.add(s.id);
+      }
       return next;
     });
   }
@@ -199,7 +205,10 @@ export function CodexImportDialog({ preview, onClose, onConfirm }: CodexImportDi
                             : workspaceLabel(key)}
                         </span>
                         {key !== NO_CWD_KEY ? (
-                          <span className="block truncate text-[10px] text-muted-foreground" title={key}>
+                          <span
+                            className="block truncate text-[10px] text-muted-foreground"
+                            title={key}
+                          >
                             {key}
                           </span>
                         ) : null}
@@ -220,7 +229,7 @@ export function CodexImportDialog({ preview, onClose, onConfirm }: CodexImportDi
               <span className="text-xs text-muted-foreground">
                 {activeCwdKey === NO_CWD_KEY
                   ? t("chat.history.codexImportDialogNoWorkspace")
-                  : activeCwdKey ?? ""}
+                  : (activeCwdKey ?? "")}
               </span>
               {activeSessions.length > 0 ? (
                 <button
@@ -269,7 +278,8 @@ export function CodexImportDialog({ preview, onClose, onConfirm }: CodexImportDi
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-medium">{session.title}</span>
                         <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                          {session.model} · {session.messageCount} {t("chat.history.codexImportDialogMessages")}
+                          {session.model} · {session.messageCount}{" "}
+                          {t("chat.history.codexImportDialogMessages")}
                         </span>
                       </span>
                       {session.alreadyImported ? (
@@ -298,10 +308,7 @@ export function CodexImportDialog({ preview, onClose, onConfirm }: CodexImportDi
               onClick={() => onConfirm(Array.from(selected))}
               disabled={selected.size === 0}
             >
-              {t("chat.history.codexImportDialogImport").replace(
-                "{count}",
-                String(selected.size),
-              )}
+              {t("chat.history.codexImportDialogImport").replace("{count}", String(selected.size))}
             </Button>
           </div>
         </div>
