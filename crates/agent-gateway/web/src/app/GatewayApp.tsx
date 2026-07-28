@@ -81,6 +81,7 @@ import {
   DEFAULT_WORKSPACE_PROJECT_ID,
   findProviderModelConfig,
   getChatRuntimeReasoningLevelsForProvider,
+  GLOBAL_NOTES_DOCK_PATH_KEY,
   getNextTheme,
   getRightDockFileTreeState,
   getRightDockProjectState,
@@ -3999,18 +4000,19 @@ export default function GatewayApp() {
   const terminalProjectPathKey = terminalProjectPath
     ? workspaceProjectPathKey(terminalProjectPath)
     : "";
+  const rightDockStatePathKey = terminalProjectPathKey || GLOBAL_NOTES_DOCK_PATH_KEY;
   // getRightDockProjectState / getRightDockFileTreeState / getSshProjectHostIds
   // build fresh objects on every call, so memoize on the owning settings slice
   // + path key: RightDockPanel is memo'd and these references are props.
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on settings.customSettings.rightDock (the only slice these getters read) so unrelated settings changes keep the reference stable.
   const rightDockProjectState = useMemo(
-    () => getRightDockProjectState(settings.customSettings, terminalProjectPathKey),
-    [settings.customSettings.rightDock, terminalProjectPathKey],
+    () => getRightDockProjectState(settings.customSettings, rightDockStatePathKey),
+    [settings.customSettings.rightDock, rightDockStatePathKey],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on settings.customSettings.rightDock (the only slice these getters read) so unrelated settings changes keep the reference stable.
   const rightDockFileTreeState = useMemo(
-    () => getRightDockFileTreeState(settings.customSettings, terminalProjectPathKey),
-    [settings.customSettings.rightDock, terminalProjectPathKey],
+    () => getRightDockFileTreeState(settings.customSettings, rightDockStatePathKey),
+    [settings.customSettings.rightDock, rightDockStatePathKey],
   );
   const rightDockFileTreeOpen = isRightDockSingletonTabOpen(
     settings.customSettings,
@@ -4172,15 +4174,15 @@ export default function GatewayApp() {
   );
   const handleRightDockProjectStateChange = useCallback(
     (updater: (current: RightDockProjectState) => RightDockProjectState) => {
-      setSettings((prev) => updateRightDockProjectState(prev, terminalProjectPathKey, updater));
+      setSettings((prev) => updateRightDockProjectState(prev, rightDockStatePathKey, updater));
     },
-    [setSettings, terminalProjectPathKey],
+    [rightDockStatePathKey, setSettings],
   );
   const handleRightDockFileTreeStateChange = useCallback(
     (patch: RightDockFileTreeStatePatch) => {
-      setSettings((prev) => updateRightDockFileTreeState(prev, terminalProjectPathKey, patch));
+      setSettings((prev) => updateRightDockFileTreeState(prev, rightDockStatePathKey, patch));
     },
-    [setSettings, terminalProjectPathKey],
+    [rightDockStatePathKey, setSettings],
   );
   const handleSshProjectHostIdsChange = useCallback(
     (hostIds: string[]) => {
@@ -4672,12 +4674,9 @@ export default function GatewayApp() {
                           variant="ghost"
                           size="icon"
                           onClick={() => setRightDockOpen((open) => !open)}
-                          disabled={Boolean(projectToolsDisabledMessage) && !rightDockOpen}
                           aria-expanded={rightDockOpen}
                           title={
-                            rightDockOpen
-                              ? "Collapse project tools panel"
-                              : (projectToolsDisabledMessage ?? "Expand project tools panel")
+                            rightDockOpen ? "Collapse project tools panel" : "Expand project tools panel"
                           }
                           className={`gateway-project-tools-panel-toggle relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
                             rightDockOpen ? "bg-muted text-foreground" : ""
@@ -4994,7 +4993,7 @@ export default function GatewayApp() {
               isOpen={activeView === "chat" && rightDockOpen}
               collapseImmediately={activeView !== "chat"}
               fontScale={settings.customSettings.fontScale.rightDock}
-              projectPathKey={terminalProjectPathKey}
+              projectPathKey={rightDockStatePathKey}
               cwd={terminalProjectPath}
               sessions={terminalSessions}
               sessionsLoaded={terminalSessionsLoaded}

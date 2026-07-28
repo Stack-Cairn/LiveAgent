@@ -491,6 +491,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
     currentActiveTab,
     fileTreeInitialized,
     gitReviewInitialized,
+    notesInitialized,
     openSingletonTab,
     orderedProjectTabIds,
     orderedProjectTabs,
@@ -574,16 +575,24 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
   );
 
   const showDisabledMessage = Boolean(
-    disabledMessage && !tunnelAvailable && !tunnelInitialized && !sshTunnelInitialized,
+    disabledMessage &&
+      !tunnelAvailable &&
+      !tunnelInitialized &&
+      !sshTunnelInitialized &&
+      !notesInitialized,
   );
   const showRightDockChooser =
     !showDisabledMessage &&
-    (projectReady || tunnelAvailable) &&
+    (projectReady || tunnelAvailable || !notesInitialized) &&
     currentActiveTab === "terminal" &&
     !activeSession;
 
   const startToolTab = useCallback(
     (kind: RightDockSingletonTabKind) => {
+      if (kind === "notes") {
+        openSingletonTab(kind);
+        return;
+      }
       if (rightDockTabRequiresProject(kind)) {
         if (!projectReady) return;
       } else if (!tunnelClient) {
@@ -729,8 +738,15 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       gitReview: gitReviewInitialized,
       tunnel: tunnelInitialized,
       sshTunnel: sshTunnelInitialized,
+      notes: notesInitialized,
     }),
-    [fileTreeInitialized, gitReviewInitialized, sshTunnelInitialized, tunnelInitialized],
+    [
+      fileTreeInitialized,
+      gitReviewInitialized,
+      notesInitialized,
+      sshTunnelInitialized,
+      tunnelInitialized,
+    ],
   );
 
   return (

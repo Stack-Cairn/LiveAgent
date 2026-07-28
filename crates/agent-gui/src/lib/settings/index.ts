@@ -107,7 +107,10 @@ export type ChatSidebarSettings = {
   recentCollapsed: boolean;
 };
 
-export const RIGHT_DOCK_TOOL_KINDS = ["fileTree", "gitReview", "tunnel", "sshTunnel"] as const;
+export const RIGHT_DOCK_TOOL_KINDS = ["fileTree", "gitReview", "tunnel", "sshTunnel", "notes"] as const;
+
+// Stable settings bucket for global right-dock tools when no workspace is selected.
+export const GLOBAL_NOTES_DOCK_PATH_KEY = "__global-notes__";
 
 export type RightDockToolKind = (typeof RIGHT_DOCK_TOOL_KINDS)[number];
 
@@ -1946,6 +1949,7 @@ export const RIGHT_DOCK_SINGLETON_TAB_IDS = {
   gitReview: "tool:gitReview",
   tunnel: "tool:tunnel",
   sshTunnel: "tool:sshTunnel",
+  notes: "tool:notes",
 } as const satisfies Record<RightDockToolKind, string>;
 
 const RIGHT_DOCK_TOOL_KIND_BY_TAB_ID = new Map<string, RightDockToolKind>(

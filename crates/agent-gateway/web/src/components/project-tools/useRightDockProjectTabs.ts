@@ -45,6 +45,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
   const gitReviewInitialized = Boolean(projectPathKey && projectState.tools.gitReview);
   const tunnelInitialized = Boolean(projectState.tools.tunnel && tunnelAvailable);
   const sshTunnelInitialized = Boolean(projectPathKey && projectState.tools.sshTunnel);
+  const notesInitialized = Boolean(projectState.tools.notes);
   const visibleTabs = useMemo(
     () =>
       getRightDockVisibleTabs({
@@ -146,6 +147,7 @@ export function useRightDockProjectTabs(options: UseRightDockProjectTabsOptions)
     effectiveActiveTabId,
     fileTreeInitialized,
     gitReviewInitialized,
+    notesInitialized,
     openSingletonTab,
     orderedProjectTabIds,
     orderedProjectTabs,
