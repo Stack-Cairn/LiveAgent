@@ -93,7 +93,13 @@ export type ChatSidebarSettings = {
   recentCollapsed: boolean;
 };
 
-export const RIGHT_DOCK_TOOL_KINDS = ["fileTree", "gitReview", "tunnel", "sshTunnel", "notes"] as const;
+export const RIGHT_DOCK_TOOL_KINDS = [
+  "fileTree",
+  "gitReview",
+  "tunnel",
+  "sshTunnel",
+  "notes",
+] as const;
 
 // Stable settings bucket for global right-dock tools when no workspace is selected.
 export const GLOBAL_NOTES_DOCK_PATH_KEY = "__global-notes__";

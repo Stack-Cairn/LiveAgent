@@ -1851,7 +1851,9 @@ export function ChatPage(props: ChatPageProps) {
                       onClick={() => setRightDockOpen((open) => !open)}
                       aria-expanded={rightDockOpen}
                       title={
-                        rightDockOpen ? "Collapse project tools panel" : "Expand project tools panel"
+                        rightDockOpen
+                          ? "Collapse project tools panel"
+                          : "Expand project tools panel"
                       }
                       className={`relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
                         rightDockOpen ? "bg-muted text-foreground" : ""

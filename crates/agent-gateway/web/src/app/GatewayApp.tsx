@@ -80,8 +80,8 @@ import {
   type ChatRuntimeControls,
   DEFAULT_WORKSPACE_PROJECT_ID,
   findProviderModelConfig,
-  getChatRuntimeReasoningLevelsForProvider,
   GLOBAL_NOTES_DOCK_PATH_KEY,
+  getChatRuntimeReasoningLevelsForProvider,
   getNextTheme,
   getRightDockFileTreeState,
   getRightDockProjectState,
@@ -4676,7 +4676,9 @@ export default function GatewayApp() {
                           onClick={() => setRightDockOpen((open) => !open)}
                           aria-expanded={rightDockOpen}
                           title={
-                            rightDockOpen ? "Collapse project tools panel" : "Expand project tools panel"
+                            rightDockOpen
+                              ? "Collapse project tools panel"
+                              : "Expand project tools panel"
                           }
                           className={`gateway-project-tools-panel-toggle relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
                             rightDockOpen ? "bg-muted text-foreground" : ""

@@ -6,12 +6,7 @@
 
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "../../../i18n";
 import { cn } from "../../../lib/shared/utils";
 import { invokeFs, isFsBackendError } from "../../../lib/tools/fsBackend";
@@ -301,7 +296,11 @@ export function NotesEditor(props: NotesEditorProps) {
             void saveCurrent();
           }}
         >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          {saving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Save className="h-3.5 w-3.5" />
+          )}
         </Button>
       </div>
       {error ? (

@@ -100,7 +100,13 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
       {/* Native trigger button styled via buttonVariants: Base UI Trigger
           renders a plain <button>, so this stays identical on GUI and web. */}
       <DropdownMenuTrigger
-        disabled={!(projectReady || tunnelAvailable || RIGHT_DOCK_TOOL_DEFINITIONS.some((tool) => tool.kind === "notes")) || creating}
+        disabled={
+          !(
+            projectReady ||
+            tunnelAvailable ||
+            RIGHT_DOCK_TOOL_DEFINITIONS.some((tool) => tool.kind === "notes")
+          ) || creating
+        }
         title={t("projectTools.newProjectTool")}
         className={cn(
           buttonVariants({ variant: "ghost", size: "icon" }),
@@ -115,7 +121,13 @@ export function RightDockCreateMenu(props: RightDockCreateMenuProps) {
           <DropdownMenuItem
             key={definition.kind}
             onSelect={() => onStartTool(definition.kind)}
-            disabled={definition.projectRequired ? !projectReady : definition.kind === "tunnel" ? !tunnelAvailable : false}
+            disabled={
+              definition.projectRequired
+                ? !projectReady
+                : definition.kind === "tunnel"
+                  ? !tunnelAvailable
+                  : false
+            }
             className="gap-2 text-xs"
           >
             {definition.icon("h-3.5 w-3.5")}

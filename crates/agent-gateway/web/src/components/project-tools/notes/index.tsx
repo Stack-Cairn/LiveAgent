@@ -13,26 +13,12 @@ import {
   useState,
 } from "react";
 import { useLocale } from "../../../i18n";
-import {
-  defaultNewNoteName,
-  ensureNotesRoot,
-  isNotesEditablePath,
-} from "../../../lib/notes/root";
+import { defaultNewNoteName, ensureNotesRoot, isNotesEditablePath } from "../../../lib/notes/root";
 import { cn } from "../../../lib/shared/utils";
-import {
-  BookOpen,
-  Check,
-  FilePlus,
-  FolderPlus,
-  Loader2,
-  RefreshCw,
-  Trash2,
-  X,
-} from "../../icons";
+import { BookOpen, Check, FilePlus, FolderPlus, Loader2, RefreshCw, Trash2, X } from "../../icons";
 import { Button } from "../../ui/button";
 import { useConfirmDialog } from "../../ui/confirm-dialog";
 import { Input } from "../../ui/input";
-import { useRightDockToolContext } from "../RightDockContext";
 import {
   addExpandedPaths,
   basename,
@@ -46,6 +32,7 @@ import {
 } from "../file-tree/model";
 import { FileTreeErrorRow, FileTreeRow } from "../file-tree/Row";
 import { useFileTreeData } from "../file-tree/useFileTreeData";
+import { useRightDockToolContext } from "../RightDockContext";
 import { NotesEditor } from "./NotesEditor";
 
 const NOTES_BUCKET_KEY = "notes:global";
@@ -100,29 +87,20 @@ export function NotesPanel(props: { active: boolean }) {
     };
   }, []);
 
-  const {
-    nodes,
-    loadChildren,
-    refreshVisible,
-    createEntry,
-    renameEntry,
-    deleteEntry,
-  } = useFileTreeData({
-    projectPathKey: NOTES_BUCKET_KEY,
-    cwd: notesRoot,
-    active: active && Boolean(notesRoot),
-    initialized: Boolean(notesRoot),
-    workspaceActivityClient: null,
-    expandedPaths,
-    query: "",
-    showHidden: false,
-  });
+  const { nodes, loadChildren, refreshVisible, createEntry, renameEntry, deleteEntry } =
+    useFileTreeData({
+      projectPathKey: NOTES_BUCKET_KEY,
+      cwd: notesRoot,
+      active: active && Boolean(notesRoot),
+      initialized: Boolean(notesRoot),
+      workspaceActivityClient: null,
+      expandedPaths,
+      query: "",
+      showHidden: false,
+    });
 
   const expandedSet = useMemo(() => new Set(expandedPaths), [expandedPaths]);
-  const rows = useMemo(
-    () => flattenFileTreeRows(nodes, expandedSet),
-    [expandedSet, nodes],
-  );
+  const rows = useMemo(() => flattenFileTreeRows(nodes, expandedSet), [expandedSet, nodes]);
 
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
@@ -133,8 +111,7 @@ export function NotesPanel(props: { active: boolean }) {
 
   const selectedNode = nodes[selectedPath] ?? nodes[ROOT_PATH];
   const selectedKind: FileTreeKind = selectedNode?.kind ?? "dir";
-  const targetDir =
-    selectedKind === "dir" ? selectedPath || ROOT_PATH : dirname(selectedPath);
+  const targetDir = selectedKind === "dir" ? selectedPath || ROOT_PATH : dirname(selectedPath);
 
   const toggleDirectory = useCallback(
     (path: string, isExpanded: boolean) => {
@@ -164,21 +141,26 @@ export function NotesPanel(props: { active: boolean }) {
     [nodes],
   );
 
-  const openNote = useCallback((path: string) => {
-    if (!isNotesEditablePath(path)) {
-      setActionError(t("projectTools.notes.unsupportedFile"));
-      return;
-    }
-    setSelectedPath(path);
-    setOpenPath(path);
-    setActionError(null);
-  }, [t]);
+  const openNote = useCallback(
+    (path: string) => {
+      if (!isNotesEditablePath(path)) {
+        setActionError(t("projectTools.notes.unsupportedFile"));
+        return;
+      }
+      setSelectedPath(path);
+      setOpenPath(path);
+      setActionError(null);
+    },
+    [t],
+  );
 
   const startAction = useCallback(
     (action: Exclude<PendingAction, null>, targetPath = targetDir) => {
       setPendingAction(action);
       setPendingTargetPath(targetPath);
-      setDraftName(action === "file" ? defaultNewNoteName() : action === "rename" ? basename(targetPath) : "");
+      setDraftName(
+        action === "file" ? defaultNewNoteName() : action === "rename" ? basename(targetPath) : "",
+      );
       setActionError(null);
     },
     [targetDir],
@@ -418,7 +400,11 @@ export function NotesPanel(props: { active: boolean }) {
             disabled={busyAction}
             onClick={() => void finishAction()}
           >
-            {busyAction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            {busyAction ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Check className="h-3.5 w-3.5" />
+            )}
           </Button>
           <Button
             size="icon"
@@ -526,16 +512,13 @@ export function NotesPanel(props: { active: boolean }) {
 
         <div className="flex min-h-0 flex-1 flex-col border-t border-border/70">
           {openPath ? (
-            <NotesEditor
-              active={active}
-              notesRoot={notesRoot}
-              path={openPath}
-              theme={theme}
-            />
+            <NotesEditor active={active} notesRoot={notesRoot} path={openPath} theme={theme} />
           ) : (
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
               <BookOpen className="h-5 w-5 text-muted-foreground" />
-              <div className="text-xs text-muted-foreground">{t("projectTools.notes.pickNote")}</div>
+              <div className="text-xs text-muted-foreground">
+                {t("projectTools.notes.pickNote")}
+              </div>
               <Button size="sm" variant="outline" onClick={() => startAction("file", ROOT_PATH)}>
                 {t("projectTools.notes.newNote")}
               </Button>
