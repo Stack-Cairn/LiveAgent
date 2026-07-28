@@ -2,24 +2,50 @@ import { useState } from "react";
 import { History, Loader2, Upload } from "../../components/icons";
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
-import { type CodexImportResult, importCodexChatHistory } from "../../lib/chat/history/chatHistory";
+import {
+  type CodexImportPreview,
+  type CodexImportResult,
+  importCodexChatHistory,
+  scanCodexChatHistory,
+} from "../../lib/chat/history/chatHistory";
+import { CodexImportDialog } from "./CodexImportDialog";
 
 export function ConversationsSection() {
   const { t } = useLocale();
-  const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [dialog, setDialog] = useState<CodexImportPreview | null>(null);
   const [result, setResult] = useState<CodexImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleImport() {
-    setLoading(true);
+  async function handleScan() {
+    setScanning(true);
     setResult(null);
     setError(null);
     try {
-      setResult(await importCodexChatHistory());
+      const preview = await scanCodexChatHistory();
+      if (preview.sessions.length === 0) {
+        setError(t("chat.history.codexImportDialogEmpty"));
+        return;
+      }
+      setDialog(preview);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setLoading(false);
+      setScanning(false);
+    }
+  }
+
+  async function handleConfirm(ids: string[]) {
+    setDialog(null);
+    setImporting(true);
+    setError(null);
+    try {
+      setResult(await importCodexChatHistory(ids));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -45,13 +71,15 @@ export function ConversationsSection() {
               {t("settings.codexImportDescription")}
             </p>
           </div>
-          <Button type="button" onClick={() => void handleImport()} disabled={loading}>
-            {loading ? (
+          <Button type="button" onClick={() => void handleScan()} disabled={scanning || importing}>
+            {scanning || importing ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Upload className="h-4 w-4" />
             )}
-            {loading ? t("chat.history.codexImporting") : t("chat.history.codexImport")}
+            {scanning || importing
+              ? t("chat.history.codexImporting")
+              : t("chat.history.codexImport")}
           </Button>
         </div>
 
@@ -68,6 +96,14 @@ export function ConversationsSection() {
           </div>
         ) : null}
       </section>
+
+      {dialog ? (
+        <CodexImportDialog
+          preview={dialog}
+          onClose={() => setDialog(null)}
+          onConfirm={(ids) => void handleConfirm(ids)}
+        />
+      ) : null}
     </div>
   );
 }
