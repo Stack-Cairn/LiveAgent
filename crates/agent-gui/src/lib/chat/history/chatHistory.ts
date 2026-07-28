@@ -226,8 +226,30 @@ export type CodexImportResult = {
   skippedLines: number;
 };
 
-export async function importCodexChatHistory() {
-  return invoke<CodexImportResult>("chat_history_import_codex");
+export type CodexImportPreviewSession = {
+  id: string;
+  sessionId: string;
+  title: string;
+  model: string;
+  cwd?: string;
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+  alreadyImported: boolean;
+};
+
+export type CodexImportPreview = {
+  sessions: CodexImportPreviewSession[];
+  scannedCount: number;
+  skippedLines: number;
+};
+
+export async function scanCodexChatHistory() {
+  return invoke<CodexImportPreview>("chat_history_scan_codex");
+}
+
+export async function importCodexChatHistory(ids: string[]) {
+  return invoke<CodexImportResult>("chat_history_import_codex", { ids });
 }
 
 export async function listChatHistoryWorkdirs() {

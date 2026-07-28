@@ -6,6 +6,28 @@ pub struct CodexImportResult {
     pub skipped_lines: usize,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexImportSession {
+    pub id: String,
+    pub session_id: String,
+    pub title: String,
+    pub model: String,
+    pub cwd: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub message_count: usize,
+    pub already_imported: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexImportPreview {
+    pub sessions: Vec<CodexImportSession>,
+    pub scanned_count: usize,
+    pub skipped_lines: usize,
+}
+
 struct CodexConversation {
     id: String,
     session_id: String,
@@ -353,14 +375,51 @@ fn import_codex_conversation(
 }
 
 #[tauri::command]
+pub async fn chat_history_scan_codex() -> Result<CodexImportPreview, String> {
+    let (sessions, scanned_count, skipped_lines) =
+        tauri::async_runtime::spawn_blocking(|| -> Result<_, String> {
+            let (conversations, scanned_count, skipped_lines) = scan_codex_sessions()?;
+            let conn = open_db()?;
+            let sessions = conversations
+                .into_iter()
+                .map(|conversation| {
+                    let already_imported = get_summary_by_id(&conn, &conversation.id).is_ok();
+                    CodexImportSession {
+                        id: conversation.id,
+                        session_id: conversation.session_id,
+                        title: conversation.title,
+                        model: conversation.model,
+                        cwd: conversation.cwd,
+                        created_at: conversation.created_at,
+                        updated_at: conversation.updated_at,
+                        message_count: conversation.messages.len(),
+                        already_imported,
+                    }
+                })
+                .collect();
+            Ok::<_, String>((sessions, scanned_count, skipped_lines))
+        })
+        .await
+        .map_err(|e| format!("Codex 扫描失败：{e}"))??;
+    Ok(CodexImportPreview {
+        sessions,
+        scanned_count,
+        skipped_lines,
+    })
+}
+
+#[tauri::command]
 pub async fn chat_history_import_codex(
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    ids: Vec<String>,
 ) -> Result<CodexImportResult, String> {
-    let (summaries, scanned_count, skipped_lines) = tauri::async_runtime::spawn_blocking(|| {
+    let selected: HashSet<String> = ids.into_iter().filter(|id| !id.trim().is_empty()).collect();
+    let (summaries, scanned_count, skipped_lines) = tauri::async_runtime::spawn_blocking(move || {
         let (conversations, scanned_count, skipped_lines) = scan_codex_sessions()?;
         let mut conn = open_db()?;
         let summaries = conversations
             .into_iter()
+            .filter(|conversation| selected.contains(&conversation.id))
             .map(|conversation| import_codex_conversation(&mut conn, conversation))
             .collect::<Result<Vec<_>, _>>()?;
         Ok::<_, String>((summaries, scanned_count, skipped_lines))
