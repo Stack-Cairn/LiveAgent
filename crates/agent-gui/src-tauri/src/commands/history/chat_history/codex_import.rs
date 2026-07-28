@@ -8,27 +8,15 @@ pub struct CodexImportResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CodexImportSession {
-    pub id: String,
-    pub session_id: String,
-    pub title: String,
-    pub model: String,
-    pub cwd: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
-    pub message_count: usize,
-    pub already_imported: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct CodexImportPreview {
-    pub sessions: Vec<CodexImportSession>,
+    pub sessions: Vec<CodexConversation>,
     pub scanned_count: usize,
     pub skipped_lines: usize,
 }
 
-struct CodexConversation {
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexConversation {
     id: String,
     session_id: String,
     title: String,
@@ -36,7 +24,10 @@ struct CodexConversation {
     cwd: Option<String>,
     created_at: i64,
     updated_at: i64,
+    #[serde(skip)]
     messages: Vec<Value>,
+    message_count: usize,
+    already_imported: bool,
 }
 
 fn codex_string(value: Option<&Value>) -> Option<String> {
@@ -248,6 +239,7 @@ fn convert_codex_file(
         .filter(|s| !s.trim().is_empty())
         .or_else(|| first_user_text.map(|s| s.chars().take(80).collect()))
         .unwrap_or_else(|| format!("Codex session {session_id}"));
+    let message_count = messages.len();
     Ok((
         Some(CodexConversation {
             id: format!("codex:{session_id}"),
@@ -258,6 +250,8 @@ fn convert_codex_file(
             created_at: created_at.unwrap_or(last_timestamp),
             updated_at: last_timestamp,
             messages,
+            message_count,
+            already_imported: false,
         }),
         skipped_lines,
     ))
@@ -309,7 +303,7 @@ fn import_codex_conversation(
     }
     let messages_json = serde_json::to_string(&conversation.messages)
         .map_err(|e| format!("序列化 Codex 消息失败：{e}"))?;
-    let message_count = conversation.messages.len() as i64;
+    let message_count = conversation.message_count as i64;
     let segment_id = format!("{}:segment:0", conversation.id);
     let start_message_id = conversation
         .messages
@@ -382,19 +376,10 @@ pub async fn chat_history_scan_codex() -> Result<CodexImportPreview, String> {
             let conn = open_db()?;
             let sessions = conversations
                 .into_iter()
-                .map(|conversation| {
-                    let already_imported = get_summary_by_id(&conn, &conversation.id).is_ok();
-                    CodexImportSession {
-                        id: conversation.id,
-                        session_id: conversation.session_id,
-                        title: conversation.title,
-                        model: conversation.model,
-                        cwd: conversation.cwd,
-                        created_at: conversation.created_at,
-                        updated_at: conversation.updated_at,
-                        message_count: conversation.messages.len(),
-                        already_imported,
-                    }
+                .map(|mut conversation| {
+                    conversation.already_imported =
+                        get_summary_by_id(&conn, &conversation.id).is_ok();
+                    conversation
                 })
                 .collect();
             Ok::<_, String>((sessions, scanned_count, skipped_lines))
