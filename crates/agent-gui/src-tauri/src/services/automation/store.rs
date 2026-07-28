@@ -123,6 +123,32 @@ impl AutomationStore {
         scheduler.run_now(task_id)
     }
 
+    /// 翻转单个 cron 任务的启用状态（托盘菜单开关用）。走唯一的
+    /// `cron_apply` 写路径（revision CAS）；读-改窗口内被并发修改时
+    /// 用新快照重试一次，仍冲突则报错。返回翻转后的启用状态。
+    pub fn toggle_cron_task_enabled(&self, task_id: &str) -> Result<bool, String> {
+        for _ in 0..2 {
+            let cron = self.snapshot()?.cron;
+            let task = cron
+                .tasks
+                .iter()
+                .find(|task| task.id == task_id)
+                .ok_or_else(|| format!("cron task 不存在：{task_id}"))?;
+            let next_enabled = !task.enabled;
+            let response = self.cron_apply(AutomationApplyInput {
+                base_revision: cron.revision,
+                ops: vec![AutomationOp::Update {
+                    id: task_id.to_string(),
+                    patch: serde_json::json!({ "enabled": next_enabled }),
+                }],
+            })?;
+            if matches!(response.status, ApplyStatus::Ok) {
+                return Ok(next_enabled);
+            }
+        }
+        Err("cron task 状态已被并发修改，请重试".to_string())
+    }
+
     fn lock_conn(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
         self.conn
             .lock()

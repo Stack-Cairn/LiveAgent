@@ -28,6 +28,20 @@ test("measureEstimateText tolerates an unclosed fence", () => {
   assert.deepEqual(measureEstimateText(text), { proseChars: 0, codeLines: 2, codeFences: 1 });
 });
 
+test("measureEstimateText caps visible lines independently for every fence", () => {
+  const firstFence = Array.from({ length: 40 }, (_, index) => `first ${index + 1}`);
+  const secondFence = Array.from({ length: 30 }, (_, index) => `second ${index + 1}`);
+  const text = ["```ts", ...firstFence, "```", "between", "```sh", ...secondFence, "```"].join(
+    "\n",
+  );
+
+  assert.deepEqual(measureEstimateText(text), {
+    proseChars: "between".length + 1,
+    codeLines: 48,
+    codeFences: 2,
+  });
+});
+
 test("assistant estimates grow monotonically with content", () => {
   const base = { proseChars: 200, codeLines: 0, codeFences: 0, toolCount: 0, thinkingCount: 0 };
   const withCode = estimateAssistantRowHeight({ ...base, codeLines: 40, codeFences: 1 });
@@ -66,16 +80,19 @@ test("assistant estimates respect the clamp bounds", () => {
   );
 });
 
-test("a long code block is no longer capped into a blank-flash under-estimate", () => {
-  // 300 code lines render at thousands of px; the old model capped at 1600.
+test("a collapsed long fence estimates only its 24-line plain-text preview", () => {
+  const text = ["```ts", ...Array.from({ length: 300 }, (_, index) => `line ${index + 1}`), "```"].join(
+    "\n",
+  );
+  const measured = measureEstimateText(text);
+  assert.deepEqual(measured, { proseChars: 0, codeLines: 24, codeFences: 1 });
+
   const estimate = estimateAssistantRowHeight({
-    proseChars: 100,
-    codeLines: 300,
-    codeFences: 1,
+    ...measured,
     toolCount: 0,
     thinkingCount: 0,
   });
-  assert.ok(estimate >= 6000, `estimate ${estimate} should hit the generous cap`);
+  assert.ok(estimate >= 600 && estimate < 1000, `unexpected preview estimate: ${estimate}`);
 });
 
 test("user estimates include attachments and stay bounded", () => {

@@ -37,6 +37,7 @@ include!("share.rs");
 include!("search.rs");
 include!("commands.rs");
 include!("codex_import.rs");
+include!("replace.rs");
 include!("branch.rs");
 include!("delete.rs");
 include!("tests.rs");

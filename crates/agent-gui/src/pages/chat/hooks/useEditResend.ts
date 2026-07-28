@@ -1,113 +1,67 @@
-import { type MutableRefObject, useCallback, useEffect, useRef } from "react";
-import type { MentionComposerHandle } from "../../../components/chat/MentionComposer";
-import {
-  type ConversationViewState,
-  type HistoryMessageRef,
-  truncateConversationFromMessage,
-} from "../../../lib/chat/conversation/conversationState";
+import { type MutableRefObject, useCallback, useRef } from "react";
+import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
-import {
-  collectRetainedSubagentParentToolCallIds,
-  pruneSubagentRunsForConversation,
-} from "../../../lib/subagents";
 import type { SendChatAction } from "../gateway/gatewayBridgeTypes";
-import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 
 type UseEditResendParams = {
-  conversationState: ConversationViewState;
   isSending: boolean;
   isConversationHydrating: boolean;
   isConversationHydrationFailed: boolean;
   currentConversationIdRef: MutableRefObject<string>;
-  composerRef: MutableRefObject<MentionComposerHandle | null>;
-  setPendingUploadsForConversation: (conversationId: string, files: PendingUploadedFile[]) => void;
-  updateConversationRuntimeEntry: (
-    conversationId: string,
-    updater: (prev: ConversationRuntimeEntry) => ConversationRuntimeEntry,
-  ) => ConversationRuntimeEntry;
-  invalidateSubagentsForConversation?: (conversationId: string) => void;
+  onError: (error: unknown) => void;
   sendActionRef: MutableRefObject<SendChatAction>;
-};
-
-type PendingEditResend = {
-  expectedState: ConversationViewState;
-  text: string;
-  uploadedFiles: PendingUploadedFile[];
-  baseMessageRef: HistoryMessageRef;
-  afterInitialHistoryPersist: () => Promise<void>;
 };
 
 export function useEditResend(params: UseEditResendParams) {
   const {
-    conversationState,
     isSending,
     isConversationHydrating,
     isConversationHydrationFailed,
     currentConversationIdRef,
-    composerRef,
-    setPendingUploadsForConversation,
-    updateConversationRuntimeEntry,
-    invalidateSubagentsForConversation,
+    onError,
     sendActionRef,
   } = params;
-  const pendingEditResendRef = useRef<PendingEditResend | null>(null);
+  const editResendInFlightRef = useRef(false);
 
   const handleResendFromEdit = useCallback(
-    (messageRef: HistoryMessageRef, text: string, uploadedFiles: PendingUploadedFile[]) => {
-      if (isSending || isConversationHydrating || isConversationHydrationFailed) {
+    async (messageRef: HistoryMessageRef, text: string, uploadedFiles: PendingUploadedFile[]) => {
+      if (
+        editResendInFlightRef.current ||
+        isSending ||
+        isConversationHydrating ||
+        isConversationHydrationFailed
+      ) {
         return;
       }
       const normalized = text.trim();
       if (!normalized && uploadedFiles.length === 0) return;
 
-      const nextState = truncateConversationFromMessage(conversationState, messageRef);
-      const parentConversationId = currentConversationIdRef.current;
-      const keepParentToolCallIds = collectRetainedSubagentParentToolCallIds(nextState);
-      pendingEditResendRef.current = {
-        expectedState: nextState,
-        text: normalized,
-        uploadedFiles,
-        baseMessageRef: messageRef,
-        afterInitialHistoryPersist: () => {
-          invalidateSubagentsForConversation?.(parentConversationId);
-          return pruneSubagentRunsForConversation({
-            parentConversationId,
-            keepParentToolCallIds,
-          }).then(() => undefined);
-        },
-      };
-      setPendingUploadsForConversation(currentConversationIdRef.current, uploadedFiles);
-      composerRef.current?.clear();
-      updateConversationRuntimeEntry(currentConversationIdRef.current, (prev) => ({
-        ...prev,
-        state: nextState,
-      }));
+      const conversationId = currentConversationIdRef.current.trim();
+      if (!conversationId) return;
+      editResendInFlightRef.current = true;
+      try {
+        const accepted = await sendActionRef.current({
+          textOverride: normalized,
+          uploadedFilesOverride: uploadedFiles,
+          conversationIdOverride: conversationId,
+          editResendBaseMessageRef: messageRef,
+        });
+        if (!accepted) throw new Error("编辑重发未启动，原历史保持不变。");
+      } catch (error) {
+        onError(error);
+      } finally {
+        editResendInFlightRef.current = false;
+      }
     },
     [
-      composerRef,
-      conversationState,
       currentConversationIdRef,
       isConversationHydrationFailed,
       isConversationHydrating,
       isSending,
-      setPendingUploadsForConversation,
-      invalidateSubagentsForConversation,
-      updateConversationRuntimeEntry,
+      onError,
+      sendActionRef,
     ],
   );
-
-  useEffect(() => {
-    const pending = pendingEditResendRef.current;
-    if (!pending) return;
-    if (conversationState !== pending.expectedState) return;
-    pendingEditResendRef.current = null;
-    void sendActionRef.current({
-      textOverride: pending.text,
-      uploadedFilesOverride: pending.uploadedFiles,
-      editResendBaseMessageRef: pending.baseMessageRef,
-      afterInitialHistoryPersist: pending.afterInitialHistoryPersist,
-    });
-  }, [conversationState, sendActionRef]);
 
   return { handleResendFromEdit };
 }

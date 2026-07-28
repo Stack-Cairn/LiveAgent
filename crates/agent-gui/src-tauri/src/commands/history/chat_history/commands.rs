@@ -63,7 +63,8 @@ pub(crate) async fn chat_history_get_summary_inner(
     .map_err(|e| format!("chat_history_get_summary join 失败：{e}"))?
 }
 
-#[tauri::command]
+// 桌面前端已迁移到窗口化的 chat_history_get_window；全量读取仅剩
+// gateway_bridge 的服务端投影在用，因此不再作为 webview command 暴露。
 pub async fn chat_history_get(id: String) -> Result<ChatHistoryRecord, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let chat_id = id.trim().to_string();
@@ -107,46 +108,129 @@ pub(crate) async fn chat_history_get_tail(
     .map_err(|e| format!("chat_history_get_tail join 失败：{e}"))?
 }
 
+pub(crate) fn build_chat_history_window_record(
+    conn: &Connection,
+    record: &ChatHistoryRecord,
+    max_messages: i64,
+    before_offset: Option<i64>,
+    expected_revision: Option<&str>,
+    include_active_segment: bool,
+) -> Result<ChatHistoryWindowRecord, String> {
+    let chat_id = record.id.trim();
+    if chat_id.is_empty() {
+        return Err("历史对话 id 不能为空".to_string());
+    }
+    if max_messages <= 0 {
+        return Err("历史窗口 maxMessages 必须大于 0".to_string());
+    }
+
+    let revision = build_history_revision(
+        &record.id,
+        record.updated_at,
+        record.active_segment_index,
+        record.total_segment_count,
+        record.total_message_count,
+    );
+    validate_expected_history_revision(expected_revision, &revision)?;
+
+    let end_offset = before_offset
+        .unwrap_or(record.total_message_count)
+        .clamp(0, record.total_message_count);
+    let requested_oldest_offset = end_offset.saturating_sub(max_messages).max(0);
+    let (segments, first_segment_offset) =
+        load_message_window_segments(conn, &record.id, requested_oldest_offset, end_offset)?;
+    if end_offset > requested_oldest_offset && segments.is_empty() {
+        return Err("历史窗口未找到对应的分段数据".to_string());
+    }
+    let relative_end_offset = end_offset.saturating_sub(first_segment_offset);
+    let window =
+        build_history_message_window(&segments, max_messages, Some(relative_end_offset), true)?;
+    let oldest_offset = first_segment_offset.saturating_add(window.oldest_offset);
+    if oldest_offset > requested_oldest_offset
+        || first_segment_offset.saturating_add(window.end_offset) != end_offset
+        || window.returned_message_count != end_offset.saturating_sub(oldest_offset)
+    {
+        return Err("历史窗口消息统计与权威 offset 不一致".to_string());
+    }
+    let segment_windows = serialize_history_segment_windows(&window)?;
+    let conversation = get_summary_by_id(conn, &record.id)?;
+    let active_segment = if include_active_segment {
+        Some(load_segment_by_index(
+            conn,
+            &record.id,
+            record.active_segment_index,
+        )?)
+    } else {
+        None
+    };
+
+    Ok(ChatHistoryWindowRecord {
+        conversation,
+        segments: segment_windows,
+        active_segment,
+        context_meta_json: record.context_meta_json.clone(),
+        active_segment_index: record.active_segment_index,
+        total_segment_count: record.total_segment_count,
+        total_message_count: record.total_message_count,
+        returned_message_count: window.returned_message_count,
+        oldest_offset,
+        has_more_before: oldest_offset > 0,
+        revision,
+        updated_at: record.updated_at,
+    })
+}
+
+pub(crate) fn chat_history_get_window_sync(
+    conn: &mut Connection,
+    id: &str,
+    max_messages: i64,
+    before_offset: Option<i64>,
+    expected_revision: Option<&str>,
+    include_active_segment: bool,
+) -> Result<ChatHistoryWindowRecord, String> {
+    let chat_id = id.trim();
+    if chat_id.is_empty() {
+        return Err("历史对话 id 不能为空".to_string());
+    }
+
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("开启历史窗口读取事务失败：{e}"))?;
+    let record = get_record_by_id(&tx, chat_id)?;
+    let result = build_chat_history_window_record(
+        &tx,
+        &record,
+        max_messages,
+        before_offset,
+        expected_revision,
+        include_active_segment,
+    )?;
+    tx.commit()
+        .map_err(|e| format!("提交历史窗口读取事务失败：{e}"))?;
+    Ok(result)
+}
+
 #[tauri::command]
-pub async fn chat_history_get_active_segment(
+pub async fn chat_history_get_window(
     id: String,
-) -> Result<ChatHistoryActiveSegmentRecord, String> {
+    max_messages: i64,
+    before_offset: Option<i64>,
+    expected_revision: Option<String>,
+    include_active_segment: bool,
+) -> Result<ChatHistoryWindowRecord, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let chat_id = id.trim().to_string();
-        if chat_id.is_empty() {
-            return Err("历史对话 id 不能为空".to_string());
-        }
-
-        let conn = open_db()?;
-        let record = get_record_by_id(&conn, &chat_id)?;
-        let context_meta_json = record.context_meta_json.clone();
-        let active_segment_index = record.active_segment_index;
-        let total_segment_count = record.total_segment_count;
-        let active_segment = load_segment_by_index(&conn, &record.id, active_segment_index)?;
-        let total_message_count = record.total_message_count;
-
-        Ok(ChatHistoryActiveSegmentRecord {
-            id: record.id,
-            title: record.title,
-            provider_id: record.provider_id,
-            model: record.model,
-            session_id: record.session_id,
-            cwd: record.cwd,
-            selected_model_json: record.selected_model_json,
-            context_meta_json,
-            active_segment_index,
-            total_segment_count,
-            total_message_count,
-            active_segment,
-            created_at: record.created_at,
-            updated_at: record.updated_at,
-            is_pinned: record.is_pinned,
-            pinned_at: record.pinned_at,
-            is_shared: record.is_shared,
-        })
+        let mut conn = open_db()?;
+        chat_history_get_window_sync(
+            &mut conn,
+            &id,
+            max_messages,
+            before_offset,
+            expected_revision.as_deref(),
+            include_active_segment,
+        )
     })
     .await
-    .map_err(|e| format!("chat_history_get_active_segment join 失败：{e}"))?
+    .map_err(|e| format!("chat_history_get_window join 失败：{e}"))?
 }
 
 pub(crate) async fn chat_history_upsert_inner(

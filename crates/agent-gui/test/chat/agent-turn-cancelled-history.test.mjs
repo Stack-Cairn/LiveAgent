@@ -221,6 +221,7 @@ test("agent turn preserves suppressed parent Agent trace for cancellation persis
       },
     },
     resetLiveTranscript: noOp,
+    settleLiveTranscript: noOp,
     batchLiveRoundsUpdate(updater) {
       liveRounds = updater(liveRounds);
     },

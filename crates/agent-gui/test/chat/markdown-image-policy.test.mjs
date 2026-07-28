@@ -249,13 +249,18 @@ test("agent tool rules keep workspace and Skills deletion on Delete", () => {
   const suffix = agentRunnerModule.buildToolsSuffix("/workspace", [
     "Delete",
     "Bash",
+    "ManagedProcess",
     "SkillsManager",
   ]);
+  assert.match(suffix, /Every intentional deletion[\s\S]*MUST use Delete/);
+  assert.match(suffix, /NEVER perform such a deletion through Bash, ManagedProcess/);
+  assert.match(suffix, /`git rm`, `git clean`, PowerShell `Remove-Item`/);
+  assert.match(suffix, /cmd `del` \/ `erase` \/ `rd`/);
+  assert.match(suffix, /record the path in Edited Files and the file ledger/);
   assert.match(
     suffix,
-    /For workspace or Skill deletion, use Delete with the exact path returned by List\/Glob\/Grep\/Read/,
+    /stage only that path[\s\S]*`git add -u -- <exact-workspace-relative-path>`/,
   );
-  assert.match(suffix, /Do not run Bash rm, rmdir, unlink, or find -delete/);
 });
 
 test("agent tool rules route installed Skill scripts through skill cwd", () => {
@@ -314,6 +319,7 @@ test("fs tool descriptions keep Image as the only display path for images", () =
   );
   assert.match(
     source,
-    /Use this instead of Bash rm, rmdir, unlink, or find -delete for workspace or Skill files\./,
+    /The structured, tracked way to intentionally delete a workspace or enabled Skill file\/directory/,
   );
+  assert.match(source, /Delete results feed LiveAgent's Edited Files and file-ledger tracking/);
 });

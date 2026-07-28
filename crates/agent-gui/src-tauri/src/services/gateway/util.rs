@@ -1,7 +1,5 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use serde_json::Value;
-
 use crate::commands::settings::RemoteSettingsPayload;
 
 use super::{
@@ -89,54 +87,4 @@ pub(crate) fn now_unix_millis() -> i64 {
 
 pub(crate) fn chat_run_ledger_now() -> (Instant, i64) {
     (Instant::now(), now_unix_millis())
-}
-
-pub(crate) fn string_field(
-    object: &serde_json::Map<String, Value>,
-    key: &str,
-) -> Result<String, String> {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-        .ok_or_else(|| format!("gateway chat event {key} is required"))
-}
-
-pub(crate) fn required_string_field(
-    object: &serde_json::Map<String, Value>,
-    key: &str,
-) -> Result<String, String> {
-    string_field(object, key)
-}
-
-pub(crate) fn required_raw_string_field(
-    object: &serde_json::Map<String, Value>,
-    key: &str,
-) -> Result<String, String> {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
-        .ok_or_else(|| format!("gateway chat event {key} is required"))
-}
-
-pub(crate) fn optional_string_field(
-    object: &serde_json::Map<String, Value>,
-    key: &str,
-) -> Option<String> {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string)
-}
-
-pub(crate) fn optional_number_field(
-    object: &serde_json::Map<String, Value>,
-    key: &str,
-) -> Option<i64> {
-    object.get(key).and_then(Value::as_i64)
 }

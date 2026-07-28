@@ -23,6 +23,8 @@ use super::gateway_proto::v2;
 pub(crate) const GATEWAY_WS_SUBPROTOCOL: &str = "liveagent.v2.pb";
 /// v2 协议版本号（`ClientHello.protocol_version`）。
 pub(crate) const GATEWAY_WS_PROTOCOL_VERSION: u32 = 2;
+/// 可靠聊天镜像协议的能力标识。
+pub(crate) const CHAT_INGRESS_V1_CAPABILITY: &str = "CHAT_INGRESS_V1";
 /// 桌面端主链路路径。
 pub(crate) const GATEWAY_WS_AGENT_PATH: &str = "/ws/v2/agent";
 /// 终端数据面路径。
@@ -78,6 +80,7 @@ pub(crate) fn build_client_hello(
         agent_version: agent_version.clone(),
         client_name: "desktop".to_string(),
         client_version: agent_version,
+        capabilities: vec![CHAT_INGRESS_V1_CAPABILITY.to_string()],
     }
 }
 
@@ -94,7 +97,16 @@ pub(crate) fn decode_ws_frame<M: ProstMessage + Default>(data: &[u8]) -> Result<
 /// ServerHello 校验：ok=false 即鉴权被拒（服务端随即以 4401 关闭），透传服务端消息。
 pub(crate) fn vet_server_hello(hello: v2::ServerHello) -> Result<v2::ServerHello, String> {
     if hello.ok {
-        return Ok(hello);
+        if hello
+            .capabilities
+            .iter()
+            .any(|capability| capability.trim() == CHAT_INGRESS_V1_CAPABILITY)
+        {
+            return Ok(hello);
+        }
+        return Err(format!(
+            "gateway protocol incompatible: missing {CHAT_INGRESS_V1_CAPABILITY}"
+        ));
     }
     let message = hello.message.trim();
     Err(if message.is_empty() {
@@ -314,10 +326,21 @@ mod tests {
         let ok = vet_server_hello(v2::ServerHello {
             ok: true,
             session_id: "session-1".to_string(),
+            capabilities: vec![CHAT_INGRESS_V1_CAPABILITY.to_string()],
             ..Default::default()
         })
         .expect("ok hello passes");
         assert_eq!(ok.session_id, "session-1");
+
+        assert_eq!(
+            vet_server_hello(v2::ServerHello {
+                ok: true,
+                session_id: "legacy-session".to_string(),
+                ..Default::default()
+            })
+            .expect_err("legacy gateway must be rejected"),
+            "gateway protocol incompatible: missing CHAT_INGRESS_V1"
+        );
 
         assert_eq!(
             vet_server_hello(v2::ServerHello {
@@ -397,12 +420,14 @@ mod tests {
             assert_eq!(hello.role, v2::ClientRole::Agent as i32);
             assert_eq!(hello.token, "test-token");
             assert_eq!(hello.client_name, "desktop");
+            assert_eq!(hello.capabilities, [CHAT_INGRESS_V1_CAPABILITY]);
 
             ws.send(encode_ws_frame(&v2::AgentServerFrame {
                 payload: Some(v2::agent_server_frame::Payload::Hello(v2::ServerHello {
                     ok: true,
                     session_id: "session-9".to_string(),
                     heartbeat_period_seconds: 15,
+                    capabilities: vec![CHAT_INGRESS_V1_CAPABILITY.to_string()],
                     ..Default::default()
                 })),
             }))

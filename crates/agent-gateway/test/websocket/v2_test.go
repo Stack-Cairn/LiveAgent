@@ -201,14 +201,19 @@ func TestV2ChatSubscribeAndStreamEvents(t *testing.T) {
 	}
 
 	dispatchStarted(sm, "run-1", "conv-1")
-	tokenData, _ := json.Marshal(map[string]any{"text": "hello"})
+	tokenData, _ := json.Marshal(map[string]any{"type": "token", "text": "hello"})
 	sm.DispatchFromAgent("desktop-agent", &gatewayv2.AgentEnvelope{
-		RequestId: "run-1",
-		Payload: &gatewayv2.AgentEnvelope_ChatEvent{
-			ChatEvent: &gatewayv2.ChatEvent{
-				Type:           gatewayv2.ChatEvent_TOKEN,
+		RequestId: "ingress-1",
+		Payload: &gatewayv2.AgentEnvelope_ChatIngressBatch{
+			ChatIngressBatch: &gatewayv2.ChatIngressBatch{
+				RunId:          "run-1",
 				ConversationId: "conv-1",
-				Data:           string(tokenData),
+				FirstSeq:       1,
+				Records: []*gatewayv2.ChatIngressRecord{{
+					Payload: &gatewayv2.ChatIngressRecord_Delta{
+						Delta: &gatewayv2.ChatIngressDelta{EventJson: string(tokenData)},
+					},
+				}},
 			},
 		},
 	})

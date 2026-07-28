@@ -36,9 +36,9 @@ func lastEvent(t *testing.T, m *Manager, conversationID string) *ConversationEve
 	return sub.Events[len(sub.Events)-1]
 }
 
-// A terminal the gateway never received (lost desktop signal) is adopted from
-// the desktop's finished_runs report with its real final state.
-func TestRunReportAdoptsMissedTerminal(t *testing.T) {
+// finished_runs is diagnostic only: neither a valid nor malformed report may
+// overtake the reliable terminal projection.
+func TestRunReportDoesNotAdoptTerminal(t *testing.T) {
 	m := NewManager()
 	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 
@@ -47,14 +47,11 @@ func TestRunReportAdoptsMissedTerminal(t *testing.T) {
 	}), time.Now())
 
 	last := lastEvent(t, m, "conv-1")
-	if last.Type != StreamEventRunFinished || last.Payload["status"] != "completed" {
-		t.Fatalf("adopted terminal = %s %#v, want run_finished/completed", last.Type, last.Payload)
+	if last.Type == StreamEventRunFinished {
+		t.Fatalf("finished_runs produced terminal = %s %#v", last.Type, last.Payload)
 	}
-	if last.Payload["reason"] != "desktop_reported" {
-		t.Fatalf("adopted terminal reason = %#v, want desktop_reported", last.Payload["reason"])
-	}
-	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
-		t.Fatalf("activity not cleared after adopted terminal, activities=%d", len(activities))
+	if activities := m.ActiveConversationActivities(); len(activities) != 1 {
+		t.Fatalf("diagnostic finished report cleared activity, activities=%d", len(activities))
 	}
 
 	// A finished report with an unknown state is not trusted verbatim: the
@@ -65,10 +62,8 @@ func TestRunReportAdoptsMissedTerminal(t *testing.T) {
 		runReport("run-2", "conv-2", "exploded"),
 	}), time.Now())
 	last2 := lastEvent(t, m2, "conv-2")
-	if last2.Type != StreamEventRunFinished ||
-		last2.Payload["status"] != "failed" ||
-		last2.Payload["error_code"] != "desktop_run_lost" {
-		t.Fatalf("invalid-state terminal = %s %#v, want failed/desktop_run_lost", last2.Type, last2.Payload)
+	if last2.Type == StreamEventRunFinished {
+		t.Fatalf("invalid diagnostic state produced terminal = %s %#v", last2.Type, last2.Payload)
 	}
 }
 
@@ -111,10 +106,9 @@ func TestRunReportFinalizesLostRunAfterGrace(t *testing.T) {
 	}
 }
 
-// A loss the desktop merely inferred (ledger sweep starved while the webview
-// was throttled) must not kill a run whose events still flow through the
-// relay; once the events go quiet past the grace window it is adopted.
-func TestInferredLossNotAdoptedWhileEventsFlow(t *testing.T) {
+// Even an inferred-loss finished report remains diagnostic while repeated;
+// it vouches the run instead of becoming a second terminal path.
+func TestInferredLossReportNeverAdopted(t *testing.T) {
 	m := NewManager()
 	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
 	m.ingestChatEvent(conversationTestAgentID, "run-1", tokenEvent("conv-1", "hello"))
@@ -130,12 +124,12 @@ func TestInferredLossNotAdoptedWhileEventsFlow(t *testing.T) {
 	}
 
 	m.convStreams.onRuntimeStatus(conversationTestAgentID, report, time.Now().Add(16*time.Second))
-	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
-		t.Fatalf("inferred loss not adopted after events went quiet, activities=%d", len(activities))
+	if activities := m.ActiveConversationActivities(); len(activities) != 1 {
+		t.Fatalf("diagnostic inferred loss cleared activity, activities=%d", len(activities))
 	}
 	last := lastEvent(t, m, "conv-1")
-	if last.Type != StreamEventRunFinished || last.Payload["error_code"] != "desktop_run_lost" {
-		t.Fatalf("quiet-adopted tail = %s %#v, want failed/desktop_run_lost", last.Type, last.Payload)
+	if last.Type == StreamEventRunFinished {
+		t.Fatalf("diagnostic inferred loss produced terminal = %s %#v", last.Type, last.Payload)
 	}
 }
 

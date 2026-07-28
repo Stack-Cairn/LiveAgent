@@ -116,6 +116,12 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   const queuedChatTurnsRef = useRef<QueuedChatTurn[]>([]);
   const queuedChatProcessingConversationIdsRef = useRef(new Set<string>());
   const queuedChatStopVersionsRef = useRef(new Map<string, number>());
+  // 打断并执行的恢复意图：conversationId → 触发打断那一刻的 stop-request 版本号。
+  // stopConversation 会打上 stop-requested 标记，而 drain effect 对该标记一律
+  // "消费后跳过"（普通停止不允许自动放行队列）。登记版本号让 drain effect 能
+  // 识别出"这次停止是打断并执行"，消费标记后继续自动发送；若用户随后又按了
+  // 普通停止，版本号被 bump，登记的意图自动失效，队列保持挂起。
+  const queuedChatInterruptResumeVersionsRef = useRef(new Map<string, number>());
   const queuedChatProcessingStatesRef = useRef(
     new Map<
       string,
@@ -347,6 +353,16 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   function stopSending() {
     const conversationId = resolveStopConversationId();
     if (!conversationId) return;
+    const nextQueuedTurn = queuedChatTurnsRef.current.find(
+      (item) => item.conversationId === conversationId,
+    );
+    if (nextQueuedTurn) {
+      // Composer Stop is stop-and-continue when this conversation already
+      // has queued work; runQueuedTurnNow records the resume intent before
+      // aborting the current run.
+      runQueuedTurnNow(nextQueuedTurn.id);
+      return;
+    }
     stopConversation(conversationId);
   }
 
@@ -581,11 +597,19 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       ) {
         continue;
       }
+      const interruptResumeVersion =
+        queuedChatInterruptResumeVersionsRef.current.get(conversationId);
+      queuedChatInterruptResumeVersionsRef.current.delete(conversationId);
       if (isConversationStopRequested(conversationId)) {
         queuedChatProcessingConversationIdsRef.current.delete(conversationId);
         const stopRequestVersion = getConversationStopRequestVersion(conversationId);
         consumeConversationStop(conversationId, stopRequestVersion);
-        continue;
+        // 打断并执行：这次停止就是为了立刻放行队首轮次，消费掉 stop 标记后
+        // 继续向下触发处理；版本号不匹配说明打断之后用户又请求过停止，尊重
+        // 最新意图，保持队列挂起。
+        if (interruptResumeVersion !== stopRequestVersion) {
+          continue;
+        }
       }
       requestQueuedChatTurnProcessing(conversationId);
     }
@@ -597,6 +621,12 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     setQueuedChatTurnsState((current) => promoteQueuedChatTurn(current, queuedTurn.id));
     if (isConversationRunning(queuedTurn.conversationId)) {
       stopConversation(queuedTurn.conversationId);
+      // 登记恢复意图（须在 stopConversation bump 版本号之后取值），运行结束后
+      // drain effect 据此消费 stop 标记并自动发送刚置顶的轮次。
+      queuedChatInterruptResumeVersionsRef.current.set(
+        queuedTurn.conversationId,
+        getConversationStopRequestVersion(queuedTurn.conversationId),
+      );
       return;
     }
     requestQueuedChatTurnProcessing(queuedTurn.conversationId);
@@ -724,14 +754,12 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       },
     });
 
-    setQueuedChatTurnsState((current) => {
-      const appended = appendQueuedChatTurn(current, queuedTurn);
-      return payload.queuePolicy === "interrupt"
-        ? promoteQueuedChatTurn(appended, queuedTurn.id)
-        : appended;
-    });
+    setQueuedChatTurnsState((current) => appendQueuedChatTurn(current, queuedTurn));
     if (payload.queuePolicy === "interrupt") {
-      stopConversation(targetConversationId);
+      // 与本地"打断并执行"共用同一路径：置顶 + 运行中则打断并登记恢复意图；
+      // 空闲则直接触发队列处理（此前空闲时也会打 stop 标记且无人消费，
+      // 导致该轮次永远挂起）。
+      runQueuedTurnNow(queuedTurn.id);
     }
     return true;
   }

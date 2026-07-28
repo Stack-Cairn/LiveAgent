@@ -5,7 +5,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 
-const { buildGatewayRuntimeSnapshotEntries } = loader.loadModule(
+const { buildGatewayFinalProjectionEntries, buildGatewayRuntimeSnapshotEntries } = loader.loadModule(
   "src/pages/chat/gateway/chatRuntimeSnapshot.ts",
 );
 const { buildGatewayToolCallPreviewArguments } = loader.loadModule(
@@ -123,4 +123,66 @@ test("gateway runtime snapshot falls back to draft assistant text", () => {
   );
   assert.equal(entries[1].text, "streaming text");
   assert.equal(entries[0].messageId, "user-2");
+});
+
+test("gateway final projection is frozen from the persisted conversation state", () => {
+  const userMessage = {
+    role: "user",
+    id: "user-final",
+    content: "Inspect the project",
+  };
+  const entries = buildGatewayFinalProjectionEntries({
+    runId: "run-final",
+    userMessage,
+    state: {
+      meta: {},
+      segments: [],
+      activeSegmentIndex: 0,
+      transcript: {
+        items: [
+          {
+            kind: "user",
+            key: "user-row",
+            messageRef: { messageId: "user-final" },
+            text: "Inspect the project",
+            attachments: [],
+          },
+          {
+            kind: "assistant",
+            key: "assistant-row",
+            rounds: [
+              {
+                key: "round-1",
+                round: 1,
+                runningToolCallIds: [],
+                blocks: [
+                  { kind: "thinking", text: "Checking files" },
+                  { kind: "text", text: "The project is healthy." },
+                ],
+              },
+            ],
+          },
+          {
+            kind: "user",
+            key: "next-user",
+            messageRef: { messageId: "user-next" },
+            text: "Next prompt",
+            attachments: [],
+          },
+        ],
+        segmentWindows: [],
+        oldestMessageOffset: 0,
+        hasMoreBefore: false,
+        revision: null,
+      },
+    },
+  });
+
+  assert.deepEqual(
+    entries.map((entry) => entry.kind),
+    ["user", "thinking", "assistant"],
+  );
+  assert.equal(entries[1].text, "Checking files");
+  assert.equal(entries[2].text, "The project is healthy.");
+  assert.equal(entries.some((entry) => entry.kind === "user" && entry.text === "Next prompt"), false);
 });

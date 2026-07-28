@@ -188,7 +188,7 @@ export class CompactionController {
       uploadedFiles: presend.uploadedFiles,
     };
     this.inFlight = true;
-    this.publishRunning("pre-send", workingState.activeSegmentIndex, decision);
+    this.publishRunning("pre-send", workingState.meta.activeSegmentIndex, decision);
 
     const scope = binding.cancellation.deriveScope();
     try {
@@ -206,7 +206,6 @@ export class CompactionController {
         complete: binding.complete,
       });
 
-      // best-effort：失败由差量写入器在下一次持久化时以全量 upsert 自愈。
       await binding.sinks.persist?.(outcome.state);
       this.rollbackSnapshot = null;
       const appliedState = presend.composeAppliedState(outcome.state);
@@ -314,7 +313,7 @@ export class CompactionController {
 
     this.rollbackSnapshot = { state: params.state, persistOnRollback: true };
     this.inFlight = true;
-    this.publishRunning(params.trigger, workingState.activeSegmentIndex, decision);
+    this.publishRunning(params.trigger, workingState.meta.activeSegmentIndex, decision);
 
     const scope = binding.cancellation.deriveScope();
     try {

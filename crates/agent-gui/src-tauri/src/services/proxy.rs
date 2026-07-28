@@ -578,7 +578,9 @@ fn is_protected_upstream_override(name: &HeaderName) -> bool {
 
 /// 解出 x-liveagent-upstream-headers 覆盖包。畸形输入一律 Err（由调用方回 400）：
 /// 静默跳过会把「自定义请求头没生效」变成难查的偶发问题。
-fn decode_upstream_header_overrides(encoded: &str) -> Result<Vec<(HeaderName, HeaderValue)>, String> {
+fn decode_upstream_header_overrides(
+    encoded: &str,
+) -> Result<Vec<(HeaderName, HeaderValue)>, String> {
     if encoded.len() > UPSTREAM_HEADERS_MAX_BYTES {
         return Err(format!(
             "{UPSTREAM_HEADERS_HEADER} exceeds {UPSTREAM_HEADERS_MAX_BYTES} bytes"
@@ -592,8 +594,10 @@ fn decode_upstream_header_overrides(encoded: &str) -> Result<Vec<(HeaderName, He
             "{UPSTREAM_HEADERS_HEADER} exceeds {UPSTREAM_HEADERS_MAX_BYTES} bytes"
         ));
     }
-    let parsed: serde_json::Map<String, Value> = serde_json::from_slice(&decoded)
-        .map_err(|error| format!("{UPSTREAM_HEADERS_HEADER} is not a valid JSON object: {error}"))?;
+    let parsed: serde_json::Map<String, Value> =
+        serde_json::from_slice(&decoded).map_err(|error| {
+            format!("{UPSTREAM_HEADERS_HEADER} is not a valid JSON object: {error}")
+        })?;
 
     let mut overrides = Vec::with_capacity(parsed.len());
     for (name, value) in parsed {
@@ -602,8 +606,10 @@ fn decode_upstream_header_overrides(encoded: &str) -> Result<Vec<(HeaderName, He
                 "{UPSTREAM_HEADERS_HEADER} entry \"{name}\" must be a string"
             ));
         };
-        let header_name = HeaderName::from_bytes(name.to_ascii_lowercase().as_bytes())
-            .map_err(|_| format!("{UPSTREAM_HEADERS_HEADER} entry \"{name}\" is not a valid header name"))?;
+        let header_name =
+            HeaderName::from_bytes(name.to_ascii_lowercase().as_bytes()).map_err(|_| {
+                format!("{UPSTREAM_HEADERS_HEADER} entry \"{name}\" is not a valid header name")
+            })?;
         if is_protected_upstream_override(&header_name) {
             continue;
         }
@@ -831,12 +837,18 @@ mod tests {
 
         let upstream_headers = build_upstream_request_headers(&headers).expect("overrides decode");
 
-        assert_eq!(header_str(&upstream_headers, "user-agent"), Some("codex_cli_rs/0.72.0"));
+        assert_eq!(
+            header_str(&upstream_headers, "user-agent"),
+            Some("codex_cli_rs/0.72.0")
+        );
         assert_eq!(
             header_str(&upstream_headers, CONTENT_TYPE),
             Some("application/custom+json")
         );
-        assert_eq!(header_str(&upstream_headers, "x-request-id"), Some("trace-1"));
+        assert_eq!(
+            header_str(&upstream_headers, "x-request-id"),
+            Some("trace-1")
+        );
         assert!(!upstream_headers.contains_key(UPSTREAM_HEADERS_HEADER));
     }
 

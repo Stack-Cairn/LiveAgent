@@ -5,7 +5,7 @@ fn now_ms() -> i64 {
     duration.as_millis() as i64
 }
 
-fn config_dir() -> Result<PathBuf, String> {
+pub(crate) fn config_dir() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
     let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
     fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败：{e}"))?;

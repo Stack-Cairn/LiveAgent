@@ -177,8 +177,9 @@ func (c *browserConn) forwardConversationEvents(
 					},
 				},
 			}); err != nil {
-				if errors.Is(err, wscore.ErrWriteQueueFull) {
+				if errors.Is(err, wscore.ErrWriteQueueFull) || errors.Is(err, wscore.ErrWriteFrameTooLarge) {
 					// 重置帧走控制队列越过拥塞积压；客户端重同步后按 seq 去重在途旧事件。
+					// 超限单帧同样只牺牲该订阅：重订阅回放/快照与 history 收敛负责补内容。
 					c.sendSubscriptionResetOrClose(agentID, conversationID)
 				}
 				return

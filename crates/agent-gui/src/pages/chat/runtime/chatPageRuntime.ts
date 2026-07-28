@@ -3,6 +3,7 @@ import { HOOK_EVENT_TRANSLATION_KEYS } from "../../../lib/automation";
 import type { HookRunWarning } from "../../../lib/automation/hookRunner";
 import type { CompactionStatus } from "../../../lib/chat/compaction/types";
 import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
+import type { ConversationPersistenceCursor } from "../../../lib/chat/history/chatHistory";
 import { normalizeErrorMessage } from "../../../lib/providers/llm";
 import type { AppSettings, SelectedModel } from "../../../lib/settings";
 
@@ -87,7 +88,7 @@ export function setConversationRuntimeCacheEntry(
 
 export function pruneIdleConversationRuntimeCaches(params: {
   runtimeCache: Map<string, ConversationRuntimeEntry>;
-  persistedStateCache: Map<string, ConversationViewState>;
+  persistenceCursors: Map<string, ConversationPersistenceCursor>;
   keepConversationIds?: Iterable<string | undefined | null>;
   maxIdleEntries?: number;
   isConversationRunning?: (conversationId: string) => boolean;
@@ -95,7 +96,7 @@ export function pruneIdleConversationRuntimeCaches(params: {
 }) {
   const {
     runtimeCache,
-    persistedStateCache,
+    persistenceCursors,
     keepConversationIds = [],
     maxIdleEntries = MAX_IDLE_CONVERSATION_RUNTIME_CACHE_ENTRIES,
     isConversationRunning,
@@ -125,15 +126,15 @@ export function pruneIdleConversationRuntimeCaches(params: {
   const runtimePruneCount = Math.max(0, idleRuntimeIds.length - idleLimit);
   for (const conversationId of idleRuntimeIds.slice(0, runtimePruneCount)) {
     runtimeCache.delete(conversationId);
-    persistedStateCache.delete(conversationId);
+    persistenceCursors.delete(conversationId);
     onPruneConversation?.(conversationId);
     prunedIds.push(conversationId);
   }
 
-  for (const conversationId of Array.from(persistedStateCache.keys())) {
+  for (const conversationId of Array.from(persistenceCursors.keys())) {
     const key = conversationId.trim();
     if (!key || runtimeCache.has(key) || isProtected(key)) continue;
-    persistedStateCache.delete(key);
+    persistenceCursors.delete(key);
     onPruneConversation?.(key);
     prunedIds.push(key);
   }

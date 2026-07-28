@@ -3,10 +3,8 @@ mod runtime;
 mod services;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
 
-use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::Emitter;
 use tauri::Manager;
@@ -20,11 +18,14 @@ const MAIN_WINDOW_LABEL: &str = "main";
 pub(crate) const WINDOW_STATE_FLAGS: tauri_plugin_window_state::StateFlags =
     tauri_plugin_window_state::StateFlags::SIZE
         .union(tauri_plugin_window_state::StateFlags::MAXIMIZED);
-const TRAY_SHOW_ID: &str = "tray-show";
-const TRAY_QUIT_ID: &str = "tray-quit";
-const TRAY_DOUBLE_CLICK_INTERVAL_MS: u64 = 500;
 const TRAY_SHOW_MENU_ON_LEFT_CLICK: bool = !cfg!(target_os = "windows");
 const TERMINAL_EXIT_REQUESTED_EVENT: &str = "terminal:exit-requested";
+/// 统一的「前端动作」事件：托盘菜单与全局快捷键中需要前端语义的动作
+/// （开会话/新建对话/切工作空间/改主题/停止运行等）都经此事件转发，
+/// 两端各自监听并只处理自己拥有的 action（App.tsx / ChatPage.tsx）。
+const APP_ACTION_EVENT: &str = "app:action";
+/// Rust 直连动作的结果反馈（如托盘触发 cron）：前端收到后 toast 呈现。
+const APP_ACTION_FEEDBACK_EVENT: &str = "app:action-feedback";
 
 #[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,8 +45,7 @@ macro_rules! app_invoke_handler {
             commands::chat_history::chat_history_workdirs,
             commands::chat_history::chat_history_shared_list,
             commands::chat_history::chat_history_search,
-            commands::chat_history::chat_history_get,
-            commands::chat_history::chat_history_get_active_segment,
+            commands::chat_history::chat_history_get_window,
             commands::chat_history::chat_history_upsert,
             commands::chat_history::chat_history_upsert_active_segment,
             commands::chat_history::chat_history_append_segment,
@@ -53,6 +53,7 @@ macro_rules! app_invoke_handler {
             commands::chat_history::chat_history_import_codex,
             commands::chat_history::chat_history_rename,
             commands::chat_history::chat_history_branch,
+            commands::chat_history::chat_history_replace_from_message,
             commands::chat_history::chat_history_set_pinned,
             commands::chat_history::chat_history_set_model,
             commands::chat_history::chat_history_share_get,
@@ -145,6 +146,7 @@ macro_rules! app_invoke_handler {
             commands::app::app_toggle_window_pin,
             commands::app::app_confirmed_exit,
             commands::app::app_macos_traffic_light_metrics,
+            commands::tray::app_tray_menu_sync,
             // Hooks
             commands::hook::hook_run_script,
             commands::hook::hook_run_http_requests,
@@ -259,7 +261,8 @@ macro_rules! app_invoke_handler {
             commands::gateway::gateway_disconnect,
             commands::gateway::gateway_status,
             commands::gateway::gateway_nudge_connection,
-            commands::gateway::gateway_send_chat_event,
+            commands::gateway::gateway_send_chat_ingress_batch,
+            commands::gateway::gateway_commit_chat_checkpoint,
             commands::gateway::gateway_chat_claim_next,
             commands::gateway::gateway_chat_mark_started,
             commands::gateway::gateway_chat_mark_local_started,
@@ -273,7 +276,6 @@ macro_rules! app_invoke_handler {
             commands::gateway::gateway_chat_release_lease,
             commands::gateway::gateway_chat_queue_respond,
             commands::gateway::gateway_publish_chat_queue_event,
-            commands::gateway::gateway_publish_chat_runtime_snapshot,
             commands::gateway::gateway_publish_settings_sync,
             commands::gateway::gateway_tunnel_state,
             commands::gateway::gateway_tunnel_create,
@@ -323,8 +325,195 @@ fn toggle_main_window_pin(app: &tauri::AppHandle) {
                     }
                 }
                 let _ = app.emit("global-shortcut:pin-changed", next);
+                // 托盘勾选与置顶真源（WindowPinState）同步；托盘可能尚未建好。
+                if let Some(handles) = app.try_state::<Arc<services::tray::TrayMenuHandles>>() {
+                    handles.set_pin_checked(next);
+                }
             }
             Err(error) => eprintln!("failed to toggle LiveAgent window pin: {error}"),
+        }
+    }
+}
+
+/// 应用级动作总线：全局快捷键与托盘菜单的动作都收敛到这里执行。
+/// Rust 能独立完成的直接做（webview 卡死时托盘仍可用）；需要前端语义的
+/// 经 [`APP_ACTION_EVENT`] 转发（部分动作先呼出主窗口）。
+#[derive(Debug, Clone)]
+enum AppAction {
+    Summon,
+    ToggleWindow,
+    TogglePin,
+    NewChat,
+    OpenConversation(String),
+    ViewAllConversations,
+    SwitchWorkspace(String),
+    StopRun(String),
+    StopAllRuns,
+    ToggleCronTask(String),
+    GatewayToggle,
+    SetTheme(&'static str),
+    OpenSettings,
+    CheckUpdates,
+    OpenDataDir,
+    Quit,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppActionEvent {
+    action: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppActionFeedbackEvent {
+    action: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    /// 结果附加值（如 cron 开关后的 "enabled"/"disabled"）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    value: Option<String>,
+}
+
+/// 托盘菜单项 ID → 动作。静态 ID 与动态前缀都定义在 `services::tray`。
+fn tray_menu_action(id: &str) -> Option<AppAction> {
+    use services::tray as tray_ids;
+    match id {
+        tray_ids::TRAY_SHOW_ID => Some(AppAction::Summon),
+        tray_ids::TRAY_NEW_CHAT_ID => Some(AppAction::NewChat),
+        tray_ids::TRAY_PIN_ID => Some(AppAction::TogglePin),
+        tray_ids::TRAY_RECENT_VIEW_ALL_ID => Some(AppAction::ViewAllConversations),
+        tray_ids::TRAY_RUN_STOP_ALL_ID => Some(AppAction::StopAllRuns),
+        tray_ids::TRAY_GATEWAY_ID => Some(AppAction::GatewayToggle),
+        tray_ids::TRAY_THEME_LIGHT_ID => Some(AppAction::SetTheme("light")),
+        tray_ids::TRAY_THEME_DARK_ID => Some(AppAction::SetTheme("dark")),
+        tray_ids::TRAY_THEME_SYSTEM_ID => Some(AppAction::SetTheme("system")),
+        tray_ids::TRAY_SETTINGS_ID => Some(AppAction::OpenSettings),
+        tray_ids::TRAY_CHECK_UPDATES_ID => Some(AppAction::CheckUpdates),
+        tray_ids::TRAY_OPEN_DATA_DIR_ID => Some(AppAction::OpenDataDir),
+        tray_ids::TRAY_QUIT_ID => Some(AppAction::Quit),
+        _ => {
+            if let Some(rest) = id.strip_prefix(tray_ids::TRAY_RECENT_PREFIX) {
+                Some(AppAction::OpenConversation(rest.to_string()))
+            } else if let Some(rest) = id.strip_prefix(tray_ids::TRAY_WORKSPACE_PREFIX) {
+                Some(AppAction::SwitchWorkspace(rest.to_string()))
+            } else if let Some(rest) = id.strip_prefix(tray_ids::TRAY_RUN_PREFIX) {
+                Some(AppAction::StopRun(rest.to_string()))
+            } else {
+                id.strip_prefix(tray_ids::TRAY_CRON_PREFIX)
+                    .map(|rest| AppAction::ToggleCronTask(rest.to_string()))
+            }
+        }
+    }
+}
+
+/// 转发前端动作。`show_window` 用于用户预期看到界面反馈的动作
+/// （开会话/新建对话/打开设置等）；后台型动作（停止运行/改主题/网关开关）
+/// 不抢焦点。
+fn forward_app_action(
+    app: &tauri::AppHandle,
+    action: &'static str,
+    id: Option<String>,
+    value: Option<String>,
+    show_window: bool,
+) {
+    if show_window {
+        if let Err(error) = show_main_window(app) {
+            eprintln!("failed to show LiveAgent window for action {action}: {error}");
+        }
+    }
+    if let Err(error) = app.emit(APP_ACTION_EVENT, AppActionEvent { action, id, value }) {
+        eprintln!("failed to emit app action {action}: {error}");
+    }
+}
+
+fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
+    match action {
+        AppAction::Summon => {
+            if let Err(error) = show_main_window(app) {
+                eprintln!("failed to show LiveAgent window: {error}");
+            }
+        }
+        AppAction::ToggleWindow => toggle_main_window(app),
+        AppAction::TogglePin => toggle_main_window_pin(app),
+        AppAction::NewChat => forward_app_action(app, "new-chat", None, None, true),
+        AppAction::OpenConversation(id) => {
+            forward_app_action(app, "open-conversation", Some(id), None, true);
+        }
+        AppAction::ViewAllConversations => {
+            forward_app_action(app, "view-all-conversations", None, None, true);
+        }
+        AppAction::SwitchWorkspace(id) => {
+            forward_app_action(app, "switch-workspace", Some(id), None, true);
+        }
+        AppAction::StopRun(id) => forward_app_action(app, "stop-run", Some(id), None, false),
+        AppAction::StopAllRuns => forward_app_action(app, "stop-all-runs", None, None, false),
+        AppAction::GatewayToggle => forward_app_action(app, "gateway-toggle", None, None, false),
+        AppAction::SetTheme(theme) => {
+            forward_app_action(app, "set-theme", None, Some(theme.to_string()), false);
+        }
+        AppAction::OpenSettings => forward_app_action(app, "open-settings", None, None, true),
+        AppAction::CheckUpdates => forward_app_action(app, "check-updates", None, None, true),
+        AppAction::ToggleCronTask(task_id) => {
+            // 托盘的定时任务子项是启用开关：翻转走 AutomationStore 唯一的
+            // cron_apply 写路径（CAS），成功后 automation:cron-changed 会驱动
+            // 前端 store 与托盘勾选自然刷新。开关是后台动作，不呼出主窗口；
+            // 结果经 feedback 事件给前端 toast（窗口可见时提示文案）。
+            let Some(store) = app.try_state::<Arc<services::automation::AutomationStore>>() else {
+                return;
+            };
+            let store = Arc::clone(store.inner());
+            let app_handle = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let (value, error) = match store.toggle_cron_task_enabled(&task_id) {
+                    Ok(enabled) => (
+                        Some(if enabled { "enabled" } else { "disabled" }.to_string()),
+                        None,
+                    ),
+                    Err(error) => {
+                        eprintln!("failed to toggle cron task from tray: {error}");
+                        (None, Some(error))
+                    }
+                };
+                if let Err(emit_error) = app_handle.emit(
+                    APP_ACTION_FEEDBACK_EVENT,
+                    AppActionFeedbackEvent {
+                        action: "toggle-cron-task",
+                        id: Some(task_id),
+                        ok: error.is_none(),
+                        error,
+                        value,
+                    },
+                ) {
+                    eprintln!("failed to emit cron toggle feedback: {emit_error}");
+                }
+            });
+        }
+        AppAction::OpenDataDir => {
+            use tauri_plugin_opener::OpenerExt;
+            match commands::settings::config_dir() {
+                Ok(dir) => {
+                    if let Err(error) = app
+                        .opener()
+                        .open_path(dir.to_string_lossy().to_string(), None::<&str>)
+                    {
+                        eprintln!("failed to open LiveAgent data directory: {error}");
+                    }
+                }
+                Err(error) => eprintln!("failed to resolve LiveAgent data directory: {error}"),
+            }
+        }
+        AppAction::Quit => {
+            let allow_exit = app.state::<Arc<AtomicBool>>();
+            let terminal_registry = app.state::<Arc<runtime::terminal::TerminalSessionRegistry>>();
+            request_app_exit(app, allow_exit.inner(), terminal_registry.inner());
         }
     }
 }
@@ -339,24 +528,14 @@ fn handle_global_shortcut(
     let Some(action) = action else {
         return;
     };
-    match action.as_str() {
-        "summon" => {
-            if let Err(error) = show_main_window(app) {
-                eprintln!("failed to show LiveAgent window from global shortcut: {error}");
-            }
-        }
-        "toggle" => toggle_main_window(app),
-        "newChat" => {
-            if let Err(error) = show_main_window(app) {
-                eprintln!("failed to show LiveAgent window from global shortcut: {error}");
-            }
-            if let Err(error) = app.emit("global-shortcut:new-chat", ()) {
-                eprintln!("failed to emit new-chat global shortcut event: {error}");
-            }
-        }
-        "pin" => toggle_main_window_pin(app),
-        _ => {}
-    }
+    let action = match action.as_str() {
+        "summon" => AppAction::Summon,
+        "toggle" => AppAction::ToggleWindow,
+        "newChat" => AppAction::NewChat,
+        "pin" => AppAction::TogglePin,
+        _ => return,
+    };
+    dispatch_app_action(app, action);
 }
 
 fn request_app_exit(
@@ -382,69 +561,42 @@ fn request_app_exit(
     app.exit(0);
 }
 
-fn record_tray_left_click(last_click_at: &Mutex<Option<Instant>>) -> bool {
-    let now = Instant::now();
-    let mut last_click_at = last_click_at.lock().unwrap();
-    let is_double_click = last_click_at
-        .map(|previous| now.duration_since(previous))
-        .is_some_and(|elapsed| elapsed <= Duration::from_millis(TRAY_DOUBLE_CLICK_INTERVAL_MS));
-
-    *last_click_at = if is_double_click { None } else { Some(now) };
-
-    is_double_click
-}
-
-fn configure_system_tray(
-    app: &tauri::App,
-    allow_exit: Arc<AtomicBool>,
-    terminal_registry: Arc<runtime::terminal::TerminalSessionRegistry>,
-) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "显示", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "退出", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quit])?;
-    let last_left_click_at = Arc::new(Mutex::new(None));
+fn configure_system_tray(app: &tauri::App) -> tauri::Result<()> {
+    let skeleton = services::tray::build_tray_menu_skeleton(app, app_version())?;
+    let menu = skeleton.menu.clone();
 
     let mut tray_builder = TrayIconBuilder::new()
         .tooltip("LiveAgent")
         .menu(&menu)
         .show_menu_on_left_click(TRAY_SHOW_MENU_ON_LEFT_CLICK)
-        .on_menu_event(move |app, event| match event.id().as_ref() {
-            TRAY_SHOW_ID => {
-                if let Err(error) = show_main_window(app) {
-                    eprintln!("failed to show LiveAgent window from tray: {error}");
+        .on_menu_event(|app, event| {
+            if let Some(action) = tray_menu_action(event.id().as_ref()) {
+                dispatch_app_action(app, action);
+            }
+        })
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                ..
+            } => {
+                if let Err(error) = show_main_window(tray.app_handle()) {
+                    eprintln!("failed to show LiveAgent window from tray double-click: {error}");
                 }
             }
-            TRAY_QUIT_ID => {
-                request_app_exit(app, &allow_exit, &terminal_registry);
+            TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Down,
+                ..
+            } => {
+                // Windows 惯例：左键单击即激活主窗口（菜单在右键）。
+                // 其他平台左键弹菜单（TRAY_SHOW_MENU_ON_LEFT_CLICK）。
+                if cfg!(target_os = "windows") {
+                    if let Err(error) = show_main_window(tray.app_handle()) {
+                        eprintln!("failed to show LiveAgent window from tray click: {error}");
+                    }
+                }
             }
             _ => {}
-        })
-        .on_tray_icon_event({
-            let last_left_click_at = Arc::clone(&last_left_click_at);
-            move |tray, event| match event {
-                TrayIconEvent::DoubleClick {
-                    button: MouseButton::Left,
-                    ..
-                } => {
-                    if let Err(error) = show_main_window(tray.app_handle()) {
-                        eprintln!("failed to show LiveAgent window from tray double-click: {error}");
-                    }
-                }
-                TrayIconEvent::Click {
-                    button: MouseButton::Left,
-                    button_state: MouseButtonState::Down,
-                    ..
-                } => {
-                    if record_tray_left_click(&last_left_click_at) {
-                        if let Err(error) = show_main_window(tray.app_handle()) {
-                            eprintln!(
-                                "failed to show LiveAgent window from tray left double-click: {error}"
-                            );
-                        }
-                    }
-                }
-                _ => {}
-            }
         });
 
     #[cfg(target_os = "macos")]
@@ -470,7 +622,13 @@ fn configure_system_tray(
     }
 
     let tray = tray_builder.build(app)?;
+    let handles = Arc::new(services::tray::TrayMenuHandles::new(
+        skeleton,
+        tray.clone(),
+        app_version(),
+    ));
     app.manage(tray);
+    app.manage(handles);
 
     Ok(())
 }
@@ -546,7 +704,6 @@ pub fn run() {
         .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
         .setup({
-            let allow_exit = Arc::clone(&allow_exit);
             let terminal_registry = Arc::clone(&terminal_registry);
             let sftp_registry = Arc::clone(&sftp_registry);
             let managed_process_registry = Arc::clone(&managed_process_registry);
@@ -554,11 +711,7 @@ pub fn run() {
             let provider_usage_service = Arc::clone(&provider_usage_service);
             move |app| {
                 commands::history_db::initialize_history_db()?;
-                configure_system_tray(
-                    app,
-                    Arc::clone(&allow_exit),
-                    Arc::clone(&terminal_registry),
-                )?;
+                configure_system_tray(app)?;
                 #[cfg(target_os = "windows")]
                 configure_windows_window_chrome(app)?;
                 if let Err(error) = commands::settings::initialize_system_proxy_from_db() {

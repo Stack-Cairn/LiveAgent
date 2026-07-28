@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/liveagent/agent-gateway/internal/observability"
 )
 
 // 写泵行为常量，保持既有稳定取值。
@@ -16,9 +18,10 @@ const (
 	DefaultQueueSize = 512
 	// DefaultCtrlQueueSize 是控制队列默认容量。
 	DefaultCtrlQueueSize = 64
+	// DefaultQueueBytes / DefaultCtrlQueueBytes 让队列同时受帧数与字节数约束。
+	DefaultQueueBytes     = 8 * 1024 * 1024
+	DefaultCtrlQueueBytes = 256 * 1024
 
-	maxWriteRetries         = 2
-	retryBackoff            = 100 * time.Millisecond
 	defaultHeartbeatPeriod  = 15 * time.Second
 	heartbeatGraceFloor     = 5 * time.Second
 	defaultControlWriteWait = 10 * time.Second
@@ -33,6 +36,9 @@ type Config struct {
 	// QueueSize / CtrlQueueSize 为两条队列的容量。
 	QueueSize     int
 	CtrlQueueSize int
+	// QueueBytes / CtrlQueueBytes 是两条队列的内存上限。
+	QueueBytes     int64
+	CtrlQueueBytes int64
 	// HeartbeatPeriod / HeartbeatGrace 决定心跳周期与空闲驱逐窗口（IdleTimeout = 3*period + grace）。
 	HeartbeatPeriod time.Duration
 	HeartbeatGrace  time.Duration
@@ -53,8 +59,15 @@ type Conn struct {
 	ws  *websocket.Conn
 	cfg Config
 
-	writeMu       sync.Mutex
-	droppedFrames atomic.Int64
+	writeMu            sync.Mutex
+	droppedFrames      atomic.Int64
+	writerCloses       atomic.Int64
+	queueByteOverflows atomic.Int64
+	dataBytes          atomic.Int64
+	controlBytes       atomic.Int64
+	dataFreed          chan struct{}
+	controlFreed       chan struct{}
+	writeOverride      func(Frame) error
 
 	closeOnce sync.Once
 	done      chan struct{}
@@ -78,12 +91,20 @@ func NewConn(ws *websocket.Conn, cfg Config) *Conn {
 	if cfg.CtrlQueueSize <= 0 {
 		cfg.CtrlQueueSize = DefaultCtrlQueueSize
 	}
+	if cfg.QueueBytes <= 0 {
+		cfg.QueueBytes = DefaultQueueBytes
+	}
+	if cfg.CtrlQueueBytes <= 0 {
+		cfg.CtrlQueueBytes = DefaultCtrlQueueBytes
+	}
 	return &Conn{
-		Outbox:     make(chan Frame, cfg.QueueSize),
-		CtrlOutbox: make(chan Frame, cfg.CtrlQueueSize),
-		ws:         ws,
-		cfg:        cfg,
-		done:       make(chan struct{}),
+		Outbox:       make(chan Frame, cfg.QueueSize),
+		CtrlOutbox:   make(chan Frame, cfg.CtrlQueueSize),
+		ws:           ws,
+		cfg:          cfg,
+		done:         make(chan struct{}),
+		dataFreed:    make(chan struct{}, 1),
+		controlFreed: make(chan struct{}, 1),
 	}
 }
 
@@ -147,15 +168,29 @@ func (c *Conn) DroppedFrames() int64 {
 	return c.droppedFrames.Load()
 }
 
+// WriterCloses 返回写泵因底层写错误而关闭连接的累计次数。
+func (c *Conn) WriterCloses() int64 {
+	return c.writerCloses.Load()
+}
+
+// QueueByteOverflows 返回帧或聚合队列超过字节预算的累计次数。
+func (c *Conn) QueueByteOverflows() int64 {
+	return c.queueByteOverflows.Load()
+}
+
 // Enqueue 将帧交给写泵：控制/心跳帧走优先队列；数据帧持续拥塞时丢弃并返回
 // ErrWriteQueueFull；FrameResponse 掉帧则关连接，让客户端重连重试而非挂到超时。
 func (c *Conn) Enqueue(frame Frame) error {
 	if frame.Class == FrameControl || frame.Class == FramePing {
-		return c.enqueueControl(frame)
+		err := c.enqueueControl(frame)
+		if errors.Is(err, ErrWriteQueueFull) || errors.Is(err, ErrWriteFrameTooLarge) {
+			c.noteDroppedFrame(frame, "control", writeQueueDropReason(err))
+		}
+		return err
 	}
 	err := c.enqueueData(frame)
-	if errors.Is(err, ErrWriteQueueFull) {
-		c.noteDroppedFrame(frame.Kind)
+	if errors.Is(err, ErrWriteQueueFull) || errors.Is(err, ErrWriteFrameTooLarge) {
+		c.noteDroppedFrame(frame, "data", writeQueueDropReason(err))
 		if frame.Class == FrameResponse {
 			c.Close()
 		}
@@ -165,64 +200,157 @@ func (c *Conn) Enqueue(frame Frame) error {
 
 // enqueueData 在数据队列瞬时满载时最多等 ControlWriteTimeout，持续积压才报 ErrWriteQueueFull；快速路径零分配。
 func (c *Conn) enqueueData(frame Frame) error {
-	select {
-	case <-c.done:
-		return errors.New("connection closed")
-	case c.Outbox <- frame:
-		return nil
-	default:
-	}
-
-	timer := time.NewTimer(c.ControlWriteTimeout())
-	defer timer.Stop()
-	select {
-	case <-c.done:
-		return errors.New("connection closed")
-	case c.Outbox <- frame:
-		return nil
-	case <-timer.C:
-		return ErrWriteQueueFull
-	}
+	return c.enqueueBounded(frame, "data", c.Outbox, &c.dataBytes, c.cfg.QueueBytes, c.dataFreed)
 }
 
 func (c *Conn) enqueueControl(frame Frame) error {
-	select {
-	case <-c.done:
-		return errors.New("connection closed")
-	case c.CtrlOutbox <- frame:
-		return nil
-	default:
-	}
-
 	if frame.Class == FramePing {
-		// 心跳是周期性的：控制队列满时静默丢弃，下个周期自然取代。
-		c.noteDroppedFrame(frame.Kind)
-		return nil
+		if c.tryEnqueueBounded(frame, "control", c.CtrlOutbox, &c.controlBytes, c.cfg.CtrlQueueBytes) {
+			return nil
+		}
+		select {
+		case <-c.done:
+			return errors.New("connection closed")
+		default:
+			// 心跳是周期性的：控制队列满时静默丢弃，下个周期自然取代。
+			c.noteDroppedFrame(frame, "control", "queue_full")
+			return nil
+		}
 	}
+	return c.enqueueBounded(frame, "control", c.CtrlOutbox, &c.controlBytes, c.cfg.CtrlQueueBytes, c.controlFreed)
+}
 
+func (c *Conn) enqueueBounded(
+	frame Frame,
+	lane string,
+	queue chan<- Frame,
+	queuedBytes *atomic.Int64,
+	byteLimit int64,
+	freed <-chan struct{},
+) error {
+	frameBytes := int64(len(frame.Data))
+	if frameBytes > byteLimit {
+		c.noteQueueByteOverflow(frameBytes, lane, "frame_too_large")
+		return ErrWriteFrameTooLarge
+	}
 	timer := time.NewTimer(c.ControlWriteTimeout())
 	defer timer.Stop()
-	select {
-	case <-c.done:
-		return errors.New("connection closed")
-	case c.CtrlOutbox <- frame:
-		return nil
-	case <-timer.C:
-		c.noteDroppedFrame(frame.Kind)
-		return ErrWriteQueueFull
+	for {
+		if reserveQueueBytes(queuedBytes, frameBytes, byteLimit) {
+			select {
+			case <-c.done:
+				releaseQueueBytes(queuedBytes, frameBytes, nil)
+				return errors.New("connection closed")
+			case queue <- frame:
+				return nil
+			case <-timer.C:
+				releaseQueueBytes(queuedBytes, frameBytes, nil)
+				return ErrWriteQueueFull
+			}
+		}
+		select {
+		case <-c.done:
+			return errors.New("connection closed")
+		case <-freed:
+		case <-timer.C:
+			c.noteQueueByteOverflow(frameBytes, lane, "byte_limit")
+			return ErrWriteQueueFull
+		}
 	}
 }
 
-func (c *Conn) noteDroppedFrame(kind string) {
+func (c *Conn) tryEnqueueBounded(
+	frame Frame,
+	lane string,
+	queue chan<- Frame,
+	queuedBytes *atomic.Int64,
+	byteLimit int64,
+) bool {
+	frameBytes := int64(len(frame.Data))
+	if frameBytes > byteLimit {
+		c.noteQueueByteOverflow(frameBytes, lane, "frame_too_large")
+		return false
+	}
+	if !reserveQueueBytes(queuedBytes, frameBytes, byteLimit) {
+		c.noteQueueByteOverflow(frameBytes, lane, "byte_limit")
+		return false
+	}
+	select {
+	case <-c.done:
+		releaseQueueBytes(queuedBytes, frameBytes, nil)
+		return false
+	case queue <- frame:
+		return true
+	default:
+		releaseQueueBytes(queuedBytes, frameBytes, nil)
+		return false
+	}
+}
+
+func reserveQueueBytes(queuedBytes *atomic.Int64, frameBytes, byteLimit int64) bool {
+	for {
+		current := queuedBytes.Load()
+		if frameBytes > byteLimit-current {
+			return false
+		}
+		if queuedBytes.CompareAndSwap(current, current+frameBytes) {
+			return true
+		}
+	}
+}
+
+func releaseQueueBytes(queuedBytes *atomic.Int64, frameBytes int64, freed chan<- struct{}) {
+	for {
+		current := queuedBytes.Load()
+		next := current - frameBytes
+		if next < 0 {
+			next = 0
+		}
+		if queuedBytes.CompareAndSwap(current, next) {
+			break
+		}
+	}
+	if freed != nil {
+		select {
+		case freed <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (c *Conn) noteDroppedFrame(frame Frame, lane string, reason string) {
 	dropped := c.droppedFrames.Add(1)
 	// 只记第一次与每第 100 次：生产可见掉帧，突发期不刷屏。
 	if dropped == 1 || dropped%100 == 0 {
 		slog.Warn("websocket: shed frame for slow client",
-			"kind", kind,
-			"dropped", dropped,
+			"lane", lane,
+			"kind", frame.Kind,
+			"request_id", frame.RequestID,
 			"remote", c.cfg.Remote,
+			"size", len(frame.Data),
+			"reason", reason,
 		)
 	}
+}
+
+func (c *Conn) noteQueueByteOverflow(size int64, lane string, reason string) {
+	overflows := c.queueByteOverflows.Add(1)
+	observability.Usage.WebSocketQueueByteOverflowsTotal.Add(1)
+	if overflows == 1 || overflows%100 == 0 {
+		slog.Warn("websocket_queue_byte_overflow",
+			"lane", lane,
+			"remote", c.cfg.Remote,
+			"size", size,
+			"reason", reason,
+		)
+	}
+}
+
+func writeQueueDropReason(err error) string {
+	if errors.Is(err, ErrWriteFrameTooLarge) {
+		return "frame_too_large"
+	}
+	return "queue_full"
 }
 
 // StartWriteLoop 启动写泵（幂等），协议层在鉴权成功后调用——鉴权前队列无人消费。
@@ -239,17 +367,17 @@ func (c *Conn) writeLoop() {
 		case <-c.done:
 			return
 		case frame := <-c.CtrlOutbox:
-			if !c.deliverFrame(frame) {
+			if !c.deliverQueuedFrame(frame, true) {
 				return
 			}
 		case frame := <-c.Outbox:
-			if !c.deliverFrame(frame) {
+			if !c.deliverQueuedFrame(frame, false) {
 				return
 			}
 			for drained := 0; drained < writeLoopBatchSize; drained++ {
 				select {
 				case extra := <-c.CtrlOutbox:
-					if !c.deliverFrame(extra) {
+					if !c.deliverQueuedFrame(extra, true) {
 						return
 					}
 					continue
@@ -257,7 +385,7 @@ func (c *Conn) writeLoop() {
 				}
 				select {
 				case extra := <-c.Outbox:
-					if !c.deliverFrame(extra) {
+					if !c.deliverQueuedFrame(extra, false) {
 						return
 					}
 				default:
@@ -269,28 +397,40 @@ func (c *Conn) writeLoop() {
 	}
 }
 
-// deliverFrame 带有限重试地写出一帧；重试耗尽即底层链路不可写，是唯一允许据此关连接的路径。
-func (c *Conn) deliverFrame(frame Frame) bool {
-	if err := c.writeFrameDirect(frame); err == nil {
-		return true
+// deliverQueuedFrame 在第一次写错误时立即关闭连接；可靠恢复必须发生在新连接上。
+func (c *Conn) deliverQueuedFrame(frame Frame, control bool) bool {
+	if control {
+		defer releaseQueueBytes(&c.controlBytes, int64(len(frame.Data)), c.controlFreed)
+	} else {
+		defer releaseQueueBytes(&c.dataBytes, int64(len(frame.Data)), c.dataFreed)
 	}
-	for attempt := 0; attempt < maxWriteRetries; attempt++ {
-		select {
-		case <-c.done:
-			return false
-		case <-time.After(retryBackoff):
+	if err := c.writeFrameDirect(frame); err != nil {
+		lane := "data"
+		if control {
+			lane = "control"
 		}
-		if err := c.writeFrameDirect(frame); err == nil {
-			return true
-		}
+		c.writerCloses.Add(1)
+		observability.Usage.WebSocketWriterClosesTotal.Add(1)
+		slog.Error("websocket_writer_closed",
+			"lane", lane,
+			"size", len(frame.Data),
+			"reason", "write_failed",
+		)
+		c.Close()
+		return false
 	}
-	c.Close()
-	return false
+	return true
 }
 
 func (c *Conn) writeFrameDirect(frame Frame) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	if c.writeOverride != nil {
+		return c.writeOverride(frame)
+	}
+	if c.ws == nil {
+		return errors.New("websocket connection is nil")
+	}
 	if c.cfg.WriteTimeout > 0 {
 		if err := c.ws.SetWriteDeadline(time.Now().Add(c.cfg.WriteTimeout)); err != nil {
 			return err

@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { SUPPORTED_LOCALES, useLocale } from "../../i18n";
+import { inferRuntimePlatform } from "../../lib/runtimePlatform";
 import {
   CLOSE_WINDOW_BEHAVIOR_OPTIONS,
   type ExecutionMode,
@@ -43,6 +44,7 @@ import {
   listLocalFontFamilies,
   toFontFamilySelectValue,
 } from "../../lib/system/fontFamily";
+import { useTrayPrefs, writeTrayPrefs } from "../../lib/tray/trayPrefs";
 import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";
 
@@ -55,6 +57,8 @@ type FontFamilySettingKey = (typeof FONT_FAMILY_FIELDS)[number];
 export function SystemSettingsForm(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
+  const trayPrefs = useTrayPrefs();
+  const isMacPlatform = useMemo(() => inferRuntimePlatform() === "macos", []);
 
   const executionMode = settings.system.executionMode;
   const isClassicAgentMode = executionMode === "tools";
@@ -636,6 +640,43 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
             );
           })}
         </div>
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
+          {t("settings.trayTitle")}
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm text-foreground">{t("settings.trayShowTitles")}</div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t("settings.trayShowTitlesDesc")}
+            </p>
+          </div>
+          <AgentActivationSwitch
+            checked={trayPrefs.showConversationTitles}
+            title={t("settings.trayShowTitles")}
+            onToggle={() =>
+              writeTrayPrefs({ showConversationTitles: !trayPrefs.showConversationTitles })
+            }
+          />
+        </div>
+        {isMacPlatform ? (
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm text-foreground">{t("settings.trayRunningBadge")}</div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("settings.trayRunningBadgeDesc")}
+              </p>
+            </div>
+            <AgentActivationSwitch
+              checked={trayPrefs.showRunningBadge}
+              title={t("settings.trayRunningBadge")}
+              onToggle={() => writeTrayPrefs({ showRunningBadge: !trayPrefs.showRunningBadge })}
+            />
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">

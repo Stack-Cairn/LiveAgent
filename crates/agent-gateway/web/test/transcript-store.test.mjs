@@ -24,6 +24,19 @@ function token(runId, seq, text) {
   return { type: "token", conversation_id: "conv-1", run_id: runId, seq, text };
 }
 
+function runContentSnapshot(runId, seq, revision, entries, extra = {}) {
+  return {
+    type: "run_content_snapshot",
+    conversation_id: "conv-1",
+    run_id: runId,
+    seq,
+    revision,
+    entries_json: JSON.stringify(entries),
+    content_complete: true,
+    ...extra,
+  };
+}
+
 function userMessage(runId, seq, message, extra = {}) {
   return { type: "user_message", conversation_id: "conv-1", run_id: runId, seq, message, ...extra };
 }
@@ -125,6 +138,281 @@ test("run lifecycle: reply renders in the live flow and folds at the next run_st
   assertUniqueKeys(snapshot);
 });
 
+test("terminal content snapshot replaces a partial stream before run_finished", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(userMessage("run-1", 1, "hello"));
+  store.applyEvent(runStarted("run-1", 2));
+  store.applyEvent(token("run-1", 3, "partial"));
+  store.flush();
+  const assistantKey = allRows(store.getSnapshot()).find((row) => row.kind === "assistant")?.key;
+
+  store.applyEvent(
+    runContentSnapshot("run-1", 4, 1, [
+      { id: "u1", kind: "user", text: "hello", attachments: [] },
+      { id: "a1", kind: "assistant", text: "partial plus full tail", round: 0 },
+    ]),
+  );
+  store.applyEvent(runFinished("run-1", 5));
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.equal(snapshot.activeRun, null);
+  assert.equal(snapshot.needsHistoryRefresh, false, "authoritative terminal content is complete");
+  assert.equal(
+    allRows(snapshot).find((row) => row.kind === "assistant")?.key,
+    assistantKey,
+    "terminal correction preserves the assistant row identity",
+  );
+  assert.match(allRows(snapshot).map(rowText).join("\n"), /partial plus full tail/);
+});
+
+test("late terminal content snapshot repairs a settled partial turn without reviving activity", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(userMessage("run-1", 1, "hello"));
+  store.applyEvent(runStarted("run-1", 2));
+  store.applyEvent(token("run-1", 3, "partial"));
+  store.applyEvent(runFinished("run-1", 4));
+  store.flush();
+  assert.equal(store.getSnapshot().needsHistoryRefresh, true, "unconfirmed completion is stale");
+
+  store.applyEvent(
+    runContentSnapshot("run-1", 5, 2, [
+      { id: "u1", kind: "user", text: "hello", attachments: [] },
+      { id: "a1", kind: "assistant", text: "complete reply", round: 0 },
+    ]),
+  );
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.equal(snapshot.activeRun, null, "content correction never revives the run");
+  assert.equal(snapshot.needsHistoryRefresh, false);
+  assert.match(allRows(snapshot).map(rowText).join("\n"), /complete reply/);
+});
+
+test("history-required terminal confirmation preserves streamed content until history converges", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(userMessage("run-1", 1, "hello"));
+  store.applyEvent(runStarted("run-1", 2));
+  store.applyEvent(token("run-1", 3, "large streamed reply"));
+  store.applyEvent(
+    runContentSnapshot("run-1", 4, 1, [], {
+      content_complete: false,
+      history_required: true,
+    }),
+  );
+  store.applyEvent(runFinished("run-1", 5));
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.equal(snapshot.activeRun, null);
+  assert.equal(snapshot.needsHistoryRefresh, true);
+  assert.match(allRows(snapshot).map(rowText).join("\n"), /large streamed reply/);
+  assertUniqueKeys(snapshot);
+});
+
+test("history enrichment keeps retrying until a stale settled reply is persisted", () => {
+  const store = createTranscriptStore();
+  const persistedUser = {
+    id: "hu:m1",
+    kind: "user",
+    text: "hello",
+    attachments: [],
+    messageRef: messageRef("m1"),
+  };
+  store.applyEvent(
+    userMessage("run-1", 1, "hello", { message_ref: wireMessageRef("m1") }),
+  );
+  store.applyEvent(runStarted("run-1", 2));
+  store.applyEvent(token("run-1", 3, "partial reply"));
+  store.applyEvent(runFinished("run-1", 4));
+  store.flush();
+  assert.equal(store.getSnapshot().needsHistoryRefresh, true, "run_finished arms refresh");
+
+  for (const attempt of [1, 2]) {
+    store.applyHistorySnapshot([persistedUser], { mode: "enrich" });
+    store.flush();
+    const snapshot = store.getSnapshot();
+    assert.equal(
+      snapshot.needsHistoryRefresh,
+      true,
+      `user-only history attempt ${attempt} keeps refresh armed`,
+    );
+    assert.equal(
+      allRows(snapshot).filter((row) => row.kind === "assistant").length,
+      1,
+      `user-only history attempt ${attempt} keeps one streamed reply`,
+    );
+    assert.match(allRows(snapshot).map(rowText).join("\n"), /partial reply/);
+    assertUniqueKeys(snapshot);
+  }
+
+  store.applyHistorySnapshot(
+    [
+      persistedUser,
+      {
+        id: "ht:hu:m1>0",
+        kind: "assistant",
+        text: "complete persisted reply",
+        round: 0,
+      },
+    ],
+    { mode: "enrich" },
+  );
+  store.flush();
+  const snapshot = store.getSnapshot();
+  assert.equal(snapshot.needsHistoryRefresh, false, "complete history stops refresh retries");
+  assert.equal(
+    allRows(snapshot).filter((row) => row.kind === "assistant").length,
+    1,
+    "persisted reply replaces rather than duplicates the stale stream",
+  );
+  assert.match(allRows(snapshot).map(rowText).join("\n"), /complete persisted reply/);
+  assert.doesNotMatch(allRows(snapshot).map(rowText).join("\n"), /partial reply/);
+  assertUniqueKeys(snapshot);
+});
+
+test("terminal snapshot and complete history converge in either arrival order", () => {
+  const historyEntries = [
+    {
+      id: "hu:m1",
+      kind: "user",
+      text: "hello",
+      attachments: [],
+      messageRef: messageRef("m1"),
+    },
+    {
+      id: "ht:hu:m1>0",
+      kind: "assistant",
+      text: "complete reply",
+      round: 0,
+    },
+  ];
+  const terminalEntries = [
+    {
+      id: "u1",
+      kind: "user",
+      text: "hello",
+      attachments: [],
+      messageRef: messageRef("m1"),
+    },
+    { id: "a1", kind: "assistant", text: "complete reply", round: 0 },
+  ];
+  const createSettledStore = () => {
+    const store = createTranscriptStore();
+    store.applyEvent(
+      userMessage("run-1", 1, "hello", { message_ref: wireMessageRef("m1") }),
+    );
+    store.applyEvent(runStarted("run-1", 2));
+    store.applyEvent(token("run-1", 3, "partial"));
+    store.applyEvent(runFinished("run-1", 4));
+    store.flush();
+    return store;
+  };
+
+  const snapshotFirst = createSettledStore();
+  snapshotFirst.applyEvent(runContentSnapshot("run-1", 5, 1, terminalEntries));
+  snapshotFirst.applyHistorySnapshot(historyEntries, { mode: "enrich" });
+  snapshotFirst.flush();
+
+  const historyFirst = createSettledStore();
+  historyFirst.applyHistorySnapshot(historyEntries, { mode: "enrich" });
+  historyFirst.applyEvent(runContentSnapshot("run-1", 5, 1, terminalEntries));
+  historyFirst.flush();
+
+  const snapshotFirstState = snapshotFirst.getSnapshot();
+  const historyFirstState = historyFirst.getSnapshot();
+  // Entry timestamps come from Date.now() at creation; the two stores are
+  // built milliseconds apart, so compare rows with timestamps normalized.
+  const withoutTimestamps = (rows) =>
+    rows.map((row) => {
+      const { timestamp: _timestamp, ...rest } = row;
+      return rest;
+    });
+  assert.deepEqual(
+    withoutTimestamps(historyFirstState.rows),
+    withoutTimestamps(snapshotFirstState.rows),
+  );
+  assert.deepEqual(
+    allRows(historyFirstState).map((row) => row.key),
+    allRows(snapshotFirstState).map((row) => row.key),
+  );
+  assert.equal(snapshotFirstState.activeRun, null);
+  assert.equal(historyFirstState.activeRun, null);
+  assert.equal(snapshotFirstState.needsHistoryRefresh, false);
+  assert.equal(historyFirstState.needsHistoryRefresh, false);
+  assertUniqueKeys(snapshotFirstState);
+  assertUniqueKeys(historyFirstState);
+});
+
+test("terminal content revisions are idempotent and cannot roll content back", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent(
+    runContentSnapshot("run-1", 2, 2, [
+      { id: "a1", kind: "assistant", text: "newest", round: 0 },
+    ]),
+  );
+  store.applyEvent(
+    runContentSnapshot("run-1", 3, 1, [
+      { id: "a1", kind: "assistant", text: "stale", round: 0 },
+    ]),
+  );
+  store.applyEvent(runFinished("run-1", 4));
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.match(allRows(snapshot).map(rowText).join("\n"), /newest/);
+  assert.doesNotMatch(allRows(snapshot).map(rowText).join("\n"), /stale/);
+  assertUniqueKeys(snapshot);
+});
+
+test("an old run correction does not disturb a newer active run", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-old", 1));
+  store.applyEvent(token("run-old", 2, "old partial"));
+  store.applyEvent(runStarted("run-new", 3));
+  store.applyEvent(token("run-new", 4, "new streaming"));
+  store.applyEvent({
+    type: "tool_status",
+    conversation_id: "conv-1",
+    run_id: "run-new",
+    seq: 5,
+    status: "Vibing",
+  });
+  store.applyEvent(
+    runContentSnapshot("run-old", 6, 1, [
+      { id: "a-old", kind: "assistant", text: "old complete", round: 0 },
+    ]),
+  );
+  store.applyEvent(runFinished("run-old", 7));
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  assert.equal(snapshot.activeRun?.runId, "run-new");
+  assert.equal(snapshot.toolStatus, "Vibing");
+  const text = allRows(snapshot).map(rowText).join("\n");
+  assert.match(text, /old complete/);
+  assert.match(text, /new streaming/);
+});
+
+test("a late content correction preserves a genuine provider error", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(runStarted("run-1", 1));
+  store.applyEvent(token("run-1", 2, "partial"));
+  store.applyEvent(runFinished("run-1", 3, "failed", { message: "provider exploded" }));
+  store.applyEvent(
+    runContentSnapshot("run-1", 4, 1, [
+      { id: "a1", kind: "assistant", text: "final partial", round: 0 },
+    ]),
+  );
+  store.flush();
+
+  const text = allRows(store.getSnapshot()).map(rowText).join("\n");
+  assert.match(text, /final partial/);
+  assert.match(text, /provider exploded/);
+  assert.equal(store.getSnapshot().activeRun, null);
+});
+
 test("cross-run rows never collide on key", () => {
   const store = createTranscriptStore();
   for (const runId of ["run-1", "run-2"]) {
@@ -217,12 +505,18 @@ test("inferred desktop_run_lost marks the streamed copy stale so enrich adopts t
   assert.equal(store.getSnapshot().needsHistoryRefresh, false);
 });
 
-test("a genuine failure keeps the streamed copy authoritative under enrich", () => {
+test("a genuine failure with confirmed terminal content stays authoritative under enrich", () => {
   const store = createTranscriptStore();
   store.applyEvent(userMessage("run-1", 1, "hello"));
   store.applyEvent(runStarted("run-1", 2));
   store.applyEvent(token("run-1", 3, "streamed reply"));
-  store.applyEvent(runFinished("run-1", 4, "failed", { message: "model exploded" }));
+  store.applyEvent(
+    runContentSnapshot("run-1", 4, 1, [
+      { id: "u1", kind: "user", text: "hello", attachments: [] },
+      { id: "a1", kind: "assistant", text: "streamed reply", round: 0 },
+    ]),
+  );
+  store.applyEvent(runFinished("run-1", 5, "failed", { message: "model exploded" }));
   store.flush();
 
   store.applyHistorySnapshot(

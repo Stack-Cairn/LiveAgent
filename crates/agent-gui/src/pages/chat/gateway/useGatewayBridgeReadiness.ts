@@ -2,10 +2,14 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import {
   type ConversationViewState,
   createConversationStateFromContext,
-  type HistoryMessageRef,
-  truncateConversationFromMessage,
 } from "../../../lib/chat/conversation/conversationState";
-import { type ChatHistorySummary, getChatHistory } from "../../../lib/chat/history/chatHistory";
+import {
+  buildConversationStateFromWindow,
+  CHAT_HISTORY_WINDOW_MESSAGES,
+  type ChatHistorySummary,
+  type ConversationPersistenceCursor,
+  getChatHistoryWindow,
+} from "../../../lib/chat/history/chatHistory";
 import { createConversationIdentity } from "../../../lib/chat/page/chatPageHelpers";
 import {
   type AppSettings,
@@ -14,27 +18,18 @@ import {
 } from "../../../lib/settings";
 import type { SidebarStore } from "../../../lib/sidebar/store";
 import {
-  collectRetainedSubagentParentToolCallIds,
-  pruneSubagentRunsForConversation,
-} from "../../../lib/subagents";
-import {
   type ConversationRuntimeEntry,
   createConversationRuntimeEntry,
   setConversationRuntimeCacheEntry,
 } from "../runtime/chatPageRuntime";
 import type { EnsureGatewayBridgeConversationReadyOptions } from "./gatewayBridgeTypes";
 
-type SubagentStoreManagerLike = {
-  invalidate: (conversationId: string) => void;
-};
-
 type UseGatewayBridgeReadinessParams = {
   settings: AppSettings;
   conversationState: ConversationViewState;
   currentConversationIdRef: MutableRefObject<string>;
   conversationRuntimeCacheRef: MutableRefObject<Map<string, ConversationRuntimeEntry>>;
-  persistedConversationStateRef: MutableRefObject<Map<string, ConversationViewState>>;
-  buildRuntimeEntryFromVisibleState: () => ConversationRuntimeEntry;
+  conversationPersistenceCursorRef: MutableRefObject<Map<string, ConversationPersistenceCursor>>;
   syncVisibleConversationRuntime: (conversationId: string, entry: ConversationRuntimeEntry) => void;
   isConversationRunning: (conversationId: string) => boolean;
   sidebarStore: SidebarStore;
@@ -43,23 +38,15 @@ type UseGatewayBridgeReadinessParams = {
   hydrationFailedConversationIdRef: MutableRefObject<string | null>;
   setHydratingConversationId: Dispatch<SetStateAction<string | null>>;
   setHydrationFailedConversationId: Dispatch<SetStateAction<string | null>>;
-  subagentStoresRef: MutableRefObject<SubagentStoreManagerLike>;
 };
 
-/**
- * Prepares a conversation for a gateway (WebUI) chat request: hydrates the
- * runtime cache from history when needed, allocates fresh identities for
- * blank requests, and applies edit_resend rebases (history truncation +
- * subagent prune) before the run starts.
- */
 export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParams) {
   const {
     settings,
     conversationState,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
-    buildRuntimeEntryFromVisibleState,
+    conversationPersistenceCursorRef,
     syncVisibleConversationRuntime,
     isConversationRunning,
     sidebarStore,
@@ -68,55 +55,54 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     hydrationFailedConversationIdRef,
     setHydratingConversationId,
     setHydrationFailedConversationId,
-    subagentStoresRef,
   } = params;
 
-  function applyGatewayBridgeRebase(conversationId: string, baseMessageRef: HistoryMessageRef) {
-    const targetConversationId = conversationId.trim();
-    if (!targetConversationId) {
-      throw new Error("Remote edit_resend requires conversation_id.");
-    }
-    const sourceEntry =
-      conversationRuntimeCacheRef.current.get(targetConversationId) ??
-      (targetConversationId === currentConversationIdRef.current
-        ? buildRuntimeEntryFromVisibleState()
-        : null);
-    if (!sourceEntry) {
-      throw new Error(`Conversation is not available for edit_resend: ${targetConversationId}`);
-    }
-    const nextState = truncateConversationFromMessage(sourceEntry.state, baseMessageRef);
-    const nextEntry = createConversationRuntimeEntry({
-      ...sourceEntry,
-      state: nextState,
+  function installHistoryRuntime(params: {
+    conversationId: string;
+    summary: ChatHistorySummary;
+    state: ConversationViewState;
+    activeSegmentIndex: number;
+    activeSegmentId: string;
+    cached?: ConversationRuntimeEntry;
+  }) {
+    const { conversationId, summary, state, activeSegmentIndex, activeSegmentId, cached } = params;
+    const entry = createConversationRuntimeEntry({
+      state,
+      sessionId: summary.sessionId ?? summary.id,
+      createdAt: summary.createdAt,
+      compactionStatus: cached?.compactionStatus,
+      isSending: cached?.isSending,
+      workdir: summary.cwd,
+      selectedModel: normalizeSelectedModelForProviders(
+        parseSelectedModelJson(summary.selectedModelJson),
+        settings.customProviders,
+      ),
     });
-    setConversationRuntimeCacheEntry(
-      conversationRuntimeCacheRef.current,
-      targetConversationId,
-      nextEntry,
-    );
-    persistedConversationStateRef.current.delete(targetConversationId);
-    if (currentConversationIdRef.current === targetConversationId) {
-      syncVisibleConversationRuntime(targetConversationId, nextEntry);
-    }
-
-    const keepParentToolCallIds = collectRetainedSubagentParentToolCallIds(nextState);
-    subagentStoresRef.current.invalidate(targetConversationId);
-    void pruneSubagentRunsForConversation({
-      parentConversationId: targetConversationId,
-      keepParentToolCallIds,
-    }).catch((error) => {
-      console.warn("gateway edit_resend subagent prune failed", error);
+    setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, conversationId, entry);
+    conversationPersistenceCursorRef.current.set(conversationId, {
+      activeSegmentIndex,
+      activeSegmentId,
     });
+    gatewayBridgeHistorySummaryRef.current.set(conversationId, summary);
+    sidebarStore.upsertLocal(summary);
+    if (currentConversationIdRef.current === conversationId) {
+      syncVisibleConversationRuntime(conversationId, entry);
+    }
+    if (hydratingConversationIdRef.current === conversationId) {
+      setHydratingConversationId(null);
+    }
+    if (hydrationFailedConversationIdRef.current === conversationId) {
+      setHydrationFailedConversationId(null);
+    }
+    return entry;
   }
 
   async function ensureGatewayBridgeConversationReady(
     targetConversationId: string,
     options?: EnsureGatewayBridgeConversationReadyOptions,
   ) {
-    const requestedConversationId = targetConversationId.trim();
-    const baseMessageRef = options?.baseMessageRef;
-    const rebased = options?.rebased === true || Boolean(baseMessageRef);
-    if (!requestedConversationId) {
+    const id = targetConversationId.trim();
+    if (!id) {
       const nextIdentity = createConversationIdentity();
       setConversationRuntimeCacheEntry(
         conversationRuntimeCacheRef.current,
@@ -132,98 +118,37 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
       );
       return nextIdentity.conversationId;
     }
-
-    const knownConversation =
-      requestedConversationId === currentConversationIdRef.current ||
-      conversationRuntimeCacheRef.current.has(requestedConversationId) ||
-      Boolean(sidebarStore.peek(requestedConversationId)) ||
-      gatewayBridgeHistorySummaryRef.current.has(requestedConversationId);
-    if (isConversationRunning(requestedConversationId)) {
-      throw new Error(`Conversation is already running: ${requestedConversationId}`);
+    if (isConversationRunning(id)) {
+      throw new Error(`Conversation is already running: ${id}`);
     }
-
-    const cached = conversationRuntimeCacheRef.current.get(requestedConversationId);
+    const cached = conversationRuntimeCacheRef.current.get(id);
+    const isPending = sidebarStore.peek(id)?.isPending === true;
+    const forceReload = options?.rebased === true;
     if (
-      rebased &&
-      baseMessageRef &&
-      (cached || requestedConversationId === currentConversationIdRef.current) &&
-      cached?.isSending !== true &&
-      hydratingConversationIdRef.current !== requestedConversationId &&
-      hydrationFailedConversationIdRef.current !== requestedConversationId
+      cached &&
+      !forceReload &&
+      (conversationPersistenceCursorRef.current.has(id) || cached.isSending || isPending)
     ) {
-      try {
-        applyGatewayBridgeRebase(requestedConversationId, baseMessageRef);
-        return requestedConversationId;
-      } catch (error) {
-        console.warn("gateway edit_resend cached rebase failed; hydrating history", error);
-      }
-    }
-    if (rebased) {
-      persistedConversationStateRef.current.delete(requestedConversationId);
-    }
-    const isPendingHistoryItem = sidebarStore.peek(requestedConversationId)?.isPending === true;
-    const shouldHydrateFromHistory =
-      !knownConversation ||
-      rebased ||
-      hydratingConversationIdRef.current === requestedConversationId ||
-      hydrationFailedConversationIdRef.current === requestedConversationId ||
-      !cached ||
-      (!persistedConversationStateRef.current.has(requestedConversationId) &&
-        !cached.isSending &&
-        !isPendingHistoryItem);
-
-    if (!shouldHydrateFromHistory) {
-      if (rebased && baseMessageRef) {
-        applyGatewayBridgeRebase(requestedConversationId, baseMessageRef);
-      }
-      return requestedConversationId;
+      return id;
     }
 
-    const record = await getChatHistory(requestedConversationId);
-    const nextEntry = createConversationRuntimeEntry({
-      state: record.state,
-      sessionId: record.sessionId ?? record.id,
-      createdAt: record.createdAt,
-      compactionStatus: cached?.compactionStatus,
-      isSending: cached?.isSending,
-      workdir: record.cwd,
-      selectedModel: normalizeSelectedModelForProviders(
-        parseSelectedModelJson(record.selectedModelJson),
-        settings.customProviders,
-      ),
+    const record = await getChatHistoryWindow({
+      id,
+      maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
+      includeActiveSegment: true,
     });
-    const historySummary: ChatHistorySummary = {
-      id: record.id,
-      title: record.title,
-      providerId: record.providerId,
-      model: record.model,
-      sessionId: record.sessionId,
-      cwd: record.cwd,
-      selectedModelJson: record.selectedModelJson,
-      messageCount: record.state.meta.totalMessageCount,
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
-      isPinned: record.isPinned,
-      pinnedAt: record.pinnedAt,
-    };
-    setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, record.id, nextEntry);
-    persistedConversationStateRef.current.set(record.id, record.state);
-    gatewayBridgeHistorySummaryRef.current.set(record.id, historySummary);
-    sidebarStore.upsertLocal(historySummary);
-    if (currentConversationIdRef.current === record.id) {
-      syncVisibleConversationRuntime(record.id, nextEntry);
-    }
-    if (hydratingConversationIdRef.current === record.id) {
-      setHydratingConversationId(null);
-    }
-    if (hydrationFailedConversationIdRef.current === record.id) {
-      setHydrationFailedConversationId(null);
-    }
-    if (rebased && baseMessageRef) {
-      applyGatewayBridgeRebase(record.id, baseMessageRef);
-    }
-    return record.id;
+    if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+    const state = buildConversationStateFromWindow(record);
+    installHistoryRuntime({
+      conversationId: record.conversation.id,
+      summary: record.conversation,
+      state,
+      activeSegmentIndex: record.activeSegment.segmentIndex,
+      activeSegmentId: record.activeSegment.segmentId,
+      cached,
+    });
+    return record.conversation.id;
   }
 
-  return { ensureGatewayBridgeConversationReady, applyGatewayBridgeRebase };
+  return { ensureGatewayBridgeConversationReady };
 }

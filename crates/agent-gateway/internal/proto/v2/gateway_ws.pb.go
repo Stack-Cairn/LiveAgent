@@ -91,6 +91,9 @@ type ClientHello struct {
 	// 客户端标识（如 "webui" / "desktop"），仅用于观测与日志。
 	ClientName    string `protobuf:"bytes,6,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
 	ClientVersion string `protobuf:"bytes,7,opt,name=client_version,json=clientVersion,proto3" json:"client_version,omitempty"`
+	// Optional feature identifiers supported by this client. Reliable desktop
+	// chat ingress is negotiated with "CHAT_INGRESS_V1".
+	Capabilities  []string `protobuf:"bytes,8,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -174,6 +177,13 @@ func (x *ClientHello) GetClientVersion() string {
 	return ""
 }
 
+func (x *ClientHello) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
 // ServerHello 是服务端对 ClientHello 的应答；ok=false 时随即关闭连接。
 type ServerHello struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -186,8 +196,10 @@ type ServerHello struct {
 	// 服务端心跳周期与消息大小上限，客户端应据此配置本地看门狗与分片。
 	HeartbeatPeriodSeconds uint32 `protobuf:"varint,5,opt,name=heartbeat_period_seconds,json=heartbeatPeriodSeconds,proto3" json:"heartbeat_period_seconds,omitempty"`
 	MaxMessageBytes        uint64 `protobuf:"varint,6,opt,name=max_message_bytes,json=maxMessageBytes,proto3" json:"max_message_bytes,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Feature identifiers supported by the gateway.
+	Capabilities  []string `protobuf:"bytes,7,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServerHello) Reset() {
@@ -260,6 +272,13 @@ func (x *ServerHello) GetMaxMessageBytes() uint64 {
 		return x.MaxMessageBytes
 	}
 	return 0
+}
+
+func (x *ServerHello) GetCapabilities() []string {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
 }
 
 // PingFrame / PongFrame 是应用层心跳：WS 控制帧 ping 探测网络栈，本帧探测页面 JS/事件循环存活。
@@ -2749,7 +2768,7 @@ var File_proto_v2_gateway_ws_proto protoreflect.FileDescriptor
 
 const file_proto_v2_gateway_ws_proto_rawDesc = "" +
 	"\n" +
-	"\x19proto/v2/gateway_ws.proto\x12\x14liveagent.gateway.v2\x1a\x16proto/v2/gateway.proto\"\x8c\x02\n" +
+	"\x19proto/v2/gateway_ws.proto\x12\x14liveagent.gateway.v2\x1a\x16proto/v2/gateway.proto\"\xb0\x02\n" +
 	"\vClientHello\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x124\n" +
 	"\x04role\x18\x02 \x01(\x0e2 .liveagent.gateway.v2.ClientRoleR\x04role\x12\x14\n" +
@@ -2758,7 +2777,8 @@ const file_proto_v2_gateway_ws_proto_rawDesc = "" +
 	"\ragent_version\x18\x05 \x01(\tR\fagentVersion\x12\x1f\n" +
 	"\vclient_name\x18\x06 \x01(\tR\n" +
 	"clientName\x12%\n" +
-	"\x0eclient_version\x18\a \x01(\tR\rclientVersion\"\xdd\x01\n" +
+	"\x0eclient_version\x18\a \x01(\tR\rclientVersion\x12\"\n" +
+	"\fcapabilities\x18\b \x03(\tR\fcapabilities\"\x81\x02\n" +
 	"\vServerHello\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1d\n" +
@@ -2767,7 +2787,8 @@ const file_proto_v2_gateway_ws_proto_rawDesc = "" +
 	"\vserver_time\x18\x04 \x01(\x03R\n" +
 	"serverTime\x128\n" +
 	"\x18heartbeat_period_seconds\x18\x05 \x01(\rR\x16heartbeatPeriodSeconds\x12*\n" +
-	"\x11max_message_bytes\x18\x06 \x01(\x04R\x0fmaxMessageBytes\")\n" +
+	"\x11max_message_bytes\x18\x06 \x01(\x04R\x0fmaxMessageBytes\x12\"\n" +
+	"\fcapabilities\x18\a \x03(\tR\fcapabilities\")\n" +
 	"\tPingFrame\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\")\n" +
 	"\tPongFrame\x12\x1c\n" +

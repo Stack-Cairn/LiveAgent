@@ -1,91 +1,109 @@
-import { memo, useMemo } from "react";
+import { memo, type ReactNode } from "react";
 
-import { ChangedFilesCard } from "../../../components/chat/ChangedFilesCard";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
-import { collectChangedFiles } from "../../../lib/chat/messages/changedFiles";
-import type { UiRound } from "../../../lib/chat/messages/uiMessages";
-
+import { VIBING_STATUS } from "../../../lib/chat/page/chatPageHelpers";
+import type { AssistantUnitRow } from "../transcript/rowModel";
 import { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
-import { RoundContent } from "./assistant-bubble/RoundContent";
+import { RetryDetailsBlock, RoundBlockContent } from "./assistant-bubble/RoundContent";
+import { AssistantStatus, CompactingText, VibingText } from "./assistant-bubble/StatusText";
+import { UsagePanel } from "./assistant-bubble/UsagePanel";
 
 export { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
-export { RetryDetailsBlock } from "./assistant-bubble/RoundContent";
-export { AssistantStatus, CompactingText, VibingText } from "./assistant-bubble/StatusText";
 
-const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
-const EMPTY_RETRY_ATTEMPTS: RetryAttemptRecord[] = [];
-
-export const AssistantBubble = memo(function AssistantBubble(props: {
-  rounds: (UiRound & {
-    runningToolCallIds?: string[];
-    thinkingOpen?: boolean;
-  })[];
+export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
+  row: AssistantUnitRow;
   showUsage?: boolean;
   usageContextWindow?: number;
-  isLive?: boolean;
-  // Pinned per row: stream-born content renders in streaming mode forever,
-  // history renders static. Never flips for a given row.
-  renderMode?: "streaming" | "static";
-  toolStatus?: string | null;
-  toolStatusVariant?: "default" | "compaction";
+  isAgentMode: boolean;
+  isCompactionRunning: boolean;
+  toolStatus: string | null;
   retryAttempts?: RetryAttemptRecord[];
 }) {
   const {
-    rounds,
+    row,
     showUsage,
     usageContextWindow,
-    isLive,
-    renderMode,
+    isAgentMode,
+    isCompactionRunning,
     toolStatus,
-    toolStatusVariant,
     retryAttempts,
   } = props;
-  const latestTodoItem = useMemo(() => {
-    for (let roundIndex = rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
-      const blocks = rounds[roundIndex]?.blocks ?? [];
-      for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-        const block = blocks[blockIndex];
-        if (block?.kind === "tool" && block.item.toolCall.name === "TodoWrite") {
-          return block.item;
-        }
-      }
+  const { unit } = row;
+  if (unit.kind === "footer") return null;
+
+  const isVibingStatus = toolStatus === VIBING_STATUS;
+  let status: ReactNode = null;
+  if (row.mutable && unit.kind === "placeholder") {
+    if (unit.showFallbackStatus) {
+      status = isCompactionRunning ? (
+        <CompactingText />
+      ) : isVibingStatus || !toolStatus ? (
+        <VibingText />
+      ) : (
+        <AssistantStatus>{toolStatus}</AssistantStatus>
+      );
+    } else if (toolStatus) {
+      status = isCompactionRunning ? (
+        <CompactingText />
+      ) : isVibingStatus ? (
+        <VibingText />
+      ) : (
+        <AssistantStatus>{toolStatus}</AssistantStatus>
+      );
     }
-    return null;
-  }, [rounds]);
-  const isAborted = useMemo(
-    () => rounds.some((round) => round.meta?.stopReason === "aborted"),
-    [rounds],
-  );
-  // 回复末尾的已编辑文件卡：聚合整条回复所有 round 的 Write/Edit/Delete，
-  // 只在回复结束（行落定）后出现，流式过程中不渲染。
-  const changedFiles = useMemo(
-    () => (isLive ? null : collectChangedFiles(rounds)),
-    [isLive, rounds],
-  );
+  } else if (
+    row.mutable &&
+    unit.kind === "block" &&
+    toolStatus &&
+    (!unit.hasRunningToolCall || isCompactionRunning || isVibingStatus)
+  ) {
+    status = isCompactionRunning ? (
+      <CompactingText />
+    ) : isVibingStatus ? (
+      <VibingText />
+    ) : (
+      <AssistantStatus>{toolStatus}</AssistantStatus>
+    );
+  }
 
   return (
     <div className="flex w-full max-w-full items-start gap-3">
-      <AssistantAvatar />
-      <div className="min-w-0 flex-1 space-y-2 pt-0.5">
-        {rounds.map((round, idx) => (
-          <RoundContent
-            key={round.key}
-            round={round}
-            showUsage={showUsage}
-            usageContextWindow={usageContextWindow}
-            isLive={isLive}
-            isActive={isLive && idx === rounds.length - 1}
-            renderMode={renderMode}
-            toolStatus={idx === rounds.length - 1 ? toolStatus : null}
-            toolStatusVariant={idx === rounds.length - 1 ? toolStatusVariant : "default"}
-            retryAttempts={idx === rounds.length - 1 ? retryAttempts : EMPTY_RETRY_ATTEMPTS}
-            runningToolCallIds={round.runningToolCallIds ?? EMPTY_RUNNING_TOOL_CALL_IDS}
-            thinkingOpen={round.thinkingOpen}
-            latestTodoItem={latestTodoItem}
-            isAborted={isAborted}
+      {row.showAvatar ? (
+        <AssistantAvatar />
+      ) : (
+        <div aria-hidden="true" className="h-7 w-7 shrink-0" />
+      )}
+      <div
+        className={`min-w-0 flex-1 space-y-2 ${
+          unit.kind === "placeholder" && unit.showFallbackStatus && isAgentMode
+            ? "pt-1"
+            : row.showAvatar
+              ? "pt-0.5"
+              : ""
+        }`}
+      >
+        {status ? <div className="py-1.5">{status}</div> : null}
+
+        {row.mutable && retryAttempts && retryAttempts.length > 0 ? (
+          <RetryDetailsBlock attempts={retryAttempts} />
+        ) : null}
+
+        {unit.kind === "block" ? (
+          <RoundBlockContent
+            block={unit.block}
+            isLive={row.live}
+            isMutable={row.mutable}
+            renderMode={row.renderMode}
+            runningToolCallIds={unit.runningToolCallIds}
+            thinkingOpen={unit.thinkingOpen}
+            isLatestThinking={unit.isLatestThinking}
+            isAborted={row.isAborted}
           />
-        ))}
-        {changedFiles ? <ChangedFilesCard summary={changedFiles} /> : null}
+        ) : null}
+
+        {unit.kind === "block" && unit.isRoundTail && showUsage ? (
+          <UsagePanel usage={unit.roundMeta?.usage} contextWindow={usageContextWindow} />
+        ) : null}
       </div>
     </div>
   );

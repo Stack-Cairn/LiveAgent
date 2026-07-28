@@ -7,6 +7,7 @@ import {
   applyCompactionCheckpoint,
   type CompactionCheckpointStats,
   type ConversationViewState,
+  getActiveSegment,
   INTERNAL_RESUME_MESSAGE_TEXT,
 } from "../conversation/conversationState";
 import { buildCompactionPayload, fitCompactionPayloadToBudget } from "./payload";
@@ -133,13 +134,13 @@ export async function runCompaction(params: {
     intent: params.intent,
     contextTokens: params.contextTokens,
     threshold: params.threshold,
-    newSegmentIndex: nextState.activeSegmentIndex,
+    newSegmentIndex: getActiveSegment(nextState)?.segmentIndex ?? nextState.meta.activeSegmentIndex,
     summaryChars: summary.summaryText.length,
   });
 
   return {
     state: nextState,
     checkpointMessage,
-    newSegmentIndex: nextState.activeSegmentIndex,
+    newSegmentIndex: getActiveSegment(nextState)?.segmentIndex ?? nextState.meta.activeSegmentIndex,
   };
 }

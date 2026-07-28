@@ -41,6 +41,12 @@
 | attachments | uploaded files 转成模型可见文本/图片引用，图片 bytes 按上下文策略清洗。 |
 | hosted search | provider 或 probe 捕获的 search block 进入消息内容和 UI。 |
 
+## 工具提示与文件变更追踪
+
+- `runAssistantWithTools` 根据本轮实际可用工具生成运行时工具规则，并在每次 provider 请求边界追加到基础 system prompt。动态规则不写入会话历史或压缩状态，避免恢复、压缩后重复叠加。
+- 工作区或已启用 Skill 中的意图性文件/目录删除必须调用结构化 `Delete`；不得通过 Bash、ManagedProcess、Shell 脚本或删除型 CLI 代替。需要暂存受 Git 跟踪的工作区删除时，先调用 `Delete`，再用 `git add -u -- <准确的工作区相对路径>` 只暂存该路径。
+- GUI/WebUI 回复末尾的「已编辑文件」和压缩文件账本只信任成功的 `Write` / `Edit` / `Delete` 工具结果。Bash 命令具有跨 Shell、管道和脚本间接副作用，无法可靠恢复具体路径，因此不做猜测式追踪。
+
 ## 上下文压缩
 
 | 触发点 | 作用 |

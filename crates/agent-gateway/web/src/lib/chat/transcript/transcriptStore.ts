@@ -646,27 +646,112 @@ export function createTranscriptStore(options?: {
     schedule(true);
   };
 
+  const applyRunContentSnapshot = (event: ConversationStreamEvent) => {
+    const runId = readEventRunId(event);
+    if (!runId) {
+      return;
+    }
+    const payload = event as {
+      revision?: unknown;
+      entries_json?: unknown;
+      content_complete?: unknown;
+      history_required?: unknown;
+    };
+    const revision =
+      typeof payload.revision === "number" && Number.isFinite(payload.revision)
+        ? Math.max(0, Math.floor(payload.revision))
+        : 0;
+    let turn = findTurnByRunId(runId);
+    if (turn?.terminalContentRevision !== undefined && revision <= turn.terminalContentRevision) {
+      return;
+    }
+    const parsed = parseAuthoritativeSnapshotEntries(payload.entries_json);
+    const historyRequired = payload.history_required === true;
+    const contentComplete =
+      payload.content_complete !== false && !historyRequired && parsed !== null;
+    if (parsed === null) {
+      if (turn && turn.contentStale !== true) {
+        replaceTurn(turn, { ...turn, contentStale: true, contentConfirmed: false });
+        schedule(true);
+      }
+      return;
+    }
+    if (!turn) {
+      turn = createTurn({
+        key: `run:${runId}`,
+        runId,
+        phase: activeRun?.runId === runId ? "streaming" : "settled",
+      });
+      turns = [...turns, turn];
+    }
+    const inferredErrorEntryId = turn.inferredLossErrorEntryId;
+    const realErrorEntries = turn.entries.filter(
+      (entry): entry is Extract<ChatEntry, { kind: "assistant" | "error" }> =>
+        (entry.kind === "error" || (entry.kind === "assistant" && entry.id.includes(":err:"))) &&
+        entry.id !== inferredErrorEntryId,
+    );
+    let next =
+      historyRequired && parsed.length === 0
+        ? adoptRun(turn, runId)
+        : rebuildTurnFromSnapshot(adoptRun(turn, runId), parsed);
+    if (realErrorEntries.length > 0) {
+      const errorTexts = new Set(
+        next.entries
+          .filter((entry) => entry.kind === "error" || entry.kind === "assistant")
+          .map((entry) => entry.text),
+      );
+      const missingErrors = realErrorEntries.filter((entry) => !errorTexts.has(entry.text));
+      if (missingErrors.length > 0) {
+        next = { ...next, entries: [...next.entries, ...missingErrors] };
+      }
+    }
+    next = {
+      ...next,
+      phase: turn.phase,
+      folded: turn.folded,
+      terminalContentRevision: revision,
+      contentConfirmed: contentComplete,
+      contentStale: contentComplete ? false : true,
+      inferredLossErrorEntryId: undefined,
+    };
+    replaceTurn(turn, next);
+    schedule(true);
+  };
+
   const applyRunFinished = (event: ConversationStreamEvent) => {
     const runId = readEventRunId(event);
-    if (activeRun && runId !== "" && runId !== activeRun.runId) {
+    const finishesDifferentActiveRun = Boolean(
+      activeRun && runId !== "" && runId !== activeRun.runId,
+    );
+    if (finishesDifferentActiveRun) {
       // Stray terminal for a non-active run (the gateway appends these
-      // deliberately, e.g. failing a superseded queued run). Never settle
-      // the active turn; just drop the stray run's turn.
+      // deliberately, e.g. failing a superseded queued run). A reliable
+      // terminal for an older run is still allowed to settle/correct that
+      // run, but it must never touch the currently active run.
       const stray = findTurnByRunId(runId);
-      if (stray && !stray.folded) {
+      const reason = (event as { reason?: unknown }).reason;
+      if (reason === "superseded" && stray && !stray.folded) {
         turns = turns.filter((turn) => turn !== stray);
         schedule(true);
+        if (!divergenceSignaled && lastSeq !== lastDivergenceSeq) {
+          divergenceSignaled = true;
+          lastDivergenceSeq = lastSeq;
+          options?.onDivergence?.();
+        }
+        return;
       }
       // The active run may itself be a zombie (its own run_finished was
       // lost); let the app resync this conversation to converge. The seq
       // guard stops a resync loop when a reset replay re-delivers the same
       // stray on every subscribe.
-      if (!divergenceSignaled && lastSeq !== lastDivergenceSeq) {
-        divergenceSignaled = true;
-        lastDivergenceSeq = lastSeq;
-        options?.onDivergence?.();
+      if (!stray) {
+        if (!divergenceSignaled && lastSeq !== lastDivergenceSeq) {
+          divergenceSignaled = true;
+          lastDivergenceSeq = lastSeq;
+          options?.onDivergence?.();
+        }
+        return;
       }
-      return;
     }
     const payload = event as {
       status?: string;
@@ -718,16 +803,19 @@ export function createTranscriptStore(options?: {
     // trusted as the full content: mark it stale so the post-persist history
     // refresh may adopt the real reply (enrichTurnFromHistory). A gateway
     // resurrection rebuilds from the runtime snapshot and clears the mark.
-    if (turn && (turn.phase !== "settled" || (inferredLoss && turn.contentStale !== true))) {
+    const shouldMarkContentStale = inferredLoss || turn?.contentConfirmed !== true;
+    if (turn && (turn.phase !== "settled" || turn.contentStale !== shouldMarkContentStale)) {
       replaceTurn(turn, {
         ...turn,
         phase: "settled",
-        contentStale: inferredLoss ? true : turn.contentStale,
+        contentStale: shouldMarkContentStale,
       });
     }
-    activeRun = null;
-    setToolStatus(null, false);
-    setRetryAttempts(EMPTY_RETRY_ATTEMPTS);
+    if (!finishesDifferentActiveRun) {
+      activeRun = null;
+      setToolStatus(null, false);
+      setRetryAttempts(EMPTY_RETRY_ATTEMPTS);
+    }
     schedule(true);
   };
 
@@ -864,6 +952,10 @@ export function createTranscriptStore(options?: {
       }
       case "run_finished": {
         applyRunFinished(event);
+        return;
+      }
+      case "run_content_snapshot": {
+        applyRunContentSnapshot(event);
         return;
       }
       case "run_queued": {
@@ -1270,5 +1362,18 @@ function parseSnapshotEntries(json: string | undefined): ChatEntry[] {
     return Array.isArray(parsed) ? parsed.filter(isSnapshotChatEntry) : [];
   } catch {
     return [];
+  }
+}
+
+function parseAuthoritativeSnapshotEntries(json: unknown): ChatEntry[] | null {
+  const raw = typeof json === "string" ? json.trim() : "";
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every(isSnapshotChatEntry) ? parsed : null;
+  } catch {
+    return null;
   }
 }

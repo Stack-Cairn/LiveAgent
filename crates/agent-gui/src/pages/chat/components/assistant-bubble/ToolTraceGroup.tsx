@@ -92,7 +92,7 @@ function ToolTraceGroupInner(props: {
         </div>
       </button>
 
-      <LazyCollapse open={open}>
+      <LazyCollapse open={open} retainWhileClosed={counts.running > 0}>
         {() => (
           <div className="space-y-0.5 pb-2 pl-[22px] pt-1">
             {items.map((item, index) => (

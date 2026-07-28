@@ -7,6 +7,9 @@ const { createProviderRuntimeConfig } = loader.loadModule(
   "src/lib/providers/runtime/providerRuntimeConfig.ts",
 );
 const settings = loader.loadModule("src/lib/settings/index.ts");
+const { getDefaultCliIdentitySettings } = loader.loadModule(
+  "src/lib/providers/cliIdentityCore.ts",
+);
 
 function createProvider(overrides = {}) {
   return {
@@ -32,11 +35,16 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
     createProvider(),
     "claude-sonnet-4-6",
     settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
+    getDefaultCliIdentitySettings(),
   );
 
   assert.equal(runtime.baseUrl, "https://relay.example/v1");
   assert.equal(runtime.apiKey, "test-key");
-  assert.deepEqual(runtime.customHeaders, [{ key: "X-Trace-Id", value: "abc" }]);
+  // 全局身份补出的 User-Agent 排在自定义头之前，原有自定义头一并保留。
+  assert.deepEqual(runtime.customHeaders, [
+    { key: "User-Agent", value: "claude-cli/2.1.71 (external, cli)" },
+    { key: "X-Trace-Id", value: "abc" },
+  ]);
   assert.equal(runtime.promptCachingEnabled, true);
   assert.equal(runtime.promptCacheRetention, "long");
   assert.equal(runtime.useSystemProxy, true);
@@ -59,10 +67,15 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
 });
 
 test("createProviderRuntimeConfig gates reasoning on model support", () => {
-  const thinkingOff = createProviderRuntimeConfig(createProvider(), "claude-sonnet-4-6", {
-    ...settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
-    thinkingEnabled: false,
-  });
+  const thinkingOff = createProviderRuntimeConfig(
+    createProvider(),
+    "claude-sonnet-4-6",
+    {
+      ...settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
+      thinkingEnabled: false,
+    },
+    getDefaultCliIdentitySettings(),
+  );
   assert.equal(thinkingOff.reasoning, "off");
 
   // 不支持思考的模型一律拿到 undefined，绝不下发无效档位（Cron / 记忆整理
@@ -71,6 +84,7 @@ test("createProviderRuntimeConfig gates reasoning on model support", () => {
     createProvider({ type: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta" }),
     "gemini-embedding-001",
     settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
+    getDefaultCliIdentitySettings(),
   );
   assert.equal(unsupported.reasoning, undefined);
 });

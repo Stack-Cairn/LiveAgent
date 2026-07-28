@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 // Generates the model metadata catalog (context window / max output /
-// thinking capability) consumed by both frontends, from the models.dev open
-// database. The output is written byte-identically to:
+// thinking capability) consumed by both frontends. OpenAI model metadata is
+// merged Codex-first from openai/codex models.json, then supplemented by the
+// models.dev open database; every other section comes from models.dev. The
+// output is written byte-identically to:
 //   crates/agent-gui/src/lib/models/catalog.generated.ts
 //   crates/agent-gateway/web/src/lib/models/catalog.generated.ts
 // and is enforced in sync by scripts/check-mirror.mjs.
 //
-// Usage: node scripts/generate-model-catalog.mjs [--source <url|file>] [--check]
-//   --source  alternate api.json URL or local file path (offline debugging)
-//   --check   compare against the checked-in snapshot without writing;
-//             exits 1 when the data differs
+// Usage: node scripts/generate-model-catalog.mjs
+//          [--source <url|file>] [--codex-source <url|file>] [--check]
+//   --source        alternate models.dev api.json URL or local file path
+//   --codex-source  alternate Codex models.json URL or local file path
+//   --check         compare against the checked-in snapshot without writing;
+//                   exits 1 when the data differs
 //
 // Refresh: make update-model-catalog
 
@@ -24,10 +28,16 @@ const OUTPUT_PATHS = [
 ];
 
 const DEFAULT_SOURCE = "https://models.dev/api.json";
+const DEFAULT_CODEX_SOURCE =
+  "https://raw.githubusercontent.com/openai/codex/main/codex-rs/models-manager/models.json";
+const MIN_CODEX_MODELS = 5;
 
 // Catalog sections. Each section unions one or more upstream models.dev
 // provider keys (first source wins on a same-id conflict — used to prefer the
-// China endpoint's limits for vendors that publish both).
+// China endpoint's limits for vendors that publish both). The openai section
+// is subsequently overlaid with same-id Codex metadata; models.dev-only models
+// remain as supplements, while newly listed Codex models receive conservative
+// defaults for fields models.json does not publish yet.
 //
 // The first four sections are the native catalogs behind the app's provider
 // types (claude_code→anthropic, gemini→google, codex→openai, xai); scoped
@@ -67,6 +77,7 @@ const SECTIONS = [
 const SENTINELS = [
   { section: "anthropic", id: "claude-sonnet-4-6", level: "high", off: true },
   { section: "openai", id: "gpt-5", level: "minimal" },
+  { section: "openai", id: "gpt-5.6-sol", level: "max", contextWindow: 272_000 },
   { section: "deepseek", id: "deepseek-chat" },
   { section: "zhipuai", id: "glm-4.6", off: true },
   { section: "alibaba", id: "qwen-max" },
@@ -156,13 +167,34 @@ function normalizeThinking(model, id, label, sectionKey) {
   return { levels, off, ...(override ?? {}) };
 }
 
+function normalizeCodexThinking(model, supplementalThinking, label) {
+  const supported = Array.isArray(model?.supported_reasoning_levels)
+    ? model.supported_reasoning_levels
+    : [];
+  if (supported.length === 0) return supplementalThinking;
+
+  const values = new Set();
+  let off = supplementalThinking?.off ?? false;
+  for (const option of supported) {
+    const value = typeof option === "string" ? option : option?.effort;
+    if (value === "none") {
+      off = true;
+    } else if (THINKING_LEVELS.includes(value)) {
+      values.add(value);
+    } else if (typeof value === "string" && value !== "") {
+      console.error(`note ${label}: unsupported Codex reasoning effort "${value}" dropped`);
+    }
+  }
+  return { levels: THINKING_LEVELS.filter((level) => values.has(level)), off };
+}
+
 function fail(message) {
   console.error(`generate-model-catalog: ${message}`);
   process.exit(1);
 }
 
 function parseArgs(argv) {
-  const args = { source: DEFAULT_SOURCE, check: false };
+  const args = { source: DEFAULT_SOURCE, codexSource: DEFAULT_CODEX_SOURCE, check: false };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--check") {
@@ -171,6 +203,10 @@ function parseArgs(argv) {
       i += 1;
       if (!argv[i]) fail("--source requires a value");
       args.source = argv[i];
+    } else if (arg === "--codex-source") {
+      i += 1;
+      if (!argv[i]) fail("--codex-source requires a value");
+      args.codexSource = argv[i];
     } else {
       fail(`unknown argument: ${arg}`);
     }
@@ -178,34 +214,109 @@ function parseArgs(argv) {
   return args;
 }
 
-async function loadUpstream(source) {
+async function loadUpstream(source, label) {
   if (/^https?:\/\//.test(source)) {
     let response;
     try {
       response = await fetch(source, { signal: AbortSignal.timeout(60_000) });
     } catch (error) {
-      fail(`fetch failed: ${error?.message ?? error}`);
+      fail(`${label} fetch failed: ${error?.message ?? error}`);
     }
-    if (!response.ok) fail(`fetch failed: HTTP ${response.status} from ${source}`);
+    if (!response.ok) fail(`${label} fetch failed: HTTP ${response.status} from ${source}`);
     try {
       return await response.json();
     } catch (error) {
-      fail(`invalid JSON from ${source}: ${error?.message ?? error}`);
+      fail(`${label} returned invalid JSON from ${source}: ${error?.message ?? error}`);
     }
   }
   try {
     return JSON.parse(readFileSync(resolve(source), "utf8"));
   } catch (error) {
-    fail(`cannot read ${source}: ${error?.message ?? error}`);
+    fail(`cannot read ${label} source ${source}: ${error?.message ?? error}`);
   }
   return undefined;
+}
+
+function extractCodexOpenAIModels(upstream) {
+  if (!Array.isArray(upstream?.models)) {
+    fail("Codex source missing models array");
+  }
+  if (upstream.models.length < MIN_CODEX_MODELS) {
+    fail(
+      `Codex source only contains ${upstream.models.length} models ` +
+        `(expected >= ${MIN_CODEX_MODELS}); upstream data looks truncated`,
+    );
+  }
+
+  const models = new Map();
+  for (const model of upstream.models) {
+    const id = typeof model?.slug === "string" ? model.slug.trim() : "";
+    if (!id) fail("Codex model missing slug");
+    const contextWindow = model?.context_window;
+    if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
+      fail(`Codex model ${id} has invalid context_window`);
+    }
+    const lower = id.toLowerCase();
+    if (models.has(lower)) fail(`Codex source contains duplicate model id ${id}`);
+    models.set(lower, { id, contextWindow, raw: model });
+  }
+  return models;
+}
+
+function mergeCodexOpenAIEntries(entries, codexModels, claimedLower) {
+  const mergedByLower = new Map(entries.map((entry) => [entry.id.toLowerCase(), entry]));
+
+  for (const codexModel of codexModels.values()) {
+    const lower = codexModel.id.toLowerCase();
+    const supplemental = mergedByLower.get(lower);
+    const thinking = normalizeCodexThinking(
+      codexModel.raw,
+      supplemental?.thinking,
+      `openai/codex/${codexModel.id}`,
+    );
+
+    if (supplemental) {
+      mergedByLower.set(lower, {
+        id: codexModel.id,
+        contextWindow: codexModel.contextWindow,
+        maxOutputToken: normalizeMaxOutputToken(
+          codexModel.contextWindow,
+          supplemental.maxOutputToken,
+        ),
+        ...(thinking ? { thinking } : {}),
+      });
+      continue;
+    }
+
+    // Hidden Codex-only entries are runtime/internal compatibility records, not
+    // public catalog additions. A newly listed model is still useful before
+    // models.dev catches up; use the existing conservative output cap until a
+    // same-id supplement becomes available.
+    if (codexModel.raw?.visibility !== "list" || codexModel.raw?.supported_in_api === false) {
+      continue;
+    }
+    const claimedBy = claimedLower.get(lower);
+    if (claimedBy) {
+      console.error(`skip openai/codex/${codexModel.id} (id claimed by section ${claimedBy})`);
+      continue;
+    }
+    claimedLower.set(lower, "openai");
+    mergedByLower.set(lower, {
+      id: codexModel.id,
+      contextWindow: codexModel.contextWindow,
+      maxOutputToken: normalizeMaxOutputToken(codexModel.contextWindow, MAX_OUTPUT_TOKEN_CAP),
+      ...(thinking ? { thinking } : {}),
+    });
+  }
+
+  return [...mergedByLower.values()];
 }
 
 // claimedLower: lowercased id -> owning section key. Lowercase-unique ids
 // across the whole catalog are what make cross-provider lookup unambiguous
 // and let the runtime index add case-insensitive aliases; the invariant is
 // re-asserted by test/models/model-catalog.test.mjs.
-function extractSection(section, upstream, claimedLower) {
+function extractSection(section, upstream, claimedLower, codexModels) {
   const entries = [];
   for (const source of section.sources) {
     const providerData = upstream?.[source];
@@ -252,8 +363,12 @@ function extractSection(section, upstream, claimedLower) {
       });
     }
   }
-  entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return entries;
+  const mergedEntries =
+    section.key === "openai"
+      ? mergeCodexOpenAIEntries(entries, codexModels, claimedLower)
+      : entries;
+  mergedEntries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return mergedEntries;
 }
 
 function renderEntry(entry) {
@@ -273,7 +388,8 @@ function renderCatalog(catalog, snapshotDate) {
   const keys = SECTIONS.map((section) => section.key);
   const lines = [
     "// Generated by scripts/generate-model-catalog.mjs — DO NOT EDIT.",
-    `// Source: https://models.dev/api.json (sections: ${keys.join(", ")})`,
+    `// Sources: ${DEFAULT_CODEX_SOURCE} (openai primary);`,
+    `//          ${DEFAULT_SOURCE} (openai supplement; sections: ${keys.join(", ")})`,
     "// Refresh: make update-model-catalog",
     "",
     'export type CatalogThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";',
@@ -321,12 +437,16 @@ function readExisting(path) {
 }
 
 const args = parseArgs(process.argv);
-const upstream = await loadUpstream(args.source);
+const [upstream, codexUpstream] = await Promise.all([
+  loadUpstream(args.source, "models.dev"),
+  loadUpstream(args.codexSource, "Codex"),
+]);
+const codexModels = extractCodexOpenAIModels(codexUpstream);
 
 const catalog = {};
 const claimedLower = new Map();
 for (const section of SECTIONS) {
-  const entries = extractSection(section, upstream, claimedLower);
+  const entries = extractSection(section, upstream, claimedLower, codexModels);
   if (entries.length < section.min) {
     fail(
       `section ${section.key}: only ${entries.length} models after filtering ` +
@@ -352,6 +472,15 @@ for (const sentinel of SENTINELS) {
     fail(
       `sentinel ${sentinel.section}/${sentinel.id}: expected thinking.off=${sentinel.off}; ` +
         "upstream reasoning_options schema may have changed",
+    );
+  }
+  if (
+    sentinel.contextWindow !== undefined &&
+    entry.contextWindow !== sentinel.contextWindow
+  ) {
+    fail(
+      `sentinel ${sentinel.section}/${sentinel.id}: expected contextWindow=` +
+        `${sentinel.contextWindow}, got ${entry.contextWindow}; Codex precedence may have changed`,
     );
   }
 }

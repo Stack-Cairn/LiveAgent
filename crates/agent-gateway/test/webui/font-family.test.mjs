@@ -5,6 +5,24 @@ import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 const loader = createWebModuleLoader();
 const fontFamily = loader.loadModule("src/lib/shared/fontFamily.ts");
 
+async function withNavigator(value, task) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    enumerable: true,
+    value,
+  });
+  try {
+    return await task();
+  } finally {
+    if (previous) {
+      Object.defineProperty(globalThis, "navigator", previous);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
+}
+
 test("font family normalizer keeps freeform stacks and rejects unsafe values", () => {
   assert.equal(fontFamily.normalizeFontFamily(""), "");
   assert.equal(fontFamily.normalizeFontFamily("system"), "system");
@@ -125,7 +143,38 @@ test("applying font families updates CSS variables and only emits code changes",
   }
 });
 
-test("listLocalFontFamilies uses queryLocalFonts when available", async () => {
+test("listLocalFontFamilies does not trigger a local-fonts permission prompt", async () => {
+  const previous = globalThis.queryLocalFonts;
+  let queryCount = 0;
+  globalThis.queryLocalFonts = async () => {
+    queryCount += 1;
+    return [{ family: "Inter" }];
+  };
+  try {
+    await withNavigator(
+      {
+        permissions: {
+          query: async (descriptor) => {
+            assert.deepEqual(descriptor, { name: "local-fonts" });
+            return { state: "prompt" };
+          },
+        },
+      },
+      async () => {
+        assert.deepEqual(await fontFamily.listLocalFontFamilies(), []);
+      },
+    );
+    assert.equal(queryCount, 0);
+  } finally {
+    if (previous === undefined) {
+      delete globalThis.queryLocalFonts;
+    } else {
+      globalThis.queryLocalFonts = previous;
+    }
+  }
+});
+
+test("listLocalFontFamilies uses queryLocalFonts when permission is already granted", async () => {
   const previous = globalThis.queryLocalFonts;
   globalThis.queryLocalFonts = async () => [
     { family: "Inter" },
@@ -134,7 +183,16 @@ test("listLocalFontFamilies uses queryLocalFonts when available", async () => {
     { family: "  " },
   ];
   try {
-    assert.deepEqual(await fontFamily.listLocalFontFamilies(), ["Inter", "PingFang SC"]);
+    await withNavigator(
+      {
+        permissions: {
+          query: async () => ({ state: "granted" }),
+        },
+      },
+      async () => {
+        assert.deepEqual(await fontFamily.listLocalFontFamilies(), ["Inter", "PingFang SC"]);
+      },
+    );
   } finally {
     if (previous === undefined) {
       delete globalThis.queryLocalFonts;

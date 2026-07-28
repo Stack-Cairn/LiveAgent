@@ -1,4 +1,4 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { type Range, useVirtualizer } from "@tanstack/react-virtual";
 import {
   type MutableRefObject,
   memo,
@@ -30,18 +30,22 @@ import {
 import { normalizeLiveToolStatus } from "../../../lib/chat/page/chatPageHelpers";
 import type { GitClient } from "../../../lib/git/types";
 import { createEntranceRegistry } from "../../../lib/transcript-virtual/entranceOnce";
-import { extractLiveRange } from "../../../lib/transcript-virtual/liveRangeExtractor";
 import { createLiveRowScrollAdjustPolicy } from "../../../lib/transcript-virtual/liveScrollAdjustPolicy";
 import {
   buildTranscriptLayoutKey,
   createTranscriptMeasurementsLru,
 } from "../../../lib/transcript-virtual/measurementsLru";
-import { AssistantRow } from "./AssistantRow";
+import { AssistantRenderUnit } from "./AssistantRenderUnit";
+import { extractRenderUnitRange } from "./renderUnitRangeExtractor";
 import { createTranscriptRowModel } from "./rowModel";
 import { UserMessageRow } from "./UserMessageRow";
 
-const TRANSCRIPT_ROW_GAP = 24;
-const TRANSCRIPT_ROW_OVERSCAN_COUNT = 5;
+const TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION = "assistant-units-v1";
+
+function buildVersionedTranscriptLayoutKey(viewportWidth: number, contentWidth: number) {
+  const layoutKey = buildTranscriptLayoutKey(viewportWidth, contentWidth);
+  return layoutKey ? `${layoutKey}:${TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION}` : "";
+}
 
 // Measured row heights survive conversation switches: saved on unmount,
 // restored (width-gated) on the next open so the switch lays out with exact
@@ -130,11 +134,9 @@ export type TranscriptListProps = {
   onFirstLayoutSettled?: () => void;
 };
 
-// The whole transcript — committed history and the streaming reply — lives in
-// one virtualized container with stable row keys, so a run settling into
-// history is a pure data transition (no cross-container move, no remount).
-// Rows at or after liveStartIndex are force-mounted; everything else
-// virtualizes normally with per-row content-shaped height estimates.
+// The whole transcript lives in one virtualized container. Assistant replies
+// are block-level render units, so a long reply no longer becomes one giant
+// row; only its mutable live tail stays force-mounted.
 export const TranscriptList = memo(function TranscriptList(props: TranscriptListProps) {
   const {
     conversationId,
@@ -177,8 +179,22 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     [rowModel, historyItems, liveState, isSending],
   );
 
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   const liveStartIndexRef = useRef(liveStartIndex);
   liveStartIndexRef.current = liveStartIndex;
+  const getScrollElement = useCallback(() => scrollViewport, [scrollViewport]);
+  const estimateRowSize = useCallback((index: number) => {
+    const rowList = rowsRef.current;
+    const row = rowList[index];
+    return row ? row.estimate + (index < rowList.length - 1 ? row.gapAfter : 0) : 260;
+  }, []);
+  const getRowKey = useCallback((index: number) => rowsRef.current[index]?.key ?? index, []);
+  const getRenderCost = useCallback((index: number) => rowsRef.current[index]?.renderCost, []);
+  const extractVirtualRange = useCallback(
+    (range: Range) => extractRenderUnitRange(range, getRenderCost, liveStartIndexRef.current),
+    [getRenderCost],
+  );
 
   const [editingMessageKey, setEditingMessageKey] = useState<string | null>(null);
   const commitDetailsCacheRef = useRef(new Map<string, CommitDisplayReference>());
@@ -247,20 +263,22 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
       (scrollViewport
         ? transcriptMeasurementsLru.restore(
             conversationId,
-            buildTranscriptLayoutKey(scrollViewport.clientWidth, layoutWidth),
+            buildVersionedTranscriptLayoutKey(scrollViewport.clientWidth, layoutWidth),
           )
         : null) ?? [],
   );
 
   const virtualizer = useVirtualizer({
     count: rows.length,
-    getScrollElement: () => scrollViewport,
-    estimateSize: (index) => rows[index]?.estimate ?? 260,
-    getItemKey: (index) => rows[index]?.key ?? index,
-    gap: TRANSCRIPT_ROW_GAP,
-    overscan: TRANSCRIPT_ROW_OVERSCAN_COUNT,
+    getScrollElement,
+    estimateSize: estimateRowSize,
+    getItemKey: getRowKey,
+    gap: 0,
+    overscan: 0,
     enabled: scrollViewport !== null,
     initialMeasurementsCache,
+    directDomUpdates: true,
+    directDomUpdatesMode: "transform",
     // End-anchored: while the viewport sits within the threshold of the end,
     // growth of the last row (streaming) compensates by the total-size delta
     // upstream, and estimate→measure corrections keep the bottom pinned. The
@@ -271,7 +289,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     // already pinned by the reducer.
     anchorTo: "end",
     scrollEndThreshold: 8,
-    rangeExtractor: (range) => extractLiveRange(range, liveStartIndexRef.current),
+    rangeExtractor: extractVirtualRange,
   });
 
   // TanStack exposes the resize-compensation predicate as an instance field,
@@ -293,8 +311,6 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   // 测量会不断修正总高度，连续若干帧重新对准，让滚动收敛在目标行顶部
   // （对准同一 index 是收敛操作，不会震荡）。收敛期间用户的滚轮/触摸/按键
   // 立即取消收敛；新跳转替换旧收敛；卸载时一并清理。
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
   const cancelJumpSettleRef = useRef<() => void>(() => {});
   useLayoutEffect(() => {
     if (!navRef) return;
@@ -381,13 +397,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
         }
         if (anchorIndex === -1) anchorIndex = items[0]?.index ?? -1;
       }
-      for (let i = Math.min(anchorIndex, rowList.length - 1); i >= 0; i--) {
-        const row = rowList[i];
-        if (row?.kind === "user") {
-          anchorKey = row.key;
-          break;
-        }
-      }
+      anchorKey = rowList[Math.min(anchorIndex, rowList.length - 1)]?.anchorUserKey ?? null;
     }
     if (anchorKey !== lastAnchorRef.current) {
       lastAnchorRef.current = anchorKey;
@@ -471,14 +481,14 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     if (!scrollViewport) return;
     transcriptMeasurementsLru.save(
       conversationId,
-      buildTranscriptLayoutKey(scrollViewport.clientWidth, layoutWidth),
+      buildVersionedTranscriptLayoutKey(scrollViewport.clientWidth, layoutWidth),
       virtualizer.takeSnapshot(),
     );
   };
   useEffect(() => () => saveMeasurementsRef.current(), []);
 
   return (
-    <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
+    <div ref={virtualizer.containerRef} className="relative">
       {virtualizer.getVirtualItems().map((virtualRow) => {
         const row = rows[virtualRow.index];
         if (!row) return null;
@@ -504,14 +514,14 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
         } else {
           body = (
             <div className="flex justify-start">
-              <AssistantRow
+              <AssistantRenderUnit
                 row={row}
                 showUsage={showUsage}
                 usageContextWindow={usageContextWindow}
                 isAgentMode={isAgentMode}
-                isCompactionRunning={row.live ? isCompactionRunning : false}
-                toolStatus={row.live ? displayedToolStatus : null}
-                retryAttempts={row.live ? liveState.retryAttempts : undefined}
+                isCompactionRunning={row.mutable ? isCompactionRunning : false}
+                toolStatus={row.mutable ? displayedToolStatus : null}
+                retryAttempts={row.mutable ? liveState.retryAttempts : undefined}
                 onResendFromEdit={onResendFromEdit}
                 onBranchConversation={onBranchConversation}
               />
@@ -525,9 +535,11 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
             data-index={virtualRow.index}
             ref={virtualizer.measureElement}
             className="absolute left-0 right-0 top-0"
-            style={{ transform: `translateY(${virtualRow.start}px)` }}
           >
             {body}
+            {row.gapAfter > 0 && virtualRow.index < rows.length - 1 ? (
+              <div aria-hidden="true" style={{ height: row.gapAfter }} />
+            ) : null}
           </div>
         );
       })}

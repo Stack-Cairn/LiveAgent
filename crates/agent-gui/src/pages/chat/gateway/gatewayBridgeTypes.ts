@@ -54,7 +54,6 @@ export type GatewayChatRequestReadyEvent = {
 
 export type EnsureGatewayBridgeConversationReadyOptions = {
   rebased?: boolean;
-  baseMessageRef?: HistoryMessageRef;
 };
 
 export type GatewayChatCancelEvent = {
@@ -88,9 +87,9 @@ export type SendChatAction = (overrides?: {
   preserveComposerOnStart?: boolean;
   beforeRuntimeStart?: () => Promise<void>;
   afterInitialHistoryPersist?: () => Promise<void>;
-  // Edit-resend: the edited (truncation-base) user message. Forwarded on the
-  // mirrored user_message event so the gateway can broadcast the truncation
-  // (`rebased`) to every other connected client.
+  // Edit-resend atomically replaces this user message and its following
+  // history before the model runtime starts, then forwards the same anchor
+  // so other connected clients can apply the rebase.
   editResendBaseMessageRef?: HistoryMessageRef;
 }) => Promise<boolean>;
 

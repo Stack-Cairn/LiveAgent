@@ -30,6 +30,7 @@ import { Button } from "../components/ui/button";
 import { useConfirmDialog } from "../components/ui/confirm-dialog";
 import { useLocale } from "../i18n";
 import type { AppUpdateController } from "../lib/appUpdates";
+import { getAutomationState, useAutomation } from "../lib/automation";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
   buildRequestContext,
@@ -80,7 +81,7 @@ import {
   createConversationOpenController,
 } from "../lib/sidebar/openController";
 import { conversationMatchesScope } from "../lib/sidebar/scope";
-import { selectConversations } from "../lib/sidebar/selectors";
+import { selectConversations, selectRunningConversationIds } from "../lib/sidebar/selectors";
 import { createSidebarStore } from "../lib/sidebar/store";
 import { useSidebarSelector } from "../lib/sidebar/useSidebarSelector";
 import { mergeAlwaysEnabledSkillNames } from "../lib/skills";
@@ -89,6 +90,8 @@ import { terminalSessionBelongsToProject } from "../lib/terminal/sessionStore";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import { disposeTodoToolState } from "../lib/tools/todoTools";
+import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
+import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import type { LocalTunnelClient } from "../lib/tunnels/constants";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
@@ -101,12 +104,10 @@ import {
   MAX_UPLOAD_FILES,
   pruneIdleConversationRuntimeCaches,
   type SendChatAction,
-  scheduleIdleHydration,
   useChatPageRuntimeStore,
   useChatSkills,
   useConversationHistoryActions,
   useEditResend,
-  useGatewayBridgeBatcher,
   useGatewayBridgeListeners,
   useLiveTranscriptController,
   usePendingUploads,
@@ -116,7 +117,7 @@ import { ChatFileDropOverlay } from "./chat/components/ChatFileDropOverlay";
 import { WorkspaceOverlayHost } from "./chat/components/WorkspaceOverlayHost";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
 import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
-import { useGatewayRuntimeSnapshots } from "./chat/gateway/useGatewayRuntimeSnapshots";
+import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
@@ -349,19 +350,19 @@ export function ChatPage(props: ChatPageProps) {
     [availableSkills],
   );
 
-  const historyRenderItems = useMemo<RenderTimelineItem[]>(
-    () => conversationState.historyRenderItems,
+  const transcriptItems = useMemo<RenderTimelineItem[]>(
+    () => conversationState.transcript.items,
     [conversationState],
   );
   // Sent-prompt history for the composer's ↑/↓ recall. Read lazily through a
   // ref so the memoized composer bar never re-renders on transcript growth.
-  const historyRenderItemsRef = useRef<RenderTimelineItem[]>(historyRenderItems);
+  const transcriptItemsRef = useRef<RenderTimelineItem[]>(transcriptItems);
   useEffect(() => {
-    historyRenderItemsRef.current = historyRenderItems;
-  }, [historyRenderItems]);
+    transcriptItemsRef.current = transcriptItems;
+  }, [transcriptItems]);
   const loadComposerHistoryPrompts = useCallback(() => {
     const prompts: string[] = [];
-    for (const item of historyRenderItemsRef.current) {
+    for (const item of transcriptItemsRef.current) {
       if (item.kind === "user" && item.text.trim()) prompts.push(item.text);
     }
     return prompts;
@@ -391,17 +392,12 @@ export function ChatPage(props: ChatPageProps) {
   const openInitialActionRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(
     async () => "painted",
   );
-  const hydrateFullActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
+  const loadEarlierHistoryActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
   const cleanupDeletedConversationActionRef = useRef<(id: string) => void>(() => undefined);
-  // Two-phase conversation open: paint the active segment fast, hydrate the
-  // full transcript at idle. The overlay appears only after 150ms of
-  // still-opening — no minimum overlay duration.
   const openController = useMemo(
     () =>
       createConversationOpenController({
         openInitial: (conversationId) => openInitialActionRef.current(conversationId),
-        hydrateFull: (conversationId) => hydrateFullActionRef.current(conversationId),
-        scheduleIdle: scheduleIdleHydration,
         onStateChange: setConversationOpenState,
       }),
     [],
@@ -434,6 +430,7 @@ export function ChatPage(props: ChatPageProps) {
     captureAbortSnapshot,
     getAbortSnapshot,
     resetLiveTranscript,
+    settleLiveTranscript,
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     updateToolStatus,
@@ -441,12 +438,16 @@ export function ChatPage(props: ChatPageProps) {
   } = useLiveTranscriptController({
     currentConversationId,
   });
-  const { queueGatewayBridgeEventForRequest, flushGatewayBridgeEventsForRequest } =
-    useGatewayBridgeBatcher();
+  const {
+    queueGatewayBridgeEventForRequest,
+    flushGatewayBridgeEventsForRequest,
+    registerGatewayRunMirror,
+    finishGatewayRunMirror,
+  } = useGatewayRunMirrorCoordinator();
   const {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
+    conversationPersistenceCursorRef,
     buildRuntimeEntryFromVisibleState,
     syncVisibleConversationRuntime,
     updateConversationRuntimeEntry,
@@ -483,6 +484,10 @@ export function ChatPage(props: ChatPageProps) {
     setCurrentConversationSelectedModel,
     setRunningConversationIds,
   });
+  const handleLoadEarlierHistory = useCallback(
+    () => loadEarlierHistoryActionRef.current(currentConversationIdRef.current),
+    [currentConversationIdRef],
+  );
 
   const {
     modelOptions,
@@ -509,7 +514,7 @@ export function ChatPage(props: ChatPageProps) {
     updateConversationRuntimeEntry,
   });
 
-  function cancelConversationHydration() {
+  function cancelConversationLoad() {
     conversationLoadSequenceRef.current += 1;
     setHydratingConversationId(null);
     setHydrationFailedConversationId(null);
@@ -799,6 +804,7 @@ export function ChatPage(props: ChatPageProps) {
     publishChatQueueSnapshots,
     collectChatQueueSnapshotConversationIds,
     stopSending,
+    stopConversation,
     enqueueCurrentComposerTurn,
     requestQueuedChatTurnProcessing,
     runQueuedTurnNow,
@@ -834,20 +840,20 @@ export function ChatPage(props: ChatPageProps) {
     sendActionRef,
   });
 
-  const {
-    activeGatewayRuntimeRunsRef,
-    queueGatewayRuntimeSnapshot,
-    queueGatewayRuntimeSnapshotForRun,
-    registerActiveGatewayRuntimeRun,
-    finishActiveGatewayRuntimeRun,
-  } = useGatewayRuntimeSnapshots({
-    canShareHistory,
-    remoteRuntimeStatus,
-    currentConversationIdRef,
-    queuedChatTurnsRef,
-    publishChatQueueSnapshots,
-    collectChatQueueSnapshotConversationIds,
-  });
+  // Queue snapshots publish on queue mutation only; after a gateway
+  // reconnect (new session) the gateway's in-memory queue view is empty, so
+  // republish the current queue for every conversation that has one.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: connection identity intentionally drives the republish
+  useEffect(() => {
+    if (!canShareHistory) {
+      return;
+    }
+    publishChatQueueSnapshots(
+      collectChatQueueSnapshotConversationIds(queuedChatTurnsRef.current, [
+        currentConversationIdRef.current,
+      ]),
+    );
+  }, [canShareHistory, remoteRuntimeStatus.connectedSince, remoteRuntimeStatus.sessionId]);
 
   const deleteConversationLocalCaches = useCallback(
     (conversationId: string) => {
@@ -869,7 +875,7 @@ export function ChatPage(props: ChatPageProps) {
       const queuedConversationIds = getQueuedConversationIds(queuedChatTurnsRef.current);
       pruneIdleConversationRuntimeCaches({
         runtimeCache: conversationRuntimeCacheRef.current,
-        persistedStateCache: persistedConversationStateRef.current,
+        persistenceCursors: conversationPersistenceCursorRef.current,
         keepConversationIds: [
           currentConversationIdRef.current,
           ...extraKeepIds,
@@ -889,7 +895,7 @@ export function ChatPage(props: ChatPageProps) {
       currentConversationIdRef,
       deleteConversationLocalCaches,
       isConversationRunning,
-      persistedConversationStateRef,
+      conversationPersistenceCursorRef,
     ],
   );
 
@@ -926,14 +932,15 @@ export function ChatPage(props: ChatPageProps) {
   const {
     startNewConversation,
     openInitial: openConversationInitial,
-    hydrateFull: hydrateConversationFull,
+    loadEarlier: loadEarlierConversationHistory,
+    replaceConversationAtMessage,
     cleanupDeletedConversation,
     persistConversation,
   } = useConversationHistoryActions({
     conversationState,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
+    conversationPersistenceCursorRef,
     markLocalHistorySnapshotSynced,
     isConversationRunning,
     conversationLoadSequenceRef,
@@ -943,7 +950,7 @@ export function ChatPage(props: ChatPageProps) {
     buildRuntimeEntryFromVisibleState,
     syncVisibleConversationRuntime,
     updateConversationRuntimeEntry,
-    cancelConversationHydration,
+    cancelConversationLoad,
     resetVisibleTransientState,
     deleteConversationArtifacts: deleteConversationLocalCaches,
     disposeSubagentsForConversation: (conversationId) => {
@@ -961,7 +968,7 @@ export function ChatPage(props: ChatPageProps) {
 
   startNewConversationActionRef.current = startNewConversation;
   openInitialActionRef.current = openConversationInitial;
-  hydrateFullActionRef.current = hydrateConversationFull;
+  loadEarlierHistoryActionRef.current = loadEarlierConversationHistory;
   cleanupDeletedConversationActionRef.current = cleanupDeletedConversation;
 
   const {
@@ -985,7 +992,7 @@ export function ChatPage(props: ChatPageProps) {
     isConversationRunning,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
+    conversationPersistenceCursorRef,
     locallySyncedHistoryUpdatedAtRef,
     deleteConversationLocalCaches,
     disposeSubagentsForConversation: (conversationId) => {
@@ -1011,7 +1018,7 @@ export function ChatPage(props: ChatPageProps) {
     if (conversationState.meta.totalMessageCount > 0 || pendingUploadedFiles.length > 0) {
       return;
     }
-    if (persistedConversationStateRef.current.has(conversationId)) {
+    if (conversationPersistenceCursorRef.current.has(conversationId)) {
       return;
     }
     const historyItem = sidebarStore.peek(conversationId);
@@ -1071,8 +1078,7 @@ export function ChatPage(props: ChatPageProps) {
     conversationState,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
-    buildRuntimeEntryFromVisibleState,
+    conversationPersistenceCursorRef,
     syncVisibleConversationRuntime,
     isConversationRunning,
     sidebarStore,
@@ -1081,7 +1087,6 @@ export function ChatPage(props: ChatPageProps) {
     hydrationFailedConversationIdRef,
     setHydratingConversationId,
     setHydrationFailedConversationId,
-    subagentStoresRef,
   });
 
   ensureGatewayBridgeConversationReadyRef.current = ensureGatewayBridgeConversationReady;
@@ -1282,17 +1287,15 @@ export function ChatPage(props: ChatPageProps) {
     clearAbortSnapshot,
     getAbortSnapshot,
     resetLiveTranscript,
+    settleLiveTranscript,
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     updateToolStatus,
     updateRetryAttempts,
     queueGatewayBridgeEventForRequest,
     flushGatewayBridgeEventsForRequest,
-    activeGatewayRuntimeRunsRef,
-    queueGatewayRuntimeSnapshot,
-    queueGatewayRuntimeSnapshotForRun,
-    registerActiveGatewayRuntimeRun,
-    finishActiveGatewayRuntimeRun,
+    registerGatewayRunMirror,
+    finishGatewayRunMirror,
     gatewayBridgeHistorySummaryRef,
     availableSkills,
     skillsRootDir,
@@ -1302,6 +1305,7 @@ export function ChatPage(props: ChatPageProps) {
     ensureTunnelToolTab,
     ensureSshTunnelToolTab,
     persistConversation,
+    replaceConversationAtMessage,
     pruneIdleConversationCaches,
     requestQueuedChatTurnProcessing,
   });
@@ -1329,30 +1333,169 @@ export function ChatPage(props: ChatPageProps) {
     });
   }, [activeWorkspaceProjectPath, isAgentMode, openController]);
 
-  // 全局快捷键「新建对话」：Rust 端呼出窗口后发事件，这里切回对话视图
-  // （可能停在 Skills/MCP Hub）、开新会话并聚焦输入框，行为对齐侧栏按钮。
+  // 动作总线（Rust `app:action`）里 ChatPage 拥有的动作在下方统一监听
+  // （handleSelectConversation 定义之后）；这里先备好 ref 镜像。
   const handleNewConversationRef = useRef(handleNewConversation);
   handleNewConversationRef.current = handleNewConversation;
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
   const isDraftConversationRef = useRef(isDraftConversation);
   isDraftConversationRef.current = isDraftConversation;
+
+  const handleSelectConversation = useCallback(
+    (id: string) => {
+      const targetConversationId = id.trim();
+      if (!targetConversationId) {
+        return;
+      }
+      prepareComposerForConversationChange();
+      openController.open(targetConversationId);
+      restoreCachedComposerDraft(targetConversationId);
+    },
+    [openController],
+  );
+
+  // 托盘/快捷键动作参数的 ref 镜像：监听 effect 是 []-dep，闭包内一律
+  // 经 ref 取最新值（handleSelectWorkspaceProject 等依赖 settings，不稳定）。
+  const sidebarRunningConversationIds = useSidebarSelector(
+    sidebarStore,
+    selectRunningConversationIds,
+  );
+  const appActionParamsRef = useRef({
+    handleSelectConversation,
+    handleSelectWorkspaceProject,
+    stopConversation,
+    consumeConversationStop,
+    isConversationRunning,
+    workspaceProjects,
+    sidebarRunningConversationIds,
+    addNotify,
+    t,
+  });
+  appActionParamsRef.current = {
+    handleSelectConversation,
+    handleSelectWorkspaceProject,
+    stopConversation,
+    consumeConversationStop,
+    isConversationRunning,
+    workspaceProjects,
+    sidebarRunningConversationIds,
+    addNotify,
+    t,
+  };
+
   useEffect(() => {
+    // 单个会话的停止：完整序列在 stopConversation（stop intent + 队列取消 +
+    // abort + force 清理）。未停到任何东西且会话未运行时必须消费掉 stop
+    // intent，否则该会话下一次 send 会被静默吞掉（同 gateway:chat-cancel 守卫）。
+    const stopConversationRun = (conversationId: string) => {
+      const params = appActionParamsRef.current;
+      const stopped = params.stopConversation(conversationId);
+      if (!stopped && !params.isConversationRunning(conversationId)) {
+        params.consumeConversationStop(conversationId);
+      }
+    };
+
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    listen("global-shortcut:new-chat", () => {
-      const wasInHub = activeViewRef.current !== "chat";
-      setActiveView("chat");
-      // 与侧栏"新建对话"一致：从 Hub 返回且当前已是空白草稿会话时直接复用。
-      if (!wasInHub || !isDraftConversationRef.current) {
-        handleNewConversationRef.current();
-      }
-      // 视图与会话切换渲染完成后再聚焦输入框。
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          composerRef.current?.focus();
-        });
+    let unlistenFeedback: (() => void) | null = null;
+
+    // Rust 直连动作的结果反馈（目前只有托盘的 cron 启用开关）：toast 呈现，
+    // 任务名从 automation store 现查（可能已被删除，回退显示 id）。
+    // 勾选态本身经 automation:cron-changed → store → 托盘同步 effect 刷新。
+    listen<{ action: string; id?: string; ok: boolean; error?: string; value?: string }>(
+      "app:action-feedback",
+      (event) => {
+        const params = appActionParamsRef.current;
+        if (event.payload.action !== "toggle-cron-task") {
+          return;
+        }
+        const taskId = event.payload.id ?? "";
+        const task = getAutomationState().cron.tasks.find((entry) => entry.id === taskId);
+        const name = task?.name.trim() || taskId;
+        if (event.payload.ok) {
+          const messageKey =
+            event.payload.value === "enabled" ? "tray.cronEnabled" : "tray.cronDisabled";
+          params.addNotify("success", params.t(messageKey).replace("{name}", name));
+        } else {
+          params.addNotify(
+            "error",
+            params
+              .t("tray.cronToggleFailed")
+              .replace("{name}", name)
+              .replace("{error}", event.payload.error ?? ""),
+          );
+        }
+      },
+    )
+      .then((nextUnlisten) => {
+        if (cancelled) {
+          nextUnlisten();
+          return;
+        }
+        unlistenFeedback = nextUnlisten;
+      })
+      .catch(() => {
+        // 非 Tauri 环境忽略。
       });
+
+    listen<{ action: string; id?: string; value?: string }>("app:action", (event) => {
+      const params = appActionParamsRef.current;
+      switch (event.payload.action) {
+        case "new-chat": {
+          const wasInHub = activeViewRef.current !== "chat";
+          setActiveView("chat");
+          // 与侧栏"新建对话"一致：从 Hub 返回且当前已是空白草稿会话时直接复用。
+          if (!wasInHub || !isDraftConversationRef.current) {
+            handleNewConversationRef.current();
+          }
+          // 视图与会话切换渲染完成后再聚焦输入框。
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+              composerRef.current?.focus();
+            });
+          });
+          break;
+        }
+        case "open-conversation": {
+          const conversationId = event.payload.id?.trim();
+          if (!conversationId) break;
+          setActiveView("chat");
+          params.handleSelectConversation(conversationId);
+          break;
+        }
+        case "view-all-conversations": {
+          setActiveView("chat");
+          setSidebarOpen(true);
+          break;
+        }
+        case "switch-workspace": {
+          const projectId = event.payload.id?.trim();
+          if (!projectId) break;
+          const project = params.workspaceProjects.find((entry) => entry.id === projectId);
+          // 菜单可能滞后于项目列表；找不到就静默忽略。
+          if (project) {
+            setActiveView("chat");
+            void params.handleSelectWorkspaceProject(project);
+          }
+          break;
+        }
+        case "stop-run": {
+          const conversationId = event.payload.id?.trim();
+          if (conversationId) {
+            stopConversationRun(conversationId);
+          }
+          break;
+        }
+        case "stop-all-runs": {
+          for (const conversationId of params.sidebarRunningConversationIds) {
+            stopConversationRun(conversationId);
+          }
+          break;
+        }
+        default:
+          break;
+      }
     })
       .then((nextUnlisten) => {
         if (cancelled) {
@@ -1369,21 +1512,50 @@ export function ChatPage(props: ChatPageProps) {
       if (unlisten) {
         unlisten();
       }
+      if (unlistenFeedback) {
+        unlistenFeedback();
+      }
     };
   }, []);
 
-  const handleSelectConversation = useCallback(
-    (id: string) => {
-      const targetConversationId = id.trim();
-      if (!targetConversationId) {
-        return;
-      }
-      prepareComposerForConversationChange();
-      openController.open(targetConversationId);
-      restoreCachedComposerDraft(targetConversationId);
-    },
-    [openController],
-  );
+  // 托盘菜单同步：任一输入变化即重建模型推送（syncTrayMenu 内部按 JSON 签名
+  // 去抖），300ms 尾随防抖吸收流式期间侧栏 upsert 引起的高频变化。
+  // 注：全局快捷键绑定存 localStorage 无订阅，在模型构建时现读——改绑后
+  // 回显会在下一次模型级变化时跟上。
+  const trayPrefs = useTrayPrefs();
+  const automationState = useAutomation();
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void syncTrayMenu(
+        buildTrayMenuModel({
+          locale: settings.locale,
+          theme: settings.theme,
+          conversations: historyItems,
+          runningConversationIds: sidebarRunningConversationIds,
+          workspaceProjects,
+          activeWorkspaceProjectId: activeWorkspaceProject?.id,
+          archivedWorkspaceProjectPaths: settings.system.archivedWorkspaceProjectPaths,
+          cronTasks: automationState.cron.tasks,
+          remote: settings.remote,
+          gatewayOnline: remoteRuntimeStatus.online,
+          prefs: trayPrefs,
+        }),
+      );
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [
+    settings.locale,
+    settings.theme,
+    historyItems,
+    sidebarRunningConversationIds,
+    workspaceProjects,
+    activeWorkspaceProject,
+    settings.system.archivedWorkspaceProjectPaths,
+    automationState.cron.tasks,
+    settings.remote,
+    remoteRuntimeStatus.online,
+    trayPrefs,
+  ]);
 
   // Called by the sidebar container after the store confirmed a deletion:
   // evict local caches, replace the visible conversation when it was the
@@ -1432,9 +1604,9 @@ export function ChatPage(props: ChatPageProps) {
   const composerPlaceholder = isCompactionRunning
     ? t("chat.compactingContextWait")
     : isConversationHydrating
-      ? "正在补全完整历史，请稍候..."
+      ? "正在加载会话，请稍候..."
       : isConversationHydrationFailed
-        ? "当前会话完整历史加载失败，请重新打开会话..."
+        ? "当前会话加载失败，请重新打开会话..."
         : enabledComposerSkills.length > 0
           ? t("chat.inputHintWithSkills")
           : t("chat.inputHint");
@@ -1465,16 +1637,12 @@ export function ChatPage(props: ChatPageProps) {
   });
 
   const { handleResendFromEdit } = useEditResend({
-    conversationState,
     isSending,
     isConversationHydrating,
     isConversationHydrationFailed,
     currentConversationIdRef,
-    composerRef,
-    setPendingUploadsForConversation,
-    updateConversationRuntimeEntry,
-    invalidateSubagentsForConversation: (conversationId) => {
-      subagentStoresRef.current.invalidate(conversationId);
+    onError: (error) => {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
     },
     sendActionRef,
   });
@@ -1707,7 +1875,9 @@ export function ChatPage(props: ChatPageProps) {
                   gitClient={tauriGitClient}
                   followRef={scrollFollowRef}
                   hasModels={hasModels}
-                  historyItems={historyRenderItems}
+                  historyItems={transcriptItems}
+                  hasMoreHistory={conversationState.transcript.hasMoreBefore}
+                  onLoadEarlierHistory={handleLoadEarlierHistory}
                   isHistorySwitching={conversationOpenState.showOverlay}
                   isSending={isSending}
                   isAgentMode={isAgentMode}
@@ -1720,8 +1890,7 @@ export function ChatPage(props: ChatPageProps) {
                   onContentWidthChange={handleChatTranscriptWidthChange}
                   onResendFromEdit={handleResendFromEdit}
                   onBranchConversation={
-                    // 水合中/水合失败时 handler 只会静默 return——直接不传，
-                    // 让 AssistantRow 的 disabled 分支给出可见的禁用态。
+                    // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
                     isConversationHydrating || isConversationHydrationFailed
                       ? undefined
                       : handleBranchConversation

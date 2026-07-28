@@ -3,12 +3,20 @@ import { invoke } from "@tauri-apps/api/core";
 import { normalizeConversationSystemPrompt } from "../context/systemPrompt";
 import {
   type ConversationViewState,
+  createTranscriptProjection,
+  getActiveSegment,
   type HistoryMessageRef,
   normalizeConversationState,
   type StoredChatContextMeta,
   type StoredContextSegment,
   type StoredSummaryMessage,
+  type TranscriptSegmentSlice,
 } from "../conversation/conversationState";
+import { parseHistorySegments, type SerializedHistorySegment } from "./chatHistoryParser";
+
+// Single window/page size for every windowed history read (open, load
+// earlier, edit-resend replace) — one contract, one constant.
+export const CHAT_HISTORY_WINDOW_MESSAGES = 360;
 
 export type ChatHistorySummary = {
   id: string;
@@ -68,30 +76,91 @@ type ChatHistorySegmentWireRecord = {
   updatedAt: number;
 };
 
-type ChatHistoryWireRecord = ChatHistorySummary & {
+type ChatHistorySegmentWindowWireRecord = {
+  segmentIndex: number;
+  segmentId: string;
+  summaryJson?: string | null;
+  messagesJson: string;
+  startMessageIndex: number;
+  messageCount: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type ActiveSegmentParserPayload = {
+  kind: "active";
+  record: Omit<ChatHistorySegmentWireRecord, "summaryJson" | "messagesJson">;
+};
+
+type WindowSegmentParserPayload = {
+  kind: "window";
+  record: Omit<ChatHistorySegmentWindowWireRecord, "summaryJson" | "messagesJson">;
+};
+
+type HistorySegmentParserPayload = ActiveSegmentParserPayload | WindowSegmentParserPayload;
+
+type ChatHistoryWindowWireRecord = {
+  conversation: ChatHistorySummary;
+  segments: ChatHistorySegmentWindowWireRecord[];
+  activeSegment: ChatHistorySegmentWireRecord | null;
   contextMetaJson: string;
   activeSegmentIndex: number;
   totalSegmentCount: number;
   totalMessageCount: number;
-  segments: ChatHistorySegmentWireRecord[];
+  returnedMessageCount: number;
+  oldestOffset: number;
+  hasMoreBefore: boolean;
+  revision: string;
+  updatedAt: number;
 };
 
-type ChatHistoryActiveSegmentWireRecord = ChatHistorySummary & {
-  contextMetaJson: string;
-  activeSegmentIndex: number;
-  totalSegmentCount: number;
-  totalMessageCount: number;
-  activeSegment: ChatHistorySegmentWireRecord;
-};
-
-export type ChatHistoryRecord = ChatHistorySummary & {
-  state: ConversationViewState;
-};
-
-export type ChatHistoryActiveSegmentRecord = ChatHistorySummary & {
+export type ChatHistoryWindowRecord = {
+  conversation: ChatHistorySummary;
   meta: StoredChatContextMeta;
-  activeSegment: StoredContextSegment;
+  segments: TranscriptSegmentSlice[];
+  activeSegment?: StoredContextSegment;
+  returnedMessageCount: number;
+  oldestOffset: number;
+  hasMoreBefore: boolean;
+  revision: string;
+  updatedAt: number;
 };
+
+export type ConversationPersistenceCursor = {
+  activeSegmentIndex: number;
+  activeSegmentId: string;
+};
+
+// Shared assembly for a full window record → runtime view state: the active
+// segment becomes the (only) runtime segment, the window's segment slices
+// become the transcript projection. Used by open, gateway-bridge readiness
+// and edit-resend replace.
+export function buildConversationStateFromWindow(
+  record: ChatHistoryWindowRecord,
+): ConversationViewState {
+  if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+  return normalizeConversationState({
+    meta: record.meta,
+    segments: [record.activeSegment],
+    transcript: createTranscriptProjection({
+      segments: record.segments,
+      activeSegmentIndex: record.meta.activeSegmentIndex,
+      oldestMessageOffset: record.oldestOffset,
+      hasMoreBefore: record.hasMoreBefore,
+      revision: record.revision,
+    }),
+  });
+}
+
+export function buildChatHistoryRevision(params: {
+  conversationId: string;
+  updatedAt: number;
+  activeSegmentIndex: number;
+  totalSegmentCount: number;
+  totalMessageCount: number;
+}) {
+  return `${params.conversationId.trim()}:${params.updatedAt}:${params.activeSegmentIndex}:${params.totalSegmentCount}:${params.totalMessageCount}`;
+}
 
 const conversationWriteQueues = new Map<string, Promise<void>>();
 
@@ -119,25 +188,33 @@ type ChatHistorySegmentMutationInput = {
   segment: ChatHistorySegmentWireRecord;
 };
 
-function isMessageArray(value: unknown): value is Message[] {
-  return Array.isArray(value);
-}
-
-function parseStoredSummaryMessage(raw: string): StoredSummaryMessage {
-  const parsed = JSON.parse(raw) as StoredSummaryMessage | null;
+function normalizeStoredSummaryMessage(parsed: unknown): StoredSummaryMessage {
   if (
     !parsed ||
+    typeof parsed !== "object" ||
+    !("role" in parsed) ||
+    !("id" in parsed) ||
+    !("content" in parsed) ||
+    !("timestamp" in parsed) ||
+    !("summaryMeta" in parsed) ||
     parsed.role !== "summary" ||
     typeof parsed.id !== "string" ||
-    typeof parsed.content !== "string"
+    typeof parsed.content !== "string" ||
+    typeof parsed.timestamp !== "number" ||
+    !parsed.summaryMeta ||
+    typeof parsed.summaryMeta !== "object"
   ) {
     throw new Error("历史摘要数据格式无效");
   }
-  return parsed;
+  return parsed as StoredSummaryMessage;
 }
 
 function parseStoredChatContextMeta(
   raw: string,
+  counts: Pick<
+    StoredChatContextMeta,
+    "activeSegmentIndex" | "totalSegmentCount" | "totalMessageCount"
+  >,
   fallbackSystemPrompt?: string,
 ): StoredChatContextMeta {
   const parsed = JSON.parse(raw) as Partial<StoredChatContextMeta> | null;
@@ -153,57 +230,9 @@ function parseStoredChatContextMeta(
     schemaVersion: 3,
     systemPrompt,
     tools: Array.isArray(parsed.tools) ? parsed.tools : undefined,
-    activeSegmentIndex:
-      typeof parsed.activeSegmentIndex === "number" ? parsed.activeSegmentIndex : 0,
-    totalSegmentCount: typeof parsed.totalSegmentCount === "number" ? parsed.totalSegmentCount : 1,
-    totalMessageCount: typeof parsed.totalMessageCount === "number" ? parsed.totalMessageCount : 0,
-  };
-}
-
-function parseStoredSegment(record: ChatHistorySegmentWireRecord): StoredContextSegment {
-  const parsedMessages = JSON.parse(record.messagesJson) as unknown;
-  if (!isMessageArray(parsedMessages)) {
-    throw new Error("历史分段消息格式无效");
-  }
-
-  return {
-    segmentIndex: record.segmentIndex,
-    segmentId: record.segmentId,
-    summary: record.summaryJson ? parseStoredSummaryMessage(record.summaryJson) : undefined,
-    messages: parsedMessages,
-    messageCount: record.messageCount,
-    startMessageId: record.startMessageId,
-    endMessageId: record.endMessageId,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  };
-}
-
-function normalizeWireRecord(
-  record: ChatHistoryWireRecord,
-  fallbackSystemPrompt?: string,
-): ChatHistoryRecord {
-  if (record.segments.length === 0) {
-    throw new Error("历史对话缺少分段数据");
-  }
-  const meta = parseStoredChatContextMeta(record.contextMetaJson, fallbackSystemPrompt);
-  const segments = record.segments.map(parseStoredSegment);
-  const state: ConversationViewState = normalizeConversationState({ meta, segments });
-
-  return {
-    id: record.id,
-    title: record.title,
-    providerId: record.providerId,
-    model: record.model,
-    sessionId: record.sessionId,
-    cwd: record.cwd,
-    selectedModelJson: record.selectedModelJson,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-    isPinned: record.isPinned,
-    pinnedAt: record.pinnedAt,
-    isShared: record.isShared,
-    state,
+    activeSegmentIndex: counts.activeSegmentIndex,
+    totalSegmentCount: counts.totalSegmentCount,
+    totalMessageCount: counts.totalMessageCount,
   };
 }
 
@@ -260,36 +289,112 @@ export async function listSharedChatHistory(page: number, pageSize: number) {
   return invoke<ChatHistoryListPage>("chat_history_shared_list", { page, pageSize });
 }
 
-export async function getChatHistory(id: string, fallbackSystemPrompt?: string) {
-  const record = await invoke<ChatHistoryWireRecord>("chat_history_get", { id });
-  return normalizeWireRecord(record, fallbackSystemPrompt);
+export async function getChatHistoryWindow(params: {
+  id: string;
+  maxMessages: number;
+  beforeOffset?: number;
+  expectedRevision?: string;
+  includeActiveSegment: boolean;
+  fallbackSystemPrompt?: string;
+}): Promise<ChatHistoryWindowRecord> {
+  const record = await invoke<ChatHistoryWindowWireRecord>("chat_history_get_window", {
+    id: params.id,
+    maxMessages: params.maxMessages,
+    beforeOffset: params.beforeOffset,
+    expectedRevision: params.expectedRevision,
+    includeActiveSegment: params.includeActiveSegment,
+  });
+  const parsed = await parseChatHistoryWindowRecord(record, params.fallbackSystemPrompt);
+  if (params.includeActiveSegment && !parsed.activeSegment) {
+    throw new Error("历史窗口缺少活跃分段");
+  }
+  return parsed;
 }
 
-export async function getChatHistoryActiveSegment(id: string, fallbackSystemPrompt?: string) {
-  const record = await invoke<ChatHistoryActiveSegmentWireRecord>(
-    "chat_history_get_active_segment",
-    { id },
-  );
-  if (!record.activeSegment) {
-    throw new Error("历史对话缺少活跃分段");
-  }
+async function parseChatHistoryWindowRecord(
+  record: ChatHistoryWindowWireRecord,
+  fallbackSystemPrompt?: string,
+): Promise<ChatHistoryWindowRecord> {
+  const activeSerialized: SerializedHistorySegment<HistorySegmentParserPayload>[] =
+    record.activeSegment
+      ? (() => {
+          const { summaryJson, messagesJson, ...payload } = record.activeSegment;
+          return [
+            {
+              payload: { kind: "active", record: payload },
+              summaryJson,
+              messagesJson,
+            },
+          ];
+        })()
+      : [];
+  const serializedSegments: SerializedHistorySegment<HistorySegmentParserPayload>[] = [
+    ...activeSerialized,
+    ...record.segments.map(({ summaryJson, messagesJson, ...payload }) => ({
+      payload: { kind: "window", record: payload } satisfies WindowSegmentParserPayload,
+      summaryJson,
+      messagesJson,
+    })),
+  ];
+  const parsedSegments = await parseHistorySegments(serializedSegments);
+  const activeSegment = parsedSegments.find((segment) => segment.payload.kind === "active");
 
   return {
-    id: record.id,
-    title: record.title,
-    providerId: record.providerId,
-    model: record.model,
-    sessionId: record.sessionId,
-    cwd: record.cwd,
-    selectedModelJson: record.selectedModelJson,
-    createdAt: record.createdAt,
+    conversation: record.conversation,
+    meta: parseStoredChatContextMeta(record.contextMetaJson, record, fallbackSystemPrompt),
+    segments: parsedSegments.flatMap(({ payload, summary, messages }) =>
+      payload.kind === "window"
+        ? [
+            {
+              segmentIndex: payload.record.segmentIndex,
+              segmentId: payload.record.segmentId,
+              summary: summary ? normalizeStoredSummaryMessage(summary) : undefined,
+              messages,
+              startMessageIndex: payload.record.startMessageIndex,
+              createdAt: payload.record.createdAt,
+              updatedAt: payload.record.updatedAt,
+            },
+          ]
+        : [],
+    ),
+    activeSegment:
+      activeSegment?.payload.kind === "active"
+        ? {
+            ...activeSegment.payload.record,
+            summary: activeSegment.summary
+              ? normalizeStoredSummaryMessage(activeSegment.summary)
+              : undefined,
+            messages: activeSegment.messages,
+          }
+        : undefined,
+    returnedMessageCount: record.returnedMessageCount,
+    oldestOffset: record.oldestOffset,
+    hasMoreBefore: record.hasMoreBefore,
+    revision: record.revision,
     updatedAt: record.updatedAt,
-    isPinned: record.isPinned,
-    pinnedAt: record.pinnedAt,
-    isShared: record.isShared,
-    meta: parseStoredChatContextMeta(record.contextMetaJson, fallbackSystemPrompt),
-    activeSegment: parseStoredSegment(record.activeSegment),
-  } satisfies ChatHistoryActiveSegmentRecord;
+  };
+}
+
+export async function replaceChatHistoryFromMessage(params: {
+  id: string;
+  baseMessageRef: HistoryMessageRef;
+  replacementMessage: Message;
+  maxMessages: number;
+  expectedRevision: string;
+  fallbackSystemPrompt?: string;
+}): Promise<ChatHistoryWindowRecord> {
+  return withConversationWriteLock(params.id, async () => {
+    const record = await invoke<ChatHistoryWindowWireRecord>("chat_history_replace_from_message", {
+      id: params.id,
+      baseMessageRef: params.baseMessageRef,
+      replacementMessage: params.replacementMessage,
+      maxMessages: params.maxMessages,
+      expectedRevision: params.expectedRevision,
+    });
+    const parsed = await parseChatHistoryWindowRecord(record, params.fallbackSystemPrompt);
+    if (!parsed.activeSegment) throw new Error("历史替换结果缺少活跃分段");
+    return parsed;
+  });
 }
 
 function withConversationWriteLock<T>(conversationId: string, task: () => Promise<T>): Promise<T> {
@@ -346,7 +451,7 @@ function buildChatHistoryConversationInput(params: {
     cwd,
     selectedModelJson,
     contextMetaJson: JSON.stringify(state.meta),
-    activeSegmentIndex: state.activeSegmentIndex,
+    activeSegmentIndex: state.meta.activeSegmentIndex,
     totalSegmentCount: state.meta.totalSegmentCount,
     totalMessageCount: state.meta.totalMessageCount,
     createdAt,
@@ -429,32 +534,7 @@ export async function deleteChatHistory(id: string) {
   });
 }
 
-function segmentPrefixMatches(
-  previous: StoredContextSegment[],
-  next: StoredContextSegment[],
-  count: number,
-) {
-  if (count < 0 || previous.length < count || next.length < count) return false;
-  for (let index = 0; index < count; index += 1) {
-    const prevSegment = previous[index];
-    const nextSegment = next[index];
-    if (
-      prevSegment.segmentIndex !== nextSegment.segmentIndex ||
-      prevSegment.segmentId !== nextSegment.segmentId ||
-      prevSegment.messageCount !== nextSegment.messageCount ||
-      prevSegment.startMessageId !== nextSegment.startMessageId ||
-      prevSegment.endMessageId !== nextSegment.endMessageId ||
-      prevSegment.createdAt !== nextSegment.createdAt ||
-      prevSegment.updatedAt !== nextSegment.updatedAt ||
-      prevSegment.summary?.id !== nextSegment.summary?.id
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
-
-type PersistConversationStateParams = {
+type PersistConversationRuntimeParams = {
   conversationId: string;
   providerId: string;
   model: string;
@@ -465,75 +545,68 @@ type PersistConversationStateParams = {
   createdAt?: number;
   updatedAt: number;
   state: ConversationViewState;
-  // 差量基线的读与推进必须发生在写锁内：并发持久化会串行排队，
-  // 后来者由此读到前一次真正落盘的状态，differential 选择才不会误判。
-  getPreviousState: () => ConversationViewState | null;
-  commitPersistedState: (state: ConversationViewState) => void;
+  getPersistenceCursor: () => ConversationPersistenceCursor | null;
+  commitPersistenceCursor: (cursor: ConversationPersistenceCursor) => void;
 };
 
-async function writeConversationState(
+async function writeConversationRuntime(
   conversation: ChatHistoryConversationInput,
-  previousState: ConversationViewState | null,
-  nextState: ConversationViewState,
+  cursor: ConversationPersistenceCursor | null,
+  state: ConversationViewState,
 ) {
-  if (!previousState) {
+  const activeSegment = getActiveSegment(state);
+  if (!activeSegment) {
+    throw new Error("无法持久化缺少活跃分段的会话");
+  }
+
+  if (!cursor) {
+    if (state.segments[0]?.segmentIndex !== 0) {
+      throw new Error("已存在的历史会话缺少持久化游标");
+    }
     return upsertChatHistoryRaw({
       ...conversation,
-      segments: nextState.segments.map(buildChatHistorySegmentInput),
+      segments: state.segments.map(buildChatHistorySegmentInput),
     });
   }
 
-  const sameShape =
-    previousState.activeSegmentIndex === nextState.activeSegmentIndex &&
-    previousState.segments.length === nextState.segments.length;
-  if (
-    sameShape &&
-    segmentPrefixMatches(
-      previousState.segments,
-      nextState.segments,
-      Math.max(0, nextState.activeSegmentIndex),
-    )
-  ) {
-    const activeSegment = nextState.segments[nextState.activeSegmentIndex];
-    if (activeSegment) {
-      return upsertChatHistoryActiveSegmentRaw({
-        conversation,
-        segment: buildChatHistorySegmentInput(activeSegment),
-      });
+  if (activeSegment.segmentIndex === cursor.activeSegmentIndex) {
+    if (activeSegment.segmentId !== cursor.activeSegmentId) {
+      throw new Error("活跃历史分段身份与持久化游标不一致");
     }
+    return upsertChatHistoryActiveSegmentRaw({
+      conversation,
+      segment: buildChatHistorySegmentInput(activeSegment),
+    });
   }
 
-  const appendShape =
-    nextState.activeSegmentIndex === previousState.activeSegmentIndex + 1 &&
-    nextState.segments.length === previousState.segments.length + 1;
-  if (
-    appendShape &&
-    segmentPrefixMatches(previousState.segments, nextState.segments, previousState.segments.length)
-  ) {
-    const appendedSegment = nextState.segments[nextState.activeSegmentIndex];
-    if (appendedSegment) {
-      return appendChatHistorySegmentRaw({
-        conversation,
-        segment: buildChatHistorySegmentInput(appendedSegment),
-      });
-    }
+  if (activeSegment.segmentIndex === cursor.activeSegmentIndex + 1) {
+    return appendChatHistorySegmentRaw({
+      conversation,
+      segment: buildChatHistorySegmentInput(activeSegment),
+    });
   }
 
-  return upsertChatHistoryRaw({
-    ...conversation,
-    segments: nextState.segments.map(buildChatHistorySegmentInput),
-  });
+  throw new Error(
+    `不支持的历史分段跳变：${cursor.activeSegmentIndex} -> ${activeSegment.segmentIndex}`,
+  );
 }
 
-export async function persistConversationState(params: PersistConversationStateParams) {
+export async function persistConversationRuntime(params: PersistConversationRuntimeParams) {
   return withConversationWriteLock(params.conversationId, async () => {
     const conversation = buildChatHistoryConversationInput(params);
-    const summary = await writeConversationState(
+    const summary = await writeConversationRuntime(
       conversation,
-      params.getPreviousState(),
+      params.getPersistenceCursor(),
       params.state,
     );
-    params.commitPersistedState(params.state);
+    const activeSegment = getActiveSegment(params.state);
+    if (!activeSegment) {
+      throw new Error("持久化成功后缺少活跃分段");
+    }
+    params.commitPersistenceCursor({
+      activeSegmentIndex: activeSegment.segmentIndex,
+      activeSegmentId: activeSegment.segmentId,
+    });
     return summary;
   });
 }

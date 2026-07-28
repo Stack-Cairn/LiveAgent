@@ -44,6 +44,8 @@ pub use gateway_proto::v2 as proto;
 
 mod chat;
 mod chat_inbox;
+mod chat_ingress;
+mod chat_ingress_transport;
 mod connection;
 mod controller;
 mod envelope_handler;
@@ -60,6 +62,7 @@ mod ws_transport;
 
 pub(crate) use chat::*;
 pub(crate) use chat_inbox::*;
+pub(crate) use chat_ingress::*;
 pub(crate) use connection::*;
 pub(crate) use history_sync::*;
 pub use history_sync::{build_history_sync_delete, build_history_sync_upsert};
@@ -78,11 +81,8 @@ pub(crate) const UI_ONLY_SETTINGS_SYNC_FIELDS: &[&str] = &[
     "theme",
     "locale",
 ];
-// Small dedicated lane for latency-sensitive control replies (Pongs). It is
-// merged into the same outbound envelope stream but never sits behind
-// thousands of queued data envelopes, so wake probes stay answerable while a
-// reply is streaming tokens through the saturated data queue.
-pub(crate) const GATEWAY_OUTBOUND_CONTROL_QUEUE_DEPTH: usize = 64;
+pub(crate) const GATEWAY_OUTBOUND_DATA_QUEUE_DEPTH: usize = 1_024;
+pub(crate) const GATEWAY_INBOUND_DISPATCH_QUEUE_DEPTH: usize = 512;
 pub(crate) const GATEWAY_RECONNECT_MIN: Duration = Duration::from_millis(250);
 pub(crate) const GATEWAY_RECONNECT_MAX: Duration = Duration::from_secs(5);
 pub(crate) const GATEWAY_RECONNECT_STABLE_AFTER: Duration = Duration::from_secs(30);
@@ -115,6 +115,8 @@ pub(crate) const GATEWAY_WEBVIEW_REPORT_FRESH_WINDOW: Duration = Duration::from_
 pub(crate) const GATEWAY_CHAT_RUNTIME_WAKE_REQUEST_PREFIX: &str = "chat-runtime-wake-";
 pub(crate) const GATEWAY_CHAT_RUNTIME_WAKE_EVENT: &str = "gateway:chat-runtime-wake";
 pub(crate) const GATEWAY_CONNECTION_NUDGE_COOLDOWN: Duration = Duration::from_secs(1);
+pub(crate) const GATEWAY_CHAT_CHECKPOINT_REQUESTED_EVENT: &str =
+    "gateway:chat-checkpoint-requested";
 
 pub struct GatewayController {
     app_handle: tauri::AppHandle,
@@ -128,8 +130,8 @@ pub struct GatewayController {
     config_tx: watch::Sender<RemoteSettingsPayload>,
     runner_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     status: Mutex<GatewayStatusSnapshot>,
-    outbound_tx: Mutex<Option<mpsc::Sender<proto::AgentEnvelope>>>,
-    outbound_control_tx: Mutex<Option<mpsc::Sender<proto::AgentEnvelope>>>,
+    outbound_tx: Mutex<Option<GatewayOutboundSender>>,
+    outbound_control_tx: Mutex<Option<GatewayOutboundSender>>,
     terminal_stream_tx: Mutex<Option<mpsc::Sender<proto::TerminalStreamFrame>>>,
     settings_snapshot: Mutex<Option<Value>>,
     remote_chat_inbox: Mutex<HashMap<String, RemoteChatInboxRecord>>,
@@ -140,6 +142,8 @@ pub struct GatewayController {
     pub(crate) tunnel_proxy: TunnelProxy,
     pub(crate) workspace_watch: Arc<WorkspaceWatchService>,
     pending_chat_queue_requests: Mutex<HashMap<String, oneshot::Sender<proto::ChatQueueResponse>>>,
+    chat_ingress: ChatIngressMirror,
+    chat_ingress_flush_lock: tokio::sync::Mutex<()>,
     terminal_forwarder_once: Once,
     terminal_stream_forwarder_once: Once,
     sftp_forwarder_once: Once,

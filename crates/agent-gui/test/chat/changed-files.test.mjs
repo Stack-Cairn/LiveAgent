@@ -92,6 +92,21 @@ test("failed or unsettled operations never count", () => {
   );
 });
 
+test("Bash deletion is not inferred as a changed file", () => {
+  assert.equal(
+    changedFiles.collectChangedFiles([
+      round(
+        toolBlock({
+          name: "Bash",
+          args: { command: "rm src/removed.ts" },
+          details: { exit_code: 0 },
+        }),
+      ),
+    ]),
+    null,
+  );
+});
+
 test("Delete marks the file deleted and a later Write revives it", () => {
   const deletedOnly = changedFiles.collectChangedFiles([
     round(

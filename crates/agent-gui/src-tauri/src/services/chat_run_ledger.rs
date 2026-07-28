@@ -1,9 +1,7 @@
-//! Desktop-side ledger of chat-run lifecycle states destined for the gateway.
+//! Desktop-side diagnostic ledger of chat-run lifecycle states.
 //!
-//! Terminal signals ("completed"/"failed"/"cancelled") must reach the gateway
-//! at least once; otherwise the WebUI shows a run as streaming forever. The
-//! ledger records every run the desktop knows about and keeps unsent terminal
-//! states around so callers can retransmit them until an acknowledged send.
+//! Reliable remote completion is owned by the chat-ingress journal. Terminal
+//! entries here are diagnostic observations only and never drive transport.
 //!
 //! Pure std container (no tauri/tokio) so it stays unit-testable.
 
@@ -48,7 +46,6 @@ pub struct ChatRunLedgerEntry {
     pub state: ChatRunLedgerState,
     pub error_code: String,
     pub message: String,
-    pub terminal_sent: bool,
     // Liveness while Running; frozen at terminal time afterwards (touch is a
     // no-op on terminal entries), so it doubles as the retention clock.
     pub touched_at: Instant,
@@ -168,7 +165,6 @@ impl ChatRunLedger {
             entry.state = state;
             entry.error_code = error_code.to_string();
             entry.message = message.to_string();
-            entry.terminal_sent = false;
             entry.touched_at = now;
             entry.updated_at_ms = now_ms;
             Self::fill_conversation_id(entry, conversation_id);
@@ -182,7 +178,6 @@ impl ChatRunLedger {
                 state,
                 error_code: error_code.to_string(),
                 message: message.to_string(),
-                terminal_sent: false,
                 touched_at: now,
                 updated_at_ms: now_ms,
             },
@@ -192,29 +187,6 @@ impl ChatRunLedger {
 
     pub fn get(&self, run_id: &str) -> Option<&ChatRunLedgerEntry> {
         self.entries.get(run_id.trim())
-    }
-
-    pub fn mark_terminal_sent(&mut self, run_id: &str) {
-        if let Some(entry) = self.entries.get_mut(run_id.trim()) {
-            if entry.state.is_terminal() {
-                entry.terminal_sent = true;
-            }
-        }
-    }
-
-    pub fn unsent_terminals(&self) -> Vec<ChatRunLedgerEntry> {
-        let mut unsent: Vec<ChatRunLedgerEntry> = self
-            .entries
-            .values()
-            .filter(|entry| entry.state.is_terminal() && !entry.terminal_sent)
-            .cloned()
-            .collect();
-        unsent.sort_by(|a, b| {
-            a.updated_at_ms
-                .cmp(&b.updated_at_ms)
-                .then_with(|| a.run_id.cmp(&b.run_id))
-        });
-        unsent
     }
 
     pub fn active_reports(&self, now: Instant) -> Vec<ChatRunLedgerEntry> {
@@ -280,26 +252,18 @@ impl ChatRunLedger {
             entry.state = ChatRunLedgerState::Failed;
             entry.error_code = DESKTOP_RUN_LOST_ERROR_CODE.to_string();
             entry.message = DESKTOP_RUN_LOST_MESSAGE.to_string();
-            entry.terminal_sent = false;
             entry.touched_at = now;
             entry.updated_at_ms = now_ms;
             demoted.push(entry.clone());
         }
 
         let terminal_retention = self.terminal_retention;
-        // Unsent terminals are kept past the normal retention so they keep
-        // retrying, but 3x retention bounds the leak if sends never succeed.
-        let unsent_retention = terminal_retention.saturating_mul(3);
         self.entries.retain(|_, entry| {
             if !entry.state.is_terminal() {
                 return true;
             }
             let age = now.saturating_duration_since(entry.touched_at);
-            if entry.terminal_sent {
-                age <= terminal_retention
-            } else {
-                age <= unsent_retention
-            }
+            age <= terminal_retention
         });
 
         demoted
@@ -317,7 +281,6 @@ impl ChatRunLedger {
             state: ChatRunLedgerState::Running,
             error_code: String::new(),
             message: String::new(),
-            terminal_sent: false,
             touched_at: now,
             updated_at_ms: now_ms,
         }
@@ -369,7 +332,7 @@ mod tests {
             4_000
         ));
 
-        let entries = ledger.unsent_terminals();
+        let entries = ledger.recent_terminal_reports();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].state, ChatRunLedgerState::Completed);
         assert_eq!(entries[0].error_code, "");
@@ -459,44 +422,6 @@ mod tests {
     }
 
     #[test]
-    fn unsent_terminals_clear_after_mark_terminal_sent() {
-        let mut ledger = test_ledger();
-        let t0 = Instant::now();
-        ledger.mark_running("run-1", "conversation-1", t0, 1_000);
-        ledger.mark_terminal(
-            "run-1",
-            "conversation-1",
-            ChatRunLedgerState::Failed,
-            "boom",
-            "run failed",
-            t0 + Duration::from_secs(1),
-            2_000,
-        );
-
-        let unsent = ledger.unsent_terminals();
-        assert_eq!(unsent.len(), 1);
-        assert_eq!(unsent[0].run_id, "run-1");
-        assert_eq!(unsent[0].error_code, "boom");
-        assert_eq!(unsent[0].message, "run failed");
-
-        ledger.mark_terminal_sent("run-1");
-        assert!(ledger.unsent_terminals().is_empty());
-
-        // A duplicate terminal for an already-terminal run must not reset
-        // terminal_sent and re-trigger retransmission.
-        assert!(!ledger.mark_terminal(
-            "run-1",
-            "conversation-1",
-            ChatRunLedgerState::Failed,
-            "boom",
-            "run failed",
-            t0 + Duration::from_secs(2),
-            3_000,
-        ));
-        assert!(ledger.unsent_terminals().is_empty());
-    }
-
-    #[test]
     fn ttl_demotion_returns_demoted_entries_once() {
         let mut ledger = test_ledger();
         let t0 = Instant::now();
@@ -509,15 +434,10 @@ mod tests {
         assert_eq!(demoted[0].state, ChatRunLedgerState::Failed);
         assert_eq!(demoted[0].error_code, DESKTOP_RUN_LOST_ERROR_CODE);
         assert_eq!(demoted[0].message, DESKTOP_RUN_LOST_MESSAGE);
-        assert!(!demoted[0].terminal_sent);
-
-        // Demoted entries are terminal now and show up for retransmission.
-        assert_eq!(ledger.unsent_terminals().len(), 1);
         // A later sweep must not demote (or return) them again.
         assert!(ledger
             .sweep(stale + Duration::from_secs(1), 3_000)
             .is_empty());
-        assert_eq!(ledger.unsent_terminals().len(), 1);
     }
 
     #[test]
@@ -535,7 +455,7 @@ mod tests {
     }
 
     #[test]
-    fn retention_evicts_sent_terminals_and_keeps_unsent_until_leak_bound() {
+    fn retention_evicts_diagnostic_terminals() {
         let mut ledger = test_ledger();
         let t0 = Instant::now();
         ledger.mark_terminal(
@@ -547,7 +467,6 @@ mod tests {
             t0,
             1_000,
         );
-        ledger.mark_terminal_sent("run-sent");
         ledger.mark_terminal(
             "run-unsent",
             "conversation-2",
@@ -558,17 +477,10 @@ mod tests {
             1_001,
         );
 
-        // Past terminal_retention: sent entry evicted, unsent entry kept.
+        // Terminal observations are diagnostics only and share one retention.
         ledger.sweep(t0 + Duration::from_secs(601), 2_000);
         let recent = ledger.recent_terminal_reports();
-        assert_eq!(recent.len(), 1);
-        assert_eq!(recent[0].run_id, "run-unsent");
-        assert_eq!(ledger.unsent_terminals().len(), 1);
-
-        // Past 3x terminal_retention: unsent entry evicted too (leak bound).
-        ledger.sweep(t0 + Duration::from_secs(1_801), 3_000);
-        assert!(ledger.recent_terminal_reports().is_empty());
-        assert!(ledger.unsent_terminals().is_empty());
+        assert!(recent.is_empty());
     }
 
     #[test]

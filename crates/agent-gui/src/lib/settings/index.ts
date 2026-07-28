@@ -20,6 +20,10 @@ import {
   resolveAnthropicKnownModelLimits,
   shouldSendAnthropicLongContextHeader,
 } from "../providers/anthropicModels";
+import {
+  type CliIdentitySettings,
+  normalizeCliIdentitySettings,
+} from "../providers/cliIdentityCore";
 import { createUuid } from "../shared/id";
 import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
 import { normalizeFontFamily } from "../system/fontFamily";
@@ -165,6 +169,7 @@ export type ChatTranscriptSettings = {
 
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
+  providerIdentities: CliIdentitySettings;
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
@@ -2164,6 +2169,7 @@ export function normalizeCustomSettings(
       normalizeSelectedModel(obj.conversationTitleModel),
       customProviders,
     ),
+    providerIdentities: normalizeCliIdentitySettings(obj.providerIdentities),
     chatSidebar: {
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,

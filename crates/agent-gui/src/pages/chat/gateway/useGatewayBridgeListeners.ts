@@ -363,17 +363,6 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
       }
       startHeartbeat(requestId);
       if (!message && uploadedFiles.length === 0) {
-        latestParamsRef.current.queueGatewayBridgeEventForRequest(
-          requestId,
-          {
-            type: "error",
-            message: "Remote chat message cannot be empty.",
-            conversation_id: targetConversationId,
-          },
-          {
-            workerId,
-          },
-        );
         failClaimedRequest(
           requestId,
           targetConversationId,
@@ -432,17 +421,6 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
             : undefined;
         if (payload.rebased === true && !baseMessageRef) {
           const message = "Remote edit_resend command is missing base_message_ref.";
-          latestParamsRef.current.queueGatewayBridgeEventForRequest(
-            requestId,
-            {
-              type: "error",
-              message,
-              conversation_id: targetConversationId,
-            },
-            {
-              workerId,
-            },
-          );
           failClaimedRequest(requestId, targetConversationId, "invalid_chat_command", message);
           return;
         }
@@ -468,7 +446,6 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
             targetConversationId,
             {
               rebased: payload.rebased === true,
-              baseMessageRef,
             },
           );
 
@@ -524,6 +501,7 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
           selectedSystemToolIdsOverride: gatewayBridgeRequest.selectedSystemToolIdsOverride,
           runtimeControlsOverride: gatewayBridgeRequest.runtimeControlsOverride,
           gatewayBridgeRequestOverride: gatewayBridgeRequest,
+          editResendBaseMessageRef: baseMessageRef,
           beforeRuntimeStart: markRuntimeStarted,
           afterInitialHistoryPersist: markRuntimeStarted,
         });
@@ -548,20 +526,6 @@ export function useGatewayBridgeListeners(params: UseGatewayBridgeListenersParam
         );
         const conversationBusy = isConversationAlreadyRunningError(rawMessage);
         const message = conversationBusy ? GATEWAY_CHAT_CONVERSATION_BUSY_MESSAGE : rawMessage;
-        latestParamsRef.current.queueGatewayBridgeEventForRequest(
-          requestId,
-          {
-            type: "error",
-            message,
-            conversation_id:
-              resolvedConversationId ||
-              targetConversationId ||
-              latestParamsRef.current.currentConversationIdRef.current,
-          },
-          {
-            workerId,
-          },
-        );
         failClaimedRequest(
           requestId,
           resolvedConversationId ||

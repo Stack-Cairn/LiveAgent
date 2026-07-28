@@ -52,6 +52,7 @@ message GatewayEnvelope {
     ProviderModelsRequest provider_models = 65;
     SettingsResetSshKnownHostRequest settings_reset_ssh_known_host = 72;
     ChatQueueRequest chat_queue = 73;
+    ChatIngressAck chat_ingress_ack = 75;
     TunnelStateSnapshot tunnel_state = 80;
     TunnelMutation tunnel_mutation = 81;
     TunnelFrame tunnel_frame = 82;
@@ -128,6 +129,9 @@ message AgentEnvelope {
     ManagedProcessSnapshot managed_process_snapshot = 92;
     HistoryBranchResponse history_branch_resp = 93;
     ProviderUsageResponse provider_usage_resp = 94;
+    ChatIngressBatch chat_ingress_batch = 95;
+    ChatIngressResume chat_ingress_resume = 96;
+    ChatIngressFragment chat_ingress_fragment = 97;
     ErrorResponse error = 99;
   }
 
@@ -1147,4 +1151,107 @@ message ProviderUsageRequest {
 
 message ProviderUsageResponse {
   string result_json = 1;
+}
+
+// ---- Reliable chat ingress (desktop -> gateway) ----
+
+// ChatIngressBatch carries contiguous logical records for one run. Each record
+// occupies exactly one sequence number beginning at first_seq.
+message ChatIngressBatch {
+  string run_id = 1;
+  string conversation_id = 2;
+  uint64 first_seq = 3;
+  repeated ChatIngressRecord records = 4;
+}
+
+message ChatIngressRecord {
+  oneof payload {
+    ChatIngressDelta delta = 1;
+    ChatIngressCheckpoint checkpoint = 2;
+    ChatIngressTerminal terminal = 3;
+    ChatIngressHeartbeat heartbeat = 4;
+  }
+}
+
+message ChatIngressDelta {
+  string event_json = 1;
+  string worker_id = 2;
+}
+
+message ChatIngressHeartbeat {
+  // Unix milliseconds.
+  int64 updated_at = 1;
+}
+
+message ChatIngressCheckpoint {
+  uint64 covers_through_seq = 1;
+  uint64 revision = 2;
+  bytes compressed_projection = 3;
+  uint64 uncompressed_bytes = 4;
+  string sha256 = 5;
+  bool content_complete = 6;
+  bool history_required = 7;
+}
+
+message ChatIngressTerminal {
+  uint64 covers_through_seq = 1;
+  uint64 revision = 2;
+  bytes compressed_projection = 3;
+  uint64 uncompressed_bytes = 4;
+  string sha256 = 5;
+  bool content_complete = 6;
+  bool history_required = 7;
+  string state = 8;
+  string error_code = 9;
+  string error_message = 10;
+}
+
+// ChatIngressResume declares the replay window retained by the desktop after a
+// reconnect. The gateway answers each run with ChatIngressAck.
+message ChatIngressResume {
+  repeated ChatIngressRunResume runs = 1;
+}
+
+message ChatIngressRunResume {
+  string run_id = 1;
+  string conversation_id = 2;
+  uint64 replay_from_seq = 3;
+  uint64 replay_through_seq = 4;
+  uint64 next_seq = 5;
+  uint64 latest_checkpoint_seq = 6;
+  uint64 terminal_seq = 7;
+  bool terminal_pending = 8;
+}
+
+// ChatIngressFragment transports one encoded ChatIngressRecord that exceeds a
+// normal batch frame. Fragments do not consume additional logical sequence
+// numbers; source_seq is the sequence of the reconstructed record.
+message ChatIngressFragment {
+  string run_id = 1;
+  string conversation_id = 2;
+  uint64 source_seq = 3;
+  uint32 fragment_index = 4;
+  uint32 fragment_count = 5;
+  bytes encoded_record_chunk = 6;
+  uint64 encoded_record_bytes = 7;
+  string sha256 = 8;
+}
+
+message ChatIngressAck {
+  string run_id = 1;
+  string conversation_id = 2;
+  uint64 committed_through = 3;
+  uint64 expected_next = 4;
+  Action action = 5;
+  bool terminal_committed = 6;
+  string error_code = 7;
+  string error_message = 8;
+
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    CONTINUE = 1;
+    REPLAY_FROM_EXPECTED = 2;
+    SEND_CHECKPOINT = 3;
+    REJECTED = 4;
+  }
 }

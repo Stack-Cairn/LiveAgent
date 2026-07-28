@@ -2,6 +2,7 @@ package chatcmd
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -18,6 +19,20 @@ func newCommandTestManager(t *testing.T) (*session.Manager, *session.AgentSessio
 	sm.SetSession(sess)
 	t.Cleanup(func() { sm.ClearSession(sess) })
 	return sm, sess
+}
+
+func TestProbeRuntimeRejectsDesktopWithoutChatIngressV1(t *testing.T) {
+	sm, sess := newCommandTestManager(t)
+
+	err := ProbeRuntime(context.Background(), sm, "desktop-agent")
+	if !errors.Is(err, session.ErrChatProtocolIncompatible) {
+		t.Fatalf("ProbeRuntime() error = %v, want ErrChatProtocolIncompatible", err)
+	}
+	select {
+	case outbound := <-sess.Outbound():
+		t.Fatalf("incompatible desktop received probe envelope: %#v", outbound.GatewayEnvelope)
+	default:
+	}
 }
 
 func TestChatTimeoutDefaultsAreShortAndDedicated(t *testing.T) {

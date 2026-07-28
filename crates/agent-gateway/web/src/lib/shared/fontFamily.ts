@@ -61,6 +61,26 @@ type LocalFontData = {
 
 type QueryLocalFonts = () => Promise<LocalFontData[]>;
 
+type LocalFontPermissions = {
+  query: (descriptor: { name: "local-fonts" }) => Promise<{ state?: string }>;
+};
+
+async function hasGrantedLocalFontPermission(): Promise<boolean> {
+  const permissions = (
+    globalThis as typeof globalThis & {
+      navigator?: { permissions?: LocalFontPermissions };
+    }
+  ).navigator?.permissions;
+  if (!permissions || typeof permissions.query !== "function") return false;
+
+  try {
+    const status = await permissions.query({ name: "local-fonts" });
+    return status.state === "granted";
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeFontFamily(value: unknown): string {
   if (typeof value !== "string") return "";
   const trimmed = value.trim().replace(/\s+/g, " ");
@@ -186,6 +206,7 @@ export async function listLocalFontFamilies(): Promise<string[]> {
     }
   ).queryLocalFonts;
   if (typeof queryLocalFonts !== "function") return [];
+  if (!(await hasGrantedLocalFontPermission())) return [];
 
   try {
     const fonts = await queryLocalFonts();

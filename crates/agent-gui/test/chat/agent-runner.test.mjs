@@ -438,6 +438,39 @@ test("runAssistantWithTools returns terminal stop messages without scheduling a 
   assert.equal(result.messages[1].role, "assistant");
 });
 
+test("runAssistantWithTools sends tracked deletion rules with a non-empty base prompt", async () => {
+  resetFakeStreams(createTextAssistant("done"));
+  const tools = [
+    {
+      name: "Delete",
+      description: "Delete a path",
+      parameters: { type: "object", properties: {} },
+    },
+    {
+      name: "Bash",
+      description: "Run a command",
+      parameters: { type: "object", properties: {} },
+    },
+  ];
+  const { params } = createBaseParams({
+    context: {
+      systemPrompt: "Base system prompt",
+      messages: [{ role: "user", content: "Delete tmp.txt", timestamp: 1 }],
+      tools,
+    },
+    tools,
+  });
+
+  await runAssistantWithTools(params);
+
+  assert.equal(observedStreamContexts.length, 1);
+  const deliveredPrompt = observedStreamContexts[0].systemPrompt;
+  assert.match(deliveredPrompt, /^Base system prompt\n\n# Tool-Execution Mode/);
+  assert.match(deliveredPrompt, /Every intentional deletion[\s\S]*MUST use Delete/);
+  assert.match(deliveredPrompt, /record the path in Edited Files and the file ledger/);
+  assert.equal(deliveredPrompt.match(/# Tool-Execution Mode/g)?.length, 1);
+});
+
 test("runAssistantWithTools waits for delayed hosted search probe finalization", async () => {
   const originalFetch = globalThis.fetch;
   let fetchCalled = false;
@@ -897,17 +930,29 @@ test("runAssistantWithTools applies turn context overrides without duplicating c
       },
     ],
   };
+  const runtimePrompts = [];
   const { params } = createBaseParams({
-    onBeforeNextTurn: async () => ({
-      context: compactedContext,
-      emittedMessages: [],
-    }),
+    onBeforeNextTurn: async (snapshot) => {
+      runtimePrompts.push(snapshot.runtimeContext.systemPrompt);
+      return {
+        context: compactedContext,
+        emittedMessages: [],
+      };
+    },
   });
 
   const result = await runAssistantWithTools(params);
 
   assert.equal(observedStreamContexts.length, 2);
-  assert.equal(observedStreamContexts[1].systemPrompt, "Compacted system prompt");
+  assert.deepEqual(runtimePrompts, ["Base system prompt"]);
+  assert.match(
+    observedStreamContexts[1].systemPrompt,
+    /^Compacted system prompt\n\n# Tool-Execution Mode/,
+  );
+  assert.equal(
+    observedStreamContexts[1].systemPrompt.match(/# Tool-Execution Mode/g)?.length,
+    1,
+  );
   assert.deepEqual(
     observedStreamContexts[1].messages.map((message) => message.content),
     ["Resume from checkpoint"],

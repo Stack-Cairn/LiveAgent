@@ -19,6 +19,8 @@ export type ChatTranscriptProps = {
   followRef: MutableRefObject<ScrollFollowHandle | null>;
   hasModels: boolean;
   historyItems: RenderTimelineItem[];
+  hasMoreHistory: boolean;
+  onLoadEarlierHistory: () => Promise<void>;
   isHistorySwitching: boolean;
   isSending: boolean;
   isAgentMode: boolean;

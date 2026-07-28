@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
@@ -19,6 +20,29 @@ func NewAgentSession(auth AuthSnapshot) *AgentSession {
 		done:         make(chan struct{}),
 		streams:      make(map[string]*agentStream),
 	}
+}
+
+// SetCapabilities records the immutable capability set declared by the
+// authenticated ClientHello. Call it before registering the session.
+func (s *AgentSession) SetCapabilities(capabilities []string) {
+	if s == nil {
+		return
+	}
+	s.capabilities = make(map[string]struct{}, len(capabilities))
+	for _, capability := range capabilities {
+		capability = strings.TrimSpace(capability)
+		if capability != "" {
+			s.capabilities[capability] = struct{}{}
+		}
+	}
+}
+
+func (s *AgentSession) SupportsCapability(capability string) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.capabilities[strings.TrimSpace(capability)]
+	return ok
 }
 
 type OutboundEnvelope struct {
@@ -219,5 +243,8 @@ func (s *agentStream) send(env *gatewayv2.AgentEnvelope) bool {
 		return false
 	case s.ch <- env:
 		return true
+	default:
+		s.close()
+		return false
 	}
 }

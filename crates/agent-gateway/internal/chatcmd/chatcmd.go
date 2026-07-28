@@ -137,6 +137,12 @@ func ProbeRuntime(
 	if sm == nil {
 		return session.ErrAgentOffline
 	}
+	if !sm.ChatIngressV1Ready(agentID) {
+		if sm.IsOnline(agentID) {
+			return session.ErrChatProtocolIncompatible
+		}
+		return session.ErrAgentOffline
+	}
 	sessionEpoch, online := sm.ChatRuntimeProbeEpoch(agentID)
 	if !online {
 		return session.ErrAgentOffline

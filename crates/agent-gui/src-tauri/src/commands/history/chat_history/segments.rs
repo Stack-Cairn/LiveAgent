@@ -260,6 +260,89 @@ fn load_tail_segments(
     Ok(segments)
 }
 
+fn load_message_window_segments(
+    conn: &Connection,
+    conversation_id: &str,
+    start_offset: i64,
+    end_offset: i64,
+) -> Result<(Vec<ChatHistorySegmentRecord>, i64), String> {
+    if end_offset <= start_offset {
+        return Ok((Vec::new(), start_offset.max(0)));
+    }
+
+    let mut metadata_stmt = conn
+        .prepare(
+            "
+            SELECT segment_index, message_count
+            FROM chatHistorySegment
+            WHERE conversation_id = ?1
+            ORDER BY segment_index ASC
+            ",
+        )
+        .map_err(|e| format!("准备历史窗口分段元数据查询失败：{e}"))?;
+    let metadata_rows = metadata_stmt
+        .query_map(params![conversation_id], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+        })
+        .map_err(|e| format!("查询历史窗口分段元数据失败：{e}"))?;
+
+    let mut first_segment_index = None;
+    let mut last_segment_index = None;
+    let mut first_segment_offset = 0_i64;
+    let mut segment_start_offset = 0_i64;
+    for row in metadata_rows {
+        let (segment_index, message_count) =
+            row.map_err(|e| format!("读取历史窗口分段元数据失败：{e}"))?;
+        let segment_end_offset = segment_start_offset.saturating_add(message_count.max(0));
+        if segment_end_offset > start_offset && segment_start_offset < end_offset {
+            if first_segment_index.is_none() {
+                first_segment_index = Some(segment_index);
+                first_segment_offset = segment_start_offset;
+            }
+            last_segment_index = Some(segment_index);
+        }
+        segment_start_offset = segment_end_offset;
+    }
+    drop(metadata_stmt);
+
+    let (Some(first_segment_index), Some(last_segment_index)) =
+        (first_segment_index, last_segment_index)
+    else {
+        return Ok((Vec::new(), start_offset.max(0)));
+    };
+    let mut stmt = conn
+        .prepare(
+            "
+            SELECT
+                segment_index,
+                segment_id,
+                summary_json,
+                messages_json,
+                message_count,
+                start_message_id,
+                end_message_id,
+                created_at,
+                updated_at
+            FROM chatHistorySegment
+            WHERE conversation_id = ?1
+              AND segment_index BETWEEN ?2 AND ?3
+            ORDER BY segment_index ASC
+            ",
+        )
+        .map_err(|e| format!("准备历史窗口分段查询失败：{e}"))?;
+    let rows = stmt
+        .query_map(
+            params![conversation_id, first_segment_index, last_segment_index],
+            row_to_segment,
+        )
+        .map_err(|e| format!("查询历史窗口分段失败：{e}"))?;
+    let mut segments = Vec::new();
+    for row in rows {
+        segments.push(row.map_err(|e| format!("读取历史窗口分段失败：{e}"))?);
+    }
+    Ok((segments, first_segment_offset))
+}
+
 fn load_segment_by_index(
     conn: &Connection,
     conversation_id: &str,
@@ -461,10 +544,10 @@ fn rename_chat_history_sync(
         .execute(
             "
             UPDATE chatHistory
-            SET title = ?1, updated_at = ?2
-            WHERE id = ?3
+            SET title = ?1
+            WHERE id = ?2
             ",
-            params![next_title, now_ms(), chat_id],
+            params![next_title, chat_id],
         )
         .map_err(|e| format!("更新历史对话标题失败：{e}"))?;
 

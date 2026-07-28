@@ -82,6 +82,7 @@ test("extract records reads and modifications, ignores enumeration tools", () =>
         { name: "Write", arguments: { path: "src/b.ts", content: "x" } },
         { name: "Read", arguments: { path: "src/a.ts" } },
         { name: "Delete", arguments: { path: "src/c.ts" } },
+        { name: "Bash", arguments: { command: "rm src/not-structured.ts" } },
       ],
       3,
     ),
