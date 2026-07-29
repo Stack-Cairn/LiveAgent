@@ -122,9 +122,26 @@ fn codex_session_id(rows: &[(String, Value)]) -> Option<String> {
         .and_then(|payload| codex_string(payload.get("session_id")).or_else(|| codex_string(payload.get("id"))))
 }
 
+fn codex_import_cwd(cwd: Option<String>, home: &std::path::Path) -> Option<String> {
+    let cwd = cwd?;
+    let codex_temp = dirs::document_dir()
+        .unwrap_or_else(|| home.join("Documents"))
+        .join("Codex");
+    if std::path::Path::new(&cwd).starts_with(&codex_temp) {
+        return Some(
+            home.join(format!(".{}", env!("CARGO_PKG_NAME")))
+                .join("default-project")
+                .to_string_lossy()
+                .into_owned(),
+        );
+    }
+    Some(cwd)
+}
+
 fn convert_codex_file(
     path: &std::path::Path,
     titles: &HashMap<String, String>,
+    home: &std::path::Path,
 ) -> Result<(Option<CodexConversation>, usize), String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("读取 Codex 会话失败：{}: {e}", path.display()))?;
     let mut rows = Vec::new();
@@ -230,7 +247,7 @@ fn convert_codex_file(
             session_id,
             title,
             model,
-            cwd,
+            cwd: codex_import_cwd(cwd, home),
             created_at: created_at.unwrap_or(last_timestamp),
             updated_at: last_timestamp,
             messages,
@@ -265,7 +282,7 @@ fn scan_codex_sessions() -> Result<(Vec<CodexConversation>, usize, usize), Strin
         let path = entry.path();
         if !entry.file_type().is_file() || path.extension().and_then(|s| s.to_str()) != Some("jsonl") || !path.file_name().and_then(|s| s.to_str()).unwrap_or_default().starts_with("rollout-") { continue; }
         scanned += 1;
-        match convert_codex_file(path, &titles) {
+        match convert_codex_file(path, &titles, &home) {
             Ok((Some(conversation), skipped_lines)) => {
                 skipped += skipped_lines;
                 conversations.push(conversation);
