@@ -249,6 +249,61 @@ export async function listChatHistory(
   });
 }
 
+export type ClaudeCodeImportResult = {
+  scannedCount: number;
+  importedCount: number;
+  skippedLines: number;
+};
+
+export type ClaudeCodeImportPreviewSession = {
+  id: string;
+  sessionId: string;
+  title: string;
+  model: string;
+  cwd?: string;
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+  alreadyImported: boolean;
+};
+
+export type ClaudeCodeImportPreview = {
+  sessions: ClaudeCodeImportPreviewSession[];
+  scannedCount: number;
+  skippedLines: number;
+};
+
+export async function scanClaudeCodeChatHistory() {
+  return invoke<ClaudeCodeImportPreview>("chat_history_scan_claude_code");
+}
+
+export async function importClaudeCodeChatHistory(ids: string[]) {
+  return invoke<ClaudeCodeImportResult>("chat_history_import_claude_code", { ids });
+}
+
+export type ClaudeOfficialImportResult = {
+  scannedCount: number;
+  importedCount: number;
+  skippedLines: number;
+};
+
+export type ClaudeOfficialImportPreview = {
+  sessions: ClaudeCodeImportPreviewSession[];
+  scannedCount: number;
+  skippedLines: number;
+};
+
+export async function scanClaudeOfficialChatHistory(zipPath: string) {
+  return invoke<ClaudeOfficialImportPreview>("chat_history_scan_claude_official", { zipPath });
+}
+
+export async function importClaudeOfficialChatHistory(zipPath: string, ids: string[]) {
+  return invoke<ClaudeOfficialImportResult>("chat_history_import_claude_official", {
+    zipPath,
+    ids,
+  });
+}
+
 export type CodexImportResult = {
   scannedCount: number;
   importedCount: number;
