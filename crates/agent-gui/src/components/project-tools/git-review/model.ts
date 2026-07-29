@@ -118,7 +118,7 @@ export type HistoryContextMenuState =
     };
 
 export type ChangesMenuState = {
-  x: number;
+  right: number;
   y: number;
   section: ChangeListSection;
 };

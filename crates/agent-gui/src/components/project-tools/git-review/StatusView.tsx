@@ -156,7 +156,11 @@ export function GitReviewStatusView(props: {
       8,
     );
     if (dx !== 0 || dy !== 0) {
-      setChangesMenu({ ...changesMenu, x: changesMenu.x + dx, y: changesMenu.y + dy });
+      setChangesMenu({
+        ...changesMenu,
+        right: changesMenu.right - dx,
+        y: changesMenu.y + dy,
+      });
     }
   }, [changesMenu, panelRef]);
 
@@ -293,10 +297,13 @@ export function GitReviewStatusView(props: {
       setChangeContextMenu(null);
       const panelRect = panelRef.current?.getBoundingClientRect();
       const buttonRect = event.currentTarget.getBoundingClientRect();
-      // Anchor at the button's bottom-right corner; the menu right-aligns via
-      // translateX(-100%) and the measured-clamp layout effect corrects it.
+      // Anchor at the button's bottom-right corner. A stable outer positioning
+      // layer keeps the inner menu's transform animation out of coordinate
+      // measurement and boundary correction.
       setChangesMenu({
-        x: panelRect ? buttonRect.right - panelRect.left : buttonRect.right,
+        right: panelRect
+          ? panelRect.right - buttonRect.right
+          : window.innerWidth - buttonRect.right,
         y: panelRect ? buttonRect.bottom - panelRect.top + 4 : buttonRect.bottom + 4,
         section,
       });
@@ -681,61 +688,66 @@ export function GitReviewStatusView(props: {
       {changesMenu ? (
         <div
           ref={changesMenuRef}
-          role="menu"
-          className={cn("absolute z-[75] min-w-56", CONTEXT_MENU_CONTAINER_CLASS)}
-          style={{ left: changesMenu.x, top: changesMenu.y, transform: "translateX(-100%)" }}
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
+          className="absolute z-[75] min-w-56"
+          style={{ right: changesMenu.right, top: changesMenu.y }}
         >
-          {changesMenu.section === "changes" ? (
-            <button
-              type="button"
-              role="menuitem"
-              className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
-              disabled={writeDisabled || busy !== "" || !hasStageableChanges}
-              onClick={stageAllChanges}
-            >
-              <FilePenLine className="h-3.5 w-3.5" />
-              <span>{t("projectTools.gitReview.stageAllChanges")}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              role="menuitem"
-              className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
-              disabled={writeDisabled || busy !== "" || !hasStagedChanges}
-              onClick={unstageAllChanges}
-            >
-              <GitCommitHorizontal className="h-3.5 w-3.5" />
-              <span>{t("projectTools.gitReview.unstageAllChanges")}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            role="menuitem"
-            className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
-            disabled={writeDisabled || busy !== "" || !hasDiscardableChanges}
-            onClick={discardAllChanges}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span>{t("projectTools.gitReview.discardAllChanges")}</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
-            disabled={loading}
-            onClick={() => {
-              setChangesMenu(null);
-              void refresh();
+          <div
+            role="menu"
+            className={cn("w-full", CONTEXT_MENU_CONTAINER_CLASS)}
+            style={{ transformOrigin: "top right" }}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
             }}
           >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span>{t("projectTools.gitReview.refreshChanges")}</span>
-          </button>
+            {changesMenu.section === "changes" ? (
+              <button
+                type="button"
+                role="menuitem"
+                className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
+                disabled={writeDisabled || busy !== "" || !hasStageableChanges}
+                onClick={stageAllChanges}
+              >
+                <FilePenLine className="h-3.5 w-3.5" />
+                <span>{t("projectTools.gitReview.stageAllChanges")}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
+                disabled={writeDisabled || busy !== "" || !hasStagedChanges}
+                onClick={unstageAllChanges}
+              >
+                <GitCommitHorizontal className="h-3.5 w-3.5" />
+                <span>{t("projectTools.gitReview.unstageAllChanges")}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
+              disabled={writeDisabled || busy !== "" || !hasDiscardableChanges}
+              onClick={discardAllChanges}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>{t("projectTools.gitReview.discardAllChanges")}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={CHANGE_CONTEXT_MENU_ITEM_CLASS}
+              disabled={loading}
+              onClick={() => {
+                setChangesMenu(null);
+                void refresh();
+              }}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              <span>{t("projectTools.gitReview.refreshChanges")}</span>
+            </button>
+          </div>
         </div>
       ) : null}
       {changeContextMenu && contextEntry ? (
