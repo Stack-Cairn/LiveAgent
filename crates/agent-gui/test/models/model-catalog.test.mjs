@@ -66,6 +66,35 @@ test("generated catalog upholds the data invariants", () => {
   }
 });
 
+test("openai catalog prefers Codex metadata and keeps models.dev supplements", () => {
+  for (const modelId of [
+    "gpt-5.2",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.5",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+  ]) {
+    assert.equal(
+      catalog.findCatalogModel("codex", modelId)?.contextWindow,
+      272_000,
+      `${modelId}: context window must come from openai/codex models.json`,
+    );
+  }
+
+  const sol = catalog.findCatalogModel("codex", "gpt-5.6-sol");
+  assert.equal(sol?.maxOutputToken, 128_000, "models.dev must supplement missing output limits");
+  assert.deepEqual(sol?.thinking, {
+    levels: ["low", "medium", "high", "xhigh", "max"],
+    off: true,
+  });
+
+  // gpt-5.6 is not a same-id Codex catalog entry; models.dev-only entries stay
+  // available as supplements instead of inheriting another model's metadata.
+  assert.equal(catalog.findCatalogModel("codex", "gpt-5.6")?.contextWindow, 1_050_000);
+});
+
 test("normalizeModelLimits repairs degenerate pairs uniformly and leaves valid pairs alone", () => {
   // 退化（输出吃满窗口）：钳到 min(32K, ⌊窗口/4⌋)。
   assert.deepEqual(

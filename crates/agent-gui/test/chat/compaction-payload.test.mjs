@@ -58,7 +58,13 @@ function buildState(messages, summary) {
       totalMessageCount: messages.length,
     },
     segments: [segment],
-    historyRenderItems: [],
+    transcript: {
+      items: [],
+      segmentWindows: [],
+      oldestMessageOffset: 0,
+      hasMoreBefore: false,
+      revision: null,
+    },
     activeSegmentIndex: 0,
   };
 }

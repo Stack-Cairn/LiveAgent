@@ -258,39 +258,6 @@ impl GatewayController {
         }
     }
 
-    pub(crate) fn renew_remote_chat_request_lease(
-        &self,
-        request_id: &str,
-        worker_id: Option<&str>,
-        require_current: bool,
-    ) -> Result<bool, String> {
-        let request_id = request_id.trim();
-        if request_id.is_empty() {
-            return Ok(true);
-        }
-        let worker_id = worker_id.unwrap_or_default().trim();
-        let mut inbox = self
-            .remote_chat_inbox
-            .lock()
-            .map_err(|_| "gateway remote chat inbox lock poisoned".to_string())?;
-        let Some(record) = inbox.get(request_id) else {
-            return Ok(true);
-        };
-        let now = Instant::now();
-        if require_current && !Self::remote_chat_record_has_current_lease(record, worker_id, now) {
-            return Ok(false);
-        }
-        if !require_current && !Self::remote_chat_record_is_owned_by_worker(record, worker_id) {
-            return Ok(false);
-        }
-        let lease_ms = Self::remote_chat_record_lease_ms(record);
-        if let Some(record) = inbox.get_mut(request_id) {
-            record.lease_expires_at = Some(now + Duration::from_millis(lease_ms));
-            record.updated_at = now;
-        }
-        Ok(true)
-    }
-
     pub async fn claim_next_chat_request(
         &self,
         worker_id: String,
@@ -437,9 +404,7 @@ impl GatewayController {
         )? {
             return Ok(());
         }
-        self.send_gateway_chat_control_event(request_id.clone(), conversation_id, "cancelled")
-            .await?;
-        self.ledger_mark_run_terminal_sent(&request_id)
+        Ok(())
     }
 
     pub async fn mark_chat_request_queued_in_gui(
@@ -490,7 +455,7 @@ impl GatewayController {
         let request_id = request_id.trim().to_string();
         let conversation_id = conversation_id.trim().to_string();
         let worker_id = worker_id.trim().to_string();
-        let should_send = {
+        let should_finish = {
             let mut inbox = self
                 .remote_chat_inbox
                 .lock()
@@ -504,11 +469,9 @@ impl GatewayController {
             inbox.remove(&request_id);
             true
         };
-        if !should_send {
+        if !should_finish {
             return Ok(());
         }
-        // Ledger first: once the inbox record is gone this is the only place
-        // that still knows the run finished, and the send below can fail.
         self.ledger_mark_run_terminal(
             &request_id,
             &conversation_id,
@@ -516,9 +479,7 @@ impl GatewayController {
             "",
             "",
         )?;
-        self.send_gateway_chat_control_event(request_id.clone(), conversation_id, "completed")
-            .await?;
-        self.ledger_mark_run_terminal_sent(&request_id)
+        Ok(())
     }
 
     pub async fn fail_chat_request(
@@ -566,9 +527,7 @@ impl GatewayController {
             Some(true) => {}
             None => {
                 // The inbox record can be gone while the run is still live in
-                // the ledger (e.g. a complete/fail race removed it). Dropping
-                // this terminal would strand the WebUI, so repair via the
-                // ledger instead of returning silently.
+                // the diagnostic ledger (for example, a complete/fail race).
                 if !terminal || !self.ledger_has_live_run(&request_id)? {
                     return Ok(());
                 }
@@ -583,17 +542,6 @@ impl GatewayController {
                 &message,
             )?;
         }
-        self.send_gateway_chat_control_event_with_details(
-            request_id.clone(),
-            conversation_id,
-            "failed",
-            error_code,
-            message,
-        )
-        .await?;
-        if terminal {
-            self.ledger_mark_run_terminal_sent(&request_id)?;
-        }
         Ok(())
     }
 
@@ -606,7 +554,7 @@ impl GatewayController {
         let request_id = request_id.trim().to_string();
         let conversation_id = conversation_id.trim().to_string();
         let worker_id = worker_id.trim().to_string();
-        let should_send = {
+        let should_cancel = {
             let mut inbox = self
                 .remote_chat_inbox
                 .lock()
@@ -621,14 +569,9 @@ impl GatewayController {
             inbox.remove(&request_id);
             true
         };
-        if !should_send {
+        if !should_cancel {
             return Ok(());
         }
-        // This "cancelled" is a genuine run terminal, not a cancel-request ack:
-        // the inbox record is removed above so no other terminal will ever be
-        // produced for this request (callers use it to drop queued turns that
-        // never start; running runs terminate via done/error/fail instead).
-        // First-terminal-wins keeps this from clobbering an earlier outcome.
         self.ledger_mark_run_terminal(
             &request_id,
             &conversation_id,
@@ -636,9 +579,7 @@ impl GatewayController {
             "",
             "",
         )?;
-        self.send_gateway_chat_control_event(request_id.clone(), conversation_id, "cancelled")
-            .await?;
-        self.ledger_mark_run_terminal_sent(&request_id)
+        Ok(())
     }
 
     pub fn heartbeat_chat_request(
@@ -865,24 +806,6 @@ impl GatewayController {
                 "desktop_runtime_lease_expired",
                 "Desktop chat runtime stopped before completing the remote request.",
             )?;
-            // One failed send must not abort the remaining terminals; the
-            // ledger flush loop retries anything that stays unsent.
-            match self
-                .send_gateway_chat_control_event_with_details(
-                    request_id.clone(),
-                    conversation_id,
-                    "failed",
-                    "desktop_runtime_lease_expired".to_string(),
-                    "Desktop chat runtime stopped before completing the remote request."
-                        .to_string(),
-                )
-                .await
-            {
-                Ok(()) => self.ledger_mark_run_terminal_sent(&request_id)?,
-                Err(error) => {
-                    eprintln!("send gateway chat lease-expired terminal failed: {error}");
-                }
-            }
         }
         Ok(())
     }
@@ -940,10 +863,6 @@ impl GatewayController {
         })
     }
 
-    pub(crate) fn ledger_mark_run_terminal_sent(&self, run_id: &str) -> Result<(), String> {
-        self.with_chat_run_ledger(|ledger| ledger.mark_terminal_sent(run_id))
-    }
-
     pub(crate) fn ledger_has_live_run(&self, run_id: &str) -> Result<bool, String> {
         self.with_chat_run_ledger(|ledger| {
             ledger
@@ -959,8 +878,8 @@ impl GatewayController {
     // run-snapshot keepalive that normally refreshes the ledger through long
     // silent tool calls — are not firing, so an untouched ledger entry proves
     // nothing about the run. Beyond the max age the webview is treated as gone
-    // and the normal TTL judgment resumes, keeping terminal delivery for
-    // genuinely lost runs guaranteed.
+    // and the normal TTL judgment resumes, keeping diagnostic liveness useful
+    // without manufacturing a remote terminal.
     pub(super) fn webview_status_report_stalled_but_alive_at(
         record: Option<&RuntimeStatusRepublishRecord>,
         now: Instant,
@@ -982,12 +901,14 @@ impl GatewayController {
         Self::webview_status_report_stalled_but_alive_at(slot.as_ref(), Instant::now())
     }
 
-    pub(crate) async fn flush_unsent_chat_run_terminals(&self) -> Result<(), String> {
+    // Periodic diagnostic-ledger sweep. Terminal delivery lives in the chat
+    // ingress journal; this only refreshes/expires ledger entries.
+    pub(crate) fn sweep_chat_run_ledger(&self) -> Result<(), String> {
         if !self.status().online {
             return Ok(());
         }
         let webview_stalled_but_alive = self.webview_status_report_stalled_but_alive();
-        let unsent = {
+        {
             let (now, now_ms) = chat_run_ledger_now();
             let mut ledger = self
                 .chat_run_ledger
@@ -1000,47 +921,19 @@ impl GatewayController {
             if webview_stalled_but_alive {
                 ledger.refresh_running(now, now_ms);
             }
-            // Sweep first: runs demoted by the TTL become unsent terminals and
-            // are picked up by this very flush.
             ledger.sweep(now, now_ms);
-            ledger.unsent_terminals()
-        };
-        for entry in unsent {
-            // The gateway cannot anchor a control event without a conversation
-            // (it drops them at ingress); such entries only age out.
-            if entry.conversation_id.is_empty() {
-                continue;
-            }
-            match self
-                .send_gateway_chat_control_event_with_details(
-                    entry.run_id.clone(),
-                    entry.conversation_id.clone(),
-                    entry.state.as_str(),
-                    entry.error_code.clone(),
-                    entry.message.clone(),
-                )
-                .await
-            {
-                Ok(()) => self.ledger_mark_run_terminal_sent(&entry.run_id)?,
-                Err(error) => {
-                    eprintln!(
-                        "flush gateway chat run terminal {} failed: {error}",
-                        entry.run_id
-                    );
-                }
-            }
         }
         Ok(())
     }
 
     pub(crate) async fn republish_chat_run_states(&self) -> Result<(), String> {
-        let (active, recent_terminals) = {
+        let active = {
             let (now, _now_ms) = chat_run_ledger_now();
             let ledger = self
                 .chat_run_ledger
                 .lock()
                 .map_err(|_| "gateway chat run ledger lock poisoned".to_string())?;
-            (ledger.active_reports(now), ledger.recent_terminal_reports())
+            ledger.active_reports(now)
         };
         for entry in active {
             if entry.conversation_id.is_empty() {
@@ -1060,33 +953,6 @@ impl GatewayController {
                     "republish gateway chat run {} failed: {error}",
                     entry.run_id
                 );
-            }
-            tokio::task::yield_now().await;
-        }
-        // Replay all recent terminals, sent or not: a gateway restart can lose
-        // them, and the control events are idempotent server-side. Unsent
-        // terminals older than the recent window are covered by the periodic
-        // flush a few seconds later.
-        for entry in recent_terminals {
-            if entry.conversation_id.is_empty() {
-                continue;
-            }
-            if let Err(error) = self
-                .send_gateway_chat_control_event_with_details(
-                    entry.run_id.clone(),
-                    entry.conversation_id.clone(),
-                    entry.state.as_str(),
-                    entry.error_code.clone(),
-                    entry.message.clone(),
-                )
-                .await
-            {
-                eprintln!(
-                    "republish gateway chat run terminal {} failed: {error}",
-                    entry.run_id
-                );
-            } else {
-                self.ledger_mark_run_terminal_sent(&entry.run_id)?;
             }
             tokio::task::yield_now().await;
         }

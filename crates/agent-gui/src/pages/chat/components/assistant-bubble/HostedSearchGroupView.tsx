@@ -80,7 +80,13 @@ function getHostedSearchCountLabel(count: number, t: (key: string) => string) {
   return count <= 1 ? t("chat.search.oneSearch") : `${count} ${t("chat.search.searches")}`;
 }
 
-export function HostedSearchGroupView({ items }: { items: HostedSearchBlock[] }) {
+export function HostedSearchGroupView({
+  items,
+  isLive = false,
+}: {
+  items: HostedSearchBlock[];
+  isLive?: boolean;
+}) {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const queries = useMemo(() => getUniqueHostedSearchQueries(items), [items]);
@@ -138,7 +144,7 @@ export function HostedSearchGroupView({ items }: { items: HostedSearchBlock[] })
       </button>
 
       {hasDetails ? (
-        <LazyCollapse open={open}>
+        <LazyCollapse open={open} retainWhileClosed={isLive && status === "searching"}>
           {() => (
             <div className="space-y-2 pb-2 pt-1.5">
               {queries.length > 0 ? (

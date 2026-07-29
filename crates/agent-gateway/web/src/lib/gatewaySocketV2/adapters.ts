@@ -1800,7 +1800,11 @@ export function decodeTerminalServerFrame(
   }
   const payload = frame.payload;
   if (payload.case === "hello") {
-    return { kind: "hello", ok: payload.value.ok, message: payload.value.message };
+    return {
+      kind: "hello",
+      ok: payload.value.ok,
+      message: payload.value.message,
+    };
   }
   if (payload.case === "frame") {
     return { kind: "frame", header: terminalStreamHeader(payload.value), data: payload.value.data };

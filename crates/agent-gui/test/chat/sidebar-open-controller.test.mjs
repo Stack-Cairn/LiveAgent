@@ -10,90 +10,79 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function createHarness(overrides = {}) {
   const states = [];
-  const calls = { openInitial: [], hydrateFull: [] };
-  const deps = {
-    openInitial: async (id, seq) => {
-      calls.openInitial.push({ id, seq });
-      return overrides.openInitial ? overrides.openInitial(id, seq) : "painted";
-    },
-    hydrateFull: async (id, seq) => {
-      calls.hydrateFull.push({ id, seq });
-      if (overrides.hydrateFull) {
-        return overrides.hydrateFull(id, seq);
-      }
-    },
-    scheduleIdle: (task) => {
-      const timer = setTimeout(task, 0);
-      return () => clearTimeout(timer);
+  const calls = [];
+  const controller = createConversationOpenController({
+    openInitial: async (id) => {
+      calls.push(id);
+      return overrides.openInitial ? overrides.openInitial(id) : "painted";
     },
     onStateChange: (state) => {
       states.push(state);
     },
     overlayDelayMs: overrides.overlayDelayMs ?? 20,
-  };
-  if (overrides.omitHydrateFull) {
-    delete deps.hydrateFull;
-  }
-  const controller = createConversationOpenController(deps);
+  });
   return { controller, states, calls };
 }
 
-test("cache hit resolves synchronously with no overlay and no hydration", async () => {
+test("window-only cache hit becomes ready without showing the overlay", async () => {
   const { controller, states, calls } = createHarness({
     openInitial: async () => "cache-hit",
   });
   controller.open("conv");
-  await sleep(60);
+  await sleep(0);
+
+  assert.deepEqual(calls, ["conv"]);
+  assert.deepEqual(
+    states.map(({ phase, showOverlay }) => ({ phase, showOverlay })),
+    [
+      { phase: "opening", showOverlay: false },
+      { phase: "ready", showOverlay: false },
+    ],
+  );
   assert.equal(states.some((state) => state.showOverlay), false);
   assert.equal(states.at(-1).phase, "ready");
   assert.equal(states.at(-1).errorCode, null);
-  assert.equal(calls.hydrateFull.length, 0);
 });
 
-test("painted-complete resolves ready with no hydration scheduled", async () => {
-  const { controller, states, calls } = createHarness({
-    openInitial: async () => "painted-complete",
-  });
+test("painted history window becomes ready with no secondary phase", async () => {
+  const { controller, states } = createHarness();
   controller.open("conv");
-  await sleep(30);
+  await sleep(0);
+
   assert.equal(states.at(-1).phase, "ready");
   assert.equal(states.at(-1).errorCode, null);
-  assert.equal(
-    states.some((state) => state.phase === "hydrating"),
-    false,
-  );
-  assert.equal(calls.hydrateFull.length, 0);
-});
-
-test("painted without a hydrateFull dep resolves ready directly", async () => {
-  const { controller, states } = createHarness({ omitHydrateFull: true });
-  controller.open("conv");
-  await sleep(30);
-  assert.equal(states.at(-1).phase, "ready");
-  assert.equal(
-    states.some((state) => state.phase === "hydrating"),
-    false,
+  assert.deepEqual(
+    [...new Set(states.map((state) => state.phase))],
+    ["opening", "ready"],
   );
 });
 
-test("slow open shows the overlay only after the delay, then hydrates at idle", async () => {
-  const { controller, states, calls } = createHarness({
-    openInitial: async () => {
-      await sleep(50);
-      return "painted";
-    },
+test("slow window load shows the delayed overlay and clears it when painted", async () => {
+  let resolveOpen;
+  const { controller, states } = createHarness({
+    overlayDelayMs: 5,
+    openInitial: () =>
+      new Promise((resolve) => {
+        resolveOpen = resolve;
+      }),
   });
   controller.open("conv");
-  await sleep(5);
-  assert.equal(states.some((state) => state.showOverlay), false);
-  await sleep(30);
-  assert.equal(states.some((state) => state.showOverlay), true);
-  await sleep(60);
+  await sleep(15);
+
+  assert.deepEqual(states.at(-1), {
+    conversationId: "conv",
+    phase: "opening",
+    showOverlay: true,
+    errorCode: null,
+  });
+
+  resolveOpen("painted");
+  await sleep(0);
   assert.equal(states.at(-1).phase, "ready");
-  assert.deepEqual(calls.hydrateFull, [{ id: "conv", seq: 1 }]);
+  assert.equal(states.at(-1).showOverlay, false);
 });
 
-test("rapid switches invalidate the earlier open", async () => {
+test("rapid switches ignore an earlier window result", async () => {
   const resolvers = new Map();
   const { controller, states, calls } = createHarness({
     openInitial: (id) =>
@@ -104,17 +93,21 @@ test("rapid switches invalidate the earlier open", async () => {
   controller.open("first");
   controller.open("second");
   resolvers.get("first")("painted");
-  resolvers.get("second")("painted");
-  await sleep(20);
+  await sleep(0);
 
-  assert.equal(calls.openInitial.length, 2);
-  // Only the second open may hydrate; the first resolution was stale.
-  assert.deepEqual(calls.hydrateFull, [{ id: "second", seq: 2 }]);
+  assert.deepEqual(calls, ["first", "second"]);
+  assert.equal(states.at(-1).conversationId, "second");
+  assert.equal(states.at(-1).phase, "opening");
+
+  resolvers.get("second")("painted");
+  await sleep(0);
+
   assert.equal(states.at(-1).conversationId, "second");
   assert.equal(states.at(-1).phase, "ready");
+  assert.equal(controller.getSequence(), 2);
 });
 
-test("initial-slice failure surfaces openFailed", async () => {
+test("window load failure surfaces openFailed", async () => {
   const { controller, states } = createHarness({
     openInitial: async () => {
       throw new Error("nope");
@@ -127,21 +120,9 @@ test("initial-slice failure surfaces openFailed", async () => {
   assert.equal(states.at(-1).showOverlay, false);
 });
 
-test("full-hydration failure keeps the paint and flags openFullFailed", async () => {
-  const { controller, states } = createHarness({
-    hydrateFull: async () => {
-      throw new Error("tail failed");
-    },
-  });
-  controller.open("conv");
-  await sleep(30);
-  assert.equal(states.at(-1).phase, "ready");
-  assert.equal(states.at(-1).errorCode, "openFullFailed");
-});
-
-test("cancel resets to idle and invalidates in-flight work", async () => {
+test("cancel resets to idle and invalidates an in-flight window load", async () => {
   let resolveOpen;
-  const { controller, states, calls } = createHarness({
+  const { controller, states } = createHarness({
     openInitial: () =>
       new Promise((resolve) => {
         resolveOpen = resolve;
@@ -150,7 +131,13 @@ test("cancel resets to idle and invalidates in-flight work", async () => {
   controller.open("conv");
   controller.cancel();
   resolveOpen("painted");
-  await sleep(10);
+  await sleep(0);
+
   assert.equal(states.at(-1).phase, "idle");
-  assert.equal(calls.hydrateFull.length, 0);
+  assert.deepEqual(controller.getState(), {
+    conversationId: "",
+    phase: "idle",
+    showOverlay: false,
+    errorCode: null,
+  });
 });

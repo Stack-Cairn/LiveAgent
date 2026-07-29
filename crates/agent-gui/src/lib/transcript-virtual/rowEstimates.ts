@@ -8,6 +8,8 @@
 // chrome), tools and thinking blocks as collapsed headers (their bodies stay
 // unmounted until first expand).
 
+import { COLLAPSED_CODE_BLOCK_PREVIEW_LINES } from "../markdownCodeBlockPolicy";
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
@@ -47,8 +49,9 @@ export type EstimateTextMeasurement = {
 };
 
 // Single cheap pass over a markdown text block: lines between ``` fences
-// count as code lines, everything else as prose characters. Runs once per
-// row build (only for rows the row cache missed), so a line split is fine.
+// count as code lines, capped per fence at the collapsed preview's visible
+// line count. Everything else counts as prose characters. Runs once per row
+// build (only for rows the row cache missed), so a line split is fine.
 export function measureEstimateText(text: string): EstimateTextMeasurement {
   if (!text.includes("```")) {
     return { proseChars: text.length, codeLines: 0, codeFences: 0 };
@@ -58,14 +61,21 @@ export function measureEstimateText(text: string): EstimateTextMeasurement {
   let codeLines = 0;
   let codeFences = 0;
   let inCode = false;
+  let visibleLinesInFence = 0;
   for (const line of text.split("\n")) {
     if (line.trimStart().startsWith("```")) {
-      if (!inCode) codeFences += 1;
+      if (!inCode) {
+        codeFences += 1;
+        visibleLinesInFence = 0;
+      }
       inCode = !inCode;
       continue;
     }
     if (inCode) {
-      codeLines += 1;
+      if (visibleLinesInFence < COLLAPSED_CODE_BLOCK_PREVIEW_LINES) {
+        codeLines += 1;
+        visibleLinesInFence += 1;
+      }
     } else {
       proseChars += line.length + 1;
     }

@@ -4,6 +4,7 @@ import {
   type ConversationViewState,
   createConversationStateFromContext,
 } from "../../../lib/chat/conversation/conversationState";
+import type { ConversationPersistenceCursor } from "../../../lib/chat/history/chatHistory";
 import type { SelectedModel } from "../../../lib/settings";
 import {
   type ConversationRuntimeEntry,
@@ -80,7 +81,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
       ],
     ]),
   );
-  const persistedConversationStateRef = useRef(new Map<string, ConversationViewState>());
+  const conversationPersistenceCursorRef = useRef(new Map<string, ConversationPersistenceCursor>());
   const runningConversationIdsRef = useRef(new Set<string>());
   const conversationAbortControllersRef = useRef(new Map<string, AbortController>());
   const conversationStopRequestsRef = useRef(new Set<string>());
@@ -359,7 +360,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
   return {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
+    conversationPersistenceCursorRef,
     runningConversationIdsRef,
     buildRuntimeEntryFromVisibleState,
     syncVisibleConversationRuntime,

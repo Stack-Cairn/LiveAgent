@@ -574,7 +574,7 @@ export function createFsTools(params: {
   const toolDelete: Tool = {
     name: "Delete",
     description:
-      "Delete a workspace or enabled Skill file/directory. Directories are removed recursively. Use this instead of Bash rm, rmdir, unlink, or find -delete for workspace or Skill files.",
+      "The structured, tracked way to intentionally delete a workspace or enabled Skill file/directory. Directories are removed recursively; use one Delete call per target. Always use this instead of Bash, ManagedProcess, shell scripts, or deletion-oriented CLIs such as rm/rmdir/unlink/find -delete/git rm/git clean/PowerShell Remove-Item/cmd del, erase, or rd. Delete results feed LiveAgent's Edited Files and file-ledger tracking.",
     parameters: strictToolParameters({
       path: Type.String({
         description:

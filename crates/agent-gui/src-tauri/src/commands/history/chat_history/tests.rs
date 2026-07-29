@@ -640,6 +640,7 @@ mod tests {
         assert!(renamed.is_pinned);
         assert_eq!(renamed.pinned_at, Some(pinned_at));
         assert_eq!(renamed.title, "Renamed Conversation");
+        assert_eq!(renamed.updated_at, conversation.updated_at);
     }
 
     #[test]
@@ -1521,8 +1522,8 @@ mod tests {
         message_index: i64,
         segment_id: &str,
         message: &Value,
-    ) -> ChatHistoryBranchAnchor {
-        ChatHistoryBranchAnchor {
+    ) -> ChatHistoryMessageRef {
+        ChatHistoryMessageRef {
             segment_index,
             message_index,
             segment_id: segment_id.to_string(),
@@ -1540,6 +1541,763 @@ mod tests {
             .iter()
             .map(|message| history_message_id_for_ref(message).expect("branch message id"))
             .collect()
+    }
+
+    fn seeded_history_revision(conn: &Connection, id: &str) -> String {
+        let record = get_record_by_id(conn, id).expect("load seeded history revision");
+        build_history_revision(
+            &record.id,
+            record.updated_at,
+            record.active_segment_index,
+            record.total_segment_count,
+            record.total_message_count,
+        )
+    }
+
+    fn parse_window_messages(segment: &ChatHistorySegmentWindowRecord) -> Vec<Value> {
+        serde_json::from_str::<Value>(&segment.messages_json)
+            .expect("parse history window messages")
+            .as_array()
+            .expect("history window messages should be an array")
+            .to_vec()
+    }
+
+    fn history_fts_row_counts(conn: &Connection, id: &str) -> (i64, i64, i64) {
+        let segment_rows = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistorySegmentFts WHERE conversation_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .expect("count history segment FTS rows");
+        let message_rows = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryMessageFts WHERE conversation_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .expect("count history message FTS rows");
+        let index_rows = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryFtsSegmentIndex WHERE conversation_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .expect("count history FTS index rows");
+        (segment_rows, message_rows, index_rows)
+    }
+
+    fn window_fixture_segments() -> Vec<ChatHistorySegmentRecord> {
+        vec![
+            branch_segment_record(
+                0,
+                "seg-0",
+                None,
+                &[
+                    branch_user_message("u0", "第零问", 1_000),
+                    branch_assistant_message("a0", "第零答", 1_001),
+                    branch_user_message("u00", "较早问题", 1_002),
+                ],
+            ),
+            branch_segment_record(
+                1,
+                "seg-1",
+                Some(r#"{"role":"summary","id":"summary-1","content":"older"}"#),
+                &[
+                    branch_assistant_message("a1", "中间回答", 1_003),
+                    branch_tool_result_message("tr1", "工具结果", 1_004),
+                    branch_user_message("u1", "较新问题", 1_005),
+                ],
+            ),
+            branch_segment_record(
+                2,
+                "seg-2",
+                None,
+                &[
+                    branch_assistant_message("a2", "最新回答", 1_006),
+                    branch_user_message("u2", "最新问题", 1_007),
+                ],
+            ),
+        ]
+    }
+
+    #[test]
+    fn history_window_tail_uses_absolute_offsets_and_message_refs() {
+        let mut conn = open_test_db().expect("open test db");
+        seed_branch_source(&conn, "conv-window", &window_fixture_segments());
+
+        let window = chat_history_get_window_sync(&mut conn, "conv-window", 4, None, None, true)
+            .expect("load tail history window");
+
+        assert_eq!(window.total_message_count, 8);
+        assert_eq!(window.returned_message_count, 5);
+        assert_eq!(window.oldest_offset, 3);
+        assert!(window.has_more_before);
+        assert_eq!(window.active_segment_index, 2);
+        assert_eq!(window.total_segment_count, 3);
+        let active_segment = window
+            .active_segment
+            .as_ref()
+            .expect("initial history window should include active segment");
+        assert_eq!(active_segment.segment_index, 2);
+        assert_eq!(active_segment.message_count, 2);
+        assert_eq!(
+            segment_message_ids(&active_segment.messages_json),
+            vec!["a2", "u2"]
+        );
+        assert_eq!(window.segments.len(), 2);
+        assert_eq!(window.segments[0].segment_index, 1);
+        assert_eq!(window.segments[0].start_message_index, 0);
+        assert_eq!(window.segments[0].message_count, 3);
+        assert_eq!(window.segments[1].segment_index, 2);
+        assert_eq!(window.segments[1].start_message_index, 0);
+        assert_eq!(window.segments[1].message_count, 2);
+
+        let messages = window
+            .segments
+            .iter()
+            .flat_map(parse_window_messages)
+            .collect::<Vec<_>>();
+        let expected_refs = [
+            (1_i64, 0_i64, "a1", "assistant"),
+            (1_i64, 1_i64, "tr1", "toolResult"),
+            (1, 2, "u1", "user"),
+            (2, 0, "a2", "assistant"),
+            (2, 1, "u2", "user"),
+        ];
+        assert_eq!(messages.len(), expected_refs.len());
+        for (message, (segment_index, message_index, message_id, role)) in
+            messages.iter().zip(expected_refs)
+        {
+            let history_ref = &message["liveAgentHistoryRef"];
+            assert_eq!(history_ref["segmentIndex"], json!(segment_index));
+            assert_eq!(history_ref["messageIndex"], json!(message_index));
+            assert_eq!(history_ref["messageId"], json!(message_id));
+            assert_eq!(history_ref["role"], json!(role));
+            assert!(history_ref["contentHash"]
+                .as_str()
+                .is_some_and(|value| value.starts_with("fnv1a32:")));
+        }
+
+        let context_meta = serde_json::from_str::<Value>(&window.context_meta_json)
+            .expect("parse window context meta");
+        assert_eq!(context_meta["activeSegmentIndex"], json!(2));
+        assert_eq!(context_meta["totalSegmentCount"], json!(3));
+        assert_eq!(context_meta["totalMessageCount"], json!(8));
+    }
+
+    #[test]
+    fn history_window_before_offset_uses_render_boundary_soft_limit() {
+        let mut conn = open_test_db().expect("open test db");
+        seed_branch_source(&conn, "conv-window", &window_fixture_segments());
+        let first_page =
+            chat_history_get_window_sync(&mut conn, "conv-window", 4, None, None, true)
+                .expect("load initial window");
+
+        let page = chat_history_get_window_sync(
+            &mut conn,
+            "conv-window",
+            2,
+            Some(first_page.oldest_offset),
+            Some(&first_page.revision),
+            false,
+        )
+        .expect("load preceding history window");
+
+        assert_eq!(page.oldest_offset, 0);
+        assert_eq!(page.returned_message_count, 3);
+        assert!(!page.has_more_before);
+        assert_eq!(page.revision, first_page.revision);
+        assert!(page.active_segment.is_none());
+        assert_eq!(page.segments.len(), 1);
+        assert_eq!(page.segments[0].segment_index, 0);
+        assert_eq!(page.segments[0].start_message_index, 0);
+        let message_ids = page
+            .segments
+            .iter()
+            .flat_map(parse_window_messages)
+            .map(|message| {
+                message["liveAgentHistoryRef"]["messageId"]
+                    .as_str()
+                    .expect("window message id")
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(message_ids, vec!["u0", "a0", "u00"]);
+    }
+
+    #[test]
+    fn history_window_aligns_inside_segment_to_nearest_render_group() {
+        let mut conn = open_test_db().expect("open test db");
+        seed_branch_source(
+            &conn,
+            "conv-window",
+            &[branch_segment_record(
+                0,
+                "seg-0",
+                None,
+                &[
+                    branch_assistant_message("carry", "上段续写", 1_000),
+                    branch_user_message("u0", "本轮问题", 1_001),
+                    branch_assistant_message("a0", "本轮回答", 1_002),
+                    branch_tool_result_message("tr0", "工具结果", 1_003),
+                    branch_user_message("u1", "下一轮问题", 1_004),
+                ],
+            )],
+        );
+
+        let window = chat_history_get_window_sync(&mut conn, "conv-window", 2, None, None, false)
+            .expect("load user-aligned history window");
+
+        assert_eq!(window.oldest_offset, 1);
+        assert_eq!(window.returned_message_count, 4);
+        assert!(window.active_segment.is_none());
+        assert_eq!(window.segments.len(), 1);
+        assert_eq!(window.segments[0].start_message_index, 1);
+        let message_ids = parse_window_messages(&window.segments[0])
+            .into_iter()
+            .map(|message| {
+                message["liveAgentHistoryRef"]["messageId"]
+                    .as_str()
+                    .expect("window message id")
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(message_ids, vec!["u0", "a0", "tr0", "u1"]);
+    }
+
+    #[test]
+    fn history_window_boundary_alignment_stays_bounded_without_nearby_groups() {
+        let mut conn = open_test_db().expect("open test db");
+        let mut messages = vec![branch_assistant_message("a0", "长工具轮", 1_000)];
+        for index in 0..100 {
+            let id = format!("tr-{index}");
+            messages.push(branch_tool_result_message(
+                &id,
+                "连续工具结果",
+                1_001 + index,
+            ));
+        }
+        seed_branch_source(
+            &conn,
+            "conv-window-bounded",
+            &[branch_segment_record(0, "seg-0", None, &messages)],
+        );
+
+        let window =
+            chat_history_get_window_sync(&mut conn, "conv-window-bounded", 4, None, None, true)
+                .expect("load bounded history window");
+
+        assert_eq!(window.oldest_offset, 97);
+        assert_eq!(window.returned_message_count, 4);
+        assert_eq!(window.segments[0].start_message_index, 97);
+        assert_eq!(
+            window.active_segment.expect("active segment").message_count,
+            101
+        );
+    }
+
+    #[test]
+    fn history_window_rejects_stale_revision() {
+        let mut conn = open_test_db().expect("open test db");
+        seed_branch_source(&conn, "conv-window", &window_fixture_segments());
+
+        let error = chat_history_get_window_sync(
+            &mut conn,
+            "conv-window",
+            4,
+            Some(4),
+            Some("conv-window:stale"),
+            false,
+        )
+        .expect_err("stale history window should fail");
+
+        assert!(
+            error.starts_with("stale-window:"),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            get_record_by_id(&conn, "conv-window")
+                .expect("history remains readable")
+                .total_message_count,
+            8
+        );
+    }
+
+    #[test]
+    fn replace_single_segment_persists_replacement_and_returns_window() {
+        let mut conn = open_test_db().expect("open test db");
+        let u1 = branch_user_message("u1", "第一问", 1_000);
+        let a1 = branch_assistant_message("a1", "第一答", 1_001);
+        let u2 = branch_user_message("u2", "第二问", 1_002);
+        let a2 = branch_assistant_message("a2", "第二答", 1_003);
+        let mut replacement = branch_user_message("u2-edited", "编辑后的第二问", 1_004);
+        replacement["liveAgentHistoryRef"] = json!({
+            "segmentIndex": 99,
+            "messageIndex": 99,
+            "segmentId": "stale-segment",
+            "messageId": "stale-message",
+            "role": "user",
+            "contentHash": "fnv1a32:deadbeef",
+        });
+        seed_branch_source(
+            &conn,
+            "conv-replace",
+            &[branch_segment_record(
+                0,
+                "seg-0",
+                None,
+                &[u1, a1, u2.clone(), a2],
+            )],
+        );
+        let previous_record = get_record_by_id(&conn, "conv-replace").expect("load source");
+        let previous_revision = seeded_history_revision(&conn, "conv-replace");
+        let anchor = branch_anchor(0, 2, "seg-0", &u2);
+
+        let result = chat_history_replace_from_message_sync(
+            &mut conn,
+            "conv-replace",
+            &anchor,
+            &replacement,
+            4,
+            &previous_revision,
+        )
+        .expect("replace single-segment message");
+
+        assert_eq!(result.active_segment_index, 0);
+        assert_eq!(result.total_segment_count, 1);
+        assert_eq!(result.total_message_count, 3);
+        assert_eq!(result.conversation.message_count, 3);
+        assert!(result.updated_at > previous_record.updated_at);
+        assert_ne!(result.revision, previous_revision);
+        assert_eq!(result.oldest_offset, 0);
+        assert_eq!(result.returned_message_count, 3);
+        assert!(!result.has_more_before);
+        let active_segment = result
+            .active_segment
+            .as_ref()
+            .expect("replace result should include active segment");
+        assert_eq!(
+            segment_message_ids(&active_segment.messages_json),
+            vec!["u1", "a1", "u2-edited"]
+        );
+        let active_messages = serde_json::from_str::<Value>(&active_segment.messages_json)
+            .expect("parse replaced active segment");
+        assert!(active_messages
+            .as_array()
+            .and_then(|messages| messages.last())
+            .and_then(Value::as_object)
+            .is_some_and(|message| !message.contains_key("liveAgentHistoryRef")));
+        assert_eq!(result.segments.len(), 1);
+        let window_messages = parse_window_messages(&result.segments[0]);
+        assert_eq!(
+            window_messages
+                .iter()
+                .map(|message| history_message_id_for_ref(message).expect("window message id"))
+                .collect::<Vec<_>>(),
+            vec!["u1", "a1", "u2-edited"]
+        );
+        assert_eq!(
+            window_messages.last().expect("replacement window message")["liveAgentHistoryRef"]
+                ["messageId"],
+            json!("u2-edited")
+        );
+        let context_meta = serde_json::from_str::<Value>(&result.context_meta_json)
+            .expect("parse replaced context meta");
+        assert_eq!(context_meta["activeSegmentIndex"], json!(0));
+        assert_eq!(context_meta["totalSegmentCount"], json!(1));
+        assert_eq!(context_meta["totalMessageCount"], json!(3));
+        let fts_message_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryMessageFts WHERE conversation_id = ?1",
+                ["conv-replace"],
+                |row| row.get(0),
+            )
+            .expect("count replaced FTS messages");
+        assert_eq!(fts_message_count, 3);
+        let replacement_fts_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryMessageFts WHERE conversation_id = ?1 AND message_id = ?2",
+                params!["conv-replace", "u2-edited"],
+                |row| row.get(0),
+            )
+            .expect("count replacement FTS message");
+        assert_eq!(replacement_fts_count, 1);
+        verify_chat_history_consistency(&conn, "conv-replace")
+            .expect("replaced history consistency");
+        let reloaded = chat_history_get_window_sync(
+            &mut conn,
+            "conv-replace",
+            4,
+            None,
+            Some(&result.revision),
+            true,
+        )
+        .expect("reload replaced history window");
+        assert_eq!(
+            serde_json::to_value(reloaded).expect("serialize reloaded window"),
+            serde_json::to_value(result).expect("serialize replace result")
+        );
+    }
+
+    #[test]
+    fn replace_cross_segment_deletes_tail_and_rebuilds_fts() {
+        let mut conn = open_test_db().expect("open test db");
+        let u2 = branch_user_message("u2", "第二问", 1_003);
+        let replacement = branch_user_message("u2-edited", "编辑后的第二问", 1_007);
+        let segments = vec![
+            branch_segment_record(
+                0,
+                "seg-0",
+                None,
+                &[
+                    branch_user_message("u1", "第一问", 1_000),
+                    branch_assistant_message("a1", "第一答", 1_001),
+                ],
+            ),
+            branch_segment_record(
+                1,
+                "seg-1",
+                None,
+                &[
+                    branch_tool_result_message("tr1", "工具结果", 1_002),
+                    u2.clone(),
+                    branch_assistant_message("a2", "第二答", 1_004),
+                ],
+            ),
+            branch_segment_record(
+                2,
+                "seg-2",
+                None,
+                &[
+                    branch_user_message("u3", "第三问", 1_005),
+                    branch_assistant_message("a3", "第三答", 1_006),
+                ],
+            ),
+        ];
+        seed_branch_source(&conn, "conv-replace", &segments);
+        let revision = seeded_history_revision(&conn, "conv-replace");
+        let anchor = branch_anchor(1, 1, "seg-1", &u2);
+
+        let result = chat_history_replace_from_message_sync(
+            &mut conn,
+            "conv-replace",
+            &anchor,
+            &replacement,
+            2,
+            &revision,
+        )
+        .expect("replace across segments");
+
+        assert_eq!(result.active_segment_index, 1);
+        assert_eq!(result.total_segment_count, 2);
+        assert_eq!(result.total_message_count, 4);
+        assert_eq!(result.oldest_offset, 2);
+        assert_eq!(result.returned_message_count, 2);
+        assert!(result.has_more_before);
+        assert_eq!(
+            segment_message_ids(
+                &result
+                    .active_segment
+                    .as_ref()
+                    .expect("replace result should include active segment")
+                    .messages_json
+            ),
+            vec!["tr1", "u2-edited"]
+        );
+        assert_eq!(
+            parse_window_messages(&result.segments[0])
+                .iter()
+                .map(|message| history_message_id_for_ref(message).expect("window message id"))
+                .collect::<Vec<_>>(),
+            vec!["tr1", "u2-edited"]
+        );
+        let stored_segments = load_segments(&conn, "conv-replace").expect("load replaced segments");
+        assert_eq!(stored_segments.len(), 2);
+        assert_eq!(stored_segments[1].segment_index, 1);
+        let tail_fts_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryMessageFts WHERE conversation_id = ?1 AND segment_index >= 2",
+                ["conv-replace"],
+                |row| row.get(0),
+            )
+            .expect("count removed tail FTS rows");
+        assert_eq!(tail_fts_rows, 0);
+        let tail_segment_fts_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistorySegmentFts WHERE conversation_id = ?1 AND segment_index >= 2",
+                ["conv-replace"],
+                |row| row.get(0),
+            )
+            .expect("count removed tail segment FTS rows");
+        assert_eq!(tail_segment_fts_rows, 0);
+        let tail_fts_index_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryFtsSegmentIndex WHERE conversation_id = ?1 AND segment_index >= 2",
+                ["conv-replace"],
+                |row| row.get(0),
+            )
+            .expect("count removed tail FTS index rows");
+        assert_eq!(tail_fts_index_rows, 0);
+        let removed_user_fts_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryMessageFts WHERE conversation_id = ?1 AND message_id IN (?2, ?3)",
+                params!["conv-replace", "u2", "u3"],
+                |row| row.get(0),
+            )
+            .expect("count removed user FTS rows");
+        assert_eq!(removed_user_fts_rows, 0);
+        let active_fts_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryMessageFts WHERE conversation_id = ?1 AND segment_index = 1",
+                ["conv-replace"],
+                |row| row.get(0),
+            )
+            .expect("count rebuilt active FTS rows");
+        assert_eq!(active_fts_rows, 2);
+        let fts_segment_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chatHistoryFtsSegmentIndex WHERE conversation_id = ?1",
+                ["conv-replace"],
+                |row| row.get(0),
+            )
+            .expect("count replaced FTS segments");
+        assert_eq!(fts_segment_count, 2);
+        verify_chat_history_consistency(&conn, "conv-replace")
+            .expect("cross-segment replace consistency");
+    }
+
+    #[test]
+    fn replace_ref_mismatch_does_not_mutate_history() {
+        let mut conn = open_test_db().expect("open test db");
+        let u1 = branch_user_message("u1", "第一问", 1_000);
+        let replacement = branch_user_message("u1-edited", "编辑后的第一问", 1_002);
+        seed_branch_source(
+            &conn,
+            "conv-replace",
+            &[branch_segment_record(
+                0,
+                "seg-0",
+                None,
+                &[u1.clone(), branch_assistant_message("a1", "第一答", 1_001)],
+            )],
+        );
+        let before_record = get_record_by_id(&conn, "conv-replace").expect("load source");
+        let before_segments = load_segments(&conn, "conv-replace").expect("load source segments");
+        let revision = seeded_history_revision(&conn, "conv-replace");
+        let mut anchor = branch_anchor(0, 0, "seg-0", &u1);
+        anchor.content_hash = "fnv1a32:deadbeef".to_string();
+
+        let error = chat_history_replace_from_message_sync(
+            &mut conn,
+            "conv-replace",
+            &anchor,
+            &replacement,
+            10,
+            &revision,
+        )
+        .expect_err("mismatched replace ref should fail");
+
+        assert!(
+            error.contains("base_message_ref"),
+            "unexpected error: {error}"
+        );
+        let after_record = get_record_by_id(&conn, "conv-replace").expect("reload source");
+        let after_segments = load_segments(&conn, "conv-replace").expect("reload source segments");
+        assert_eq!(after_record.updated_at, before_record.updated_at);
+        assert_eq!(
+            after_record.total_message_count,
+            before_record.total_message_count
+        );
+        assert_eq!(
+            after_segments[0].messages_json,
+            before_segments[0].messages_json
+        );
+        verify_chat_history_consistency(&conn, "conv-replace")
+            .expect("unchanged replace consistency");
+    }
+
+    #[test]
+    fn replace_rejects_stale_revision_without_mutation() {
+        let mut conn = open_test_db().expect("open test db");
+        let u1 = branch_user_message("u1", "第一问", 1_000);
+        let replacement = branch_user_message("u1-edited", "编辑后的第一问", 1_002);
+        seed_branch_source(
+            &conn,
+            "conv-replace",
+            &[branch_segment_record(
+                0,
+                "seg-0",
+                None,
+                &[u1.clone(), branch_assistant_message("a1", "第一答", 1_001)],
+            )],
+        );
+        let anchor = branch_anchor(0, 0, "seg-0", &u1);
+
+        let error = chat_history_replace_from_message_sync(
+            &mut conn,
+            "conv-replace",
+            &anchor,
+            &replacement,
+            10,
+            "conv-replace:stale",
+        )
+        .expect_err("stale replace should fail");
+
+        assert!(
+            error.starts_with("stale-window:"),
+            "unexpected error: {error}"
+        );
+        assert_eq!(
+            get_record_by_id(&conn, "conv-replace")
+                .expect("reload source")
+                .total_message_count,
+            2
+        );
+        assert_eq!(
+            load_segments(&conn, "conv-replace")
+                .expect("reload segments")
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn replace_rejects_non_user_or_missing_stable_id() {
+        let mut conn = open_test_db().expect("open test db");
+        let u1 = branch_user_message("u1", "第一问", 1_000);
+        seed_branch_source(
+            &conn,
+            "conv-replace",
+            &[branch_segment_record(
+                0,
+                "seg-0",
+                None,
+                std::slice::from_ref(&u1),
+            )],
+        );
+        let anchor = branch_anchor(0, 0, "seg-0", &u1);
+        let revision = seeded_history_revision(&conn, "conv-replace");
+
+        let assistant = branch_assistant_message("a-edited", "错误角色", 1_001);
+        let role_error = chat_history_replace_from_message_sync(
+            &mut conn,
+            "conv-replace",
+            &anchor,
+            &assistant,
+            10,
+            &revision,
+        )
+        .expect_err("assistant replacement should fail");
+        assert!(role_error.contains("role must be user"));
+
+        let missing_id = json!({
+            "role": "user",
+            "content": "缺少稳定 id",
+            "timestamp": 1_001,
+        });
+        let id_error = chat_history_replace_from_message_sync(
+            &mut conn,
+            "conv-replace",
+            &anchor,
+            &missing_id,
+            10,
+            &revision,
+        )
+        .expect_err("replacement without stable id should fail");
+        assert!(id_error.contains("non-empty stable id"));
+        let revision_error = chat_history_replace_from_message_sync(
+            &mut conn,
+            "conv-replace",
+            &anchor,
+            &branch_user_message("u1-edited", "编辑后的第一问", 1_001),
+            10,
+            "",
+        )
+        .expect_err("empty expected revision should fail");
+        assert!(revision_error.contains("expected_revision must not be empty"));
+        assert_eq!(seeded_history_revision(&conn, "conv-replace"), revision);
+        assert_eq!(
+            segment_message_ids(
+                &load_segments(&conn, "conv-replace").expect("reload source segments")[0]
+                    .messages_json
+            ),
+            vec!["u1"]
+        );
+    }
+
+    #[test]
+    fn replace_window_failure_rolls_back_transaction() {
+        let mut conn = open_test_db().expect("open test db");
+        let mut malformed_segment = branch_segment_record(
+            0,
+            "seg-0",
+            None,
+            &[branch_user_message("u0", "较早问题", 1_000)],
+        );
+        malformed_segment.messages_json = "not-json".to_string();
+        let u1 = branch_user_message("u1", "待编辑问题", 1_001);
+        let segments = vec![
+            malformed_segment,
+            branch_segment_record(
+                1,
+                "seg-1",
+                None,
+                &[
+                    u1.clone(),
+                    branch_assistant_message("a1", "待删除回答", 1_002),
+                ],
+            ),
+            branch_segment_record(
+                2,
+                "seg-2",
+                None,
+                &[branch_user_message("u2", "待删除后续", 1_003)],
+            ),
+        ];
+        seed_branch_source(&conn, "conv-replace", &segments);
+        let before_record = get_record_by_id(&conn, "conv-replace").expect("load source");
+        let before_segments = load_segments(&conn, "conv-replace").expect("load source segments");
+        let before_fts_counts = history_fts_row_counts(&conn, "conv-replace");
+        let anchor = branch_anchor(1, 0, "seg-1", &u1);
+        let replacement = branch_user_message("u1-edited", "编辑后的问题", 1_004);
+        let revision = seeded_history_revision(&conn, "conv-replace");
+
+        let error = chat_history_replace_from_message_sync(
+            &mut conn,
+            "conv-replace",
+            &anchor,
+            &replacement,
+            10,
+            &revision,
+        )
+        .expect_err("window construction failure should roll back replace");
+
+        assert!(error.contains("parse history segment seg-0 failed"));
+        let after_record = get_record_by_id(&conn, "conv-replace").expect("reload source");
+        let after_segments = load_segments(&conn, "conv-replace").expect("reload source segments");
+        assert_eq!(after_record.updated_at, before_record.updated_at);
+        assert_eq!(
+            after_record.active_segment_index,
+            before_record.active_segment_index
+        );
+        assert_eq!(
+            after_record.total_segment_count,
+            before_record.total_segment_count
+        );
+        assert_eq!(
+            after_record.total_message_count,
+            before_record.total_message_count
+        );
+        assert_eq!(after_segments.len(), before_segments.len());
+        assert!(after_segments
+            .iter()
+            .zip(&before_segments)
+            .all(|(after, before)| after.messages_json == before.messages_json));
+        assert_eq!(
+            history_fts_row_counts(&conn, "conv-replace"),
+            before_fts_counts
+        );
     }
 
     #[test]
@@ -1633,7 +2391,12 @@ mod tests {
         seed_branch_source(
             &conn,
             "conv-source",
-            &[branch_segment_record(0, "seg-0", None, &[u1, a1, u2.clone()])],
+            &[branch_segment_record(
+                0,
+                "seg-0",
+                None,
+                &[u1, a1, u2.clone()],
+            )],
         );
 
         let anchor = branch_anchor(0, 2, "seg-0", &u2);

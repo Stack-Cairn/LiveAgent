@@ -25,6 +25,10 @@ import {
   type StreamdownTranslations,
 } from "streamdown";
 import { useLocale } from "../i18n";
+import {
+  getCollapsedCodeBlockPreview,
+  resolveCodeBlockRenderPolicy,
+} from "../lib/markdownCodeBlockPolicy";
 import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { cn } from "../lib/shared/utils";
 import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, X } from "./icons";
@@ -89,7 +93,6 @@ type StreamdownCodeChildProps = {
   "data-block"?: string;
 };
 
-const CODE_BLOCK_COLLAPSE_LINE_THRESHOLD = 16;
 const DEFAULT_CODE_BLOCK_LANGUAGE = "markdown";
 
 function MarkdownImageFallback(props: MarkdownImageFallbackProps) {
@@ -167,11 +170,6 @@ function ensureCodeBlockLanguage(child: ReactElement<StreamdownCodeChildProps>) 
   });
 }
 
-function getLineCount(value: string) {
-  if (!value) return 0;
-  return value.replace(/\n$/, "").split("\n").length;
-}
-
 function CodeBlockActions({ code }: { code: string }) {
   const { t } = useLocale();
   const [copied, setCopied] = useState(false);
@@ -199,24 +197,22 @@ function CodeBlockActions({ code }: { code: string }) {
   );
 }
 
-function CollapsibleCodePre({ children }: MarkdownPreProps) {
+export function CollapsibleCodePre({ children }: MarkdownPreProps) {
   const { t } = useLocale();
   const childElement = isValidElement<StreamdownCodeChildProps>(children)
     ? ensureCodeBlockLanguage(children)
     : null;
   const codeContent = childElement ? getCodeTextFromChild(childElement) : "";
   const language = childElement ? getCodeLanguage(childElement.props.className) : "";
-  const lineCount = getLineCount(codeContent);
+  const { lineCount, shouldCollapse } = resolveCodeBlockRenderPolicy(codeContent);
   const isMermaid = language === "mermaid" || language === "mmd";
-  const isCollapsible = Boolean(
-    childElement && !isMermaid && lineCount > CODE_BLOCK_COLLAPSE_LINE_THRESHOLD,
-  );
+  const isCollapsible = Boolean(childElement && !isMermaid && shouldCollapse);
   const [expanded, setExpanded] = useState(false);
 
   if (!childElement) return children;
 
-  const codeBlock = cloneElement(childElement, { "data-block": "true" });
   if (!isCollapsible) {
+    const codeBlock = cloneElement(childElement, { "data-block": "true" });
     return (
       <div className="relative w-full">
         {isMermaid ? null : <CodeBlockActions code={codeContent} />}
@@ -225,18 +221,28 @@ function CollapsibleCodePre({ children }: MarkdownPreProps) {
     );
   }
 
+  const previewContent = getCollapsedCodeBlockPreview(codeContent);
+
   return (
     <div className="relative w-full">
       <CodeBlockActions code={codeContent} />
-      <div
-        className={cn(
-          "w-full [&_[data-streamdown='code-block-body']]:transition-[max-height] [&_[data-streamdown='code-block-body']]:duration-300 [&_[data-streamdown='code-block-body']]:ease-out",
-          !expanded &&
-            "[&_[data-streamdown='code-block-body']]:max-h-[22rem] [&_[data-streamdown='code-block-body']]:overflow-hidden",
-        )}
-      >
-        {codeBlock}
-      </div>
+      {expanded ? (
+        <div className="w-full">{cloneElement(childElement, { "data-block": "true" })}</div>
+      ) : (
+        <div
+          className="mt-2 w-full overflow-hidden rounded-xl bg-muted/40"
+          data-liveagent-code-preview="collapsed"
+        >
+          <div className="flex h-8 items-center px-3 text-[11px] font-medium tracking-[0.06em] text-muted-foreground/85">
+            {language || DEFAULT_CODE_BLOCK_LANGUAGE}
+          </div>
+          <pre className="!m-0 !overflow-x-auto !pb-2">
+            <code className="block w-max min-w-full whitespace-pre py-4 font-mono text-[13px] leading-5 text-foreground/92">
+              {previewContent}
+            </code>
+          </pre>
+        </div>
+      )}
       {expanded ? null : (
         <div className="pointer-events-none absolute inset-x-0 bottom-7 h-20 bg-gradient-to-b from-transparent via-background/70 to-background" />
       )}

@@ -1,12 +1,15 @@
-// Package wscore 提供 v2 WebSocket 协议共用的连接运行时（优先级双队列写泵、拥塞掉帧、
-// 有限重试、空闲驱逐与心跳）。对帧格式无感：帧以已编码字节入队，协议层负责编码并声明
-// 拥塞策略（Frame.Class）。行为与常量沿用经过单元测试固定的实现，无语义变化。
+// Package wscore 提供 v2 WebSocket 协议共用的连接运行时（优先级双队列写泵、帧数/字节
+// 双限、空闲驱逐与心跳）。对帧格式无感：帧以已编码字节入队，协议层负责编码并声明
+// 拥塞策略（Frame.Class）；第一次底层写错误会立即关闭连接并交给重连恢复。
 package wscore
 
 import "errors"
 
 // ErrWriteQueueFull 表示帧因持续拥塞被丢弃；协议层可据此对单个流降级恢复而不牺牲整条连接。
 var ErrWriteQueueFull = errors.New("write queue full")
+
+// ErrWriteFrameTooLarge 表示单帧本身已经超过所属队列的字节预算，继续等待不会恢复。
+var ErrWriteFrameTooLarge = errors.New("write frame exceeds queue byte limit")
 
 // FrameClass 决定帧的入队队列与拥塞策略。
 type FrameClass uint8

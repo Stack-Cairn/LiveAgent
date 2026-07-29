@@ -80,8 +80,14 @@ func (s *Server) BrowserHandler() http.Handler {
 			),
 		}
 		c.core = wscore.NewConn(conn, wscore.Config{
-			WriteTimeout:    s.cfg.WebSocketWriteTimeout,
-			QueueSize:       s.cfg.WebSocketWriteQueueSize,
+			WriteTimeout: s.cfg.WebSocketWriteTimeout,
+			QueueSize:    s.cfg.WebSocketWriteQueueSize,
+			// The chat_subscribed replay is a single FrameResponse that can
+			// carry a near-full event ring (8 MiB approx-counted, JSON-marshal
+			// expansion ~1.5x) plus a projection snapshot (≤4 MiB); size the
+			// data-queue byte budget with headroom so a legitimate replay
+			// never trips the frame_too_large connection close.
+			QueueBytes:      24 * 1024 * 1024,
 			HeartbeatPeriod: s.cfg.WebSocketHeartbeatPeriod,
 			HeartbeatGrace:  s.cfg.WebSocketHeartbeatGrace,
 			Remote:          r.RemoteAddr,

@@ -3,7 +3,10 @@ package pbws
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +18,20 @@ import (
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 	"github.com/liveagent/agent-gateway/internal/session"
 )
+
+const (
+	agentInboundQueueFrames = 512
+	// Must admit any single frame the read limit allows (64 MiB default):
+	// interactive responses (fs reads, history payloads) arrive on this same
+	// queue, and an over-budget frame kills the session. The byte budget
+	// bounds queue memory, not frame size.
+	agentInboundQueueBytes = int64(64 * 1024 * 1024)
+)
+
+type queuedAgentEnvelope struct {
+	envelope     *gatewayv2.AgentEnvelope
+	encodedBytes int64
+}
 
 // AgentHandler 返回 /ws/v2/agent 的 HTTP 处理器：hello 一并完成鉴权与
 // 会话登记，之后进入双向信封流。
@@ -41,7 +58,7 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 	defer func() { _ = conn.Close() }()
 
 	// ---- 握手：hello 同时完成鉴权与会话登记 ----
-	frame, ok := readAgentFrame(conn)
+	frame, _, ok := readAgentFrame(conn)
 	if !ok {
 		return
 	}
@@ -80,6 +97,7 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 		SessionID:    sessionID,
 	}
 	sess := session.NewAgentSession(authSnapshot)
+	sess.SetCapabilities(hello.GetCapabilities())
 	toAgent := sess.Outbound()
 	if !s.sm.SetAuthenticatedSessionIfCurrent(sess, func() bool {
 		return s.tokens.AuthenticationCurrent(hello.GetAgentId(), authEpoch)
@@ -121,6 +139,25 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 	}()
 
 	go s.agentHeartbeatLoop(ctx, conn, sess)
+
+	inbound := make(chan queuedAgentEnvelope, agentInboundQueueFrames)
+	var inboundBytes atomic.Int64
+	go func() {
+		defer cancel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-sess.Done():
+				return
+			case queued := <-inbound:
+				if queued.envelope != nil {
+					s.sm.DispatchFromAgentForSession(sess, queued.envelope)
+				}
+				releaseAgentInboundBytes(&inboundBytes, queued.encodedBytes)
+			}
+		}
+	}()
 
 	// WS 控制帧 pong 计入桌面端存活（对应 h2 keepalive 的职能）。
 	conn.SetPongHandler(func(string) error {
@@ -171,7 +208,7 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 
 	// ---- 入站循环 ----
 	for {
-		frame, ok := readAgentFrame(conn)
+		frame, encodedBytes, ok := readAgentFrame(conn)
 		if !ok {
 			cancel()
 			return
@@ -184,25 +221,91 @@ func (s *Server) serveAgent(conn *websocket.Conn) {
 		}
 		// 任何入站信封都证明桌面端存活；活跃流式传输中的 agent 绝不能被判心跳过期。
 		s.sm.TouchHeartbeat(sess)
-		// Pong 与其他信封同一分发：关联探测按 request_id 命中注册流，周期心跳的 Pong 无注册流、被无害忽略。
-		s.sm.DispatchFromAgentForSession(sess, env)
+		// 单一有界 dispatcher 保持信封顺序，同时把 protobuf 读取从业务
+		// 处理解耦。帧数或字节水位饱和时立即废弃当前 session；可靠聊天由
+		// Agent 在新连接重放，不能让慢 handler 反向阻塞 reader 和心跳。
+		queuedBytes := int64(encodedBytes)
+		if !reserveAgentInboundBytes(&inboundBytes, queuedBytes) {
+			noteAgentInboundOverflow(sess, queuedBytes, "byte_limit")
+			cancel()
+			return
+		}
+		select {
+		case <-ctx.Done():
+			releaseAgentInboundBytes(&inboundBytes, queuedBytes)
+			return
+		case <-sess.Done():
+			releaseAgentInboundBytes(&inboundBytes, queuedBytes)
+			return
+		case inbound <- queuedAgentEnvelope{envelope: env, encodedBytes: queuedBytes}:
+		default:
+			releaseAgentInboundBytes(&inboundBytes, queuedBytes)
+			noteAgentInboundOverflow(sess, queuedBytes, "frame_limit")
+			cancel()
+			return
+		}
 	}
 }
 
-func readAgentFrame(conn *websocket.Conn) (*gatewayv2.AgentClientFrame, bool) {
+func noteAgentInboundOverflow(sess *session.AgentSession, size int64, reason string) {
+	agentID := ""
+	sessionID := ""
+	if sess != nil {
+		agentID = strings.TrimSpace(sess.AgentID)
+		sessionID = strings.TrimSpace(sess.SessionID)
+	}
+	observability.Usage.V2AgentInboundOverflowsTotal.Add(1)
+	slog.Warn("agent_inbound_overflow",
+		"agent_id", agentID,
+		"session_id", sessionID,
+		"lane", "agent_inbound",
+		"size", size,
+		"reason", reason,
+	)
+}
+
+func readAgentFrame(conn *websocket.Conn) (*gatewayv2.AgentClientFrame, int, bool) {
 	for {
 		messageType, data, err := conn.ReadMessage()
 		if err != nil {
-			return nil, false
+			return nil, 0, false
 		}
 		if messageType != websocket.BinaryMessage {
 			continue
 		}
 		var frame gatewayv2.AgentClientFrame
 		if err := proto.Unmarshal(data, &frame); err != nil {
-			return nil, false
+			return nil, 0, false
 		}
-		return &frame, true
+		return &frame, len(data), true
+	}
+}
+
+func reserveAgentInboundBytes(queuedBytes *atomic.Int64, frameBytes int64) bool {
+	if frameBytes < 0 || frameBytes > agentInboundQueueBytes {
+		return false
+	}
+	for {
+		current := queuedBytes.Load()
+		if frameBytes > agentInboundQueueBytes-current {
+			return false
+		}
+		if queuedBytes.CompareAndSwap(current, current+frameBytes) {
+			return true
+		}
+	}
+}
+
+func releaseAgentInboundBytes(queuedBytes *atomic.Int64, frameBytes int64) {
+	for {
+		current := queuedBytes.Load()
+		next := current - frameBytes
+		if next < 0 {
+			next = 0
+		}
+		if queuedBytes.CompareAndSwap(current, next) {
+			return
+		}
 	}
 }
 

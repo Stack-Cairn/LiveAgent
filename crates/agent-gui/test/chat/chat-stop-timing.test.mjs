@@ -172,7 +172,7 @@ test("a stop intent aborts a controller and handler registered later", () => {
   hookHarness.cleanup();
 });
 
-test("a stop during queued processing never auto-starts the next turn", async () => {
+test("a direct queue stop pauses processing until composer Stop resumes it", async () => {
   const hookHarness = createHookHarness();
   const sendGate = deferred();
   const sendCalls = [];
@@ -332,6 +332,12 @@ test("a stop during queued processing never auto-starts the next turn", async ()
 
   assert.equal(sendCalls.length, 1, "the second queued turn must remain paused after Stop");
   assert.equal(queue.queuedChatTurnsRef.current.length, 1);
+
+  queue.stopSending();
+  await flushPromises();
+
+  assert.equal(sendCalls.length, 2, "composer Stop must continue with the queued turn");
+  assert.equal(queue.queuedChatTurnsRef.current.length, 0);
   hookHarness.cleanup();
 });
 
@@ -367,6 +373,7 @@ test("finalization flushes the gateway stream only after history persists", asyn
     "src/pages/chat/runtime/chatRunFinalization.ts",
   );
   const persistGate = deferred();
+  const closeGate = deferred();
   const events = [];
 
   const finalization = finalizeChatRunInOrder({
@@ -376,7 +383,9 @@ test("finalization flushes the gateway stream only after history persists", asyn
       events.push("persist:done");
     },
     closeBridge: async () => {
-      events.push("close");
+      events.push("close:start");
+      await closeGate.promise;
+      events.push("close:done");
     },
     finishRuntimeRun: async () => {
       events.push("finish");
@@ -390,8 +399,15 @@ test("finalization flushes the gateway stream only after history persists", asyn
   assert.deepEqual(events, ["persist:start"], "flushes must wait for the persist barrier");
 
   persistGate.resolve();
+  await flushPromises();
+  assert.deepEqual(
+    events,
+    ["persist:start", "persist:done", "close:start"],
+    "terminal checkpoint must wait for the final delta flush",
+  );
+  closeGate.resolve();
   await finalization;
-  assert.deepEqual(events, ["persist:start", "persist:done", "close", "finish"]);
+  assert.deepEqual(events, ["persist:start", "persist:done", "close:start", "close:done", "finish"]);
 });
 
 test("a failing persist barrier still lets the finalization flushes run", async () => {
@@ -414,4 +430,34 @@ test("a failing persist barrier still lets the finalization flushes run", async 
   });
 
   assert.deepEqual(events, ["close", "finish"]);
+});
+
+test("terminal history persistence marks both false results and thrown errors", async () => {
+  const loader = createTsModuleLoader();
+  const { trackTerminalHistoryPersist } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  let failures = 0;
+
+  assert.equal(
+    await trackTerminalHistoryPersist(
+      async () => false,
+      () => {
+        failures += 1;
+      },
+    ),
+    false,
+  );
+  await assert.rejects(
+    trackTerminalHistoryPersist(
+      async () => {
+        throw new Error("history database unavailable");
+      },
+      () => {
+        failures += 1;
+      },
+    ),
+    /history database unavailable/,
+  );
+  assert.equal(failures, 2);
 });

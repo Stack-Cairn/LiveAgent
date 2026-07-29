@@ -130,30 +130,6 @@ pub struct GatewayChatQueueEventInput {
     pub revision: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GatewayChatRuntimeSnapshot {
-    pub conversation_id: String,
-    pub run_id: String,
-    #[serde(default)]
-    pub client_request_id: Option<String>,
-    #[serde(default)]
-    pub worker_id: Option<String>,
-    pub state: String,
-    #[serde(default)]
-    pub cwd: Option<String>,
-    #[serde(default)]
-    pub updated_at: i64,
-    #[serde(default)]
-    pub revision: i64,
-    #[serde(default)]
-    pub entries_json: String,
-    #[serde(default)]
-    pub tool_status: Option<String>,
-    #[serde(default)]
-    pub tool_status_is_compaction: bool,
-}
-
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayChatClaimedRequest {

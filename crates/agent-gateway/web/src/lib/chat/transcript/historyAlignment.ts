@@ -1,5 +1,6 @@
 import { type ChatEntry, safeStringify } from "@/lib/chatUi";
 
+import { rebuildTurnFromSnapshot } from "./turnReducer";
 import type { HistoryApplyMode, Turn, UserChatEntry } from "./types";
 
 // History ↔ stream reconciliation. The persisted history and the streamed
@@ -139,10 +140,11 @@ function enrichTurnFromHistory(turn: Turn, historyTurn: HistoryTurn): Turn {
     historyTurn.entries.length > 0 &&
     next.phase === "settled"
   ) {
+    const rebuilt = rebuildTurnFromSnapshot(next, historyTurn.entries);
     return {
-      ...next,
-      entries: historyTurn.entries,
+      ...rebuilt,
       contentStale: false,
+      contentConfirmed: true,
       inferredLossErrorEntryId: undefined,
     };
   }

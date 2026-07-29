@@ -48,6 +48,17 @@ export type RunLifecycleEvent =
       // The conversation log seq this snapshot represents through: events
       // with seq <= as_of_seq are already folded into entries_json.
       as_of_seq?: number;
+    }
+  | {
+      type: "run_content_snapshot";
+      conversation_id: string;
+      run_id: string;
+      seq: number;
+      revision: number;
+      entries_json: string;
+      content_complete: boolean;
+      history_required?: boolean;
+      sha256?: string;
     };
 
 export type ConversationStreamEvent = (ChatEvent | RunLifecycleEvent) & {

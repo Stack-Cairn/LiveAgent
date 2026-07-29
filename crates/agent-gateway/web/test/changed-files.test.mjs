@@ -72,4 +72,18 @@ test("web collectChangedFiles mirrors the GUI aggregation contract", () => {
   assert.equal(summary.totalAdded, 4);
   assert.equal(summary.totalRemoved, 0);
   assert.equal(changedFiles.collectChangedFiles([{ blocks: [] }]), null);
+  assert.equal(
+    changedFiles.collectChangedFiles([
+      {
+        blocks: [
+          toolBlock({
+            name: "Bash",
+            args: { command: "rm src/untracked-deletion.ts" },
+            details: { exit_code: 0 },
+          }),
+        ],
+      },
+    ]),
+    null,
+  );
 });

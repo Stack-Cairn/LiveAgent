@@ -49,6 +49,14 @@ export type Turn = {
   // Error entry appended for a falsifiable liveness verdict. A same-run
   // resurrection removes this exact entry before streaming resumes.
   inferredLossErrorEntryId?: string;
+  // Highest authoritative terminal-content revision applied for this run.
+  // It is independent from phase/activity: a late correction may update a
+  // settled turn without making it live again.
+  terminalContentRevision?: number;
+  // True once either a complete run_content_snapshot or persisted history has
+  // confirmed the whole settled reply. run_finished without this confirmation
+  // marks the turn stale and starts bounded history convergence.
+  contentConfirmed?: boolean;
 };
 
 export type TranscriptRowOrigin = "history" | "stream";

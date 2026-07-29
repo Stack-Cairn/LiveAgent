@@ -230,7 +230,13 @@ test("request context can preserve uploaded file metadata for native provider ad
       },
     ],
     activeSegmentIndex: 0,
-    historyRenderItems: [],
+    transcript: {
+      items: [],
+      segmentWindows: [],
+      oldestMessageOffset: 0,
+      hasMoreBefore: false,
+      revision: null,
+    },
   };
 
   const strippedContext = conversationState.buildRequestContext(state);

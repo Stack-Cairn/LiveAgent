@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 
 use crate::commands::{
     chat_history,
-    chat_history::{history_message_content_hash, history_message_id_for_ref, message_matches_ref},
+    chat_history::ChatHistoryMessageRef,
     fs::{
         fs_create_dir_sync, fs_delete_sync, fs_list_dirs_sync, fs_list_sync, fs_mention_list_sync,
         fs_read_editable_text_sync, fs_read_workspace_image_sync, fs_rename_sync, fs_roots_sync,
@@ -242,11 +242,12 @@ pub async fn handle_history_prefix(
         .base_message_ref
         .as_ref()
         .ok_or_else(|| "history.prefix requires base_message_ref".to_string())?;
-    validate_stable_chat_message_ref(base_message_ref)?;
+    let base_message_ref = history_message_ref_from_proto(base_message_ref);
+    chat_history::validate_user_history_message_ref(&base_message_ref)?;
 
     let record = chat_history::chat_history_get(request.conversation_id.clone()).await?;
     let (prefix_segments, prefix_message_count) =
-        build_history_prefix_segments(&record.segments, base_message_ref)?;
+        chat_history::build_history_prefix_segments(&record.segments, &base_message_ref)?;
     let (messages_json, returned_message_count) =
         flatten_history_messages_json_window(&prefix_segments, max_messages)?;
 
@@ -279,16 +280,8 @@ pub async fn handle_history_branch(
         .base_message_ref
         .as_ref()
         .ok_or_else(|| "history.branch requires base_message_ref".to_string())?;
-    validate_stable_chat_message_ref(base_message_ref)?;
-
-    let anchor = chat_history::ChatHistoryBranchAnchor {
-        segment_index: i64::from(base_message_ref.segment_index),
-        message_index: i64::from(base_message_ref.message_index),
-        segment_id: base_message_ref.segment_id.clone(),
-        message_id: base_message_ref.message_id.clone(),
-        role: base_message_ref.role.clone(),
-        content_hash: base_message_ref.content_hash.clone(),
-    };
+    let anchor = history_message_ref_from_proto(base_message_ref);
+    chat_history::validate_user_history_message_ref(&anchor)?;
     let summary =
         chat_history::chat_history_branch_inner(request.conversation_id.clone(), anchor).await?;
 
@@ -1237,193 +1230,26 @@ fn flatten_history_messages_json(
     flatten_history_messages_json_window(segments, 0).map(|(messages_json, _)| messages_json)
 }
 
-fn validate_stable_chat_message_ref(ref_value: &proto::ChatMessageRef) -> Result<(), String> {
-    if ref_value.segment_index < 0 || ref_value.message_index < 0 {
-        return Err("base_message_ref indexes must be non-negative".to_string());
+fn history_message_ref_from_proto(ref_value: &proto::ChatMessageRef) -> ChatHistoryMessageRef {
+    ChatHistoryMessageRef {
+        segment_index: i64::from(ref_value.segment_index),
+        message_index: i64::from(ref_value.message_index),
+        segment_id: ref_value.segment_id.clone(),
+        message_id: ref_value.message_id.clone(),
+        role: ref_value.role.clone(),
+        content_hash: ref_value.content_hash.clone(),
     }
-    if ref_value.segment_id.trim().is_empty()
-        || ref_value.message_id.trim().is_empty()
-        || ref_value.role.trim().is_empty()
-        || ref_value.content_hash.trim().is_empty()
-    {
-        return Err(
-            "base_message_ref requires segment_id, message_id, role, and content_hash".to_string(),
-        );
-    }
-    if ref_value.role.trim() != "user" {
-        return Err("base_message_ref role must be user".to_string());
-    }
-    Ok(())
-}
-
-fn build_history_message_ref_json(
-    segment: &chat_history::ChatHistorySegmentRecord,
-    message_index: usize,
-    message: &Value,
-) -> Option<Value> {
-    let object = message.as_object()?;
-    let segment_id = segment.segment_id.trim();
-    let message_id = history_message_id_for_ref(message)?;
-    let role = object.get("role").and_then(Value::as_str)?.trim();
-    if segment_id.is_empty() || message_id.is_empty() || role.is_empty() {
-        return None;
-    }
-    Some(json!({
-        "segmentIndex": segment.segment_index,
-        "messageIndex": message_index,
-        "segmentId": segment_id,
-        "messageId": message_id,
-        "role": role,
-        "contentHash": history_message_content_hash(message),
-    }))
-}
-
-fn message_matches_stable_ref(message: &Value, ref_value: &proto::ChatMessageRef) -> bool {
-    message_matches_ref(
-        message,
-        &ref_value.message_id,
-        &ref_value.role,
-        &ref_value.content_hash,
-    )
-}
-
-fn build_history_prefix_segments(
-    segments: &[chat_history::ChatHistorySegmentRecord],
-    ref_value: &proto::ChatMessageRef,
-) -> Result<(Vec<chat_history::ChatHistorySegmentRecord>, i64), String> {
-    let mut prefix_segments = Vec::new();
-    let mut prefix_message_count = 0_i64;
-    let target_segment_id = ref_value.segment_id.trim();
-
-    for segment in segments {
-        let parsed = serde_json::from_str::<Value>(&segment.messages_json)
-            .map_err(|e| format!("parse history segment {} failed: {e}", segment.segment_id))?;
-        let messages = parsed
-            .as_array()
-            .ok_or_else(|| format!("history segment {} is not an array", segment.segment_id))?;
-
-        if segment.segment_id.trim() != target_segment_id {
-            let message_count = i64::try_from(messages.len()).unwrap_or(i64::MAX);
-            prefix_message_count = prefix_message_count.saturating_add(message_count);
-            prefix_segments.push(segment.clone());
-            continue;
-        }
-
-        let hinted_index = usize::try_from(ref_value.message_index).ok();
-        let target_index = hinted_index
-            .filter(|index| {
-                messages
-                    .get(*index)
-                    .map(|message| message_matches_stable_ref(message, ref_value))
-                    .unwrap_or(false)
-            })
-            .or_else(|| {
-                messages
-                    .iter()
-                    .position(|message| message_matches_stable_ref(message, ref_value))
-            })
-            .ok_or_else(|| {
-                "base_message_ref did not match a stable user message in history".to_string()
-            })?;
-
-        let prefix_messages = messages[..target_index].to_vec();
-        let mut prefix_segment = segment.clone();
-        prefix_segment.messages_json = serde_json::to_string(&prefix_messages)
-            .map_err(|e| format!("serialize history prefix segment failed: {e}"))?;
-        prefix_segment.message_count = i64::try_from(prefix_messages.len()).unwrap_or(i64::MAX);
-        prefix_segment.end_message_id = prefix_messages
-            .last()
-            .and_then(history_message_id_for_ref)
-            .or_else(|| segment.start_message_id.clone());
-        prefix_message_count = prefix_message_count.saturating_add(prefix_segment.message_count);
-        prefix_segments.push(prefix_segment);
-        return Ok((prefix_segments, prefix_message_count));
-    }
-
-    Err("base_message_ref segment was not found in history".to_string())
 }
 
 fn flatten_history_messages_json_window(
     segments: &[chat_history::ChatHistorySegmentRecord],
     max_messages: i64,
 ) -> Result<(String, i32), String> {
-    struct ParsedSegment<'a> {
-        segment: &'a chat_history::ChatHistorySegmentRecord,
-        summary: Option<Value>,
-        messages: Vec<Value>,
-    }
-
-    let mut parsed_segments = Vec::new();
-    let mut selected_message_count = 0_usize;
-    for segment in segments {
-        let summary = match segment.summary_json.as_deref().map(str::trim) {
-            Some(trimmed) if !trimmed.is_empty() => match serde_json::from_str::<Value>(trimmed) {
-                Ok(summary) => Some(summary),
-                Err(error) => {
-                    eprintln!(
-                        "skip invalid history segment summary {}: {error}",
-                        segment.segment_id
-                    );
-                    None
-                }
-            },
-            _ => None,
-        };
-
-        let parsed = serde_json::from_str::<Value>(&segment.messages_json)
-            .map_err(|e| format!("parse history segment {} failed: {e}", segment.segment_id))?;
-        let items = parsed
-            .as_array()
-            .ok_or_else(|| format!("history segment {} is not an array", segment.segment_id))?
-            .to_vec();
-        selected_message_count = selected_message_count.saturating_add(items.len());
-        parsed_segments.push(ParsedSegment {
-            segment,
-            summary,
-            messages: items,
-        });
-    }
-
-    let max_messages = usize::try_from(max_messages.max(0)).unwrap_or(0);
-    let mut messages_to_skip = if max_messages > 0 && selected_message_count > max_messages {
-        selected_message_count - max_messages
-    } else {
-        0
-    };
-    let mut merged = Vec::new();
-    let mut returned_message_count = 0_usize;
-
-    for parsed in parsed_segments {
-        if messages_to_skip >= parsed.messages.len() {
-            messages_to_skip -= parsed.messages.len();
-            continue;
-        }
-
-        if let Some(summary) = parsed.summary {
-            merged.push(summary);
-        }
-
-        let start_index = messages_to_skip;
-        messages_to_skip = 0;
-        for (message_index, item) in parsed.messages.iter().enumerate().skip(start_index) {
-            let mut cloned = item.clone();
-            if let Some(object) = cloned.as_object_mut() {
-                if let Some(history_ref) =
-                    build_history_message_ref_json(parsed.segment, message_index, item)
-                {
-                    object.insert("liveAgentHistoryRef".to_string(), history_ref);
-                }
-            }
-            merged.push(cloned);
-            returned_message_count = returned_message_count.saturating_add(1);
-        }
-    }
-
-    let messages_json = serde_json::to_string(&merged)
-        .map_err(|e| format!("serialize flattened history messages failed: {e}"))?;
+    let window = chat_history::build_history_message_window(segments, max_messages, None, false)?;
+    let messages_json = chat_history::flatten_history_message_window(&window)?;
     Ok((
         messages_json,
-        i32::try_from(returned_message_count).unwrap_or(i32::MAX),
+        i32::try_from(window.returned_message_count).unwrap_or(i32::MAX),
     ))
 }
 
@@ -1549,11 +1375,13 @@ mod tests {
     use serde_json::{json, Value};
 
     use super::{
-        build_history_prefix_segments, flatten_history_messages_json,
-        flatten_history_messages_json_window, is_builtin_share_tool_name, parse_runs_limit,
-        redact_builtin_tool_content_json, sanitize_provider_summaries,
+        flatten_history_messages_json, flatten_history_messages_json_window,
+        is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
+        sanitize_provider_summaries,
     };
-    use crate::commands::chat_history::{history_message_content_hash, ChatHistorySegmentRecord};
+    use crate::commands::chat_history::{
+        self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
+    };
 
     fn make_segment(
         segment_index: i64,
@@ -1561,12 +1389,16 @@ mod tests {
         summary_json: Option<&str>,
         messages_json: &str,
     ) -> ChatHistorySegmentRecord {
+        let message_count = serde_json::from_str::<Value>(messages_json)
+            .ok()
+            .and_then(|value| value.as_array().map(|messages| messages.len() as i64))
+            .unwrap_or(1);
         ChatHistorySegmentRecord {
             segment_index,
             segment_id: segment_id.to_string(),
             summary_json: summary_json.map(str::to_string),
             messages_json: messages_json.to_string(),
-            message_count: 0,
+            message_count,
             start_message_id: None,
             end_message_id: None,
             created_at: 0,
@@ -1633,17 +1465,41 @@ mod tests {
         .expect("flatten history");
 
         let parsed = serde_json::from_str::<Value>(&flattened).expect("parse flattened history");
+        let hello_hash = history_message_content_hash(&json!({
+            "role":"user",
+            "content":"hello"
+        }));
+        let world_hash = history_message_content_hash(&json!({
+            "role":"assistant",
+            "content":"world"
+        }));
         assert_eq!(
             parsed,
             json!([
                 {
                     "role":"user",
-                    "content":"hello"
+                    "content":"hello",
+                    "liveAgentHistoryRef":{
+                        "segmentIndex":0,
+                        "messageIndex":0,
+                        "segmentId":"segment-a",
+                        "messageId":"segment-0-message-0-0",
+                        "role":"user",
+                        "contentHash":hello_hash
+                    }
                 },
                 {"role":"summary","id":"summary-1","content":"compressed"},
                 {
                     "role":"assistant",
-                    "content":"world"
+                    "content":"world",
+                    "liveAgentHistoryRef":{
+                        "segmentIndex":1,
+                        "messageIndex":0,
+                        "segmentId":"segment-b",
+                        "messageId":"segment-1-message-0-0",
+                        "role":"assistant",
+                        "contentHash":world_hash
+                    }
                 }
             ])
         );
@@ -1684,6 +1540,8 @@ mod tests {
         let new_1_hash = history_message_content_hash(
             &json!({"role":"user","id":"user-new-1","content":"new-1"}),
         );
+        let new_0_hash =
+            history_message_content_hash(&json!({"role":"assistant","content":"new-0"}));
         assert_eq!(returned_message_count, 3);
         assert_eq!(
             parsed,
@@ -1705,7 +1563,15 @@ mod tests {
                 {"role":"summary","id":"summary-b","content":"newer"},
                 {
                     "role":"assistant",
-                    "content":"new-0"
+                    "content":"new-0",
+                    "liveAgentHistoryRef":{
+                        "segmentIndex":5,
+                        "messageIndex":0,
+                        "segmentId":"segment-b",
+                        "messageId":"segment-5-message-0-0",
+                        "role":"assistant",
+                        "contentHash":new_0_hash
+                    }
                 },
                 {
                     "role":"user",
@@ -1750,11 +1616,11 @@ mod tests {
             ),
         ];
 
-        let (prefix, count) = build_history_prefix_segments(
+        let (prefix, count) = chat_history::build_history_prefix_segments(
             &segments,
-            &crate::services::gateway::proto::ChatMessageRef {
-                segment_index: 1,
-                message_index: 1,
+            &ChatHistoryMessageRef {
+                segment_index: 1_i64,
+                message_index: 1_i64,
                 segment_id: "segment-b".to_string(),
                 message_id: "user-target".to_string(),
                 role: "user".to_string(),

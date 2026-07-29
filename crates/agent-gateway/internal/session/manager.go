@@ -10,6 +10,7 @@ import (
 
 var ErrAgentIDRequired = errors.New("agent_id is required")
 var ErrAgentOffline = errors.New("agent offline")
+var ErrChatProtocolIncompatible = errors.New("desktop chat protocol is incompatible; update LiveAgent desktop")
 var ErrTunnelNotFound = errors.New("tunnel not found")
 var ErrTunnelExpired = errors.New("tunnel expired")
 var ErrTunnelOverLimit = errors.New("tunnel connection limit exceeded")
@@ -42,6 +43,7 @@ type AgentSession struct {
 	SessionID    string
 	ConnectedAt  time.Time
 	LastPing     time.Time
+	capabilities map[string]struct{}
 
 	toAgent chan *OutboundEnvelope
 	pingCh  chan *gatewayv2.GatewayEnvelope

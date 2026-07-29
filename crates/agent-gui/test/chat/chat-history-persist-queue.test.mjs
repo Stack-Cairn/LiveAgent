@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+const chatHistoryParserPath = fileURLToPath(
+  new URL("../../src/lib/chat/history/chatHistoryParser.ts", import.meta.url),
+);
 
 function createDeferred() {
   let resolve;
@@ -28,6 +33,11 @@ function loadChatHistory(invoke) {
   const loader = createTsModuleLoader({
     mocks: {
       "@tauri-apps/api/core": { invoke },
+      [chatHistoryParserPath]: {
+        async parseHistorySegments(segments) {
+          return segments.map(({ payload }) => ({ payload, messages: [] }));
+        },
+      },
     },
   });
   return loader.loadModule("src/lib/chat/history/chatHistory.ts");
@@ -50,19 +60,33 @@ function buildState(segments, activeSegmentIndex) {
     meta: {
       schemaVersion: 3,
       systemPrompt: "prompt",
-      activeSegmentIndex,
+      activeSegmentIndex: segments[activeSegmentIndex].segmentIndex,
       totalSegmentCount: segments.length,
-      totalMessageCount: segments.reduce((sum, seg) => sum + seg.messageCount, 0),
+      totalMessageCount: segments.reduce((sum, item) => sum + item.messageCount, 0),
     },
     segments,
-    historyRenderItems: [],
+    transcript: {
+      items: [],
+      segments: [],
+      segmentWindows: [],
+      oldestMessageOffset: 0,
+      hasMoreBefore: false,
+      revision: null,
+    },
     activeSegmentIndex,
   };
 }
 
-function summaryFor(updatedAt) {
+function persistenceCursor(item) {
   return {
-    id: "conv-1",
+    activeSegmentIndex: item.segmentIndex,
+    activeSegmentId: item.segmentId,
+  };
+}
+
+function summaryFor(conversationId, updatedAt) {
+  return {
+    id: conversationId,
     title: "对话",
     providerId: "anthropic",
     model: "claude",
@@ -71,17 +95,29 @@ function summaryFor(updatedAt) {
   };
 }
 
-function persistParams(previousRef, state) {
+function persistParams({
+  conversationId = "conv-1",
+  cursorRef,
+  cursorReads,
+  cursorCommits,
+  state,
+}) {
   return {
-    conversationId: "conv-1",
+    conversationId,
     providerId: "anthropic",
     model: "claude",
     title: "对话",
-    updatedAt: 1,
+    updatedAt: state.segments[state.activeSegmentIndex].updatedAt,
     state,
-    getPreviousState: () => previousRef.current,
-    commitPersistedState: (persisted) => {
-      previousRef.current = persisted;
+    getPersistenceCursor: () => {
+      const current = cursorRef.current ? { ...cursorRef.current } : null;
+      cursorReads?.push(current);
+      return current;
+    },
+    commitPersistenceCursor: (cursor) => {
+      const committed = { ...cursor };
+      cursorCommits?.push(committed);
+      cursorRef.current = committed;
     },
   };
 }
@@ -90,94 +126,261 @@ async function flush() {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
-const seg0 = segment(0, { messageCount: 2, endMessageId: "m-2" });
-const stateA = buildState([seg0], 0);
-const stateB = buildState([seg0, segment(1, { messageCount: 1 })], 1);
-const stateC = buildState([seg0, segment(1, { messageCount: 3, updatedAt: 205 })], 1);
+async function resolveCall(call, conversationId, updatedAt) {
+  call.deferred.resolve(summaryFor(conversationId, updatedAt));
+  await flush();
+}
 
-test("overlapping persists serialize and the later one diffs against the committed state", async () => {
+const seg0 = segment(0, { messageCount: 2, endMessageId: "m-2" });
+const seg1Initial = segment(1, { messageCount: 1, endMessageId: "m-3" });
+const seg1Grown = segment(1, {
+  messageCount: 3,
+  endMessageId: "m-5",
+  updatedAt: 205,
+});
+const stateWithAppendedSegment = buildState([seg0, seg1Initial], 1);
+const stateWithGrownActiveSegment = buildState([seg0, seg1Grown], 1);
+
+test("queued persists read the latest persistence cursor inside the conversation lock", async () => {
   const recorder = createInvokeRecorder();
   const chatHistory = loadChatHistory(recorder.invoke);
-  const previousRef = { current: stateA };
+  const cursorRef = { current: persistenceCursor(seg0) };
+  const cursorReads = [];
+  const cursorCommits = [];
 
-  const first = chatHistory.persistConversationState(persistParams(previousRef, stateB));
-  const second = chatHistory.persistConversationState(persistParams(previousRef, stateC));
+  const first = chatHistory.persistConversationRuntime(
+    persistParams({
+      cursorRef,
+      cursorReads,
+      cursorCommits,
+      state: stateWithAppendedSegment,
+    }),
+  );
+  const second = chatHistory.persistConversationRuntime(
+    persistParams({
+      cursorRef,
+      cursorReads,
+      cursorCommits,
+      state: stateWithGrownActiveSegment,
+    }),
+  );
   await flush();
 
-  // 第二个持久化必须等第一个完成（含基线推进），不得并发发起 IPC。
   assert.equal(recorder.calls.length, 1);
   assert.equal(recorder.calls[0].cmd, "chat_history_append_segment");
-  assert.equal(recorder.calls[0].args.input.segment.segmentId, "seg-1");
+  assert.deepEqual(cursorReads, [persistenceCursor(seg0)]);
 
-  recorder.calls[0].deferred.resolve(summaryFor(10));
-  await flush();
+  await resolveCall(recorder.calls[0], "conv-1", 10);
 
-  // C 对比的是已落盘的 B（同形状 → active upsert），而不是过期的 A（会误判为 append）。
   assert.equal(recorder.calls.length, 2);
   assert.equal(recorder.calls[1].cmd, "chat_history_upsert_active_segment");
   assert.equal(recorder.calls[1].args.input.segment.messageCount, 3);
+  assert.deepEqual(cursorReads, [persistenceCursor(seg0), persistenceCursor(seg1Initial)]);
 
-  recorder.calls[1].deferred.resolve(summaryFor(11));
+  await resolveCall(recorder.calls[1], "conv-1", 11);
   await first;
   await second;
-  assert.equal(previousRef.current, stateC);
+  assert.deepEqual(cursorRef.current, persistenceCursor(seg1Initial));
+  assert.deepEqual(cursorCommits, [
+    persistenceCursor(seg1Initial),
+    persistenceCursor(seg1Initial),
+  ]);
 });
 
-test("failed persist does not advance the baseline; the next diff retries from the last committed state", async () => {
+test("failed persist does not advance the cursor and the next persist retries the transition", async () => {
   const recorder = createInvokeRecorder();
   const chatHistory = loadChatHistory(recorder.invoke);
-  const previousRef = { current: stateA };
+  const cursorRef = { current: persistenceCursor(seg0) };
+  const cursorCommits = [];
 
-  const first = chatHistory.persistConversationState(persistParams(previousRef, stateB));
+  const first = chatHistory.persistConversationRuntime(
+    persistParams({
+      cursorRef,
+      cursorCommits,
+      state: stateWithAppendedSegment,
+    }),
+  );
   await flush();
   assert.equal(recorder.calls[0].cmd, "chat_history_append_segment");
   recorder.calls[0].deferred.reject(new Error("db busy"));
   await assert.rejects(first, /db busy/);
-  assert.equal(previousRef.current, stateA);
+  assert.deepEqual(cursorRef.current, persistenceCursor(seg0));
+  assert.deepEqual(cursorCommits, []);
 
-  const second = chatHistory.persistConversationState(persistParams(previousRef, stateC));
+  const second = chatHistory.persistConversationRuntime(
+    persistParams({
+      cursorRef,
+      cursorCommits,
+      state: stateWithGrownActiveSegment,
+    }),
+  );
   await flush();
+
   assert.equal(recorder.calls.length, 2);
   assert.equal(recorder.calls[1].cmd, "chat_history_append_segment");
-  recorder.calls[1].deferred.resolve(summaryFor(12));
+  await resolveCall(recorder.calls[1], "conv-1", 12);
   await second;
-  assert.equal(previousRef.current, stateC);
+  assert.deepEqual(cursorRef.current, persistenceCursor(seg1Grown));
+  assert.deepEqual(cursorCommits, [persistenceCursor(seg1Grown)]);
 });
 
-test("persist without a previous state falls back to a full upsert", async () => {
+test("persistence cursor selects explicit initial active and append transitions", async () => {
   const recorder = createInvokeRecorder();
   const chatHistory = loadChatHistory(recorder.invoke);
-  const previousRef = { current: null };
+  const conversationId = "conv-transitions";
+  const cursorRef = { current: null };
+  const initialSegment = segment(0, { messageCount: 1, endMessageId: "m-1" });
+  const grownSegment = segment(0, {
+    messageCount: 2,
+    endMessageId: "m-2",
+    updatedAt: 150,
+  });
+  const appendedSegment = segment(1, { messageCount: 1, endMessageId: "m-3" });
 
-  const persist = chatHistory.persistConversationState(persistParams(previousRef, stateB));
+  const initial = chatHistory.persistConversationRuntime(
+    persistParams({
+      conversationId,
+      cursorRef,
+      state: buildState([initialSegment], 0),
+    }),
+  );
   await flush();
-  assert.equal(recorder.calls.length, 1);
   assert.equal(recorder.calls[0].cmd, "chat_history_upsert");
-  assert.equal(recorder.calls[0].args.input.segments.length, 2);
+  assert.equal(recorder.calls[0].args.input.segments.length, 1);
+  await resolveCall(recorder.calls[0], conversationId, 20);
+  await initial;
+  assert.deepEqual(cursorRef.current, persistenceCursor(initialSegment));
 
-  recorder.calls[0].deferred.resolve(summaryFor(13));
-  await persist;
-  assert.equal(previousRef.current, stateB);
+  const active = chatHistory.persistConversationRuntime(
+    persistParams({
+      conversationId,
+      cursorRef,
+      state: buildState([grownSegment], 0),
+    }),
+  );
+  await flush();
+  assert.equal(recorder.calls[1].cmd, "chat_history_upsert_active_segment");
+  assert.equal(recorder.calls[1].args.input.segment.messageCount, 2);
+  await resolveCall(recorder.calls[1], conversationId, 21);
+  await active;
+  assert.deepEqual(cursorRef.current, persistenceCursor(grownSegment));
+
+  const append = chatHistory.persistConversationRuntime(
+    persistParams({
+      conversationId,
+      cursorRef,
+      state: buildState([grownSegment, appendedSegment], 1),
+    }),
+  );
+  await flush();
+  assert.equal(recorder.calls[2].cmd, "chat_history_append_segment");
+  assert.equal(recorder.calls[2].args.input.segment.segmentId, "seg-1");
+  await resolveCall(recorder.calls[2], conversationId, 22);
+  await append;
+  assert.deepEqual(cursorRef.current, persistenceCursor(appendedSegment));
 });
 
-test("history mutations share the same per-conversation lock as state persists", async () => {
+test("history mutations share the per-conversation lock with runtime persistence", async () => {
   const recorder = createInvokeRecorder();
   const chatHistory = loadChatHistory(recorder.invoke);
-  const previousRef = { current: stateA };
+  const cursorRef = { current: persistenceCursor(seg0) };
 
-  const persist = chatHistory.persistConversationState(persistParams(previousRef, stateB));
+  const persist = chatHistory.persistConversationRuntime(
+    persistParams({ cursorRef, state: stateWithAppendedSegment }),
+  );
   const rename = chatHistory.renameChatHistory("conv-1", "新标题");
   await flush();
 
   assert.equal(recorder.calls.length, 1);
   assert.equal(recorder.calls[0].cmd, "chat_history_append_segment");
 
-  recorder.calls[0].deferred.resolve(summaryFor(14));
-  await flush();
+  await resolveCall(recorder.calls[0], "conv-1", 30);
+  assert.deepEqual(cursorRef.current, persistenceCursor(seg1Initial));
   assert.equal(recorder.calls.length, 2);
   assert.equal(recorder.calls[1].cmd, "chat_history_rename");
+  assert.deepEqual(recorder.calls[1].args, { id: "conv-1", title: "新标题" });
 
-  recorder.calls[1].deferred.resolve(summaryFor(15));
+  await resolveCall(recorder.calls[1], "conv-1", 31);
   await persist;
   await rename;
+});
+
+test("edit-resend uses one atomic replace command that returns the refreshed tail window", async () => {
+  const recorder = createInvokeRecorder();
+  const chatHistory = loadChatHistory(recorder.invoke);
+  const replacementMessage = {
+    role: "user",
+    id: "user-replacement",
+    content: "edited prompt",
+    timestamp: 500,
+  };
+  const task = chatHistory.replaceChatHistoryFromMessage({
+    id: "conv-1",
+    baseMessageRef: {
+      segmentIndex: 0,
+      messageIndex: 2,
+      segmentId: "seg-0",
+      messageId: "user-old",
+      role: "user",
+      contentHash: "fnv1a32:12345678",
+    },
+    replacementMessage,
+    maxMessages: 360,
+    expectedRevision: "conv-1:before",
+  });
+  await flush();
+
+  assert.equal(recorder.calls.length, 1);
+  assert.equal(recorder.calls[0].cmd, "chat_history_replace_from_message");
+  assert.deepEqual(recorder.calls[0].args, {
+    id: "conv-1",
+    baseMessageRef: {
+      segmentIndex: 0,
+      messageIndex: 2,
+      segmentId: "seg-0",
+      messageId: "user-old",
+      role: "user",
+      contentHash: "fnv1a32:12345678",
+    },
+    replacementMessage,
+    maxMessages: 360,
+    expectedRevision: "conv-1:before",
+  });
+
+  recorder.calls[0].deferred.resolve({
+    conversation: summaryFor("conv-1", 501),
+    contextMetaJson: JSON.stringify({ systemPrompt: "prompt" }),
+    activeSegmentIndex: 0,
+    totalSegmentCount: 1,
+    totalMessageCount: 3,
+    returnedMessageCount: 3,
+    oldestOffset: 0,
+    hasMoreBefore: false,
+    revision: "conv-1:after",
+    updatedAt: 501,
+    activeSegment: {
+      segmentIndex: 0,
+      segmentId: "seg-0",
+      messagesJson: JSON.stringify([replacementMessage]),
+      messageCount: 3,
+      createdAt: 100,
+      updatedAt: 500,
+    },
+    segments: [
+      {
+        segmentIndex: 0,
+        segmentId: "seg-0",
+        messagesJson: JSON.stringify([replacementMessage]),
+        startMessageIndex: 0,
+        messageCount: 3,
+        createdAt: 100,
+        updatedAt: 500,
+      },
+    ],
+  });
+
+  const result = await task;
+  assert.equal(result.revision, "conv-1:after");
+  assert.equal(result.activeSegment.segmentId, "seg-0");
+  assert.equal(result.meta.totalMessageCount, 3);
 });

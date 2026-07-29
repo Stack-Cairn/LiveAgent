@@ -4,33 +4,6 @@
 /// Must match BRANCH_CONVERSATION_DEFAULT_TITLE in agent-gui src/lib/chat/page/chatPageHelpers.ts.
 pub(crate) const BRANCH_DEFAULT_TITLE: &str = "新分支";
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatHistoryBranchAnchor {
-    pub segment_index: i64,
-    pub message_index: i64,
-    pub segment_id: String,
-    pub message_id: String,
-    pub role: String,
-    pub content_hash: String,
-}
-
-fn validate_branch_anchor(anchor: &ChatHistoryBranchAnchor) -> Result<(), String> {
-    if anchor.segment_index < 0 || anchor.message_index < 0 {
-        return Err("分支锚点 segmentIndex/messageIndex 不能小于 0".to_string());
-    }
-    if anchor.segment_id.trim().is_empty()
-        || anchor.message_id.trim().is_empty()
-        || anchor.content_hash.trim().is_empty()
-    {
-        return Err("分支锚点缺少 segmentId、messageId 或 contentHash".to_string());
-    }
-    if anchor.role.trim() != "user" {
-        return Err("分支锚点 role 必须为 user".to_string());
-    }
-    Ok(())
-}
-
 fn parse_branch_segment_messages(segment: &ChatHistorySegmentRecord) -> Result<Vec<Value>, String> {
     let parsed = serde_json::from_str::<Value>(&segment.messages_json)
         .map_err(|e| format!("解析历史分段 {} 失败：{e}", segment.segment_id))?;
@@ -49,19 +22,9 @@ fn branch_message_role_is_user(message: &Value) -> bool {
         == Some("user")
 }
 
-/// 镜像前端 getMessageStableId（conversationState.ts）：优先取消息 id /
-/// assistant responseId，否则用新分段索引 + 段内消息索引 + 时间戳兜底。
-fn branch_stable_message_id(message: &Value, segment_index: i64, message_index: usize) -> String {
-    history_message_id_for_ref(message).unwrap_or_else(|| {
-        format!(
-            "segment-{segment_index}-message-{message_index}-{}",
-            read_message_timestamp(message)
-        )
-    })
-}
-
 /// 镜像前端 normalizeSegment（conversationState.ts）：裁剪后重算
 /// message_count/start/end/updated_at，保留 segment_id、summary_json、created_at。
+/// start/end 的 stable id 与前端 getMessageStableId 同构（history_message_stable_id）。
 fn build_branch_sliced_segment(
     record: &ChatHistorySegmentRecord,
     kept_messages: &[Value],
@@ -70,10 +33,10 @@ fn build_branch_sliced_segment(
     let last_index = kept_messages.len().saturating_sub(1);
     let start_message_id = kept_messages
         .first()
-        .map(|message| branch_stable_message_id(message, new_segment_index, 0));
+        .map(|message| history_message_stable_id(message, new_segment_index, 0));
     let end_message_id = kept_messages
         .last()
-        .map(|message| branch_stable_message_id(message, new_segment_index, last_index));
+        .map(|message| history_message_stable_id(message, new_segment_index, last_index));
     let updated_at = kept_messages
         .last()
         .map(read_message_timestamp)
@@ -98,32 +61,13 @@ fn build_branch_sliced_segment(
 /// 返回复制到新会话的分段列表（已按 0..n-1 重编号）与消息总数。
 pub(crate) fn build_branch_segments(
     segments: &[ChatHistorySegmentRecord],
-    anchor: &ChatHistoryBranchAnchor,
+    anchor: &ChatHistoryMessageRef,
 ) -> Result<(Vec<ChatHistorySegmentInput>, i64), String> {
-    let target_segment_id = anchor.segment_id.trim();
-    let anchor_segment_pos = segments
-        .iter()
-        .position(|segment| segment.segment_id.trim() == target_segment_id)
-        .ok_or_else(|| "未找到分支锚点所在的历史分段".to_string())?;
-
-    let anchor_messages = parse_branch_segment_messages(&segments[anchor_segment_pos])?;
-    let matches_anchor = |message: &Value| {
-        message_matches_ref(message, &anchor.message_id, "user", &anchor.content_hash)
-    };
-    let hinted_index = usize::try_from(anchor.message_index).ok();
-    let anchor_position = hinted_index
-        .filter(|index| {
-            anchor_messages
-                .get(*index)
-                .map(|message| matches_anchor(message))
-                .unwrap_or(false)
-        })
-        .or_else(|| {
-            anchor_messages
-                .iter()
-                .position(|message| matches_anchor(message))
-        })
-        .ok_or_else(|| "未找到匹配的分支锚点消息".to_string())?;
+    let location = locate_history_message_ref(segments, anchor)
+        .map_err(|error| format!("未找到匹配的分支锚点消息：{error}"))?;
+    let anchor_segment_pos = location.segment_position;
+    let anchor_messages = location.messages;
+    let anchor_position = location.message_index;
 
     // 独占切点：锚点之后（跨分段）的第一条 user 消息；没有则整会话复制。
     // 顺带记录切点前是否存在非 user 消息：桌面 done 先于落盘（persist-lag），
@@ -204,45 +148,16 @@ pub(crate) fn build_branch_segments(
 
 /// context_meta_json 是前端 StoredChatContextMeta 的序列化：只覆写三个计数
 /// 字段，其余键保持原样；无法解析时原样保留。
-fn patch_branch_context_meta(
-    raw: &str,
-    active_segment_index: i64,
-    total_segment_count: i64,
-    total_message_count: i64,
-) -> String {
-    match serde_json::from_str::<Value>(raw) {
-        Ok(mut parsed) => match parsed.as_object_mut() {
-            Some(object) => {
-                object.insert(
-                    "activeSegmentIndex".to_string(),
-                    Value::from(active_segment_index),
-                );
-                object.insert(
-                    "totalSegmentCount".to_string(),
-                    Value::from(total_segment_count),
-                );
-                object.insert(
-                    "totalMessageCount".to_string(),
-                    Value::from(total_message_count),
-                );
-                parsed.to_string()
-            }
-            None => raw.to_string(),
-        },
-        Err(_) => raw.to_string(),
-    }
-}
-
 pub(crate) fn chat_history_branch_sync(
     conn: &mut Connection,
     source_id: &str,
-    anchor: &ChatHistoryBranchAnchor,
+    anchor: &ChatHistoryMessageRef,
 ) -> Result<ChatHistorySummary, String> {
     let source_id = source_id.trim();
     if source_id.is_empty() {
         return Err("历史对话 id 不能为空".to_string());
     }
-    validate_branch_anchor(anchor)?;
+    validate_user_history_message_ref(anchor)?;
 
     let tx = conn
         .transaction()
@@ -257,7 +172,7 @@ pub(crate) fn chat_history_branch_sync(
     let (segments, total_message_count) = build_branch_segments(&source_segments, anchor)?;
     let total_segment_count = segments.len() as i64;
     let active_segment_index = total_segment_count - 1;
-    let context_meta_json = patch_branch_context_meta(
+    let context_meta_json = patch_history_context_meta(
         &source.context_meta_json,
         active_segment_index,
         total_segment_count,
@@ -297,7 +212,7 @@ pub(crate) fn chat_history_branch_sync(
 
 pub(crate) async fn chat_history_branch_inner(
     id: String,
-    anchor: ChatHistoryBranchAnchor,
+    anchor: ChatHistoryMessageRef,
 ) -> Result<ChatHistorySummary, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
@@ -310,7 +225,7 @@ pub(crate) async fn chat_history_branch_inner(
 #[tauri::command]
 pub async fn chat_history_branch(
     id: String,
-    base_message_ref: ChatHistoryBranchAnchor,
+    base_message_ref: ChatHistoryMessageRef,
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_branch_inner(id, base_message_ref).await?;

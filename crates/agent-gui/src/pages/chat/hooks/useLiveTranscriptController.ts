@@ -273,6 +273,14 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
     [flushPendingLiveUpdates, liveTranscriptStore],
   );
 
+  const settleLiveTranscript = useCallback(
+    (targetStore: LiveTranscriptStore = liveTranscriptStore) => {
+      flushPendingLiveUpdates(targetStore);
+      targetStore.settle();
+    },
+    [flushPendingLiveUpdates, liveTranscriptStore],
+  );
+
   const appendDraftAssistantText = useCallback(
     (delta: string, targetStore: LiveTranscriptStore = liveTranscriptStore) => {
       const artifacts = resolveLiveTranscriptArtifacts(targetStore);
@@ -418,6 +426,7 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
     captureAbortSnapshot,
     getAbortSnapshot,
     resetLiveTranscript,
+    settleLiveTranscript,
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     updateToolStatus,

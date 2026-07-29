@@ -32,19 +32,19 @@ html[data-liveagent-webui="gateway"] .model-selector-item {
 html[data-liveagent-webui="gateway"] .model-selector-trigger,
 html[data-liveagent-webui="gateway"] .model-selector-current-label {
   font-size: 15px;
-  line-height: 1.1;
+  line-height: 1.3;
 }
 
 html[data-liveagent-webui="gateway"] .model-selector-dropdown,
 html[data-liveagent-webui="gateway"] .model-selector-item {
   font-size: 14px;
-  line-height: 1.15;
+  line-height: 1.3;
 }
 
 html[data-liveagent-webui="gateway"] .model-selector-menu-title,
 html[data-liveagent-webui="gateway"] .model-selector-group-label {
   font-size: 14px;
-  line-height: 1.15;
+  line-height: 1.3;
 }
 
 html[data-liveagent-webui="gateway"] .chat-history-sidebar {

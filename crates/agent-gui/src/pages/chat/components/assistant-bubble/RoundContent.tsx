@@ -1,19 +1,16 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { ChevronRight, Lightbulb, RefreshCw } from "../../../../components/icons";
 import { Markdown } from "../../../../components/Markdown";
 import { useLocale } from "../../../../i18n";
 import type { RetryAttemptRecord } from "../../../../lib/chat/conversation/liveTranscriptStore";
-import type { ToolTraceItem, UiRound } from "../../../../lib/chat/messages/uiMessages";
-import { normalizeLiveToolStatus, VIBING_STATUS } from "../../../../lib/chat/page/chatPageHelpers";
-import { groupRoundBlocks } from "./assistantBubbleUtils";
+import type { GroupedRoundBlock } from "./assistantBubbleUtils";
 import { HostedSearchGroupView } from "./HostedSearchGroupView";
 import { LazyCollapse } from "./LazyCollapse";
-import { AssistantStatus, CompactingText, VibingText } from "./StatusText";
+import { AssistantStatus } from "./StatusText";
 import { MemoToolCallItem } from "./ToolCallItem";
 import { getNativeDisplayImagePayload, NativeDisplayImageBlock } from "./ToolImages";
 import { ToolTraceGroup } from "./ToolTraceGroup";
-import { UsagePanel } from "./UsagePanel";
 
 const ThinkingBlock = memo(function ThinkingBlock({
   text,
@@ -45,7 +42,7 @@ const ThinkingBlock = memo(function ThinkingBlock({
         aria-expanded={isOpen}
         onClick={() => {
           userInteractedRef.current = true;
-          setIsOpen((prev) => !prev);
+          setIsOpen((previous) => !previous);
         }}
         className="thinking-block-toggle flex w-full cursor-pointer select-none items-center gap-2 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] font-normal text-muted-foreground/80 hover:text-foreground"
       >
@@ -92,7 +89,7 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
       <button
         type="button"
         aria-expanded={isOpen}
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => setIsOpen((previous) => !previous)}
         className="retry-details-toggle flex w-full cursor-pointer select-none items-center gap-2 py-1.5 text-left text-[calc(13px*var(--zone-font-scale,1))] font-normal text-muted-foreground/80 hover:text-foreground"
       >
         <RefreshCw className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
@@ -104,11 +101,9 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
       <LazyCollapse open={isOpen}>
         {() => (
           <div className="space-y-1 pb-1 pt-1.5">
-            {/* Index-keyed: attempt ordinals can repeat within one list (text
-                mode's tool-recovery loop restarts each wrapper's counter at 1)
-                and the list is append-only, so the index is the stable key. */}
             {attempts.map((entry, index) => (
               <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: retry attempts are append-only and their reported ordinals can repeat.
                 key={`${index}-${entry.attempt}-${entry.maxAttempts}`}
                 className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[calc(12px*var(--zone-font-scale,1))] text-muted-foreground"
               >
@@ -127,198 +122,98 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
   );
 });
 
-export const RoundContent = memo(function RoundContent(props: {
-  round: UiRound;
-  showUsage?: boolean;
-  usageContextWindow?: number;
-  isLive?: boolean;
-  isActive?: boolean;
-  // Pinned per row (see AssistantBubble); falls back to the live flag for
-  // callers that render outside the transcript row model.
-  renderMode?: "streaming" | "static";
-  toolStatus?: string | null;
-  toolStatusVariant?: "default" | "compaction";
-  retryAttempts?: RetryAttemptRecord[];
-  runningToolCallIds?: string[];
-  thinkingOpen?: boolean;
-  latestTodoItem?: ToolTraceItem | null;
-  isAborted?: boolean;
+export const RoundBlockContent = memo(function RoundBlockContent(props: {
+  block: GroupedRoundBlock;
+  isLive: boolean;
+  isMutable: boolean;
+  renderMode: "streaming" | "static";
+  runningToolCallIds: string[];
+  thinkingOpen: boolean;
+  isLatestThinking: boolean;
+  isAborted: boolean;
 }) {
   const {
-    round,
-    showUsage,
-    usageContextWindow,
+    block,
     isLive,
-    isActive,
+    isMutable,
     renderMode,
-    toolStatus,
-    toolStatusVariant,
-    retryAttempts,
     runningToolCallIds,
     thinkingOpen,
-    latestTodoItem,
-    isAborted = false,
+    isLatestThinking,
+    isAborted,
   } = props;
-  const groupedBlocks = useMemo(() => groupRoundBlocks(round.blocks), [round.blocks]);
-  const visibleGroupedBlocks = useMemo(
-    () =>
-      groupedBlocks.filter(
-        (block) =>
-          !latestTodoItem ||
-          block.kind !== "tool" ||
-          block.item.toolCall.name !== "TodoWrite" ||
-          block.item === latestTodoItem,
-      ),
-    [groupedBlocks, latestTodoItem],
-  );
-  const hasContent =
-    visibleGroupedBlocks.some((block) => {
-      if (
-        block.kind === "tool" ||
-        block.kind === "toolGroup" ||
-        block.kind === "hostedSearch" ||
-        block.kind === "hostedSearchGroup"
-      ) {
-        return true;
-      }
-      return block.text.trim().length > 0;
-    }) ||
-    (isActive && isLive);
-  const normalizedToolStatus =
-    isActive && isLive ? normalizeLiveToolStatus(toolStatus ?? null) : null;
-  const isCompactionStatus = toolStatusVariant === "compaction";
-  const isVibingStatus = normalizedToolStatus === VIBING_STATUS;
-  const hasRunningToolCall = useMemo(() => {
-    const runningIds = new Set(runningToolCallIds ?? []);
-    return visibleGroupedBlocks.some((block) => {
-      if (block.kind === "tool")
-        return Boolean(block.item.toolCall.id && runningIds.has(block.item.toolCall.id));
-      if (block.kind === "toolGroup") {
-        return block.items.some((item) =>
-          Boolean(item.toolCall.id && runningIds.has(item.toolCall.id)),
-        );
-      }
-      return false;
-    });
-  }, [runningToolCallIds, visibleGroupedBlocks]);
-  const latestThinkingKey = useMemo(() => {
-    for (let index = visibleGroupedBlocks.length - 1; index >= 0; index -= 1) {
-      const block = visibleGroupedBlocks[index];
-      if (block?.kind === "thinking") return block.key;
-    }
-    return null;
-  }, [visibleGroupedBlocks]);
-  const autoOpenThinking = isLive ? Boolean(isActive && thinkingOpen) : false;
 
-  if (!hasContent) return null;
+  let content: ReactNode;
+  if (block.kind === "thinking") {
+    const isRunning = isLive && thinkingOpen && isLatestThinking;
+    content = (
+      <ThinkingBlock
+        text={block.text}
+        open={isRunning}
+        isRunning={isRunning}
+        renderMode={renderMode}
+      />
+    );
+  } else if (block.kind === "tool") {
+    const displayImagePayload = getNativeDisplayImagePayload(block.item);
+    if (displayImagePayload) {
+      content = <NativeDisplayImageBlock payload={displayImagePayload} />;
+    } else if (block.item.toolCall.name === "Image" && !block.item.toolResult?.isError) {
+      content = null;
+    } else {
+      content = (
+        <MemoToolCallItem
+          item={block.item}
+          isAborted={isAborted}
+          isRunning={Boolean(
+            isLive && block.item.toolCall.id && runningToolCallIds.includes(block.item.toolCall.id),
+          )}
+        />
+      );
+    }
+  } else if (block.kind === "toolGroup") {
+    content = (
+      <ToolTraceGroup
+        items={block.items}
+        isAborted={isAborted}
+        runningToolCallIds={isLive ? runningToolCallIds : []}
+      />
+    );
+  } else if (block.kind === "hostedSearch" || block.kind === "hostedSearchGroup") {
+    content = (
+      <HostedSearchGroupView
+        items={block.kind === "hostedSearch" ? [block.item] : block.items}
+        isLive={isLive}
+      />
+    );
+  } else if (block.text.trim()) {
+    content = (
+      <Markdown
+        content={block.text}
+        className="font-chat"
+        renderMode={renderMode}
+        showCaret={Boolean(isLive && isMutable)}
+      />
+    );
+  } else {
+    content = null;
+  }
+
+  if (!content) return null;
 
   return (
     <div
       className={
         isLive
-          ? "space-y-2"
-          : // Settled rounds freeze todo-card animations; the strike-through /
-            // dimming of incomplete items is reserved for aborted replies —
-            // a normally completed reply may legitimately leave todos open.
-            `space-y-2 [&_.todo-list-view_.animate-spin]:!animate-none [&_.todo-list-view_.shimmer]:!animate-none${
+          ? undefined
+          : `w-full [&_.todo-list-view_.animate-spin]:!animate-none [&_.todo-list-view_.shimmer]:!animate-none${
               isAborted
                 ? " [&_.todo-list-view_[data-todo-incomplete]>span:last-child]:!text-muted-foreground/40 [&_.todo-list-view_[data-todo-incomplete]>span:last-child]:line-through"
                 : ""
             }`
       }
     >
-      {isActive &&
-      isLive &&
-      normalizedToolStatus &&
-      (!hasRunningToolCall || isCompactionStatus || isVibingStatus) ? (
-        <div className="py-1.5">
-          {isCompactionStatus ? (
-            <CompactingText />
-          ) : isVibingStatus ? (
-            <VibingText />
-          ) : (
-            <AssistantStatus>{normalizedToolStatus}</AssistantStatus>
-          )}
-        </div>
-      ) : null}
-
-      {isActive && isLive && retryAttempts && retryAttempts.length > 0 ? (
-        <RetryDetailsBlock attempts={retryAttempts} />
-      ) : null}
-
-      {visibleGroupedBlocks.map((block) => {
-        if (block.kind === "thinking") {
-          return (
-            <ThinkingBlock
-              key={block.key}
-              text={block.text}
-              open={autoOpenThinking && block.key === latestThinkingKey}
-              isRunning={autoOpenThinking && block.key === latestThinkingKey}
-              renderMode={renderMode ?? (isLive ? "streaming" : "static")}
-            />
-          );
-        }
-
-        if (block.kind === "tool") {
-          const displayImagePayload = getNativeDisplayImagePayload(block.item);
-          if (displayImagePayload) {
-            return <NativeDisplayImageBlock key={block.key} payload={displayImagePayload} />;
-          }
-
-          if (block.item.toolCall.name === "Image" && !block.item.toolResult?.isError) {
-            return null;
-          }
-
-          return (
-            <MemoToolCallItem
-              key={block.key}
-              item={block.item}
-              isAborted={isAborted}
-              isRunning={Boolean(
-                isLive &&
-                  block.item.toolCall.id &&
-                  (runningToolCallIds || []).includes(block.item.toolCall.id),
-              )}
-            />
-          );
-        }
-
-        if (block.kind === "toolGroup") {
-          return (
-            <ToolTraceGroup
-              key={block.key}
-              items={block.items}
-              isAborted={isAborted}
-              runningToolCallIds={isLive ? (runningToolCallIds ?? []) : []}
-            />
-          );
-        }
-
-        if (block.kind === "hostedSearch" || block.kind === "hostedSearchGroup") {
-          return (
-            <HostedSearchGroupView
-              key={block.key}
-              items={block.kind === "hostedSearch" ? [block.item] : block.items}
-            />
-          );
-        }
-
-        if (!block.text.trim()) return null;
-
-        return (
-          <Markdown
-            key={block.key}
-            content={block.text}
-            className="font-chat"
-            renderMode={renderMode ?? (isLive ? "streaming" : "static")}
-            showCaret={Boolean(isLive && isActive)}
-          />
-        );
-      })}
-
-      {showUsage ? (
-        <UsagePanel usage={round.meta?.usage} contextWindow={usageContextWindow} />
-      ) : null}
+      {content}
     </div>
   );
 });

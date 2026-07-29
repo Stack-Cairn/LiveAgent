@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { CliIdentityUpdateHost } from "./components/CliIdentityUpdateHost";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { Pin } from "./components/icons";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
@@ -19,6 +20,8 @@ import {
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
   subscribeToSystemThemePreference,
+  THEME_OPTIONS,
+  type Theme,
 } from "./lib/settings";
 import {
   loadPersistedSettingsWithDefaults,
@@ -392,6 +395,14 @@ export default function App() {
     }));
   }, [setSettings]);
 
+  // 托盘外观子菜单的直达设置（identity bail-out 避免重复落盘）。
+  const setTheme = useCallback(
+    (theme: Theme) => {
+      setSettings((prev) => (prev.theme === theme ? prev : { ...prev, theme }));
+    },
+    [setSettings],
+  );
+
   const openSettings = useCallback(
     (section: SectionId = "system") => {
       setSettingsSection(section);
@@ -412,17 +423,55 @@ export default function App() {
     setOverlay("leaving");
   }, []);
 
-  // 全局快捷键「新建对话」触发时，若设置覆盖层开着则先收起，露出对话页。
+  // 动作总线（Rust `app:action`）中 App 拥有的动作：主题/打开设置/网关开关/
+  // 检查更新，以及「新建对话」时先收起设置覆盖层（会话侧由 ChatPage 处理）。
   const closeSettingsRef = useRef(closeSettings);
   closeSettingsRef.current = closeSettings;
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
+  const openSettingsRef = useRef(openSettings);
+  openSettingsRef.current = openSettings;
+  const setThemeRef = useRef(setTheme);
+  setThemeRef.current = setTheme;
+  const runUpdateCheckRef = useRef<() => void>(() => {});
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | null = null;
-    listen("global-shortcut:new-chat", () => {
-      if (settingsOpenRef.current) {
-        closeSettingsRef.current();
+    listen<{ action: string; id?: string; value?: string }>("app:action", (event) => {
+      switch (event.payload.action) {
+        case "new-chat": {
+          if (settingsOpenRef.current) {
+            closeSettingsRef.current();
+          }
+          break;
+        }
+        case "set-theme": {
+          const theme = event.payload.value;
+          if ((THEME_OPTIONS as readonly string[]).includes(theme ?? "")) {
+            setThemeRef.current(theme as Theme);
+          }
+          break;
+        }
+        case "open-settings": {
+          openSettingsRef.current();
+          break;
+        }
+        case "check-updates": {
+          openSettingsRef.current("about");
+          runUpdateCheckRef.current();
+          break;
+        }
+        case "gateway-toggle": {
+          // 与设置页远程开关同一条路径：settings 保存链会落库并 apply_config，
+          // DB / 控制器 / 设置页开关三方保持一致（勿改为 Rust 直连开关）。
+          setSettings((prev) => ({
+            ...prev,
+            remote: { ...prev.remote, enabled: !prev.remote.enabled },
+          }));
+          break;
+        }
+        default:
+          break;
       }
     })
       .then((nextUnlisten) => {
@@ -441,7 +490,7 @@ export default function App() {
         unlisten();
       }
     };
-  }, []);
+  }, [setSettings]);
 
   const handleTransitionEnd = useCallback(() => {
     if (overlay === "leaving") {
@@ -473,6 +522,10 @@ export default function App() {
     includePrereleases: settings.updates.includePrereleases,
     messages: appUpdateMessages,
   });
+  // 托盘「检查更新」动作：controller 在监听 effect 之后创建，经 ref 回填。
+  runUpdateCheckRef.current = () => {
+    void appUpdate.runCheck().catch(() => undefined);
+  };
 
   useEffect(() => {
     if (!settingsReady) return;
@@ -533,6 +586,7 @@ export default function App() {
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppChrome>
+        <CliIdentityUpdateHost settings={settings} setSettings={setSettings} />
         <CronPromptRunner settings={settings} />
         <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
         <AppErrorBoundary>

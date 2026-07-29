@@ -1,4 +1,11 @@
 import type { CustomProvider } from "../settings";
+import {
+  CLI_IDENTITY_METADATA,
+  type CliIdentitySettings,
+  formatCliIdentityUserAgent,
+  getAppliedCliIdentityVersion,
+  isManagedCliIdentityProviderId,
+} from "./cliIdentityCore";
 
 const RESERVED_CUSTOM_HEADER_KEYS = new Set([
   "authorization",
@@ -16,9 +23,45 @@ const HTTP_HEADER_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 // WebView 的 fetch() 直接抛错、把整轮对话打断成一条与请求头无关的报错。
 const HTTP_HEADER_VALUE_PATTERN = /^[\t\x20-\x7e]*$/;
 
+export type CustomHeader = { key: string; value: string };
+
+export type CustomHeaderImportIssueReason =
+  | "invalid-item"
+  | "unsupported-value"
+  | "invalid-key"
+  | "reserved"
+  | "invalid-value"
+  | "malformed-header";
+
+export type CustomHeaderImportIssue = {
+  key?: string;
+  reason: CustomHeaderImportIssueReason;
+};
+
+export type CustomHeaderImportResult = {
+  headers: CustomHeader[];
+  issues: CustomHeaderImportIssue[];
+};
+
+export type CustomHeaderImportErrorCode =
+  | "empty"
+  | "invalid-json"
+  | "unsupported-json"
+  | "unterminated-quote";
+
+export class CustomHeaderImportError extends Error {
+  constructor(readonly code: CustomHeaderImportErrorCode) {
+    super(code);
+    this.name = "CustomHeaderImportError";
+  }
+}
+
 export const ANTHROPIC_DEFAULT_REQUEST_HEADERS = {
   "x-app": "cli",
-  "User-Agent": "claude-cli/2.1.71 (external, cli)",
+  "User-Agent": formatCliIdentityUserAgent(
+    "claude_code",
+    CLI_IDENTITY_METADATA.claude_code.builtinVersion,
+  ),
   "Content-Type": "application/json",
   "X-Stainless-OS": "MacOS",
   "X-Stainless-Arch": "arm64",
@@ -32,12 +75,17 @@ export const ANTHROPIC_DEFAULT_REQUEST_HEADERS = {
   "anthropic-dangerous-direct-browser-access": "true",
 } as const;
 
-export const CODEX_DEFAULT_USER_AGENT =
-  "codex_cli_rs/0.72.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal";
+export const CODEX_DEFAULT_USER_AGENT = formatCliIdentityUserAgent(
+  "codex",
+  CLI_IDENTITY_METADATA.codex.builtinVersion,
+);
 export const CODEX_SESSION_ID_HEADER = "session_id";
 export const CODEX_CONVERSATION_ID_HEADER = "conversation_id";
 
-export const XAI_DEFAULT_USER_AGENT = "grok-shell/0.2.110 (linux; x86_64)";
+export const XAI_DEFAULT_USER_AGENT = formatCliIdentityUserAgent(
+  "xai",
+  CLI_IDENTITY_METADATA.xai.builtinVersion,
+);
 
 const COMMON_CUSTOM_HEADER_KEY_PRESETS = [
   "X-Request-ID",
@@ -87,6 +135,53 @@ function findHeaderKey(
   return Object.keys(headers).find((key) => key.toLowerCase() === expected);
 }
 
+export function readCustomHeaderValue(
+  headers: CustomProvider["customHeaders"] | undefined,
+  name: string,
+): string | undefined {
+  const expected = name.toLowerCase();
+  for (let index = (headers?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const header = headers?.[index];
+    if (
+      header?.key.toLowerCase() === expected &&
+      isValidCustomHeaderKey(header.key) &&
+      isValidCustomHeaderValue(header.value)
+    ) {
+      return header.value;
+    }
+  }
+  return undefined;
+}
+
+export function resolveProviderCustomHeaders(
+  provider: Pick<CustomProvider, "type" | "apiKey" | "requestFormat" | "customHeaders">,
+  identities: CliIdentitySettings,
+): CustomProvider["customHeaders"] {
+  const customHeaders = provider.customHeaders ?? [];
+  if (!isManagedCliIdentityProviderId(provider.type)) return customHeaders;
+  const customUserAgent = readCustomHeaderValue(customHeaders, "User-Agent");
+  if (customUserAgent !== undefined && isValidCustomHeaderValue(customUserAgent)) {
+    return customHeaders;
+  }
+  if (provider.type === "claude_code" && isAnthropicOAuthApiKey(provider.apiKey)) {
+    return customHeaders;
+  }
+  if (provider.type === "codex" && provider.requestFormat === "openai-completions") {
+    return customHeaders;
+  }
+  const profile = identities[provider.type];
+  return [
+    {
+      key: "User-Agent",
+      value: formatCliIdentityUserAgent(
+        provider.type,
+        getAppliedCliIdentityVersion(provider.type, profile),
+      ),
+    },
+    ...customHeaders,
+  ];
+}
+
 export function isValidCustomHeaderKey(key: string): boolean {
   return HTTP_HEADER_TOKEN_PATTERN.test(key);
 }
@@ -101,6 +196,214 @@ export function isReservedCustomHeaderKey(key: string): boolean {
     RESERVED_CUSTOM_HEADER_KEYS.has(normalized) ||
     normalized.startsWith(RESERVED_CUSTOM_HEADER_KEY_PREFIX)
   );
+}
+function issueKey(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const safe = value.replace(/[\r\n]+/g, " ").trim();
+  return safe || undefined;
+}
+
+function addImportedHeader(
+  headers: CustomHeader[],
+  issues: CustomHeaderImportIssue[],
+  keyValue: unknown,
+  headerValue: unknown,
+): void {
+  if (typeof keyValue !== "string") {
+    issues.push({ reason: "invalid-item" });
+    return;
+  }
+
+  const key = keyValue;
+  if (
+    typeof headerValue !== "string" &&
+    typeof headerValue !== "number" &&
+    typeof headerValue !== "boolean"
+  ) {
+    issues.push({ key: issueKey(key), reason: "unsupported-value" });
+    return;
+  }
+  if (!isValidCustomHeaderKey(key)) {
+    issues.push({ key: issueKey(key), reason: "invalid-key" });
+    return;
+  }
+  if (isReservedCustomHeaderKey(key)) {
+    issues.push({ key, reason: "reserved" });
+    return;
+  }
+
+  const value = String(headerValue);
+  if (!isValidCustomHeaderValue(value)) {
+    issues.push({ key, reason: "invalid-value" });
+    return;
+  }
+
+  const existingIndex = headers.findIndex(
+    (header) => header.key.toLowerCase() === key.toLowerCase(),
+  );
+  const next = { key, value };
+  if (existingIndex >= 0) headers[existingIndex] = next;
+  else headers.push(next);
+}
+
+function tokenizeCurl(command: string): string[] {
+  const normalized = command.replace(/[\\`^][ \t]*\r?\n/g, " ");
+  const tokens: string[] = [];
+  let token = "";
+  let quote: "'" | '"' | null = null;
+  let started = false;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index];
+    if (quote) {
+      if (character === quote) {
+        quote = null;
+        continue;
+      }
+      if (
+        character === "\\" &&
+        quote === '"' &&
+        index + 1 < normalized.length &&
+        ['"', "\\"].includes(normalized[index + 1])
+      ) {
+        token += normalized[index + 1];
+        index += 1;
+        continue;
+      }
+      token += character;
+      continue;
+    }
+
+    if (character === "'" || character === '"') {
+      quote = character;
+      started = true;
+      continue;
+    }
+    if (/\s/.test(character)) {
+      if (started) {
+        tokens.push(token);
+        token = "";
+        started = false;
+      }
+      continue;
+    }
+    if (
+      character === "\\" &&
+      index + 1 < normalized.length &&
+      (/\s/.test(normalized[index + 1]) ||
+        normalized[index + 1] === "'" ||
+        normalized[index + 1] === '"')
+    ) {
+      token += normalized[index + 1];
+      started = true;
+      index += 1;
+      continue;
+    }
+    token += character;
+    started = true;
+  }
+
+  if (quote) throw new CustomHeaderImportError("unterminated-quote");
+  if (started) tokens.push(token);
+  return tokens;
+}
+
+function parseCurlHeaders(input: string): CustomHeaderImportResult {
+  const tokens = tokenizeCurl(input);
+  const headers: CustomHeader[] = [];
+  const issues: CustomHeaderImportIssue[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    let rawHeader: string | undefined;
+    if (token === "-H" || token === "--header") {
+      rawHeader = tokens[index + 1];
+      index += 1;
+    } else if (token.startsWith("--header=")) {
+      rawHeader = token.slice("--header=".length);
+    } else {
+      continue;
+    }
+
+    if (rawHeader === undefined) {
+      issues.push({ reason: "malformed-header" });
+      continue;
+    }
+    const separatorIndex = rawHeader.indexOf(":");
+    if (separatorIndex < 0) {
+      issues.push({ reason: "malformed-header" });
+      continue;
+    }
+    addImportedHeader(
+      headers,
+      issues,
+      rawHeader.slice(0, separatorIndex).trim(),
+      rawHeader.slice(separatorIndex + 1).trim(),
+    );
+  }
+
+  return { headers, issues };
+}
+
+export function parseCustomHeadersImport(input: string): CustomHeaderImportResult {
+  const trimmed = input.trim();
+  if (!trimmed) throw new CustomHeaderImportError("empty");
+
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      throw new CustomHeaderImportError("invalid-json");
+    }
+
+    const headers: CustomHeader[] = [];
+    const issues: CustomHeaderImportIssue[] = [];
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          issues.push({ reason: "invalid-item" });
+          continue;
+        }
+        const record = item as Record<string, unknown>;
+        addImportedHeader(headers, issues, record.key, record.value);
+      }
+    } else if (parsed && typeof parsed === "object") {
+      for (const [key, value] of Object.entries(parsed)) {
+        addImportedHeader(headers, issues, key, value);
+      }
+    } else {
+      throw new CustomHeaderImportError("unsupported-json");
+    }
+    return { headers, issues };
+  }
+
+  return parseCurlHeaders(trimmed);
+}
+
+export function mergeImportedCustomHeaders(
+  current: readonly CustomHeader[],
+  imported: readonly CustomHeader[],
+): { headers: CustomHeader[]; importedCount: number; overwrittenCount: number } {
+  let headers = current.map((header) => ({ ...header }));
+  let overwrittenCount = 0;
+
+  for (const importedHeader of imported) {
+    const expected = importedHeader.key.toLowerCase();
+    const firstIndex = headers.findIndex((header) => header.key.toLowerCase() === expected);
+    if (firstIndex < 0) {
+      headers.push({ ...importedHeader });
+      continue;
+    }
+
+    overwrittenCount += 1;
+    headers = headers.filter(
+      (header, index) => index === firstIndex || header.key.toLowerCase() !== expected,
+    );
+    headers[firstIndex] = { ...importedHeader };
+  }
+
+  return { headers, importedCount: imported.length, overwrittenCount };
 }
 export function mergeCustomHeaders(
   base: Record<string, string>,

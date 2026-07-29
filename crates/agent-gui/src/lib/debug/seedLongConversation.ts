@@ -4,7 +4,7 @@ import {
   appendMessagesToConversation,
   normalizeConversationState,
 } from "../chat/conversation/conversationState";
-import { persistConversationState } from "../chat/history/chatHistory";
+import { persistConversationRuntime } from "../chat/history/chatHistory";
 import { createUuid } from "../shared/id";
 
 // Dev-only transcript stress fixture: builds a large conversation with the
@@ -225,7 +225,7 @@ export async function seedLongConversation(options: SeedLongConversationOptions 
     }
   }
 
-  await persistConversationState({
+  await persistConversationRuntime({
     conversationId,
     providerId: "seed",
     model: "seed-model",
@@ -234,8 +234,8 @@ export async function seedLongConversation(options: SeedLongConversationOptions 
     createdAt: startedAt,
     updatedAt: Date.now(),
     state,
-    getPreviousState: () => null,
-    commitPersistedState: () => {},
+    getPersistenceCursor: () => null,
+    commitPersistenceCursor: () => {},
   });
 
   console.info(

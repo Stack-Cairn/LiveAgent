@@ -1,8 +1,10 @@
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { Terminal } from "../../../components/icons";
 import type { ConfirmDialogOptions } from "../../../components/ui/confirm-dialog";
-import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
-import { deleteChatHistory } from "../../../lib/chat/history/chatHistory";
+import {
+  type ConversationPersistenceCursor,
+  deleteChatHistory,
+} from "../../../lib/chat/history/chatHistory";
 import { memoryDeleteProject } from "../../../lib/memory/api";
 import {
   type AppSettings,
@@ -43,7 +45,7 @@ type UseWorkspaceProjectRemovalParams = {
   isConversationRunning: (conversationId: string) => boolean;
   currentConversationIdRef: MutableRefObject<string>;
   conversationRuntimeCacheRef: MutableRefObject<Map<string, ConversationRuntimeEntry>>;
-  persistedConversationStateRef: MutableRefObject<Map<string, ConversationViewState>>;
+  conversationPersistenceCursorRef: MutableRefObject<Map<string, ConversationPersistenceCursor>>;
   locallySyncedHistoryUpdatedAtRef: MutableRefObject<Map<string, number>>;
   deleteConversationLocalCaches: (conversationId: string) => void;
   disposeSubagentsForConversation: (conversationId: string) => void;
@@ -79,7 +81,7 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
     isConversationRunning,
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    persistedConversationStateRef,
+    conversationPersistenceCursorRef,
     locallySyncedHistoryUpdatedAtRef,
     deleteConversationLocalCaches,
     disposeSubagentsForConversation,
@@ -231,7 +233,7 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
             }
             removeSharedHistoryItems(deletedConversationIds);
             for (const conversationId of deletedConversationIds) {
-              persistedConversationStateRef.current.delete(conversationId);
+              conversationPersistenceCursorRef.current.delete(conversationId);
               conversationRuntimeCacheRef.current.delete(conversationId);
               locallySyncedHistoryUpdatedAtRef.current.delete(conversationId);
               deleteConversationLocalCaches(conversationId);

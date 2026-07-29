@@ -2,13 +2,11 @@ import { type ReactNode, useState } from "react";
 
 import { cn } from "../../../../lib/shared/utils";
 
-// Collapsible region whose body mounts on first expand and stays mounted
-// forever after. Collapsed-from-birth content costs nothing — no Streamdown
-// parse, no shiki highlight, no diff build, no DOM — which is what makes
-// scrolling a settled transcript cheap; once revealed it keeps its state
-// exactly like the old always-mounted markup (the settle zero-remount
-// invariant holds because the latch lives in components whose keys carry
-// over).
+// Collapsible region whose body mounts on first expand. Running content may
+// retain that body while closed so in-progress widgets keep their local
+// state; settled content releases it immediately on collapse. Content that
+// starts closed still costs nothing — no Streamdown parse, Shiki highlight,
+// diff build or retained DOM.
 //
 // The height change lands in a single commit — deliberately no
 // grid-template-rows transition. A layout animation resizes the virtualized
@@ -20,15 +18,17 @@ import { cn } from "../../../../lib/shared/utils";
 // sees exactly one resize per toggle.
 export function LazyCollapse(props: {
   open: boolean;
+  retainWhileClosed?: boolean;
   className?: string;
   children: () => ReactNode;
 }) {
-  const { open, className, children } = props;
+  const { open, retainWhileClosed = false, className, children } = props;
   const [mounted, setMounted] = useState(open);
   if (open && !mounted) {
     // Render-phase latch: the body mounts in the same commit as the expand.
     setMounted(true);
   }
+  const shouldRenderBody = open || (mounted && retainWhileClosed);
 
   return (
     <div
@@ -40,7 +40,7 @@ export function LazyCollapse(props: {
       )}
     >
       <div className="min-h-0 overflow-hidden">
-        {mounted ? (
+        {shouldRenderBody ? (
           // Dropping the class on collapse resets the CSS animation, so
           // every re-expand replays the entrance.
           <div className={open ? "lazy-collapse-reveal" : "invisible"}>{children()}</div>

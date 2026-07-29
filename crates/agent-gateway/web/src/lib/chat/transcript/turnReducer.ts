@@ -635,15 +635,42 @@ export function applyEventToTurn(turn: Turn, event: ChatEvent): Turn {
 // already-present user bubble keep their identity, so nothing remounts.
 export function rebuildTurnFromSnapshot(turn: Turn, parsed: ChatEntry[]): Turn {
   const ns = turnNamespace(turn);
-  // Index the delta-built tool calls: the snapshot's content is debounced
-  // producer state and can lag the live delta stream, so a rebuild must never
-  // roll a tool call's args back to a lower progress.
-  const existingToolCalls = new Map<string, ChatEntry & { kind: "tool_call" }>();
-  for (const entry of turn.entries) {
-    if (entry.kind === "tool_call" && entry.toolCall.id) {
-      existingToolCalls.set(entry.toolCall.id, entry);
+  const usedExistingEntries = new Set<ChatEntry>();
+  const findStableEntry = (incoming: ChatEntry): ChatEntry | undefined => {
+    const exactSnapshotId = `${ns}:s:${incoming.id}`;
+    const exact = turn.entries.find(
+      (entry) => !usedExistingEntries.has(entry) && entry.id === exactSnapshotId,
+    );
+    if (exact) {
+      return exact;
     }
-  }
+    return turn.entries.find((entry) => {
+      if (usedExistingEntries.has(entry) || entry.kind !== incoming.kind) {
+        return false;
+      }
+      if (entry.kind === "tool_call" && incoming.kind === "tool_call") {
+        return Boolean(entry.toolCall.id) && entry.toolCall.id === incoming.toolCall.id;
+      }
+      if (entry.kind === "tool_result" && incoming.kind === "tool_result") {
+        return (
+          Boolean(entry.toolResult.toolCallId) &&
+          entry.toolResult.toolCallId === incoming.toolResult.toolCallId
+        );
+      }
+      if ("round" in entry || "round" in incoming) {
+        const existingRound =
+          "round" in entry && typeof entry.round === "number" && entry.round > 0
+            ? Math.floor(entry.round)
+            : 1;
+        const incomingRound =
+          "round" in incoming && typeof incoming.round === "number" && incoming.round > 0
+            ? Math.floor(incoming.round)
+            : 1;
+        return existingRound === incomingRound;
+      }
+      return true;
+    });
+  };
   let user = turn.user;
   const entries: ChatEntry[] = [];
   for (const entry of parsed) {
@@ -655,31 +682,33 @@ export function rebuildTurnFromSnapshot(turn: Turn, parsed: ChatEntry[]): Turn {
       }
       continue;
     }
-    // Snapshot entries carry runtime-assigned ids that are stable per run;
-    // prefixing with the turn namespace keeps them from colliding with other
-    // runs while staying identical across repeated snapshots.
+    // Keep the delta-built identity wherever the canonical entry corresponds
+    // to an existing slot. This lets an authoritative correction replace the
+    // text/tool payload without remounting the assistant row.
+    const previous = findStableEntry(entry);
+    if (previous) {
+      usedExistingEntries.add(previous);
+    }
     let merged = entry;
-    if (entry.kind === "tool_call") {
-      const prev = existingToolCalls.get(entry.toolCall.id);
-      if (prev) {
-        const prevProgress = toolArgsProgress(
-          prev.toolCall.name,
-          normalizeToolArguments(prev.toolCall.arguments),
-        );
-        const snapshotProgress = toolArgsProgress(
-          entry.toolCall.name,
-          normalizeToolArguments(entry.toolCall.arguments),
-        );
-        if (
-          prevProgress !== undefined &&
-          snapshotProgress !== undefined &&
-          snapshotProgress < prevProgress
-        ) {
-          merged = { ...entry, toolCall: prev.toolCall, summary: prev.summary, text: prev.text };
-        }
+    if (entry.kind === "tool_call" && previous?.kind === "tool_call") {
+      const prev = previous;
+      const prevProgress = toolArgsProgress(
+        prev.toolCall.name,
+        normalizeToolArguments(prev.toolCall.arguments),
+      );
+      const snapshotProgress = toolArgsProgress(
+        entry.toolCall.name,
+        normalizeToolArguments(entry.toolCall.arguments),
+      );
+      if (
+        prevProgress !== undefined &&
+        snapshotProgress !== undefined &&
+        snapshotProgress < prevProgress
+      ) {
+        merged = { ...entry, toolCall: prev.toolCall, summary: prev.summary, text: prev.text };
       }
     }
-    entries.push({ ...merged, id: `${ns}:s:${entry.id}` } as ChatEntry);
+    entries.push({ ...merged, id: previous?.id ?? `${ns}:s:${entry.id}` } as ChatEntry);
   }
   if (user === turn.user && entries.length === 0 && turn.entries.length === 0) {
     return turn;

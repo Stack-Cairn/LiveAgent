@@ -54,7 +54,7 @@ impl GatewayController {
                 let pong = match self.current_outbound_control_sender() {
                     Ok(sender) => match sender.try_send(pong) {
                         Ok(()) => return Ok(()),
-                        Err(error) => error.into_inner(),
+                        Err(envelope) => envelope,
                     },
                     Err(_) => pong,
                 };
@@ -84,6 +84,9 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::ChatQueue(request)) => {
                 self.handle_chat_queue_request(request_id, request).await
+            }
+            Some(proto::gateway_envelope::Payload::ChatIngressAck(ack)) => {
+                self.handle_chat_ingress_ack(request_id, ack).await
             }
             Some(proto::gateway_envelope::Payload::CronManage(request)) => {
                 // Successful apply actions broadcast their own snapshot via the

@@ -40,27 +40,25 @@ function createEntry(id, options = {}) {
   };
 }
 
-function createState(id) {
+function createCursor(id) {
   return {
-    id,
-    meta: {
-      totalMessageCount: 1,
-    },
+    activeSegmentIndex: 0,
+    activeSegmentId: `${id}-segment`,
   };
 }
 
 test("pruneIdleConversationRuntimeCaches evicts oldest idle runtime entries", () => {
   const runtimeCache = new Map();
-  const persistedStateCache = new Map();
+  const persistenceCursors = new Map();
   for (const id of ["a", "b", "c", "d"]) {
     setConversationRuntimeCacheEntry(runtimeCache, id, createEntry(id));
-    persistedStateCache.set(id, createState(id));
+    persistenceCursors.set(id, createCursor(id));
   }
   const pruned = [];
 
   const result = pruneIdleConversationRuntimeCaches({
     runtimeCache,
-    persistedStateCache,
+    persistenceCursors,
     maxIdleEntries: 2,
     onPruneConversation: (id) => pruned.push(id),
   });
@@ -68,12 +66,12 @@ test("pruneIdleConversationRuntimeCaches evicts oldest idle runtime entries", ()
   assert.deepEqual(result, ["a", "b"]);
   assert.deepEqual(pruned, ["a", "b"]);
   assert.deepEqual([...runtimeCache.keys()], ["c", "d"]);
-  assert.deepEqual([...persistedStateCache.keys()], ["c", "d"]);
+  assert.deepEqual([...persistenceCursors.keys()], ["c", "d"]);
 });
 
 test("pruneIdleConversationRuntimeCaches keeps visible and running conversations", () => {
   const runtimeCache = new Map();
-  const persistedStateCache = new Map();
+  const persistenceCursors = new Map();
   setConversationRuntimeCacheEntry(runtimeCache, "visible", createEntry("visible"));
   setConversationRuntimeCacheEntry(
     runtimeCache,
@@ -84,12 +82,12 @@ test("pruneIdleConversationRuntimeCaches keeps visible and running conversations
   setConversationRuntimeCacheEntry(runtimeCache, "running", createEntry("running"));
   setConversationRuntimeCacheEntry(runtimeCache, "new-idle", createEntry("new-idle"));
   for (const id of runtimeCache.keys()) {
-    persistedStateCache.set(id, createState(id));
+    persistenceCursors.set(id, createCursor(id));
   }
 
   const result = pruneIdleConversationRuntimeCaches({
     runtimeCache,
-    persistedStateCache,
+    persistenceCursors,
     keepConversationIds: ["visible"],
     isConversationRunning: (id) => id === "running",
     maxIdleEntries: 1,
@@ -101,47 +99,47 @@ test("pruneIdleConversationRuntimeCaches keeps visible and running conversations
     ["visible", "sending", "running", "new-idle"],
   );
   assert.deepEqual(
-    [...persistedStateCache.keys()],
+    [...persistenceCursors.keys()],
     ["visible", "sending", "running", "new-idle"],
   );
 });
 
 test("setConversationRuntimeCacheEntry refreshes LRU order", () => {
   const runtimeCache = new Map();
-  const persistedStateCache = new Map();
+  const persistenceCursors = new Map();
   for (const id of ["a", "b", "c"]) {
     setConversationRuntimeCacheEntry(runtimeCache, id, createEntry(id));
-    persistedStateCache.set(id, createState(id));
+    persistenceCursors.set(id, createCursor(id));
   }
   setConversationRuntimeCacheEntry(runtimeCache, "a", createEntry("a", { messageCount: 2 }));
 
   const result = pruneIdleConversationRuntimeCaches({
     runtimeCache,
-    persistedStateCache,
+    persistenceCursors,
     maxIdleEntries: 2,
   });
 
   assert.deepEqual(result, ["b"]);
   assert.deepEqual([...runtimeCache.keys()], ["c", "a"]);
-  assert.deepEqual([...persistedStateCache.keys()], ["a", "c"]);
+  assert.deepEqual([...persistenceCursors.keys()], ["a", "c"]);
 });
 
-test("pruneIdleConversationRuntimeCaches removes unprotected persisted-only states", () => {
+test("pruneIdleConversationRuntimeCaches removes unprotected cursor-only entries", () => {
   const runtimeCache = new Map();
-  const persistedStateCache = new Map([
-    ["visible", createState("visible")],
-    ["stale-a", createState("stale-a")],
-    ["stale-b", createState("stale-b")],
+  const persistenceCursors = new Map([
+    ["visible", createCursor("visible")],
+    ["stale-a", createCursor("stale-a")],
+    ["stale-b", createCursor("stale-b")],
   ]);
   setConversationRuntimeCacheEntry(runtimeCache, "visible", createEntry("visible"));
 
   const result = pruneIdleConversationRuntimeCaches({
     runtimeCache,
-    persistedStateCache,
+    persistenceCursors,
     keepConversationIds: ["visible"],
   });
 
   assert.deepEqual(result, ["stale-a", "stale-b"]);
   assert.deepEqual([...runtimeCache.keys()], ["visible"]);
-  assert.deepEqual([...persistedStateCache.keys()], ["visible"]);
+  assert.deepEqual([...persistenceCursors.keys()], ["visible"]);
 });

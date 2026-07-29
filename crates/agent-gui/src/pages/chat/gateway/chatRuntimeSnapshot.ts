@@ -1,5 +1,6 @@
 import type { Message, ToolCall, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
 
+import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptState } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { HostedSearchBlock } from "../../../lib/chat/messages/hostedSearch";
 import {
@@ -63,6 +64,12 @@ export type GatewayRuntimeSnapshotEntry =
 export type GatewayRuntimeSnapshotInput = {
   userMessage?: Message | null;
   liveTranscript: LiveTranscriptState;
+};
+
+export type GatewayFinalProjectionInput = {
+  state: ConversationViewState;
+  userMessage: Message;
+  runId: string;
 };
 
 function readMessageId(message: Message | undefined, fallback: string) {
@@ -245,7 +252,9 @@ function appendRoundEntries(
   flushText();
 }
 
-function buildUserEntry(message: Message): GatewayRuntimeSnapshotEntry | null {
+function buildUserEntry(
+  message: Message,
+): Extract<GatewayRuntimeSnapshotEntry, { kind: "user" }> | null {
   if (message.role !== "user") {
     return null;
   }
@@ -290,5 +299,49 @@ export function buildGatewayRuntimeSnapshotEntries(
     });
   }
 
+  return entries;
+}
+
+export function buildGatewayFinalProjectionEntries(
+  input: GatewayFinalProjectionInput,
+): GatewayRuntimeSnapshotEntry[] {
+  const userEntry = buildUserEntry(input.userMessage);
+  const entries: GatewayRuntimeSnapshotEntry[] = userEntry ? [userEntry] : [];
+  const userMessageId = readMessageId(input.userMessage, "");
+  let userIndex = input.state.transcript.items.findIndex(
+    (item) => item.kind === "user" && item.messageRef?.messageId === userMessageId,
+  );
+  if (userIndex < 0 && userEntry) {
+    for (let index = input.state.transcript.items.length - 1; index >= 0; index -= 1) {
+      const item = input.state.transcript.items[index];
+      if (
+        item?.kind === "user" &&
+        item.text === userEntry.text &&
+        item.attachments.length === userEntry.attachments.length
+      ) {
+        userIndex = index;
+        break;
+      }
+    }
+  }
+  if (userIndex < 0) {
+    return entries;
+  }
+
+  let assistantGroupIndex = 0;
+  for (let index = userIndex + 1; index < input.state.transcript.items.length; index += 1) {
+    const item = input.state.transcript.items[index];
+    if (!item) continue;
+    if (item.kind === "user") {
+      break;
+    }
+    if (item.kind !== "assistant") {
+      continue;
+    }
+    for (const round of item.rounds) {
+      appendRoundEntries(entries, round, `run-${input.runId}-assistant-${assistantGroupIndex}`);
+      assistantGroupIndex += 1;
+    }
+  }
   return entries;
 }

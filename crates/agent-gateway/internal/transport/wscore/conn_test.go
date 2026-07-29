@@ -2,6 +2,7 @@ package wscore
 
 import (
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -165,5 +166,67 @@ func TestOnCloseRunsExactlyOnce(t *testing.T) {
 	c.Close()
 	if calls != 1 {
 		t.Fatalf("OnClose calls = %d, want 1", calls)
+	}
+}
+
+func TestDataQueueEnforcesByteLimit(t *testing.T) {
+	t.Parallel()
+
+	c := NewConn(nil, Config{
+		QueueSize:    4,
+		QueueBytes:   4,
+		WriteTimeout: 20 * time.Millisecond,
+	})
+	if err := c.Enqueue(Frame{Class: FrameData, Kind: "chat.event", Data: []byte("1234")}); err != nil {
+		t.Fatalf("Enqueue within byte limit = %v, want nil", err)
+	}
+	if err := c.Enqueue(Frame{Class: FrameData, Kind: "chat.event", Data: []byte("5")}); !errors.Is(err, ErrWriteQueueFull) {
+		t.Fatalf("Enqueue beyond aggregate byte limit = %v, want ErrWriteQueueFull", err)
+	}
+	if got := c.QueueByteOverflows(); got != 1 {
+		t.Fatalf("QueueByteOverflows = %d, want 1", got)
+	}
+}
+
+func TestFrameLargerThanByteLimitFailsImmediately(t *testing.T) {
+	t.Parallel()
+
+	c := NewConn(nil, Config{QueueSize: 4, QueueBytes: 4, WriteTimeout: time.Second})
+	started := time.Now()
+	err := c.Enqueue(Frame{Class: FrameData, Kind: "chat.event", Data: []byte("12345")})
+	if !errors.Is(err, ErrWriteFrameTooLarge) {
+		t.Fatalf("oversized Enqueue = %v, want ErrWriteFrameTooLarge", err)
+	}
+	if waited := time.Since(started); waited > 100*time.Millisecond {
+		t.Fatalf("oversized Enqueue waited %s, want immediate rejection", waited)
+	}
+	if got := c.QueueByteOverflows(); got != 1 {
+		t.Fatalf("QueueByteOverflows = %d, want 1", got)
+	}
+}
+
+func TestFirstWriteErrorClosesWithoutRetry(t *testing.T) {
+	t.Parallel()
+
+	c := NewConn(nil, Config{QueueSize: 1, QueueBytes: 16, WriteTimeout: time.Second})
+	var calls atomic.Int64
+	c.writeOverride = func(Frame) error {
+		calls.Add(1)
+		return errors.New("write failed")
+	}
+	c.StartWriteLoop()
+	if err := c.Enqueue(Frame{Class: FrameData, Kind: "chat.event", Data: []byte("payload")}); err != nil {
+		t.Fatalf("Enqueue = %v, want nil", err)
+	}
+	select {
+	case <-c.Done():
+	case <-time.After(time.Second):
+		t.Fatal("write error did not close connection")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("write attempts = %d, want exactly 1", got)
+	}
+	if got := c.WriterCloses(); got != 1 {
+		t.Fatalf("WriterCloses = %d, want 1", got)
 	}
 }

@@ -14,7 +14,7 @@ use crate::runtime::managed_process::ManagedProcessRegistry;
 use crate::runtime::sftp::SftpSessionRegistry;
 use crate::runtime::terminal::TerminalSessionRegistry;
 use crate::services::automation::AutomationStore;
-use crate::services::chat_run_ledger::{ChatRunLedger, ChatRunLedgerState};
+use crate::services::chat_run_ledger::ChatRunLedger;
 use crate::services::memory::MemoryStore;
 use crate::services::provider_usage::ProviderUsageService;
 use crate::services::tunnel::{TunnelProxy, TunnelStore};
@@ -37,6 +37,7 @@ impl GatewayController {
         let (config_tx, _) = watch::channel(initial_config);
         let tunnel_store = TunnelStore::new(app_handle.clone());
         let workspace_watch = Arc::new(WorkspaceWatchService::new(app_handle.clone()));
+        let chat_ingress = ChatIngressMirror::spawn(app_handle.clone());
         Self {
             app_handle,
             automation_store,
@@ -72,6 +73,8 @@ impl GatewayController {
             tunnel_proxy: TunnelProxy::new(),
             workspace_watch,
             pending_chat_queue_requests: Mutex::new(HashMap::new()),
+            chat_ingress,
+            chat_ingress_flush_lock: tokio::sync::Mutex::new(()),
             terminal_forwarder_once: Once::new(),
             terminal_stream_forwarder_once: Once::new(),
             sftp_forwarder_once: Once::new(),
@@ -158,8 +161,8 @@ impl GatewayController {
                     if let Err(error) = controller.expire_remote_chat_leases().await {
                         eprintln!("expire gateway remote chat leases failed: {error}");
                     }
-                    if let Err(error) = controller.flush_unsent_chat_run_terminals().await {
-                        eprintln!("flush gateway chat run terminals failed: {error}");
+                    if let Err(error) = controller.sweep_chat_run_ledger() {
+                        eprintln!("sweep gateway chat run ledger failed: {error}");
                     }
                 }
             });
@@ -349,47 +352,6 @@ impl GatewayController {
             })
     }
 
-    pub async fn send_chat_event(
-        &self,
-        request_id: String,
-        event: Value,
-        worker_id: Option<String>,
-    ) -> Result<(), String> {
-        // Terminal events must bypass the lease-freshness check: an expired but
-        // still-owned lease may no longer be "current", yet dropping the run's
-        // done/error signal here would leave the WebUI streaming forever.
-        let is_terminal = chat_event_is_terminal(&event);
-        if !self.renew_remote_chat_request_lease(&request_id, worker_id.as_deref(), !is_terminal)? {
-            return Ok(());
-        }
-        let conversation_id = chat_event_conversation_id(&event);
-        if is_terminal {
-            let state = if chat_event_type(&event) == Some("done") {
-                ChatRunLedgerState::Completed
-            } else {
-                ChatRunLedgerState::Failed
-            };
-            // Carry the error text into the ledger so a retransmitted terminal
-            // control event still surfaces it after the original send failed.
-            let message = event
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .trim();
-            // Record the terminal before attempting the send so a failed send
-            // is retransmitted by the ledger flush loop.
-            self.ledger_mark_run_terminal(&request_id, &conversation_id, state, "", message)?;
-        } else {
-            self.ledger_touch_run(&request_id, &conversation_id)?;
-        }
-        let envelope = build_chat_event_envelope(request_id.clone(), event)?;
-        let result = self.send_agent_envelope(envelope).await;
-        if is_terminal && result.is_ok() {
-            self.ledger_mark_run_terminal_sent(&request_id)?;
-        }
-        result
-    }
-
     pub async fn publish_history_sync(&self, event: GatewayHistorySyncEvent) {
         if let Err(error) = self.app_handle.emit(CHAT_HISTORY_SYNC_EVENT, event.clone()) {
             eprintln!("emit chat history sync failed: {error}");
@@ -410,37 +372,6 @@ impl GatewayController {
         if let Err(error) = self.send_agent_envelope(envelope).await {
             eprintln!("send gateway history sync event failed: {error}");
         }
-    }
-
-    pub async fn publish_chat_runtime_snapshot(
-        &self,
-        snapshot: GatewayChatRuntimeSnapshot,
-    ) -> Result<(), String> {
-        let run_id = snapshot.run_id.trim().to_string();
-        let conversation_id = snapshot.conversation_id.trim().to_string();
-        let terminal_state = match snapshot.state.trim() {
-            "completed" => Some(ChatRunLedgerState::Completed),
-            "failed" => Some(ChatRunLedgerState::Failed),
-            "cancelled" => Some(ChatRunLedgerState::Cancelled),
-            _ => None,
-        };
-        if !run_id.is_empty() {
-            match terminal_state {
-                Some(state) => {
-                    self.ledger_mark_run_terminal(&run_id, &conversation_id, state, "", "")?;
-                }
-                None if snapshot.state.trim() == "running" => {
-                    self.ledger_touch_run(&run_id, &conversation_id)?;
-                }
-                None => {}
-            }
-        }
-        let envelope = build_chat_runtime_snapshot_envelope(snapshot)?;
-        let result = self.send_agent_envelope(envelope).await;
-        if terminal_state.is_some() && !run_id.is_empty() && result.is_ok() {
-            self.ledger_mark_run_terminal_sent(&run_id)?;
-        }
-        result
     }
 
     pub async fn publish_settings_sync(&self, payload: Value) -> Result<(), String> {

@@ -4,8 +4,9 @@ use serde_json::Value;
 
 use crate::commands::settings::{load_remote_settings, open_db, parse_remote_settings_payload};
 use crate::services::gateway::{
-    GatewayChatClaimedRequest, GatewayChatQueueEventInput, GatewayChatQueueResponseInput,
-    GatewayChatRuntimeSnapshot, GatewayController, GatewayStatusSnapshot,
+    GatewayChatCheckpointCommitResult, GatewayChatCheckpointInput, GatewayChatClaimedRequest,
+    GatewayChatIngressAcceptResult, GatewayChatIngressBatchInput, GatewayChatQueueEventInput,
+    GatewayChatQueueResponseInput, GatewayController, GatewayStatusSnapshot,
 };
 use crate::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
 use crate::services::tunnel::{
@@ -82,15 +83,19 @@ pub fn gateway_nudge_connection(
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn gateway_send_chat_event(
-    request_id: String,
-    event: Value,
-    worker_id: Option<String>,
+pub async fn gateway_send_chat_ingress_batch(
+    input: GatewayChatIngressBatchInput,
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
-) -> Result<(), String> {
-    gateway_controller
-        .send_chat_event(request_id, event, worker_id)
-        .await
+) -> Result<GatewayChatIngressAcceptResult, String> {
+    gateway_controller.accept_chat_ingress_batch(input).await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn gateway_commit_chat_checkpoint(
+    input: GatewayChatCheckpointInput,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<GatewayChatCheckpointCommitResult, String> {
+    gateway_controller.commit_chat_checkpoint(input).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -241,16 +246,6 @@ pub async fn gateway_publish_chat_queue_event(
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
     gateway_controller.publish_chat_queue_event(input).await
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn gateway_publish_chat_runtime_snapshot(
-    input: GatewayChatRuntimeSnapshot,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
-) -> Result<(), String> {
-    gateway_controller
-        .publish_chat_runtime_snapshot(input)
-        .await
 }
 
 #[tauri::command]

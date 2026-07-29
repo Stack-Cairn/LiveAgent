@@ -190,7 +190,7 @@ export function createGatewayBridgeEventController(
         conversation_id: params.conversationId,
         checkpoint: {
           summaryId: summary.id,
-          segmentIndex: state.activeSegmentIndex,
+          segmentIndex: activeSegment.segmentIndex,
           coveredMessageCount: summary.summaryMeta.coveredMessageCount,
           coversThroughMessageId: summary.summaryMeta.coversThroughMessageId,
           timestamp: summary.timestamp,

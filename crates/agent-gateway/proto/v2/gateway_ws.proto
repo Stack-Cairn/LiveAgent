@@ -35,6 +35,9 @@ message ClientHello {
   // 客户端标识（如 "webui" / "desktop"），仅用于观测与日志。
   string client_name = 6;
   string client_version = 7;
+  // Optional feature identifiers supported by this client. Reliable desktop
+  // chat ingress is negotiated with "CHAT_INGRESS_V1".
+  repeated string capabilities = 8;
 }
 
 // ServerHello 是服务端对 ClientHello 的应答；ok=false 时随即关闭连接。
@@ -48,6 +51,8 @@ message ServerHello {
   // 服务端心跳周期与消息大小上限，客户端应据此配置本地看门狗与分片。
   uint32 heartbeat_period_seconds = 5;
   uint64 max_message_bytes = 6;
+  // Feature identifiers supported by the gateway.
+  repeated string capabilities = 7;
 }
 
 // PingFrame / PongFrame 是应用层心跳：WS 控制帧 ping 探测网络栈，本帧探测页面 JS/事件循环存活。

@@ -51,6 +51,10 @@ func (m *Manager) ingestChatEvent(agentID, requestID string, event *gatewayv2.Ch
 	if eventType == "" {
 		eventType = chatwire.EventTypeName(event.GetType())
 	}
+	if (event.GetType() == gatewayv2.ChatEvent_DONE || event.GetType() == gatewayv2.ChatEvent_ERROR) &&
+		s.reliableIngressOwnsRunLocked(agentID, runID) {
+		return
+	}
 
 	if event.GetType() == gatewayv2.ChatEvent_USER_MESSAGE {
 		if record := s.runs[agentScopedKey(agentID, runID)]; record != nil && record.userMessageSeeded {
@@ -189,6 +193,10 @@ func (m *Manager) ingestChatControl(agentID, requestID string, control *gatewayv
 		stream.agentID = agentID
 	}
 	s.noteAgentEpochLocked(stream, epoch)
+	if (controlType == "completed" || controlType == "failed" || controlType == "cancelled") &&
+		s.reliableIngressOwnsRunLocked(agentID, runID) {
+		return
+	}
 
 	switch controlType {
 	case "started":
@@ -300,6 +308,10 @@ func (m *Manager) ingestRuntimeSnapshot(agentID string, snapshot *gatewayv2.Chat
 		stream.agentID = agentID
 	}
 	s.noteAgentEpochLocked(stream, epoch)
+	if (state == "completed" || state == "failed" || state == "cancelled") &&
+		s.reliableIngressOwnsRunLocked(agentID, runID) {
+		return
+	}
 	if stream.runFinishedRecently(runID) {
 		// Both running and terminal snapshots are authoritative runtime
 		// evidence. A terminal snapshot must be able to correct an earlier

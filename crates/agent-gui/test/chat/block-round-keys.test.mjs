@@ -118,7 +118,7 @@ test("merging render-only rounds shifts r<n> keys in lockstep with round numbers
     tools: [],
     messages: [user("question", 1), assistant("first reply", 2)],
   });
-  const lastBefore = state.historyRenderItems.at(-1);
+  const lastBefore = state.transcript.items.at(-1);
   assert.equal(lastBefore.kind, "assistant");
   assert.deepEqual(
     lastBefore.rounds.map((round) => round.key),
@@ -128,7 +128,7 @@ test("merging render-only rounds shifts r<n> keys in lockstep with round numbers
   const merged = conversationState.appendRenderOnlyMessagesToConversation(state, [
     assistant("appended reply", 3),
   ]);
-  const lastAfter = merged.historyRenderItems.at(-1);
+  const lastAfter = merged.transcript.items.at(-1);
   assert.deepEqual(
     lastAfter.rounds.map((round) => round.round),
     [1, 2],

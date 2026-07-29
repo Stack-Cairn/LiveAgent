@@ -297,7 +297,13 @@ test("gateway bridge checkpoint emits compaction summary payload", () => {
         },
       },
     ],
-    historyRenderItems: [],
+    transcript: {
+      items: [],
+      segmentWindows: [],
+      oldestMessageOffset: 0,
+      hasMoreBefore: false,
+      revision: null,
+    },
     meta: {
       schemaVersion: 3,
       activeSegmentIndex: 1,

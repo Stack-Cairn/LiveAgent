@@ -207,10 +207,15 @@ async function executeCronPromptRun(
     providerId: provider.type,
     model: request.model,
     runtime: {
-      ...createProviderRuntimeConfig(provider, request.model, {
-        ...DEFAULT_CHAT_RUNTIME_CONTROLS,
-        reasoning: resolveCronReasoning(request.reasoning),
-      }),
+      ...createProviderRuntimeConfig(
+        provider,
+        request.model,
+        {
+          ...DEFAULT_CHAT_RUNTIME_CONTROLS,
+          reasoning: resolveCronReasoning(request.reasoning),
+        },
+        settings.customSettings.providerIdentities,
+      ),
       // 后台定时任务恒开提示词缓存：与前台会话共享同一前缀，命中率远高于按
       // 供应商开关逐个判断。
       promptCachingEnabled: true,

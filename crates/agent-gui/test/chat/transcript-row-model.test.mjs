@@ -1,13 +1,24 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const { createTranscriptRowModel } = loader.loadModule("src/pages/chat/transcript/rowModel.ts");
+const { createLiveTranscriptStore } = loader.loadModule(
+  "src/lib/chat/conversation/liveTranscriptStore.ts",
+);
 const { createEntranceRegistry, ENTRANCE_ANIMATION_WINDOW_MS } = loader.loadModule(
   "src/lib/transcript-virtual/entranceOnce.ts",
 );
-const { extractLiveRange } = loader.loadModule("src/lib/transcript-virtual/liveRangeExtractor.ts");
+const { extractRenderUnitRange } = loader.loadModule(
+  "src/pages/chat/transcript/renderUnitRangeExtractor.ts",
+);
+const { collectChangedFiles } = loader.loadModule("src/lib/chat/messages/changedFiles.ts");
+const transcriptListSource = fs.readFileSync(
+  new URL("../../src/pages/chat/transcript/TranscriptList.tsx", import.meta.url),
+  "utf8",
+);
 
 function userItem(key, text = "prompt") {
   return {
@@ -40,9 +51,28 @@ function round(key, text) {
   };
 }
 
-const idleLive = { isSending: false, draftAssistantText: "", toolStatus: null, liveRounds: [] };
+function blockRows(snapshot) {
+  return snapshot.rows.filter(
+    (row) => row.kind === "assistant-unit" && row.unit.kind === "block",
+  );
+}
 
-test("settling a live turn keys the committed twin with the live row key", () => {
+function footerRows(snapshot) {
+  return snapshot.rows.filter(
+    (row) => row.kind === "assistant-unit" && row.unit.kind === "footer",
+  );
+}
+
+const idleLive = {
+  isSending: false,
+  draftAssistantText: "",
+  toolStatus: null,
+  liveRounds: [],
+  retryAttempts: [],
+  isSettled: false,
+};
+
+test("settling a live turn preserves every block-unit key and adds one footer unit", () => {
   const model = createTranscriptRowModel();
   const history = [userItem("u1")];
 
@@ -52,45 +82,42 @@ test("settling a live turn keys the committed twin with the live row key", () =>
     liveRounds: [{ ...round("r1", "partial"), runningToolCallIds: [], thinkingOpen: false }],
   });
   assert.equal(streaming.liveStartIndex, 1);
-  const liveKey = streaming.rows[1].key;
-  assert.ok(liveKey.startsWith("live-turn-"));
-  assert.equal(streaming.rows[1].renderMode, "streaming");
+  const liveBlockKey = blockRows(streaming)[0].key;
+  assert.match(liveBlockKey, /^live-turn-/);
+  assert.equal(blockRows(streaming)[0].renderMode, "streaming");
 
   const settledHistory = [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])];
   const settled = model.build(settledHistory, idleLive);
   assert.equal(settled.liveStartIndex, -1);
-  assert.equal(settled.rows.length, 2);
-  assert.equal(settled.rows[1].key, liveKey, "committed twin adopts the live row key");
-  assert.equal(settled.rows[1].renderMode, "streaming", "stream-born rows stay in streaming mode");
+  assert.equal(settled.rows.length, 3);
+  assert.equal(blockRows(settled)[0].key, liveBlockKey);
+  assert.equal(blockRows(settled)[0].renderMode, "streaming");
+  assert.equal(footerRows(settled).length, 1);
+  assert.ok(footerRows(settled)[0].key.startsWith(liveBlockKey.split(":round:")[0]));
 
-  // Later rebuilds (new item identities, same item keys) keep the alias.
   const rebuilt = model.build(
     [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])],
     idleLive,
   );
-  assert.equal(rebuilt.rows[1].key, liveKey);
+  assert.equal(blockRows(rebuilt)[0].key, liveBlockKey);
 });
 
-test("persist lag: the alias still lands when history commits a build later", () => {
+test("persist lag: block-unit aliases still land one build later", () => {
   const model = createTranscriptRowModel();
   const history = [userItem("u1")];
-
   const streaming = model.build(history, {
     ...idleLive,
     isSending: true,
     liveRounds: [{ ...round("r1", "partial"), runningToolCallIds: [], thinkingOpen: false }],
   });
-  const liveKey = streaming.rows[1].key;
+  const liveBlockKey = blockRows(streaming)[0].key;
 
-  // Run ended but the committed twin has not landed yet.
-  const gap = model.build(history, idleLive);
-  assert.equal(gap.rows.length, 1);
-
+  assert.equal(model.build(history, idleLive).rows.length, 1);
   const settled = model.build(
     [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])],
     idleLive,
   );
-  assert.equal(settled.rows[1].key, liveKey);
+  assert.equal(blockRows(settled)[0].key, liveBlockKey);
 });
 
 test("a new turn supersedes an unresolved settle so aliases never cross turns", () => {
@@ -102,31 +129,31 @@ test("a new turn supersedes an unresolved settle so aliases never cross turns", 
   };
 
   model.build([userItem("u1")], sendingLive);
-  model.build([userItem("u1")], idleLive); // twin never landed
-  model.build([userItem("u1"), userItem("u2")], sendingLive); // next turn starts
-  const secondLiveKey = model.build([userItem("u1"), userItem("u2")], sendingLive).rows.at(-1).key;
+  model.build([userItem("u1")], idleLive);
+  const secondStreaming = model.build([userItem("u1"), userItem("u2")], sendingLive);
+  const secondLiveBlockKey = blockRows(secondStreaming).at(-1).key;
 
   const settled = model.build(
     [userItem("u1"), userItem("u2"), assistantItem("a2", [round("r1", "reply 2")])],
     idleLive,
   );
-  assert.equal(settled.rows.at(-1).key, secondLiveKey, "alias belongs to the second turn");
+  assert.equal(blockRows(settled).at(-1).key, secondLiveBlockKey);
 });
 
-test("draft text synthesizes the round shape buildUiMessages will commit", () => {
+test("draft text becomes one complete text render unit", () => {
   const model = createTranscriptRowModel();
   const streaming = model.build([userItem("u1")], {
     ...idleLive,
     isSending: true,
     draftAssistantText: "hello",
   });
-  const liveRow = streaming.rows[1];
-  assert.equal(liveRow.rounds.length, 1);
-  assert.equal(liveRow.rounds[0].key, "r1");
-  assert.deepEqual(liveRow.rounds[0].blocks, [{ kind: "text", id: "text-1", text: "hello" }]);
+  const liveBlock = blockRows(streaming)[0];
+  assert.equal(liveBlock.unit.block.kind, "text");
+  assert.equal(liveBlock.unit.block.key, "text-1");
+  assert.equal(liveBlock.unit.block.text, "hello");
 });
 
-test("settled rows reuse identities across builds while streaming", () => {
+test("settled units reuse identities across live-store emits", () => {
   const model = createTranscriptRowModel();
   const history = [userItem("u1"), assistantItem("a1", [round("r1", "done")])];
   const sendingLive = {
@@ -138,32 +165,31 @@ test("settled rows reuse identities across builds while streaming", () => {
   const second = model.build(history, { ...sendingLive });
   assert.equal(first.rows[0], second.rows[0]);
   assert.equal(first.rows[1], second.rows[1]);
+  assert.equal(first.rows[2], second.rows[2]);
 });
 
 test("entrance registry: initial rows never animate, new rows animate once", () => {
   let clock = 1_000;
   const registry = createEntranceRegistry(() => clock);
   registry.observeBirths(["a", "b"], true);
-  assert.equal(registry.shouldAnimate("a"), false, "initial rows are pre-registered");
+  assert.equal(registry.shouldAnimate("a"), false);
 
   clock += 50;
   registry.observeBirths(["c"], false);
-  assert.equal(registry.shouldAnimate("c"), true, "new row animates in its birth window");
+  assert.equal(registry.shouldAnimate("c"), true);
   assert.equal(registry.shouldAnimate("a"), false);
 
   clock += ENTRANCE_ANIMATION_WINDOW_MS + 1;
-  assert.equal(registry.shouldAnimate("c"), false, "virtualizer re-entry does not replay");
-
-  // Replayed births (StrictMode double-build) keep the original stamp.
+  assert.equal(registry.shouldAnimate("c"), false);
   registry.observeBirths(["c"], false);
-  assert.equal(registry.shouldAnimate("c"), false, "replayed birth does not re-animate");
+  assert.equal(registry.shouldAnimate("c"), false);
 
   registry.reset();
   registry.observeBirths(["c"], true);
-  assert.equal(registry.shouldAnimate("c"), false, "after reset the first build re-seeds");
+  assert.equal(registry.shouldAnimate("c"), false);
 });
 
-test("row model reports births once and reuses the history array between emits", () => {
+test("row model reports unit births once and reuses the history array", () => {
   const births = [];
   const model = createTranscriptRowModel({
     onRowsBorn: (keys, isInitialBuild) => births.push([keys.slice(), isInitialBuild]),
@@ -171,9 +197,10 @@ test("row model reports births once and reuses the history array between emits",
   const history = [userItem("u1"), assistantItem("a1", [round("r1", "done")])];
 
   const first = model.build(history, idleLive);
-  assert.deepEqual(births, [[["u1", "a1"], true]]);
+  assert.deepEqual(births, [
+    [["u1", "a1:round:r1:block:text-1", "a1:footer"], true],
+  ]);
 
-  // Same history identity → the same rows array comes back, no new births.
   const second = model.build(history, idleLive);
   assert.equal(second.rows, first.rows);
   assert.equal(births.length, 1);
@@ -186,15 +213,14 @@ test("row model reports births once and reuses the history array between emits",
   const streaming = model.build(history, sendingLive);
   assert.equal(births.length, 2);
   assert.equal(births[1][1], false);
-  assert.ok(births[1][0][0].startsWith("live-turn-"));
-  assert.equal(streaming.rows[0], first.rows[0], "cached history rows survive the live tail");
+  assert.match(births[1][0][0], /^live-turn-/);
+  assert.equal(streaming.rows[0], first.rows[0]);
 
-  // Streaming emits with unchanged history report nothing further.
   model.build(history, { ...sendingLive });
   assert.equal(births.length, 2);
 });
 
-test("a twin that lands while still sending is re-keyed onto the live row at settle", () => {
+test("a committed twin that races persistence is re-keyed at settle", () => {
   const model = createTranscriptRowModel();
   const sendingLive = {
     ...idleLive,
@@ -203,23 +229,219 @@ test("a twin that lands while still sending is re-keyed onto the live row at set
   };
 
   model.build([userItem("u1")], sendingLive);
-  // The committed twin lands while the run is still sending (persist raced
-  // the settle): it gets built un-aliased next to the live tail.
   const midRun = [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])];
   const racing = model.build(midRun, sendingLive);
-  const liveKey = racing.rows.at(-1).key;
-  assert.equal(racing.rows[1].key, "a1");
+  const liveBlockKey = blockRows(racing).at(-1).key;
+  assert.equal(blockRows(racing)[0].key, "a1:round:r1:block:text-1");
 
-  // Settle with the same history identity: the twin must adopt the live key
-  // in place instead of keeping the stale un-aliased row.
   const settled = model.build(midRun, idleLive);
-  assert.equal(settled.rows.length, 2);
-  assert.equal(settled.rows[1].key, liveKey);
+  assert.equal(settled.rows.length, 3);
+  assert.equal(blockRows(settled)[0].key, liveBlockKey);
 });
 
-test("live range extractor unions the live tail with the visible window", () => {
-  const range = { startIndex: 2, endIndex: 4, overscan: 0, count: 10 };
-  assert.deepEqual(extractLiveRange(range, 8), [2, 3, 4, 8, 9]);
-  assert.deepEqual(extractLiveRange(range, -1), [2, 3, 4]);
-  assert.deepEqual(extractLiveRange(range, 3), [2, 3, 4, 5, 6, 7, 8, 9]);
+test("terminal settlement removes the live tail before sending clears", () => {
+  const model = createTranscriptRowModel();
+  const store = createLiveTranscriptStore();
+  const history = [userItem("u1")];
+
+  store.reset();
+  store.updateLiveRounds(() => [
+    { ...round("r1", "full reply"), runningToolCallIds: [], thinkingOpen: false },
+  ]);
+  const streaming = model.build(history, { ...store.getSnapshot(), isSending: true });
+  const liveBlockKey = blockRows(streaming)[0].key;
+
+  store.settle();
+  const committed = [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])];
+  const finalizing = model.build(committed, { ...store.getSnapshot(), isSending: true });
+
+  assert.equal(finalizing.rows.length, 3);
+  assert.equal(finalizing.liveStartIndex, -1);
+  assert.equal(blockRows(finalizing)[0].key, liveBlockKey);
+  assert.equal(blockRows(finalizing)[0].live, false);
+
+  const released = model.build(committed, { ...store.getSnapshot(), isSending: false });
+  assert.equal(released.rows.length, 3);
+
+  store.reset();
+  const nextPending = model.build(committed, { ...store.getSnapshot(), isSending: true });
+  assert.equal(nextPending.rows.length, 4);
+  assert.equal(nextPending.liveStartIndex, 3);
+  assert.equal(nextPending.rows[3].mutable, true);
+});
+
+test("assistant rounds flatten into grouped top-level render units", () => {
+  const model = createTranscriptRowModel();
+  const tool = (id, name = "Read") => ({
+    kind: "tool",
+    item: { toolCall: { type: "toolCall", id, name, arguments: {} } },
+  });
+  const rounds = [
+    {
+      round: 1,
+      key: "r1",
+      blocks: [
+        { kind: "text", id: "text-1", text: "answer" },
+        { kind: "thinking", id: "thinking-1", text: "thought" },
+        tool("call-1"),
+        tool("call-2"),
+        { kind: "hostedSearch", item: { id: "search-1" } },
+      ],
+    },
+  ];
+  const snapshot = model.build([userItem("u1"), assistantItem("a1", rounds)], idleLive);
+  assert.deepEqual(
+    blockRows(snapshot).map((row) => row.unit.block.kind),
+    ["text", "thinking", "toolGroup", "hostedSearchGroup"],
+  );
+  assert.equal(footerRows(snapshot).length, 1);
+  assert.equal(blockRows(snapshot)[0].showAvatar, true);
+  assert.ok(blockRows(snapshot).slice(1).every((row) => !row.showAvatar));
+});
+
+test("Markdown text blocks stay whole instead of being string-sliced", () => {
+  const model = createTranscriptRowModel();
+  const markdown = `${"paragraph content ".repeat(8_000)}\n\n\`\`\`ts\nconst value = 1;\n\`\`\``;
+  const snapshot = model.build(
+    [userItem("u1"), assistantItem("a1", [round("r1", markdown)])],
+    idleLive,
+  );
+  assert.equal(blockRows(snapshot).length, 1);
+  assert.equal(blockRows(snapshot)[0].unit.block.text, markdown);
+  assert.ok(blockRows(snapshot)[0].renderCost > 1);
+});
+
+test("only the mutable live tail is pinned while completed prefix units virtualize", () => {
+  const model = createTranscriptRowModel();
+  const liveRound = {
+    round: 1,
+    key: "r1",
+    blocks: [
+      { kind: "text", id: "text-1", text: "prefix" },
+      { kind: "thinking", id: "thinking-1", text: "done thinking" },
+      { kind: "text", id: "text-2", text: "streaming tail" },
+    ],
+    runningToolCallIds: [],
+    thinkingOpen: false,
+  };
+  const snapshot = model.build([userItem("u1")], {
+    ...idleLive,
+    isSending: true,
+    liveRounds: [liveRound],
+  });
+  const units = blockRows(snapshot);
+  assert.equal(units.length, 3);
+  assert.deepEqual(
+    units.map((row) => row.mutable),
+    [false, false, true],
+  );
+  assert.equal(snapshot.liveStartIndex, snapshot.rows.indexOf(units[2]));
+  assert.equal(snapshot.liveStartIndex, snapshot.rows.length - 1);
+});
+
+test("assistant unit keys do not depend on the history-window-relative index", () => {
+  const model = createTranscriptRowModel();
+  const assistant = assistantItem("assistant-stable", [round("r1", "reply")]);
+  const first = model.build([userItem("u1"), assistant], idleLive);
+  const firstKeys = first.rows
+    .filter((row) => row.kind === "assistant-unit")
+    .map((row) => row.key);
+  assert.ok(
+    first.rows
+      .filter((row) => row.kind === "assistant-unit")
+      .every((row) => row.anchorUserKey === "u1"),
+  );
+
+  const shifted = model.build([userItem("older"), userItem("u1"), assistant], idleLive);
+  const shiftedKeys = shifted.rows
+    .filter((row) => row.kind === "assistant-unit")
+    .map((row) => row.key);
+  assert.deepEqual(shiftedKeys, firstKeys);
+  assert.ok(
+    shifted.rows
+      .filter((row) => row.kind === "assistant-unit")
+      .every((row) => row.anchorUserKey === "u1"),
+  );
+});
+
+test("usage stays on each round tail and changed files stay on the reply footer", () => {
+  const model = createTranscriptRowModel();
+  const usage = {
+    input: 10,
+    output: 20,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 30,
+  };
+  const writeTool = {
+    kind: "tool",
+    item: {
+      toolCall: {
+        type: "toolCall",
+        id: "write-1",
+        name: "Write",
+        arguments: { path: "src/result.ts", content: "export {};" },
+      },
+      toolResult: { role: "toolResult", toolCallId: "write-1", isError: false, content: [] },
+    },
+  };
+  const rounds = [
+    {
+      round: 1,
+      key: "r1",
+      blocks: [
+        { kind: "text", id: "text-1", text: "first" },
+        { kind: "text", id: "text-2", text: "second" },
+      ],
+      meta: { usage },
+    },
+    { round: 2, key: "r2", blocks: [writeTool] },
+  ];
+  const snapshot = model.build([userItem("u1"), assistantItem("a1", rounds)], idleLive);
+  const units = blockRows(snapshot);
+  assert.deepEqual(
+    units.map((row) => row.unit.isRoundTail),
+    [false, true, true],
+  );
+  assert.equal(units[1].unit.roundMeta.usage, usage);
+  const footer = footerRows(snapshot)[0];
+  assert.equal(footer.unit.hasChangedFilesCandidate, true);
+  assert.equal(collectChangedFiles(footer.unit.rounds).files[0].path, "src/result.ts");
+  assert.equal(footer.unit.replyText, "firstsecond");
+});
+
+test("cost-aware overscan spends one giant unit instead of five fixed rows", () => {
+  const range = { startIndex: 3, endIndex: 4, overscan: 0, count: 10 };
+  const costs = [1, 1, 20, 1, 1, 1, 1, 1, 1, 1];
+  const readIndexes = [];
+  const getCost = (index) => {
+    readIndexes.push(index);
+    return costs[index];
+  };
+  assert.deepEqual(extractRenderUnitRange(range, getCost, -1), [2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(readIndexes, [2, 5, 6, 7, 8, 9]);
+
+  const tailPinned = extractRenderUnitRange(
+    { startIndex: 0, endIndex: 0, overscan: 0, count: 6 },
+    () => 20,
+    5,
+    8,
+    1,
+  );
+  assert.deepEqual(tailPinned, [0, 1, 5]);
+});
+
+test("transcript virtualizer keeps scroll updates off the full React measurement path", () => {
+  assert.match(transcriptListSource, /const estimateRowSize = useCallback/);
+  assert.match(transcriptListSource, /const getRowKey = useCallback/);
+  assert.match(transcriptListSource, /const extractVirtualRange = useCallback/);
+  assert.match(transcriptListSource, /estimateSize:\s*estimateRowSize/);
+  assert.match(transcriptListSource, /getItemKey:\s*getRowKey/);
+  assert.match(transcriptListSource, /rangeExtractor:\s*extractVirtualRange/);
+  assert.match(transcriptListSource, /directDomUpdates:\s*true/);
+  assert.match(transcriptListSource, /directDomUpdatesMode:\s*"transform"/);
+  assert.match(transcriptListSource, /ref=\{virtualizer\.containerRef\}/);
+  assert.doesNotMatch(transcriptListSource, /rows\.map\(\(row\) => row\.renderCost\)/);
+  assert.doesNotMatch(transcriptListSource, /height:\s*virtualizer\.getTotalSize\(\)/);
+  assert.doesNotMatch(transcriptListSource, /transform:\s*`translateY\(/);
 });

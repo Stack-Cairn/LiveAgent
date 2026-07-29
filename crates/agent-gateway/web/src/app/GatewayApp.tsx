@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
+import { CliIdentityUpdateHost } from "@/components/CliIdentityUpdateHost";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
@@ -39,6 +40,7 @@ import {
   trimLeadingHeadlessEntries,
 } from "@/lib/chat/historyWindow";
 import type { CodeMentionReference } from "@/lib/chat/mentionReferences";
+import { isChatRuntimeProtocolIncompatible } from "@/lib/chat/runtimeCompatibility";
 import { createActivityStore } from "@/lib/chat/stream/activityStore";
 import {
   type ChatCommandOutcome,
@@ -228,21 +230,6 @@ import { WorkspaceOverlayHost } from "./WorkspaceOverlayHost";
 
 const STALE_HISTORY_RETRY_INITIAL_DELAY_MS = 1_000;
 const STALE_HISTORY_RETRY_MAX_DELAY_MS = 30_000;
-
-// Idle scheduler for the open controller (mirrors the GUI helper semantics:
-// requestIdleCallback with a hard timeout so it still runs on busy pages).
-// The web end's opens resolve "painted-complete", so the controller never
-// actually schedules its phase-2 hydration through this — it exists to
-// satisfy the shared controller deps.
-const HYDRATE_IDLE_TIMEOUT_MS = 1_500;
-function scheduleIdleTask(task: () => void): () => void {
-  if (typeof window.requestIdleCallback === "function") {
-    const handle = window.requestIdleCallback(() => task(), { timeout: HYDRATE_IDLE_TIMEOUT_MS });
-    return () => window.cancelIdleCallback(handle);
-  }
-  const timeoutId = window.setTimeout(task, 300);
-  return () => window.clearTimeout(timeoutId);
-}
 
 export default function GatewayApp() {
   const historyShareToken = useMemo(() => parseHistoryShareToken(), []);
@@ -560,19 +547,16 @@ export default function GatewayApp() {
   }, [activeWorkspaceProjectPath, isAgentMode, sidebarStore]);
 
   // Conversation-open controller: the web end paints the conversation's whole
-  // established history window in phase 1 (openInitial resolves
-  // "painted-complete"), so the controller never schedules a phase-2
-  // hydration — messages above the window edge stay unfetched until the user
-  // pages up. Deps go through refs (assigned per render) so the controller
-  // instance stays stable.
-  const openInitialRef = useRef<
-    (id: string, seq: number) => Promise<"cache-hit" | "painted" | "painted-complete">
-  >(() => Promise.resolve("painted-complete"));
+  // established history window in the single open phase — messages above the
+  // window edge stay unfetched until the user pages up. Deps go through refs
+  // (assigned per render) so the controller instance stays stable.
+  const openInitialRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(() =>
+    Promise.resolve("painted"),
+  );
   const openController = useMemo(
     () =>
       createConversationOpenController({
-        openInitial: (id, seq) => openInitialRef.current(id, seq),
-        scheduleIdle: scheduleIdleTask,
+        openInitial: (id) => openInitialRef.current(id),
         onStateChange: setConversationOpenState,
       }),
     [],
@@ -1995,16 +1979,15 @@ export default function GatewayApp() {
   // paged up to). Sets the selection state synchronously (controller.open
   // calls this in the same tick), fetches the window, and replace-applies it
   // to the transcript store. The web end has no synchronous local-activation
-  // path, so it always resolves "painted-complete" (never "cache-hit") —
-  // revisits still show the cached transcript instantly because the registry
-  // store keeps rendering underneath. Messages above the window edge stay
-  // unfetched until the user pages up ("load earlier history"): an idle full
-  // hydration would put open cost back on the conversation's lifetime size,
-  // which is exactly what the lazy window avoids.
+  // path, so it always resolves "painted" (never "cache-hit") — revisits
+  // still show the cached transcript instantly because the registry store
+  // keeps rendering underneath. Messages above the window edge stay
+  // unfetched until the user pages up ("load earlier history"): hydrating
+  // the full record on open would put open cost back on the conversation's
+  // lifetime size, which is exactly what the lazy window avoids.
   async function openConversationInitial(
     conversationIdValue: string,
-    _seq: number,
-  ): Promise<"cache-hit" | "painted-complete"> {
+  ): Promise<"cache-hit" | "painted"> {
     const currentApi = api;
     if (!currentApi) {
       throw new Error("Gateway client is not ready.");
@@ -2049,7 +2032,7 @@ export default function GatewayApp() {
         planned === undefined ? undefined : { maxMessages: planned },
       );
       if (isStale()) {
-        return "painted-complete";
+        return "painted";
       }
       const counts = readHistoryWindowCounts(detail);
       if (counts) {
@@ -2060,7 +2043,7 @@ export default function GatewayApp() {
       const parsed = await parseHistoryMessagesJsonAsync(detail.messages_json);
       const entries = detail.has_more === true ? trimLeadingHeadlessEntries(parsed) : parsed;
       if (isStale()) {
-        return "painted-complete";
+        return "painted";
       }
       setSelectedHistory(detail);
       transcriptStoreRegistry
@@ -2070,7 +2053,7 @@ export default function GatewayApp() {
       if (detailWorkdir) {
         conversationWorkdirsRef.current.set(conversationIdValue, detailWorkdir);
       }
-      return "painted-complete";
+      return "painted";
     } catch (error) {
       if (!isStale()) {
         const message = asErrorMessage(
@@ -2107,6 +2090,9 @@ export default function GatewayApp() {
             statusRef.current = nextStatus;
             setStatus(nextStatus);
             setStatusError(null);
+            if (isChatRuntimeProtocolIncompatible(nextStatus)) {
+              throw new Error(translate("chat.runtime.protocolIncompatible", settings.locale));
+            }
             return nextStatus;
           })
           .catch((error) => {
@@ -2142,7 +2128,7 @@ export default function GatewayApp() {
         }
       }
     },
-    [api],
+    [api, settings.locale],
   );
 
   // List loading, reconnect reconciliation, and the 60s silent reconcile all
@@ -2303,12 +2289,11 @@ export default function GatewayApp() {
       baseMessageRef: options?.editMessageRef,
       optimistic: options?.optimisticEcho !== false,
       submit: async () => {
-        // Preserve the instant optimistic echo, then serialize the bounded
-        // runtime wake-up ahead of dispatch. A failed/old-gateway prepare is a
-        // soft degradation: chat.command remains the final wake signal.
-        await prepareChatRuntime("send", api, CHAT_RUNTIME_PREPARE_TIMEOUT_MS).catch(
-          () => undefined,
-        );
+        // Preserve the instant optimistic echo, then require the bounded
+        // runtime wake-up before dispatch. The socket layer still understands
+        // old gateways; a new gateway must never fall through and dual-send to
+        // a desktop that lacks reliable chat ingress.
+        await prepareChatRuntime("send", api, CHAT_RUNTIME_PREPARE_TIMEOUT_MS);
         return api.chatCommand(commandInput);
       },
     });
@@ -2442,9 +2427,7 @@ export default function GatewayApp() {
         // straight into the GUI queue. The pipeline slot (pre-first-token
         // spinner + watchdog) belongs to the first command; the queue panel
         // updates via command_update/run_queued and chat_queue events.
-        await prepareChatRuntime("send", api, CHAT_RUNTIME_PREPARE_TIMEOUT_MS).catch(
-          () => undefined,
-        );
+        await prepareChatRuntime("send", api, CHAT_RUNTIME_PREPARE_TIMEOUT_MS);
         await api.chatCommand({
           type: "chat.submit",
           message: materialized.text,
@@ -4347,20 +4330,29 @@ export default function GatewayApp() {
   const composerIsSending = transcriptBusy;
   const transcriptError = displayedTranscriptRowCount === 0 ? null : chatError;
   const composerCompactionBlocked = transcriptToolStatusIsCompaction;
+  const chatProtocolIncompatible = isChatRuntimeProtocolIncompatible(status);
+  const chatProtocolIncompatibleMessage = chatProtocolIncompatible
+    ? translate("chat.runtime.protocolIncompatible", settings.locale)
+    : null;
   const sidebarSectionsDisabled = shouldDisableGatewaySidebarSections({
     connectionLost: gatewayConnectionLost,
     agentStatusFresh: sidebarAgentStatusFresh,
     agentOnline: status?.online,
   });
   const composerInputDisabled =
-    !status?.online || historyDetailLoading || composerCompactionBlocked;
-  const composerPlaceholder = composerCompactionBlocked
-    ? translate("chat.compactingContextWait", settings.locale)
-    : historyDetailLoading
-      ? "正在加载会话历史，请稍候..."
-      : enabledComposerSkills.length > 0
-        ? translate("chat.inputHintWithSkills", settings.locale)
-        : translate("chat.inputHint", settings.locale);
+    !status?.online ||
+    chatProtocolIncompatible ||
+    historyDetailLoading ||
+    composerCompactionBlocked;
+  const composerPlaceholder = chatProtocolIncompatible
+    ? translate("chat.runtime.protocolIncompatiblePlaceholder", settings.locale)
+    : composerCompactionBlocked
+      ? translate("chat.compactingContextWait", settings.locale)
+      : historyDetailLoading
+        ? "正在加载会话历史，请稍候..."
+        : enabledComposerSkills.length > 0
+          ? translate("chat.inputHintWithSkills", settings.locale)
+          : translate("chat.inputHint", settings.locale);
   const canDropUpload =
     status?.online === true &&
     isAgentMode &&
@@ -4484,6 +4476,7 @@ export default function GatewayApp() {
     <LocaleContext.Provider value={localeContextValue}>
       <AppErrorBoundary>
         <div className="gateway-shell">
+          <CliIdentityUpdateHost settings={settings} setSettings={setSettings} />
           <input
             ref={fileInputRef}
             type="file"
@@ -4715,6 +4708,9 @@ export default function GatewayApp() {
                   </div>
 
                   {statusError ? <div className="gateway-banner-error">{statusError}</div> : null}
+                  {chatProtocolIncompatibleMessage && !statusError ? (
+                    <div className="gateway-banner-error">{chatProtocolIncompatibleMessage}</div>
+                  ) : null}
                   {settingsSyncError ? (
                     <div className="gateway-banner-error">{settingsSyncError}</div>
                   ) : null}
@@ -4915,6 +4911,13 @@ export default function GatewayApp() {
                         })();
                       }}
                       onStop={() => {
+                        const nextQueuedTurn = queuedChatTurnsForDisplayedConversation[0];
+                        if (nextQueuedTurn) {
+                          // Keep WebUI's stop button aligned with the desktop
+                          // composer: stop the active run, then drain the queue.
+                          runQueuedTurnNow(nextQueuedTurn.id);
+                          return;
+                        }
                         void cancelChat(displayedConversationId);
                       }}
                       onPrepareChatRuntime={() => {

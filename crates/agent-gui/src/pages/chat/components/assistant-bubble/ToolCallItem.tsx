@@ -523,7 +523,7 @@ function ToolCallItem({
         </div>
       </button>
 
-      <LazyCollapse open={open && canExpand}>
+      <LazyCollapse open={open && canExpand} retainWhileClosed={Boolean(isRunning)}>
         {() => (
           <div className="space-y-3 pb-2 pl-[22px] pt-1">
             {shouldShowArgs ? (

@@ -75,11 +75,7 @@ import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
 import { getOrCreateTodoToolState } from "../../../lib/tools/todoTools";
 import type { TunnelManagerChange } from "../../../lib/tools/tunnelManagerTools";
-import {
-  appendSystemPrompt,
-  buildPartialAssistantMessage,
-  type ConversationRuntimeEntry,
-} from "../runtime/chatPageRuntime";
+import { appendSystemPrompt, buildPartialAssistantMessage } from "../runtime/chatPageRuntime";
 import { buildGatewayToolCallPreviewArguments } from "./gatewayToolPreview";
 
 export type RuntimeModel = {
@@ -253,6 +249,7 @@ export type RunAgentConversationTurnParams = {
   compaction: CompactionController;
   cancellation: TurnCancellation;
   resetLiveTranscript: (store: LiveTranscriptStore) => void;
+  settleLiveTranscript: (store: LiveTranscriptStore) => void;
   batchLiveRoundsUpdate: (
     updater: (prev: LiveRound[]) => LiveRound[],
     store: LiveTranscriptStore,
@@ -264,10 +261,7 @@ export type RunAgentConversationTurnParams = {
     suppressedToolTrace: SuppressedToolTraceSnapshot[];
   }) => void;
   commitVisibleAbortedConversation: () => boolean;
-  updateConversationRuntimeEntry: (
-    conversationId: string,
-    updater: (prev: ConversationRuntimeEntry) => ConversationRuntimeEntry,
-  ) => ConversationRuntimeEntry;
+  freezeGatewayFinalProjection: (state: ConversationViewState, contentComplete?: boolean) => void;
   persistConversationWithHistorySync: (params: PersistConversationParams) => Promise<boolean>;
   memoryExtractionModel?: MemoryExtractionModelConfig;
   onMemoryExtractionModelFailure?: (model: MemoryExtractionModelConfig) => void;
@@ -315,12 +309,13 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     compaction,
     cancellation,
     resetLiveTranscript,
+    settleLiveTranscript,
     batchLiveRoundsUpdate,
     updateToolStatus,
     updateRetryAttempts,
     updatePersistableAgentProgress,
     commitVisibleAbortedConversation,
-    updateConversationRuntimeEntry,
+    freezeGatewayFinalProjection,
     persistConversationWithHistorySync,
     memoryExtractionModel,
     onMemoryExtractionModelFailure,
@@ -1132,11 +1127,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     );
   }
   hookLifecycle.endAgent();
-  resetLiveTranscript(transcriptStore);
-  updateConversationRuntimeEntry(conversationId, (prev) => ({
-    ...prev,
-    state: completedState,
-  }));
+  applyConversationState(completedState);
+  freezeGatewayFinalProjection(completedState, true);
+  settleLiveTranscript(transcriptStore);
   await persistConversationWithHistorySync({
     conversationId,
     sessionId,
@@ -1148,11 +1141,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     createdAt,
     titlePromise,
   });
-  gatewayBridgeEvents.queueEvent({
-    type: "done",
-    conversation_id: conversationId,
-  });
-  await gatewayBridgeEvents.close();
   if (!showSilentMemoryExtraction && shouldRunMemoryExtraction) {
     void runPostTurnMemoryExtraction();
   }

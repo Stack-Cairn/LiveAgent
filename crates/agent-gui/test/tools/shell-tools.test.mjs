@@ -52,6 +52,13 @@ test("Bash tool keeps one Bash entry and uses Git Bash-first policy for Claude C
   assert.match(bundle.tools[0].description, /Windows runs Bash commands/);
   assert.match(bundle.tools[0].description, /Git Bash \(POSIX semantics\)/);
   assert.match(bundle.tools[0].description, /Write POSIX\/bash syntax by default/);
+  assert.match(bundle.tools[0].description, /always use Delete for intentional workspace or Skill deletions/);
+  assert.match(bundle.tools[0].description, /PowerShell Remove-Item\/cmd del, erase, or rd/);
+  assert.match(bundle.tools[0].description, /only structured Delete calls make deletions visible in Edited Files/);
+  const managedProcess = bundle.tools.find((tool) => tool.name === "ManagedProcess");
+  assert.ok(managedProcess);
+  assert.match(managedProcess.description, /never use it to intentionally delete workspace/);
+  assert.match(managedProcess.description, /use Delete so LiveAgent can track the deletion/);
   assert.doesNotMatch(bundle.tools[0].description, /native Windows shell chain/);
 
   const result = await bundle.executeToolCall(createBashCall());

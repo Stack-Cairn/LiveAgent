@@ -8,7 +8,8 @@ import {
 // ---------------------------------------------------------------------------
 // 模型思考能力（档位可用性的单一真源）
 // ---------------------------------------------------------------------------
-// 数据来自 catalog.generated.ts 的 thinking 字段（models.dev reasoning_options
+// 数据来自 catalog.generated.ts 的 thinking 字段（OpenAI 重名模型优先采用
+// Codex supported_reasoning_levels，其余由 models.dev reasoning_options 补充并
 // 在生成期归一化）。本模块只回答"这个模型有哪些思考档、能否关闭"——UI 档位
 // 列表与请求期钳制都从这里派生，保证两者永不漂移。每档发什么请求参数
 // （adaptive/budget、effort 字段名、值改写）是流式运行时的领域，不归这里管。
