@@ -67,6 +67,7 @@ import {
   pruneSubagentRunsForConversation,
   type SubagentStoreManager,
 } from "../../../lib/subagents";
+import { sendTaskCompletionNotification } from "../../../lib/taskCompletionNotification";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import { appendManagedSkillSelections, asErrorMessage } from "../chatPageUtils";
 import {
@@ -665,6 +666,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     let runCleanupPromise: Promise<void> = Promise.resolve();
     let compactionBound = false;
     let runStopRequestVersion: number | null = null;
+    let completionNotificationSent = false;
 
     function registerGatewayRuntimeRun(state: GatewayRuntimeSnapshotState) {
       if (!(gatewayBridgeRequest || hasRemoteGatewayTarget)) {
@@ -859,6 +861,21 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       );
       if (result === "timed_out") {
         console.warn(`chat run finalization timed out: ${conversationId}`);
+      }
+      if (
+        settings.customSettings.taskCompletionNotifications &&
+        !completionNotificationSent &&
+        (state === "completed" || state === "failed")
+      ) {
+        completionNotificationSent = true;
+        void sendTaskCompletionNotification({
+          state,
+          title: "LiveAgent",
+          completedBody: t("notification.taskCompleted"),
+          failedBody: t("notification.taskFailed"),
+        }).catch((error) => {
+          console.warn("task completion notification failed", error);
+        });
       }
     }
 

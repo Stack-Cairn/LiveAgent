@@ -583,6 +583,35 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
       </section>
 
       <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <MessageSquare className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-foreground">
+                {t("settings.taskCompletionNotifications")}
+              </div>
+              <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                {t("settings.taskCompletionNotificationsDesc")}
+              </div>
+            </div>
+          </div>
+          <AgentActivationSwitch
+            checked={settings.customSettings.taskCompletionNotifications}
+            title={t("settings.taskCompletionNotifications")}
+            onToggle={() =>
+              setSettings((prev) =>
+                updateCustomSettings(prev, {
+                  taskCompletionNotifications: !prev.customSettings.taskCompletionNotifications,
+                }),
+              )
+            }
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Minimize2 className="h-4 w-4 text-muted-foreground" />
           {t("settings.closeWindowBehavior")}

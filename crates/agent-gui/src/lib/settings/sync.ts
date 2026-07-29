@@ -464,6 +464,7 @@ function syncableCustomSettings(
 ): GatewaySettingsSyncCustomSettings {
   return {
     ...customSettings,
+    taskCompletionNotifications: true,
     chatSidebar: {
       projectsCollapsed: false,
       recentCollapsed: false,
@@ -1206,6 +1207,7 @@ export function applyGatewaySettingsSyncPayload(
       ...incomingCustomSettings,
       providerIdentities:
         incomingCustomSettings.providerIdentities ?? current.customSettings.providerIdentities,
+      taskCompletionNotifications: current.customSettings.taskCompletionNotifications,
       rightDock: Object.hasOwn(incomingCustomSettings, "rightDock")
         ? mergeSyncedRightDockSettings(
             current.customSettings.rightDock,
@@ -1213,7 +1215,8 @@ export function applyGatewaySettingsSyncPayload(
           )
         : current.customSettings.rightDock,
       chatSidebar: current.customSettings.chatSidebar,
-      // Typography, scale, and transcript width are local UI preferences, never gateway-synced.
+      // Notifications, typography, scale, and transcript width are local UI preferences,
+      // never gateway-synced.
       interfaceFontFamily: current.customSettings.interfaceFontFamily,
       chatFontFamily: current.customSettings.chatFontFamily,
       codeFontFamily: current.customSettings.codeFontFamily,

@@ -170,6 +170,7 @@ export type ChatTranscriptSettings = {
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
   providerIdentities: CliIdentitySettings;
+  taskCompletionNotifications: boolean;
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
@@ -2170,6 +2171,7 @@ export function normalizeCustomSettings(
       customProviders,
     ),
     providerIdentities: normalizeCliIdentitySettings(obj.providerIdentities),
+    taskCompletionNotifications: obj.taskCompletionNotifications !== false,
     chatSidebar: {
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,

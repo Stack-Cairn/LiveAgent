@@ -1192,6 +1192,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.providerUseSystemProxyDesc":
       "该供应商的模型请求经应用代理出网；应用代理未启用时保持直连。",
     "settings.closeWindowBehavior": "关闭窗口",
+    "settings.taskCompletionNotifications": "任务结束通知",
+    "settings.taskCompletionNotificationsDesc": "应用在后台时，对话完成或失败后发送系统通知。",
+    "notification.taskCompleted": "对话任务已完成",
+    "notification.taskFailed": "对话任务运行失败",
     "settings.closeWindowMinimize": "最小化到托盘",
     "settings.closeWindowMinimizeDesc": "关闭窗口后应用继续在后台运行，可从托盘恢复。",
     "settings.closeWindowExit": "退出应用",
@@ -3502,6 +3506,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.providerUseSystemProxyDesc":
       "Route this provider's model requests through the app proxy. Falls back to a direct connection while the app proxy is disabled.",
     "settings.closeWindowBehavior": "Close Window",
+    "settings.taskCompletionNotifications": "Task completion notifications",
+    "settings.taskCompletionNotificationsDesc":
+      "Send a system notification when a conversation completes or fails while the app is in the background.",
+    "notification.taskCompleted": "Conversation task completed",
+    "notification.taskFailed": "Conversation task failed",
     "settings.closeWindowMinimize": "Minimize to tray",
     "settings.closeWindowMinimizeDesc":
       "Keep the app running in the background and restore it from the tray.",

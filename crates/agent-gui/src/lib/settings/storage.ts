@@ -85,6 +85,7 @@ function readLocalUiSettings(): {
     return {
       conversationTitleModel: normalizeSelectedModel(obj.conversationTitleModel),
       providerIdentities: normalizeCliIdentitySettings(obj.providerIdentities),
+      taskCompletionNotifications: obj.taskCompletionNotifications !== false,
       chatSidebar: {
         projectsCollapsed: chatSidebar.projectsCollapsed === true,
         recentCollapsed: chatSidebar.recentCollapsed === true,
