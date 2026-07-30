@@ -519,7 +519,7 @@ test("unknown template rejects the batch before any agent starts", async () => {
   assert.equal(result.isError, true);
   assert.equal(result.details.status, "rejected");
   assert.equal(result.details.issues[0].code, "unknown_template");
-  assert.match(result.content[0].text, /Enabled templates/);
+  assert.match(result.content[0].text, /Templates available to subagents/);
   assert.equal(harness.runnerCalls.length, 0);
 });
 

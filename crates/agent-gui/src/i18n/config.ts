@@ -1671,6 +1671,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.agentsShowPrompt": "查看 Prompt",
     "settings.agentsReady": "可以保存",
     "settings.agentsRequired": "名称和 Prompt 为必填项",
+    "settings.agentsSubagentTemplates": "子代理模板",
+    "settings.agentsSubagentTemplatesHint":
+      "选择可供子代理按需引用的模板，可同时选择多个；不会改变主代理当前激活的模板。",
 
     /* ── Settings SSH ── */
     "settings.sshTitle": "SSH",
@@ -4002,6 +4005,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.agentsShowPrompt": "View Prompt",
     "settings.agentsReady": "Ready to save",
     "settings.agentsRequired": "Name and Prompt are required",
+    "settings.agentsSubagentTemplates": "Subagent Templates",
+    "settings.agentsSubagentTemplatesHint":
+      "Choose templates that subagents may reference. Multiple templates can be selected without changing the active main-agent template.",
 
     /* ── Settings SSH ── */
     "settings.sshTitle": "SSH",

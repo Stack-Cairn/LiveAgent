@@ -170,7 +170,7 @@ test("registry with a subagent runtime exposes Agent and the parent SendMessage"
   assert.ok(registry.hasTool("agent"));
 });
 
-test("Agent tool description embeds the hydrated roster and enabled templates", async () => {
+test("Agent tool description embeds the hydrated roster and available templates", async () => {
   const harness = createRegistryHarness();
   const storeIpc = createFakeStoreIpc();
   storeIpc.seedIdentity({

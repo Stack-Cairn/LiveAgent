@@ -245,6 +245,7 @@ export type AgentPromptTemplate = {
   description: string;
   prompt: string;
   enabled: boolean;
+  availableToSubagents: boolean;
 };
 
 export type SshAuthType = "password" | "privateKey" | "keyboardInteractive";
@@ -1501,6 +1502,10 @@ export function normalizeAgentPromptTemplate(input: unknown): AgentPromptTemplat
     description: normalizeOptionalText(obj.description),
     prompt: normalizeOptionalText(obj.prompt),
     enabled: obj.enabled === true,
+    availableToSubagents:
+      typeof obj.availableToSubagents === "boolean"
+        ? obj.availableToSubagents
+        : obj.enabled === true,
   };
 }
 

@@ -120,7 +120,7 @@ test("duplicate agent ids are rejected case-insensitively", () => {
   assert.match(result.issues[0].message, /Duplicate agent id "expert-a"/);
 });
 
-test("unknown template is rejected; enabled templates resolve by id or name case-insensitively", () => {
+test("unknown template is rejected; available templates resolve by id or name case-insensitively", () => {
   const bad = parse({ agents: [{ id: "a", prompt: "ok", template: "ghost" }] });
   assert.deepEqual(issueCodes(bad), ["unknown_template"]);
   assert.match(bad.issues[0].message, /Unknown template "ghost"/);

@@ -10,13 +10,14 @@ fn load_agents(conn: &Connection) -> Result<Option<Value>, String> {
                 row.get::<_, String>(2)?,
                 row.get::<_, String>(3)?,
                 row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
             ))
         })
         .map_err(|e| format!("读取 {AGENT_PROMPT_TEMPLATES_TABLE} 失败：{e}"))?;
 
     let mut templates = Vec::new();
     for row in rows {
-        let (template_id, name, description, prompt, enabled) =
+        let (template_id, name, description, prompt, enabled, available_to_subagents) =
             row.map_err(|e| format!("读取 {AGENT_PROMPT_TEMPLATES_TABLE} 行失败：{e}"))?;
         templates.push(Value::Object(Map::from_iter([
             ("id".to_string(), Value::String(template_id)),
@@ -24,6 +25,10 @@ fn load_agents(conn: &Connection) -> Result<Option<Value>, String> {
             ("description".to_string(), Value::String(description)),
             ("prompt".to_string(), Value::String(prompt)),
             ("enabled".to_string(), Value::Bool(enabled != 0)),
+            (
+                "availableToSubagents".to_string(),
+                Value::Bool(available_to_subagents != 0),
+            ),
         ])));
     }
 
@@ -73,6 +78,16 @@ fn save_agents(conn: &mut Connection, payload: Value) -> Result<(), String> {
             }
             enabled_template_id = Some(template_id.clone());
         }
+        let available_to_subagents = match template.get("availableToSubagents") {
+            Some(Value::Bool(value)) => *value,
+            Some(Value::Null) | None => enabled,
+            Some(_) => {
+                return Err(
+                    "settings_save_agents payload[].availableToSubagents 必须是布尔值"
+                        .to_string(),
+                );
+            }
+        };
 
         tx.execute(
             AGENT_PROMPT_TEMPLATES_INSERT_SQL,
@@ -82,6 +97,7 @@ fn save_agents(conn: &mut Connection, payload: Value) -> Result<(), String> {
                 description,
                 prompt,
                 if enabled { 1_i64 } else { 0_i64 },
+                if available_to_subagents { 1_i64 } else { 0_i64 },
                 sort_index as i64,
                 updated_at
             ],

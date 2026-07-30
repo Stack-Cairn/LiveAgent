@@ -90,7 +90,7 @@ export function formatRoster(entries: SubagentRosterEntry[]) {
 
 /** Template block embedded in the Agent tool description. */
 export function formatTemplates(entries: SubagentTemplateEntry[]) {
-  if (entries.length === 0) return "No enabled AGENTS templates are available.";
+  if (entries.length === 0) return "No AGENTS templates are available to subagents.";
   return entries
     .slice(0, MAX_LISTED_AGENTS)
     .map((entry) => {

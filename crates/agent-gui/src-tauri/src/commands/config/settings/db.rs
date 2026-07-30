@@ -48,6 +48,7 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
             description TEXT NOT NULL,
             prompt TEXT NOT NULL,
             enabled INTEGER NOT NULL DEFAULT 0,
+            available_to_subagents INTEGER NOT NULL DEFAULT 0,
             sort_index INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         );
@@ -105,6 +106,36 @@ pub(crate) fn initialize_schema(conn: &Connection) -> Result<(), String> {
         ",
     )
     .map_err(|e| format!("初始化设置表失败：{e}"))?;
+
+    let has_subagent_template_column = {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(agent_prompt_templates)")
+            .map_err(|e| format!("检查 {AGENT_PROMPT_TEMPLATES_TABLE} 表结构失败：{e}"))?;
+        let columns = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("读取 {AGENT_PROMPT_TEMPLATES_TABLE} 表结构失败：{e}"))?;
+        let mut found = false;
+        for column in columns {
+            if column.map_err(|e| format!("读取 {AGENT_PROMPT_TEMPLATES_TABLE} 列失败：{e}"))?
+                == "available_to_subagents"
+            {
+                found = true;
+                break;
+            }
+        }
+        found
+    };
+    if !has_subagent_template_column {
+        conn.execute_batch(
+            "
+            ALTER TABLE agent_prompt_templates
+                ADD COLUMN available_to_subagents INTEGER NOT NULL DEFAULT 0;
+            UPDATE agent_prompt_templates
+                SET available_to_subagents = enabled;
+            ",
+        )
+        .map_err(|e| format!("迁移 {AGENT_PROMPT_TEMPLATES_TABLE} 子代理模板字段失败：{e}"))?;
+    }
     Ok(())
 }
 

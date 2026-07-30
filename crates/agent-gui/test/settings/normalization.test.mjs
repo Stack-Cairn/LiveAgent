@@ -2104,21 +2104,65 @@ test("web storage redaction clears ssh secrets but keeps configured state", () =
   assert.equal(redacted.ssh.hosts[0].proxy.passwordConfigured, true);
 });
 
-test("only one agent prompt template remains enabled after normalization", () => {
+test("main-agent activation stays single-select while subagent templates remain multi-select", () => {
   const agents = settings.normalizeAgentPromptTemplates([
-    { id: "a", name: "A", prompt: "Prompt A", enabled: true },
-    { id: "b", name: "B", prompt: "Prompt B", enabled: true },
-    { id: "c", name: "C", prompt: "Prompt C", enabled: false },
+    {
+      id: "a",
+      name: "A",
+      prompt: "Prompt A",
+      enabled: true,
+      availableToSubagents: true,
+    },
+    {
+      id: "b",
+      name: "B",
+      prompt: "Prompt B",
+      enabled: true,
+      availableToSubagents: true,
+    },
+    {
+      id: "c",
+      name: "C",
+      prompt: "Prompt C",
+      enabled: false,
+      availableToSubagents: false,
+    },
   ]);
 
   assert.deepEqual(
-    agents.map((agent) => [agent.id, agent.enabled]),
+    agents.map((agent) => [agent.id, agent.enabled, agent.availableToSubagents]),
     [
-      ["a", true],
-      ["b", false],
-      ["c", false],
+      ["a", true, true],
+      ["b", false, true],
+      ["c", false, false],
     ],
   );
+});
+
+test("legacy agent templates default subagent availability from main activation", () => {
+  const enabledLegacy = settings.normalizeAgentPromptTemplate({
+    id: "legacy-enabled",
+    name: "Legacy Enabled",
+    prompt: "Prompt",
+    enabled: true,
+  });
+  const disabledLegacy = settings.normalizeAgentPromptTemplate({
+    id: "legacy-disabled",
+    name: "Legacy Disabled",
+    prompt: "Prompt",
+    enabled: false,
+  });
+  const explicitlyUnavailable = settings.normalizeAgentPromptTemplate({
+    id: "explicit",
+    name: "Explicit",
+    prompt: "Prompt",
+    enabled: true,
+    availableToSubagents: false,
+  });
+
+  assert.equal(enabledLegacy.availableToSubagents, true);
+  assert.equal(disabledLegacy.availableToSubagents, false);
+  assert.equal(explicitlyUnavailable.availableToSubagents, false);
 });
 
 test("mcp and remote settings normalize transport, selection, ports, and tokens", () => {

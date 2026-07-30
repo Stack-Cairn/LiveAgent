@@ -98,7 +98,7 @@ export function renderBatchRejectionText(params: {
   if (params.templates.length > 0) {
     lines.push(
       "",
-      "Enabled templates (reference by template=<id>):",
+      "Templates available to subagents (reference by template=<id>):",
       ...params.templates.map((entry) => {
         const description = entry.description ? ` - ${entry.description}` : "";
         return `- ${entry.id} (${entry.name})${description}`;

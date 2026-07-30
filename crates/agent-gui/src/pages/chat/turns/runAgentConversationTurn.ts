@@ -181,10 +181,12 @@ function finishAgentPerfSpan(
   return durationMs;
 }
 
-// Only enabled, non-empty templates are resolvable from Agent calls.
-function enabledSubagentTemplates(agentTemplates: AppSettings["agents"]): SubagentTemplate[] {
+// Only templates selected for subagents and carrying a non-empty prompt are resolvable from Agent calls.
+export function availableSubagentTemplates(
+  agentTemplates: AppSettings["agents"],
+): SubagentTemplate[] {
   return (agentTemplates ?? [])
-    .filter((template) => template.enabled && template.prompt.trim())
+    .filter((template) => template.availableToSubagents && template.prompt.trim())
     .map((template) => ({
       id: template.id,
       name: template.name,
@@ -430,7 +432,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           model,
           runtime,
           sessionId,
-          templates: enabledSubagentTemplates(agentTemplates),
+          templates: availableSubagentTemplates(agentTemplates),
           store: subagentStore,
           scheduler: subagentScheduler,
         }
