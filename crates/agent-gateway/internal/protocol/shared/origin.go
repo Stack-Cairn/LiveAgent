@@ -37,15 +37,10 @@ func requestURLForOriginCheck(r *http.Request) *url.URL {
 	if r == nil {
 		return nil
 	}
-	scheme := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
-	if scheme == "" {
-		if r.TLS != nil {
-			scheme = "https"
-		} else {
-			scheme = "http"
-		}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
 	}
-	scheme = strings.ToLower(strings.TrimSpace(strings.Split(scheme, ",")[0]))
 	switch scheme {
 	case "http", "https":
 	default:
