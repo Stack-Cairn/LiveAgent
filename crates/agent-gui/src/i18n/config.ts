@@ -147,9 +147,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.claudeOfficialImportFailed": "Claude 官方对话导入失败",
     "chat.history.claudeOfficialImportDialogTitle": "导入 Claude 官方对话",
     "chat.history.claudeOfficialImportDialogSubtitle":
-      "从官方 Claude 数据 ZIP 中选择需要导入的对话；会话将全部归入 Default 工作区。",
+      "从官方 Claude 数据 ZIP 中选择需要导入的对话；会话将归入 Chat 模式。",
     "chat.history.claudeOfficialImportDialogEmpty": "没有可导入的 Claude 官方对话。",
-    "chat.history.claudeOfficialImportDialogDefaultWorkspace": "Default 工作区",
     "chat.history.claudeCodeImporting": "正在导入 Claude Code 对话…",
     "chat.history.claudeCodeImportFailed": "Claude Code 对话导入失败",
     "chat.history.claudeCodeImportDialogTitle": "导入 Claude Code 对话",
@@ -989,8 +988,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.claudeImportResult": "已导入 {imported} 个会话，共读取 {scanned} 个 Claude 会话。",
     "settings.claudeCodeImportTitle": "Claude Code 对话",
     "settings.claudeOfficialImportTitle": "Claude 官方对话",
-    "settings.claudeOfficialImportDescription":
-      "选择 Claude 官方数据 ZIP；会话会全部导入 LiveAgent 的 Default 工作区。",
+    "settings.claudeOfficialImportDescription": "选择 Claude 官方数据 ZIP；会话将归入 Chat 模式。",
     "settings.claudeOfficialImportResult":
       "已导入 {imported} 个会话，共读取 {scanned} 个 Claude 官方对话。",
     "settings.claudeCodeImportDescription":
@@ -2472,9 +2470,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.claudeOfficialImportFailed": "Failed to import official Claude conversations",
     "chat.history.claudeOfficialImportDialogTitle": "Import official Claude conversations",
     "chat.history.claudeOfficialImportDialogSubtitle":
-      "Choose conversations from an official Claude data ZIP. All conversations are imported into the Default workspace.",
+      "Choose conversations from an official Claude data ZIP. They are imported into Chat mode.",
     "chat.history.claudeOfficialImportDialogEmpty": "No official Claude conversations to import.",
-    "chat.history.claudeOfficialImportDialogDefaultWorkspace": "Default workspace",
     "chat.history.claudeCodeImporting": "Importing Claude Code conversations…",
     "chat.history.claudeCodeImportFailed": "Failed to import Claude Code conversations",
     "chat.history.claudeCodeImportDialogTitle": "Import Claude Code conversations",
@@ -3347,7 +3344,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.claudeCodeImportTitle": "Claude Code conversations",
     "settings.claudeOfficialImportTitle": "Official Claude conversations",
     "settings.claudeOfficialImportDescription":
-      "Choose an official Claude data ZIP. All imported conversations go to LiveAgent's Default workspace.",
+      "Choose an official Claude data ZIP. Conversations are imported into Chat mode.",
     "settings.claudeOfficialImportResult":
       "Imported {imported} conversations from {scanned} official Claude conversations.",
     "settings.claudeCodeImportDescription":

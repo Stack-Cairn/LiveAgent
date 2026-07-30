@@ -10,24 +10,6 @@ use std::collections::HashMap;
 
 const CLAUDE_OFFICIAL_CONVERSATIONS_ENTRY: &str = "conversations.json";
 
-fn claude_official_default_cwd() -> Result<String, String> {
-    crate::commands::settings::default_project_workdir()
-}
-
-fn claude_official_workspace_cwd(conversation: &Value, default_cwd: &str) -> String {
-    for key in ["cwd", "source_cwd", "workspace_path", "workspacePath"] {
-        let Some(cwd) = import_string(conversation.get(key)) else { continue };
-        let path = std::path::Path::new(&cwd);
-        if path.is_absolute()
-            && !path.starts_with("/home/claude")
-            && !path.starts_with("/mnt/user-data")
-        {
-            return cwd;
-        }
-    }
-    default_cwd.to_string()
-}
-
 fn read_claude_official_conversations(path: &std::path::Path) -> Result<Vec<Value>, String> {
     if path.extension().and_then(|extension| extension.to_str()) != Some("zip") {
         return Err("请选择 Claude 官方数据 ZIP 文件".to_string());
@@ -154,9 +136,7 @@ fn claude_official_content_blocks(
 
 fn convert_claude_official_conversation(
     conversation: &Value,
-    default_cwd: &str,
 ) -> Option<ImportConversation> {
-    let cwd = claude_official_workspace_cwd(conversation, default_cwd);
     let session_id = import_string(conversation.get("uuid"))?;
     let created_at = import_timestamp(conversation.get("created_at").and_then(Value::as_str))
         .unwrap_or_else(now_ms);
@@ -247,7 +227,9 @@ fn convert_claude_official_conversation(
         session_id,
         title,
         model: "claude-official".to_string(),
-        cwd: Some(cwd),
+        // Official exports cannot identify a LiveAgent project. All imported
+        // official conversations belong to Chat mode, never a workspace.
+        cwd: None,
         created_at,
         updated_at,
         messages,
@@ -260,12 +242,11 @@ fn scan_claude_official(
     zip_path: &std::path::Path,
 ) -> Result<(Vec<ImportConversation>, usize, usize), String> {
     let records = read_claude_official_conversations(zip_path)?;
-    let default_cwd = claude_official_default_cwd()?;
     let scanned_count = records.len();
     let mut skipped_lines = 0;
     let mut conversations = Vec::new();
     for record in &records {
-        match convert_claude_official_conversation(record, &default_cwd) {
+        match convert_claude_official_conversation(record) {
             Some(conversation) => conversations.push(conversation),
             None => skipped_lines += 1,
         }
@@ -307,7 +288,7 @@ mod claude_official_import_tests {
     use super::*;
 
     #[test]
-    fn keeps_explicit_workspace_paths_and_defaults_workspace_less_conversations() {
+    fn imports_official_conversations_into_chat_mode() {
         let conversation = serde_json::json!({
             "uuid": "conversation-1",
             "cwd": "/tmp/linked-workspace", "name": "Official conversation",
@@ -321,9 +302,9 @@ mod claude_official_import_tests {
                 ], "created_at":"2026-07-29T07:30:28.537983Z"}
             ]
         });
-        let imported = convert_claude_official_conversation(&conversation, "/tmp/default-project").expect("official conversation should be importable");
+        let imported = convert_claude_official_conversation(&conversation).expect("official conversation should be importable");
         assert_eq!(imported.id, "claude-official:conversation-1");
-        assert_eq!(imported.cwd.as_deref(), Some("/tmp/linked-workspace"));
+        assert_eq!(imported.cwd, None);
         assert_eq!(imported.message_count, 3);
         assert_eq!(imported.messages[0]["role"], "user");
         assert_eq!(imported.messages[1]["content"][0]["type"], "thinking");
@@ -334,7 +315,27 @@ mod claude_official_import_tests {
     }
 
     #[test]
-    fn sends_workspace_less_conversations_to_default_workspace() {
+    fn ignores_official_workspace_metadata() {
+        for (key, value) in [
+            ("cwd", "/Users/tester/project"),
+            ("source_cwd", "/Users/tester/project"),
+            ("workspace_path", "/Users/tester/project"),
+            ("workspacePath", "/Users/tester/project"),
+            ("cwd", "/home/claude/project"),
+        ] {
+            let conversation = serde_json::json!({
+                "uuid": format!("conversation-{key}"),
+                key: value,
+                "chat_messages": [{"uuid":"user-1", "sender":"human", "text":"Hello"}]
+            });
+            let imported = convert_claude_official_conversation(&conversation)
+                .expect("official conversation should be importable");
+            assert_eq!(imported.cwd, None, "{key} must not create a workspace");
+        }
+    }
+
+    #[test]
+    fn sends_workspace_less_conversations_to_chat_mode() {
         let conversation = serde_json::json!({
             "uuid": "workspace-less-conversation",
             "chat_messages": [{
@@ -345,14 +346,14 @@ mod claude_official_import_tests {
             }]
         });
 
-        let imported = convert_claude_official_conversation(&conversation, "/tmp/default-project")
+        let imported = convert_claude_official_conversation(&conversation)
             .expect("workspace-less conversation should be importable");
-        assert_eq!(imported.cwd.as_deref(), Some("/tmp/default-project"));
+        assert_eq!(imported.cwd, None);
     }
 
     #[test]
     fn skips_official_conversation_without_displayable_messages() {
         let conversation = serde_json::json!({"uuid":"empty-conversation", "name":"", "chat_messages":[]});
-        assert!(convert_claude_official_conversation(&conversation, "/tmp/default-project").is_none());
+        assert!(convert_claude_official_conversation(&conversation).is_none());
     }
 }

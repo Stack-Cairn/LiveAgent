@@ -15,14 +15,16 @@ type ClaudeCodeImportDialogProps = {
   preview: ClaudeCodeImportPreview | ClaudeOfficialImportPreview;
   onClose: () => void;
   onConfirm: (ids: string[]) => void;
-  defaultWorkspaceOnly?: boolean;
+  /// 官方导入没有 LiveAgent 工作区语义，始终汇入 Chat 模式；本机 Claude
+  /// Code 导入则保留其实际 cwd 分组。`variant` 也控制标题与副标题。
+  variant: "claude-code" | "claude-official";
 };
 
 const NO_CWD_KEY = "__liveagent_no_cwd__";
-const DEFAULT_WORKSPACE_KEY = "__liveagent_default_workspace__";
+const CHAT_MODE_KEY = "__liveagent_chat_mode__";
 
 function workspaceLabel(cwd: string): string {
-  if (cwd === NO_CWD_KEY) return "";
+  if (cwd === NO_CWD_KEY || cwd === CHAT_MODE_KEY) return "";
   // 显示路径末段，title 上带完整路径
   const segments = cwd.split(/[\\/]/).filter(Boolean);
   return segments[segments.length - 1] ?? cwd;
@@ -32,19 +34,14 @@ export function ClaudeCodeImportDialog({
   preview,
   onClose,
   onConfirm,
-  defaultWorkspaceOnly = false,
+  variant,
 }: ClaudeCodeImportDialogProps) {
   const { t } = useLocale();
   const { modalState, requestClose } = useModalMotion(onClose);
 
   const groups = useMemo(() => {
-    if (defaultWorkspaceOnly) {
-      return [
-        ["__liveagent_default_workspace__", preview.sessions] as [
-          string,
-          ClaudeCodeImportPreviewSession[],
-        ],
-      ];
+    if (variant === "claude-official") {
+      return [[CHAT_MODE_KEY, preview.sessions] as [string, ClaudeCodeImportPreviewSession[]]];
     }
     const map = new Map<string, ClaudeCodeImportPreviewSession[]>();
     for (const session of preview.sessions) {
@@ -53,14 +50,14 @@ export function ClaudeCodeImportDialog({
       if (list) list.push(session);
       else map.set(key, [session]);
     }
-    // 按会话数倒序，default-project 置顶
+    // 按会话数倒序；无 cwd 的小组垫底
     return Array.from(map.entries()).sort((a, b) => {
-      const aIsDefault = a[0].includes("default-project");
-      const bIsDefault = b[0].includes("default-project");
-      if (aIsDefault !== bIsDefault) return aIsDefault ? -1 : 1;
+      const aIsNoCwd = a[0] === NO_CWD_KEY;
+      const bIsNoCwd = b[0] === NO_CWD_KEY;
+      if (aIsNoCwd !== bIsNoCwd) return aIsNoCwd ? 1 : -1;
       return b[1].length - a[1].length;
     });
-  }, [preview.sessions, defaultWorkspaceOnly]);
+  }, [preview.sessions, variant]);
 
   const [activeCwdKey, setActiveCwdKey] = useState<string | null>(groups[0]?.[0] ?? null);
 
@@ -128,16 +125,20 @@ export function ClaudeCodeImportDialog({
       <div className="settings-modal-panel relative z-10 flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
         <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/55 bg-background/80 text-foreground/85">
-            <Folder className="h-5 w-5" />
+            {variant === "claude-official" ? (
+              <MessageSquareText className="h-5 w-5" />
+            ) : (
+              <Folder className="h-5 w-5" />
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold">
-              {defaultWorkspaceOnly
+              {variant === "claude-official"
                 ? t("chat.history.claudeOfficialImportDialogTitle")
                 : t("chat.history.claudeCodeImportDialogTitle")}
             </h2>
             <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {defaultWorkspaceOnly
+              {variant === "claude-official"
                 ? t("chat.history.claudeOfficialImportDialogSubtitle")
                 : t("chat.history.claudeCodeImportDialogSubtitle")}
             </p>
@@ -157,7 +158,11 @@ export function ClaudeCodeImportDialog({
           {/* 左栏：工作区 */}
           <div className="flex w-56 shrink-0 flex-col bg-card">
             <div className="flex items-center justify-between border-b border-border/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              <span>{t("chat.history.claudeCodeImportDialogWorkspaces")}</span>
+              <span>
+                {variant === "claude-official"
+                  ? t("settings.executionMode")
+                  : t("chat.history.claudeCodeImportDialogWorkspaces")}
+              </span>
               <button
                 type="button"
                 onClick={() => {
@@ -218,21 +223,30 @@ export function ClaudeCodeImportDialog({
                       >
                         {allSelected ? <Check className="h-3 w-3" /> : null}
                       </button>
-                      <Folder
-                        className={cn(
-                          "h-3.5 w-3.5 shrink-0",
-                          isActive ? "text-primary" : "text-muted-foreground",
-                        )}
-                      />
+                      {variant === "claude-official" ? (
+                        <MessageSquareText
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0",
+                            isActive ? "text-primary" : "text-muted-foreground",
+                          )}
+                        />
+                      ) : (
+                        <Folder
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0",
+                            isActive ? "text-primary" : "text-muted-foreground",
+                          )}
+                        />
+                      )}
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-medium">
-                          {key === NO_CWD_KEY
-                            ? t("chat.history.claudeCodeImportDialogNoWorkspace")
-                            : key === DEFAULT_WORKSPACE_KEY
-                              ? t("chat.history.claudeOfficialImportDialogDefaultWorkspace")
+                          {key === CHAT_MODE_KEY
+                            ? t("settings.chatMode")
+                            : key === NO_CWD_KEY
+                              ? t("chat.history.claudeCodeImportDialogNoWorkspace")
                               : workspaceLabel(key)}
                         </span>
-                        {key !== NO_CWD_KEY && key !== DEFAULT_WORKSPACE_KEY ? (
+                        {key !== NO_CWD_KEY && key !== CHAT_MODE_KEY ? (
                           <span
                             className="block truncate text-[10px] text-muted-foreground"
                             title={key}
@@ -255,10 +269,10 @@ export function ClaudeCodeImportDialog({
           <div className="flex flex-1 flex-col bg-background">
             <div className="flex items-center justify-between border-b border-border/40 px-4 py-2">
               <span className="text-xs text-muted-foreground">
-                {activeCwdKey === NO_CWD_KEY
-                  ? t("chat.history.claudeCodeImportDialogNoWorkspace")
-                  : activeCwdKey === DEFAULT_WORKSPACE_KEY
-                    ? t("chat.history.claudeOfficialImportDialogDefaultWorkspace")
+                {activeCwdKey === CHAT_MODE_KEY
+                  ? t("settings.chatMode")
+                  : activeCwdKey === NO_CWD_KEY
+                    ? t("chat.history.claudeCodeImportDialogNoWorkspace")
                     : (activeCwdKey ?? "")}
               </span>
               {activeSessions.length > 0 ? (

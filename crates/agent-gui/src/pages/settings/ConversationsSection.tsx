@@ -220,6 +220,7 @@ export function ConversationsSection() {
           preview={dialog.preview as ClaudeOfficialImportPreview}
           onClose={() => setDialog(null)}
           onConfirm={(ids) => void handleConfirm("claude-official", ids, dialog.zipPath)}
+          variant="claude-official"
         />
       ) : null}
       {dialog?.source === "claude-code" ? (
@@ -227,6 +228,7 @@ export function ConversationsSection() {
           preview={dialog.preview as ClaudeCodeImportPreview}
           onClose={() => setDialog(null)}
           onConfirm={(ids) => void handleConfirm("claude-code", ids)}
+          variant="claude-code"
         />
       ) : null}
     </div>
