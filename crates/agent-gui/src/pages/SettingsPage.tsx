@@ -138,11 +138,13 @@ export function SettingsPage(props: SettingsPageProps) {
     saveState,
     onBack,
     initialSection = "system",
+    initialProviderId,
     hiddenSections = [],
     appUpdate,
   } = props;
   const { t } = useLocale();
   const [section, setSection] = useState<SectionId>(initialSection);
+  const [pendingProviderId, setPendingProviderId] = useState(initialProviderId);
 
   const sectionLabels = useMemo<Record<SectionId, string>>(
     () => ({
@@ -177,7 +179,8 @@ export function SettingsPage(props: SettingsPageProps) {
 
   useEffect(() => {
     setSection(initialSection);
-  }, [initialSection]);
+    setPendingProviderId(initialProviderId);
+  }, [initialProviderId, initialSection]);
 
   useEffect(() => {
     if (allNavItems.some((item) => item.id === section)) {
@@ -190,7 +193,14 @@ export function SettingsPage(props: SettingsPageProps) {
   const sectionContent = (() => {
     switch (section) {
       case "providers":
-        return <ProvidersSection settings={settings} setSettings={setSettings} />;
+        return (
+          <ProvidersSection
+            settings={settings}
+            setSettings={setSettings}
+            initialProviderId={pendingProviderId}
+            onInitialProviderHandled={() => setPendingProviderId(undefined)}
+          />
+        );
       case "conversations":
         return <ConversationsSection />;
       case "system":

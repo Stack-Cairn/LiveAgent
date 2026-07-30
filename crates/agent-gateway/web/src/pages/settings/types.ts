@@ -21,6 +21,7 @@ export type SettingsPageProps = {
   saveState: WebSettingsSaveState;
   onBack: () => void;
   initialSection?: SectionId;
+  initialProviderId?: string;
   hiddenSections?: SectionId[];
   onAgentDirectoryChanged?: () => void | Promise<void>;
 };

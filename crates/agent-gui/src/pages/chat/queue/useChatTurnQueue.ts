@@ -13,10 +13,9 @@ import {
   type ExecutionMode,
   isAgentExecutionMode,
   normalizeChatRuntimeControls,
-  normalizeSystemToolSelection,
-  type SystemToolId,
 } from "../../../lib/settings";
 import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
+import { answerToolApproval } from "../../../lib/tools/toolApproval";
 import type { ChatQueueTurnPreview } from "../components/ChatComposerBar";
 import { createTextComposerDraft } from "../composer/composerDraftText";
 import type { ActiveGatewayBridgeRequest, SendChatAction } from "../gateway/gatewayBridgeTypes";
@@ -139,7 +138,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         createdAt: number;
         executionMode: ExecutionMode;
         workdir: string;
-        selectedSystemToolIds: SystemToolId[];
         runtimeControls: ChatRuntimeControls;
         gatewayRequest?: QueuedChatTurn["gatewayRequest"];
       })
@@ -407,7 +405,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       uploadedFiles,
       executionMode,
       workdir: workdirForTurn,
-      selectedSystemToolIds: editSlot?.selectedSystemToolIds ?? settings.system.selectedSystemTools,
       runtimeControls: editSlot?.runtimeControls ?? settings.chatRuntimeControls,
       createdAt: editSlot?.createdAt,
       gatewayRequest: editSlot?.gatewayRequest,
@@ -494,7 +491,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
                 : queuedTurn.runtimeControls,
               executionModeOverride: queuedTurn.executionMode,
               workdirOverride: queuedTurn.workdir,
-              selectedSystemToolIdsOverride: queuedTurn.selectedSystemToolIds,
             }
           : null;
         const markGatewayStarted =
@@ -513,7 +509,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           conversationIdOverride: targetConversationId,
           executionModeOverride: queuedTurn.executionMode,
           workdirOverride: queuedTurn.workdir,
-          selectedSystemToolIdsOverride: queuedTurn.selectedSystemToolIds,
           runtimeControlsOverride: queuedTurn.runtimeControls,
           gatewayBridgeRequestOverride: gatewayBridgeRequest,
           preserveComposerOnStart: true,
@@ -673,7 +668,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       createdAt: queuedTurn.createdAt,
       executionMode: queuedTurn.executionMode,
       workdir: queuedTurn.workdir,
-      selectedSystemToolIds: queuedTurn.selectedSystemToolIds.slice(),
       runtimeControls: { ...queuedTurn.runtimeControls },
       gatewayRequest: queuedTurn.gatewayRequest ? { ...queuedTurn.gatewayRequest } : undefined,
     };
@@ -727,7 +721,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const runtimeControls = payload.runtimeControls
       ? normalizeChatRuntimeControls(payload.runtimeControls)
       : settings.chatRuntimeControls;
-    const selectedSystemToolIds = normalizeSystemToolSelection(payload.selectedSystemTools);
     const queuedTurn = createQueuedChatTurn({
       id: `gateway-${requestId}`,
       conversationId: targetConversationId,
@@ -735,10 +728,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       uploadedFiles,
       executionMode,
       workdir: isAgentExecutionMode(executionMode) ? workdir : "",
-      selectedSystemToolIds:
-        selectedSystemToolIds.length > 0
-          ? selectedSystemToolIds
-          : settings.system.selectedSystemTools,
       runtimeControls,
       gatewayRequest: {
         requestId,
@@ -818,6 +807,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       };
 
       if (!requestId) return;
+
       if (!conversationId && action !== "get") {
         fail("conversation_id is required");
         return;
@@ -848,6 +838,37 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         const outcome = answerAskUserQuestion(itemId, rawAnswers, { conversationId });
         if (!outcome.ok) {
           fail(outcome.message || "question not pending", "not_found");
+          return;
+        }
+        respond(requestId, { accepted: true });
+        return;
+      }
+
+      // WebUI 对工具审批卡片的决定:itemId 即 toolCallId,request_json 携带
+      // {"decision":"approve"|"deny"|"approve_session"},落到桌面审批挂起表。
+      if (action === "tool_approval") {
+        if (!itemId) {
+          fail("tool_approval requires item_id", "invalid_request");
+          return;
+        }
+        let decision: unknown;
+        try {
+          decision = JSON.parse(request.requestJson || "{}");
+        } catch {
+          fail("invalid tool approval payload", "invalid_payload");
+          return;
+        }
+        const raw =
+          decision && typeof decision === "object"
+            ? (decision as { decision?: unknown }).decision
+            : decision;
+        if (raw !== "approve" && raw !== "deny" && raw !== "approve_session") {
+          fail("invalid tool approval decision", "invalid_payload");
+          return;
+        }
+        const outcome = answerToolApproval(itemId, raw, { conversationId });
+        if (!outcome.ok) {
+          fail(outcome.message || "approval not pending", "not_found");
           return;
         }
         respond(requestId, { accepted: true });

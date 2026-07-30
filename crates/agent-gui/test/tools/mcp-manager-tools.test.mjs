@@ -98,7 +98,6 @@ test("McpManager is always registered as a builtin tool", async () => {
     fileState: fileToolState.createFileToolState(),
     skillsEnabled: false,
     runtimeScope: "chat",
-    selectedSystemToolIds: [],
     getMcpSettings: () => ({ servers: [], selected: [] }),
   });
 
@@ -117,7 +116,6 @@ test("builtin registry resolves tool names with casing drift before execution", 
     fileState: fileToolState.createFileToolState(),
     skillsEnabled: false,
     runtimeScope: "chat",
-    selectedSystemToolIds: [],
     getMcpSettings: () => ({ servers: [], selected: [] }),
   });
 
@@ -145,7 +143,6 @@ test("ManagedProcess is registered only for chat runtime", async () => {
     providerId: "codex",
     fileState: fileToolState.createFileToolState(),
     skillsEnabled: false,
-    selectedSystemToolIds: [],
     getMcpSettings: () => ({ servers: [], selected: [] }),
   };
 

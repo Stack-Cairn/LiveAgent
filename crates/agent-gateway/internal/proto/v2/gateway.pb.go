@@ -6082,19 +6082,18 @@ func (x *GitResponse) GetResultJson() string {
 }
 
 type ChatRequest struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	ConversationId      string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	Message             string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	SelectedModel       *ChatSelectedModel     `protobuf:"bytes,3,opt,name=selected_model,json=selectedModel,proto3" json:"selected_model,omitempty"`
-	ExecutionMode       string                 `protobuf:"bytes,4,opt,name=execution_mode,json=executionMode,proto3" json:"execution_mode,omitempty"`
-	Workdir             string                 `protobuf:"bytes,5,opt,name=workdir,proto3" json:"workdir,omitempty"`
-	SelectedSystemTools []string               `protobuf:"bytes,6,rep,name=selected_system_tools,json=selectedSystemTools,proto3" json:"selected_system_tools,omitempty"`
-	UploadedFiles       []*ChatUploadedFile    `protobuf:"bytes,7,rep,name=uploaded_files,json=uploadedFiles,proto3" json:"uploaded_files,omitempty"`
-	ClientRequestId     string                 `protobuf:"bytes,8,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
-	RuntimeControls     *ChatRuntimeControls   `protobuf:"bytes,9,opt,name=runtime_controls,json=runtimeControls,proto3" json:"runtime_controls,omitempty"`
-	QueuePolicy         string                 `protobuf:"bytes,10,opt,name=queue_policy,json=queuePolicy,proto3" json:"queue_policy,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId  string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	Message         string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	SelectedModel   *ChatSelectedModel     `protobuf:"bytes,3,opt,name=selected_model,json=selectedModel,proto3" json:"selected_model,omitempty"`
+	ExecutionMode   string                 `protobuf:"bytes,4,opt,name=execution_mode,json=executionMode,proto3" json:"execution_mode,omitempty"`
+	Workdir         string                 `protobuf:"bytes,5,opt,name=workdir,proto3" json:"workdir,omitempty"`
+	UploadedFiles   []*ChatUploadedFile    `protobuf:"bytes,7,rep,name=uploaded_files,json=uploadedFiles,proto3" json:"uploaded_files,omitempty"`
+	ClientRequestId string                 `protobuf:"bytes,8,opt,name=client_request_id,json=clientRequestId,proto3" json:"client_request_id,omitempty"`
+	RuntimeControls *ChatRuntimeControls   `protobuf:"bytes,9,opt,name=runtime_controls,json=runtimeControls,proto3" json:"runtime_controls,omitempty"`
+	QueuePolicy     string                 `protobuf:"bytes,10,opt,name=queue_policy,json=queuePolicy,proto3" json:"queue_policy,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ChatRequest) Reset() {
@@ -6160,13 +6159,6 @@ func (x *ChatRequest) GetWorkdir() string {
 		return x.Workdir
 	}
 	return ""
-}
-
-func (x *ChatRequest) GetSelectedSystemTools() []string {
-	if x != nil {
-		return x.SelectedSystemTools
-	}
-	return nil
 }
 
 func (x *ChatRequest) GetUploadedFiles() []*ChatUploadedFile {
@@ -13072,19 +13064,18 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\vGitResponse\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x1f\n" +
 	"\vresult_json\x18\x02 \x01(\tR\n" +
-	"resultJson\"\x89\x04\n" +
+	"resultJson\"\xf2\x03\n" +
 	"\vChatRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12N\n" +
 	"\x0eselected_model\x18\x03 \x01(\v2'.liveagent.gateway.v2.ChatSelectedModelR\rselectedModel\x12%\n" +
 	"\x0eexecution_mode\x18\x04 \x01(\tR\rexecutionMode\x12\x18\n" +
-	"\aworkdir\x18\x05 \x01(\tR\aworkdir\x122\n" +
-	"\x15selected_system_tools\x18\x06 \x03(\tR\x13selectedSystemTools\x12M\n" +
+	"\aworkdir\x18\x05 \x01(\tR\aworkdir\x12M\n" +
 	"\x0euploaded_files\x18\a \x03(\v2&.liveagent.gateway.v2.ChatUploadedFileR\ruploadedFiles\x12*\n" +
 	"\x11client_request_id\x18\b \x01(\tR\x0fclientRequestId\x12T\n" +
 	"\x10runtime_controls\x18\t \x01(\v2).liveagent.gateway.v2.ChatRuntimeControlsR\x0fruntimeControls\x12!\n" +
 	"\fqueue_policy\x18\n" +
-	" \x01(\tR\vqueuePolicy\"\xcf\x01\n" +
+	" \x01(\tR\vqueuePolicyJ\x04\b\x06\x10\aR\x15selected_system_tools\"\xcf\x01\n" +
 	"\x0eChatMessageRef\x12#\n" +
 	"\rsegment_index\x18\x01 \x01(\x05R\fsegmentIndex\x12#\n" +
 	"\rmessage_index\x18\x02 \x01(\x05R\fmessageIndex\x12\x1d\n" +

@@ -1,0 +1,156 @@
+name: PR Governance
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+concurrency:
+  group: pr-governance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  governance:
+    name: Check PR compliance
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft && github.event.pull_request.state == 'open' }}
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const body = (pr.body || '').replace(/<!--[\s\S]*?-->/g, '');
+            const MARKER = '<!-- pr-governance-report -->';
+
+            // PR(如 dependabot)与维护者显式豁免的 PR 跳过检查。
+            const labels = pr.labels.map((l) => l.name);
+            if (pr.user.type === 'Bot' || labels.includes('governance-exempt')) {
+              core.info('Bot PR or governance-exempt label present, skipping governance checks.');
+              return;
+            }
+
+            const problems = [];
+
+            // 1) 必须关联 issue:优先看 GitHub 解析出的关闭引用,正则兜底
+            const gql = await github.graphql(
+              `query ($owner: String!, $repo: String!, $num: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $num) {
+                    closingIssuesReferences(first: 1) { totalCount }
+                  }
+                }
+              }`,
+              { owner, repo, num: pr.number },
+            );
+            const linkedByGithub =
+              gql.repository.pullRequest.closingIssuesReferences.totalCount > 0;
+            const linkedByText =
+              /(clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed))\s*:?\s+(?:[\w.-]+\/[\w.-]+)?#\d+/i.test(body);
+            if (!linkedByGithub && !linkedByText) {
+              problems.push(
+                '**No linked issue**: the PR body must contain `Closes #123` / `Fixes #123` / `Resolves #123`. ' +
+                'This project requires an issue before a PR — see the [contribution guidelines](https://github.com/' +
+                `${owner}/${repo}/blob/main/.github/CONTRIBUTING.md).`,
+              );
+            }
+
+            // 2) UI 改动必须附截图/预览:改动文件命中前端路径,而正文没有图片即视为缺失。
+            const UI_PATHS = [
+              'crates/agent-gui/src/',
+              'crates/agent-gateway/web/src/',
+            ];
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const uiTouched = files.some((f) =>
+              UI_PATHS.some((p) => f.filename.startsWith(p)),
+            );
+            const hasImage =
+              /!\[[^\]]*\]\([^)]+\)|<img\s|user-attachments\/assets/i.test(body);
+            if (uiTouched && !hasImage) {
+              problems.push(
+                '**UI change without screenshots**: this PR modifies frontend code. Please add before/after screenshots or a recording under "Screenshots / preview" in the PR body.',
+              );
+            }
+
+            // 3) 必须与基线无冲突。mergeable 由 GitHub 异步计算,null 表示尚未算完,轮询等待。
+            let mergeable = pr.mergeable ?? null;
+            for (let i = 0; i < 6 && mergeable === null; i++) {
+              await new Promise((r) => setTimeout(r, 5000));
+              const { data } = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pr.number,
+              });
+              mergeable = data.mergeable;
+            }
+            if (mergeable === false) {
+              problems.push(
+                '**Merge conflicts with the target branch**: merge or rebase the latest base branch and resolve conflicts on your branch before requesting review. Maintainers do not resolve conflicts for you.',
+              );
+            }
+
+            // 汇总:更新置顶报告评论;不合规则转为 draft。
+            const passed = problems.length === 0;
+            const report = passed
+              ? `${MARKER}\n**PR governance checks passed.** Awaiting human review.`
+              : [
+                  MARKER,
+                  '**PR governance checks failed — this PR has been converted to draft.**',
+                  '',
+                  ...problems.map((p) => `- ${p}`),
+                  '',
+                  'Fix the items above, then click **Ready for review** to re-run the checks.',
+                ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: pr.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body?.includes(MARKER));
+            if (existing) {
+              // 结果没变化就不重复编辑,避免 timeline 噪音。
+              if (existing.body !== report) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body: report,
+                });
+              }
+            } else if (!passed) {
+              // 首次即通过的 PR 不发评论,保持安静。
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pr.number,
+                body: report,
+              });
+            }
+
+            if (!passed) {
+              // 即便转 draft 失败(token 权限不足),下面的 setFailed 也会把检查置红,
+              // 配合 main 的 required status check 仍能阻止合并,治理不会失效。
+              try {
+                await github.graphql(
+                  `mutation ($id: ID!) {
+                    convertPullRequestToDraft(input: { pullRequestId: $id }) {
+                      pullRequest { isDraft }
+                    }
+                  }`,
+                  { id: pr.node_id },
+                );
+              } catch (e) {
+                core.warning(`Failed to convert to draft (${e.message}); the check is still red and merge blocking is unaffected.`);
+              }
+              core.setFailed(`PR governance checks failed:\n- ${problems.join('\n- ')}`);
+            }

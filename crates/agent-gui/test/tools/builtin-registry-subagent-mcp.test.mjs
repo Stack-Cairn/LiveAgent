@@ -112,7 +112,6 @@ async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
     fileState: createFileToolState(),
     skillsEnabled: true,
     runtimeScope: "chat",
-    selectedSystemToolIds: [],
     getMcpSettings: () => mcpSettingsHolder.value,
   };
   if (!withSubagentRuntime) {

@@ -23,22 +23,6 @@ func TestNormalizeExecutionMode(t *testing.T) {
 	}
 }
 
-func TestNormalizeSelectedSystemTools(t *testing.T) {
-	t.Parallel()
-
-	got := NormalizeSelectedSystemTools([]string{
-		" http_get_test ",
-		"http_get_test",
-		"",
-		"unknown_tool",
-	})
-	want := []string{"http_get_test"}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("NormalizeSelectedSystemTools() = %#v, want %#v", got, want)
-	}
-}
-
 func TestNormalizeChatSelectedModelAcceptsGemini(t *testing.T) {
 	t.Parallel()
 

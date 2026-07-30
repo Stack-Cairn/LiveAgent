@@ -13,6 +13,7 @@ import {
 } from "../../../lib/chat/askUserQuestion";
 import { submitAskUserQuestionAnswer } from "../../../lib/chat/askUserQuestionBridge";
 import { deriveFileChangeStats } from "../../../lib/chat/fileChangeStats";
+import { readToolApprovalPending } from "../../../lib/chat/toolApprovalArgs";
 import { FILE_TOOL_TEXT_FIELDS } from "../../../lib/chat/toolPreview";
 import {
   previewText,
@@ -91,6 +92,17 @@ function ToolCallItem({
     (answers: AskUserQuestionAnswer[]) => submitAskUserQuestionAnswer(item.toolCall.id, answers),
     [item.toolCall.id],
   );
+  // 工具审批:桌面端在待审批时把 __toolApprovalPending 标记盖到同步的工具参数上
+  // (见 gatewayToolPreview 的重发)。带标记且尚无结果
+  // → 渲染审批卡片;审批消解后重发的快照不再带标记,卡片隐藏。
+  // 注意:审批在 beforeToolCall 处挂起,此时工具尚未开始执行、并不处于 isRunning
+  // 状态(不同于 AskUserQuestion 是工具自身执行时挂起),故不能用 isRunning 作门,
+  // 标记本身即权威的"待审批"信号。
+  const isApprovalPending =
+    !readOnly &&
+    !isRedactedToolContent &&
+    !result &&
+    readToolApprovalPending(item.toolCall.arguments);
   const shouldAutoOpen =
     !isRedactedToolContent &&
     (item.toolCall.name === "Image" ||
@@ -145,17 +157,19 @@ function ToolCallItem({
   const statusLabel =
     isTodo && hasIncompleteTodo && isAborted
       ? t("chat.tool.aborted")
-      : isRunning
-        ? isAskUser
-          ? askQuestions.length > 0
-            ? t("chat.askUser.waiting")
-            : t("chat.askUser.preparing")
-          : t("chat.tool.running")
-        : result
-          ? result.isError
-            ? t("chat.tool.failed")
-            : t("chat.tool.success")
-          : t("chat.tool.waiting");
+      : isApprovalPending
+        ? t("chat.toolApproval.waitingStatus")
+        : isRunning
+          ? isAskUser
+            ? askQuestions.length > 0
+              ? t("chat.askUser.waiting")
+              : t("chat.askUser.preparing")
+            : t("chat.tool.running")
+          : result
+            ? result.isError
+              ? t("chat.tool.failed")
+              : t("chat.tool.success")
+            : t("chat.tool.waiting");
 
   const statusTextClass = result?.isError
     ? "text-[hsl(var(--chat-error))]"

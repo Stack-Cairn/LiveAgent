@@ -27,7 +27,6 @@ import {
 import { createUuid } from "../shared/id";
 import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
 import { normalizeFontFamily } from "../system/fontFamily";
-import { SYSTEM_TOOL_OPTIONS, type SystemToolId } from "../tools/systemToolOptions";
 import {
   DEFAULT_CHAT_TRANSCRIPT_WIDTH,
   MAX_CHAT_TRANSCRIPT_WIDTH,
@@ -36,8 +35,6 @@ import {
 import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
 
 export { normalizeFontFamily } from "../system/fontFamily";
-
-export type { SystemToolId } from "../tools/systemToolOptions";
 
 export function isThinkingAlwaysOnForModel(
   providerId: ProviderId,
@@ -198,10 +195,18 @@ export type SystemProxyConfig = {
   passwordConfigured?: boolean;
 };
 
+/** 工具审批策略:allow 直接执行、ask 执行前请求用户批准、deny 直接拒绝。 */
+export type ToolPolicy = "allow" | "ask" | "deny";
+
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
-  selectedSystemTools: SystemToolId[];
+  /**
+   * 按规范工具名(内置名 / `mcp_*`)覆盖审批策略;缺省由
+   * resolveToolPolicy 按来源推断(内置/mcp=allow、只读工具恒 allow)。
+   * 可选:旧快照缺失该字段时视为空表(全部走默认),保证零回归。
+   */
+  toolPolicies?: Record<string, ToolPolicy>;
   workspaceProjects: WorkspaceProject[];
   activeWorkspaceProjectId?: string;
   hiddenWorkspaceProjectPaths: string[];
@@ -1059,18 +1064,18 @@ function normalizeMcpTransport(input: unknown): McpTransport {
   return "stdio";
 }
 
-export function normalizeSystemToolSelection(input: unknown): SystemToolId[] {
-  const valid = new Set<SystemToolId>(SYSTEM_TOOL_OPTIONS.map((tool) => tool.id));
-  const out: SystemToolId[] = [];
-
-  for (const item of normalizeStringArray(input)) {
-    const value = item as SystemToolId;
-    if (!valid.has(value)) continue;
-    if (out.includes(value)) continue;
-    out.push(value);
+/** 工具策略表:丢弃空键与非法值;空表返回 undefined(与"无覆盖"语义一致)。 */
+export function normalizeToolPolicies(input: unknown): Record<string, ToolPolicy> | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const out: Record<string, ToolPolicy> = {};
+  for (const [rawKey, rawValue] of Object.entries(input as Record<string, unknown>)) {
+    const key = String(rawKey).trim();
+    if (!key) continue;
+    if (rawValue === "allow" || rawValue === "ask" || rawValue === "deny") {
+      out[key] = rawValue;
+    }
   }
-
-  return out;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function normalizeMcpSelection(input: unknown, servers: McpServerConfig[]): string[] {
@@ -1642,7 +1647,7 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
   return {
     executionMode: normalizeExecutionMode(obj.executionMode),
     workdir: normalizeWorkdir(obj.workdir),
-    selectedSystemTools: normalizeSystemToolSelection(obj.selectedSystemTools),
+    toolPolicies: normalizeToolPolicies(obj.toolPolicies),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     activeWorkspaceProjectId:
       typeof obj.activeWorkspaceProjectId === "string" && obj.activeWorkspaceProjectId.trim()
@@ -2198,7 +2203,6 @@ export function getDefaultSettings(): AppSettings {
     system: {
       executionMode: "tools",
       workdir: "",
-      selectedSystemTools: [],
       workspaceProjects: [],
       activeWorkspaceProjectId: undefined,
       hiddenWorkspaceProjectPaths: [],

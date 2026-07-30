@@ -560,6 +560,106 @@ test("runAssistantWithTools calls onBeforeNextTurn only for toolUse turns with t
   );
 });
 
+test("runAssistantWithTools announces execution start before invoking the tool executor", async () => {
+  const askToolCall = createToolCall("call-ask-order", "AskUserQuestion", {
+    questions: [
+      {
+        id: "choice",
+        prompt: "Choose one",
+        options: [{ label: "First" }, { label: "Second" }],
+      },
+    ],
+  });
+  const askTool = {
+    name: "AskUserQuestion",
+    description: "Ask the user",
+    parameters: { type: "object", properties: {} },
+  };
+  const sequence = [];
+  resetFakeStreams(createToolUseAssistant(askToolCall), createTextAssistant("done"));
+  const { params } = createBaseParams({
+    context: {
+      systemPrompt: "Base system prompt",
+      messages: [{ role: "user", content: "Start", timestamp: 1 }],
+      tools: [askTool],
+    },
+    tools: [askTool],
+    onToolCall() {
+      sequence.push("tool_call");
+    },
+    onToolExecutionStart() {
+      sequence.push("execution_start");
+    },
+    async executeToolCall(toolCall) {
+      sequence.push("execute");
+      return createToolResult(toolCall);
+    },
+  });
+
+  await runAssistantWithTools(params);
+
+  const executionStartIndex = sequence.indexOf("execution_start");
+  const executeIndex = sequence.indexOf("execute");
+  assert.ok(sequence.includes("tool_call"));
+  assert.ok(executionStartIndex >= 0);
+  assert.ok(executeIndex > executionStartIndex);
+});
+
+test("AskUserQuestion is pending before the next user-event task after execution start", async () => {
+  const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
+  const bundle = askTools.createAskUserQuestionTools({
+    conversationId: "conversation-runner",
+    timeoutMs: 200,
+  });
+  const askTool = bundle.tools.find((tool) => tool.name === "AskUserQuestion");
+  assert.ok(askTool);
+  const askToolCall = createToolCall("call-ask-next-task", "AskUserQuestion", {
+    questions: [
+      {
+        id: "choice",
+        prompt: "Choose one",
+        options: [{ label: "First", recommended: true }, { label: "Second" }],
+      },
+    ],
+  });
+  resetFakeStreams(createToolUseAssistant(askToolCall), createTextAssistant("done"));
+
+  let resolveAnswerAttempt;
+  const answerAttempt = new Promise((resolve) => {
+    resolveAnswerAttempt = resolve;
+  });
+  const { params } = createBaseParams({
+    context: {
+      systemPrompt: "Base system prompt",
+      messages: [{ role: "user", content: "Start", timestamp: 1 }],
+      tools: [askTool],
+    },
+    tools: [askTool],
+    executeToolCall: bundle.executeToolCall,
+    onToolExecutionStart() {
+      // DOM clicks and Gateway deliveries cannot run inside this synchronous callback;
+      // the earliest real user event is the next task, after the runner has entered
+      // executeToolCall and synchronously populated pendingByToolCallId.
+      setImmediate(() => {
+        resolveAnswerAttempt(
+          askTools.answerAskUserQuestion("call-ask-next-task", [
+            { questionId: "choice", selectedLabel: "Second" },
+          ]),
+        );
+      });
+    },
+  });
+
+  const result = await runAssistantWithTools(params);
+  assert.deepEqual(await answerAttempt, { ok: true });
+  const toolResult = result.emittedMessages.find(
+    (message) => message.role === "toolResult" && message.toolCallId === askToolCall.id,
+  );
+  assert.ok(toolResult);
+  assert.equal(toolResult.details.answers[0].selectedLabel, "Second");
+  assert.equal("timedOut" in toolResult.details, false);
+});
+
 // Mocked turn tests (agent-turn-cancelled-history.test.mjs) replay this payload
 // shape by hand; the assertions here are what keep those replicas honest.
 test("runAssistantWithTools reports 1-based monotonic rounds and paired tool results to onBeforeNextTurn", async () => {

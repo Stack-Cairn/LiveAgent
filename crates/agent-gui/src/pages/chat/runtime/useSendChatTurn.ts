@@ -51,7 +51,6 @@ import {
   isAgentDevMode,
   isAgentExecutionMode,
   type SelectedModel,
-  type SystemToolId,
   updateMemorySettings,
   updateSkills,
   workspaceProjectPathKey,
@@ -120,6 +119,7 @@ type UseSendChatTurnParams = {
   settings: AppSettings;
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   getMcpSettings: () => AppSettings["mcp"];
+  getToolPolicies: () => AppSettings["system"]["toolPolicies"];
   t: (key: string) => string;
   sidebarStore: SidebarStore;
   titleJobRef: MutableRefObject<TitleJobRefValue>;
@@ -197,6 +197,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     settings,
     setSettings,
     getMcpSettings,
+    getToolPolicies,
     t,
     sidebarStore,
     titleJobRef,
@@ -289,7 +290,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     conversationIdOverride?: string;
     executionModeOverride?: ExecutionMode;
     workdirOverride?: string;
-    selectedSystemToolIdsOverride?: SystemToolId[];
     runtimeControlsOverride?: ChatRuntimeControls;
     gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
     preserveComposerOnStart?: boolean;
@@ -320,10 +320,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       gatewayBridgeRequest?.workdirOverride ??
       (effectiveIsAgentMode ? (runtimeEntry?.workdir ?? settings.system.workdir) : "")
     ).trim();
-    const effectiveSelectedSystemToolIds =
-      overrides?.selectedSystemToolIdsOverride ??
-      gatewayBridgeRequest?.selectedSystemToolIdsOverride ??
-      settings.system.selectedSystemTools;
     const effectiveProjectPathKey = workspaceProjectPathKey(effectiveWorkdir);
     const effectiveAssociatedSshHostIds = getSshProjectHostIds(
       settings.ssh,
@@ -1423,8 +1419,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
               enableManagedSkills(change.names);
             },
             agentTemplates: settings.agents,
-            selectedSystemToolIds: effectiveSelectedSystemToolIds,
             getMcpSettings,
+            getToolPolicies,
             applyMcpOps: (ops) => {
               setSettings((prev) => applyMcpOpsToAppSettings(prev, ops));
             },

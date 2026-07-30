@@ -1,0 +1,66 @@
+name: Feature request
+description: Propose a new feature or improvement. Every feature PR must reference a confirmed feature issue — describe the requirement here first.
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Choose the module this proposal mainly involves.
+      options:
+        - Desktop UI (agent-gui / React)
+        - Desktop core (Tauri / Rust)
+        - Gateway (agent-gateway / Go)
+        - Agent sessions / streaming
+        - Tool execution / MCP / Skills
+        - Model providers
+        - Packaging / release / installation
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement (what should this solve)
+      description: Describe the current pain point or limitation and the affected user scenarios. This is the core input for review — be specific.
+      placeholder: Currently ... which causes ... and affects the ... scenario.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired interaction, API, configuration, or behavior change. For UI proposals, sketches or reference screenshots are encouraged.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Estimated change scope
+      description: If you plan to implement this yourself, list the modules / directories / files you expect to touch, to help assess complexity.
+      placeholder: |
+        crates/agent-gui/src/...
+        crates/agent-gateway/internal/...
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other designs or existing workarounds you considered.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submit checklist
+      options:
+        - label: I searched existing issues and pull requests and found no duplicates.
+          required: true
+        - label: This proposal is focused on a single feature or improvement.
+          required: true
+        - label: I understand a PR should come after this issue is confirmed by maintainers, otherwise it will be converted to draft.
+          required: true

@@ -251,6 +251,8 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   onMoveQueuedTurnUp: (id: string) => void;
   onEditQueuedTurn: (id: string) => void;
   onRemoveQueuedTurn: (id: string) => void;
+  /** 输入框上方的集中审批栏(待审批时由上层注入,渲染在队列面板之上)。 */
+  approvalBar?: ReactNode;
 }) {
   const {
     composerRef,
@@ -284,6 +286,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     onMoveQueuedTurnUp,
     onEditQueuedTurn,
     onRemoveQueuedTurn,
+    approvalBar,
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
@@ -629,6 +632,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
           isComposerExpanded && "flex min-h-0 flex-col justify-end",
         )}
       >
+        {approvalBar}
         {queuedTurns.length > 0 ? (
           <div
             ref={queuePanelRef}

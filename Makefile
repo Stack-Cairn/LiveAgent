@@ -150,7 +150,7 @@ BUF_BREAKING_AGAINST ?= ../../.git\#subdir=$(AGENT_GATEWAY_DIR)
 proto-check:
 	@command -v buf >/dev/null || (echo "buf is required. Run: mise install" && exit 1)
 	cd $(AGENT_GATEWAY_DIR) && buf lint
-	node scripts/check-buf-breaking.mjs "$(AGENT_GATEWAY_DIR)" "$(BUF_BREAKING_AGAINST)"
+	cd $(AGENT_GATEWAY_DIR) && buf breaking --against '$(BUF_BREAKING_AGAINST)'
 
 webui:
 	pnpm --dir $(AGENT_GATEWAY_WEB_DIR) install --offline

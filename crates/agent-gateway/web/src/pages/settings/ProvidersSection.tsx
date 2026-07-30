@@ -402,7 +402,6 @@ function ProviderModal({
   const [editingModel, setEditingModel] = useState<ModelEditDraft | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [activePanel, setActivePanel] = useState<ProviderDialogPanel>("general");
-  const [visibleHeaderValues, setVisibleHeaderValues] = useState<Set<number>>(new Set());
   const [headerValidationSubmitted, setHeaderValidationSubmitted] = useState(false);
   const [headerSuggest, setHeaderSuggest] = useState<{
     index: number;
@@ -764,24 +763,7 @@ function ProviderModal({
 
   function removeCustomHeader(index: number) {
     setCustomHeaders((prev) => prev.filter((_, headerIndex) => headerIndex !== index));
-    setVisibleHeaderValues((prev) => {
-      const next = new Set<number>();
-      for (const visibleIndex of prev) {
-        if (visibleIndex < index) next.add(visibleIndex);
-        if (visibleIndex > index) next.add(visibleIndex - 1);
-      }
-      return next;
-    });
     setHeaderValidationSubmitted(false);
-  }
-
-  function toggleCustomHeaderValue(index: number) {
-    setVisibleHeaderValues((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
   }
 
   function openHeaderSuggest(index: number) {
@@ -824,7 +806,6 @@ function ProviderModal({
       }
       const merged = mergeImportedCustomHeaders(customHeaders, parsed.headers);
       setCustomHeaders(merged.headers);
-      setVisibleHeaderValues(new Set());
       setHeaderSuggest(null);
       setHeaderValidationSubmitted(false);
       setHeaderImportSummary({
@@ -1816,7 +1797,6 @@ function ProviderModal({
                         const issueTitle = issue ? customHeaderIssueMessage(issue, t) : undefined;
                         const valueIssue = issue === "invalid-value";
                         const keyIssue = issue !== null && !valueIssue;
-                        const valueVisible = visibleHeaderValues.has(index);
                         const suggestOpen =
                           headerSuggest?.index === index && headerSuggestItems.length > 0;
 
@@ -1895,10 +1875,10 @@ function ProviderModal({
                                 ref={(element) => {
                                   headerValueRefs.current[index] = element;
                                 }}
-                                type={valueVisible ? "text" : "password"}
+                                type="text"
                                 value={header.value}
                                 className={cn(
-                                  "h-10 w-full rounded-none border-0 bg-transparent pl-3 pr-[4.5rem] font-mono text-xs shadow-none focus-visible:ring-0",
+                                  "h-10 w-full rounded-none border-0 bg-transparent pl-3 pr-11 font-mono text-xs shadow-none focus-visible:ring-0",
                                   valueIssue && "text-destructive",
                                 )}
                                 placeholder={t("settings.customHeaderValue")}
@@ -1918,29 +1898,6 @@ function ProviderModal({
                                 }}
                               />
                               <div className="settings-hover-actions absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 max-[720px]:opacity-100">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground"
-                                  onClick={() => toggleCustomHeaderValue(index)}
-                                  title={
-                                    valueVisible
-                                      ? t("settings.hideCustomHeaderValue")
-                                      : t("settings.showCustomHeaderValue")
-                                  }
-                                  aria-label={
-                                    valueVisible
-                                      ? t("settings.hideCustomHeaderValue")
-                                      : t("settings.showCustomHeaderValue")
-                                  }
-                                >
-                                  {valueVisible ? (
-                                    <EyeOff className="h-3.5 w-3.5" />
-                                  ) : (
-                                    <Eye className="h-3.5 w-3.5" />
-                                  )}
-                                </Button>
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -3007,8 +2964,13 @@ function ProviderList(props: {
   );
 }
 
-export function ProvidersSection(props: SettingsSectionProps) {
-  const { settings, setSettings } = props;
+export function ProvidersSection(
+  props: SettingsSectionProps & {
+    initialProviderId?: string;
+    onInitialProviderHandled?: () => void;
+  },
+) {
+  const { settings, setSettings, initialProviderId, onInitialProviderHandled } = props;
   const { t } = useLocale();
 
   const [activeTab, setActiveTab] = useState<ProviderId>("claude_code");
@@ -3019,6 +2981,19 @@ export function ProvidersSection(props: SettingsSectionProps) {
   const { usageByProvider, refreshingProviderIds, refreshProvider } = useProviderUsage(
     settings.customProviders,
   );
+  const openedInitialProviderIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const providerId = initialProviderId?.trim();
+    if (!providerId || openedInitialProviderIdRef.current === providerId) return;
+    const provider = settings.customProviders.find((item) => item.id === providerId);
+    if (!provider) return;
+    openedInitialProviderIdRef.current = providerId;
+    setActiveTab(provider.type);
+    setEditingProvider(provider);
+    setModalOpen(true);
+    onInitialProviderHandled?.();
+  }, [initialProviderId, onInitialProviderHandled, settings.customProviders]);
 
   function openAdd() {
     setEditingProvider(null);

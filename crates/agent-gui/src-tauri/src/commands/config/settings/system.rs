@@ -254,13 +254,6 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         );
     }
 
-    if !matches!(system.get(SYSTEM_SELECTED_TOOLS_KEY), Some(Value::Array(_))) {
-        system.insert(
-            SYSTEM_SELECTED_TOOLS_KEY.to_string(),
-            Value::Array(Vec::new()),
-        );
-    }
-
     system.insert(
         SYSTEM_WORKSPACE_PROJECTS_KEY.to_string(),
         normalize_workspace_projects_value(
@@ -387,7 +380,7 @@ fn save_system_with_default_workdir(
     for key in [
         SYSTEM_EXECUTION_MODE_KEY,
         SYSTEM_WORKDIR_KEY,
-        SYSTEM_SELECTED_TOOLS_KEY,
+        SYSTEM_TOOL_POLICIES_KEY,
         SYSTEM_WORKSPACE_PROJECTS_KEY,
         SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY,
         SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY,

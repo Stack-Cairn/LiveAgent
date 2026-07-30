@@ -499,7 +499,8 @@ async function managedSkillListToDiscovery(
 
 async function loadSkillsDiscovery(): Promise<SkillDiscovery> {
   await ensureBuiltinSkills();
-  return managedSkillListToDiscovery(await manageSkill({ action: "list" }));
+  const discovery = await managedSkillListToDiscovery(await manageSkill({ action: "list" }));
+  return discovery;
 }
 
 export async function discoverSkills(options: DiscoverSkillsOptions = {}): Promise<SkillDiscovery> {

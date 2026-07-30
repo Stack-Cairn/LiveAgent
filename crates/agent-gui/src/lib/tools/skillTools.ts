@@ -646,6 +646,7 @@ export function createSkillTools(
         { workdir: params.workdir },
       );
       enforceSkillManagerAccessPolicy(payload, skillAccessPolicy);
+
       const result = await manageSkill(payload);
       const visibleResult = filterManageSkillResult(result, skillAccessPolicy);
       if (

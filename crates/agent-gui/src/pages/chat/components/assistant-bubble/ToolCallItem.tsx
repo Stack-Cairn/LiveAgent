@@ -1,5 +1,5 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { AskUserQuestionCard } from "../../../../components/chat/AskUserQuestionCard";
 import { FileChangeBadge } from "../../../../components/chat/FileChangeBadge";
@@ -30,6 +30,11 @@ import {
   answerAskUserQuestion,
   getAskUserQuestionDeadlineAt,
 } from "../../../../lib/tools/askUserQuestionTools";
+import {
+  getPendingToolApproval,
+  getToolApprovalVersion,
+  subscribeToolApprovals,
+} from "../../../../lib/tools/toolApproval";
 import {
   areStableValuesEqual,
   displayString,
@@ -368,6 +373,10 @@ function ToolCallItem({
       Promise.resolve(answerAskUserQuestion(item.toolCall.id, answers)),
     [item.toolCall.id],
   );
+  // 工具审批挂起是响应式的:被审批的工具调用早已在转录中,挂起在 beforeToolCall
+  // 处出现/消失,故订阅审批服务版本号触发重渲染(memo 化组件内 hook 照常重跑)。
+  useSyncExternalStore(subscribeToolApprovals, getToolApprovalVersion, getToolApprovalVersion);
+  const pendingApproval = getPendingToolApproval(item.toolCall.id);
   const shouldAutoOpen =
     item.toolCall.name === "Image" ||
     builtinResultKind === "display_image" ||
@@ -413,17 +422,19 @@ function ToolCallItem({
   const statusLabel =
     isTodo && hasIncompleteTodo && isAborted
       ? t("chat.tool.aborted")
-      : isRunning
-        ? isAskUser
-          ? askQuestions.length > 0
-            ? t("chat.askUser.waiting")
-            : t("chat.askUser.preparing")
-          : t("chat.tool.running")
-        : result
-          ? result.isError
-            ? t("chat.tool.failed")
-            : t("chat.tool.success")
-          : t("chat.tool.waiting");
+      : pendingApproval
+        ? t("chat.toolApproval.waitingStatus")
+        : isRunning
+          ? isAskUser
+            ? askQuestions.length > 0
+              ? t("chat.askUser.waiting")
+              : t("chat.askUser.preparing")
+            : t("chat.tool.running")
+          : result
+            ? result.isError
+              ? t("chat.tool.failed")
+              : t("chat.tool.success")
+            : t("chat.tool.waiting");
 
   const statusTextClass = result?.isError
     ? "text-[hsl(var(--chat-error))]"

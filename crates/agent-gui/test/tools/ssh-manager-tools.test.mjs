@@ -68,7 +68,6 @@ async function buildRegistry(params = {}) {
     skillsEnabled: false,
     runtimeScope: "chat",
     currentChatModel: { customProviderId: "p", model: "m" },
-    selectedSystemToolIds: [],
     getMcpSettings: () => ({ selected: [], servers: [] }),
     sshHosts: [SSH_HOST],
     associatedSshHostIds: ["host-1"],

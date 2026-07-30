@@ -373,14 +373,6 @@ export async function invoke<T>(command: string, args?: Record<string, unknown>)
         String(args?.session_id ?? ""),
         typeof args?.project_path_key === "string" ? args.project_path_key : undefined,
       )) as T;
-    case "system_http_get_test":
-      return {
-        url: `${window.location.origin}/api/status`,
-        status: 200,
-        ok: true,
-        body: "WebUI shim placeholder",
-        content_type: "text/plain",
-      } as T;
     default:
       throw new Error(`WebUI shim does not implement invoke("${command}")`);
   }

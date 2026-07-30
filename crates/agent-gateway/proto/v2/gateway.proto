@@ -609,7 +609,8 @@ message ChatRequest {
   ChatSelectedModel selected_model = 3;
   string execution_mode = 4;
   string workdir = 5;
-  repeated string selected_system_tools = 6;
+  reserved 6;
+  reserved "selected_system_tools";
   repeated ChatUploadedFile uploaded_files = 7;
   string client_request_id = 8;
   ChatRuntimeControls runtime_controls = 9;

@@ -113,6 +113,5 @@ export function buildGatewaySystemSettings(settings: AppSettings, workdirOverrid
   return {
     executionMode: settings.system.executionMode,
     workdir: workdirOverride ?? settings.system.workdir.trim(),
-    selectedSystemTools: [...settings.system.selectedSystemTools],
   };
 }

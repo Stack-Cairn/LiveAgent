@@ -169,6 +169,7 @@ function applyRuntimeSystemDefaults(settings: AppSettings, defaultWorkdir: strin
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
+  const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [settingsReady, setSettingsReady] = useState(false);
   const [settings, setSettingsState] = useState<AppSettings>(() => getDefaultSettings());
   const [settingsSaveState, setSettingsSaveState] = useState<SettingsSaveState>({
@@ -377,6 +378,7 @@ export default function App() {
   // synchronously by setSettings, so read-modify-write sequences that stay in
   // one synchronous segment can never observe a stale snapshot.
   const getMcpSettings = useCallback(() => settingsRef.current.mcp, []);
+  const getToolPolicies = useCallback(() => settingsRef.current.system.toolPolicies, []);
 
   const reloadPersistedSettings = useCallback(async () => {
     await saveChainRef.current.catch(() => undefined);
@@ -404,8 +406,9 @@ export default function App() {
   );
 
   const openSettings = useCallback(
-    (section: SectionId = "system") => {
+    (section: SectionId = "system", providerId?: string) => {
       setSettingsSection(section);
+      setSettingsProviderId(section === "providers" ? providerId : undefined);
       setSettingsOpen(true);
       setOverlay("entering");
       requestAnimationFrame(() => requestAnimationFrame(() => setOverlay("open")));
@@ -594,6 +597,7 @@ export default function App() {
             settings={settings}
             setSettings={setSettings}
             getMcpSettings={getMcpSettings}
+            getToolPolicies={getToolPolicies}
             context={context}
             setContext={setContext}
             onOpenSettings={openSettings}
@@ -615,6 +619,7 @@ export default function App() {
                 saveState={settingsSaveState}
                 onBack={closeSettings}
                 initialSection={settingsSection}
+                initialProviderId={settingsProviderId}
                 appUpdate={appUpdate}
               />
             </AppErrorBoundary>

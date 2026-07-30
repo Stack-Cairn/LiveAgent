@@ -1,0 +1,85 @@
+name: Bug report
+description: Report a defect in LiveAgent. Reports missing key details may be asked to supplement before triage.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report security vulnerabilities here — submit them privately via [Security Advisories](https://github.com/Stack-Cairn/LiveAgent/security/advisories/new).
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Choose the module this issue mainly affects.
+      options:
+        - Desktop UI (agent-gui / React)
+        - Desktop core (Tauri / Rust)
+        - Gateway (agent-gateway / Go)
+        - Agent sessions / streaming
+        - Tool execution / MCP / Skills
+        - Model providers
+        - Packaging / release / installation
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Release version, Docker image tag, branch, or commit SHA.
+      placeholder: v0.3.2 / main@f69f24dc
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and version, deployment mode (desktop app / self-hosted gateway), model provider, etc.
+      placeholder: |
+        OS: macOS 15.2 (Apple Silicon)
+        Deployment: desktop app
+        Model provider: Anthropic API
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence of steps that reliably reproduces the problem.
+      placeholder: |
+        1. Open the settings page...
+        2. Click...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Relevant logs, error messages, or screenshots (drag and drop to upload). Remove secrets such as API keys and tokens first.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submit checklist
+      options:
+        - label: I searched existing issues and pull requests and found no duplicates.
+          required: true
+        - label: This is not a security vulnerability (report those privately via Security Advisories).
+          required: true

@@ -68,7 +68,6 @@ pub struct GatewayChatRequestEvent {
     pub runtime_controls: Option<GatewayChatRuntimeControlsEvent>,
     pub execution_mode: String,
     pub workdir: String,
-    pub selected_system_tools: Vec<String>,
     pub uploaded_files: Vec<GatewayUploadedFileEvent>,
     pub queue_policy: String,
 }

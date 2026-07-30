@@ -1097,7 +1097,7 @@ mod tests {
             json!({
                 "executionMode": "tools",
                 "workdir": "E:/Code/test_directory/003",
-                "selectedSystemTools": ["http_get_test"]
+                "toolPolicies": { "Bash": "ask", "server:docs-mcp": "deny" }
             }),
         )
         .expect("save system");
@@ -1129,8 +1129,8 @@ mod tests {
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
                 SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
-                SYSTEM_SELECTED_TOOLS_KEY.to_string(),
                 SYSTEM_SYSTEM_PROXY_KEY.to_string(),
+                SYSTEM_TOOL_POLICIES_KEY.to_string(),
                 SYSTEM_WORKDIR_KEY.to_string(),
                 SYSTEM_WORKSPACE_PROJECTS_KEY.to_string(),
             ]
@@ -1145,7 +1145,7 @@ mod tests {
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
                 "workdir": default_workdir.clone(),
-                "selectedSystemTools": ["http_get_test"],
+                "toolPolicies": { "Bash": "ask", "server:docs-mcp": "deny" },
                 "workspaceProjects": [
                     {
                         "id": DEFAULT_WORKSPACE_PROJECT_ID,
@@ -1168,7 +1168,6 @@ mod tests {
             json!({
                 "executionMode": "tools",
                 "workdir": "/tmp/liveagent-default-project",
-                "selectedSystemTools": [],
                 "archivedWorkspaceProjectPaths": [
                     " /tmp/project-a ",
                     "/tmp/project-a",
@@ -1197,7 +1196,6 @@ mod tests {
             json!({
                 "executionMode": "tools",
                 "workdir": "",
-                "selectedSystemTools": []
             }),
             "/tmp/liveagent-default-project",
         )
@@ -1214,7 +1212,7 @@ mod tests {
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
-                "selectedSystemTools": [],
+                "toolPolicies": null,
                 "workspaceProjects": [
                     {
                         "id": DEFAULT_WORKSPACE_PROJECT_ID,
@@ -1237,7 +1235,6 @@ mod tests {
             json!({
                 "executionMode": "tools",
                 "workdir": "/tmp/liveagent-default-project",
-                "selectedSystemTools": [],
                 "workspaceProjects": [
                     {
                         "id": DEFAULT_WORKSPACE_PROJECT_ID,
@@ -1266,7 +1263,7 @@ mod tests {
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
-                "selectedSystemTools": [],
+                "toolPolicies": null,
                 "workspaceProjects": [
                     {
                         "id": DEFAULT_WORKSPACE_PROJECT_ID,
@@ -1299,7 +1296,6 @@ mod tests {
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
                 "workdir": "/tmp/liveagent-default-project",
-                "selectedSystemTools": [],
                 "workspaceProjects": [
                     {
                         "id": DEFAULT_WORKSPACE_PROJECT_ID,

@@ -303,7 +303,6 @@ async function buildRegistry(
     fileState: createFileToolState(),
     skillsEnabled: true,
     runtimeScope,
-    selectedSystemToolIds: [],
     getMcpSettings: () => mcpSettingsHolder.value,
     ...(withTodoState ? { todoState: createTodoToolState() } : {}),
   };

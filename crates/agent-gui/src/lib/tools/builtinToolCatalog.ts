@@ -4,9 +4,7 @@ import type { SystemToolRuntimeScope } from "./systemToolOptions";
  * Display-only catalog of the built-in tools registered by the agent runtime.
  * This file is mirrored byte-for-byte between agent-gui and agent-gateway/web
  * (see scripts/mirror-manifest.json), so it must stay pure data: no runtime
- * bundle imports (the WebUI tree does not have them). It is intentionally
- * separate from SYSTEM_TOOL_OPTIONS, which doubles as the persistence
- * whitelist for selectedSystemTools.
+ * bundle imports (the WebUI tree does not have them).
  */
 
 export type BuiltinToolCategoryId =
@@ -254,27 +252,3 @@ export const BUILTIN_TOOL_CATALOG: readonly BuiltinToolCatalogEntry[] = [
     conditional: true,
   },
 ];
-
-export type CustomToolPresentation = {
-  icon: ToolCatalogIconId;
-  isReadOnly: boolean;
-  nameKey: string;
-  descKey: string;
-  detailKey: string;
-};
-
-/**
- * Presentation metadata for selectable custom system tools. The runtime
- * definitions in customSystemTools.ts stay untouched (their exports are
- * asserted by tests); entries missing here fall back to the option's raw
- * label/description.
- */
-export const CUSTOM_TOOL_PRESENTATION: Record<string, CustomToolPresentation> = {
-  http_get_test: {
-    icon: "globe",
-    isReadOnly: true,
-    nameKey: "settings.customTool.http_get_test.name",
-    descKey: "settings.customTool.http_get_test.desc",
-    detailKey: "settings.customTool.http_get_test.detail",
-  },
-};

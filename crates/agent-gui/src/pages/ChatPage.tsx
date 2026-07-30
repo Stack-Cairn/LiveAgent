@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   type ChangedFilesActions,
@@ -17,6 +18,7 @@ import { HistoryShareModal } from "../components/chat/HistoryShareModal";
 import type { MentionComposerHandle } from "../components/chat/MentionComposer";
 import { NotifyToast } from "../components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "../components/chat/SharedHistoryManagerModal";
+import { ToolApprovalBar } from "../components/chat/ToolApprovalBar";
 import { PanelRightClose, PanelRightOpen } from "../components/icons";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type {
@@ -92,6 +94,13 @@ import { terminalSessionBelongsToProject } from "../lib/terminal/sessionStore";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import { disposeTodoToolState } from "../lib/tools/todoTools";
+import {
+  answerToolApproval,
+  cancelPendingToolApprovalsForConversation,
+  getToolApprovalVersion,
+  listPendingToolApprovalsForConversation,
+  subscribeToolApprovals,
+} from "../lib/tools/toolApproval";
 import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import type { LocalTunnelClient } from "../lib/tunnels/constants";
@@ -148,9 +157,11 @@ type ChatPageProps = {
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   /** Reads the authoritative settingsRef (not render-time state) so tools never see a stale snapshot. */
   getMcpSettings: () => AppSettings["mcp"];
+  /** Live read of tool approval policies (same settingsRef rationale as getMcpSettings). */
+  getToolPolicies: () => AppSettings["system"]["toolPolicies"];
   context: Context;
   setContext: (next: Context) => void;
-  onOpenSettings: (section?: SectionId) => void;
+  onOpenSettings: (section?: SectionId, providerId?: string) => void;
   onToggleTheme: () => void;
   appUpdate?: AppUpdateController;
 };
@@ -160,6 +171,7 @@ export function ChatPage(props: ChatPageProps) {
     settings,
     setSettings,
     getMcpSettings,
+    getToolPolicies,
     context,
     setContext,
     onOpenSettings,
@@ -523,6 +535,29 @@ export function ChatPage(props: ChatPageProps) {
   }
 
   const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
+
+  // 当前会话的待审批工具:订阅审批服务版本,pending 表变更即重取。用于输入框上方
+  // 的集中审批栏(取代埋在每个折叠项里的分散卡片)。
+  useSyncExternalStore(subscribeToolApprovals, getToolApprovalVersion, getToolApprovalVersion);
+  const pendingToolApprovals = listPendingToolApprovalsForConversation(currentConversationId);
+  const approvalBar =
+    pendingToolApprovals.length > 0 ? (
+      <ToolApprovalBar
+        pending={pendingToolApprovals}
+        onDecide={(toolCallId, decision) =>
+          Promise.resolve(
+            answerToolApproval(toolCallId, decision, { conversationId: currentConversationId }),
+          )
+        }
+        onDecideAll={async (decision) => {
+          for (const item of pendingToolApprovals) {
+            answerToolApproval(item.toolCallId, decision, {
+              conversationId: currentConversationId,
+            });
+          }
+        }}
+      />
+    ) : null;
   const currentConversationPersistedCwd =
     historyItems.find((item) => item.id === currentConversationId)?.cwd?.trim() || "";
   const currentConversationRuntimeWorkdir =
@@ -972,6 +1007,7 @@ export function ChatPage(props: ChatPageProps) {
           subagentStoresRef.current.dispose(conversationId);
           disposeTodoToolState(conversationId);
           cancelPendingAskUserQuestionsForConversation(conversationId);
+          cancelPendingToolApprovalsForConversation(conversationId);
         },
       });
     },
@@ -1338,6 +1374,7 @@ export function ChatPage(props: ChatPageProps) {
     settings,
     setSettings,
     getMcpSettings,
+    getToolPolicies,
     t,
     setErrorMessage,
     sidebarStore,
@@ -2017,6 +2054,7 @@ export function ChatPage(props: ChatPageProps) {
                 onEditQueuedTurn={editQueuedTurn}
                 onRemoveQueuedTurn={removeQueuedTurn}
                 onHeightChange={setComposerOverlayHeight}
+                approvalBar={approvalBar}
               />
               {isFileDropActive ? (
                 <ChatFileDropOverlay

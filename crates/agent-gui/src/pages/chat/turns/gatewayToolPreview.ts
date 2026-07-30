@@ -11,9 +11,47 @@ import {
   type PreviewFieldMetrics,
   type StreamPreviewMeta,
 } from "../../../lib/chat/messages/toolPreview";
+import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
+import {
+  TOOL_APPROVAL_DEADLINE_ARG,
+  TOOL_APPROVAL_PENDING_ARG,
+  TOOL_APPROVAL_SUMMARY_ARG,
+} from "../../../lib/chat/toolApprovalArgs";
 import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
+import { getToolApprovalDeadlineAt, hasPendingToolApproval } from "../../../lib/tools/toolApproval";
 
 const GATEWAY_TOOL_TEXT_PREVIEW_MAX_CHARS = 4000;
+
+// 审批栏摘要上限:够绝大多数命令完整展示,同时防止同步标记载荷过大;
+// 极端超长时截断兜底(审批栏内命令块另有 max-height + 滚动)。
+const TOOL_APPROVAL_SUMMARY_MAX_CHARS = 2000;
+
+// 待审批工具的摘要,供审批栏统一完整展示(Bash/ManagedProcess 保留原始命令含换行,
+// 其余工具复用 summarizeToolCall 的参数摘要)。仅在极端超长时截断。
+export function summarizeToolCallForApproval(
+  toolCall: Pick<ToolCall, "id" | "name" | "arguments">,
+): string {
+  const args = toolCall.arguments || {};
+  let text = "";
+  if (
+    (toolCall.name === "Bash" || toolCall.name === "ManagedProcess") &&
+    typeof args.command === "string"
+  ) {
+    // 命令保留原始换行(审批栏以 pre-wrap 完整展示),不折叠空白。
+    text = args.command.trim();
+  } else {
+    text = summarizeToolCall(toolCall as ToolCall, {
+      includeName: false,
+      includeManagerAction: false,
+    })
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  if (text.length > TOOL_APPROVAL_SUMMARY_MAX_CHARS) {
+    return `${text.slice(0, TOOL_APPROVAL_SUMMARY_MAX_CHARS - 1)}…`;
+  }
+  return text;
+}
 
 function buildHeadTailPreview(input: string, maxChars = GATEWAY_TOOL_TEXT_PREVIEW_MAX_CHARS) {
   if (input.length <= maxChars) {
@@ -55,8 +93,20 @@ export function buildGatewayToolCallPreviewArguments(
   toolCall: Pick<ToolCall, "id" | "name" | "arguments">,
 ) {
   const sourceArgs = toolCall.arguments || {};
+  // 待审批标记:任意工具在 beforeToolCall 处挂起等待批准时,盖到同步给 WebUI 的
+  // 参数上,让远端渲染审批卡片并显示与桌面同源的倒计时。审批消解后重发的快照
+  // 不再带此标记,卡片随之隐藏。__ 前缀合成参数不入展示、不影响本地执行。
+  const approvalOverlay: Record<string, unknown> | null =
+    toolCall.id && hasPendingToolApproval(toolCall.id)
+      ? {
+          [TOOL_APPROVAL_PENDING_ARG]: true,
+          [TOOL_APPROVAL_DEADLINE_ARG]: getToolApprovalDeadlineAt(toolCall.id) ?? undefined,
+          [TOOL_APPROVAL_SUMMARY_ARG]: summarizeToolCallForApproval(toolCall),
+        }
+      : null;
   // AskUserQuestion：附带权威应答截止时间，WebUI 卡片倒计时与桌面计时同源
-  //（execute 挂起时复用同一预置值；见 askUserQuestionTools）。
+  //（execute 挂起时复用同一预置值；见 askUserQuestionTools）。ask 工具只读、
+  // 永不进入审批门,故此处无需叠加 approvalOverlay。
   if (toolCall.name === ASK_USER_QUESTION_TOOL_NAME) {
     return {
       ...sourceArgs,
@@ -65,10 +115,10 @@ export function buildGatewayToolCallPreviewArguments(
   }
   const fieldsToPreview = FILE_TOOL_TEXT_FIELDS[toolCall.name];
   if (!fieldsToPreview) {
-    return sourceArgs;
+    return approvalOverlay ? { ...sourceArgs, ...approvalOverlay } : sourceArgs;
   }
 
-  const args: Record<string, unknown> = { ...sourceArgs };
+  const args: Record<string, unknown> = { ...sourceArgs, ...(approvalOverlay ?? {}) };
   const fields: Record<string, PreviewFieldMetrics> = {};
   let progress = 0;
 

@@ -79,7 +79,9 @@ export function useChatSkills(params: UseChatSkillsParams) {
       }
 
       try {
-        const discovery = await discoverSkills({ force: options?.force });
+        const discovery = await discoverSkills({
+          force: options?.force,
+        });
         if (!mountedRef.current || requestSequenceRef.current !== requestId) {
           return null;
         }

@@ -16,6 +16,7 @@ import type {
 } from "@/components/chat/MentionComposer";
 import { type NotifyItem, NotifyToast } from "@/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@/components/chat/SharedHistoryManagerModal";
+import { ToolApprovalBar } from "@/components/chat/ToolApprovalBar";
 import { ChevronDown, PanelRightClose, PanelRightOpen, Terminal } from "@/components/icons";
 import type {
   GitCommitContextPayload,
@@ -60,6 +61,15 @@ import {
   createTranscriptStoreRegistry,
   useConversationChat,
 } from "@/lib/chat/stream/useConversationChat";
+import {
+  readToolApprovalDeadlineAt,
+  readToolApprovalPending,
+  readToolApprovalSummary,
+} from "@/lib/chat/toolApprovalArgs";
+import {
+  registerToolApprovalDecisionHandler,
+  submitToolApprovalDecision,
+} from "@/lib/chat/toolApprovalBridge";
 import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import { mergePendingUploadedFiles } from "@/lib/chat/uploadedFiles";
 import {
@@ -301,6 +311,7 @@ export default function GatewayApp() {
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [workspaceCreateModalOpen, setWorkspaceCreateModalOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
+  const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [overlay, setOverlay] = useState<OverlayState>("closed");
   const { settings, setSettings, settingsSyncReady, settingsSyncError, settingsSaveState } =
     useGatewaySettingsSync({ token, api, activeAgentId: activeAgentScope });
@@ -664,6 +675,32 @@ export default function GatewayApp() {
       }
     });
     return () => registerAskUserQuestionAnswerHandler(null);
+  }, [api]);
+
+  // 工具审批卡片的决定出口：经网关 chat_queue.tool_approval 送达桌面端审批挂起表;
+  // 桌面端据此放行/拒绝该工具,结果照常以 tool_result 事件流回本端。
+  useEffect(() => {
+    if (!api) {
+      registerToolApprovalDecisionHandler(null);
+      return;
+    }
+    registerToolApprovalDecisionHandler(async (toolCallId, decision) => {
+      const conversationIdValue = getDisplayedConversationId();
+      if (!conversationIdValue) {
+        return { ok: false, message: "No active conversation." };
+      }
+      try {
+        const response = await api.chatQueueToolApproval(
+          conversationIdValue,
+          toolCallId,
+          JSON.stringify({ decision }),
+        );
+        return { ok: response.accepted, message: response.message || undefined };
+      } catch (error) {
+        return { ok: false, message: asErrorMessage(error, "Failed to submit the decision.") };
+      }
+    });
+    return () => registerToolApprovalDecisionHandler(null);
   }, [api]);
 
   function getVisibleComposerConversationId() {
@@ -3590,11 +3627,12 @@ export default function GatewayApp() {
 
   const handleComposerBusyChange = useCallback((_isBusy: boolean) => {}, []);
 
-  function openSettings(section: SectionId = "system") {
+  function openSettings(section: SectionId = "system", providerId?: string) {
     if (isMobileSidebarLayout()) {
       setSidebarOpen(false);
     }
     setSettingsSection(section);
+    setSettingsProviderId(section === "providers" ? providerId : undefined);
     setSettingsOpen(true);
     setOverlay("entering");
     requestAnimationFrame(() => requestAnimationFrame(() => setOverlay("open")));
@@ -4367,6 +4405,44 @@ export default function GatewayApp() {
     return item?.title ?? "";
   }, [selectedHistoryId, sidebarConversationsById]);
   const transcriptRows = displayedTranscript.rows;
+  // 当前会话的待审批工具:遍历渲染中的 transcript,筛出带 __toolApprovalPending 标记
+  // 且尚无结果的 tool call(与 ToolCallItem 判定同源)。用于输入框上方的集中审批栏,
+  // 取代埋在各折叠项里的分散卡片。快照 revision 变化时经 useConversationChat 重渲染,
+  // 本 memo 随之重算,无需 subscribeToolApprovals。
+  const pendingToolApprovals = useMemo(() => {
+    const out: { toolCallId: string; toolName: string; summary?: string; deadlineAt?: number }[] =
+      [];
+    for (const row of transcriptRows) {
+      if (row.kind !== "assistant") continue;
+      for (const round of row.rounds) {
+        for (const block of round.blocks) {
+          if (block.kind !== "tool") continue;
+          const { toolCall, toolResult } = block.item;
+          if (toolResult) continue;
+          if (!readToolApprovalPending(toolCall.arguments)) continue;
+          out.push({
+            toolCallId: toolCall.id,
+            toolName: toolCall.name,
+            summary: readToolApprovalSummary(toolCall.arguments),
+            deadlineAt: readToolApprovalDeadlineAt(toolCall.arguments) ?? undefined,
+          });
+        }
+      }
+    }
+    return out;
+  }, [transcriptRows]);
+  const approvalBar =
+    pendingToolApprovals.length > 0 ? (
+      <ToolApprovalBar
+        pending={pendingToolApprovals}
+        onDecide={(toolCallId, decision) => submitToolApprovalDecision(toolCallId, decision)}
+        onDecideAll={async (decision) => {
+          for (const item of pendingToolApprovals) {
+            await submitToolApprovalDecision(item.toolCallId, decision);
+          }
+        }}
+      />
+    ) : null;
   const transcriptLiveStartIndex = displayedTranscript.liveStartIndex;
   const transcriptFloors = useMemo(() => buildFloorEntries(transcriptRows), [transcriptRows]);
   // Row count gates everything visual (empty state, error banner, loading
@@ -5028,6 +5104,7 @@ export default function GatewayApp() {
                       onMoveQueuedTurnUp={moveQueuedTurnUp}
                       onEditQueuedTurn={editQueuedTurn}
                       onRemoveQueuedTurn={removeQueuedTurn}
+                      approvalBar={approvalBar}
                     />
                     {isFileDropActive ? (
                       <FileDropOverlay
@@ -5128,6 +5205,7 @@ export default function GatewayApp() {
                 saveState={settingsSaveState}
                 onBack={closeSettings}
                 initialSection={settingsSection}
+                initialProviderId={settingsProviderId}
                 hiddenSections={["remote"]}
                 onAgentDirectoryChanged={async () => {
                   if (!api) return;

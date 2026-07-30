@@ -1018,7 +1018,7 @@ mod tests {
         let started = Instant::now();
         let result = run_shell_script(
             temp_dir.display().to_string(),
-            "sleep 5 & echo ready".to_string(),
+            "sleep 15 & background_pid=$!; echo ready:$background_pid".to_string(),
             None,
             Some(60_000),
             None,
@@ -1026,16 +1026,26 @@ mod tests {
             None,
         )
         .expect("shell run should return a response");
+        let elapsed = started.elapsed();
+        let background_pid = result
+            .stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("ready:"))
+            .expect("shell should report the background process id")
+            .trim();
+        let _ = std::process::Command::new("kill")
+            .arg(background_pid)
+            .status();
 
         let _ = fs::remove_dir_all(&temp_dir);
 
         assert_eq!(result.exit_code, 0);
         assert!(result.stdio_open_after_exit);
-        assert!(result.stdout.contains("ready"));
+        assert!(result.stdout.contains("ready:"));
         assert!(result.stderr.contains("stdout/stderr remained open"));
         assert!(
-            started.elapsed() < Duration::from_secs(3),
-            "background stdio leak should not block until the background process exits"
+            elapsed < Duration::from_secs(10),
+            "background stdio leak should not block until the background process exits; elapsed: {elapsed:?}"
         );
     }
 

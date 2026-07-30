@@ -15,6 +15,7 @@ import {
   requestRuntimeCancel,
   waitForAbortablePromise,
 } from "./invokeWithAbort";
+import { normalizeToolParametersSchema } from "./toolSchema";
 
 type McpToolInfo = {
   serverId: string;
@@ -193,6 +194,7 @@ export async function createMcpTools(params: {
         kind: string;
         isReadOnly: boolean;
         displayCategory: "mcp";
+        serverId: string;
       },
     ]
   > = [];
@@ -203,9 +205,9 @@ export async function createMcpTools(params: {
     tools.push({
       name: safeName,
       description: `${descriptionPrefix}${info.description || info.name}`,
-      // pi-ai Tool.parameters is TypeBox's TSchema type, but providers only need JSON Schema.
-      // MCP already provides JSON Schema under `inputSchema`, so we pass it through.
-      parameters: (info.inputSchema ?? { type: "object" }) as any,
+      // MCP 的 inputSchema 是运行时由 server 提供、未经校验的 JSON Schema;过界前
+      // 做结构守卫,畸形值回退为 {type:"object"},避免直接送 provider 引发报错。
+      parameters: normalizeToolParametersSchema(info.inputSchema, `MCP ${safeName}`),
     });
     toolNameMap.set(safeName, {
       serverId: info.serverId,
@@ -219,6 +221,7 @@ export async function createMcpTools(params: {
         kind: "mcp",
         isReadOnly: false,
         displayCategory: "mcp",
+        serverId: info.serverId,
       },
     ]);
   }

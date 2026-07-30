@@ -1,6 +1,6 @@
 import { type FormEvent, memo, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-
+import { ToolPolicyToggle } from "../../components/hub/ToolPolicyToggle";
 import {
   AlertTriangle,
   Globe2,
@@ -14,7 +14,6 @@ import {
   Wifi,
   X,
 } from "../../components/icons";
-
 import { Button } from "../../components/ui/button";
 import { ConfirmDeletePopover } from "../../components/ui/confirm-action-popover";
 import { Input } from "../../components/ui/input";
@@ -28,9 +27,24 @@ import {
 } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import { useLocale } from "../../i18n";
-import { type AppSettings, type McpServerConfig, updateMcp } from "../../lib/settings";
+import {
+  type AppSettings,
+  type McpServerConfig,
+  type ToolPolicy,
+  updateMcp,
+  updateSystem,
+} from "../../lib/settings";
+
 import { useModalMotion } from "../../lib/shared/modalMotion";
 import { cn } from "../../lib/shared/utils";
+
+// MCP 按 server 的审批策略键(须与 lib/tools/toolPolicy.ts 的 TOOL_SERVER_POLICY_PREFIX
+// 一致)。未显式设置的 server 缺省 allow(与 resolveToolPolicy 一致,组级 group:mcp
+// 的 UI 已移除,恒回落 allow)。
+const SERVER_POLICY_PREFIX = "server:";
+function serverPolicyKey(serverId: string): string {
+  return `${SERVER_POLICY_PREFIX}${serverId}`;
+}
 
 type SetMcpSettingsFn = (updater: (prev: AppSettings) => AppSettings) => void;
 
@@ -226,8 +240,10 @@ const McpServerCard = memo(function McpServerCard(props: {
   idx: number;
   setSettings: SetMcpSettingsFn;
   onEdit: () => void;
+  policy: ToolPolicy;
+  onPolicyChange: (next: ToolPolicy) => void;
 }) {
-  const { server: serverConfig, idx, setSettings, onEdit } = props;
+  const { server: serverConfig, idx, setSettings, onEdit, policy, onPolicyChange } = props;
   const { t } = useLocale();
   const transport = serverConfig.transport || "stdio";
   const isStdio = transport === "stdio";
@@ -351,7 +367,14 @@ const McpServerCard = memo(function McpServerCard(props: {
           </div>
         ) : null}
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {/* 审批策略:该 server 全部工具的默认放行/询问/拒绝,就地可改。 */}
+          <ToolPolicyToggle
+            value={policy}
+            ariaLabel={serverConfig.id || `Server ${idx + 1}`}
+            onChange={onPolicyChange}
+            size="sm"
+          />
           <button
             type="button"
             onClick={onEdit}
@@ -727,6 +750,19 @@ export function McpServersForm(props: McpServersFormProps) {
                 idx={idx}
                 setSettings={setSettings}
                 onEdit={() => onEditServer?.(server, idx)}
+                policy={settings.system.toolPolicies?.[serverPolicyKey(server.id)] ?? "allow"}
+                onPolicyChange={(next) =>
+                  setSettings((prev) => {
+                    const current = { ...(prev.system.toolPolicies ?? {}) };
+                    const key = serverPolicyKey(server.id);
+                    // allow 为缺省,选回即清键保持精简。
+                    if (next === "allow") delete current[key];
+                    else current[key] = next;
+                    return updateSystem(prev, {
+                      toolPolicies: Object.keys(current).length > 0 ? current : undefined,
+                    });
+                  })
+                }
               />
             ))}
           </div>

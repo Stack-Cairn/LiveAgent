@@ -343,7 +343,6 @@ export function isBuiltinShareToolName(name: string) {
     "Edit",
     "Glob",
     "Grep",
-    "HttpGetTest",
     "Image",
     "List",
     "ManagedProcess",

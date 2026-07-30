@@ -12,6 +12,8 @@ const { buildGatewayToolCallPreviewArguments } = loader.loadModule(
   "src/pages/chat/turns/gatewayToolPreview.ts",
 );
 const toolPreview = loader.loadModule("src/lib/chat/messages/toolPreview.ts");
+const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
+const askShared = loader.loadModule("src/lib/chat/askUserQuestion.ts");
 
 test("gateway runtime snapshot projects live rounds into chat entries", () => {
   const entries = buildGatewayRuntimeSnapshotEntries({
@@ -101,6 +103,66 @@ test("gateway runtime snapshot carries the same tool preview shape as bridge del
   const metadata = entry.toolCall.arguments[toolPreview.LIVE_TOOL_PREVIEW_META_KEY];
   assert.equal(metadata.progress, content.length);
   assert.equal(metadata.fields.content.chars, content.length);
+});
+
+test("gateway runtime snapshots preserve an AskUserQuestion deadline across reconnects", async () => {
+  const toolCall = {
+    type: "toolCall",
+    id: "tool-ask-snapshot",
+    name: "AskUserQuestion",
+    arguments: {
+      questions: [
+        {
+          id: "choice",
+          prompt: "Choose one",
+          options: [{ label: "First" }, { label: "Second" }],
+        },
+      ],
+    },
+  };
+  const liveTranscript = {
+    draftAssistantText: "",
+    toolStatus: null,
+    liveRounds: [
+      {
+        key: "round-1",
+        round: 1,
+        runningToolCallIds: [toolCall.id],
+        thinkingOpen: false,
+        blocks: [{ kind: "tool", item: { toolCall } }],
+      },
+    ],
+  };
+
+  const first = buildGatewayRuntimeSnapshotEntries({ userMessage: null, liveTranscript });
+  const firstToolCall = first.find((entry) => entry.kind === "tool_call");
+  assert.ok(firstToolCall);
+  const deadlineAt =
+    firstToolCall.toolCall.arguments[askShared.ASK_USER_QUESTION_DEADLINE_ARG];
+  assert.ok(deadlineAt > Date.now());
+
+  const reconnected = buildGatewayRuntimeSnapshotEntries({ userMessage: null, liveTranscript });
+  const reconnectedToolCalls = reconnected.filter((entry) => entry.kind === "tool_call");
+  assert.equal(reconnectedToolCalls.length, 1);
+  assert.equal(
+    reconnectedToolCalls[0].toolCall.arguments[askShared.ASK_USER_QUESTION_DEADLINE_ARG],
+    deadlineAt,
+  );
+  assert.equal(askTools.getAskUserQuestionDeadlineAt(toolCall.id), deadlineAt);
+
+  // Consume the preset through the real pending lifecycle and clean it up.
+  const bundle = askTools.createAskUserQuestionTools({ conversationId: "conv-snapshot" });
+  const resultPromise = bundle.executeToolCall(toolCall);
+  assert.equal(askTools.hasPendingAskUserQuestion(toolCall.id), true);
+  assert.equal(
+    askTools.answerAskUserQuestion(toolCall.id, [
+      { questionId: "choice", selectedLabel: "Second" },
+    ]).ok,
+    true,
+  );
+  const result = await resultPromise;
+  assert.equal(result.details.answers[0].selectedLabel, "Second");
+  assert.equal(askTools.getAskUserQuestionDeadlineAt(toolCall.id), null);
 });
 
 test("gateway runtime snapshot falls back to draft assistant text", () => {

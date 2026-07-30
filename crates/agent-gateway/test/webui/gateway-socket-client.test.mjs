@@ -1265,7 +1265,6 @@ test("GatewayWebSocketClient chatCommand sends the command frame and parses the 
     systemSettings: {
       executionMode: "agent",
       workdir: "/workspace/project",
-      selectedSystemTools: ["Bash"],
     },
   });
   const socket = await connectAndAuth(codec);
@@ -1277,7 +1276,6 @@ test("GatewayWebSocketClient chatCommand sends the command frame and parses the 
   assert.equal(command.json.chat_command.request.client_request_id, "req-1");
   assert.equal(command.json.chat_command.request.queue_policy, "append");
   assert.equal(command.json.chat_command.request.workdir, "/workspace/project");
-  assert.deepEqual(command.json.chat_command.request.selected_system_tools, ["Bash"]);
 
   socket.receiveBinary(
     codec.encodeServerFrame({

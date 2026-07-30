@@ -65,7 +65,6 @@ func NormalizeRequestBody(body *handler.ChatRequestBody) error {
 	body.ExecutionMode = handler.NormalizeExecutionMode(body.ExecutionMode)
 	body.Workdir = handler.NormalizeWorkdir(body.Workdir)
 	body.QueuePolicy = normalizeQueuePolicy(body.QueuePolicy)
-	body.SelectedSystemTools = handler.NormalizeSelectedSystemTools(body.SelectedSystemTools)
 	body.UploadedFiles = handler.NormalizeChatUploadedFiles(body.UploadedFiles)
 	body.RuntimeControls = handler.NormalizeChatRuntimeControls(body.RuntimeControls)
 	selectedModel, err := handler.NormalizeChatSelectedModel(body.SelectedModel)
@@ -275,7 +274,6 @@ func buildUserMessageAppendedPayload(
 		"uploaded_files":        body.UploadedFiles,
 		"execution_mode":        body.ExecutionMode,
 		"workdir":               body.Workdir,
-		"selected_system_tools": body.SelectedSystemTools,
 		"runtime_controls":      body.RuntimeControls,
 		"selected_model":        body.SelectedModel,
 	}
@@ -326,7 +324,6 @@ func buildProtoRequest(body handler.ChatRequestBody) *gatewayv2.ChatRequest {
 		RuntimeControls:     handler.ToProtoChatRuntimeControls(body.RuntimeControls),
 		ExecutionMode:       body.ExecutionMode,
 		Workdir:             body.Workdir,
-		SelectedSystemTools: body.SelectedSystemTools,
 		UploadedFiles:       handler.ToProtoChatUploadedFiles(body.UploadedFiles),
 		QueuePolicy:         body.QueuePolicy,
 	}
@@ -359,7 +356,6 @@ func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 		Message:             req.GetMessage(),
 		ExecutionMode:       req.GetExecutionMode(),
 		Workdir:             req.GetWorkdir(),
-		SelectedSystemTools: req.GetSelectedSystemTools(),
 		QueuePolicy:         req.GetQueuePolicy(),
 	}
 	if selected := req.GetSelectedModel(); selected != nil {

@@ -12,6 +12,7 @@ import {
   Moon,
   OpenaiChatgptIcon,
   PanelLeft,
+  Pencil,
   Search,
   Settings,
   Sun,
@@ -65,7 +66,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
   // 模型下拉内嵌的执行模式分段器：请求切到 Chat("text") 或 Agent("tools")。
   // agent-dev 视为 Agent 的一种，由调用方决定是否保持不降级。
   onSelectExecutionMode: (mode: "text" | "tools") => void;
-  onOpenSettings: (section?: SectionId) => void;
+  onOpenSettings: (section?: SectionId, providerId?: string) => void;
   onToggleTheme: () => void;
   onOpenSidebar: () => void;
   preThemeActions?: ReactNode;
@@ -312,30 +313,52 @@ export const ChatHeader = memo(function ChatHeader(props: {
                           {groupIndex > 0 ? (
                             <hr className="my-1 h-px border-0 bg-border/30" />
                           ) : null}
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(group.id)}
-                            aria-expanded={expanded}
-                            title={expanded ? t("chat.collapseProvider") : t("chat.expandProvider")}
-                            className="model-selector-group-label sticky top-0 z-10 flex h-[30px] w-full shrink-0 cursor-pointer items-center gap-1.5 rounded-md bg-popover/60 px-2 py-0 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground/80 backdrop-blur-xl transition-colors hover:bg-muted/40 focus-visible:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 supports-[backdrop-filter]:bg-popover/40 dark:text-white/80"
-                          >
-                            <ProviderBrandIcon
-                              type={group.providerType}
-                              className="h-3.5 w-3.5 opacity-90"
-                            />
-                            <span className="min-w-0 flex-1 truncate normal-case tracking-normal">
-                              {group.name}
-                            </span>
-                            <span className="inline-flex h-4 min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted/70 px-1 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums tracking-normal">
-                              {group.opts.length}
-                            </span>
-                            <ChevronDown
-                              className={cn(
-                                "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
-                                expanded && "rotate-180",
-                              )}
-                            />
-                          </button>
+                          <div className="group sticky top-0 z-10 flex h-[30px] shrink-0 items-stretch rounded-md bg-popover/60 backdrop-blur-xl transition-colors hover:bg-muted/40 focus-within:bg-muted/40 supports-[backdrop-filter]:bg-popover/40">
+                            <button
+                              type="button"
+                              onClick={() => toggleGroup(group.id)}
+                              aria-expanded={expanded}
+                              className="model-selector-group-label flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-l-md px-2 py-0 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white/80"
+                            >
+                              <ProviderBrandIcon
+                                type={group.providerType}
+                                className="h-3.5 w-3.5 opacity-90"
+                              />
+                              <span className="min-w-0 flex-1 truncate normal-case tracking-normal">
+                                {group.name}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsModelPickerOpen(false);
+                                onOpenSettings("providers", group.id);
+                              }}
+                              aria-label={`${t("settings.editProvider")}: ${group.name}`}
+                              className="pointer-events-none flex w-7 max-w-0 shrink-0 cursor-pointer items-center justify-center overflow-hidden text-muted-foreground/70 opacity-0 transition-[max-width,opacity,color,background-color] duration-150 group-hover:max-w-7 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:max-w-7 group-focus-within:pointer-events-auto group-focus-within:opacity-100 hover:bg-muted/60 hover:text-foreground focus-visible:max-w-7 focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleGroup(group.id)}
+                              aria-expanded={expanded}
+                              aria-label={`${
+                                expanded ? t("chat.collapseProvider") : t("chat.expandProvider")
+                              }: ${group.name}`}
+                              className="model-selector-group-label flex shrink-0 cursor-pointer items-center gap-1.5 rounded-r-md px-2 py-0 text-muted-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white/80"
+                            >
+                              <span className="inline-flex h-4 min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-muted/70 px-1 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums tracking-normal">
+                                {group.opts.length}
+                              </span>
+                              <ChevronDown
+                                className={cn(
+                                  "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                                  expanded && "rotate-180",
+                                )}
+                              />
+                            </button>
+                          </div>
                           {expanded
                             ? group.opts.map((option) => {
                                 const isSelected = option.value === selectedValue;

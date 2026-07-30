@@ -28,7 +28,9 @@ const MEMORY_SETTINGS_TABLE: &str = "memory_settings";
 
 const SYSTEM_EXECUTION_MODE_KEY: &str = "executionMode";
 const SYSTEM_WORKDIR_KEY: &str = "workdir";
-const SYSTEM_SELECTED_TOOLS_KEY: &str = "selectedSystemTools";
+// 工具审批策略(按工具名/`group:`/`server:` 键 → allow/ask/deny)。此前未纳入
+// 保存白名单,导致重启后设置丢失;补入本键持久化。
+const SYSTEM_TOOL_POLICIES_KEY: &str = "toolPolicies";
 const SYSTEM_WORKSPACE_PROJECTS_KEY: &str = "workspaceProjects";
 const SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY: &str = "activeWorkspaceProjectId";
 const SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY: &str = "hiddenWorkspaceProjectPaths";

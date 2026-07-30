@@ -26,11 +26,23 @@ function formatCountdown(remainingMs: number) {
 /**
  * 倒计时提示：优先使用调用方传入的权威截止时间（GUI 读工具挂起表，WebUI 读
  * 网关参数上的 deadline 盖章），两端与桌面计时同源；缺失时（历史/降级数据）
- * 回退为挂载时刻近似。超时后 tool_result 会把卡片切到只读态。
+ * 回退为挂载时刻近似。倒计时归零立即禁止交互，随后 tool_result 把卡片
+ * 切到只读态。
+ *
+ * 盖章用的是桌面时钟，而倒计时读本机时钟：远端浏览器时钟偏移足够大时，
+ * 一个仍在挂起的提问会在挂载瞬间就显示过期（或远超完整窗口）。因此仅当
+ * 截止时间落在“挂载时刻（不含）～挂载时刻 + 完整应答窗口（含）”内才采信，
+ * 否则视为时钟不可比、回退挂载近似，避免把可作答的卡片锁死；真正过期的
+ * 提交仍由桌面挂起表权威拒绝。
  */
 function useAnswerCountdown(active: boolean, deadlineAt?: number) {
-  const [fallbackDeadline] = useState(() => Date.now() + ASK_USER_QUESTION_TIMEOUT_MS);
-  const deadline = deadlineAt ?? fallbackDeadline;
+  const [mountedAt] = useState(() => Date.now());
+  const deadline =
+    deadlineAt !== undefined &&
+    deadlineAt > mountedAt &&
+    deadlineAt <= mountedAt + ASK_USER_QUESTION_TIMEOUT_MS
+      ? deadlineAt
+      : mountedAt + ASK_USER_QUESTION_TIMEOUT_MS;
   const [remainingMs, setRemainingMs] = useState(() => deadline - Date.now());
 
   useEffect(() => {
@@ -98,8 +110,10 @@ export function AskUserQuestionCard({
 
   const isSettled = (answers?.length ?? 0) > 0;
   const selections = isSettled ? settledSelections : draftSelections;
-  const canInteract = interactive && !isSettled && !cancelled && !submitting;
-  const remainingMs = useAnswerCountdown(interactive && !isSettled && !cancelled, deadlineAt);
+  const countdownActive = interactive && !isSettled && !cancelled;
+  const remainingMs = useAnswerCountdown(countdownActive, deadlineAt);
+  const countdownExpired = countdownActive && remainingMs <= 0;
+  const canInteract = countdownActive && remainingMs > 0 && !submitting;
 
   // 该题是否已作答：普通选项已选，或“其他”选中且文本非空。
   const isQuestionAnswered = (questionId: string) => {
@@ -267,7 +281,9 @@ export function AskUserQuestionCard({
                     canInteract && !isSelected
                       ? "hover:border-border/70 hover:bg-foreground/[0.03] dark:hover:border-white/[0.14]"
                       : "",
-                    !canInteract && !isSelected && (isSettled || cancelled) ? "opacity-55" : "",
+                    !canInteract && !isSelected && (isSettled || cancelled || countdownExpired)
+                      ? "opacity-55"
+                      : "",
                     canInteract ? "cursor-pointer" : "cursor-default",
                   )}
                 >
@@ -323,7 +339,9 @@ export function AskUserQuestionCard({
                 canInteract && !activeCustomSelected
                   ? "hover:border-border/70 hover:bg-foreground/[0.03] dark:hover:border-white/[0.14]"
                   : "",
-                !canInteract && !activeCustomSelected && (isSettled || cancelled)
+                !canInteract &&
+                  !activeCustomSelected &&
+                  (isSettled || cancelled || countdownExpired)
                   ? "opacity-55"
                   : "",
                 canInteract ? "cursor-pointer" : "cursor-default",
@@ -403,7 +421,7 @@ export function AskUserQuestionCard({
             </span>
             <button
               type="button"
-              disabled={!allAnswered || submitting}
+              disabled={!allAnswered || !canInteract}
               onClick={() => void submit()}
               className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-none text-primary-foreground transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
             >

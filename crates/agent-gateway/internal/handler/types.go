@@ -35,7 +35,6 @@ type ChatRequestBody struct {
 	RuntimeControls     *ChatRuntimeControlsBody `json:"runtime_controls,omitempty"`
 	ExecutionMode       string                   `json:"execution_mode,omitempty"`
 	Workdir             string                   `json:"workdir,omitempty"`
-	SelectedSystemTools []string                 `json:"selected_system_tools,omitempty"`
 	UploadedFiles       []ChatUploadedFileBody   `json:"uploaded_files,omitempty"`
 	QueuePolicy         string                   `json:"queue_policy,omitempty"`
 }
@@ -71,10 +70,6 @@ func boolValue(input *bool, fallback bool) bool {
 		return fallback
 	}
 	return *input
-}
-
-var validSystemToolIDs = map[string]struct{}{
-	"http_get_test": {},
 }
 
 func NormalizeChatSelectedModel(
@@ -146,28 +141,6 @@ func NormalizeExecutionMode(value string) string {
 
 func NormalizeWorkdir(value string) string {
 	return normalizeTrimmedText(value)
-}
-
-func NormalizeSelectedSystemTools(input []string) []string {
-	out := make([]string, 0, len(input))
-	seen := make(map[string]struct{}, len(input))
-
-	for _, item := range input {
-		value := normalizeTrimmedText(item)
-		if value == "" {
-			continue
-		}
-		if _, ok := validSystemToolIDs[value]; !ok {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-
-	return out
 }
 
 func NormalizeChatUploadedFiles(input []ChatUploadedFileBody) []ChatUploadedFileBody {

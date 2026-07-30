@@ -61,8 +61,19 @@ test("parseAskUserQuestionItems enforces limits, ids, and single recommendation"
       ),
     /at most 4 questions/,
   );
+  assert.throws(() => shared.parseAskUserQuestionItems(undefined), /non-empty/);
   assert.throws(
     () => shared.parseAskUserQuestionItems([{ prompt: "只有一个选项？", options: [{ label: "a" }] }]),
+    /needs 2-6 options/,
+  );
+  assert.throws(
+    () =>
+      shared.parseAskUserQuestionItems([
+        {
+          prompt: "选项过多？",
+          options: Array.from({ length: 7 }, (_, index) => ({ label: `o${index}` })),
+        },
+      ]),
     /needs 2-6 options/,
   );
   assert.throws(
@@ -178,9 +189,11 @@ test("execute suspends until the user answers, then returns the selections", asy
   ]);
   assert.equal(wrongLabel.ok, false);
 
+  // 乱序提交每题的非推荐、非第一项，结果仍按问题定义对齐；这也确保超时
+  // 默认答案不能掩盖用户真实选择。
   const accepted = tools.answerAskUserQuestion("call-ask-answer", [
-    { questionId: "storage", selectedLabel: "应用数据目录" },
-    { questionId: "q2", selectedLabel: "不迁移" },
+    { questionId: "q2", selectedLabel: "稍后再说" },
+    { questionId: "storage", selectedLabel: "工作区根目录" },
   ]);
   assert.equal(accepted.ok, true);
 
@@ -189,10 +202,11 @@ test("execute suspends until the user answers, then returns the selections", asy
   assert.equal(result.details.kind, "ask_user_question");
   assert.deepEqual(
     result.details.answers.map((answer) => answer.selectedLabel),
-    ["应用数据目录", "不迁移"],
+    ["工作区根目录", "稍后再说"],
   );
+  assert.equal("timedOut" in result.details, false);
   assert.match(result.content[0].text, /proceed accordingly/);
-  assert.match(result.content[0].text, /应用数据目录/);
+  assert.match(result.content[0].text, /工作区根目录/);
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-answer"), false);
 
   // 已落定的提问不能再次应答。
@@ -223,6 +237,79 @@ test("timeout auto-selects the recommended options and continues", async () => {
   assert.equal(late.ok, false);
 });
 
+test("timeout falls back to the first option when no recommendation exists", async () => {
+  const { tools } = loadModules();
+  const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-1", timeoutMs: 25 });
+  const result = await bundle.executeToolCall(
+    createToolCall(
+      {
+        questions: [
+          {
+            id: "plain",
+            prompt: "No recommendation",
+            options: [{ label: "First" }, { label: "Second" }],
+          },
+        ],
+      },
+      "call-ask-first-fallback",
+    ),
+  );
+
+  assert.equal(result.details.timedOut, true);
+  assert.deepEqual(
+    result.details.answers.map((answer) => answer.selectedLabel),
+    ["First"],
+  );
+  assert.equal(tools.hasPendingAskUserQuestion("call-ask-first-fallback"), false);
+});
+
+test("immediate answers are pending synchronously and never fall through to timeout defaults", async () => {
+  const { tools } = loadModules();
+  const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-fast", timeoutMs: 100 });
+
+  for (let index = 0; index < 20; index += 1) {
+    const toolCallId = `call-ask-fast-${index}`;
+    const resultPromise = bundle.executeToolCall(createToolCall(buildQuestionsArgs(), toolCallId));
+    assert.equal(tools.hasPendingAskUserQuestion(toolCallId), true);
+
+    const accepted = tools.answerAskUserQuestion(toolCallId, [
+      { questionId: "storage", selectedLabel: "工作区根目录" },
+      { questionId: "q2", selectedLabel: "稍后再说" },
+    ]);
+    assert.deepEqual(accepted, { ok: true });
+
+    const result = await resultPromise;
+    assert.equal("timedOut" in result.details, false);
+    assert.deepEqual(
+      result.details.answers.map((answer) => answer.selectedLabel),
+      ["工作区根目录", "稍后再说"],
+    );
+  }
+});
+
+test("an answer accepted before the deadline is not overwritten when the old timeout passes", async () => {
+  const { tools } = loadModules();
+  const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-1", timeoutMs: 35 });
+  const toolCallId = "call-ask-before-deadline";
+  const resultPromise = bundle.executeToolCall(createToolCall(buildQuestionsArgs(), toolCallId));
+
+  const accepted = tools.answerAskUserQuestion(toolCallId, [
+    { questionId: "storage", selectedLabel: "工作区根目录" },
+    { questionId: "q2", selectedLabel: "稍后再说" },
+  ]);
+  assert.equal(accepted.ok, true);
+  const result = await resultPromise;
+
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal("timedOut" in result.details, false);
+  assert.deepEqual(
+    result.details.answers.map((answer) => answer.selectedLabel),
+    ["工作区根目录", "稍后再说"],
+  );
+  assert.equal(tools.hasPendingAskUserQuestion(toolCallId), false);
+  assert.equal(tools.answerAskUserQuestion(toolCallId, []).ok, false);
+});
+
 test("abort settles a pending question as cancelled", async () => {
   const { tools } = loadModules();
   const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-1" });
@@ -239,6 +326,14 @@ test("abort settles a pending question as cancelled", async () => {
   assert.deepEqual(result.details.answers, []);
   assert.match(result.content[0].text, /stopped the turn/);
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-abort"), false);
+  assert.equal(tools.getAskUserQuestionDeadlineAt("call-ask-abort"), null);
+  assert.equal(
+    tools.answerAskUserQuestion("call-ask-abort", [
+      { questionId: "storage", selectedLabel: "工作区根目录" },
+      { questionId: "q2", selectedLabel: "迁移" },
+    ]).ok,
+    false,
+  );
 });
 
 test("conversation disposal cancels its pending questions only", async () => {
@@ -267,6 +362,11 @@ test("conversation disposal cancels its pending questions only", async () => {
 test("invalid arguments fail fast with a validation error result", async () => {
   const { tools } = loadModules();
   const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-1" });
+  const missing = await bundle.executeToolCall(createToolCall({}, "call-ask-missing"));
+  assert.equal(missing.isError, true);
+  assert.match(missing.content[0].text, /non-empty `questions` array/);
+  assert.equal(tools.hasPendingAskUserQuestion("call-ask-missing"), false);
+
   const result = await bundle.executeToolCall(
     createToolCall({ questions: [{ prompt: "选项不足", options: [{ label: "唯一" }] }] }),
   );

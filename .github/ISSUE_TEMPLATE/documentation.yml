@@ -1,0 +1,47 @@
+name: Documentation
+description: Report incorrect, outdated, missing, or unclear documentation.
+title: "[Docs] "
+labels:
+  - documentation
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: Problem type
+      options:
+        - Incorrect (does not match actual behavior)
+        - Outdated (behavior changed but docs did not)
+        - Missing (should be documented but is not)
+        - Unclear / misleading
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: Link or file path of the affected documentation.
+      placeholder: docs/xxx.md or a section of README.md
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem description
+      description: Explain what is wrong. For incorrect content, also describe the actual correct behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested fix
+      description: Your suggested wording, if any. Mention if you are willing to submit a PR for it.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submit checklist
+      options:
+        - label: I searched existing issues and found no duplicates.
+          required: true

@@ -2,12 +2,7 @@ import type { MutableRefObject } from "react";
 import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
-import type {
-  ChatRuntimeControls,
-  ExecutionMode,
-  ProviderId,
-  SystemToolId,
-} from "../../../lib/settings";
+import type { ChatRuntimeControls, ExecutionMode, ProviderId } from "../../../lib/settings";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 
 export type GatewaySelectedModelEvent = {
@@ -32,7 +27,6 @@ export type GatewayChatRequestEvent = {
   runtimeControls?: GatewayChatRuntimeControlsEvent;
   executionMode?: string;
   workdir?: string;
-  selectedSystemTools?: string[];
   uploadedFiles?: PendingUploadedFile[];
   queuePolicy?: "auto" | "append" | "interrupt" | string;
 };
@@ -71,7 +65,6 @@ export type ActiveGatewayBridgeRequest = {
   runtimeControlsOverride?: ChatRuntimeControls;
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
-  selectedSystemToolIdsOverride?: SystemToolId[];
 };
 
 export type SendChatAction = (overrides?: {
@@ -81,7 +74,6 @@ export type SendChatAction = (overrides?: {
   conversationIdOverride?: string;
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
-  selectedSystemToolIdsOverride?: SystemToolId[];
   runtimeControlsOverride?: ChatRuntimeControls;
   gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
   preserveComposerOnStart?: boolean;

@@ -679,6 +679,16 @@ export async function runAssistantWithTools(params: {
   debugLogger?: StreamDebugLogger;
   subagentScheduler?: SubagentScheduler;
   allowEmptyWorkdir?: boolean;
+  /**
+   * 工具审批门:每次工具执行前(截断校验之后)对规范化后的调用调用一次。
+   * 返回 allow:false 时该调用被拦截,reason 作为 toolResult 交给模型(与截断
+   * 拒绝同渲染路径)。回调可 await(交互式审批),被 turn 中止时应 reject/拒绝。
+   * 与策略/元数据实现解耦:runner 只认这个结果,不感知 toolPolicies 细节。
+   */
+  resolveToolGate?: (
+    toolCall: ToolCall,
+    signal?: AbortSignal,
+  ) => Promise<{ allow: true } | { allow: false; reason: string }>;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
@@ -1421,6 +1431,15 @@ export async function runAssistantWithTools(params: {
             block: true,
             reason: buildTruncatedToolCallText(effectiveToolCall.name, truncationReason),
           };
+        }
+        // 审批门:对每个工具调用(含 Bash/Agent 批处理成员,均先逐个过此处)在
+        // 执行前裁决。deny/未批准 → block,reason 成为该调用的 toolResult。
+        // 传入 turn 信号:ask 策略下的挂起审批在 turn 停止时应被中止。
+        if (params.resolveToolGate) {
+          const gate = await params.resolveToolGate(effectiveToolCall, params.signal);
+          if (!gate.allow) {
+            return { block: true, reason: gate.reason };
+          }
         }
         if (effectiveToolCall.name !== "Agent") {
           return undefined;

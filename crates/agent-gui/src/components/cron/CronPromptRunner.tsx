@@ -169,7 +169,6 @@ async function executeCronPromptRun(
       customProviderId: request.providerId,
       model: request.model,
     },
-    selectedSystemToolIds: settings.system.selectedSystemTools,
     getMcpSettings: () => settings.mcp,
     mcpLoadFailureMode: "throw",
   });

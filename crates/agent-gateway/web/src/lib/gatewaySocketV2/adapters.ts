@@ -334,9 +334,6 @@ function buildChatCommand(body: J) {
         : undefined,
       executionMode: str(inner.execution_mode),
       workdir: str(inner.workdir),
-      selectedSystemTools: Array.isArray(inner.selected_system_tools)
-        ? inner.selected_system_tools.map((item) => str(item))
-        : [],
       uploadedFiles: uploadedFiles.map((file) => {
         const raw = rec(file);
         return create(ChatUploadedFileSchema, {
