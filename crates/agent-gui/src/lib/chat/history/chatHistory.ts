@@ -277,8 +277,6 @@ export type ImportResult = {
 export type ClaudeCodeImportPreviewSession = ImportPreviewSession;
 export type ClaudeCodeImportPreview = ImportPreview;
 export type ClaudeCodeImportResult = ImportResult;
-export type ClaudeOfficialImportPreview = ImportPreview;
-export type ClaudeOfficialImportResult = ImportResult;
 export type CodexImportPreviewSession = ImportPreviewSession;
 export type CodexImportPreview = ImportPreview;
 export type CodexImportResult = ImportResult;
@@ -289,17 +287,6 @@ export async function scanClaudeCodeChatHistory() {
 
 export async function importClaudeCodeChatHistory(ids: string[]) {
   return invoke<ImportResult>("chat_history_import_claude_code", { ids });
-}
-
-export async function scanClaudeOfficialChatHistory(zipPath: string) {
-  return invoke<ImportPreview>("chat_history_scan_claude_official", { zipPath });
-}
-
-export async function importClaudeOfficialChatHistory(zipPath: string, ids: string[]) {
-  return invoke<ImportResult>("chat_history_import_claude_official", {
-    zipPath,
-    ids,
-  });
 }
 
 export async function scanCodexChatHistory() {

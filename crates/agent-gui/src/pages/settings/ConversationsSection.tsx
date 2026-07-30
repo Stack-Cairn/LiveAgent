@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { History, Loader2, Upload } from "../../components/icons";
 import { Button } from "../../components/ui/button";
@@ -7,10 +6,8 @@ import {
   type ImportPreview,
   type ImportResult,
   importClaudeCodeChatHistory,
-  importClaudeOfficialChatHistory,
   importCodexChatHistory,
   scanClaudeCodeChatHistory,
-  scanClaudeOfficialChatHistory,
   scanCodexChatHistory,
 } from "../../lib/chat/history/chatHistory";
 import { ImportDialog, type ImportSource } from "./ImportDialog";
@@ -18,7 +15,6 @@ import { ImportDialog, type ImportSource } from "./ImportDialog";
 type ImportDialogState = {
   source: ImportSource;
   preview: ImportPreview;
-  zipPath?: string;
 };
 
 export function ConversationsSection() {
@@ -34,35 +30,19 @@ export function ConversationsSection() {
     setResult(null);
     setError(null);
     try {
-      const zipPath =
-        source === "claude-official"
-          ? await invoke<string | null>("system_pick_file", {
-              initialWorkdir: undefined,
-              filterName: "Claude data export",
-              extensions: ["zip"],
-            })
-          : undefined;
-      if (source === "claude-official" && !zipPath) return;
-      const officialZipPath = zipPath ?? "";
       const preview =
-        source === "codex"
-          ? await scanCodexChatHistory()
-          : source === "claude-code"
-            ? await scanClaudeCodeChatHistory()
-            : await scanClaudeOfficialChatHistory(officialZipPath);
+        source === "codex" ? await scanCodexChatHistory() : await scanClaudeCodeChatHistory();
       if (preview.sessions.length === 0) {
         setError(
           t(
             source === "codex"
               ? "chat.history.codexImportDialogEmpty"
-              : source === "claude-code"
-                ? "chat.history.claudeCodeImportDialogEmpty"
-                : "chat.history.claudeOfficialImportDialogEmpty",
+              : "chat.history.claudeCodeImportDialogEmpty",
           ),
         );
         return;
       }
-      setDialog({ source, preview, zipPath: zipPath ?? undefined });
+      setDialog({ source, preview });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -70,7 +50,7 @@ export function ConversationsSection() {
     }
   }
 
-  async function handleConfirm(source: ImportSource, ids: string[], zipPath?: string) {
+  async function handleConfirm(source: ImportSource, ids: string[]) {
     setDialog(null);
     setImporting(source);
     setError(null);
@@ -78,9 +58,7 @@ export function ConversationsSection() {
       const value =
         source === "codex"
           ? await importCodexChatHistory(ids)
-          : source === "claude-code"
-            ? await importClaudeCodeChatHistory(ids)
-            : await importClaudeOfficialChatHistory(zipPath ?? "", ids);
+          : await importClaudeCodeChatHistory(ids);
       setResult({ source, value });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -112,18 +90,6 @@ export function ConversationsSection() {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : null}
               {t("chat.history.claudeCodeImport")}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void handleScan("claude-official")}
-              disabled={busy}
-            >
-              {scanning === "claude-official" || importing === "claude-official" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4" />
-              )}
-              {t("chat.history.claudeOfficialImport")}
             </Button>
           </div>
         </div>
@@ -205,7 +171,7 @@ export function ConversationsSection() {
           source={dialog.source}
           preview={dialog.preview}
           onClose={() => setDialog(null)}
-          onConfirm={(ids) => void handleConfirm(dialog.source, ids, dialog.zipPath)}
+          onConfirm={(ids) => void handleConfirm(dialog.source, ids)}
         />
       ) : null}
     </div>

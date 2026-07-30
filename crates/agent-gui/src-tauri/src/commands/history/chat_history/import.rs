@@ -1,5 +1,5 @@
 // Unified data model and persistence core shared by every provider importer
-// (codex, claude_code, claude_official). Each provider supplies:
+// (codex, claude_code). Each provider supplies:
 //   - how to locate & parse its source
 //   - three scalars via `ImportProviderConfig` (provider_id, id prefix, model)
 // Writing the conversation to the database is identical across providers, so it
@@ -60,13 +60,6 @@ impl ImportProviderConfig {
             provider_id: "claude_code",
             id_prefix: "claude-code",
             selected_model_json: Some(make_selected_model_json("builtin-claude_code", model)),
-        }
-    }
-    pub(crate) fn claude_official() -> Self {
-        Self {
-            provider_id: "claude_official",
-            id_prefix: "claude-official",
-            selected_model_json: None,
         }
     }
     pub(crate) fn id_prefix_with(&self, session_id: &str) -> String {

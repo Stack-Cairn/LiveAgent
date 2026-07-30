@@ -8,7 +8,7 @@ import { useImportSelection } from "../../lib/chat/history/useImportSelection";
 import { useModalMotion } from "../../lib/shared/modalMotion";
 import { cn } from "../../lib/shared/utils";
 
-export type ImportSource = "codex" | "claude-code" | "claude-official";
+export type ImportSource = "codex" | "claude-code";
 
 type ImportDialogProps = {
   source: ImportSource;
@@ -18,10 +18,9 @@ type ImportDialogProps = {
 };
 
 const NO_CWD_KEY = "__liveagent_no_cwd__";
-const CHAT_MODE_KEY = "__liveagent_chat_mode__";
 
 function workspaceLabel(cwd: string): string {
-  if (cwd === NO_CWD_KEY || cwd === CHAT_MODE_KEY) return "";
+  if (cwd === NO_CWD_KEY) return "";
   const segments = cwd.split(/[\\/]/).filter(Boolean);
   return segments[segments.length - 1] ?? cwd;
 }
@@ -33,7 +32,6 @@ const LABELS: Record<
     subtitle: string;
     workspaces: string;
     noWorkspace: string;
-    chatMode?: string;
     empty: string;
     all: string;
     none: string;
@@ -69,29 +67,12 @@ const LABELS: Record<
     alreadyImported: "chat.history.claudeCodeImportDialogAlreadyImported",
     messages: "chat.history.claudeCodeImportDialogMessages",
   },
-  "claude-official": {
-    title: "chat.history.claudeOfficialImportDialogTitle",
-    subtitle: "chat.history.claudeOfficialImportDialogSubtitle",
-    workspaces: "settings.executionMode",
-    noWorkspace: "chat.history.claudeCodeImportDialogNoWorkspace",
-    chatMode: "settings.chatMode",
-    empty: "chat.history.claudeOfficialImportDialogEmpty",
-    all: "chat.history.claudeCodeImportDialogAll",
-    none: "chat.history.claudeCodeImportDialogNone",
-    selected: "chat.history.claudeCodeImportDialogSelected",
-    import: "chat.history.claudeCodeImportDialogImport",
-    alreadyImported: "chat.history.claudeCodeImportDialogAlreadyImported",
-    messages: "chat.history.claudeCodeImportDialogMessages",
-  },
 };
 
 function buildGroups(
   source: ImportSource,
   sessions: ImportPreviewSession[],
 ): [string, ImportPreviewSession[]][] {
-  if (source === "claude-official") {
-    return [[CHAT_MODE_KEY, sessions]];
-  }
   const map = new Map<string, ImportPreviewSession[]>();
   for (const session of sessions) {
     const key = session.cwd?.trim() ? session.cwd : NO_CWD_KEY;
@@ -116,8 +97,7 @@ export function ImportDialog({ source, preview, onClose, onConfirm }: ImportDial
   const { t } = useLocale();
   const { modalState, requestClose } = useModalMotion(onClose);
   const labels = LABELS[source];
-  const isOfficial = source === "claude-official";
-  const WorkspaceIcon = isOfficial ? MessageSquareText : Folder;
+  const WorkspaceIcon = Folder;
 
   const groups = useMemo(() => buildGroups(source, preview.sessions), [source, preview.sessions]);
   const [activeCwdKey, setActiveCwdKey] = useState<string | null>(groups[0]?.[0] ?? null);
@@ -127,7 +107,6 @@ export function ImportDialog({ source, preview, onClose, onConfirm }: ImportDial
 
   const formatKey = useCallback(
     (key: string) => {
-      if (key === CHAT_MODE_KEY) return t(labels.chatMode ?? "settings.chatMode");
       if (key === NO_CWD_KEY) return t(labels.noWorkspace);
       return workspaceLabel(key);
     },
@@ -235,7 +214,7 @@ export function ImportDialog({ source, preview, onClose, onConfirm }: ImportDial
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-medium">{formatKey(key)}</span>
-                        {key !== NO_CWD_KEY && key !== CHAT_MODE_KEY ? (
+                        {key !== NO_CWD_KEY ? (
                           <span
                             className="block truncate text-[10px] text-muted-foreground"
                             title={key}

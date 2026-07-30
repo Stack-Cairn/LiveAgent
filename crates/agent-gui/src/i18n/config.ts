@@ -141,14 +141,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.persistFailed": "历史记录保存失败：{message}",
     "chat.history.codexImport": "导入 Codex 对话",
     "chat.history.claudeCodeImport": "导入本机 Claude Code",
-    "chat.history.claudeOfficialImport": "导入 Official ZIP",
     "chat.history.claudeImportFailed": "Claude 对话导入失败",
-    "chat.history.claudeOfficialImporting": "正在导入 Claude 官方对话…",
-    "chat.history.claudeOfficialImportFailed": "Claude 官方对话导入失败",
-    "chat.history.claudeOfficialImportDialogTitle": "导入 Claude 官方对话",
-    "chat.history.claudeOfficialImportDialogSubtitle":
-      "从官方 Claude 数据 ZIP 中选择需要导入的对话；会话将归入 Chat 模式。",
-    "chat.history.claudeOfficialImportDialogEmpty": "没有可导入的 Claude 官方对话。",
     "chat.history.claudeCodeImporting": "正在导入 Claude Code 对话…",
     "chat.history.claudeCodeImportFailed": "Claude Code 对话导入失败",
     "chat.history.claudeCodeImportDialogTitle": "导入 Claude Code 对话",
@@ -984,13 +977,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.codexImportDescription": "从 ~/.codex/sessions 导入尚未存在于 LiveAgent 的会话。",
     "settings.codexImportResult": "已导入 {imported} 个会话，共扫描 {scanned} 个 Codex 会话文件。",
     "settings.claudeImportTitle": "Claude 对话",
-    "settings.claudeImportDescription": "从本机 Claude Code 或 Official Claude 数据 ZIP 导入对话。",
+    "settings.claudeImportDescription": "从本机 Claude Code 导入对话。",
     "settings.claudeImportResult": "已导入 {imported} 个会话，共读取 {scanned} 个 Claude 会话。",
     "settings.claudeCodeImportTitle": "Claude Code 对话",
-    "settings.claudeOfficialImportTitle": "Claude 官方对话",
-    "settings.claudeOfficialImportDescription": "选择 Claude 官方数据 ZIP；会话将归入 Chat 模式。",
-    "settings.claudeOfficialImportResult":
-      "已导入 {imported} 个会话，共读取 {scanned} 个 Claude 官方对话。",
     "settings.claudeCodeImportDescription":
       "从 ~/.claude/projects 导入 Claude Code 主会话；子代理和工作流记录不会导入。",
     "settings.claudeCodeImportResult":
@@ -2464,14 +2453,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.persistFailed": "Failed to save history: {message}",
     "chat.history.codexImport": "Import Codex conversations",
     "chat.history.claudeCodeImport": "Import local Claude Code",
-    "chat.history.claudeOfficialImport": "Import Official ZIP",
     "chat.history.claudeImportFailed": "Failed to import Claude conversations",
-    "chat.history.claudeOfficialImporting": "Importing official Claude conversations…",
-    "chat.history.claudeOfficialImportFailed": "Failed to import official Claude conversations",
-    "chat.history.claudeOfficialImportDialogTitle": "Import official Claude conversations",
-    "chat.history.claudeOfficialImportDialogSubtitle":
-      "Choose conversations from an official Claude data ZIP. They are imported into Chat mode.",
-    "chat.history.claudeOfficialImportDialogEmpty": "No official Claude conversations to import.",
     "chat.history.claudeCodeImporting": "Importing Claude Code conversations…",
     "chat.history.claudeCodeImportFailed": "Failed to import Claude Code conversations",
     "chat.history.claudeCodeImportDialogTitle": "Import Claude Code conversations",
@@ -3337,16 +3319,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.codexImportResult":
       "Imported {imported} conversations from {scanned} scanned Codex session files.",
     "settings.claudeImportTitle": "Claude conversations",
-    "settings.claudeImportDescription":
-      "Import conversations from local Claude Code or an Official Claude data ZIP.",
+    "settings.claudeImportDescription": "Import conversations from local Claude Code.",
     "settings.claudeImportResult":
       "Imported {imported} conversations from {scanned} Claude conversations.",
     "settings.claudeCodeImportTitle": "Claude Code conversations",
-    "settings.claudeOfficialImportTitle": "Official Claude conversations",
-    "settings.claudeOfficialImportDescription":
-      "Choose an official Claude data ZIP. Conversations are imported into Chat mode.",
-    "settings.claudeOfficialImportResult":
-      "Imported {imported} conversations from {scanned} official Claude conversations.",
     "settings.claudeCodeImportDescription":
       "Import primary sessions from ~/.claude/projects. Subagent and workflow transcripts are excluded.",
     "settings.claudeCodeImportResult":

@@ -53,8 +53,6 @@ macro_rules! app_invoke_handler {
             commands::chat_history::codex_import::chat_history_import_codex,
             commands::chat_history::claude_code_import::chat_history_scan_claude_code,
             commands::chat_history::claude_code_import::chat_history_import_claude_code,
-            commands::chat_history::claude_official_import::chat_history_scan_claude_official,
-            commands::chat_history::claude_official_import::chat_history_import_claude_official,
             commands::chat_history::chat_history_rename,
             commands::chat_history::chat_history_branch,
             commands::chat_history::chat_history_replace_from_message,

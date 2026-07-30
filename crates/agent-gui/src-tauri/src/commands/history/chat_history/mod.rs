@@ -38,7 +38,6 @@ include!("search.rs");
 include!("commands.rs");
 include!("replace.rs");
 pub(crate) mod claude_code_import;
-pub(crate) mod claude_official_import;
 pub(crate) mod codex_import;
 mod import;
 include!("branch.rs");
