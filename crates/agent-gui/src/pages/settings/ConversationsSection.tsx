@@ -4,12 +4,8 @@ import { History, Loader2, Upload } from "../../components/icons";
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
 import {
-  type ClaudeCodeImportPreview,
-  type ClaudeCodeImportResult,
-  type ClaudeOfficialImportPreview,
-  type ClaudeOfficialImportResult,
-  type CodexImportPreview,
-  type CodexImportResult,
+  type ImportPreview,
+  type ImportResult,
   importClaudeCodeChatHistory,
   importClaudeOfficialChatHistory,
   importCodexChatHistory,
@@ -17,13 +13,9 @@ import {
   scanClaudeOfficialChatHistory,
   scanCodexChatHistory,
 } from "../../lib/chat/history/chatHistory";
-import { ClaudeCodeImportDialog } from "./ClaudeCodeImportDialog";
-import { CodexImportDialog } from "./CodexImportDialog";
+import { ImportDialog, type ImportSource } from "./ImportDialog";
 
-type ImportSource = "codex" | "claude-code" | "claude-official";
-type ImportPreview = CodexImportPreview | ClaudeCodeImportPreview | ClaudeOfficialImportPreview;
-type ImportResult = CodexImportResult | ClaudeCodeImportResult | ClaudeOfficialImportResult;
-type ImportDialog = {
+type ImportDialogState = {
   source: ImportSource;
   preview: ImportPreview;
   zipPath?: string;
@@ -33,7 +25,7 @@ export function ConversationsSection() {
   const { t } = useLocale();
   const [scanning, setScanning] = useState<ImportSource | null>(null);
   const [importing, setImporting] = useState<ImportSource | null>(null);
-  const [dialog, setDialog] = useState<ImportDialog | null>(null);
+  const [dialog, setDialog] = useState<ImportDialogState | null>(null);
   const [result, setResult] = useState<{ source: ImportSource; value: ImportResult } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -208,27 +200,12 @@ export function ConversationsSection() {
       {claudeImportCard()}
       {codexImportCard()}
 
-      {dialog?.source === "codex" ? (
-        <CodexImportDialog
-          preview={dialog.preview as CodexImportPreview}
+      {dialog ? (
+        <ImportDialog
+          source={dialog.source}
+          preview={dialog.preview}
           onClose={() => setDialog(null)}
-          onConfirm={(ids) => void handleConfirm("codex", ids)}
-        />
-      ) : null}
-      {dialog?.source === "claude-official" ? (
-        <ClaudeCodeImportDialog
-          preview={dialog.preview as ClaudeOfficialImportPreview}
-          onClose={() => setDialog(null)}
-          onConfirm={(ids) => void handleConfirm("claude-official", ids, dialog.zipPath)}
-          variant="claude-official"
-        />
-      ) : null}
-      {dialog?.source === "claude-code" ? (
-        <ClaudeCodeImportDialog
-          preview={dialog.preview as ClaudeCodeImportPreview}
-          onClose={() => setDialog(null)}
-          onConfirm={(ids) => void handleConfirm("claude-code", ids)}
-          variant="claude-code"
+          onConfirm={(ids) => void handleConfirm(dialog.source, ids, dialog.zipPath)}
         />
       ) : null}
     </div>

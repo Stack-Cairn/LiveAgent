@@ -249,13 +249,7 @@ export async function listChatHistory(
   });
 }
 
-export type ClaudeCodeImportResult = {
-  scannedCount: number;
-  importedCount: number;
-  skippedLines: number;
-};
-
-export type ClaudeCodeImportPreviewSession = {
+export type ImportPreviewSession = {
   id: string;
   sessionId: string;
   title: string;
@@ -267,73 +261,53 @@ export type ClaudeCodeImportPreviewSession = {
   alreadyImported: boolean;
 };
 
-export type ClaudeCodeImportPreview = {
-  sessions: ClaudeCodeImportPreviewSession[];
+export type ImportPreview = {
+  sessions: ImportPreviewSession[];
   scannedCount: number;
   skippedLines: number;
 };
 
-export async function scanClaudeCodeChatHistory() {
-  return invoke<ClaudeCodeImportPreview>("chat_history_scan_claude_code");
-}
-
-export async function importClaudeCodeChatHistory(ids: string[]) {
-  return invoke<ClaudeCodeImportResult>("chat_history_import_claude_code", { ids });
-}
-
-export type ClaudeOfficialImportResult = {
+export type ImportResult = {
   scannedCount: number;
   importedCount: number;
   skippedLines: number;
 };
 
-export type ClaudeOfficialImportPreview = {
-  sessions: ClaudeCodeImportPreviewSession[];
-  scannedCount: number;
-  skippedLines: number;
-};
+// Backward-compatible aliases for existing call sites.
+export type ClaudeCodeImportPreviewSession = ImportPreviewSession;
+export type ClaudeCodeImportPreview = ImportPreview;
+export type ClaudeCodeImportResult = ImportResult;
+export type ClaudeOfficialImportPreview = ImportPreview;
+export type ClaudeOfficialImportResult = ImportResult;
+export type CodexImportPreviewSession = ImportPreviewSession;
+export type CodexImportPreview = ImportPreview;
+export type CodexImportResult = ImportResult;
+
+export async function scanClaudeCodeChatHistory() {
+  return invoke<ImportPreview>("chat_history_scan_claude_code");
+}
+
+export async function importClaudeCodeChatHistory(ids: string[]) {
+  return invoke<ImportResult>("chat_history_import_claude_code", { ids });
+}
 
 export async function scanClaudeOfficialChatHistory(zipPath: string) {
-  return invoke<ClaudeOfficialImportPreview>("chat_history_scan_claude_official", { zipPath });
+  return invoke<ImportPreview>("chat_history_scan_claude_official", { zipPath });
 }
 
 export async function importClaudeOfficialChatHistory(zipPath: string, ids: string[]) {
-  return invoke<ClaudeOfficialImportResult>("chat_history_import_claude_official", {
+  return invoke<ImportResult>("chat_history_import_claude_official", {
     zipPath,
     ids,
   });
 }
 
-export type CodexImportResult = {
-  scannedCount: number;
-  importedCount: number;
-  skippedLines: number;
-};
-
-export type CodexImportPreviewSession = {
-  id: string;
-  sessionId: string;
-  title: string;
-  model: string;
-  cwd?: string;
-  createdAt: number;
-  updatedAt: number;
-  messageCount: number;
-  alreadyImported: boolean;
-};
-
-export type CodexImportPreview = {
-  sessions: CodexImportPreviewSession[];
-  scannedCount: number;
-  skippedLines: number;
-};
-
 export async function scanCodexChatHistory() {
-  return invoke<CodexImportPreview>("chat_history_scan_codex");
+  return invoke<ImportPreview>("chat_history_scan_codex");
 }
 
 export async function importCodexChatHistory(ids: string[]) {
-  return invoke<CodexImportResult>("chat_history_import_codex", { ids });
+  return invoke<ImportResult>("chat_history_import_codex", { ids });
 }
 
 export async function listChatHistoryWorkdirs() {

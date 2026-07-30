@@ -4,7 +4,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -37,10 +37,10 @@ include!("share.rs");
 include!("search.rs");
 include!("commands.rs");
 include!("replace.rs");
-mod import;
-pub(crate) mod codex_import;
 pub(crate) mod claude_code_import;
 pub(crate) mod claude_official_import;
+pub(crate) mod codex_import;
+mod import;
 include!("branch.rs");
 include!("delete.rs");
 include!("tests.rs");
