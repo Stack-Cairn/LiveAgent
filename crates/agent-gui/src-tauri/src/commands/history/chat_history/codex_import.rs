@@ -1,46 +1,12 @@
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexImportResult {
-    pub scanned_count: usize,
-    pub imported_count: usize,
-    pub skipped_lines: usize,
-}
+// Codex importer. Knows only how to locate & parse `~/.codex/sessions/**/rollout-*.jsonl`
+// into [`ImportConversation`]. The shared struct, DB write and command shell
+// live in `super::import`; this module just supplies the Codex-specific scan +
+// parse plus two tauri commands wired to that core.
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodexImportPreview {
-    pub sessions: Vec<CodexConversation>,
-    pub scanned_count: usize,
-    pub skipped_lines: usize,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct CodexConversation {
-    id: String,
-    session_id: String,
-    title: String,
-    model: String,
-    cwd: Option<String>,
-    created_at: i64,
-    updated_at: i64,
-    #[serde(skip)]
-    messages: Vec<Value>,
-    message_count: usize,
-    already_imported: bool,
-}
-
-fn codex_string(value: Option<&Value>) -> Option<String> {
-    value.and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
-}
-
-fn codex_timestamp(value: Option<&str>) -> Option<i64> {
-    value.and_then(|value| {
-        chrono::DateTime::parse_from_rfc3339(value)
-            .ok()
-            .map(|date| date.timestamp_millis())
-    })
-}
+use super::import::*;
+use super::*;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 fn codex_text_blocks(value: Option<&Value>, input: bool) -> Vec<Value> {
     let mut blocks = Vec::new();
@@ -119,37 +85,34 @@ fn codex_session_id(rows: &[(String, Value)]) -> Option<String> {
         .find(|row| row.get("payload").and_then(|p| p.get("thread_source")).and_then(Value::as_str) != Some("subagent"))
         .or_else(|| rows.iter().find_map(|(_, row)| (row.get("type").and_then(Value::as_str) == Some("session_meta")).then_some(row)))
         .and_then(|row| row.get("payload"))
-        .and_then(|payload| codex_string(payload.get("session_id")).or_else(|| codex_string(payload.get("id"))))
+        .and_then(|payload| import_string(payload.get("session_id")).or_else(|| import_string(payload.get("id"))))
 }
 
-fn codex_import_cwd(cwd: Option<String>, home: &std::path::Path) -> Option<String> {
+/// Remap a Codex `cwd` to a live-agent workdir. Sessions Codex ran inside its
+/// own sandbox temp dir (`<documents>/Codex/…`) never existed on disk for the
+/// user, so they are parked under the live-agent default project; any other
+/// `cwd` is kept verbatim.
+pub(crate) fn codex_remap_cwd(cwd: Option<String>, codex_temp_root: &std::path::Path, default_project: &std::path::Path) -> Option<String> {
     let cwd = cwd?;
-    let codex_temp = dirs::document_dir()
-        .unwrap_or_else(|| home.join("Documents"))
-        .join("Codex");
-    if std::path::Path::new(&cwd).starts_with(&codex_temp) {
-        return Some(
-            home.join(format!(".{}", env!("CARGO_PKG_NAME")))
-                .join("default-project")
-                .to_string_lossy()
-                .into_owned(),
-        );
+    if std::path::Path::new(&cwd).starts_with(codex_temp_root) {
+        return Some(default_project.to_string_lossy().into_owned());
     }
     Some(cwd)
 }
 
-fn convert_codex_file(
+pub(crate) fn convert_codex_file(
     path: &std::path::Path,
     titles: &HashMap<String, String>,
-    home: &std::path::Path,
-) -> Result<(Option<CodexConversation>, usize), String> {
+    codex_temp_root: &std::path::Path,
+    default_project: &std::path::Path,
+) -> Result<(Option<ImportConversation>, usize), String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("读取 Codex 会话失败：{}: {e}", path.display()))?;
     let mut rows = Vec::new();
     let mut skipped_lines = 0;
     for line in text.lines() {
         match serde_json::from_str::<Value>(line) {
             Ok(row) if row.get("type").and_then(Value::as_str).is_some() => {
-                let timestamp = codex_string(row.get("timestamp")).unwrap_or_default();
+                let timestamp = import_string(row.get("timestamp")).unwrap_or_default();
                 rows.push((timestamp, row));
             }
             _ => skipped_lines += 1,
@@ -169,15 +132,15 @@ fn convert_codex_file(
         match row.get("type").and_then(Value::as_str) {
             Some("session_meta") => {
                 if let Some(payload) = row.get("payload") {
-                    model = model.or_else(|| codex_string(payload.get("model")));
-                    cwd = cwd.or_else(|| codex_string(payload.get("cwd")));
-                    created_at = created_at.or_else(|| codex_timestamp(Some(timestamp)));
+                    model = model.or_else(|| import_string(payload.get("model")));
+                    cwd = cwd.or_else(|| import_string(payload.get("cwd")));
+                    created_at = created_at.or_else(|| import_timestamp(Some(timestamp)));
                 }
             }
             Some("turn_context") => {
                 if let Some(payload) = row.get("payload") {
-                    model = codex_string(payload.get("model")).or(model);
-                    cwd = codex_string(payload.get("cwd")).or(cwd);
+                    model = import_string(payload.get("model")).or(model);
+                    cwd = import_string(payload.get("cwd")).or(cwd);
                 }
             }
             _ => {}
@@ -190,12 +153,12 @@ fn convert_codex_file(
     let mut last_timestamp = created_at.unwrap_or_else(now_ms);
 
     for (index, (timestamp, row)) in rows.iter().enumerate() {
-        let timestamp = codex_timestamp(Some(timestamp)).unwrap_or(last_timestamp);
+        let timestamp = import_timestamp(Some(timestamp)).unwrap_or(last_timestamp);
         last_timestamp = timestamp;
         if let Some(payload) = row.get("payload") {
             if row.get("type").and_then(Value::as_str) != Some("response_item") { continue; }
             let item_type = payload.get("type").and_then(Value::as_str).unwrap_or_default();
-            let item_id = codex_string(payload.get("id")).unwrap_or_else(|| format!("{session_id}:{index}"));
+            let item_id = import_string(payload.get("id")).unwrap_or_else(|| format!("{session_id}:{index}"));
             match item_type {
                 "message" => {
                     let role = payload.get("role").and_then(Value::as_str).unwrap_or_default();
@@ -215,14 +178,14 @@ fn convert_codex_file(
                     if !summary.is_empty() { messages.push(codex_assistant(format!("{session_id}:{item_id}"), vec![serde_json::json!({ "type": "thinking", "thinking": summary })], &model, timestamp, "stop")); }
                 }
                 "function_call" | "custom_tool_call" => {
-                    let call_id = codex_string(payload.get("call_id")).unwrap_or_else(|| item_id.clone());
-                    let name = codex_string(payload.get("name")).unwrap_or_else(|| "codex_tool".to_string());
+                    let call_id = import_string(payload.get("call_id")).unwrap_or_else(|| item_id.clone());
+                    let name = import_string(payload.get("name")).unwrap_or_else(|| "codex_tool".to_string());
                     call_names.insert(call_id.clone(), name.clone());
                     let arguments = if item_type == "function_call" { codex_arguments(payload.get("arguments")) } else { codex_arguments(payload.get("input")) };
                     messages.push(codex_assistant(format!("{session_id}:{item_id}"), vec![serde_json::json!({ "type": "toolCall", "id": call_id, "name": name, "arguments": arguments })], &model, timestamp, "toolUse"));
                 }
                 "function_call_output" | "custom_tool_call_output" => {
-                    let call_id = codex_string(payload.get("call_id")).unwrap_or_else(|| item_id.clone());
+                    let call_id = import_string(payload.get("call_id")).unwrap_or_else(|| item_id.clone());
                     let tool_name = call_names.get(&call_id).cloned().unwrap_or_else(|| "codex_tool".to_string());
                     let content = codex_output_blocks(payload.get("output"));
                     messages.push(serde_json::json!({ "role": "toolResult", "toolCallId": call_id, "toolName": tool_name, "content": content, "isError": false, "timestamp": timestamp }));
@@ -242,12 +205,12 @@ fn convert_codex_file(
         .unwrap_or_else(|| format!("Codex session {session_id}"));
     let message_count = messages.len();
     Ok((
-        Some(CodexConversation {
+        Some(ImportConversation {
             id: format!("codex:{session_id}"),
             session_id,
             title,
             model,
-            cwd: codex_import_cwd(cwd, home),
+            cwd: codex_remap_cwd(cwd, codex_temp_root, default_project),
             created_at: created_at.unwrap_or(last_timestamp),
             updated_at: last_timestamp,
             messages,
@@ -264,17 +227,21 @@ fn read_codex_titles(home: &std::path::Path) -> HashMap<String, String> {
     let Ok(text) = std::fs::read_to_string(path) else { return titles };
     for line in text.lines() {
         if let Ok(row) = serde_json::from_str::<Value>(line) {
-            if let (Some(id), Some(title)) = (codex_string(row.get("id")), codex_string(row.get("thread_name"))) { titles.insert(id, title); }
+            if let (Some(id), Some(title)) = (import_string(row.get("id")), import_string(row.get("thread_name"))) { titles.insert(id, title); }
         }
     }
     titles
 }
 
-fn scan_codex_sessions() -> Result<(Vec<CodexConversation>, usize, usize), String> {
+fn scan_codex_sessions() -> Result<(Vec<ImportConversation>, usize, usize), String> {
     let home = dirs::home_dir().ok_or_else(|| "无法定位用户主目录".to_string())?;
     let root = home.join(".codex/sessions");
     if !root.exists() { return Ok((Vec::new(), 0, 0)); }
     let titles = read_codex_titles(&home);
+    // Codex parks throwaway sessions under <documents>/Codex; map those onto the
+    // live-agent default project so we don't surface a workdir the user never had.
+    let codex_temp_root = dirs::document_dir().unwrap_or_else(|| home.join("Documents")).join("Codex");
+    let default_project = home.join(format!(".{}", env!("CARGO_PKG_NAME"))).join("default-project");
     let mut conversations = Vec::new();
     let mut scanned = 0;
     let mut skipped = 0;
@@ -282,7 +249,7 @@ fn scan_codex_sessions() -> Result<(Vec<CodexConversation>, usize, usize), Strin
         let path = entry.path();
         if !entry.file_type().is_file() || path.extension().and_then(|s| s.to_str()) != Some("jsonl") || !path.file_name().and_then(|s| s.to_str()).unwrap_or_default().starts_with("rollout-") { continue; }
         scanned += 1;
-        match convert_codex_file(path, &titles, &home) {
+        match convert_codex_file(path, &titles, &codex_temp_root, &default_project) {
             Ok((Some(conversation), skipped_lines)) => {
                 skipped += skipped_lines;
                 conversations.push(conversation);
@@ -295,82 +262,8 @@ fn scan_codex_sessions() -> Result<(Vec<CodexConversation>, usize, usize), Strin
     Ok((conversations, scanned, skipped))
 }
 
-fn import_codex_conversation(
-    conn: &mut Connection,
-    conversation: CodexConversation,
-) -> Result<(ChatHistorySummary, bool), String> {
-    if let Ok(summary) = get_summary_by_id(conn, &conversation.id) {
-        return Ok((summary, false));
-    }
-    let messages_json = serde_json::to_string(&conversation.messages)
-        .map_err(|e| format!("序列化 Codex 消息失败：{e}"))?;
-    let message_count = conversation.message_count as i64;
-    let segment_id = format!("{}:segment:0", conversation.id);
-    let start_message_id = conversation
-        .messages
-        .first()
-        .and_then(|message| codex_string(message.get("id")));
-    let end_message_id = conversation
-        .messages
-        .last()
-        .and_then(|message| codex_string(message.get("id")));
-    let input = ChatHistoryUpsertInput {
-        id: conversation.id.clone(),
-        title: conversation.title,
-        provider_id: "codex".to_string(),
-        model: conversation.model.clone(),
-        session_id: Some(conversation.session_id),
-        cwd: conversation.cwd,
-        selected_model_json: Some(
-            serde_json::json!({ "customProviderId": "codex", "model": conversation.model })
-                .to_string(),
-        ),
-        context_meta_json: serde_json::json!({ "schemaVersion": 3, "activeSegmentIndex": 0, "totalSegmentCount": 1, "totalMessageCount": message_count }).to_string(),
-        active_segment_index: 0,
-        total_segment_count: 1,
-        total_message_count: message_count,
-        segments: vec![ChatHistorySegmentInput {
-            segment_index: 0,
-            segment_id,
-            summary_json: None,
-            messages_json,
-            message_count,
-            start_message_id,
-            end_message_id,
-            created_at: conversation.created_at,
-            updated_at: conversation.updated_at,
-        }],
-        created_at: Some(conversation.created_at),
-        updated_at: conversation.updated_at,
-    };
-    validate_upsert_input(&input)?;
-    let conversation_input = ChatHistoryConversationInput {
-        id: input.id.clone(),
-        title: input.title,
-        provider_id: input.provider_id,
-        model: input.model,
-        session_id: input.session_id,
-        cwd: input.cwd,
-        selected_model_json: input.selected_model_json,
-        context_meta_json: input.context_meta_json,
-        active_segment_index: input.active_segment_index,
-        total_segment_count: input.total_segment_count,
-        total_message_count: input.total_message_count,
-        created_at: input.created_at,
-        updated_at: input.updated_at,
-    };
-    let tx = conn
-        .transaction()
-        .map_err(|e| format!("开启 Codex 导入事务失败：{e}"))?;
-    upsert_chat_history_header(&tx, &conversation_input)?;
-    sync_segments(&tx, input.id.trim(), &input.segments, input.total_segment_count)?;
-    verify_chat_history_consistency(&tx, input.id.trim())?;
-    tx.commit().map_err(|e| format!("提交 Codex 导入事务失败：{e}"))?;
-    Ok((get_summary_by_id(conn, input.id.trim())?, true))
-}
-
 #[tauri::command]
-pub async fn chat_history_scan_codex() -> Result<CodexImportPreview, String> {
+pub async fn chat_history_scan_codex() -> Result<ImportPreview, String> {
     let (sessions, scanned_count, skipped_lines) =
         tauri::async_runtime::spawn_blocking(|| -> Result<_, String> {
             let (conversations, scanned_count, skipped_lines) = scan_codex_sessions()?;
@@ -387,7 +280,7 @@ pub async fn chat_history_scan_codex() -> Result<CodexImportPreview, String> {
         })
         .await
         .map_err(|e| format!("Codex 扫描失败：{e}"))??;
-    Ok(CodexImportPreview {
+    Ok(ImportPreview {
         sessions,
         scanned_count,
         skipped_lines,
@@ -398,32 +291,11 @@ pub async fn chat_history_scan_codex() -> Result<CodexImportPreview, String> {
 pub async fn chat_history_import_codex(
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
     ids: Vec<String>,
-) -> Result<CodexImportResult, String> {
+) -> Result<ImportResult, String> {
     let selected: HashSet<String> = ids.into_iter().filter(|id| !id.trim().is_empty()).collect();
-    let (summaries, scanned_count, skipped_lines) = tauri::async_runtime::spawn_blocking(move || {
-        let (conversations, scanned_count, skipped_lines) = scan_codex_sessions()?;
-        let mut conn = open_db()?;
-        let summaries = conversations
-            .into_iter()
-            .filter(|conversation| selected.contains(&conversation.id))
-            .map(|conversation| import_codex_conversation(&mut conn, conversation))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok::<_, String>((summaries, scanned_count, skipped_lines))
-    })
-    .await
-    .map_err(|e| format!("Codex 导入失败：{e}"))??;
-    let mut imported_count = 0;
-    for summary in &summaries {
-        if summary.1 {
-            gateway_controller
-                .publish_history_sync(build_history_sync_upsert(&summary.0))
-                .await;
-            imported_count += 1;
-        }
-    }
-    Ok(CodexImportResult {
-        scanned_count,
-        imported_count,
-        skipped_lines,
-    })
+    let (conversations, _scanned_count, skipped_lines) =
+        tauri::async_runtime::spawn_blocking(scan_codex_sessions)
+            .await
+            .map_err(|e| format!("Codex 扫描失败：{e}"))??;
+    run_import(ImportProviderConfig::codex("codex"), conversations, skipped_lines, selected, &gateway_controller).await
 }

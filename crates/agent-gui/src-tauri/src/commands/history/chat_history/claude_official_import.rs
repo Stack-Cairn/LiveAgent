@@ -1,18 +1,12 @@
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaudeOfficialImportResult {
-    pub scanned_count: usize,
-    pub imported_count: usize,
-    pub skipped_lines: usize,
-}
+// Claude official importer. Locates & parses `conversations.json` inside a
+// user-selected Claude data-export ZIP into [`ImportConversation`]. The shared
+// struct, DB write, command shell and the `claude_code_assistant` formatter all
+// live in `super::import`; this module just supplies the ZIP-specific scan +
+// parse plus two tauri commands wired to that core.
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ClaudeOfficialImportPreview {
-    pub sessions: Vec<ClaudeCodeConversation>,
-    pub scanned_count: usize,
-    pub skipped_lines: usize,
-}
+use super::import::*;
+use super::*;
+use std::collections::HashMap;
 
 const CLAUDE_OFFICIAL_CONVERSATIONS_ENTRY: &str = "conversations.json";
 
@@ -22,7 +16,7 @@ fn claude_official_default_cwd() -> Result<String, String> {
 
 fn claude_official_workspace_cwd(conversation: &Value, default_cwd: &str) -> String {
     for key in ["cwd", "source_cwd", "workspace_path", "workspacePath"] {
-        let Some(cwd) = claude_code_string(conversation.get(key)) else { continue };
+        let Some(cwd) = import_string(conversation.get(key)) else { continue };
         let path = std::path::Path::new(&cwd);
         if path.is_absolute()
             && !path.starts_with("/home/claude")
@@ -72,9 +66,9 @@ fn claude_official_attachment_text(message: &Value) -> Vec<Value> {
         .into_iter()
         .flatten()
     {
-        let name = claude_code_string(attachment.get("file_name"))
+        let name = import_string(attachment.get("file_name"))
             .unwrap_or_else(|| "unnamed attachment".to_string());
-        let file_type = claude_code_string(attachment.get("file_type"));
+        let file_type = import_string(attachment.get("file_type"));
         let size = attachment.get("file_size").and_then(Value::as_u64);
         let mut text = format!("[Imported attachment: {name}");
         if let Some(file_type) = file_type {
@@ -84,7 +78,7 @@ fn claude_official_attachment_text(message: &Value) -> Vec<Value> {
             text.push_str(&format!(", {size} bytes"));
         }
         text.push(']');
-        if let Some(extracted) = claude_code_string(attachment.get("extracted_content")) {
+        if let Some(extracted) = import_string(attachment.get("extracted_content")) {
             text.push('\n');
             text.push_str(&extracted);
         }
@@ -96,7 +90,7 @@ fn claude_official_attachment_text(message: &Value) -> Vec<Value> {
         .into_iter()
         .flatten()
     {
-        let Some(name) = claude_code_string(file.get("file_name")) else { continue };
+        let Some(name) = import_string(file.get("file_name")) else { continue };
         blocks.push(serde_json::json!({
             "type": "text",
             "text": format!("[Imported file reference: {name}; the original file was not included in the Claude official data]")
@@ -114,19 +108,19 @@ fn claude_official_content_blocks(
     for block in value.and_then(Value::as_array).into_iter().flatten() {
         match block.get("type").and_then(Value::as_str) {
             Some("text") => {
-                if let Some(text) = claude_code_string(block.get("text")) {
+                if let Some(text) = import_string(block.get("text")) {
                     assistant_blocks.push(serde_json::json!({ "type": "text", "text": text }));
                 }
             }
             Some("thinking") => {
-                if let Some(thinking) = claude_code_string(block.get("thinking")) {
+                if let Some(thinking) = import_string(block.get("thinking")) {
                     assistant_blocks.push(serde_json::json!({ "type": "thinking", "thinking": thinking }));
                 }
             }
             Some("tool_use") => {
-                let id = claude_code_string(block.get("id"))
+                let id = import_string(block.get("id"))
                     .unwrap_or_else(|| format!("claude-official-tool-{}", tool_names.len()));
-                let name = claude_code_string(block.get("name"))
+                let name = import_string(block.get("name"))
                     .unwrap_or_else(|| "claude_official_tool".to_string());
                 tool_names.insert(id.clone(), name.clone());
                 assistant_blocks.push(serde_json::json!({
@@ -137,8 +131,8 @@ fn claude_official_content_blocks(
                 }));
             }
             Some("tool_result") => {
-                let tool_call_id = claude_code_string(block.get("tool_use_id"))
-                    .or_else(|| claude_code_string(block.get("tool_call_id")))
+                let tool_call_id = import_string(block.get("tool_use_id"))
+                    .or_else(|| import_string(block.get("tool_call_id")))
                     .unwrap_or_else(|| format!("claude-official-tool-result-{}", tool_results.len()));
                 let tool_name = tool_names
                     .get(&tool_call_id)
@@ -148,7 +142,7 @@ fn claude_official_content_blocks(
                     "role": "toolResult",
                     "toolCallId": tool_call_id,
                     "toolName": tool_name,
-                    "content": claude_code_text_blocks(block.get("content")),
+                    "content": import_text_blocks(block.get("content")),
                     "isError": block.get("is_error").and_then(Value::as_bool).unwrap_or(false)
                 }));
             }
@@ -161,12 +155,12 @@ fn claude_official_content_blocks(
 fn convert_claude_official_conversation(
     conversation: &Value,
     default_cwd: &str,
-) -> Option<ClaudeCodeConversation> {
+) -> Option<ImportConversation> {
     let cwd = claude_official_workspace_cwd(conversation, default_cwd);
-    let session_id = claude_code_string(conversation.get("uuid"))?;
-    let created_at = claude_code_timestamp(conversation.get("created_at").and_then(Value::as_str))
+    let session_id = import_string(conversation.get("uuid"))?;
+    let created_at = import_timestamp(conversation.get("created_at").and_then(Value::as_str))
         .unwrap_or_else(now_ms);
-    let mut updated_at = claude_code_timestamp(conversation.get("updated_at").and_then(Value::as_str))
+    let mut updated_at = import_timestamp(conversation.get("updated_at").and_then(Value::as_str))
         .unwrap_or(created_at);
     let mut messages = Vec::new();
     let mut tool_names = HashMap::new();
@@ -179,14 +173,14 @@ fn convert_claude_official_conversation(
         .flatten()
         .enumerate()
     {
-        let timestamp = claude_code_timestamp(message.get("created_at").and_then(Value::as_str))
+        let timestamp = import_timestamp(message.get("created_at").and_then(Value::as_str))
             .unwrap_or(updated_at);
         updated_at = updated_at.max(timestamp);
-        let message_id = claude_code_string(message.get("uuid"))
+        let message_id = import_string(message.get("uuid"))
             .unwrap_or_else(|| format!("{session_id}:{index}"));
         match message.get("sender").and_then(Value::as_str) {
             Some("human") => {
-                let mut content = claude_code_text_blocks(message.get("text"));
+                let mut content = import_text_blocks(message.get("text"));
                 if content.is_empty() {
                     content = message
                         .get("content")
@@ -194,7 +188,7 @@ fn convert_claude_official_conversation(
                         .into_iter()
                         .flatten()
                         .filter(|block| block.get("type").and_then(Value::as_str) == Some("text"))
-                        .filter_map(|block| claude_code_string(block.get("text")))
+                        .filter_map(|block| import_string(block.get("text")))
                         .map(|text| serde_json::json!({ "type": "text", "text": text }))
                         .collect();
                 }
@@ -219,7 +213,7 @@ fn convert_claude_official_conversation(
                 let (mut content, mut tool_results) =
                     claude_official_content_blocks(message.get("content"), &mut tool_names);
                 if content.is_empty() {
-                    content = claude_code_text_blocks(message.get("text"));
+                    content = import_text_blocks(message.get("text"));
                 }
                 if !content.is_empty() {
                     messages.push(claude_code_assistant(
@@ -244,12 +238,12 @@ fn convert_claude_official_conversation(
     if messages.is_empty() {
         return None;
     }
-    let title = claude_code_string(conversation.get("name"))
+    let title = import_string(conversation.get("name"))
         .or_else(|| first_user_text.map(|text| text.chars().take(80).collect()))
         .unwrap_or_else(|| format!("Claude conversation {session_id}"));
     let message_count = messages.len();
-    Some(ClaudeCodeConversation {
-        id: format!("claude-official:{session_id}"),
+    Some(ImportConversation {
+        id: ImportProviderConfig::claude_official().id_prefix_with(&session_id),
         session_id,
         title,
         model: "claude-official".to_string(),
@@ -264,7 +258,7 @@ fn convert_claude_official_conversation(
 
 fn scan_claude_official(
     zip_path: &std::path::Path,
-) -> Result<(Vec<ClaudeCodeConversation>, usize, usize), String> {
+) -> Result<(Vec<ImportConversation>, usize, usize), String> {
     let records = read_claude_official_conversations(zip_path)?;
     let default_cwd = claude_official_default_cwd()?;
     let scanned_count = records.len();
@@ -280,63 +274,8 @@ fn scan_claude_official(
     Ok((conversations, scanned_count, skipped_lines))
 }
 
-fn import_claude_official_conversation(
-    conn: &mut Connection,
-    conversation: ClaudeCodeConversation,
-) -> Result<(ChatHistorySummary, bool), String> {
-    if let Ok(summary) = get_summary_by_id(conn, &conversation.id) {
-        return Ok((summary, false));
-    }
-    let messages_json = serde_json::to_string(&conversation.messages)
-        .map_err(|error| format!("序列化 Claude 官方会话消息失败：{error}"))?;
-    let message_count = conversation.message_count as i64;
-    let segment_id = format!("{}:segment:0", conversation.id);
-    let start_message_id = conversation.messages.first().and_then(|message| claude_code_string(message.get("id")));
-    let end_message_id = conversation.messages.last().and_then(|message| claude_code_string(message.get("id")));
-    let input = ChatHistoryUpsertInput {
-        id: conversation.id.clone(),
-        title: conversation.title,
-        provider_id: "claude_official".to_string(),
-        model: conversation.model,
-        session_id: Some(conversation.session_id),
-        cwd: conversation.cwd,
-        selected_model_json: None,
-        context_meta_json: serde_json::json!({ "schemaVersion": 3, "activeSegmentIndex": 0, "totalSegmentCount": 1, "totalMessageCount": message_count }).to_string(),
-        active_segment_index: 0,
-        total_segment_count: 1,
-        total_message_count: message_count,
-        segments: vec![ChatHistorySegmentInput {
-            segment_index: 0,
-            segment_id,
-            summary_json: None,
-            messages_json,
-            message_count,
-            start_message_id,
-            end_message_id,
-            created_at: conversation.created_at,
-            updated_at: conversation.updated_at,
-        }],
-        created_at: Some(conversation.created_at),
-        updated_at: conversation.updated_at,
-    };
-    validate_upsert_input(&input)?;
-    let conversation_input = ChatHistoryConversationInput {
-        id: input.id.clone(), title: input.title, provider_id: input.provider_id, model: input.model,
-        session_id: input.session_id, cwd: input.cwd, selected_model_json: input.selected_model_json,
-        context_meta_json: input.context_meta_json, active_segment_index: input.active_segment_index,
-        total_segment_count: input.total_segment_count, total_message_count: input.total_message_count,
-        created_at: input.created_at, updated_at: input.updated_at,
-    };
-    let tx = conn.transaction().map_err(|error| format!("开启 Claude 官方会话导入事务失败：{error}"))?;
-    upsert_chat_history_header(&tx, &conversation_input)?;
-    sync_segments(&tx, input.id.trim(), &input.segments, input.total_segment_count)?;
-    verify_chat_history_consistency(&tx, input.id.trim())?;
-    tx.commit().map_err(|error| format!("提交 Claude 官方会话导入事务失败：{error}"))?;
-    Ok((get_summary_by_id(conn, input.id.trim())?, true))
-}
-
 #[tauri::command]
-pub async fn chat_history_scan_claude_official(zip_path: String) -> Result<ClaudeOfficialImportPreview, String> {
+pub async fn chat_history_scan_claude_official(zip_path: String) -> Result<ImportPreview, String> {
     let (sessions, scanned_count, skipped_lines) = tauri::async_runtime::spawn_blocking(move || {
         let (conversations, scanned_count, skipped_lines) = scan_claude_official(std::path::Path::new(&zip_path))?;
         let conn = open_db()?;
@@ -346,7 +285,7 @@ pub async fn chat_history_scan_claude_official(zip_path: String) -> Result<Claud
         }).collect();
         Ok::<_, String>((sessions, scanned_count, skipped_lines))
     }).await.map_err(|error| format!("Claude 官方数据扫描失败：{error}"))??;
-    Ok(ClaudeOfficialImportPreview { sessions, scanned_count, skipped_lines })
+    Ok(ImportPreview { sessions, scanned_count, skipped_lines })
 }
 
 #[tauri::command]
@@ -354,24 +293,13 @@ pub async fn chat_history_import_claude_official(
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
     zip_path: String,
     ids: Vec<String>,
-) -> Result<ClaudeOfficialImportResult, String> {
+) -> Result<ImportResult, String> {
     let selected: HashSet<String> = ids.into_iter().filter(|id| !id.trim().is_empty()).collect();
-    let (summaries, scanned_count, skipped_lines) = tauri::async_runtime::spawn_blocking(move || {
-        let (conversations, scanned_count, skipped_lines) = scan_claude_official(std::path::Path::new(&zip_path))?;
-        let mut conn = open_db()?;
-        let summaries = conversations.into_iter().filter(|conversation| selected.contains(&conversation.id))
-            .map(|conversation| import_claude_official_conversation(&mut conn, conversation))
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok::<_, String>((summaries, scanned_count, skipped_lines))
-    }).await.map_err(|error| format!("Claude 官方数据导入失败：{error}"))??;
-    let mut imported_count = 0;
-    for summary in &summaries {
-        if summary.1 {
-            gateway_controller.publish_history_sync(build_history_sync_upsert(&summary.0)).await;
-            imported_count += 1;
-        }
-    }
-    Ok(ClaudeOfficialImportResult { scanned_count, imported_count, skipped_lines })
+    let (conversations, _scanned_count, skipped_lines) =
+        tauri::async_runtime::spawn_blocking(move || scan_claude_official(std::path::Path::new(&zip_path)))
+            .await
+            .map_err(|error| format!("Claude 官方数据导入失败：{error}"))??;
+    run_import(ImportProviderConfig::claude_official(), conversations, skipped_lines, selected, &gateway_controller).await
 }
 
 #[cfg(test)]

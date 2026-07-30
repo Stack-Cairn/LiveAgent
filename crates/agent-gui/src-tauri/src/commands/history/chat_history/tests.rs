@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use super::codex_import::{convert_codex_file, codex_remap_cwd};
+    use super::import::*;
     use super::*;
     use serde_json::json;
 
@@ -2604,8 +2606,13 @@ mod tests {
         .expect("write rollout");
         let titles = HashMap::from([("session-1".to_string(), "Imported title".to_string())]);
 
-        let (conversation, skipped) =
-            convert_codex_file(&path, &titles, temp.path()).expect("convert rollout");
+        let (conversation, skipped) = convert_codex_file(
+            &path,
+            &titles,
+            std::path::Path::new("/nonexistent/Codex"),
+            std::path::Path::new("/nonexistent/default-project"),
+        )
+        .expect("convert rollout");
         let conversation = conversation.expect("conversation");
 
         assert_eq!(skipped, 1);
@@ -2623,29 +2630,36 @@ mod tests {
 
     #[test]
     fn codex_temporary_workdir_uses_default_project() {
-        let home = std::path::Path::new("/Users/tester");
+        let codex_temp = std::path::Path::new("/Users/tester/Documents/Codex");
+        let default_project = std::path::Path::new("/Users/tester/.liveagent/default-project");
         assert_eq!(
-            codex_import_cwd(Some("/Users/tester/Documents/Codex".to_string()), home).as_deref(),
+            codex_remap_cwd(Some("/Users/tester/Documents/Codex".to_string()), codex_temp, default_project).as_deref(),
             Some("/Users/tester/.liveagent/default-project")
         );
         assert_eq!(
-            codex_import_cwd(
+            codex_remap_cwd(
                 Some("/Users/tester/Documents/Codex/session-1".to_string()),
-                home
+                codex_temp,
+                default_project
             )
             .as_deref(),
             Some("/Users/tester/.liveagent/default-project")
         );
         assert_eq!(
-            codex_import_cwd(Some("/Users/tester/Projects/app".to_string()), home).as_deref(),
+            codex_remap_cwd(Some("/Users/tester/Projects/app".to_string()), codex_temp, default_project).as_deref(),
             Some("/Users/tester/Projects/app")
+        );
+        assert_eq!(
+            codex_remap_cwd(None, codex_temp, default_project).as_deref(),
+            None
         );
     }
 
     #[test]
     fn codex_import_skips_an_existing_conversation() {
         let mut conn = open_test_db().expect("open test db");
-        let conversation = CodexConversation {
+        let config = ImportProviderConfig::codex("codex");
+        let conversation = ImportConversation {
             id: "codex:session-1".to_string(),
             session_id: "session-1".to_string(),
             title: "Imported".to_string(),
@@ -2659,13 +2673,15 @@ mod tests {
                 "content": [{ "type": "text", "text": "Hello" }],
                 "timestamp": 1_700_000_000_000_i64
             })],
+            message_count: 1,
+            already_imported: false,
         };
 
-        let (_, inserted) = import_codex_conversation(&mut conn, conversation).expect("first import");
+        let (_, inserted) = import_conversation(&config, &mut conn, conversation).expect("first import");
         assert!(inserted);
         rename_chat_history_sync(&conn, "codex:session-1", "Keep my title").expect("rename");
 
-        let duplicate = CodexConversation {
+        let duplicate = ImportConversation {
             id: "codex:session-1".to_string(),
             session_id: "session-1".to_string(),
             title: "Overwrite".to_string(),
@@ -2679,9 +2695,11 @@ mod tests {
                 "content": [{ "type": "text", "text": "New" }],
                 "timestamp": 1_700_000_000_200_i64
             })],
+            message_count: 1,
+            already_imported: false,
         };
         let (summary, inserted) =
-            import_codex_conversation(&mut conn, duplicate).expect("duplicate import");
+            import_conversation(&config, &mut conn, duplicate).expect("duplicate import");
 
         assert!(!inserted);
         assert_eq!(summary.title, "Keep my title");
