@@ -1,0 +1,36 @@
+name: Stale
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          days-before-issue-stale: 14
+          days-before-issue-close: 14
+          days-before-pr-stale: 14
+          days-before-pr-close: 14
+          stale-issue-message: >-
+            This issue has been inactive for 14 days and is marked stale.
+            It will be closed in 14 days if there is no further activity.
+          close-issue-message: >-
+            Closed due to inactivity. Comment or reopen if this is still relevant.
+          stale-pr-message: >-
+            This PR has been inactive for 14 days and is marked stale.
+            It will be closed in 14 days if there is no further activity.
+            Push an update or comment to keep it open.
+          close-pr-message: >-
+            Closed due to inactivity. Reopen and push an update if you want to
+            continue this work.
+          exempt-issue-labels: "pinned,roadmap,help wanted,good first issue"
+          exempt-pr-labels: "pinned,governance-exempt"
+          exempt-all-milestones: true

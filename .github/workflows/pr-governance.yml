@@ -19,6 +19,8 @@ jobs:
     if: ${{ !github.event.pull_request.draft && github.event.pull_request.state == 'open' }}
     steps:
       - uses: actions/github-script@v8
+        env:
+          DRAFT_PAT: ${{ secrets.PR_GOVERNANCE_PAT }}
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -97,17 +99,45 @@ jobs:
               );
             }
 
-            // 汇总:更新置顶报告评论;不合规则转为 draft。
+            // 汇总:不合规先尝试转 draft,再按实际结果生成报告,避免文案与真实状态不符。
             const passed = problems.length === 0;
+
+            // 转失败(未配 PAT / token 失效)只警告:下面的 setFailed 会把检查置红,
+            // 配合 main 的 required status check 仍能阻止合并,治理不会失效。
+            let drafted = false;
+            if (!passed) {
+              try {
+                const pat = process.env.DRAFT_PAT;
+                await github.graphql(
+                  `mutation ($id: ID!) {
+                    convertPullRequestToDraft(input: { pullRequestId: $id }) {
+                      pullRequest { isDraft }
+                    }
+                  }`,
+                  {
+                    id: pr.node_id,
+                    ...(pat ? { headers: { authorization: `Bearer ${pat}` } } : {}),
+                  },
+                );
+                drafted = true;
+              } catch (e) {
+                core.warning(`Failed to convert to draft (${e.message}); the check is still red and merge blocking is unaffected.`);
+              }
+            }
+
             const report = passed
               ? `${MARKER}\n**PR governance checks passed.** Awaiting human review.`
               : [
                   MARKER,
-                  '**PR governance checks failed — this PR has been converted to draft.**',
+                  drafted
+                    ? '**PR governance checks failed — this PR has been converted to draft.**'
+                    : '**PR governance checks failed.**',
                   '',
                   ...problems.map((p) => `- ${p}`),
                   '',
-                  'Fix the items above, then click **Ready for review** to re-run the checks.',
+                  drafted
+                    ? 'Fix the items above, then click **Ready for review** to re-run the checks.'
+                    : 'Fix the items above — pushing new commits or editing the PR body will re-run the checks.',
                 ].join('\n');
 
             const comments = await github.paginate(github.rest.issues.listComments, {
@@ -138,19 +168,5 @@ jobs:
             }
 
             if (!passed) {
-              // 即便转 draft 失败(token 权限不足),下面的 setFailed 也会把检查置红,
-              // 配合 main 的 required status check 仍能阻止合并,治理不会失效。
-              try {
-                await github.graphql(
-                  `mutation ($id: ID!) {
-                    convertPullRequestToDraft(input: { pullRequestId: $id }) {
-                      pullRequest { isDraft }
-                    }
-                  }`,
-                  { id: pr.node_id },
-                );
-              } catch (e) {
-                core.warning(`Failed to convert to draft (${e.message}); the check is still red and merge blocking is unaffected.`);
-              }
               core.setFailed(`PR governance checks failed:\n- ${problems.join('\n- ')}`);
             }
