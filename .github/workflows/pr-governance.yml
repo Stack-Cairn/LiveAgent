@@ -108,17 +108,27 @@ jobs:
             if (!passed) {
               try {
                 const pat = process.env.DRAFT_PAT;
-                await github.graphql(
-                  `mutation ($id: ID!) {
-                    convertPullRequestToDraft(input: { pullRequestId: $id }) {
-                      pullRequest { isDraft }
-                    }
-                  }`,
-                  {
-                    id: pr.node_id,
-                    ...(pat ? { headers: { authorization: `Bearer ${pat}` } } : {}),
+                if (!pat) throw new Error('PR_GOVERNANCE_PAT is not configured');
+                // 不走 github.graphql:octokit 的 auth 钩子会强制覆盖 authorization 头,传入的 PAT 会被 GITHUB_TOKEN 顶掉,而该 mutation 不接受 integration token。
+                const res = await fetch('https://api.github.com/graphql', {
+                  method: 'POST',
+                  headers: {
+                    authorization: `Bearer ${pat}`,
+                    'content-type': 'application/json',
                   },
-                );
+                  body: JSON.stringify({
+                    query: `mutation ($id: ID!) {
+                      convertPullRequestToDraft(input: { pullRequestId: $id }) {
+                        pullRequest { isDraft }
+                      }
+                    }`,
+                    variables: { id: pr.node_id },
+                  }),
+                });
+                const out = await res.json();
+                if (!res.ok || out.errors?.length) {
+                  throw new Error(out.errors?.map((e) => e.message).join('; ') || `HTTP ${res.status}`);
+                }
                 drafted = true;
               } catch (e) {
                 core.warning(`Failed to convert to draft (${e.message}); the check is still red and merge blocking is unaffected.`);
