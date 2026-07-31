@@ -79,19 +79,16 @@ export function ConversationsSection() {
               {t("settings.claudeImportDescription")}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleScan("claude-code")}
-              disabled={busy}
-            >
-              {scanning === "claude-code" || importing === "claude-code" ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
-              {t("chat.history.claudeCodeImport")}
-            </Button>
-          </div>
+          <Button type="button" onClick={() => void handleScan("claude-code")} disabled={busy}>
+            {scanning === "claude-code" || importing === "claude-code" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            {scanning === "claude-code" || importing === "claude-code"
+              ? t("chat.history.claudeCodeImporting")
+              : t("chat.history.claudeCodeImport")}
+          </Button>
         </div>
         {sourceResult ? (
           <div className="mt-4 rounded-xl bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
