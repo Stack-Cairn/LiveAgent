@@ -478,6 +478,12 @@ export async function setChatHistoryModel(id: string, selectedModelJson: string)
   );
 }
 
+export async function setChatHistoryCwd(id: string, cwd: string) {
+  return withConversationWriteLock(id, () =>
+    invoke<ChatHistorySummary>("chat_history_set_cwd", { id, cwd }),
+  );
+}
+
 export async function getChatHistoryShare(id: string) {
   return invoke<ChatHistoryShareStatus>("chat_history_share_get", { id });
 }
