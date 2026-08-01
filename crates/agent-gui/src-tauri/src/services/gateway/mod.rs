@@ -45,7 +45,7 @@ pub use gateway_proto::v2 as proto;
 
 mod chat;
 mod chat_inbox;
-mod chat_ingress;
+pub(crate) mod chat_ingress;
 mod chat_ingress_transport;
 mod connection;
 mod controller;

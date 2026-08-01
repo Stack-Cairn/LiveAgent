@@ -1332,7 +1332,6 @@ pub(crate) fn system_create_project_folder_sync(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Option<String>, String> {
     crate::compat::async_runtime::spawn_blocking(move || {
         let mut dialog = FileDialog::new();
@@ -1348,7 +1347,6 @@ pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Optio
     .map_err(|e| format!("system_pick_folder join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_pick_file(
     initial_workdir: Option<String>,
     filter_name: Option<String>,
@@ -1372,7 +1370,6 @@ pub async fn system_pick_file(
     .map_err(|e| format!("system_pick_file join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_create_project_folder(
     parent: String,
     name: String,
@@ -1382,7 +1379,6 @@ pub async fn system_create_project_folder(
         .map_err(|e| format!("system_create_project_folder join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_pick_readable_files(
     workdir: String,
     max_files: Option<usize>,
@@ -1394,7 +1390,6 @@ pub async fn system_pick_readable_files(
     .map_err(|e| format!("system_pick_readable_files join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_import_readable_file_paths(
     workdir: String,
     paths: Vec<String>,
@@ -1407,7 +1402,6 @@ pub async fn system_import_readable_file_paths(
     .map_err(|e| format!("system_import_readable_file_paths join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_import_uploaded_readable_files(
     workdir: String,
     files: Vec<SystemUploadedReadableFileInput>,
@@ -1420,7 +1414,6 @@ pub async fn system_import_uploaded_readable_files(
     .map_err(|e| format!("system_import_uploaded_readable_files join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_import_pasted_texts(
     workdir: String,
     texts: Vec<SystemPastedTextInput>,
@@ -1440,7 +1433,6 @@ pub async fn system_import_pasted_texts(
     .map_err(|e| format!("system_import_pasted_texts join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_read_uploaded_image_preview(
     workdir: String,
     absolute_path: String,
@@ -1452,7 +1444,6 @@ pub async fn system_read_uploaded_image_preview(
     .map_err(|e| format!("system_read_uploaded_image_preview join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_read_uploaded_native_attachment(
     workdir: String,
     absolute_path: Option<String>,
@@ -1465,14 +1456,12 @@ pub async fn system_read_uploaded_native_attachment(
     .map_err(|e| format!("system_read_uploaded_native_attachment join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn system_list_skill_files() -> Result<SystemListSkillFilesResponse, String> {
     crate::compat::async_runtime::spawn_blocking(system_list_skill_files_sync)
         .await
         .map_err(|e| format!("system_list_skill_files join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn system_ensure_builtin_skills(
 ) -> Result<Vec<crate::services::skills::SystemBuiltinSkillSeedResponse>, String> {
     crate::compat::async_runtime::spawn_blocking(crate::services::skills::ensure_builtin_agent_skills_sync)
@@ -1480,7 +1469,6 @@ pub async fn system_ensure_builtin_skills(
         .map_err(|e| format!("system_ensure_builtin_skills join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_manage_skill(payload: Value) -> Result<SystemManageSkillResponse, String> {
     crate::compat::async_runtime::spawn_blocking(move || {
         crate::services::skills::system_manage_skill_sync(payload)
@@ -1489,7 +1477,6 @@ pub async fn system_manage_skill(payload: Value) -> Result<SystemManageSkillResp
     .map_err(|e| format!("system_manage_skill join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn system_read_skill_text(
     path: String,
     offset: Option<usize>,
@@ -1500,7 +1487,6 @@ pub async fn system_read_skill_text(
         .map_err(|e| format!("system_read_skill_text join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn system_read_skill_metadata(
     path: String,
 ) -> Result<SystemReadSkillMetadataResponse, String> {
@@ -1509,7 +1495,6 @@ pub async fn system_read_skill_metadata(
         .map_err(|e| format!("system_read_skill_metadata join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_append_debug_jsonl(
     conversation_id: String,
     entry: Value,
@@ -1535,28 +1520,25 @@ fn system_clipboard_read_text_sync() -> Result<String, String> {
     }
 }
 
-#[tauri::command]
 pub async fn system_clipboard_read_text() -> Result<String, String> {
     crate::compat::async_runtime::spawn_blocking(system_clipboard_read_text_sync)
         .await
         .map_err(|e| format!("system_clipboard_read_text join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn system_begin_power_activity(
     activity_id: String,
     reason: String,
     ttl_ms: Option<u64>,
-    power_activity: tauri::State<'_, Arc<PowerActivityManager>>,
+    power_activity: &Arc<PowerActivityManager>,
 ) -> Result<(), String> {
     power_activity.begin(activity_id, reason, ttl_ms);
     Ok(())
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn system_end_power_activity(
     activity_id: String,
-    power_activity: tauri::State<'_, Arc<PowerActivityManager>>,
+    power_activity: &Arc<PowerActivityManager>,
 ) -> Result<(), String> {
     power_activity.end(activity_id);
     Ok(())

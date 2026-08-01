@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::runtime::terminal::TerminalSessionRegistry;
@@ -22,14 +22,12 @@ pub struct GlobalShortcutRegistry {
 pub struct WindowPinState(pub AtomicBool);
 
 /// 前端查询当前置顶状态（webview 重载后恢复置顶指示器）。
-#[tauri::command]
-pub fn app_window_pinned(pin_state: State<'_, Arc<WindowPinState>>) -> bool {
+pub fn app_window_pinned(pin_state: &Arc<WindowPinState>) -> bool {
     pin_state.0.load(Ordering::SeqCst)
 }
 
 /// 前端主动切换置顶（置顶指示器点击取消）；状态变更仍经
 /// `global-shortcut:pin-changed` 事件广播回前端。
-#[tauri::command]
 pub fn app_toggle_window_pin(app: AppHandle) {
     crate::toggle_main_window_pin(&app);
 }
@@ -68,11 +66,10 @@ pub struct GlobalShortcutFailure {
 /// 全量替换式注册：本命令是插件注册的唯一入口，`unregister_all` 会清掉
 /// 插件上的所有快捷键。日后若有其他模块要注册全局快捷键，必须并入本命令
 /// 的 bindings 走同一条替换路径，不能自行调用插件 register。
-#[tauri::command]
 pub fn app_set_global_shortcuts(
     app: AppHandle,
     bindings: Vec<GlobalShortcutBinding>,
-    registry: State<'_, Arc<GlobalShortcutRegistry>>,
+    registry: &Arc<GlobalShortcutRegistry>,
 ) -> Result<Vec<GlobalShortcutFailure>, String> {
     let manager = app.global_shortcut();
     manager
@@ -135,7 +132,6 @@ pub struct RuntimePlatformResponse {
     pub platform: &'static str,
 }
 
-#[tauri::command]
 pub fn app_runtime_platform() -> RuntimePlatformResponse {
     let platform = if cfg!(windows) {
         "windows"
@@ -147,20 +143,18 @@ pub fn app_runtime_platform() -> RuntimePlatformResponse {
     RuntimePlatformResponse { platform }
 }
 
-#[tauri::command]
 pub fn app_set_close_window_behavior(
     behavior: String,
-    close_window_behavior: State<'_, Arc<CloseWindowBehaviorState>>,
+    close_window_behavior: &Arc<CloseWindowBehaviorState>,
 ) -> Result<(), String> {
     close_window_behavior.store(parse_close_window_behavior(&behavior), Ordering::SeqCst);
     Ok(())
 }
 
-#[tauri::command]
 pub fn app_confirmed_exit(
     app: AppHandle,
-    allow_exit: State<'_, Arc<AtomicBool>>,
-    terminal_registry: State<'_, Arc<TerminalSessionRegistry>>,
+    allow_exit: &Arc<AtomicBool>,
+    terminal_registry: &Arc<TerminalSessionRegistry>,
 ) -> Result<(), String> {
     terminal_registry.close_all()?;
     allow_exit.store(true, Ordering::SeqCst);
@@ -169,7 +163,6 @@ pub fn app_confirmed_exit(
 }
 
 #[allow(dead_code)]
-#[tauri::command]
 pub async fn app_macos_traffic_light_metrics(
     window: tauri::Window,
 ) -> Result<Option<MacOsTrafficLightMetrics>, String> {

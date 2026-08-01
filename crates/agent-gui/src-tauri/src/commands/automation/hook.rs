@@ -266,16 +266,15 @@ fn truncate_response(text: &str) -> String {
     out
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn hook_run_script(
     workdir: Option<String>,
     script: String,
     timeout_ms: Option<u64>,
     scope_id: Option<String>,
     context: Option<HashMap<String, String>>,
-    registry: tauri::State<'_, Arc<HookScopeRegistry>>,
+    registry: &Arc<HookScopeRegistry>,
 ) -> Result<ShellRunResponse, String> {
-    let registry = Arc::clone(registry.inner());
+    let registry = Arc::clone(registry);
     let envs = normalize_context(context);
     crate::compat::async_runtime::spawn_blocking(move || {
         run_hook_script_sync(&registry, workdir, script, timeout_ms, scope_id, envs)
@@ -284,13 +283,12 @@ pub async fn hook_run_script(
     .map_err(|e| format!("hook_run_script join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn hook_run_http_requests(
     requests: Vec<HttpRequestInput>,
     scope_id: Option<String>,
-    registry: tauri::State<'_, Arc<HookScopeRegistry>>,
+    registry: &Arc<HookScopeRegistry>,
 ) -> Result<HookHttpRunResponse, String> {
-    let registry = Arc::clone(registry.inner());
+    let registry = Arc::clone(registry);
     crate::compat::async_runtime::spawn_blocking(move || {
         run_hook_http_requests_sync(&registry, requests, scope_id)
     })
@@ -298,10 +296,9 @@ pub async fn hook_run_http_requests(
     .map_err(|e| format!("hook_run_http_requests join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn hook_cancel_scope(
     scope_id: String,
-    registry: tauri::State<'_, Arc<HookScopeRegistry>>,
+    registry: &Arc<HookScopeRegistry>,
 ) -> Result<(), String> {
     registry.cancel(scope_id.trim())
 }

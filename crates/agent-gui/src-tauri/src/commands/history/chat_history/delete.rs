@@ -59,10 +59,9 @@ pub(crate) async fn chat_history_delete_inner(id: String) -> Result<(), String> 
     .map_err(|e| format!("chat_history_delete join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_delete(
     id: String,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<(), String> {
     let conversation_id = id.trim().to_string();
     chat_history_delete_inner(id).await?;

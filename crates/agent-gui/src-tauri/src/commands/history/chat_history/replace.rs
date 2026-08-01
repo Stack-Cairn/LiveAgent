@@ -153,14 +153,13 @@ pub(crate) async fn chat_history_replace_from_message_inner(
     .map_err(|e| format!("chat_history_replace_from_message join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_replace_from_message(
     id: String,
     base_message_ref: ChatHistoryMessageRef,
     replacement_message: Value,
     max_messages: i64,
     expected_revision: String,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistoryWindowRecord, String> {
     let result = chat_history_replace_from_message_inner(
         id,

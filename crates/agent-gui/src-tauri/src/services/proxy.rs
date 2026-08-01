@@ -75,8 +75,7 @@ struct ImageProxyQuery {
     url: String,
 }
 
-#[tauri::command]
-pub fn proxy_get_server_info(state: tauri::State<'_, Arc<ProxyServerState>>) -> ProxyServerInfo {
+pub fn proxy_get_server_info(state: &Arc<ProxyServerState>) -> ProxyServerInfo {
     state.info.clone()
 }
 

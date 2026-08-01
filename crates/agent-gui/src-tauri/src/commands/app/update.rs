@@ -468,7 +468,6 @@ fn build_updater(
         .map_err(|error| format!("failed to initialize updater: {error}"))
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn app_update_check(
     app: AppHandle,
     include_prerelease: bool,
@@ -512,7 +511,6 @@ pub async fn app_update_check(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn app_update_install(
     app: AppHandle,
     include_prerelease: bool,
@@ -567,7 +565,6 @@ pub async fn app_update_install(
     ))
 }
 
-#[tauri::command]
 pub fn app_restart(app: AppHandle) -> Result<(), String> {
     // restart() tears the process down without firing ExitRequested/Exit
     // (sync command, main thread), so the exit-path cleanup must run here or

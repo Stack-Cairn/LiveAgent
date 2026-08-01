@@ -13,6 +13,9 @@ pub mod runtime_commands;
 #[path = "workspace/mod.rs"]
 pub mod workspace_commands;
 
+#[cfg(feature = "desktop")]
+pub mod adapters;
+
 pub use app_commands::app;
 pub use app_commands::system;
 pub use app_commands::tray;

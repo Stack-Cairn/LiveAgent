@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::State;
 
 use crate::runtime::shell_runner::{run_shell_script, ShellRunRegistry, ShellRunResponse};
 
@@ -10,9 +9,8 @@ pub struct ShellCancelResponse {
     cancelled: bool,
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn shell_run(
-    registry: State<'_, Arc<ShellRunRegistry>>,
+    registry: &Arc<ShellRunRegistry>,
     workdir: String,
     command: String,
     cwd: Option<String>,
@@ -49,9 +47,8 @@ pub async fn shell_run(
 
 /// Cancels any run registered in the shared `ShellRunRegistry` — shell
 /// commands, MCP tool calls, and SSH exec all park their cancel tokens there.
-#[tauri::command(rename_all = "snake_case")]
 pub fn runtime_cancel(
-    registry: State<'_, Arc<ShellRunRegistry>>,
+    registry: &Arc<ShellRunRegistry>,
     run_id: String,
 ) -> ShellCancelResponse {
     ShellCancelResponse {
