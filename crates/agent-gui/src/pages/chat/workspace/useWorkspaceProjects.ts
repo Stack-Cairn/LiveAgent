@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { invoke } from "../../../lib/tauriBridge";
+import { revealItemInDir } from "../../../lib/tauriBridge";
 import {
   type Dispatch,
   type MutableRefObject,

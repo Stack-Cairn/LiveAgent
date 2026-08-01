@@ -1,6 +1,6 @@
 import type { Message } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke } from "../../../lib/tauriBridge";
+import { listen } from "../../../lib/tauriBridge";
 import { useCallback, useEffect, useRef } from "react";
 
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";

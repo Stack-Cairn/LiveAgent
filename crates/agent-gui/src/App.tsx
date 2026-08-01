@@ -1,6 +1,6 @@
 import type { Context } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke } from "./lib/tauriBridge";
+import { listen } from "./lib/tauriBridge";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";

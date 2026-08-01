@@ -1,5 +1,5 @@
 import type { Message } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../../lib/tauriBridge";
 import { normalizeConversationSystemPrompt } from "../context/systemPrompt";
 import {
   type ConversationViewState,

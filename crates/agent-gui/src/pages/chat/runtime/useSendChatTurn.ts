@@ -1,5 +1,5 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../../lib/tauriBridge";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { useCallback } from "react";
 import type {

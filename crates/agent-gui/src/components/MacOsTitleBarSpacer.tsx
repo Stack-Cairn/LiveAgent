@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../lib/tauriBridge";
 import { useEffect, useState } from "react";
 import type { AppUpdateController } from "../lib/appUpdates";
 import { cn } from "../lib/shared/utils";

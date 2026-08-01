@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GlassPanel } from "../../components/hub/HubChrome";
 import {

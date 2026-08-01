@@ -2,7 +2,7 @@ import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "../lib/tauriBridge";
 import {
   type ComponentProps,
   cloneElement,

@@ -1,4 +1,4 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "../../lib/tauriBridge";
 import {
   type CSSProperties,
   memo,

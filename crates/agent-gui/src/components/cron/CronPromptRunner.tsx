@@ -1,5 +1,5 @@
 import type { Context } from "@earendil-works/pi-ai";
-import { listen } from "@tauri-apps/api/event";
+import { listen } from "../../lib/tauriBridge";
 import { useEffect, useRef } from "react";
 import type { CompletePromptRunInput, PromptRunRequest } from "../../lib/automation";
 import { backend } from "../../lib/automation/backend";

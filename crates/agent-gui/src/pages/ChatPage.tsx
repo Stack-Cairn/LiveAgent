@@ -1,5 +1,5 @@
 import type { Context } from "@earendil-works/pi-ai";
-import { listen } from "@tauri-apps/api/event";
+import { listen } from "../lib/tauriBridge";
 import {
   type CSSProperties,
   type SetStateAction,
