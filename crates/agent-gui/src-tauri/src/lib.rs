@@ -1,3 +1,4 @@
+mod app_context;
 mod commands;
 mod compat;
 mod events;
@@ -644,31 +645,6 @@ fn configure_windows_window_chrome(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let automation_store = Arc::new(
-        services::automation::AutomationStore::open()
-            .expect("failed to initialize LiveAgent automation store"),
-    );
-    let automation_scheduler = Arc::new(services::automation::AutomationScheduler::new(
-        Arc::clone(&automation_store),
-    ));
-    let memory_store = Arc::new(
-        services::memory::MemoryStore::open().expect("failed to initialize LiveAgent memory store"),
-    );
-    let provider_usage_service =
-        Arc::new(services::provider_usage::ProviderUsageService::default());
-    let power_activity = Arc::new(services::power_activity::PowerActivityManager::default());
-    let managed_process_registry =
-        Arc::new(runtime::managed_process::ManagedProcessRegistry::open());
-    let terminal_registry = Arc::new(runtime::terminal::TerminalSessionRegistry::default());
-    let git_clone_task_registry = Arc::new(commands::git::GitCloneTaskRegistry::default());
-    let sftp_registry = Arc::new(runtime::sftp::SftpSessionRegistry::new(Arc::clone(
-        &terminal_registry,
-    )));
-    let allow_exit = Arc::new(AtomicBool::new(false));
-    let close_window_behavior = Arc::new(commands::app::CloseWindowBehaviorState::new(
-        commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
-    ));
-
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -687,28 +663,13 @@ pub fn run() {
                 })
                 .build(),
         )
+        // 纯桌面态：与 AppContext 无关的静态状态（headless 无窗口/托盘/快捷键）。
         .manage(Arc::new(commands::app::GlobalShortcutRegistry::default()))
         .manage(Arc::new(commands::app::WindowPinState::default()))
         .manage(Arc::new(commands::mcp::McpRuntimeManager::default()))
-        .manage(Arc::clone(&memory_store))
-        .manage(Arc::clone(&provider_usage_service))
-        .manage(Arc::clone(&power_activity))
         .manage(Arc::new(runtime::shell_runner::ShellRunRegistry::default()))
-        .manage(Arc::clone(&managed_process_registry))
-        .manage(Arc::clone(&terminal_registry))
-        .manage(Arc::clone(&sftp_registry))
-        .manage(Arc::clone(&git_clone_task_registry))
-        .manage(Arc::clone(&allow_exit))
-        .manage(Arc::clone(&close_window_behavior))
-        .manage(Arc::clone(&automation_store))
-        .manage(Arc::clone(&automation_scheduler))
         .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
         .setup({
-            let terminal_registry = Arc::clone(&terminal_registry);
-            let sftp_registry = Arc::clone(&sftp_registry);
-            let managed_process_registry = Arc::clone(&managed_process_registry);
-            let git_clone_task_registry = Arc::clone(&git_clone_task_registry);
-            let provider_usage_service = Arc::clone(&provider_usage_service);
             move |app| {
                 commands::history_db::initialize_history_db()?;
                 configure_system_tray(app)?;
@@ -722,65 +683,28 @@ pub fn run() {
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");
                 }
+                // 业务装配（headless 与 desktop 共用）：状态创建 + 依赖注入 + 后台任务。
                 let event_emitter: Arc<dyn crate::events::EventEmitter> =
                     crate::events::shared_emitter(app.handle().clone());
-                terminal_registry.attach_event_emitter(Arc::clone(&event_emitter));
-                sftp_registry.attach_event_emitter(Arc::clone(&event_emitter));
-                let gateway_controller = Arc::new(services::gateway::GatewayController::new(
-                    Arc::clone(&event_emitter),
-                    Arc::clone(&automation_store),
-                    Arc::clone(&memory_store),
-                    Arc::clone(&provider_usage_service),
-                    Arc::clone(&terminal_registry),
-                    Arc::clone(&sftp_registry),
-                    Arc::clone(&managed_process_registry),
-                    Arc::clone(&git_clone_task_registry),
-                ));
-                managed_process_registry.set_notifier(
-                    runtime::managed_process::ManagedProcessNotifier {
-                        event_emitter: Arc::clone(&event_emitter),
-                        gateway: Arc::downgrade(&gateway_controller),
-                    },
-                );
-                managed_process_registry.spawn_startup_reconcile();
-                managed_process_registry.spawn_monitor();
-                automation_store.set_notifier(services::automation::AutomationNotifier {
-                    event_emitter: Arc::clone(&event_emitter),
-                    gateway: Arc::downgrade(&gateway_controller),
-                    scheduler: Arc::downgrade(&automation_scheduler),
-                });
-                Arc::clone(&automation_scheduler).start();
-                app.manage(Arc::clone(&gateway_controller));
-                if let Err(error) = gateway_controller.start() {
-                    eprintln!("failed to start remote gateway controller: {error}");
-                }
-                crate::compat::async_runtime::spawn({
-                    let gateway_controller = Arc::clone(&gateway_controller);
-                    async move {
-                        if let Err(error) = gateway_controller.reload_from_db().await {
-                            eprintln!("failed to load remote gateway settings: {error}");
-                        }
-                    }
-                });
+                let ctx = app_context::AppContext::new(event_emitter);
+                manage_app_context_states(app, &ctx);
                 Ok(())
             }
         })
-        .on_window_event({
-            let allow_exit = Arc::clone(&allow_exit);
-            let close_window_behavior = Arc::clone(&close_window_behavior);
-            let terminal_registry = Arc::clone(&terminal_registry);
-            move |window, event| {
-                if window.label() != MAIN_WINDOW_LABEL {
-                    return;
-                }
+        .on_window_event(|window, event| {
+            if window.label() != MAIN_WINDOW_LABEL {
+                return;
+            }
 
-                if let WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    if commands::app::is_close_window_exit(&close_window_behavior) {
-                        request_app_exit(window.app_handle(), &allow_exit, &terminal_registry);
-                    } else if let Err(error) = window.hide() {
-                        eprintln!("failed to hide LiveAgent window on close: {error}");
-                    }
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let Some(ctx) = window.try_state::<Arc<app_context::AppContext>>() else {
+                    return;
+                };
+                api.prevent_close();
+                if commands::app::is_close_window_exit(&ctx.close_window_behavior) {
+                    request_app_exit(window.app_handle(), &ctx.allow_exit, &ctx.terminal_registry);
+                } else if let Err(error) = window.hide() {
+                    eprintln!("failed to hide LiveAgent window on close: {error}");
                 }
             }
         })
@@ -788,32 +712,34 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(move |_app, event| match event {
+    app.run(move |app, event| match event {
         tauri::RunEvent::Resumed => {
-            if let Some(gateway_controller) =
-                _app.try_state::<Arc<services::gateway::GatewayController>>()
-            {
-                if let Err(error) = gateway_controller.nudge_connection("app_resumed", true) {
+            if let Some(ctx) = app.try_state::<Arc<app_context::AppContext>>() {
+                if let Err(error) = ctx.gateway_controller.nudge_connection("app_resumed", true) {
                     eprintln!("failed to nudge gateway connection after app resume: {error}");
                 }
             }
         }
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { .. } => {
-            if let Err(error) = show_main_window(_app) {
+            if let Err(error) = show_main_window(app) {
                 eprintln!("failed to show LiveAgent window from dock reopen: {error}");
             }
         }
         tauri::RunEvent::ExitRequested { api, .. } => {
-            if !allow_exit.load(Ordering::SeqCst) {
-                let running_count = terminal_registry.running_session_count();
+            let Some(ctx) = app.try_state::<Arc<app_context::AppContext>>() else {
+                api.prevent_exit();
+                return;
+            };
+            if !ctx.allow_exit.load(Ordering::SeqCst) {
+                let running_count = ctx.terminal_registry.running_session_count();
                 if running_count > 0 {
-                    if let Err(error) = show_main_window(_app) {
+                    if let Err(error) = show_main_window(app) {
                         eprintln!(
                             "failed to show LiveAgent window before terminal exit confirm: {error}"
                         );
                     }
-                    if let Err(error) = _app.emit(
+                    if let Err(error) = app.emit(
                         TERMINAL_EXIT_REQUESTED_EVENT,
                         TerminalExitRequestedEvent { running_count },
                     ) {
@@ -824,12 +750,29 @@ pub fn run() {
             } else {
                 // Real exit: reclaim every non-isolated managed process
                 // before the OS tears us down (Drop is not guaranteed).
-                terminal_registry.shutdown_cleanup();
-                managed_process_registry.shutdown_cleanup();
-                git_clone_task_registry.shutdown_cleanup();
-                power_activity.clear_all();
+                ctx.terminal_registry.shutdown_cleanup();
+                ctx.managed_process_registry.shutdown_cleanup();
+                ctx.git_clone_task_registry.shutdown_cleanup();
+                ctx.power_activity.clear_all();
             }
         }
         _ => {}
     });
+}
+
+/// 将 `AppContext` 的各字段注册为 tauri `State`，供命令适配层按需解包。
+/// 注意：`State` 以类型区分，字段本身必须各自 `manage`（不能只 manage 整个 ctx）。
+fn manage_app_context_states(app: &tauri::App, ctx: &Arc<app_context::AppContext>) {
+    app.manage(Arc::clone(&ctx.automation_store));
+    app.manage(Arc::clone(&ctx.automation_scheduler));
+    app.manage(Arc::clone(&ctx.memory_store));
+    app.manage(Arc::clone(&ctx.provider_usage_service));
+    app.manage(Arc::clone(&ctx.power_activity));
+    app.manage(Arc::clone(&ctx.managed_process_registry));
+    app.manage(Arc::clone(&ctx.terminal_registry));
+    app.manage(Arc::clone(&ctx.sftp_registry));
+    app.manage(Arc::clone(&ctx.git_clone_task_registry));
+    app.manage(Arc::clone(&ctx.allow_exit));
+    app.manage(Arc::clone(&ctx.close_window_behavior));
+    app.manage(Arc::clone(&ctx.gateway_controller));
 }

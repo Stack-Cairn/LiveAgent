@@ -18,7 +18,9 @@ pub mod adapters;
 
 pub use app_commands::app;
 pub use app_commands::system;
+#[cfg(feature = "desktop")]
 pub use app_commands::tray;
+#[cfg(feature = "desktop")]
 pub use app_commands::update;
 
 pub use automation_commands::cron;

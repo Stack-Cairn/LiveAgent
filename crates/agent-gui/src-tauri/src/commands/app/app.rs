@@ -1,9 +1,16 @@
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU8, Ordering};
+#[cfg(feature = "desktop")]
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+#[cfg(feature = "desktop")]
+use std::sync::Mutex;
 
-use tauri::{AppHandle};
+#[cfg(feature = "desktop")]
+use tauri::AppHandle;
+#[cfg(feature = "desktop")]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
+#[cfg(feature = "desktop")]
 use crate::runtime::terminal::TerminalSessionRegistry;
 
 pub type CloseWindowBehaviorState = AtomicU8;
@@ -12,26 +19,31 @@ pub const CLOSE_WINDOW_BEHAVIOR_MINIMIZE: u8 = 0;
 pub const CLOSE_WINDOW_BEHAVIOR_EXIT: u8 = 1;
 
 /// 已注册全局快捷键 -> 动作 的映射，供插件回调反查动作。
+#[cfg(feature = "desktop")]
 #[derive(Default)]
 pub struct GlobalShortcutRegistry {
     entries: Mutex<Vec<(Shortcut, String)>>,
 }
 
 /// 主窗口置顶状态（快捷键切换用；独立 newtype 避免与其他 AtomicBool 状态类型冲突）。
+#[cfg(feature = "desktop")]
 #[derive(Default)]
 pub struct WindowPinState(pub AtomicBool);
 
 /// 前端查询当前置顶状态（webview 重载后恢复置顶指示器）。
+#[cfg(feature = "desktop")]
 pub fn app_window_pinned(pin_state: &Arc<WindowPinState>) -> bool {
     pin_state.0.load(Ordering::SeqCst)
 }
 
 /// 前端主动切换置顶（置顶指示器点击取消）；状态变更仍经
 /// `global-shortcut:pin-changed` 事件广播回前端。
+#[cfg(feature = "desktop")]
 pub fn app_toggle_window_pin(app: AppHandle) {
     crate::toggle_main_window_pin(&app);
 }
 
+#[cfg(feature = "desktop")]
 impl GlobalShortcutRegistry {
     pub fn lookup_action(&self, shortcut: &Shortcut) -> Option<String> {
         let entries = self.entries.lock().ok()?;
@@ -48,6 +60,7 @@ impl GlobalShortcutRegistry {
     }
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlobalShortcutBinding {
@@ -55,6 +68,7 @@ pub struct GlobalShortcutBinding {
     pub accelerator: String,
 }
 
+#[cfg(feature = "desktop")]
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlobalShortcutFailure {
@@ -66,6 +80,7 @@ pub struct GlobalShortcutFailure {
 /// 全量替换式注册：本命令是插件注册的唯一入口，`unregister_all` 会清掉
 /// 插件上的所有快捷键。日后若有其他模块要注册全局快捷键，必须并入本命令
 /// 的 bindings 走同一条替换路径，不能自行调用插件 register。
+#[cfg(feature = "desktop")]
 pub fn app_set_global_shortcuts(
     app: AppHandle,
     bindings: Vec<GlobalShortcutBinding>,
@@ -116,6 +131,7 @@ pub fn is_close_window_exit(state: &CloseWindowBehaviorState) -> bool {
     state.load(Ordering::SeqCst) == CLOSE_WINDOW_BEHAVIOR_EXIT
 }
 
+#[cfg(feature = "desktop")]
 #[allow(dead_code)]
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -151,6 +167,7 @@ pub fn app_set_close_window_behavior(
     Ok(())
 }
 
+#[cfg(feature = "desktop")]
 pub fn app_confirmed_exit(
     app: AppHandle,
     allow_exit: &Arc<AtomicBool>,
@@ -162,6 +179,7 @@ pub fn app_confirmed_exit(
     Ok(())
 }
 
+#[cfg(feature = "desktop")]
 #[allow(dead_code)]
 pub async fn app_macos_traffic_light_metrics(
     window: tauri::Window,
@@ -169,6 +187,7 @@ pub async fn app_macos_traffic_light_metrics(
     read_macos_traffic_light_metrics(window).await
 }
 
+#[cfg(feature = "desktop")]
 #[cfg(not(target_os = "macos"))]
 #[allow(dead_code)]
 async fn read_macos_traffic_light_metrics(
@@ -177,6 +196,7 @@ async fn read_macos_traffic_light_metrics(
     Ok(None)
 }
 
+#[cfg(feature = "desktop")]
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
 async fn read_macos_traffic_light_metrics(
@@ -195,6 +215,7 @@ async fn read_macos_traffic_light_metrics(
         .map_err(|_| "failed to receive macOS traffic light metrics".to_string())?
 }
 
+#[cfg(feature = "desktop")]
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
 fn read_macos_traffic_light_metrics_on_main_thread(
@@ -272,6 +293,7 @@ fn read_macos_traffic_light_metrics_on_main_thread(
 
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
+#[cfg(feature = "desktop")]
 fn macos_window_button_screen_frame(
     ns_window: &objc2_app_kit::NSWindow,
     button: &objc2_app_kit::NSButton,
