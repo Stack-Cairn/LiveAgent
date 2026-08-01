@@ -39,7 +39,7 @@ pub async fn gateway_connect(
     payload: Option<Value>,
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
-    let mut config = tauri::async_runtime::spawn_blocking(move || {
+    let mut config = crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         let persisted = load_remote_settings(&conn)?;
         let mut requested = match payload {

@@ -27,7 +27,7 @@ pub async fn shell_run(
     let cancel_token = normalized_run_id.as_deref().map(|id| registry.register(id));
     let registered_token = cancel_token.clone();
 
-    let join_result = tauri::async_runtime::spawn_blocking(move || {
+    let join_result = crate::compat::async_runtime::spawn_blocking(move || {
         run_shell_script(
             workdir,
             command,

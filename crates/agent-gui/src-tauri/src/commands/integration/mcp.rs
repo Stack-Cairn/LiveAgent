@@ -26,7 +26,7 @@ async fn run_blocking<R: Send + 'static>(
     label: &'static str,
     f: impl FnOnce() -> Result<R, String> + Send + 'static,
 ) -> Result<R, String> {
-    tauri::async_runtime::spawn_blocking(f)
+    crate::compat::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| format!("{label} join failed: {e}"))?
 }
@@ -1710,7 +1710,7 @@ pub async fn mcp_call_tool(
         .as_deref()
         .map(|id| run_registry.register(id));
     let registered_token = cancel_token.clone();
-    let mut task = tauri::async_runtime::spawn_blocking(move || {
+    let mut task = crate::compat::async_runtime::spawn_blocking(move || {
         let id = server_id.trim().to_string();
         if id.is_empty() {
             return Err("server_id cannot be empty".to_string());

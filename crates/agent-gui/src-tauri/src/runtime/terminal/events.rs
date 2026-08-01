@@ -1,5 +1,6 @@
 use std::sync::Arc;
-use tauri::Emitter;
+use crate::events::EventEmitterExt;
+
 
 use super::*;
 
@@ -27,9 +28,9 @@ impl TerminalSessionRegistry {
             ssh_local_forward: None,
         };
 
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
-                let _ = app_handle.emit(TERMINAL_EVENT_NAME, &payload);
+        if let Ok(event_emitter) = self.event_emitter.lock() {
+            if let Some(event_emitter) = event_emitter.as_ref() {
+                let _ = event_emitter.emit(TERMINAL_EVENT_NAME, &payload);
             }
         }
 
@@ -101,10 +102,10 @@ impl TerminalSessionRegistry {
         if payloads.is_empty() {
             return;
         }
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
+        if let Ok(event_emitter) = self.event_emitter.lock() {
+            if let Some(event_emitter) = event_emitter.as_ref() {
                 for payload in payloads {
-                    let _ = app_handle.emit(TERMINAL_STREAM_EVENT_NAME, payload);
+                    let _ = event_emitter.emit(TERMINAL_STREAM_EVENT_NAME, payload);
                 }
             }
         }
@@ -145,9 +146,9 @@ impl TerminalSessionRegistry {
             ssh_local_forward: None,
         };
 
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
-                let _ = app_handle.emit(TERMINAL_EVENT_NAME, &payload);
+        if let Ok(event_emitter) = self.event_emitter.lock() {
+            if let Some(event_emitter) = event_emitter.as_ref() {
+                let _ = event_emitter.emit(TERMINAL_EVENT_NAME, &payload);
             }
         }
 

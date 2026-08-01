@@ -94,7 +94,7 @@ impl GatewayController {
             return;
         }
         let controller = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             if let Err(error) = controller.flush_chat_ingress().await {
                 eprintln!("flush gateway chat ingress failed: {error}");
             }

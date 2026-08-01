@@ -8,6 +8,13 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# `desktop` is the default (and, until P1.2, the only meaningful) build mode.
+# The headless build (`--no-default-features`) strips Tauri in a later PR;
+# declaring the feature now lets cfg-gated code compile without warnings.
+default = ["desktop"]
+desktop = []
+
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.

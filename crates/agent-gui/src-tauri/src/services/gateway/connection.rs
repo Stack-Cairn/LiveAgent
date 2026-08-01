@@ -5,10 +5,10 @@ use std::time::{Duration, Instant};
 use futures_util::{SinkExt as _, StreamExt as _};
 use prost::Message as _;
 use serde_json::Value;
-use tauri::Emitter;
 use tokio::sync::{mpsc, watch, OwnedSemaphorePermit, Semaphore};
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
+use crate::events::EventEmitterExt;
 use crate::commands::settings::RemoteSettingsPayload;
 use crate::runtime::terminal::TerminalEventPayload;
 use crate::services::gateway_bridge;
@@ -39,7 +39,7 @@ const GATEWAY_WRITE_TIMEOUT_MIN: Duration = Duration::from_secs(10);
 const GATEWAY_WRITE_TIMEOUT_MAX: Duration = Duration::from_secs(60);
 
 /// 后台任务句柄的 RAII 中止器。
-struct AbortTaskOnDrop(tauri::async_runtime::JoinHandle<()>);
+struct AbortTaskOnDrop(crate::compat::async_runtime::JoinHandle<()>);
 
 impl Drop for AbortTaskOnDrop {
     fn drop(&mut self) {
@@ -183,7 +183,7 @@ impl GatewayOutboundSender {
     }
 
     pub(crate) fn blocking_send(&self, envelope: proto::AgentEnvelope) -> Result<(), String> {
-        tauri::async_runtime::block_on(self.send(envelope))
+        crate::compat::async_runtime::block_on(self.send(envelope))
     }
 }
 
@@ -439,7 +439,7 @@ impl GatewayController {
             let (last_inbound_tx, last_inbound_rx) = watch::channel(Instant::now());
 
             let writer_failure_tx = failure_tx.clone();
-            let writer_task = tauri::async_runtime::spawn(async move {
+            let writer_task = crate::compat::async_runtime::spawn(async move {
                 if let Err(error) = run_gateway_writer(
                     ws_sink,
                     system_write_rx,
@@ -455,7 +455,7 @@ impl GatewayController {
 
             let dispatcher = Arc::clone(self);
             let dispatcher_failure_tx = failure_tx.clone();
-            let dispatcher_task = tauri::async_runtime::spawn(async move {
+            let dispatcher_task = crate::compat::async_runtime::spawn(async move {
                 while let Some(envelope) = dispatch_rx.recv().await {
                     if let Err(error) = dispatcher.handle_gateway_envelope(envelope).await {
                         let _ = dispatcher_failure_tx
@@ -467,7 +467,7 @@ impl GatewayController {
 
             let watchdog_write_tx = system_write_tx.clone();
             let watchdog_failure_tx = failure_tx.clone();
-            let watchdog_task = tauri::async_runtime::spawn(async move {
+            let watchdog_task = crate::compat::async_runtime::spawn(async move {
                 run_gateway_watchdog(
                     last_inbound_rx,
                     watchdog_write_tx,
@@ -558,9 +558,9 @@ impl GatewayController {
 
     pub(crate) fn spawn_post_connect_reconciliation(
         self: &Arc<Self>,
-    ) -> tauri::async_runtime::JoinHandle<()> {
+    ) -> crate::compat::async_runtime::JoinHandle<()> {
         let controller = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             // Runtime readiness is control-plane state: restore it immediately
             // on the fresh stream before low-priority snapshots begin replaying.
             if let Some((worker_id, state, visible, active_run_count)) =
@@ -655,7 +655,7 @@ impl GatewayController {
         request: proto::UploadedImagePreviewRequest,
     ) -> Result<(), String> {
         let sender = self.current_outbound_sender()?;
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             let envelope = match gateway_bridge::handle_uploaded_image_preview(request).await {
                 Ok(response) => proto::AgentEnvelope {
                     request_id,
@@ -745,7 +745,7 @@ impl GatewayController {
         } else {
             return;
         };
-        let _ = self.app_handle.emit("gateway:status", next);
+        let _ = self.event_emitter.emit("gateway:status", next);
     }
 
     pub(crate) async fn publish_current_settings_sync(&self) -> Result<(), String> {
@@ -775,7 +775,7 @@ impl GatewayController {
 
     pub async fn refresh_settings_sync_from_db(&self) -> Result<Value, String> {
         let snapshot = self.current_settings_snapshot().await?;
-        self.app_handle
+        self.event_emitter
             .emit(GATEWAY_SETTINGS_SYNC_EVENT, snapshot.clone())
             .map_err(|e| format!("emit gateway settings sync failed: {e}"))?;
         self.publish_settings_sync(snapshot.clone()).await?;

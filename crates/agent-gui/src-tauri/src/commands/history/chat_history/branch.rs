@@ -214,7 +214,7 @@ pub(crate) async fn chat_history_branch_inner(
     id: String,
     anchor: ChatHistoryMessageRef,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         chat_history_branch_sync(&mut conn, &id, &anchor)
     })

@@ -1052,7 +1052,7 @@ pub(crate) fn cleanup_worktree_targets_blocking(
 pub async fn subagent_worktree_create(
     input: SubagentWorktreeCreateInput,
 ) -> Result<SubagentWorktreeCreateResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let SubagentWorktreeCreateInput { workdir, label } = input;
         let requested_workdir = canonicalize_existing_dir(&workdir, "workdir")?;
         let repo_root_raw = run_git(&requested_workdir, &["rev-parse", "--show-toplevel"])?;
@@ -1142,7 +1142,7 @@ pub async fn subagent_worktree_create(
 pub async fn subagent_worktree_status(
     input: SubagentWorktreeStatusInput,
 ) -> Result<SubagentWorktreeStatusResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         worktree_status_blocking(input.worktree_root, input.max_diff_chars)
     })
     .await
@@ -1153,7 +1153,7 @@ pub async fn subagent_worktree_status(
 pub async fn subagent_worktree_apply(
     input: SubagentWorktreeApplyInput,
 ) -> Result<SubagentWorktreeApplyResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         apply_worktree_changes_blocking(input.parent_workdir, input.worktree_root)
     })
     .await
@@ -1164,7 +1164,7 @@ pub async fn subagent_worktree_apply(
 pub async fn subagent_worktree_cleanup(
     input: SubagentWorktreeCleanupInput,
 ) -> Result<SubagentWorktreeCleanupItem, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         cleanup_worktree_target_blocking(
             SubagentWorktreeCleanupTarget {
                 run_id: None,

@@ -17,7 +17,7 @@ impl GatewayController {
             .map_err(|_| "gateway settings snapshot lock poisoned".to_string())?
             .clone();
 
-        let db_snapshot = tauri::async_runtime::spawn_blocking(move || {
+        let db_snapshot = crate::compat::async_runtime::spawn_blocking(move || {
             let conn = open_db()?;
             load_gateway_settings_sync_snapshot(&conn)
         })

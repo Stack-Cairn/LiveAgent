@@ -107,7 +107,7 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
         .route("/proxy/{provider}/{*rest}", any(handle_proxy))
         .with_state(state.clone());
 
-    tauri::async_runtime::spawn(async move {
+    crate::compat::async_runtime::spawn(async move {
         let listener = match TokioTcpListener::from_std(listener) {
             Ok(listener) => listener,
             Err(err) => {

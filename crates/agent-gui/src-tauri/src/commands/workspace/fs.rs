@@ -43,7 +43,7 @@ async fn run_blocking<R: Send + 'static>(
     label: &'static str,
     f: impl FnOnce() -> Result<R, String> + Send + 'static,
 ) -> Result<R, String> {
-    tauri::async_runtime::spawn_blocking(f)
+    crate::compat::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| format!("{label} join failed: {e}"))?
 }
@@ -237,7 +237,7 @@ async fn run_blocking_fs<R: Send + 'static>(
     label: &'static str,
     f: impl FnOnce() -> Result<R, FsCommandError> + Send + 'static,
 ) -> Result<R, FsCommandError> {
-    tauri::async_runtime::spawn_blocking(f)
+    crate::compat::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| FsCommandError::other(format!("{label} join failed: {e}")))?
 }

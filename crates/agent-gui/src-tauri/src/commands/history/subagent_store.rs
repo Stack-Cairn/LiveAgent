@@ -1255,7 +1255,7 @@ pub(crate) fn list_subagent_messages_sync(
 pub async fn subagent_identity_upsert(
     input: SubagentIdentityUpsertInput,
 ) -> Result<SubagentIdentityRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         upsert_subagent_identity_sync(&conn, &input)
     })
@@ -1267,7 +1267,7 @@ pub async fn subagent_identity_upsert(
 pub async fn subagent_identity_list(
     input: SubagentIdentityListInput,
 ) -> Result<Vec<SubagentIdentityRecord>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         list_subagent_identities_sync(&conn, &input)
     })
@@ -1277,7 +1277,7 @@ pub async fn subagent_identity_list(
 
 #[tauri::command]
 pub async fn subagent_run_save(input: SubagentRunSaveInput) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_subagent_run_sync(&mut conn, &input)
     })
@@ -1289,7 +1289,7 @@ pub async fn subagent_run_save(input: SubagentRunSaveInput) -> Result<(), String
 pub async fn subagent_run_list(
     input: SubagentRunListInput,
 ) -> Result<Vec<SubagentRunRecord>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         list_subagent_runs_sync(&conn, &input)
     })
@@ -1301,7 +1301,7 @@ pub async fn subagent_run_list(
 pub async fn subagent_run_load(
     input: SubagentRunLoadInput,
 ) -> Result<Option<SubagentRunStateRecord>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         load_subagent_run_sync(&conn, &input.id)
     })
@@ -1313,7 +1313,7 @@ pub async fn subagent_run_load(
 pub async fn subagent_run_prune(
     input: SubagentRunPruneInput,
 ) -> Result<SubagentPruneResult, String> {
-    tauri::async_runtime::spawn_blocking(move || prune_subagent_runs(input))
+    crate::compat::async_runtime::spawn_blocking(move || prune_subagent_runs(input))
         .await
         .map_err(|e| format!("subagent_run_prune join failed: {e}"))?
 }
@@ -1322,7 +1322,7 @@ pub async fn subagent_run_prune(
 pub async fn subagent_message_append(
     input: SubagentMessageAppendInput,
 ) -> Result<SubagentMessageRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         append_subagent_message_sync(&mut conn, &input)
     })
@@ -1334,7 +1334,7 @@ pub async fn subagent_message_append(
 pub async fn subagent_message_list(
     input: SubagentMessageListInput,
 ) -> Result<Vec<SubagentMessageRecord>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         list_subagent_messages_sync(&conn, &input)
     })

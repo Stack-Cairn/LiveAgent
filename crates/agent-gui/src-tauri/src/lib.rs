@@ -1,4 +1,6 @@
 mod commands;
+mod compat;
+mod events;
 mod runtime;
 mod services;
 
@@ -469,7 +471,7 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
             };
             let store = Arc::clone(store.inner());
             let app_handle = app.clone();
-            tauri::async_runtime::spawn_blocking(move || {
+            crate::compat::async_runtime::spawn_blocking(move || {
                 let (value, error) = match store.toggle_cron_task_enabled(&task_id) {
                     Ok(enabled) => (
                         Some(if enabled { "enabled" } else { "disabled" }.to_string()),
@@ -720,10 +722,12 @@ pub fn run() {
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");
                 }
-                terminal_registry.attach_app_handle(app.handle().clone());
-                sftp_registry.attach_app_handle(app.handle().clone());
+                let event_emitter: Arc<dyn crate::events::EventEmitter> =
+                    crate::events::shared_emitter(app.handle().clone());
+                terminal_registry.attach_event_emitter(Arc::clone(&event_emitter));
+                sftp_registry.attach_event_emitter(Arc::clone(&event_emitter));
                 let gateway_controller = Arc::new(services::gateway::GatewayController::new(
-                    app.handle().clone(),
+                    Arc::clone(&event_emitter),
                     Arc::clone(&automation_store),
                     Arc::clone(&memory_store),
                     Arc::clone(&provider_usage_service),
@@ -734,14 +738,14 @@ pub fn run() {
                 ));
                 managed_process_registry.set_notifier(
                     runtime::managed_process::ManagedProcessNotifier {
-                        app_handle: app.handle().clone(),
+                        event_emitter: Arc::clone(&event_emitter),
                         gateway: Arc::downgrade(&gateway_controller),
                     },
                 );
                 managed_process_registry.spawn_startup_reconcile();
                 managed_process_registry.spawn_monitor();
                 automation_store.set_notifier(services::automation::AutomationNotifier {
-                    app_handle: app.handle().clone(),
+                    event_emitter: Arc::clone(&event_emitter),
                     gateway: Arc::downgrade(&gateway_controller),
                     scheduler: Arc::downgrade(&automation_scheduler),
                 });
@@ -750,7 +754,7 @@ pub fn run() {
                 if let Err(error) = gateway_controller.start() {
                     eprintln!("failed to start remote gateway controller: {error}");
                 }
-                tauri::async_runtime::spawn({
+                crate::compat::async_runtime::spawn({
                     let gateway_controller = Arc::clone(&gateway_controller);
                     async move {
                         if let Err(error) = gateway_controller.reload_from_db().await {
