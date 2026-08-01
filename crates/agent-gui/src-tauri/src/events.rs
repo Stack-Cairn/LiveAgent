@@ -9,6 +9,7 @@
 //! The trait itself is generic-free (dyn-compatible); the ergonomic generic
 //! [`EventEmitterExt::emit`] is provided as a blanket extension.
 
+#[cfg(feature = "desktop")]
 use std::sync::Arc;
 
 use serde::Serialize;
@@ -58,29 +59,51 @@ impl EventEmitter for TauriEventEmitter {
 }
 
 /// Headless implementation: emits through a WebSocket broadcast channel.
-/// Wired up in P1.2 (`src/headless.rs`); until then it is a no-op stub so the
-/// headless build compiles.
+/// Wired up by `src/headless.rs`, which keeps one `Arc<WsEventEmitter>` for
+/// the `EventEmitter` injection and clones it into the axum state so the
+/// `/ws` route can subscribe to the same broadcast.
 #[cfg(not(feature = "desktop"))]
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct WsEventEmitter {
-    // TODO(P1.2): broadcast::Sender<EventPayload>
+    tx: tokio::sync::broadcast::Sender<WsEvent>,
+}
+
+/// A single frontend event serialized for WebSocket delivery.
+#[cfg(not(feature = "desktop"))]
+#[derive(Clone, Serialize)]
+pub struct WsEvent {
+    pub event: String,
+    pub payload: serde_json::Value,
+}
+
+#[cfg(not(feature = "desktop"))]
+impl WsEventEmitter {
+    pub fn new(tx: tokio::sync::broadcast::Sender<WsEvent>) -> Self {
+        Self { tx }
+    }
+
+    /// Subscribe to the event stream (used by the `/ws` route).
+    pub fn subscribe(&self) -> tokio::sync::broadcast::Receiver<WsEvent> {
+        self.tx.subscribe()
+    }
 }
 
 #[cfg(not(feature = "desktop"))]
 impl EventEmitter for WsEventEmitter {
-    fn emit_json(&self, _event: &str, _payload: serde_json::Value) -> Result<(), String> {
+    fn emit_json(&self, event: &str, payload: serde_json::Value) -> Result<(), String> {
+        let _ = self.tx.send(WsEvent {
+            event: event.to_string(),
+            payload,
+        });
         Ok(())
     }
 }
 
 /// Helper to build the shared emitter used across services. On desktop it
-/// wraps the app handle; on headless it wraps the WS broadcast.
+/// wraps the app handle; on headless, `src/headless.rs` constructs the
+/// `WsEventEmitter` directly so it can also hand the broadcast sender to the
+/// `/ws` route.
 #[cfg(feature = "desktop")]
 pub fn shared_emitter(app_handle: tauri::AppHandle) -> Arc<dyn EventEmitter> {
     Arc::new(TauriEventEmitter::new(app_handle))
-}
-
-#[cfg(not(feature = "desktop"))]
-pub fn shared_emitter() -> Arc<dyn EventEmitter> {
-    Arc::new(WsEventEmitter::default())
 }
