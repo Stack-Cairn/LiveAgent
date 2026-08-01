@@ -26,6 +26,7 @@ import {
   hideDesktopSidebarCloseButton,
 } from "../../../agent-ui-adapters/sidebarChrome";
 import type { AppUpdateController } from "../../../lib/appUpdates";
+import { setChatHistoryCwd } from "../../../lib/chat/history/chatHistory";
 import { normalizeConversationTitle } from "../../../lib/chat/page/chatPageHelpers";
 import type { WorkspaceProject } from "../../../lib/settings";
 
@@ -151,6 +152,24 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     [store],
   );
 
+  const handleMoveToWorkspace = useCallback(
+    (id: string, cwd: string) => {
+      void setChatHistoryCwd(id, cwd).then(() => {
+        void store.refresh();
+        void store.refreshWorkdirs("delete");
+      });
+    },
+    [store],
+  );
+
+  const handleMoveConversationsToWorkspace = useCallback(
+    async (ids: readonly string[], cwd: string) => {
+      await Promise.all(ids.map((id) => setChatHistoryCwd(id, cwd)));
+      await Promise.all([store.refresh(), store.refreshWorkdirs("delete")]);
+    },
+    [store],
+  );
+
   const handleDeleteConversation = useCallback(
     (id: string) => {
       store.clearMutationError(id);
@@ -251,6 +270,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       onCommitRename={handleCommitRename}
       onCancelRename={handleCancelRename}
       onSetPinned={handleSetPinned}
+      onMoveToWorkspace={handleMoveToWorkspace}
+      onMoveConversationsToWorkspace={handleMoveConversationsToWorkspace}
       canShareConversations={props.canShareConversations}
       sharedConversationCount={props.sharedConversationCount}
       onShareConversation={props.onShareConversation}

@@ -410,6 +410,31 @@ pub async fn chat_history_set_pinned(
     Ok(summary)
 }
 
+pub(crate) async fn chat_history_set_cwd_inner(
+    id: String,
+    cwd: String,
+) -> Result<ChatHistorySummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_db()?;
+        set_chat_history_cwd_sync(&conn, &id, &cwd)
+    })
+    .await
+    .map_err(|e| format!("chat_history_set_cwd join 失败：{e}"))?
+}
+
+#[tauri::command]
+pub async fn chat_history_set_cwd(
+    id: String,
+    cwd: String,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<ChatHistorySummary, String> {
+    let summary = chat_history_set_cwd_inner(id, cwd).await?;
+    gateway_controller
+        .publish_history_sync(build_history_sync_upsert(&summary))
+        .await;
+    Ok(summary)
+}
+
 pub(crate) async fn chat_history_set_model_inner(
     id: String,
     selected_model_json: String,

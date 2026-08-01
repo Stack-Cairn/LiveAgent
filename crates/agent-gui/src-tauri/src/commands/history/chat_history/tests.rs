@@ -527,6 +527,43 @@ mod tests {
     }
 
     #[test]
+    fn set_cwd_moves_conversation_between_workspaces() {
+        let conn = open_test_db().expect("open test db");
+        let mut conversation = sample_conversation();
+        conversation.cwd = Some("/tmp/project-a".to_string());
+        upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+
+        let summary = set_chat_history_cwd_sync(&conn, "conv-1", "/tmp/project-b")
+            .expect("move conversation to another workspace");
+        assert_eq!(summary.cwd.as_deref(), Some("/tmp/project-b"));
+
+        let reloaded = get_summary_by_id(&conn, "conv-1").expect("reload summary");
+        assert_eq!(reloaded.cwd.as_deref(), Some("/tmp/project-b"));
+
+        // Deletes the conversation from the workdirs grouping of the old cwd.
+        let workdirs = list_chat_history_workdirs_sync(&conn).expect("list workdirs");
+        assert_eq!(workdirs.workdirs.len(), 1);
+        assert_eq!(workdirs.workdirs[0].path, "/tmp/project-b");
+    }
+
+    #[test]
+    fn set_cwd_rejects_empty_target_or_missing_conversation() {
+        let conn = open_test_db().expect("open test db");
+        let mut conversation = sample_conversation();
+        conversation.cwd = Some("/tmp/project-a".to_string());
+        upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+
+        let empty_target =
+            set_chat_history_cwd_sync(&conn, "conv-1", "  ").expect_err("reject empty target");
+        assert!(empty_target.contains("工作空间"));
+
+        let missing =
+            set_chat_history_cwd_sync(&conn, "does-not-exist", "/tmp/project-b")
+                .expect_err("reject missing conversation");
+        assert!(missing.contains("未找到"));
+    }
+
+    #[test]
     fn v1_database_gains_selected_model_column_via_v2_migration() {
         // 复现存量库场景：完整的 v1 schema（无 selected_model_json）且
         // user_version 已到 1——版本门禁必须由 v2 迁移补齐新列。
