@@ -40,7 +40,7 @@ pub fn app_window_pinned(pin_state: &Arc<WindowPinState>) -> bool {
 /// `global-shortcut:pin-changed` 事件广播回前端。
 #[cfg(feature = "desktop")]
 pub fn app_toggle_window_pin(app: AppHandle) {
-    crate::toggle_main_window_pin(&app);
+    crate::desktop::toggle_main_window_pin(&app);
 }
 
 #[cfg(feature = "desktop")]

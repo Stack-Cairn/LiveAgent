@@ -43,9 +43,13 @@ fn main() {
         .compile_protos(&[proto_v2, proto_v2_ws], &[gateway_root])
         .expect("compile gateway protos");
 
-    let is_windows_msvc = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
-        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
-    if is_windows_msvc {
+    // Tauri build script glue only runs in the desktop build
+    // (`--no-default-features` strips Tauri entirely).
+    #[cfg(feature = "desktop")]
+    {
+        let is_windows_msvc = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
+            && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+        if is_windows_msvc {
         let manifest_path = std::path::Path::new(
             &std::env::var("OUT_DIR").expect("OUT_DIR for Windows app manifest"),
         )
@@ -77,7 +81,8 @@ fn main() {
             "cargo:rustc-link-arg=/MANIFESTINPUT:{}",
             manifest_path.display()
         );
-    } else {
-        tauri_build::build();
+        } else {
+            tauri_build::build();
+        }
     }
 }

@@ -1,3 +1,8 @@
+// `pub use` re-exports are consumed by the desktop-only `adapters` module
+// (and, from PR-E on, the headless command router). Until the headless
+// router lands, some re-exports are unused in the headless build.
+#![cfg_attr(not(feature = "desktop"), allow(unused_imports))]
+
 #[path = "app/mod.rs"]
 pub mod app_commands;
 #[path = "automation/mod.rs"]

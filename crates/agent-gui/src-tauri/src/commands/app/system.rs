@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+#[cfg(feature = "desktop")]
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -849,6 +850,7 @@ fn infer_native_attachment_mime(path: &Path, kind: Option<&str>) -> String {
     }
 }
 
+#[cfg(feature = "desktop")]
 fn system_pick_readable_files_sync(
     workdir: String,
     max_files: Option<usize>,
@@ -1207,6 +1209,7 @@ fn system_append_debug_jsonl_sync(conversation_id: String, entry: Value) -> Resu
     Ok(())
 }
 
+#[cfg(feature = "desktop")]
 fn resolve_pick_folder_initial_dir(initial_workdir: Option<String>) -> Option<PathBuf> {
     let raw = initial_workdir?;
     let trimmed = raw.trim();
@@ -1332,6 +1335,7 @@ pub(crate) fn system_create_project_folder_sync(
     })
 }
 
+#[cfg(feature = "desktop")]
 pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Option<String>, String> {
     crate::compat::async_runtime::spawn_blocking(move || {
         let mut dialog = FileDialog::new();
@@ -1347,6 +1351,7 @@ pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Optio
     .map_err(|e| format!("system_pick_folder join 失败：{e}"))?
 }
 
+#[cfg(feature = "desktop")]
 pub async fn system_pick_file(
     initial_workdir: Option<String>,
     filter_name: Option<String>,
@@ -1384,7 +1389,16 @@ pub async fn system_pick_readable_files(
     max_files: Option<usize>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
     crate::compat::async_runtime::spawn_blocking(move || {
-        system_pick_readable_files_sync(workdir, max_files)
+        #[cfg(feature = "desktop")]
+        {
+            system_pick_readable_files_sync(workdir, max_files)
+        }
+        #[cfg(not(feature = "desktop"))]
+        {
+            // Headless 无原生文件对话框：该命令仅桌面前端使用。
+            let _ = (workdir, max_files);
+            Err("file picker is unavailable in headless mode".to_string())
+        }
     })
     .await
     .map_err(|e| format!("system_pick_readable_files join failed: {e}"))?
@@ -1506,17 +1520,25 @@ pub async fn system_append_debug_jsonl(
     .map_err(|e| format!("system_append_debug_jsonl join 失败：{e}"))?
 }
 
-// 桌面端读系统剪贴板的唯一通道：WKWebView 的 navigator.clipboard.readText()
-// 对来自其他应用的剪贴板内容会弹出原生"粘贴"确认气泡（DOM paste access），
-// 自定义右键菜单的粘贴必须绕开 webview 直接读原生剪贴板。
+/// 桌面端读系统剪贴板的唯一通道：WKWebView 的 navigator.clipboard.readText()
+/// 对来自其他应用的剪贴板内容会弹出原生"粘贴"确认气泡（DOM paste access），
+/// 自定义右键菜单的粘贴必须绕开 webview 直接读原生剪贴板。
+/// Headless 构建无剪贴板，直接报错（该命令仅桌面前端会调用）。
 fn system_clipboard_read_text_sync() -> Result<String, String> {
-    let mut clipboard =
-        arboard::Clipboard::new().map_err(|e| format!("clipboard unavailable: {e}"))?;
-    match clipboard.get_text() {
-        Ok(text) => Ok(text),
-        // 剪贴板无文本内容（空/图片/文件）时按空文本处理，前端据此静默收起菜单。
-        Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
-        Err(e) => Err(format!("clipboard read failed: {e}")),
+    #[cfg(feature = "desktop")]
+    {
+        let mut clipboard =
+            arboard::Clipboard::new().map_err(|e| format!("clipboard unavailable: {e}"))?;
+        match clipboard.get_text() {
+            Ok(text) => Ok(text),
+            // 剪贴板无文本内容（空/图片/文件）时按空文本处理，前端据此静默收起菜单。
+            Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
+            Err(e) => Err(format!("clipboard read failed: {e}")),
+        }
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        Err("clipboard is unavailable in headless mode".to_string())
     }
 }
 
