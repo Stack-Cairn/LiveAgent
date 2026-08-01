@@ -217,6 +217,38 @@ jobs:
           CARGO_TERM_COLOR: always
         run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml integration_commands::mcp --lib
 
+  headless-rust:
+    name: Headless Rust Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/agent-gui/src-tauri
+
+      # P1.2: `--no-default-features` strips the whole Tauri runtime and runs
+      # the same business code over the axum HTTP/WebSocket bridge (see
+      # lib.rs `headless` module). Guard that build path against regressions;
+      # desktop-only deps must never leak into the headless feature set.
+      - name: Check headless backend
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --no-default-features
+
+      - name: Build headless release binary
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo build --release --manifest-path crates/agent-gui/src-tauri/Cargo.toml --no-default-features
+
   mirror:
     name: GUI/WebUI Mirror Check
     runs-on: ubuntu-latest
