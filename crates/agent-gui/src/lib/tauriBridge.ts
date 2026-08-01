@@ -13,9 +13,11 @@
  *                      (POST /api/invoke) and WebSocket (GET /ws), so the same
  *                      WebUI build can drive LiveAgent headless.
  *
- * The headless server base URL is resolved from (in order):
+ * The headless server URL is resolved from (in order):
  *   `import.meta.env.VITE_LIVEAGENT_HEADLESS_URL`
  *   `window.__LIVEAGENT_HEADLESS_URL__`
+ *   `window.location.origin` (same-origin: WebUI served by the headless
+ *   server itself on a single port)
  *   `http://127.0.0.1:17890`
  */
 
@@ -47,6 +49,11 @@ function resolveHeadlessBaseUrl(): string {
   if (fromEnv) return fromEnv.replace(/\/+$/, "");
   if (typeof window !== "undefined" && window.__LIVEAGENT_HEADLESS_URL__) {
     return window.__LIVEAGENT_HEADLESS_URL__.replace(/\/+$/, "");
+  }
+  // Same-origin fallback: when the WebUI is served by the headless server
+  // itself (single-port deployment), talk to the origin we were loaded from.
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
   }
   return "http://127.0.0.1:17890";
 }
