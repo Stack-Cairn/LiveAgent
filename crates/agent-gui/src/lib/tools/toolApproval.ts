@@ -12,6 +12,15 @@ import { ASK_USER_QUESTION_TIMEOUT_MS } from "../chat/askUserQuestion";
 /** 审批窗口毫秒数:复用 AskUserQuestion 的时长常量,行为口径一致。 */
 export const TOOL_APPROVAL_TIMEOUT_MS = ASK_USER_QUESTION_TIMEOUT_MS;
 
+// 运行时审批窗口（毫秒）：由设置 system.interactiveTimeoutMinutes 经 App.tsx 注入
+// （与 AskUserQuestion 同一设置、同一窗口；永不超时用很大的值表达）。未注入回退默认常量。
+let configuredToolApprovalTimeoutMs = TOOL_APPROVAL_TIMEOUT_MS;
+
+/** 由设置层注入运行时审批窗口（毫秒）。 */
+export function setToolApprovalTimeoutMs(timeoutMs: number): void {
+  configuredToolApprovalTimeoutMs = timeoutMs;
+}
+
 /** approve:本次放行;deny:本次拒绝;approve_session:本会话内该工具后续免审。 */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
 
@@ -155,7 +164,7 @@ export function requestToolApproval(params: {
   timeoutMs?: number;
 }): Promise<ToolApprovalSettlement> {
   const toolCallId = params.toolCallId.trim();
-  const timeoutMs = params.timeoutMs ?? TOOL_APPROVAL_TIMEOUT_MS;
+  const timeoutMs = params.timeoutMs ?? configuredToolApprovalTimeoutMs;
   const deadlineAt = Date.now() + timeoutMs;
 
   if (params.signal?.aborted) {

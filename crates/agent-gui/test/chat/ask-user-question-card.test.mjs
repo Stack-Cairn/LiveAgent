@@ -236,10 +236,10 @@ test("a deadline already past at mount is distrusted and the pending card stays 
   assert.equal(submitted[0][0].selectedLabel, "Second");
 });
 
-test("a deadline beyond the full answer window is distrusted and clamps the countdown", () => {
+test("a far-future deadline (long timeout window) is trusted and counts down to it", () => {
   const card = createCardHarness();
   const tree = card.render({
-    // 本机时钟慢于桌面盖章时钟：截止时间看似远超完整应答窗口。
+    // 超长窗口（≈永不超时）：截止时间远超默认窗口，仍被采信并显示其剩余时间。
     deadlineAt: Date.now() + ASK_USER_QUESTION_TIMEOUT_MS + 5 * 60 * 1000,
     onSubmit: async () => ({ ok: true }),
   });
@@ -249,8 +249,7 @@ test("a deadline beyond the full answer window is distrusted and clamps the coun
     (node) => node.type === "button" && node.props?.role === "radio",
   );
   assert.equal(optionButtons.every((button) => button.props.disabled === false), true);
-  // 倒计时按挂载近似显示完整窗口，而不是把偏移量当剩余时间。
-  assert.match(treeText(tree), /(?:3:00|2:59) chat\.askUser\.timeoutHint/);
+  assert.match(treeText(tree), /(?:8:00|7:59) chat\.askUser\.timeoutHint/);
 });
 
 test("a complete answer before the deadline submits the selected non-first option", async () => {

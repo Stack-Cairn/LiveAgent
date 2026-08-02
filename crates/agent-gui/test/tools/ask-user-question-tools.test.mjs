@@ -263,6 +263,33 @@ test("timeout falls back to the first option when no recommendation exists", asy
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-first-fallback"), false);
 });
 
+test("a very long timeout window behaves like never within the test window", async () => {
+  const { tools } = loadModules();
+  // 1 小时窗口：测试等待 ~60ms 内不会自动落定，等价于“永不”。
+  const bundle = tools.createAskUserQuestionTools({
+    conversationId: "conv-long-window",
+    timeoutMs: 60 * 60 * 1000,
+  });
+  const toolCall = createToolCall(buildQuestionsArgs(), "call-ask-long-window");
+
+  const resultPromise = bundle.executeToolCall(toolCall);
+  const deadline = tools.getAskUserQuestionDeadlineAt("call-ask-long-window");
+  assert.ok(Number.isFinite(deadline));
+  assert.ok(deadline > Date.now());
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(tools.hasPendingAskUserQuestion("call-ask-long-window"), true);
+
+  // 用户作答后才落定，且不标记超时。
+  tools.answerAskUserQuestion("call-ask-long-window", [
+    { questionId: "storage", selectedLabel: "应用数据目录" },
+    { questionId: "q2", selectedLabel: "不迁移" },
+  ]);
+  const result = await resultPromise;
+  assert.equal(result.isError, false);
+  assert.equal(result.details.timedOut, undefined);
+  assert.equal(tools.hasPendingAskUserQuestion("call-ask-long-window"), false);
+});
+
 test("immediate answers are pending synchronously and never fall through to timeout defaults", async () => {
   const { tools } = loadModules();
   const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-fast", timeoutMs: 100 });

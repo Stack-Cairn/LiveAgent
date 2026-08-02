@@ -7,7 +7,9 @@ export const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 export const ASK_USER_QUESTION_MAX_QUESTIONS = 4;
 export const ASK_USER_QUESTION_MIN_OPTIONS = 2;
 export const ASK_USER_QUESTION_MAX_OPTIONS = 6;
-/** 每轮提问的应答窗口：超时后按推荐项（缺省第一项）自动落定继续执行。 */
+/** 每轮提问的应答窗口默认值（毫秒）：超时后按推荐项（缺省第一项）自动落定继续执行。
+ *  运行时实际窗口由设置 system.interactiveTimeoutMinutes 驱动（正数分钟；超长≈永不超时），
+ *  此常量仅作未注入时的兜底默认，保持历史行为与测试注入口径一致。 */
 export const ASK_USER_QUESTION_TIMEOUT_MS = 3 * 60 * 1000;
 /** UI 合成"其他（自行输入）"应答的最大长度；超出部分截断。 */
 export const ASK_USER_QUESTION_CUSTOM_MAX_LENGTH = 2000;

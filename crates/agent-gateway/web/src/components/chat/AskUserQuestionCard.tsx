@@ -25,22 +25,18 @@ function formatCountdown(remainingMs: number) {
 
 /**
  * 倒计时提示：优先使用调用方传入的权威截止时间（GUI 读工具挂起表，WebUI 读
- * 网关参数上的 deadline 盖章），两端与桌面计时同源；缺失时（历史/降级数据）
- * 回退为挂载时刻近似。倒计时归零立即禁止交互，随后 tool_result 把卡片
- * 切到只读态。
+ * 网关参数上的 deadline 盖章），两端与桌面计时同源。超长窗口（≈永不超时）时
+ * 显示很长倒计时；截止时间缺失/已过期时回退为挂载时刻的默认窗口近似，避免把
+ * 可作答的卡片锁死。倒计时归零立即禁止交互，随后 tool_result 把卡片切到只读态。
  *
- * 盖章用的是桌面时钟，而倒计时读本机时钟：远端浏览器时钟偏移足够大时，
- * 一个仍在挂起的提问会在挂载瞬间就显示过期（或远超完整窗口）。因此仅当
- * 截止时间落在“挂载时刻（不含）～挂载时刻 + 完整应答窗口（含）”内才采信，
- * 否则视为时钟不可比、回退挂载近似，避免把可作答的卡片锁死；真正过期的
- * 提交仍由桌面挂起表权威拒绝。
+ * 盖章用的是桌面时钟，而倒计时读本机时钟：远端浏览器时钟偏移足够大时，一个
+ * 仍在挂起的提问会在挂载瞬间显示过期。仅采信“挂载时刻之后”的截止时间；真正
+ * 过期的提交仍由桌面挂起表权威拒绝。
  */
 function useAnswerCountdown(active: boolean, deadlineAt?: number) {
   const [mountedAt] = useState(() => Date.now());
   const deadline =
-    deadlineAt !== undefined &&
-    deadlineAt > mountedAt &&
-    deadlineAt <= mountedAt + ASK_USER_QUESTION_TIMEOUT_MS
+    deadlineAt !== undefined && deadlineAt > mountedAt
       ? deadlineAt
       : mountedAt + ASK_USER_QUESTION_TIMEOUT_MS;
   const [remainingMs, setRemainingMs] = useState(() => deadline - Date.now());

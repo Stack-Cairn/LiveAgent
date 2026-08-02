@@ -64,6 +64,25 @@ test("超时落定为 timeout", async () => {
   assert.equal(hasPendingToolApproval("c4"), false);
 });
 
+test("很长的超时窗口 ≈ 永不:挂起等待用户决定,不在测试窗口内自动落定", async () => {
+  const promise = requestToolApproval({
+    toolCallId: "c-long-window",
+    toolName: "Bash",
+    conversationId: "conv-long-window",
+    timeoutMs: 60 * 60 * 1000, // 1 小时
+  });
+  assert.equal(hasPendingToolApproval("c-long-window"), true);
+  const pending = getPendingToolApproval("c-long-window");
+  assert.ok(pending && pending.deadlineAt > Date.now() + 60 * 60 * 1000 - 60_000);
+  // 等一拍，确认不会自动 timeout。
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(hasPendingToolApproval("c-long-window"), true);
+  // 用户决定后才落定。
+  answerToolApproval("c-long-window", "approve");
+  assert.deepEqual(await promise, { kind: "decided", decision: "approve" });
+  assert.equal(hasPendingToolApproval("c-long-window"), false);
+});
+
 test("AbortSignal 触发 → cancelled;已 aborted 的信号立即 cancelled", async () => {
   const controller = new AbortController();
   const promise = requestToolApproval({

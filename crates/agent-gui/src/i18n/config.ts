@@ -1314,6 +1314,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.systemTools": "系统工具",
     "settings.systemToolsDesc":
       "查看 LiveAgent 在 Agent 模式下自动注册的内置工具，并为每个工具设置审批策略（放行 / 执行前询问 / 拒绝）。",
+    "settings.interactiveTimeout.title": "交互式应答超时",
+    "settings.interactiveTimeout.desc": "AskUserQuestion 提问卡与工具审批栏的等待窗口，二者共用。",
+    "settings.interactiveTimeout.unit": "分钟",
+    "settings.interactiveTimeout.hint":
+      "正数分钟 = 超时窗口；填很大的数（如 99999）≈ 永不超时。超时后按各交互既定姿态落定（提问自动选推荐项并继续、审批按拒绝）。",
     "settings.builtinToolCategory.fs": "文件系统",
     "settings.builtinToolCategory.process": "终端与进程",
     "settings.builtinToolCategory.intelligence": "智能与记忆",
@@ -3629,6 +3634,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.systemTools": "System Tools",
     "settings.systemToolsDesc":
       "View the built-in tools that LiveAgent registers automatically in Agent mode, and set an approval policy per tool (allow / ask before running / deny).",
+    "settings.interactiveTimeout.title": "Interactive answer timeout",
+    "settings.interactiveTimeout.desc":
+      "Wait window shared by the AskUserQuestion card and the tool approval bar.",
+    "settings.interactiveTimeout.unit": "min",
+    "settings.interactiveTimeout.hint":
+      "Positive minutes = answer window; use a very large number (e.g. 99999) for effectively no timeout. On timeout, each prompt settles its own way (questions auto-pick the recommended option and continue; approvals are denied).",
     "settings.builtinToolCategory.fs": "File System",
     "settings.builtinToolCategory.process": "Terminal & Processes",
     "settings.builtinToolCategory.intelligence": "Intelligence & Memory",

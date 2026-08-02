@@ -5,9 +5,10 @@
 //
 // 说明:MCP 工具按 server、插件工具按工具的策略已就地内联到各自 Hub 卡片旁
 //(需运行时数据),不在本节;本节聚焦内置工具,补上内置工具此前不可管控的缺口。
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ToolPolicyToggle } from "../../components/hub/ToolPolicyToggle";
 import { Wrench } from "../../components/icons";
+import { Input } from "../../components/ui/input";
 import { useLocale } from "../../i18n";
 import { type ToolPolicy, updateSystem } from "../../lib/settings";
 import { BUILTIN_TOOL_CATALOG, BUILTIN_TOOL_CATEGORIES } from "../../lib/tools/builtinToolCatalog";
@@ -51,6 +52,22 @@ export function SystemToolsSection(props: SettingsSectionProps) {
 
   const overriddenCount = Object.keys(policies).length;
 
+  // 交互式应答超时（分钟）：正数=超时窗口，超长≈永不超时。草稿 + blur 提交，避免
+  // 逐字符触发设置同步；空/非法回退不提交，非正由归一化回默认 3。
+  const interactiveTimeoutMinutes = settings.system.interactiveTimeoutMinutes;
+  const [timeoutDraft, setTimeoutDraft] = useState<string | null>(null);
+  const timeoutInputValue = timeoutDraft ?? String(interactiveTimeoutMinutes);
+  const commitTimeoutDraft = () => {
+    if (timeoutDraft === null) return;
+    const parsed = Number.parseInt(timeoutDraft, 10);
+    if (!Number.isFinite(parsed)) {
+      setTimeoutDraft(null);
+      return;
+    }
+    setSettings((prev) => updateSystem(prev, { interactiveTimeoutMinutes: parsed }));
+    setTimeoutDraft(null);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
@@ -68,6 +85,36 @@ export function SystemToolsSection(props: SettingsSectionProps) {
             {t("settings.toolPermissionsOverridden").replace("{count}", String(overriddenCount))}
           </span>
         ) : null}
+      </div>
+
+      <div className="rounded-xl border border-border/50 bg-background/60 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">{t("settings.interactiveTimeout.title")}</div>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+              {t("settings.interactiveTimeout.desc")}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Input
+              type="number"
+              value={timeoutInputValue}
+              aria-label={t("settings.interactiveTimeout.title")}
+              onChange={(event) => setTimeoutDraft(event.currentTarget.value)}
+              onBlur={commitTimeoutDraft}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              className="w-20"
+            />
+            <span className="text-xs text-muted-foreground">
+              {t("settings.interactiveTimeout.unit")}
+            </span>
+          </div>
+        </div>
+        <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground/70">
+          {t("settings.interactiveTimeout.hint")}
+        </p>
       </div>
 
       <div className="space-y-4">

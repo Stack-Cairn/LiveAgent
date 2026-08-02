@@ -198,6 +198,11 @@ export type SystemProxyConfig = {
 /** 工具审批策略:allow 直接执行、ask 执行前请求用户批准、deny 直接拒绝。 */
 export type ToolPolicy = "allow" | "ask" | "deny";
 
+/** 交互式应答（AskUserQuestion 提问卡 + 工具审批栏）的等待窗口，单位分钟。
+ *  正数 = 超时窗口，超时后按各交互既定姿态落定（提问自动选推荐项并继续、
+ *  审批按拒绝）。两处交互共用同一窗口。填很大的数（如 99999）≈ 永不超时。 */
+export const INTERACTIVE_TIMEOUT_DEFAULT_MINUTES = 3;
+
 export type SystemSettings = {
   executionMode: ExecutionMode;
   workdir: string;
@@ -207,6 +212,8 @@ export type SystemSettings = {
    * 可选:旧快照缺失该字段时视为空表(全部走默认),保证零回归。
    */
   toolPolicies?: Record<string, ToolPolicy>;
+  /** 交互式应答超时(分钟):正数=窗口,超长≈永不。缺省 3,保持历史行为。 */
+  interactiveTimeoutMinutes: number;
   workspaceProjects: WorkspaceProject[];
   activeWorkspaceProjectId?: string;
   hiddenWorkspaceProjectPaths: string[];
@@ -1642,12 +1649,20 @@ export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
   };
 }
 
+/** 归一化交互式应答超时(分钟):正数=窗口(超长≈永不),缺省/非法/非正回 3。 */
+export function normalizeInteractiveTimeoutMinutes(input: unknown): number {
+  return typeof input === "number" && Number.isFinite(input) && input > 0
+    ? input
+    : INTERACTIVE_TIMEOUT_DEFAULT_MINUTES;
+}
+
 export function normalizeSystemSettings(input: unknown): SystemSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     executionMode: normalizeExecutionMode(obj.executionMode),
     workdir: normalizeWorkdir(obj.workdir),
     toolPolicies: normalizeToolPolicies(obj.toolPolicies),
+    interactiveTimeoutMinutes: normalizeInteractiveTimeoutMinutes(obj.interactiveTimeoutMinutes),
     workspaceProjects: normalizeWorkspaceProjects(obj.workspaceProjects),
     activeWorkspaceProjectId:
       typeof obj.activeWorkspaceProjectId === "string" && obj.activeWorkspaceProjectId.trim()
@@ -2209,6 +2224,7 @@ export function getDefaultSettings(): AppSettings {
       missingWorkspaceProjectPaths: [],
       archivedWorkspaceProjectPaths: [],
       systemProxy: getDefaultSystemProxyConfig(),
+      interactiveTimeoutMinutes: INTERACTIVE_TIMEOUT_DEFAULT_MINUTES,
     },
     customProviders,
     mcp: {
