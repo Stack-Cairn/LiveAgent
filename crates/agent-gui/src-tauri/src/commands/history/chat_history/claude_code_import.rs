@@ -77,6 +77,9 @@ fn convert_claude_code_file(
         let event_id = format!("{session_id}:{entry_id}");
         match row.get("type").and_then(Value::as_str) {
             Some("user") => {
+                if row.get("isMeta").and_then(Value::as_bool) == Some(true) {
+                    continue;
+                }
                 let Some(message) = row.get("message") else {
                     continue;
                 };
