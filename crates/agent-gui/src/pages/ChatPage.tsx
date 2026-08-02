@@ -34,6 +34,7 @@ import { useLocale } from "../i18n";
 import type { AppUpdateController } from "../lib/appUpdates";
 import { getAutomationState, useAutomation } from "../lib/automation";
 import type { ChatFileLink } from "../lib/chat/chatFileLinks";
+import type { CompactionSinks } from "../lib/chat/compaction/controller";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
   buildRequestContext,
@@ -41,6 +42,8 @@ import {
   createConversationStateFromContext,
   type RenderTimelineItem,
 } from "../lib/chat/conversation/conversationState";
+import { createGatewayBridgeEventController } from "../lib/chat/conversation/run/gatewayBridgeEvents";
+import { createTurnCancellation } from "../lib/chat/conversation/turnCancellation";
 import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
 import type { CodeMentionReference } from "../lib/chat/messages/mentionReferences";
@@ -54,6 +57,7 @@ import {
 import type { ScrollFollowHandle } from "../lib/chat-scroll/useScrollFollow";
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { setPreferredMonacoNlsLocale } from "../lib/monacoNls";
+import { createProviderRuntimeConfig } from "../lib/providers/llm";
 import {
   type AppSettings,
   getRightDockFileTreeState,
@@ -127,6 +131,7 @@ import { appendManagedSkillSelections } from "./chat/chatPageUtils";
 import { ChatFileDropOverlay } from "./chat/components/ChatFileDropOverlay";
 import { WorkspaceOverlayHost } from "./chat/components/WorkspaceOverlayHost";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
+import { createLocalGatewayChatRunId } from "./chat/gateway/gatewayRuntimeStatusModel";
 import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
@@ -139,6 +144,11 @@ import {
   removeQueuedChatTurnsForConversation,
 } from "./chat/queue/chatTurnQueue";
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
+import { buildCompactionContext } from "./chat/runtime/conversationContextBuilders";
+import {
+  type EffectiveChatModelSelection,
+  resolveEffectiveChatModelSelection,
+} from "./chat/runtime/modelSelection";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
@@ -368,6 +378,21 @@ export function ChatPage(props: ChatPageProps) {
     () => conversationState.transcript.items,
     [conversationState],
   );
+  const contextUsageTokens = useMemo(() => {
+    for (let itemIndex = transcriptItems.length - 1; itemIndex >= 0; itemIndex -= 1) {
+      const item = transcriptItems[itemIndex];
+      if (item.kind === "summary") return undefined;
+      if (item.kind !== "assistant") continue;
+
+      for (let roundIndex = item.rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
+        const totalTokens = item.rounds[roundIndex].meta?.usageTotalTokens;
+        if (typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0) {
+          return totalTokens;
+        }
+      }
+    }
+    return undefined;
+  }, [transcriptItems]);
   // Sent-prompt history for the composer's ↑/↓ recall. Read lazily through a
   // ref so the memoized composer bar never re-renders on transcript growth.
   const transcriptItemsRef = useRef<RenderTimelineItem[]>(transcriptItems);
@@ -1086,6 +1111,131 @@ export function ChatPage(props: ChatPageProps) {
     setHydratingConversationId,
     setHydrationFailedConversationId,
   });
+
+  /**
+   * 手动压缩当前会话上下文（由输入区上下文用量环的确认弹窗触发）。
+   * 空闲时复用压缩主流程强制压缩；发送中/压缩中返回 false。
+   */
+  const handleManualCompact = useCallback(async (): Promise<boolean> => {
+    const conversationId = currentConversationIdRef.current;
+    if (isConversationRunning(conversationId)) return false;
+    const runtimeEntry = buildRuntimeEntryFromVisibleState();
+    if (runtimeEntry.compactionStatus.phase !== "idle") return false;
+    // 手动压缩仅在上下文占用超过 50% 时可用（与用量环展示口径一致）。
+    const usageRatio =
+      typeof contextUsageTokens === "number" &&
+      Number.isFinite(contextUsageTokens) &&
+      typeof currentModelContextWindow === "number" &&
+      Number.isFinite(currentModelContextWindow) &&
+      currentModelContextWindow > 0
+        ? contextUsageTokens / currentModelContextWindow
+        : 0;
+    if (usageRatio <= 0.5) return false;
+
+    let effectiveSelectedModel: EffectiveChatModelSelection;
+    try {
+      effectiveSelectedModel = resolveEffectiveChatModelSelection({
+        settings,
+        conversationSelectedModel: runtimeEntry.selectedModel,
+      });
+    } catch {
+      setErrorMessage("当前模型配置不可用，请重新选择模型后重试。");
+      return false;
+    }
+    const { selectedModel, provider, providerId, model } = effectiveSelectedModel;
+    const providerConfig = createProviderRuntimeConfig(
+      provider,
+      model,
+      chatRuntimeControlsForCurrentProvider,
+      settings.customSettings.providerIdentities,
+    );
+
+    const hasRemoteGatewayTarget =
+      settings.remote.enabled &&
+      settings.remote.gatewayUrl.trim() !== "" &&
+      settings.remote.token.trim() !== "";
+    const gatewayBridgeEvents = createGatewayBridgeEventController({
+      conversationId,
+      requestId: createLocalGatewayChatRunId(conversationId),
+      workerId: "gui-live",
+      enabled: hasRemoteGatewayTarget,
+      sendEvent: queueGatewayBridgeEventForRequest,
+      flushEvents: flushGatewayBridgeEventsForRequest,
+      resolveErrorConversationId: () => currentConversationIdRef.current,
+    });
+    const setBridgeToolStatus = (status: string | null, isCompaction = false) => {
+      gatewayBridgeEvents.queueToolStatus(status, isCompaction);
+      updateToolStatus(status, liveTranscriptStore);
+    };
+
+    const controller = getCompactionController(conversationId);
+    const sinks: CompactionSinks = {
+      applyState: (state) =>
+        updateConversationRuntimeEntry(conversationId, (prev) => ({ ...prev, state })),
+      applyStateMidRun: (state) => {
+        updateConversationRuntimeEntry(conversationId, (prev) => ({ ...prev, state }));
+        resetLiveTranscript(liveTranscriptStore);
+      },
+      publishStatus: (status) =>
+        updateConversationRuntimeEntry(conversationId, (prev) => ({
+          ...prev,
+          compactionStatus: status,
+        })),
+      setBridgeToolStatus,
+      queueCheckpoint: (state) => gatewayBridgeEvents.queueCheckpoint(state),
+      persist: (state) =>
+        persistConversation({
+          conversationId,
+          sessionId: runtimeEntry.sessionId,
+          providerId,
+          model,
+          selectedModel,
+          cwd: displayedConversationWorkdir || undefined,
+          state,
+          fallbackTitle: t("chat.pendingTitle"),
+          createdAt: runtimeEntry.createdAt,
+          titlePromise: null,
+        }),
+    };
+
+    try {
+      return await controller.compactNow({
+        state: runtimeEntry.state,
+        providerId,
+        model,
+        runtime: providerConfig,
+        cancellation: createTurnCancellation(),
+        sinks,
+        buildPreparedContext: (state, tools, options) =>
+          buildCompactionContext(state, tools, options),
+        buildResumeContext: (state, resumeMessage, tools, options) => {
+          const base = buildCompactionContext(state, tools, options);
+          if (!resumeMessage) return base;
+          return { ...base, messages: [...base.messages, resumeMessage] };
+        },
+      });
+    } finally {
+      await gatewayBridgeEvents.close();
+    }
+  }, [
+    buildRuntimeEntryFromVisibleState,
+    chatRuntimeControlsForCurrentProvider,
+    contextUsageTokens,
+    currentConversationIdRef,
+    currentModelContextWindow,
+    displayedConversationWorkdir,
+    flushGatewayBridgeEventsForRequest,
+    getCompactionController,
+    isConversationRunning,
+    liveTranscriptStore,
+    persistConversation,
+    queueGatewayBridgeEventForRequest,
+    resetLiveTranscript,
+    settings,
+    t,
+    updateConversationRuntimeEntry,
+    updateToolStatus,
+  ]);
 
   startNewConversationActionRef.current = startNewConversation;
   openInitialActionRef.current = openConversationInitial;
@@ -2037,6 +2187,9 @@ export function ChatPage(props: ChatPageProps) {
                 chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                 reasoningOptions={chatRuntimeReasoningOptions}
                 thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
+                contextUsageTokens={contextUsageTokens}
+                contextWindow={currentModelContextWindow}
+                onManualCompactConfirm={handleManualCompact}
                 gitClient={tauriGitClient}
                 workspaceActivityClient={tauriWorkspaceActivityClient}
                 onSend={handleSend}

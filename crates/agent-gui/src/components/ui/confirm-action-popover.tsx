@@ -6,7 +6,7 @@ import { Button } from "./button";
 
 export function ConfirmActionPopover(props: {
   title: string;
-  description: ReactNode;
+  description?: ReactNode;
   confirmLabel: string;
   onConfirm: () => void;
   // Popover edge to align with the trigger; "end" suits right-aligned action
@@ -51,9 +51,11 @@ export function ConfirmActionPopover(props: {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{title}</p>
-                  <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    {description}
-                  </div>
+                  {description ? (
+                    <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                      {description}
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="mt-3 flex justify-end gap-2">

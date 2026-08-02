@@ -244,6 +244,7 @@ export class CompactionController {
   async compactDuringRun(params: {
     trigger: Exclude<CompactionTrigger, "pre-send">;
     state: ConversationViewState;
+    force?: boolean;
     budgetContext?: Context;
     tools?: Context["tools"];
     includeAbortedMessages?: boolean;
@@ -292,10 +293,14 @@ export class CompactionController {
         : binding.buildPreparedContext(workingState, params.tools, buildOptions);
     this.ledger.rebase(budgetContext);
     this.updateTurnMeta(workingState);
-    const decision = this.decide("protection", this.ledger.total(), now);
+    const decision = this.decide(
+      params.force ? "optimization" : "protection",
+      this.ledger.total(),
+      now,
+    );
     this.logDecision(decision);
 
-    if (!decision.shouldCompact) {
+    if (!params.force && !decision.shouldCompact) {
       if (pruned) {
         binding.sinks.applyStateMidRun?.(pruned.state);
         return {
@@ -378,6 +383,35 @@ export class CompactionController {
   }
 
   // 用户中止后的统一善后：有快照则回滚（恢复状态/输入框/可选持久化）并返回 true。
+  /**
+   * 用户手动触发的上下文压缩（点击输入区上下文用量环 → 确认）：临时绑定一轮并复用主压缩流程，
+   * 强制跳过阈值判断。仅限空闲时调用；若有进行中的回合或绑定则直接返回 false。
+   */
+  async compactNow(params: {
+    state: ConversationViewState;
+    providerId: ProviderId;
+    model: string;
+    runtime: ProviderRuntimeConfig;
+    cancellation: TurnCancellation;
+    debugLogger?: StreamDebugLogger;
+    sinks: CompactionSinks;
+    buildPreparedContext: CompactionTurnBinding["buildPreparedContext"];
+    buildResumeContext: CompactionTurnBinding["buildResumeContext"];
+  }): Promise<boolean> {
+    if (this.binding || this.inFlight) return false;
+    this.bindTurn({ ...params });
+    try {
+      const result = await this.compactDuringRun({
+        trigger: "manual",
+        state: params.state,
+        force: true,
+      });
+      return result.context !== null;
+    } finally {
+      this.unbindTurn();
+    }
+  }
+
   async handleTurnAbort(): Promise<boolean> {
     const binding = this.binding;
     const snapshot = this.rollbackSnapshot;
