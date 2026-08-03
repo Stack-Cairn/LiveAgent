@@ -4405,6 +4405,21 @@ export default function GatewayApp() {
     return item?.title ?? "";
   }, [selectedHistoryId, sidebarConversationsById]);
   const transcriptRows = displayedTranscript.rows;
+  const contextUsageTokens = useMemo(() => {
+    for (let rowIndex = transcriptRows.length - 1; rowIndex >= 0; rowIndex -= 1) {
+      const row = transcriptRows[rowIndex];
+      if (row.kind === "checkpoint") return undefined;
+      if (row.kind !== "assistant") continue;
+
+      for (let roundIndex = row.rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
+        const totalTokens = row.rounds[roundIndex].meta?.usageTotalTokens;
+        if (typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0) {
+          return totalTokens;
+        }
+      }
+    }
+    return undefined;
+  }, [transcriptRows]);
   // 当前会话的待审批工具:遍历渲染中的 transcript,筛出带 __toolApprovalPending 标记
   // 且尚无结果的 tool call(与 ToolCallItem 判定同源)。用于输入框上方的集中审批栏,
   // 取代埋在各折叠项里的分散卡片。快照 revision 变化时经 useConversationChat 重渲染,
@@ -4981,6 +4996,8 @@ export default function GatewayApp() {
                       chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                       reasoningOptions={chatRuntimeReasoningOptions}
                       thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
+                      contextUsageTokens={contextUsageTokens}
+                      contextWindow={currentModelContextWindow}
                       gitClient={gitClient}
                       gitWriteEnabled={settings.remote.enableWebGit}
                       gitDisabledMessage={gitDisabledMessage}

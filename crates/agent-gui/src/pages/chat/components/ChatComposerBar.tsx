@@ -38,6 +38,7 @@ import {
   Trash2,
 } from "../../../components/icons";
 import { Button } from "../../../components/ui/button";
+import { ConfirmActionPopover } from "../../../components/ui/confirm-action-popover";
 import {
   Select,
   SelectContent,
@@ -96,6 +97,118 @@ function RuntimeControlTooltip(props: { label: string; children: ReactNode }) {
   );
 }
 
+function ContextUsageRing(props: {
+  totalTokens?: number;
+  contextWindow?: number;
+  locale: string;
+  totalLabel: string;
+  contextWindowLabel: string;
+  confirmTitle: string;
+  confirmLabel: string;
+  disabled?: boolean;
+  onConfirm?: (() => void) | (() => Promise<unknown>);
+}) {
+  const {
+    totalTokens,
+    contextWindow,
+    locale,
+    totalLabel,
+    contextWindowLabel,
+    confirmTitle,
+    confirmLabel,
+    disabled,
+    onConfirm,
+  } = props;
+  if (typeof contextWindow !== "number" || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return null;
+  }
+
+  const normalizedTokens =
+    typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0
+      ? Math.floor(totalTokens)
+      : 0;
+  const rawPercentage = (normalizedTokens / contextWindow) * 100;
+  const displayedPercentage = Math.min(999, Math.round(rawPercentage));
+  const ringPercentage = Math.min(100, Math.max(0, rawPercentage));
+  const formattedTokens = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(
+    normalizedTokens,
+  );
+  const formattedWindow = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(
+    contextWindow,
+  );
+  const label = `${displayedPercentage}% · ${totalLabel} ${formattedTokens} · ${contextWindowLabel} ${formattedWindow}`;
+  const progressClass =
+    rawPercentage >= 90
+      ? "stroke-red-500 dark:stroke-red-400"
+      : rawPercentage >= 70
+        ? "stroke-amber-500 dark:stroke-amber-400"
+        : "stroke-emerald-500 dark:stroke-emerald-400";
+  // 手动压缩仅在上下文占用超过 50% 时可用。
+  const manualCompactAvailable = rawPercentage > 50;
+
+  return (
+    <RuntimeControlTooltip label={label}>
+      <ConfirmActionPopover
+        title={confirmTitle}
+        confirmLabel={confirmLabel}
+        tone="default"
+        side="top"
+        onConfirm={() => onConfirm?.()}
+      >
+        {(open) => (
+          <button
+            type="button"
+            onClick={open}
+            disabled={disabled || !manualCompactAvailable}
+            aria-label={confirmTitle}
+            className="relative flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full transition-opacity hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span
+              role="progressbar"
+              aria-label={label}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.min(100, displayedPercentage)}
+              className="relative flex h-8 w-8 items-center justify-center text-[calc(7px*var(--zone-font-scale,1))] font-semibold leading-none tabular-nums text-foreground/75"
+            >
+              <svg
+                aria-hidden
+                role="presentation"
+                viewBox="0 0 24 24"
+                className="absolute inset-0 h-8 w-8 -rotate-90"
+              >
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9.5"
+                  fill="none"
+                  strokeWidth="2.25"
+                  className="stroke-foreground/10 dark:stroke-white/10"
+                />
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="9.5"
+                  fill="none"
+                  pathLength="100"
+                  strokeWidth="2.25"
+                  strokeLinecap="round"
+                  strokeDasharray="100"
+                  strokeDashoffset={100 - ringPercentage}
+                  className={cn(
+                    "transition-[stroke-dashoffset,stroke] duration-300",
+                    progressClass,
+                  )}
+                />
+              </svg>
+              <span className="relative">{displayedPercentage}%</span>
+            </span>
+          </button>
+        )}
+      </ConfirmActionPopover>
+    </RuntimeControlTooltip>
+  );
+}
 let pendingComposerImagePreviewSequence = 0;
 const pendingComposerImagePreviewKeys = new WeakMap<PendingUploadedFile, string>();
 
@@ -184,6 +297,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   chatRuntimeControls: ChatRuntimeControls;
   reasoningOptions: ReasoningLevel[];
   thinkingAlwaysOn: boolean;
+  contextUsageTokens?: number;
+  contextWindow?: number;
+  /** 点击上下文用量环触发手动压缩（确认弹窗由组件内部展示）。 */
+  onManualCompactConfirm?: (() => void) | (() => Promise<unknown>);
   gitClient?: GitClient | null;
   gitWriteEnabled?: boolean;
   gitDisabledMessage?: string;
@@ -219,6 +336,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     chatRuntimeControls,
     reasoningOptions,
     thinkingAlwaysOn,
+    contextUsageTokens,
+    contextWindow,
+    onManualCompactConfirm,
     gitClient,
     gitWriteEnabled = true,
     gitDisabledMessage,
@@ -240,7 +360,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     onHeightChange,
     approvalBar,
   } = props;
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const attachmentListRef = useRef<HTMLDivElement | null>(null);
   const previousPendingUploadCountRef = useRef(0);
@@ -981,6 +1101,17 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
+              <ContextUsageRing
+                totalTokens={contextUsageTokens}
+                contextWindow={contextWindow}
+                locale={locale}
+                totalLabel={t("chat.usageTotal")}
+                contextWindowLabel={t("chat.contextWindow")}
+                confirmTitle={t("chat.manualCompactTitle")}
+                confirmLabel={t("chat.manualCompactConfirm")}
+                disabled={controlsDisabled || isSending}
+                onConfirm={onManualCompactConfirm}
+              />
               <Button
                 disabled={isSending ? false : sendDisabled}
                 onClick={() => {

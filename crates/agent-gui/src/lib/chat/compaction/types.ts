@@ -1,6 +1,6 @@
 export type { ProviderRuntimeConfig } from "../../providers/runtime/types";
 
-export type CompactionTrigger = "pre-send" | "mid-stream" | "post-tool";
+export type CompactionTrigger = "pre-send" | "mid-stream" | "post-tool" | "manual";
 
 // optimization = 发送前的从容压缩（阈值更宽），protection = 运行中的保护性压缩（阈值更紧）。
 export type CompactionIntent = "optimization" | "protection";

@@ -198,6 +198,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.changedFiles.expand": "展开文件列表",
     "chat.compactingContext": "正在压缩上下文",
     "chat.compactingContextWait": "正在压缩上下文，请稍候...",
+    "chat.manualCompactTitle": "手动压缩上下文？",
+
+    "chat.manualCompactConfirm": "压缩",
     "chat.editMessage": "编辑消息",
     "chat.cancel": "取消",
     "chat.queue.title": "等待队列 {count}",
@@ -2467,6 +2470,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.changedFiles.expand": "Expand file list",
     "chat.compactingContext": "Compressing context",
     "chat.compactingContextWait": "Compressing context, please wait...",
+    "chat.manualCompactTitle": "Compact context manually?",
+
+    "chat.manualCompactConfirm": "Compact",
     "chat.editMessage": "Edit Message",
     "chat.cancel": "Cancel",
     "chat.queue.title": "Queue {count}",
