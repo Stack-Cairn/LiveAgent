@@ -893,19 +893,38 @@ mod tests {
     }
 
     /// True while ANY member of the process group is alive, even after the
-    /// leader exited.
+    /// leader exited. Probes /proc states instead of `kill -0 -<pgid>`:
+    /// kill(2) treats zombies as alive, and orphaned zombies are reaped by
+    /// PID 1 — which not every host does (minimal container images), leaving
+    /// `kill -0` to report a terminated group as alive forever.
     #[cfg(unix)]
     fn process_group_exists(pgid: u32) -> bool {
-        std::process::Command::new("kill")
-            .arg("-0")
-            .arg("--")
-            .arg(format!("-{pgid}"))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return false;
+        };
+        for entry in entries.flatten() {
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            let Ok(pid) = name.parse::<u32>() else {
+                continue;
+            };
+            let Ok(raw) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+                continue;
+            };
+            let Some(rest) = raw.split(')').last() else {
+                continue;
+            };
+            let parts: Vec<&str> = rest.trim_start().split_whitespace().collect();
+            // parts: [state, ppid, pgrp, ...]
+            if parts.len() > 2
+                && parts[2].parse::<u32>().ok() == Some(pgid)
+                && !matches!(parts[0], "Z" | "X")
+            {
+                return true;
+            }
+        }
+        false
     }
 
     #[cfg(unix)]
