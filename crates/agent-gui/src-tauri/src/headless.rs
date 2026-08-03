@@ -22,11 +22,11 @@ use std::time::Instant;
 use dirs;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path as AxumPath, State, State as AxumState};
+use axum::extract::{FromRef, Path as AxumPath, State, State as AxumState};
 use axum::http::{header, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{any, get, post};
 use axum::{Json, Router};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -49,7 +49,7 @@ use crate::services::tunnel::{GatewayTunnelCreateInput, GatewayTunnelUpdateInput
 use crate::app_context::AppContext;
 use crate::events::WsEventEmitter;
 use crate::runtime::shell_runner::ShellRunRegistry;
-use crate::services::proxy::ProxyServerState;
+use crate::services::proxy::{handle_image_proxy, handle_proxy, ProxyServerState};
 
 // ---- Unified error type for headless command dispatch ----
 
@@ -89,6 +89,14 @@ pub struct HeadlessState {
     pub shell_runs: Arc<ShellRunRegistry>,
     pub hook_scopes: Arc<crate::commands::hook::HookScopeRegistry>,
     pub proxy_server: Arc<ProxyServerState>,
+    /// BFF 模式下反代路由挂在主 HTTP 服务上，前端拿到的反代 baseUrl 就是主服务地址。
+    pub proxy_base_url: String,
+}
+
+impl FromRef<HeadlessState> for Arc<ProxyServerState> {
+    fn from_ref(state: &HeadlessState) -> Self {
+        state.proxy_server.clone()
+    }
 }
 
 // ---- Argument helpers ----
@@ -1950,7 +1958,14 @@ pub async fn dispatch(state: &HeadlessState, cmd: &str, args: Value) -> Result<V
     },
         // ===== proxy =====
     "proxy_get_server_info" => {
-        to_value(crate::services::proxy::proxy_get_server_info(&state.proxy_server))
+        // BFF 模式：反代路由挂在主 HTTP 服务上（/proxy/*、/image-proxy），
+        // 前端直接把请求发到主服务端口，由服务端转发上游。token 沿用本地反代
+        // 的随机 token，/proxy handler 按同一 token 校验。
+        let info = crate::services::proxy::proxy_get_server_info(&state.proxy_server);
+        to_value(serde_json::json!({
+            "baseUrl": state.proxy_base_url,
+            "token": info.token,
+        }))
     },
         _ => Err(HeadlessError::Business(format!("unknown command: {{cmd}}"))),
     }
@@ -1980,7 +1995,15 @@ async fn auth_middleware(
 ) -> Result<Response, StatusCode> {
     // Health check and WebSocket are always public.
     let path = req.uri().path().to_string();
-    if path == "/health" || path == "/api/status" || path == "/ws" || path == "/" {
+    // /proxy/* 与 /image-proxy 走反代自身的 token/URL 校验，豁免 API token
+    // （浏览器 fetch / <img> 无法携带 Bearer）。
+    if path == "/health"
+        || path == "/api/status"
+        || path == "/ws"
+        || path == "/"
+        || path == "/image-proxy"
+        || path.starts_with("/proxy/")
+    {
         return Ok(next.run(req).await);
     }
     match &config.api_token {
@@ -2257,6 +2280,11 @@ pub fn build_router(state: HeadlessState) -> Router {
         .route("/api/status", get(api_status))
         .route("/api/invoke", post(invoke_handler))
         .route("/ws", get(ws_handler))
+        // BFF 出网反代：复用本地反代的 handler，把出网统一收敛到主服务端口，
+        // 浏览器同源请求即可，无 CORS/随机端口问题（agent-gateway 同款架构）。
+        .route("/image-proxy", get(handle_image_proxy))
+        .route("/proxy/{provider}", any(handle_proxy))
+        .route("/proxy/{provider}/{*rest}", any(handle_proxy))
         .route("/", get(serve_root))
         .route("/{*path}", get(serve_static))
         .with_state(state)
@@ -2266,12 +2294,24 @@ pub fn build_router(state: HeadlessState) -> Router {
 }
 
 /// Build the axum state (registries that are not part of AppContext).
-pub fn build_state(ctx: Arc<AppContext>, emitter: Arc<WsEventEmitter>) -> Result<HeadlessState, String> {
+pub fn build_state(
+    ctx: Arc<AppContext>,
+    emitter: Arc<WsEventEmitter>,
+    proxy_base_url: String,
+) -> Result<HeadlessState, String> {
     let mcp_runtime = Arc::new(crate::commands::mcp::McpRuntimeManager::default());
     let shell_runs = Arc::new(ShellRunRegistry::default());
     let hook_scopes = Arc::new(crate::commands::hook::HookScopeRegistry::default());
     let proxy_server = crate::services::proxy::start_proxy_server()?;
-    Ok(HeadlessState { ctx, emitter, mcp_runtime, shell_runs, hook_scopes, proxy_server })
+    Ok(HeadlessState {
+        ctx,
+        emitter,
+        mcp_runtime,
+        shell_runs,
+        hook_scopes,
+        proxy_server,
+        proxy_base_url,
+    })
 }
 
 /// Run the headless server. Config via environment variables:
@@ -2302,7 +2342,9 @@ pub async fn serve() -> Result<(), String> {
     }
 
     let ctx = AppContext::new(emitter_dyn);
-    let state = build_state(ctx, emitter).map_err(|e| format!("headless state: {e}"))?;
+    // BFF：反代路由挂在主服务上，前端拿到的反代 baseUrl 即主服务地址。
+    let proxy_base_url = format!("http://127.0.0.1:{port}");
+    let state = build_state(ctx, emitter, proxy_base_url).map_err(|e| format!("headless state: {e}"))?;
     let app = build_router(state);
     let listener = tokio::net::TcpListener::bind((host.as_str(), port))
         .await.map_err(|e| format!("bind {host}:{port}: {e}"))?;
