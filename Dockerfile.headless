@@ -1,0 +1,66 @@
+# syntax=docker/dockerfile:1.7
+
+# LiveAgent Headless Docker Image
+# Builds the headless binary (axum server + WebSocket bridge) without Tauri
+
+FROM --platform=$BUILDPLATFORM rust:1.82-bookworm AS builder
+
+# Install system dependencies for the build
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Copy workspace Cargo files for dependency caching
+COPY Cargo.toml Cargo.lock ./
+COPY crates/agent-gui/src-tauri/Cargo.toml ./crates/agent-gui/src-tauri/
+
+# Create dummy source files for dependency caching
+RUN mkdir -p crates/agent-gui/src-tauri/src && \
+    echo 'fn main() {}' > crates/agent-gui/src-tauri/src/main.rs && \
+    echo 'pub fn dummy() {}' > crates/agent-gui/src-tauri/src/lib.rs
+
+# Build dependencies only (cached layer)
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --no-default-features -p liveagent || true
+
+# Copy actual source code
+COPY . .
+
+# Build the headless binary with embedded assets
+ARG TARGETOS
+ARG TARGETARCH
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --no-default-features -p liveagent && \
+    cp target/release/liveagent /usr/local/bin/liveagent
+
+# Runtime image
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd --system --uid 10001 --user-group --home-dir /nonexistent --shell /usr/sbin/nologin liveagent && \
+    install -d -o liveagent -g liveagent -m 0700 /var/lib/liveagent
+
+COPY --from=builder /usr/local/bin/liveagent /usr/local/bin/liveagent
+
+USER liveagent
+
+ENV PORT=17890 \
+    LIVEAGENT_DATA_DIR=/var/lib/liveagent
+
+VOLUME ["/var/lib/liveagent"]
+
+EXPOSE 17890
+
+ENTRYPOINT ["/usr/local/bin/liveagent", "--port", "17890"]
