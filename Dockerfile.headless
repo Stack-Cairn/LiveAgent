@@ -50,8 +50,10 @@ RUN apt-get update && \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-RUN useradd --system --uid 10001 --user-group --home-dir /nonexistent --shell /usr/sbin/nologin liveagent && \
+# Create non-root user whose home is the writable data volume.
+# The app stores history/settings under $HOME/.liveagent (dirs::home_dir()),
+# so the home dir must live on the data volume, not /nonexistent.
+RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/liveagent --shell /usr/sbin/nologin liveagent && \
     install -d -o liveagent -g liveagent -m 0700 /var/lib/liveagent
 
 COPY --from=builder /usr/local/bin/liveagent /usr/local/bin/liveagent
