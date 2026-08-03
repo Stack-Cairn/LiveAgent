@@ -13,6 +13,7 @@ import {
   isAgentDevMode,
   isAgentExecutionMode,
   type ReasoningLevel,
+  resolveEffectiveSkillNames,
 } from "../../lib/settings";
 import {
   buildSkillsSystemPrompt,
@@ -59,11 +60,15 @@ function getActiveAgentPrompt(settings: AppSettings) {
   );
 }
 
-async function buildCronSkillsContext(settings: AppSettings) {
-  const selectedSkillNames = settings.skills.selected.filter(
-    (name) => !isAlwaysEnabledSkillName(name),
-  );
-  if (!settings.skills.enabled || selectedSkillNames.length === 0) {
+async function buildCronSkillsContext(settings: AppSettings, request: PromptRunRequest) {
+  const effective = resolveEffectiveSkillNames({
+    settings: settings.skills,
+    presetId: request.skillPresetId,
+    skillsDisabled: request.skillsDisabled,
+    executionMode: settings.system.executionMode,
+  });
+  const selectedSkillNames = effective.skillNames.filter((name) => !isAlwaysEnabledSkillName(name));
+  if (!effective.enabled || selectedSkillNames.length === 0) {
     return {
       enabled: false,
       prompt: "",
@@ -153,7 +158,7 @@ async function executeCronPromptRun(
     throw new Error(`Auto Prompt provider API key is empty: ${providerLabel}`);
   }
 
-  const skillsContext = await buildCronSkillsContext(settings);
+  const skillsContext = await buildCronSkillsContext(settings, request);
   const activeAgentPrompt = getActiveAgentPrompt(settings);
   const runtimePlatform = await resolveRuntimePlatform();
   const builtinRegistry = await buildBuiltinToolRegistry({

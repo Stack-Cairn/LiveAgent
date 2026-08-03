@@ -221,6 +221,19 @@ test("Cron workspace pin stays wired across GUI and WebUI", () => {
   }
 });
 
+test("Cron Skills preset selectors render names instead of internal ids", () => {
+  for (const source of [guiCronModalSource, webCronModalSource]) {
+    assert.match(
+      source,
+      /skillPresets\.find\(\(preset\) => preset\.id === value\)\?\.name/,
+    );
+    assert.match(
+      source,
+      /resolveSkillPreset\(\{ presets: skillPresets \}, skillPresetId\)\.name/,
+    );
+  }
+});
+
 test("CronTaskManager create pins the agent's current workspace by default", () => {
   // Create with the workdir key absent injects the runtime workspace (http
   // tasks excluded); an explicitly EMPTY workdir also resolves to the

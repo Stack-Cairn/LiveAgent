@@ -257,6 +257,8 @@ export type HistoryDetail = {
   returned_message_count?: number;
   has_more?: boolean;
   conversation?: ConversationSummary;
+  skill_preset_id?: string;
+  skills_disabled?: boolean;
 };
 
 export type HistoryShareStatus = {

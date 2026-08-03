@@ -223,6 +223,7 @@ pub async fn handle_history_get(
     let (messages_json, returned_message_count) =
         flatten_history_messages_json_window(&record.segments, max_messages)?;
     let total_message_count = i32::try_from(record.total_message_count).unwrap_or(i32::MAX);
+    let (skill_preset_id, skills_disabled) = history_skills_config(&record.context_meta_json);
 
     Ok(proto::HistoryGetResponse {
         conversation_id: record.id.clone(),
@@ -232,6 +233,8 @@ pub async fn handle_history_get(
         has_more: max_messages > 0
             && i64::from(returned_message_count) < record.total_message_count,
         conversation: Some(build_proto_conversation_summary_from_record(&record)),
+        skill_preset_id,
+        skills_disabled,
     })
 }
 
@@ -251,6 +254,7 @@ pub async fn handle_history_prefix(
         chat_history::build_history_prefix_segments(&record.segments, &base_message_ref)?;
     let (messages_json, returned_message_count) =
         flatten_history_messages_json_window(&prefix_segments, max_messages)?;
+    let (skill_preset_id, skills_disabled) = history_skills_config(&record.context_meta_json);
 
     Ok(proto::HistoryPrefixResponse {
         conversation_id: record.id.clone(),
@@ -259,7 +263,25 @@ pub async fn handle_history_prefix(
         returned_message_count,
         has_more: max_messages > 0 && i64::from(returned_message_count) < prefix_message_count,
         conversation: Some(build_proto_conversation_summary_from_record(&record)),
+        skill_preset_id,
+        skills_disabled,
     })
+}
+
+fn history_skills_config(context_meta_json: &str) -> (String, bool) {
+    let value = serde_json::from_str::<Value>(context_meta_json).unwrap_or(Value::Null);
+    let preset_id = value
+        .get("skillPresetId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("default")
+        .to_string();
+    let disabled = value
+        .get("skillsDisabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    (preset_id, disabled)
 }
 
 pub async fn handle_history_rename(
@@ -299,6 +321,21 @@ pub async fn handle_history_pin(
             .await?;
 
     Ok(proto::HistoryPinResponse {
+        conversation: Some(build_proto_conversation_summary(summary)),
+    })
+}
+
+pub async fn handle_history_skills(
+    request: proto::HistorySkillsRequest,
+) -> Result<proto::HistorySkillsResponse, String> {
+    let summary = chat_history::chat_history_set_skills_inner(
+        request.conversation_id,
+        request.skill_preset_id,
+        request.skills_disabled,
+    )
+    .await?;
+
+    Ok(proto::HistorySkillsResponse {
         conversation: Some(build_proto_conversation_summary(summary)),
     })
 }

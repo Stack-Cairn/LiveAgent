@@ -36,7 +36,17 @@ import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
 import { readClipboardText } from "../../lib/system/clipboardText";
 import { invokeFs } from "../../lib/tools/fsBackend";
-import { Blend, ClipboardPaste, Copy, ScanText, Scissors, SKILL_ICON_SVG_MARKUP } from "../icons";
+import {
+  Blend,
+  Check,
+  ChevronRight,
+  ClipboardPaste,
+  Copy,
+  Layers,
+  ScanText,
+  Scissors,
+  SKILL_ICON_SVG_MARKUP,
+} from "../icons";
 import { getFileTypeIcon, getFileTypeIconSvg } from "./fileTypeIcons";
 import { mentionChipClassName } from "./mentionChipStyles";
 import {
@@ -74,6 +84,18 @@ export type MentionComposerSkill = {
 
 export type MentionComposerSkillMention = MentionComposerSkill;
 
+export type MentionComposerSkillPreset = {
+  id: string;
+  name: string;
+};
+
+export type MentionComposerSkillsCommand = {
+  presets: MentionComposerSkillPreset[];
+  presetId: string;
+  disabled: boolean;
+  onChange: (presetId: string, disabled: boolean) => void;
+};
+
 export type MentionComposerCommitMention = {
   sha: string;
   shortSha: string;
@@ -106,7 +128,9 @@ export type MentionComposerGitFileMention = {
 
 type MentionSuggestion =
   | { type: "file"; entry: MentionFileEntry }
-  | { type: "skill"; skill: MentionComposerSkill };
+  | { type: "skill"; skill: MentionComposerSkill }
+  | { type: "skillsCommand" }
+  | { type: "skillPreset"; presetId: string; name: string; disabled: boolean; current: boolean };
 
 type ComposerContextMenuState = {
   x: number;
@@ -191,6 +215,7 @@ export interface MentionComposerProps {
   placeholder?: string;
   workdir: string;
   enabledSkills?: MentionComposerSkill[];
+  skillsCommand?: MentionComposerSkillsCommand;
   className?: string;
 }
 
@@ -1226,6 +1251,16 @@ function insertMentionChipElement(ctx: MentionContext, chip: HTMLElement) {
   placeCaretInTextNode(afterNode, anchor.caretOffset);
 }
 
+function replaceMentionQueryText(ctx: MentionContext, replacement: string) {
+  const { textNode, triggerOffset, query } = ctx;
+  const text = textNode.textContent || "";
+  const beforeText = text.slice(0, triggerOffset);
+  const afterText = removeCaretAnchors(text.slice(triggerOffset + 1 + query.length));
+  const nextText = `${beforeText}${replacement ? `/${replacement}` : ""}${afterText}`;
+  textNode.data = nextText;
+  placeCaretInTextNode(textNode, beforeText.length + (replacement ? replacement.length + 1 : 0));
+}
+
 /** Replace the @query text with a styled mention chip. */
 function insertMentionChip(ctx: MentionContext, path: string, kind: "file" | "dir") {
   const chip = createFileMentionChip(path, kind);
@@ -1770,6 +1805,7 @@ function Popup({
   emptyLabel: string;
   onSelect: (suggestion: MentionSuggestion) => void;
 }) {
+  const { t } = useLocale();
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
@@ -1826,7 +1862,12 @@ function Popup({
       }}
     >
       <div className="px-3.5 pb-1.5 pt-3 text-xs font-medium text-muted-foreground">
-        {trigger === "skill" ? "Skills" : "文件"}
+        {suggestions.length > 0 &&
+        suggestions.every((suggestion) => suggestion.type === "skillPreset")
+          ? t("chat.skills.commandMenuTitle")
+          : trigger === "skill"
+            ? "Skills"
+            : "文件"}
       </div>
       <div
         ref={listRef}
@@ -1838,6 +1879,8 @@ function Popup({
         {error && !isLoading && <div className="px-2 py-2 text-xs text-destructive">{error}</div>}
         {suggestions.map((suggestion, i) => {
           const isSkill = suggestion.type === "skill";
+          const isSkillsCommand = suggestion.type === "skillsCommand";
+          const isSkillPreset = suggestion.type === "skillPreset";
           const entry = suggestion.type === "file" ? suggestion.entry : null;
           const skill = suggestion.type === "skill" ? suggestion.skill : null;
           const isDir = entry?.kind === "dir";
@@ -1845,12 +1888,28 @@ function Popup({
           const fileName = parts.pop() || "";
           const dirPath = parts.join("/");
           const Icon = entry ? getFileTypeIcon(entry.path, entry.kind) : null;
-          const title = skill?.name ?? fileName;
-          const subtitle = skill?.description ?? (dirPath ? `${dirPath}/` : "");
+          const title = isSkillsCommand
+            ? "/skills"
+            : isSkillPreset
+              ? suggestion.name
+              : (skill?.name ?? fileName);
+          const subtitle = isSkillsCommand
+            ? t("chat.skills.commandDescription")
+            : isSkillPreset
+              ? suggestion.disabled
+                ? t("chat.skills.commandDisabledDescription")
+                : t("chat.skills.commandPresetDescription")
+              : (skill?.description ?? (dirPath ? `${dirPath}/` : ""));
           return (
             <div
               key={
-                entry ? `${entry.kind}:${entry.path}` : `skill:${skill?.skillFile ?? skill?.name}`
+                entry
+                  ? `${entry.kind}:${entry.path}`
+                  : isSkillsCommand
+                    ? "command:skills"
+                    : isSkillPreset
+                      ? `preset:${suggestion.disabled ? "disabled" : suggestion.presetId}`
+                      : `skill:${skill?.skillFile ?? skill?.name}`
               }
               ref={i === highlightIndex ? hlRef : undefined}
               className={cn(
@@ -1871,14 +1930,20 @@ function Popup({
               <span
                 className={cn(
                   "flex h-4 w-4 shrink-0 items-center justify-center",
-                  isSkill
+                  isSkill || isSkillsCommand || isSkillPreset
                     ? "text-foreground/85"
                     : isDir
                       ? "text-amber-600 dark:text-amber-300"
                       : "text-muted-foreground",
                 )}
               >
-                {Icon ? <Icon width={16} height={16} /> : <Blend className="h-4 w-4" />}
+                {isSkillsCommand || isSkillPreset ? (
+                  <Layers className="h-4 w-4" />
+                ) : Icon ? (
+                  <Icon width={16} height={16} />
+                ) : (
+                  <Blend className="h-4 w-4" />
+                )}
               </span>
               <span className="min-w-0 flex-1 truncate">
                 <span className="font-normal text-foreground/95">{title}</span>
@@ -1886,7 +1951,11 @@ function Popup({
                   <span className="ml-2 text-xs text-muted-foreground/75">{subtitle}</span>
                 )}
               </span>
-              {isSkill ? (
+              {isSkillsCommand ? (
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+              ) : isSkillPreset && suggestion.current ? (
+                <Check className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+              ) : isSkill ? (
                 <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/60">
                   skill
                 </span>
@@ -2087,6 +2156,7 @@ export const MentionComposer = memo(
       placeholder = "",
       workdir,
       enabledSkills = [],
+      skillsCommand,
       className,
     }: MentionComposerProps,
     ref,
@@ -2366,7 +2436,28 @@ export const MentionComposer = memo(
       }
 
       if (mentionCtx.trigger === "skill") {
+        if (skillsCommand && normalizedMentionQuery === "skills") {
+          return [
+            ...skillsCommand.presets.map((preset) => ({
+              type: "skillPreset" as const,
+              presetId: preset.id,
+              name: preset.name,
+              disabled: false,
+              current: !skillsCommand.disabled && preset.id === skillsCommand.presetId,
+            })),
+            {
+              type: "skillPreset" as const,
+              presetId: skillsCommand.presetId,
+              name: t("chat.skills.disabledForConversation"),
+              disabled: true,
+              current: skillsCommand.disabled,
+            },
+          ];
+        }
         const next: MentionSuggestion[] = [];
+        if (skillsCommand && "skills".includes(normalizedMentionQuery)) {
+          next.push({ type: "skillsCommand" });
+        }
         for (const skill of enabledSkills) {
           const haystack = `${skill.name}\n${skill.description}\n${skill.baseDir}`.toLowerCase();
           if (normalizedMentionQuery && !haystack.includes(normalizedMentionQuery)) {
@@ -2391,7 +2482,14 @@ export const MentionComposer = memo(
         }
       }
       return next;
-    }, [enabledSkills, mentionCtx, mentionSessionSearchIndex, normalizedMentionQuery]);
+    }, [
+      enabledSkills,
+      mentionCtx,
+      mentionSessionSearchIndex,
+      normalizedMentionQuery,
+      skillsCommand,
+      t,
+    ]);
 
     useEffect(() => {
       setHighlightIdx((current) => {
@@ -2620,16 +2718,18 @@ export const MentionComposer = memo(
         }
       };
 
-      applyContext(detectMention(el, enabledSkills.length > 0));
+      const slashEnabled = enabledSkills.length > 0 || Boolean(skillsCommand);
+      applyContext(detectMention(el, slashEnabled));
       window.requestAnimationFrame(() => {
         const nextEl = editorRef.current;
         if (!nextEl || document.activeElement !== nextEl) return;
-        applyContext(detectMention(nextEl, enabledSkills.length > 0));
+        applyContext(detectMention(nextEl, slashEnabled));
       });
     }, [
       cancelMentionRefetch,
       closeMentionSession,
       enabledSkills.length,
+      skillsCommand,
       scheduleMentionRefetch,
       startMentionSession,
     ]);
@@ -2883,7 +2983,19 @@ export const MentionComposer = memo(
           closeMentionSession();
           return;
         }
-        if (suggestion.type === "skill") {
+        if (suggestion.type === "skillsCommand") {
+          replaceMentionQueryText(mentionCtx, "skills");
+          resetPromptHistoryRecall();
+          closeMentionSession();
+          refreshEmptyState();
+          editorRef.current?.focus();
+          window.requestAnimationFrame(refreshMention);
+          return;
+        }
+        if (suggestion.type === "skillPreset") {
+          replaceMentionQueryText(mentionCtx, "");
+          skillsCommand?.onChange(suggestion.presetId, suggestion.disabled);
+        } else if (suggestion.type === "skill") {
           insertSkillMentionChip(mentionCtx, suggestion.skill);
         } else {
           insertMentionChip(mentionCtx, suggestion.entry.path, suggestion.entry.kind);
@@ -2893,7 +3005,14 @@ export const MentionComposer = memo(
         refreshEmptyState();
         editorRef.current?.focus();
       },
-      [closeMentionSession, mentionCtx, refreshEmptyState, resetPromptHistoryRecall],
+      [
+        closeMentionSession,
+        mentionCtx,
+        refreshEmptyState,
+        refreshMention,
+        resetPromptHistoryRecall,
+        skillsCommand,
+      ],
     );
 
     const restoreComposerContextSelection = useCallback(() => {

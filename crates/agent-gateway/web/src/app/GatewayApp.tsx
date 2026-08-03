@@ -31,6 +31,11 @@ import { registerAskUserQuestionAnswerHandler } from "@/lib/chat/askUserQuestion
 import type { ChatFileLink } from "@/lib/chat/chatFileLinks";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
 import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
+import {
+  applyConversationSkillsOverride,
+  applyPersistedConversationSkills,
+  rekeyConversationSkills,
+} from "@/lib/chat/conversationSkillsState";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import {
   adoptHistoryWindowState,
@@ -107,7 +112,9 @@ import {
   type RightDockFileTreeStatePatch,
   type RightDockProjectState,
   removeRightDockProjectState,
+  resolveEffectiveSkillNames,
   resolveEffectiveTheme,
+  resolveSkillPreset,
   resolveWorkspaceProjects,
   type SelectedModel,
   setSelectedModel,
@@ -117,6 +124,7 @@ import {
   updateRightDockFileTreeState,
   updateRightDockProjectState,
   updateRightDockWidth,
+  updateSkillPreset,
   updateSkills,
   updateSshProjectHostIds,
   updateSystem,
@@ -124,7 +132,6 @@ import {
   workspaceProjectPathKey,
 } from "@/lib/settings";
 import { createUuid } from "@/lib/shared/id";
-import { mergeAlwaysEnabledSkillNames } from "@/lib/skills";
 import { terminalSessionBelongsToProject } from "@/lib/terminal/sessionStore";
 import type { TerminalSession } from "@/lib/terminal/types";
 import { createGatewayWorkspaceActivityClient } from "@/lib/workspace-activity/gatewayWorkspaceActivityClient";
@@ -275,6 +282,11 @@ export default function GatewayApp() {
   const [conversationModelOverrides, setConversationModelOverrides] = useState<
     ReadonlyMap<string, SelectedModel>
   >(new Map());
+  const [conversationSkills, setConversationSkills] = useState<
+    ReadonlyMap<string, { skillPresetId: string; skillsDisabled: boolean }>
+  >(new Map());
+  const conversationSkillsDirtyIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const conversationSkillsPersistenceRef = useRef(new Map<string, Promise<void>>());
   const [chatError, setChatError] = useState<string | null>(null);
   // Top-right toast stack for upload/attachment feedback — mirrors the GUI's
   // NotifyToast usage so upload failures never render as conversation output.
@@ -293,6 +305,23 @@ export default function GatewayApp() {
   const [, setChatQueueRevision] = useState(0);
   const [selectedHistoryId, setSelectedHistoryId] = useState("");
   const [selectedHistory, setSelectedHistory] = useState<HistoryDetail | null>(null);
+  useEffect(() => {
+    const detail = selectedHistory;
+    const id = detail?.conversation_id?.trim();
+    if (!detail || !id) return;
+    setConversationSkills((current) => {
+      const next = applyPersistedConversationSkills(
+        { selections: current, dirtyIds: conversationSkillsDirtyIdsRef.current },
+        id,
+        {
+          skillPresetId: detail.skill_preset_id?.trim() || "default",
+          skillsDisabled: detail.skills_disabled === true,
+        },
+      );
+      conversationSkillsDirtyIdsRef.current = next.dirtyIds;
+      return next.selections;
+    });
+  }, [selectedHistory]);
   // Two-phase conversation open (openController): "opening" gates the
   // composer/transcript loading affordances; showOverlay drives the switch
   // overlay (appears only after ~150ms of still-loading).
@@ -1100,6 +1129,15 @@ export default function GatewayApp() {
         next.delete(previousId);
         if (!next.has(nextId)) next.set(nextId, override);
         return next;
+      });
+      setConversationSkills((current) => {
+        const next = rekeyConversationSkills(
+          { selections: current, dirtyIds: conversationSkillsDirtyIdsRef.current },
+          previousId,
+          nextId,
+        );
+        conversationSkillsDirtyIdsRef.current = next.dirtyIds;
+        return next.selections;
       });
     },
     [moveConversationUploads, sidebarStore, transcriptStoreRegistry],
@@ -2317,6 +2355,8 @@ export default function GatewayApp() {
       runtimeControls,
       baseMessageRef: options?.editMessageRef,
       queuePolicy: options?.queuePolicy ?? "auto",
+      skillPresetId: conversationSkills.get(activeConversationId)?.skillPresetId ?? "default",
+      skillsDisabled: conversationSkills.get(activeConversationId)?.skillsDisabled ?? false,
     };
 
     const outcome = await chatCommandPipeline.submit({
@@ -2482,6 +2522,8 @@ export default function GatewayApp() {
           clientRequestId: createUuid(),
           runtimeControls: chatRuntimeControlsForCurrentProvider,
           queuePolicy,
+          skillPresetId: conversationSkills.get(conversationIdValue)?.skillPresetId ?? "default",
+          skillsDisabled: conversationSkills.get(conversationIdValue)?.skillsDisabled ?? false,
         });
         refreshChatQueueSnapshot(conversationIdValue);
         return true;
@@ -3690,6 +3732,8 @@ export default function GatewayApp() {
     queuedChatEditSessionRef.current = null;
     setQueuedChatTurns([]);
     setChatQueueRevision(0);
+    setConversationSkills(new Map());
+    conversationSkillsDirtyIdsRef.current = new Set();
     resetProjectToolsRuntimeRef.current();
     setSelectedHistoryId("");
     setSelectedHistory(null);
@@ -3754,6 +3798,8 @@ export default function GatewayApp() {
       setSelectedHistoryId("");
       setSelectedHistory(null);
       setConversationModelOverrides(new Map());
+      setConversationSkills(new Map());
+      conversationSkillsDirtyIdsRef.current = new Set();
       setFullHistoryLoading(false);
       setQueuedChatTurns([]);
       setChatQueueRevision(0);
@@ -3909,11 +3955,72 @@ export default function GatewayApp() {
     [displayedConversationId, setSettings],
   );
 
-  const skillsEnabled = settings.skills.enabled && isAgentMode;
-  const selectedSkillNames = useMemo(
-    () => (skillsEnabled ? mergeAlwaysEnabledSkillNames(settings.skills.selected) : []),
-    [skillsEnabled, settings.skills.selected],
+  const handleConversationSkillsChange = useCallback(
+    (presetId: string, disabled: boolean) => {
+      const targetConversationId = displayedConversationId.trim();
+      if (!targetConversationId) return;
+      const selection = {
+        skillPresetId: presetId.trim() || "default",
+        skillsDisabled: disabled,
+      };
+      setConversationSkills((current) => {
+        const next = applyConversationSkillsOverride(
+          { selections: current, dirtyIds: conversationSkillsDirtyIdsRef.current },
+          targetConversationId,
+          selection,
+        );
+        conversationSkillsDirtyIdsRef.current = next.dirtyIds;
+        return next.selections;
+      });
+      if (!api || isLocalDraftConversationId(targetConversationId)) return;
+      const previous = conversationSkillsPersistenceRef.current.get(targetConversationId);
+      const persist = (previous ?? Promise.resolve())
+        .catch(() => undefined)
+        .then(async () => {
+          await api.setHistorySkills(
+            targetConversationId,
+            selection.skillPresetId,
+            selection.skillsDisabled,
+          );
+          setConversationSkills((current) => {
+            const next = applyPersistedConversationSkills(
+              { selections: current, dirtyIds: conversationSkillsDirtyIdsRef.current },
+              targetConversationId,
+              selection,
+            );
+            conversationSkillsDirtyIdsRef.current = next.dirtyIds;
+            return next.selections;
+          });
+        })
+        .catch((error) => {
+          addNotify("error", asErrorMessage(error, "保存 Skill 预设失败"));
+        });
+      conversationSkillsPersistenceRef.current.set(targetConversationId, persist);
+      void persist.finally(() => {
+        if (conversationSkillsPersistenceRef.current.get(targetConversationId) === persist) {
+          conversationSkillsPersistenceRef.current.delete(targetConversationId);
+        }
+      });
+    },
+    [addNotify, api, displayedConversationId],
   );
+
+  const activeConversationSkills = conversationSkills.get(displayedConversationId) ?? {
+    skillPresetId: "default",
+    skillsDisabled: false,
+  };
+  const effectiveSkillsSelection = useMemo(
+    () =>
+      resolveEffectiveSkillNames({
+        settings: settings.skills,
+        presetId: activeConversationSkills.skillPresetId,
+        skillsDisabled: activeConversationSkills.skillsDisabled,
+        executionMode: settings.system.executionMode,
+      }),
+    [activeConversationSkills, settings.skills, settings.system.executionMode],
+  );
+  const skillsEnabled = effectiveSkillsSelection.enabled;
+  const selectedSkillNames = effectiveSkillsSelection.skillNames;
   const { availableSkills, skillsRootDir } = useChatSkills({
     skillsEnabled,
     selectedSkillNames,
@@ -4295,9 +4402,12 @@ export default function GatewayApp() {
     const composer = composerRef.current;
     if (!composer || !codeReviewSkill) return;
     setSettings((prev) => {
-      const selected = mergeAlwaysEnabledSkillNames(prev.skills.selected);
-      if (selected.includes(codeReviewSkill.name)) return prev;
-      return updateSkills(prev, { selected: [...selected, codeReviewSkill.name] });
+      const preset = resolveSkillPreset(prev.skills, effectiveSkillsSelection.presetId);
+      if (preset.skillNames.includes(codeReviewSkill.name)) return prev;
+      const skills = updateSkillPreset(prev.skills, preset.id, {
+        skillNames: [...preset.skillNames, codeReviewSkill.name],
+      });
+      return updateSkills(prev, { presets: skills.presets });
     });
     const alreadyInserted = composer
       .getDraft()
@@ -4306,7 +4416,7 @@ export default function GatewayApp() {
       composer.insertSkillMention(codeReviewSkill);
     }
     composer.focus();
-  }, [codeReviewSkill, setSettings]);
+  }, [codeReviewSkill, effectiveSkillsSelection.presetId, setSettings]);
   const handleRightDockInsertCommitMention = useCallback((commit: GitCommitContextPayload) => {
     composerRef.current?.insertCommitMention(commit);
     composerRef.current?.focus();
@@ -4978,6 +5088,11 @@ export default function GatewayApp() {
                       workdir={displayedConversationWorkdir}
                       enabledSkills={enabledComposerSkills}
                       isAgentMode={isAgentMode}
+                      skillPresets={settings.skills.presets}
+                      skillPresetId={effectiveSkillsSelection.presetId}
+                      skillsDisabled={activeConversationSkills.skillsDisabled}
+                      skillsGloballyEnabled={settings.skills.enabled}
+                      onSkillsChange={handleConversationSkillsChange}
                       chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                       reasoningOptions={chatRuntimeReasoningOptions}
                       thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}

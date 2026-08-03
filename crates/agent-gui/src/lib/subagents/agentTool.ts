@@ -185,6 +185,7 @@ export type SubagentRuntimeConfig = {
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  skillsPrompt?: string;
 };
 
 export function createSubagentTools(params: {
@@ -198,6 +199,7 @@ export function createSubagentTools(params: {
   templates: SubagentTemplate[];
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  skillsPrompt?: string;
   baseTools: Tool[];
   executeToolCall: (toolCall: ToolCall, signal?: AbortSignal) => Promise<ToolResultMessage>;
   metadataByName: Map<string, BuiltinToolMetadata>;
@@ -311,6 +313,7 @@ export function createSubagentTools(params: {
       messageBusEnabled,
       store,
       scheduler,
+      skillsPrompt: params.skillsPrompt,
       worktree: worktreeIpc,
       createChildToolRegistry: params.createSubagentToolRegistry,
       readonlyTools,

@@ -174,6 +174,14 @@ fn task_config_json(task: &CronTask) -> Result<String, String> {
         config.insert("workdir".to_string(), Value::String(workdir.clone()));
     }
     config.insert(
+        "skillPresetId".to_string(),
+        Value::String(task.skill_preset_id.clone()),
+    );
+    config.insert(
+        "skillsDisabled".to_string(),
+        Value::Bool(task.skills_disabled),
+    );
+    config.insert(
         "timeoutSeconds".to_string(),
         Value::Number(task.timeout_seconds.into()),
     );
@@ -294,6 +302,8 @@ struct TaskConfig {
     selected_model: Option<SelectedModelRef>,
     reasoning: Option<String>,
     workdir: Option<String>,
+    skill_preset_id: String,
+    skills_disabled: bool,
     timeout_seconds: Option<u64>,
 }
 
@@ -330,6 +340,17 @@ fn parse_task_config(config_json: &str) -> TaskConfig {
             .get("workdir")
             .and_then(Value::as_str)
             .map(ToString::to_string),
+        skill_preset_id: map
+            .get("skillPresetId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("default")
+            .to_string(),
+        skills_disabled: map
+            .get("skillsDisabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         timeout_seconds: map.get("timeoutSeconds").and_then(Value::as_u64),
     }
 }
@@ -355,6 +376,8 @@ fn cron_task_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CronTask> {
         prompt: config.prompt,
         selected_model: config.selected_model,
         reasoning: config.reasoning,
+        skill_preset_id: config.skill_preset_id,
+        skills_disabled: config.skills_disabled,
         workdir: config.workdir,
         last_error: row.get("last_error")?,
     })

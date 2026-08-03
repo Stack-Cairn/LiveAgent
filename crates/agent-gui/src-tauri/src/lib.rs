@@ -54,6 +54,7 @@ macro_rules! app_invoke_handler {
             commands::chat_history::chat_history_replace_from_message,
             commands::chat_history::chat_history_set_pinned,
             commands::chat_history::chat_history_set_model,
+            commands::chat_history::chat_history_set_skills,
             commands::chat_history::chat_history_share_get,
             commands::chat_history::chat_history_share_set,
             commands::chat_history::chat_history_delete,

@@ -81,6 +81,8 @@ fn gateway_chat_request(
         workdir: String::new(),
         uploaded_files: Vec::new(),
         queue_policy: String::new(),
+        skill_preset_id: "default".to_string(),
+        skills_disabled: None,
     }
 }
 

@@ -13,6 +13,8 @@ export type QueuedGatewayChatRequest = {
   queuePolicy?: "auto" | "append" | "interrupt";
   selectedModel?: GatewaySelectedModelEvent;
   runtimeControls?: GatewayChatRuntimeControlsEvent;
+  skillPresetId?: string;
+  skillsDisabled?: boolean;
 };
 
 export type QueuedChatTurn = {

@@ -150,7 +150,7 @@ type BuildBuiltinBaseToolRegistryParams = {
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
   onManagedSkillsChanged?: (change: {
-    action: "install" | "create";
+    action: "install" | "create" | "delete";
     names: string[];
     baseDirs: string[];
   }) => void | Promise<void>;
@@ -320,6 +320,7 @@ export async function buildBuiltinToolRegistry(
       templates: subagentRuntime.templates,
       store: subagentRuntime.store,
       scheduler: subagentRuntime.scheduler,
+      skillsPrompt: subagentRuntime.skillsPrompt,
       baseTools: baseRegistry.tools,
       executeToolCall: baseRegistry.executeToolCall,
       metadataByName: baseRegistry.metadataByName,
@@ -329,7 +330,6 @@ export async function buildBuiltinToolRegistry(
             ...params,
             workdir,
             fileState: createFileToolState(),
-            skillsEnabled: false,
             applyMcpOps: undefined,
             mcpLoadFailureMode: "continue",
             memoryToolMode: "ro",

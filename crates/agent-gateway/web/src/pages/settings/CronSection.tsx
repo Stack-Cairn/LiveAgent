@@ -331,6 +331,7 @@ export function CronSection(props: SettingsSectionProps) {
           providers={settings.customProviders}
           workspaceOptions={workspaceOptions}
           executionMode={settings.system.executionMode}
+          skillPresets={settings.skills.presets}
           onPickWorkdir={pickWorkdirDirectory}
           onSave={modal.mode === "add" ? handleAdd : handleEdit}
           onClose={() => setModal({ open: false })}

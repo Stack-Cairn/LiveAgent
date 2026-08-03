@@ -7,6 +7,122 @@ const settings = loader.loadModule("src/lib/settings/index.ts");
 const normalize = loader.loadModule("src/lib/settings/normalize.ts");
 const sync = loader.loadModule("src/lib/settings/sync.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
+const PRESET_A_ID = "11111111-1111-4111-8111-111111111111";
+const PRESET_B_ID = "22222222-2222-4222-8222-222222222222";
+const PRESET_V8_ID = "88888888-8888-8888-8888-888888888888";
+
+test("skills settings migrate legacy selection into the default preset", () => {
+  const normalized = settings.normalizeSkillsSettings({
+    enabled: true,
+    selected: ["beta", "skills-creator", "alpha", "alpha"],
+  });
+
+  assert.deepEqual(normalized.presets, [
+    { id: "default", name: "Default", description: "", skillNames: ["alpha", "beta"] },
+  ]);
+  assert.deepEqual(normalized.selected, ["skills-creator", "skills-installer", "alpha", "beta"]);
+});
+
+test("skills presets enforce the built-in default and case-insensitive unique names", () => {
+  const longDescription = `  ${"x".repeat(260)}  `;
+  const presets = settings.normalizeSkillPresets([
+    { id: "33333333-3333-4333-8333-333333333333", name: "default", skillNames: ["ignored"] },
+    { id: "default", name: "Renamed", skillNames: ["one"] },
+    { id: PRESET_A_ID, name: "Work", description: longDescription, skillNames: ["two"] },
+    { id: PRESET_B_ID, name: "work", skillNames: ["three"] },
+    { id: "__disabled__", name: "Reserved collision", skillNames: ["four"] },
+    { id: "not-a-uuid", name: "Invalid", skillNames: ["five"] },
+  ]);
+
+  assert.deepEqual(presets, [
+    { id: "default", name: "Default", description: "", skillNames: ["one"] },
+    {
+      id: PRESET_A_ID,
+      name: "Work",
+      description: "x".repeat(240),
+      skillNames: ["two"],
+    },
+  ]);
+});
+
+test("skills presets accept RFC 9562 UUIDs and normalize IDs deterministically", () => {
+  const presets = settings.normalizeSkillPresets([
+    { id: "88888888-8888-8888-8888-888888888888".toUpperCase(), name: "V8", skillNames: [] },
+    { id: PRESET_V8_ID, name: "Duplicate ID", skillNames: [] },
+  ]);
+
+  assert.deepEqual(presets, [
+    { id: "default", name: "Default", description: "", skillNames: [] },
+    { id: PRESET_V8_ID, name: "V8", description: "", skillNames: [] },
+  ]);
+  assert.equal(settings.resolveSkillPreset({ presets }, PRESET_V8_ID.toUpperCase()).id, PRESET_V8_ID);
+});
+
+test("skills presets sort names by deterministic code-unit order", () => {
+  const presets = settings.normalizeSkillPresets([
+    {
+      id: "default",
+      name: "Default",
+      skillNames: ["ä-skill", "z-skill", "A-skill", "a-skill"],
+    },
+  ]);
+
+  assert.deepEqual(presets[0].skillNames, ["A-skill", "a-skill", "z-skill", "ä-skill"]);
+});
+
+test("effective skills resolve missing presets to default and honor all disable gates", () => {
+  const skills = settings.normalizeSkillsSettings({
+    presets: [
+      { id: "default", name: "Default", skillNames: ["base"] },
+      { id: PRESET_A_ID, name: "Focused", skillNames: ["review"] },
+    ],
+  });
+
+  assert.deepEqual(
+    settings.resolveEffectiveSkillNames({
+      settings: skills,
+      presetId: PRESET_A_ID,
+      executionMode: "tools",
+    }).skillNames,
+    ["skills-creator", "skills-installer", "review"],
+  );
+  assert.equal(
+    settings.resolveEffectiveSkillNames({
+      settings: skills,
+      presetId: "missing",
+      executionMode: "tools",
+    }).presetId,
+    "default",
+  );
+  assert.deepEqual(
+    settings.resolveEffectiveSkillNames({
+      settings: skills,
+      presetId: PRESET_A_ID,
+      skillsDisabled: true,
+      executionMode: "tools",
+    }).skillNames,
+    [],
+  );
+  assert.deepEqual(
+    settings.resolveEffectiveSkillNames({
+      settings: skills,
+      presetId: PRESET_A_ID,
+      executionMode: "text",
+    }).skillNames,
+    [],
+  );
+});
+
+test("removing an installed skill cleans every preset", () => {
+  const skills = settings.normalizeSkillsSettings({
+    presets: [
+      { id: "default", name: "Default", skillNames: ["shared", "base"] },
+      { id: PRESET_A_ID, name: "Focused", skillNames: ["shared", "review"] },
+    ],
+  });
+  const next = settings.removeSkillFromAllPresets(skills, "shared");
+  assert.deepEqual(next.presets.map((preset) => preset.skillNames), [["base"], ["review"]]);
+});
 
 test("basic provider field normalizers trim values and remove duplicate models", () => {
   assert.equal(normalize.normalizeBaseUrl(" https://api.example.com/v1/// "), "https://api.example.com/v1//");

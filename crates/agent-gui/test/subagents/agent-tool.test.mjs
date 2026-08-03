@@ -75,6 +75,18 @@ test("readonly happy path: identity prompts, filtered child tools, SendMessage a
   assert.equal(finalSave.run.parentToolCallId, "call-agent");
 });
 
+test("subagents inherit the parent run's resolved Skills prompt snapshot", async () => {
+  const harness = await createSubagentHarness({
+    skillsPrompt: "<available_skills>\n- focused-review: Review the focused files.\n</available_skills>",
+  });
+  await harness.bundle.executeToolCall(
+    createAgentToolCall({ agents: [{ id: "reviewer", prompt: "Review the change." }] }),
+  );
+
+  assert.match(harness.runnerCalls[0].context.systemPrompt, /<available_skills>/);
+  assert.match(harness.runnerCalls[0].context.systemPrompt, /focused-review/);
+});
+
 test("Agent tool never appears in child tool selections", async () => {
   const harness = await createSubagentHarness();
   await harness.bundle.executeToolCall(

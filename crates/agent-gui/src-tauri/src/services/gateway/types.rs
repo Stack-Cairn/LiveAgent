@@ -70,6 +70,8 @@ pub struct GatewayChatRequestEvent {
     pub workdir: String,
     pub uploaded_files: Vec<GatewayUploadedFileEvent>,
     pub queue_policy: String,
+    pub skill_preset_id: String,
+    pub skills_disabled: Option<bool>,
 }
 
 pub(crate) fn is_complete_user_chat_message_ref(ref_value: &proto::ChatMessageRef) -> bool {

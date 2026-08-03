@@ -2006,6 +2006,16 @@ test("SkillsManager management can auto-enable installed Skills without exposing
               numLines: 4,
             };
           }
+          if (action === "delete") {
+            return {
+              action: "delete",
+              rootDir: "/Users/me/.liveagent/skills",
+              deleted: {
+                name: "new-skill",
+                target: "/Users/me/.liveagent/skills/new-skill",
+              },
+            };
+          }
           if (action === "list") {
             return {
               action: "list",
@@ -2128,7 +2138,34 @@ test("SkillsManager management can auto-enable installed Skills without exposing
     });
     assert.equal(readResult.isError, false);
     assert.equal(readResult.details.path, "new-skill/SKILL.md");
-    assert.deepEqual(events, ["liveagent:skills-discovery-updated"]);
+
+    const deleteResult = await bundle.executeToolCall({
+      type: "toolCall",
+      id: "delete-new-skill",
+      name: "SkillsManager",
+      arguments: {
+        action: "delete",
+        name: "new-skill",
+      },
+    });
+    assert.equal(deleteResult.isError, false);
+    assert.equal(deleteResult.details.deletedName, "new-skill");
+    assert.deepEqual(changes, [
+      {
+        action: "install",
+        names: ["new-skill"],
+        baseDirs: ["new-skill"],
+      },
+      {
+        action: "delete",
+        names: ["new-skill"],
+        baseDirs: ["new-skill"],
+      },
+    ]);
+    assert.deepEqual(events, [
+      "liveagent:skills-discovery-updated",
+      "liveagent:skills-discovery-updated",
+    ]);
   } finally {
     if (typeof previousWindow === "undefined") {
       delete globalThis.window;

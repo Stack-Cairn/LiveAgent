@@ -9,6 +9,7 @@ import {
 } from "../chat/conversation/conversationState";
 import { createTurnCancellationFromSignal } from "../chat/conversation/turnCancellation";
 import { runAssistantWithTools } from "../chat/runner/agentRunner";
+import { appendSystemPrompt } from "../providers/runtime/common";
 import type { ProviderRuntimeConfig } from "../providers/runtime/types";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
@@ -56,6 +57,7 @@ export type SubagentRunEnvironment = {
   messageBusEnabled: boolean;
   store: SubagentConversationStore;
   scheduler: SubagentScheduler;
+  skillsPrompt?: string;
   worktree: SubagentWorktreeIpc;
   createChildToolRegistry?: (workdir: string) => Promise<SubagentToolRegistry>;
   readonlyTools: Tool[];
@@ -459,7 +461,7 @@ export async function executeSubagentRun(
     const childToolNames = new Set(childTools.map((tool) => tool.name));
 
     // ---- provision: context (resume or fresh) ------------------------------
-    const systemPrompt = buildSubagentSystemPrompt({
+    let systemPrompt = buildSubagentSystemPrompt({
       spec,
       identity,
       template,
@@ -468,6 +470,9 @@ export async function executeSubagentRun(
       agentTotal: request.total,
       messageBusEnabled: env.messageBusEnabled,
     });
+    if (env.skillsPrompt) {
+      systemPrompt = appendSystemPrompt(systemPrompt, env.skillsPrompt);
+    }
     // 子代理复用同一压缩状态机：sinks 只捕获结果状态与触发运行期持久化。
     const compaction = new CompactionController();
     const compactionCancellation = createTurnCancellationFromSignal(signal);
@@ -544,8 +549,8 @@ export async function executeSubagentRun(
     // turn context.
     let baseState: ConversationViewState =
       restoredState ??
-      createConversationStateFromContext(
-        buildSubagentContext({
+      createConversationStateFromContext({
+        ...buildSubagentContext({
           spec,
           identity,
           template,
@@ -556,7 +561,8 @@ export async function executeSubagentRun(
           messageBusSnapshot: await renderBusSnapshot(),
           messageBusEnabled: env.messageBusEnabled,
         }),
-      );
+        systemPrompt,
+      });
     lastView = baseState;
     schedulePersist("running", baseState);
 

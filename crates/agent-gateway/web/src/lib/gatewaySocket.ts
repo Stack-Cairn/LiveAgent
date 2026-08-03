@@ -132,6 +132,8 @@ export type GatewayChatCommandInput = {
   runtimeControls?: GatewayChatRuntimeControls;
   baseMessageRef?: HistoryMessageRef;
   queuePolicy?: "auto" | "append" | "interrupt";
+  skillPresetId?: string;
+  skillsDisabled?: boolean;
 };
 
 type SkillListResponse = {
@@ -628,6 +630,8 @@ function buildChatCommandPayload(input: GatewayChatCommandInput) {
           }
         : undefined,
       queue_policy: input.queuePolicy ?? "auto",
+      skill_preset_id: input.skillPresetId?.trim() || "default",
+      skills_disabled: input.skillsDisabled === true,
       base_message_ref: input.baseMessageRef
         ? buildHistoryMessageRefPayload(input.baseMessageRef)
         : undefined,
@@ -2524,6 +2528,18 @@ export class GatewayWebSocketClient {
     return this.request<ConversationSummary>("history.pin", {
       conversation_id: conversationId,
       is_pinned: isPinned,
+    });
+  }
+
+  async setHistorySkills(
+    conversationId: string,
+    skillPresetId: string,
+    skillsDisabled: boolean,
+  ): Promise<ConversationSummary> {
+    return this.request<ConversationSummary>("history.skills", {
+      conversation_id: conversationId,
+      skill_preset_id: skillPresetId,
+      skills_disabled: skillsDisabled,
     });
   }
 

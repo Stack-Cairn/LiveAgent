@@ -320,6 +320,40 @@ impl GatewayController {
                 });
                 Ok(())
             }
+            Some(proto::gateway_envelope::Payload::HistorySkills(request)) => {
+                let controller = Arc::clone(self);
+                tauri::async_runtime::spawn(async move {
+                    let result = match gateway_bridge::handle_history_skills(request).await {
+                        Ok(response) => {
+                            if let Some(conversation) = response.conversation.as_ref() {
+                                controller
+                                    .publish_history_sync(build_history_sync_upsert_from_proto(
+                                        conversation,
+                                    ))
+                                    .await;
+                            }
+                            controller
+                                .send_agent_envelope(proto::AgentEnvelope {
+                                    request_id: request_id.clone(),
+                                    timestamp: now_unix_seconds(),
+                                    payload: Some(
+                                        proto::agent_envelope::Payload::HistorySkillsResp(response),
+                                    ),
+                                })
+                                .await
+                        }
+                        Err(error) => {
+                            controller
+                                .send_error_response(request_id.clone(), 500, error)
+                                .await
+                        }
+                    };
+                    if let Err(err) = result {
+                        eprintln!("gateway history.skills handler failed: {err}");
+                    }
+                });
+                Ok(())
+            }
             Some(proto::gateway_envelope::Payload::HistoryShareGet(request)) => {
                 let controller = Arc::clone(self);
                 tauri::async_runtime::spawn(async move {

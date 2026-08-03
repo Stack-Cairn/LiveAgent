@@ -604,6 +604,53 @@ mod tests {
     }
 
     #[test]
+    fn set_skills_patches_context_metadata_without_bumping_updated_at() {
+        let conn = open_test_db().expect("open test db");
+        let mut conversation = sample_conversation();
+        conversation.context_meta_json = json!({
+            "schemaVersion": 4,
+            "systemPrompt": "preserve me",
+            "skillPresetId": "default",
+            "skillsDisabled": false,
+        })
+        .to_string();
+        upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+        let before = get_summary_by_id(&conn, "conv-1").expect("load summary");
+
+        let summary = set_chat_history_skills_sync(&conn, "conv-1", "focused", true)
+            .expect("set conversation skills");
+        let record = get_record_by_id(&conn, "conv-1").expect("load record");
+        let context_meta: Value =
+            serde_json::from_str(&record.context_meta_json).expect("parse context metadata");
+
+        assert_eq!(summary.updated_at, before.updated_at);
+        assert_eq!(context_meta["schemaVersion"], json!(4));
+        assert_eq!(context_meta["systemPrompt"], json!("preserve me"));
+        assert_eq!(context_meta["skillPresetId"], json!("focused"));
+        assert_eq!(context_meta["skillsDisabled"], json!(true));
+    }
+
+    #[test]
+    fn set_skills_rejects_invalid_or_missing_conversations() {
+        let conn = open_test_db().expect("open test db");
+        let conversation = sample_conversation();
+        upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+
+        assert!(set_chat_history_skills_sync(&conn, "", "default", false).is_err());
+        assert!(set_chat_history_skills_sync(&conn, "conv-1", " ", false).is_err());
+        assert!(set_chat_history_skills_sync(&conn, "missing", "default", false).is_err());
+
+        conn.execute(
+            "UPDATE chatHistory SET context_meta_json = 'not-json' WHERE id = 'conv-1'",
+            [],
+        )
+        .expect("corrupt context metadata");
+        assert!(set_chat_history_skills_sync(&conn, "conv-1", "default", false).is_err());
+        let record = get_record_by_id(&conn, "conv-1").expect("load unchanged record");
+        assert_eq!(record.context_meta_json, "not-json");
+    }
+
+    #[test]
     fn upsert_header_preserves_selected_model_when_input_none() {
         let conn = open_test_db().expect("open test db");
         let mut conversation = sample_conversation();
@@ -1502,8 +1549,10 @@ mod tests {
         conversation.total_segment_count = segments.len() as i64;
         conversation.total_message_count = total_message_count;
         conversation.context_meta_json = json!({
-            "schemaVersion": 3,
+            "schemaVersion": 4,
             "systemPrompt": "keep me",
+            "skillPresetId": "focused",
+            "skillsDisabled": true,
             "activeSegmentIndex": conversation.active_segment_index,
             "totalSegmentCount": conversation.total_segment_count,
             "totalMessageCount": total_message_count,
@@ -2573,8 +2622,10 @@ mod tests {
         assert_eq!(context_meta["activeSegmentIndex"], json!(0));
         assert_eq!(context_meta["totalSegmentCount"], json!(1));
         assert_eq!(context_meta["totalMessageCount"], json!(2));
-        assert_eq!(context_meta["schemaVersion"], json!(3));
+        assert_eq!(context_meta["schemaVersion"], json!(4));
         assert_eq!(context_meta["systemPrompt"], json!("keep me"));
+        assert_eq!(context_meta["skillPresetId"], json!("focused"));
+        assert_eq!(context_meta["skillsDisabled"], json!(true));
     }
 
     #[test]

@@ -597,7 +597,7 @@ export function createSkillTools(
     workdir?: string;
     skillAccessPolicy?: SkillAccessPolicy;
     onManagedSkillsChanged?: (change: {
-      action: "install" | "create";
+      action: "install" | "create" | "delete";
       names: string[];
       baseDirs: string[];
     }) => void | Promise<void>;
@@ -670,6 +670,18 @@ export function createSkillTools(
         notifySkillsDiscoveryUpdated();
       }
       if (result.action === "delete") {
+        const deletedName = result.deleted?.name ?? optionalString(payload, "name");
+        if (deletedName) {
+          try {
+            await params.onManagedSkillsChanged?.({
+              action: "delete",
+              names: [deletedName],
+              baseDirs: [deletedName],
+            });
+          } catch (error) {
+            console.warn("Failed to remove deleted Skill from presets", error);
+          }
+        }
         notifySkillsDiscoveryUpdated();
       }
 

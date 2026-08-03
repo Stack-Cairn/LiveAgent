@@ -61,6 +61,7 @@ message GatewayEnvelope {
     HistoryBranchRequest history_branch = 92;
     ProviderUsageRequest provider_usage = 93;
     ChatFileOpenRequest chat_file_open = 94;
+    HistorySkillsRequest history_skills = 95;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -135,6 +136,7 @@ message AgentEnvelope {
     ChatIngressFragment chat_ingress_fragment = 97;
     ChatFileOpenResponse chat_file_open_resp = 98;
     ErrorResponse error = 99;
+    HistorySkillsResponse history_skills_resp = 100;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -615,6 +617,8 @@ message ChatRequest {
   string client_request_id = 8;
   ChatRuntimeControls runtime_controls = 9;
   string queue_policy = 10;
+  string skill_preset_id = 11;
+  optional bool skills_disabled = 12;
 }
 
 message ChatMessageRef {
@@ -779,6 +783,8 @@ message HistoryGetResponse {
   int32 returned_message_count = 4;
   bool has_more = 5;
   ConversationSummary conversation = 6;
+  string skill_preset_id = 7;
+  bool skills_disabled = 8;
 }
 
 message HistoryPrefixRequest {
@@ -794,6 +800,8 @@ message HistoryPrefixResponse {
   int32 returned_message_count = 4;
   bool has_more = 5;
   ConversationSummary conversation = 6;
+  string skill_preset_id = 7;
+  bool skills_disabled = 8;
 }
 
 message HistoryRenameRequest {
@@ -1279,4 +1287,14 @@ message ChatIngressAck {
     SEND_CHECKPOINT = 3;
     REJECTED = 4;
   }
+}
+
+message HistorySkillsRequest {
+  string conversation_id = 1;
+  string skill_preset_id = 2;
+  bool skills_disabled = 3;
+}
+
+message HistorySkillsResponse {
+  ConversationSummary conversation = 1;
 }

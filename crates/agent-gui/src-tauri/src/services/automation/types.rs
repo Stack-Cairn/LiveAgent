@@ -89,6 +89,10 @@ pub struct CronTask {
     /// Thinking level for prompt tasks; None/empty means the runtime default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<String>,
+    #[serde(default = "default_skill_preset_id")]
+    pub skill_preset_id: String,
+    #[serde(default)]
+    pub skills_disabled: bool,
     /// Workspace path pinned for this task; None/empty means "follow the
     /// globally active workspace" (the pre-existing behavior).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -258,6 +262,14 @@ pub struct PromptRunRequest {
     /// Task thinking level; empty means the runner's default.
     #[serde(default)]
     pub reasoning: String,
+    #[serde(default = "default_skill_preset_id")]
+    pub skill_preset_id: String,
+    #[serde(default)]
+    pub skills_disabled: bool,
+}
+
+pub fn default_skill_preset_id() -> String {
+    "default".to_string()
 }
 
 fn default_true() -> bool {

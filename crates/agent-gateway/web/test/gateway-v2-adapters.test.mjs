@@ -317,6 +317,23 @@ test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
     { page: 2, pageSize: 50, cwd: "/tmp/p" },
   );
 
+  const skillsFrame = decodeClientFrame(
+    encodeRequestFrame(
+      "req-skills",
+      "history.skills",
+      {
+        conversation_id: "conversation-1",
+        skill_preset_id: "focused-review",
+        skills_disabled: true,
+      },
+      "agent-a",
+    ),
+  );
+  assert.equal(skillsFrame.payload.value.payload.case, "historySkills");
+  assert.equal(skillsFrame.payload.value.payload.value.conversationId, "conversation-1");
+  assert.equal(skillsFrame.payload.value.payload.value.skillPresetId, "focused-review");
+  assert.equal(skillsFrame.payload.value.payload.value.skillsDisabled, true);
+
   const terminalFrame = decodeClientFrame(
     encodeRequestFrame("req-2", "terminal.create", {
       cwd: "/workspace",
@@ -347,11 +364,15 @@ test("encodeRequestFrame maps request types onto GatewayEnvelope arms", () => {
           },
         ],
         queue_policy: "auto",
+        skill_preset_id: "focused-review",
+        skills_disabled: true,
       },
     }, "agent-a"),
   );
   assert.equal(commandFrame.payload.case, "chatCommand");
   assert.equal(commandFrame.payload.value.request.uploadedFiles[0].sizeBytes, 4102444800000n);
+  assert.equal(commandFrame.payload.value.request.skillPresetId, "focused-review");
+  assert.equal(commandFrame.payload.value.request.skillsDisabled, true);
 
   assert.throws(
     () => encodeRequestFrame("missing-agent", "status.get", {}),

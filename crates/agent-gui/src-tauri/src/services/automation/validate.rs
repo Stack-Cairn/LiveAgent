@@ -243,9 +243,14 @@ pub fn validate_cron_task(value: Value, label: &str) -> Result<CronTask, String>
         prompt: None,
         selected_model: None,
         reasoning: None,
+        skill_preset_id: optional_string(&map, "skillPresetId"),
+        skills_disabled: bool_with_default(&map, "skillsDisabled", label, false)?,
         workdir: None,
         last_error: None,
     };
+    if task.skill_preset_id.is_empty() {
+        task.skill_preset_id = "default".to_string();
+    }
 
     match kind.as_str() {
         "bash" => {

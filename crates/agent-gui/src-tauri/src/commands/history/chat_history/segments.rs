@@ -498,6 +498,54 @@ fn set_chat_history_model_sync(
     get_summary_by_id(conn, chat_id)
 }
 
+fn set_chat_history_skills_sync(
+    conn: &Connection,
+    id: &str,
+    skill_preset_id: &str,
+    skills_disabled: bool,
+) -> Result<ChatHistorySummary, String> {
+    let chat_id = id.trim();
+    let preset_id = skill_preset_id.trim();
+    if chat_id.is_empty() {
+        return Err("历史对话 id 不能为空".to_string());
+    }
+    if preset_id.is_empty() {
+        return Err("Skill 预设 id 不能为空".to_string());
+    }
+
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("开启 Skill 预设更新事务失败：{e}"))?;
+    let context_meta_json: String = tx
+        .query_row(
+            "SELECT context_meta_json FROM chatHistory WHERE id = ?1",
+            params![chat_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("读取历史对话元数据失败：{e}"))?
+        .ok_or_else(|| "未找到对应的历史对话".to_string())?;
+    let mut context_meta = serde_json::from_str::<Map<String, Value>>(&context_meta_json)
+        .map_err(|e| format!("历史对话元数据格式无效：{e}"))?;
+    context_meta.insert(
+        "skillPresetId".to_string(),
+        Value::String(preset_id.to_string()),
+    );
+    context_meta.insert("skillsDisabled".to_string(), Value::Bool(skills_disabled));
+    let payload = serde_json::to_string(&context_meta)
+        .map_err(|e| format!("序列化历史对话 Skill 预设失败：{e}"))?;
+
+    tx.execute(
+        "UPDATE chatHistory SET context_meta_json = ?1 WHERE id = ?2",
+        params![payload, chat_id],
+    )
+    .map_err(|e| format!("更新历史对话 Skill 预设失败：{e}"))?;
+    tx.commit()
+        .map_err(|e| format!("提交 Skill 预设更新事务失败：{e}"))?;
+
+    get_summary_by_id(conn, chat_id)
+}
+
 fn set_chat_history_pinned_sync(
     conn: &Connection,
     id: &str,

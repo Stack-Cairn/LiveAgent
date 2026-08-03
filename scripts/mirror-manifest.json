@@ -35,6 +35,7 @@
     "components/chat/ComposerAttachmentCard.tsx",
     "components/chat/AskUserQuestionCard.tsx",
     "components/CliIdentityUpdateHost.tsx",
+    "components/skills/SkillPresetManager.tsx",
     "components/chat/ToolApprovalBar.tsx",
     "components/hub/ToolPolicyToggle.tsx",
     "lib/chat/askUserQuestion.ts",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle,
@@ -41,6 +41,8 @@ import {
   getChatRuntimeReasoningLevelsForProvider,
   isAgentExecutionMode,
   isThinkingAlwaysOnForModel,
+  resolveSkillPreset,
+  type SkillPreset,
 } from "../../lib/settings";
 import { useModalMotion } from "../../lib/shared/modalMotion";
 import {
@@ -160,6 +162,7 @@ type CronTaskModalProps = {
   providers: CustomProvider[];
   workspaceOptions: CronWorkspaceOption[];
   executionMode: ExecutionMode;
+  skillPresets: SkillPreset[];
   /**
    * Platform directory picker injected by each end's CronSection (native
    * dialog on desktop, remote path prompt on the WebUI). The browse button
@@ -177,6 +180,7 @@ export function CronTaskModal({
   providers,
   workspaceOptions,
   executionMode,
+  skillPresets,
   onPickWorkdir,
   onSave,
   onClose,
@@ -209,6 +213,13 @@ export function CronTaskModal({
     const initial = initialData?.reasoning ?? "";
     return isCronReasoningLevel(initial) ? initial : DEFAULT_CRON_REASONING;
   });
+  const [skillPresetId, setSkillPresetId] = useState(
+    () => resolveSkillPreset({ presets: skillPresets }, initialData?.skillPresetId).id,
+  );
+  const [skillsDisabled, setSkillsDisabled] = useState(initialData?.skillsDisabled === true);
+  useEffect(() => {
+    setSkillPresetId((current) => resolveSkillPreset({ presets: skillPresets }, current).id);
+  }, [skillPresets]);
   // A Windows pin may spell the same directory differently than the
   // workspace list ("\\" vs "/", drive-letter case); snap it to the list
   // entry's exact spelling so the Select matches it by value.
@@ -326,6 +337,8 @@ export function CronTaskModal({
         // Prompt tasks always carry a concrete level (default "medium");
         // other kinds clear the field.
         reasoning: type === "prompt" ? reasoning : "",
+        skillPresetId: type === "prompt" ? skillPresetId : "default",
+        skillsDisabled: type === "prompt" ? skillsDisabled : false,
         // Always carried: an empty string is the explicit "follow the active
         // workspace" signal — omitting the key would make merge_patch keep a
         // stale pin forever.
@@ -861,6 +874,43 @@ export function CronTaskModal({
                     {t("settings.cronPromptModelEmpty")}
                   </div>
                 ) : null}
+
+                <div className="settings-form-grid grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">
+                      {t("settings.cronSkillPresetLabel")}
+                    </Label>
+                    <Select
+                      value={skillPresetId}
+                      onValueChange={setSkillPresetId}
+                      disabled={skillsDisabled}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue>
+                          {(value) =>
+                            skillPresets.find((preset) => preset.id === value)?.name ??
+                            resolveSkillPreset({ presets: skillPresets }, skillPresetId).name
+                          }
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {skillPresets.map((preset) => (
+                          <SelectItem key={preset.id} value={preset.id}>
+                            {preset.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <label className="flex h-10 cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={skillsDisabled}
+                      onChange={(event) => setSkillsDisabled(event.currentTarget.checked)}
+                    />
+                    {t("settings.cronSkillsDisabled")}
+                  </label>
+                </div>
 
                 <div className="overflow-hidden rounded-xl border border-border/60 bg-muted/20">
                   <div className="flex items-center gap-1.5 border-b border-border/30 px-3 py-2 text-[11px] text-muted-foreground">

@@ -394,6 +394,8 @@ impl AutomationStore {
                 counted,
                 workdir: workdir.to_string(),
                 reasoning: task.reasoning.clone().unwrap_or_default(),
+                skill_preset_id: task.skill_preset_id.clone(),
+                skills_disabled: task.skills_disabled,
             };
             let request_json = serde_json::to_string(&request)
                 .map_err(|e| format!("序列化 prompt run 请求失败：{e}"))?;
