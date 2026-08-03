@@ -76,15 +76,33 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-$TARGE
 # ---- Runtime image ----
 FROM debian:bookworm-slim AS runtime
 
+# Common debugging/ops tools so `docker exec` sessions can diagnose network,
+# DNS and process issues without installing anything at runtime.
+# NOTE: ping/tcpdump additionally need NET_RAW / NET_ADMIN capabilities
+# (add `cap_add` in compose) — the binaries are installed regardless.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
+    bash \
+    curl \
+    wget \
+    iputils-ping \
+    dnsutils \
+    iproute2 \
+    netcat-openbsd \
+    procps \
+    less \
+    nano \
+    file \
+    jq \
+    tcpdump \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user whose home is the writable data volume.
 # The app stores history/settings under $HOME/.liveagent (dirs::home_dir()),
 # so the home dir must live on the data volume, not /nonexistent.
-RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/liveagent --shell /usr/sbin/nologin liveagent && \
+# bash as login shell so `docker exec -it liveagent bash` works for debugging.
+RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/liveagent --shell /bin/bash liveagent && \
     install -d -o liveagent -g liveagent -m 0700 /var/lib/liveagent
 
 COPY --from=builder /usr/local/bin/liveagent /usr/local/bin/liveagent
