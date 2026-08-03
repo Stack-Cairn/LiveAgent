@@ -312,30 +312,18 @@ function FolderPickerDialog({
             : root.label || root.path,
     }));
 
-    // Common development directories (Docker mount points, workspace, etc.)
-    const commonDevDirs = [
-      { path: "/workspace", label: "/workspace" },
-      { path: "/app", label: "/app" },
-      { path: "/data", label: "/data" },
-      { path: "/code", label: "/code" },
-      { path: "/project", label: "/project" },
-      { path: "/src", label: "/src" },
-      { path: "/opt", label: "/opt" },
-      { path: "/var/www", label: "/var/www" },
-    ];
-
-    // Add common dev dirs that exist and aren't already in the list
     const existingPaths = new Set(items.map((item) => item.path));
-    for (const dir of commonDevDirs) {
-      if (!existingPaths.has(dir.path)) {
-        items.push({
-          key: `common:${dir.path}`,
-          path: dir.path,
-          icon: Folder,
-          label: dir.label,
-        });
-        existingPaths.add(dir.path);
-      }
+
+    // Docker / headless deployment common workspace
+    const workspaceDir = "/workspace";
+    if (!existingPaths.has(workspaceDir)) {
+      items.push({
+        key: `common:${workspaceDir}`,
+        path: workspaceDir,
+        icon: Folder,
+        label: "/workspace",
+      });
+      existingPaths.add(workspaceDir);
     }
 
     const hasInitial = items.some((item) => item.path === initialPath);
