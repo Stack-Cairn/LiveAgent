@@ -11,6 +11,7 @@ RUN apt-get update && \
     pkg-config \
     libssl-dev \
     libclang-dev \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
