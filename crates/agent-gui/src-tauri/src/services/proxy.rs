@@ -103,6 +103,7 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
     let app = Router::new()
         .route("/image-proxy", get(handle_image_proxy))
         .route("/proxy/{provider}", any(handle_proxy))
+        .route("/proxy/{provider}/", any(handle_proxy))
         .route("/proxy/{provider}/{*rest}", any(handle_proxy))
         .with_state(state.clone());
 

@@ -2282,8 +2282,11 @@ pub fn build_router(state: HeadlessState) -> Router {
         .route("/ws", get(ws_handler))
         // BFF 出网反代：复用本地反代的 handler，把出网统一收敛到主服务端口，
         // 浏览器同源请求即可，无 CORS/随机端口问题（agent-gateway 同款架构）。
+        // 注意 axum 0.8 中 `/proxy/{provider}` 与 `/{*rest}` 都不匹配尾斜杠路径，
+        // 显式补 `/proxy/{provider}/`，否则 `/proxy/hub/` 会落进 SPA fallback。
         .route("/image-proxy", get(handle_image_proxy))
         .route("/proxy/{provider}", any(handle_proxy))
+        .route("/proxy/{provider}/", any(handle_proxy))
         .route("/proxy/{provider}/{*rest}", any(handle_proxy))
         .route("/", get(serve_root))
         .route("/{*path}", get(serve_static))
