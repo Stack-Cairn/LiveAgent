@@ -16,6 +16,11 @@ RUN apt-get update && \
 
 WORKDIR /src
 
+# Auto-provided build args (buildx). Declared before the cache-mount RUN
+# layers so $TARGETARCH is available for per-arch cache ids.
+ARG TARGETOS
+ARG TARGETARCH
+
 # Copy workspace Cargo files for dependency caching
 COPY Cargo.toml Cargo.lock ./
 COPY crates/agent-gui/src-tauri/Cargo.toml ./crates/agent-gui/src-tauri/
@@ -26,19 +31,18 @@ RUN mkdir -p crates/agent-gui/src-tauri/src && \
     echo 'pub fn dummy() {}' > crates/agent-gui/src-tauri/src/lib.rs
 
 # Build dependencies only (cached layer)
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/target \
+# NOTE: per-arch cache ids prevent parallel amd64/arm64 builders from
+# racing on the same cargo registry dir (tower-*.cargo-ok File exists).
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-$TARGETARCH \
+    --mount=type=cache,target=/src/target,id=cargo-target-$TARGETARCH \
     cargo build --release --no-default-features -p liveagent || true
 
 # Copy actual source code
 COPY . .
 
 # Build the headless binary with embedded assets
-ARG TARGETOS
-ARG TARGETARCH
-
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/src/target \
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-$TARGETARCH \
+    --mount=type=cache,target=/src/target,id=cargo-target-$TARGETARCH \
     cargo build --release --no-default-features -p liveagent && \
     cp target/release/liveagent /usr/local/bin/liveagent
 
