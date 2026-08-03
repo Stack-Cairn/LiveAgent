@@ -3,7 +3,7 @@
 # LiveAgent Headless Docker Image
 # Builds the headless binary (axum server + WebSocket bridge) without Tauri
 
-FROM --platform=$BUILDPLATFORM rust:1.85-bookworm AS builder
+FROM --platform=$BUILDPLATFORM rust:1.88-bookworm AS builder
 
 # Install system dependencies for the build
 RUN apt-get update && \
