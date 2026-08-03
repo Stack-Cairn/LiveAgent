@@ -21,6 +21,7 @@ COPY crates/agent-gui/index.html crates/agent-gui/vite.config.ts \
      crates/agent-gui/postcss.config.js crates/agent-gui/tailwind.config.js ./
 COPY crates/agent-gui/src ./src
 COPY crates/agent-gui/public ./public
+COPY crates/agent-gui/src-tauri/icons ./src-tauri/icons
 
 RUN pnpm build
 
