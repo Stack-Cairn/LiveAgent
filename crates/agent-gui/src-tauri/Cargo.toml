@@ -28,6 +28,10 @@ desktop = [
   "tauri/tray-icon",
   "tauri/image-png",
 ]
+# Headless mode with runtime file fallback (for development).
+# Production headless builds should compile with `--no-default-features` and
+# embed assets at compile time via build.rs.
+runtime-fallback = []
 
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
@@ -50,7 +54,7 @@ reqwest = { version = "0.13.4", features = ["blocking", "json", "stream", "socks
 rquickjs = { version = "0.8", features = ["array-buffer", "classes", "bindgen"] }
 percent-encoding = "2.3.2"
 axum = { version = "0.8.9", features = ["ws"] }
-tower-http = { version = "0.6.4", features = ["fs"] }
+tower-http = { version = "0.6.4", features = ["fs", "cors"] }
 tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util", "rt-multi-thread"] }
 tokio-stream = "0.1.18"
 tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"] }

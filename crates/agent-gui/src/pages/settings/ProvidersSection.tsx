@@ -1,4 +1,4 @@
-import { invoke } from "../../lib/tauriBridge";
+import { invoke, isTauri } from "../../lib/tauriBridge";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../../src-tauri/icons/custom/ccswitch.png";
@@ -3682,9 +3682,44 @@ export function ProvidersSection(
   }
 
   async function chooseCherryDataDirectory() {
-    const selected = await invoke<string | null>("system_pick_folder", {
-      initial_workdir: cherryDataPath ?? cherryProviders?.dataPath ?? undefined,
-    });
+    let selected: string | null;
+    if (isTauri()) {
+      selected = await invoke<string | null>("system_pick_folder", {
+        initial_workdir: cherryDataPath ?? cherryProviders?.dataPath ?? undefined,
+      });
+    } else {
+      // Headless: inline input dialog
+      const defaultValue = cherryDataPath ?? cherryProviders?.dataPath ?? "/home";
+      selected = await new Promise<string | null>((resolve) => {
+        const backdrop = document.createElement("div");
+        Object.assign(backdrop.style, {
+          position: "fixed", inset: "0", zIndex: "99999",
+          background: "rgba(0,0,0,0.5)", display: "flex",
+          alignItems: "center", justifyContent: "center",
+        });
+        backdrop.innerHTML = `
+          <div style="background:#fff;border-radius:12px;padding:24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:system-ui,sans-serif">
+            <div style="font-size:16px;font-weight:600;margin-bottom:8px">输入 Cherry Studio 数据目录路径</div>
+            <input id="__cherry-path-input" type="text" value="${defaultValue}"
+              style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+              <button id="__cherry-cancel" style="padding:8px 16px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px">取消</button>
+              <button id="__cherry-ok" style="padding:8px 16px;border:none;border-radius:8px;background:#1a73e8;color:#fff;cursor:pointer;font-size:14px">确定</button>
+            </div>
+          </div>`;
+        document.body.appendChild(backdrop);
+        const inputEl = backdrop.querySelector("#__cherry-path-input") as HTMLInputElement;
+        inputEl.focus();
+        inputEl.select();
+        const cleanup = (val: string | null) => { backdrop.remove(); resolve(val); };
+        backdrop.querySelector("#__cherry-cancel")!.addEventListener("click", () => cleanup(null));
+        backdrop.querySelector("#__cherry-ok")!.addEventListener("click", () => cleanup(inputEl.value || null));
+        inputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") cleanup(inputEl.value || null);
+          if (e.key === "Escape") cleanup(null);
+        });
+      });
+    }
     if (!selected) return;
 
     setCherryLoading(true);

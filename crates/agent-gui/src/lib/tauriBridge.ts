@@ -72,19 +72,32 @@ export async function invoke<T>(
     return tauriInvoke<T>(cmd, args as never);
   }
 
-  const response = await fetch(`${resolveHeadlessBaseUrl()}/api/invoke`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cmd, args: args ?? {} }),
-  });
-  if (!response.ok) {
-    throw new Error(`headless invoke failed (HTTP ${response.status}) for command: ${cmd}`);
+  const maxRetries = 2;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch(`${resolveHeadlessBaseUrl()}/api/invoke`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cmd, args: args ?? {} }),
+    });
+    if (response.status === 429) {
+      if (attempt < maxRetries) {
+        // Exponential backoff: 500ms, 1500ms
+        const delay = 500 * (attempt + 1);
+        console.warn(`[headless] invoke ${cmd} got 429, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
+      }
+    }
+    if (!response.ok) {
+      throw new Error(`headless invoke failed (HTTP ${response.status}) for command: ${cmd}`);
+    }
+    const body = (await response.json()) as { ok: boolean; value?: unknown; error?: string };
+    if (!body.ok) {
+      throw new Error(body.error ?? `command failed: ${cmd}`);
+    }
+    return body.value as T;
   }
-  const body = (await response.json()) as { ok: boolean; value?: unknown; error?: string };
-  if (!body.ok) {
-    throw new Error(body.error ?? `command failed: ${cmd}`);
-  }
-  return body.value as T;
+  throw new Error(`headless invoke failed after retries for command: ${cmd}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,38 +108,117 @@ export async function invoke<T>(
 type EventHandler = (event: { payload: unknown }) => void;
 
 const wsListeners = new Map<string, Set<EventHandler>>();
-let wsPromise: Promise<WebSocket> | null = null;
+
+// Exponential-backoff reconnect for the headless WebSocket fan-out. When the
+// connection drops (server restart, network hiccup, or the server closing a
+// slow client due to backpressure), the socket is re-established automatically
+// so already-registered listeners keep receiving events without re-subscribing.
+const RECONNECT_INITIAL_DELAY_MS = 500;
+const RECONNECT_MAX_DELAY_MS = 10_000;
+
+let ws: WebSocket | null = null;
+let wsConnectionPromise: Promise<WebSocket> | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectDelayMs = RECONNECT_INITIAL_DELAY_MS;
+let reconnectAttempts = 0;
+
+function hasListeners(): boolean {
+  for (const handlers of wsListeners.values()) {
+    if (handlers.size > 0) return true;
+  }
+  return false;
+}
+
+/** Drop the socket and any pending reconnect. Called when the last listener unsubscribes. */
+function teardownHeadlessSocket(): void {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (ws !== null) {
+    ws.onclose = null;
+    ws.onerror = null;
+    try {
+      ws.close();
+    } catch {
+      // already closing/closed
+    }
+    ws = null;
+  }
+  wsConnectionPromise = null;
+  reconnectDelayMs = RECONNECT_INITIAL_DELAY_MS;
+  reconnectAttempts = 0;
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer !== null) return;
+  const delay = reconnectDelayMs;
+  reconnectDelayMs = Math.min(reconnectDelayMs * 2, RECONNECT_MAX_DELAY_MS);
+  reconnectAttempts += 1;
+  console.warn(
+    `[headless] WebSocket lost; reconnecting in ${delay}ms (attempt ${reconnectAttempts})`,
+  );
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    // Fire-and-forget: on failure onclose schedules the next attempt.
+    void connectHeadlessWebSocket().catch(() => {
+      /* handled by scheduleReconnect */
+    });
+  }, delay);
+}
 
 function connectHeadlessWebSocket(): Promise<WebSocket> {
-  if (!wsPromise) {
-    wsPromise = new Promise<WebSocket>((resolve, reject) => {
-      const ws = new WebSocket(`${resolveHeadlessBaseUrl().replace(/^http/, "ws")}/ws`);
-      ws.onopen = () => resolve(ws);
-      ws.onerror = () => {
-        wsPromise = null;
-        reject(new Error("headless WebSocket connection failed"));
-      };
-      ws.onclose = () => {
-        wsPromise = null;
-        // Rejecting pending listeners is not possible after the fact; a later
-        // listen() call will open a fresh socket.
-      };
-      ws.onmessage = (message) => {
-        try {
-          const frame = JSON.parse(message.data as string) as { event?: string; payload?: unknown };
-          if (typeof frame.event !== "string") return;
-          const handlers = wsListeners.get(frame.event);
-          if (!handlers) return;
-          for (const handler of [...handlers]) {
-            handler({ payload: frame.payload });
-          }
-        } catch (error) {
-          console.error("[headless] failed to parse WS event frame", error);
-        }
-      };
-    });
+  if (ws !== null && ws.readyState === WebSocket.OPEN) {
+    return Promise.resolve(ws);
   }
-  return wsPromise;
+  if (wsConnectionPromise) {
+    return wsConnectionPromise;
+  }
+
+  wsConnectionPromise = new Promise<WebSocket>((resolve, reject) => {
+    const socket = new WebSocket(`${resolveHeadlessBaseUrl().replace(/^http/, "ws")}/ws`);
+    ws = socket;
+
+    socket.onopen = () => {
+      reconnectDelayMs = RECONNECT_INITIAL_DELAY_MS;
+      reconnectAttempts = 0;
+      console.info("[headless] WebSocket connected");
+      resolve(socket);
+    };
+
+    socket.onerror = () => {
+      console.warn("[headless] WebSocket error (close will follow)");
+    };
+
+    socket.onclose = (event) => {
+      if (ws === socket) ws = null;
+      wsConnectionPromise = null;
+      // Rejecting a promise that already resolved (connected then dropped) is a
+      // no-op; for a failed first connect it surfaces the error to listen().
+      reject(
+        new Error(
+          `headless WebSocket closed (code ${event.code}${event.reason ? `: ${event.reason}` : ""})`,
+        ),
+      );
+      scheduleReconnect();
+    };
+
+    socket.onmessage = (message) => {
+      try {
+        const frame = JSON.parse(message.data as string) as { event?: string; payload?: unknown };
+        if (typeof frame.event !== "string") return;
+        const handlers = wsListeners.get(frame.event);
+        if (!handlers) return;
+        for (const handler of [...handlers]) {
+          handler({ payload: frame.payload });
+        }
+      } catch (error) {
+        console.error("[headless] failed to parse WS event frame", error);
+      }
+    };
+  });
+
+  return wsConnectionPromise;
 }
 
 /**
@@ -152,6 +244,7 @@ export async function listen<T>(
   handlers.add(wrapped);
   return () => {
     handlers?.delete(wrapped);
+    if (!hasListeners()) teardownHeadlessSocket();
   };
 }
 
