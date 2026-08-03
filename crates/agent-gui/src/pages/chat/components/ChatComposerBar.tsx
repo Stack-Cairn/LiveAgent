@@ -28,6 +28,7 @@ import {
   LightbulbOff,
   Loader2,
   Maximize2,
+  Mic,
   Minimize2,
   Paperclip,
   Play,
@@ -54,6 +55,7 @@ import {
   type ReasoningLevel,
 } from "../../../lib/settings";
 import { cn } from "../../../lib/shared/utils";
+import { composeVoiceTranscriptSuffix, useSpeechInput } from "../../../lib/voice";
 import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
 import { useUploadedImagePreview } from "../transcript/uploadedImagePreview";
 
@@ -240,7 +242,48 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     onHeightChange,
     approvalBar,
   } = props;
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const voiceBaseRef = useRef("");
+  const finishVoiceTranscript = useCallback(() => {
+    composerRef.current?.setVoiceTranscript(null);
+  }, [composerRef]);
+  const applyVoiceTranscript = useCallback(
+    (committed: string, interim: string) => {
+      const next = composeVoiceTranscriptSuffix(voiceBaseRef.current, committed, interim);
+      composerRef.current?.setVoiceTranscript(next);
+    },
+    [composerRef],
+  );
+  const {
+    supported: voiceSupported,
+    isListening: voiceListening,
+    errorKey: voiceErrorKey,
+    toggle: toggleVoiceInput,
+    clearError: clearVoiceError,
+    cancel: cancelVoiceInput,
+  } = useSpeechInput({
+    language: locale === "en-US" ? "en-US" : "zh-CN",
+    onStart: () => {
+      clearVoiceError();
+      finishVoiceTranscript();
+      voiceBaseRef.current = composerRef.current?.getText() ?? "";
+      composerRef.current?.setVoiceTranscript("");
+    },
+    onUpdate: ({ committed, interim }) => {
+      applyVoiceTranscript(committed, interim);
+    },
+    onError: () => {
+      finishVoiceTranscript();
+    },
+    onEnd: () => {
+      finishVoiceTranscript();
+      composerRef.current?.focus();
+    },
+  });
+  const cancelActiveVoiceInput = useCallback(() => {
+    finishVoiceTranscript();
+    cancelVoiceInput();
+  }, [cancelVoiceInput, finishVoiceTranscript]);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const attachmentListRef = useRef<HTMLDivElement | null>(null);
   const previousPendingUploadCountRef = useRef(0);
@@ -267,7 +310,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   );
   const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
   const controlsDisabled = isInputDisabled;
+  const voiceDisabled = isInputDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
+
+  useEffect(() => {
+    if (isInputDisabled) {
+      cancelActiveVoiceInput();
+    }
+  }, [cancelActiveVoiceInput, isInputDisabled]);
   // 档位为空但恒开（deepseek-reasoner 型"恒开不可调"）也算支持思考——
   // 亮灯但开关与档位均不可操作；两者皆无才是真不支持。
   const thinkingSupported = reasoningOptions.length > 0 || thinkingAlwaysOn;
@@ -296,6 +346,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     ? t("chat.runtime.thinkingUnavailable")
     : t("chat.runtime.thinkingTooltip");
   const webSearchTooltip = t("chat.runtime.webSearchTooltip");
+  const voiceTooltip = voiceErrorKey
+    ? t(voiceErrorKey)
+    : voiceListening
+      ? t("chat.voice.listening")
+      : t("chat.voice.start");
   const toggleQueueTooltip = queueCollapsed ? t("chat.queue.expand") : t("chat.queue.collapse");
   const toggleComposerExpandTooltip = isComposerExpanded
     ? t("chat.composer.collapse")
@@ -367,9 +422,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
 
   /** 发送（含排队）后退出全高编辑态，让路给回复内容。 */
   const handleComposerSend = useCallback(() => {
+    cancelActiveVoiceInput();
     setComposerExpanded(false);
     onSend();
-  }, [onSend, setComposerExpanded]);
+  }, [cancelActiveVoiceInput, onSend, setComposerExpanded]);
 
   const shouldShowQueueScrollbar = !queueCollapsed && queuedTurns.length > 2;
 
@@ -916,6 +972,32 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                   )}
                 </button>
               </RuntimeControlTooltip>
+
+              {voiceSupported ? (
+                <RuntimeControlTooltip label={voiceTooltip}>
+                  <button
+                    type="button"
+                    disabled={voiceDisabled}
+                    onClick={() => {
+                      clearVoiceError();
+                      toggleVoiceInput();
+                    }}
+                    aria-label={voiceListening ? t("chat.voice.stop") : t("chat.voice.start")}
+                    aria-pressed={voiceListening}
+                    className={cn(
+                      "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                      "disabled:pointer-events-none disabled:opacity-40",
+                      voiceListening
+                        ? "text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-200"
+                        : voiceErrorKey
+                          ? "text-amber-600 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-200"
+                          : "text-muted-foreground hover:text-foreground dark:hover:text-white",
+                    )}
+                  >
+                    <Mic className={cn("h-4 w-4", voiceListening && "animate-pulse")} />
+                  </button>
+                </RuntimeControlTooltip>
+              ) : null}
 
               {reasoningOptions.length > 1 ? (
                 <div
