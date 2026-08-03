@@ -14,6 +14,7 @@ import {
 } from "../../../components/ui/select";
 import { useLocale } from "../../../i18n";
 import { useModalMotion } from "../../../lib/shared/modalMotion";
+import { openFolderPicker } from "./HeadlessFolderPicker";
 
 type RemoteBranches = {
   defaultBranch: string;
@@ -84,39 +85,11 @@ export function WorkspaceCloneModal({
           initial_workdir: parent || undefined,
         });
       } else {
-        // Headless: inline input dialog (window.prompt blocked in non-user-gesture contexts)
-        const defaultValue = parent || "/home";
-        const input = await new Promise<string | null>((resolve) => {
-          const backdrop = document.createElement("div");
-          Object.assign(backdrop.style, {
-            position: "fixed", inset: "0", zIndex: "99999",
-            background: "rgba(0,0,0,0.5)", display: "flex",
-            alignItems: "center", justifyContent: "center",
-          });
-          backdrop.innerHTML = `
-            <div style="background:#fff;border-radius:12px;padding:24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:system-ui,sans-serif">
-              <div style="font-size:16px;font-weight:600;margin-bottom:8px">输入父目录路径</div>
-              <input id="__parent-path-input" type="text" value="${defaultValue}"
-                style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
-              <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-                <button id="__parent-cancel" style="padding:8px 16px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px">取消</button>
-                <button id="__parent-ok" style="padding:8px 16px;border:none;border-radius:8px;background:#1a73e8;color:#fff;cursor:pointer;font-size:14px">确定</button>
-              </div>
-            </div>`;
-          document.body.appendChild(backdrop);
-          const inputEl = backdrop.querySelector("#__parent-path-input") as HTMLInputElement;
-          inputEl.focus();
-          inputEl.select();
-          const cleanup = (val: string | null) => { backdrop.remove(); resolve(val); };
-          backdrop.querySelector("#__parent-cancel")!.addEventListener("click", () => cleanup(null));
-          backdrop.querySelector("#__parent-ok")!.addEventListener("click", () => cleanup(inputEl.value || null));
-          inputEl.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") cleanup(inputEl.value || null);
-            if (e.key === "Escape") cleanup(null);
-          });
+        // Headless: international-style folder picker dialog
+        selected = await openFolderPicker({
+          title: "选择父目录",
+          initialPath: parent || "/",
         });
-        if (!input) return;
-        selected = await invoke<string | null>("system_pick_folder", { path: input });
       }
       const path = selected?.trim();
       if (path) setParent(path);

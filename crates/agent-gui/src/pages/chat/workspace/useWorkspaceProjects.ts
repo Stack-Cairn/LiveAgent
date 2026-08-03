@@ -28,6 +28,7 @@ import {
   mergeWorkspaceProjectsWithHistory,
 } from "../../../lib/workspaceProjects";
 import { asErrorMessage } from "../chatPageUtils";
+import { openFolderPicker } from "./HeadlessFolderPicker";
 import { startWorkspaceCloneTask } from "./cloneTasks";
 import {
   createWorkspaceProjectFromPath,
@@ -356,40 +357,12 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
           initial_workdir: activeWorkspaceProjectPath || workdir,
         });
       } else {
-        // Headless: inline input dialog (window.prompt blocked in non-user-gesture contexts)
-        const defaultValue = activeWorkspaceProjectPath || workdir || "/home";
-        const input = await new Promise<string | null>((resolve) => {
-          const backdrop = document.createElement("div");
-          Object.assign(backdrop.style, {
-            position: "fixed", inset: "0", zIndex: "99999",
-            background: "rgba(0,0,0,0.5)", display: "flex",
-            alignItems: "center", justifyContent: "center",
-          });
-          backdrop.innerHTML = `
-            <div style="background:#fff;border-radius:12px;padding:24px;width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);font-family:system-ui,sans-serif">
-              <div style="font-size:16px;font-weight:600;margin-bottom:8px">输入工作空间路径</div>
-              <div style="font-size:13px;color:#666;margin-bottom:16px">请输入要添加的工作空间的绝对路径</div>
-              <input id="__ws-path-input" type="text" value="${defaultValue}"
-                style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none" />
-              <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
-                <button id="__ws-cancel" style="padding:8px 16px;border:1px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px">取消</button>
-                <button id="__ws-ok" style="padding:8px 16px;border:none;border-radius:8px;background:#1a73e8;color:#fff;cursor:pointer;font-size:14px">确定</button>
-              </div>
-            </div>`;
-          document.body.appendChild(backdrop);
-          const inputEl = backdrop.querySelector("#__ws-path-input") as HTMLInputElement;
-          inputEl.focus();
-          inputEl.select();
-          const cleanup = (val: string | null) => { backdrop.remove(); resolve(val); };
-          backdrop.querySelector("#__ws-cancel")!.addEventListener("click", () => cleanup(null));
-          backdrop.querySelector("#__ws-ok")!.addEventListener("click", () => cleanup(inputEl.value || null));
-          inputEl.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") cleanup(inputEl.value || null);
-            if (e.key === "Escape") cleanup(null);
-          });
+        // Headless: international-style folder picker (breadcrumbs, quick
+        // places, directory listing) instead of a bare text input.
+        picked = await openFolderPicker({
+          title: "选择工作空间目录",
+          initialPath: activeWorkspaceProjectPath || workdir || "/",
         });
-        if (!input) return;
-        picked = await invoke<string | null>("system_pick_folder", { path: input });
       }
       const path = picked?.trim();
       if (!path) return;
