@@ -13,8 +13,7 @@ import { type ToolPolicy, updateSystem } from "../../lib/settings";
 import { BUILTIN_TOOL_CATALOG, BUILTIN_TOOL_CATEGORIES } from "../../lib/tools/builtinToolCatalog";
 import type { SettingsSectionProps } from "./types";
 
-// 交互式应答超时（分钟）档位表：60 分钟内档位密（细调），超过 60 分钟直接跳最大档
-// 99999（≈ 超长等待）。滑块只在这些档位上取整，保证时间始终是常见可读的分钟数。
+// 档位表：60 分钟内细调，超过 1 小时直跳最大档 99999。
 const TIMEOUT_STOPS = [
   1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 99999,
 ];
@@ -57,8 +56,6 @@ export function SystemToolsSection(props: SettingsSectionProps) {
 
   const overriddenCount = Object.keys(policies).length;
 
-  // 交互式应答超时（分钟）：AskUserQuestion 提问卡与工具审批栏共用同一等待窗口。
-  // 滑块按档位表映射（TIMEOUT_STOPS，见文件头），最右档 = 99999。
   const timeoutMinutes = settings.system.interactiveTimeoutMinutes;
   const timeoutStopIndex = TIMEOUT_STOPS.reduce(
     (best, stop, i) =>
