@@ -245,7 +245,7 @@ A drop-in development sandbox built on the headless runtime. Instead of one ever
 
 | Image | Contents | Approx. size |
 |---|---|---|
-| `liveagent-core` | git · build-essential · cmake · ninja · pkg-config · strace · vim · tmux · network tools **+** go 1.25.12 · node 22.19.0 · pnpm · python 3.12 (all managed by [mise](https://mise.jdx.dev)) | ~0.9 GB |
+| `liveagent-core` | git · build-essential · cmake · ninja · pkg-config · strace · vim · tmux · network tools **+** go 1.25.12 · node 22.19.0 · pnpm · bun · python 3.12 (all managed by [mise](https://mise.jdx.dev)) | ~0.9 GB |
 | `liveagent-full` | everything in `core` **+** Java (Temurin 17) · Maven 3.9 | ~1.2 GB |
 
 Both images are built by GitHub Actions from the same `Dockerfile.headless-tools` (`TARGET_PROFILE=core|full`), multi-arch amd64/arm64, and share the same base layers — pulling `full` never re-downloads the `core` layers.
@@ -286,7 +286,8 @@ services:
 > **Notes**
 > - Use a **named volume** for `/opt/mise`. A bind mount of an empty directory would hide the preinstalled toolchain.
 > - Low-frequency / large tools are intentionally **not** preinstalled (gdb, valgrind, clang, rust, php, ruby…). Install them on demand: `apt-get install -y gdb clang` or `mise use -g rust@latest` — no image rebuild needed.
-> - Interactive shells inside the container (`docker exec -it liveagent bash`) already have the full mise environment (PATH / JAVA_HOME) injected.
+> - Every bash session inside the container has the full mise environment (PATH / JAVA_HOME), including **non-interactive login shells** like the app's `bash -lc` execution path: `/etc/profile.d/mise.sh` covers login shells, `/etc/bash.bashrc` covers interactive shells, and `/opt/mise/shims` is on the default PATH as a fallback for non-shell processes.
+> - `pnpm` and `bun` are installed via the npm backend from the npmmirror registry (`MISE_NPM_REGISTRY_URL`), so installing/upgrading them does not depend on GitHub reachability; `go`/`node`/`python` come from their official upstreams (preinstalled in the image).
 
 ### Headless Security Model
 

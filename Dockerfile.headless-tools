@@ -9,12 +9,15 @@ ARG TARGET_PROFILE=core
 # 工具按需分层，而不是把所有语言运行时都塞进一个镜像）：
 #
 #   base : Debian bookworm-slim + 高频基础工具（git / 编译链 / 调试 / 网络 / 编辑器）
-#   core : base + mise + go 1.25.12 + node 22.19.0 + python 3.12 + pnpm   (~0.9 GB)
+#   core : base + mise + go 1.25.12 + node 22.19.0 + python 3.12 + pnpm + bun  (~0.9 GB)
 #   full : core + java temurin-17 + maven 3.9                            (~1.2 GB)
 #
 # 语言运行时全部由 mise 管理（镜像内置全局 config，见 docker/mise.{core,full}.toml），
 # 用户可在 compose 里用 MISE_<TOOL>_VERSION 环境变量切换任意版本，缺失的版本
 # 首次启动自动补装（懒加载，见 docker/entrypoint.sh）。
+# 注意：go/node/python 由 mise core backend 从 GitHub/go.dev/nodejs.org 下载，
+# pnpm/bun 走 npm backend，registry 指向 npmmirror（MISE_NPM_REGISTRY_URL），
+# 国内网络下 npm 类工具安装/补装不依赖 GitHub。
 #
 # 构建（GitHub Actions，官方源可达；用 TARGET_PROFILE 选择 core 或 full）：
 #   docker build --build-arg TARGET_PROFILE=core -f Dockerfile.headless-tools -t liveagent-core .
@@ -130,8 +133,11 @@ FROM base AS core
 
 # mise 版本管理器（单二进制）。GitHub Actions 官方源可达；MISE_VERSION 锁定可复现。
 # 先下载到文件再执行：curl -f 失败会直接中断构建，不会因管道空输入被吞。
+# MISE_NPM_REGISTRY_URL：npm backend（pnpm/bun）统一走 npmmirror，
+# 保证国内网络（NAS/容器）下安装与懒加载补装都不依赖 GitHub。
 ENV MISE_DATA_DIR=/opt/mise \
     MISE_GLOBAL_CONFIG_FILE=/etc/mise/config.toml \
+    MISE_NPM_REGISTRY_URL=https://registry.npmmirror.com \
     MISE_YES=true
 
 RUN curl -fsSL https://mise.run -o /tmp/mise-install.sh && \
@@ -161,14 +167,20 @@ RUN chmod +x /usr/local/bin/entrypoint.sh && \
     install -d -o liveagent -g liveagent -m 0700 /var/lib/liveagent && \
     # mise 数据目录交给 liveagent 可写（懒加载补装的版本也要落盘）
     chown -R liveagent:liveagent /opt/mise && \
-    # docker exec 进入的 bash 自动注入 mise 环境（PATH/JAVA_HOME 等）
+    # --- mise 环境注入（工具链 PATH/JAVA_HOME 等）---
+    # 1) /etc/profile.d/mise.sh：login shell 无论交互与否都加载（/etc/profile 会
+    #    source profile.d/*.sh），覆盖 liveagent 的 bash -lc 执行路径；
+    # 2) /etc/bash.bashrc 尾部：覆盖非登录交互式 shell（docker exec -it bash）。
+    #    两者叠加即所有 bash 场景都有完整工具链。
+    printf 'eval "$(mise env --shell bash)" 2>/dev/null\n' > /etc/profile.d/mise.sh && \
     echo 'eval "$(mise env --shell bash)" 2>/dev/null' >> /etc/bash.bashrc
 
 USER liveagent
 
-# The headless server reads these env vars (CLI flags are ignored in headless
-# mode). Binding 0.0.0.0 makes the port reachable through Docker's NAT.
-ENV LIVEAGENT_HEADLESS_HOST=0.0.0.0 \
+# 兜底：把 mise shims 放进 PATH，覆盖不经 shell 直接 fork 的进程；
+# 正常 bash 场景由 profile.d/bash.bashrc 的 mise env 注入（含 installs 路径）。
+ENV PATH=/opt/mise/shims:$PATH \
+    LIVEAGENT_HEADLESS_HOST=0.0.0.0 \
     LIVEAGENT_HEADLESS_PORT=17890 \
     LIVEAGENT_DATA_DIR=/var/lib/liveagent \
     LANG=en_US.UTF-8
