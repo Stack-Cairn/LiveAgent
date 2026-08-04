@@ -1,12 +1,11 @@
-//! Dual emit sinks for workspace activity: the local webview event is
-//! unconditional; the gateway envelope goes out only for workdirs the gateway
-//! declared interest in, and only best-effort (never blocking a watcher
-//! thread — a dropped event is healed by the next change).
+//! 工作区活动事件的出口。
+//!
+//! 只负责组装 payload 并投给事件总线。谁想要这些事件——桌面 webview、Gateway、
+//! 将来的 HTTP 后端——各自注册 sink，与本文件无关。
+//!
+//! best-effort：丢一条事件由下一次变更自愈，绝不阻塞 watcher 线程。
 
 use serde::Serialize;
-use tauri::Emitter;
-
-use crate::services::gateway::{now_unix_seconds, proto};
 
 use super::{WorkspaceWatchService, WORKSPACE_ACTIVITY_EVENT};
 
@@ -42,35 +41,6 @@ impl WorkspaceWatchService {
             truncated,
         };
 
-        if let Err(error) = self
-            .app_handle
-            .emit(WORKSPACE_ACTIVITY_EVENT, payload.clone())
-        {
-            eprintln!("emit workspace activity failed: {error}");
-        }
-
-        if !self.workdir_in_gateway_set(workdir) {
-            return;
-        }
-        let Some(controller) = self.current_gateway() else {
-            return;
-        };
-        let Ok(sender) = controller.current_outbound_sender() else {
-            return;
-        };
-        let _ = sender.try_send(proto::AgentEnvelope {
-            request_id: format!("workspace-activity-{}", uuid::Uuid::new_v4()),
-            timestamp: now_unix_seconds(),
-            payload: Some(proto::agent_envelope::Payload::WorkspaceActivity(
-                proto::WorkspaceActivityEvent {
-                    workdir: payload.workdir,
-                    revision: payload.revision,
-                    fs: payload.fs,
-                    git: payload.git,
-                    changed_paths: payload.changed_paths,
-                    truncated: payload.truncated,
-                },
-            )),
-        });
+        self.events.emit(WORKSPACE_ACTIVITY_EVENT, payload);
     }
 }

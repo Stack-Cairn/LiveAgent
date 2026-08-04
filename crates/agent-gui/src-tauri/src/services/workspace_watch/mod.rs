@@ -1,21 +1,20 @@
 //! Workspace activity watch service: watches workdirs for filesystem / git
-//! state changes and pushes debounced invalidation events to both the local
-//! webview (`workspace:activity`) and, for gateway-requested workdirs, to the
-//! remote gateway as `AgentEnvelope{workspace_activity}`.
+//! state changes and pushes debounced invalidation events to the event bus
+//! (`workspace:activity`). Who consumes them — the desktop webview, the
+//! gateway, a future HTTP backend — is not this module's business.
 //!
-//! Two declarative sources feed the desired watch set — the local webview
-//! (Tauri command `workspace_watch_set`) and the gateway
-//! (`GatewayEnvelope{workspace_watch}`). The actual watch set is their union;
-//! each `set_desired` call replaces one source's set wholesale and reconciles
-//! watchers against the new union.
+//! Two declarative sources feed the desired watch set — the local frontend
+//! (`workspace_watch_set`) and the gateway (`GatewayEnvelope{workspace_watch}`).
+//! The actual watch set is their union; each `set_desired` call replaces one
+//! source's set wholesale and reconciles watchers against the new union.
 
 mod emit;
 mod watcher;
 
 use std::collections::{BTreeSet, HashMap};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex};
 
-use crate::services::gateway::GatewayController;
+use crate::events::EventBus;
 
 pub const WORKSPACE_ACTIVITY_EVENT: &str = "workspace:activity";
 
@@ -35,8 +34,7 @@ struct WatchInner {
 }
 
 pub struct WorkspaceWatchService {
-    app_handle: tauri::AppHandle,
-    gateway: Mutex<Option<Weak<GatewayController>>>,
+    events: Arc<EventBus>,
     inner: Mutex<WatchInner>,
     // Per-workdir monotonic revision counters. Kept outside WatchInner so they
     // survive watcher teardown/recreation: a re-watched workdir must not
@@ -45,20 +43,11 @@ pub struct WorkspaceWatchService {
 }
 
 impl WorkspaceWatchService {
-    pub fn new(app_handle: tauri::AppHandle) -> Self {
+    pub fn new(events: Arc<EventBus>) -> Self {
         Self {
-            app_handle,
-            gateway: Mutex::new(None),
+            events,
             inner: Mutex::new(WatchInner::default()),
             revisions: Mutex::new(HashMap::new()),
-        }
-    }
-
-    /// Wires the gateway sink. Called once after the controller Arc exists;
-    /// a Weak reference keeps the ownership acyclic (controller owns service).
-    pub fn attach_gateway(&self, controller: Weak<GatewayController>) {
-        if let Ok(mut slot) = self.gateway.lock() {
-            *slot = Some(controller);
         }
     }
 
@@ -93,15 +82,13 @@ impl WorkspaceWatchService {
         }
     }
 
-    pub(crate) fn workdir_in_gateway_set(&self, workdir: &str) -> bool {
+    /// Gateway 兴趣集查询。Gateway 侧的 sink 用它决定要不要把某条活动事件转发出去——
+    /// 兴趣集归本服务管（它本来就按 source 分开存），转发归 sink 管。
+    pub fn workdir_in_gateway_set(&self, workdir: &str) -> bool {
         self.inner
             .lock()
             .map(|inner| inner.gateway.contains(workdir))
             .unwrap_or(false)
-    }
-
-    pub(crate) fn current_gateway(&self) -> Option<Arc<GatewayController>> {
-        self.gateway.lock().ok()?.as_ref()?.upgrade()
     }
 
     /// Per-workdir monotonic revision. A poisoned lock yields 0, which clients

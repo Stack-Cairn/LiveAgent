@@ -1,11 +1,10 @@
-use std::sync::{Mutex, Weak};
+use std::sync::{Arc, Mutex, Weak};
 
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde_json::Value;
-use tauri::Emitter;
 use uuid::Uuid;
 
-use crate::services::gateway::GatewayController;
+use crate::events::EventBus;
 
 use super::db;
 use super::scheduler::AutomationScheduler;
@@ -15,51 +14,32 @@ use super::validate;
 /// Fan-out target for store mutations. All change notifications originate
 /// here so every writer (UI apply, LLM tool, gateway relay, executor
 /// decrement) produces exactly the same broadcast.
+///
+/// 只保留两件事：往事件总线发（谁在听与本文件无关），以及唤醒调度器——
+/// 后者是真实业务逻辑，不是传输。
 pub struct AutomationNotifier {
-    pub app_handle: tauri::AppHandle,
-    pub gateway: Weak<GatewayController>,
+    pub events: Arc<EventBus>,
     pub scheduler: Weak<AutomationScheduler>,
 }
 
 impl AutomationNotifier {
     fn cron_changed(&self, snapshot: &CronSnapshot) {
-        if let Err(error) = self.app_handle.emit(CRON_CHANGED_EVENT, snapshot) {
-            eprintln!("emit {CRON_CHANGED_EVENT} failed: {error}");
-        }
+        self.events.emit(CRON_CHANGED_EVENT, snapshot);
         if let Some(scheduler) = self.scheduler.upgrade() {
             scheduler.request_reload();
         }
-        self.refresh_gateway();
     }
 
     fn hooks_changed(&self, snapshot: &HooksSnapshot) {
-        if let Err(error) = self.app_handle.emit(HOOKS_CHANGED_EVENT, snapshot) {
-            eprintln!("emit {HOOKS_CHANGED_EVENT} failed: {error}");
-        }
-        self.refresh_gateway();
+        self.events.emit(HOOKS_CHANGED_EVENT, snapshot);
     }
 
     fn prompt_pending(&self) {
-        if let Err(error) = self.app_handle.emit(PROMPT_PENDING_EVENT, ()) {
-            eprintln!("emit {PROMPT_PENDING_EVENT} failed: {error}");
-        }
+        self.events.emit(PROMPT_PENDING_EVENT, ());
     }
 
     fn prompt_expired(&self, event: &PromptExpiredEvent) {
-        if let Err(error) = self.app_handle.emit(PROMPT_EXPIRED_EVENT, event) {
-            eprintln!("emit {PROMPT_EXPIRED_EVENT} failed: {error}");
-        }
-    }
-
-    fn refresh_gateway(&self) {
-        let Some(gateway) = self.gateway.upgrade() else {
-            return;
-        };
-        tauri::async_runtime::spawn(async move {
-            if let Err(error) = gateway.refresh_settings_sync_from_db().await {
-                eprintln!("refresh gateway settings sync after automation change failed: {error}");
-            }
-        });
+        self.events.emit(PROMPT_EXPIRED_EVENT, event);
     }
 }
 

@@ -32,11 +32,11 @@ impl GatewayController {
         sftp_registry: Arc<SftpSessionRegistry>,
         managed_process_registry: Arc<ManagedProcessRegistry>,
         git_clone_task_registry: Arc<GitCloneTaskRegistry>,
+        workspace_watch: Arc<WorkspaceWatchService>,
     ) -> Self {
         let initial_config = RemoteSettingsPayload::default();
         let (config_tx, _) = watch::channel(initial_config);
         let tunnel_store = TunnelStore::new(app_handle.clone());
-        let workspace_watch = Arc::new(WorkspaceWatchService::new(app_handle.clone()));
         let chat_ingress = ChatIngressMirror::spawn(app_handle.clone());
         Self {
             app_handle,
@@ -85,7 +85,6 @@ impl GatewayController {
     }
 
     pub fn start(self: &Arc<Self>) -> Result<(), String> {
-        self.workspace_watch.attach_gateway(Arc::downgrade(self));
         self.start_terminal_forwarder();
         self.start_terminal_stream_forwarder();
         self.start_sftp_forwarder();

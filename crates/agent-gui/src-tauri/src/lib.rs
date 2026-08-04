@@ -1,6 +1,9 @@
 mod commands;
+mod events;
+mod gateway_sink;
 mod runtime;
 mod services;
+mod tauri_sink;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -722,6 +725,13 @@ pub fn run() {
                 }
                 terminal_registry.attach_app_handle(app.handle().clone());
                 sftp_registry.attach_app_handle(app.handle().clone());
+                // 事件总线：后端只管往这里发，谁听由这里决定。
+                // 桌面 webview 和 Gateway 都只是普通订阅者，没有谁被硬编码进后端。
+                // 先建空总线，sink 稍后注册——总线用内部可变性，允许后置。
+                let events = Arc::new(events::EventBus::new());
+                let workspace_watch = Arc::new(services::workspace_watch::WorkspaceWatchService::new(
+                    Arc::clone(&events),
+                ));
                 let gateway_controller = Arc::new(services::gateway::GatewayController::new(
                     app.handle().clone(),
                     Arc::clone(&automation_store),
@@ -731,18 +741,21 @@ pub fn run() {
                     Arc::clone(&sftp_registry),
                     Arc::clone(&managed_process_registry),
                     Arc::clone(&git_clone_task_registry),
+                    Arc::clone(&workspace_watch),
                 ));
-                managed_process_registry.set_notifier(
-                    runtime::managed_process::ManagedProcessNotifier {
-                        app_handle: app.handle().clone(),
-                        gateway: Arc::downgrade(&gateway_controller),
-                    },
-                );
+                events.register(Arc::new(tauri_sink::TauriEventSink::new(
+                    app.handle().clone(),
+                )));
+                events.register(Arc::new(gateway_sink::GatewayEventSink::new(
+                    &gateway_controller,
+                    &workspace_watch,
+                )));
+                app.manage(Arc::clone(&events));
+                managed_process_registry.set_event_bus(Arc::clone(&events));
                 managed_process_registry.spawn_startup_reconcile();
                 managed_process_registry.spawn_monitor();
                 automation_store.set_notifier(services::automation::AutomationNotifier {
-                    app_handle: app.handle().clone(),
-                    gateway: Arc::downgrade(&gateway_controller),
+                    events: Arc::clone(&events),
                     scheduler: Arc::downgrade(&automation_scheduler),
                 });
                 Arc::clone(&automation_scheduler).start();
