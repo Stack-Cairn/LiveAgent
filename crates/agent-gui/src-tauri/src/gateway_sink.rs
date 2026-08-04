@@ -99,22 +99,55 @@ impl GatewayEventSink {
     }
 }
 
+/// 一条事件对应的 Gateway 动作。
+///
+/// 拆出这个 enum 的唯一目的是**能测**。`GatewayController` 持有 `tauri::AppHandle`，
+/// 单测里造不出来，所以「收到事件后做了什么」验不了。但 P2-07 真实踩过的那次回归
+/// （移除 gateway 发布调用后忘了在 sink 里接上，编译全绿而 history 同步已断）
+/// 是一个**路由错误**——事件名没落到任何分支上。路由是纯函数，可以单独测。
+///
+/// 于是：决策在这里（可测），执行留在 `emit_json`（造不出 controller，但只剩转发）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GatewayAction {
+    PublishManagedProcesses,
+    RefreshSettingsSync,
+    ApplyRemoteSettings,
+    ForwardWorkspaceActivity,
+    PublishHistoryUpsert,
+    PublishHistoryDelete,
+    /// 其余事件 Gateway 通过各 registry 自带的 subscriber 通道拿，或者根本不关心。
+    /// 静默忽略是正确行为：加一个新事件不该逼着这里跟着改。
+    Ignore,
+}
+
+fn action_for(event: &str) -> GatewayAction {
+    match event {
+        MANAGED_PROCESS_CHANGED_EVENT => GatewayAction::PublishManagedProcesses,
+        // cron / hooks 变更都会改变 settings 快照，Gateway 需要重新同步。
+        CRON_CHANGED_EVENT | HOOKS_CHANGED_EVENT => GatewayAction::RefreshSettingsSync,
+        SETTINGS_REMOTE_SAVED_EVENT => GatewayAction::ApplyRemoteSettings,
+        WORKSPACE_ACTIVITY_EVENT => GatewayAction::ForwardWorkspaceActivity,
+        HISTORY_UPSERT_EVENT => GatewayAction::PublishHistoryUpsert,
+        HISTORY_DELETE_EVENT => GatewayAction::PublishHistoryDelete,
+        _ => GatewayAction::Ignore,
+    }
+}
+
 impl EventSink for GatewayEventSink {
     fn emit_json(&self, event: &str, payload: serde_json::Value) {
         let Some(controller) = self.controller.upgrade() else {
             return;
         };
 
-        match event {
-            MANAGED_PROCESS_CHANGED_EVENT => {
+        match action_for(event) {
+            GatewayAction::PublishManagedProcesses => {
                 tokio::spawn(async move {
                     if let Err(error) = controller.publish_current_managed_processes().await {
                         eprintln!("publish managed process snapshot failed: {error}");
                     }
                 });
             }
-            // cron / hooks 变更都会改变 settings 快照，Gateway 需要重新同步。
-            CRON_CHANGED_EVENT | HOOKS_CHANGED_EVENT => {
+            GatewayAction::RefreshSettingsSync => {
                 tokio::spawn(async move {
                     if let Err(error) = controller.refresh_settings_sync_from_db().await {
                         eprintln!(
@@ -125,7 +158,7 @@ impl EventSink for GatewayEventSink {
             }
             // settings_save_remote 迁入 agent-core 后不再直接持有 controller，
             // 改成发事件；apply_config 这一步搬到这里，Gateway 的知识仍然只在本文件。
-            SETTINGS_REMOTE_SAVED_EVENT => match serde_json::from_value(payload) {
+            GatewayAction::ApplyRemoteSettings => match serde_json::from_value(payload) {
                 Ok(config) => {
                     if let Err(error) = controller.apply_config(config) {
                         eprintln!("apply remote settings to gateway failed: {error}");
@@ -133,22 +166,24 @@ impl EventSink for GatewayEventSink {
                 }
                 Err(error) => eprintln!("settings:remote-saved 事件反序列化失败: {error}"),
             },
-            WORKSPACE_ACTIVITY_EVENT => {
+            GatewayAction::ForwardWorkspaceActivity => {
                 self.forward_workspace_activity(&controller, &payload);
             }
             // history 是少数几个必须把 payload 读回来的事件：Gateway 要把整个
             // summary 转成 sync 事件发给远端，重读数据库拿不到「刚才改的是哪一条」。
-            HISTORY_UPSERT_EVENT => match serde_json::from_value::<ChatHistorySummary>(payload) {
-                Ok(summary) => {
-                    tokio::spawn(async move {
-                        controller
-                            .publish_history_sync(build_history_sync_upsert(&summary))
-                            .await;
-                    });
+            GatewayAction::PublishHistoryUpsert => {
+                match serde_json::from_value::<ChatHistorySummary>(payload) {
+                    Ok(summary) => {
+                        tokio::spawn(async move {
+                            controller
+                                .publish_history_sync(build_history_sync_upsert(&summary))
+                                .await;
+                        });
+                    }
+                    Err(error) => eprintln!("history upsert 事件反序列化失败: {error}"),
                 }
-                Err(error) => eprintln!("history upsert 事件反序列化失败: {error}"),
-            },
-            HISTORY_DELETE_EVENT => {
+            }
+            GatewayAction::PublishHistoryDelete => {
                 let Some(conversation_id) = payload.as_str().map(str::to_string) else {
                     eprintln!("history delete 事件 payload 不是字符串");
                     return;
@@ -159,10 +194,61 @@ impl EventSink for GatewayEventSink {
                         .await;
                 });
             }
-            // 其余事件 Gateway 通过各 registry 自带的 subscriber 通道拿，
-            // 或者根本不关心。不认识的事件静默丢弃是正确行为：
-            // 加一个新事件不应该逼着这里跟着改。
-            _ => {}
+            GatewayAction::Ignore => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 每条事件都必须落到一个非 Ignore 的分支上。
+    ///
+    /// 断言用的是 agent-core 导出的**常量本身**，不是字面量字符串——这样后端改了
+    /// 事件名，这里跟着变，测试不会假绿。而如果后端**新增**一条 Gateway 该关心的
+    /// 事件却忘了在 `action_for` 里接上，就会掉进 Ignore，被下面的断言抓住。
+    #[test]
+    fn every_event_gateway_cares_about_is_routed() {
+        let expected = [
+            (MANAGED_PROCESS_CHANGED_EVENT, GatewayAction::PublishManagedProcesses),
+            (CRON_CHANGED_EVENT, GatewayAction::RefreshSettingsSync),
+            (HOOKS_CHANGED_EVENT, GatewayAction::RefreshSettingsSync),
+            (SETTINGS_REMOTE_SAVED_EVENT, GatewayAction::ApplyRemoteSettings),
+            (WORKSPACE_ACTIVITY_EVENT, GatewayAction::ForwardWorkspaceActivity),
+            (HISTORY_UPSERT_EVENT, GatewayAction::PublishHistoryUpsert),
+            (HISTORY_DELETE_EVENT, GatewayAction::PublishHistoryDelete),
+        ];
+
+        for (event, action) in expected {
+            assert_eq!(
+                action_for(event),
+                action,
+                "事件 {event} 没有路由到预期动作——Gateway 会静默地收不到它"
+            );
+        }
+    }
+
+    /// 事件名之间不能互相碰撞：两条不同的事件落到同一个动作上（除了 cron/hooks
+    /// 这对故意共享的）说明常量写重了。
+    #[test]
+    fn event_names_are_distinct() {
+        let names = [
+            MANAGED_PROCESS_CHANGED_EVENT,
+            CRON_CHANGED_EVENT,
+            HOOKS_CHANGED_EVENT,
+            SETTINGS_REMOTE_SAVED_EVENT,
+            WORKSPACE_ACTIVITY_EVENT,
+            HISTORY_UPSERT_EVENT,
+            HISTORY_DELETE_EVENT,
+        ];
+        let unique: std::collections::HashSet<_> = names.iter().collect();
+        assert_eq!(unique.len(), names.len(), "存在重复的事件名常量");
+    }
+
+    #[test]
+    fn unknown_events_are_ignored_rather_than_panicking() {
+        assert_eq!(action_for("terminal:output"), GatewayAction::Ignore);
+        assert_eq!(action_for(""), GatewayAction::Ignore);
     }
 }

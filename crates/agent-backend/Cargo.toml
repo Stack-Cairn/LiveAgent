@@ -1,0 +1,28 @@
+[package]
+name = "agent-backend"
+version = "0.1.0"
+edition = "2021"
+description = "LiveAgent backend HTTP/WS server. The one and only network entry point."
+
+[[bin]]
+name = "agent-backend"
+path = "src/main.rs"
+
+[dependencies]
+agent-core = { path = "../agent-core" }
+axum = { version = "0.8.9", features = ["ws", "multipart"] }
+axum-server = { version = "0.7.2", features = ["tls-rustls"] }
+tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util", "rt", "rt-multi-thread", "signal"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.2", features = ["limit"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+futures-util = "0.3.32"
+subtle = "2.6.1"
+uuid = { version = "1.23.4", features = ["v4"] }
+rand = "0.9.2"
+reqwest = { version = "0.13.4", features = ["json", "stream"] }
+
+[dev-dependencies]
+tower = { version = "0.5.2", features = ["util"] }
+http-body-util = "0.1.3"
