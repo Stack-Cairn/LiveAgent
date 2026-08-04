@@ -1315,10 +1315,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.systemToolsDesc":
       "查看 LiveAgent 在 Agent 模式下自动注册的内置工具，并为每个工具设置审批策略（放行 / 执行前询问 / 拒绝）。",
     "settings.interactiveTimeout.title": "交互式应答超时",
-    "settings.interactiveTimeout.desc": "AskUserQuestion 提问卡与工具审批栏的等待窗口，二者共用。",
     "settings.interactiveTimeout.unit": "分钟",
-    "settings.interactiveTimeout.hint":
-      "正数分钟 = 超时窗口；填很大的数（如 99999）≈ 永不超时。超时后按各交互既定姿态落定（提问自动选推荐项并继续、审批按拒绝）。",
     "settings.builtinToolCategory.fs": "文件系统",
     "settings.builtinToolCategory.process": "终端与进程",
     "settings.builtinToolCategory.intelligence": "智能与记忆",
@@ -1391,7 +1388,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.builtinTool.ask_user_question.name": "用户提问",
     "settings.builtinTool.ask_user_question.desc": "以选项卡片向你提问并等待选择",
     "settings.builtinTool.ask_user_question.detail":
-      "模型在需要你决策时发起选择题（一次最多 4 个问题，每题 2-6 个选项且各题数量一致，推荐项排在首位）。卡片暂停执行等待作答，3 分钟内未作答自动按推荐项继续执行；桌面端与 WebUI 均可作答，点击停止可跳过。仅在对话场景注册。",
+      "模型在需要你决策时发起选择题（一次最多 4 个问题，每题 2-6 个选项且各题数量一致，推荐项排在首位）。卡片暂停执行等待作答，超时时间可用下方滑块调整，超时后未作答自动按推荐项继续执行；桌面端与 WebUI 均可作答，点击停止可跳过。仅在对话场景注册。",
     "settings.builtinTool.cron_task_manager.name": "定时任务",
     "settings.builtinTool.cron_task_manager.desc": "创建与管理定时自动任务",
     "settings.builtinTool.cron_task_manager.detail":
@@ -3635,11 +3632,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.systemToolsDesc":
       "View the built-in tools that LiveAgent registers automatically in Agent mode, and set an approval policy per tool (allow / ask before running / deny).",
     "settings.interactiveTimeout.title": "Interactive answer timeout",
-    "settings.interactiveTimeout.desc":
-      "Wait window shared by the AskUserQuestion card and the tool approval bar.",
     "settings.interactiveTimeout.unit": "min",
-    "settings.interactiveTimeout.hint":
-      "Positive minutes = answer window; use a very large number (e.g. 99999) for effectively no timeout. On timeout, each prompt settles its own way (questions auto-pick the recommended option and continue; approvals are denied).",
     "settings.builtinToolCategory.fs": "File System",
     "settings.builtinToolCategory.process": "Terminal & Processes",
     "settings.builtinToolCategory.intelligence": "Intelligence & Memory",
@@ -3714,7 +3707,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.builtinTool.ask_user_question.desc":
       "Ask you multiple-choice questions in a card and wait for your selections",
     "settings.builtinTool.ask_user_question.detail":
-      "Lets the model ask you multiple-choice questions when a decision is yours to make (up to 4 questions per call, 2-6 options each with the same count across questions, recommended option shown first). Execution pauses on an interactive card until you answer — from the desktop or the WebUI; after 3 minutes without an answer the recommended options are auto-selected, and pressing Stop skips the question. Chat sessions only.",
+      "Lets the model ask you multiple-choice questions when a decision is yours to make (up to 4 questions per call, 2-6 options each with the same count across questions, recommended option shown first). Execution pauses on an interactive card until you answer — from the desktop or the WebUI; the answer window is adjustable with the slider below, and when it elapses without an answer the recommended options are auto-selected. Pressing Stop skips the question. Chat sessions only.",
     "settings.builtinTool.cron_task_manager.name": "Scheduled Tasks",
     "settings.builtinTool.cron_task_manager.desc": "Create and manage scheduled automations",
     "settings.builtinTool.cron_task_manager.detail":
