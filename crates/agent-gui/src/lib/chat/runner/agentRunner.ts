@@ -36,6 +36,13 @@ import {
   isProviderNativeWebFetchToolName,
   isProviderNativeWebSearchToolName,
 } from "../../providers/nativeWebSearch";
+import type { PreparedProxyRequest } from "../../providers/proxy";
+import {
+  failoverBreakerKey,
+  type ModelFailoverRuntimeConfig,
+  type ProviderFailoverCandidate,
+  withProviderFailover,
+} from "../../providers/runtime/providerFailover";
 import type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
 import {
   inferRuntimePlatform,
@@ -43,7 +50,7 @@ import {
   type RuntimePlatform,
   runtimePlatformLabel,
 } from "../../runtimePlatform";
-import type { ProviderId, ReasoningLevel } from "../../settings";
+import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
@@ -638,10 +645,38 @@ function findLastAssistantMessage(messages: Message[]): AssistantMessage | null 
   );
 }
 
+export type AgentRunnerFailoverTarget = {
+  /** Stable identity used for breaker keys and switch callbacks. */
+  selectedModel: SelectedModel;
+  providerId: ProviderId;
+  model: string;
+  /** Display label, e.g. "PackyCode · claude-sonnet-4-5". */
+  label: string;
+  runtime: ProviderRuntimeConfig;
+};
+
+export type AgentRunnerFailoverSwitchEvent = {
+  /** The fallback target now active, or null when back on the primary. */
+  target: AgentRunnerFailoverTarget | null;
+  round: number;
+  errorMessage: string;
+};
+
+export type AgentRunnerFailoverParams = {
+  config: ModelFailoverRuntimeConfig;
+  /** Identity of the primary target described by params.providerId/model/runtime. */
+  primary: { selectedModel?: SelectedModel; label: string };
+  /** Fallback targets in failover-queue order, primary duplicates removed. */
+  fallbacks: AgentRunnerFailoverTarget[];
+  /** Fired when a round commits on a different target than the previous rounds. */
+  onSwitched?: (event: AgentRunnerFailoverSwitchEvent) => void;
+};
+
 export async function runAssistantWithTools(params: {
   providerId: ProviderId;
   model: string;
   runtime: ProviderRuntimeConfig;
+  failover?: AgentRunnerFailoverParams;
   runtimePlatform?: RuntimePlatform;
   context: Context;
   workdir: string;
@@ -731,6 +766,108 @@ export async function runAssistantWithTools(params: {
       reasoning: params.runtime.reasoning,
       api: model.api,
     });
+
+    // ---- Provider auto-failover targets -----------------------------------
+    // Target 0 is the primary (params.providerId/model/runtime); the rest map
+    // to params.failover.fallbacks in queue order. Fallback proxy/model
+    // preparation is lazy so unused fallbacks never touch the hot path.
+    type PreparedFailoverTarget = {
+      index: number;
+      key: string;
+      label: string;
+      selectedModel?: SelectedModel;
+      providerId: ProviderId;
+      modelId: string;
+      runtime: ProviderRuntimeConfig;
+      proxyRequest: PreparedProxyRequest;
+      model: ReturnType<typeof createModelFromConfig>;
+    };
+
+    const failoverParams = params.failover;
+    const primaryTarget: PreparedFailoverTarget = {
+      index: 0,
+      key: failoverParams?.primary.selectedModel
+        ? failoverBreakerKey(
+            failoverParams.primary.selectedModel.customProviderId,
+            failoverParams.primary.selectedModel.model,
+          )
+        : failoverBreakerKey(params.providerId, modelId),
+      label: failoverParams?.primary.label ?? `${params.providerId} · ${modelId}`,
+      selectedModel: failoverParams?.primary.selectedModel,
+      providerId: params.providerId,
+      modelId,
+      runtime: params.runtime,
+      proxyRequest,
+      model,
+    };
+
+    const preparedFallbackTargets = new Map<number, Promise<PreparedFailoverTarget>>();
+    const prepareFallbackTarget = (index: number): Promise<PreparedFailoverTarget> => {
+      const existing = preparedFallbackTargets.get(index);
+      if (existing) return existing;
+      const fallback = failoverParams?.fallbacks[index - 1];
+      if (!fallback) {
+        return Promise.reject(new Error(`Unknown failover target index: ${index}`));
+      }
+      const prepared = (async () => {
+        const fallbackProxyRequest = await prepareProviderRequest(
+          fallback.providerId,
+          fallback.runtime,
+          { sessionId: params.sessionId },
+        );
+        return {
+          index,
+          key: failoverBreakerKey(
+            fallback.selectedModel.customProviderId,
+            fallback.selectedModel.model,
+          ),
+          label: fallback.label,
+          selectedModel: fallback.selectedModel,
+          providerId: fallback.providerId,
+          modelId: fallback.model,
+          runtime: fallback.runtime,
+          proxyRequest: fallbackProxyRequest,
+          model: createModelFromConfig(
+            fallback.providerId,
+            fallback.model,
+            fallbackProxyRequest.baseUrl,
+            fallback.runtime.requestFormat,
+            fallback.runtime.modelConfig,
+            fallback.runtime.baseUrl.trim(),
+          ),
+        } satisfies PreparedFailoverTarget;
+      })();
+      // A failed preparation must not be cached forever; allow later retries.
+      preparedFallbackTargets.set(
+        index,
+        prepared.catch((error) => {
+          preparedFallbackTargets.delete(index);
+          throw error;
+        }),
+      );
+      return preparedFallbackTargets.get(index) as Promise<PreparedFailoverTarget>;
+    };
+
+    /** Cheap, IO-free model identity for failover bookkeeping/synthesis. */
+    const fallbackTargetIdentity = (index: number) => {
+      const fallback = failoverParams?.fallbacks[index - 1];
+      if (!fallback) return { api: model.api, provider: model.provider, id: modelId };
+      const identity = createModelFromConfig(
+        fallback.providerId,
+        fallback.model,
+        fallback.runtime.baseUrl.trim(),
+        fallback.runtime.requestFormat,
+        fallback.runtime.modelConfig,
+        fallback.runtime.baseUrl.trim(),
+      );
+      return { api: identity.api, provider: identity.provider, id: identity.id };
+    };
+
+    // Sticky winner: rounds after a successful failover start on the target
+    // that actually answered, mirroring cc-switch's hot switch semantics.
+    let activeFailoverTargetIndex = 0;
+    let lastFailoverErrorMessage = "";
+    // ------------------------------------------------------------------------
 
     const toolResultErrorFlags = new Map<string, boolean>();
     const toolCallsById = new Map<string, ToolCall>();
@@ -1270,108 +1407,200 @@ export async function runAssistantWithTools(params: {
         messages: streamContext.messages.slice(),
         tools: filterRequestTools(streamTools),
       });
-      const fallbackReasoning =
-        params.providerId === "claude_code" || params.providerId === "gemini"
-          ? toSimpleStreamReasoning(params.runtime.reasoning)
-          : streamModel.api === "openai-responses" || streamModel.api === "openai-completions"
-            ? toSimpleStreamReasoning(params.runtime.reasoning)
-            : undefined;
-      const shouldProbeHostedSearch = Boolean(nativeWebSearchStatus);
-      const hostedSearchProbeId = shouldProbeHostedSearch
-        ? createHostedSearchProbeId(params.providerId)
-        : undefined;
-      let streamOptions: StreamOptionsEx = {
-        ...(options ?? {}),
-        apiKey: options?.apiKey ?? params.runtime.apiKey,
-        headers: withHostedSearchProbeHeader(
-          {
-            ...(options?.headers ?? {}),
-            ...proxyRequest.headers,
-          },
-          hostedSearchProbeId,
-        ),
-        signal: options?.signal,
-        sessionId: options?.sessionId ?? params.sessionId,
-        cacheRetention:
-          options?.cacheRetention ??
-          resolveProviderCacheRetention(
-            params.providerId,
-            params.runtime.promptCachingEnabled,
-            undefined,
-            params.runtime.promptCacheRetention,
+
+      // pi-agent-core passes the agent-state model; honor it for the primary
+      // target so external model swaps keep working through the failover path.
+      const primaryRoundTarget: PreparedFailoverTarget =
+        streamModel === model ? primaryTarget : { ...primaryTarget, model: streamModel };
+
+      const buildTargetRoundStream = (target: PreparedFailoverTarget) => {
+        const targetModel = target.model;
+        const fallbackReasoning =
+          target.providerId === "claude_code" || target.providerId === "gemini"
+            ? toSimpleStreamReasoning(target.runtime.reasoning)
+            : targetModel.api === "openai-responses" || targetModel.api === "openai-completions"
+              ? toSimpleStreamReasoning(target.runtime.reasoning)
+              : undefined;
+        const targetNativeWebSearchStatus =
+          target.index === 0
+            ? nativeWebSearchStatus
+            : resolveProviderNativeWebSearchStatus({
+                providerId: target.providerId,
+                api: targetModel.api,
+                enabled: params.nativeWebSearch,
+                baseUrl: target.runtime.baseUrl,
+                modelId: target.modelId,
+              });
+        const shouldProbeHostedSearch = Boolean(targetNativeWebSearchStatus);
+        const hostedSearchProbeId = shouldProbeHostedSearch
+          ? createHostedSearchProbeId(target.providerId)
+          : undefined;
+        let streamOptions: StreamOptionsEx = {
+          ...(options ?? {}),
+          apiKey: options?.apiKey ?? target.runtime.apiKey,
+          headers: withHostedSearchProbeHeader(
+            {
+              ...(options?.headers ?? {}),
+              ...target.proxyRequest.headers,
+            },
+            hostedSearchProbeId,
           ),
-        metadata: buildProviderRequestMetadata(params.providerId, params.sessionId),
-        toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
-        reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
-        streamRetry: {
-          onRetry: (attempt, maxAttempts, errorMessage) => {
-            params.onToolStatus?.(
-              `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
-            );
-            retryAttemptsForRound.push({ attempt, maxAttempts, errorMessage });
-            params.onRetryAttempts?.(round, retryAttemptsForRound.slice());
+          signal: options?.signal,
+          sessionId: options?.sessionId ?? params.sessionId,
+          cacheRetention:
+            options?.cacheRetention ??
+            resolveProviderCacheRetention(
+              target.providerId,
+              target.runtime.promptCachingEnabled,
+              undefined,
+              target.runtime.promptCacheRetention,
+            ),
+          metadata: buildProviderRequestMetadata(target.providerId, params.sessionId),
+          toolChoice: options?.toolChoice ?? (effectiveContext.tools?.length ? "auto" : undefined),
+          reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
+          streamRetry: {
+            onRetry: (attempt, maxAttempts, errorMessage) => {
+              params.onToolStatus?.(
+                `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
+              );
+              retryAttemptsForRound.push({ attempt, maxAttempts, errorMessage });
+              params.onRetryAttempts?.(round, retryAttemptsForRound.slice());
+            },
+            onRetryRecovered: () => {
+              params.onToolStatus?.(`第 ${round} 轮：模型生成中...`);
+            },
           },
-          onRetryRecovered: () => {
-            params.onToolStatus?.(`第 ${round} 轮：模型生成中...`);
+        };
+
+        streamOptions = finalizeProviderStreamOptions({
+          providerId: target.providerId,
+          baseUrl: target.runtime.baseUrl,
+          options: streamOptions,
+          context: effectiveContext,
+          model: targetModel,
+          workdir: params.workdir,
+          nativeWebSearch: params.nativeWebSearch,
+          debugLogger: params.debugLogger,
+          extra: {
+            round,
+            sessionId: params.sessionId,
           },
-        },
+        });
+
+        // A discarded failover attempt for this round may have left a live
+        // probe/aggregator behind; finish it quietly and drop its blocks so
+        // the winning attempt starts from a clean slate.
+        const staleProbe = hostedSearchProbeByRound.get(round);
+        if (staleProbe) {
+          hostedSearchProbeByRound.delete(round);
+          hostedSearchBlocksByRound.delete(round);
+          hostedSearchOrderedBlocksByRound.delete(round);
+          void staleProbe
+            .finishProbe()
+            .then(() => staleProbe.disposeAggregator())
+            .catch(() => undefined);
+        }
+
+        const hostedSearchAggregator = createHostedSearchEventAggregator({
+          providerId: target.providerId,
+          onHostedSearch: (hostedSearch) => {
+            if (hostedSearch.status === "searching") {
+              nativeWebSearchStatusController.schedule();
+            } else {
+              nativeWebSearchStatusController.pause();
+            }
+            upsertHostedSearchBlockForRound(round, hostedSearch);
+            upsertHostedSearchOrderedBlockForRound(round, hostedSearch);
+            params.onHostedSearch?.(hostedSearch, round);
+          },
+        });
+        const hostedSearchProbe = startHostedSearchFetchProbe({
+          providerId: target.providerId,
+          sessionId: params.sessionId,
+          requestId: hostedSearchProbeId,
+          enabled: shouldProbeHostedSearch,
+          onRawEvent: hostedSearchAggregator.accept,
+        });
+        hostedSearchProbeByRound.set(round, {
+          finishProbe: hostedSearchProbe.finish,
+          completeAggregator: hostedSearchAggregator.complete,
+          failAggregator: hostedSearchAggregator.fail,
+          disposeAggregator: hostedSearchAggregator.dispose,
+        });
+
+        params.debugLogger?.logRequest(
+          buildStreamRequestDebugPayload({
+            runtime: target.runtime,
+            context: effectiveContext,
+            options: streamOptions,
+            round,
+          }),
+        );
+
+        return streamSimpleByApi(targetModel, effectiveContext, streamOptions);
       };
 
-      streamOptions = finalizeProviderStreamOptions({
-        providerId: params.providerId,
-        baseUrl: params.runtime.baseUrl,
-        options: streamOptions,
-        context: effectiveContext,
-        model: streamModel,
-        workdir: params.workdir,
-        nativeWebSearch: params.nativeWebSearch,
-        debugLogger: params.debugLogger,
-        extra: {
-          round,
-          sessionId: params.sessionId,
+      const wrapWithGuard = (stream: ReturnType<typeof streamSimpleByApi>) =>
+        wrapStreamWithToolCallArgumentGuard(stream, (toolCall, reason) => {
+          incompleteToolCallArguments.set(toolCall.id, reason);
+        });
+
+      if (!failoverParams || failoverParams.fallbacks.length === 0) {
+        return wrapWithGuard(buildTargetRoundStream(primaryRoundTarget));
+      }
+
+      // Candidate order: sticky active target first, then the rest in
+      // primary→queue order. Breaker-open targets are skipped inside
+      // withProviderFailover.
+      const totalTargets = failoverParams.fallbacks.length + 1;
+      const targetOrder = [
+        activeFailoverTargetIndex,
+        ...Array.from({ length: totalTargets }, (_, i) => i).filter(
+          (i) => i !== activeFailoverTargetIndex,
+        ),
+      ];
+      const candidates = targetOrder.map((targetIndex) => {
+        const fallback = targetIndex === 0 ? null : failoverParams.fallbacks[targetIndex - 1];
+        return {
+          key:
+            targetIndex === 0
+              ? primaryTarget.key
+              : failoverBreakerKey(
+                  fallback?.selectedModel.customProviderId ?? "",
+                  fallback?.selectedModel.model ?? "",
+                ),
+          label: targetIndex === 0 ? primaryTarget.label : (fallback?.label ?? ""),
+          model:
+            targetIndex === 0
+              ? { api: model.api, provider: model.provider, id: model.id }
+              : fallbackTargetIdentity(targetIndex),
+          start: async () => {
+            const target =
+              targetIndex === 0 ? primaryRoundTarget : await prepareFallbackTarget(targetIndex);
+            return buildTargetRoundStream(target);
+          },
+        } satisfies ProviderFailoverCandidate;
+      });
+
+      const failoverStream = withProviderFailover(candidates, {
+        config: failoverParams.config,
+        signal: options?.signal,
+        onFailover: ({ fromLabel, toLabel, errorMessage }) => {
+          lastFailoverErrorMessage = errorMessage;
+          params.onToolStatus?.(`第 ${round} 轮：${fromLabel} 不可用，正在切换到 ${toLabel}...`);
+        },
+        onCommitted: (candidateIndex) => {
+          const targetIndex = targetOrder[candidateIndex] ?? activeFailoverTargetIndex;
+          if (targetIndex === activeFailoverTargetIndex) return;
+          activeFailoverTargetIndex = targetIndex;
+          failoverParams.onSwitched?.({
+            target: targetIndex === 0 ? null : (failoverParams.fallbacks[targetIndex - 1] ?? null),
+            round,
+            errorMessage: lastFailoverErrorMessage,
+          });
         },
       });
-
-      const hostedSearchAggregator = createHostedSearchEventAggregator({
-        providerId: params.providerId,
-        onHostedSearch: (hostedSearch) => {
-          if (hostedSearch.status === "searching") {
-            nativeWebSearchStatusController.schedule();
-          } else {
-            nativeWebSearchStatusController.pause();
-          }
-          upsertHostedSearchBlockForRound(round, hostedSearch);
-          upsertHostedSearchOrderedBlockForRound(round, hostedSearch);
-          params.onHostedSearch?.(hostedSearch, round);
-        },
-      });
-      const hostedSearchProbe = startHostedSearchFetchProbe({
-        providerId: params.providerId,
-        sessionId: params.sessionId,
-        requestId: hostedSearchProbeId,
-        enabled: shouldProbeHostedSearch,
-        onRawEvent: hostedSearchAggregator.accept,
-      });
-      hostedSearchProbeByRound.set(round, {
-        finishProbe: hostedSearchProbe.finish,
-        completeAggregator: hostedSearchAggregator.complete,
-        failAggregator: hostedSearchAggregator.fail,
-        disposeAggregator: hostedSearchAggregator.dispose,
-      });
-
-      params.debugLogger?.logRequest(
-        buildStreamRequestDebugPayload({
-          runtime: params.runtime,
-          context: effectiveContext,
-          options: streamOptions,
-          round,
-        }),
-      );
-
-      const sourceStream = streamSimpleByApi(streamModel, effectiveContext, streamOptions);
-      return wrapStreamWithToolCallArgumentGuard(sourceStream, (toolCall, reason) => {
-        incompleteToolCallArguments.set(toolCall.id, reason);
-      });
+      return wrapWithGuard(failoverStream);
     };
 
     // A truncated call whose repaired arguments also fail schema validation

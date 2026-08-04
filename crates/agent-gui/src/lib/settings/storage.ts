@@ -43,6 +43,7 @@ type LocalUiSettings = {
   customSettings?: unknown;
   updates?: unknown;
   selectedModel?: unknown;
+  modelFailover?: unknown;
   theme?: unknown;
   locale?: unknown;
   closeWindowBehavior?: unknown;
@@ -70,6 +71,13 @@ function readLocalUiSettings(): {
   customSettings: AppSettings["customSettings"];
   updates: AppSettings["updates"];
   selectedModel?: SelectedModel;
+  /**
+   * Raw persisted value. Queue entries are validated against customProviders
+   * (loaded from the backend), so normalization has to happen inside
+   * normalizeSettings — normalizing here with no providers would drop the
+   * whole queue.
+   */
+  modelFailover: unknown;
   theme: Theme;
   locale: Locale;
   closeWindowBehavior: CloseWindowBehavior;
@@ -107,6 +115,7 @@ function readLocalUiSettings(): {
         customSettings: defaults.customSettings,
         updates: defaults.updates,
         selectedModel: defaults.selectedModel,
+        modelFailover: defaults.modelFailover,
         theme: defaults.theme,
         locale: defaults.locale,
         closeWindowBehavior: defaults.closeWindowBehavior,
@@ -124,6 +133,7 @@ function readLocalUiSettings(): {
       ),
       updates: normalizeUpdateSettings(parsed?.updates ?? defaults.updates),
       selectedModel: normalizeSelectedModel(parsed?.selectedModel),
+      modelFailover: parsed?.modelFailover ?? defaults.modelFailover,
       theme: normalizeTheme(parsed?.theme ?? defaults.theme),
       locale: normalizeLocale(parsed?.locale ?? defaults.locale),
       closeWindowBehavior: normalizeCloseWindowBehavior(
@@ -137,6 +147,7 @@ function readLocalUiSettings(): {
       customSettings: defaults.customSettings,
       updates: defaults.updates,
       selectedModel: defaults.selectedModel,
+      modelFailover: defaults.modelFailover,
       theme: defaults.theme,
       locale: defaults.locale,
       closeWindowBehavior: defaults.closeWindowBehavior,
@@ -152,6 +163,7 @@ function writeLocalUiSettings(
     | "customSettings"
     | "updates"
     | "selectedModel"
+    | "modelFailover"
     | "theme"
     | "locale"
     | "closeWindowBehavior"
@@ -163,6 +175,7 @@ function writeLocalUiSettings(
     customSettings: settings.customSettings,
     updates: settings.updates,
     selectedModel: settings.selectedModel,
+    modelFailover: settings.modelFailover,
     theme: settings.theme,
     locale: settings.locale,
     closeWindowBehavior: settings.closeWindowBehavior,
@@ -223,6 +236,7 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     customSettings: localUi.customSettings,
     updates: localUi.updates,
     selectedModel: localUi.selectedModel,
+    modelFailover: localUi.modelFailover as AppSettings["modelFailover"],
     theme: localUi.theme,
     locale: localUi.locale,
     closeWindowBehavior: localUi.closeWindowBehavior,
@@ -323,6 +337,7 @@ export async function persistSettings(
     hasChanged(prev.customSettings, next.customSettings) ||
     hasChanged(prev.updates, next.updates) ||
     hasChanged(prev.selectedModel ?? null, next.selectedModel ?? null) ||
+    hasChanged(prev.modelFailover, next.modelFailover) ||
     hasChanged(prev.theme, next.theme) ||
     hasChanged(prev.locale, next.locale) ||
     hasChanged(prev.closeWindowBehavior, next.closeWindowBehavior)
@@ -333,6 +348,7 @@ export async function persistSettings(
       customSettings: next.customSettings,
       updates: next.updates,
       selectedModel: next.selectedModel,
+      modelFailover: next.modelFailover,
       theme: next.theme,
       locale: next.locale,
       closeWindowBehavior: next.closeWindowBehavior,

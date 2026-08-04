@@ -1553,6 +1553,27 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.conversationTitleModelHint": "未选择时，标题生成会使用当前对话使用的模型。",
     "settings.customSettingsModelEmpty": "当前 Provider 未配置模型。",
 
+    /* ── Settings Model Failover ── */
+    "settings.failoverTitle": "自动故障转移",
+    "settings.failoverEnabled": "已开启",
+    "settings.failoverToggleHint":
+      "开启后，{vendor} 请求失败时会按队列顺序自动把当前对话的模型切换到下一个 {vendor} 供应商继续请求（模型不变，只换供应商），并在成功后停留在该供应商。仅在同厂商供应商之间转移，不会跨厂商。",
+    "settings.failoverQueueTitle": "故障转移队列",
+    "settings.failoverQueueHint":
+      "按优先级排列的 {vendor} 备用供应商（P1 优先）。当前供应商请求失败时，用同一个模型依次尝试；未激活该模型的供应商会被跳过。",
+    "settings.failoverQueueAdd": "选择供应商加入队列",
+    "settings.failoverQueueEmpty": "队列为空。添加至少一个备用供应商后，自动故障转移才会生效。",
+    "settings.failoverQueueMoveUp": "上移",
+    "settings.failoverQueueMoveDown": "下移",
+    "settings.failoverQueueRemove": "移除",
+    "settings.failoverMaxSwitches": "单次请求最大切换次数",
+    "settings.failoverMaxSwitchesHint": "一次请求失败后最多切换的备用供应商个数（1-10）。",
+    "settings.failoverFailureThreshold": "失败阈值",
+    "settings.failoverFailureThresholdHint": "连续失败多少次后熔断该供应商（建议 3-10）。",
+    "settings.failoverCooldownSeconds": "熔断冷却时间（秒）",
+    "settings.failoverCooldownSecondsHint":
+      "熔断后跳过该供应商的时长，到期后放行探测请求（5-3600 秒）。",
+
     /* ── Settings Prompt ── */
     "settings.agentsTitle": "全局提示词",
     "settings.agentsDesc": "管理可复用的全局提示词模板",
@@ -3764,6 +3785,30 @@ export const translations: Record<Locale, Record<string, string>> = {
       "When unselected, title generation uses the model from the current chat.",
     "settings.customSettingsModelEmpty":
       "No active models are configured for the current providers.",
+
+    /* ── Settings Model Failover ── */
+    "settings.failoverTitle": "Auto Failover",
+    "settings.failoverEnabled": "Enabled",
+    "settings.failoverToggleHint":
+      "When a {vendor} request fails, automatically retry it on the next {vendor} provider in the queue with the same model (provider changes, model does not) and stay on the provider that answered. Failover never crosses vendors.",
+    "settings.failoverQueueTitle": "Failover queue",
+    "settings.failoverQueueHint":
+      "Fallback {vendor} providers in priority order (P1 first), tried with the conversation's current model when the active provider fails. Providers without that model active are skipped.",
+    "settings.failoverQueueAdd": "Add a provider to the queue",
+    "settings.failoverQueueEmpty":
+      "The queue is empty. Auto failover only takes effect after at least one fallback provider is added.",
+    "settings.failoverQueueMoveUp": "Move up",
+    "settings.failoverQueueMoveDown": "Move down",
+    "settings.failoverQueueRemove": "Remove",
+    "settings.failoverMaxSwitches": "Max switches per request",
+    "settings.failoverMaxSwitchesHint":
+      "Maximum number of fallback providers tried after a failed request (1-10).",
+    "settings.failoverFailureThreshold": "Failure threshold",
+    "settings.failoverFailureThresholdHint":
+      "Consecutive failures before a provider's circuit breaker opens (suggested 3-10).",
+    "settings.failoverCooldownSeconds": "Cooldown (seconds)",
+    "settings.failoverCooldownSecondsHint":
+      "How long an open circuit skips the provider before allowing a probe request (5-3600 seconds).",
 
     /* ── Settings Prompt ── */
     "settings.agentsTitle": "Prompt",
