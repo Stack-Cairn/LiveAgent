@@ -594,7 +594,7 @@ pub(crate) async fn open_chat_file_link_for_conversation(
                 )
             })?;
 
-        tauri::async_runtime::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             let _permit = permit;
             open_chat_file_link_sync(
                 conversation_id,

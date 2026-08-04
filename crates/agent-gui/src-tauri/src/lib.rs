@@ -471,7 +471,7 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
             };
             let store = Arc::clone(store.inner());
             let app_handle = app.clone();
-            tauri::async_runtime::spawn_blocking(move || {
+            tokio::task::spawn_blocking(move || {
                 let (value, error) = match store.toggle_cron_task_enabled(&task_id) {
                     Ok(enabled) => (
                         Some(if enabled { "enabled" } else { "disabled" }.to_string()),
@@ -762,7 +762,7 @@ pub fn run() {
                 if let Err(error) = gateway_controller.start() {
                     eprintln!("failed to start remote gateway controller: {error}");
                 }
-                tauri::async_runtime::spawn({
+                tokio::spawn({
                     let gateway_controller = Arc::clone(&gateway_controller);
                     async move {
                         if let Err(error) = gateway_controller.reload_from_db().await {

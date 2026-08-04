@@ -19,7 +19,7 @@ pub(crate) async fn run_ssh_session_io(
     let (mut read_half, write_half) = channel.split();
     let (writer_end_tx, mut writer_end_rx) = tokio::sync::mpsc::channel::<SshSessionIoEndReason>(1);
     let writer_runtime = Arc::clone(&runtime);
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let mut writer = write_half.make_writer();
         let reason = loop {
             tokio::select! {
@@ -169,7 +169,7 @@ pub(crate) fn spawn_ssh_reconnect_runner(
 ) {
     // russh drives each session on the current Tokio runtime, so reconnects must
     // live on Tauri's long-running runtime rather than a short-lived thread runtime.
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         registry
             .handle_ssh_unexpected_disconnect(session_id, runtime, connection_id)
             .await;

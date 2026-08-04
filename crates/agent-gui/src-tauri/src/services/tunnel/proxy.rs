@@ -127,7 +127,7 @@ impl TunnelProxy {
             }
             proto::TunnelFrameKind::Ping => {
                 let controller = Arc::clone(controller);
-                tauri::async_runtime::spawn(async move {
+                tokio::spawn(async move {
                     let _ = send_tunnel_frame(
                         &controller,
                         proto::TunnelFrame {
@@ -163,7 +163,7 @@ impl TunnelProxy {
 
         let controller = Arc::clone(controller);
         let stream_id = stream_id.to_string();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             run_tunnel_http_request(
                 controller,
                 stream_id,
@@ -194,7 +194,7 @@ impl TunnelProxy {
 
         let controller = Arc::clone(controller);
         let stream_id = stream_id.to_string();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             run_tunnel_websocket(controller, stream_id, upstream_url, headers, gateway_rx).await;
         });
         Ok(())
@@ -215,7 +215,7 @@ impl TunnelProxy {
 
 fn spawn_tunnel_frame_error(controller: &Arc<GatewayController>, stream_id: String, error: String) {
     let controller = Arc::clone(controller);
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let _ = send_tunnel_frame(
             &controller,
             proto::TunnelFrame {
@@ -235,7 +235,7 @@ fn spawn_tunnel_ws_dial_error(
     error: String,
 ) {
     let controller = Arc::clone(controller);
-    tauri::async_runtime::spawn(async move {
+    tokio::spawn(async move {
         let _ = send_tunnel_frame(
             &controller,
             proto::TunnelFrame {

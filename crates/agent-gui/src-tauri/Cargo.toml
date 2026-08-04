@@ -30,7 +30,7 @@ reqwest = { version = "0.13.4", features = ["blocking", "json", "stream", "socks
 rquickjs = { version = "0.8", features = ["array-buffer", "classes", "bindgen"] }
 percent-encoding = "2.3.2"
 axum = "0.8.9"
-tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util"] }
+tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util", "rt", "rt-multi-thread", "process"] }
 tokio-stream = "0.1.18"
 tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3.32"

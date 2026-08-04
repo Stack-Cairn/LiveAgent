@@ -532,7 +532,7 @@ fn now_ms() -> i64 {
 }
 
 async fn load_tunnel_specs() -> Result<Vec<StoredTunnelSpec>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let conn = open_db()?;
         load_tunnel_specs_sync(&conn)
     })
@@ -541,7 +541,7 @@ async fn load_tunnel_specs() -> Result<Vec<StoredTunnelSpec>, String> {
 }
 
 pub(super) async fn persist_tunnel_spec(spec: StoredTunnelSpec) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let conn = open_db()?;
         persist_tunnel_spec_sync(&conn, &spec)
     })
@@ -553,7 +553,7 @@ pub(super) async fn delete_tunnel_specs(tunnel_ids: Vec<String>) -> Result<(), S
     if tunnel_ids.is_empty() {
         return Ok(());
     }
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let conn = open_db()?;
         for tunnel_id in &tunnel_ids {
             delete_tunnel_spec_sync(&conn, tunnel_id)?;

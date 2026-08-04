@@ -42,7 +42,7 @@ fn delete_chat_history_sync(
 }
 
 pub(crate) async fn chat_history_delete_inner(id: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let chat_id = id.trim().to_string();
         let mut conn = open_db()?;
         let mut subagent_prune_result = delete_chat_history_sync(&mut conn, &chat_id)?;

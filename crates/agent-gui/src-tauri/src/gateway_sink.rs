@@ -100,7 +100,7 @@ impl EventSink for GatewayEventSink {
 
         match event {
             MANAGED_PROCESS_CHANGED_EVENT => {
-                tauri::async_runtime::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(error) = controller.publish_current_managed_processes().await {
                         eprintln!("publish managed process snapshot failed: {error}");
                     }
@@ -108,7 +108,7 @@ impl EventSink for GatewayEventSink {
             }
             // cron / hooks 变更都会改变 settings 快照，Gateway 需要重新同步。
             CRON_CHANGED_EVENT | HOOKS_CHANGED_EVENT => {
-                tauri::async_runtime::spawn(async move {
+                tokio::spawn(async move {
                     if let Err(error) = controller.refresh_settings_sync_from_db().await {
                         eprintln!(
                             "refresh gateway settings sync after automation change failed: {error}"
@@ -124,7 +124,7 @@ impl EventSink for GatewayEventSink {
             HISTORY_UPSERT_EVENT => {
                 match serde_json::from_value::<ChatHistorySummary>(payload) {
                     Ok(summary) => {
-                        tauri::async_runtime::spawn(async move {
+                        tokio::spawn(async move {
                             controller
                                 .publish_history_sync(build_history_sync_upsert(&summary))
                                 .await;
@@ -138,7 +138,7 @@ impl EventSink for GatewayEventSink {
                     eprintln!("history delete 事件 payload 不是字符串");
                     return;
                 };
-                tauri::async_runtime::spawn(async move {
+                tokio::spawn(async move {
                     controller
                         .publish_history_sync(build_history_sync_delete(conversation_id))
                         .await;

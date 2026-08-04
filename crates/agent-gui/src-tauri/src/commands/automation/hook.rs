@@ -277,7 +277,7 @@ pub async fn hook_run_script(
 ) -> Result<ShellRunResponse, String> {
     let registry = Arc::clone(registry.inner());
     let envs = normalize_context(context);
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         run_hook_script_sync(&registry, workdir, script, timeout_ms, scope_id, envs)
     })
     .await
@@ -291,7 +291,7 @@ pub async fn hook_run_http_requests(
     registry: tauri::State<'_, Arc<HookScopeRegistry>>,
 ) -> Result<HookHttpRunResponse, String> {
     let registry = Arc::clone(registry.inner());
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         run_hook_http_requests_sync(&registry, requests, scope_id)
     })
     .await

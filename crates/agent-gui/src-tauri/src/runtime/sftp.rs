@@ -507,7 +507,7 @@ impl SftpSessionRegistry {
 
         let failed_template = initial.clone();
         let registry = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let result = if direction == "upload" {
                 registry
                     .upload(

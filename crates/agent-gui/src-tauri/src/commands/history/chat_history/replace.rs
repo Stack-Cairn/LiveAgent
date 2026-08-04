@@ -138,7 +138,7 @@ pub(crate) async fn chat_history_replace_from_message_inner(
     max_messages: i64,
     expected_revision: String,
 ) -> Result<ChatHistoryWindowRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let mut conn = open_db()?;
         chat_history_replace_from_message_sync(
             &mut conn,

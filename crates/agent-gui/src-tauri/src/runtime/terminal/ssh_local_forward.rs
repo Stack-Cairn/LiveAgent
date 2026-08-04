@@ -30,7 +30,7 @@ struct SshLocalForwardState {
 struct SshLocalForwardEntry {
     record: SshLocalForwardRecord,
     cancel_tx: watch::Sender<bool>,
-    task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl Default for SshLocalForwardRegistry {
@@ -195,7 +195,7 @@ impl TerminalSessionRegistry {
         let weak_registry = Arc::downgrade(self);
         let global_connections = Arc::clone(&self.ssh_local_forwards.global_connections);
         let forward_connections = Arc::new(Semaphore::new(SSH_LOCAL_FORWARD_MAX_CONNECTIONS));
-        let task = tauri::async_runtime::spawn(run_ssh_local_forward_listener(
+        let task = tokio::spawn(run_ssh_local_forward_listener(
             weak_registry,
             forward_id.clone(),
             listener,

@@ -694,7 +694,7 @@ fn gc_upload_staging_in(base: &Path, now: SystemTime, retention: std::time::Dura
 
 /// 启动时清理过期的上传批次；失败只记录，绝不阻断启动。
 pub fn gc_upload_staging_on_startup() {
-    tauri::async_runtime::spawn_blocking(|| {
+    tokio::task::spawn_blocking(|| {
         if let Ok(base) = upload_staging_base() {
             gc_upload_staging_in(&base, SystemTime::now(), UPLOAD_STAGING_RETENTION);
         }
@@ -1334,7 +1334,7 @@ pub(crate) fn system_create_project_folder_sync(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let mut dialog = FileDialog::new();
         if let Some(initial_dir) = resolve_pick_folder_initial_dir(initial_workdir) {
             dialog = dialog.set_directory(initial_dir);
@@ -1354,7 +1354,7 @@ pub async fn system_pick_file(
     filter_name: Option<String>,
     extensions: Option<Vec<String>>,
 ) -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let mut dialog = FileDialog::new();
         if let Some(initial_dir) = resolve_pick_folder_initial_dir(initial_workdir) {
             dialog = dialog.set_directory(initial_dir);
@@ -1377,7 +1377,7 @@ pub async fn system_create_project_folder(
     parent: String,
     name: String,
 ) -> Result<SystemCreateProjectFolderResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || system_create_project_folder_sync(parent, name))
+    tokio::task::spawn_blocking(move || system_create_project_folder_sync(parent, name))
         .await
         .map_err(|e| format!("system_create_project_folder join 失败：{e}"))?
 }
@@ -1387,7 +1387,7 @@ pub async fn system_pick_readable_files(
     workdir: String,
     max_files: Option<usize>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         system_pick_readable_files_sync(workdir, max_files)
     })
     .await
@@ -1400,7 +1400,7 @@ pub async fn system_import_readable_file_paths(
     paths: Vec<String>,
     max_files: Option<usize>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         system_import_readable_file_paths_sync(workdir, paths, max_files)
     })
     .await
@@ -1413,7 +1413,7 @@ pub async fn system_import_uploaded_readable_files(
     files: Vec<SystemUploadedReadableFileInput>,
     max_files: Option<usize>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         system_import_uploaded_readable_files_from_base64_sync(workdir, files, max_files)
     })
     .await
@@ -1425,7 +1425,7 @@ pub async fn system_import_pasted_texts(
     workdir: String,
     texts: Vec<SystemPastedTextInput>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let uploads = texts
             .into_iter()
             .map(|text| SystemReadableFileUploadInput {
@@ -1445,7 +1445,7 @@ pub async fn system_read_uploaded_image_preview(
     workdir: String,
     absolute_path: String,
 ) -> Result<SystemUploadedImagePreviewResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         system_read_uploaded_image_preview_sync(workdir, absolute_path)
     })
     .await
@@ -1458,7 +1458,7 @@ pub async fn system_read_uploaded_native_attachment(
     absolute_path: Option<String>,
     kind: Option<String>,
 ) -> Result<SystemUploadedNativeAttachmentResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         system_read_uploaded_native_attachment_sync(workdir, absolute_path, kind)
     })
     .await
@@ -1467,7 +1467,7 @@ pub async fn system_read_uploaded_native_attachment(
 
 #[tauri::command]
 pub async fn system_list_skill_files() -> Result<SystemListSkillFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(system_list_skill_files_sync)
+    tokio::task::spawn_blocking(system_list_skill_files_sync)
         .await
         .map_err(|e| format!("system_list_skill_files join 失败：{e}"))?
 }
@@ -1475,14 +1475,14 @@ pub async fn system_list_skill_files() -> Result<SystemListSkillFilesResponse, S
 #[tauri::command]
 pub async fn system_ensure_builtin_skills(
 ) -> Result<Vec<crate::services::skills::SystemBuiltinSkillSeedResponse>, String> {
-    tauri::async_runtime::spawn_blocking(crate::services::skills::ensure_builtin_agent_skills_sync)
+    tokio::task::spawn_blocking(crate::services::skills::ensure_builtin_agent_skills_sync)
         .await
         .map_err(|e| format!("system_ensure_builtin_skills join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn system_manage_skill(payload: Value) -> Result<SystemManageSkillResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         crate::services::skills::system_manage_skill_sync(payload)
     })
     .await
@@ -1495,7 +1495,7 @@ pub async fn system_read_skill_text(
     offset: Option<usize>,
     length: Option<usize>,
 ) -> Result<SystemReadSkillTextResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || system_read_skill_text_sync(path, offset, length))
+    tokio::task::spawn_blocking(move || system_read_skill_text_sync(path, offset, length))
         .await
         .map_err(|e| format!("system_read_skill_text join failed: {e}"))?
 }
@@ -1504,7 +1504,7 @@ pub async fn system_read_skill_text(
 pub async fn system_read_skill_metadata(
     path: String,
 ) -> Result<SystemReadSkillMetadataResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || system_read_skill_metadata_sync(path))
+    tokio::task::spawn_blocking(move || system_read_skill_metadata_sync(path))
         .await
         .map_err(|e| format!("system_read_skill_metadata join 失败：{e}"))?
 }
@@ -1514,7 +1514,7 @@ pub async fn system_append_debug_jsonl(
     conversation_id: String,
     entry: Value,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         system_append_debug_jsonl_sync(conversation_id, entry)
     })
     .await
@@ -1537,7 +1537,7 @@ fn system_clipboard_read_text_sync() -> Result<String, String> {
 
 #[tauri::command]
 pub async fn system_clipboard_read_text() -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(system_clipboard_read_text_sync)
+    tokio::task::spawn_blocking(system_clipboard_read_text_sync)
         .await
         .map_err(|e| format!("system_clipboard_read_text join failed: {e}"))?
 }
