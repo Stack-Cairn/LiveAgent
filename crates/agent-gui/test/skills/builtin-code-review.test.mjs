@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const skillSource = readFileSync(
-  new URL("../../src-tauri/prompt/skills/liveagent-code-review/SKILL.md", import.meta.url),
+  new URL("../../../agent-core/prompt/skills/liveagent-code-review/SKILL.md", import.meta.url),
   "utf8",
 );
 const builtinRegistrySource = readFileSync(
-  new URL("../../src-tauri/src/services/skills/builtin.rs", import.meta.url),
+  new URL("../../../agent-core/src/services/skills/builtin.rs", import.meta.url),
   "utf8",
 );
 

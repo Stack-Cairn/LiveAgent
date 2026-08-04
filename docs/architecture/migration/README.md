@@ -72,7 +72,7 @@ Go 的选型没有任何文档依据:它出现在 root commit `487af778`(2026-05
 | 阶段 | 文档 | 状态 |
 |---|---|---|
 | 1 · 划清后端边界 | [phase-1-boundary.md](phase-1-boundary.md) | ✅ 完成 |
-| 2 · Rust 后端网络化 | [phase-2-backend.md](phase-2-backend.md) | 🟡 进行中(约 25%) |
+| 2 · Rust 后端网络化 | [phase-2-backend.md](phase-2-backend.md) | 🟡 进行中(约 80%) |
 | 3 · 抽 Node 引擎 | [phase-3-engine.md](phase-3-engine.md) | ⬜ 未开始 |
 | 4 · 前端网络化 | [phase-4-frontend.md](phase-4-frontend.md) | ⬜ 未开始 |
 | 5 · 前端合并 | [phase-5-merge.md](phase-5-merge.md) | ⬜ 未开始 |
@@ -123,8 +123,8 @@ id,task,status,blocker,verify,notes
 
 | 风险 | 说明 | 对策 |
 |---|---|---|
-| 事件总线把编译期错误变成运行时静默失败 | 迁移 history sync 时**真实发生过**:移除 gateway 调用后忘了在 sink 里接上,编译全绿但同步已断 | `GatewayEventSink` 补测试(P2-14) |
+| 事件总线把编译期错误变成运行时静默失败 | 迁移 history sync 时**真实发生过**:移除 gateway 调用后忘了在 sink 里接上,编译全绿但同步已断 | ✅ 已补:路由决策拆成纯函数 `action_for` 并测试(P2-14) |
 | 工具审批反向往返 | 引擎搬到后端后,后端要主动向前端发起请求并等回答,而前端可能没连着 | 按决策 10,先写测试再写实现(P3-06) |
 | 快照源不能是 SQLite | `runAgentConversationTurn.ts:1217` 落库只在函数末尾一次,turn 中不写库 | 快照来自引擎内存态(P3-07) |
-| SSRF 防护需重写 | Go 的黑名单 + safeurl 在 Rust 无对应物;`proxy.rs:227` 的校验**没有 IP 黑名单**,够用只因绑 loopback | 手写 + DNS rebinding 防护(P2-12) |
+| SSRF 防护需重写 | Go 的黑名单 + safeurl 在 Rust 无对应物;`proxy.rs:227` 的校验**没有 IP 黑名单**,够用只因绑 loopback | ✅ 已重写:`agent-backend/src/ssrf.rs`,含 NAT64/6to4 内嵌 IPv4 递归检查(P2-27) |
 | 20 个脆测试会误报 | `readFileSync` + 正则断言源码文本,不验证行为 | 阶段 5 改写或删(P5-05) |

@@ -1,7 +1,8 @@
 # 阶段 2 · Rust 后端网络化
 
-**状态:🟡 进行中(约 25%)**
-提交:`3cf93685` `231faefb` `a2e22a93` `1336a48f`
+**状态:🟡 进行中(约 80%)**
+提交:`3cf93685` `231faefb` `a2e22a93` `1336a48f` `1363c2c1` `8a5afca0` `b627ca2e`
+`ed7fc88a` `58a73280` `5212db5b`
 
 ## 目标
 
@@ -81,33 +82,50 @@ sink 多为「重读当前状态再发布」,避免给 11 个 payload 类型逐�
 
 | 指标 | 起点 | 现在 | 目标 |
 |---|---|---|---|
-| 后端代码里 `GatewayController` 引用 | 65 | **40** | 0 |
-| 后端代码里结构性 tauri 触点(`AppHandle`/`Emitter`/`Manager`/`Window`) | 13 | **9** | 0 |
-| 已迁入 agent-core 的行数 | 0 | **152** | 76,122 |
-| HTTP 路由 | 0 | 0 | 195 |
+| 后端代码里 `GatewayController` 引用 | 65 | **0** | 0 |
+| 后端代码里结构性 tauri 触点 | 13 | **0** | 0 |
+| 已迁入 agent-core 的行数 | 0 | **69,440** | 76,122 |
+| HTTP 路由 | 0 | **4** | 176 |
 
-剩余 40 处 `GatewayController` 全部集中在「要删的」和「要重写的」:
+`agent-core` 依赖树零 tauri,编译期防线生效。`src-tauri` 从 92k 行降到 22,480 行。
+
+行数比原估的 76,122 少,因为 `services/tunnel/`(需重写)和 `services/proxy.rs`
+(阶段 2 末由 agent-backend 取代)没搬——搬 proxy.rs 会把 axum 拖进 agent-core。
+
+## ⚠️ 推翻:P2-16/17/18 的顺序假设是错的
+
+原计划「runtime → services → commands,runtime 依赖最少先做」。**runtime 不是叶子**:
 
 ```
-commands/integration/gateway.rs  27  （20 个命令阶段 4 直接删）
-services/tunnel/*                11  （阶段 1 已定：需重写）
-commands/config/settings/*        2  （已记录的部分删除项）
+runtime/terminal/{state,ssh_connect,ssh_session,ssh_auth}.rs → crate::commands::settings
+runtime/{task_runner,shell_runner}.rs                        → crate::services::system_proxy
+runtime/managed_process_journal.rs                           → crate::services::automation::db
 ```
 
-剩余 9 处结构性 tauri 触点:`services/tunnel/store.rs` 3 处(待重写)+
-`commands/app/{app,tray,update}` 6 处(**前端专属,本就该留在壳里**)。
+三者互相引用,不存在无环的拆分顺序。分步搬只能靠临时垫片,下一步再删掉。
 
-**即:所有应当迁入 agent-core 的后端模块,现已全部 gateway-free 且无结构性 tauri 耦合。**
+**一次搬完反而更简单**:所有 `crate::runtime::` / `crate::services::` / `crate::commands::`
+内部路径在 agent-core 里原样有效,133 个文件零路径改写。代价只有 18 个编译错误。
 
-## 剩余机械工作量
+真正的成本在壳侧:**61 个** `pub(crate)` 需要提升为 `pub`(文档原估 29)。全部由编译器
+`E0603` 点名后提升,没有全局提升——`pub(crate)` 在 crate 内依然有效,只有真正跨界的才该动。
 
-| 项 | 数量 | 性质 |
-|---|---|---|
-| `tauri::async_runtime` → tokio | 132 | 机械(前提已核验,见下) |
-| `#[tauri::command]` 拆成 impl + wrapper | 178 | 机械但量大 |
-| `tauri::State<'_, Arc<T>>` → 显式参数 | 68 | 机械 |
-| 代码迁入 agent-core | 76,122 行 | 机械 |
-| `pub(crate)` 跨界提升 | 580 处中约 29 个符号路径 | 机械 |
+## 剩余工作
+
+| 项 | 状态 |
+|---|---|
+| `tauri::async_runtime` → tokio | ✅ 225 处已换(gateway 除外,阶段 4 删) |
+| `#[tauri::command]` 拆成 impl + wrapper | ✅ 177 个,脚本生成 |
+| `tauri::State<'_, Arc<T>>` → 显式参数 | ✅ 41 处 → `&Arc<T>`,体内 `x.inner()` → `x` |
+| 代码迁入 agent-core | ✅ 69,440 行 |
+| `pub(crate)` 跨界提升 | ✅ 61 个符号 |
+| **补完 172 条路由(P2-28)** | ⬜ 当前 4/176 |
+| **会话隔离(P2-24)/状态码语义(P2-25)** | ⬜ |
+| **契约测试(P2-29)/tunnel 重写(P2-30)/验收(P2-31)** | ⬜ |
+
+包装与实现的拆分是**脚本生成**的,不是手写:177 次同样的机械变换,手写只会引入
+手写才有的错误。生成后用机器验了前端契约——234 个命令名、`rename_all`、JSON key
+与阶段起点 `8c90a424` 逐字一致。
 
 ## 已核验的事实(实验/读源码,非推断)
 
@@ -151,14 +169,22 @@ commands/config/settings/*        2  （已记录的部分删除项）
 | `tauri::State` 注入的 9 个命令怎么做会话隔离 | `git_clone_repository_{start,tasks,cancel,dismiss}`、`shell_run`、`runtime_cancel`、`hook_run_{script,http_requests}`、`hook_cancel_scope` 持有 registry 句柄。需定 header 名、生命周期、校验方式 |
 | 返回 `Result<(), String>` 的约 9 个命令 | HTTP 无法区分「成功」「不存在」「无权限」,需补状态码语义 |
 | EventBus 背压 | `emit_json` 同步遍历所有 sink,慢客户端会阻塞业务线程。WS sink 必须自排队 + 丢帧 |
-| axum 0.8 TLS 集成 | `axum-server` 的 `RustlsConfig::from_pem_file` 签名**未经验证**,实现前必须查证 |
 | 3 个 settings 命令未设计路由 | `settings_list_ccswitch_providers`、`settings_list_cherry_studio_providers`、`settings_list_cherry_studio_providers_from_path` |
 
 ## 已知风险
 
 **事件总线把编译期错误变成了运行时静默失败。** 这在迁移 history sync 时**真实发生过**:
 移除 gateway 发布调用后忘了在 sink 里接上,`cargo check` 全绿但 history 同步已断,
-下一步才补上。`GatewayEventSink` 目前**无测试覆盖**(P2-14)。
+下一步才补上。
+
+已补防线(P2-14):`GatewayController` 持有 `tauri::AppHandle`,单测造不出来,所以把
+**路由决策**(`action_for`,纯函数)和**执行**(`emit_json`,只剩转发)分开——踩过的那次
+回归本质就是路由错误。断言用 agent-core 导出的事件常量本身而非字面量:后端改名测试
+跟着变,后端新增事件却忘了接就掉进 `Ignore` 被抓住。已用变异验证:删掉
+`HISTORY_UPSERT_EVENT` 分支,测试立即失败。
+
+`settings_save_remote` 是最后一处 `GatewayController` 耦合,已按同款模式切断:
+发 `settings:remote-saved`,sink 接住去调 `apply_config`。
 
 ## 验证
 

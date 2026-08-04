@@ -98,7 +98,7 @@ test("Gateway chat file opens run off-loop with bounded host concurrency", () =>
   const chatFileLinks = fs.readFileSync(
     fileURLToPath(
       new URL(
-        "../../src-tauri/src/commands/workspace/chat_file_links.rs",
+        "../../../agent-core/src/commands/workspace/chat_file_links.rs",
         import.meta.url,
       ),
     ),

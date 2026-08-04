@@ -130,13 +130,13 @@ test("serialization folds the editor content into the per-mode script slot", () 
 });
 
 test("preset scripts stay in sync with the Rust builtin presets", async () => {
-  // KEEP IN SYNC 锚点:与 src-tauri/src/services/provider_usage.rs 的
+  // KEEP IN SYNC 锚点:与 agent-core/src/services/provider_usage.rs 的
   // GENERAL_SCRIPT/NEWAPI_SCRIPT 逐字符一致。custom 骨架仅前端填充
   // (Rust 对空 custom 脚本直接报错,无兜底),不参与比对。
   const { readFile } = await import("node:fs/promises");
   const { fileURLToPath } = await import("node:url");
   const rustSource = await readFile(
-    fileURLToPath(new URL("../../src-tauri/src/services/provider_usage.rs", import.meta.url)),
+    fileURLToPath(new URL("../../../agent-core/src/services/provider_usage.rs", import.meta.url)),
     "utf8",
   );
   for (const preset of [
