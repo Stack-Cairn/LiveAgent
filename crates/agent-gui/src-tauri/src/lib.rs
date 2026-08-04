@@ -723,8 +723,6 @@ pub fn run() {
                 if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
                     eprintln!("failed to seed builtin skills: {error}");
                 }
-                terminal_registry.attach_app_handle(app.handle().clone());
-                sftp_registry.attach_app_handle(app.handle().clone());
                 // 事件总线：后端只管往这里发，谁听由这里决定。
                 // 桌面 webview 和 Gateway 都只是普通订阅者，没有谁被硬编码进后端。
                 // 先建空总线，sink 稍后注册——总线用内部可变性，允许后置。
@@ -752,6 +750,8 @@ pub fn run() {
                 )));
                 app.manage(Arc::clone(&events));
                 managed_process_registry.set_event_bus(Arc::clone(&events));
+                terminal_registry.set_event_bus(Arc::clone(&events));
+                sftp_registry.set_event_bus(Arc::clone(&events));
                 managed_process_registry.spawn_startup_reconcile();
                 managed_process_registry.spawn_monitor();
                 automation_store.set_notifier(services::automation::AutomationNotifier {

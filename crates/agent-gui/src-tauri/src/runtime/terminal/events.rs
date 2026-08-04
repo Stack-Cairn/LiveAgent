@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use tauri::Emitter;
 
 use super::*;
 
@@ -27,9 +26,9 @@ impl TerminalSessionRegistry {
             ssh_local_forward: None,
         };
 
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
-                let _ = app_handle.emit(TERMINAL_EVENT_NAME, &payload);
+        if let Ok(events) = self.events.lock() {
+            if let Some(events) = events.as_ref() {
+                events.emit(TERMINAL_EVENT_NAME, &payload);
             }
         }
 
@@ -101,10 +100,10 @@ impl TerminalSessionRegistry {
         if payloads.is_empty() {
             return;
         }
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
+        if let Ok(events) = self.events.lock() {
+            if let Some(events) = events.as_ref() {
                 for payload in payloads {
-                    let _ = app_handle.emit(TERMINAL_STREAM_EVENT_NAME, payload);
+                    events.emit(TERMINAL_STREAM_EVENT_NAME, payload);
                 }
             }
         }
@@ -145,9 +144,9 @@ impl TerminalSessionRegistry {
             ssh_local_forward: None,
         };
 
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
-                let _ = app_handle.emit(TERMINAL_EVENT_NAME, &payload);
+        if let Ok(events) = self.events.lock() {
+            if let Some(events) = events.as_ref() {
+                events.emit(TERMINAL_EVENT_NAME, &payload);
             }
         }
 

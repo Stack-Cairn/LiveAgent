@@ -6,9 +6,10 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use uuid::Uuid;
+
+use crate::events::EventBus;
 
 use crate::runtime::platform::expand_tilde_path;
 use crate::runtime::project_path::{
@@ -118,7 +119,7 @@ pub struct SftpSessionRegistry {
     sessions: Mutex<HashMap<String, SftpCachedConnection>>,
     transfers: Mutex<HashMap<String, Arc<SftpTransferTask>>>,
     transfer_states: Mutex<HashMap<String, SftpTransferState>>,
-    app_handle: Mutex<Option<AppHandle>>,
+    events: Mutex<Option<Arc<EventBus>>>,
     subscribers: Arc<Mutex<HashMap<usize, mpsc::Sender<SftpEvent>>>>,
     next_subscriber_id: AtomicUsize,
 }
@@ -158,15 +159,15 @@ impl SftpSessionRegistry {
             sessions: Mutex::new(HashMap::new()),
             transfers: Mutex::new(HashMap::new()),
             transfer_states: Mutex::new(HashMap::new()),
-            app_handle: Mutex::new(None),
+            events: Mutex::new(None),
             subscribers: Arc::new(Mutex::new(HashMap::new())),
             next_subscriber_id: AtomicUsize::new(0),
         }
     }
 
-    pub fn attach_app_handle(&self, app_handle: AppHandle) {
-        if let Ok(mut slot) = self.app_handle.lock() {
-            *slot = Some(app_handle);
+    pub fn set_event_bus(&self, events: Arc<EventBus>) {
+        if let Ok(mut slot) = self.events.lock() {
+            *slot = Some(events);
         }
     }
 
@@ -634,9 +635,9 @@ impl SftpSessionRegistry {
             transfer_states.insert(key, payload.transfer.clone());
         }
 
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
-                let _ = app_handle.emit(SFTP_EVENT_NAME, &payload);
+        if let Ok(events) = self.events.lock() {
+            if let Some(events) = events.as_ref() {
+                events.emit(SFTP_EVENT_NAME, &payload);
             }
         }
 

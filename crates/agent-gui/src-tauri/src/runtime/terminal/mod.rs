@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
-use tauri::AppHandle;
+use crate::events::EventBus;
 
 mod events;
 mod output;
@@ -84,7 +84,7 @@ pub struct TerminalSessionRegistry {
     pending_ssh_prompts: Mutex<HashMap<String, PendingSshPrompt>>,
     ssh_terminal_tabs_tx: Mutex<()>,
     ssh_terminal_tabs: Mutex<HashMap<String, SshTerminalTabsState>>,
-    app_handle: Mutex<Option<AppHandle>>,
+    events: Mutex<Option<Arc<EventBus>>>,
     subscribers: Arc<Mutex<HashMap<usize, mpsc::Sender<TerminalEvent>>>>,
     stream_subscribers: Arc<Mutex<HashMap<usize, mpsc::Sender<TerminalStreamEvent>>>>,
     echo_dispatch: Mutex<HashMap<String, TerminalEchoDispatchState>>,

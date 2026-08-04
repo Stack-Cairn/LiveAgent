@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex, Weak};
 
-use tauri::Emitter;
 use tokio::io::{copy_bidirectional, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{watch, Semaphore};
@@ -379,9 +378,9 @@ impl TerminalSessionRegistry {
         // The desktop webview listens on the dedicated channel; gateway
         // subscribers get a terminal event so the WebUI shares the stream
         // without a second event pipeline.
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
-                let _ = app_handle.emit(SSH_LOCAL_FORWARD_EVENT_NAME, payload.clone());
+        if let Ok(events) = self.events.lock() {
+            if let Some(events) = events.as_ref() {
+                events.emit(SSH_LOCAL_FORWARD_EVENT_NAME, payload.clone());
             }
         }
         let subscribers = self
