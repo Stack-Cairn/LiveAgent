@@ -223,7 +223,7 @@ pub(crate) fn message_matches_history_ref(
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct HistorySegmentMessageWindow {
+pub struct HistorySegmentMessageWindow {
     pub segment_index: i64,
     pub segment_id: String,
     pub summary: Option<Value>,

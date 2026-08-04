@@ -5,12 +5,8 @@
 //! - 每个 request 的 Authorization: Bearer <password> header 里的密码就是这个。
 //! - 常量时间比较，防止时序侧信道泄露密码长度。
 
-use std::sync::Arc;
-
-use axum::extract::Request;
-use axum::http::{HeaderMap, StatusCode};
-use axum::middleware::Next;
-use axum::response::Response;
+use axum::http::HeaderMap;
+use rand::Rng;
 use subtle::ConstantTimeEq;
 
 /// 密码认证配置。存一个密码，verify 时常量时间比较。

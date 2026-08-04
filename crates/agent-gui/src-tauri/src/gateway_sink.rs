@@ -211,11 +211,20 @@ mod tests {
     #[test]
     fn every_event_gateway_cares_about_is_routed() {
         let expected = [
-            (MANAGED_PROCESS_CHANGED_EVENT, GatewayAction::PublishManagedProcesses),
+            (
+                MANAGED_PROCESS_CHANGED_EVENT,
+                GatewayAction::PublishManagedProcesses,
+            ),
             (CRON_CHANGED_EVENT, GatewayAction::RefreshSettingsSync),
             (HOOKS_CHANGED_EVENT, GatewayAction::RefreshSettingsSync),
-            (SETTINGS_REMOTE_SAVED_EVENT, GatewayAction::ApplyRemoteSettings),
-            (WORKSPACE_ACTIVITY_EVENT, GatewayAction::ForwardWorkspaceActivity),
+            (
+                SETTINGS_REMOTE_SAVED_EVENT,
+                GatewayAction::ApplyRemoteSettings,
+            ),
+            (
+                WORKSPACE_ACTIVITY_EVENT,
+                GatewayAction::ForwardWorkspaceActivity,
+            ),
             (HISTORY_UPSERT_EVENT, GatewayAction::PublishHistoryUpsert),
             (HISTORY_DELETE_EVENT, GatewayAction::PublishHistoryDelete),
         ];

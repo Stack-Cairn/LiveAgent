@@ -8,8 +8,8 @@
 //     key: impl AsRef<Path>,
 // ) -> Result<Self>  // std::io::Result<RustlsConfig>
 
-use std::path::PathBuf;
 use axum_server::tls_rustls::RustlsConfig;
+use std::path::PathBuf;
 
 /// TLS 证书和私钥的文件路径
 #[derive(Debug, Clone)]
@@ -42,13 +42,24 @@ pub async fn load(paths: &TlsPaths) -> Result<RustlsConfig, String> {
                     // 尝试分辨是哪个文件不存在（通过文件系统检查）
                     let cert_exists = paths.cert.exists();
                     let key_exists = paths.key.exists();
-                    if !cert_exists {
-                        format!("证书文件不存在: {}", paths.cert.display())
-                    } else if !key_exists {
-                        format!("私钥文件不存在: {}", paths.key.display())
-                    } else {
-                        // 双重检查都存在但还是报错，可能是权限问题
-                        format!("无法读取 TLS 文件: {}", e)
+                    match (cert_exists, key_exists) {
+                        (false, false) => {
+                            format!(
+                                "证书和私钥文件都不存在: {} 和 {}",
+                                paths.cert.display(),
+                                paths.key.display()
+                            )
+                        }
+                        (false, true) => {
+                            format!("证书文件不存在: {}", paths.cert.display())
+                        }
+                        (true, false) => {
+                            format!("私钥文件不存在: {}", paths.key.display())
+                        }
+                        (true, true) => {
+                            // 双重检查都存在但还是报错，可能是权限问题
+                            format!("无法读取 TLS 文件: {}", e)
+                        }
                     }
                 }
                 std::io::ErrorKind::PermissionDenied => {
@@ -75,10 +86,7 @@ pub async fn load(paths: &TlsPaths) -> Result<RustlsConfig, String> {
 ///
 /// # Errors
 /// 只提供其中一个参数时返回错误
-pub fn from_args(
-    cert: Option<PathBuf>,
-    key: Option<PathBuf>,
-) -> Result<Option<TlsPaths>, String> {
+pub fn from_args(cert: Option<PathBuf>, key: Option<PathBuf>) -> Result<Option<TlsPaths>, String> {
     match (cert, key) {
         (Some(cert), Some(key)) => {
             // 两个都给，返回 TlsPaths

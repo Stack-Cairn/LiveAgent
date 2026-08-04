@@ -14,14 +14,14 @@ use std::sync::{Arc, OnceLock};
 use agent_core::events::EventSink;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
-use futures_util::stream::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 use tokio::sync::broadcast;
 
 /// 事件队列容量。根据实时事件流特性：
 /// - 本地代理任务：每秒几十到上百条事件（shell output、terminal render、progress）
 /// - 256 帧 = 2-3 秒缓冲
 /// - 慢客户端（网络延迟、处理滞后）超过这个窗口就丢帧，这是可接受的折中
-/// （不是关键数据，只是 UI 更新）
+///   （不是关键数据，只是 UI 更新）
 const WS_EVENT_QUEUE_CAPACITY: usize = 256;
 
 /// WebSocket 事件流 sink：接收来自 EventBus 的事件，缓冲后通过 broadcast channel
@@ -69,10 +69,10 @@ impl EventSink for WsEventSink {
             }
         };
 
-        // 非阻塞发送。try_send：
-        // - Err(SendError::Closed) 表示没有订阅者，直接返回，丢弃此事件
-        // - Err(SendError::Lagged) 表示队列满，broadcast 已丢最旧帧，我们继续发新的
+        // 非阻塞发送。send()：
         // - Ok(usize) 表示有 N 个订阅者收到了这条消息
+        // - Err(SendError::Closed) 表示没有订阅者，直接返回，丢弃此事件
+        // 队列满时 broadcast 自动丢最旧帧，不会返回错误也不会阻塞。
         match self.tx.send(json_str) {
             Ok(_num_receivers) => {
                 // 正常，有客户端收到了
@@ -103,7 +103,7 @@ pub fn get_or_init_ws_sink() -> Arc<WsEventSink> {
 ///
 /// 使用方式（在 axum router 里）：
 /// ```ignore
-/// .route("/ws/events", get(ws_handler))
+///   .route("/ws/events", get(ws_handler))
 /// ```
 ///
 /// 客户端连接后立即订阅事件流，收不到连接前的历史事件（决策 19）。
@@ -120,22 +120,57 @@ pub async fn ws_handler(
 
 /// 处理单个 WebSocket 连接的业务逻辑。
 async fn handle_socket(socket: WebSocket) {
-    let (mut sender, _receiver) = socket.split();
+    let (mut sender, mut receiver) = socket.split();
 
     // 获取全局的 sink，订阅事件流。
     let sink = get_or_init_ws_sink();
     let mut events = sink.subscribe();
 
     // 循环接收事件，直到连接断开或任务取消。
-    while let Ok(json_str) = events.recv().await {
-        // 发送给客户端。WebSocket message 用 Text。
-        if sender.send(Message::Text(json_str)).await.is_err() {
-            // 客户端断开或 send 失败，退出这个 task。
-            break;
+    // 同时监听 broadcast 事件和客户端连接状态，避免在客户端断开时无限阻塞。
+    loop {
+        tokio::select! {
+            result = events.recv() => {
+                match result {
+                    Ok(json_str) => {
+                        // 发送给客户端。WebSocket message 用 Text。
+                        if sender.send(Message::Text(json_str.into())).await.is_err() {
+                            // 客户端断开或 send 失败，退出这个 task。
+                            break;
+                        }
+                    }
+                    Err(_) => {
+                        // broadcast channel 已关闭（sender 被丢弃），退出。
+                        break;
+                    }
+                }
+            }
+            msg = receiver.next() => {
+                match msg {
+                    None => {
+                        // 客户端主动关闭连接
+                        break;
+                    }
+                    Some(Ok(_)) => {
+                        // 接收到客户端消息，这个简单实现忽略它，继续等待事件
+                    }
+                    Some(Err(_)) => {
+                        // WebSocket 错误，退出
+                        break;
+                    }
+                }
+            }
         }
     }
 
     // 连接断开，task 自动清理退出。
+}
+
+/// 事件流挂在 `/api/events` 上，和命令路由一起走认证。
+///
+/// 流式端点是「命令式路由」约定的唯一例外（见 lib.rs 顶部）。
+pub fn router() -> axum::Router<crate::state::AppState> {
+    axum::Router::new().route("/events", axum::routing::get(ws_handler))
 }
 
 #[cfg(test)]
@@ -146,10 +181,7 @@ mod tests {
     fn emit_json_without_subscribers_does_not_panic() {
         let sink = WsEventSink::new();
         // 没有任何订阅者的情况下发事件。应该直接丢弃，不 panic。
-        sink.emit_json(
-            "test:event",
-            serde_json::json!({ "message": "hello" }),
-        );
+        sink.emit_json("test:event", serde_json::json!({ "message": "hello" }));
         // 如果执行到这里就说明没有 panic。
     }
 
@@ -161,10 +193,7 @@ mod tests {
         // 这个测试在同步上下文里就能验证（emit_json 是同步的）。
         let start = std::time::Instant::now();
         for i in 0..=WS_EVENT_QUEUE_CAPACITY * 2 {
-            sink.emit_json(
-                "perf:test",
-                serde_json::json!({ "seq": i }),
-            );
+            sink.emit_json("perf:test", serde_json::json!({ "seq": i }));
         }
         let elapsed = start.elapsed();
 
@@ -186,10 +215,7 @@ mod tests {
         let mut rx = sink.subscribe();
 
         // 从另一个地方（模拟 EventBus 调用 emit_json）发事件。
-        sink.emit_json(
-            "test:hello",
-            serde_json::json!({ "data": "world" }),
-        );
+        sink.emit_json("test:hello", serde_json::json!({ "data": "world" }));
 
         // 订阅者应该能收到这条消息。
         let msg = tokio::time::timeout(std::time::Duration::from_secs(1), rx.recv())
@@ -198,8 +224,7 @@ mod tests {
             .expect("channel closed");
 
         // 验证消息格式。
-        let parsed: serde_json::Value = serde_json::from_str(&msg)
-            .expect("failed to parse JSON");
+        let parsed: serde_json::Value = serde_json::from_str(&msg).expect("failed to parse JSON");
         assert_eq!(parsed["event"], "test:hello");
         assert_eq!(parsed["payload"]["data"], "world");
     }
@@ -239,8 +264,7 @@ mod tests {
             .expect("receive timeout")
             .expect("channel closed");
 
-        let parsed: serde_json::Value = serde_json::from_str(&msg)
-            .expect("failed to parse JSON");
+        let parsed: serde_json::Value = serde_json::from_str(&msg).expect("failed to parse JSON");
         assert_eq!(parsed["event"], "format:test");
         assert_eq!(parsed["payload"]["nested"]["field"], "value");
     }

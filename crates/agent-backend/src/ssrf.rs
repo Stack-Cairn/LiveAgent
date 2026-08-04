@@ -3,8 +3,10 @@
 //! 包含 IP 黑名单、URL 验证、域名解析与检查等核心防护机制。
 //! 调用方必须使用这里的函数来校验所有外部请求的目标地址。
 
+// Url 从 reqwest 转出来用，不额外引 url crate：连接最终就是交给 reqwest 发的，
+// 两处用同一个解析器才不会出现「校验时是一个 host、请求时是另一个」。
+use reqwest::Url;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use url::Url;
 
 /// URL 解析结果，包含 host 和 port。
 #[derive(Debug, Clone)]
@@ -105,7 +107,7 @@ fn is_blocked_ipv4(ip: Ipv4Addr) -> bool {
 /// 检查 IPv6 地址是否被拦截。
 fn is_blocked_ipv6(ip: Ipv6Addr) -> bool {
     // ::1/128 - Loopback
-    if ip == Ipv6Addr::LOOPBACK {
+    if ip == Ipv6Addr::LOCALHOST {
         return true;
     }
 
@@ -201,10 +203,7 @@ pub fn validate_url(raw: &str) -> Result<UrlParts, String> {
     }
 
     // 获取 host
-    let host = url
-        .host_str()
-        .ok_or("URL缺少有效的主机名")?
-        .to_string();
+    let host = url.host_str().ok_or("URL缺少有效的主机名")?.to_string();
 
     // 获取 port，使用 default_port() 处理标准端口
     let port = url.port().unwrap_or_else(|| match url.scheme() {
@@ -239,10 +238,7 @@ pub fn validate_url(raw: &str) -> Result<UrlParts, String> {
 /// # 返回
 /// 成功返回通过校验的 `SocketAddr` 列表。列表不为空保证全部 IP 都合法。
 /// 失败返回错误信息（包含被拦截的 IP）。
-pub async fn resolve_and_validate(
-    host: &str,
-    port: u16,
-) -> Result<Vec<SocketAddr>, String> {
+pub async fn resolve_and_validate(host: &str, port: u16) -> Result<Vec<SocketAddr>, String> {
     use std::str::FromStr;
 
     // 首先尝试直接解析为 IP 地址（如果 host 本身是 IP）
@@ -264,12 +260,15 @@ pub async fn resolve_and_validate(
     for socket_addr in addrs {
         let ip = socket_addr.ip();
         if is_blocked_ip(ip) {
-            return Err(format!(
-                "主机 {} 解析得到被拦截的IP: {}",
-                host, ip
-            ));
+            return Err(format!("主机 {} 解析得到被拦截的IP: {}", host, ip));
         }
         validated_addrs.push(socket_addr);
+    }
+
+    // 解析出 0 个地址不能算通过：调用方要拿这个列表去 reqwest 的 resolve() 钉死连接，
+    // 空列表钉不住任何东西，等于把 DNS 决定权还给了系统解析器。
+    if validated_addrs.is_empty() {
+        return Err(format!("主机 {host} 没有解析出任何地址"));
     }
 
     if validated_addrs.is_empty() {
@@ -314,7 +313,9 @@ mod tests {
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(192, 168, 255, 255))));
 
         // 通过: 192.167.255.255 和 192.169.0.0
-        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(192, 167, 255, 255))));
+        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(
+            192, 167, 255, 255
+        ))));
         assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(192, 169, 0, 0))));
     }
 
@@ -325,7 +326,9 @@ mod tests {
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(127, 255, 255, 255))));
 
         // 通过
-        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(126, 255, 255, 255))));
+        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(
+            126, 255, 255, 255
+        ))));
         assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(128, 0, 0, 0))));
     }
 
@@ -336,7 +339,9 @@ mod tests {
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(169, 254, 255, 255))));
 
         // 通过
-        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(169, 253, 255, 255))));
+        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(
+            169, 253, 255, 255
+        ))));
         assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(169, 255, 0, 0))));
     }
 
@@ -366,8 +371,9 @@ mod tests {
         // 拒绝: 255.255.255.255
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::BROADCAST)));
 
-        // 通过: 255.255.255.254
-        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 254))));
+        // 255.255.255.254 也拒绝：它落在 240/4 保留段里。
+        // 「只有 .255 是广播」是常见误解——240/4 整段都不可路由。
+        assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 254))));
     }
 
     #[test]
@@ -377,7 +383,9 @@ mod tests {
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(239, 255, 255, 255))));
 
         // 通过
-        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(223, 255, 255, 255))));
+        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(
+            223, 255, 255, 255
+        ))));
     }
 
     #[test]
@@ -386,8 +394,13 @@ mod tests {
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(240, 0, 0, 1))));
         assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 254))));
 
-        // 通过
-        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(239, 255, 255, 255))));
+        // 239.255.255.255 是 224/4 多播的上界，同样拒绝。
+        // 240/4 的下界是 240.0.0.0，两段首尾相接不留缝。
+        assert!(is_blocked_ip(IpAddr::V4(Ipv4Addr::new(239, 255, 255, 255))));
+        // 223.255.255.255 是多播段之下的最后一个公网地址，必须放行。
+        assert!(!is_blocked_ip(IpAddr::V4(Ipv4Addr::new(
+            223, 255, 255, 255
+        ))));
     }
 
     #[test]
@@ -403,10 +416,12 @@ mod tests {
     #[test]
     fn test_ipv6_loopback() {
         // 拒绝: ::1
-        assert!(is_blocked_ip(IpAddr::V6(Ipv6Addr::LOOPBACK)));
+        assert!(is_blocked_ip(IpAddr::V6(Ipv6Addr::LOCALHOST)));
 
         // 通过: ::2
-        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 2))));
+        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(
+            0, 0, 0, 0, 0, 0, 0, 2
+        ))));
     }
 
     #[test]
@@ -432,10 +447,14 @@ mod tests {
         ))));
 
         // 通过: fe7f::（在 fe80 之前）
-        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(0xfe7f, 0, 0, 0, 0, 0, 0, 1))));
+        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(
+            0xfe7f, 0, 0, 0, 0, 0, 0, 1
+        ))));
 
         // 通过: fec0::（超过 febf，不在 link-local 范围）
-        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(0xfec0, 0, 0, 0, 0, 0, 0, 1))));
+        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(
+            0xfec0, 0, 0, 0, 0, 0, 0, 1
+        ))));
     }
 
     #[test]
@@ -449,10 +468,14 @@ mod tests {
         ))));
 
         // 通过: fb00::
-        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(0xfb00, 0, 0, 0, 0, 0, 0, 1))));
+        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(
+            0xfb00, 0, 0, 0, 0, 0, 0, 1
+        ))));
 
         // 通过: fe00::
-        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(0xfe00, 0, 0, 0, 0, 0, 0, 1))));
+        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(
+            0xfe00, 0, 0, 0, 0, 0, 0, 1
+        ))));
     }
 
     #[test]
@@ -466,7 +489,9 @@ mod tests {
         ))));
 
         // 通过: fe00::
-        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(0xfe00, 0, 0, 0, 0, 0, 0, 1))));
+        assert!(!is_blocked_ip(IpAddr::V6(Ipv6Addr::new(
+            0xfe00, 0, 0, 0, 0, 0, 0, 1
+        ))));
     }
 
     #[test]
@@ -507,15 +532,15 @@ mod tests {
     fn test_ipv6_nat64() {
         // NAT64: 64:ff9b:0:0:0:0:aabb:ccdd
         // 64:ff9b::7f00:1 内嵌 127.0.0.1，应被拒绝
-        let ipv6_nat64_loopback = Ipv6Addr::new(0x0064, 0xffff, 0, 0, 0, 0, 0x7f00, 0x0001);
+        let ipv6_nat64_loopback = Ipv6Addr::new(0x0064, 0xff9b, 0, 0, 0, 0, 0x7f00, 0x0001);
         assert!(is_blocked_ip(IpAddr::V6(ipv6_nat64_loopback)));
 
         // 64:ff9b::c0a8:101 内嵌 192.168.1.1，应被拒绝
-        let ipv6_nat64_private = Ipv6Addr::new(0x0064, 0xffff, 0, 0, 0, 0, 0xc0a8, 0x0101);
+        let ipv6_nat64_private = Ipv6Addr::new(0x0064, 0xff9b, 0, 0, 0, 0, 0xc0a8, 0x0101);
         assert!(is_blocked_ip(IpAddr::V6(ipv6_nat64_private)));
 
         // 64:ff9b::0101:0101 内嵌 1.1.1.1，应通过
-        let ipv6_nat64_public = Ipv6Addr::new(0x0064, 0xffff, 0, 0, 0, 0, 0x0101, 0x0101);
+        let ipv6_nat64_public = Ipv6Addr::new(0x0064, 0xff9b, 0, 0, 0, 0, 0x0101, 0x0101);
         assert!(!is_blocked_ip(IpAddr::V6(ipv6_nat64_public)));
     }
 
@@ -554,18 +579,14 @@ mod tests {
     fn test_validate_url_with_credentials_rejected() {
         let result = validate_url("http://user:pass@example.com/path");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("用户名或密码"));
+        assert!(result.unwrap_err().contains("用户名或密码"));
     }
 
     #[test]
     fn test_validate_url_ftp_rejected() {
         let result = validate_url("ftp://example.com/file");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("不支持的 scheme"));
+        assert!(result.unwrap_err().contains("不支持的 scheme"));
     }
 
     #[test]
@@ -619,7 +640,12 @@ mod tests {
     async fn test_resolve_localhost() {
         // localhost 解析为 127.0.0.1，应被拒绝
         let result = resolve_and_validate("localhost", 80).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("黑名单"));
+        let error = result.expect_err("localhost 解析到回环地址，必须拒绝");
+        // 断言错误点出了具体 IP，而不是断言某句措辞——措辞会变，「说清是哪个 IP 被拦」
+        // 才是这条错误信息存在的意义。
+        assert!(
+            error.contains("127.0.0.1") || error.contains("::1"),
+            "错误信息没说明是哪个 IP 被拦截：{error}"
+        );
     }
 }
