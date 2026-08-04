@@ -1,6 +1,5 @@
 mod commands;
 mod gateway_sink;
-mod runtime;
 mod services;
 mod tauri_commands;
 mod tauri_sink;
@@ -467,7 +466,9 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
             // cron_apply 写路径（CAS），成功后 automation:cron-changed 会驱动
             // 前端 store 与托盘勾选自然刷新。开关是后台动作，不呼出主窗口；
             // 结果经 feedback 事件给前端 toast（窗口可见时提示文案）。
-            let Some(store) = app.try_state::<Arc<services::automation::AutomationStore>>() else {
+            let Some(store) =
+                app.try_state::<Arc<agent_core::services::automation::AutomationStore>>()
+            else {
                 return;
             };
             let store = Arc::clone(store.inner());
@@ -499,7 +500,7 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
         }
         AppAction::OpenDataDir => {
             use tauri_plugin_opener::OpenerExt;
-            match commands::settings::config_dir() {
+            match agent_core::commands::settings::config_dir() {
                 Ok(dir) => {
                     if let Err(error) = app
                         .opener()
@@ -513,7 +514,8 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
         }
         AppAction::Quit => {
             let allow_exit = app.state::<Arc<AtomicBool>>();
-            let terminal_registry = app.state::<Arc<runtime::terminal::TerminalSessionRegistry>>();
+            let terminal_registry =
+                app.state::<Arc<agent_core::runtime::terminal::TerminalSessionRegistry>>();
             request_app_exit(app, allow_exit.inner(), terminal_registry.inner());
         }
     }
@@ -542,7 +544,7 @@ fn handle_global_shortcut(
 fn request_app_exit(
     app: &tauri::AppHandle,
     allow_exit: &AtomicBool,
-    terminal_registry: &runtime::terminal::TerminalSessionRegistry,
+    terminal_registry: &agent_core::runtime::terminal::TerminalSessionRegistry,
 ) {
     let running_count = terminal_registry.running_session_count();
     if running_count > 0 {
@@ -645,26 +647,34 @@ fn configure_windows_window_chrome(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 必须在任何后端逻辑之前：agent-core 编译时不知道自己会被装进哪个产物，
+    // 版本号只能由宿主注入（MCP 的 clientInfo 会读它）。
+    agent_core::set_app_version(app_version());
+
     let automation_store = Arc::new(
-        services::automation::AutomationStore::open()
+        agent_core::services::automation::AutomationStore::open()
             .expect("failed to initialize LiveAgent automation store"),
     );
-    let automation_scheduler = Arc::new(services::automation::AutomationScheduler::new(
-        Arc::clone(&automation_store),
-    ));
+    let automation_scheduler = Arc::new(
+        agent_core::services::automation::AutomationScheduler::new(Arc::clone(&automation_store)),
+    );
     let memory_store = Arc::new(
-        services::memory::MemoryStore::open().expect("failed to initialize LiveAgent memory store"),
+        agent_core::services::memory::MemoryStore::open()
+            .expect("failed to initialize LiveAgent memory store"),
     );
     let provider_usage_service =
-        Arc::new(services::provider_usage::ProviderUsageService::default());
-    let power_activity = Arc::new(services::power_activity::PowerActivityManager::default());
+        Arc::new(agent_core::services::provider_usage::ProviderUsageService::default());
+    let power_activity =
+        Arc::new(agent_core::services::power_activity::PowerActivityManager::default());
     let managed_process_registry =
-        Arc::new(runtime::managed_process::ManagedProcessRegistry::open());
-    let terminal_registry = Arc::new(runtime::terminal::TerminalSessionRegistry::default());
-    let git_clone_task_registry = Arc::new(commands::git::GitCloneTaskRegistry::default());
-    let sftp_registry = Arc::new(runtime::sftp::SftpSessionRegistry::new(Arc::clone(
-        &terminal_registry,
-    )));
+        Arc::new(agent_core::runtime::managed_process::ManagedProcessRegistry::open());
+    let terminal_registry =
+        Arc::new(agent_core::runtime::terminal::TerminalSessionRegistry::default());
+    let git_clone_task_registry =
+        Arc::new(agent_core::commands::git::GitCloneTaskRegistry::default());
+    let sftp_registry = Arc::new(agent_core::runtime::sftp::SftpSessionRegistry::new(
+        Arc::clone(&terminal_registry),
+    ));
     let allow_exit = Arc::new(AtomicBool::new(false));
     let close_window_behavior = Arc::new(commands::app::CloseWindowBehaviorState::new(
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
@@ -690,11 +700,15 @@ pub fn run() {
         )
         .manage(Arc::new(commands::app::GlobalShortcutRegistry::default()))
         .manage(Arc::new(commands::app::WindowPinState::default()))
-        .manage(Arc::new(commands::mcp::McpRuntimeManager::default()))
+        .manage(Arc::new(
+            agent_core::commands::mcp::McpRuntimeManager::default(),
+        ))
         .manage(Arc::clone(&memory_store))
         .manage(Arc::clone(&provider_usage_service))
         .manage(Arc::clone(&power_activity))
-        .manage(Arc::new(runtime::shell_runner::ShellRunRegistry::default()))
+        .manage(Arc::new(
+            agent_core::runtime::shell_runner::ShellRunRegistry::default(),
+        ))
         .manage(Arc::clone(&managed_process_registry))
         .manage(Arc::clone(&terminal_registry))
         .manage(Arc::clone(&sftp_registry))
@@ -703,7 +717,9 @@ pub fn run() {
         .manage(Arc::clone(&close_window_behavior))
         .manage(Arc::clone(&automation_store))
         .manage(Arc::clone(&automation_scheduler))
-        .manage(Arc::new(commands::hook::HookScopeRegistry::default()))
+        .manage(Arc::new(
+            agent_core::commands::hook::HookScopeRegistry::default(),
+        ))
         .setup({
             let terminal_registry = Arc::clone(&terminal_registry);
             let sftp_registry = Arc::clone(&sftp_registry);
@@ -711,16 +727,19 @@ pub fn run() {
             let git_clone_task_registry = Arc::clone(&git_clone_task_registry);
             let provider_usage_service = Arc::clone(&provider_usage_service);
             move |app| {
-                commands::history_db::initialize_history_db()?;
+                agent_core::commands::history_db::initialize_history_db()?;
                 configure_system_tray(app)?;
                 #[cfg(target_os = "windows")]
                 configure_windows_window_chrome(app)?;
-                if let Err(error) = commands::settings::initialize_system_proxy_from_db() {
+                if let Err(error) =
+                    agent_core::commands::settings::initialize_system_proxy_from_db()
+                {
                     eprintln!("failed to initialize system proxy state: {error}");
                 }
                 commands::system::gc_upload_staging_on_startup();
                 app.manage(services::proxy::start_proxy_server()?);
-                if let Err(error) = services::skills::ensure_builtin_agent_skills_sync() {
+                if let Err(error) = agent_core::services::skills::ensure_builtin_agent_skills_sync()
+                {
                     eprintln!("failed to seed builtin skills: {error}");
                 }
                 // 事件总线：后端只管往这里发，谁听由这里决定。
@@ -728,7 +747,9 @@ pub fn run() {
                 // 先建空总线，sink 稍后注册——总线用内部可变性，允许后置。
                 let events = Arc::new(agent_core::events::EventBus::new());
                 let workspace_watch = Arc::new(
-                    services::workspace_watch::WorkspaceWatchService::new(Arc::clone(&events)),
+                    agent_core::services::workspace_watch::WorkspaceWatchService::new(Arc::clone(
+                        &events,
+                    )),
                 );
                 let gateway_controller = Arc::new(services::gateway::GatewayController::new(
                     app.handle().clone(),
@@ -754,10 +775,12 @@ pub fn run() {
                 sftp_registry.set_event_bus(Arc::clone(&events));
                 managed_process_registry.spawn_startup_reconcile();
                 managed_process_registry.spawn_monitor();
-                automation_store.set_notifier(services::automation::AutomationNotifier {
-                    events: Arc::clone(&events),
-                    scheduler: Arc::downgrade(&automation_scheduler),
-                });
+                automation_store.set_notifier(
+                    agent_core::services::automation::AutomationNotifier {
+                        events: Arc::clone(&events),
+                        scheduler: Arc::downgrade(&automation_scheduler),
+                    },
+                );
                 Arc::clone(&automation_scheduler).start();
                 app.manage(Arc::clone(&gateway_controller));
                 if let Err(error) = gateway_controller.start() {

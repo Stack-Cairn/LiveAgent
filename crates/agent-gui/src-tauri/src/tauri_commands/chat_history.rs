@@ -6,12 +6,10 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::chat_history::*;
-use crate::{
-    commands::{history_db, subagent_store},
-    services::memory::{MemoryHistorySearchMatch, MemorySearchArgs},
-};
+use agent_core::commands::chat_history::*;
+use agent_core::commands::{history_db, subagent_store};
 use agent_core::events::EventBus;
+use agent_core::services::memory::{MemoryHistorySearchMatch, MemorySearchArgs};
 use chrono::{Local, LocalResult, NaiveDate, TimeZone};
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -34,7 +32,7 @@ pub async fn chat_history_replace_from_message(
     expected_revision: String,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistoryWindowRecord, String> {
-    crate::commands::chat_history::chat_history_replace_from_message(
+    agent_core::commands::chat_history::chat_history_replace_from_message(
         id,
         base_message_ref,
         replacement_message,
@@ -50,7 +48,7 @@ pub async fn chat_history_delete(
     id: String,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<(), String> {
-    crate::commands::chat_history::chat_history_delete(id, events.inner()).await
+    agent_core::commands::chat_history::chat_history_delete(id, events.inner()).await
 }
 
 #[tauri::command]
@@ -60,12 +58,12 @@ pub async fn chat_history_list(
     cwd: Option<String>,
     cwd_empty: Option<bool>,
 ) -> Result<ChatHistoryListResponse, String> {
-    crate::commands::chat_history::chat_history_list(page, page_size, cwd, cwd_empty).await
+    agent_core::commands::chat_history::chat_history_list(page, page_size, cwd, cwd_empty).await
 }
 
 #[tauri::command]
 pub async fn chat_history_workdirs() -> Result<ChatHistoryWorkdirsResponse, String> {
-    crate::commands::chat_history::chat_history_workdirs().await
+    agent_core::commands::chat_history::chat_history_workdirs().await
 }
 
 #[tauri::command]
@@ -73,14 +71,14 @@ pub async fn chat_history_shared_list(
     page: i64,
     page_size: i64,
 ) -> Result<ChatHistoryListResponse, String> {
-    crate::commands::chat_history::chat_history_shared_list(page, page_size).await
+    agent_core::commands::chat_history::chat_history_shared_list(page, page_size).await
 }
 
 #[tauri::command]
 pub async fn chat_history_search(
     args: ChatHistorySearchArgs,
 ) -> Result<ChatHistorySearchResponse, String> {
-    crate::commands::chat_history::chat_history_search(args).await
+    agent_core::commands::chat_history::chat_history_search(args).await
 }
 
 #[tauri::command]
@@ -91,7 +89,7 @@ pub async fn chat_history_get_window(
     expected_revision: Option<String>,
     include_active_segment: bool,
 ) -> Result<ChatHistoryWindowRecord, String> {
-    crate::commands::chat_history::chat_history_get_window(
+    agent_core::commands::chat_history::chat_history_get_window(
         id,
         max_messages,
         before_offset,
@@ -106,7 +104,7 @@ pub async fn chat_history_upsert(
     input: ChatHistoryUpsertInput,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistorySummary, String> {
-    crate::commands::chat_history::chat_history_upsert(input, events.inner()).await
+    agent_core::commands::chat_history::chat_history_upsert(input, events.inner()).await
 }
 
 #[tauri::command]
@@ -114,7 +112,8 @@ pub async fn chat_history_upsert_active_segment(
     input: ChatHistorySegmentMutationInput,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistorySummary, String> {
-    crate::commands::chat_history::chat_history_upsert_active_segment(input, events.inner()).await
+    agent_core::commands::chat_history::chat_history_upsert_active_segment(input, events.inner())
+        .await
 }
 
 #[tauri::command]
@@ -122,7 +121,7 @@ pub async fn chat_history_append_segment(
     input: ChatHistorySegmentMutationInput,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistorySummary, String> {
-    crate::commands::chat_history::chat_history_append_segment(input, events.inner()).await
+    agent_core::commands::chat_history::chat_history_append_segment(input, events.inner()).await
 }
 
 #[tauri::command]
@@ -131,7 +130,7 @@ pub async fn chat_history_rename(
     title: String,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistorySummary, String> {
-    crate::commands::chat_history::chat_history_rename(id, title, events.inner()).await
+    agent_core::commands::chat_history::chat_history_rename(id, title, events.inner()).await
 }
 
 #[tauri::command]
@@ -140,7 +139,7 @@ pub async fn chat_history_set_pinned(
     is_pinned: bool,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistorySummary, String> {
-    crate::commands::chat_history::chat_history_set_pinned(id, is_pinned, events.inner()).await
+    agent_core::commands::chat_history::chat_history_set_pinned(id, is_pinned, events.inner()).await
 }
 
 #[tauri::command]
@@ -149,13 +148,17 @@ pub async fn chat_history_set_model(
     selected_model_json: String,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistorySummary, String> {
-    crate::commands::chat_history::chat_history_set_model(id, selected_model_json, events.inner())
-        .await
+    agent_core::commands::chat_history::chat_history_set_model(
+        id,
+        selected_model_json,
+        events.inner(),
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn chat_history_share_get(id: String) -> Result<ChatHistoryShareStatus, String> {
-    crate::commands::chat_history::chat_history_share_get(id).await
+    agent_core::commands::chat_history::chat_history_share_get(id).await
 }
 
 #[tauri::command]
@@ -165,7 +168,7 @@ pub async fn chat_history_share_set(
     redact_tool_content: Option<bool>,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistoryShareStatus, String> {
-    crate::commands::chat_history::chat_history_share_set(
+    agent_core::commands::chat_history::chat_history_share_set(
         id,
         enabled,
         redact_tool_content,
@@ -180,5 +183,6 @@ pub async fn chat_history_branch(
     base_message_ref: ChatHistoryMessageRef,
     events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistorySummary, String> {
-    crate::commands::chat_history::chat_history_branch(id, base_message_ref, events.inner()).await
+    agent_core::commands::chat_history::chat_history_branch(id, base_message_ref, events.inner())
+        .await
 }

@@ -19,17 +19,17 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, watch};
 
-use crate::commands::git::GitCloneTaskRegistry;
-use crate::commands::settings::RemoteSettingsPayload;
-use crate::runtime::managed_process::ManagedProcessRegistry;
-use crate::runtime::sftp::SftpSessionRegistry;
-use crate::runtime::terminal::TerminalSessionRegistry;
-use crate::services::automation::AutomationStore;
-use crate::services::chat_run_ledger::ChatRunLedger;
-use crate::services::memory::MemoryStore;
-use crate::services::provider_usage::ProviderUsageService;
 use crate::services::tunnel::{TunnelProxy, TunnelStore};
-use crate::services::workspace_watch::WorkspaceWatchService;
+use agent_core::commands::git::GitCloneTaskRegistry;
+use agent_core::commands::settings::RemoteSettingsPayload;
+use agent_core::runtime::managed_process::ManagedProcessRegistry;
+use agent_core::runtime::sftp::SftpSessionRegistry;
+use agent_core::runtime::terminal::TerminalSessionRegistry;
+use agent_core::services::automation::AutomationStore;
+use agent_core::services::chat_run_ledger::ChatRunLedger;
+use agent_core::services::memory::MemoryStore;
+use agent_core::services::provider_usage::ProviderUsageService;
+use agent_core::services::workspace_watch::WorkspaceWatchService;
 
 /// 网关 v2 protobuf 生成模块。业务消息与帧壳属于同一包。
 /// 仅生成消息，不生成客户端或服务端。

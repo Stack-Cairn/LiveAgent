@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
-use crate::runtime::terminal::TerminalSessionRegistry;
+use agent_core::runtime::terminal::TerminalSessionRegistry;
 
 pub type CloseWindowBehaviorState = AtomicU8;
 

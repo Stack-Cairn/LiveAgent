@@ -49,9 +49,37 @@ dependencies = [
 name = "agent-core"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "dirs",
+ "futures-util",
+ "globset",
+ "ignore",
+ "leveldb-core",
+ "lopdf",
+ "notify",
+ "percent-encoding",
+ "portable-pty",
+ "quick-xml 0.41.0",
+ "regex",
+ "reqwest",
+ "rquickjs",
+ "rusqlite",
+ "russh",
+ "russh-sftp",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "thiserror 2.0.18",
  "tokio",
+ "tokio-cron-scheduler",
+ "toml 0.9.12+spec-1.1.0",
+ "uuid",
+ "wait-timeout",
+ "walkdir",
+ "windows-sys 0.61.2",
+ "zip 8.6.0",
 ]
 
 [[package]]

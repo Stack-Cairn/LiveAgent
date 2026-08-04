@@ -9,9 +9,9 @@ use super::{
     GATEWAY_RECONNECT_STABLE_AFTER, GATEWAY_RUNTIME_STATUS_REPUBLISH_MAX_AGE,
     GATEWAY_WEBVIEW_REPORT_FRESH_WINDOW,
 };
-use crate::commands::settings::RemoteSettingsPayload;
 use crate::services::gateway_bridge;
-use crate::services::provider_usage::{ProviderUsageResult, UsageData};
+use agent_core::commands::settings::RemoteSettingsPayload;
+use agent_core::services::provider_usage::{ProviderUsageResult, UsageData};
 use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 

@@ -8,9 +8,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::runtime::platform::expand_tilde_path;
-use crate::services::power_activity::PowerActivityManager;
-pub use crate::services::skills::{
+use agent_core::runtime::platform::expand_tilde_path;
+use agent_core::runtime::project_path::validate_project_folder_name;
+use agent_core::services::power_activity::PowerActivityManager;
+pub use agent_core::services::skills::{
     SystemListSkillFilesResponse, SystemManageSkillResponse, SystemReadSkillMetadataResponse,
     SystemReadSkillTextResponse,
 };
@@ -1175,13 +1176,13 @@ pub(crate) fn system_read_uploaded_native_attachment_sync(
 }
 
 pub(crate) fn system_list_skill_files_sync() -> Result<SystemListSkillFilesResponse, String> {
-    crate::services::skills::system_list_skill_files_sync()
+    agent_core::services::skills::system_list_skill_files_sync()
 }
 
 pub(crate) fn system_read_skill_metadata_sync(
     path: String,
 ) -> Result<SystemReadSkillMetadataResponse, String> {
-    crate::services::skills::system_read_skill_metadata_sync(path)
+    agent_core::services::skills::system_read_skill_metadata_sync(path)
 }
 
 pub(crate) fn system_read_skill_text_sync(
@@ -1189,7 +1190,7 @@ pub(crate) fn system_read_skill_text_sync(
     offset: Option<usize>,
     length: Option<usize>,
 ) -> Result<SystemReadSkillTextResponse, String> {
-    crate::services::skills::system_read_skill_text_sync(path, offset, length)
+    agent_core::services::skills::system_read_skill_text_sync(path, offset, length)
 }
 
 fn system_append_debug_jsonl_sync(conversation_id: String, entry: Value) -> Result<(), String> {
@@ -1222,48 +1223,6 @@ fn resolve_pick_folder_initial_dir(initial_workdir: Option<String>) -> Option<Pa
     path.parent()
         .filter(|parent| parent.is_dir())
         .map(Path::to_path_buf)
-}
-
-fn is_windows_reserved_project_name(name: &str) -> bool {
-    let stem = name
-        .split('.')
-        .next()
-        .unwrap_or(name)
-        .trim()
-        .trim_end_matches(' ')
-        .to_ascii_uppercase();
-    matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || (stem.len() == 4
-            && (stem.starts_with("COM") || stem.starts_with("LPT"))
-            && stem[3..]
-                .parse::<u8>()
-                .is_ok_and(|value| (1..=9).contains(&value)))
-}
-
-pub(crate) fn validate_project_folder_name(name: &str) -> Result<&str, String> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err("项目名不能为空".to_string());
-    }
-    if trimmed == "." || trimmed == ".." {
-        return Err("项目名不能是 . 或 ..".to_string());
-    }
-    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains(':') {
-        return Err("项目名不能包含路径分隔符".to_string());
-    }
-    if trimmed
-        .chars()
-        .any(|ch| ch == '\0' || ch.is_ascii_control())
-    {
-        return Err("项目名包含非法字符".to_string());
-    }
-    if Path::new(trimmed).components().count() != 1 {
-        return Err("项目名不能包含路径片段".to_string());
-    }
-    if is_windows_reserved_project_name(trimmed) {
-        return Err("项目名不能使用系统保留名称".to_string());
-    }
-    Ok(trimmed)
 }
 
 /// Mirror of the fs command layer's `display_path`: strip the Windows `\\?\`
@@ -1472,17 +1431,19 @@ pub async fn system_list_skill_files() -> Result<SystemListSkillFilesResponse, S
 
 #[tauri::command]
 pub async fn system_ensure_builtin_skills(
-) -> Result<Vec<crate::services::skills::SystemBuiltinSkillSeedResponse>, String> {
-    tokio::task::spawn_blocking(crate::services::skills::ensure_builtin_agent_skills_sync)
+) -> Result<Vec<agent_core::services::skills::SystemBuiltinSkillSeedResponse>, String> {
+    tokio::task::spawn_blocking(agent_core::services::skills::ensure_builtin_agent_skills_sync)
         .await
         .map_err(|e| format!("system_ensure_builtin_skills join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn system_manage_skill(payload: Value) -> Result<SystemManageSkillResponse, String> {
-    tokio::task::spawn_blocking(move || crate::services::skills::system_manage_skill_sync(payload))
-        .await
-        .map_err(|e| format!("system_manage_skill join failed: {e}"))?
+    tokio::task::spawn_blocking(move || {
+        agent_core::services::skills::system_manage_skill_sync(payload)
+    })
+    .await
+    .map_err(|e| format!("system_manage_skill join failed: {e}"))?
 }
 
 #[tauri::command]

@@ -6,8 +6,8 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::fs::*;
-use crate::runtime::platform::expand_tilde_path;
+use agent_core::commands::fs::*;
+use agent_core::runtime::platform::expand_tilde_path;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
@@ -36,7 +36,7 @@ pub async fn fs_read_image_source(
     source_type: Option<String>,
     mime_type: Option<String>,
 ) -> Result<ReadResponse, FsCommandError> {
-    crate::commands::fs::fs_read_image_source(workdir, source, source_type, mime_type).await
+    agent_core::commands::fs::fs_read_image_source(workdir, source, source_type, mime_type).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -44,7 +44,7 @@ pub async fn fs_read_workspace_image(
     workdir: String,
     path: String,
 ) -> Result<ReadResponse, FsCommandError> {
-    crate::commands::fs::fs_read_workspace_image(workdir, path).await
+    agent_core::commands::fs::fs_read_workspace_image(workdir, path).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -58,7 +58,7 @@ pub async fn fs_read_text(
     cell_start: Option<usize>,
     cell_limit: Option<usize>,
 ) -> Result<ReadResponse, FsCommandError> {
-    crate::commands::fs::fs_read_text(
+    agent_core::commands::fs::fs_read_text(
         workdir, path, start_line, limit, page_start, page_limit, cell_start, cell_limit,
     )
     .await
@@ -69,7 +69,7 @@ pub async fn fs_read_editable_text(
     workdir: String,
     path: String,
 ) -> Result<ReadEditableTextResponse, FsCommandError> {
-    crate::commands::fs::fs_read_editable_text(workdir, path).await
+    agent_core::commands::fs::fs_read_editable_text(workdir, path).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -77,7 +77,7 @@ pub async fn fs_path_status(
     workdir: String,
     path: String,
 ) -> Result<PathStatusResponse, FsCommandError> {
-    crate::commands::fs::fs_path_status(workdir, path).await
+    agent_core::commands::fs::fs_path_status(workdir, path).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -89,7 +89,7 @@ pub async fn fs_write_text(
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
 ) -> Result<WriteTextResponse, FsCommandError> {
-    crate::commands::fs::fs_write_text(
+    agent_core::commands::fs::fs_write_text(
         workdir,
         path,
         content,
@@ -111,7 +111,7 @@ pub async fn fs_edit_text(
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
 ) -> Result<EditTextResponse, FsCommandError> {
-    crate::commands::fs::fs_edit_text(
+    agent_core::commands::fs::fs_edit_text(
         workdir,
         path,
         old_string,
@@ -126,7 +126,7 @@ pub async fn fs_edit_text(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fs_delete(workdir: String, path: String) -> Result<DeleteResponse, FsCommandError> {
-    crate::commands::fs::fs_delete(workdir, path).await
+    agent_core::commands::fs::fs_delete(workdir, path).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -135,7 +135,7 @@ pub async fn fs_open_workspace_path(
     path: String,
     mode: Option<String>,
 ) -> Result<OpenWorkspacePathResponse, FsCommandError> {
-    crate::commands::fs::fs_open_workspace_path(workdir, path, mode).await
+    agent_core::commands::fs::fs_open_workspace_path(workdir, path, mode).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -143,7 +143,7 @@ pub async fn fs_create_dir(
     workdir: String,
     path: String,
 ) -> Result<CreateDirResponse, FsCommandError> {
-    crate::commands::fs::fs_create_dir(workdir, path).await
+    agent_core::commands::fs::fs_create_dir(workdir, path).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -152,12 +152,12 @@ pub async fn fs_rename(
     from_path: String,
     to_path: String,
 ) -> Result<RenameResponse, FsCommandError> {
-    crate::commands::fs::fs_rename(workdir, from_path, to_path).await
+    agent_core::commands::fs::fs_rename(workdir, from_path, to_path).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn fs_roots() -> Result<FsRootsResponse, String> {
-    crate::commands::fs::fs_roots().await
+    agent_core::commands::fs::fs_roots().await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -165,7 +165,7 @@ pub async fn fs_list_dirs(
     path: String,
     max_results: Option<usize>,
 ) -> Result<FsListDirsResponse, String> {
-    crate::commands::fs::fs_list_dirs(path, max_results).await
+    agent_core::commands::fs::fs_list_dirs(path, max_results).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -177,7 +177,7 @@ pub async fn fs_list(
     max_results: Option<usize>,
     show_hidden: Option<bool>,
 ) -> Result<ListResponse, FsCommandError> {
-    crate::commands::fs::fs_list(workdir, path, depth, offset, max_results, show_hidden).await
+    agent_core::commands::fs::fs_list(workdir, path, depth, offset, max_results, show_hidden).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -189,7 +189,7 @@ pub async fn fs_glob(
     max_results: Option<usize>,
     sort_by: Option<String>,
 ) -> Result<GlobResponse, FsCommandError> {
-    crate::commands::fs::fs_glob(workdir, path, pattern, offset, max_results, sort_by).await
+    agent_core::commands::fs::fs_glob(workdir, path, pattern, offset, max_results, sort_by).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -205,7 +205,7 @@ pub async fn fs_grep(
     context: Option<usize>,
     multiline: Option<bool>,
 ) -> Result<GrepResponse, FsCommandError> {
-    crate::commands::fs::fs_grep(
+    agent_core::commands::fs::fs_grep(
         workdir,
         path,
         pattern,
@@ -227,5 +227,5 @@ pub async fn fs_mention_list(
     query: Option<String>,
     show_hidden: Option<bool>,
 ) -> Result<MentionListResponse, String> {
-    crate::commands::fs::fs_mention_list(workdir, max_results, query, show_hidden).await
+    agent_core::commands::fs::fs_mention_list(workdir, max_results, query, show_hidden).await
 }

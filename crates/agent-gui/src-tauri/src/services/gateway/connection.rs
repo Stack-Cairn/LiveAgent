@@ -9,9 +9,9 @@ use tauri::Emitter;
 use tokio::sync::{mpsc, watch, OwnedSemaphorePermit, Semaphore};
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 
-use crate::commands::settings::RemoteSettingsPayload;
-use crate::runtime::terminal::TerminalEventPayload;
 use crate::services::gateway_bridge;
+use agent_core::commands::settings::RemoteSettingsPayload;
+use agent_core::runtime::terminal::TerminalEventPayload;
 
 use super::gateway_proto::v2;
 use super::*;

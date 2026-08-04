@@ -6,8 +6,8 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::sftp::*;
-use crate::runtime::sftp::{
+use agent_core::commands::sftp::*;
+use agent_core::runtime::sftp::{
     SftpActionResponse, SftpListResponse, SftpReadTextResponse, SftpSessionRegistry,
     SftpStatResponse, SftpTransferResponse,
 };
@@ -22,7 +22,7 @@ pub async fn sftp_list(
     side: String,
     path: Option<String>,
 ) -> Result<SftpListResponse, String> {
-    crate::commands::sftp::sftp_list(
+    agent_core::commands::sftp::sftp_list(
         registry.inner(),
         session_id,
         project_path_key,
@@ -42,7 +42,7 @@ pub async fn sftp_stat(
     side: String,
     path: Option<String>,
 ) -> Result<SftpStatResponse, String> {
-    crate::commands::sftp::sftp_stat(
+    agent_core::commands::sftp::sftp_stat(
         registry.inner(),
         session_id,
         project_path_key,
@@ -62,7 +62,7 @@ pub async fn sftp_read_text(
     offset: Option<u64>,
     max_bytes: Option<usize>,
 ) -> Result<SftpReadTextResponse, String> {
-    crate::commands::sftp::sftp_read_text(
+    agent_core::commands::sftp::sftp_read_text(
         registry.inner(),
         session_id,
         project_path_key,
@@ -83,7 +83,7 @@ pub async fn sftp_write_text(
     overwrite: Option<bool>,
     create_parent_dirs: Option<bool>,
 ) -> Result<SftpActionResponse, String> {
-    crate::commands::sftp::sftp_write_text(
+    agent_core::commands::sftp::sftp_write_text(
         registry.inner(),
         session_id,
         project_path_key,
@@ -104,7 +104,7 @@ pub async fn sftp_mkdir(
     side: String,
     path: String,
 ) -> Result<SftpActionResponse, String> {
-    crate::commands::sftp::sftp_mkdir(
+    agent_core::commands::sftp::sftp_mkdir(
         registry.inner(),
         session_id,
         project_path_key,
@@ -125,7 +125,7 @@ pub async fn sftp_rename(
     from_path: String,
     to_path: String,
 ) -> Result<SftpActionResponse, String> {
-    crate::commands::sftp::sftp_rename(
+    agent_core::commands::sftp::sftp_rename(
         registry.inner(),
         session_id,
         project_path_key,
@@ -147,7 +147,7 @@ pub async fn sftp_delete(
     path: String,
     recursive: Option<bool>,
 ) -> Result<SftpActionResponse, String> {
-    crate::commands::sftp::sftp_delete(
+    agent_core::commands::sftp::sftp_delete(
         registry.inner(),
         session_id,
         project_path_key,
@@ -171,7 +171,7 @@ pub async fn sftp_transfer(
     recursive: Option<bool>,
     overwrite: Option<bool>,
 ) -> Result<SftpTransferResponse, String> {
-    crate::commands::sftp::sftp_transfer(
+    agent_core::commands::sftp::sftp_transfer(
         registry.inner(),
         session_id,
         project_path_key,
@@ -191,7 +191,7 @@ pub fn sftp_cancel_transfer(
     session_id: String,
     transfer_id: String,
 ) -> Result<(), String> {
-    crate::commands::sftp::sftp_cancel_transfer(registry.inner(), session_id, transfer_id)
+    agent_core::commands::sftp::sftp_cancel_transfer(registry.inner(), session_id, transfer_id)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -200,5 +200,5 @@ pub fn sftp_transfer_status(
     session_id: String,
     transfer_id: String,
 ) -> Result<SftpTransferResponse, String> {
-    crate::commands::sftp::sftp_transfer_status(registry.inner(), session_id, transfer_id)
+    agent_core::commands::sftp::sftp_transfer_status(registry.inner(), session_id, transfer_id)
 }

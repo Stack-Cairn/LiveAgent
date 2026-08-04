@@ -9,6 +9,36 @@ description = "LiveAgent backend core: tools, storage and runtime. Deliberately 
 # 一旦有人把前端专属 command 挪进来，cargo build -p agent-core 直接失败，
 # 而不是等到 headless 模式跑不起来才发现。
 [dependencies]
+base64 = "0.22.1"
+chrono = "0.4.45"
+dirs = "6.0.0"
+futures-util = "0.3.32"
+globset = "0.4.18"
+ignore = "0.4.27"
+leveldb-core = "0.1.0"
+lopdf = "0.43.0"
+notify = "8.2.0"
+percent-encoding = "2.3.2"
+portable-pty = "0.9.0"
+quick-xml = "0.41.0"
+regex = "1.12.4"
+reqwest = { version = "0.13.4", features = ["blocking", "json", "stream", "socks"] }
+rquickjs = { version = "0.8", features = ["array-buffer", "classes", "bindgen"] }
+rusqlite = { version = "0.40.1", features = ["bundled"] }
+russh = "0.62.2"
+russh-sftp = "2.3.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
+sha2 = "0.11.0"
+tempfile = "3.27.0"
+thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util", "rt", "rt-multi-thread", "process"] }
+tokio-cron-scheduler = "0.15.1"
+toml = "0.9.11"
+uuid = { version = "1.23.4", features = ["v4"] }
+wait-timeout = "0.2.1"
+walkdir = "2.5.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }

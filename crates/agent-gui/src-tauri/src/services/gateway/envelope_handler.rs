@@ -3,13 +3,13 @@ use std::sync::Arc;
 use serde_json::Value;
 use tauri::Emitter;
 
-use crate::commands::chat_history::{self};
-use crate::commands::settings::{
+use crate::services::gateway_bridge;
+use agent_core::commands::chat_history::{self};
+use agent_core::commands::settings::{
     apply_ssh_patch_with_conn, open_db, redact_gateway_settings_sync_payload,
     reset_runtime_ssh_known_host, SSH_PATCH_FIELD,
 };
-use crate::services::gateway_bridge;
-use crate::services::workspace_watch::WatchSource;
+use agent_core::services::workspace_watch::WatchSource;
 
 use super::*;
 

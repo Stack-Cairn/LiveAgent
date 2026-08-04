@@ -6,8 +6,8 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::subagent_worktree::*;
-use crate::runtime::process::configure_child_process_group;
+use agent_core::commands::subagent_worktree::*;
+use agent_core::runtime::process::configure_child_process_group;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
@@ -22,26 +22,26 @@ use uuid::Uuid;
 pub async fn subagent_worktree_create(
     input: SubagentWorktreeCreateInput,
 ) -> Result<SubagentWorktreeCreateResponse, String> {
-    crate::commands::subagent_worktree::subagent_worktree_create(input).await
+    agent_core::commands::subagent_worktree::subagent_worktree_create(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_worktree_status(
     input: SubagentWorktreeStatusInput,
 ) -> Result<SubagentWorktreeStatusResponse, String> {
-    crate::commands::subagent_worktree::subagent_worktree_status(input).await
+    agent_core::commands::subagent_worktree::subagent_worktree_status(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_worktree_apply(
     input: SubagentWorktreeApplyInput,
 ) -> Result<SubagentWorktreeApplyResponse, String> {
-    crate::commands::subagent_worktree::subagent_worktree_apply(input).await
+    agent_core::commands::subagent_worktree::subagent_worktree_apply(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_worktree_cleanup(
     input: SubagentWorktreeCleanupInput,
 ) -> Result<SubagentWorktreeCleanupItem, String> {
-    crate::commands::subagent_worktree::subagent_worktree_cleanup(input).await
+    agent_core::commands::subagent_worktree::subagent_worktree_cleanup(input).await
 }

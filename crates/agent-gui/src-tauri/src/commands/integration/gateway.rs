@@ -2,17 +2,19 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::commands::settings::{load_remote_settings, open_db, parse_remote_settings_payload};
 use crate::services::gateway::{
     GatewayChatCheckpointCommitResult, GatewayChatCheckpointInput, GatewayChatClaimedRequest,
     GatewayChatIngressAcceptResult, GatewayChatIngressBatchInput, GatewayChatQueueEventInput,
     GatewayChatQueueResponseInput, GatewayController, GatewayStatusSnapshot,
 };
-use crate::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
 use crate::services::tunnel::{
     GatewayTunnelCreateInput, GatewayTunnelUpdateInput, TunnelStatePayload,
 };
-use crate::services::workspace_watch::WatchSource;
+use agent_core::commands::settings::{
+    load_remote_settings, open_db, parse_remote_settings_payload,
+};
+use agent_core::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
+use agent_core::services::workspace_watch::WatchSource;
 
 #[tauri::command]
 pub async fn provider_usage_query(

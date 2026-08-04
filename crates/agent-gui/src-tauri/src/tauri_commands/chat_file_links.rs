@@ -6,8 +6,8 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::chat_file_links::*;
-use crate::runtime::platform::expand_tilde_path;
+use agent_core::commands::chat_file_links::*;
+use agent_core::runtime::platform::expand_tilde_path;
 use serde::Serialize;
 use std::fs;
 use std::io::Read;
@@ -28,7 +28,7 @@ pub async fn open_chat_file_link(
     column: Option<u32>,
     open_in_file_manager: Option<bool>,
 ) -> Result<ChatFileLinkOpenResponse, ChatFileLinkError> {
-    crate::commands::chat_file_links::open_chat_file_link(
+    agent_core::commands::chat_file_links::open_chat_file_link(
         conversation_id,
         workdir,
         path,

@@ -6,7 +6,7 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::subagent_store::*;
+use agent_core::commands::subagent_store::*;
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -19,52 +19,52 @@ use std::{
 pub async fn subagent_identity_upsert(
     input: SubagentIdentityUpsertInput,
 ) -> Result<SubagentIdentityRecord, String> {
-    crate::commands::subagent_store::subagent_identity_upsert(input).await
+    agent_core::commands::subagent_store::subagent_identity_upsert(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_identity_list(
     input: SubagentIdentityListInput,
 ) -> Result<Vec<SubagentIdentityRecord>, String> {
-    crate::commands::subagent_store::subagent_identity_list(input).await
+    agent_core::commands::subagent_store::subagent_identity_list(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_run_save(input: SubagentRunSaveInput) -> Result<(), String> {
-    crate::commands::subagent_store::subagent_run_save(input).await
+    agent_core::commands::subagent_store::subagent_run_save(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_run_list(
     input: SubagentRunListInput,
 ) -> Result<Vec<SubagentRunRecord>, String> {
-    crate::commands::subagent_store::subagent_run_list(input).await
+    agent_core::commands::subagent_store::subagent_run_list(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_run_load(
     input: SubagentRunLoadInput,
 ) -> Result<Option<SubagentRunStateRecord>, String> {
-    crate::commands::subagent_store::subagent_run_load(input).await
+    agent_core::commands::subagent_store::subagent_run_load(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_run_prune(
     input: SubagentRunPruneInput,
 ) -> Result<SubagentPruneResult, String> {
-    crate::commands::subagent_store::subagent_run_prune(input).await
+    agent_core::commands::subagent_store::subagent_run_prune(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_message_append(
     input: SubagentMessageAppendInput,
 ) -> Result<SubagentMessageRecord, String> {
-    crate::commands::subagent_store::subagent_message_append(input).await
+    agent_core::commands::subagent_store::subagent_message_append(input).await
 }
 
 #[tauri::command]
 pub async fn subagent_message_list(
     input: SubagentMessageListInput,
 ) -> Result<Vec<SubagentMessageRecord>, String> {
-    crate::commands::subagent_store::subagent_message_list(input).await
+    agent_core::commands::subagent_store::subagent_message_list(input).await
 }

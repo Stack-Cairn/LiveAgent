@@ -6,10 +6,10 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::terminal::*;
-use crate::runtime::sftp::SftpSessionRegistry;
-use crate::runtime::shell_runner::ShellRunRegistry;
-use crate::runtime::terminal::{
+use agent_core::commands::terminal::*;
+use agent_core::runtime::sftp::SftpSessionRegistry;
+use agent_core::runtime::shell_runner::ShellRunRegistry;
+use agent_core::runtime::terminal::{
     normalize_ssh_local_forward_local_port, ssh_local_forward_local_port_available,
     terminal_shell_options as runtime_terminal_shell_options, SshLocalForwardActionResponse,
     SshLocalForwardListResponse, SshTerminalTabsSnapshot, TerminalListResponse,
@@ -21,7 +21,7 @@ use std::sync::Arc;
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn terminal_shell_options() -> TerminalShellOptionsResponse {
-    crate::commands::terminal::terminal_shell_options()
+    agent_core::commands::terminal::terminal_shell_options()
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -29,7 +29,7 @@ pub fn terminal_list(
     registry: tauri::State<'_, Arc<TerminalSessionRegistry>>,
     project_path_key: Option<String>,
 ) -> TerminalListResponse {
-    crate::commands::terminal::terminal_list(registry.inner(), project_path_key)
+    agent_core::commands::terminal::terminal_list(registry.inner(), project_path_key)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -42,7 +42,7 @@ pub fn terminal_create(
     cols: Option<u16>,
     rows: Option<u16>,
 ) -> Result<TerminalSnapshotResponse, String> {
-    crate::commands::terminal::terminal_create(
+    agent_core::commands::terminal::terminal_create(
         registry.inner(),
         cwd,
         project_path_key,
@@ -64,7 +64,7 @@ pub async fn terminal_create_ssh(
     rows: Option<u16>,
     sftp_enabled: Option<bool>,
 ) -> Result<TerminalSshCreateResponse, String> {
-    crate::commands::terminal::terminal_create_ssh(
+    agent_core::commands::terminal::terminal_create_ssh(
         registry.inner(),
         cwd,
         project_path_key,
@@ -84,7 +84,7 @@ pub async fn terminal_answer_ssh_prompt(
     prompt_answer: Option<String>,
     trust_host_key: Option<bool>,
 ) -> Result<TerminalSshCreateResponse, String> {
-    crate::commands::terminal::terminal_answer_ssh_prompt(
+    agent_core::commands::terminal::terminal_answer_ssh_prompt(
         registry.inner(),
         prompt_id,
         prompt_answer,
@@ -98,7 +98,7 @@ pub fn terminal_cancel_ssh_prompt(
     registry: tauri::State<'_, Arc<TerminalSessionRegistry>>,
     prompt_id: String,
 ) -> Result<(), String> {
-    crate::commands::terminal::terminal_cancel_ssh_prompt(registry.inner(), prompt_id)
+    agent_core::commands::terminal::terminal_cancel_ssh_prompt(registry.inner(), prompt_id)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -106,7 +106,7 @@ pub async fn terminal_ssh_reconnect(
     registry: tauri::State<'_, Arc<TerminalSessionRegistry>>,
     session_id: String,
 ) -> Result<TerminalSessionRecord, String> {
-    crate::commands::terminal::terminal_ssh_reconnect(registry.inner(), session_id).await
+    agent_core::commands::terminal::terminal_ssh_reconnect(registry.inner(), session_id).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -114,7 +114,7 @@ pub async fn terminal_ssh_latency(
     registry: tauri::State<'_, Arc<TerminalSessionRegistry>>,
     session_id: String,
 ) -> Result<TerminalSshLatencyResponse, String> {
-    crate::commands::terminal::terminal_ssh_latency(registry.inner(), session_id).await
+    agent_core::commands::terminal::terminal_ssh_latency(registry.inner(), session_id).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -128,7 +128,7 @@ pub async fn terminal_ssh_exec(
     max_bytes: Option<usize>,
     run_id: Option<String>,
 ) -> Result<TerminalSshExecResponse, String> {
-    crate::commands::terminal::terminal_ssh_exec(
+    agent_core::commands::terminal::terminal_ssh_exec(
         registry.inner(),
         run_registry.inner(),
         session_id,
@@ -150,7 +150,7 @@ pub async fn terminal_ssh_local_forward_start(
     remote_port: u32,
     local_port: Option<u32>,
 ) -> Result<SshLocalForwardActionResponse, String> {
-    crate::commands::terminal::terminal_ssh_local_forward_start(
+    agent_core::commands::terminal::terminal_ssh_local_forward_start(
         registry.inner(),
         session_id,
         project_path_key,
@@ -167,7 +167,7 @@ pub fn terminal_ssh_local_forward_list(
     session_id: Option<String>,
     project_path_key: Option<String>,
 ) -> Result<SshLocalForwardListResponse, String> {
-    crate::commands::terminal::terminal_ssh_local_forward_list(
+    agent_core::commands::terminal::terminal_ssh_local_forward_list(
         registry.inner(),
         session_id,
         project_path_key,
@@ -180,7 +180,7 @@ pub async fn terminal_ssh_local_forward_stop(
     forward_id: String,
     session_id: Option<String>,
 ) -> Result<SshLocalForwardActionResponse, String> {
-    crate::commands::terminal::terminal_ssh_local_forward_stop(
+    agent_core::commands::terminal::terminal_ssh_local_forward_stop(
         registry.inner(),
         forward_id,
         session_id,
@@ -190,7 +190,7 @@ pub async fn terminal_ssh_local_forward_stop(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_ssh_local_forward_check_port(local_port: u32) -> Result<bool, String> {
-    crate::commands::terminal::terminal_ssh_local_forward_check_port(local_port).await
+    agent_core::commands::terminal::terminal_ssh_local_forward_check_port(local_port).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -198,7 +198,7 @@ pub fn ssh_terminal_tabs_list(
     registry: tauri::State<'_, Arc<TerminalSessionRegistry>>,
     project_path_key: String,
 ) -> Result<SshTerminalTabsSnapshot, String> {
-    crate::commands::terminal::ssh_terminal_tabs_list(registry.inner(), project_path_key)
+    agent_core::commands::terminal::ssh_terminal_tabs_list(registry.inner(), project_path_key)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -207,7 +207,7 @@ pub fn ssh_terminal_tab_open(
     session_id: String,
     kind: String,
 ) -> Result<SshTerminalTabsSnapshot, String> {
-    crate::commands::terminal::ssh_terminal_tab_open(registry.inner(), session_id, kind)
+    agent_core::commands::terminal::ssh_terminal_tab_open(registry.inner(), session_id, kind)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -215,7 +215,7 @@ pub fn ssh_terminal_tab_close(
     registry: tauri::State<'_, Arc<TerminalSessionRegistry>>,
     tab_id: String,
 ) -> Result<SshTerminalTabsSnapshot, String> {
-    crate::commands::terminal::ssh_terminal_tab_close(registry.inner(), tab_id)
+    agent_core::commands::terminal::ssh_terminal_tab_close(registry.inner(), tab_id)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -224,7 +224,7 @@ pub fn terminal_stream_attach(
     session_id: String,
     max_bytes: Option<usize>,
 ) -> Result<TerminalStreamSnapshotResponse, String> {
-    crate::commands::terminal::terminal_stream_attach(registry.inner(), session_id, max_bytes)
+    agent_core::commands::terminal::terminal_stream_attach(registry.inner(), session_id, max_bytes)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -233,7 +233,7 @@ pub fn terminal_stream_input(
     session_id: String,
     bytes: Vec<u8>,
 ) -> Result<(), String> {
-    crate::commands::terminal::terminal_stream_input(registry.inner(), session_id, bytes)
+    agent_core::commands::terminal::terminal_stream_input(registry.inner(), session_id, bytes)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -243,7 +243,7 @@ pub fn terminal_stream_resize(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    crate::commands::terminal::terminal_stream_resize(registry.inner(), session_id, cols, rows)
+    agent_core::commands::terminal::terminal_stream_resize(registry.inner(), session_id, cols, rows)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -252,7 +252,7 @@ pub fn terminal_rename(
     session_id: String,
     title: String,
 ) -> Result<TerminalSessionRecord, String> {
-    crate::commands::terminal::terminal_rename(registry.inner(), session_id, title)
+    agent_core::commands::terminal::terminal_rename(registry.inner(), session_id, title)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -261,7 +261,11 @@ pub fn terminal_close(
     sftp_registry: tauri::State<'_, Arc<SftpSessionRegistry>>,
     session_id: String,
 ) -> Result<TerminalSessionRecord, String> {
-    crate::commands::terminal::terminal_close(registry.inner(), sftp_registry.inner(), session_id)
+    agent_core::commands::terminal::terminal_close(
+        registry.inner(),
+        sftp_registry.inner(),
+        session_id,
+    )
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -270,7 +274,7 @@ pub fn terminal_close_project(
     sftp_registry: tauri::State<'_, Arc<SftpSessionRegistry>>,
     project_path_key: String,
 ) -> Result<TerminalListResponse, String> {
-    crate::commands::terminal::terminal_close_project(
+    agent_core::commands::terminal::terminal_close_project(
         registry.inner(),
         sftp_registry.inner(),
         project_path_key,
@@ -284,7 +288,7 @@ pub fn terminal_read_tail(
     session_id: Option<String>,
     max_bytes: Option<usize>,
 ) -> Result<TerminalReadTailResponse, String> {
-    crate::commands::terminal::terminal_read_tail(
+    agent_core::commands::terminal::terminal_read_tail(
         registry.inner(),
         project_path_key,
         session_id,

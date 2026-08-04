@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use serde_json::json;
 use tauri::Emitter;
 
-use crate::services::chat_run_ledger::{ChatRunLedger, ChatRunLedgerState};
+use agent_core::services::chat_run_ledger::{ChatRunLedger, ChatRunLedgerState};
 
 use super::*;
 

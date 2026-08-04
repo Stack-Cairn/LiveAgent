@@ -7,11 +7,11 @@ use tokio_stream::StreamExt as _;
 use tokio_tungstenite::tungstenite::Message as WsMessage;
 use uuid::Uuid;
 
-use crate::commands::settings::RemoteSettingsPayload;
-use crate::runtime::project_path::{
+use agent_core::commands::settings::RemoteSettingsPayload;
+use agent_core::runtime::project_path::{
     project_path_key as normalize_project_path_key, project_path_keys_equal,
 };
-use crate::runtime::terminal::{
+use agent_core::runtime::terminal::{
     normalize_ssh_local_forward_local_port, ssh_local_forward_local_port_available,
     terminal_shell_options, SshLocalForwardActionResponse, SshLocalForwardEventPayload,
     SshLocalForwardListResponse, SshLocalForwardRecord, SshTerminalTabRecord,

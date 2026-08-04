@@ -6,10 +6,10 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::settings::*;
-use crate::runtime::project_path::project_path_key as normalize_project_path_key;
-use crate::services::automation::AutomationScheduler;
-use crate::services::gateway::GatewayController;
+use agent_core::commands::settings::*;
+use agent_core::events::EventBus;
+use agent_core::runtime::project_path::project_path_key as normalize_project_path_key;
+use agent_core::services::automation::AutomationScheduler;
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Number, Value};
@@ -24,12 +24,12 @@ use uuid::Uuid;
 
 #[tauri::command]
 pub async fn settings_load_all() -> Result<SettingsLoadResponse, String> {
-    crate::commands::settings::settings_load_all().await
+    agent_core::commands::settings::settings_load_all().await
 }
 
 #[tauri::command]
 pub async fn settings_save_providers(payload: Value) -> Result<(), String> {
-    crate::commands::settings::settings_save_providers(payload).await
+    agent_core::commands::settings::settings_save_providers(payload).await
 }
 
 #[tauri::command]
@@ -37,40 +37,44 @@ pub async fn settings_save_system(
     payload: Value,
     automation_scheduler: tauri::State<'_, Arc<AutomationScheduler>>,
 ) -> Result<(), String> {
-    crate::commands::settings::settings_save_system(payload, automation_scheduler.inner()).await
+    agent_core::commands::settings::settings_save_system(payload, automation_scheduler.inner())
+        .await
 }
 
 #[tauri::command]
 pub async fn settings_save_mcp(payload: Value) -> Result<(), String> {
-    crate::commands::settings::settings_save_mcp(payload).await
+    agent_core::commands::settings::settings_save_mcp(payload).await
 }
 
+// 从 State<GatewayController> 换成 State<EventBus>：实现侧已经不认识 Gateway 了，
+// 它只发 settings:remote-saved，由 GatewayEventSink 接住去调 apply_config。
+// State 参数不是 JSON key，前端契约不受影响。
 #[tauri::command]
 pub async fn settings_save_remote(
     payload: Value,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<(), String> {
-    crate::commands::settings::settings_save_remote(payload, gateway_controller.inner()).await
+    agent_core::commands::settings::settings_save_remote(payload, events.inner()).await
 }
 
 #[tauri::command]
 pub async fn settings_save_memory(payload: Value) -> Result<(), String> {
-    crate::commands::settings::settings_save_memory(payload).await
+    agent_core::commands::settings::settings_save_memory(payload).await
 }
 
 #[tauri::command]
 pub async fn settings_save_agents(payload: Value) -> Result<(), String> {
-    crate::commands::settings::settings_save_agents(payload).await
+    agent_core::commands::settings::settings_save_agents(payload).await
 }
 
 #[tauri::command]
 pub async fn settings_save_ssh(payload: Value) -> Result<(), String> {
-    crate::commands::settings::settings_save_ssh(payload).await
+    agent_core::commands::settings::settings_save_ssh(payload).await
 }
 
 #[tauri::command]
 pub async fn settings_apply_ssh_patch(payload: Value) -> Result<SshPatchApplyResponse, String> {
-    crate::commands::settings::settings_apply_ssh_patch(payload).await
+    agent_core::commands::settings::settings_apply_ssh_patch(payload).await
 }
 
 #[tauri::command]
@@ -78,22 +82,22 @@ pub async fn settings_reset_ssh_known_host(
     host: String,
     port: u16,
 ) -> Result<SshKnownHostResetResponse, String> {
-    crate::commands::settings::settings_reset_ssh_known_host(host, port).await
+    agent_core::commands::settings::settings_reset_ssh_known_host(host, port).await
 }
 
 #[tauri::command]
 pub async fn settings_list_cherry_studio_providers() -> Result<CherryProvidersResponse, String> {
-    crate::commands::settings::settings_list_cherry_studio_providers().await
+    agent_core::commands::settings::settings_list_cherry_studio_providers().await
 }
 
 #[tauri::command]
 pub async fn settings_list_cherry_studio_providers_from_path(
     data_path: String,
 ) -> Result<CherryProvidersResponse, String> {
-    crate::commands::settings::settings_list_cherry_studio_providers_from_path(data_path).await
+    agent_core::commands::settings::settings_list_cherry_studio_providers_from_path(data_path).await
 }
 
 #[tauri::command]
 pub async fn settings_list_ccswitch_providers() -> Result<CcsProvidersResponse, String> {
-    crate::commands::settings::settings_list_ccswitch_providers().await
+    agent_core::commands::settings::settings_list_ccswitch_providers().await
 }

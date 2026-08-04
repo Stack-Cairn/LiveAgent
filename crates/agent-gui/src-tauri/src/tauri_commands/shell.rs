@@ -6,8 +6,8 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::shell::*;
-use crate::runtime::shell_runner::{run_shell_script, ShellRunRegistry, ShellRunResponse};
+use agent_core::commands::shell::*;
+use agent_core::runtime::shell_runner::{run_shell_script, ShellRunRegistry, ShellRunResponse};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -22,7 +22,7 @@ pub async fn shell_run(
     provider_id: Option<String>,
     run_id: Option<String>,
 ) -> Result<ShellRunResponse, String> {
-    crate::commands::shell::shell_run(
+    agent_core::commands::shell::shell_run(
         registry.inner(),
         workdir,
         command,
@@ -40,5 +40,5 @@ pub fn runtime_cancel(
     registry: tauri::State<'_, Arc<ShellRunRegistry>>,
     run_id: String,
 ) -> ShellCancelResponse {
-    crate::commands::shell::runtime_cancel(registry.inner(), run_id)
+    agent_core::commands::shell::runtime_cancel(registry.inner(), run_id)
 }

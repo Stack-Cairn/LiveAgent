@@ -13,17 +13,18 @@
 
 use std::sync::{Arc, Weak};
 
-use crate::commands::chat_history::{
-    ChatHistorySummary, HISTORY_DELETE_EVENT, HISTORY_UPSERT_EVENT,
-};
-use crate::runtime::managed_process::MANAGED_PROCESS_CHANGED_EVENT;
-use crate::services::automation::types::{CRON_CHANGED_EVENT, HOOKS_CHANGED_EVENT};
 use crate::services::gateway::{
     build_history_sync_delete, build_history_sync_upsert, now_unix_seconds, proto,
     GatewayController,
 };
-use crate::services::workspace_watch::{WorkspaceWatchService, WORKSPACE_ACTIVITY_EVENT};
+use agent_core::commands::chat_history::{
+    ChatHistorySummary, HISTORY_DELETE_EVENT, HISTORY_UPSERT_EVENT,
+};
+use agent_core::commands::settings::SETTINGS_REMOTE_SAVED_EVENT;
 use agent_core::events::EventSink;
+use agent_core::runtime::managed_process::MANAGED_PROCESS_CHANGED_EVENT;
+use agent_core::services::automation::types::{CRON_CHANGED_EVENT, HOOKS_CHANGED_EVENT};
+use agent_core::services::workspace_watch::{WorkspaceWatchService, WORKSPACE_ACTIVITY_EVENT};
 
 pub struct GatewayEventSink {
     controller: Weak<GatewayController>,
@@ -122,6 +123,16 @@ impl EventSink for GatewayEventSink {
                     }
                 });
             }
+            // settings_save_remote 迁入 agent-core 后不再直接持有 controller，
+            // 改成发事件；apply_config 这一步搬到这里，Gateway 的知识仍然只在本文件。
+            SETTINGS_REMOTE_SAVED_EVENT => match serde_json::from_value(payload) {
+                Ok(config) => {
+                    if let Err(error) = controller.apply_config(config) {
+                        eprintln!("apply remote settings to gateway failed: {error}");
+                    }
+                }
+                Err(error) => eprintln!("settings:remote-saved 事件反序列化失败: {error}"),
+            },
             WORKSPACE_ACTIVITY_EVENT => {
                 self.forward_workspace_activity(&controller, &payload);
             }

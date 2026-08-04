@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::commands::{
+use agent_core::commands::{
     chat_file_links::open_chat_file_link_for_conversation,
     chat_history,
     chat_history::ChatHistoryMessageRef,
@@ -14,24 +14,25 @@ use crate::commands::{
     },
     git::{git_gateway_clone_task_action_sync, GitCloneTaskRegistry},
     settings::{load_providers, open_db},
-    system::{
-        system_create_project_folder_sync, system_import_uploaded_readable_files_sync,
-        system_list_skill_files_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
-        system_read_uploaded_image_preview_sync, SystemReadableFileUploadInput,
-    },
 };
-use crate::services::automation::{
-    validate_cron_expression, AutomationApplyInput, AutomationStore,
+// system 仍在壳里：它是前端专属命令（文件对话框、技能文件读取），不进 agent-core。
+use crate::commands::system::{
+    system_create_project_folder_sync, system_import_uploaded_readable_files_sync,
+    system_list_skill_files_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
+    system_read_uploaded_image_preview_sync, SystemReadableFileUploadInput,
 };
 use crate::services::gateway::proto;
-use crate::services::memory::{
+use agent_core::services::automation::{
+    validate_cron_expression, AutomationApplyInput, AutomationStore,
+};
+use agent_core::services::memory::{
     MemoryAcceptArgs, MemoryBatchArgs, MemoryDeleteArgs, MemoryDeleteProjectArgs, MemoryListArgs,
     MemoryOrganizeDueClaimArgs, MemoryOrganizeRunCreateArgs, MemoryOrganizeRunListArgs,
     MemoryOrganizeRunReadArgs, MemoryOrganizeRunUpdateArgs, MemoryQuotaSummaryArgs, MemoryReadArgs,
     MemoryRecentRejectionsArgs, MemorySearchArgs, MemoryStore, MemoryUpdateArgs, MemoryWriteArgs,
 };
-use crate::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
-use crate::services::skills::system_manage_skill_sync;
+use agent_core::services::provider_usage::{ProviderUsageResult, ProviderUsageService};
+use agent_core::services::skills::system_manage_skill_sync;
 
 const DEFAULT_HISTORY_LIST_PAGE: i32 = 1;
 const DEFAULT_HISTORY_LIST_PAGE_SIZE: i32 = 80;
@@ -373,7 +374,7 @@ pub async fn handle_provider_list() -> Result<proto::ProviderListResponse, Strin
 pub async fn handle_provider_models(
     request: proto::ProviderModelsRequest,
 ) -> Result<proto::ProviderModelsResponse, String> {
-    let models_json = crate::services::provider_models::fetch_provider_models(
+    let models_json = agent_core::services::provider_models::fetch_provider_models(
         request.provider_type.trim(),
         request.base_url.trim(),
         request.api_key.trim(),
@@ -1406,7 +1407,7 @@ mod tests {
         is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
         sanitize_provider_summaries,
     };
-    use crate::commands::chat_history::{
+    use agent_core::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
     };
 

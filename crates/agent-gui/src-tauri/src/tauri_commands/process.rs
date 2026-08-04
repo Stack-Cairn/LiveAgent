@@ -6,8 +6,8 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::process::*;
-use crate::runtime::managed_process::{
+use agent_core::commands::process::*;
+use agent_core::runtime::managed_process::{
     ManagedProcessLogResponse, ManagedProcessRegistry, ManagedProcessSnapshot,
     ManagedProcessStartResponse, ManagedProcessStatusResponse, ManagedProcessStopResponse,
 };
@@ -22,7 +22,7 @@ pub fn managed_process_start(
     label: Option<String>,
     isolated: Option<bool>,
 ) -> Result<ManagedProcessStartResponse, String> {
-    crate::commands::process::managed_process_start(
+    agent_core::commands::process::managed_process_start(
         registry.inner(),
         workdir,
         command,
@@ -37,7 +37,7 @@ pub fn managed_process_status(
     registry: tauri::State<'_, Arc<ManagedProcessRegistry>>,
     process_id: Option<String>,
 ) -> Result<ManagedProcessStatusResponse, String> {
-    crate::commands::process::managed_process_status(registry.inner(), process_id)
+    agent_core::commands::process::managed_process_status(registry.inner(), process_id)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -45,7 +45,7 @@ pub fn managed_process_stop(
     registry: tauri::State<'_, Arc<ManagedProcessRegistry>>,
     process_id: String,
 ) -> Result<ManagedProcessStopResponse, String> {
-    crate::commands::process::managed_process_stop(registry.inner(), process_id)
+    agent_core::commands::process::managed_process_stop(registry.inner(), process_id)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -54,14 +54,14 @@ pub fn managed_process_read_log(
     process_id: String,
     max_bytes: Option<u64>,
 ) -> Result<ManagedProcessLogResponse, String> {
-    crate::commands::process::managed_process_read_log(registry.inner(), process_id, max_bytes)
+    agent_core::commands::process::managed_process_read_log(registry.inner(), process_id, max_bytes)
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn managed_process_snapshot(
     registry: tauri::State<'_, Arc<ManagedProcessRegistry>>,
 ) -> Result<ManagedProcessSnapshot, String> {
-    crate::commands::process::managed_process_snapshot(registry.inner())
+    agent_core::commands::process::managed_process_snapshot(registry.inner())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -69,5 +69,5 @@ pub fn managed_process_clear(
     registry: tauri::State<'_, Arc<ManagedProcessRegistry>>,
     process_id: Option<String>,
 ) -> Result<ManagedProcessSnapshot, String> {
-    crate::commands::process::managed_process_clear(registry.inner(), process_id)
+    agent_core::commands::process::managed_process_clear(registry.inner(), process_id)
 }

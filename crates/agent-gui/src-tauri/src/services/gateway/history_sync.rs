@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::commands::chat_history::ChatHistorySummary;
+use agent_core::commands::chat_history::ChatHistorySummary;
 
 use super::*;
 

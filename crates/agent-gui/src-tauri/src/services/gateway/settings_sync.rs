@@ -1,7 +1,7 @@
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::commands::settings::{
+use agent_core::commands::settings::{
     load_gateway_settings_sync_snapshot, open_db, redact_gateway_settings_sync_payload,
     PROVIDER_API_KEY_UPDATES_FIELD, PROVIDER_USAGE_QUERY_SECRET_UPDATES_FIELD, SSH_PATCH_FIELD,
     SSH_SECRET_UPDATES_FIELD, SYSTEM_PROXY_PASSWORD_UPDATE_FIELD,

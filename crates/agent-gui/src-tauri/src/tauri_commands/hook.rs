@@ -6,14 +6,14 @@
 
 #![allow(unused_imports)]
 
-use crate::commands::hook::*;
-use crate::runtime::shell_runner::{
+use agent_core::commands::hook::*;
+use agent_core::runtime::shell_runner::{
     run_shell_script_with_envs, ShellCancelFlag, ShellCancelToken, ShellRunResponse,
 };
-use crate::runtime::task_runner::{
+use agent_core::runtime::task_runner::{
     build_http_client, resolve_workdir, run_single_http_request, HttpRequestInput,
 };
-use crate::services::automation::validate::{MAX_HOOK_TIMEOUT_MS, MIN_HOOK_TIMEOUT_MS};
+use agent_core::services::automation::validate::{MAX_HOOK_TIMEOUT_MS, MIN_HOOK_TIMEOUT_MS};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -28,7 +28,7 @@ pub async fn hook_run_script(
     context: Option<HashMap<String, String>>,
     registry: tauri::State<'_, Arc<HookScopeRegistry>>,
 ) -> Result<ShellRunResponse, String> {
-    crate::commands::hook::hook_run_script(
+    agent_core::commands::hook::hook_run_script(
         workdir,
         script,
         timeout_ms,
@@ -45,7 +45,7 @@ pub async fn hook_run_http_requests(
     scope_id: Option<String>,
     registry: tauri::State<'_, Arc<HookScopeRegistry>>,
 ) -> Result<HookHttpRunResponse, String> {
-    crate::commands::hook::hook_run_http_requests(requests, scope_id, registry.inner()).await
+    agent_core::commands::hook::hook_run_http_requests(requests, scope_id, registry.inner()).await
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -53,5 +53,5 @@ pub async fn hook_cancel_scope(
     scope_id: String,
     registry: tauri::State<'_, Arc<HookScopeRegistry>>,
 ) -> Result<(), String> {
-    crate::commands::hook::hook_cancel_scope(scope_id, registry.inner()).await
+    agent_core::commands::hook::hook_cancel_scope(scope_id, registry.inner()).await
 }

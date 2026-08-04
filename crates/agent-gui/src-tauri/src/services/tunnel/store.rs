@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use uuid::Uuid;
 
-use crate::commands::settings::open_db;
-use crate::runtime::project_path::project_path_key as normalize_project_path_key;
 use crate::services::gateway::{now_unix_seconds, proto};
+use agent_core::commands::settings::open_db;
+use agent_core::runtime::project_path::project_path_key as normalize_project_path_key;
 
 use super::{
     tunnel_health_payload_from_proto, validate_tunnel_target_url, GatewayTunnelCreateInput,

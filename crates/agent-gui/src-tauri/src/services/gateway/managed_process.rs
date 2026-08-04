@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use crate::runtime::managed_process::{
+use agent_core::runtime::managed_process::{
     ManagedProcessRecord, ManagedProcessRegistry, ManagedProcessSnapshot,
 };
 

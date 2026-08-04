@@ -130,7 +130,7 @@ async fn handle_image_proxy(Query(query): Query<ImageProxyQuery>, headers: Heade
 
     // 图片外链与商店链路同语义：恒随应用代理出网（未启用=直连，配置异常
     // 502 fail fast）。<img> 请求无法携带自定义头，因此不走 per-request 开关。
-    let client = match crate::services::system_proxy::cached_client() {
+    let client = match agent_core::services::system_proxy::cached_client() {
         Ok(client) => client,
         Err(error) => {
             return error_response(
@@ -370,7 +370,7 @@ async fn handle_proxy(
     // 系统代理未启用时 cached_client 返回直连 client（勾选但全局关闭 = 直连）；
     // 代理配置异常则 fail fast，绝不静默降级为直连。
     let client = if use_system_proxy {
-        match crate::services::system_proxy::cached_client() {
+        match agent_core::services::system_proxy::cached_client() {
             Ok(client) => client,
             Err(error) => {
                 return error_response(

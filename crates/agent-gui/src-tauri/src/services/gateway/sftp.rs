@@ -1,6 +1,6 @@
 use uuid::Uuid;
 
-use crate::runtime::sftp::{
+use agent_core::runtime::sftp::{
     SftpActionResponse, SftpEntry, SftpEventPayload, SftpListResponse, SftpStatResponse,
     SftpTransferResponse, SftpTransferState,
 };

@@ -6,7 +6,7 @@ use tauri::Emitter;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
-use crate::services::chat_run_ledger::ChatRunLedgerEntry;
+use agent_core::services::chat_run_ledger::ChatRunLedgerEntry;
 
 use super::*;
 

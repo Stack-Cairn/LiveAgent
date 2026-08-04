@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::commands::settings::RemoteSettingsPayload;
+use agent_core::commands::settings::RemoteSettingsPayload;
 
 use super::{
     GatewayStatusSnapshot, GATEWAY_CHAT_RUNTIME_WAKE_REQUEST_PREFIX, GATEWAY_RECONNECT_MAX,
