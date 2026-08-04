@@ -32,6 +32,7 @@ import { useLocale } from "../../i18n";
 import {
   applyMcpRegistryInstallConfig,
   createUniqueMcpServerId,
+  getFeaturedMcpRegistryCards,
   MCP_REGISTRY_SOURCE_OPTIONS,
   type McpRegistryCard,
   type McpRegistryConfigInput,
@@ -1294,6 +1295,9 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [installedByCardId, setInstalledByCardId] = useState<Record<string, string>>({});
   const groupedItems = useMemo(() => groupMcpRegistryCards(items), [items]);
+  // 本地内置的精选连接（如 Obsidian），仅在未搜索时展示，避免挤占搜索结果。
+  const featuredGroups = useMemo(() => groupMcpRegistryCards(getFeaturedMcpRegistryCards(t)), [t]);
+  const showFeatured = query.trim() === "";
 
   const existingIds = useMemo(
     () => new Set(settings.mcp.servers.map((server) => server.id)),
@@ -1506,6 +1510,26 @@ export function McpRegistryBrowser(props: McpRegistryBrowserProps) {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-1 pb-4 pt-2">
         <div className="flex flex-col gap-4">
+          {showFeatured && featuredGroups.length > 0 ? (
+            <div className="hub-panel-enter flex flex-col gap-2.5">
+              <div className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 text-foreground/55" />
+                <span>{t("mcpHub.featuredTitle")}</span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {featuredGroups.map((group) => (
+                  <RegistryCard
+                    key={group.id}
+                    group={group}
+                    installedIdForCard={installedIdForCard}
+                    installingId={installingId}
+                    onPreview={setPreviewCard}
+                    onInstall={(next) => void installCard(next)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
           {loading && items.length === 0 ? (
             <>
               <div key={source} className="hub-frost-hero hub-panel-enter px-4 py-3.5">
