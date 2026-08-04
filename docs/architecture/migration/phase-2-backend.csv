@@ -1,0 +1,32 @@
+id,task,status,blocker,verify,notes
+P2-01,设计 EventSink/EventBus 抽象,done,,agent-core/src/events.rs 存在且 4 个单测通过,"payload 用 serde_json::Value：这些类型本来就要过 JSON IPC，线上协议也是 JSON，没有第二种表示值得维护"
+P2-02,建 TauriEventSink 接 webview,done,P2-01,src-tauri/tauri_sink.rs 存在，webview 事件照常到达前端,桌面壳独有，永不进 agent-core
+P2-03,建 GatewayEventSink 收敛 gateway 事件知识,done,P2-01,src-tauri/gateway_sink.rs 存在，Gateway 中继照常工作,过渡设施，阶段 4 随 Gateway 一并删除
+P2-04,解耦 runtime/managed_process.rs,done,P2-01;P2-03,rg 'tauri::|GatewayController' runtime/managed_process.rs 无输出,该文件的 tauri 与 gateway 依赖原本全部集中在 24 行的 notifier 里，改掉它整个 800+ 行文件一次变干净
+P2-05,解耦 services/automation/store.rs,done,P2-01;P2-03,rg 'tauri::|GatewayController' services/automation/store.rs 无输出,保留 scheduler.request_reload()——那是业务逻辑不是传输
+P2-06,解耦 services/workspace_watch/,done,P2-01;P2-03,rg 'tauri::|GatewayController' services/workspace_watch 无输出,顺带纠正所有权倒置：WorkspaceWatchService 原由 GatewayController 创建，现改为后端创建、controller 接收，attach_gateway 删除
+P2-07,解耦 chat_history 的 history sync,done,P2-01;P2-03,rg 'GatewayController' commands/history/chat_history 无输出,"新增 history:upsert / history:delete 事件（面向未来：新架构下前端本身就是远程客户端，同样需要）。ChatHistorySummary 补 Deserialize。⚠️ 此步引入过真实回归：移除 gateway 调用后忘了在 sink 接上，编译全绿但同步已断"
+P2-08,解耦 terminal/sftp/ssh_local_forward 事件发送,done,P2-01,rg 'app_handle|AppHandle|Emitter' runtime/terminal runtime/sftp.rs 无输出,attach_app_handle → set_event_bus。这些 broadcast 早就是双路的（emit + subscribers），改动只是把 webview 降级成普通订阅者
+P2-09,建 crates/agent-core 并接通 workspace,done,,cargo check -p agent-core 通过且 cargo tree -p agent-core 零 tauri,编译期防线生效
+P2-10,迁入 events.rs 作为跨 crate 验证载荷,done,P2-09,agent-core 的 4 个测试在新 crate 内通过，liveagent 666 个测试仍绿,选它因为零外部依赖且是后端与壳的唯一事件契约
+P2-11,验证 include! 跨 crate 行为,done,P2-09,"实验：嵌套 include! + 独立 crate + 跨 crate 引用，编译通过","推翻并行分析的头号 blocker。真问题是 pub(crate) 跨 crate 变私有（E0603）。580 处 pub(crate) 但壳侧只引用 29 个符号路径，只提升跨界的"
+P2-12,核验 async_runtime → tokio 的替换条件,done,,"读 tauri-2.11.5/src/async_runtime.rs 确认；逐站点核查 132 处 spawn 的调用上下文","并行分析漏掉关键前提：default_runtime() 会 TokioRuntime::new().unwrap() 自建 runtime，故 tauri 版任何上下文可调而 tokio::spawn 在 runtime 外会 panic。核查结论：后端所有 spawn 只从 async 上下文可达，可机械替换"
+P2-13,定路由约定,done,,backend-split.md 有「路由约定」一节且组间无歧义,"三份并行设计各给一套（命令式/kebab 资源式/REST 式）。采纳命令式 POST /api/<command_name>：命令名与参数 JSON 前端现在就在用，1:1 映射让阶段 4 是机械替换"
+P2-14,补 GatewayEventSink 测试,todo,P2-03,"注入假 controller，断言每个事件名触发预期的 publish 调用","优先级最高的未完成项：事件总线把编译期错误变成运行时静默失败，P2-07 已真实踩过一次"
+P2-15,批量替换 132 处 async_runtime 为 tokio,todo,P2-12,rg 'tauri::async_runtime' commands runtime services（排除 gateway/tray）无输出,前提已核验；替换后需确认 Cargo.toml 的 tokio features 含 rt-multi-thread
+P2-16,迁入 runtime/ 到 agent-core,todo,P2-09;P2-11;P2-15,cargo check -p agent-core 通过且 runtime/ 不再存在于 src-tauri,11837 行。依赖最少，先做。注意 pub(crate) 提升只做壳侧真正引用的
+P2-17,迁入 services/ 到 agent-core,todo,P2-16,cargo check -p agent-core 通过,26847 行（排除 gateway/tray/gateway_bridge）。services/tunnel/ 不搬——按 P1-07 需重写
+P2-18,迁入 commands/ 实现到 agent-core,todo,P2-17,cargo check -p agent-core 通过,37438 行。含 178 处 #[tauri::command] 与 68 处 State 的拆分
+P2-19,在 src-tauri 留下 195 个薄包装,todo,P2-18,"cargo test -p liveagent 全绿且桌面端手工冒烟：history/settings/terminal/git/skills 可用",薄包装形态：#[tauri::command] fn x(state: State<Arc<T>>) { agent_core::x(&state).await }
+P2-20,建 crates/agent-backend 骨架,todo,P2-09,"cargo run -p agent-backend --（带 --password）能起进程，GET /healthz 返回 ok",axum 0.8.9 已在依赖中
+P2-21,实现密码认证中间件,todo,P2-20,"无 Bearer 返回 401；错密码返回 401 且响应时间与正确密码无显著差异（常量时间比较）","密码即 Bearer（决策 7）。本地密码初始化动态生成、可改（决策 8）"
+P2-22,实现 TLS 支持,todo,P2-20,"带 --tls-cert/--tls-key 启动后 https 可访问；不带则纯 HTTP","⚠️ axum-server RustlsConfig::from_pem_file 签名未经验证，实现前必须查证"
+P2-23,打通 3 条代表性路由（unary/stream/upload）,todo,P2-20;P2-21,"curl 打 unary、websocat 打 stream、curl -F 打 upload 全部返回预期","先验证约定再批量推。建议选 git_status（unary）、terminal_stream_attach（stream）、system_import_uploaded_readable_files（upload）"
+P2-24,定 tauri::State 那 9 个命令的会话隔离方案,todo,P2-23,"方案写入 backend-split.md：header 名、生命周期、校验方式；且 2 个前端并发调用互不干扰","git_clone_repository_{start,tasks,cancel,dismiss}、shell_run、runtime_cancel、hook_run_{script,http_requests}、hook_cancel_scope"
+P2-25,"补齐返回 Result<(),String> 命令的状态码语义",todo,P2-23,"约 9 个命令能区分成功/不存在/无权限","workspace_watch_set、hook_cancel_scope、多个 tunnel_*"
+P2-26,实现 WS 事件流 sink,todo,P2-20;P2-01,"多个 WS 客户端同时连，各自都收到事件；慢客户端不阻塞业务线程","⚠️ EventBus::emit_json 同步遍历 sink，WS sink 必须自排队 + 丢帧。重连语义按决策 19：不补发，拉快照 + 订阅增量"
+P2-27,重写 SSRF 防护,todo,P2-20,"RFC1918/loopback/link-local/CGNAT/NAT64/6to4 全部拒绝；DNS rebinding 场景（域名解析到内网 IP）被拦","不要复用 proxy.rs:227 的 validate_image_proxy_url——它只查 scheme 和嵌入凭据，没有 IP 黑名单，够用只因绑 loopback。需用 reqwest 的 resolve() 把连接钉死在已校验 IP"
+P2-28,补完 195 条路由,todo,P2-23;P2-24;P2-25,"每条 backend.txt 里的 command 都有对应路由","含 3 个漏掉的 settings 命令：settings_list_ccswitch_providers、settings_list_cherry_studio_providers、_from_path。rename_all 逐命令沿用现状不能统一（git_clone_repository_tasks、chat_history_replace_from_message 已知不一致）"
+P2-29,写 API 契约测试,todo,P2-28,"不经前端直接打 JSON API，覆盖 195 个 command；新增 command 未加路由时测试失败",决策 18：只加契约测试不做 e2e
+P2-30,重写 tunnel 为本机代理,todo,P2-20,"前端请求后端隧道路由，能访问到 localhost:5173 的 dev server","按 P1-07：去掉 slug 注册协议、跨中继分帧、公开无认证入口。名字改 tunnel_*。是否仍需路径前缀重写取决于路由是否挂子路径"
+P2-31,阶段验收：不经前端打通全部能力,todo,P2-29,"curl/websocat 验证 fs/git/terminal/history/settings 全部可用，且桌面端行为零变化",

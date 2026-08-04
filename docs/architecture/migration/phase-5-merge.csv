@@ -1,0 +1,10 @@
+id,task,status,blocker,verify,notes
+P5-01,盘点两套前端的真实差异,todo,P4-16,"产出差异清单：GUI 独有 / WebUI 独有 / 已镜像相同",mirror-manifest.json 已列出被 CI 强制字节相同的文件，那部分是零成本合并
+P5-02,设计壳能力探测 API,todo,P5-01,"hasShell()/hasTray()/hasUpdater() 等在 Tauri 里返 true、浏览器里返 false",一份代码 + 运行时探测，不要两份代码靠构建分叉
+P5-03,把登录页从 WebUI 并入 GUI,todo,P5-02,"浏览器访问出现登录页；Tauri 壳里不出现",阶段 4 建的登录页在 WebUI 侧
+P5-04,按探测结果降级 18 个前端专属能力,todo,P5-02,"浏览器里托盘/更新入口隐藏；剪贴板走 navigator.clipboard；文件选择走 input type=file；外链走 window.open",
+P5-05,处理 20 个脆测试,todo,P5-01,"这 20 个文件已改写为行为断言或删除；没有被 skip 掉的","它们用 readFileSync + 正则锁死源码文本，不验证行为。另 128 个走 load-ts-module.mjs 的行为型测试保留。不要为了让它们绿而回避重构"
+P5-06,删除 crates/agent-gateway/web,todo,P5-03;P5-04,"目录不存在；构建仍通过",126934 行
+P5-07,删除 mirror-manifest.json 与其 CI job,todo,P5-06,"scripts/mirror-manifest.json 不存在；ci.yml 里无 Mirror Check job",合并后镜像机制失去意义
+P5-08,验收：一份代码两种宿主,todo,P5-04;P5-06,"同一份构建产物在 Tauri 壳与浏览器里都可用，能力按探测降级",
+P5-09,验收：全功能手工冒烟,todo,P5-08,"桌面端与浏览器端各自逐项过 history/settings/terminal/上传/git review/skills/memory/cron/chat",

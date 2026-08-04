@@ -1,0 +1,17 @@
+id,task,status,blocker,verify,notes
+P4-01,设计并实现 backendClient,todo,P2-28,"createBackendClient({baseUrl, password}) 能发请求、带 Bearer、处理 401","唯一的本地/远程差异就是 baseUrl。命令式路由让这层是薄的：invoke(name, args) → POST /api/{name} args"
+P4-02,实现 WS 事件订阅客户端,todo,P4-01;P2-26,"前端能收到 terminal/sftp/history/workspace 等事件；断线自动重连后重新订阅","替代 17 个文件里的 listen()。重连语义按决策 19：拉快照 + 订阅增量，不补发"
+P4-03,Tauri 壳注入密码并跳过登录页,todo,P4-01,"桌面版双击启动直接可用，不出现登录页",决策 8。密码初始化动态生成、用户可改
+P4-04,浏览器登录页,todo,P4-01,"浏览器访问远程后端出现登录页，输对密码后进入",
+P4-05,替换 57 个文件的 invoke 调用,todo,P4-01,"rg '@tauri-apps/api/core' crates/agent-gui/src 只剩前端专属命令的文件",前端专属的 18 个 command 保留 invoke——托盘/窗口/更新不该走网络
+P4-06,替换 17 个文件的 listen 调用,todo,P4-02,"rg '@tauri-apps/api/event' crates/agent-gui/src 只剩壳事件",
+P4-07,处理 plugin-opener 的 7 处,todo,P4-05,"浏览器里打开外链降级为 window.open；桌面里仍走原生",
+P4-08,拆分 settings_save_remote,todo,P4-05,"Gateway 连接字段消失；enable_web_* 权限开关仍生效且能门控远程前端","阶段 1 遗留缺陷。RemoteSettingsPayload（settings/types.rs:23）混了两类字段"
+P4-09,删除 21 个 deleted.txt 里的 command,todo,P4-05;P3-15,"cargo check -p liveagent 通过；deleted.txt 里的命令名在代码中无残留",
+P4-10,删除 services/gateway/,todo,P4-09,"cargo check 通过；rg 'services::gateway' 无输出",10228 行
+P4-11,删除 gateway_bridge.rs 与 gateway_sink.rs,todo,P4-10,"cargo check 通过",约 1550 行
+P4-12,删除 Go 侧 chat 可靠性补丁,todo,P3-15,"Go 侧 chat.prepare wake ping、ChatRunLedger、三层超时、seq window 相关代码删除后 go build 通过",约 3800 行。阶段 3 已验证为死代码才动手
+P4-13,新桌面端检测旧网关地址并提示,todo,P4-03,"配一个旧 gateway 地址，前端给出明确的迁移提示而非静默失败",决策 15
+P4-14,冻结旧 gateway 镜像 tag,todo,,"docker pull 旧 tag 仍成功；旧桌面端配旧网关仍可用",决策 15：破坏性变更无法避免（两边都在等对方来连），但要断得体面
+P4-15,写 README 迁移指南,todo,P4-13;P4-14,"README 有从 v1 gateway 迁到 v2 后端的步骤",
+P4-16,验收：改 base URL 即切换本地/远程,todo,P4-05;P4-06,"同一份前端只改 baseUrl，本机后端与远程后端行为一致",
