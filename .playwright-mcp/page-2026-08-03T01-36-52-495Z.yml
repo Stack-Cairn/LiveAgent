@@ -1,0 +1,48 @@
+- generic [ref=f2e6]:
+  - complementary [ref=f2e7]:
+    - generic [ref=f2e8]:
+      - generic [ref=f2e9]:
+        - generic [ref=f2e10]:
+          - generic [ref=f2e11]: Live Agent
+          - button "关闭边栏" [ref=f2e15]
+        - generic [ref=f2e20]:
+          - button "新对话" [ref=f2e21]
+          - button "Skills" [ref=f2e27]
+          - button "MCP" [ref=f2e33]
+      - generic [ref=f2e40]:
+        - generic [ref=f2e41]:
+          - button "工作空间" [expanded] [ref=f2e42]
+          - button "新建工作空间" [ref=f2e46]
+        - button "调整工作空间与最近对话占比" [ref=f2e51]
+        - button "最近会话" [expanded] [ref=f2e54]
+        - paragraph [ref=f2e62]: 暂无历史对话
+      - button "设置" [ref=f2e65]
+  - generic [ref=f2e71]:
+    - banner [ref=f2e73]:
+      - generic [ref=f2e74]:
+        - button "选择模型" [disabled]
+      - generic [ref=f2e75]:
+        - button "切换到深色模式" [ref=f2e76]
+        - button "Select a project to use project tools." [disabled]
+    - generic [ref=f2e79]:
+      - generic [ref=f2e83]:
+        - generic [ref=f2e88]: 欢迎使用 LiveAgent
+        - generic [ref=f2e89]: 你还没有配置模型。
+        - generic [ref=f2e90]: 点击下方按钮，配置供应商和模型。
+        - button "配置供应商" [ref=f2e91]
+      - generic:
+        - button [ref=f2e96]
+        - separator "调整对话正文宽度" [ref=f2e98]
+    - generic [ref=f2e101]:
+      - button "扩大输入框" [ref=f2e102]
+      - textbox [ref=f2e107]: 输入消息，@ 引用文件，提示词可队列发送...
+      - generic [ref=f2e108]:
+        - generic [ref=f2e109]:
+          - generic [ref=f2e110]:
+            - button "请先选择一个项目" [disabled]
+          - button "联网搜索已开启" [ref=f2e112]
+          - generic [ref=f2e117]:
+            - button "当前模型不支持 Thinking" [disabled]
+          - button "无 Git 仓库" [disabled]
+        - generic [ref=f2e118]:
+          - button "发送消息" [disabled]

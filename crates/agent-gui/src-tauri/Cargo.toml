@@ -21,6 +21,7 @@ tauri-build = { version = "2.6.3", features = [] }
 prost-build = "0.14.4"
 
 [dependencies]
+agent-core = { path = "../../agent-core" }
 tauri = { version = "2.11.5", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2.5.4"
 serde = { version = "1.0.228", features = ["derive"] }

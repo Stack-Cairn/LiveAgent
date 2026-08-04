@@ -17,7 +17,7 @@ use crate::runtime::process::{
     ProcessProbe,
 };
 use crate::runtime::shell_runner::spawn_platform_shell_command;
-use crate::events::EventBus;
+use agent_core::events::EventBus;
 
 const PROCESS_LOG_DIR: &str = "process-logs";
 const DEFAULT_LOG_BYTES: u64 = 64 * 1024;

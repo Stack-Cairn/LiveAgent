@@ -16,7 +16,7 @@ use std::sync::{Arc, Weak};
 use crate::commands::chat_history::{
     ChatHistorySummary, HISTORY_DELETE_EVENT, HISTORY_UPSERT_EVENT,
 };
-use crate::events::EventSink;
+use agent_core::events::EventSink;
 use crate::runtime::managed_process::MANAGED_PROCESS_CHANGED_EVENT;
 use crate::services::automation::types::{CRON_CHANGED_EVENT, HOOKS_CHANGED_EVENT};
 use crate::services::gateway::{

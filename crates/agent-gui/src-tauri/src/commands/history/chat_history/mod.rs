@@ -9,9 +9,10 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use agent_core::events::EventBus;
+
 use crate::{
     commands::{history_db, subagent_store},
-    events::EventBus,
     services::memory::{MemoryHistorySearchMatch, MemorySearchArgs},
 };
 use uuid::Uuid;

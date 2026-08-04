@@ -1,5 +1,4 @@
 mod commands;
-mod events;
 mod gateway_sink;
 mod runtime;
 mod services;
@@ -726,7 +725,7 @@ pub fn run() {
                 // 事件总线：后端只管往这里发，谁听由这里决定。
                 // 桌面 webview 和 Gateway 都只是普通订阅者，没有谁被硬编码进后端。
                 // 先建空总线，sink 稍后注册——总线用内部可变性，允许后置。
-                let events = Arc::new(events::EventBus::new());
+                let events = Arc::new(agent_core::events::EventBus::new());
                 let workspace_watch = Arc::new(services::workspace_watch::WorkspaceWatchService::new(
                     Arc::clone(&events),
                 ));

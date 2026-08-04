@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use uuid::Uuid;
 
-use crate::events::EventBus;
+use agent_core::events::EventBus;
 
 use crate::runtime::platform::expand_tilde_path;
 use crate::runtime::project_path::{

@@ -4,7 +4,7 @@ use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::events::EventBus;
+use agent_core::events::EventBus;
 
 use super::db;
 use super::scheduler::AutomationScheduler;

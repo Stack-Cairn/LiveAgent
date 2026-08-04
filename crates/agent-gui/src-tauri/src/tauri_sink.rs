@@ -5,7 +5,7 @@
 
 use tauri::{AppHandle, Emitter};
 
-use crate::events::EventSink;
+use agent_core::events::EventSink;
 
 pub struct TauriEventSink {
     app: AppHandle,

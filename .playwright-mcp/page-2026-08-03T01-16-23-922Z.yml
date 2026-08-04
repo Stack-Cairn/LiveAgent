@@ -1,0 +1,52 @@
+- generic [ref=e6]:
+  - complementary [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e11]: Live Agent
+          - button "关闭边栏" [ref=e15]
+        - generic [ref=e20]:
+          - button "新对话" [ref=e21]
+          - button "Skills" [ref=e27]
+          - button "MCP" [ref=e33]
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - button "工作空间" [expanded] [ref=e42]
+          - button "新建工作空间" [ref=e46]
+        - button "调整工作空间与最近对话占比" [ref=e51]
+        - button "最近会话" [expanded] [ref=e54]
+        - paragraph [ref=e62]: 暂无历史对话
+      - button "设置" [ref=e65]
+  - generic [ref=e71]:
+    - generic [ref=e72]:
+      - banner [ref=e73]:
+        - generic [ref=e74]:
+          - button "选择模型" [disabled]
+        - generic [ref=e75]:
+          - button "切换到深色模式" [ref=e76]
+          - button "Select a project to use project tools." [disabled]
+      - generic [ref=e79]:
+        - paragraph [ref=e84]: Cannot read properties of undefined (reading 'invoke')
+        - button [ref=e85]
+    - generic [ref=e88]:
+      - generic [ref=e92]:
+        - generic [ref=e97]: 欢迎使用 LiveAgent
+        - generic [ref=e98]: 你还没有配置模型。
+        - generic [ref=e99]: 点击下方按钮，配置供应商和模型。
+        - button "配置供应商" [ref=e100]
+      - generic:
+        - button [ref=e105]
+        - separator "调整对话正文宽度" [ref=e107]
+    - generic [ref=e110]:
+      - button "扩大输入框" [ref=e111]
+      - textbox [ref=e116]: 输入消息，@ 引用文件，提示词可队列发送...
+      - generic [ref=e117]:
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - button "请先选择一个项目" [disabled]
+          - button "联网搜索已开启" [ref=e121]
+          - generic [ref=e126]:
+            - button "当前模型不支持 Thinking" [disabled]
+          - button "无 Git 仓库" [disabled]
+        - generic [ref=e127]:
+          - button "发送消息" [disabled]

@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
-use crate::events::EventBus;
+use agent_core::events::EventBus;
 
 mod events;
 mod output;

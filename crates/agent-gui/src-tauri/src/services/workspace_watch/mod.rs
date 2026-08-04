@@ -14,7 +14,7 @@ mod watcher;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
-use crate::events::EventBus;
+use agent_core::events::EventBus;
 
 pub const WORKSPACE_ACTIVITY_EVENT: &str = "workspace:activity";
 

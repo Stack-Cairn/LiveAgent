@@ -1,0 +1,14 @@
+[package]
+name = "agent-core"
+version = "0.1.0"
+edition = "2021"
+description = "LiveAgent backend core: tools, storage and runtime. Deliberately free of any UI framework."
+
+# 编译期防线：本 crate 不得出现任何 tauri 依赖。
+# 这是 docs/architecture/backend-boundary.md「编译期防线」一节的落地——
+# 一旦有人把前端专属 command 挪进来，cargo build -p agent-core 直接失败，
+# 而不是等到 headless 模式跑不起来才发现。
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util", "rt", "rt-multi-thread", "process"] }
