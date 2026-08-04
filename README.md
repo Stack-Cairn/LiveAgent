@@ -239,6 +239,55 @@ location / {
 
 
 
+### Headless Dev-Tools Image (`core` / `full`)
+
+A drop-in development sandbox built on the headless runtime. Instead of one ever-growing "kitchen-sink" image, the toolchain is **layered and kept lean** (mirroring the GitHub devcontainers / Gitpod approach):
+
+| Image | Contents | Approx. size |
+|---|---|---|
+| `liveagent-core` | git · build-essential · cmake · ninja · pkg-config · strace · vim · tmux · network tools **+** go 1.25.12 · node 22.19.0 · pnpm · python 3.12 (all managed by [mise](https://mise.jdx.dev)) | ~0.9 GB |
+| `liveagent-full` | everything in `core` **+** Java (Temurin 17) · Maven 3.9 | ~1.2 GB |
+
+Both images are built by GitHub Actions from the same `Dockerfile.headless-tools` (`TARGET_PROFILE=core|full`), multi-arch amd64/arm64, and share the same base layers — pulling `full` never re-downloads the `core` layers.
+
+**Quick start (compose):**
+
+```yaml
+services:
+  liveagent:
+    image: ghcr.io/stack-cairn/liveagent-full:latest
+    restart: unless-stopped
+    ports:
+      - "17890:17890"
+    volumes:
+      - liveagent-data:/var/lib/liveagent
+      # Named volume (not bind mount!) — Docker copies the preinstalled
+      # toolchain into it on first use and persists any lazily-installed
+      # runtimes (e.g. Java 8) across restarts.
+      - mise-data:/opt/mise
+volumes:
+  liveagent-data:
+  mise-data:
+```
+
+**Switch any runtime version via an environment variable.** The image reads `MISE_<TOOL>_VERSION` (e.g. `MISE_JAVA_VERSION`, `MISE_NODE_VERSION`, `MISE_PYTHON_VERSION`); missing versions are auto-installed on first start (needs network once) and persisted on the `mise-data` volume:
+
+```yaml
+services:
+  liveagent:
+    image: ghcr.io/stack-cairn/liveagent-full:latest
+    environment:
+      MISE_JAVA_VERSION: "temurin-8"   # switch to Java 8; auto-installed on first boot
+    volumes:
+      - liveagent-data:/var/lib/liveagent
+      - mise-data:/opt/mise            # persists the lazily-installed JDK
+```
+
+> **Notes**
+> - Use a **named volume** for `/opt/mise`. A bind mount of an empty directory would hide the preinstalled toolchain.
+> - Low-frequency / large tools are intentionally **not** preinstalled (gdb, valgrind, clang, rust, php, ruby…). Install them on demand: `apt-get install -y gdb clang` or `mise use -g rust@latest` — no image rebuild needed.
+> - Interactive shells inside the container (`docker exec -it liveagent bash`) already have the full mise environment (PATH / JAVA_HOME) injected.
+
 ### Build from Source
 
 Expand the Development Guide below for the full set of Make commands.
