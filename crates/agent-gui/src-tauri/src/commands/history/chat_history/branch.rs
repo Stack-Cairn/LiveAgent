@@ -226,11 +226,9 @@ pub(crate) async fn chat_history_branch_inner(
 pub async fn chat_history_branch(
     id: String,
     base_message_ref: ChatHistoryMessageRef,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_branch_inner(id, base_message_ref).await?;
-    gateway_controller
-        .publish_history_sync(build_history_sync_upsert(&summary))
-        .await;
+    events.emit(HISTORY_UPSERT_EVENT, &summary);
     Ok(summary)
 }

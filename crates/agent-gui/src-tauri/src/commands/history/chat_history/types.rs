@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, Serialize)]
+// Deserialize 是为了事件消费者：history 变更事件把整个 summary 作为 payload 发出，
+// 订阅方（Gateway 中继、将来的 WebSocket 后端）需要把它读回来。
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatHistorySummary {
     pub id: String,

@@ -160,7 +160,7 @@ pub async fn chat_history_replace_from_message(
     replacement_message: Value,
     max_messages: i64,
     expected_revision: String,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    events: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<ChatHistoryWindowRecord, String> {
     let result = chat_history_replace_from_message_inner(
         id,
@@ -170,8 +170,6 @@ pub async fn chat_history_replace_from_message(
         expected_revision,
     )
     .await?;
-    gateway_controller
-        .publish_history_sync(build_history_sync_upsert(&result.conversation))
-        .await;
+    events.emit(HISTORY_UPSERT_EVENT, &result.conversation);
     Ok(result)
 }

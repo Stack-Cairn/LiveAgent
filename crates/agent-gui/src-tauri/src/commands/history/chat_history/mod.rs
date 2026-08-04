@@ -11,12 +11,15 @@ use std::{
 
 use crate::{
     commands::{history_db, subagent_store},
-    services::{
-        gateway::{build_history_sync_delete, build_history_sync_upsert, GatewayController},
-        memory::{MemoryHistorySearchMatch, MemorySearchArgs},
-    },
+    events::EventBus,
+    services::memory::{MemoryHistorySearchMatch, MemorySearchArgs},
 };
 use uuid::Uuid;
+
+/// 会话被创建或更新。payload 是完整的 `ChatHistorySummary`。
+pub const HISTORY_UPSERT_EVENT: &str = "history:upsert";
+/// 会话被删除。payload 是被删会话的 id 字符串。
+pub const HISTORY_DELETE_EVENT: &str = "history:delete";
 
 const HISTORY_SHARE_TOKEN_LEN: usize = 9;
 const HISTORY_SHARE_TOKEN_INSERT_ATTEMPTS: usize = 8;

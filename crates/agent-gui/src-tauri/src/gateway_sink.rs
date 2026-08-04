@@ -13,10 +13,16 @@
 
 use std::sync::{Arc, Weak};
 
+use crate::commands::chat_history::{
+    ChatHistorySummary, HISTORY_DELETE_EVENT, HISTORY_UPSERT_EVENT,
+};
 use crate::events::EventSink;
 use crate::runtime::managed_process::MANAGED_PROCESS_CHANGED_EVENT;
 use crate::services::automation::types::{CRON_CHANGED_EVENT, HOOKS_CHANGED_EVENT};
-use crate::services::gateway::{now_unix_seconds, proto, GatewayController};
+use crate::services::gateway::{
+    build_history_sync_delete, build_history_sync_upsert, now_unix_seconds, proto,
+    GatewayController,
+};
 use crate::services::workspace_watch::{WorkspaceWatchService, WORKSPACE_ACTIVITY_EVENT};
 
 pub struct GatewayEventSink {
@@ -112,6 +118,31 @@ impl EventSink for GatewayEventSink {
             }
             WORKSPACE_ACTIVITY_EVENT => {
                 self.forward_workspace_activity(&controller, &payload);
+            }
+            // history 是少数几个必须把 payload 读回来的事件：Gateway 要把整个
+            // summary 转成 sync 事件发给远端，重读数据库拿不到「刚才改的是哪一条」。
+            HISTORY_UPSERT_EVENT => {
+                match serde_json::from_value::<ChatHistorySummary>(payload) {
+                    Ok(summary) => {
+                        tauri::async_runtime::spawn(async move {
+                            controller
+                                .publish_history_sync(build_history_sync_upsert(&summary))
+                                .await;
+                        });
+                    }
+                    Err(error) => eprintln!("history upsert 事件反序列化失败: {error}"),
+                }
+            }
+            HISTORY_DELETE_EVENT => {
+                let Some(conversation_id) = payload.as_str().map(str::to_string) else {
+                    eprintln!("history delete 事件 payload 不是字符串");
+                    return;
+                };
+                tauri::async_runtime::spawn(async move {
+                    controller
+                        .publish_history_sync(build_history_sync_delete(conversation_id))
+                        .await;
+                });
             }
             // 其余事件 Gateway 通过各 registry 自带的 subscriber 通道拿，
             // 或者根本不关心。不认识的事件静默丢弃是正确行为：
