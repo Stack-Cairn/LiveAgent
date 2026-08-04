@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use tauri::State;
-
 use crate::runtime::managed_process::{
     ManagedProcessLogResponse, ManagedProcessRegistry, ManagedProcessSnapshot,
     ManagedProcessStartResponse, ManagedProcessStatusResponse, ManagedProcessStopResponse,

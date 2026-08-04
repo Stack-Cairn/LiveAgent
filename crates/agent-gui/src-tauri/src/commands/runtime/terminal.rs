@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use tauri::State;
-
 use crate::runtime::sftp::SftpSessionRegistry;
 use crate::runtime::shell_runner::ShellRunRegistry;
 use crate::runtime::terminal::{

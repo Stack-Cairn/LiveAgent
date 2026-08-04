@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use tauri::State;
-
 use crate::runtime::sftp::{
     SftpActionResponse, SftpListResponse, SftpReadTextResponse, SftpSessionRegistry,
     SftpStatResponse, SftpTransferResponse,
