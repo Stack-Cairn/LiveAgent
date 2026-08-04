@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Generate src/headless.rs invoke dispatch for the headless (no-tauri) runtime.
 
+[HISTORICAL TOOL] Since the BFF proxy / route-fix commits (the headless.rs
+server skeleton) src/headless.rs diverged from this generator and is now
+hand-maintained. Its dispatch arms are checked against the committed manifest
+by scripts/verify_headless.py in CI. This script is kept for reference only;
+do not run it to overwrite src/headless.rs.
+
 v2: Improved error handling, WebSocket backpressure, auth middleware support.
 Generates the complete headless.rs file with:
   - Unified HeadlessError type (DesktopOnly / Unavailable / Business)

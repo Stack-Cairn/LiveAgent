@@ -15,15 +15,17 @@
 #![cfg(not(feature = "desktop"))]
 
 use std::collections::HashMap;
+#[cfg(feature = "runtime-fallback")]
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::net::SocketAddr;
 use std::time::Instant;
 
 use dirs;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{FromRef, Path as AxumPath, State, State as AxumState};
-use axum::http::{header, StatusCode};
+use axum::extract::{ConnectInfo, Extension, FromRef, Path as AxumPath, Query, State, State as AxumState};
+use axum::http::{header, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
@@ -32,7 +34,6 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::broadcast;
-use tower_http::cors::{Any, CorsLayer};
 
 use crate::commands::chat_history::{ChatHistoryMessageRef, ChatHistorySearchArgs, ChatHistorySegmentMutationInput, ChatHistoryUpsertInput};
 use crate::commands::mcp::{McpServerConfig};
@@ -91,6 +92,8 @@ pub struct HeadlessState {
     pub proxy_server: Arc<ProxyServerState>,
     /// BFF 模式下反代路由挂在主 HTTP 服务上，前端拿到的反代 baseUrl 就是主服务地址。
     pub proxy_base_url: String,
+    /// Optional Bearer token for /api/invoke and non-same-origin /ws (LIVEAGENT_API_TOKEN).
+    pub api_token: Option<String>,
 }
 
 impl FromRef<HeadlessState> for Arc<ProxyServerState> {
@@ -1967,7 +1970,10 @@ pub async fn dispatch(state: &HeadlessState, cmd: &str, args: Value) -> Result<V
             "token": info.token,
         }))
     },
-        _ => Err(HeadlessError::Business(format!("unknown command: {{cmd}}"))),
+        _ => {
+            eprintln!("[dispatch] unknown command: {cmd}");
+            Err(HeadlessError::Business(format!("unknown command: {cmd}")))
+        }
     }
 }
 
@@ -1988,27 +1994,40 @@ impl AuthConfig {
     }
 }
 
+/// True when the request is same-origin (browser page served by this server).
+/// A request whose Origin scheme+host matches its Host header was issued by
+/// the WebUI we serve, i.e. the caller already had access to this port.
+fn is_same_origin(req: &axum::http::Request<axum::body::Body>) -> bool {
+    let Some(origin) = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
+        return false;
+    };
+    let Some(host) = req.headers().get(header::HOST).and_then(|v| v.to_str().ok()) else {
+        return false;
+    };
+    origin == format!("http://{host}") || origin == format!("https://{host}")
+}
+
 async fn auth_middleware(
     State(config): State<AuthConfig>,
     req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Health check and WebSocket are always public.
-    let path = req.uri().path().to_string();
-    // /proxy/* 与 /image-proxy 走反代自身的 token/URL 校验，豁免 API token
-    // （浏览器 fetch / <img> 无法携带 Bearer）。
-    if path == "/health"
-        || path == "/api/status"
-        || path == "/ws"
-        || path == "/"
-        || path == "/image-proxy"
-        || path.starts_with("/proxy/")
-    {
+    // Only the command execution endpoint is protected by the API token.
+    // Everything else (static assets, /health, /api/status, /proxy/*,
+    // /image-proxy) is public by design; WebSocket auth is handled separately
+    // in ws_handler (same-origin is allowed, otherwise ?token= required).
+    if req.uri().path() != "/api/invoke" {
         return Ok(next.run(req).await);
     }
     match &config.api_token {
         None => Ok(next.run(req).await),
         Some(expected) => {
+            // Same-origin browser requests are already authorized (the caller
+            // loaded the WebUI from this service). Cross-origin / non-browser
+            // callers must present the Bearer token.
+            if is_same_origin(&req) {
+                return Ok(next.run(req).await);
+            }
             let ok = req.headers().get(header::AUTHORIZATION)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.strip_prefix("Bearer "))
@@ -2018,10 +2037,104 @@ async fn auth_middleware(
     }
 }
 
+// ---- CORS / same-origin guard ----
+
+/// Allowed extra origins for cross-origin browser access (comma separated).
+/// Defaults to same-origin only. Loaded once at startup from
+/// `LIVEAGENT_HEADLESS_CORS_ORIGINS`.
+#[derive(Clone)]
+pub struct CorsConfig {
+    pub allowed: Vec<String>,
+}
+
+impl CorsConfig {
+    pub fn from_env() -> Self {
+        let allowed = std::env::var("LIVEAGENT_HEADLESS_CORS_ORIGINS")
+            .map(|v| v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+            .unwrap_or_default();
+        Self { allowed }
+    }
+    fn origin_allowed(&self, req: &axum::http::Request<axum::body::Body>) -> Option<String> {
+        let origin = req.headers().get(header::ORIGIN)?.to_str().ok()?.to_string();
+        if is_same_origin(req) || self.allowed.contains(&origin) {
+            Some(origin)
+        } else {
+            None
+        }
+    }
+}
+
+/// Guards against cross-site request forgery / cross-origin data theft.
+///
+/// - Requests with an `Origin` header that is neither same-origin nor on the
+///   allow-list are rejected with 403 before reaching the router.
+/// - CORS preflight (OPTIONS) for allowed origins returns a proper 204 with
+///   the needed allow headers.
+/// - Requests without an `Origin` (curl, server-side callers) pass through for
+///   token-based auth to decide.
+/// - For the WebSocket upgrade path, an `WsOriginCheck` extension is set so
+///   ws_handler can distinguish browser (same-origin, already authorized)
+///   connections from non-browser clients (which must present ?token=).
+async fn cors_origin_middleware(
+    State(config): State<CorsConfig>,
+    mut req: axum::http::Request<axum::body::Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let has_origin = req.headers().contains_key(header::ORIGIN);
+    let is_ws = req.uri().path() == "/ws";
+
+    let allowed_origin = if has_origin { config.origin_allowed(&req) } else { None };
+
+    // Cross-origin request that failed the allow-list -> reject before routing.
+    if has_origin && allowed_origin.is_none() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    // Let ws_handler know whether this is an authorized same-origin browser
+    // WebSocket (Origin present + allowed) or a non-browser client.
+    if is_ws {
+        let browser_authorized = allowed_origin.is_some();
+        req.extensions_mut().insert(WsOriginCheck { browser_authorized });
+    }
+
+    // Preflight: answer with the CORS allow headers directly.
+    if req.method() == Method::OPTIONS {
+        let mut builder = Response::builder().status(StatusCode::NO_CONTENT);
+        if let Some(origin) = &allowed_origin {
+            builder = builder
+                .header(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin)
+                .header(header::ACCESS_CONTROL_ALLOW_METHODS, "GET, POST, OPTIONS")
+                .header(header::ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Authorization")
+                .header(header::VARY, "Origin");
+        }
+        return builder.body(axum::body::Body::empty()).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    let mut resp = next.run(req).await;
+    if let Some(origin) = &allowed_origin {
+        let headers = resp.headers_mut();
+        headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            origin.parse().unwrap_or_else(|_| header::HeaderValue::from_static("*")));
+        let vary = headers.get(header::VARY)
+            .and_then(|v| v.to_str().ok())
+            .map(|v| if v.split(',').any(|p| p.trim() == "Origin") { v.to_string() }
+                 else { format!("{v}, Origin") })
+            .unwrap_or_else(|| "Origin".to_string());
+        headers.insert(header::VARY, vary.parse().unwrap_or_else(|_| header::HeaderValue::from_static("Origin")));
+    }
+    Ok(resp)
+}
+
+/// Set by [`cors_origin_middleware`] for `/ws` upgrade requests.
+#[derive(Clone)]
+pub struct WsOriginCheck {
+    /// true = request came from a same-origin/allow-listed browser page.
+    pub browser_authorized: bool,
+}
+
 // ---- Rate limiting ----
 
 use std::sync::Mutex;
-use std::collections::hash_map::Entry;
 
 /// Simple in-memory per-IP rate limiter (token bucket).
 #[derive(Clone)]
@@ -2059,12 +2172,25 @@ async fn rate_limit_middleware(
     if req.uri().path() != "/api/invoke" {
         return Ok(next.run(req).await);
     }
-    // Extract IP from X-Forwarded-For or socket addr
-    let ip = req.headers().get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.split(',').next())
-        .unwrap_or("127.0.0.1")
-        .trim().to_string();
+    // Extract the client IP. X-Forwarded-For is only trusted when explicitly
+    // enabled (LIVEAGENT_TRUST_PROXY_HEADERS=1) — otherwise it is spoofable
+    // and would let callers bypass the rate limit by cycling fake IPs.
+    let ip = if std::env::var("LIVEAGENT_TRUST_PROXY_HEADERS").is_ok() {
+        req.headers().get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(',').next())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let ip = if ip.is_empty() {
+        req.extensions().get::<ConnectInfo<SocketAddr>>()
+            .map(|ci| ci.0.ip().to_string())
+            .unwrap_or_else(|| "unknown".to_string())
+    } else {
+        ip
+    };
     // Loopback (local web UI) is trusted tooling: exempt from rate limiting.
     // Without this, the browser's parallel frontend requests quickly exhaust
     // the token bucket and the UI shows HTTP 429 for every invoke.
@@ -2200,7 +2326,23 @@ async fn invoke_handler(
 async fn ws_handler(
     ws: WebSocketUpgrade,
     AxumState(state): AxumState<HeadlessState>,
+    Extension(origin_check): Extension<WsOriginCheck>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
+    // Browser connections from the same origin / allow-list are already
+    // authorized (the page is served by this server). Non-browser clients
+    // (no Origin, e.g. curl) must present ?token= when an API token is
+    // configured — this stops cross-origin / scripted subscriptions to the
+    // event stream (session content exfiltration).
+    if !origin_check.browser_authorized {
+        if let Some(expected) = &state.api_token {
+            let ok = params.get("token").map_or(false, |t| t == expected.as_str());
+            if !ok {
+                eprintln!("[ws] rejected connection: missing/invalid token");
+                return (StatusCode::UNAUTHORIZED, "ws: missing or invalid token").into_response();
+            }
+        }
+    }
     ws.on_upgrade(move |socket| handle_ws(socket, state))
 }
 
@@ -2215,15 +2357,15 @@ mod embedded {
 async fn serve_static(
     AxumPath(path): AxumPath<String>,
 ) -> impl IntoResponse {
-    serve_static_path(&path)
+    serve_static_path(&path).await
 }
 
 /// Root path handler (no path capture needed).
 async fn serve_root() -> impl IntoResponse {
-    serve_static_path("")
+    serve_static_path("").await
 }
 
-fn serve_static_path(path: &str) -> impl IntoResponse {
+async fn serve_static_path(path: &str) -> impl IntoResponse {
     #[cfg(not(feature = "runtime-fallback"))]
     {
         let file_path = if path.is_empty() || path == "/" { "index.html".to_string() }
@@ -2244,8 +2386,10 @@ fn serve_static_path(path: &str) -> impl IntoResponse {
     }
     #[cfg(feature = "runtime-fallback")]
     {
-        use tower_http::services::ServeDir;
-        let root = web_root().ok_or(StatusCode::NOT_FOUND)?;
+        let root = match web_root() {
+            Some(root) => root,
+            None => return StatusCode::NOT_FOUND.into_response(),
+        };
         let file = tokio::fs::read(root.join(&path)).await;
         match file {
             Ok(bytes) => {
@@ -2266,12 +2410,9 @@ fn serve_static_path(path: &str) -> impl IntoResponse {
 // ---- Router ----
 
 pub fn build_router(state: HeadlessState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
-
     let auth = AuthConfig::from_env();
+    // Same-origin CORS guard (+ optional allow-list from env).
+    let cors_config = CorsConfig::from_env();
     // Default: 60 requests per minute for /api/invoke
     let limiter = RateLimiter::new(60, std::time::Duration::from_secs(60));
 
@@ -2293,7 +2434,8 @@ pub fn build_router(state: HeadlessState) -> Router {
         .with_state(state)
         .layer(middleware::from_fn_with_state(auth, auth_middleware))
         .layer(middleware::from_fn_with_state(limiter, rate_limit_middleware))
-        .layer(cors)
+        // Outermost: enforce same-origin / allow-list before anything else.
+        .layer(middleware::from_fn_with_state(cors_config, cors_origin_middleware))
 }
 
 /// Build the axum state (registries that are not part of AppContext).
@@ -2301,6 +2443,7 @@ pub fn build_state(
     ctx: Arc<AppContext>,
     emitter: Arc<WsEventEmitter>,
     proxy_base_url: String,
+    api_token: Option<String>,
 ) -> Result<HeadlessState, String> {
     let mcp_runtime = Arc::new(crate::commands::mcp::McpRuntimeManager::default());
     let shell_runs = Arc::new(ShellRunRegistry::default());
@@ -2314,6 +2457,7 @@ pub fn build_state(
         hook_scopes,
         proxy_server,
         proxy_base_url,
+        api_token,
     })
 }
 
@@ -2347,14 +2491,30 @@ pub async fn serve() -> Result<(), String> {
     let ctx = AppContext::new(emitter_dyn);
     // BFF：反代路由挂在主服务上，前端拿到的反代 baseUrl 即主服务地址。
     let proxy_base_url = format!("http://127.0.0.1:{port}");
-    let state = build_state(ctx, emitter, proxy_base_url).map_err(|e| format!("headless state: {e}"))?;
+    let auth_config = AuthConfig::from_env();
+    let state = build_state(
+        ctx,
+        emitter,
+        proxy_base_url,
+        auth_config.api_token.clone(),
+    ).map_err(|e| format!("headless state: {e}"))?;
     let app = build_router(state);
     let listener = tokio::net::TcpListener::bind((host.as_str(), port))
         .await.map_err(|e| format!("bind {host}:{port}: {e}"))?;
 
-    let has_auth = AuthConfig::from_env().api_token.is_some();
+    let has_auth = auth_config.api_token.is_some();
     eprintln!("LiveAgent headless listening on http://{host}:{port} (auth={has_auth})");
-    axum::serve(listener, app).await.map_err(|e| e.to_string())
+    // Security hint: bound to a non-loopback interface without a token means
+    // anyone who can reach this port can invoke commands without credentials.
+    let non_loopback = host != "127.0.0.1" && host != "localhost" && host != "::1";
+    if non_loopback && !has_auth {
+        eprintln!(
+            "WARNING: listening on {host} with auth DISABLED. Set LIVEAGENT_API_TOKEN to \
+            require credentials for remote /api/invoke and /ws callers."
+        );
+    }
+    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+        .await.map_err(|e| e.to_string())
 }
 
 #[cfg(feature = "runtime-fallback")]

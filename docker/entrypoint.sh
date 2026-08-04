@@ -11,8 +11,14 @@
 set -euo pipefail
 
 if command -v mise >/dev/null 2>&1; then
-  mise install -y >/dev/null 2>&1 \
-    || echo "[entrypoint] warning: mise install failed, continuing with preinstalled tools" >&2
+  # 懒加载补装（需出网）；最多等 300s，避免离线/慢网拖死启动。
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 300 mise install -y >/dev/null 2>&1 \
+      || echo "[entrypoint] warning: mise install failed/timed out, continuing with preinstalled tools" >&2
+  else
+    mise install -y >/dev/null 2>&1 \
+      || echo "[entrypoint] warning: mise install failed, continuing with preinstalled tools" >&2
+  fi
   eval "$(mise env --shell bash)" >/dev/null 2>&1 || true
 fi
 

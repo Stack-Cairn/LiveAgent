@@ -1,6 +1,6 @@
 name: LiveAgent Headless Tools Image (core/full)
 
-# 构建并发布两个开发工具镜像到 GHCR：
+# 构建并发布两个开发工具镜像到 GHCR（main 分支 push / v* tag 触发，可手动 dispatch）：
 #   ghcr.io/<owner>/liveagent-core  (~0.9 GB, 默认开发沙箱)
 #   ghcr.io/<owner>/liveagent-full  (~1.2 GB, 含 Java 17 + Maven, Java 8 懒加载)
 # 同一 Dockerfile（Dockerfile.headless-tools），用 TARGET_PROFILE 区分；
@@ -10,7 +10,6 @@ on:
   push:
     branches:
       - main
-      - feat/headless-*
     tags:
       - "v*"
   workflow_dispatch:

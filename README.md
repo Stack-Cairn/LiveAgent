@@ -288,6 +288,39 @@ services:
 > - Low-frequency / large tools are intentionally **not** preinstalled (gdb, valgrind, clang, rust, php, ruby…). Install them on demand: `apt-get install -y gdb clang` or `mise use -g rust@latest` — no image rebuild needed.
 > - Interactive shells inside the container (`docker exec -it liveagent bash`) already have the full mise environment (PATH / JAVA_HOME) injected.
 
+### Headless Security Model
+
+The headless server serves the WebUI, the HTTP API and the WebSocket event stream on one port (`LIVEAGENT_HEADLESS_PORT`, default 17890). Access control:
+
+| Env var | Default | Effect |
+|---|---|---|
+| `LIVEAGENT_API_TOKEN` | *(unset = auth off)* | Enables Bearer auth for `/api/invoke` and requires `?token=` on non-browser `/ws` connections. |
+| `LIVEAGENT_HEADLESS_HOST` | `127.0.0.1` | Bind address. Binding a non-loopback interface **without** a token prints a startup warning. |
+| `LIVEAGENT_HEADLESS_CORS_ORIGINS` | *(unset)* | Comma-separated extra origins allowed to call the API (besides the same origin). |
+| `LIVEAGENT_TRUST_PROXY_HEADERS` | *(unset)* | Set to `1` to trust `X-Forwarded-For` for rate-limit IPs (only behind a trusted reverse proxy). |
+
+- **Origin gate (default on):** every request with an `Origin` header is allowed only if it matches the server's own origin or `LIVEAGENT_HEADLESS_CORS_ORIGINS`; anything else gets `403`. Preflight `OPTIONS` is answered with the matching CORS headers. This blocks CSRF and cross-origin data exfiltration.
+- **Same-origin exemption:** requests without an `Origin` (curl, scripts) pass the gate; when `LIVEAGENT_API_TOKEN` is set they must present `Authorization: Bearer <token>` (invoke) or `?token=<token>` (WebSocket). Browser pages served by the server itself are always allowed (same origin), so the WebUI needs no token.
+- **Rate limiting:** per-IP token bucket on `/api/invoke`. The client IP comes from the actual TCP peer by default (`X-Forwarded-For` is only consulted when `LIVEAGENT_TRUST_PROXY_HEADERS=1`).
+
+### Headless Command Registry & Generator
+
+The headless dispatch surface is **generated and verified, not hand-synced**:
+
+- `scripts/manifest/commands.json` — committed source of truth for the 234 Tauri commands.
+- `scripts/build_type_map.py` — derives the Rust type map from `src/*.rs` (`--src/--out`).
+- `scripts/gen_adapters.py` — regenerates `crates/agent-gui/src-tauri/src/commands/adapters.rs` from the manifest + type map (`--commands/--types/--out`).
+- `scripts/gen_headless.sh` — one-shot pipeline: `build_type_map.py` → `gen_adapters.py`.
+- `scripts/verify_headless.py` — asserts `headless.rs` dispatch arms match the manifest **both ways** (no missing, no extra).
+
+**When you add / remove / rename a command:**
+
+1. Update `scripts/manifest/commands.json`.
+2. Add / adjust the business function in `src/commands/*` (no `#[tauri::command]` needed — it lives only in the generated adapter layer).
+3. Run `bash scripts/gen_headless.sh` to regenerate `adapters.rs`.
+4. Add / update the matching dispatch arm in `src/headless.rs` (hand-maintained server skeleton — the generator does **not** overwrite it).
+5. Run `python3 scripts/verify_headless.py` locally; CI (`gen-verify` job) enforces both steps 3 and 4.
+
 ### Build from Source
 
 Expand the Development Guide below for the full set of Make commands.
