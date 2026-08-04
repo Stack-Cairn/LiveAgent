@@ -3132,28 +3132,24 @@ pub(crate) fn git_gateway_clone_task_action_sync(
     }
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_status(workdir: String) -> Result<GitRepositoryState, String> {
     tokio::task::spawn_blocking(move || git_status_sync(workdir))
         .await
         .map_err(|error| format!("git_status join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_discover_repositories(workdir: String) -> Result<GitRepositoryDiscovery, String> {
     tokio::task::spawn_blocking(move || git_discover_repositories_sync(workdir))
         .await
         .map_err(|error| format!("git_discover_repositories join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_branches(workdir: String) -> Result<GitBranchesResponse, String> {
     tokio::task::spawn_blocking(move || git_branches_sync(workdir))
         .await
         .map_err(|error| format!("git_branches join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_switch_branch(
     workdir: String,
     branch: String,
@@ -3164,20 +3160,16 @@ pub async fn git_switch_branch(
         .map_err(|error| format!("git_switch_branch join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_create_branch(
     workdir: String,
     branch: String,
     start_point: Option<String>,
 ) -> Result<GitOperationResponse, String> {
-    tokio::task::spawn_blocking(move || {
-        git_create_branch_sync(workdir, branch, start_point)
-    })
-    .await
-    .map_err(|error| format!("git_create_branch join 失败：{error}"))?
+    tokio::task::spawn_blocking(move || git_create_branch_sync(workdir, branch, start_point))
+        .await
+        .map_err(|error| format!("git_create_branch join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_init(
     workdir: String,
     branch: Option<String>,
@@ -3196,23 +3188,19 @@ pub async fn git_init(
     .map_err(|error| format!("git_init join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_clone_repository(
     parent: String,
     name: String,
     remote_url: String,
     branch: Option<String>,
 ) -> Result<GitOperationResponse, String> {
-    tokio::task::spawn_blocking(move || {
-        git_clone_repository_sync(parent, name, remote_url, branch)
-    })
-    .await
-    .map_err(|error| format!("git_clone_repository join 失败：{error}"))?
+    tokio::task::spawn_blocking(move || git_clone_repository_sync(parent, name, remote_url, branch))
+        .await
+        .map_err(|error| format!("git_clone_repository join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn git_clone_repository_start(
-    registry: tauri::State<'_, Arc<GitCloneTaskRegistry>>,
+    registry: &Arc<GitCloneTaskRegistry>,
     parent: String,
     name: String,
     remote_url: String,
@@ -3221,31 +3209,27 @@ pub fn git_clone_repository_start(
     registry.start(parent, name, remote_url, branch)
 }
 
-#[tauri::command]
 pub fn git_clone_repository_tasks(
-    registry: tauri::State<'_, Arc<GitCloneTaskRegistry>>,
+    registry: &Arc<GitCloneTaskRegistry>,
 ) -> Result<Vec<GitCloneTask>, String> {
     registry.snapshot()
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn git_clone_repository_cancel(
-    registry: tauri::State<'_, Arc<GitCloneTaskRegistry>>,
+    registry: &Arc<GitCloneTaskRegistry>,
     task_id: String,
 ) -> Result<GitCloneTask, String> {
     registry.cancel(task_id)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn git_clone_repository_dismiss(
-    registry: tauri::State<'_, Arc<GitCloneTaskRegistry>>,
+    registry: &Arc<GitCloneTaskRegistry>,
     task_id: String,
 ) -> Result<Vec<GitCloneTask>, String> {
     registry.dismiss(task_id)?;
     registry.snapshot()
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_list_remote_branches(
     remote_url: String,
 ) -> Result<GitRemoteBranchesResponse, String> {
@@ -3254,7 +3238,6 @@ pub async fn git_list_remote_branches(
         .map_err(|error| format!("git_list_remote_branches join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_diff(
     workdir: String,
     mode: Option<String>,
@@ -3265,7 +3248,6 @@ pub async fn git_diff(
         .map_err(|error| format!("git_diff join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_log(
     workdir: String,
     limit: Option<usize>,
@@ -3276,7 +3258,6 @@ pub async fn git_log(
         .map_err(|error| format!("git_log join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_commit_details(
     workdir: String,
     commit: String,
@@ -3286,19 +3267,15 @@ pub async fn git_commit_details(
         .map_err(|error| format!("git_commit_details join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_compare_commit_with_remote(
     workdir: String,
     commit: String,
 ) -> Result<GitDiffResponse, String> {
-    tokio::task::spawn_blocking(move || {
-        git_compare_commit_with_remote_sync(workdir, commit)
-    })
-    .await
-    .map_err(|error| format!("git_compare_commit_with_remote join 失败：{error}"))?
+    tokio::task::spawn_blocking(move || git_compare_commit_with_remote_sync(workdir, commit))
+        .await
+        .map_err(|error| format!("git_compare_commit_with_remote join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_commit_diff(
     workdir: String,
     commit: String,
@@ -3309,35 +3286,30 @@ pub async fn git_commit_diff(
         .map_err(|error| format!("git_commit_diff join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_stage(workdir: String, path: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_stage_sync(workdir, path))
         .await
         .map_err(|error| format!("git_stage join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_stage_all(workdir: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_stage_all_sync(workdir))
         .await
         .map_err(|error| format!("git_stage_all join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_unstage(workdir: String, path: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_unstage_sync(workdir, path))
         .await
         .map_err(|error| format!("git_unstage join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_unstage_all(workdir: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_unstage_all_sync(workdir))
         .await
         .map_err(|error| format!("git_unstage_all join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_discard(
     workdir: String,
     path: String,
@@ -3348,14 +3320,12 @@ pub async fn git_discard(
         .map_err(|error| format!("git_discard join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_discard_all(workdir: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_discard_all_sync(workdir))
         .await
         .map_err(|error| format!("git_discard_all join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_add_to_gitignore(
     workdir: String,
     path: String,
@@ -3365,7 +3335,6 @@ pub async fn git_add_to_gitignore(
         .map_err(|error| format!("git_add_to_gitignore join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_open_system_file_location(
     workdir: String,
     path: String,
@@ -3375,28 +3344,24 @@ pub async fn git_open_system_file_location(
         .map_err(|error| format!("git_open_system_file_location join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_commit(workdir: String, message: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_commit_sync(workdir, message))
         .await
         .map_err(|error| format!("git_commit join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_fetch(workdir: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_fetch_sync(workdir))
         .await
         .map_err(|error| format!("git_fetch join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_pull(workdir: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_pull_sync(workdir))
         .await
         .map_err(|error| format!("git_pull join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_set_remote(
     workdir: String,
     remote_url: String,
@@ -3406,14 +3371,12 @@ pub async fn git_set_remote(
         .map_err(|error| format!("git_set_remote join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_push(workdir: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_push_sync(workdir))
         .await
         .map_err(|error| format!("git_push join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_delete_branch(
     workdir: String,
     branch: String,
@@ -3424,20 +3387,16 @@ pub async fn git_delete_branch(
         .map_err(|error| format!("git_delete_branch join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_rename_branch(
     workdir: String,
     branch: String,
     new_branch: String,
 ) -> Result<GitOperationResponse, String> {
-    tokio::task::spawn_blocking(move || {
-        git_rename_branch_sync(workdir, branch, new_branch)
-    })
-    .await
-    .map_err(|error| format!("git_rename_branch join 失败：{error}"))?
+    tokio::task::spawn_blocking(move || git_rename_branch_sync(workdir, branch, new_branch))
+        .await
+        .map_err(|error| format!("git_rename_branch join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_stash_push(
     workdir: String,
     message: Option<String>,
@@ -3447,7 +3406,6 @@ pub async fn git_stash_push(
         .map_err(|error| format!("git_stash_push join 失败：{error}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn git_stash_pop(workdir: String) -> Result<GitOperationResponse, String> {
     tokio::task::spawn_blocking(move || git_stash_pop_sync(workdir))
         .await

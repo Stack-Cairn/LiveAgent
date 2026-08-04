@@ -73,10 +73,8 @@ impl AutomationScheduler {
     async fn run_loop(self: Arc<Self>) {
         {
             let store = Arc::clone(&self.store);
-            let recovered = tokio::task::spawn_blocking(move || {
-                store.recover_interrupted_prompt_runs()
-            })
-            .await;
+            let recovered =
+                tokio::task::spawn_blocking(move || store.recover_interrupted_prompt_runs()).await;
             match recovered {
                 Ok(Ok(count)) if count > 0 => {
                     eprintln!("automation: expired {count} prompt run(s) interrupted by restart");
@@ -255,10 +253,7 @@ impl AutomationScheduler {
         let fresh = {
             let store = Arc::clone(&self.store);
             let task_id = task_id.clone();
-            tokio::task::spawn_blocking(move || {
-                store.cron_task_for_scheduled_fire(&task_id)
-            })
-            .await
+            tokio::task::spawn_blocking(move || store.cron_task_for_scheduled_fire(&task_id)).await
         };
         match fresh {
             Ok(Ok(Some((workdir, task)))) => {
@@ -442,8 +437,7 @@ impl AutomationScheduler {
     fn record_run_detached(&self, run: CompletedRun) {
         let store = Arc::clone(&self.store);
         tokio::spawn(async move {
-            let result =
-                tokio::task::spawn_blocking(move || store.record_completed_run(run)).await;
+            let result = tokio::task::spawn_blocking(move || store.record_completed_run(run)).await;
             match result {
                 Ok(Err(error)) => eprintln!("Cron run 记录失败：{error}"),
                 Err(error) => eprintln!("Cron run 记录 join 失败：{error}"),

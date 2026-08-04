@@ -59,11 +59,9 @@ pub(crate) async fn chat_history_delete_inner(id: String) -> Result<(), String> 
     .map_err(|e| format!("chat_history_delete join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_delete(
     id: String,
-    events: tauri::State<'_, Arc<EventBus>>,
-) -> Result<(), String> {
+    events: &Arc<EventBus>) -> Result<(), String> {
     let conversation_id = id.trim().to_string();
     chat_history_delete_inner(id).await?;
     events.emit(HISTORY_DELETE_EVENT, conversation_id);

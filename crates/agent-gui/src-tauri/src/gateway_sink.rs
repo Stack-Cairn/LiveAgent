@@ -16,7 +16,6 @@ use std::sync::{Arc, Weak};
 use crate::commands::chat_history::{
     ChatHistorySummary, HISTORY_DELETE_EVENT, HISTORY_UPSERT_EVENT,
 };
-use agent_core::events::EventSink;
 use crate::runtime::managed_process::MANAGED_PROCESS_CHANGED_EVENT;
 use crate::services::automation::types::{CRON_CHANGED_EVENT, HOOKS_CHANGED_EVENT};
 use crate::services::gateway::{
@@ -24,6 +23,7 @@ use crate::services::gateway::{
     GatewayController,
 };
 use crate::services::workspace_watch::{WorkspaceWatchService, WORKSPACE_ACTIVITY_EVENT};
+use agent_core::events::EventSink;
 
 pub struct GatewayEventSink {
     controller: Weak<GatewayController>,
@@ -78,9 +78,15 @@ impl GatewayEventSink {
             payload: Some(proto::agent_envelope::Payload::WorkspaceActivity(
                 proto::WorkspaceActivityEvent {
                     workdir: workdir.to_string(),
-                    revision: payload.get("revision").and_then(|v| v.as_u64()).unwrap_or(0),
+                    revision: payload
+                        .get("revision")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0),
                     fs: payload.get("fs").and_then(|v| v.as_bool()).unwrap_or(false),
-                    git: payload.get("git").and_then(|v| v.as_bool()).unwrap_or(false),
+                    git: payload
+                        .get("git")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
                     changed_paths,
                     truncated: payload
                         .get("truncated")
@@ -121,18 +127,16 @@ impl EventSink for GatewayEventSink {
             }
             // history 是少数几个必须把 payload 读回来的事件：Gateway 要把整个
             // summary 转成 sync 事件发给远端，重读数据库拿不到「刚才改的是哪一条」。
-            HISTORY_UPSERT_EVENT => {
-                match serde_json::from_value::<ChatHistorySummary>(payload) {
-                    Ok(summary) => {
-                        tokio::spawn(async move {
-                            controller
-                                .publish_history_sync(build_history_sync_upsert(&summary))
-                                .await;
-                        });
-                    }
-                    Err(error) => eprintln!("history upsert 事件反序列化失败: {error}"),
+            HISTORY_UPSERT_EVENT => match serde_json::from_value::<ChatHistorySummary>(payload) {
+                Ok(summary) => {
+                    tokio::spawn(async move {
+                        controller
+                            .publish_history_sync(build_history_sync_upsert(&summary))
+                            .await;
+                    });
                 }
-            }
+                Err(error) => eprintln!("history upsert 事件反序列化失败: {error}"),
+            },
             HISTORY_DELETE_EVENT => {
                 let Some(conversation_id) = payload.as_str().map(str::to_string) else {
                     eprintln!("history delete 事件 payload 不是字符串");

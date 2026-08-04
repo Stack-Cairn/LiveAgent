@@ -1251,7 +1251,6 @@ pub(crate) fn list_subagent_messages_sync(
 // Tauri commands
 // ---------------------------------------------------------------------------
 
-#[tauri::command]
 pub async fn subagent_identity_upsert(
     input: SubagentIdentityUpsertInput,
 ) -> Result<SubagentIdentityRecord, String> {
@@ -1263,7 +1262,6 @@ pub async fn subagent_identity_upsert(
     .map_err(|e| format!("subagent_identity_upsert join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_identity_list(
     input: SubagentIdentityListInput,
 ) -> Result<Vec<SubagentIdentityRecord>, String> {
@@ -1275,7 +1273,6 @@ pub async fn subagent_identity_list(
     .map_err(|e| format!("subagent_identity_list join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_run_save(input: SubagentRunSaveInput) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let mut conn = open_db()?;
@@ -1285,7 +1282,6 @@ pub async fn subagent_run_save(input: SubagentRunSaveInput) -> Result<(), String
     .map_err(|e| format!("subagent_run_save join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_run_list(
     input: SubagentRunListInput,
 ) -> Result<Vec<SubagentRunRecord>, String> {
@@ -1297,7 +1293,6 @@ pub async fn subagent_run_list(
     .map_err(|e| format!("subagent_run_list join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_run_load(
     input: SubagentRunLoadInput,
 ) -> Result<Option<SubagentRunStateRecord>, String> {
@@ -1309,7 +1304,6 @@ pub async fn subagent_run_load(
     .map_err(|e| format!("subagent_run_load join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_run_prune(
     input: SubagentRunPruneInput,
 ) -> Result<SubagentPruneResult, String> {
@@ -1318,7 +1312,6 @@ pub async fn subagent_run_prune(
         .map_err(|e| format!("subagent_run_prune join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_message_append(
     input: SubagentMessageAppendInput,
 ) -> Result<SubagentMessageRecord, String> {
@@ -1330,7 +1323,6 @@ pub async fn subagent_message_append(
     .map_err(|e| format!("subagent_message_append join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_message_list(
     input: SubagentMessageListInput,
 ) -> Result<Vec<SubagentMessageRecord>, String> {

@@ -14,11 +14,11 @@
 //! - [`shell`]：本地 shell 解析、PTY 环境与进程清理
 //! - [`util`]：小型辅助函数
 
+use agent_core::events::EventBus;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
-use agent_core::events::EventBus;
 
 mod events;
 mod output;

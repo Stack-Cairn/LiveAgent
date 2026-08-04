@@ -13,22 +13,19 @@ use crate::runtime::terminal::{
     TerminalSshExecResponse, TerminalSshLatencyResponse, TerminalStreamSnapshotResponse,
 };
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_shell_options() -> TerminalShellOptionsResponse {
     runtime_terminal_shell_options()
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_list(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     project_path_key: Option<String>,
 ) -> TerminalListResponse {
     registry.list(project_path_key)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_create(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     cwd: String,
     project_path_key: Option<String>,
     shell: Option<String>,
@@ -39,9 +36,8 @@ pub fn terminal_create(
     registry.create(cwd, project_path_key, shell, title, cols, rows)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_create_ssh(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     cwd: String,
     project_path_key: Option<String>,
     ssh_host_id: String,
@@ -51,7 +47,6 @@ pub async fn terminal_create_ssh(
     sftp_enabled: Option<bool>,
 ) -> Result<TerminalSshCreateResponse, String> {
     registry
-        .inner()
         .clone()
         .create_ssh(
             cwd,
@@ -65,48 +60,42 @@ pub async fn terminal_create_ssh(
         .await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_answer_ssh_prompt(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     prompt_id: String,
     prompt_answer: Option<String>,
     trust_host_key: Option<bool>,
 ) -> Result<TerminalSshCreateResponse, String> {
     registry
-        .inner()
         .clone()
         .answer_ssh_prompt(prompt_id, prompt_answer, trust_host_key.unwrap_or(false))
         .await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_cancel_ssh_prompt(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     prompt_id: String,
 ) -> Result<(), String> {
     registry.cancel_ssh_prompt(prompt_id)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_ssh_reconnect(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: String,
 ) -> Result<TerminalSessionRecord, String> {
-    registry.inner().clone().ssh_reconnect(session_id).await
+    registry.clone().ssh_reconnect(session_id).await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_ssh_latency(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: String,
 ) -> Result<TerminalSshLatencyResponse, String> {
     registry.ssh_latency(session_id).await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_ssh_exec(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
-    run_registry: State<'_, Arc<ShellRunRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
+    run_registry: &Arc<ShellRunRegistry>,
     session_id: String,
     command: String,
     cwd: Option<String>,
@@ -122,7 +111,6 @@ pub async fn terminal_ssh_exec(
         .map(|id| run_registry.register(id));
     let registered_token = cancel_token.clone();
     let result = registry
-        .inner()
         .clone()
         .ssh_exec(
             session_id,
@@ -139,9 +127,8 @@ pub async fn terminal_ssh_exec(
     result
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_ssh_local_forward_start(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: String,
     project_path_key: Option<String>,
     remote_host: String,
@@ -149,7 +136,6 @@ pub async fn terminal_ssh_local_forward_start(
     local_port: Option<u32>,
 ) -> Result<SshLocalForwardActionResponse, String> {
     registry
-        .inner()
         .clone()
         .ssh_local_forward_start(
             session_id,
@@ -161,18 +147,16 @@ pub async fn terminal_ssh_local_forward_start(
         .await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_ssh_local_forward_list(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: Option<String>,
     project_path_key: Option<String>,
 ) -> Result<SshLocalForwardListResponse, String> {
     registry.ssh_local_forward_list(session_id, project_path_key)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_ssh_local_forward_stop(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     forward_id: String,
     session_id: Option<String>,
 ) -> Result<SshLocalForwardActionResponse, String> {
@@ -181,7 +165,6 @@ pub async fn terminal_ssh_local_forward_stop(
         .await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn terminal_ssh_local_forward_check_port(local_port: u32) -> Result<bool, String> {
     let port = normalize_ssh_local_forward_local_port(Some(local_port))?;
     if port == 0 {
@@ -191,52 +174,46 @@ pub async fn terminal_ssh_local_forward_check_port(local_port: u32) -> Result<bo
     Ok(ssh_local_forward_local_port_available(port).await)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn ssh_terminal_tabs_list(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     project_path_key: String,
 ) -> Result<SshTerminalTabsSnapshot, String> {
     registry.ssh_terminal_tabs_list(project_path_key)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn ssh_terminal_tab_open(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: String,
     kind: String,
 ) -> Result<SshTerminalTabsSnapshot, String> {
     registry.ssh_terminal_tab_open(session_id, kind)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn ssh_terminal_tab_close(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     tab_id: String,
 ) -> Result<SshTerminalTabsSnapshot, String> {
     registry.ssh_terminal_tab_close(tab_id)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_stream_attach(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: String,
     max_bytes: Option<usize>,
 ) -> Result<TerminalStreamSnapshotResponse, String> {
     registry.stream_attach(session_id, max_bytes)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_stream_input(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: String,
     bytes: Vec<u8>,
 ) -> Result<(), String> {
     registry.input_bytes(session_id, bytes)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_stream_resize(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: String,
     cols: u16,
     rows: u16,
@@ -244,19 +221,17 @@ pub fn terminal_stream_resize(
     registry.stream_resize(session_id, cols, rows)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_rename(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     session_id: String,
     title: String,
 ) -> Result<TerminalSessionRecord, String> {
     registry.rename(session_id, title)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_close(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
-    sftp_registry: State<'_, Arc<SftpSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
+    sftp_registry: &Arc<SftpSessionRegistry>,
     session_id: String,
 ) -> Result<TerminalSessionRecord, String> {
     let response = registry.close(session_id)?;
@@ -264,10 +239,9 @@ pub fn terminal_close(
     Ok(response)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_close_project(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
-    sftp_registry: State<'_, Arc<SftpSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
+    sftp_registry: &Arc<SftpSessionRegistry>,
     project_path_key: String,
 ) -> Result<TerminalListResponse, String> {
     let response = registry.close_project(project_path_key)?;
@@ -277,9 +251,8 @@ pub fn terminal_close_project(
     Ok(response)
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn terminal_read_tail(
-    registry: State<'_, Arc<TerminalSessionRegistry>>,
+    registry: &Arc<TerminalSessionRegistry>,
     project_path_key: String,
     session_id: Option<String>,
     max_bytes: Option<usize>,

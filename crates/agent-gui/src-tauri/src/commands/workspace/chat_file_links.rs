@@ -624,7 +624,6 @@ pub(crate) async fn open_chat_file_link_for_conversation(
     })?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn open_chat_file_link(
     conversation_id: String,
     workdir: String,

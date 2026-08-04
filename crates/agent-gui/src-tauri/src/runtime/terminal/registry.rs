@@ -5,10 +5,10 @@ use std::sync::atomic::Ordering;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
-use agent_core::events::EventBus;
 use crate::runtime::project_path::{
     project_path_key as normalize_project_path_key, project_path_keys_equal,
 };
+use agent_core::events::EventBus;
 
 use super::*;
 

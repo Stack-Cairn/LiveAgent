@@ -1048,7 +1048,6 @@ pub(crate) fn cleanup_worktree_targets_blocking(
     }
 }
 
-#[tauri::command]
 pub async fn subagent_worktree_create(
     input: SubagentWorktreeCreateInput,
 ) -> Result<SubagentWorktreeCreateResponse, String> {
@@ -1138,7 +1137,6 @@ pub async fn subagent_worktree_create(
     .map_err(|err| format!("subagent_worktree_create join failed: {err}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_worktree_status(
     input: SubagentWorktreeStatusInput,
 ) -> Result<SubagentWorktreeStatusResponse, String> {
@@ -1149,7 +1147,6 @@ pub async fn subagent_worktree_status(
     .map_err(|err| format!("subagent_worktree_status join failed: {err}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_worktree_apply(
     input: SubagentWorktreeApplyInput,
 ) -> Result<SubagentWorktreeApplyResponse, String> {
@@ -1160,7 +1157,6 @@ pub async fn subagent_worktree_apply(
     .map_err(|err| format!("subagent_worktree_apply join failed: {err}"))?
 }
 
-#[tauri::command]
 pub async fn subagent_worktree_cleanup(
     input: SubagentWorktreeCleanupInput,
 ) -> Result<SubagentWorktreeCleanupItem, String> {

@@ -1387,11 +1387,9 @@ pub async fn system_pick_readable_files(
     workdir: String,
     max_files: Option<usize>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tokio::task::spawn_blocking(move || {
-        system_pick_readable_files_sync(workdir, max_files)
-    })
-    .await
-    .map_err(|e| format!("system_pick_readable_files join failed: {e}"))?
+    tokio::task::spawn_blocking(move || system_pick_readable_files_sync(workdir, max_files))
+        .await
+        .map_err(|e| format!("system_pick_readable_files join failed: {e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -1482,11 +1480,9 @@ pub async fn system_ensure_builtin_skills(
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn system_manage_skill(payload: Value) -> Result<SystemManageSkillResponse, String> {
-    tokio::task::spawn_blocking(move || {
-        crate::services::skills::system_manage_skill_sync(payload)
-    })
-    .await
-    .map_err(|e| format!("system_manage_skill join failed: {e}"))?
+    tokio::task::spawn_blocking(move || crate::services::skills::system_manage_skill_sync(payload))
+        .await
+        .map_err(|e| format!("system_manage_skill join failed: {e}"))?
 }
 
 #[tauri::command]
@@ -1514,11 +1510,9 @@ pub async fn system_append_debug_jsonl(
     conversation_id: String,
     entry: Value,
 ) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || {
-        system_append_debug_jsonl_sync(conversation_id, entry)
-    })
-    .await
-    .map_err(|e| format!("system_append_debug_jsonl join 失败：{e}"))?
+    tokio::task::spawn_blocking(move || system_append_debug_jsonl_sync(conversation_id, entry))
+        .await
+        .map_err(|e| format!("system_append_debug_jsonl join 失败：{e}"))?
 }
 
 // 桌面端读系统剪贴板的唯一通道：WKWebView 的 navigator.clipboard.readText()

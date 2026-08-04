@@ -222,12 +222,10 @@ pub(crate) async fn chat_history_branch_inner(
     .map_err(|e| format!("chat_history_branch join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_branch(
     id: String,
     base_message_ref: ChatHistoryMessageRef,
-    events: tauri::State<'_, Arc<EventBus>>,
-) -> Result<ChatHistorySummary, String> {
+    events: &Arc<EventBus>) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_branch_inner(id, base_message_ref).await?;
     events.emit(HISTORY_UPSERT_EVENT, &summary);
     Ok(summary)

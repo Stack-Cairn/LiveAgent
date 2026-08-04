@@ -19,7 +19,6 @@ pub struct CcsProvidersResponse {
     pub providers: Vec<CcsProviderImportItem>,
 }
 
-#[tauri::command]
 pub async fn settings_list_ccswitch_providers() -> Result<CcsProvidersResponse, String> {
     tokio::task::spawn_blocking(|| {
         let candidates = ccswitch_db_candidates();

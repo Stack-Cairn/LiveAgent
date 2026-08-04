@@ -79,7 +79,6 @@ struct CherryImportScan {
     providers: Vec<CherryProviderImportItem>,
 }
 
-#[tauri::command]
 pub async fn settings_list_cherry_studio_providers() -> Result<CherryProvidersResponse, String> {
     tokio::task::spawn_blocking(|| {
         cherry_scan_candidates(&cherry_user_data_candidates(), false)
@@ -88,10 +87,8 @@ pub async fn settings_list_cherry_studio_providers() -> Result<CherryProvidersRe
     .map_err(|error| format!("settings_list_cherry_studio_providers join 失败：{error}"))?
 }
 
-#[tauri::command]
 pub async fn settings_list_cherry_studio_providers_from_path(
-    data_path: String,
-) -> Result<CherryProvidersResponse, String> {
+    data_path: String) -> Result<CherryProvidersResponse, String> {
     tokio::task::spawn_blocking(move || {
         let selected = PathBuf::from(data_path.trim());
         if selected.as_os_str().is_empty() {
