@@ -13,6 +13,30 @@ env:
   NODE_VERSION: 22.19.0
 
 jobs:
+  backend:
+    name: Backend Rust
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # routes_gen.rs 是脚本生成的：wrapper 变了没重新生成 → 这里失败。
+      - name: Check generated routes are in sync
+        run: make check-routes
+
+      - name: Test agent-backend (routes contract, tunnel e2e)
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo test -p agent-backend
+
   gateway:
     name: Gateway
     runs-on: ubuntu-latest

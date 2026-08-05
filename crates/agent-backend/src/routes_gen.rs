@@ -6,10 +6,13 @@
 use axum::extract::State;
 use axum::response::Response;
 use axum::routing::post;
-use axum::{Json, Router};
+use axum::Router;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
+// 不用 axum::Json：它的提取失败是 422/415 纯文本，违反「所有失败都是
+// 400 + {error}」的契约（routes.rs）。crate::json::Json 把它们折进同一形状。
+use crate::json::Json;
 use crate::routes::respond;
 use crate::state::AppState;
 

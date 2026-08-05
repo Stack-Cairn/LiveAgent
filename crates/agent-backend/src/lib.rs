@@ -20,6 +20,7 @@
 //! 流式端点是唯一例外，走 WS（`/api/events`）。
 
 pub mod auth;
+pub mod json;
 pub mod routes;
 pub mod routes_gen;
 pub mod ssrf;

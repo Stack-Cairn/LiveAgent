@@ -64,10 +64,20 @@ impl GatewayController {
                 Ok(())
             }
             // 隧道不再经中继（P2-30）：后端就在工作机上，自己开端口反代。
-            // 旧 gateway 若仍发这三类帧，忽略即可——阶段 6 会连协议一起删。
+            // State/Frame 是旧 gateway 推来的状态/数据帧，没有应答语义，忽略；
+            // 阶段 6 会连协议一起删。
             Some(proto::gateway_envelope::Payload::TunnelState(_))
-            | Some(proto::gateway_envelope::Payload::TunnelMutation(_))
             | Some(proto::gateway_envelope::Payload::TunnelFrame(_)) => Ok(()),
+            // Mutation 是网关 Web UI 的请求帧：静默吞掉会让远端一直挂到超时。
+            // 在协议删掉之前，明确回「不再支持」。
+            Some(proto::gateway_envelope::Payload::TunnelMutation(_)) => {
+                self.send_error_response(
+                    request_id,
+                    410,
+                    "tunnels are no longer relayed through the gateway; manage them from the desktop app".to_string(),
+                )
+                .await
+            }
             Some(proto::gateway_envelope::Payload::WorkspaceWatch(request)) => {
                 self.workspace_watch
                     .set_desired(WatchSource::Gateway, request.workdirs);

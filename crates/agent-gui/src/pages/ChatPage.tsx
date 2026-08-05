@@ -2096,7 +2096,9 @@ export function ChatPage(props: ChatPageProps) {
         tunnelClient={isAgentMode ? tauriTunnelClient : null}
         tunnelEnabled={tunnelEnabled}
         tunnelDisabledMessage={tunnelDisabledMessage}
-        tunnelPublicBaseUrl={settings.remote.gatewayUrl.trim()}
+        // 一隧道一端口（P2-30）：publicUrl 指向本机端口，网关地址与它无关，
+        // 传了只会把链接改写到没有监听的主机上。
+        tunnelPublicBaseUrl=""
         workspaceActivityClient={tauriWorkspaceActivityClient}
         onWidthChange={handleRightDockWidthChange}
         onProjectStateChange={handleRightDockProjectStateChange}

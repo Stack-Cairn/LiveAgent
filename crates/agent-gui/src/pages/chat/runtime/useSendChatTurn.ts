@@ -1425,7 +1425,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
               setSettings((prev) => applyMcpOpsToAppSettings(prev, ops));
             },
             remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
-            tunnelPublicBaseUrl: settings.remote.gatewayUrl.trim(),
+            // 一隧道一端口（P2-30）：publicUrl 指向本机端口，网关地址与它无关，
+            // 传了只会把链接改写到没有监听的主机上。
+            tunnelPublicBaseUrl: "",
             sshHosts: settings.ssh.hosts,
             associatedSshHostIds: effectiveAssociatedSshHostIds,
             sshManagerRemoteAllowed:

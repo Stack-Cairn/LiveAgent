@@ -73,6 +73,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(error) = state.tunnels.initialize().await {
         eprintln!("恢复隧道失败：{error}");
     }
+    // 周期清扫过期隧道：TTL 的强制执行就在这里，不起它 TTL 只是显示值。
+    state.tunnels.spawn_sweeper();
     let app = build_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
 

@@ -196,10 +196,13 @@ function render() {
   out.push("use axum::extract::State;");
   out.push("use axum::response::Response;");
   out.push("use axum::routing::post;");
-  out.push("use axum::{Json, Router};");
+  out.push("use axum::Router;");
   out.push("use serde::Deserialize;");
   out.push("use serde_json::Value;");
   out.push("use std::collections::HashMap;");
+  out.push("// 不用 axum::Json：它的提取失败是 422/415 纯文本，违反「所有失败都是");
+  out.push("// 400 + {error}」的契约（routes.rs）。crate::json::Json 把它们折进同一形状。");
+  out.push("use crate::json::Json;");
   out.push("use crate::routes::respond;");
   out.push("use crate::state::AppState;");
   out.push("");

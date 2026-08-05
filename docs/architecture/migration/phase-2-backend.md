@@ -330,6 +330,12 @@ let _guard = runtime.enter();
 `settings_save_remote` 是最后一处 `GatewayController` 耦合,已按同款模式切断:
 发 `settings:remote-saved`,sink 接住去调 `apply_config`。
 
+**桌面壳与 agent-backend 不能同机并跑。** 两者打开同一个 `~/.liveagent` 库:
+cron 任务会被两个进程各触发一次,同一条隧道 spec 会被两个数据面各绑一个端口。
+managed-process journal 有 owner_pid 互斥,automation 和 tunnel 没有等价机制——
+当前架构假设同机只跑一个后端实例(桌面壳**或** agent-backend)。阶段 3 桌面壳
+改为连接 agent-backend 时,这个假设变成结构性保证;在那之前它只是运行约定。
+
 ## 验证
 
 ```bash

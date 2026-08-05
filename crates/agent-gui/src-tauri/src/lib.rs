@@ -822,6 +822,8 @@ pub fn run() {
                         if let Err(error) = tunnels.initialize().await {
                             eprintln!("failed to restore tunnels: {error}");
                         }
+                        // 周期清扫过期隧道：TTL 的强制执行就在这里。
+                        tunnels.spawn_sweeper();
                     }
                 });
 

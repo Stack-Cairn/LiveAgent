@@ -34,7 +34,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Router;
 use futures_util::{SinkExt, StreamExt};
 use subtle::ConstantTimeEq;
-use tokio::sync::oneshot;
+use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
@@ -65,18 +65,10 @@ fn is_hop_by_hop(name: &str, request: bool) -> bool {
     }
 }
 
-/// 单条隧道的运行句柄。drop 掉 `shutdown` 即停掉监听。
+/// 单条隧道的运行句柄。drop 掉 sender 即通知监听和所有在途 WebSocket 桥退出——
+/// 「关隧道」必须切断已建立的会话,不然撤销只是不再接新连接。
 struct RunningTunnel {
-    shutdown: Option<oneshot::Sender<()>>,
-}
-
-impl Drop for RunningTunnel {
-    fn drop(&mut self) {
-        if let Some(shutdown) = self.shutdown.take() {
-            // 接收端已消失说明 server 自己退了，忽略即可。
-            let _ = shutdown.send(());
-        }
-    }
+    _shutdown: watch::Sender<()>,
 }
 
 /// 所有在跑的隧道监听。
@@ -119,10 +111,12 @@ impl TunnelDataPlaneTrait for TunnelDataPlane {
             .map_err(|e| format!("隧道 {} 读取端口失败：{e}", binding.id))?
             .port();
 
+        let (shutdown_tx, shutdown_rx) = watch::channel(());
         let state = Arc::new(TunnelProxyState {
             id: binding.id.clone(),
             target: binding.target_url.clone(),
             access_token: binding.access_token.clone(),
+            shutdown: shutdown_rx,
             client: reqwest::Client::builder()
                 // 目标恒为本机/内网：显式忽略环境代理，否则 OS 级 HTTP_PROXY
                 // 会劫持本地转发，隧道直接不可用。
@@ -132,7 +126,7 @@ impl TunnelDataPlaneTrait for TunnelDataPlane {
                 .map_err(|e| format!("创建隧道 HTTP 客户端失败：{e}"))?,
         });
 
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
+        let mut shutdown = state.shutdown.clone();
         let app = Router::new()
             .fallback(handle_tunnel_request)
             .with_state(state);
@@ -145,8 +139,9 @@ impl TunnelDataPlaneTrait for TunnelDataPlane {
                     return;
                 }
             };
+            // sender 被 drop（stop / 重建）→ changed() 出错 → 触发关闭。
             let server = axum::serve(listener, app).with_graceful_shutdown(async move {
-                let _ = shutdown_rx.await;
+                let _ = shutdown.changed().await;
             });
             if let Err(error) = server.await {
                 eprintln!("隧道 {id} 的监听意外退出：{error}");
@@ -158,16 +153,14 @@ impl TunnelDataPlaneTrait for TunnelDataPlane {
                 running.insert(
                     binding.id,
                     RunningTunnel {
-                        shutdown: Some(shutdown_tx),
+                        _shutdown: shutdown_tx,
                     },
                 );
                 Ok(port)
             }
-            // 拿不到锁就把刚起的服务关掉，不能留一个没人管得着的监听。
-            Err(_) => {
-                let _ = shutdown_tx.send(());
-                Err("tunnel data plane lock poisoned".to_string())
-            }
+            // 拿不到锁直接返回错误：shutdown_tx 随之 drop，刚起的服务自行关闭，
+            // 不会留下没人管得着的监听。
+            Err(_) => Err("tunnel data plane lock poisoned".to_string()),
         }
     }
 
@@ -182,6 +175,8 @@ struct TunnelProxyState {
     id: String,
     target: String,
     access_token: String,
+    /// sender 一 drop（隧道被关/重建）就触发,WS 桥靠它在关隧道时立刻断开。
+    shutdown: watch::Receiver<()>,
     client: reqwest::Client,
 }
 
@@ -504,7 +499,9 @@ fn proxy_websocket(
     }
 
     upgrade.on_upgrade(move |socket| async move {
-        if let Err(error) = bridge_websocket(socket, url.clone(), headers, &state.id).await {
+        let shutdown = state.shutdown.clone();
+        if let Err(error) = bridge_websocket(socket, url.clone(), headers, &state.id, shutdown).await
+        {
             eprintln!("隧道 {} 的 WebSocket 转发失败：{error}", state.id);
         }
     })
@@ -516,6 +513,7 @@ async fn bridge_websocket(
     url: reqwest::Url,
     headers: HeaderMap,
     tunnel_id: &str,
+    mut shutdown: watch::Receiver<()>,
 ) -> Result<(), String> {
     let mut request = url
         .as_str()
@@ -557,6 +555,12 @@ async fn bridge_websocket(
 
     loop {
         tokio::select! {
+            // 隧道被关闭/重建：立刻切断两侧，「撤销」必须对已打开的会话生效。
+            _ = shutdown.changed() => {
+                let _ = down_tx.send(AxumMessage::Close(None)).await;
+                let _ = up_tx.send(WsMessage::Close(None)).await;
+                break;
+            }
             incoming = down_rx.next() => {
                 let Some(message) = incoming else { break };
                 let message = message.map_err(|e| format!("读取浏览器帧失败：{e}"))?;

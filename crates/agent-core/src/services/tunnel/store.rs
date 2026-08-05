@@ -35,6 +35,9 @@ const TUNNEL_SETTINGS_TABLE: &str = "tunnel_settings";
 /// 两次自动探活之间的最小间隔。显式 check 绕过它。
 const PROBE_THROTTLE: Duration = Duration::from_secs(15);
 
+/// 周期清扫的间隔。过期隧道的监听最多再多活这么久。
+const SWEEP_INTERVAL: Duration = Duration::from_secs(30);
+
 /// 访问 token 的字节数。32 字节 base64url ≈ 43 字符,穷举不可行。
 const ACCESS_TOKEN_BYTES: usize = 32;
 
@@ -76,6 +79,10 @@ pub struct TunnelStore {
     events: Arc<EventBus>,
     data_plane: Arc<dyn TunnelDataPlane>,
     state: Mutex<State>,
+    /// 串行化 create/update/close/sweep。这些操作在「查额度 → 起监听 → 落库 →
+    /// 写内存」之间会放开 `state` 锁,并发跑会越过 MAX_TUNNELS 或交错出
+    /// 内存/DB/数据面三方不一致。变更是低频操作,串行是最笨也最清晰的解法。
+    mutate: tokio::sync::Mutex<()>,
 }
 
 impl TunnelStore {
@@ -84,7 +91,23 @@ impl TunnelStore {
             events,
             data_plane,
             state: Mutex::new(State::default()),
+            mutate: tokio::sync::Mutex::new(()),
         }
+    }
+
+    /// 起周期清扫任务。没有它,TTL 只是个显示值:快照会隐藏过期隧道,
+    /// 但监听端口和 token 都还活着,而且面板上连关闭按钮都没了。
+    pub fn spawn_sweeper(self: &Arc<Self>) {
+        let store = Arc::clone(self);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(SWEEP_INTERVAL);
+            loop {
+                ticker.tick().await;
+                if let Err(error) = store.sweep().await {
+                    eprintln!("清扫过期隧道失败：{error}");
+                }
+            }
+        });
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, State>, String> {
@@ -148,10 +171,13 @@ impl TunnelStore {
 
     /// 建隧道。
     pub async fn create(&self, input: TunnelCreateInput) -> Result<String, TunnelError> {
+        let _guard = self.mutate.lock().await;
         let now = now_unix_seconds();
+        // 过期清理归 spawn_sweeper 的周期任务管——它走完整关闭路径（停监听 +
+        // 删库）。这里只在内存里清会留下没人管得着的监听。额度检查自己会
+        // 过滤过期项，不依赖清理先跑。
         let spec = {
-            let mut state = self.lock().map_err(TunnelError::internal)?;
-            sweep_expired(&mut state, now);
+            let state = self.lock().map_err(TunnelError::internal)?;
             prepare_create(&state, input, now)?
         };
 
@@ -184,6 +210,7 @@ impl TunnelStore {
 
     /// 改隧道。目标变了要重建监听,所以重新 start(数据面负责先停旧的)。
     pub async fn update(&self, input: TunnelUpdateInput) -> Result<String, TunnelError> {
+        let _guard = self.mutate.lock().await;
         let (spec, previous_token) = {
             let state = self.lock().map_err(TunnelError::internal)?;
             let spec = prepare_update(&state, input)?;
@@ -196,19 +223,31 @@ impl TunnelStore {
         };
 
         // token 保持不变：用户可能已经把链接发出去了，改个目标不该让它失效。
-        let port = self
-            .data_plane
-            .start(TunnelBinding {
-                id: spec.id.clone(),
-                target_url: spec.target_url.clone(),
-                access_token: previous_token.clone(),
-            })
-            .map_err(|error| TunnelError::new("port_unavailable", error))?;
+        let port = match self.data_plane.start(TunnelBinding {
+            id: spec.id.clone(),
+            target_url: spec.target_url.clone(),
+            access_token: previous_token.clone(),
+        }) {
+            Ok(port) => port,
+            // start 内部已停掉旧监听，失败后旧端口不再服务。把 runtime 摘掉
+            // 再发快照——面板上它显示为不可用，而不是假装还在跑。
+            Err(error) => {
+                if let Ok(mut state) = self.lock() {
+                    state.runtimes.remove(&spec.id);
+                }
+                let _ = self.publish();
+                return Err(TunnelError::new("port_unavailable", error));
+            }
+        };
 
         if let Err(error) = persist_spec(spec.clone()).await {
             self.data_plane.stop(&spec.id);
-            let mut state = self.lock().map_err(TunnelError::internal)?;
-            remove_tunnel(&mut state, &spec.id);
+            // 旧 DB 行也要删：只清内存的话，这条隧道会在重启后带着旧目标复活。
+            let _ = delete_specs(vec![spec.id.clone()]).await;
+            if let Ok(mut state) = self.lock() {
+                remove_tunnel(&mut state, &spec.id);
+            }
+            let _ = self.publish();
             return Err(TunnelError::internal(error));
         }
         {
@@ -228,6 +267,7 @@ impl TunnelStore {
 
     /// 关隧道。
     pub async fn close(&self, tunnel_id: String) -> Result<String, TunnelError> {
+        let _guard = self.mutate.lock().await;
         let tunnel_id = tunnel_id.trim().to_string();
         if tunnel_id.is_empty() {
             return Err(TunnelError::not_found());
@@ -312,6 +352,7 @@ impl TunnelStore {
 
     /// 清掉已过期的隧道,顺便停掉它们的监听。
     pub async fn sweep(&self) -> Result<Vec<String>, String> {
+        let _guard = self.mutate.lock().await;
         let expired = {
             let mut state = self.lock()?;
             sweep_expired(&mut state, now_unix_seconds())

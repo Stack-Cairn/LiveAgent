@@ -238,4 +238,44 @@ async fn auth_and_error_semantics() {
         .expect("构造请求失败");
     let resp = app.clone().oneshot(req).await.expect("请求失败");
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // 合法 JSON 但缺必填字段 → 也必须是 400 + {"error": ...}。
+    // axum 默认给 422 纯文本，会把按契约解析错误体的客户端炸掉（crate::json::Json 的存在理由）。
+    let assert_error_shape = |status: StatusCode, bytes: &[u8], case: &str| {
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{case}: 状态必须是 400");
+        let value: serde_json::Value =
+            serde_json::from_slice(bytes).unwrap_or_else(|e| panic!("{case}: 错误体不是 JSON：{e}"));
+        assert!(
+            value.get("error").is_some(),
+            "{case}: 错误体必须带 error 字段：{value}"
+        );
+    };
+
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/chat_history_list")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"page":1}"#))
+        .expect("构造请求失败");
+    let resp = app.clone().oneshot(req).await.expect("请求失败");
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .expect("读响应体失败");
+    assert_error_shape(status, &bytes, "缺必填字段");
+
+    // 没带 Content-Type → 同样 400 + {"error": ...}（axum 默认是 415 纯文本）。
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/api/chat_history_list")
+        .header(header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+        .body(Body::from(r#"{"page":1,"pageSize":5}"#))
+        .expect("构造请求失败");
+    let resp = app.clone().oneshot(req).await.expect("请求失败");
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 20)
+        .await
+        .expect("读响应体失败");
+    assert_error_shape(status, &bytes, "缺 Content-Type");
 }
