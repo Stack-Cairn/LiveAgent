@@ -10,6 +10,7 @@ app_update_check
 app_update_install
 app_window_pinned
 fs_open_workspace_path
+get_backend_endpoint
 git_open_system_file_location
 open_chat_file_link
 system_clipboard_read_text

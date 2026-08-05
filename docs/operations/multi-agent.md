@@ -1,8 +1,17 @@
 # 多 Agent 与凭证管理
 
+> ⚠️ **本文已废弃，仅供查阅历史。**
+>
+> 它描述的是 Go Gateway 的多 Agent 凭证模型，而 Gateway 已随阶段 6 整个删除。
+> 新架构里「一个前端只连一个后端」（决策 12），`agent_id`、每 Agent 凭证签发与
+> 轮换、`agent_list` 目录这些概念都不存在了；认证退化成一个密码当 Bearer token。
+> 当前的部署方式见 [deployment.md](deployment.md)，协议见
+> [../architecture/protocols.md](../architecture/protocols.md)。
+>
+> 下面的内容对应旧 gateway 镜像的历史 tag——那些 tag 按决策 15 仍可拉取。
+
 网关支持多台桌面 Agent 同时在线（个人多设备到上百台规模），浏览器可分别
-控制任意一台。本文是部署与凭证运维手册；协议细节见
-[protocols.md](../architecture/protocols.md)。
+控制任意一台。本文是部署与凭证运维手册。
 
 ## 部署清单
 

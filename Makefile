@@ -29,7 +29,7 @@ RELEASE_TAG ?=
 .PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
 .PHONY: backend-docker-build backend-docker-run backend-docker-smoke
 .PHONY: clean update-model-catalog check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
-.PHONY: update-routes check-routes
+.PHONY: update-routes check-routes check-command-classes
 
 all: build
 
@@ -126,9 +126,9 @@ backend-docker-smoke: backend-docker-build
 	docker rm -f "$$name" >/dev/null 2>&1 || true; \
 	docker run -d --name "$$name" -p 18443:8443 $(BACKEND_DOCKER_IMAGE) >/dev/null; \
 	trap 'docker rm -f "$$name" >/dev/null 2>&1 || true' EXIT; \
-	for _ in $$(seq 1 30); do \
-		if curl -fsS --insecure https://127.0.0.1:18443/healthz 2>/dev/null | grep -q 'ok'; then \
-			echo "Backend Docker smoke test passed: https://127.0.0.1:18443/healthz"; \
+	for _ in $$(seq 1 60); do \
+		if curl -fsS http://127.0.0.1:18443/healthz 2>/dev/null | grep -q 'ok'; then \
+			echo "Backend Docker smoke test passed: http://127.0.0.1:18443/healthz"; \
 			exit 0; \
 		fi; \
 		sleep 1; \
@@ -150,6 +150,10 @@ update-routes:
 # 校验 routes_gen.rs 与 wrapper 层一致（CI 用）；漂移即失败。
 check-routes:
 	node scripts/generate-routes.mjs --check
+
+# 校验每条已注册的 Tauri command 都在 docs/architecture/command-classes/ 里有归类（CI 用）。
+check-command-classes:
+	@bash scripts/check-command-classes.sh
 
 check-rust-target-%:
 	@rustup target list --installed | grep -qx "$*" || (echo "Rust target $* is not installed. Run: rustup target add $*" && exit 1)
@@ -215,4 +219,5 @@ help:
 	@printf "  %-34s %s\n" "make update-model-catalog" "刷新 models.dev 模型目录快照"
 	@printf "  %-34s %s\n" "make update-routes" "从 tauri_commands 重新生成 agent-backend 路由层"
 	@printf "  %-34s %s\n" "make check-routes" "校验路由层与 wrapper 一致（CI 门禁）"
+	@printf "  %-34s %s\n" "make check-command-classes" "校验 Tauri command 全部已归类（CI 门禁）"
 	@printf "  %-34s %s\n" "make help" "查看可用命令"

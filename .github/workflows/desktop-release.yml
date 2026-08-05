@@ -77,9 +77,6 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install protobuf compiler
-        run: brew install protobuf
-
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates/agent-gui/src-tauri
@@ -181,11 +178,6 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Install protobuf compiler
-        run: |
-          choco install protoc -y --no-progress
-          "$env:ChocolateyInstall\lib\protoc\tools\bin" | Out-File -Append $env:GITHUB_PATH
-
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: crates/agent-gui/src-tauri
@@ -273,7 +265,6 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             patchelf \
-            protobuf-compiler \
             rpm \
             wget
 

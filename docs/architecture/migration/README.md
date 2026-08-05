@@ -80,7 +80,7 @@ Go 的选型没有任何文档依据:它出现在 root commit `487af778`(2026-05
 | 3 · 抽 Node 引擎 | [phase-3-engine.md](phase-3-engine.md) | 🔴 被阻塞(P3-01 stub + 7 关键问题) |
 | 4 · 前端网络化 | [phase-4-frontend.md](phase-4-frontend.md) | 🟨 进行中(删除清单已落地,验收未跑) |
 | 5 · 前端合并 | [phase-5-merge.md](phase-5-merge.md) | 🟨 基本完成(合并与删除已落地,冒烟未跑) |
-| 6 · 删除 Go 与切换发布 | [phase-6-cutover.md](phase-6-cutover.md) | ⬜ 未开始 |
+| 6 · 删除 Go 与切换发布 | [phase-6-cutover.md](phase-6-cutover.md) | 🟡 进行中(文档重写已完成) |
 
 每份文档配一个同名 `.csv` 作为 todo-list(见下方「CSV 约定」)。
 

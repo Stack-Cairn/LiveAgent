@@ -85,7 +85,7 @@
 | apply_policy | `none`（默认，不回灌）/`auto`（自动 apply patch）/`explicit`（仅当所有变更文件命中 `allowed_output_paths` 才 apply；路径必须解析进 workspace）。`retain_worktree=true` 保留可安全清理的 worktree 供复查。 |
 | 原子校验 | 校验失败时不启动任何 agent，返回结构化错误并附上当前 roster 与已启用模板列表；`AgentPromptTemplate.enabled` 生效，`template` 只能引用已启用模板（按 id 或 name 解析）。 |
 | SendMessage | `to=parent`（父私有）/`to=*`（共享广播）/`to=<agent id>`（直达），收件人按 roster 校验，未知收件人直接拒绝；channel 为 direct/shared/decision/question，消息在下一轮 turn 边界投递。 |
-| 持久化 | run 在每个 turn 边界通过 `subagent_run_save` 增量落盘，中断的 run 可从最后完成的 round 恢复；run status 含 `cancelled`。identity/run/message/worktree 各有 Tauri 命令族（见 architecture/gui.md）。 |
+| 持久化 | run 在每个 turn 边界通过 `subagent_run_save` 增量落盘，中断的 run 可从最后完成的 round 恢复；run status 含 `cancelled`。identity/run/message/worktree 各有后端命令族（见 architecture/protocols.md）。 |
 | UI 协议 | details kind 为 `subagent_batch`/`subagent_card`/`subagent_message`；per-agent 卡片以 `subagent_card: true` 标记的合成 tool call 渲染，被拒绝的 Agent 调用也会可见渲染；`lib/subagents/protocol.ts` 在 GUI/WebUI 间逐字节镜像（scripts/mirror-manifest.json）。 |
 
 ## 工具改造检查表

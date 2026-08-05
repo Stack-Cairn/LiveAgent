@@ -7,7 +7,7 @@
  *
  * 判据是 /healthz 的响应体——两代刚好不一样，不需要猜：
  *   - v2 后端（agent-backend/src/lib.rs）：text/plain 的 `ok`
- *   - v1 Gateway（agent-gateway internal/handler/health.go）：JSON `{"ok":true}`
+ *   - v1 Gateway（已从本仓库删除，但旧镜像仍在跑）：JSON `{"ok":true}`
  */
 
 import { LEGACY_GATEWAY_MESSAGE } from "../../lib/backend/commandRouting";

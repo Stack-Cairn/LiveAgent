@@ -234,5 +234,5 @@ diff /tmp/registered.txt /tmp/classified.txt && echo "分类完整,无遗漏无�
 ## 交叉引用
 
 - 总体方案与 19 项决策:`/Users/realm/.claude/plans/go-gateway-git-go-peaceful-wigderson.md`
-- 当前 Gateway 职责(将废弃):`docs/architecture/gateway.md`
-- 当前整体架构(将重写):`docs/architecture/overview.md`
+- 当前 Gateway 职责(将废弃):Gateway 已随阶段 6 删除,`docs/architecture/gateway.md` 不再存在
+- 当前整体架构(将重写):`docs/architecture/overview.md`(已按三层结构重写)

@@ -16,7 +16,7 @@ body:
       options:
         - Desktop UI (agent-gui / React)
         - Desktop core (Tauri / Rust)
-        - Gateway (agent-gateway / Go)
+        - Backend (agent-backend / Rust)
         - Agent sessions / streaming
         - Tool execution / MCP / Skills
         - Model providers

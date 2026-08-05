@@ -12,7 +12,7 @@ body:
       options:
         - Desktop UI (agent-gui / React)
         - Desktop core (Tauri / Rust)
-        - Gateway (agent-gateway / Go)
+        - Backend (agent-backend / Rust)
         - Agent sessions / streaming
         - Tool execution / MCP / Skills
         - Model providers
@@ -43,7 +43,7 @@ body:
       description: If you plan to implement this yourself, list the modules / directories / files you expect to touch, to help assess complexity.
       placeholder: |
         crates/agent-gui/src/...
-        crates/agent-gateway/internal/...
+        crates/agent-backend/src/...
     validations:
       required: false
   - type: textarea

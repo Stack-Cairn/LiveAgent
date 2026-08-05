@@ -20,7 +20,7 @@ Closes #
 
 <!-- List the affected modules and key files/directories so reviewers can locate the change quickly. -->
 
-- Modules: <!-- e.g. agent-gui / agent-gateway / src-tauri -->
+- Modules: <!-- e.g. agent-gui / agent-backend / src-tauri -->
 - Key paths:
 
 ## Screenshots / preview
@@ -34,7 +34,7 @@ Closes #
 ## Verification
 
 <!-- How you verified this change:
-  - Checks you ran, e.g. cd crates/agent-gateway && go test ./...
+  - Checks you ran, e.g. cargo test --workspace
   - Tests added or updated for behavior changes (or why none were needed).
 -->
 

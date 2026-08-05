@@ -1,97 +1,203 @@
-# CI/CD 与发布
+# 部署与发布
 
-本文档描述当前自动化发布链路：CI 检查、Gateway Docker 镜像、用户自部署 Gateway、桌面端 macOS/Windows Release。
+## 部署形态
 
-## 自动化入口
+只有两种，区别在于**后端跑在哪台机器上**：
 
-| 入口 | Workflow | 动作 |
-|---|---|---|
-| PR / `main` push | `.github/workflows/ci.yml` | 跑 Gateway、WebUI、GUI、Tauri Rust 测试和 proto 一致性检查。 |
-| `v*` tag / 手动指定 tag | `.github/workflows/gateway-docker.yml` | 构建并推送 `vX.Y.Z` 与 `latest` Gateway 镜像。 |
-| `v*` tag / 手动指定 tag | `.github/workflows/desktop-release.yml` | 并行构建 macOS Intel、macOS Apple Silicon、Windows x64 和 Linux x64 桌面包，并上传到 GitHub Release。 |
+| 形态 | 后端 | 前端 | 适用 |
+|---|---|---|---|
+| 桌面端自带 | Tauri 壳在自己进程里起 `agent-backend`，监听 `127.0.0.1:<随机端口>` | 壳内 WebView | 单机使用，装完即用 |
+| 独立后端 | Docker 跑 `agent-backend`，监听 `0.0.0.0:8443` | 浏览器打开同一台机器提供的页面并填地址+密码 | 后端放服务器/家里的机器，从别处访问 |
 
-## Gateway 镜像
+两者**不能同机并跑**——共用同一个 `~/.liveagent` 数据目录。
 
-根目录 `Dockerfile` 是 Gateway 的生产镜像：
+> **NAT 穿透不再是应用的事。** 后端在家、人在公司仍然要打洞，但这现在是**网络
+> 问题**：用 tailscale / frp / cloudflared 任选其一。应用里不再有会合注册代码
+> （旧 Go gateway 那约 1,100 行随阶段 6 一起删除）。这不是功能退化，是把网络问题
+> 还给网络工具——它们做得比我们好，而且用户本来就在用。
+
+## 后端镜像
+
+根目录 `Dockerfile`，三阶段：
 
 | 阶段 | 内容 |
 |---|---|
-| `webui` | 用 Node 22 和 pnpm 构建 `crates/agent-gateway/web/dist`。 |
-| `gateway-builder` | 用 Go 编译 `cmd/gateway`，WebUI 静态资源通过 `go:embed` 打进二进制。 |
-| `runtime` | Debian slim + CA certificates + `liveagent-gateway`，非 root 用户运行。 |
+| `engine-builder` | Node 22 + pnpm，`tsc --noEmit` + esbuild 把 `agent-core-js` 打成单文件 `dist/index.js` |
+| `backend-builder` | Rust，`cargo build -p agent-backend --release` |
+| `runtime` | `node:22.17.1-bookworm-slim`，非 root（uid 10001），二进制 + 引擎 bundle |
 
-运行时变量：
-
-| 变量 | 必填 | 说明 |
-|---|---|---|
-| `LIVEAGENT_GATEWAY_TOKEN` | 是 | WebUI、HTTP API、桌面端 v2 WebSocket 的共享访问 token。 |
-| `PORT` | Railway 自动提供 | HTTP/WebUI/桌面端 WebSocket 监听端口，未提供时 Dockerfile 默认 `8080`。 |
-| `LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT` | 否 | `chat.prepare` 与 command accepted 前关联原生 Ping/Pong 的最大等待时间，默认 `2s`。 |
-| `LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT` | 否 | accepted 后把 `ChatCommandRequest` 投递到当前桌面 Agent stream 的最大等待时间，默认 `5s`。 |
-| `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | 否 | Chat command 进入桌面运行态的第一段 watchdog，默认 `5s`。 |
-| `LIVEAGENT_GATEWAY_CHAT_RENDER_START_TIMEOUT` | 否 | 第一段 watchdog 后继续等待桌面 run settled 的附加窗口，默认 `10s`。 |
-
-本地 smoke run 示例：
-
-```bash
-make gateway-docker-smoke
+```
+ENTRYPOINT ["agent-backend", "--engine-bundle", "/opt/liveagent/engine"]
+EXPOSE 8443
 ```
 
-CI 中的 `Gateway Docker Smoke` job 会执行同等检查：构建镜像、启动容器、访问 `/healthz`。
+运行时基底是 `node:*-slim` 而不是 `debian-slim`：Node runtime 要随产物分发
+（决策 3），自带比手装干净。**代价是镜像比旧的 Go 版本大**——这是决策 3 的已知
+成本，记下来而不是假装没有。
 
-## 用户自部署 Gateway
+本地构建与冒烟：
 
-LiveAgent 不提供托管 Gateway 服务。需要公网 Remote Gateway 的用户可以用自己的 Railway 账号部署本仓库，或在其他 Docker 平台部署 `ghcr.io/<owner>/liveagent-gateway:vX.Y.Z` / `latest` 镜像。
+```bash
+make backend-docker-build     # docker build -t liveagent-backend:local .
+make backend-docker-run       # -p 8443:8443
+make backend-docker-smoke     # 起容器 + 轮询 /healthz，60s 上限
+```
 
-Railway 自部署路径：
+冒烟给 60s 而不是 30s：Node 引擎的就绪探测本身最多等 30s。
 
-1. 在 Railway 新建项目，选择 GitHub Repository。
-2. 选择 `Stack-Cairn/LiveAgent` 或用户自己的 fork。
-3. 分支选择包含根目录 `Dockerfile` 和 `railway.json` 的分支。
-4. 在 service variables 中设置 `LIVEAGENT_GATEWAY_TOKEN=<long-random-token>`。
-5. 部署成功后生成 Public Domain，并访问 `/healthz` 验证健康检查。
+## 启动参数
 
-推荐生产部署模型：
+`agent-backend` 只认命令行参数，**不读环境变量**（手写解析，不引 clap——五个参数
+不值一整棵依赖树）：
 
-| 流量 | Railway 能力 | Remote 配置 |
+| 参数 | 默认 | 说明 |
 |---|---|---|
-| WebUI / HTTP / 桌面端 WebSocket（`/ws/v2*`） | Public Networking HTTPS 域名 | 桌面端设置 `Gateway URL=https://<service>.up.railway.app`，网关端口填 `443`。 |
+| `--port <PORT>` | `8443` | 监听端口，绑 `0.0.0.0` |
+| `--password <PW>` | 随机生成 | Bearer token。不给就生成一个 32 位 base62 串并**打到 stderr** |
+| `--tls-cert <PEM>` `--tls-key <PEM>` | 无 | 两个一起给才启用内建 TLS |
+| `--engine-bundle <DIR>` | 无 | Node 引擎 bundle 目录（内含 `index.js`）。不给则以**纯 API 模式**运行——命令全部可用，但没有 chat |
 
-全部实时链路统一走同一 HTTPS 域名与端口。
+密码打 stderr 不打 stdout，是为了让 stdout 能被管道消费。
 
-Gateway 运行时变量由用户在自己的平台配置：
+> **`PORT` 环境变量不生效。** Railway 一类平台会注入 `PORT`，但后端不读它。
+> 需要在平台的服务设置里把目标端口显式设成 `8443`（Dockerfile 的 `EXPOSE` 值），
+> 或在启动命令里加 `--port`。
 
-| 变量 | 说明 |
+## TLS
+
+三种都支持（决策 14），选一种：
+
+| 方式 | 配置 |
 |---|---|
-| `LIVEAGENT_GATEWAY_TOKEN` | WebUI、管理 API 与 Agent 链路使用的网关 Token；Agent 也可使用独立凭证。 |
-| `LIVEAGENT_GATEWAY_AGENT_DB` | Agent 凭证 SQLite 路径；缺省自动创建，无需手动设置。 |
-| `LIVEAGENT_GATEWAY_DATA_DIR` | 自动数据库的父目录；官方容器默认 `/var/lib/liveagent`，直接运行二进制时默认使用用户配置目录。 |
-| `LIVEAGENT_GATEWAY_CHAT_PREPARE_TIMEOUT` | 默认 `2s`；通常无需调大，超时应暴露半开连接并让客户端快速恢复。 |
-| `LIVEAGENT_GATEWAY_CHAT_DELIVERY_TIMEOUT` | 默认 `5s`；控制 accepted 后投递桌面 stream 的上限。 |
-| `LIVEAGENT_GATEWAY_CHAT_START_TIMEOUT` | 默认 `5s`；控制远程 command 启动 watchdog 的第一阶段。 |
-| `LIVEAGENT_GATEWAY_CHAT_RENDER_START_TIMEOUT` | 默认 `10s`；控制启动 watchdog 的附加阶段。 |
+| 内建 TLS | `--tls-cert cert.pem --tls-key key.pem`，直接 `https://` 对外 |
+| 反向代理 | 不给证书参数，明文监听，由 nginx / Caddy / 平台终结 TLS |
+| 隧道 | tailscale / cloudflared 自带加密，后端明文监听即可 |
 
-Gateway 的 conversation stream replay 与 `client_request_id` 去重当前都是进程内有界状态，本身不需要持久卷。事件窗口默认保留最近 10 分钟、最多 4096 条或约 8 MiB；command 去重记录保留 24 小时，但 Gateway 进程重启后不会保留。Gateway 默认自动创建每 Agent 凭证数据库（SQLite）；可用 `-agent-db` 指定路径。生产部署需要把数据库目录挂载到持久卷；官方 Docker 命令使用 `-v liveagent-gateway-data:/var/lib/liveagent`，否则重建容器会丢失已签发的凭证（见 [multi-agent.md](multi-agent.md)）。
+官方镜像的冒烟与 CI 都跑**明文**路径——容器内不配证书，TLS 由外层终结是更常见的
+部署姿势。
 
-升级时旧启动脚本中的 `-grpc-addr` 和 `-command-queue-timeout` 会在新版参数解析前被移除，不会出现在 `--help`，也不会恢复已删除的 v1/gRPC 或离线命令队列。`-grpc-max-message-bytes` 与 `LIVEAGENT_GATEWAY_GRPC_MAX_MESSAGE_BYTES` 会映射到当前 WebSocket protobuf 消息上限；新名称 `-max-message-bytes` 和 `LIVEAGENT_GATEWAY_MAX_MESSAGE_BYTES` 优先。其他未知参数仍会报错，避免隐藏配置拼写错误。
+## 数据持久化
 
-## GitHub Secrets
+后端把全部状态写在**运行用户的 `~/.liveagent`** 下（`agent-core/src/storage.rs`，
+路径是写死的字符串，不随包名漂移）：
 
-macOS signed/notarized release 需要这些 secrets：
+```
+~/.liveagent/
+  config.sqlite               设置
+  chat-history.sqlite3        会话历史 + FTS
+  memory/**/*.md              记忆事实源
+  memory/memory-index.sqlite3 记忆索引
+  skills/                     Skills root
+  uploads/<batch>/            上传暂存
+```
+
+**密钥也在这里。** provider API key 存在后端的设置库里，前端不再持有它们。所以
+「密钥只在本地」这句话现在应该说成**「密钥只在后端，后端由你自己部署」**——如果
+你把后端放在别人的服务器上，密钥就在别人的服务器上。
+
+> ⚠️ **官方镜像目前没有为数据目录预留卷**：runtime 用户建成
+> `--home-dir /nonexistent`，`~` 的解析结果与卷挂载点都没有验证过，
+> 容器重建是否丢数据**尚未实测**。生产部署前请自行确认数据落点，
+> 这条属于阶段 6 验收未完成项。
+
+## 客户端接入
+
+### 浏览器
+
+打开前端页面后，登录页填三项：主机、端口、密码。也可以直接发链接，跳过登录页：
+
+```
+https://your-box:8443/?backendHost=your-box&backendPort=8443&token=<password>&secure=true
+```
+
+URL 参数会被持久化到 localStorage，下次打开不用重填。`secure` 缺省跟随页面协议。
+
+一个后端支持**多个前端同时连**（决策 9）。前端不在场不阻塞后端主流程（决策 10）：
+对话照跑，工具审批该超时超时、有推荐项自动选。
+
+### 桌面端
+
+桌面端连的是**它自己进程里那个后端**：`get_backend_endpoint` 返回的 host 恒为
+`127.0.0.1`，端口和随机密码由壳注入，用户永远不输密码、也看不到登录页。
+
+> ⚠️ **桌面壳目前无法连接远程后端。** `commands/app/backend.rs` 只会返回内嵌后端
+> 的端点，没有填写远程地址的入口。阶段 6 验收里「Docker 跑 headless 后端，
+> 笔记本上的桌面端连过去」这一条**当前实现不支持**，远程访问只有浏览器一条路。
+
+## 从旧 Gateway 迁移
+
+| 项 | 处置 |
+|---|---|
+| 旧镜像 `ghcr.io/<owner>/liveagent-gateway` | **历史 tag 全部保留、仍可拉取**（决策 15）。只是不再发布新 tag |
+| 新镜像 | `ghcr.io/<owner>/liveagent-backend:vX.Y.Z` / `:latest` |
+| 旧桌面端 | 仍可连旧 gateway 镜像。这是大版本切换，不是原地升级 |
+| `LIVEAGENT_GATEWAY_*` 环境变量 | 全部作废。新后端只认命令行参数 |
+| 每 Agent 凭证、`agent_id`、多 Agent 目录 | 概念消失。一个前端只连一个后端（决策 12） |
+| 浏览器里的旧 token | 前端检测到 `liveagent.gateway.token` 会在登录页给迁移提示 |
+
+## CI
+
+`.github/workflows/ci.yml`：
+
+| Job | 内容 |
+|---|---|
+| Backend Rust | `make check-routes`（生成物漂移）、`make check-command-classes`（新命令必须归类）、**`cargo tree -p agent-core \| grep tauri` 命中即失败**、`cargo test` + `clippy -D warnings` |
+| Backend Docker Smoke | 构建镜像、起容器、轮询 `/healthz` |
+| GUI | 前端测试 |
+| Tauri Rust Check | `src-tauri` 单独跑（它要 GTK/WebKit，不能塞进后端 job） |
+| Diff Hygiene | 空白字符检查 |
+
+「agent-core 不许依赖 tauri」是编译期防线的 CI 版：这个 crate 一旦依赖 tauri，
+headless 后端就再也编不出来了，而这种依赖是顺手 `use` 一下就会引入的。
+
+## 发布
+
+| 触发 | Workflow | 产物 |
+|---|---|---|
+| `v*` tag / 手动 | `.github/workflows/backend-docker.yml` | `ghcr.io/<owner>/liveagent-backend:<tag>` + `:latest`，`linux/amd64` |
+| `v*` tag / 手动 | `.github/workflows/desktop-release.yml` | macOS Intel/ARM `.dmg`、Windows `.msi`/`.exe`、Linux `.AppImage`/`.deb`/`.rpm`，各带 updater 用的压缩包与 `.sig` |
+
+发布 job 上传完平台产物后生成 `latest.json`。桌面端「设置 → 关于」按用户是否允许
+预发布，从 GitHub Releases 里筛带 `latest.json` 的版本。
+
+### 桌面版本号来源
+
+日常开发只维护一处：`crates/agent-gui/package.json`。Tauri 配置、前端 About 页和
+Rust 运行时都从这里读。
+
+正式发布**不依赖人工改 package.json**。`desktop-release.yml` 先解析 tag：
+
+```bash
+node scripts/release/prepare-app-version-from-tag.mjs vX.Y.Z
+```
+
+| 输出 | 示例 | 用途 |
+|---|---|---|
+| `LIVEAGENT_RELEASE_TAG` | `v0.1.3` | Release 名、产物命名、下载 URL |
+| `LIVEAGENT_APP_VERSION` | `0.1.3` | About 页与 Rust 运行时 |
+| `LIVEAGENT_IS_PRERELEASE` | `false` | 是否标记 prerelease |
+| `LIVEAGENT_TAURI_VERSION_CONFIG` | `src-tauri/tauri.version.generated.conf.json` | Tauri 构建时的临时 config overlay（不提交） |
+
+各平台 job 复用同一份 metadata，用 `--config "$LIVEAGENT_TAURI_VERSION_CONFIG"`
+注入版本。这样 tag 是唯一事实源，**忘记改 `package.json` 不会导致发布包显示旧版本**。
+
+### macOS 签名与公证
+
+需要的 GitHub Secrets：
 
 | Secret | 说明 |
 |---|---|
-| `APPLE_CERTIFICATE_P12_BASE64` | Developer ID Application `.p12` 的 base64。 |
-| `APPLE_CERTIFICATE_PASSWORD` | 导出 `.p12` 时设置的密码。 |
-| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: wenlin fei (UU94JSVAA9)`。 |
-| `APPLE_ID` | Apple Developer 账号邮箱。 |
-| `APPLE_TEAM_ID` | `UU94JSVAA9`。 |
-| `APPLE_APP_SPECIFIC_PASSWORD` | Apple app-specific password。 |
-| `TAURI_SIGNING_PRIVATE_KEY` | Tauri updater 私钥，用于生成 release 更新包签名。 |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Tauri updater 私钥密码；无密码时可为空。 |
-| `TAURI_UPDATER_PUBLIC_KEY` | Tauri updater 公钥，会编译进桌面端用于校验更新包。 |
+| `APPLE_CERTIFICATE_P12_BASE64` | Developer ID Application `.p12` 的 base64 |
+| `APPLE_CERTIFICATE_PASSWORD` | 导出 `.p12` 时设的密码 |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: wenlin fei (UU94JSVAA9)` |
+| `APPLE_ID` | Apple Developer 账号邮箱 |
+| `APPLE_TEAM_ID` | `UU94JSVAA9` |
+| `APPLE_APP_SPECIFIC_PASSWORD` | app-specific password |
+| `TAURI_SIGNING_PRIVATE_KEY` | updater 私钥 |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | updater 私钥密码，无密码可空 |
+| `TAURI_UPDATER_PUBLIC_KEY` | updater 公钥，编译进桌面端校验更新包 |
 
-脚本化写入 GitHub 配置：
+脚本化写入：
 
 ```bash
 BOOTSTRAP_APPLE_SECRETS=1 \
@@ -99,63 +205,25 @@ APPLE_CERTIFICATE_PASSWORD=<p12-export-password> \
   scripts/release/bootstrap-github-secrets.sh
 ```
 
-如果 `CERT_DIR/developer_id_application.p12` 不存在，脚本会从本机 Keychain 中的 `Developer ID Application: wenlin fei (UU94JSVAA9)` 自动导出，并生成 `.p12` 密码写入 GitHub Secret。`CERT_DIR` 默认优先使用 `~/Personal/cert`，不存在时使用 `~/Downloads/cert`。已有 `.p12` 时需要传入 `APPLE_CERTIFICATE_PASSWORD=<p12-password>`。
+`CERT_DIR/developer_id_application.p12` 不存在时，脚本会从本机 Keychain 的
+`Developer ID Application: wenlin fei (UU94JSVAA9)` 自动导出。`CERT_DIR` 优先
+`~/Personal/cert`，不存在时用 `~/Downloads/cert`。
 
-如果自动导出失败，先确认本机能看到可签名 identity：
+自动导出失败先确认本机能看到可签名 identity：
 
 ```bash
 security find-identity -v -p codesigning "$HOME/Library/Keychains/login.keychain-db"
 ```
 
-Keychain 中必须是带私钥的 `Developer ID Application` identity。若 macOS 拒绝私钥导出，可以在 Keychain Access 中手动导出 `.p12` 到 `P12_PATH`，再用同一个 `APPLE_CERTIFICATE_PASSWORD` 重新运行脚本。
+必须是**带私钥**的 `Developer ID Application`。macOS 拒绝导出私钥时，在 Keychain
+Access 里手动导出 `.p12` 到 `P12_PATH`，再用同一个 `APPLE_CERTIFICATE_PASSWORD`
+重跑脚本。
 
-脚本默认读取：
+Windows 暂无签名 secret，release workflow 先发 unsigned 包；接入 `.p12/.pfx` 或
+Trusted Signing 后再补签名步骤。
 
-| 文件 | 用途 |
-|---|---|
-| `CERT_DIR/developer_id_application.p12` | CI 导入的签名 identity。 |
-| `CERT_DIR/app key.md` | Apple app-specific password。 |
+## 相关文档
 
-## 桌面产物
-
-`desktop-release.yml` 产物：
-
-| 平台 | Runner | 产物 |
-|---|---|---|
-| macOS Intel | `macos-15-intel` | `LiveAgent-vX.Y.Z-macOS-x64.dmg`，以及 updater 使用的 `.app.tar.gz` / `.sig`。 |
-| macOS Apple Silicon | `macos-14` | `LiveAgent-vX.Y.Z-macOS-aarch64.dmg`，以及 updater 使用的 `.app.tar.gz` / `.sig`。 |
-| Windows x64 | `windows-latest` | `LiveAgent-vX.Y.Z-Windows-x64.msi`、`LiveAgent-vX.Y.Z-Windows-x64-Setup.exe`，以及 updater 使用的 `.zip` / `.sig`。 |
-| Linux x64 | `ubuntu-latest` | `LiveAgent-vX.Y.Z-Linux-x86_64.AppImage`、`.deb`、`.rpm`，以及 updater 使用的 `.tar.gz` / `.sig`。 |
-
-发布 job 会在上传平台产物后生成并上传 `latest.json`。桌面端「设置 -> 关于」会根据用户是否允许预发布，从 GitHub Releases 中筛选带 `latest.json` 的正式 / 预发布版本；未允许预发布时只检查正式 Release。
-
-## 桌面版本号来源
-
-本地开发和普通本机构建只维护一个默认版本源：`crates/agent-gui/package.json`。Tauri 默认配置、前端 About 页和 Rust 运行时代码都会从这里读取版本，因此日常开发不需要到多个文件里同步版本号。
-
-正式发布时不依赖人工修改 `package.json`。`desktop-release.yml` 会先在 `Release Metadata` job 中解析 release tag：
-
-```bash
-node scripts/release/prepare-app-version-from-tag.mjs vX.Y.Z
-```
-
-这个脚本会校验 tag 必须是 `v` 开头的 semver，输出：
-
-| 输出 | 示例 | 用途 |
-|---|---|---|
-| `LIVEAGENT_RELEASE_TAG` | `v0.1.3` | GitHub Release、产物命名和下载 URL。 |
-| `LIVEAGENT_APP_VERSION` | `0.1.3` | 前端 About 页和 Rust 运行时代码。 |
-| `LIVEAGENT_IS_PRERELEASE` | `false` | 决定 GitHub Release 是否标记为 prerelease。 |
-| `LIVEAGENT_TAURI_VERSION_CONFIG` | `src-tauri/tauri.version.generated.conf.json` | Tauri 构建时追加的临时 config overlay。 |
-
-各平台构建 job 会复用同一份 metadata，并生成一个未提交到仓库的 Tauri overlay：
-
-```json
-{
-  "version": "0.1.3"
-}
-```
-
-Tauri 构建命令通过额外的 `--config "$LIVEAGENT_TAURI_VERSION_CONFIG"` 注入这个版本；Vite 和 Rust build script 通过 `LIVEAGENT_APP_VERSION` 注入同一个版本。这样发布版本以 tag 为事实来源，updater manifest、应用内显示版本和安装包版本会保持一致；忘记改 `package.json` 不会导致发布包仍显示旧版本。
-
-Windows 当前没有代码签名 secret，release workflow 会先自动发布 unsigned 包。接入 Windows `.p12/.pfx` 或 Trusted Signing 后再补签名步骤。
+- [development.md](development.md) —— 本地开发与运行
+- [../architecture/overview.md](../architecture/overview.md) —— 三层结构
+- [../architecture/protocols.md](../architecture/protocols.md) —— 端点与认证

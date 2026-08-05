@@ -61,6 +61,10 @@ COPY --from=backend-builder /out/target/release/agent-backend /usr/local/bin/age
 # 从 engine-builder 阶段复制 Node 引擎 bundle
 COPY --from=engine-builder /src/crates/agent-core-js/dist/index.js /opt/liveagent/engine/index.js
 
+# 入口脚本：把平台注入的环境变量翻成 argv（后端只认 argv）
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
+
 # 调整所有权为 liveagent 用户
 RUN chown -R liveagent:liveagent /opt/liveagent
 
@@ -68,4 +72,4 @@ USER liveagent
 
 EXPOSE 8443
 
-ENTRYPOINT ["agent-backend", "--engine-bundle", "/opt/liveagent/engine"]
+ENTRYPOINT ["docker-entrypoint.sh"]

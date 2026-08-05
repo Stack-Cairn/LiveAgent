@@ -1,0 +1,104 @@
+name: Backend Docker
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish, for example v0.1.0
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  # 新镜像名。旧的 ghcr.io/<owner>/liveagent-gateway 历史 tag 保持不动、仍可拉取
+  # （决策 15）：我们只是不再发布新的 gateway 镜像，不删除任何已发布的 tag。
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/liveagent-backend
+
+jobs:
+  build-and-push:
+    name: Build and Push Backend Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ github.event.inputs.tag || github.ref_name }}
+            type=raw,value=latest
+
+      # 只发 linux/amd64。Go 版 gateway 能轻松出 arm64（GOARCH 交叉编译白送），
+      # Rust 后端不行：依赖链里有 aws-lc-sys，交叉编译要 cmake + aarch64 工具链和
+      # sysroot，Dockerfile 现在也没接 --target。宁可少发一个架构，也不发一个
+      # 架构标错的镜像（见下面的验证步骤，那正是 v0.1.0–v1.1.8 踩过的坑）。
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      # 防"标着一个架构、装着另一个架构的二进制"。v0.1.0 到 v1.1.8 的镜像宣称
+      # arm64 却装着 x86-64 二进制，就是这么漏出去的。加架构时这步必须跟着扩。
+      - name: Verify binary architecture
+        run: |
+          set -euo pipefail
+          repo="$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')"
+          ref="$repo@${{ steps.push.outputs.digest }}"
+          docker pull "$ref" >/dev/null
+          docker rm -f verify-amd64 >/dev/null 2>&1 || true
+          docker create --name verify-amd64 "$ref" >/dev/null
+          docker cp verify-amd64:/usr/local/bin/agent-backend /tmp/agent-backend-amd64
+          docker rm -f verify-amd64 >/dev/null
+          info="$(file -b /tmp/agent-backend-amd64)"
+          echo "linux/amd64: $info"
+          echo "$info" | grep -q "x86-64" || {
+            echo "::error::linux/amd64 镜像里的 agent-backend 不是 x86-64 二进制"
+            exit 1
+          }
+
+      # 引擎 bundle 漏进镜像的话，后端会退化成"纯 API 模式"静默跑起来 ——
+      # /healthz 照样返回 ok，问题要到用户发第一条消息才暴露。这里提前拦。
+      - name: Verify Node engine bundle is present
+        run: |
+          set -euo pipefail
+          repo="$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')"
+          ref="$repo@${{ steps.push.outputs.digest }}"
+          docker rm -f verify-engine >/dev/null 2>&1 || true
+          docker create --name verify-engine "$ref" >/dev/null
+          docker cp verify-engine:/opt/liveagent/engine/index.js /tmp/engine-index.js
+          docker rm -f verify-engine >/dev/null
+          test -s /tmp/engine-index.js || {
+            echo "::error::镜像里的 Node 引擎 bundle 是空的"
+            exit 1
+          }
+          echo "engine bundle: $(wc -c < /tmp/engine-index.js) bytes"

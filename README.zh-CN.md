@@ -5,8 +5,8 @@
 <h1 align="center">LiveAgent</h1>
 
 <p align="center">
-  <strong>Your Local-First AI Agent Desktop</strong><br/>
-  多模型接入 · 本地工具执行 · MCP & Skills 生态 · 远程 Gateway
+  <strong>Your Self-Hosted AI Agent Workspace</strong><br/>
+  多模型接入 · 真实工具执行 · MCP & Skills 生态 · 浏览器与桌面端共用一个后端
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
   <img alt="Tauri" src="https://img.shields.io/badge/built%20with-Tauri%202-FFC131?logo=tauri&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-19-087EA4?logo=react&logoColor=white" />
   <img alt="Rust" src="https://img.shields.io/badge/Rust-stable-B7410E?logo=rust&logoColor=white" />
-  <img alt="Go" src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" />
+  <img alt="Node" src="https://img.shields.io/badge/Node-22-5FA04E?logo=nodedotjs&logoColor=white" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 </p>
 
@@ -79,11 +79,11 @@
 
 ## 为什么是 LiveAgent?
 
-LiveAgent 是一个 **本地优先** 的 AI Agent 桌面客户端。它将大语言模型的推理能力与本地系统工具深度整合,让 AI 能够真正操作你的文件系统、执行命令、管理定时任务,同时通过 Gateway 实现远程访问与协作。
+LiveAgent 是一个 **自部署** 的 AI Agent。它将大语言模型的推理能力与真实系统工具深度整合,让 AI 能够真正操作你的文件系统、执行命令、管理定时任务;桌面端和浏览器连的是同一个后端。
 
 - **真正动手的 Agent** — 不止于对话:读写文件、精确编辑、执行 Bash、托管长驻进程
 - **生态完全开放** — MCP 协议桥接任意外部工具,Skills 技能包按需加载
-- **本地与远程兼得** — 桌面端独立可用,部署 Gateway 后浏览器随处操控
+- **密钥只在后端** — 只有后端持有凭据,而后端跑在哪里由你决定:自己的笔记本、家里的服务器,或者你自己的 VPS
 
 ---
 
@@ -107,7 +107,7 @@ LiveAgent 是一个 **本地优先** 的 AI Agent 桌面客户端。它将大语
 
 ### 🧩 MCP 与 Skills 生态
 
-- **MCP 协议桥接** — Tauri 端原生桥接任意 stdio / http MCP Server,无限扩展工具能力
+- **MCP 协议桥接** — 后端原生桥接任意 stdio / http MCP Server,无限扩展工具能力
 - **Skills 技能包** — 渐进式披露、按需加载,支持安装 / 创建 / 打包与 ClawHub 生态
 
 ### 💾 记忆与自动化
@@ -115,10 +115,10 @@ LiveAgent 是一个 **本地优先** 的 AI Agent 桌面客户端。它将大语
 - **持久化记忆** — Markdown + SQLite FTS 全文检索,跨会话知识管理
 - **定时任务** — bash / http / prompt 三种 Cron 任务类型,后台自动执行
 
-### 🌐 远程 Gateway
+### 🌐 浏览器与桌面端,同一个后端
 
-- **浏览器随处访问** — Go 网关(WebSocket + Protobuf),WebUI 远程操控本地 Agent
-- **断线可恢复** — 有界 seq window 补齐短时断线,桌面端持久化兜底
+- **一份代码,两个壳** — 桌面端和浏览器跑的是同一份前端构建产物,唯一区别是指向哪个后端地址
+- **断线可恢复** — 事件 WebSocket 断线重连并补齐,后端持久化兜底
 
 ---
 
@@ -163,9 +163,18 @@ LiveAgent 是一个 **本地优先** 的 AI Agent 桌面客户端。它将大语
 | DEB | Debian / Ubuntu 系 | `sudo dpkg -i LiveAgent-<版本>-Linux-x86_64.deb` |
 | RPM | Fedora / openSUSE 系 | `sudo rpm -i LiveAgent-<版本>-Linux-x86_64.rpm` |
 
-### 需要远程访问? 部署 Gateway
+### 需要远程访问?(旧版 Gateway)
 
-桌面端开箱即用,不依赖任何服务端。只有想 **在浏览器里远程操控本地 Agent** 时,才需要部署 Gateway。
+> **⚠️ 计划在 v2.0 停用** —— 下面这套 Gateway 部署方式在 v2.0 会断。
+> 已经部署的用户请先读 [v2.0 迁移指南](README.md#v20-迁移指南--v20-migration-guide)。
+
+v2.0 没有 Gateway 这一层:你把 **后端** 部署在想要的位置,桌面端或浏览器直连它。
+如果后端在 NAT 后面而你在外面,那是 **网络层的问题,用网络层的办法解决** ——
+[Tailscale](https://tailscale.com/)、[frp](https://github.com/fatedier/frp) 或
+[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/),
+应用本身不再内置任何会合注册与打洞逻辑。
+
+下面是 v1 的 Gateway 部署方式,保留给已经在用的人。
 
 **注意：在部署并使用Nginx反向代理后，设置中Remote页面Gateway地址填写Https地址，端口号填写443。**
 
@@ -243,47 +252,51 @@ location / {
 
 展开下方「开发指南」查看完整 Make 命令。
 
-![](docs/images/architecture.webp)
-
 <details>
 <summary><b>架构总览</b> — 架构图与技术栈</summary>
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                        Browser WebUI                          │
-│              React + Vite + WebSocket + Gateway API           │
+│                       前端(同一份代码)                        │
+│      React 19 · Vite · 跑在浏览器标签页里,或跑在 Tauri 2       │
+│              桌面壳里 —— 构建产物完全相同                       │
 └────────────────────────────┬─────────────────────────────────┘
-                             │ WebSocket / HTTP
+                             │ HTTP POST /api/<command>  (JSON)
+                             │ WebSocket /api/events     (JSON)
 ┌────────────────────────────▼─────────────────────────────────┐
-│                       Agent Gateway                           │
-│    Go · WebSocket · HTTP · Session Manager · Event Store     │
-│                    (Railway / Docker / 自部署)                 │
+│                     后端 · agent-backend                      │
+│      Rust · axum · SQLite · 密码鉴权 · 前端静态资源托管         │
+│           唯一对外监听者。密钥只存在这一层。                     │
+│              (笔记本 / 家庭服务器 / Docker / VPS)              │
 └────────────────────────────┬─────────────────────────────────┘
-                             │ WebSocket v2 (双向流)
+                             │ loopback HTTP(不对外暴露)
 ┌────────────────────────────▼─────────────────────────────────┐
-│                        Agent GUI                              │
-│                   Tauri 2 · React 19 · Rust                  │
+│                     引擎 · agent-core-js                      │
+│              Node 22 · TypeScript · pi-agent-core             │
 ├──────────┬───────────┬───────────┬───────────┬───────────────┤
 │ 模型协议  │ Agent运行时 │  工具执行   │  Skills   │  Memory/Cron  │
 │ pi-ai    │ 多轮循环   │ FS/Bash/  │  渐进披露  │  SQLite+MD    │
-│ + Codex  │ + SubAgent │ MCP桥接   │  + Hub    │  FTS索引      │
+│          │ + SubAgent │ MCP桥接   │  + Hub    │  FTS索引      │
 └──────────┴───────────┴───────────┴───────────┴───────────────┘
 ```
+
+桌面壳就是个壳:它渲染前端,外加托盘、通知、文件对话框这些原生能力。
+它不是第二套实现 —— 把同一份前端指向远程后端地址,行为完全一致。
 
 **技术栈**
 
 | 组件 | 技术 |
 |---|---|
-| **Agent GUI** · 框架 | Tauri 2 + React 19 + TypeScript 6 |
-| **Agent GUI** · 构建 | Vite 8 + pnpm |
-| **Agent GUI** · 样式 | Tailwind CSS 4 + Radix UI |
-| **Agent GUI** · 渲染 | streamdown + KaTeX + Mermaid + Monaco Editor |
-| **Agent GUI** · 后端 | Rust + Tokio + SQLite (rusqlite) + WebSocket (tokio-tungstenite) |
-| **Agent GUI** · LLM | @earendil-works/pi-ai · @openai/codex-sdk · claude-agent-sdk |
-| **Gateway** · 语言 | Go 1.25 |
-| **Gateway** · 协议 | WebSocket + Protobuf + HTTP |
-| **Gateway** · Web UI | React + Vite + Tailwind CSS(嵌入式) |
-| **Gateway** · 部署 | Docker multi-stage · Railway CI/CD |
+| **前端** · 框架 | React 19 + TypeScript 6 |
+| **前端** · 构建 | Vite 8 + pnpm |
+| **前端** · 样式 | Tailwind CSS 4 + Base UI |
+| **前端** · 渲染 | streamdown + KaTeX + Mermaid + Monaco Editor |
+| **桌面壳** | Tauri 2(可选 —— 浏览器是一等公民) |
+| **后端** · `agent-backend` | Rust + Tokio + axum + SQLite (rusqlite) |
+| **后端** · 协议 | JSON over HTTP + WebSocket |
+| **引擎** · `agent-core-js` | Node 22 + TypeScript |
+| **引擎** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
+| **部署** | Docker(后端与 Node runtime 同一镜像)· Railway CI/CD |
 
 </details>
 
@@ -294,14 +307,12 @@ location / {
 |---|---|
 | `make dev` | 启动 Tauri 开发环境 |
 | `make build` | 构建桌面应用 |
-| `make dev-gateway` | 启动 Gateway 开发服务 |
-| `make gateway-build` | 构建 Gateway 二进制 |
-| `make gateway-docker-build` | 构建 Docker 镜像 |
-| `make gateway-docker-smoke` | 构建 + 健康检查 |
+| `make backend-docker-build` | 构建后端 Docker 镜像 |
+| `make backend-docker-run` | 运行后端镜像(HTTPS 8443) |
+| `make backend-docker-smoke` | 构建 + `/healthz` 健康检查 |
 | `make desktop-build-macos-release` | macOS 签名发布构建 |
-| `make build-linux` | Linux amd64 网关 |
-| `make build-linux-arm` | Linux arm64 网关 |
-| `make proto` | 重新生成 Protobuf 代码 |
+| `make update-routes` | 从 command wrapper 重新生成后端路由层 |
+| `make check-routes` | 校验生成的路由是否漂移(CI 门禁) |
 | `make clean` | 清理构建产物 |
 
 </details>
@@ -312,19 +323,24 @@ location / {
 ```
 LiveAgent/
 ├── crates/
-│   ├── agent-gui/                # 桌面客户端
-│   │   ├── src/                  # React 前端
+│   ├── agent-gui/                # 前端 + 桌面壳
+│   │   ├── src/                  # React 前端(浏览器与桌面端共用)
 │   │   │   ├── components/       #   UI 组件
 │   │   │   ├── lib/              #   核心逻辑 (chat, tools, skills, memory)
 │   │   │   ├── pages/            #   页面 (Chat, Settings)
 │   │   │   ├── i18n/             #   国际化
 │   │   │   └── prompt/           #   System Prompt 模板
-│   │   └── src-tauri/            # Rust 后端 (Tauri)
+│   │   └── src-tauri/            # Tauri 2 桌面壳 (Rust)
 │   │
-│   └── agent-gateway/            # Go 网关服务
-│       ├── cmd/gateway/          #   入口
-│       ├── internal/             #   核心实现
-│       └── proto/v2/             #   Protobuf 定义
+│   ├── agent-backend/            # Rust 后端 —— 唯一对外监听者
+│   │   ├── routes.rs             #   HTTP 命令路由 (/api/<command>)
+│   │   ├── ws.rs                 #   事件 WebSocket (/api/events)
+│   │   └── engine_process.rs     #   拉起并守护 Node 引擎进程
+│   │
+│   ├── agent-core/               # 共享 Rust 核心(工具、运行时、存储)
+│   │
+│   └── agent-core-js/            # Node 引擎 —— 模型调用与 Agent 循环
+│       └── src/                  #   TypeScript,esbuild 打包
 │
 ├── docs/                         # 项目文档
 │   ├── architecture/             #   架构设计
@@ -332,8 +348,8 @@ LiveAgent/
 │   └── operations/               #   运维部署
 │
 ├── scripts/release/              # 发布自动化
-├── .github/workflows/            # CI/CD (CI + Desktop Release + Gateway Docker)
-├── Dockerfile                    # Gateway 容器镜像
+├── .github/workflows/            # CI/CD
+├── Dockerfile                    # 后端容器镜像(Rust + Node runtime)
 ├── Makefile                      # 构建命令集
 └── Cargo.toml                    # Rust workspace
 ```
@@ -345,16 +361,16 @@ LiveAgent/
 ## FAQ
 
 <details>
-<summary><b>API Key 会离开本机吗?</b></summary>
+<summary><b>我的 API Key 存在哪?</b></summary>
 
-不会。秘钥仅保存在桌面端本地,Gateway 只做协议中继 — 不访问文件系统、不存储任何凭据。
+只在后端 —— 而后端跑在哪里由你决定。前端从头到尾看不到密钥:它只发命令,由后端去调模型。后端跑在自己笔记本上,密钥就不出这台机器;部署到自己的服务器上,密钥就只在那台服务器上。链路里没有任何我们的服务。
 
 </details>
 
 <details>
-<summary><b>必须部署 Gateway 吗?</b></summary>
+<summary><b>必须部署什么吗?</b></summary>
 
-不需要。桌面客户端可独立使用全部本地能力;只有需要从浏览器远程访问本地 Agent 时,才部署 Gateway。
+本地用不需要 —— 桌面端自带后端,开箱即用。只有当你想从浏览器、从另一台机器访问同一个 Agent,或者想在合上笔记本后让它继续跑,才需要单独部署后端。
 
 </details>
 
@@ -368,7 +384,7 @@ LiveAgent/
 <details>
 <summary><b>长对话 / 断线后上下文会丢吗?</b></summary>
 
-不会。桌面端以 Segment + Summary Checkpoint 持久化完整历史;Gateway 通过有界 seq window 补齐短时断线,重连后自动收敛。
+不会。后端以 Segment + Summary Checkpoint 持久化完整历史,并且在你断线期间继续跑 —— 前端重连事件流后自动补齐。
 
 </details>
 
@@ -380,17 +396,17 @@ LiveAgent/
 
 提交 PR 前,请确保以下检查全部通过(与 CI 门禁一致):
 
-**桌面客户端 · `crates/agent-gui`**
+**前端 · `crates/agent-gui`**
 
 1. 类型检查与构建通过:`pnpm build`
 2. 代码规范检查通过:`pnpm lint`
 3. 前端单元测试通过:`pnpm test:frontend`(改动发布脚本时另跑 `pnpm test:release`)
-4. Rust 后端检查通过:`cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests`(仓库根目录执行)
+4. 桌面壳检查通过:`cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests`(仓库根目录执行)
 
-**Gateway · `crates/agent-gateway`(如有改动)**
+**后端 · `crates/agent-backend`(如有改动)**
 
-1. Go 单元测试通过:`go test ./...`
-2. Proto 变更后重新生成并提交产物:`make proto`
+1. 生成的路由无漂移:`make check-routes`(新增 command 未加路由必须在这里失败)
+2. 后端测试通过:`cargo test -p agent-backend`
 
 **Diff 卫生**
 

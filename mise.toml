@@ -1,9 +1,4 @@
 # 项目共享工具链版本。进入仓库目录执行 `mise install` 即可安装全部固定版本
 [tools]
-go = "1.25.12"
 node = "22.19.0"
 "npm:pnpm" = "10.32.1"
-protoc = "34.0"
-"go:google.golang.org/protobuf/cmd/protoc-gen-go" = "1.36.11"
-buf = "1.71.0"
-golangci-lint = "2.12.2"

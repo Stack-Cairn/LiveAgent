@@ -32,57 +32,42 @@ jobs:
       - name: Check generated routes are in sync
         run: make check-routes
 
-      - name: Test agent-backend (routes contract, tunnel e2e)
+      # 阶段 1 的 command 分类门禁：新增 Tauri command 必须归类。
+      - name: Check command classification is complete
+        run: make check-command-classes
+
+      # 编译期防线的 CI 版：agent-core 是跨壳内核，一旦它依赖 tauri，
+      # headless 后端就再也编不出来了。依赖链上出现 tauri 直接失败。
+      - name: Ensure agent-core stays Tauri-free
+        run: |
+          set -euo pipefail
+          # 先落到变量：直接 `cargo tree | grep -q` 的话，cargo tree 自己失败会让
+          # grep 收到空输入从而"通过"，门禁就成了摆设。
+          tree="$(cargo tree -p agent-core)"
+          if printf '%s\n' "$tree" | grep -q tauri; then
+            echo "::error::agent-core 依赖树里出现了 tauri，跨壳内核的防线破了"
+            printf '%s\n' "$tree" | grep tauri
+            exit 1
+          fi
+          echo "agent-core 依赖树干净，无 tauri"
+
+      - name: Test agent-backend and agent-core
         env:
           CARGO_TERM_COLOR: always
-        run: cargo test -p agent-backend
+        run: cargo test -p agent-backend -p agent-core
 
-  gateway:
-    name: Gateway
+      # 只 lint 后端这两个 crate：src-tauri 也在同一 workspace 里，用
+      # --workspace 会把 GTK/WebKit 那套系统依赖拖进这个 job。src-tauri
+      # 由 tauri-rust job 单独覆盖。
+      - name: Clippy agent-backend and agent-core
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo clippy -p agent-backend -p agent-core --all-targets -- -D warnings
+
+  backend-docker:
+    name: Backend Docker Smoke
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          # buf breaking 需要完整历史以对比 origin/main 的 proto 契约。
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: crates/agent-gateway/go.mod
-          cache-dependency-path: crates/agent-gateway/go.sum
-
-      - name: Install buf
-        uses: bufbuild/buf-action@v1
-        with:
-          setup_only: true
-          version: 1.71.0
-
-      - name: Install protobuf Go plugins
-        run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
-      - name: Proto lint and breaking-change check
-        run: make proto-check BUF_BREAKING_AGAINST='../../.git#branch=origin/main,subdir=crates/agent-gateway'
-
-      - name: Check generated protobuf
-        run: |
-          make proto
-          git diff --exit-code -- crates/agent-gateway/internal/proto
-
-      - name: Lint gateway
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.12.2
-          working-directory: crates/agent-gateway
-
-      - name: Test gateway
-        working-directory: crates/agent-gateway
-        run: go test ./...
-
-  gateway-docker:
-    name: Gateway Docker Smoke
-    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
 
@@ -94,28 +79,32 @@ jobs:
           context: .
           file: Dockerfile
           load: true
-          tags: liveagent-gateway:ci
+          tags: liveagent-backend:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Smoke test container
         run: |
           set -euo pipefail
-          docker rm -f liveagent-gateway-smoke >/dev/null 2>&1 || true
+          docker rm -f liveagent-backend-smoke >/dev/null 2>&1 || true
+          # 不传 --tls-cert，容器内是明文 HTTP：TLS 由外层（Railway / 反代）终结。
+          # 也不传 --password，后端会自己生成一个并打到 stderr —— /healthz 不需要鉴权。
           docker run -d \
-            --name liveagent-gateway-smoke \
-            -p 18080:8080 \
-            -e LIVEAGENT_GATEWAY_TOKEN=ci-token \
-            liveagent-gateway:ci
-          trap 'docker rm -f liveagent-gateway-smoke >/dev/null 2>&1 || true' EXIT
-          for _ in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:18080/healthz | grep -q '"ok":true'; then
+            --name liveagent-backend-smoke \
+            -p 18443:8443 \
+            liveagent-backend:ci
+          trap 'docker rm -f liveagent-backend-smoke >/dev/null 2>&1 || true' EXIT
+          # /healthz 返回纯文本 ok，且刻意在鉴权之外。Node 引擎就绪探测最多 30s，
+          # 这里给 60s 余量。
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:18443/healthz | grep -q 'ok'; then
+              echo "Backend Docker smoke test passed"
               exit 0
             fi
             sleep 1
           done
-          echo "Gateway Docker smoke test failed; container logs:"
-          docker logs liveagent-gateway-smoke || true
+          echo "Backend Docker smoke test failed; container logs:"
+          docker logs liveagent-backend-smoke || true
           exit 1
 
   gui:
@@ -162,7 +151,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            protobuf-compiler \
             libwebkit2gtk-4.1-dev \
             libgtk-3-dev \
             libayatana-appindicator3-dev \

@@ -5,8 +5,8 @@
 <h1 align="center">LiveAgent</h1>
 
 <p align="center">
-  <strong>Your Local-First AI Agent Desktop</strong><br/>
-  Multi-model access · Local tool execution · MCP & Skills ecosystem · Remote Gateway
+  <strong>Your Self-Hosted AI Agent Workspace</strong><br/>
+  Multi-model access · Real tool execution · MCP & Skills ecosystem · Browser or desktop, same backend
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
   <img alt="Tauri" src="https://img.shields.io/badge/built%20with-Tauri%202-FFC131?logo=tauri&logoColor=white" />
   <img alt="React" src="https://img.shields.io/badge/React-19-087EA4?logo=react&logoColor=white" />
   <img alt="Rust" src="https://img.shields.io/badge/Rust-stable-B7410E?logo=rust&logoColor=white" />
-  <img alt="Go" src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white" />
+  <img alt="Node" src="https://img.shields.io/badge/Node-22-5FA04E?logo=nodedotjs&logoColor=white" />
   <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
 </p>
 
@@ -78,11 +78,11 @@
 
 ## Why LiveAgent?
 
-LiveAgent is a **local-first** AI agent desktop client. It deeply integrates large language model reasoning with local system tools, so the AI can genuinely operate your file system, run commands, and manage scheduled tasks — while the Gateway enables remote access and collaboration.
+LiveAgent is a **self-hosted** AI agent you run yourself. It deeply integrates large language model reasoning with real system tools, so the AI can genuinely operate your file system, run commands, and manage scheduled tasks — and you reach it from a desktop app or a browser, both talking to the same backend.
 
 - **An agent that actually gets things done** — beyond chat: read and write files, make precise edits, run Bash, and supervise long-running processes
 - **A fully open ecosystem** — bridge any external tool via the MCP protocol, and load Skills packages on demand
-- **Both local and remote** — the desktop app works fully standalone; deploy the Gateway and control it from any browser
+- **Your keys stay on your backend** — the backend is the only thing that holds credentials, and you decide where it runs: your laptop, your home server, or your own VPS
 
 ---
 
@@ -106,7 +106,7 @@ LiveAgent is a **local-first** AI agent desktop client. It deeply integrates lar
 
 ### 🧩 MCP & Skills Ecosystem
 
-- **MCP protocol bridging** — the Tauri side natively bridges any stdio / http MCP server for unlimited tool extension
+- **MCP protocol bridging** — the backend natively bridges any stdio / http MCP server for unlimited tool extension
 - **Skills packages** — progressive disclosure and on-demand loading, with install / create / package support and the ClawHub ecosystem
 
 ### 💾 Memory & Automation
@@ -114,10 +114,10 @@ LiveAgent is a **local-first** AI agent desktop client. It deeply integrates lar
 - **Persistent memory** — Markdown + SQLite FTS full-text search for cross-session knowledge management
 - **Scheduled tasks** — bash / http / prompt cron job types, executed automatically in the background
 
-### 🌐 Remote Gateway
+### 🌐 Browser and Desktop, One Backend
 
-- **Access from any browser** — Go gateway (WebSocket + Protobuf) with a WebUI for remotely controlling the local agent
-- **Disconnect recovery** — a bounded seq window replays short outages, with desktop-side persistence as the safety net
+- **Same code, two shells** — the desktop app and the browser run the identical frontend build; the only difference is which backend URL it points at
+- **Disconnect recovery** — the event WebSocket reconnects and replays, with backend-side persistence as the safety net
 
 ---
 
@@ -162,12 +162,14 @@ Choose by distribution from [Releases](https://github.com/Stack-Cairn/LiveAgent/
 | DEB | Debian / Ubuntu family | `sudo dpkg -i LiveAgent-<version>-Linux-x86_64.deb` |
 | RPM | Fedora / openSUSE family | `sudo rpm -i LiveAgent-<version>-Linux-x86_64.rpm` |
 
-### Need Remote Access? Deploy the Gateway
+### Need Remote Access? (Legacy Gateway)
 
 > **⚠️ 计划在 v2.0 停用 / Deprecated in v2.0** —— 下面这套 Gateway 部署方式在
 > v2.0 会断。已经部署的用户请先读 [v2.0 迁移指南](#v20-迁移指南--v20-migration-guide)。
 
-The desktop app works out of the box and depends on no server. Deploy the Gateway only if you want to **control your local agent from a browser**.
+In v2.0 there is no Gateway: you deploy the **backend** where you want it, and the desktop app or a browser points straight at it. If the backend sits behind NAT and you are not, that is a networking problem with networking answers — [Tailscale](https://tailscale.com/), [frp](https://github.com/fatedier/frp), or [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) — not something the app punches through for you.
+
+The instructions below are the v1 Gateway path, kept for users who already run it.
 
 **Note: when deployed behind an Nginx reverse proxy, set the Gateway address on the Settings → Remote page to the HTTPS URL and use port 443.**
 
@@ -246,47 +248,52 @@ location / {
 
 Expand the Development Guide below for the full set of Make commands.
 
-![](docs/images/architecture.webp)
-
 <details>
 <summary><b>Architecture Overview</b> — diagram & tech stack</summary>
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                        Browser WebUI                          │
-│              React + Vite + WebSocket + Gateway API           │
+│                    Frontend (one codebase)                    │
+│      React 19 · Vite · runs in a browser tab, or inside       │
+│         the Tauri 2 desktop shell — same build output         │
 └────────────────────────────┬─────────────────────────────────┘
-                             │ WebSocket / HTTP
+                             │ HTTP POST /api/<command>  (JSON)
+                             │ WebSocket /api/events     (JSON)
 ┌────────────────────────────▼─────────────────────────────────┐
-│                       Agent Gateway                           │
-│    Go · WebSocket · HTTP · Session Manager · Event Store     │
-│               (Railway / Docker / self-hosted)                │
+│                   Backend · agent-backend                     │
+│     Rust · axum · SQLite · password auth · static assets      │
+│        The only public listener. Holds the API keys.          │
+│            (laptop / home server / Docker / VPS)              │
 └────────────────────────────┬─────────────────────────────────┘
-                             │ WebSocket v2 (bidirectional stream)
+                             │ loopback HTTP (never exposed)
 ┌────────────────────────────▼─────────────────────────────────┐
-│                        Agent GUI                              │
-│                   Tauri 2 · React 19 · Rust                  │
+│                    Engine · agent-core-js                     │
+│                Node 22 · TypeScript · pi-agent-core           │
 ├──────────┬────────────┬───────────┬────────────┬─────────────┤
 │ Models   │ Runtime    │ Tools     │ Skills     │ Memory/Cron │
 │ pi-ai    │ multi-turn │ FS/Bash/  │ progressive│ SQLite+MD   │
-│ + Codex  │ + SubAgent │ MCP bridge│ + Hub      │ FTS index   │
+│          │ + SubAgent │ MCP bridge│ + Hub      │ FTS index   │
 └──────────┴────────────┴───────────┴────────────┴─────────────┘
 ```
+
+The desktop shell is a shell: it renders the frontend and adds native niceties
+(tray, notifications, file dialogs). It is not a second implementation — point
+the same frontend at a remote backend URL and everything works identically.
 
 **Tech Stack**
 
 | Component | Technology |
 |---|---|
-| **Agent GUI** · Framework | Tauri 2 + React 19 + TypeScript 6 |
-| **Agent GUI** · Build | Vite 8 + pnpm |
-| **Agent GUI** · Styling | Tailwind CSS 4 + Radix UI |
-| **Agent GUI** · Rendering | streamdown + KaTeX + Mermaid + Monaco Editor |
-| **Agent GUI** · Backend | Rust + Tokio + SQLite (rusqlite) + WebSocket (tokio-tungstenite) |
-| **Agent GUI** · LLM | @earendil-works/pi-ai · @openai/codex-sdk · claude-agent-sdk |
-| **Gateway** · Language | Go 1.25 |
-| **Gateway** · Protocols | WebSocket + Protobuf + HTTP |
-| **Gateway** · Web UI | React + Vite + Tailwind CSS (embedded) |
-| **Gateway** · Deployment | Docker multi-stage · Railway CI/CD |
+| **Frontend** · Framework | React 19 + TypeScript 6 |
+| **Frontend** · Build | Vite 8 + pnpm |
+| **Frontend** · Styling | Tailwind CSS 4 + Base UI |
+| **Frontend** · Rendering | streamdown + KaTeX + Mermaid + Monaco Editor |
+| **Desktop shell** | Tauri 2 (optional — the browser is a first-class target) |
+| **Backend** · `agent-backend` | Rust + Tokio + axum + SQLite (rusqlite) |
+| **Backend** · Protocol | JSON over HTTP + WebSocket |
+| **Engine** · `agent-core-js` | Node 22 + TypeScript |
+| **Engine** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
+| **Deployment** | Docker (backend + Node runtime in one image) · Railway CI/CD |
 
 </details>
 
@@ -297,14 +304,12 @@ Expand the Development Guide below for the full set of Make commands.
 |---|---|
 | `make dev` | Start the Tauri development environment |
 | `make build` | Build the desktop app |
-| `make dev-gateway` | Start the Gateway dev server |
-| `make gateway-build` | Build the Gateway binary |
-| `make gateway-docker-build` | Build the Docker image |
-| `make gateway-docker-smoke` | Build + health check |
+| `make backend-docker-build` | Build the backend Docker image |
+| `make backend-docker-run` | Run the backend image (HTTPS on 8443) |
+| `make backend-docker-smoke` | Build + `/healthz` check |
 | `make desktop-build-macos-release` | macOS signed release build |
-| `make build-linux` | Linux amd64 gateway |
-| `make build-linux-arm` | Linux arm64 gateway |
-| `make proto` | Regenerate Protobuf code |
+| `make update-routes` | Regenerate the backend route layer from the command wrappers |
+| `make check-routes` | Fail if the generated routes have drifted (CI gate) |
 | `make clean` | Clean build artifacts |
 
 </details>
@@ -315,19 +320,24 @@ Expand the Development Guide below for the full set of Make commands.
 ```
 LiveAgent/
 ├── crates/
-│   ├── agent-gui/                # Desktop client
-│   │   ├── src/                  # React frontend
+│   ├── agent-gui/                # Frontend + desktop shell
+│   │   ├── src/                  # React frontend (browser and desktop share it)
 │   │   │   ├── components/       #   UI components
 │   │   │   ├── lib/              #   Core logic (chat, tools, skills, memory)
 │   │   │   ├── pages/            #   Pages (Chat, Settings)
 │   │   │   ├── i18n/             #   Internationalization
 │   │   │   └── prompt/           #   System prompt templates
-│   │   └── src-tauri/            # Rust backend (Tauri)
+│   │   └── src-tauri/            # Tauri 2 desktop shell (Rust)
 │   │
-│   └── agent-gateway/            # Go gateway service
-│       ├── cmd/gateway/          #   Entry point
-│       ├── internal/             #   Core implementation
-│       └── proto/v2/             #   Protobuf definitions
+│   ├── agent-backend/            # Rust backend — the only public listener
+│   │   ├── routes.rs             #   HTTP command routes (/api/<command>)
+│   │   ├── ws.rs                 #   Event WebSocket (/api/events)
+│   │   └── engine_process.rs     #   Spawns and supervises the Node engine
+│   │
+│   ├── agent-core/               # Shared Rust core (tools, runtime, storage)
+│   │
+│   └── agent-core-js/            # Node engine — model calls and the agent loop
+│       └── src/                  #   TypeScript, bundled with esbuild
 │
 ├── docs/                         # Project docs
 │   ├── architecture/             #   Architecture design
@@ -335,8 +345,8 @@ LiveAgent/
 │   └── operations/               #   Operations & deployment
 │
 ├── scripts/release/              # Release automation
-├── .github/workflows/            # CI/CD (CI + Desktop Release + Gateway Docker)
-├── Dockerfile                    # Gateway container image
+├── .github/workflows/            # CI/CD
+├── Dockerfile                    # Backend container image (Rust + Node runtime)
 ├── Makefile                      # Build commands
 └── Cargo.toml                    # Rust workspace
 ```
@@ -419,16 +429,16 @@ LiveAgent/
 ## FAQ
 
 <details>
-<summary><b>Does my API key ever leave my machine?</b></summary>
+<summary><b>Where do my API keys live?</b></summary>
 
-No. Keys are stored locally on the desktop side only. The Gateway is a pure protocol relay — it never accesses the file system and never stores any credentials.
+Only on the backend — and you decide where the backend runs. The frontend never sees a key: it sends commands, the backend calls the model. If you run the backend on your own laptop the keys never leave the machine; if you deploy it to your own server, they live there and nowhere else. There is no service of ours in the path.
 
 </details>
 
 <details>
-<summary><b>Do I have to deploy the Gateway?</b></summary>
+<summary><b>Do I have to deploy anything?</b></summary>
 
-No. The desktop client works standalone with all local capabilities; deploy the Gateway only when you need browser-based remote access to your local agent.
+Not for local use — the desktop app ships the backend inside it and works out of the box. Deploy the backend separately when you want to reach the same agent from a browser, from another machine, or keep it running while your laptop is closed.
 
 </details>
 
@@ -442,7 +452,7 @@ Claude (Anthropic), Codex (OpenAI), and Gemini protocols are built in, plus cust
 <details>
 <summary><b>Will long conversations / disconnects lose context?</b></summary>
 
-No. The desktop app persists the full history with Segment + Summary Checkpoints; the Gateway replays short disconnects through a bounded seq window and converges automatically after reconnecting.
+No. The backend persists the full history with Segment + Summary Checkpoints, and it keeps running while you are disconnected — the frontend reconnects to the event stream and catches up.
 
 </details>
 
@@ -454,17 +464,17 @@ Issues and pull requests are welcome! See the [Development Guide](docs/operation
 
 Before submitting a PR, make sure all of the following checks pass (they match the CI gates):
 
-**Desktop client · `crates/agent-gui`**
+**Frontend · `crates/agent-gui`**
 
 1. Type check & build pass: `pnpm build`
 2. Lint passes: `pnpm lint`
 3. Frontend unit tests pass: `pnpm test:frontend` (also run `pnpm test:release` when touching release scripts)
-4. Rust backend check passes: `cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests` (run from the repo root)
+4. Desktop shell check passes: `cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests` (run from the repo root)
 
-**Gateway · `crates/agent-gateway` (if changed)**
+**Backend · `crates/agent-backend` (if changed)**
 
-1. Go unit tests pass: `go test ./...`
-2. Regenerate and commit artifacts after proto changes: `make proto`
+1. Generated routes are in sync: `make check-routes` (adding a command without a route must fail here)
+2. Backend tests pass: `cargo test -p agent-backend`
 
 **Diff hygiene**
 

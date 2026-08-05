@@ -1,6 +1,6 @@
 # 阶段 6 · 删除 Go 与切换发布
 
-**状态:⬜ 未开始**(依赖阶段 5)
+**状态:🟡 进行中**
 
 ## 目标
 
@@ -81,3 +81,47 @@ cargo tree -p agent-core | grep -q tauri && echo "防线破了" || echo "防线�
 - **旧 gateway 镜像 tag 仍可拉、旧桌面端仍可连**(决策 15)
 - 记录镜像体积与启动时间,与 Go 版本对比 —— Node runtime 会让镜像变大,
   这是决策 3 的已知代价,记下来而不是假装没有
+
+---
+
+## 执行记录
+
+### 文档重写(已完成)
+
+| 文件 | 处置 |
+|---|---|
+| `docs/architecture/gateway.md` | 删除 |
+| `docs/architecture/gui.md` / `webui.md` | 删除,合并为 `docs/architecture/frontend.md` |
+| `docs/architecture/overview.md` | 重写为三层结构(前端 / Rust 后端 / Node 引擎) |
+| `docs/architecture/protocols.md` | 重写为 JSON over HTTP+WS |
+| `docs/operations/deployment.md` | 重写:两种部署形态、镜像、启动参数、NAT 穿透交给网络工具 |
+| `docs/README.md` | 目录、阅读顺序、核心边界表全部改写 |
+| `docs/operations/multi-agent.md` | 加废弃横幅(整篇讲的是已删除的 Gateway 凭证模型) |
+| `docs/features/tools.md`、`docs/architecture/backend-boundary.md` | 修正指向已删文档的链接 |
+
+新文档全部从代码读出来写,不抄旧文:路由形状取自 `routes.rs`/`routes_gen.rs`
+(176 条),事件语义取自 `ws.rs` 与 `engine.ts` 的 `emitEvent` 调用点,
+审批往返取自 `approval.rs` + `useBackendEventSubscription.ts` 两端对照,
+壳能力降级取自 `capabilities.ts` 与 `commandRouting.ts`。
+
+### 写文档时发现的两个实现缺口
+
+两条都与本阶段的验收标准直接冲突,已按实况写进文档而不是按计划写:
+
+1. **桌面壳无法连接远程后端。** `commands/app/backend.rs::get_backend_endpoint`
+   只返回内嵌后端的端点(host 恒为 `127.0.0.1`),前端 `endpoint.ts` 在壳内也
+   只走 `askShellForEndpoint()` 这一条路,没有填写远程地址的入口。
+   验收标准里「Docker 跑 headless 后端,笔记本上的桌面端连过去」**当前实现
+   不支持**,远程访问只有浏览器一条路。
+
+2. **容器数据落点未验证。** `agent-core/src/storage.rs` 用
+   `dirs::home_dir()` 解析 `~/.liveagent`,而 Dockerfile 把 runtime 用户建成
+   `--home-dir /nonexistent`,镜像也没有为数据目录预留卷。容器重建是否丢
+   设置库/历史库/记忆文件,没有实测过(本机无 docker,未能验证)。
+
+### 其余待办
+
+- 删除清单(Go / proto / buf 工具链)、构建与 CI 切换、README 三处修改
+  由其他并行任务负责,不在本条记录范围内。
+- 端到端验收(桌面端 + 浏览器逐项过、镜像体积与启动时间对比)未跑。
+
