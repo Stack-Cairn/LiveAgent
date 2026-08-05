@@ -303,6 +303,17 @@ pub async fn handle_history_pin(
     })
 }
 
+pub async fn handle_history_set_cwd(
+    request: proto::HistorySetCwdRequest,
+) -> Result<proto::HistorySetCwdResponse, String> {
+    let summary =
+        chat_history::chat_history_set_cwd_inner(request.conversation_id, request.cwd).await?;
+
+    Ok(proto::HistorySetCwdResponse {
+        conversation: Some(build_proto_conversation_summary(summary)),
+    })
+}
+
 pub async fn handle_history_share_get(
     request: proto::HistoryShareGetRequest,
 ) -> Result<proto::HistoryShareGetResponse, String> {

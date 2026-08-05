@@ -70,7 +70,7 @@ import {
 import type { SidebarConversation } from "../../lib/sidebar/types";
 
 export type ChatHistorySidebarListStatus = "initial" | "loading" | "syncing" | "ready";
-export type ChatHistorySidebarMutationKind = "rename" | "pin" | "delete";
+export type ChatHistorySidebarMutationKind = "rename" | "pin" | "move" | "delete";
 
 type ChatHistorySidebarProps = {
   items: readonly SidebarConversation[];
@@ -137,7 +137,10 @@ type ChatHistorySidebarProps = {
   onCancelRename: () => void;
   onSetPinned: (id: string, isPinned: boolean) => void;
   onMoveToWorkspace: (id: string, cwd: string) => void;
-  onMoveConversationsToWorkspace: (ids: readonly string[], cwd: string) => Promise<void>;
+  onMoveConversationsToWorkspace: (
+    ids: readonly string[],
+    cwd: string,
+  ) => Promise<readonly string[]>;
   canShareConversations: boolean;
   sharedConversationCount: number;
   onShareConversation: (item: SidebarConversation) => void;
@@ -247,6 +250,7 @@ function areRenderedHistoryItemsEqual(previous: SidebarConversation, next: Sideb
   return (
     previous.id === next.id &&
     previous.title === next.title &&
+    previous.cwd === next.cwd &&
     previous.isPinned === next.isPinned &&
     previous.isShared === next.isShared &&
     previous.isPending === next.isPending
@@ -387,6 +391,15 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     }
     onSetPinned(item.id, item.isPinned !== true);
   }, [isInteractionDisabled, item.id, item.isPinned, onSetPinned]);
+
+  const handleMoveToWorkspace = useCallback(
+    (cwd: string) => {
+      if (!isInteractionDisabled) {
+        onMoveToWorkspace(item.id, cwd);
+      }
+    },
+    [isInteractionDisabled, item.id, onMoveToWorkspace],
+  );
 
   const handleShare = useCallback(() => {
     if (isInteractionDisabled) {
@@ -892,7 +905,7 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                           isBusy ||
                           workspace.path === item.cwd
                         }
-                        onSelect={() => onMoveToWorkspace(item.id, workspace.path)}
+                        onSelect={() => handleMoveToWorkspace(workspace.path)}
                         className="gap-2"
                       >
                         <FolderClosed className="h-3.5 w-3.5 shrink-0" />
@@ -1559,6 +1572,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   // Bumped to invalidate an in-flight bulk delete: its shouldStop callback
   // starts returning true and its continuation stops touching state.
   const bulkDeleteRunRef = useRef(0);
+  const bulkMoveRunRef = useRef(0);
   const { confirm: requestBulkDeleteConfirm, dialog: bulkDeleteDialog } = useConfirmDialog();
   const orderedConversationIds = useMemo(() => items.map((item) => item.id), [items]);
   const selectableConversationIds = useMemo(
@@ -1606,6 +1620,14 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       onMoveToWorkspace(id, cwd);
     }
   });
+  const handleMoveConversationsToWorkspace = useStableEvent(
+    (ids: readonly string[], cwd: string) => {
+      if (sectionsDisabled) {
+        return Promise.resolve<readonly string[]>(ids);
+      }
+      return onMoveConversationsToWorkspace(ids, cwd);
+    },
+  );
   const handleShareConversation = useStableEvent((item: SidebarConversation) => {
     if (!sectionsDisabled) {
       onShareConversation(item);
@@ -1728,7 +1750,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   });
   const exitSelectionMode = useCallback(() => {
     bulkDeleteRunRef.current += 1;
+    bulkMoveRunRef.current += 1;
     setIsBulkDeleting(false);
+    setIsBulkMoving(false);
+    setBulkMoveMenuOpen(false);
     setSelectionMode(false);
     setSelectedConversationIds(new Set());
     selectionAnchorRef.current = null;
@@ -1833,14 +1858,26 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     if (ids.length === 0 || isBulkMoving || sectionsDisabled) {
       return;
     }
+
+    const runId = bulkMoveRunRef.current + 1;
+    bulkMoveRunRef.current = runId;
     setIsBulkMoving(true);
     try {
-      await onMoveConversationsToWorkspace(ids, cwd);
-      setSelectionMode(false);
-      setSelectedConversationIds(new Set());
-      selectionAnchorRef.current = null;
+      const failedIds = await handleMoveConversationsToWorkspace(ids, cwd);
+      if (bulkMoveRunRef.current !== runId) {
+        return;
+      }
+      const orderedConversationIdSet = new Set(orderedConversationIds);
+      const remainingFailedIds = failedIds.filter((id) => orderedConversationIdSet.has(id));
+      setSelectedConversationIds(new Set(remainingFailedIds));
+      selectionAnchorRef.current = remainingFailedIds[0] ?? null;
+      if (remainingFailedIds.length === 0) {
+        setSelectionMode(false);
+      }
     } finally {
-      setIsBulkMoving(false);
+      if (bulkMoveRunRef.current === runId) {
+        setIsBulkMoving(false);
+      }
     }
   });
   // Archived rows are split into their own collapsed group at the list end;
@@ -2320,7 +2357,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
         isPendingDelete={pendingDeleteId === item.id}
         isSelectionMode={selectionMode}
         isSelected={selectedConversationIds.has(item.id)}
-        isSelectionDisabled={isBulkDeleting || !selectableConversationIds.has(item.id)}
+        isSelectionDisabled={
+          isBulkDeleting || isBulkMoving || !selectableConversationIds.has(item.id)
+        }
         isInteractionDisabled={sectionsDisabled}
         isMobileMenuLayout={isMobileMenuLayout}
         renameDraft={renamingId === item.id ? renameDraft : ""}
@@ -2351,9 +2390,9 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       handleMenuOpenChange,
       handleRenameDraftChange,
       handleSelectConversation,
+      handleMoveToWorkspace,
       handleSetPinned,
       handleSetPendingDelete,
-      handleMoveToWorkspace,
       handleShareConversation,
       handleStartRenaming,
       busyConversationIds,
@@ -2361,6 +2400,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       activeProjects,
       enterSelectionMode,
       isBulkDeleting,
+      isBulkMoving,
       isMobileMenuLayout,
       menuSide,
       openMenuId,
@@ -2731,10 +2771,23 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             <div className="flex items-center gap-1.5">
               {selectionMode ? (
                 <>
-                  <DropdownMenu open={bulkMoveMenuOpen} onOpenChange={setBulkMoveMenuOpen}>
+                  <DropdownMenu
+                    open={bulkMoveMenuOpen}
+                    onOpenChange={(open) => {
+                      if (!sectionsDisabled || !open) {
+                        setBulkMoveMenuOpen(open);
+                      }
+                    }}
+                  >
                     <DropdownMenuTrigger
                       type="button"
-                      disabled={selectedConversationIds.size === 0 || isBulkMoving}
+                      disabled={
+                        sectionsDisabled ||
+                        selectedConversationIds.size === 0 ||
+                        isBulkDeleting ||
+                        isBulkMoving ||
+                        activeProjects.length === 0
+                      }
                       className={cn(
                         PROJECT_ICON_BUTTON_CLASS,
                         "inline-flex items-center justify-center",
@@ -2752,12 +2805,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     <DropdownMenuContent
                       side="top"
                       align="start"
+                      collisionPadding={12}
                       className="sidebar-context-menu max-h-[18rem] min-w-[12rem] overflow-y-auto rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
                     >
                       {activeProjects.map((workspace) => (
                         <DropdownMenuItem
                           key={workspace.id}
-                          disabled={workspace.path === null}
                           onSelect={() => void handleBulkMove(workspace.path)}
                           className="gap-2"
                         >
@@ -2773,7 +2826,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                     size="icon"
                     onClick={handleBulkDelete}
                     disabled={
-                      sectionsDisabled || selectedConversationIds.size === 0 || isBulkDeleting
+                      sectionsDisabled ||
+                      selectedConversationIds.size === 0 ||
+                      isBulkDeleting ||
+                      isBulkMoving
                     }
                     className={cn(PROJECT_ICON_BUTTON_CLASS, "text-destructive")}
                     title={t("chat.conversationBulkDelete")}

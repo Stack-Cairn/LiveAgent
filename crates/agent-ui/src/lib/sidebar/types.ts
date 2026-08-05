@@ -41,10 +41,12 @@ export type SidebarErrorCode =
   | "renameFailed"
   | "renameBlockedRunning"
   | "pinFailed"
+  | "moveFailed"
+  | "moveBlockedRunning"
   | "deleteFailed"
   | "deleteBlockedRunning";
 
-export type SidebarMutationKind = "rename" | "pin" | "delete";
+export type SidebarMutationKind = "rename" | "pin" | "move" | "delete";
 
 export type SidebarRunningItem = {
   conversationId: string;
