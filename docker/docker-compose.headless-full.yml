@@ -1,0 +1,37 @@
+# LiveAgent Headless Full — Docker Compose（独立配置，可直接使用）
+# ===============================================================
+# 全栈开发沙箱（~1.2 GB）。
+# 预装: core 全部工具 + java temurin-17 + maven 3.9
+#       （Java 8 未预装，首次使用时自动补装）
+# 镜像由 GitHub Actions 构建推送，此处直接拉取，无需本地构建。
+#
+# 用法（在 LiveAgent 项目根目录）:
+#   docker compose -f docker/docker-compose.headless-full.yml up -d
+#   docker compose -f docker/docker-compose.headless-full.yml logs -f
+#   docker compose -f docker/docker-compose.headless-full.yml down
+#
+# 环境变量（可选，不设置时用默认值）:
+#   GHCR_OWNER=thirsty5034  镜像仓库所有者（fork 后改为自己的用户名）
+#   TAG=main                镜像版本（main 分支 push 自动构建为 main；打 v* tag 后可填 v1.2.3 / latest）
+#
+# 切换运行时版本: 取消注释下方 environment 并改版本号，缺失版本首次启动自动补装。
+#   MISE_NODE_VERSION: 20.18.0
+#   MISE_PYTHON_VERSION: 3.11
+#   MISE_GO_VERSION: 1.24
+#   MISE_JAVA_VERSION: temurin-8
+
+services:
+  headless-full:
+    image: ghcr.io/${GHCR_OWNER:-thirsty5034}/liveagent-full:${TAG:-main}
+    container_name: liveagent-full
+    network_mode: host          # 直接使用宿主机网络，无 NAT 转发
+    environment:
+      TZ: Asia/Shanghai
+      LIVEAGENT_HEADLESS_HOST: 0.0.0.0
+      LIVEAGENT_HEADLESS_PORT: 17890
+      LIVEAGENT_DATA_DIR: /var/lib/liveagent
+      LANG: en_US.UTF-8
+    volumes:
+      - /vol1/1000/projects:/workspace    # 项目代码统一挂载
+      - ./data:/var/lib/liveagent          # 数据持久化（相对运行 compose 的目录）
+    restart: unless-stopped
