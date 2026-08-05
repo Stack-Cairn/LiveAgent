@@ -29,8 +29,6 @@ function baseInput(overrides = {}) {
     activeWorkspaceProjectId: undefined,
     archivedWorkspaceProjectPaths: [],
     cronTasks: [],
-    remote: { enabled: false },
-    gatewayOnline: false,
     prefs: PREFS,
     ...overrides,
   };
@@ -122,22 +120,11 @@ test("cron entries list all tasks with enabled checkmarks, capped at 10", () => 
   assert.equal(enabledEntry?.checked, true);
 });
 
-test("remote access state maps to status suffix, label, and enablement", () => {
-  const off = trayMenu.buildTrayMenuModel(baseInput());
-  assert.equal(off.gatewayEnabled, false);
-  assert.equal(off.statusSuffix, null);
-  assert.equal(off.labels.gateway, "远程访问（已关闭）");
-
-  const online = trayMenu.buildTrayMenuModel(
-    baseInput({ remote: { enabled: true }, gatewayOnline: true }),
-  );
-  assert.equal(online.gatewayEnabled, true);
-  assert.equal(online.statusSuffix, "远程已连接");
-
-  const offline = trayMenu.buildTrayMenuModel(
-    baseInput({ remote: { enabled: true }, gatewayOnline: false }),
-  );
-  assert.equal(offline.statusSuffix, "远程已断开");
+test("tray model no longer carries gateway state", () => {
+  const model = trayMenu.buildTrayMenuModel(baseInput());
+  assert.equal(model.statusSuffix, null);
+  assert.equal("gateway" in model.labels, false);
+  assert.equal("gatewayEnabled" in model, false);
 });
 
 test("badge text appears only with the pref on and runs active", () => {

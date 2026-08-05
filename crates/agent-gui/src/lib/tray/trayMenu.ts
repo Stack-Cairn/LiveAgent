@@ -13,7 +13,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type Locale, t } from "../../i18n/config";
 import type { CronTask } from "../automation/types";
-import type { AppSettings, Theme, WorkspaceProject } from "../settings";
+import type { Theme, WorkspaceProject } from "../settings";
 import { workspaceProjectPathKey } from "../settings";
 import { readGlobalShortcutBindings } from "../shortcuts/globalShortcuts";
 import type { SidebarConversation } from "../sidebar/types";
@@ -42,7 +42,6 @@ export type TrayMenuModel = {
     runs: string;
     stopAll: string;
     cron: string;
-    gateway: string;
     appearance: string;
     themeLight: string;
     themeDark: string;
@@ -59,7 +58,6 @@ export type TrayMenuModel = {
   runs: TrayMenuEntry[];
   cron: TrayMenuEntry[];
   theme: Theme;
-  gatewayEnabled: boolean;
   showAccelerator: string | null;
   newChatAccelerator: string | null;
   tooltip: string | null;
@@ -75,8 +73,6 @@ export type BuildTrayMenuModelInput = {
   activeWorkspaceProjectId: string | undefined;
   archivedWorkspaceProjectPaths: readonly string[];
   cronTasks: readonly CronTask[];
-  remote: AppSettings["remote"];
-  gatewayOnline: boolean;
   prefs: TrayPrefs;
 };
 
@@ -151,18 +147,9 @@ export function buildTrayMenuModel(input: BuildTrayMenuModelInput): TrayMenuMode
     checked: task.enabled,
   }));
 
-  // 远程访问是本机的一个开关，不再是「连没连上某个 Gateway」。
-  const remoteEnabled = input.remote.enabled;
-  const gatewayStatusText = !remoteEnabled
-    ? null
-    : input.gatewayOnline
-      ? t("tray.gatewayConnected", locale)
-      : t("tray.gatewayDisconnected", locale);
-
   const tooltipParts = [
     "LiveAgent",
     runningCount > 0 ? withCount(t("tray.tooltipRunning", locale), runningCount) : null,
-    gatewayStatusText,
   ].filter((part): part is string => Boolean(part));
 
   return {
@@ -179,9 +166,6 @@ export function buildTrayMenuModel(input: BuildTrayMenuModelInput): TrayMenuMode
           : t("tray.runsIdle", locale),
       stopAll: t("tray.stopAll", locale),
       cron: t("tray.cron", locale),
-      gateway: remoteEnabled
-        ? `${t("tray.gateway", locale)} · ${gatewayStatusText ?? ""}`
-        : t("tray.gatewayDisabled", locale),
       appearance: `${t("tray.appearance", locale)} · ${t(
         input.theme === "light"
           ? "tray.themeLight"
@@ -198,14 +182,13 @@ export function buildTrayMenuModel(input: BuildTrayMenuModelInput): TrayMenuMode
       openDataDir: t("tray.openDataDir", locale),
       quit: t("tray.quit", locale),
     },
-    statusSuffix: gatewayStatusText,
+    statusSuffix: null,
     recent,
     recentTruncated,
     workspaces,
     runs,
     cron,
     theme: input.theme,
-    gatewayEnabled: remoteEnabled,
     showAccelerator: enabledAccelerator("summon"),
     newChatAccelerator: enabledAccelerator("newChat"),
     tooltip: tooltipParts.join(" · "),

@@ -1764,8 +1764,6 @@ export function ChatPage(props: ChatPageProps) {
           activeWorkspaceProjectId: activeWorkspaceProject?.id,
           archivedWorkspaceProjectPaths: settings.system.archivedWorkspaceProjectPaths,
           cronTasks: automationState.cron.tasks,
-          remote: settings.remote,
-          gatewayOnline: remoteRuntimeStatus.online,
           prefs: trayPrefs,
         }),
       );
@@ -1780,8 +1778,6 @@ export function ChatPage(props: ChatPageProps) {
     activeWorkspaceProject,
     settings.system.archivedWorkspaceProjectPaths,
     automationState.cron.tasks,
-    settings.remote,
-    remoteRuntimeStatus.online,
     trayPrefs,
   ]);
 
