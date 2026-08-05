@@ -35,7 +35,11 @@ export async function callBackend<T = unknown>(
 
   if (!response.ok) {
     if (parsed && typeof parsed === 'object' && 'error' in parsed) {
-      throw new Error(String((parsed as any).error));
+      const errorValue = (parsed as any).error;
+      if (typeof errorValue === 'string') {
+        throw new Error(errorValue);
+      }
+      throw errorValue;
     }
     throw new Error(`Backend call failed for "${command}": HTTP ${response.status}`);
   }

@@ -47,20 +47,3 @@ export async function requestToolApproval(params: {
   }
 }
 
-export type AnswerToolApprovalOutcome = { ok: boolean; message?: string };
-
-/**
- * 应答一个挂起的审批。由前端审批卡片调用,转发用户决定给 Rust。
- * (此函数作为前端导入兼容层保留;实际接线由前端/Rust 协调完成。)
- */
-export function answerToolApproval(
-  _toolCallId: string,
-  _decision: ToolApprovalDecision,
-  _options?: { conversationId?: string }
-): AnswerToolApprovalOutcome {
-  // 占位:实际应答应由前端直接打 Rust 的 answer_tool_approval 接口
-  return {
-    ok: false,
-    message: "answerToolApproval is not implemented on Node side; route through Rust",
-  };
-}
