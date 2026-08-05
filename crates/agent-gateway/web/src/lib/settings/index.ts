@@ -2310,7 +2310,9 @@ export function normalizeProviderFailoverSettings(
       const providerId =
         typeof raw === "string"
           ? raw
-          : raw && typeof raw === "object" && typeof (raw as SelectedModel).customProviderId === "string"
+          : raw &&
+              typeof raw === "object" &&
+              typeof (raw as SelectedModel).customProviderId === "string"
             ? (raw as SelectedModel).customProviderId
             : "";
       if (!providerId) continue;

@@ -2762,7 +2762,10 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
             ) : null}
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">
-            {t("settings.failoverToggleHint").replaceAll("{vendor}", getProviderLabel(providerType))}
+            {t("settings.failoverToggleHint").replaceAll(
+              "{vendor}",
+              getProviderLabel(providerType),
+            )}
           </p>
         </div>
         <DialogSwitch
