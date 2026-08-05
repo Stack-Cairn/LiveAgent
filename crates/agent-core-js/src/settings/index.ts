@@ -399,14 +399,13 @@ export const CLOSE_WINDOW_BEHAVIOR_OPTIONS = [
 
 const SYSTEM_THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
 
+/**
+ * 后端的远程访问控制：门控「连过来的远程前端能干什么」。
+ * 这里没有「连到哪个 Gateway」——桌面端自己就是后端，不再外拨。
+ */
 export type RemoteSettings = {
+  /** 远程访问总开关：关掉后下面几项一律不生效。 */
   enabled: boolean;
-  gatewayUrl: string;
-  gatewayPort: number;
-  token: string;
-  agentId: string;
-  autoReconnect: boolean;
-  heartbeatInterval: number;
   enableWebTerminal: boolean;
   enableWebSshTerminal: boolean;
   enableWebGit: boolean;
@@ -1119,12 +1118,6 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
     enabled: obj.enabled === true,
-    gatewayUrl: normalizeBaseUrl(typeof obj.gatewayUrl === "string" ? obj.gatewayUrl : ""),
-    gatewayPort: normalizeIntegerInRange(obj.gatewayPort, 1, 65_535, 443),
-    token: normalizeApiKey(typeof obj.token === "string" ? obj.token : ""),
-    agentId: normalizeOptionalText(obj.agentId),
-    autoReconnect: obj.autoReconnect !== false,
-    heartbeatInterval: normalizePositiveInteger(obj.heartbeatInterval, 30),
     enableWebTerminal: obj.enableWebTerminal === true,
     enableWebSshTerminal: obj.enableWebSshTerminal === true,
     enableWebGit: obj.enableWebGit === true,
@@ -2222,12 +2215,6 @@ export function getDefaultSettings(): AppSettings {
     },
     remote: {
       enabled: false,
-      gatewayUrl: "",
-      gatewayPort: 443,
-      token: "",
-      agentId: "",
-      autoReconnect: true,
-      heartbeatInterval: 30,
       enableWebTerminal: false,
       enableWebSshTerminal: false,
       enableWebGit: false,

@@ -351,11 +351,7 @@ func statusLocked(entry *agentEntry, now time.Time) Status {
 	status.SessionID = entry.session.SessionID
 	status.ConnectedSince = entry.session.ConnectedAt.Unix()
 	status.LastHeartbeat = entry.session.LastPing.Unix()
-	if !entry.session.SupportsCapability(gatewayv2.ChatIngressV1Capability) {
-		status.RuntimeState = "protocol_incompatible"
-	} else {
-		status.RuntimeState = entry.runtimeState
-	}
+	status.RuntimeState = entry.runtimeState
 	status.RuntimeWorkerID = entry.runtimeWorkerID
 	status.RuntimeVisible = entry.runtimeVisible
 	status.RuntimeActiveRunCount = entry.runtimeActiveRunCount
@@ -374,13 +370,6 @@ func (m *Manager) ChatRuntimeReady(agentID string) bool {
 		return false
 	}
 	return runtimeReadyLocked(entry, time.Now())
-}
-
-func (m *Manager) ChatIngressV1Ready(agentID string) bool {
-	m.registry.mu.RLock()
-	defer m.registry.mu.RUnlock()
-	entry, err := m.registry.resolveOnlineLocked(agentID)
-	return err == nil && entry.session.SupportsCapability(gatewayv2.ChatIngressV1Capability)
 }
 
 // ChatRuntimeProbeEpoch 返回目标 Agent 的会话 epoch；探活完成后以同一 agent_id +
@@ -491,9 +480,6 @@ func clearRuntimeStatusLocked(entry *agentEntry) {
 
 func runtimeReadyLocked(entry *agentEntry, now time.Time) bool {
 	if entry == nil || entry.session == nil {
-		return false
-	}
-	if !entry.session.SupportsCapability(gatewayv2.ChatIngressV1Capability) {
 		return false
 	}
 	if entry.session.LastPing.IsZero() || now.Sub(entry.session.LastPing) > agentSessionHeartbeatTTL {

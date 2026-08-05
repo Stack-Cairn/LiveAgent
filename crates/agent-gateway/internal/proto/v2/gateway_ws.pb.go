@@ -91,8 +91,8 @@ type ClientHello struct {
 	// 客户端标识（如 "webui" / "desktop"），仅用于观测与日志。
 	ClientName    string `protobuf:"bytes,6,opt,name=client_name,json=clientName,proto3" json:"client_name,omitempty"`
 	ClientVersion string `protobuf:"bytes,7,opt,name=client_version,json=clientVersion,proto3" json:"client_version,omitempty"`
-	// Optional feature identifiers supported by this client. Reliable desktop
-	// chat ingress is negotiated with "CHAT_INGRESS_V1".
+	// Optional feature identifiers supported by this client. No capability is
+	// currently negotiated; the field stays for forward compatibility.
 	Capabilities  []string `protobuf:"bytes,8,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

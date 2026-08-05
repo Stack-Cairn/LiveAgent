@@ -9,7 +9,6 @@ pub mod hook;
 pub mod mcp;
 pub mod memory;
 pub mod process;
-pub mod proxy;
 pub mod settings;
 pub mod sftp;
 pub mod shell;

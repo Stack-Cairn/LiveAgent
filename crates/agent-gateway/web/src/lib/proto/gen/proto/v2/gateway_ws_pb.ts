@@ -70,8 +70,8 @@ export type ClientHello = Message<"liveagent.gateway.v2.ClientHello"> & {
   clientVersion: string;
 
   /**
-   * Optional feature identifiers supported by this client. Reliable desktop
-   * chat ingress is negotiated with "CHAT_INGRESS_V1".
+   * Optional feature identifiers supported by this client. No capability is
+   * currently negotiated; the field stays for forward compatibility.
    *
    * @generated from field: repeated string capabilities = 8;
    */

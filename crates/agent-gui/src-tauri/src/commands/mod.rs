@@ -3,12 +3,13 @@
 #[path = "app/mod.rs"]
 pub mod app_commands;
 
-/// Gateway 的 20 个命令：阶段 4 随 Gateway 一并删除，所以不拆、不迁。
-#[path = "integration/gateway.rs"]
-pub mod gateway;
+#[path = "integration/mod.rs"]
+pub mod integration_commands;
 
 pub use app_commands::app;
 pub use app_commands::backend;
 pub use app_commands::system;
 pub use app_commands::tray;
 pub use app_commands::update;
+pub use integration_commands::provider_usage;
+pub use integration_commands::workspace;

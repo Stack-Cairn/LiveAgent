@@ -10,7 +10,6 @@ import (
 
 var ErrAgentIDRequired = errors.New("agent_id is required")
 var ErrAgentOffline = errors.New("agent offline")
-var ErrChatProtocolIncompatible = errors.New("desktop chat protocol is incompatible; update LiveAgent desktop")
 var ErrTunnelNotFound = errors.New("tunnel not found")
 var ErrTunnelExpired = errors.New("tunnel expired")
 var ErrTunnelOverLimit = errors.New("tunnel connection limit exceeded")
@@ -87,7 +86,7 @@ func NewManager() *Manager {
 		managedProcesses: newManagedProcessHub(),
 		statusSubs:       newStatusSubscriberHub(),
 	}
-	m.convStreams = newConversationStreamStore(m.IsOnline)
+	m.convStreams = newConversationStreamStore()
 	go m.tunnelExpirySweepLoop()
 	return m
 }

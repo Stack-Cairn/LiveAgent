@@ -1,87 +1,14 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
-import type { AppSettings } from "../../../lib/settings";
-import { buildFallbackGatewayStatus, type GatewayRuntimeStatus } from "./gatewayRuntimeStatusModel";
-
-type UseGatewayStatusParams = {
-  remote: AppSettings["remote"];
-};
+import { useState } from "react";
+import { type GatewayRuntimeStatus, OFFLINE_GATEWAY_STATUS } from "./gatewayRuntimeStatusModel";
 
 /**
- * Tracks the desktop gateway runtime status: one initial `gateway_status`
- * fetch plus a `gateway:status` event subscription, both re-armed when the
- * connection-relevant remote settings change.
+ * 阶段 4 之后桌面端不再内嵌 gateway,`gateway_status` 命令与
+ * `gateway:status` 事件均已删除——运行时状态恒为离线。保留 hook
+ * 形状是为了让消费方(状态条/分享入口)零改动地维持既有行为。
  */
-export function useGatewayStatus(params: UseGatewayStatusParams) {
-  const { remote } = params;
-  const [remoteRuntimeStatus, setRemoteRuntimeStatus] = useState<GatewayRuntimeStatus>(() =>
-    buildFallbackGatewayStatus(remote),
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void invoke<GatewayRuntimeStatus>("gateway_status")
-      .then((status) => {
-        if (!cancelled) {
-          setRemoteRuntimeStatus(status);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRemoteRuntimeStatus(buildFallbackGatewayStatus(remote));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    remote.agentId,
-    remote.autoReconnect,
-    remote.enabled,
-    remote.gatewayUrl,
-    remote.gatewayPort,
-    remote.heartbeatInterval,
-    remote.token,
-  ]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let dispose: (() => void) | null = null;
-
-    void listen<GatewayRuntimeStatus>("gateway:status", (event) => {
-      if (!cancelled) {
-        setRemoteRuntimeStatus(event.payload);
-      }
-    })
-      .then((unlisten) => {
-        if (cancelled) {
-          unlisten();
-          return;
-        }
-        dispose = unlisten;
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setRemoteRuntimeStatus(buildFallbackGatewayStatus(remote));
-        }
-      });
-
-    return () => {
-      cancelled = true;
-      dispose?.();
-    };
-  }, [
-    remote.agentId,
-    remote.autoReconnect,
-    remote.enabled,
-    remote.gatewayUrl,
-    remote.gatewayPort,
-    remote.heartbeatInterval,
-    remote.token,
-  ]);
+export function useGatewayStatus() {
+  const [remoteRuntimeStatus, setRemoteRuntimeStatus] =
+    useState<GatewayRuntimeStatus>(OFFLINE_GATEWAY_STATUS);
 
   return { remoteRuntimeStatus, setRemoteRuntimeStatus };
 }

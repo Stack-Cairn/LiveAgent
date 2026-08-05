@@ -29,7 +29,7 @@ function baseInput(overrides = {}) {
     activeWorkspaceProjectId: undefined,
     archivedWorkspaceProjectPaths: [],
     cronTasks: [],
-    remote: { enabled: false, gatewayUrl: "", token: "" },
+    remote: { enabled: false },
     gatewayOnline: false,
     prefs: PREFS,
     ...overrides,
@@ -122,36 +122,22 @@ test("cron entries list all tasks with enabled checkmarks, capped at 10", () => 
   assert.equal(enabledEntry?.checked, true);
 });
 
-test("gateway state maps to status suffix, label, and enablement", () => {
-  const unconfigured = trayMenu.buildTrayMenuModel(baseInput());
-  assert.equal(unconfigured.gatewayEnabled, false);
-  assert.equal(unconfigured.statusSuffix, null);
-  assert.equal(unconfigured.labels.gateway, "远程网关（未配置）");
+test("remote access state maps to status suffix, label, and enablement", () => {
+  const off = trayMenu.buildTrayMenuModel(baseInput());
+  assert.equal(off.gatewayEnabled, false);
+  assert.equal(off.statusSuffix, null);
+  assert.equal(off.labels.gateway, "远程访问（已关闭）");
 
   const online = trayMenu.buildTrayMenuModel(
-    baseInput({
-      remote: { enabled: true, gatewayUrl: "wss://gw", token: "tok" },
-      gatewayOnline: true,
-    }),
+    baseInput({ remote: { enabled: true }, gatewayOnline: true }),
   );
   assert.equal(online.gatewayEnabled, true);
   assert.equal(online.statusSuffix, "远程已连接");
 
-  const disabled = trayMenu.buildTrayMenuModel(
-    baseInput({
-      remote: { enabled: false, gatewayUrl: "wss://gw", token: "tok" },
-      gatewayOnline: false,
-    }),
+  const offline = trayMenu.buildTrayMenuModel(
+    baseInput({ remote: { enabled: true }, gatewayOnline: false }),
   );
-  assert.equal(disabled.statusSuffix, "远程已断开");
-
-  const connecting = trayMenu.buildTrayMenuModel(
-    baseInput({
-      remote: { enabled: true, gatewayUrl: "wss://gw", token: "tok" },
-      gatewayOnline: false,
-    }),
-  );
-  assert.equal(connecting.statusSuffix, "远程连接中");
+  assert.equal(offline.statusSuffix, "远程已断开");
 });
 
 test("badge text appears only with the pref on and runs active", () => {

@@ -2,7 +2,6 @@ package session
 
 import (
 	"strings"
-	"time"
 
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
@@ -35,29 +34,9 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 	// 所有入站事件按已认证会话的 agent_id 打标入账——这是跨 Agent 隔离的唯一
 	// 事实源：Agent 无法伪造他人身份的事件（身份来自握手，不来自载荷）。
 	agentID := session.AgentID
-	reliableChatIngress := session.SupportsCapability(gatewayv2.ChatIngressV1Capability)
-
-	if batch := env.GetChatIngressBatch(); batch != nil {
-		m.touchRuntimeActivity(session)
-		m.queueChatIngressAck(session, env.GetRequestId(), m.ingestChatIngressBatch(agentID, batch))
-		return
-	}
-	if resume := env.GetChatIngressResume(); resume != nil {
-		m.touchRuntimeActivity(session)
-		for _, ack := range m.ingestChatIngressResume(agentID, resume) {
-			m.queueChatIngressAck(session, env.GetRequestId(), ack)
-		}
-		return
-	}
-	if fragment := env.GetChatIngressFragment(); fragment != nil {
-		m.touchRuntimeActivity(session)
-		m.queueChatIngressAck(session, env.GetRequestId(), m.ingestChatIngressFragment(agentID, fragment))
-		return
-	}
 
 	if runtimeStatus := env.GetRuntimeStatus(); runtimeStatus != nil {
 		m.UpdateRuntimeStatus(session, runtimeStatus)
-		m.convStreams.onRuntimeStatus(agentID, runtimeStatus, time.Now())
 		return
 	}
 
@@ -66,28 +45,15 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 	}
 
 	if runtimeSnapshot := env.GetChatRuntimeSnapshot(); runtimeSnapshot != nil {
-		if reliableChatIngress {
-			return
-		}
 		m.ingestRuntimeSnapshot(agentID, runtimeSnapshot)
 		return
 	}
 
 	if chatEvent := env.GetChatEvent(); chatEvent != nil {
-		if reliableChatIngress {
-			return
-		}
 		m.ingestChatEvent(agentID, env.GetRequestId(), chatEvent)
 	}
 
 	if chatControl := env.GetChatControl(); chatControl != nil {
-		controlType := strings.TrimSpace(chatControl.GetType())
-		if controlType == "" {
-			controlType = strings.TrimSpace(chatControl.GetState())
-		}
-		if reliableChatIngress && (controlType == "completed" || controlType == "failed" || controlType == "cancelled") {
-			return
-		}
 		m.ingestChatControl(agentID, env.GetRequestId(), chatControl)
 	}
 
@@ -154,22 +120,4 @@ func (m *Manager) dispatchFromAgent(expected *AgentSession, env *gatewayv2.Agent
 	// through to session.dispatch: they answer gateway-issued requests and
 	// correlate by request id.
 	session.dispatch(env)
-}
-
-func (m *Manager) queueChatIngressAck(session *AgentSession, requestID string, ack *gatewayv2.ChatIngressAck) {
-	if session == nil || ack == nil {
-		return
-	}
-	queued, err := session.TrySendToAgent(&gatewayv2.GatewayEnvelope{
-		RequestId: requestID,
-		Timestamp: time.Now().Unix(),
-		Payload: &gatewayv2.GatewayEnvelope_ChatIngressAck{
-			ChatIngressAck: ack,
-		},
-	})
-	if err != nil || !queued {
-		// An ACK that cannot be queued must force a reconnect. Silently losing
-		// it would leave the producer unsure whether the record committed.
-		session.Close()
-	}
 }

@@ -29,7 +29,6 @@ pub const TRAY_WORKSPACES_MENU_ID: &str = "tray-workspaces-menu";
 pub const TRAY_RUNS_MENU_ID: &str = "tray-runs-menu";
 pub const TRAY_RUN_STOP_ALL_ID: &str = "tray-run-stop-all";
 pub const TRAY_CRON_MENU_ID: &str = "tray-cron-menu";
-pub const TRAY_GATEWAY_ID: &str = "tray-gateway";
 pub const TRAY_APPEARANCE_MENU_ID: &str = "tray-appearance-menu";
 pub const TRAY_THEME_LIGHT_ID: &str = "tray-theme:light";
 pub const TRAY_THEME_DARK_ID: &str = "tray-theme:dark";
@@ -74,7 +73,6 @@ pub struct TrayMenuLabels {
     pub runs: String,
     pub stop_all: String,
     pub cron: String,
-    pub gateway: String,
     pub appearance: String,
     pub theme_light: String,
     pub theme_dark: String,
@@ -101,8 +99,6 @@ pub struct TrayMenuModel {
     pub cron: Vec<TrayMenuEntry>,
     /// "light" | "dark" | "system"；其余值不更新勾选。
     pub theme: String,
-    /// 远程网关行是否可点（未配置远程时禁用）。
-    pub gateway_enabled: bool,
     /// summon / newChat 全局快捷键回显（muda accelerator 格式，仅显示不注册）。
     pub show_accelerator: Option<String>,
     pub new_chat_accelerator: Option<String>,
@@ -124,7 +120,6 @@ pub struct TrayMenuHandles {
     workspaces: Submenu<tauri::Wry>,
     runs: Submenu<tauri::Wry>,
     cron: Submenu<tauri::Wry>,
-    gateway: MenuItem<tauri::Wry>,
     appearance: Submenu<tauri::Wry>,
     theme_light: CheckMenuItem<tauri::Wry>,
     theme_dark: CheckMenuItem<tauri::Wry>,
@@ -147,7 +142,6 @@ pub struct TrayMenuSkeleton {
     workspaces: Submenu<tauri::Wry>,
     runs: Submenu<tauri::Wry>,
     cron: Submenu<tauri::Wry>,
-    gateway: MenuItem<tauri::Wry>,
     appearance: Submenu<tauri::Wry>,
     theme_light: CheckMenuItem<tauri::Wry>,
     theme_dark: CheckMenuItem<tauri::Wry>,
@@ -178,7 +172,6 @@ pub fn build_tray_menu_skeleton(
     let workspaces = Submenu::with_id(app, TRAY_WORKSPACES_MENU_ID, "工作空间", false)?;
     let runs = Submenu::with_id(app, TRAY_RUNS_MENU_ID, "运行中", false)?;
     let cron = Submenu::with_id(app, TRAY_CRON_MENU_ID, "定时任务", false)?;
-    let gateway = MenuItem::with_id(app, TRAY_GATEWAY_ID, "远程网关", false, None::<&str>)?;
     let theme_light =
         CheckMenuItem::with_id(app, TRAY_THEME_LIGHT_ID, "浅色", true, false, None::<&str>)?;
     let theme_dark =
@@ -224,7 +217,6 @@ pub fn build_tray_menu_skeleton(
             &PredefinedMenuItem::separator(app)?,
             &runs,
             &cron,
-            &gateway,
             &PredefinedMenuItem::separator(app)?,
             &appearance,
             &settings,
@@ -245,7 +237,6 @@ pub fn build_tray_menu_skeleton(
         workspaces,
         runs,
         cron,
-        gateway,
         appearance,
         theme_light,
         theme_dark,
@@ -270,7 +261,6 @@ impl TrayMenuHandles {
             workspaces: skeleton.workspaces,
             runs: skeleton.runs,
             cron: skeleton.cron,
-            gateway: skeleton.gateway,
             appearance: skeleton.appearance,
             theme_light: skeleton.theme_light,
             theme_dark: skeleton.theme_dark,
@@ -323,7 +313,6 @@ pub fn apply_tray_menu(
     set_submenu_text_if_present(&handles.workspaces, &model.labels.workspaces).map_err(err)?;
     set_submenu_text_if_present(&handles.runs, &model.labels.runs).map_err(err)?;
     set_submenu_text_if_present(&handles.cron, &model.labels.cron).map_err(err)?;
-    set_text_if_present(&handles.gateway, &model.labels.gateway).map_err(err)?;
     set_submenu_text_if_present(&handles.appearance, &model.labels.appearance).map_err(err)?;
     set_check_text_if_present(&handles.theme_light, &model.labels.theme_light).map_err(err)?;
     set_check_text_if_present(&handles.theme_dark, &model.labels.theme_dark).map_err(err)?;
@@ -361,12 +350,6 @@ pub fn apply_tray_menu(
         }
         _ => {}
     }
-
-    // 远程网关行。
-    handles
-        .gateway
-        .set_enabled(model.gateway_enabled)
-        .map_err(err)?;
 
     // 动态子菜单重建。
     let recent_trailing = if model.recent_truncated {
@@ -658,7 +641,6 @@ mod tests {
             "runs": [],
             "cron": [{ "id": "t1", "label": "夜间构建" }],
             "theme": "dark",
-            "gatewayEnabled": true,
             "newChatAccelerator": "Ctrl+Shift+KeyN",
             "tooltip": "LiveAgent · 空闲",
             "badgeText": null
@@ -672,7 +654,6 @@ mod tests {
         assert!(model.recent_truncated);
         assert!(model.workspaces[0].checked);
         assert_eq!(model.theme, "dark");
-        assert!(model.gateway_enabled);
         assert_eq!(
             model.new_chat_accelerator.as_deref(),
             Some("Ctrl+Shift+KeyN")

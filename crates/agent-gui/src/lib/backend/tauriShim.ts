@@ -1,187 +1,66 @@
 /**
- * 浏览器环境的 __TAURI_INTERNALS__ polyfill（阶段 4 前端网络化的收口点）。
+ * 浏览器环境的 `__TAURI_INTERNALS__` polyfill。
  *
- * 桌面端（Tauri webview）里 __TAURI_INTERNALS__ 由壳注入，本模块什么都不做。
- * 纯浏览器里则把同一套调用面翻译到 agent-backend 的网络 API：
- *   - invoke(cmd, args)            → POST /api/<cmd>（routes_gen.rs 镜像的 180 个 command）
- *   - plugin:event|listen/unlisten → WS /api/events 订阅（{event, payload} 帧）
- *   - get_backend_endpoint         → 本地配置（URL 参数 / localStorage）
+ * 阶段 4 之后，业务代码的 invoke/listen 已经由 vite alias 顶替到
+ * lib/backend/tauriCore.ts 与 tauriEvent.ts，不再经过这里。这个 polyfill 只
+ * 剩一个职责：让**仍然直接读 `window.__TAURI_INTERNALS__` 的第三方模块**
+ * （`@tauri-apps/plugin-opener`、`@tauri-apps/api/window|webview|path`——它们
+ * 内部走相对 import，alias 管不到）在纯浏览器里不至于抛
+ * "Cannot read properties of undefined"。
  *
- * 这样 58 个直接 import @tauri-apps/api 的文件不需要任何改动。
+ * 桌面壳里什么都不做：真 internals 由 Tauri 注入，且它的每个成员都是
+ * `Object.defineProperty(..., { value })` 定义的 non-writable/non-configurable
+ * 属性，改不了也不该改。
  *
- * 端点配置：URL 参数 ?backendHost=&backendPort=&token= 会持久化到 localStorage，
- * 之后可省略。默认 127.0.0.1:8443。
+ * 它必须是 main.tsx 的第一个 import：模块作用域里就有 invoke 的文件不少。
  */
 
-type BackendEndpoint = { host: string; port: number; password: string };
-
-const STORAGE_KEY = "liveagent.backend.endpoint";
-
-// 只存在于 Tauri 壳（src-tauri/src/commands）的命令；阶段 4/5 里它们
-// 要么消失（gateway_*）要么留在壳里（app_* 窗口/托盘/更新）。
-const SHELL_ONLY_PREFIXES = ["app_", "gateway_"];
-const SHELL_ONLY_COMMANDS = new Set(["workspace_watch_set", "system_ensure_builtin_skills"]);
-
-function loadEndpoint(): BackendEndpoint {
-  const params = new URLSearchParams(window.location.search);
-  let stored: Partial<BackendEndpoint> = {};
-  try {
-    stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-  } catch {
-    // 损坏的存档当空处理
-  }
-  const endpoint: BackendEndpoint = {
-    host: params.get("backendHost") ?? stored.host ?? "127.0.0.1",
-    port: Number(params.get("backendPort") ?? stored.port ?? 8443),
-    password: params.get("token") ?? stored.password ?? "",
-  };
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(endpoint));
-  } catch {
-    // 隐私模式下写不进去也无所谓
-  }
-  return endpoint;
-}
-
-export function isNetworkShimActive(): boolean {
-  const internals = (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
-  return !!internals && !!(internals as Record<string, unknown>).__LIVEAGENT_NETWORK_SHIM__;
-}
+import { LEGACY_GATEWAY_MESSAGE, REMOVED_GATEWAY_COMMANDS } from "./commandRouting";
+import { backendInvoke, dispatchLocalEvent, subscribeBackendEvent } from "./transport";
 
 export function installTauriShim() {
   const w = window as unknown as Record<string, unknown>;
   if (w.__TAURI_INTERNALS__) return; // 真 Tauri 壳在场，不干预
 
-  const endpoint = loadEndpoint();
-  const httpBase = `http://${endpoint.host}:${endpoint.port}`;
-
-  // ---- 回调注册表（transformCallback 的存储） ----
+  // ---- 回调注册表：transformCallback 的存储 ----
   let nextCallbackId = 1;
   const callbacks = new Map<number, (payload: unknown) => void>();
-
-  // ---- 事件订阅：event 名 → 该事件的 callback id 集合 ----
-  const eventSubscribers = new Map<string, Set<number>>();
-
-  // ---- WS 连接（惰性建立，断线自动重连） ----
-  let ws: WebSocket | null = null;
-  let wsRetryDelay = 500;
-
-  function ensureWebSocket() {
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-      return;
-    }
-    const url = new URL(`ws://${endpoint.host}:${endpoint.port}/api/events`);
-    url.searchParams.set("token", endpoint.password);
-    const socket = new WebSocket(url.toString());
-    ws = socket;
-
-    socket.onopen = () => {
-      wsRetryDelay = 500;
-    };
-    socket.onmessage = (msg) => {
-      let frame: { event?: string; payload?: unknown };
-      try {
-        frame = JSON.parse(String(msg.data));
-      } catch {
-        return;
-      }
-      if (!frame.event) return;
-      const subs = eventSubscribers.get(frame.event);
-      if (!subs) return;
-      // Tauri event 回调收到的是完整 Event 对象 {event, id, payload}
-      const eventObj = { event: frame.event, id: 0, payload: frame.payload };
-      for (const id of subs) {
-        callbacks.get(id)?.(eventObj);
-      }
-    };
-    socket.onclose = () => {
-      if (ws === socket) ws = null;
-      // 还有订阅者才重连
-      if (eventSubscribers.size > 0) {
-        setTimeout(ensureWebSocket, wsRetryDelay);
-        wsRetryDelay = Math.min(wsRetryDelay * 2, 10_000);
-      }
-    };
-  }
-
-  async function httpInvoke(cmd: string, args: unknown): Promise<unknown> {
-    const response = await fetch(`${httpBase}/api/${cmd}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${endpoint.password}`,
-      },
-      body: JSON.stringify(args ?? {}),
-    });
-    const text = await response.text();
-    let parsed: unknown = null;
-    try {
-      parsed = text ? JSON.parse(text) : null;
-    } catch {
-      throw new Error(`Backend call failed for "${cmd}": HTTP ${response.status} - invalid JSON`);
-    }
-    if (!response.ok) {
-      if (parsed && typeof parsed === "object" && "error" in parsed) {
-        const errorValue = (parsed as { error: unknown }).error;
-        throw typeof errorValue === "string" ? new Error(errorValue) : errorValue;
-      }
-      throw new Error(`Backend call failed for "${cmd}": HTTP ${response.status}`);
-    }
-    if (parsed && typeof parsed === "object" && "ok" in parsed) {
-      return (parsed as { ok: unknown }).ok;
-    }
-    return parsed;
-  }
+  // 事件订阅：callback id → 退订函数（transport 层的 WS 订阅）
+  const unsubscribes = new Map<number, () => void>();
 
   function invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
-    // 事件插件：本地翻译成 WS 订阅
+    // 事件插件：翻译成 transport 的 WS 订阅
     if (cmd === "plugin:event|listen") {
       const eventName = String(args?.event);
       const handlerId = Number(args?.handler);
-      let subs = eventSubscribers.get(eventName);
-      if (!subs) {
-        subs = new Set();
-        eventSubscribers.set(eventName, subs);
-      }
-      subs.add(handlerId);
-      ensureWebSocket();
+      const unsubscribe = subscribeBackendEvent(eventName, (frame) => {
+        callbacks.get(handlerId)?.({ event: frame.event, id: handlerId, payload: frame.payload });
+      });
+      unsubscribes.set(handlerId, unsubscribe);
       return Promise.resolve(handlerId);
     }
     if (cmd === "plugin:event|unlisten") {
-      const eventName = String(args?.event);
       const handlerId = Number(args?.eventId);
-      const subs = eventSubscribers.get(eventName);
-      if (subs) {
-        subs.delete(handlerId);
-        if (subs.size === 0) eventSubscribers.delete(eventName);
-      }
+      unsubscribes.get(handlerId)?.();
+      unsubscribes.delete(handlerId);
       callbacks.delete(handlerId);
       return Promise.resolve();
     }
     if (cmd === "plugin:event|emit" || cmd === "plugin:event|emit_to") {
-      // 前端本地事件：直接分发给本地订阅者
-      const eventName = String(args?.event);
-      const subs = eventSubscribers.get(eventName);
-      if (subs) {
-        const eventObj = { event: eventName, id: 0, payload: args?.payload };
-        for (const id of subs) callbacks.get(id)?.(eventObj);
-      }
+      // 前端本地事件：浏览器里没有 Rust 广播，直接回环给本地订阅者
+      dispatchLocalEvent(String(args?.event), args?.payload);
       return Promise.resolve();
     }
-    // Tauri 壳专属命令：浏览器里由 shim 直接回答
-    if (cmd === "get_backend_endpoint") {
-      return Promise.resolve({ ...endpoint });
+    if (REMOVED_GATEWAY_COMMANDS.has(cmd)) {
+      return Promise.reject(
+        new Error(`${cmd} 是 v1 Gateway 时代的命令，已经删除。${LEGACY_GATEWAY_MESSAGE}`),
+      );
     }
-    // 壳专属命令（窗口/托盘/更新/gateway 镜像等）在浏览器没有对应物，
-    // 本地拒绝，不打到后端制造 404 噪音。调用方都有 catch。
-    if (SHELL_ONLY_PREFIXES.some((p) => cmd.startsWith(p)) || SHELL_ONLY_COMMANDS.has(cmd)) {
-      return Promise.reject(new Error(`Shell-only command not available in browser: ${cmd}`));
-    }
-    // 其他插件命令（窗口/托盘/opener 等）浏览器没有对应物
+    // 其余插件命令（窗口、托盘、opener）浏览器里没有对应物。调用点都有 catch。
     if (cmd.startsWith("plugin:")) {
-      return Promise.reject(new Error(`Tauri plugin command not available in browser: ${cmd}`));
+      return Promise.reject(new Error(`Tauri 插件命令在浏览器里不可用：${cmd}`));
     }
-    return httpInvoke(cmd, args);
+    return backendInvoke(cmd, args);
   }
 
   w.__TAURI_INTERNALS__ = {
@@ -192,12 +71,17 @@ export function installTauriShim() {
       return id;
     },
     unregisterCallback(id: number) {
+      unsubscribes.get(id)?.();
+      unsubscribes.delete(id);
       callbacks.delete(id);
+    },
+    runCallback(id: number, payload: unknown) {
+      callbacks.get(id)?.(payload);
     },
     convertFileSrc(filePath: string, protocol = "asset") {
       return `${protocol}://localhost/${encodeURIComponent(filePath)}`;
     },
-    // 标记这是网络 shim，便于调试与个别 UI 判定
+    // 标记这是网络 shim：endpoint.ts 靠它区分「真壳」和「我们自己装的壳」
     __LIVEAGENT_NETWORK_SHIM__: true,
   };
 
@@ -211,6 +95,4 @@ export function installTauriShim() {
   };
 }
 
-// 模块副作用安装：必须是 main.tsx 的第一个 import，
-// 保证任何模块作用域的 invoke/listen 之前 shim 已就位。
 installTauriShim();

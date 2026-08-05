@@ -51,11 +51,6 @@ func (m *Manager) ingestChatEvent(agentID, requestID string, event *gatewayv2.Ch
 	if eventType == "" {
 		eventType = chatwire.EventTypeName(event.GetType())
 	}
-	if (event.GetType() == gatewayv2.ChatEvent_DONE || event.GetType() == gatewayv2.ChatEvent_ERROR) &&
-		s.reliableIngressOwnsRunLocked(agentID, runID) {
-		return
-	}
-
 	if event.GetType() == gatewayv2.ChatEvent_USER_MESSAGE {
 		if record := s.runs[agentScopedKey(agentID, runID)]; record != nil && record.userMessageSeeded {
 			messageID, _ := payload["message_id"].(string)
@@ -81,12 +76,8 @@ func (m *Manager) ingestChatEvent(agentID, requestID string, event *gatewayv2.Ch
 	}
 
 	if stream.runFinishedRecently(runID) {
-		// A live event for a run whose terminal was merely inferred proves the
-		// inference wrong — reopen the run instead of dropping its stream.
-		if !s.resurrectRunLocked(stream, runID) {
-			// Late straggler after a genuine or duplicate terminal; drop it.
-			return
-		}
+		// Late straggler after the run's terminal; drop it.
+		return
 	}
 
 	switch event.GetType() {
@@ -193,39 +184,16 @@ func (m *Manager) ingestChatControl(agentID, requestID string, control *gatewayv
 		stream.agentID = agentID
 	}
 	s.noteAgentEpochLocked(stream, epoch)
-	if (controlType == "completed" || controlType == "failed" || controlType == "cancelled") &&
-		s.reliableIngressOwnsRunLocked(agentID, runID) {
-		return
-	}
 
 	switch controlType {
 	case "started":
-		// A reconnect republish may re-anchor a run this store wrongly gave up
-		// on (inferred loss); resurrect before the started no-ops against the
-		// finished set.
-		if stream.runFinishedRecently(runID) && !s.resurrectRunLocked(stream, runID) {
+		if stream.runFinishedRecently(runID) {
 			return
 		}
 		s.runStartedLocked(stream, runID, "", now)
 	case "completed", "failed", "cancelled":
-		inferredLoss := controlType == "failed" && isInferredRunLossCode(errorCode)
 		if stream.runFinishedRecently(runID) {
-			if inferredLoss || !s.resurrectRunLocked(stream, runID) {
-				return
-			}
-		}
-		// The desktop ledger flushes inferred losses (desktop_run_lost & co)
-		// through this same channel. For the conversation's active run, ignore
-		// such a verdict while the run's own events are fresh or it was
-		// already falsified once — genuine terminals always pass.
-		if inferredLoss &&
-			stream.activity != nil && stream.activity.RunID == runID {
-			record := s.runs[agentScopedKey(agentID, runID)]
-			eventsFresh := !stream.lastEventAt.IsZero() &&
-				now.Sub(stream.lastEventAt) < s.runReportLostTimeout
-			if eventsFresh || (record != nil && record.revived) {
-				return
-			}
+			return
 		}
 		s.runFinishedLocked(stream, runID, controlType, errorCode, message, nil, now)
 	case "queued_in_gui":
@@ -308,17 +276,8 @@ func (m *Manager) ingestRuntimeSnapshot(agentID string, snapshot *gatewayv2.Chat
 		stream.agentID = agentID
 	}
 	s.noteAgentEpochLocked(stream, epoch)
-	if (state == "completed" || state == "failed" || state == "cancelled") &&
-		s.reliableIngressOwnsRunLocked(agentID, runID) {
-		return
-	}
 	if stream.runFinishedRecently(runID) {
-		// Both running and terminal snapshots are authoritative runtime
-		// evidence. A terminal snapshot must be able to correct an earlier
-		// inferred loss even when no token arrived between the two verdicts.
-		if !s.resurrectRunLocked(stream, runID) {
-			return
-		}
+		return
 	}
 
 	switch state {

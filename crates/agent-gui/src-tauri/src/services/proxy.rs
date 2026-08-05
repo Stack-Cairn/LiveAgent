@@ -1,3 +1,10 @@
+//! 本机 HTTP 代理（供 webview 取图与转发 provider 请求）。
+//!
+//! 阶段 4 起**不再启动**：查询端口的壳命令随其余命令一并删除，setup 里也不再
+//! 拉起监听。整个模块暂时留着，因为 agent-backend 还没接手 `/image-proxy` 与
+//! `/proxy/{provider}` 两条路由——搬过去之前删掉就等于把唯一的实现也删了。
+#![allow(dead_code)]
+
 use std::{
     net::{Ipv4Addr, TcpListener},
     sync::Arc,
@@ -73,10 +80,6 @@ struct ProxyRoutePath {
 #[derive(Deserialize)]
 struct ImageProxyQuery {
     url: String,
-}
-
-pub fn proxy_get_server_info(state: &Arc<ProxyServerState>) -> ProxyServerInfo {
-    state.info.clone()
 }
 
 pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {

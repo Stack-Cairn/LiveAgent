@@ -1246,10 +1246,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "tray.runsActive": "运行中 · {count} 个对话",
     "tray.stopAll": "全部停止",
     "tray.cron": "定时任务",
-    "tray.gateway": "远程网关",
-    "tray.gatewayNotConfigured": "远程网关（未配置）",
+    "tray.gateway": "远程访问",
+    "tray.gatewayDisabled": "远程访问（已关闭）",
     "tray.gatewayConnected": "远程已连接",
-    "tray.gatewayConnecting": "远程连接中",
     "tray.gatewayDisconnected": "远程已断开",
     "tray.appearance": "外观",
     "tray.themeLight": "浅色",
@@ -1873,25 +1872,12 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     /* ── Settings Remote ── */
     "settings.remoteTitle": "远程访问",
-    "settings.remoteDesc": "通过云端 Gateway 远程控制本地 LiveAgent",
-    "settings.remoteConnected": "已连接",
-    "settings.remoteConnectedProtocol": "已连接 ({protocol})",
-    "settings.remoteDisconnected": "未连接",
+    "settings.remoteDesc": "控制远程前端连上本机后能做什么",
     "settings.remoteEnable": "启用远程访问",
     "settings.remoteDisable": "关闭远程访问",
-    "settings.remoteGatewayConnection": "Gateway 连接",
-    "settings.remoteGatewayUrl": "Gateway 地址",
-    "settings.remoteGatewayUrlHint":
-      "云端 Gateway 的 HTTPS 地址，用于 WebUI 访问与桌面端 v2 WebSocket 连接",
-    "settings.remoteAuth": "身份认证",
-    "settings.remoteToken": "访问令牌",
-    "settings.remoteTokenPlaceholder": "输入与 Gateway 配置一致的 Token",
-    "settings.remoteTokenHint": "与 Gateway 启动时配置的 --token 参数保持一致，用于双向认证",
-    "settings.remoteAgentId": "Agent 标识",
-    "settings.remoteAgentIdHint": "由此安装自动生成并持久化，连接不同 Gateway 时保持不变",
-    "settings.remoteAdvanced": "高级选项",
-    "settings.remoteAutoReconnect": "自动重连",
-    "settings.remoteAutoReconnectHint": "连接断开后自动尝试重新连接 Gateway",
+    "settings.remoteAccessControl": "访问控制",
+    "settings.remoteAccessControlHint":
+      "逐项授权：只有在这里打开的能力，已登录的远程前端才能使用。",
     "settings.remoteWebTerminal": "允许 WebUI Terminal",
     "settings.remoteWebTerminalHint": "开启后，已登录 WebUI 可启动并控制本机项目终端。",
     "settings.remoteWebSshTerminal": "允许 WebUI SSH Terminal",
@@ -1903,12 +1889,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.remoteWebTunnels": "允许 WebUI 内网穿透",
     "settings.remoteWebTunnelsHint":
       "开启后，已登录 WebUI 可为 localhost 或 IP 地址 HTTP 服务创建和关闭临时访问链接。",
-    "settings.remoteHeartbeat": "心跳间隔",
-    "settings.remoteHeartbeatHint": "本地 Agent 向 Gateway 上报存活状态的间隔",
-    "settings.remoteHeartbeatUnit": "秒",
-    "settings.remoteConnectionStatus": "连接状态",
-    "settings.remoteConnectedSince": "连接起始时间",
-    "settings.remoteLastHeartbeat": "最近一次心跳",
 
     /* ── MCP Hub ── */
     "mcpHub.title": "MCP Servers",
@@ -3558,10 +3538,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "tray.runsActive": "Running · {count} chats",
     "tray.stopAll": "Stop All",
     "tray.cron": "Cron Tasks",
-    "tray.gateway": "Remote Gateway",
-    "tray.gatewayNotConfigured": "Remote Gateway (not configured)",
+    "tray.gateway": "Remote Access",
+    "tray.gatewayDisabled": "Remote Access (off)",
     "tray.gatewayConnected": "Remote connected",
-    "tray.gatewayConnecting": "Remote connecting",
     "tray.gatewayDisconnected": "Remote disconnected",
     "tray.appearance": "Appearance",
     "tray.themeLight": "Light",
@@ -4214,27 +4193,12 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     /* ── Settings Remote ── */
     "settings.remoteTitle": "Remote Access",
-    "settings.remoteDesc": "Control your local LiveAgent remotely via cloud Gateway",
-    "settings.remoteConnected": "Connected",
-    "settings.remoteConnectedProtocol": "Connected ({protocol})",
-    "settings.remoteDisconnected": "Disconnected",
+    "settings.remoteDesc": "Control what remote clients may do once they reach this desktop",
     "settings.remoteEnable": "Enable remote access",
     "settings.remoteDisable": "Disable remote access",
-    "settings.remoteGatewayConnection": "Gateway Connection",
-    "settings.remoteGatewayUrl": "Gateway URL",
-    "settings.remoteGatewayUrlHint":
-      "HTTPS address of the cloud Gateway for WebUI access and the desktop v2 WebSocket link",
-    "settings.remoteAuth": "Authentication",
-    "settings.remoteToken": "Access Token",
-    "settings.remoteTokenPlaceholder": "Enter the token matching Gateway config",
-    "settings.remoteTokenHint":
-      "Must match the --token argument used when starting the Gateway, used for mutual authentication",
-    "settings.remoteAgentId": "Agent ID",
-    "settings.remoteAgentIdHint":
-      "Generated and persisted by this installation; it stays stable across Gateway connections",
-    "settings.remoteAdvanced": "Advanced Options",
-    "settings.remoteAutoReconnect": "Auto Reconnect",
-    "settings.remoteAutoReconnectHint": "Automatically reconnect to Gateway after connection drops",
+    "settings.remoteAccessControl": "Access Control",
+    "settings.remoteAccessControlHint":
+      "Grant capabilities one by one: authenticated remote clients can only use what is enabled here.",
     "settings.remoteWebTerminal": "Allow WebUI Terminal",
     "settings.remoteWebTerminalHint":
       "Allow authenticated WebUI clients to start and control local project terminals.",
@@ -4247,12 +4211,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.remoteWebTunnels": "Allow WebUI Tunnels",
     "settings.remoteWebTunnelsHint":
       "Allow authenticated WebUI clients to create and close temporary links for localhost or IP-address HTTP services.",
-    "settings.remoteHeartbeat": "Heartbeat Interval",
-    "settings.remoteHeartbeatHint": "How often the local Agent reports liveness to the Gateway",
-    "settings.remoteHeartbeatUnit": "seconds",
-    "settings.remoteConnectionStatus": "Connection Status",
-    "settings.remoteConnectedSince": "Connected Since",
-    "settings.remoteLastHeartbeat": "Last Heartbeat",
 
     /* ── MCP Hub ── */
     "mcpHub.title": "MCP Servers",

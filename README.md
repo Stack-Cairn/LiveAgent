@@ -164,6 +164,9 @@ Choose by distribution from [Releases](https://github.com/Stack-Cairn/LiveAgent/
 
 ### Need Remote Access? Deploy the Gateway
 
+> **⚠️ 计划在 v2.0 停用 / Deprecated in v2.0** —— 下面这套 Gateway 部署方式在
+> v2.0 会断。已经部署的用户请先读 [v2.0 迁移指南](#v20-迁移指南--v20-migration-guide)。
+
 The desktop app works out of the box and depends on no server. Deploy the Gateway only if you want to **control your local agent from a browser**.
 
 **Note: when deployed behind an Nginx reverse proxy, set the Gateway address on the Settings → Remote page to the HTTPS URL and use port 443.**
@@ -341,6 +344,77 @@ LiveAgent/
 ```
 
 </details>
+
+---
+
+## v2.0 迁移指南 / v2.0 Migration Guide
+
+**v2.0 会改掉远程访问的整个架构。已经部署 `ghcr.io/stack-cairn/liveagent-gateway`
+的用户一定会断 —— 这是无法避免的破坏性变更,不是 bug。**
+
+### 为什么会断
+
+旧模型:桌面端**主动拨出**连到 Gateway,浏览器再连 Gateway,Gateway 在中间转发。
+新模型:后端(Rust + Node)自己就是服务端,**前端直接连后端**。
+
+两边都在等对方来连,技术上对不上,没有兼容层可写。
+
+### 你的选择
+
+| 情况 | 怎么办 |
+|---|---|
+| 现在跑得好好的,不想动 | **什么都不用做。** 旧镜像 tag 冻结保留、可以继续拉;旧桌面端配旧网关继续可用 |
+| 想升到 v2.0 | 按下面的步骤迁移 |
+
+旧镜像会一直留在 registry 里,但**不再收到更新**(包括安全修复)。
+
+### 迁移步骤
+
+1. **把旧版本钉死,不要用 `:latest`。** 升级前先确认旧部署用的是具体 tag:
+
+   ```bash
+   docker pull ghcr.io/stack-cairn/liveagent-gateway:v1  # 冻结的旧 tag
+   ```
+
+2. **备份 Gateway 数据卷。** 里面有 Agent token 和数据库:
+
+   ```bash
+   docker run --rm -v liveagent-gateway-data:/data -v "$PWD":/backup \
+     alpine tar czf /backup/liveagent-gateway-backup.tar.gz -C /data .
+   ```
+
+3. **在要远程访问的那台机器上部署 v2.0 后端**(替代 Gateway 容器)。
+   它同时提供 HTTP API、WebSocket 和前端静态资源,一个端口。
+
+4. **前端只需要两样东西:base URL + 密码。**
+   「连到哪个 Gateway」「Agent ID」「自动重连」「心跳间隔」这些设置项在 v2.0
+   不存在了 —— 本地和远程的唯一差别就是那个 base URL:
+
+   ```ts
+   const backend = createBackendClient({ baseUrl, password });
+   ```
+
+   - 桌面版:壳自动注入密码,跳过登录页,双击即用
+   - 浏览器:访问后端地址,走登录页输密码
+
+5. **旧 Agent token 不迁移。** v2.0 用密码直接当 Bearer token,旧的 Agent token
+   体系没有对应物。部署后端时重新设一个密码即可。
+
+6. **确认无误后再删旧容器:**
+
+   ```bash
+   docker rm -f liveagent-gateway
+   ```
+
+### 新桌面端连旧网关会怎样
+
+不会静默失败,但目前的提示是**调用时**给的,不是配置时给的:前端仍残留的
+`gateway_*` 调用点会被本地拦下并抛出
+
+> v2 不再需要 Gateway:桌面端不再外拨连接它,改为前端直连后端(本机或远程)。
+> 迁移步骤见 README 的 v2 迁移指南。
+
+「在设置页检测到旧网关地址就直接提示」还没做。
 
 ---
 

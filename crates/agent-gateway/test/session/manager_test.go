@@ -139,7 +139,6 @@ func TestChatRuntimeReadyRequiresFreshRuntimeHeartbeat(t *testing.T) {
 
 	sm := newTestSessionManager()
 	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
-	sess.SetCapabilities([]string{gatewayv2.ChatIngressV1Capability})
 	sm.SetSession(sess)
 
 	if status := sm.Status("desktop-agent"); !status.Online || status.ChatRuntimeReady {
@@ -189,7 +188,6 @@ func TestRuntimeStatusUpdateBroadcastsStatus(t *testing.T) {
 
 	sm := newTestSessionManager()
 	sess := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
-	sess.SetCapabilities([]string{gatewayv2.ChatIngressV1Capability})
 	sm.SetSession(sess)
 	updates, cleanup := sm.SubscribeStatus()
 	defer cleanup()

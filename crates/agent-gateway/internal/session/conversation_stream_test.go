@@ -597,38 +597,6 @@ func TestEvictionProtectsActiveRunUntilHardCap(t *testing.T) {
 	m2.convStreams.mu.Unlock()
 }
 
-func TestReaperForceFinishesStaleRunsOnlyWhenOnline(t *testing.T) {
-	m := NewManager()
-	m.convStreams.staleRunTimeout = time.Millisecond
-	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
-	time.Sleep(5 * time.Millisecond)
-
-	// Agent offline: the run is left alone.
-	m.convStreams.reap(time.Now())
-	if activities := m.ActiveConversationActivities(); len(activities) != 1 {
-		t.Fatalf("offline reap must not finish runs, activities=%d", len(activities))
-	}
-
-	// Agent online: the silent run is force-finished.
-	m.SetSession(&AgentSession{
-		AgentID: conversationTestAgentID,
-		toAgent: make(chan *OutboundEnvelope, 1),
-		done:    make(chan struct{}),
-		streams: make(map[string]*agentStream),
-	})
-	m.convStreams.reap(time.Now())
-	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
-		t.Fatalf("online reap must finish stale runs, activities=%d", len(activities))
-	}
-
-	sub := m.SubscribeConversationStream(conversationTestAgentID, "conv-1", 0, "")
-	sub.Cleanup()
-	last := sub.Events[len(sub.Events)-1]
-	if last.Type != StreamEventRunFinished || last.Payload["error_code"] != "stale_run" {
-		t.Fatalf("stale finish tail = %s %#v", last.Type, last.Payload)
-	}
-}
-
 func TestCancellingStateAndWatchdog(t *testing.T) {
 	m := NewManager()
 	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
@@ -737,39 +705,6 @@ func TestSubscriberOverflowClosesAndResumes(t *testing.T) {
 	total := received + len(resume.Events)
 	if total < conversationSubscriberBuffer+8 {
 		t.Fatalf("lost events across overflow: saw %d", total)
-	}
-}
-
-func TestReaperSparesSilentRunsWhileReportsVouch(t *testing.T) {
-	m := NewManager()
-	m.convStreams.staleRunTimeout = 10 * time.Millisecond
-	m.SetSession(&AgentSession{
-		AgentID: conversationTestAgentID,
-		toAgent: make(chan *OutboundEnvelope, 1),
-		done:    make(chan struct{}),
-		streams: make(map[string]*agentStream),
-	})
-
-	m.ingestChatControl(conversationTestAgentID, "run-1", startedControl("run-1", "conv-1"))
-	time.Sleep(20 * time.Millisecond)
-
-	// A silent long tool call: no events, but the run report vouches for it.
-	m.convStreams.onRuntimeStatus(conversationTestAgentID, &gatewayv2.RuntimeStatusEvent{
-		ActiveRuns: []*gatewayv2.ChatRunReport{
-			{RunId: "run-1", ConversationId: "conv-1", State: "running"},
-		},
-	}, time.Now())
-	m.convStreams.reap(time.Now())
-	if activities := m.ActiveConversationActivities(); len(activities) != 1 {
-		t.Fatalf("vouched silent run must be spared, activities=%d", len(activities))
-	}
-
-	// Once the reports stop vouching for it, the run is reaped after the
-	// timeout elapses again.
-	time.Sleep(20 * time.Millisecond)
-	m.convStreams.reap(time.Now())
-	if activities := m.ActiveConversationActivities(); len(activities) != 0 {
-		t.Fatalf("stale run must be reaped once vouching stops, activities=%d", len(activities))
 	}
 }
 

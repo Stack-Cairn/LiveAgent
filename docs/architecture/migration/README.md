@@ -19,6 +19,10 @@ Go gateway 13,914 行手写代码里,约 **3,800 行专门在给「chat 引擎�
 
 **只把 Go 翻成 Rust,这 3,800 行会原样搬过去。目标是让它们不必存在。**
 
+> 阶段 4 已删掉其中的 CHAT_INGRESS_V1 收端与三层推断超时(净减约 4,200 行,
+> 含生成代码);`chat.prepare` wake ping、24h 幂等去重、浏览器侧 `after_seq`
+> replay 仍在,理由见 [phase-4-frontend.md](phase-4-frontend.md)「遗留事项」。
+
 Go 的选型没有任何文档依据:它出现在 root commit `487af778`(2026-05-24,squash 导入),
 `git log --all --grep=` 扫过 gateway/golang/relay/performance 等,`--grep=performance`
 **零命中**。没有 ADR、没有 RFC、没有一行 commit message 解释。唯一写下来的是**职责**
@@ -74,7 +78,7 @@ Go 的选型没有任何文档依据:它出现在 root commit `487af778`(2026-05
 | 1 · 划清后端边界 | [phase-1-boundary.md](phase-1-boundary.md) | ✅ 完成 |
 | 2 · Rust 后端网络化 | [phase-2-backend.md](phase-2-backend.md) | ✅ 完成 |
 | 3 · 抽 Node 引擎 | [phase-3-engine.md](phase-3-engine.md) | 🔴 被阻塞(P3-01 stub + 7 关键问题) |
-| 4 · 前端网络化 | [phase-4-frontend.md](phase-4-frontend.md) | ⬜ 未开始 |
+| 4 · 前端网络化 | [phase-4-frontend.md](phase-4-frontend.md) | 🟨 进行中(删除清单已落地,验收未跑) |
 | 5 · 前端合并 | [phase-5-merge.md](phase-5-merge.md) | ⬜ 未开始 |
 | 6 · 删除 Go 与切换发布 | [phase-6-cutover.md](phase-6-cutover.md) | ⬜ 未开始 |
 

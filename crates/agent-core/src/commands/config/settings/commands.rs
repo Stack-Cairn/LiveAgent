@@ -52,19 +52,14 @@ pub async fn settings_save_mcp(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_mcp join 失败：{e}"))?
 }
 
-/// 保存远程（Gateway）配置。
+/// 保存远程访问控制设置（远程前端能开终端 / SSH / Git / 隧道吗）。
 ///
-/// 保存完只往总线上发一条 `settings:remote-saved`，**不认识 Gateway**。
-/// 谁想在配置变更后做事（当前是 `GatewayEventSink` 调 `apply_config`），
-/// 自己去订阅——这是 P2-04~P2-08 一路用下来的同一个模式，
-/// 也是这条命令能跟着 settings 一起迁入 agent-core 的唯一原因。
-///
-/// payload 发的是**落库后的归一化结果**而不是入参：订阅者要的是「现在是什么」，
-/// 不是「谁请求了什么」。
+/// 保存完只往总线上发一条 `settings:remote-saved`，payload 是**落库后的结果**
+/// 而不是入参：订阅者要的是「现在是什么」，不是「谁请求了什么」。
 pub async fn settings_save_remote(payload: Value, events: &Arc<EventBus>) -> Result<(), String> {
     let normalized = tokio::task::spawn_blocking(move || {
-        let mut conn = open_db()?;
-        save_remote(&mut conn, payload)
+        let conn = open_db()?;
+        save_remote(&conn, payload)
     })
     .await
     .map_err(|e| format!("settings_save_remote join 失败：{e}"))??;

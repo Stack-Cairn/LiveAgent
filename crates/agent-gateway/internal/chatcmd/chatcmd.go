@@ -136,12 +136,6 @@ func ProbeRuntime(
 	if sm == nil {
 		return session.ErrAgentOffline
 	}
-	if !sm.ChatIngressV1Ready(agentID) {
-		if sm.IsOnline(agentID) {
-			return session.ErrChatProtocolIncompatible
-		}
-		return session.ErrAgentOffline
-	}
 	sessionEpoch, online := sm.ChatRuntimeProbeEpoch(agentID)
 	if !online {
 		return session.ErrAgentOffline
@@ -269,13 +263,13 @@ func buildUserMessageAppendedPayload(
 	baseMessageRef *MessageRef,
 ) map[string]any {
 	payload := map[string]any{
-		"type":                  "user_message",
-		"message":               body.Message,
-		"uploaded_files":        body.UploadedFiles,
-		"execution_mode":        body.ExecutionMode,
-		"workdir":               body.Workdir,
-		"runtime_controls":      body.RuntimeControls,
-		"selected_model":        body.SelectedModel,
+		"type":             "user_message",
+		"message":          body.Message,
+		"uploaded_files":   body.UploadedFiles,
+		"execution_mode":   body.ExecutionMode,
+		"workdir":          body.Workdir,
+		"runtime_controls": body.RuntimeControls,
+		"selected_model":   body.SelectedModel,
 	}
 	if baseMessageRef != nil {
 		payload["base_message_ref"] = baseMessageRef
@@ -317,15 +311,15 @@ func BuildCancelCommandPayload(conversationID string) *gatewayv2.GatewayEnvelope
 
 func buildProtoRequest(body handler.ChatRequestBody) *gatewayv2.ChatRequest {
 	return &gatewayv2.ChatRequest{
-		ConversationId:      body.ConversationID,
-		ClientRequestId:     body.ClientRequestID,
-		Message:             body.Message,
-		SelectedModel:       handler.ToProtoChatSelectedModel(body.SelectedModel),
-		RuntimeControls:     handler.ToProtoChatRuntimeControls(body.RuntimeControls),
-		ExecutionMode:       body.ExecutionMode,
-		Workdir:             body.Workdir,
-		UploadedFiles:       handler.ToProtoChatUploadedFiles(body.UploadedFiles),
-		QueuePolicy:         body.QueuePolicy,
+		ConversationId:  body.ConversationID,
+		ClientRequestId: body.ClientRequestID,
+		Message:         body.Message,
+		SelectedModel:   handler.ToProtoChatSelectedModel(body.SelectedModel),
+		RuntimeControls: handler.ToProtoChatRuntimeControls(body.RuntimeControls),
+		ExecutionMode:   body.ExecutionMode,
+		Workdir:         body.Workdir,
+		UploadedFiles:   handler.ToProtoChatUploadedFiles(body.UploadedFiles),
+		QueuePolicy:     body.QueuePolicy,
 	}
 }
 
@@ -351,12 +345,12 @@ func RequestBodyFromProto(req *gatewayv2.ChatRequest) handler.ChatRequestBody {
 		return handler.ChatRequestBody{}
 	}
 	body := handler.ChatRequestBody{
-		ConversationID:      req.GetConversationId(),
-		ClientRequestID:     req.GetClientRequestId(),
-		Message:             req.GetMessage(),
-		ExecutionMode:       req.GetExecutionMode(),
-		Workdir:             req.GetWorkdir(),
-		QueuePolicy:         req.GetQueuePolicy(),
+		ConversationID:  req.GetConversationId(),
+		ClientRequestID: req.GetClientRequestId(),
+		Message:         req.GetMessage(),
+		ExecutionMode:   req.GetExecutionMode(),
+		Workdir:         req.GetWorkdir(),
+		QueuePolicy:     req.GetQueuePolicy(),
 	}
 	if selected := req.GetSelectedModel(); selected != nil {
 		body.SelectedModel = &handler.ChatSelectedModelBody{

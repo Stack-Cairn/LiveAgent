@@ -46,8 +46,7 @@ pub async fn settings_save_mcp(payload: Value) -> Result<(), String> {
     agent_core::commands::settings::settings_save_mcp(payload).await
 }
 
-// 从 State<GatewayController> 换成 State<EventBus>：实现侧已经不认识 Gateway 了，
-// 它只发 settings:remote-saved，由 GatewayEventSink 接住去调 apply_config。
+// 保存后只发 settings:remote-saved；谁关心远程访问权限变了自己去订阅。
 // State 参数不是 JSON key，前端契约不受影响。
 #[tauri::command]
 pub async fn settings_save_remote(

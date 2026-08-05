@@ -2136,6 +2136,7 @@ test("mcp and remote settings normalize transport, selection, ports, and tokens"
   assert.equal(mcp.servers[1].transport, "stdio");
   assert.deepEqual(mcp.servers[1].args, ["server.js"]);
 
+  // 远程设置只剩访问控制开关，旧库里的连接字段读到就丢掉。
   const remote = settings.normalizeRemoteSettings({
     enabled: true,
     gatewayUrl: " http:/127.0.0.1:8787/ ",
@@ -2147,18 +2148,13 @@ test("mcp and remote settings normalize transport, selection, ports, and tokens"
     enableWebSshTerminal: true,
   });
 
-  assert.equal(remote.gatewayUrl, "http://127.0.0.1:8787");
-  assert.equal(remote.gatewayPort, 443);
-  assert.equal(remote.token, "secret");
-  assert.equal(remote.agentId, "agent-550e8400-e29b-41d4-a716-446655440000");
-  assert.equal(remote.autoReconnect, false);
-  assert.equal(remote.heartbeatInterval, 15);
-  assert.equal(remote.enableWebSshTerminal, true);
-
-  const remoteWithOversizedPort = settings.normalizeRemoteSettings({
-    gatewayPort: "70000",
+  assert.deepEqual(remote, {
+    enabled: true,
+    enableWebTerminal: false,
+    enableWebSshTerminal: true,
+    enableWebGit: false,
+    enableWebTunnels: false,
   });
-  assert.equal(remoteWithOversizedPort.gatewayPort, 65_535);
 });
 
 test("font scale settings normalize invalid values to 1 and clamp out-of-range values", () => {

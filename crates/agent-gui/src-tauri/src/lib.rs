@@ -1,6 +1,5 @@
 mod backend_server;
 mod commands;
-mod gateway_sink;
 mod services;
 mod tauri_commands;
 mod tauri_sink;
@@ -259,35 +258,14 @@ macro_rules! app_invoke_handler {
             commands::system::system_begin_power_activity,
             commands::system::system_end_power_activity,
             commands::system::system_clipboard_read_text,
-            commands::gateway::gateway_connect,
-            commands::gateway::gateway_disconnect,
-            commands::gateway::gateway_status,
-            commands::gateway::gateway_nudge_connection,
-            commands::gateway::gateway_send_chat_ingress_batch,
-            commands::gateway::gateway_commit_chat_checkpoint,
-            commands::gateway::gateway_chat_claim_next,
-            commands::gateway::gateway_chat_mark_started,
-            commands::gateway::gateway_chat_mark_local_started,
-            commands::gateway::gateway_chat_mark_local_cancelled,
-            commands::gateway::gateway_chat_mark_queued_in_gui,
-            commands::gateway::gateway_chat_complete,
-            commands::gateway::gateway_chat_fail,
-            commands::gateway::gateway_chat_cancel_request,
-            commands::gateway::gateway_chat_heartbeat,
-            commands::gateway::gateway_chat_runtime_heartbeat,
-            commands::gateway::gateway_chat_release_lease,
-            commands::gateway::gateway_chat_queue_respond,
-            commands::gateway::gateway_publish_chat_queue_event,
-            commands::gateway::gateway_publish_settings_sync,
             tauri_commands::tunnel::tunnel_state,
             tauri_commands::tunnel::tunnel_create,
             tauri_commands::tunnel::tunnel_update,
             tauri_commands::tunnel::tunnel_close,
             tauri_commands::tunnel::tunnel_check,
-            commands::gateway::workspace_watch_set,
-            commands::gateway::provider_usage_query,
-            commands::gateway::provider_usage_test,
-            tauri_commands::proxy::proxy_get_server_info,
+            commands::workspace::workspace_watch_set,
+            commands::provider_usage::provider_usage_query,
+            commands::provider_usage::provider_usage_test,
         ]
     };
 }
@@ -352,7 +330,6 @@ enum AppAction {
     StopRun(String),
     StopAllRuns,
     ToggleCronTask(String),
-    GatewayToggle,
     SetTheme(&'static str),
     OpenSettings,
     CheckUpdates,
@@ -393,7 +370,6 @@ fn tray_menu_action(id: &str) -> Option<AppAction> {
         tray_ids::TRAY_PIN_ID => Some(AppAction::TogglePin),
         tray_ids::TRAY_RECENT_VIEW_ALL_ID => Some(AppAction::ViewAllConversations),
         tray_ids::TRAY_RUN_STOP_ALL_ID => Some(AppAction::StopAllRuns),
-        tray_ids::TRAY_GATEWAY_ID => Some(AppAction::GatewayToggle),
         tray_ids::TRAY_THEME_LIGHT_ID => Some(AppAction::SetTheme("light")),
         tray_ids::TRAY_THEME_DARK_ID => Some(AppAction::SetTheme("dark")),
         tray_ids::TRAY_THEME_SYSTEM_ID => Some(AppAction::SetTheme("system")),
@@ -417,7 +393,7 @@ fn tray_menu_action(id: &str) -> Option<AppAction> {
 }
 
 /// 转发前端动作。`show_window` 用于用户预期看到界面反馈的动作
-/// （开会话/新建对话/打开设置等）；后台型动作（停止运行/改主题/网关开关）
+/// （开会话/新建对话/打开设置等）；后台型动作（停止运行/改主题）
 /// 不抢焦点。
 fn forward_app_action(
     app: &tauri::AppHandle,
@@ -457,7 +433,6 @@ fn dispatch_app_action(app: &tauri::AppHandle, action: AppAction) {
         }
         AppAction::StopRun(id) => forward_app_action(app, "stop-run", Some(id), None, false),
         AppAction::StopAllRuns => forward_app_action(app, "stop-all-runs", None, None, false),
-        AppAction::GatewayToggle => forward_app_action(app, "gateway-toggle", None, None, false),
         AppAction::SetTheme(theme) => {
             forward_app_action(app, "set-theme", None, Some(theme.to_string()), false);
         }
@@ -749,8 +724,6 @@ pub fn run() {
             let terminal_registry = Arc::clone(&terminal_registry);
             let sftp_registry = Arc::clone(&sftp_registry);
             let managed_process_registry = Arc::clone(&managed_process_registry);
-            let git_clone_task_registry = Arc::clone(&git_clone_task_registry);
-            let provider_usage_service = Arc::clone(&provider_usage_service);
             move |app| {
                 agent_core::commands::history_db::initialize_history_db()?;
                 configure_system_tray(app)?;
@@ -762,13 +735,12 @@ pub fn run() {
                     eprintln!("failed to initialize system proxy state: {error}");
                 }
                 commands::system::gc_upload_staging_on_startup();
-                app.manage(services::proxy::start_proxy_server()?);
                 if let Err(error) = agent_core::services::skills::ensure_builtin_agent_skills_sync()
                 {
                     eprintln!("failed to seed builtin skills: {error}");
                 }
                 // 事件总线：后端只管往这里发，谁听由这里决定。
-                // 桌面 webview 和 Gateway 都只是普通订阅者，没有谁被硬编码进后端。
+                // 桌面 webview 只是普通订阅者，没有谁被硬编码进后端。
                 // 先建空总线，sink 稍后注册——总线用内部可变性，允许后置。
                 let events = Arc::new(agent_core::events::EventBus::new());
                 let workspace_watch = Arc::new(
@@ -776,25 +748,11 @@ pub fn run() {
                         &events,
                     )),
                 );
-                let gateway_controller = Arc::new(services::gateway::GatewayController::new(
-                    app.handle().clone(),
-                    Arc::clone(&automation_store),
-                    Arc::clone(&memory_store),
-                    Arc::clone(&provider_usage_service),
-                    Arc::clone(&terminal_registry),
-                    Arc::clone(&sftp_registry),
-                    Arc::clone(&managed_process_registry),
-                    Arc::clone(&git_clone_task_registry),
-                    Arc::clone(&workspace_watch),
-                ));
                 events.register(Arc::new(tauri_sink::TauriEventSink::new(
                     app.handle().clone(),
                 )));
-                events.register(Arc::new(gateway_sink::GatewayEventSink::new(
-                    &gateway_controller,
-                    &workspace_watch,
-                )));
                 app.manage(Arc::clone(&events));
+                app.manage(Arc::clone(&workspace_watch));
                 managed_process_registry.set_event_bus(Arc::clone(&events));
                 terminal_registry.set_event_bus(Arc::clone(&events));
                 sftp_registry.set_event_bus(Arc::clone(&events));
@@ -807,11 +765,9 @@ pub fn run() {
                     },
                 );
                 Arc::clone(&automation_scheduler).start();
-                app.manage(Arc::clone(&gateway_controller));
 
                 // 隧道（P2-30）：桌面壳复用后端那套「一隧道一端口」实现，
                 // 与 agent-backend 走的是同一个 TunnelStore + 同一个数据面。
-                // 不再经 Gateway 中继，所以它不属于 GatewayController。
                 let tunnels = Arc::new(agent_core::services::tunnel::TunnelStore::new(
                     Arc::clone(&events),
                     Arc::new(agent_backend::tunnel::TunnelDataPlane::new()),
@@ -826,18 +782,6 @@ pub fn run() {
                         }
                         // 周期清扫过期隧道：TTL 的强制执行就在这里。
                         tunnels.spawn_sweeper();
-                    }
-                });
-
-                if let Err(error) = gateway_controller.start() {
-                    eprintln!("failed to start remote gateway controller: {error}");
-                }
-                tokio::spawn({
-                    let gateway_controller = Arc::clone(&gateway_controller);
-                    async move {
-                        if let Err(error) = gateway_controller.reload_from_db().await {
-                            eprintln!("failed to load remote gateway settings: {error}");
-                        }
                     }
                 });
 
@@ -920,15 +864,6 @@ pub fn run() {
         .expect("error while building tauri application");
 
     app.run(move |_app, event| match event {
-        tauri::RunEvent::Resumed => {
-            if let Some(gateway_controller) =
-                _app.try_state::<Arc<services::gateway::GatewayController>>()
-            {
-                if let Err(error) = gateway_controller.nudge_connection("app_resumed", true) {
-                    eprintln!("failed to nudge gateway connection after app resume: {error}");
-                }
-            }
-        }
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Reopen { .. } => {
             if let Err(error) = show_main_window(_app) {

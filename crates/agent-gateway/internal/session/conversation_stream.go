@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
 )
 
 // The conversation stream store is the authoritative relay state for chat:
@@ -29,16 +28,11 @@ const (
 	conversationMaxEvents         = 4096
 	conversationMaxEventBytes     = 8 << 20
 	conversationIdleRetention     = 30 * time.Minute
-	conversationStaleRunTimeout   = 10 * time.Minute
-	conversationOfflineRunTimeout = 30 * time.Minute
 	conversationReaperInterval    = time.Minute
 	conversationFinishedRunMemory = 8
 	conversationSubscriberBuffer  = 256
 	pendingChatRunRetention       = 5 * time.Minute
 	chatCommandDedupeRetention    = 24 * time.Hour
-	// conversationRunReportLostTimeout is the grace window before a run absent
-	// from the desktop's run reports is finalized as lost.
-	conversationRunReportLostTimeout = 15 * time.Second
 )
 
 const (
@@ -197,27 +191,6 @@ type chatRunRecord struct {
 	// reconnect replay nor the identity-forwarded desktop echo can seed a
 	// second truncation.
 	rebaseSeeded bool
-	// lostInferred marks a run whose terminal was inferred from missing
-	// liveness reports (desktop_run_lost and friends) rather than delivered by
-	// the run itself. Such a terminal is falsifiable: fresh events for the run
-	// prove it wrong and resurrect the run instead of being dropped as
-	// stragglers.
-	lostInferred bool
-	// revived marks a run resurrected after a wrong inferred terminal; further
-	// inferred-loss signals for it are ignored (the desktop-side ledger may
-	// keep repeating the stale verdict) until a genuine terminal arrives.
-	revived bool
-}
-
-// isInferredRunLossCode reports whether an error code represents a liveness
-// inference (nobody vouched for the run) instead of an outcome the run itself
-// produced. Inferred terminals must stay reversible: the run may well be alive.
-func isInferredRunLossCode(errorCode string) bool {
-	switch errorCode {
-	case "desktop_run_lost", "stale_run", "agent_offline", "desktop_runtime_lease_expired":
-		return true
-	}
-	return false
 }
 
 // chatCommandDedupeRecord is the process-local idempotency key for WebUI chat
@@ -251,53 +224,41 @@ type pendingChatRun struct {
 }
 
 type conversationStreamStore struct {
-	mu               sync.Mutex
-	streams          map[string]*conversationStream
-	pendingRuns      map[string]*pendingChatRun
-	runs             map[string]*chatRunRecord
-	commandDedup     map[string]*chatCommandDedupeRecord
-	commandWatchers  map[string][]chan ChatCommandUpdate
-	commandUpdates   map[string]chatCommandUpdateRecord
-	ingressRuns      map[string]*chatIngressRunState
-	ingressFragments map[string]*chatIngressFragmentAssembly
-	nextSubID        int
+	mu              sync.Mutex
+	streams         map[string]*conversationStream
+	pendingRuns     map[string]*pendingChatRun
+	runs            map[string]*chatRunRecord
+	commandDedup    map[string]*chatCommandDedupeRecord
+	commandWatchers map[string][]chan ChatCommandUpdate
+	commandUpdates  map[string]chatCommandUpdateRecord
+	nextSubID       int
 
 	activityHub *chatActivityHub
 
 	reaperOnce sync.Once
-	isOnline   func(string) bool
 
 	// tunable in tests
-	eventRetention       time.Duration
-	maxEvents            int
-	maxEventBytes        int
-	idleRetention        time.Duration
-	staleRunTimeout      time.Duration
-	offlineRunTimeout    time.Duration
-	runReportLostTimeout time.Duration
-	reaperInterval       time.Duration
+	eventRetention time.Duration
+	maxEvents      int
+	maxEventBytes  int
+	idleRetention  time.Duration
+	reaperInterval time.Duration
 }
 
-func newConversationStreamStore(isOnline func(string) bool) *conversationStreamStore {
+func newConversationStreamStore() *conversationStreamStore {
 	return &conversationStreamStore{
-		streams:              make(map[string]*conversationStream),
-		pendingRuns:          make(map[string]*pendingChatRun),
-		runs:                 make(map[string]*chatRunRecord),
-		commandDedup:         make(map[string]*chatCommandDedupeRecord),
-		commandWatchers:      make(map[string][]chan ChatCommandUpdate),
-		commandUpdates:       make(map[string]chatCommandUpdateRecord),
-		ingressRuns:          make(map[string]*chatIngressRunState),
-		ingressFragments:     make(map[string]*chatIngressFragmentAssembly),
-		activityHub:          newChatActivityHub(),
-		isOnline:             isOnline,
-		eventRetention:       conversationEventRetention,
-		maxEvents:            conversationMaxEvents,
-		maxEventBytes:        conversationMaxEventBytes,
-		idleRetention:        conversationIdleRetention,
-		staleRunTimeout:      conversationStaleRunTimeout,
-		offlineRunTimeout:    conversationOfflineRunTimeout,
-		runReportLostTimeout: conversationRunReportLostTimeout,
-		reaperInterval:       conversationReaperInterval,
+		streams:         make(map[string]*conversationStream),
+		pendingRuns:     make(map[string]*pendingChatRun),
+		runs:            make(map[string]*chatRunRecord),
+		commandDedup:    make(map[string]*chatCommandDedupeRecord),
+		commandWatchers: make(map[string][]chan ChatCommandUpdate),
+		commandUpdates:  make(map[string]chatCommandUpdateRecord),
+		activityHub:     newChatActivityHub(),
+		eventRetention:  conversationEventRetention,
+		maxEvents:       conversationMaxEvents,
+		maxEventBytes:   conversationMaxEventBytes,
+		idleRetention:   conversationIdleRetention,
+		reaperInterval:  conversationReaperInterval,
 	}
 }
 
@@ -731,13 +692,6 @@ func (s *conversationStreamStore) runFinishedLocked(
 	if record.clientRequestID != "" {
 		payload["client_request_id"] = record.clientRequestID
 	}
-	// Inferred terminals (nobody vouched for the run) stay falsifiable: a
-	// later event for the run resurrects it instead of being dropped. Genuine
-	// terminals settle the run for good.
-	record.lostInferred = status == "failed" && isInferredRunLossCode(errorCode)
-	if !record.lostInferred {
-		record.revived = false
-	}
 	s.appendEventLocked(stream, runID, StreamEventRunFinished, payload, now)
 	stream.finishedRuns = append(stream.finishedRuns, runID)
 	if len(stream.finishedRuns) > conversationFinishedRunMemory {
@@ -754,41 +708,6 @@ func (s *conversationStreamStore) runFinishedLocked(
 		stream.snapshotDirty = false
 		s.publishActivityLocked(stream, now)
 	}
-}
-
-// resurrectRunLocked reopens a run that was force-finished by a liveness
-// inference: fresh agent traffic for the run proves the inference wrong. The
-// run leaves the finished set (so runStartedLocked re-registers it), is
-// flagged to ignore repeats of the stale verdict, and the stream is marked
-// snapshot-hungry so subscribers rebuild the tail that was dropped while the
-// run was considered dead. Refuses when another run owns the conversation —
-// then the late events really are stragglers.
-func (s *conversationStreamStore) resurrectRunLocked(
-	stream *conversationStream,
-	runID string,
-) bool {
-	record := s.runs[agentScopedKey(stream.agentID, runID)]
-	if record == nil || !record.lostInferred {
-		return false
-	}
-	if stream.activity != nil {
-		return false
-	}
-	kept := stream.finishedRuns[:0]
-	for _, finished := range stream.finishedRuns {
-		if finished != runID {
-			kept = append(kept, finished)
-		}
-	}
-	stream.finishedRuns = kept
-	record.lostInferred = false
-	record.revived = true
-	// The events dropped between the wrong terminal and this resurrection are
-	// unrecoverable from the log; late joiners and current subscribers rebuild
-	// from the next runtime snapshot.
-	stream.runNeedsSnapshot = true
-	stream.snapshotDirty = true
-	return true
 }
 
 // markRunQueuedLocked records that a run's command is pending in the gateway
@@ -1281,71 +1200,6 @@ func (m *Manager) ForceFinishRun(agentID string, runID string, status string, er
 
 // --- maintenance -----------------------------------------------------------
 
-// onRuntimeStatus reconciles the desktop's diagnostic run ledger with tracked
-// activities. Active and finished reports only vouch liveness; a finished
-// report never has terminal authority. Reliable completion belongs exclusively
-// to ChatIngressTerminal, while absence beyond the grace window remains an
-// explicitly inferred fallback.
-func (s *conversationStreamStore) onRuntimeStatus(agentID string, event *gatewayv2.RuntimeStatusEvent, now time.Time) {
-	agentID = strings.TrimSpace(agentID)
-	if agentID == "" || event == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	activeSet := make(map[string]bool, len(event.GetActiveRuns()))
-	for _, report := range event.GetActiveRuns() {
-		activeSet[report.GetRunId()] = true
-	}
-	finished := make(map[string]bool, len(event.GetFinishedRuns()))
-	for _, report := range event.GetFinishedRuns() {
-		finished[report.GetRunId()] = true
-	}
-
-	// Reconcile only tracked activities; finished reports never resurrect a
-	// stream for a run this store is not tracking.
-	for _, stream := range s.streams {
-		if stream.activity == nil || (agentID != "" && stream.agentID != agentID) {
-			continue
-		}
-		runID := stream.activity.RunID
-		if stream.activity.State == RunActivityQueued {
-			// The accepted-command startup watchdog owns the queued phase;
-			// the desktop may not know the run yet.
-			continue
-		}
-		if activeSet[runID] {
-			stream.activity.UpdatedAt = now
-			continue
-		}
-		record := s.runs[agentScopedKey(stream.agentID, runID)]
-		revived := record != nil && record.revived
-		if finished[runID] {
-			stream.activity.UpdatedAt = now
-			if ingress := s.ingressRuns[agentScopedKey(stream.agentID, runID)]; ingress != nil {
-				ingress.checkpointRequested = true
-				ingress.updatedAt = now
-			}
-			continue
-		}
-		if revived {
-			// Resurrected after a wrong loss verdict: liveness inferences no
-			// longer end this run; the reaper's stale-run timeout is the
-			// backstop for a genuinely dead one.
-			continue
-		}
-		// Stream events vouch too: never finalize a run whose events are still
-		// flowing through the relay (mirrors the reaper's lastAlive logic).
-		eventsQuiet := stream.lastEventAt.IsZero() ||
-			now.Sub(stream.lastEventAt) >= s.runReportLostTimeout
-		if eventsQuiet && now.Sub(stream.activity.UpdatedAt) >= s.runReportLostTimeout {
-			s.runFinishedLocked(stream, runID, "failed", "desktop_run_lost",
-				"The desktop runtime stopped reporting this run.", nil, now)
-		}
-	}
-}
-
 func (s *conversationStreamStore) startReaper() {
 	s.reaperOnce.Do(func() {
 		interval := s.reaperInterval
@@ -1368,26 +1222,6 @@ func (s *conversationStreamStore) reap(now time.Time) {
 
 	for streamKey, stream := range s.streams {
 		s.evictStreamLocked(stream, now)
-
-		if stream.activity != nil {
-			online := s.isOnline != nil && s.isOnline(stream.agentID)
-			// A run is stale only when NOTHING vouches for it: no stream
-			// events and no activity transition/report-vouch within the
-			// timeout (onRuntimeStatus bumps UpdatedAt for reported runs).
-			lastAlive := stream.lastEventAt
-			if stream.activity.UpdatedAt.After(lastAlive) {
-				lastAlive = stream.activity.UpdatedAt
-			}
-			if online {
-				if !lastAlive.IsZero() && now.Sub(lastAlive) > s.staleRunTimeout {
-					s.runFinishedLocked(stream, stream.activity.RunID, "failed", "stale_run",
-						"The desktop runtime stopped reporting this run.", nil, now)
-				}
-			} else if !lastAlive.IsZero() && now.Sub(lastAlive) > s.offlineRunTimeout {
-				s.runFinishedLocked(stream, stream.activity.RunID, "failed", "agent_offline",
-					"The desktop agent went offline during this run.", nil, now)
-			}
-		}
 
 		if stream.activity == nil &&
 			len(stream.subscribers) == 0 &&
@@ -1417,17 +1251,6 @@ func (s *conversationStreamStore) reap(now time.Time) {
 	for runID, record := range s.commandUpdates {
 		if now.Sub(record.at) > chatCommandDedupeRetention {
 			delete(s.commandUpdates, runID)
-		}
-	}
-
-	for runKey, state := range s.ingressRuns {
-		if state == nil || now.Sub(state.updatedAt) > s.idleRetention {
-			delete(s.ingressRuns, runKey)
-		}
-	}
-	for fragmentKey, assembly := range s.ingressFragments {
-		if assembly == nil || now.After(assembly.expiresAt) {
-			delete(s.ingressFragments, fragmentKey)
 		}
 	}
 }

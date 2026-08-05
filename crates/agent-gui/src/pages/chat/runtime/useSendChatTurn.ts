@@ -1,13 +1,13 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { backendFetch } from "../../../lib/backend/client";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "../../../components/chat/MentionComposer";
 import { getAutomationState } from "../../../lib/automation";
 import { createHookRunScope } from "../../../lib/automation/hookRunner";
+import { backendFetch } from "../../../lib/backend/client";
 import {
   buildPersistableMessagesFromSnapshot,
   type SuppressedToolTraceSnapshot,
@@ -286,10 +286,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     ).trim();
     const effectiveIsAgentDevExecutionMode = isAgentDevMode(effectiveExecutionMode);
     const effectiveSkillsEnabled = settings.skills.enabled && effectiveIsAgentMode;
-    const hasRemoteGatewayTarget =
-      settings.remote.enabled &&
-      settings.remote.gatewayUrl.trim() !== "" &&
-      settings.remote.token.trim() !== "";
+    // 没有「连到哪个 Gateway」了：开着远程访问就意味着可能有远程前端在看。
+    const hasRemoteGatewayTarget = settings.remote.enabled;
     const mirrorsLocalRunToGateway = !gatewayBridgeRequest && hasRemoteGatewayTarget;
     const gatewayBridgeRequestId =
       gatewayBridgeRequest?.requestId ?? createLocalGatewayChatRunId(conversationId);
@@ -1178,7 +1176,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     });
 
     let abortedConversationCommitted = false;
-    let persistableAgentProgress: {
+    const persistableAgentProgress: {
       completedThroughRound: number;
       suppressedToolTrace: SuppressedToolTraceSnapshot[];
     } = {

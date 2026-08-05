@@ -8,6 +8,7 @@ import "katex/dist/katex.min.css";
 import "streamdown/styles.css";
 import { inferRuntimePlatform } from "./lib/runtimePlatform";
 import { installWebviewNavigationGuard } from "./lib/system/webviewNavigationGuard";
+import { AuthGate } from "./pages/login/AuthGate";
 
 // F5/Ctrl+R 等 webview 内置浏览器行为会把整个应用当网页刷新/导航走——在 React
 // 挂载前安装守卫。dev 下放行刷新组合键，保留本地整页重载的调试手段。
@@ -26,6 +27,9 @@ if (import.meta.env.DEV) {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    {/* 桌面壳里 AuthGate 直接放行；浏览器里它先要到后端地址和密码。 */}
+    <AuthGate>
+      <App />
+    </AuthGate>
   </React.StrictMode>,
 );

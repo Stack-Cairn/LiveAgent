@@ -151,15 +151,13 @@ export function buildTrayMenuModel(input: BuildTrayMenuModelInput): TrayMenuMode
     checked: task.enabled,
   }));
 
-  const remoteConfigured =
-    input.remote.gatewayUrl.trim() !== "" && input.remote.token.trim() !== "";
-  const gatewayStatusText = !remoteConfigured
+  // 远程访问是本机的一个开关，不再是「连没连上某个 Gateway」。
+  const remoteEnabled = input.remote.enabled;
+  const gatewayStatusText = !remoteEnabled
     ? null
     : input.gatewayOnline
       ? t("tray.gatewayConnected", locale)
-      : input.remote.enabled
-        ? t("tray.gatewayConnecting", locale)
-        : t("tray.gatewayDisconnected", locale);
+      : t("tray.gatewayDisconnected", locale);
 
   const tooltipParts = [
     "LiveAgent",
@@ -181,9 +179,9 @@ export function buildTrayMenuModel(input: BuildTrayMenuModelInput): TrayMenuMode
           : t("tray.runsIdle", locale),
       stopAll: t("tray.stopAll", locale),
       cron: t("tray.cron", locale),
-      gateway: remoteConfigured
+      gateway: remoteEnabled
         ? `${t("tray.gateway", locale)} · ${gatewayStatusText ?? ""}`
-        : t("tray.gatewayNotConfigured", locale),
+        : t("tray.gatewayDisabled", locale),
       appearance: `${t("tray.appearance", locale)} · ${t(
         input.theme === "light"
           ? "tray.themeLight"
@@ -207,7 +205,7 @@ export function buildTrayMenuModel(input: BuildTrayMenuModelInput): TrayMenuMode
     runs,
     cron,
     theme: input.theme,
-    gatewayEnabled: remoteConfigured,
+    gatewayEnabled: remoteEnabled,
     showAccelerator: enabledAccelerator("summon"),
     newChatAccelerator: enabledAccelerator("newChat"),
     tooltip: tooltipParts.join(" · "),

@@ -35,8 +35,8 @@ message ClientHello {
   // 客户端标识（如 "webui" / "desktop"），仅用于观测与日志。
   string client_name = 6;
   string client_version = 7;
-  // Optional feature identifiers supported by this client. Reliable desktop
-  // chat ingress is negotiated with "CHAT_INGRESS_V1".
+  // Optional feature identifiers supported by this client. No capability is
+  // currently negotiated; the field stays for forward compatibility.
   repeated string capabilities = 8;
 }
 

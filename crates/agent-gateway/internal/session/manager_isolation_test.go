@@ -205,34 +205,6 @@ func TestConversationEpochUsesSourceAgentSession(t *testing.T) {
 	}
 }
 
-func TestRuntimeStatusReconcilesOnlySourceAgentRuns(t *testing.T) {
-	m := NewManager()
-	a := newTestSession(m, "agent-a", "session-a")
-	m.SetSession(a)
-	b := newTestSession(m, "agent-b", "session-b")
-	m.SetSession(b)
-	t.Cleanup(func() { m.ClearSession(a); m.ClearSession(b) })
-
-	dispatchFor(m, a, &gatewayv2.AgentEnvelope{
-		RequestId: "run-a",
-		Payload: &gatewayv2.AgentEnvelope_ChatControl{
-			ChatControl: startedControl("run-a", "conv-a"),
-		},
-	})
-	dispatchFor(m, b, &gatewayv2.AgentEnvelope{
-		RequestId: "run-b",
-		Payload: &gatewayv2.AgentEnvelope_ChatControl{
-			ChatControl: startedControl("run-b", "conv-b"),
-		},
-	})
-
-	m.convStreams.onRuntimeStatus("agent-a", runsReport(nil, nil), time.Now().Add(20*time.Second))
-	activities := m.ActiveConversationActivities()
-	if len(activities) != 1 || activities[0].AgentID != "agent-b" || activities[0].RunID != "run-b" {
-		t.Fatalf("activities after agent-a empty report = %#v, want only agent-b/run-b", activities)
-	}
-}
-
 func TestConversationStreamsAreScopedByAgent(t *testing.T) {
 	m := NewManager()
 	subA := m.SubscribeConversationStream("agent-a", "conv-shared", 0, "")

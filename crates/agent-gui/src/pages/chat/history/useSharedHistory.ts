@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import {
   type Dispatch,
   type SetStateAction,
@@ -15,7 +14,6 @@ import {
   listSharedChatHistory,
   setChatHistoryShare,
 } from "../../../lib/chat/history/chatHistory";
-import type { AppSettings } from "../../../lib/settings";
 import { sortSidebarConversations } from "../../../lib/sidebar/reconcile";
 import type { SidebarStore } from "../../../lib/sidebar/store";
 import { asErrorMessage } from "../chatPageUtils";
@@ -24,7 +22,6 @@ import type { GatewayRuntimeStatus } from "../gateway/gatewayRuntimeStatusModel"
 const SHARED_HISTORY_LIST_PAGE_SIZE = 200;
 
 type UseSharedHistoryParams = {
-  remoteSettings: AppSettings["remote"];
   remoteRuntimeStatus: GatewayRuntimeStatus;
   setRemoteRuntimeStatus: Dispatch<SetStateAction<GatewayRuntimeStatus>>;
   sidebarStore: SidebarStore;
@@ -37,13 +34,7 @@ type UseSharedHistoryParams = {
  * sidebar (isShared flags).
  */
 export function useSharedHistory(params: UseSharedHistoryParams) {
-  const {
-    remoteSettings,
-    remoteRuntimeStatus,
-    setRemoteRuntimeStatus,
-    sidebarStore,
-    setErrorMessage,
-  } = params;
+  const { remoteRuntimeStatus, sidebarStore, setErrorMessage } = params;
 
   const [shareConversation, setShareConversation] = useState<ChatHistorySummary | null>(null);
   const [shareStatus, setShareStatus] = useState<ChatHistoryShareStatus | null>(null);
@@ -70,9 +61,8 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
   const sharedHistoryListRequestRef = useRef<Promise<ChatHistorySummary[]> | null>(null);
   const sharedManagerShareOrigin = useMemo(() => {
     const statusGatewayUrl = remoteRuntimeStatus.gatewayUrl?.trim() ?? "";
-    const runtimeGatewayUrl = sharedManagerGatewayUrl.trim();
-    return statusGatewayUrl || runtimeGatewayUrl || remoteSettings.gatewayUrl;
-  }, [remoteRuntimeStatus.gatewayUrl, remoteSettings.gatewayUrl, sharedManagerGatewayUrl]);
+    return statusGatewayUrl || sharedManagerGatewayUrl.trim();
+  }, [remoteRuntimeStatus.gatewayUrl, sharedManagerGatewayUrl]);
   const canShareHistory =
     remoteRuntimeStatus.online === true &&
     remoteRuntimeStatus.enabled === true &&
@@ -220,19 +210,11 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
   );
 
   const refreshSharedManagerGatewayUrl = useCallback(() => {
-    setSharedManagerGatewayUrlLoading(true);
-    void invoke<GatewayRuntimeStatus>("gateway_status")
-      .then((status) => {
-        setRemoteRuntimeStatus(status);
-        setSharedManagerGatewayUrl(status.gatewayUrl?.trim() ?? "");
-      })
-      .catch(() => {
-        setSharedManagerGatewayUrl("");
-      })
-      .finally(() => {
-        setSharedManagerGatewayUrlLoading(false);
-      });
-  }, [setRemoteRuntimeStatus]);
+    // gateway_status 命令已随桌面端 gateway 一起删除:分享链接的
+    // 网关 URL 恒为空,与离线状态时的既有行为一致。
+    setSharedManagerGatewayUrlLoading(false);
+    setSharedManagerGatewayUrl("");
+  }, []);
 
   const handleOpenShareModal = useCallback(
     (conversation: ChatHistorySummary) => {
@@ -246,9 +228,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
       setShareError(null);
       setShareLoading(false);
       setShareUpdating(false);
-      setSharedManagerGatewayUrl(
-        remoteRuntimeStatus.gatewayUrl?.trim() || remoteSettings.gatewayUrl.trim(),
-      );
+      setSharedManagerGatewayUrl(remoteRuntimeStatus.gatewayUrl?.trim() ?? "");
       refreshSharedManagerGatewayUrl();
 
       if (!canShareHistory) {
@@ -277,7 +257,6 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
       refreshSharedManagerGatewayUrl,
       remoteRuntimeStatus.gatewayUrl,
       setSharedManagerError,
-      remoteSettings.gatewayUrl,
     ],
   );
 
@@ -367,18 +346,12 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
   }, [handleLoadSharedHistoryStatus, refreshSharedHistoryItems, refreshSharedManagerGatewayUrl]);
 
   const handleOpenSharedHistoryManager = useCallback(() => {
-    setSharedManagerGatewayUrl(remoteSettings.gatewayUrl.trim());
     refreshSharedManagerGatewayUrl();
     setSharedManagerOpen(true);
     void refreshSharedHistoryItems().then((items) => {
       items.forEach(handleLoadSharedHistoryStatus);
     });
-  }, [
-    handleLoadSharedHistoryStatus,
-    refreshSharedHistoryItems,
-    refreshSharedManagerGatewayUrl,
-    remoteSettings.gatewayUrl,
-  ]);
+  }, [handleLoadSharedHistoryStatus, refreshSharedHistoryItems, refreshSharedManagerGatewayUrl]);
 
   const handleDisableSharedHistory = useCallback(
     (conversation: ChatHistorySummary) => {

@@ -146,7 +146,6 @@ func newV2BrowserTest(t *testing.T) (*session.Manager, *session.AgentSession, *w
 	sm := session.NewManager()
 	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
 	agentSession := session.NewAgentSession(sm.LatestAuthSnapshot("desktop-agent"))
-	agentSession.SetCapabilities([]string{gatewayv2.ChatIngressV1Capability})
 	sm.SetSession(agentSession)
 
 	handler := pbws.NewServer(newV2TestConfig(), sm, nil).BrowserHandler()

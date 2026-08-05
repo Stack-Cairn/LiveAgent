@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { isNetworkShimActive } from "../backend/tauriShim";
 import { type Locale, normalizeLocale } from "../../i18n/config";
 import { normalizeCliIdentitySettings } from "../providers/cliIdentityCore";
 
@@ -24,7 +23,7 @@ import {
   type SkillsSettings,
   type Theme,
 } from "./index";
-import { buildGatewaySettingsSyncPayload, buildGatewaySettingsSyncUpdatePayload } from "./sync";
+import { buildGatewaySettingsSyncUpdatePayload } from "./sync";
 
 const LOCAL_UI_SETTINGS_STORAGE_KEY = "liveagent.ui-settings.v1";
 
@@ -344,12 +343,4 @@ export async function persistSettings(
 
   await Promise.all(tasks);
   return result;
-}
-
-export async function publishGatewaySettingsSync(settings: AppSettings): Promise<void> {
-  // 浏览器（网络 shim）里没有 gateway 镜像，也没有壳命令可调。
-  if (isNetworkShimActive()) return;
-  await invoke("gateway_publish_settings_sync", {
-    payload: buildGatewaySettingsSyncPayload(settings),
-  } as any);
 }

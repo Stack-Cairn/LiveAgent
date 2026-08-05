@@ -18,23 +18,17 @@ pub struct SshPatchApplyResponse {
     pub conflict: Option<String>,
 }
 
+/// 后端的远程访问控制设置：门控「连过来的远程前端能干什么」。
+///
+/// 这里**没有**「连到哪个 Gateway」——桌面端自己就是后端，不再外拨。
+/// 旧库里遗留的 gatewayUrl/token/agentId 等键读到就忽略（serde 默认行为），
+/// 不迁移、不报错，下次保存时自然被覆盖掉。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteSettingsPayload {
+    /// 远程访问总开关：关掉后下面几项一律不生效。
     #[serde(default)]
     pub enabled: bool,
-    #[serde(default)]
-    pub gateway_url: String,
-    #[serde(default = "default_remote_gateway_port", alias = "grpcPort")]
-    pub gateway_port: u16,
-    #[serde(default)]
-    pub token: String,
-    #[serde(default)]
-    pub agent_id: String,
-    #[serde(default = "default_remote_auto_reconnect")]
-    pub auto_reconnect: bool,
-    #[serde(default = "default_remote_heartbeat_interval")]
-    pub heartbeat_interval: u64,
     #[serde(default)]
     pub enable_web_terminal: bool,
     #[serde(default)]

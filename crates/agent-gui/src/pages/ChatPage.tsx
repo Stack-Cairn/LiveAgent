@@ -33,6 +33,7 @@ import { useConfirmDialog } from "../components/ui/confirm-dialog";
 import { useLocale } from "../i18n";
 import type { AppUpdateController } from "../lib/appUpdates";
 import { getAutomationState, useAutomation } from "../lib/automation";
+import { backendFetch } from "../lib/backend/client";
 import type { ChatFileLink } from "../lib/chat/chatFileLinks";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
@@ -131,7 +132,6 @@ import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirr
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
-import { backendFetch } from "../lib/backend/client";
 import { useBackendEventSubscription } from "./chat/hooks/useBackendEventSubscription";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
@@ -312,9 +312,7 @@ export function ChatPage(props: ChatPageProps) {
     prepareComposerForConversationChangeActionRef,
   });
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { remoteRuntimeStatus, setRemoteRuntimeStatus } = useGatewayStatus({
-    remote: settings.remote,
-  });
+  const { remoteRuntimeStatus, setRemoteRuntimeStatus } = useGatewayStatus();
   const tauriTunnelClient = useMemo<LocalTunnelClient>(() => createTauriTunnelClient(), []);
 
   // The only page-level subscription to the sidebar list: ChatPage's own
@@ -348,7 +346,6 @@ export function ChatPage(props: ChatPageProps) {
     handleDisableSharedHistory,
     handleSetSharedHistoryRedactToolContent,
   } = useSharedHistory({
-    remoteSettings: settings.remote,
     remoteRuntimeStatus,
     setRemoteRuntimeStatus,
     sidebarStore,
@@ -587,7 +584,10 @@ export function ChatPage(props: ChatPageProps) {
         const message = error instanceof Error ? error.message : String(error);
         // 409 表示已被其它前端应答
         if (message.includes("409") || message.includes("AlreadyAnswered")) {
-          return { ok: false, message: t("chat.toolApproval.alreadyAnswered") || "已被其它前端应答" };
+          return {
+            ok: false,
+            message: t("chat.toolApproval.alreadyAnswered") || "已被其它前端应答",
+          };
         }
         return { ok: false, message };
       }

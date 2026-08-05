@@ -14,6 +14,14 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* invoke/listen 的替身，与 vite.config.ts 的 resolve.alias 一一对应。
+       写在这里是为了让「我们的替身少导出了一个符号」变成编译错误，
+       而不是运行时的 undefined。 */
+    "paths": {
+      "@tauri-apps/api/core": ["./src/lib/backend/tauriCore.ts"],
+      "@tauri-apps/api/event": ["./src/lib/backend/tauriEvent.ts"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,

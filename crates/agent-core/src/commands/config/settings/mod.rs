@@ -8,17 +8,14 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use uuid::Uuid;
 
 use crate::events::EventBus;
 use crate::runtime::project_path::project_path_key as normalize_project_path_key;
 use crate::services::automation::AutomationScheduler;
 
-/// 远程配置落库后发出，payload 是归一化后的 `RemoteSettingsPayload`。
+/// 远程访问控制设置落库后发出，payload 是 `RemoteSettingsPayload`。
 ///
-/// 订阅者当前只有一个：`src-tauri/gateway_sink.rs`，它拿去调 `apply_config`。
-/// 阶段 4 删掉 Gateway 后这条事件仍然有意义——远程配置变了，
-/// 连着的其它客户端也该知道。
+/// 远程前端的权限变了，正连着的其它客户端也该知道。
 pub const SETTINGS_REMOTE_SAVED_EVENT: &str = "settings:remote-saved";
 
 const DB_FILENAME: &str = "config.sqlite";

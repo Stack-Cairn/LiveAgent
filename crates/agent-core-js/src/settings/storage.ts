@@ -23,7 +23,7 @@ import {
   type SkillsSettings,
   type Theme,
 } from "./index";
-import { buildGatewaySettingsSyncPayload, buildGatewaySettingsSyncUpdatePayload } from "./sync";
+import { buildGatewaySettingsSyncUpdatePayload } from "./sync";
 
 const LOCAL_UI_SETTINGS_STORAGE_KEY = "liveagent.ui-settings.v1";
 
@@ -343,10 +343,4 @@ export async function persistSettings(
 
   await Promise.all(tasks);
   return result;
-}
-
-export async function publishGatewaySettingsSync(settings: AppSettings): Promise<void> {
-  await callBackend("gateway_publish_settings_sync", {
-    payload: buildGatewaySettingsSyncPayload(settings),
-  } as any);
 }

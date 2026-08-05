@@ -26,7 +26,6 @@ import {
 import {
   loadPersistedSettingsWithDefaults,
   persistSettings,
-  publishGatewaySettingsSync,
   type SettingsSaveState,
 } from "./lib/settings/storage";
 import {
@@ -75,21 +74,6 @@ function hasSettingsSyncChanged(prev: AppSettings, next: AppSettings) {
   return (
     JSON.stringify(buildGatewaySettingsSyncPayload(prev)) !==
     JSON.stringify(buildGatewaySettingsSyncPayload(next))
-  );
-}
-
-function hasSensitiveSettingsUpdates(settings: AppSettings) {
-  return (
-    settings.customProviders.some((provider) => provider.apiKey.trim().length > 0) ||
-    settings.customProviders.some(
-      (provider) =>
-        provider.usageQuery.apiKey.trim().length > 0 ||
-        provider.usageQuery.accessToken.trim().length > 0 ||
-        provider.usageQuery.secretAccessKey.trim().length > 0,
-    ) ||
-    settings.ssh.hosts.some(
-      (host) => host.password.trim().length > 0 || host.privateKey.trim().length > 0,
-    )
   );
 }
 
@@ -279,9 +263,6 @@ export default function App() {
           settingsRef.current = loadedWithDefaults;
           setSettingsState(loadedWithDefaults);
           setSettingsSaveState({ status: "saved" });
-          void publishGatewaySettingsSync(loadedWithDefaults).catch((error) => {
-            console.error("publish gateway settings sync failed", error);
-          });
         }
       } catch (error) {
         if (!cancelled) {
@@ -307,20 +288,14 @@ export default function App() {
   }, []);
 
   const queueSettingsSave = useCallback(
-    (prev: AppSettings, next: AppSettings, fallback: string, publishSync: boolean) => {
+    (prev: AppSettings, next: AppSettings, fallback: string) => {
       const saveSequence = ++saveSequenceRef.current;
       setSettingsSaveState({ status: "saving" });
 
       saveChainRef.current = saveChainRef.current
         .catch(() => undefined)
         .then(() => persistSettings(prev, next))
-        .then(async (persistResult) => {
-          const publishTarget = persistResult.ssh
-            ? normalizeSettings({
-                ...next,
-                ssh: persistResult.ssh,
-              })
-            : next;
+        .then((persistResult) => {
           if (persistResult.ssh && saveSequenceRef.current === saveSequence) {
             const merged = normalizeSettings({
               ...settingsRef.current,
@@ -331,9 +306,6 @@ export default function App() {
           }
           if (persistResult.conflict) {
             throw new Error(persistResult.conflict);
-          }
-          if (publishSync) {
-            await publishGatewaySettingsSync(publishTarget);
           }
         })
         .then(() => {
@@ -364,12 +336,7 @@ export default function App() {
       );
       settingsRef.current = next;
       setSettingsState(next);
-      queueSettingsSave(
-        prev,
-        next,
-        "保存设置失败。",
-        hasSettingsSyncChanged(prev, next) || hasSensitiveSettingsUpdates(next),
-      );
+      queueSettingsSave(prev, next, "保存设置失败。");
     },
     [queueSettingsSave],
   );
@@ -464,15 +431,6 @@ export default function App() {
           runUpdateCheckRef.current();
           break;
         }
-        case "gateway-toggle": {
-          // 与设置页远程开关同一条路径：settings 保存链会落库并 apply_config，
-          // DB / 控制器 / 设置页开关三方保持一致（勿改为 Rust 直连开关）。
-          setSettings((prev) => ({
-            ...prev,
-            remote: { ...prev.remote, enabled: !prev.remote.enabled },
-          }));
-          break;
-        }
         default:
           break;
       }
@@ -561,7 +519,7 @@ export default function App() {
         }
         settingsRef.current = next;
         setSettingsState(next);
-        queueSettingsSave(prev, next, "同步 WebUI 设置失败。", publicChanged);
+        queueSettingsSave(prev, next, "同步 WebUI 设置失败。");
       },
     );
 
