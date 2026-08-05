@@ -2,32 +2,36 @@
 //!
 //! 用法：
 //! ```text
-//! agent-backend --port 8443 [--password <pw>] [--tls-cert a.pem --tls-key b.pem]
+//! agent-backend --port 8443 [--password <pw>] [--tls-cert a.pem --tls-key b.pem] [--engine-bundle <path>]
 //! ```
 //!
 //! 不给 `--password` 就动态生成一个并打印到 stderr（决策 8：本地密码初始化
 //! 动态生成、可改）。打到 stderr 而不是 stdout，是为了让 stdout 能被管道消费。
+//!
+//! `--engine-bundle` 指向 Node 引擎的打包产物（index.js）。阶段 3：必须给它（容器模式）。
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use agent_backend::{auth, build_router, build_state, tls};
+use agent_backend::{auth, build_router, build_state, engine_process, tls};
 
 struct Args {
     port: u16,
     password: Option<String>,
     tls_cert: Option<PathBuf>,
     tls_key: Option<PathBuf>,
+    engine_bundle: Option<PathBuf>,
 }
 
-/// 手写参数解析而不是引 clap：四个参数，clap 会带进来一整棵依赖树。
+/// 手写参数解析而不是引 clap：五个参数，clap 会带进来一整棵依赖树。
 fn parse_args() -> Result<Args, String> {
     let mut args = Args {
         port: 8443,
         password: None,
         tls_cert: None,
         tls_key: None,
+        engine_bundle: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -41,9 +45,10 @@ fn parse_args() -> Result<Args, String> {
             "--password" => args.password = Some(take("--password")?),
             "--tls-cert" => args.tls_cert = Some(PathBuf::from(take("--tls-cert")?)),
             "--tls-key" => args.tls_key = Some(PathBuf::from(take("--tls-key")?)),
+            "--engine-bundle" => args.engine_bundle = Some(PathBuf::from(take("--engine-bundle")?)),
             "--help" | "-h" => {
                 println!(
-                    "agent-backend --port <PORT> [--password <PW>] [--tls-cert <PEM> --tls-key <PEM>]"
+                    "agent-backend --port <PORT> [--password <PW>] [--tls-cert <PEM> --tls-key <PEM>] [--engine-bundle <PATH>]"
                 );
                 std::process::exit(0);
             }
@@ -79,6 +84,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // 周期清扫过期隧道：TTL 的强制执行就在这里，不起它 TTL 只是显示值。
     state.tunnels.spawn_sweeper();
+
+    // 启动 Node 引擎进程。决策 3/5/11 链条：单 Docker 镜像；Node 只监听 loopback；
+    // 后端退出时 kill child。
+    let _engine = if let Some(bundle_path) = args.engine_bundle {
+        match engine_process::spawn_engine(state.clone(), bundle_path).await {
+            Ok(engine) => {
+                eprintln!("Node 引擎启动成功");
+                Some(engine)
+            }
+            Err(e) => {
+                eprintln!("警告：启动 Node 引擎失败，纯 API 模式继续运行：{e}");
+                None
+            }
+        }
+    } else {
+        eprintln!("未提供 --engine-bundle，纯 API 模式运行");
+        None
+    };
+
     let app = build_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
 

@@ -21,6 +21,7 @@
 
 pub mod approval;
 pub mod auth;
+pub mod engine_process;
 pub mod engine_proxy;
 pub mod json;
 pub mod routes;
