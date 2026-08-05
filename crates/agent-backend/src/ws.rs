@@ -9,7 +9,7 @@
 //! 重连语义：按决策 19，**不补发历史事件**。客户端重连后自己拉快照再订阅增量。
 //! 没有 seq 号，没有 after_seq 参数，没有 replay buffer。
 
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use agent_core::events::EventSink;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -69,101 +69,53 @@ impl EventSink for WsEventSink {
             }
         };
 
-        // 非阻塞发送。send()：
-        // - Ok(usize) 表示有 N 个订阅者收到了这条消息
-        // - Err(SendError::Closed) 表示没有订阅者，直接返回，丢弃此事件
-        // 队列满时 broadcast 自动丢最旧帧，不会返回错误也不会阻塞。
-        match self.tx.send(json_str) {
-            Ok(_num_receivers) => {
-                // 正常，有客户端收到了
-            }
-            Err(broadcast::error::SendError(_)) => {
-                // 没有订阅者，这很正常——可能还没有客户端连接，或者都断开了。
-                // 静默丢弃，不 panic、不 log（太吵）。
-            }
-        }
+        // 非阻塞：队列满时 broadcast 自动丢最旧帧；没有订阅者时 send 返回 Err，
+        // 那只说明还没有客户端连着，静默丢弃即可。
+        let _ = self.tx.send(json_str);
     }
-}
-
-/// 全局的 WsEventSink 实例。多个 ws_handler 调用会共享同一个 sink（因此也共享
-/// 同一个 broadcast channel）。这样所有客户端都能收到同一份事件流。
-static GLOBAL_WS_SINK: OnceLock<Arc<WsEventSink>> = OnceLock::new();
-
-/// 初始化或获取全局的 WebSocket 事件 sink。
-///
-/// 后端启动时调用一次（来自 main.rs 或类似的初始化代码），注册到 EventBus。
-/// 后续 ws_handler 调用会重用同一个实例。
-pub fn get_or_init_ws_sink() -> Arc<WsEventSink> {
-    GLOBAL_WS_SINK
-        .get_or_init(|| Arc::new(WsEventSink::new()))
-        .clone()
 }
 
 /// axum 0.8 WebSocket 事件流 handler。
 ///
-/// 使用方式（在 axum router 里）：
-/// ```ignore
-///   .route("/ws/events", get(ws_handler))
-/// ```
-///
+/// sink 从 `AppState` 拿（`build_state` 建它并注册进 EventBus）。
 /// 客户端连接后立即订阅事件流，收不到连接前的历史事件（决策 19）。
-/// 断开连接时 task 自行清理，无需手动。
-///
-/// **先决条件**：后端启动时必须调用 `get_or_init_ws_sink()` 并将其注册到 EventBus。
-/// 见 main.rs 的初始化代码。
+/// 断开时 task 自行退出，没有 per-connection 状态要清理。
 pub async fn ws_handler(
-    State(_state): State<crate::state::AppState>,
+    State(state): State<crate::state::AppState>,
     upgrade: WebSocketUpgrade,
 ) -> impl axum::response::IntoResponse {
-    upgrade.on_upgrade(handle_socket)
+    let events = state.ws_sink.subscribe();
+    upgrade.on_upgrade(move |socket| handle_socket(socket, events))
 }
 
-/// 处理单个 WebSocket 连接的业务逻辑。
-async fn handle_socket(socket: WebSocket) {
+/// 把 broadcast 里的事件泵进单个 WebSocket 连接，直到任一侧断开。
+async fn handle_socket(socket: WebSocket, mut events: broadcast::Receiver<String>) {
     let (mut sender, mut receiver) = socket.split();
 
-    // 获取全局的 sink，订阅事件流。
-    let sink = get_or_init_ws_sink();
-    let mut events = sink.subscribe();
-
-    // 循环接收事件，直到连接断开或任务取消。
-    // 同时监听 broadcast 事件和客户端连接状态，避免在客户端断开时无限阻塞。
     loop {
         tokio::select! {
             result = events.recv() => {
                 match result {
                     Ok(json_str) => {
-                        // 发送给客户端。WebSocket message 用 Text。
                         if sender.send(Message::Text(json_str.into())).await.is_err() {
-                            // 客户端断开或 send 失败，退出这个 task。
-                            break;
+                            break; // 客户端断开
                         }
                     }
-                    Err(_) => {
-                        // broadcast channel 已关闭（sender 被丢弃），退出。
-                        break;
-                    }
+                    // 客户端消费太慢、错过了被挤掉的旧帧——按模块头的约定丢帧
+                    // 继续，而不是断连。
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
             msg = receiver.next() => {
                 match msg {
-                    None => {
-                        // 客户端主动关闭连接
-                        break;
-                    }
-                    Some(Ok(_)) => {
-                        // 接收到客户端消息，这个简单实现忽略它，继续等待事件
-                    }
-                    Some(Err(_)) => {
-                        // WebSocket 错误，退出
-                        break;
-                    }
+                    // 客户端发来的消息一律忽略；None/Err 表示连接结束。
+                    Some(Ok(_)) => continue,
+                    _ => break,
                 }
             }
         }
     }
-
-    // 连接断开，task 自动清理退出。
 }
 
 /// 事件流挂在 `/api/events` 上，和命令路由一起走认证。

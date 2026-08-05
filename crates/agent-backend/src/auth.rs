@@ -23,29 +23,14 @@ impl AuthConfig {
 
     /// 常量时间验证 Bearer token。
     ///
-    /// 即使 presented 长度与内部密码不同，也必须走完整个比较流程。
-    /// 这样避免攻击者通过响应时间推断密码长度。
+    /// 长度不等时跟自己比：比较耗时始终只取决于密码长度，
+    /// 不让攻击者通过响应时间推断有没有猜中长度。
     pub fn verify(&self, presented: &str) -> bool {
-        let stored_bytes = self.password.as_bytes();
-        let presented_bytes = presented.as_bytes();
-
-        // 检查长度是否相等（但不提前返回）。
-        let len_eq = stored_bytes.len() == presented_bytes.len();
-
-        // 总是进行常量时间比较。
-        // 如果长度匹配，比较实际数据；否则比较填充数据，保证比较次数相同。
-        let to_compare = if len_eq {
-            presented_bytes.to_vec()
-        } else {
-            // 长度不同时，用全零向量代替，确保比较总是遍历相同数量的字节。
-            vec![0u8; stored_bytes.len()]
-        };
-
-        // 常量时间比较数据。
-        let data_eq: bool = stored_bytes.ct_eq(&to_compare).into();
-
-        // 只有当长度和数据都匹配时，才返回 true。
-        // 前面已经跑完了 ct_eq，这里的 && 不会导致提前返回的时序差异。
+        let stored = self.password.as_bytes();
+        let presented = presented.as_bytes();
+        let len_eq = stored.len() == presented.len();
+        let target = if len_eq { presented } else { stored };
+        let data_eq: bool = stored.ct_eq(target).into();
         len_eq && data_eq
     }
 }

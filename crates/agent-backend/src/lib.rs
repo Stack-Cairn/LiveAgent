@@ -105,7 +105,8 @@ pub fn build_state(auth: Arc<auth::AuthConfig>) -> Result<AppState, String> {
     ));
 
     // 事件接线（顺序与桌面壳 setup 一致）。
-    events.register(crate::ws::get_or_init_ws_sink());
+    let ws_sink = Arc::new(crate::ws::WsEventSink::new());
+    events.register(ws_sink.clone());
     terminals.set_event_bus(Arc::clone(&events));
     sftp.set_event_bus(Arc::clone(&events));
     let managed_processes: Arc<agent_core::runtime::managed_process::ManagedProcessRegistry> =
@@ -136,5 +137,6 @@ pub fn build_state(auth: Arc<auth::AuthConfig>) -> Result<AppState, String> {
         workspace_watch,
         tunnels,
         auth,
+        ws_sink,
     })
 }

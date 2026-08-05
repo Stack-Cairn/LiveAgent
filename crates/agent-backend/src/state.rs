@@ -46,4 +46,6 @@ pub struct AppState {
     pub tunnels: Arc<TunnelStore>,
     /// 认证凭据。密码即 Bearer token（决策 7）。
     pub auth: Arc<crate::auth::AuthConfig>,
+    /// WS 事件流入口：EventBus 往里写，每个 `/api/events` 连接订阅它。
+    pub ws_sink: Arc<crate::ws::WsEventSink>,
 }
