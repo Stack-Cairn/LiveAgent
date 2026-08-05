@@ -57,7 +57,7 @@
 | `subagent_worktree` | 4 | |
 | `hook` | 3 | |
 | `shell` | 2 | `shell_run`、`runtime_cancel` |
-| **`tunnel`** | **5** | 从 gateway 模块救回,见下 |
+| **`tunnel`** | **5** | 从 gateway 模块救回并重写,见下 |
 | **`provider_usage`** | **2** | 从 gateway 模块救回,见下 |
 | **`workspace_watch`** | **1** | 从 gateway 模块救回,见下 |
 
@@ -71,25 +71,34 @@
 | `workspace_watch_set` | 工作区文件监听 | `gateway.rs:299` 只调 `workspace_watch.set_desired(WatchSource::Local, …)` |
 | `provider_usage_query` | 查 provider 用量 | `gateway.rs:18` 只调 `provider_usage_service.query()` |
 | `provider_usage_test` | 测试用量查询配置 | 同上 |
-| `gateway_tunnel_state` | 隧道列表 | 见下方「隧道要重写」 |
-| `gateway_tunnel_create` | 建隧道 | |
-| `gateway_tunnel_update` | 改隧道 | |
-| `gateway_tunnel_close` | 关隧道 | |
-| `gateway_tunnel_check` | 探测本地端口 | |
+| `tunnel_state` | 隧道列表 | ✅ P2-30 已重写并改名(原 `gateway_tunnel_state`) |
+| `tunnel_create` | 建隧道 | ✅ |
+| `tunnel_update` | 改隧道 | ✅ |
+| `tunnel_close` | 关隧道 | ✅ |
+| `tunnel_check` | 探测本地端口 | ✅ 改为同步等探活完成 |
 
 这三组在阶段 2 迁移时必须**脱离 `GatewayController`**,改为直接持有各自的 service。
 
-### 隧道要重写,不是照搬
+### 隧道要重写,不是照搬 —— ✅ 已完成(P2-30)
 
 隧道的用途是:agent 在工作机上起了个 dev server(如 `:5173`),用户想从浏览器看效果。
 
-- **现在**:桌面端把端口注册到公网 Gateway,Gateway 开 `/t/{slug}` 公开反代,并重写 HTML 属性、
-  CSS `url()`、注入 shim、改 CSP(`internal/server/tunnel_rewrite.go`,约 1000 行)。
-- **之后**:后端**就在**那台工作机上,且已有网络接口。前端直接请求后端的隧道路由,
-  后端代理到 `localhost:5173` 即可。**slug 注册协议、跨中继分帧、公开无认证入口全部不需要。**
+- **旧**:桌面端把端口注册到公网 Gateway,Gateway 开 `/t/{slug}` 公开反代,并重写 HTML 属性、
+  CSS `url()`、注入 shim、改 CSP(`internal/server/tunnel_rewrite.go` 424 行 +
+  `tunnel_proxy.go` 781 行)。
+- **新**:后端**就在**那台工作机上,且已有网络接口,直接反代到 `localhost:5173`。
+  **slug 注册协议、跨中继分帧、公开无认证入口全部不需要。**
 
-路径前缀重写是否仍然必要,取决于隧道路由是否挂在子路径下 —— 阶段 2 设计时决定。
-名字应从 `gateway_tunnel_*` 改为 `tunnel_*`。
+**「路径前缀重写是否必要」已定案:不必要,因为不挂子路径。** 每条隧道占一个独立端口,
+路径 1:1 —— dev server 发的 `<script src="/assets/main.js">` 本来就是对的。挂
+`/t/<id>/` 才需要重写它发出的每个 URL,那等于把上面那 1,205 行用 Rust 重写一遍。
+
+认证改为「首访 `?t=<token>` → HttpOnly cookie → 302 到干净路径」:浏览器标签页发不了
+`Authorization` 头,所以后端密码在这里用不上。强度与旧架构的「不可猜 slug」相当,
+但端口可被扫到而 token 不能。
+
+命令名已从 `gateway_tunnel_*` 改为 `tunnel_*`,事件 `gateway:tunnel-state` →
+`tunnel:state`。详见 [migration/phase-2-backend.md](migration/phase-2-backend.md#隧道重写p2-30)。
 
 ### 后端专属但当前由前端触发的
 

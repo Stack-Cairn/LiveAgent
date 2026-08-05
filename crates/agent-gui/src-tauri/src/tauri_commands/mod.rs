@@ -16,3 +16,4 @@ pub mod shell;
 pub mod subagent_store;
 pub mod subagent_worktree;
 pub mod terminal;
+pub mod tunnel;

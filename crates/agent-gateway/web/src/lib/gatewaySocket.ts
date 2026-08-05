@@ -1129,6 +1129,10 @@ function normalizeTunnelStatus(input: RawTunnelStatus): TunnelStatus {
     name: input.name?.trim() ?? "",
     targetUrl: input.target_url ?? "",
     publicPath: input.public_path ?? "",
+    // 旧 gateway 协议没有这两个字段（隧道走 /t/{slug} 中继）。
+    // 阶段 6 删 Go 时这整条路径一并消失。
+    publicUrl: "",
+    port: 0,
     createdAt: Number(input.created_at ?? 0),
     expiresAt: Number(input.expires_at ?? 0),
     activeConnections: Number(input.active_connections ?? 0),

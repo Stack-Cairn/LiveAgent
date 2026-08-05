@@ -63,17 +63,11 @@ impl GatewayController {
                 }
                 Ok(())
             }
-            Some(proto::gateway_envelope::Payload::TunnelState(snapshot)) => {
-                self.handle_tunnel_state_snapshot(snapshot);
-                Ok(())
-            }
-            Some(proto::gateway_envelope::Payload::TunnelMutation(mutation)) => {
-                self.handle_tunnel_mutation_request(request_id, mutation);
-                Ok(())
-            }
-            Some(proto::gateway_envelope::Payload::TunnelFrame(frame)) => {
-                self.tunnel_proxy.handle_frame(self, frame)
-            }
+            // 隧道不再经中继（P2-30）：后端就在工作机上，自己开端口反代。
+            // 旧 gateway 若仍发这三类帧，忽略即可——阶段 6 会连协议一起删。
+            Some(proto::gateway_envelope::Payload::TunnelState(_))
+            | Some(proto::gateway_envelope::Payload::TunnelMutation(_))
+            | Some(proto::gateway_envelope::Payload::TunnelFrame(_)) => Ok(()),
             Some(proto::gateway_envelope::Payload::WorkspaceWatch(request)) => {
                 self.workspace_watch
                     .set_desired(WatchSource::Gateway, request.workdirs);

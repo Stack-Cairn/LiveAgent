@@ -9,4 +9,3 @@ pub mod gateway;
 pub mod gateway_bridge;
 pub mod proxy;
 pub mod tray;
-pub mod tunnel;

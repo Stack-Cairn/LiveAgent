@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc as std_mpsc, Arc};
@@ -984,10 +983,7 @@ fn validate_delta_event_json(event_json: &str) -> Result<(), String> {
 }
 
 fn chat_ingress_db_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir().ok_or_else(|| "无法定位用户目录".to_string())?;
-    let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
-    fs::create_dir_all(&dir).map_err(|error| format!("创建网关聊天镜像目录失败：{error}"))?;
-    Ok(dir.join(CHAT_INGRESS_DB_FILENAME))
+    Ok(agent_core::storage::app_storage_dir()?.join(CHAT_INGRESS_DB_FILENAME))
 }
 
 #[derive(Debug)]

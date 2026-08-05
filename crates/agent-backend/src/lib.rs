@@ -21,9 +21,11 @@
 
 pub mod auth;
 pub mod routes;
+pub mod routes_gen;
 pub mod ssrf;
 pub mod state;
 pub mod tls;
+pub mod tunnel;
 pub mod ws;
 
 use std::sync::Arc;
@@ -52,13 +54,28 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
 }
 
-/// 构造一个只挂了 registry、没接任何事件消费者的后端状态。
+/// 构造后端状态：装好全部 registry，并把事件总线接到 WS sink 和各发事件方。
 ///
-/// 事件 sink 由调用方注册：本地模式下桌面壳注册自己的，纯后端模式下注册 WS sink。
+/// 对照桌面壳 `.setup()` 的接线（agent-gui lib.rs:765-784）：
+///  - WS sink 注册进 EventBus（纯后端模式下 WS 客户端才能收到事件）
+///  - managed_process / terminal / sftp 三个 registry 调 set_event_bus（否则
+///    这些子系统的事件根本到不了总线，P2-31 验收时发现的实际缺口）
+///  - automation notifier + scheduler.start()（定时任务才跑得起来）
+///  - managed process 的 startup_reconcile / monitor（进程快照自愈）
+///
+/// 隧道**不在**这里恢复：`TunnelStore::initialize` 要读库还要起监听，是 async
+/// 且会失败的。放进 `serve` 前由调用方显式 await，见 `main.rs`。
 pub fn build_state(auth: Arc<auth::AuthConfig>) -> Result<AppState, String> {
     use agent_core::events::EventBus;
+    use agent_core::services::automation::AutomationNotifier;
+    use agent_core::services::tunnel::TunnelStore;
 
     let events = Arc::new(EventBus::new());
+    // 建表。桌面壳在 setup 第一行做这件事（agent-gui lib.rs:730）；纯后端模式下
+    // 漏掉它，chat_history_* 全部报 "no such table: chatHistory"——路由可达、
+    // 契约测试全绿，但功能是坏的。P2-31 用 curl 实测时抓到的。
+    agent_core::commands::history_db::initialize_history_db()
+        .map_err(|e| format!("初始化 history 库失败：{e}"))?;
     let automation_store = Arc::new(
         agent_core::services::automation::AutomationStore::open()
             .map_err(|e| format!("打开 automation 存储失败：{e}"))?,
@@ -81,6 +98,25 @@ pub fn build_state(auth: Arc<auth::AuthConfig>) -> Result<AppState, String> {
     let workspace_watch = Arc::new(
         agent_core::services::workspace_watch::WorkspaceWatchService::new(Arc::clone(&events)),
     );
+    let tunnels = Arc::new(TunnelStore::new(
+        Arc::clone(&events),
+        Arc::new(crate::tunnel::TunnelDataPlane::new()),
+    ));
+
+    // 事件接线（顺序与桌面壳 setup 一致）。
+    events.register(crate::ws::get_or_init_ws_sink());
+    terminals.set_event_bus(Arc::clone(&events));
+    sftp.set_event_bus(Arc::clone(&events));
+    let managed_processes: Arc<agent_core::runtime::managed_process::ManagedProcessRegistry> =
+        Arc::new(Default::default());
+    managed_processes.set_event_bus(Arc::clone(&events));
+    managed_processes.spawn_startup_reconcile();
+    managed_processes.spawn_monitor();
+    automation_store.set_notifier(AutomationNotifier {
+        events: Arc::clone(&events),
+        scheduler: Arc::downgrade(&automation_scheduler),
+    });
+    Arc::clone(&automation_scheduler).start();
 
     Ok(AppState {
         events,
@@ -89,7 +125,7 @@ pub fn build_state(auth: Arc<auth::AuthConfig>) -> Result<AppState, String> {
         memory_store,
         provider_usage: Arc::new(Default::default()),
         power_activity: Arc::new(Default::default()),
-        managed_processes: Arc::new(Default::default()),
+        managed_processes,
         terminals,
         sftp,
         shell_runs: Arc::new(Default::default()),
@@ -97,6 +133,7 @@ pub fn build_state(auth: Arc<auth::AuthConfig>) -> Result<AppState, String> {
         hook_scopes: Arc::new(Default::default()),
         mcp: Arc::new(Default::default()),
         workspace_watch,
+        tunnels,
         auth,
     })
 }

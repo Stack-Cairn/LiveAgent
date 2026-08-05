@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
 
 import {
-  composePublicUrl,
+  resolveTunnelUrl,
   type TunnelHealth,
   type TunnelStateSnapshot,
   type TunnelStatus,
@@ -27,14 +27,10 @@ type TunnelManagerDetails = {
   tunnel?: TunnelStatus;
 };
 
-// Health checks run asynchronously on the agent; after triggering one we wait
-// briefly before sampling the state snapshot so fresh results can land.
-const CHECK_SETTLE_DELAY_MS = 2500;
-
 const TUNNEL_MANAGER_TOOL: Tool = {
   name: "TunnelManager",
   description:
-    "Manage temporary Remote HTTP/WebSocket/SSE tunnels through the Gateway. Use list to inspect active tunnels and their health, create to expose a localhost or IPv4/IPv6 http service, check to re-run health probes, and close to revoke a tunnel. Mutations also work while the gateway link is offline; they take effect once the link is restored.",
+    "Manage temporary HTTP/WebSocket/SSE tunnels to local services. Use list to inspect active tunnels and their health, create to expose a localhost or IPv4/IPv6 http service, check to re-run health probes, and close to revoke a tunnel. Each tunnel gets its own port; the returned public URL already contains the access token.",
   parameters: Type.Object({
     action: Type.Union(
       [Type.Literal("list"), Type.Literal("create"), Type.Literal("close"), Type.Literal("check")],
@@ -118,24 +114,15 @@ function formatHealth(health: TunnelHealth | null | undefined) {
 }
 
 function formatSnapshotHealthLines(snapshot: TunnelStateSnapshot) {
-  const lines = [
-    `link: ${snapshot.agentOnline ? "online" : "offline"}`,
-    `relay: ${formatHealth(snapshot.relay)}`,
-  ];
-  if (snapshot.gatewayUnsupported === true) {
-    lines.push("gateway: connected gateway does not support tunnels (no public URLs)");
-  }
-  return lines;
+  return [`link: ${snapshot.agentOnline ? "online" : "offline"}`];
 }
 
 function formatTunnelLine(tunnel: TunnelStatus, publicBaseUrl: string) {
   const name = tunnel.name.trim() || tunnel.targetUrl;
-  const publicUrl = composePublicUrl(publicBaseUrl, tunnel.publicPath);
+  const publicUrl = resolveTunnelUrl(tunnel, publicBaseUrl);
   const lines = [`- ${name}`, `  id: ${tunnel.id}`, `  target: ${tunnel.targetUrl}`];
   if (publicUrl) {
     lines.push(`  public: ${publicUrl}`);
-  } else if (tunnel.publicPath) {
-    lines.push(`  publicPath: ${tunnel.publicPath}`);
   }
   lines.push(`  service: ${formatHealth(tunnel.local)}`);
   lines.push(`  ttl: ${formatRemaining(tunnel.expiresAt)}`);
@@ -187,25 +174,7 @@ function errorResult(
 }
 
 async function fetchTunnelState() {
-  return invoke<TunnelStateSnapshot>("gateway_tunnel_state");
-}
-
-function delay(ms: number, signal?: AbortSignal) {
-  return new Promise<void>((resolve) => {
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-    const onAbort = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
+  return invoke<TunnelStateSnapshot>("tunnel_state");
 }
 
 async function executeTunnelManager(
@@ -273,7 +242,7 @@ async function executeTunnelManager(
       } catch {
         // Best-effort: the created tunnel is diffed against the pre-create ids.
       }
-      await invoke<void>("gateway_tunnel_create", { input });
+      await invoke<void>("tunnel_create", { input });
       const snapshot = await fetchTunnelState();
       const created = snapshot.tunnels
         .filter((tunnel) => !knownIds.has(tunnel.id))
@@ -294,16 +263,16 @@ async function executeTunnelManager(
       if (!id) {
         throw new Error("TunnelManager.id is required for action=close.");
       }
-      await invoke<void>("gateway_tunnel_close", { tunnel_id: id });
+      await invoke<void>("tunnel_close", { tunnel_id: id });
       await notifyChange("close");
       return okResult({ toolCall, action, text: `Closed Remote tunnel ${id}.` });
     }
 
     // action === "check"
     const id = normalizeOptionalText(args.id) || undefined;
-    await invoke<void>("gateway_tunnel_check", { tunnel_id: id });
-    // Probes run asynchronously; wait briefly before sampling the state.
-    await delay(CHECK_SETTLE_DELAY_MS, signal);
+    // tunnel_check 同步等探活跑完才返回（旧实现是异步的，只能 sleep 2.5s
+    // 再取样碰运气）。返回后快照一定是新的。
+    await invoke<void>("tunnel_check", { tunnel_id: id });
     const snapshot = await fetchTunnelState();
     const checkedTunnels = id
       ? snapshot.tunnels.filter((tunnel) => tunnel.id === id)
@@ -313,7 +282,7 @@ async function executeTunnelManager(
     }
     await notifyChange("check");
     const text = [
-      "Tunnel health (sampled ~2.5s after triggering checks; probes are async and may still be settling):",
+      "Tunnel health:",
       ...formatSnapshotHealthLines(snapshot),
       ...checkedTunnels.map((tunnel) => formatTunnelLine(tunnel, publicBaseUrl)),
     ].join("\n");

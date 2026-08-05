@@ -81,12 +81,7 @@ pub struct SystemCreateProjectFolderResponse {
 }
 
 fn app_storage_dir() -> Result<PathBuf, String> {
-    let home =
-        dirs::home_dir().ok_or_else(|| "Failed to locate the user home directory".to_string())?;
-    let dir = home.join(format!(".{}", env!("CARGO_PKG_NAME")));
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create the application directory: {e}"))?;
-    Ok(dir)
+    agent_core::storage::app_storage_dir()
 }
 
 fn debug_root_dir() -> Result<PathBuf, String> {

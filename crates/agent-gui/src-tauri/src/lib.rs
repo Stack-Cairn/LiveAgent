@@ -277,11 +277,11 @@ macro_rules! app_invoke_handler {
             commands::gateway::gateway_chat_queue_respond,
             commands::gateway::gateway_publish_chat_queue_event,
             commands::gateway::gateway_publish_settings_sync,
-            commands::gateway::gateway_tunnel_state,
-            commands::gateway::gateway_tunnel_create,
-            commands::gateway::gateway_tunnel_update,
-            commands::gateway::gateway_tunnel_close,
-            commands::gateway::gateway_tunnel_check,
+            tauri_commands::tunnel::tunnel_state,
+            tauri_commands::tunnel::tunnel_create,
+            tauri_commands::tunnel::tunnel_update,
+            tauri_commands::tunnel::tunnel_close,
+            tauri_commands::tunnel::tunnel_check,
             commands::gateway::workspace_watch_set,
             commands::gateway::provider_usage_query,
             commands::gateway::provider_usage_test,
@@ -647,6 +647,29 @@ fn configure_windows_window_chrome(app: &tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 进入 tokio runtime 上下文，并**必须**在此之前把同一个 handle 交给 tauri。
+    //
+    // 为什么需要这一步：P2-15 把 225 处 `tauri::async_runtime::spawn` 换成了
+    // `tokio::spawn`。两者有一处实质差异（P2-12 已记录）——tauri 版会
+    // `RUNTIME.get_or_init(default_runtime)` 自建 runtime，所以在任何上下文都能调；
+    // 裸 `tokio::spawn` 在 runtime 之外**直接 panic**。
+    //
+    // P2-12 的逐站点核查结论是「所有 spawn 都只从 async 上下文可达」，但漏了
+    // `.setup()` 这条路径：它由 tauri 在**主线程同步**调用，不在任何 runtime 里。
+    // 于是 `gc_upload_staging_on_startup()`（system.rs 的 spawn_blocking）一进
+    // setup 就 panic，而且它发生在 objc 的 `did_finish_launching` 回调里——
+    // 那是个 `extern "C"` 边界，panic 不能跨越，直接变成 abort。
+    //
+    // 与其逐个给 setup 里的 spawn 加保护（那是把特殊情况数量从 1 变成 N），
+    // 不如在入口建好 runtime 并让 tauri 复用它：此后**任何**代码路径都在 runtime
+    // 上下文里，`tokio::spawn` 与 `tauri::async_runtime::spawn` 行为一致。
+    let runtime = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
+    // 让 tauri 用同一个 runtime，而不是让它自己再建一个：两个 runtime 意味着
+    // 两个线程池，且 `async_runtime::block_on` 与 `tokio::spawn` 会落在不同的
+    // 执行器上。必须在 tauri 首次碰 RUNTIME 之前调用，否则 `set` 会 panic。
+    tauri::async_runtime::set(runtime.handle().clone());
+    let _guard = runtime.enter();
+
     // 必须在任何后端逻辑之前：agent-core 编译时不知道自己会被装进哪个产物，
     // 版本号只能由宿主注入（MCP 的 clientInfo 会读它）。
     agent_core::set_app_version(app_version());
@@ -783,6 +806,25 @@ pub fn run() {
                 );
                 Arc::clone(&automation_scheduler).start();
                 app.manage(Arc::clone(&gateway_controller));
+
+                // 隧道（P2-30）：桌面壳复用后端那套「一隧道一端口」实现，
+                // 与 agent-backend 走的是同一个 TunnelStore + 同一个数据面。
+                // 不再经 Gateway 中继，所以它不属于 GatewayController。
+                let tunnels = Arc::new(agent_core::services::tunnel::TunnelStore::new(
+                    Arc::clone(&events),
+                    Arc::new(agent_backend::tunnel::TunnelDataPlane::new()),
+                ));
+                app.manage(Arc::clone(&tunnels));
+                tokio::spawn({
+                    let tunnels = Arc::clone(&tunnels);
+                    async move {
+                        // 恢复上次留下的隧道：端口和 token 是新的，链接会变。
+                        if let Err(error) = tunnels.initialize().await {
+                            eprintln!("failed to restore tunnels: {error}");
+                        }
+                    }
+                });
+
                 if let Err(error) = gateway_controller.start() {
                     eprintln!("failed to start remote gateway controller: {error}");
                 }

@@ -17,21 +17,20 @@ export function createTauriTunnelClient(): LocalTunnelClient {
       agentOnline: raw.agentOnline === true,
       relay: raw.relay ?? null,
       tunnels: raw.tunnels ?? [],
-      gatewayUnsupported: raw.gatewayUnsupported === true,
     };
   };
   return {
     subscribeTunnelState: (listener) => {
       listeners.add(listener);
       if (!unlistenPromise) {
-        unlistenPromise = listen<TunnelStateSnapshot>("gateway:tunnel-state", (event) => {
+        unlistenPromise = listen<TunnelStateSnapshot>("tunnel:state", (event) => {
           const snapshot = normalizeSnapshot(event.payload);
           for (const subscriber of [...listeners]) {
             subscriber(snapshot);
           }
         });
       }
-      void invoke<TunnelStateSnapshot>("gateway_tunnel_state")
+      void invoke<TunnelStateSnapshot>("tunnel_state")
         .then((payload) => {
           if (listeners.has(listener)) {
             listener(normalizeSnapshot(payload));
@@ -47,9 +46,9 @@ export function createTauriTunnelClient(): LocalTunnelClient {
         }
       };
     },
-    createTunnel: (input: TunnelCreateInput) => invoke<void>("gateway_tunnel_create", { input }),
-    updateTunnel: (input: TunnelUpdateInput) => invoke<void>("gateway_tunnel_update", { input }),
-    closeTunnel: (id: string) => invoke<void>("gateway_tunnel_close", { tunnel_id: id }),
-    checkTunnel: (id?: string) => invoke<void>("gateway_tunnel_check", { tunnel_id: id }),
+    createTunnel: (input: TunnelCreateInput) => invoke<void>("tunnel_create", { input }),
+    updateTunnel: (input: TunnelUpdateInput) => invoke<void>("tunnel_update", { input }),
+    closeTunnel: (id: string) => invoke<void>("tunnel_close", { tunnel_id: id }),
+    checkTunnel: (id?: string) => invoke<void>("tunnel_check", { tunnel_id: id }),
   };
 }

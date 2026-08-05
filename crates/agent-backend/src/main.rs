@@ -67,6 +67,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let state = build_state(Arc::new(auth::AuthConfig::new(password)))?;
+    // 恢复上次留下的隧道：读库、给存活的重新起监听。端口和 token 是本次进程
+    // 新分配的，所以链接会变——这是有意的（见 services/tunnel/store.rs 文档）。
+    // 失败只记日志不中止：隧道起不来不该让整个后端服务不起来。
+    if let Err(error) = state.tunnels.initialize().await {
+        eprintln!("恢复隧道失败：{error}");
+    }
     let app = build_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
 

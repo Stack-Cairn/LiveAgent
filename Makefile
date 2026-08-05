@@ -34,6 +34,7 @@ MODEL_CATALOG_GENERATED_FILES := $(AGENT_GUI_DIR)/src/lib/models/catalog.generat
 .PHONY: dev-gateway dev-webui ensure-webui-embed-stub
 .PHONY: proto proto-check webui gateway-build gateway-docker-build gateway-docker-run gateway-docker-smoke build-linux build-linux-amd build-linux-arm
 .PHONY: clean update-model-catalog check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
+.PHONY: update-routes check-routes
 
 all: build gateway-build
 
@@ -202,6 +203,14 @@ clean:
 update-model-catalog:
 	node scripts/generate-model-catalog.mjs
 
+# 从 src-tauri/src/tauri_commands/*.rs 重新生成 agent-backend 的路由层（routes_gen.rs）。
+update-routes:
+	node scripts/generate-routes.mjs
+
+# 校验 routes_gen.rs 与 wrapper 层一致（CI 用）；漂移即失败。
+check-routes:
+	node scripts/generate-routes.mjs --check
+
 check-rust-target-%:
 	@rustup target list --installed | grep -qx "$*" || (echo "Rust target $* is not installed. Run: rustup target add $*" && exit 1)
 
@@ -273,4 +282,6 @@ help:
 	@printf "  %-34s %s\n" "make all" "同时构建 GUI 和 agent-gateway"
 	@printf "  %-34s %s\n" "make clean" "清理 agent-gateway 构建产物"
 	@printf "  %-34s %s\n" "make update-model-catalog" "刷新 models.dev 模型目录快照"
+	@printf "  %-34s %s\n" "make update-routes" "从 tauri_commands 重新生成 agent-backend 路由层"
+	@printf "  %-34s %s\n" "make check-routes" "校验路由层与 wrapper 一致（CI 门禁）"
 	@printf "  %-34s %s\n" "make help" "查看可用命令"

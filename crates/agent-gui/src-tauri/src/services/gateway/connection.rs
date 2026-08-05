@@ -589,10 +589,6 @@ impl GatewayController {
                 eprintln!("publish gateway terminal sessions failed: {error}");
             }
             tokio::task::yield_now().await;
-            if let Err(error) = controller.publish_desired_tunnels().await {
-                eprintln!("publish gateway tunnel desired state failed: {error}");
-            }
-            tokio::task::yield_now().await;
             if let Err(error) = controller.publish_current_managed_processes().await {
                 eprintln!("publish gateway managed processes failed: {error}");
             }
@@ -604,7 +600,6 @@ impl GatewayController {
             if let Err(error) = controller.reconcile_chat_ingress().await {
                 eprintln!("reconcile gateway chat ingress failed: {error}");
             }
-            controller.spawn_tunnel_probes(None, false);
         })
     }
 
@@ -725,17 +720,12 @@ impl GatewayController {
         });
     }
 
-    /// Publishes a disconnected gateway status and mirrors the offline state
-    /// onto the tunnel event channel: without the mirror, the tunnel panel's
-    /// `agentOnline` badge would keep the last gateway snapshot's stale
-    /// "online" until the next snapshot — which never arrives while offline.
     pub(crate) fn publish_disconnected_status(
         &self,
         config: &RemoteSettingsPayload,
         last_error: Option<String>,
     ) {
         self.publish_status(|status| set_disconnected_status(status, config, last_error));
-        self.emit_local_tunnel_state();
     }
 
     pub(crate) fn publish_status(&self, mutate: impl FnOnce(&mut GatewayStatusSnapshot)) {

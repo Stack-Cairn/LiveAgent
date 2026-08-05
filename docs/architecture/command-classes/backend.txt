@@ -40,11 +40,6 @@ fs_read_workspace_image
 fs_rename
 fs_roots
 fs_write_text
-gateway_tunnel_check
-gateway_tunnel_close
-gateway_tunnel_create
-gateway_tunnel_state
-gateway_tunnel_update
 git_add_to_gitignore
 git_branches
 git_clone_repository
@@ -192,4 +187,9 @@ terminal_ssh_reconnect
 terminal_stream_attach
 terminal_stream_input
 terminal_stream_resize
+tunnel_check
+tunnel_close
+tunnel_create
+tunnel_state
+tunnel_update
 workspace_watch_set

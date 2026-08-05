@@ -22,6 +22,7 @@ use agent_core::services::automation::{AutomationScheduler, AutomationStore};
 use agent_core::services::memory::MemoryStore;
 use agent_core::services::power_activity::PowerActivityManager;
 use agent_core::services::provider_usage::ProviderUsageService;
+use agent_core::services::tunnel::TunnelStore;
 use agent_core::services::workspace_watch::WorkspaceWatchService;
 
 #[derive(Clone)]
@@ -40,6 +41,9 @@ pub struct AppState {
     pub hook_scopes: Arc<HookScopeRegistry>,
     pub mcp: Arc<McpRuntimeManager>,
     pub workspace_watch: Arc<WorkspaceWatchService>,
+    /// 隧道状态。数据面（真正的监听）藏在它内部持有的 `TunnelDataPlane` 里，
+    /// 所以这里只需要一个句柄——命令层不该直接碰监听。
+    pub tunnels: Arc<TunnelStore>,
     /// 认证凭据。密码即 Bearer token（决策 7）。
     pub auth: Arc<crate::auth::AuthConfig>,
 }

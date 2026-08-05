@@ -7,9 +7,6 @@ use crate::services::gateway::{
     GatewayChatIngressAcceptResult, GatewayChatIngressBatchInput, GatewayChatQueueEventInput,
     GatewayChatQueueResponseInput, GatewayController, GatewayStatusSnapshot,
 };
-use crate::services::tunnel::{
-    GatewayTunnelCreateInput, GatewayTunnelUpdateInput, TunnelStatePayload,
-};
 use agent_core::commands::settings::{
     load_remote_settings, open_db, parse_remote_settings_payload,
 };
@@ -256,45 +253,6 @@ pub async fn gateway_publish_settings_sync(
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<(), String> {
     gateway_controller.publish_settings_sync(payload).await
-}
-
-#[tauri::command]
-pub fn gateway_tunnel_state(
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
-) -> Result<TunnelStatePayload, String> {
-    Ok(gateway_controller.tunnel_state())
-}
-
-#[tauri::command]
-pub async fn gateway_tunnel_create(
-    input: GatewayTunnelCreateInput,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
-) -> Result<(), String> {
-    gateway_controller.tunnel_create(input).await
-}
-
-#[tauri::command]
-pub async fn gateway_tunnel_update(
-    input: GatewayTunnelUpdateInput,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
-) -> Result<(), String> {
-    gateway_controller.tunnel_update(input).await
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn gateway_tunnel_close(
-    tunnel_id: String,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
-) -> Result<(), String> {
-    gateway_controller.tunnel_close(tunnel_id).await
-}
-
-#[tauri::command(rename_all = "snake_case")]
-pub async fn gateway_tunnel_check(
-    tunnel_id: Option<String>,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
-) -> Result<(), String> {
-    gateway_controller.tunnel_check(tunnel_id).await
 }
 
 #[tauri::command]

@@ -72,7 +72,7 @@ Go 的选型没有任何文档依据:它出现在 root commit `487af778`(2026-05
 | 阶段 | 文档 | 状态 |
 |---|---|---|
 | 1 · 划清后端边界 | [phase-1-boundary.md](phase-1-boundary.md) | ✅ 完成 |
-| 2 · Rust 后端网络化 | [phase-2-backend.md](phase-2-backend.md) | 🟡 进行中(约 80%) |
+| 2 · Rust 后端网络化 | [phase-2-backend.md](phase-2-backend.md) | ✅ 完成 |
 | 3 · 抽 Node 引擎 | [phase-3-engine.md](phase-3-engine.md) | ⬜ 未开始 |
 | 4 · 前端网络化 | [phase-4-frontend.md](phase-4-frontend.md) | ⬜ 未开始 |
 | 5 · 前端合并 | [phase-5-merge.md](phase-5-merge.md) | ⬜ 未开始 |
@@ -88,9 +88,15 @@ Go 的选型没有任何文档依据:它出现在 root commit `487af778`(2026-05
 cargo test --workspace && cargo clippy --workspace -- -D warnings
 node --test 'crates/agent-gui/test/**/*.test.mjs'
 cargo tree -p agent-core | grep -q tauri && echo "防线破了" || echo "防线完好"
+make dev    # ← 必须真的起来，见下
 ```
 
 **且桌面端必须完整可用。** 不做长期分支。
+
+⚠️ **`make dev` 不是可选项。** 阶段 2 出现过一次「757 个测试全绿、`cargo build`
+干净,但 `make dev` 直接 abort」——`.setup()` 里的 `tokio::spawn` 在没有 runtime
+的上下文 panic,而那个 panic 发生在 objc `extern "C"` 回调里不能 unwind。
+凡是只在真实启动路径上跑的代码(setup 接线、DB 建表、后台任务),测试套件一律看不到。
 
 ## 代码规模基线(2026-08-04 实测)
 
@@ -127,4 +133,6 @@ id,task,status,blocker,verify,notes
 | 工具审批反向往返 | 引擎搬到后端后,后端要主动向前端发起请求并等回答,而前端可能没连着 | 按决策 10,先写测试再写实现(P3-06) |
 | 快照源不能是 SQLite | `runAgentConversationTurn.ts:1217` 落库只在函数末尾一次,turn 中不写库 | 快照来自引擎内存态(P3-07) |
 | SSRF 防护需重写 | Go 的黑名单 + safeurl 在 Rust 无对应物;`proxy.rs:227` 的校验**没有 IP 黑名单**,够用只因绑 loopback | ✅ 已重写:`agent-backend/src/ssrf.rs`,含 NAT64/6to4 内嵌 IPv4 递归检查(P2-27) |
+| **「路由可达」≠「命令可用」** | 契约测试把 400 也算通过(空 body 反序列化失败是正常的),于是「路由挂上了但底层没初始化」的命令能骗过它。P2-31 用 curl 实测抓到两例:漏 `initialize_history_db()`、漏 `TunnelStore::initialize()` | ✅ 已补 Test D:6 条代表性命令带**真实参数**必须 200 且带 `ok`(P2-31) |
+| **「编译绿 + 测试绿」不覆盖「进程能不能起来」** | P2-15 把 `async_runtime::spawn` 换成 `tokio::spawn` 后,`.setup()`(主线程同步调用,不在 runtime 里)里的 spawn 直接 panic,且在 objc `extern "C"` 边界上不能 unwind → abort,桌面端起不来。757 个测试全绿也测不到 | ✅ `run()` 入口建 runtime + `async_runtime::set` 统一;**每阶段结束必须真的跑一次 `make dev`** |
 | 20 个脆测试会误报 | `readFileSync` + 正则断言源码文本,不验证行为 | 阶段 5 改写或删(P5-05) |

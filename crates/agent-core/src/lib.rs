@@ -17,6 +17,7 @@ pub mod commands;
 pub mod events;
 pub mod runtime;
 pub mod services;
+pub mod storage;
 
 use std::sync::OnceLock;
 

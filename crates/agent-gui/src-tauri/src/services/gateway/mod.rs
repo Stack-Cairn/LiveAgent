@@ -19,7 +19,6 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, watch};
 
-use crate::services::tunnel::{TunnelProxy, TunnelStore};
 use agent_core::commands::git::GitCloneTaskRegistry;
 use agent_core::commands::settings::RemoteSettingsPayload;
 use agent_core::runtime::managed_process::ManagedProcessRegistry;
@@ -138,8 +137,6 @@ pub struct GatewayController {
     chat_run_ledger: Mutex<ChatRunLedger>,
     runtime_status_republish: Mutex<Option<RuntimeStatusRepublishRecord>>,
     last_connection_nudge: Mutex<Option<Instant>>,
-    pub(crate) tunnel_store: TunnelStore,
-    pub(crate) tunnel_proxy: TunnelProxy,
     pub(crate) workspace_watch: Arc<WorkspaceWatchService>,
     pending_chat_queue_requests: Mutex<HashMap<String, oneshot::Sender<proto::ChatQueueResponse>>>,
     chat_ingress: ChatIngressMirror,
@@ -149,5 +146,4 @@ pub struct GatewayController {
     sftp_forwarder_once: Once,
     remote_chat_inbox_sweeper_once: Once,
     runtime_status_republisher_once: Once,
-    pub(crate) tunnel_store_once: Once,
 }

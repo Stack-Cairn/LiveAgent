@@ -20,6 +20,10 @@ export type TunnelStatus = {
   name: string;
   targetUrl: string;
   publicPath: string;
+  // 后端给出的完整访问地址，含首访 token。一隧道一端口，所以链接是
+  // http://host:<port>/?t=<token>，前端不再拼 baseUrl + publicPath。
+  publicUrl: string;
+  port: number;
   createdAt: number;
   expiresAt: number;
   activeConnections: number;
@@ -32,7 +36,6 @@ export type TunnelStateSnapshot = {
   agentOnline: boolean;
   relay: TunnelHealth | null;
   tunnels: TunnelStatus[];
-  gatewayUnsupported?: boolean;
 };
 
 export type TunnelCreateInput = {
@@ -101,9 +104,30 @@ export function validateLocalHttpTarget(input: string): string | null {
   return null;
 }
 
-export function composePublicUrl(baseUrl: string, publicPath: string): string {
-  const base = baseUrl.trim().replace(/\/+$/, "");
-  const path = publicPath.trim();
-  if (!base || !path) return "";
-  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+// 解析一条隧道的可访问链接。
+//
+// 新后端（P2-30，一隧道一端口）直接给出 `publicUrl`，已含首访 token；
+// `baseUrl` 只用于远程访问时替换主机名——后端不知道自己被从哪个地址访问，
+// 给出的主机名恒为 127.0.0.1。
+//
+// 旧 Gateway 中继路径没有 `publicUrl`，只有 `/t/{slug}` 形式的 `publicPath`，
+// 要拼在 gateway 地址后面。阶段 6 删 Go 时这个分支一并消失。
+export function resolveTunnelUrl(tunnel: TunnelStatus, baseUrl?: string): string {
+  const host = baseUrl?.trim().replace(/\/+$/, "");
+  const direct = tunnel.publicUrl.trim();
+  if (!direct) {
+    const path = tunnel.publicPath.trim();
+    if (!host || !path) return "";
+    return `${host}${path.startsWith("/") ? path : `/${path}`}`;
+  }
+  if (!host) return direct;
+  try {
+    const parsed = new URL(direct);
+    const override = new URL(host);
+    parsed.hostname = override.hostname;
+    parsed.protocol = override.protocol;
+    return parsed.toString();
+  } catch {
+    return direct;
+  }
 }

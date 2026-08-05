@@ -7,12 +7,16 @@
 
 ```
 crates/
-  agent-core/          新增 · 后端核心 · Cargo.toml 禁 tauri（编译期防线）
-  agent-backend/       待建 · axum HTTP/WS 服务 · 依赖 agent-core
-  agent-gui/src-tauri/ 桌面壳 · 依赖 agent-core · 只剩 #[tauri::command] 薄包装 + 托盘/窗口/更新
+  agent-core/          后端核心 · Cargo.toml 禁 tauri（编译期防线）
+  agent-backend/       axum HTTP/WS 服务 · 依赖 agent-core · 175 条路由 + /api/events
+  agent-gui/src-tauri/ 桌面壳 · 依赖 agent-core + agent-backend（隧道数据面）
+                       · 只剩 #[tauri::command] 薄包装 + 托盘/窗口/更新
 ```
 
-`agent-core` 已建立并接通,`cargo tree -p agent-core` 零 tauri 依赖。
+两个 crate 均已建立并接通,`cargo tree` 对 agent-core / agent-backend 都零 tauri。
+
+桌面壳依赖 agent-backend 只为复用隧道数据面(`TunnelDataPlane`)——两边跑同一份
+实现,行为不可能不一致。这不构成环:agent-backend 不依赖 src-tauri。
 
 ## 路由约定:命令式,不做 REST 化
 
@@ -74,13 +78,22 @@ Tauri `.setup()` 调用。但该文件正好被 agent-backend 取代
 所以不要批量提升为 `pub`,只提升真正跨界的那些——其余保持 `pub(crate)`
 (在 agent-core 内部依然有效)。
 
+## 已决的设计决策
+
+| 问题 | 决策 | 理由 |
+|---|---|---|
+| `tauri::State` 注入的命令会话隔离（P2-24） | **不做 owner 命名空间，id 即隔离边界** | 三个 registry（`GitCloneTaskRegistry`/`ShellRunRegistry`/`HookScopeRegistry`）都按调用方提供的字符串 id keyed（`task_id`/`run_id`/`scope_id`），且 task id 是服务端 UUID 天然不可猜。桌面壳本就允许 Gateway 与 GUI 共享同一批 registry。决策 7 下所有客户端共享同一密码、没有客户端身份，owner 维度无从谈起。HTTP 侧与桌面现状一致 |
+| 返回 `Result<(), String>` 的命令状态码（P2-25） | **保持 200/400 两档** | 与 Tauri IPC 语义一致（Err 就是失败），错误体已带字符串，前端在读。补 404/403 需要逐命令审计错误来源，收益有限 |
+| 隧道数据面挂在哪（P2-30） | **一隧道一端口，路径 1:1**，不挂子路径 | 挂 `/t/<id>/` 时 dev server 发的绝对路径会打到隧道外，必须重写 HTML/CSS/fetch/WS 并改 CSP（Go 版 1,205 行）。独立端口下这类问题不存在，重写代码 0 行 |
+| 隧道端口怎么保护（P2-30） | **首访 `?t=<token>` → HttpOnly cookie → 302 到干净路径** | 浏览器标签页发不了 `Authorization` 头，后端密码在这里用不上。与旧架构的「不可猜 slug」同强度，但端口可被扫到而 token 不能 |
+
 ## 待解决
 
-| 问题 | 说明 |
-|---|---|
-| `tauri::State` 注入的 9 个命令 | `git_clone_repository_{start,tasks,cancel,dismiss}`、`shell_run`、`runtime_cancel`、`hook_run_{script,http_requests}`、`hook_cancel_scope` 持有 registry 句柄。HTTP 侧需要会话隔离方案(header 名、生命周期、校验),尚未定 |
-| 返回 `Result<(), String>` 的命令 | 约 9 处(`workspace_watch_set`、`hook_cancel_scope`、多个 `tunnel_*`)。HTTP 无法区分「成功」「不存在」「无权限」,需补状态码语义 |
-| EventBus 背压 | `events.rs` 的 `emit_json` 同步遍历所有 sink,一个慢客户端会阻塞发事件的业务线程。WS sink 必须自己排队 + 丢帧,不能阻塞 |
-| `GatewayEventSink` 无测试 | 事件总线把编译期错误变成了运行时静默失败——迁移 history sync 时就真实发生过一次(移除 gateway 调用后忘了在 sink 里接上,编译全绿但同步已断)。需补覆盖 |
-| 3 个 settings 命令未设计路由 | `settings_list_ccswitch_providers`、`settings_list_cherry_studio_providers`、`settings_list_cherry_studio_providers_from_path` |
-| axum 0.8 TLS 集成 | `axum-server` 的 `RustlsConfig::from_pem_file` 签名未经验证,实现前必须查证 |
+阶段 2 的待解决项已全部闭合。
+
+> 已闭合：`GatewayEventSink` 测试 → `action_for` 纯函数 + 变异验证（P2-14）；
+> EventBus 背压 → WS sink 自排队 + 丢帧（容量 256，非阻塞 `tx.send`）；
+> 3 个 settings 命令 → 已随 175 条路由生成；
+> axum 0.8 TLS → `RustlsConfig::from_pem_file` 已查证并实现（P2-22）；
+> 隧道重写 → P2-30；不经前端实测 → P2-31。
+

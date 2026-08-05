@@ -3,8 +3,8 @@ import { useLocale } from "../../i18n";
 import { workspaceProjectPathKey } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
 import {
-  composePublicUrl,
   type LocalTunnelClient,
+  resolveTunnelUrl,
   TUNNEL_TTL_OPTIONS,
   type TunnelCreateInput,
   type TunnelHealth,
@@ -717,8 +717,7 @@ export function LocalTunnelPanel({
     return () => window.clearTimeout(timer);
   }, [copiedId]);
 
-  const gatewayUnsupported = snapshot?.gatewayUnsupported === true;
-  const mutationsEnabled = enabled && !gatewayUnsupported && Boolean(client);
+  const mutationsEnabled = enabled && Boolean(client);
 
   const beginRowAction = useCallback((id: string, action: TunnelRowAction) => {
     setPendingActions((current) => ({ ...current, [id]: action }));
@@ -865,7 +864,7 @@ export function LocalTunnelPanel({
   }, [checkingAll, client, mutationsEnabled]);
 
   const publicUrlFor = useCallback(
-    (tunnel: TunnelStatus) => composePublicUrl(publicBaseUrl, tunnel.publicPath),
+    (tunnel: TunnelStatus) => resolveTunnelUrl(tunnel, publicBaseUrl),
     [publicBaseUrl],
   );
 
@@ -1033,13 +1032,6 @@ export function LocalTunnelPanel({
           <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-300">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0">{disabledMessage}</span>
-          </div>
-        ) : null}
-
-        {gatewayUnsupported ? (
-          <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-300">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0">{t("projectTools.tunnelGatewayUnsupported")}</span>
           </div>
         ) : null}
 

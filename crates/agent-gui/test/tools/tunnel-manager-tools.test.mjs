@@ -5,10 +5,12 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 function createTunnel(overrides = {}) {
   return {
     id: "tun-1",
-    slug: "abc123",
+    slug: "",
     name: "Local app",
     targetUrl: "http://localhost:3000",
-    publicPath: "/t/abc123/",
+    publicPath: "/",
+    publicUrl: "http://127.0.0.1:19273/?t=token-abc",
+    port: 19273,
     createdAt: 1_700_000_000,
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
     activeConnections: 0,
@@ -22,7 +24,7 @@ function createSnapshot(tunnels, overrides = {}) {
   return {
     revision: 1,
     agentOnline: true,
-    relay: { status: "ok", httpStatus: 0, error: "", checkedAt: 1_700_000_100, rttMs: 23 },
+    relay: null,
     tunnels,
     ...overrides,
   };
@@ -77,7 +79,7 @@ test("TunnelManager is injected only when Remote Web Tunnels are enabled", async
   assert.equal(cronRegistry.hasTool("TunnelManager"), false);
 });
 
-test("TunnelManager list/create/close/check call gateway tunnel commands", async () => {
+test("TunnelManager list/create/close/check call tunnel commands", async () => {
   const invocations = [];
   const tunnels = [createTunnel()];
   const loader = createTsModuleLoader({
@@ -85,15 +87,15 @@ test("TunnelManager list/create/close/check call gateway tunnel commands", async
       "@tauri-apps/api/core": {
         async invoke(command, args) {
           invocations.push({ command, args });
-          if (command === "gateway_tunnel_state") {
+          if (command === "tunnel_state") {
             return createSnapshot([...tunnels]);
           }
-          if (command === "gateway_tunnel_create") {
+          if (command === "tunnel_create") {
             tunnels.push(
               createTunnel({
                 id: "tun-created",
-                slug: "created",
-                publicPath: "/t/created/",
+                publicUrl: "http://127.0.0.1:19274/?t=token-created",
+                port: 19274,
                 targetUrl: args.input.targetUrl,
                 name: args.input.name ?? "",
                 createdAt: 1_700_000_500,
@@ -102,10 +104,10 @@ test("TunnelManager list/create/close/check call gateway tunnel commands", async
             );
             return undefined;
           }
-          if (command === "gateway_tunnel_close") {
+          if (command === "tunnel_close") {
             return undefined;
           }
-          if (command === "gateway_tunnel_check") {
+          if (command === "tunnel_check") {
             return undefined;
           }
           throw new Error(`unexpected invoke ${command}`);
@@ -131,11 +133,11 @@ test("TunnelManager list/create/close/check call gateway tunnel commands", async
   assert.equal(listResult.details.action, "list");
   assert.equal(listResult.details.tunnels.length, 1);
   assert.match(listResult.content[0].text, /link: online/);
-  assert.match(listResult.content[0].text, /relay: ok/);
   assert.match(listResult.content[0].text, /service: ok HTTP 200/);
+  // 主机名被 publicBaseUrl 覆盖（远程访问），端口与 token 来自后端。
   assert.match(
     listResult.content[0].text,
-    /public: https:\/\/gateway\.example\.test\/t\/abc123\//,
+    /public: https:\/\/gateway\.example\.test:19273\/\?t=token-abc/,
   );
 
   const createResult = await bundle.executeToolCall(
@@ -152,7 +154,7 @@ test("TunnelManager list/create/close/check call gateway tunnel commands", async
   assert.match(createResult.content[0].text, /unlimited/);
   assert.match(
     createResult.content[0].text,
-    /public: https:\/\/gateway\.example\.test\/t\/created\//,
+    /public: https:\/\/gateway\.example\.test:19274\/\?t=token-created/,
   );
 
   const closeResult = await bundle.executeToolCall(
@@ -173,10 +175,10 @@ test("TunnelManager list/create/close/check call gateway tunnel commands", async
   assert.deepEqual(
     invocations.map((call) => [call.command, call.args]),
     [
-      ["gateway_tunnel_state", undefined],
-      ["gateway_tunnel_state", undefined],
+      ["tunnel_state", undefined],
+      ["tunnel_state", undefined],
       [
-        "gateway_tunnel_create",
+        "tunnel_create",
         {
           input: {
             targetUrl: "http://localhost:5173/app",
@@ -186,10 +188,10 @@ test("TunnelManager list/create/close/check call gateway tunnel commands", async
           },
         },
       ],
-      ["gateway_tunnel_state", undefined],
-      ["gateway_tunnel_close", { tunnel_id: "tun-1" }],
-      ["gateway_tunnel_check", { tunnel_id: "tun-created" }],
-      ["gateway_tunnel_state", undefined],
+      ["tunnel_state", undefined],
+      ["tunnel_close", { tunnel_id: "tun-1" }],
+      ["tunnel_check", { tunnel_id: "tun-created" }],
+      ["tunnel_state", undefined],
     ],
   );
   assert.deepEqual(
@@ -202,7 +204,7 @@ test("TunnelManager list/create/close/check call gateway tunnel commands", async
   );
 });
 
-test("TunnelManager rejects invalid arguments before invoking gateway commands", async () => {
+test("TunnelManager rejects invalid arguments before invoking tunnel commands", async () => {
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {

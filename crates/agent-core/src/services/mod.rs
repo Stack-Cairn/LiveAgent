@@ -6,4 +6,5 @@ pub mod provider_models;
 pub mod provider_usage;
 pub mod skills;
 pub mod system_proxy;
+pub mod tunnel;
 pub mod workspace_watch;

@@ -6,7 +6,6 @@ use serde_json::{json, Value};
 use tauri::Emitter;
 use tokio::sync::watch;
 
-use crate::services::tunnel::{TunnelProxy, TunnelStore};
 use agent_core::commands::git::GitCloneTaskRegistry;
 use agent_core::commands::settings::{
     load_remote_settings, normalize_remote_settings_payload, open_db, RemoteSettingsPayload,
@@ -36,7 +35,6 @@ impl GatewayController {
     ) -> Self {
         let initial_config = RemoteSettingsPayload::default();
         let (config_tx, _) = watch::channel(initial_config);
-        let tunnel_store = TunnelStore::new(app_handle.clone());
         let chat_ingress = ChatIngressMirror::spawn(app_handle.clone());
         Self {
             app_handle,
@@ -69,8 +67,6 @@ impl GatewayController {
             chat_run_ledger: Mutex::new(ChatRunLedger::new()),
             runtime_status_republish: Mutex::new(None),
             last_connection_nudge: Mutex::new(None),
-            tunnel_store,
-            tunnel_proxy: TunnelProxy::new(),
             workspace_watch,
             pending_chat_queue_requests: Mutex::new(HashMap::new()),
             chat_ingress,
@@ -80,7 +76,6 @@ impl GatewayController {
             sftp_forwarder_once: Once::new(),
             remote_chat_inbox_sweeper_once: Once::new(),
             runtime_status_republisher_once: Once::new(),
-            tunnel_store_once: Once::new(),
         }
     }
 
@@ -90,7 +85,6 @@ impl GatewayController {
         self.start_sftp_forwarder();
         self.start_remote_chat_inbox_sweeper();
         self.start_runtime_status_republisher();
-        self.start_tunnel_store();
         self.ensure_runner()
     }
 

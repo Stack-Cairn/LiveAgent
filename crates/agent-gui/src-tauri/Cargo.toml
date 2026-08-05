@@ -22,6 +22,9 @@ prost-build = "0.14.4"
 
 [dependencies]
 agent-core = { path = "../../agent-core" }
+# 隧道数据面（P2-30）。桌面壳与 agent-backend 用同一份实现——两边行为
+# 不可能不一致，这正是「一套 API 两类客户端」要的效果。
+agent-backend = { path = "../../agent-backend" }
 tauri = { version = "2.11.5", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener = "2.5.4"
 serde = { version = "1.0.228", features = ["derive"] }
