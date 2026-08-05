@@ -18,16 +18,16 @@
 - **处置**:要么在壳内补远程地址入口(登录页在壳内也可达),要么改验收标准明确
   「桌面壳 = 本地内嵌后端,远程一律走浏览器」。需要人拍板。
 
-### 2. 容器数据落点未验证,重建可能丢数据
+### 2. 容器数据落点未验证,重建可能丢数据 —— 已解决
 
 - **来源**:阶段 6。`crates/agent-core/src/storage.rs` 用 `dirs::home_dir()` 解析
   `~/.liveagent`,而 `Dockerfile` 把 runtime 用户建成 `--home-dir /nonexistent`,
   镜像也没有为数据目录预留卷。
 - **影响**:CI smoke 绿只说明进程能起,数据可能落在未挂卷路径,容器重建丢
   设置库/历史库/记忆文件。
-- **处置**:在有 docker 的机器上跑
-  `docker run --rm liveagent-backend:local sh -c 'echo $HOME'` 确认落点;
-  Dockerfile 显式设 `HOME` 或数据目录参数,并在 deployment.md 写明挂卷路径。
+- **处置(已完成)**:`storage.rs` 支持 `LIVEAGENT_DATA_DIR` 环境变量,后端加
+  `--data-dir` 参数;Dockerfile 预设 `LIVEAGENT_DATA_DIR=/var/lib/liveagent`、
+  建目录并 `VOLUME`;deployment.md 已写明挂卷路径。
 
 ### 3. 端到端验收整体未跑
 
@@ -70,13 +70,15 @@
 
 ## 三、技术债
 
-### 8. 后端不读环境变量,靠 entrypoint 薄壳翻译
+### 8. 后端不读环境变量,靠 entrypoint 薄壳翻译 —— 已解决
 
 - **来源**:阶段 6。`agent-backend` 只认 argv(main.rs 无一处 `env::var`),
   容器场景靠新增的 `scripts/docker-entrypoint.sh` 把
   `PORT` / `LIVEAGENT_BACKEND_PASSWORD` / `LIVEAGENT_TLS_CERT+KEY` 翻成 argv。
 - **影响**:能用,但属架构欠账;所有容器平台的配置都多绕一层 shell。
-- **处置**:在 Rust 侧读 env(argv 优先),然后删薄壳。
+- **处置(已完成)**:main.rs 读 `PORT` / `LIVEAGENT_BACKEND_PASSWORD` /
+  `LIVEAGENT_TLS_CERT+KEY` / `LIVEAGENT_ENGINE_BUNDLE` / `LIVEAGENT_DATA_DIR`
+  (argv 优先),`scripts/docker-entrypoint.sh` 已删,ENTRYPOINT 直指二进制。
 
 ### 9. Makefile 既有 bug 两处
 
@@ -116,8 +118,11 @@
 - **来源**:阶段 1「遗留缺陷」。`RemoteSettingsPayload` 混了两类字段,
   gateway 相关字段随 Gateway 删除,web 权限开关仍需要;计划阶段 4 拆成两半,
   已记入 `backend-boundary.md`「已知分类缺陷」。
-- **处置**:核对阶段 4 是否已完成拆分,已完成则从 backend-boundary.md 销记,
-  未完成则补拆。
+- **处置**:✅ 已核对完成(阶段 4 P4-08)。`RemoteSettingsPayload`
+  (`agent-core/src/commands/config/settings/types.rs`)与前端 `RemoteSettings`
+  (`agent-gui/src/lib/settings/index.ts`)都只剩 `enabled` + `enableWeb*` 权限开关,
+  gateway 连接字段已删,旧库遗留键由 serde 默认行为忽略。
+  backend-boundary.md 的「已知分类缺陷」一节已销记。
 
 ### 14. 根 `.gitignore` 的 `bin` 条目来历不明
 

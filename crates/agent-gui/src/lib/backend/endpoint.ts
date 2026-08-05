@@ -1,10 +1,11 @@
 /**
  * 后端端点的来源与凭据存储。
  *
- * 两种运行形态，一个数据结构：
- *   - 桌面壳：端点由壳注入（`get_backend_endpoint` 走原生 IPC 拿内嵌后端的
- *     host/port/随机密码）。用户永远不输密码，也永远看不到登录页。
- *   - 纯浏览器：端点来自 URL 参数或 localStorage，由登录页写入。
+ * 两种运行形态，一个数据结构，一条解析链：
+ *   - 存档端点（URL 参数 / localStorage，由登录页或连接页写入）永远优先。
+ *   - 桌面壳在存档为空时落回壳注入的内嵌后端端点（`get_backend_endpoint`
+ *     走原生 IPC 拿 host/port/随机密码），开箱零配置。
+ *   - 纯浏览器没有兜底：存档为空就进登录页。
  *
  * 「本地」和「远程」的差别到此为止就只剩这三个字段了。
  */
@@ -101,11 +102,6 @@ export function clearStoredEndpoint(): void {
   }
 }
 
-/** 有没有可以直接用的凭据（不校验其正确性）。 */
-export function hasStoredCredentials(): boolean {
-  return isDesktopShell() || readStoredEndpoint() !== null;
-}
-
 /** 存档里的端点，登录页用来预填。 */
 export function peekStoredEndpoint(): BackendEndpoint | null {
   return readStoredEndpoint();
@@ -152,8 +148,12 @@ export function resolveEndpoint(): Promise<BackendEndpoint> {
   if (pending) return pending;
 
   pending = (async () => {
+    // 解析链：用户手填/URL 注入的存档端点 > 壳内嵌后端。壳内用户在连接页
+    // 填了远程地址就走存档；没填过存档为空，落回内嵌后端。浏览器没有壳，
+    // 存档为空就是凭据缺失。
     const internals = getNativeInternals();
-    const endpoint = internals ? await askShellForEndpoint(internals) : readStoredEndpoint();
+    const endpoint =
+      readStoredEndpoint() ?? (internals ? await askShellForEndpoint(internals) : null);
     if (!endpoint) throw new MissingCredentialsError();
     cached = endpoint;
     return endpoint;

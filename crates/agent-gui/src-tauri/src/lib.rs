@@ -676,6 +676,9 @@ pub fn run() {
         Arc::clone(&terminal_registry),
     ));
     let allow_exit = Arc::new(AtomicBool::new(false));
+    // 持有内嵌后端服务（含 Node 引擎进程句柄），直到真正退出时关闭。
+    let backend_server_slot: Arc<std::sync::Mutex<Option<backend_server::BackendServer>>> =
+        Arc::new(std::sync::Mutex::new(None));
     let close_window_behavior = Arc::new(commands::app::CloseWindowBehaviorState::new(
         commands::app::CLOSE_WINDOW_BEHAVIOR_MINIMIZE,
     ));
@@ -724,6 +727,7 @@ pub fn run() {
             let terminal_registry = Arc::clone(&terminal_registry);
             let sftp_registry = Arc::clone(&sftp_registry);
             let managed_process_registry = Arc::clone(&managed_process_registry);
+            let backend_server_slot = Arc::clone(&backend_server_slot);
             move |app| {
                 agent_core::commands::history_db::initialize_history_db()?;
                 configure_system_tray(app)?;
@@ -826,9 +830,12 @@ pub fn run() {
                                 commands::backend::BackendEndpoint {
                                     host: "127.0.0.1".to_string(),
                                     port: server.port,
-                                    password: server.password,
+                                    password: server.password.clone(),
                                 },
                             );
+                            // 持有 server（含引擎进程句柄）直到退出，否则引擎会被立刻 kill。
+                            *backend_server_slot.lock().expect("backend server slot poisoned") =
+                                Some(server);
                         }
                         Err(e) => {
                             eprintln!("启动内嵌后端服务失败：{e}");
@@ -893,6 +900,13 @@ pub fn run() {
                 terminal_registry.shutdown_cleanup();
                 managed_process_registry.shutdown_cleanup();
                 git_clone_task_registry.shutdown_cleanup();
+                if let Some(server) = backend_server_slot
+                    .lock()
+                    .ok()
+                    .and_then(|mut slot| slot.take())
+                {
+                    server.shutdown_engine();
+                }
                 power_activity.clear_all();
             }
         }

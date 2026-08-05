@@ -45,7 +45,7 @@ export const SHELL_ONLY_COMMANDS = new Set([
  * 已经删掉的命令（deleted.txt）：20 个 gateway_* 中继 + proxy_get_server_info。
  *
  * Rust 侧已随阶段 4 一起移除，壳里和后端里都不存在了。仍有前端调用点
- * （src/pages/chat/gateway/*）没清干净，走 IPC 会得到 "command not found"、
+ * （src/pages/chat/bridge/*）没清干净，走 IPC 会得到 "command not found"、
  * 走 HTTP 会得到 404——两种都是让人猜的错误。这里本地拦下并给迁移提示。
  */
 export const REMOVED_GATEWAY_COMMANDS = new Set([

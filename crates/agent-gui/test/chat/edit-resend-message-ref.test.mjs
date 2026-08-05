@@ -6,8 +6,8 @@ const loader = createTsModuleLoader();
 const conversationState = loader.loadModule(
   "src/lib/chat/conversation/conversationState.ts",
 );
-const gatewayBridgeEvents = loader.loadModule(
-  "src/lib/chat/conversation/run/gatewayBridgeEvents.ts",
+const backendBridgeEvents = loader.loadModule(
+  "src/lib/chat/conversation/run/bridgeEvents.ts",
 );
 
 // ---------------------------------------------------------------------------
@@ -50,7 +50,7 @@ test("findHistoryMessageRefByMessageId returns undefined for unknown or blank id
 
 function collectEvents() {
   const events = [];
-  const controller = gatewayBridgeEvents.createGatewayBridgeEventController({
+  const controller = backendBridgeEvents.createBackendBridgeEventController({
     conversationId: "conv-1",
     requestId: "run-1",
     enabled: true,

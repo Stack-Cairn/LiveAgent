@@ -5,8 +5,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 
-const { buildGatewayFinalProjectionEntries, buildGatewayRuntimeSnapshotEntries } = loader.loadModule(
-  "src/pages/chat/gateway/chatRuntimeSnapshot.ts",
+const { buildBackendFinalProjectionEntries, buildBackendRuntimeSnapshotEntries } = loader.loadModule(
+  "src/pages/chat/bridge/chatRuntimeSnapshot.ts",
 );
 const { buildGatewayToolCallPreviewArguments } = loader.loadModule(
   "src/pages/chat/turns/gatewayToolPreview.ts",
@@ -16,7 +16,7 @@ const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
 const askShared = loader.loadModule("src/lib/chat/askUserQuestion.ts");
 
 test("gateway runtime snapshot projects live rounds into chat entries", () => {
-  const entries = buildGatewayRuntimeSnapshotEntries({
+  const entries = buildBackendRuntimeSnapshotEntries({
     userMessage: {
       role: "user",
       id: "user-1",
@@ -79,7 +79,7 @@ test("gateway runtime snapshot carries the same tool preview shape as bridge del
     name: "Write",
     arguments: { path: "big.txt", content },
   };
-  const entries = buildGatewayRuntimeSnapshotEntries({
+  const entries = buildBackendRuntimeSnapshotEntries({
     userMessage: null,
     liveTranscript: {
       draftAssistantText: "",
@@ -134,14 +134,14 @@ test("gateway runtime snapshots preserve an AskUserQuestion deadline across reco
     ],
   };
 
-  const first = buildGatewayRuntimeSnapshotEntries({ userMessage: null, liveTranscript });
+  const first = buildBackendRuntimeSnapshotEntries({ userMessage: null, liveTranscript });
   const firstToolCall = first.find((entry) => entry.kind === "tool_call");
   assert.ok(firstToolCall);
   const deadlineAt =
     firstToolCall.toolCall.arguments[askShared.ASK_USER_QUESTION_DEADLINE_ARG];
   assert.ok(deadlineAt > Date.now());
 
-  const reconnected = buildGatewayRuntimeSnapshotEntries({ userMessage: null, liveTranscript });
+  const reconnected = buildBackendRuntimeSnapshotEntries({ userMessage: null, liveTranscript });
   const reconnectedToolCalls = reconnected.filter((entry) => entry.kind === "tool_call");
   assert.equal(reconnectedToolCalls.length, 1);
   assert.equal(
@@ -166,7 +166,7 @@ test("gateway runtime snapshots preserve an AskUserQuestion deadline across reco
 });
 
 test("gateway runtime snapshot falls back to draft assistant text", () => {
-  const entries = buildGatewayRuntimeSnapshotEntries({
+  const entries = buildBackendRuntimeSnapshotEntries({
     userMessage: {
       role: "user",
       id: "user-2",
@@ -193,7 +193,7 @@ test("gateway final projection is frozen from the persisted conversation state",
     id: "user-final",
     content: "Inspect the project",
   };
-  const entries = buildGatewayFinalProjectionEntries({
+  const entries = buildBackendFinalProjectionEntries({
     runId: "run-final",
     userMessage,
     state: {

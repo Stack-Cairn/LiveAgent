@@ -22,9 +22,9 @@ import {
   createConversationRuntimeEntry,
   setConversationRuntimeCacheEntry,
 } from "../runtime/chatPageRuntime";
-import type { EnsureGatewayBridgeConversationReadyOptions } from "./gatewayBridgeTypes";
+import type { EnsureBackendBridgeConversationReadyOptions } from "./bridgeTypes";
 
-type UseGatewayBridgeReadinessParams = {
+type UseBackendBridgeReadinessParams = {
   settings: AppSettings;
   conversationState: ConversationViewState;
   currentConversationIdRef: MutableRefObject<string>;
@@ -33,14 +33,14 @@ type UseGatewayBridgeReadinessParams = {
   syncVisibleConversationRuntime: (conversationId: string, entry: ConversationRuntimeEntry) => void;
   isConversationRunning: (conversationId: string) => boolean;
   sidebarStore: SidebarStore;
-  gatewayBridgeHistorySummaryRef: MutableRefObject<Map<string, ChatHistorySummary>>;
+  backendBridgeHistorySummaryRef: MutableRefObject<Map<string, ChatHistorySummary>>;
   hydratingConversationIdRef: MutableRefObject<string | null>;
   hydrationFailedConversationIdRef: MutableRefObject<string | null>;
   setHydratingConversationId: Dispatch<SetStateAction<string | null>>;
   setHydrationFailedConversationId: Dispatch<SetStateAction<string | null>>;
 };
 
-export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParams) {
+export function useBackendBridgeReadiness(params: UseBackendBridgeReadinessParams) {
   const {
     settings,
     conversationState,
@@ -50,7 +50,7 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     syncVisibleConversationRuntime,
     isConversationRunning,
     sidebarStore,
-    gatewayBridgeHistorySummaryRef,
+    backendBridgeHistorySummaryRef,
     hydratingConversationIdRef,
     hydrationFailedConversationIdRef,
     setHydratingConversationId,
@@ -83,7 +83,7 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
       activeSegmentIndex,
       activeSegmentId,
     });
-    gatewayBridgeHistorySummaryRef.current.set(conversationId, summary);
+    backendBridgeHistorySummaryRef.current.set(conversationId, summary);
     sidebarStore.upsertLocal(summary);
     if (currentConversationIdRef.current === conversationId) {
       syncVisibleConversationRuntime(conversationId, entry);
@@ -97,9 +97,9 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     return entry;
   }
 
-  async function ensureGatewayBridgeConversationReady(
+  async function ensureBackendBridgeConversationReady(
     targetConversationId: string,
-    options?: EnsureGatewayBridgeConversationReadyOptions,
+    options?: EnsureBackendBridgeConversationReadyOptions,
   ) {
     const id = targetConversationId.trim();
     if (!id) {
@@ -150,5 +150,5 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     return record.conversation.id;
   }
 
-  return { ensureGatewayBridgeConversationReady };
+  return { ensureBackendBridgeConversationReady };
 }

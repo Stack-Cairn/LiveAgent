@@ -1,6 +1,6 @@
 import type { MutableRefObject } from "react";
 import type { Locale } from "../../../i18n/config";
-import type { GatewayBridgeEventController } from "../../../lib/chat/conversation/run";
+import type { BackendBridgeEventController } from "../../../lib/chat/conversation/run";
 import {
   buildConversationTitlePrompt,
   buildConversationTitleSystemPrompt,
@@ -32,7 +32,7 @@ type StartConversationTitleJobParams = {
   // are renamed through the history IPC by the caller.
   sidebarStore: Pick<SidebarStore, "peek" | "upsertLocal">;
   titleJobRef: MutableRefObject<TitleJobRefValue>;
-  gatewayBridgeEvents: GatewayBridgeEventController;
+  backendBridgeEvents: BackendBridgeEventController;
 };
 
 const GATEWAY_BRIDGE_TITLE_MIN_INTERVAL_MS = 250;
@@ -60,7 +60,7 @@ export function startConversationTitleJob(params: StartConversationTitleJobParam
     locale,
     sidebarStore,
     titleJobRef,
-    gatewayBridgeEvents,
+    backendBridgeEvents,
   } = params;
   let streamedTitle = "";
   let lastForwardedGatewayTitle = "";
@@ -77,7 +77,7 @@ export function startConversationTitleJob(params: StartConversationTitleJobParam
     }
     lastForwardedGatewayTitle = title;
     lastForwardedGatewayTitleAt = now;
-    gatewayBridgeEvents.queueTitle(title, force);
+    backendBridgeEvents.queueTitle(title, force);
   };
 
   const titleRuntime = buildConversationTitleRuntime(runtime);

@@ -27,8 +27,10 @@
 | `runtime` | `node:22.17.1-bookworm-slim`，非 root（uid 10001），二进制 + 引擎 bundle |
 
 ```
-ENTRYPOINT ["agent-backend", "--engine-bundle", "/opt/liveagent/engine"]
+ENV LIVEAGENT_DATA_DIR=/var/lib/liveagent LIVEAGENT_ENGINE_BUNDLE=/opt/liveagent/engine
+VOLUME ["/var/lib/liveagent"]
 EXPOSE 8443
+ENTRYPOINT ["/usr/local/bin/agent-backend"]
 ```
 
 运行时基底是 `node:*-slim` 而不是 `debian-slim`：Node runtime 要随产物分发
@@ -47,21 +49,18 @@ make backend-docker-smoke     # 起容器 + 轮询 /healthz，60s 上限
 
 ## 启动参数
 
-`agent-backend` 只认命令行参数，**不读环境变量**（手写解析，不引 clap——五个参数
-不值一整棵依赖树）：
+`agent-backend` 每个命令行参数都有环境变量兜底，**argv 优先**（手写解析，
+不引 clap——六个参数不值一整棵依赖树）：
 
-| 参数 | 默认 | 说明 |
-|---|---|---|
-| `--port <PORT>` | `8443` | 监听端口，绑 `0.0.0.0` |
-| `--password <PW>` | 随机生成 | Bearer token。不给就生成一个 32 位 base62 串并**打到 stderr** |
-| `--tls-cert <PEM>` `--tls-key <PEM>` | 无 | 两个一起给才启用内建 TLS |
-| `--engine-bundle <DIR>` | 无 | Node 引擎 bundle 目录（内含 `index.js`）。不给则以**纯 API 模式**运行——命令全部可用，但没有 chat |
+| 参数 | 环境变量 | 默认 | 说明 |
+|---|---|---|---|
+| `--port <PORT>` | `PORT` | `8443` | 监听端口，绑 `0.0.0.0`。Railway 一类平台注入的 `PORT` 直接生效 |
+| `--password <PW>` | `LIVEAGENT_BACKEND_PASSWORD` | 随机生成 | Bearer token。不给就生成一个 32 位 base62 串并**打到 stderr** |
+| `--tls-cert <PEM>` `--tls-key <PEM>` | `LIVEAGENT_TLS_CERT` / `LIVEAGENT_TLS_KEY` | 无 | 两个一起给才启用内建 TLS；只给一个直接报错退出 |
+| `--engine-bundle <DIR>` | `LIVEAGENT_ENGINE_BUNDLE` | 无 | Node 引擎 bundle 目录（内含 `index.js`）。不给则以**纯 API 模式**运行——命令全部可用，但没有 chat |
+| `--data-dir <DIR>` | `LIVEAGENT_DATA_DIR` | `~/.liveagent` | 数据目录。官方镜像预设为 `/var/lib/liveagent` |
 
 密码打 stderr 不打 stdout，是为了让 stdout 能被管道消费。
-
-> **`PORT` 环境变量不生效。** Railway 一类平台会注入 `PORT`，但后端不读它。
-> 需要在平台的服务设置里把目标端口显式设成 `8443`（Dockerfile 的 `EXPOSE` 值），
-> 或在启动命令里加 `--port`。
 
 ## TLS
 
@@ -78,11 +77,12 @@ make backend-docker-smoke     # 起容器 + 轮询 /healthz，60s 上限
 
 ## 数据持久化
 
-后端把全部状态写在**运行用户的 `~/.liveagent`** 下（`agent-core/src/storage.rs`，
-路径是写死的字符串，不随包名漂移）：
+后端把全部状态写在**数据目录**下（`agent-core/src/storage.rs`）。解析顺序：
+`--data-dir` → `LIVEAGENT_DATA_DIR` → 运行用户的 `~/.liveagent`（路径是写死的
+字符串，不随包名漂移——桌面壳不传参数，永远落在 `~/.liveagent`）：
 
 ```
-~/.liveagent/
+<数据目录>/
   config.sqlite               设置
   chat-history.sqlite3        会话历史 + FTS
   memory/**/*.md              记忆事实源
@@ -95,10 +95,9 @@ make backend-docker-smoke     # 起容器 + 轮询 /healthz，60s 上限
 「密钥只在本地」这句话现在应该说成**「密钥只在后端，后端由你自己部署」**——如果
 你把后端放在别人的服务器上，密钥就在别人的服务器上。
 
-> ⚠️ **官方镜像目前没有为数据目录预留卷**：runtime 用户建成
-> `--home-dir /nonexistent`，`~` 的解析结果与卷挂载点都没有验证过，
-> 容器重建是否丢数据**尚未实测**。生产部署前请自行确认数据落点，
-> 这条属于阶段 6 验收未完成项。
+> **官方镜像的数据卷**：镜像预设 `LIVEAGENT_DATA_DIR=/var/lib/liveagent` 并声明
+> `VOLUME ["/var/lib/liveagent"]`（目录已建好、归 uid 10001）。持久化只需挂卷：
+> `docker run -v liveagent-data:/var/lib/liveagent ...`。不挂卷则数据随容器删除而丢失。
 
 ## 客户端接入
 
@@ -131,7 +130,7 @@ URL 参数会被持久化到 localStorage，下次打开不用重填。`secure` 
 | 旧镜像 `ghcr.io/<owner>/liveagent-gateway` | **历史 tag 全部保留、仍可拉取**（决策 15）。只是不再发布新 tag |
 | 新镜像 | `ghcr.io/<owner>/liveagent-backend:vX.Y.Z` / `:latest` |
 | 旧桌面端 | 仍可连旧 gateway 镜像。这是大版本切换，不是原地升级 |
-| `LIVEAGENT_GATEWAY_*` 环境变量 | 全部作废。新后端只认命令行参数 |
+| `LIVEAGENT_GATEWAY_*` 环境变量 | 全部作废。新后端认 `PORT`、`LIVEAGENT_BACKEND_PASSWORD`、`LIVEAGENT_TLS_CERT/KEY`、`LIVEAGENT_ENGINE_BUNDLE`、`LIVEAGENT_DATA_DIR`（argv 优先） |
 | 每 Agent 凭证、`agent_id`、多 Agent 目录 | 概念消失。一个前端只连一个后端（决策 12） |
 | 浏览器里的旧 token | 前端检测到 `liveagent.gateway.token` 会在登录页给迁移提示 |
 

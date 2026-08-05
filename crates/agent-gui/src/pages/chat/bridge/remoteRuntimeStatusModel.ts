@@ -1,10 +1,10 @@
 import { createUuid } from "../../../lib/shared/id";
 
-export type GatewayRuntimeStatus = {
+export type RemoteRuntimeStatus = {
   online: boolean;
   enabled: boolean;
   configured: boolean;
-  gatewayUrl?: string | null;
+  remoteUrl?: string | null;
   sessionId?: string | null;
   connectedSince?: number | null;
   lastHeartbeat?: number | null;
@@ -12,19 +12,19 @@ export type GatewayRuntimeStatus = {
 };
 
 /**
- * 远程设置里已经没有「连到哪个 Gateway」了，拿不到运行时状态时只能当离线。
+ * 远程设置里已经没有「连到哪个 Backend」了，拿不到运行时状态时只能当离线。
  */
-export const OFFLINE_GATEWAY_STATUS: GatewayRuntimeStatus = {
+export const OFFLINE_REMOTE_STATUS: RemoteRuntimeStatus = {
   online: false,
   enabled: false,
   configured: false,
-  gatewayUrl: null,
+  remoteUrl: null,
   sessionId: null,
   connectedSince: null,
   lastHeartbeat: null,
   lastError: null,
 };
 
-export function createLocalGatewayChatRunId(conversationId: string) {
+export function createLocalChatRunId(conversationId: string) {
   return `conversation-live-${conversationId}-${createUuid()}`;
 }

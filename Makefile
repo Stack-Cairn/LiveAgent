@@ -23,6 +23,8 @@ DESKTOP_WINDOWS_TAURI_CONFIG ?= src-tauri/tauri.windows.conf.json
 DESKTOP_RELEASE_TAURI_CONFIG ?= src-tauri/tauri.macos.release.conf.json
 DESKTOP_RELEASE_TAURI_CONFIG_FLAGS ?= --config $(DESKTOP_RELEASE_TAURI_CONFIG) $(if $(LIVEAGENT_TAURI_VERSION_CONFIG),--config $(LIVEAGENT_TAURI_VERSION_CONFIG))
 
+MODEL_CATALOG_GENERATED_FILES := $(AGENT_GUI_DIR)/src/lib/models/catalog.generated.ts
+
 BACKEND_DOCKER_IMAGE ?= liveagent-backend:local
 RELEASE_TAG ?=
 
@@ -139,6 +141,8 @@ backend-docker-smoke: backend-docker-build
 
 ## Maintenance
 clean:
+	cargo clean
+	rm -rf $(AGENT_GUI_DIR)/dist $(AGENT_CORE_JS_DIR)/dist
 
 update-model-catalog:
 	node scripts/generate-model-catalog.mjs

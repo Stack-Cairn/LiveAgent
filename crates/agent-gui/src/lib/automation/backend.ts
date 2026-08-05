@@ -1,7 +1,7 @@
 // Desktop (Tauri) transport for the automation store: direct invoke calls
-// plus change events emitted by the Rust AutomationStore notifier. This file
-// is the per-platform adapter — the web frontend ships its own copy speaking
-// the gateway cron.manage protocol.
+// plus change events emitted by the Rust AutomationStore notifier. The invoke
+// shim routes these automation/cron commands over the network to the backend's
+// command handlers.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";

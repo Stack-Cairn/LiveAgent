@@ -25,7 +25,6 @@ target
 *.local
 .vscode
 target
-bin
 .serena
 chatroom
 

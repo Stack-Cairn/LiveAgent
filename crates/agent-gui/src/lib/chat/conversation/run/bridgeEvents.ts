@@ -23,7 +23,7 @@ type QueueUserMessageOptions = {
 
 // Wire shape mirror of the gateway's ChatMessageRef (snake_case), matching
 // the webui's buildHistoryMessageRefPayload byte for byte.
-function buildGatewayMessageRefPayload(ref: HistoryMessageRef): Record<string, unknown> {
+function buildBridgeMessageRefPayload(ref: HistoryMessageRef): Record<string, unknown> {
   return {
     segment_index: ref.segmentIndex,
     message_index: ref.messageIndex,
@@ -34,9 +34,9 @@ function buildGatewayMessageRefPayload(ref: HistoryMessageRef): Record<string, u
   };
 }
 
-type GatewayBridgeSendResult = Promise<void> | void;
+type BackendBridgeSendResult = Promise<void> | void;
 
-type GatewayBridgeEventControllerParams = {
+type BackendBridgeEventControllerParams = {
   conversationId: string;
   requestId: string;
   workerId?: string;
@@ -45,21 +45,21 @@ type GatewayBridgeEventControllerParams = {
     requestId: string,
     event: Record<string, unknown>,
     options?: { workerId?: string },
-  ) => GatewayBridgeSendResult;
+  ) => BackendBridgeSendResult;
   flushEvents?: (requestId: string) => Promise<void>;
   resolveErrorConversationId?: () => string;
 };
 
-export type GatewayBridgeEventController = {
+export type BackendBridgeEventController = {
   queueEvent: (
     event: Record<string, unknown>,
     options?: QueueEventOptions,
-  ) => GatewayBridgeSendResult;
+  ) => BackendBridgeSendResult;
   queueUserMessage: (
     message: string,
     uploadedFiles?: readonly unknown[],
     options?: QueueUserMessageOptions,
-  ) => GatewayBridgeSendResult;
+  ) => BackendBridgeSendResult;
   queueToken: (delta: string, extra?: Record<string, unknown>) => void;
   queueTitle: (nextTitle: string, allowAfterClose?: boolean) => void;
   queueToolStatus: (status: string | null, isCompaction?: boolean) => void;
@@ -71,9 +71,9 @@ export type GatewayBridgeEventController = {
   isClosed: () => boolean;
 };
 
-export function createGatewayBridgeEventController(
-  params: GatewayBridgeEventControllerParams,
-): GatewayBridgeEventController {
+export function createBackendBridgeEventController(
+  params: BackendBridgeEventControllerParams,
+): BackendBridgeEventController {
   let forwardedText = false;
   let streamClosed = false;
   let closePromise: Promise<void> | null = null;
@@ -138,11 +138,11 @@ export function createGatewayBridgeEventController(
         ),
         conversation_id: params.conversationId,
         ...(options?.messageRef
-          ? { message_ref: buildGatewayMessageRefPayload(options.messageRef) }
+          ? { message_ref: buildBridgeMessageRefPayload(options.messageRef) }
           : {}),
         ...(options?.baseMessageRef
           ? {
-              base_message_ref: buildGatewayMessageRefPayload(options.baseMessageRef),
+              base_message_ref: buildBridgeMessageRefPayload(options.baseMessageRef),
               reason: "edit_resend",
             }
           : {}),

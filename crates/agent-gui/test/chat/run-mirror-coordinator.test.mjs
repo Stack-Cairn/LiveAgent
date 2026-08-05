@@ -120,35 +120,35 @@ test("run mirror batches deltas and durably commits terminal after the batch", a
         },
       },
     });
-    const { useGatewayRunMirrorCoordinator } = loader.loadModule(
-      "src/pages/chat/gateway/useGatewayRunMirrorCoordinator.ts",
+    const { useBackendRunMirrorCoordinator } = loader.loadModule(
+      "src/pages/chat/bridge/useRunMirrorCoordinator.ts",
     );
     let mirror;
     harness.render(() => {
-      mirror = useGatewayRunMirrorCoordinator();
+      mirror = useBackendRunMirrorCoordinator();
     });
-    mirror.registerGatewayRunMirror({
+    mirror.registerBackendRunMirror({
       runId: "run-1",
       conversationId: "conv-1",
       workerId: "gui-live",
       userMessage: { role: "user", id: "user-1", content: "hello" },
       transcriptStore: createTranscriptStore(),
     });
-    mirror.queueGatewayBridgeEventForRequest(
+    mirror.queueBackendBridgeEventForRequest(
       "run-1",
       { type: "token", text: "hello ", conversation_id: "conv-1" },
       { workerId: "gui-live" },
     );
-    mirror.queueGatewayBridgeEventForRequest(
+    mirror.queueBackendBridgeEventForRequest(
       "run-1",
       { type: "token", text: "world", conversation_id: "conv-1" },
       { workerId: "gui-live" },
     );
-    mirror.queueGatewayBridgeEventForRequest("run-1", {
+    mirror.queueBackendBridgeEventForRequest("run-1", {
       type: "done",
       conversation_id: "conv-1",
     });
-    await mirror.finishGatewayRunMirror({
+    await mirror.finishBackendRunMirror({
       runId: "run-1",
       conversationId: "conv-1",
       entriesJson: '[{"id":"a1","kind":"assistant","text":"hello world"}]',
@@ -195,26 +195,26 @@ test("a rejected local delta batch does not prevent durable terminal repair", as
         },
       },
     });
-    const { useGatewayRunMirrorCoordinator } = loader.loadModule(
-      "src/pages/chat/gateway/useGatewayRunMirrorCoordinator.ts",
+    const { useBackendRunMirrorCoordinator } = loader.loadModule(
+      "src/pages/chat/bridge/useRunMirrorCoordinator.ts",
     );
     let mirror;
     harness.render(() => {
-      mirror = useGatewayRunMirrorCoordinator();
+      mirror = useBackendRunMirrorCoordinator();
     });
-    mirror.registerGatewayRunMirror({
+    mirror.registerBackendRunMirror({
       runId: "run-1",
       conversationId: "conv-1",
       userMessage: { role: "user", id: "user-1", content: "hello" },
       transcriptStore: createTranscriptStore(),
     });
-    mirror.queueGatewayBridgeEventForRequest("run-1", {
+    mirror.queueBackendBridgeEventForRequest("run-1", {
       type: "token",
       text: "partial",
       conversation_id: "conv-1",
     });
-    await assert.rejects(mirror.flushGatewayBridgeEventsForRequest("run-1"), /actor queue full/);
-    await mirror.finishGatewayRunMirror({
+    await assert.rejects(mirror.flushBackendBridgeEventsForRequest("run-1"), /actor queue full/);
+    await mirror.finishBackendRunMirror({
       runId: "run-1",
       conversationId: "conv-1",
       entriesJson: '[{"id":"a1","kind":"assistant","text":"complete"}]',
@@ -256,14 +256,14 @@ test("run mirror flushes after 25ms and enforces record and byte batch bounds", 
         },
       },
     });
-    const { useGatewayRunMirrorCoordinator } = loader.loadModule(
-      "src/pages/chat/gateway/useGatewayRunMirrorCoordinator.ts",
+    const { useBackendRunMirrorCoordinator } = loader.loadModule(
+      "src/pages/chat/bridge/useRunMirrorCoordinator.ts",
     );
     let mirror;
     harness.render(() => {
-      mirror = useGatewayRunMirrorCoordinator();
+      mirror = useBackendRunMirrorCoordinator();
     });
-    mirror.registerGatewayRunMirror({
+    mirror.registerBackendRunMirror({
       runId: "run-bounds",
       conversationId: "conv-bounds",
       workerId: "gui-live",
@@ -271,18 +271,18 @@ test("run mirror flushes after 25ms and enforces record and byte batch bounds", 
       transcriptStore: createTranscriptStore(),
     });
 
-    mirror.queueGatewayBridgeEventForRequest("run-bounds", {
+    mirror.queueBackendBridgeEventForRequest("run-bounds", {
       type: "tool_status",
       status: "timer",
       conversation_id: "conv-bounds",
     });
     assert.equal(calls.length, 0, "the first record waits for the 25ms batch timer");
     timers.runTimeouts();
-    await mirror.flushGatewayBridgeEventsForRequest("run-bounds");
+    await mirror.flushBackendBridgeEventsForRequest("run-bounds");
     assert.equal(calls.length, 1, "the timer flushes the pending batch");
 
     for (let index = 0; index < 65; index += 1) {
-      const pending = mirror.queueGatewayBridgeEventForRequest("run-bounds", {
+      const pending = mirror.queueBackendBridgeEventForRequest("run-bounds", {
         type: "tool_status",
         status: `record-${index}`,
         conversation_id: "conv-bounds",
@@ -290,7 +290,7 @@ test("run mirror flushes after 25ms and enforces record and byte batch bounds", 
       if (pending) await pending;
     }
     for (let index = 0; index < 40; index += 1) {
-      const pending = mirror.queueGatewayBridgeEventForRequest("run-bounds", {
+      const pending = mirror.queueBackendBridgeEventForRequest("run-bounds", {
         type: "tool_result",
         id: `large-${index}`,
         content: "x".repeat(4_000),
@@ -298,7 +298,7 @@ test("run mirror flushes after 25ms and enforces record and byte batch bounds", 
       });
       if (pending) await pending;
     }
-    await mirror.finishGatewayRunMirror({
+    await mirror.finishBackendRunMirror({
       runId: "run-bounds",
       conversationId: "conv-bounds",
       entriesJson: "[]",
@@ -361,20 +361,20 @@ test("running checkpoint is an ordered barrier and cannot cross terminal", async
         },
       },
     });
-    const { useGatewayRunMirrorCoordinator } = loader.loadModule(
-      "src/pages/chat/gateway/useGatewayRunMirrorCoordinator.ts",
+    const { useBackendRunMirrorCoordinator } = loader.loadModule(
+      "src/pages/chat/bridge/useRunMirrorCoordinator.ts",
     );
     let mirror;
     harness.render(() => {
-      mirror = useGatewayRunMirrorCoordinator();
+      mirror = useBackendRunMirrorCoordinator();
     });
-    mirror.registerGatewayRunMirror({
+    mirror.registerBackendRunMirror({
       runId: "run-barrier",
       conversationId: "conv-barrier",
       userMessage: { role: "user", id: "user-barrier", content: "hello" },
       transcriptStore: createTranscriptStore(() => transcriptText),
     });
-    mirror.queueGatewayBridgeEventForRequest("run-barrier", {
+    mirror.queueBackendBridgeEventForRequest("run-barrier", {
       type: "token",
       text: "first",
       conversation_id: "conv-barrier",
@@ -394,27 +394,27 @@ test("running checkpoint is an ordered barrier and cannot cross terminal", async
       },
     });
     await Promise.resolve();
-    await mirror.flushGatewayBridgeEventsForRequest("run-barrier");
+    await mirror.flushBackendBridgeEventsForRequest("run-barrier");
 
     transcriptText = "firstsecond";
-    mirror.queueGatewayBridgeEventForRequest("run-barrier", {
+    mirror.queueBackendBridgeEventForRequest("run-barrier", {
       type: "token",
       text: "second",
       conversation_id: "conv-barrier",
     });
-    mirror.queueGatewayBridgeEventForRequest("run-barrier", {
+    mirror.queueBackendBridgeEventForRequest("run-barrier", {
       type: "done",
       conversation_id: "conv-barrier",
     });
     await Promise.all([
-      mirror.finishGatewayRunMirror({
+      mirror.finishBackendRunMirror({
         runId: "run-barrier",
         conversationId: "conv-barrier",
         entriesJson: '[{"id":"a1","kind":"assistant","text":"firstsecond"}]',
         state: "completed",
         contentComplete: true,
       }),
-      mirror.finishGatewayRunMirror({
+      mirror.finishBackendRunMirror({
         runId: "run-barrier",
         conversationId: "conv-barrier",
         entriesJson: '[{"id":"a1","kind":"assistant","text":"firstsecond"}]',
@@ -501,14 +501,14 @@ test("terminal retry reuses the frozen revision after a lost local response", as
         },
       },
     });
-    const { useGatewayRunMirrorCoordinator } = loader.loadModule(
-      "src/pages/chat/gateway/useGatewayRunMirrorCoordinator.ts",
+    const { useBackendRunMirrorCoordinator } = loader.loadModule(
+      "src/pages/chat/bridge/useRunMirrorCoordinator.ts",
     );
     let mirror;
     harness.render(() => {
-      mirror = useGatewayRunMirrorCoordinator();
+      mirror = useBackendRunMirrorCoordinator();
     });
-    mirror.registerGatewayRunMirror({
+    mirror.registerBackendRunMirror({
       runId: "run-terminal-retry",
       conversationId: "conv-terminal-retry",
       userMessage: { role: "user", id: "user-terminal-retry", content: "hello" },
@@ -517,7 +517,7 @@ test("terminal retry reuses the frozen revision after a lost local response", as
     const frozenEntries = '[{"id":"a1","kind":"assistant","text":"complete"}]';
 
     await assert.rejects(
-      mirror.finishGatewayRunMirror({
+      mirror.finishBackendRunMirror({
         runId: "run-terminal-retry",
         conversationId: "conv-terminal-retry",
         entriesJson: frozenEntries,
@@ -526,7 +526,7 @@ test("terminal retry reuses the frozen revision after a lost local response", as
       }),
       /IPC response lost/,
     );
-    await mirror.finishGatewayRunMirror({
+    await mirror.finishBackendRunMirror({
       runId: "run-terminal-retry",
       conversationId: "conv-terminal-retry",
       entriesJson: '[{"id":"different","kind":"assistant","text":"must not replace frozen"}]',

@@ -16,14 +16,14 @@ import {
 } from "../../../lib/settings";
 import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
 import { answerToolApproval } from "../../../lib/tools/toolApproval";
+import type { ActiveBackendBridgeRequest, SendChatAction } from "../bridge/bridgeTypes";
+import {
+  type BackendChatClaimedRequest,
+  normalizeBackendExecutionMode,
+  normalizeBackendWorkdir,
+} from "../bridge/bridgeTypes";
 import type { ChatQueueTurnPreview } from "../components/ChatComposerBar";
 import { createTextComposerDraft } from "../composer/composerDraftText";
-import type { ActiveGatewayBridgeRequest, SendChatAction } from "../gateway/gatewayBridgeTypes";
-import {
-  type GatewayChatClaimedRequest,
-  normalizeGatewayExecutionMode,
-  normalizeGatewayWorkdir,
-} from "../gateway/gatewayBridgeTypes";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 import {
   appendQueuedChatTurn,
@@ -218,7 +218,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     return conversationIds;
   }
 
-  function cancelGatewayQueuedTurnRequest(item: QueuedChatTurn | null | undefined) {
+  function cancelBackendQueuedTurnRequest(item: QueuedChatTurn | null | undefined) {
     const gatewayRequest = item?.gatewayRequest;
     if (!item || !gatewayRequest) return;
     void invoke("gateway_chat_cancel_request", {
@@ -329,7 +329,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const processingState = queuedChatProcessingStatesRef.current.get(targetConversationId);
     if (processingState) {
       processingState.stopRequestVersion = stopRequestVersion;
-      cancelGatewayQueuedTurnRequest(processingState.inFlightTurn);
+      cancelBackendQueuedTurnRequest(processingState.inFlightTurn);
     }
     const controller = getConversationAbortController(targetConversationId);
     const transcriptStore = getConversationLiveTranscriptStore(targetConversationId);
@@ -478,7 +478,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         setQueuedChatTurnsState(() => taken.queue);
         const gatewayRequest = queuedTurn.gatewayRequest;
         const gatewayWorkerId = gatewayRequest?.workerId?.trim() || "gui-queue";
-        const gatewayBridgeRequest: ActiveGatewayBridgeRequest | null = gatewayRequest
+        const backendBridgeRequest: ActiveBackendBridgeRequest | null = gatewayRequest
           ? {
               requestId: gatewayRequest.requestId,
               conversationId: targetConversationId,
@@ -493,8 +493,8 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
               workdirOverride: queuedTurn.workdir,
             }
           : null;
-        const markGatewayStarted =
-          gatewayRequest && gatewayBridgeRequest
+        const markBackendStarted =
+          gatewayRequest && backendBridgeRequest
             ? async () => {
                 await invoke("gateway_chat_mark_started", {
                   request_id: gatewayRequest.requestId,
@@ -510,15 +510,15 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           executionModeOverride: queuedTurn.executionMode,
           workdirOverride: queuedTurn.workdir,
           runtimeControlsOverride: queuedTurn.runtimeControls,
-          gatewayBridgeRequestOverride: gatewayBridgeRequest,
+          backendBridgeRequestOverride: backendBridgeRequest,
           preserveComposerOnStart: true,
-          beforeRuntimeStart: markGatewayStarted,
-          afterInitialHistoryPersist: markGatewayStarted,
+          beforeRuntimeStart: markBackendStarted,
+          afterInitialHistoryPersist: markBackendStarted,
         });
         const stopped = wasStoppedDuringProcessing();
         if (!accepted) {
           if (stopped && gatewayRequest) {
-            cancelGatewayQueuedTurnRequest(queuedTurn);
+            cancelBackendQueuedTurnRequest(queuedTurn);
           } else {
             setQueuedChatTurnsState((current) =>
               promoteQueuedChatTurn(appendQueuedChatTurn(current, queuedTurn), queuedTurn.id),
@@ -527,7 +527,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           inFlightQueuedTurn = null;
         } else if (gatewayRequest) {
           if (stopped) {
-            cancelGatewayQueuedTurnRequest(queuedTurn);
+            cancelBackendQueuedTurnRequest(queuedTurn);
           } else {
             void invoke("gateway_chat_complete", {
               request_id: gatewayRequest.requestId,
@@ -561,7 +561,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         const failedQueuedTurn = inFlightQueuedTurn;
         if (failedQueuedTurn) {
           if (wasStoppedDuringProcessing() && failedQueuedTurn.gatewayRequest) {
-            cancelGatewayQueuedTurnRequest(failedQueuedTurn);
+            cancelBackendQueuedTurnRequest(failedQueuedTurn);
           } else {
             setQueuedChatTurnsState((current) =>
               promoteQueuedChatTurn(
@@ -681,10 +681,10 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   function removeQueuedTurn(id: string) {
     const queuedTurn = queuedChatTurnsRef.current.find((item) => item.id === id.trim());
     setQueuedChatTurnsState((current) => removeQueuedChatTurn(current, id));
-    cancelGatewayQueuedTurnRequest(queuedTurn);
+    cancelBackendQueuedTurnRequest(queuedTurn);
   }
 
-  function shouldQueueGatewayChatRequest(
+  function shouldQueueBackendChatRequest(
     conversationId: string,
     queuePolicy: "auto" | "append" | "interrupt",
   ) {
@@ -698,8 +698,8 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     );
   }
 
-  async function enqueueGatewayChatRequest(
-    claimed: GatewayChatClaimedRequest,
+  async function enqueueBackendChatRequest(
+    claimed: BackendChatClaimedRequest,
     conversationId: string,
   ) {
     const payload = claimed.request;
@@ -712,9 +712,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     }
 
     const executionMode =
-      normalizeGatewayExecutionMode(payload.executionMode) ?? settings.system.executionMode;
+      normalizeBackendExecutionMode(payload.executionMode) ?? settings.system.executionMode;
     const workdir =
-      normalizeGatewayWorkdir(payload.workdir) ??
+      normalizeBackendWorkdir(payload.workdir) ??
       conversationRuntimeCacheRef.current.get(targetConversationId)?.workdir ??
       displayedConversationWorkdir ??
       settings.system.workdir;
@@ -756,7 +756,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    type GatewayChatQueueRequestEvent = {
+    type BackendChatQueueRequestEvent = {
       requestId: string;
       action: string;
       conversationId?: string;
@@ -788,7 +788,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const snapshotJson = (conversationId: string) =>
       JSON.stringify(buildChatQueueSnapshot(conversationId));
 
-    void listen<GatewayChatQueueRequestEvent>("gateway:chat-queue-request", (event) => {
+    void listen<BackendChatQueueRequestEvent>("gateway:chat-queue-request", (event) => {
       if (disposed) return;
       const request = event.payload;
       const requestId = request.requestId?.trim() ?? "";
@@ -1051,7 +1051,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     moveQueuedTurnUp,
     editQueuedTurn,
     removeQueuedTurn,
-    shouldQueueGatewayChatRequest,
-    enqueueGatewayChatRequest,
+    shouldQueueBackendChatRequest,
+    enqueueBackendChatRequest,
   };
 }

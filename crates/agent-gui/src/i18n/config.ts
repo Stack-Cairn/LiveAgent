@@ -1869,6 +1869,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     /* ── Settings Remote ── */
     "settings.remoteTitle": "远程访问",
     "settings.remoteDesc": "控制远程前端连上本机后能做什么",
+    "settings.backendServerTitle": "后端服务器",
+    "settings.backendServerEmbedded": "本机内嵌后端",
+    "settings.backendServerChange": "切换…",
     "settings.remoteEnable": "启用远程访问",
     "settings.remoteDisable": "关闭远程访问",
     "settings.remoteAccessControl": "访问控制",
@@ -4186,6 +4189,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     /* ── Settings Remote ── */
     "settings.remoteTitle": "Remote Access",
     "settings.remoteDesc": "Control what remote clients may do once they reach this desktop",
+    "settings.backendServerTitle": "Backend Server",
+    "settings.backendServerEmbedded": "Embedded local backend",
+    "settings.backendServerChange": "Change…",
     "settings.remoteEnable": "Enable remote access",
     "settings.remoteDisable": "Disable remote access",
     "settings.remoteAccessControl": "Access Control",

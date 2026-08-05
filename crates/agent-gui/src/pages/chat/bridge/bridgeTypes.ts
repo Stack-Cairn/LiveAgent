@@ -5,63 +5,63 @@ import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFil
 import type { ChatRuntimeControls, ExecutionMode, ProviderId } from "../../../lib/settings";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 
-export type GatewaySelectedModelEvent = {
+export type BackendSelectedModelEvent = {
   customProviderId: string;
   model: string;
   providerType: string;
 };
 
-export type GatewayChatRuntimeControlsEvent = Pick<
+export type BackendChatRuntimeControlsEvent = Pick<
   ChatRuntimeControls,
   "thinkingEnabled" | "nativeWebSearchEnabled" | "reasoning"
 >;
 
-export type GatewayChatRequestEvent = {
+export type BackendChatRequestEvent = {
   requestId: string;
   conversationId: string;
   clientRequestId?: string;
   message: string;
   rebased?: boolean;
   baseMessageRef?: HistoryMessageRef;
-  selectedModel?: GatewaySelectedModelEvent;
-  runtimeControls?: GatewayChatRuntimeControlsEvent;
+  selectedModel?: BackendSelectedModelEvent;
+  runtimeControls?: BackendChatRuntimeControlsEvent;
   executionMode?: string;
   workdir?: string;
   uploadedFiles?: PendingUploadedFile[];
   queuePolicy?: "auto" | "append" | "interrupt" | string;
 };
 
-export type GatewayChatClaimedRequest = {
+export type BackendChatClaimedRequest = {
   requestId: string;
   clientRequestId: string;
   conversationId: string;
   state: string;
   attempt: number;
   leaseMs: number;
-  request: GatewayChatRequestEvent;
+  request: BackendChatRequestEvent;
 };
 
-export type GatewayChatRequestReadyEvent = {
+export type BackendChatRequestReadyEvent = {
   requestId?: string;
   reason?: string;
 };
 
-export type EnsureGatewayBridgeConversationReadyOptions = {
+export type EnsureBackendBridgeConversationReadyOptions = {
   rebased?: boolean;
 };
 
-export type GatewayChatCancelEvent = {
+export type BackendChatCancelEvent = {
   requestId: string;
   conversationId: string;
 };
 
-export type ActiveGatewayBridgeRequest = {
+export type ActiveBackendBridgeRequest = {
   requestId: string;
   conversationId: string;
   clientRequestId?: string;
   workerId?: string;
   startedAt: number;
-  selectedModelOverride?: GatewaySelectedModelEvent;
+  selectedModelOverride?: BackendSelectedModelEvent;
   runtimeControlsOverride?: ChatRuntimeControls;
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
@@ -75,7 +75,7 @@ export type SendChatAction = (overrides?: {
   executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
   runtimeControlsOverride?: ChatRuntimeControls;
-  gatewayBridgeRequestOverride?: ActiveGatewayBridgeRequest | null;
+  backendBridgeRequestOverride?: ActiveBackendBridgeRequest | null;
   preserveComposerOnStart?: boolean;
   beforeRuntimeStart?: () => Promise<void>;
   afterInitialHistoryPersist?: () => Promise<void>;
@@ -85,16 +85,16 @@ export type SendChatAction = (overrides?: {
   editResendBaseMessageRef?: HistoryMessageRef;
 }) => Promise<boolean>;
 
-export type GatewayBridgeRuntimeRefs = {
+export type BackendBridgeRuntimeRefs = {
   currentConversationIdRef: MutableRefObject<string>;
   conversationRuntimeCacheRef: MutableRefObject<Map<string, ConversationRuntimeEntry>>;
-  ensureGatewayBridgeConversationReadyRef: MutableRefObject<
-    (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
+  ensureBackendBridgeConversationReadyRef: MutableRefObject<
+    (id: string, options?: EnsureBackendBridgeConversationReadyOptions) => Promise<string>
   >;
   sendActionRef: MutableRefObject<SendChatAction>;
 };
 
-export function normalizeGatewayProviderType(value: string): ProviderId | null {
+export function normalizeBackendProviderType(value: string): ProviderId | null {
   const normalized = value.trim();
   if (
     normalized === "codex" ||
@@ -107,7 +107,7 @@ export function normalizeGatewayProviderType(value: string): ProviderId | null {
   return null;
 }
 
-export function normalizeGatewayExecutionMode(
+export function normalizeBackendExecutionMode(
   value: string | null | undefined,
 ): ExecutionMode | undefined {
   switch (value?.trim()) {
@@ -120,7 +120,7 @@ export function normalizeGatewayExecutionMode(
   }
 }
 
-export function normalizeGatewayWorkdir(value: string | null | undefined): string | undefined {
+export function normalizeBackendWorkdir(value: string | null | undefined): string | undefined {
   const normalized = value?.trim() ?? "";
   return normalized || undefined;
 }

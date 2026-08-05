@@ -23,8 +23,8 @@ import type {
   RetryAttemptRecord,
 } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type {
+  BackendBridgeEventController,
   ConversationHookLifecycle,
-  GatewayBridgeEventController,
 } from "../../../lib/chat/conversation/run";
 import type { TurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
 import { memoryExtraction } from "../../../lib/chat/memory/extractionController";
@@ -240,7 +240,7 @@ export type RunAgentConversationTurnParams = {
   createdAt: number;
   titlePromise: Promise<string | null> | null;
   transcriptStore: LiveTranscriptStore;
-  gatewayBridgeEvents: GatewayBridgeEventController;
+  backendBridgeEvents: BackendBridgeEventController;
   hookLifecycle: ConversationHookLifecycle;
   conversationDebugLogger: StreamDebugLogger;
   subagentStore?: SubagentConversationStore;
@@ -304,7 +304,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     createdAt,
     titlePromise,
     transcriptStore,
-    gatewayBridgeEvents,
+    backendBridgeEvents,
     hookLifecycle,
     conversationDebugLogger,
     subagentStore,
@@ -509,7 +509,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     // 桌面本地由 pending 表经 useSyncExternalStore 响应式驱动,不依赖此事件。
     const emitApprovalMarkerEvent = () => {
       if (!shouldShowToolEvent(toolCall)) return;
-      gatewayBridgeEvents.queueEvent({
+      backendBridgeEvents.queueEvent({
         type: "tool_call",
         id: toolCall.id,
         name: toolCall.name,
@@ -597,7 +597,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   }
 
   function commitAssistantRoundMeta(assistant: AssistantMessage, round: number) {
-    gatewayBridgeEvents.queueToken("", {
+    backendBridgeEvents.queueToken("", {
       round,
       provider: assistant.provider,
       model: assistant.model,
@@ -623,7 +623,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   }
 
   function updateHostedSearch(hostedSearch: HostedSearchBlock, round: number) {
-    gatewayBridgeEvents.queueEvent({
+    backendBridgeEvents.queueEvent({
       type: "hosted_search",
       id: hostedSearch.id,
       provider: hostedSearch.provider,
@@ -669,7 +669,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     pendingToolCallDeltas.clear();
 
     for (const { round, toolCall } of deltas) {
-      gatewayBridgeEvents.queueEvent({
+      backendBridgeEvents.queueEvent({
         type: "tool_call_delta",
         id: toolCall.id,
         name: toolCall.name,
@@ -771,7 +771,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           );
         },
         onTextDelta: (delta, round) => {
-          gatewayBridgeEvents.queueToken(delta, { round });
+          backendBridgeEvents.queueToken(delta, { round });
           streamedAgentText += delta;
           streamedAgentTokenUnits += estimateTextTokenUnits(delta);
           batchLiveRoundsUpdate(
@@ -800,7 +800,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           scope.controller.abort();
         },
         onThinkingDelta: (delta, round) => {
-          gatewayBridgeEvents.queueEvent({
+          backendBridgeEvents.queueEvent({
             type: "thinking",
             text: delta,
             round,
@@ -826,7 +826,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           // executeToolCall 建立 pending 前抢先提交。
           if (toolCall.name === ASK_USER_QUESTION_TOOL_NAME) return;
           if (!shouldShowToolEvent(toolCall)) return;
-          gatewayBridgeEvents.queueEvent({
+          backendBridgeEvents.queueEvent({
             type: "tool_call",
             id: toolCall.id,
             name: toolCall.name,
@@ -855,7 +855,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             hookLifecycle.toolExecutionStarted();
           }
           if (!shouldShowToolEvent(toolCall)) return;
-          gatewayBridgeEvents.queueEvent({
+          backendBridgeEvents.queueEvent({
             type: "tool_call",
             id: toolCall.id,
             name: toolCall.name,
@@ -879,7 +879,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             hookLifecycle.toolResultReceived(round);
           }
           if (!shouldShowToolEvent(toolCall, toolResult)) return;
-          gatewayBridgeEvents.queueEvent({
+          backendBridgeEvents.queueEvent({
             type: "tool_result",
             id: toolCall.id,
             name: toolCall.name,
@@ -920,7 +920,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           commitAssistantRoundMeta(assistant, round);
         },
         onToolStatus: (s) => {
-          gatewayBridgeEvents.queueToolStatus(s, false);
+          backendBridgeEvents.queueToolStatus(s, false);
           updateToolStatus(s, transcriptStore);
         },
         onRetryAttempts: (_round, attempts) => {
@@ -1040,8 +1040,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   );
   let completedState = finalState;
   const gatewayAssistantText = assistantMessageToText(result.assistant);
-  if (!gatewayBridgeEvents.hasForwardedText() && gatewayAssistantText.length > 0) {
-    gatewayBridgeEvents.queueToken(gatewayAssistantText, {
+  if (!backendBridgeEvents.hasForwardedText() && gatewayAssistantText.length > 0) {
+    backendBridgeEvents.queueToken(gatewayAssistantText, {
       round: activeAgentRound || 1,
     });
   }
@@ -1095,7 +1095,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         );
       },
       onTextDelta: (delta, round) => {
-        gatewayBridgeEvents.queueToken(delta, { round });
+        backendBridgeEvents.queueToken(delta, { round });
         batchLiveRoundsUpdate(
           (prev) =>
             updateLiveRound(prev, round, (target) =>
@@ -1105,7 +1105,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         );
       },
       onThinkingDelta: (delta, round) => {
-        gatewayBridgeEvents.queueEvent({
+        backendBridgeEvents.queueEvent({
           type: "thinking",
           text: delta,
           round,
@@ -1122,7 +1122,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       },
       onToolCall: (toolCall, round) => {
         if (!shouldShowToolEvent(toolCall)) return;
-        gatewayBridgeEvents.queueEvent({
+        backendBridgeEvents.queueEvent({
           type: "tool_call",
           id: toolCall.id,
           name: toolCall.name,
@@ -1141,7 +1141,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       },
       onToolExecutionStart: (toolCall, round) => {
         if (!shouldShowToolEvent(toolCall)) return;
-        gatewayBridgeEvents.queueEvent({
+        backendBridgeEvents.queueEvent({
           type: "tool_call",
           id: toolCall.id,
           name: toolCall.name,
@@ -1160,7 +1160,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       },
       onToolResult: (toolCall, toolResult, round) => {
         if (!shouldShowToolEvent(toolCall)) return;
-        gatewayBridgeEvents.queueEvent({
+        backendBridgeEvents.queueEvent({
           type: "tool_result",
           id: toolCall.id,
           name: toolCall.name,
@@ -1192,7 +1192,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       },
       onAssistantMessage: commitAssistantRoundMeta,
       onToolStatus: (s) => {
-        gatewayBridgeEvents.queueToolStatus(s, false);
+        backendBridgeEvents.queueToolStatus(s, false);
         updateToolStatus(s, transcriptStore);
       },
     });

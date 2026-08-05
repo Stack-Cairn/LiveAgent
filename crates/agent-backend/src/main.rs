@@ -2,10 +2,16 @@
 //!
 //! 用法：
 //! ```text
-//! agent-backend --port 8443 [--password <pw>] [--tls-cert a.pem --tls-key b.pem] [--engine-bundle <path>]
+//! agent-backend --port 8443 [--password <pw>] [--tls-cert a.pem --tls-key b.pem] \
+//!     [--engine-bundle <path>] [--data-dir <dir>]
 //! ```
 //!
-//! 不给 `--password` 就动态生成一个并打印到 stderr（决策 8：本地密码初始化
+//! 每个参数都有对应的环境变量兜底（argv 优先）：`PORT`、
+//! `LIVEAGENT_BACKEND_PASSWORD`、`LIVEAGENT_TLS_CERT`/`LIVEAGENT_TLS_KEY`、
+//! `LIVEAGENT_ENGINE_BUNDLE`、`LIVEAGENT_DATA_DIR`。容器平台（Railway 等）
+//! 只会给环境变量，以前靠一层 entrypoint 脚本翻译，现在后端直接认。
+//!
+//! 不给密码就动态生成一个并打印到 stderr（决策 8：本地密码初始化
 //! 动态生成、可改）。打到 stderr 而不是 stdout，是为了让 stdout 能被管道消费。
 //!
 //! `--engine-bundle` 指向 Node 引擎的打包产物（index.js）。阶段 3：必须给它（容器模式）。
@@ -24,37 +30,70 @@ struct Args {
     engine_bundle: Option<PathBuf>,
 }
 
-/// 手写参数解析而不是引 clap：五个参数，clap 会带进来一整棵依赖树。
+/// 非空环境变量，空串按未设置处理（`FOO=` 是平台 UI 里清空后留下的残渣）。
+fn env_var(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|v| !v.is_empty())
+}
+
+/// 手写参数解析而不是引 clap：六个参数，clap 会带进来一整棵依赖树。
+/// argv 没给的项从环境变量补齐，之后不再有第二条配置路径。
 fn parse_args() -> Result<Args, String> {
+    let mut port: Option<u16> = None;
     let mut args = Args {
-        port: 8443,
+        port: 0,
         password: None,
         tls_cert: None,
         tls_key: None,
         engine_bundle: None,
     };
+    let mut data_dir: Option<PathBuf> = None;
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
         let mut take = |name: &str| it.next().ok_or_else(|| format!("{name} 需要一个值"));
         match flag.as_str() {
             "--port" => {
-                args.port = take("--port")?
-                    .parse()
-                    .map_err(|_| "--port 必须是 1-65535 的整数".to_string())?;
+                port = Some(
+                    take("--port")?
+                        .parse()
+                        .map_err(|_| "--port 必须是 1-65535 的整数".to_string())?,
+                );
             }
             "--password" => args.password = Some(take("--password")?),
             "--tls-cert" => args.tls_cert = Some(PathBuf::from(take("--tls-cert")?)),
             "--tls-key" => args.tls_key = Some(PathBuf::from(take("--tls-key")?)),
             "--engine-bundle" => args.engine_bundle = Some(PathBuf::from(take("--engine-bundle")?)),
+            "--data-dir" => data_dir = Some(PathBuf::from(take("--data-dir")?)),
             "--help" | "-h" => {
                 println!(
-                    "agent-backend --port <PORT> [--password <PW>] [--tls-cert <PEM> --tls-key <PEM>] [--engine-bundle <PATH>]"
+                    "agent-backend [--port <PORT>] [--password <PW>] [--tls-cert <PEM> --tls-key <PEM>] [--engine-bundle <PATH>] [--data-dir <DIR>]\n\
+                     环境变量兜底：PORT、LIVEAGENT_BACKEND_PASSWORD、LIVEAGENT_TLS_CERT/LIVEAGENT_TLS_KEY、LIVEAGENT_ENGINE_BUNDLE、LIVEAGENT_DATA_DIR"
                 );
                 std::process::exit(0);
             }
             other => return Err(format!("未知参数：{other}")),
         }
     }
+
+    // env 兜底。做完之后下游只看 Args，不再碰环境变量。
+    let env_port = env_var("PORT")
+        .map(|v| v.parse().map_err(|_| "PORT 必须是 1-65535 的整数".to_string()))
+        .transpose()?;
+    args.port = port.or(env_port).unwrap_or(8443);
+    args.password = args.password.or_else(|| env_var("LIVEAGENT_BACKEND_PASSWORD"));
+    args.tls_cert = args.tls_cert.or_else(|| env_var("LIVEAGENT_TLS_CERT").map(PathBuf::from));
+    args.tls_key = args.tls_key.or_else(|| env_var("LIVEAGENT_TLS_KEY").map(PathBuf::from));
+    args.engine_bundle = args
+        .engine_bundle
+        .or_else(|| env_var("LIVEAGENT_ENGINE_BUNDLE").map(PathBuf::from));
+
+    // 数据目录反着走：agent-core 的路径解析只认 LIVEAGENT_DATA_DIR 环境变量
+    // （见 agent_core::storage），--data-dir 就翻译成它。这里还在 main 的
+    // 单线程早期，set_var 安全。都不设则 storage 落回 ~/.liveagent——
+    // 桌面壳的路径行为不变。
+    if let Some(dir) = data_dir {
+        std::env::set_var(agent_core::storage::DATA_DIR_ENV, dir);
+    }
+
     Ok(args)
 }
 

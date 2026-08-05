@@ -27,7 +27,7 @@ if (import.meta.env.DEV) {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    {/* 桌面壳里 AuthGate 直接放行；浏览器里它先要到后端地址和密码。 */}
+    {/* 桌面壳里 AuthGate 默认放行（内嵌后端）；手填过远程地址或在浏览器里，它先校验/要凭据。 */}
     <AuthGate>
       <App />
     </AuthGate>

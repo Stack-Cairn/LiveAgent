@@ -1,11 +1,11 @@
+export type {
+  ActiveBackendBridgeRequest,
+  EnsureBackendBridgeConversationReadyOptions,
+  SendChatAction,
+} from "./bridge/bridgeTypes";
+export { useBackendBridgeListeners } from "./bridge/useBridgeListeners";
 export { ChatComposerBar, type ChatQueueTurnPreview } from "./components/ChatComposerBar";
 export { ChatHeader } from "./components/ChatHeader";
-export type {
-  ActiveGatewayBridgeRequest,
-  EnsureGatewayBridgeConversationReadyOptions,
-  SendChatAction,
-} from "./gateway/gatewayBridgeTypes";
-export { useGatewayBridgeListeners } from "./gateway/useGatewayBridgeListeners";
 export { useConversationHistoryActions } from "./history/useConversationHistoryActions";
 export { useChatPageRuntimeStore } from "./hooks/useChatPageRuntimeStore";
 export { useChatSkills } from "./hooks/useChatSkills";

@@ -16,9 +16,9 @@ import {
 } from "../../../lib/chat/messages/uploadedFiles";
 import { buildGatewayToolCallPreviewArguments } from "../turns/gatewayToolPreview";
 
-export type GatewayRuntimeSnapshotState = "running" | "completed" | "failed" | "cancelled";
+export type BackendRuntimeSnapshotState = "running" | "completed" | "failed" | "cancelled";
 
-type GatewayAssistantMeta = {
+type BackendAssistantMeta = {
   provider?: string;
   model?: string;
   api?: string;
@@ -27,7 +27,7 @@ type GatewayAssistantMeta = {
   usageTotalTokens?: number;
 };
 
-export type GatewayRuntimeSnapshotEntry =
+export type BackendRuntimeSnapshotEntry =
   | {
       id: string;
       kind: "user";
@@ -35,7 +35,7 @@ export type GatewayRuntimeSnapshotEntry =
       attachments: PendingUploadedFile[];
       messageId: string;
     }
-  | { id: string; kind: "assistant"; text: string; round?: number; meta?: GatewayAssistantMeta }
+  | { id: string; kind: "assistant"; text: string; round?: number; meta?: BackendAssistantMeta }
   | { id: string; kind: "thinking"; text: string; round?: number }
   | {
       id: string;
@@ -61,12 +61,12 @@ export type GatewayRuntimeSnapshotEntry =
     }
   | { id: string; kind: "error"; text: string };
 
-export type GatewayRuntimeSnapshotInput = {
+export type BackendRuntimeSnapshotInput = {
   userMessage?: Message | null;
   liveTranscript: LiveTranscriptState;
 };
 
-export type GatewayFinalProjectionInput = {
+export type BackendFinalProjectionInput = {
   state: ConversationViewState;
   userMessage: Message;
   runId: string;
@@ -135,7 +135,7 @@ function buildToolCallEntry(
   round: number | undefined,
   index: number,
   toolCall: ToolCall | undefined,
-): GatewayRuntimeSnapshotEntry {
+): BackendRuntimeSnapshotEntry {
   const normalized = normalizeToolCall(toolCall, `${prefix}-tool-${round ?? 0}-${index}`);
   // Snapshot entries must carry the same preview shape (truncated text +
   // meta + monotonic progress) as bridge deltas, so remote consumers can
@@ -160,7 +160,7 @@ function buildToolResultEntry(
   index: number,
   toolCall: ToolCall,
   toolResult: ToolResultMessage,
-): GatewayRuntimeSnapshotEntry {
+): BackendRuntimeSnapshotEntry {
   const normalized = normalizeToolResult(toolResult, toolCall);
   return {
     id: `${prefix}-tool-result-${round ?? 0}-${normalized.toolCallId}-${index}`,
@@ -173,7 +173,7 @@ function buildToolResultEntry(
 }
 
 function appendRoundEntries(
-  entries: GatewayRuntimeSnapshotEntry[],
+  entries: BackendRuntimeSnapshotEntry[],
   round: UiRound,
   prefix: string,
 ) {
@@ -254,7 +254,7 @@ function appendRoundEntries(
 
 function buildUserEntry(
   message: Message,
-): Extract<GatewayRuntimeSnapshotEntry, { kind: "user" }> | null {
+): Extract<BackendRuntimeSnapshotEntry, { kind: "user" }> | null {
   if (message.role !== "user") {
     return null;
   }
@@ -273,10 +273,10 @@ function buildUserEntry(
   };
 }
 
-export function buildGatewayRuntimeSnapshotEntries(
-  input: GatewayRuntimeSnapshotInput,
-): GatewayRuntimeSnapshotEntry[] {
-  const entries: GatewayRuntimeSnapshotEntry[] = [];
+export function buildBackendRuntimeSnapshotEntries(
+  input: BackendRuntimeSnapshotInput,
+): BackendRuntimeSnapshotEntry[] {
+  const entries: BackendRuntimeSnapshotEntry[] = [];
   const userEntry = input.userMessage ? buildUserEntry(input.userMessage) : null;
   if (userEntry) {
     entries.push(userEntry);
@@ -302,11 +302,11 @@ export function buildGatewayRuntimeSnapshotEntries(
   return entries;
 }
 
-export function buildGatewayFinalProjectionEntries(
-  input: GatewayFinalProjectionInput,
-): GatewayRuntimeSnapshotEntry[] {
+export function buildBackendFinalProjectionEntries(
+  input: BackendFinalProjectionInput,
+): BackendRuntimeSnapshotEntry[] {
   const userEntry = buildUserEntry(input.userMessage);
-  const entries: GatewayRuntimeSnapshotEntry[] = userEntry ? [userEntry] : [];
+  const entries: BackendRuntimeSnapshotEntry[] = userEntry ? [userEntry] : [];
   const userMessageId = readMessageId(input.userMessage, "");
   let userIndex = input.state.transcript.items.findIndex(
     (item) => item.kind === "user" && item.messageRef?.messageId === userMessageId,

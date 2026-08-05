@@ -1,8 +1,9 @@
 /**
- * 浏览器登录页。
+ * 后端连接页。
  *
- * 只在**纯浏览器**里出现：桌面壳的端点和密码由壳注入（决策 8），永远不展示
- * 这个页面。见 main.tsx 的门禁。
+ * 浏览器里是登录页：必须填地址和密码。桌面壳里是可选的「切换后端服务器」
+ * 页：地址留空提交即回到本机内嵌后端（决策 8 的零配置路径），填了就和
+ * 浏览器走完全相同的远程连接代码。
  */
 
 import { useState } from "react";
@@ -10,7 +11,9 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import {
   type BackendEndpoint,
+  clearStoredEndpoint,
   hasLegacyGatewayLeftovers,
+  isDesktopShell,
   peekStoredEndpoint,
   resetEndpoint,
 } from "../../lib/backend/endpoint";
@@ -19,12 +22,14 @@ import { probeEndpoint } from "./probeEndpoint";
 type LoginPageProps = {
   /** 门禁预校验失败时带进来的提示（比如存档里的密码已经失效）。 */
   initialMessage?: string;
-  onAuthenticated: (endpoint: BackendEndpoint) => void;
+  /** 远程连接成功带 endpoint；壳内选择内嵌后端时为 null。 */
+  onAuthenticated: (endpoint: BackendEndpoint | null) => void;
 };
 
 export function LoginPage({ initialMessage, onAuthenticated }: LoginPageProps) {
   const stored = peekStoredEndpoint();
-  const [host, setHost] = useState(stored?.host ?? "127.0.0.1");
+  const shell = isDesktopShell();
+  const [host, setHost] = useState(stored?.host ?? (shell ? "" : "127.0.0.1"));
   const [port, setPort] = useState(String(stored?.port ?? 8443));
   const [password, setPassword] = useState("");
   const [secure, setSecure] = useState(stored?.secure ?? window.location.protocol === "https:");
@@ -36,6 +41,14 @@ export function LoginPage({ initialMessage, onAuthenticated }: LoginPageProps) {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
+
+    // 壳内地址留空 = 用回内嵌后端：清掉存档，端点解析链自然落回壳注入。
+    if (shell && !host.trim()) {
+      clearStoredEndpoint();
+      resetEndpoint();
+      onAuthenticated(null);
+      return;
+    }
 
     const parsedPort = Number(port);
     if (!host.trim() || !Number.isFinite(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
@@ -70,7 +83,9 @@ export function LoginPage({ initialMessage, onAuthenticated }: LoginPageProps) {
         <div className="space-y-1">
           <h1 className="text-lg font-semibold">连接到 LiveAgent 后端</h1>
           <p className="text-sm text-muted-foreground">
-            填写后端服务的地址和访问密码。密码保存在本机浏览器里。
+            {shell
+              ? "填写远程后端的服务器地址和访问密码；留空地址则使用本机内嵌后端。"
+              : "填写后端服务的地址和访问密码。密码保存在本机浏览器里。"}
           </p>
         </div>
 
@@ -84,13 +99,13 @@ export function LoginPage({ initialMessage, onAuthenticated }: LoginPageProps) {
         <div className="flex gap-2">
           <div className="flex-1 space-y-1">
             <label className="text-xs text-muted-foreground" htmlFor="login-host">
-              地址
+              {shell ? "服务器地址（留空用本机）" : "地址"}
             </label>
             <Input
               id="login-host"
               value={host}
               onChange={(event) => setHost(event.target.value)}
-              placeholder="127.0.0.1"
+              placeholder={shell ? "留空使用内嵌后端" : "127.0.0.1"}
               autoComplete="off"
             />
           </div>

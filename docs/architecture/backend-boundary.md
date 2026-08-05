@@ -114,22 +114,6 @@
 阶段 3 之后引擎在后端,「断线重连拉快照」的快照源**必须是引擎内存态**(含正在生成的半条消息),
 不能查 SQLite,否则重连会看到会话回退到上一轮结束。详见方案风险 2。
 
-### 已知分类缺陷:`settings_save_remote` 是「部分删除」
-
-三分类容不下这一条,实施阶段 2 时发现。`RemoteSettingsPayload`
-(`commands/config/settings/types.rs:23`)混了两类字段:
-
-| 字段 | 归属 |
-|---|---|
-| `gateway_url`、`gateway_port`、`token`、`agent_id`、`auto_reconnect`、`heartbeat_interval` | **删除** —— 纯粹是「连到哪个 Gateway」,新架构里前端连后端,没有这个概念 |
-| `enable_web_terminal`、`enable_web_ssh_terminal`、`enable_web_git` 等权限开关 | **后端** —— 门控远程前端能干什么,依然需要 |
-
-而且 `settings_save_remote` 调的 `gateway_controller.apply_config()` 是**命令不是事件**:
-它返回 `Result` 并向调用方传播错误,转成事件总线会丢掉错误语义。
-
-处置:阶段 2 保持这一条与 Gateway 耦合(它本来就是 Gateway 命令),迁移 `commands/config/settings/`
-时把这个函数留在壳里。阶段 4 拆成两半——连接字段随 Gateway 删除,权限开关并入后端的访问控制设置。
-
 ---
 
 ## B. 前端专属(18)

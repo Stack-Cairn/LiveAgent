@@ -16,14 +16,14 @@ import {
 } from "../../../lib/chat/history/chatHistory";
 import { sortSidebarConversations } from "../../../lib/sidebar/reconcile";
 import type { SidebarStore } from "../../../lib/sidebar/store";
+import type { RemoteRuntimeStatus } from "../bridge/remoteRuntimeStatusModel";
 import { asErrorMessage } from "../chatPageUtils";
-import type { GatewayRuntimeStatus } from "../gateway/gatewayRuntimeStatusModel";
 
 const SHARED_HISTORY_LIST_PAGE_SIZE = 200;
 
 type UseSharedHistoryParams = {
-  remoteRuntimeStatus: GatewayRuntimeStatus;
-  setRemoteRuntimeStatus: Dispatch<SetStateAction<GatewayRuntimeStatus>>;
+  remoteRuntimeStatus: RemoteRuntimeStatus;
+  setRemoteRuntimeStatus: Dispatch<SetStateAction<RemoteRuntimeStatus>>;
   sidebarStore: SidebarStore;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
 };
@@ -54,15 +54,15 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
   const [sharedManagerErrors, setSharedManagerErrors] = useState<
     Record<string, string | undefined>
   >({});
-  const [sharedManagerGatewayUrl, setSharedManagerGatewayUrl] = useState("");
-  const [sharedManagerGatewayUrlLoading, setSharedManagerGatewayUrlLoading] = useState(false);
+  const [sharedManagerBackendUrl, setSharedManagerBackendUrl] = useState("");
+  const [sharedManagerBackendUrlLoading, setSharedManagerBackendUrlLoading] = useState(false);
   const [sharedHistoryItems, setSharedHistoryItems] = useState<ChatHistorySummary[]>([]);
   const sharedHistoryItemsRef = useRef<ChatHistorySummary[]>([]);
   const sharedHistoryListRequestRef = useRef<Promise<ChatHistorySummary[]> | null>(null);
   const sharedManagerShareOrigin = useMemo(() => {
-    const statusGatewayUrl = remoteRuntimeStatus.gatewayUrl?.trim() ?? "";
-    return statusGatewayUrl || sharedManagerGatewayUrl.trim();
-  }, [remoteRuntimeStatus.gatewayUrl, sharedManagerGatewayUrl]);
+    const statusBackendUrl = remoteRuntimeStatus.remoteUrl?.trim() ?? "";
+    return statusBackendUrl || sharedManagerBackendUrl.trim();
+  }, [remoteRuntimeStatus.remoteUrl, sharedManagerBackendUrl]);
   const canShareHistory =
     remoteRuntimeStatus.online === true &&
     remoteRuntimeStatus.enabled === true &&
@@ -209,11 +209,11 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
     [markSharedConversation, setSharedManagerError, updateSharedManagerIdSet],
   );
 
-  const refreshSharedManagerGatewayUrl = useCallback(() => {
+  const refreshSharedManagerBackendUrl = useCallback(() => {
     // gateway_status 命令已随桌面端 gateway 一起删除:分享链接的
     // 网关 URL 恒为空,与离线状态时的既有行为一致。
-    setSharedManagerGatewayUrlLoading(false);
-    setSharedManagerGatewayUrl("");
+    setSharedManagerBackendUrlLoading(false);
+    setSharedManagerBackendUrl("");
   }, []);
 
   const handleOpenShareModal = useCallback(
@@ -228,8 +228,8 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
       setShareError(null);
       setShareLoading(false);
       setShareUpdating(false);
-      setSharedManagerGatewayUrl(remoteRuntimeStatus.gatewayUrl?.trim() ?? "");
-      refreshSharedManagerGatewayUrl();
+      setSharedManagerBackendUrl(remoteRuntimeStatus.remoteUrl?.trim() ?? "");
+      refreshSharedManagerBackendUrl();
 
       if (!canShareHistory) {
         setShareError("Remote 尚未配置并连接成功，暂时不能分享会话。");
@@ -254,8 +254,8 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
     [
       canShareHistory,
       markSharedConversation,
-      refreshSharedManagerGatewayUrl,
-      remoteRuntimeStatus.gatewayUrl,
+      refreshSharedManagerBackendUrl,
+      remoteRuntimeStatus.remoteUrl,
       setSharedManagerError,
     ],
   );
@@ -283,7 +283,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
       setSharedManagerError(id, null);
       setShareUpdating(true);
       if (enabled) {
-        refreshSharedManagerGatewayUrl();
+        refreshSharedManagerBackendUrl();
       }
 
       void setChatHistoryShare(id, enabled, options)
@@ -305,7 +305,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
     [
       canShareHistory,
       markSharedConversation,
-      refreshSharedManagerGatewayUrl,
+      refreshSharedManagerBackendUrl,
       setSharedManagerError,
       shareConversation,
     ],
@@ -339,19 +339,19 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
   );
 
   const handleRefreshSharedHistoryStatuses = useCallback(() => {
-    refreshSharedManagerGatewayUrl();
+    refreshSharedManagerBackendUrl();
     void refreshSharedHistoryItems().then((items) => {
       items.forEach(handleLoadSharedHistoryStatus);
     });
-  }, [handleLoadSharedHistoryStatus, refreshSharedHistoryItems, refreshSharedManagerGatewayUrl]);
+  }, [handleLoadSharedHistoryStatus, refreshSharedHistoryItems, refreshSharedManagerBackendUrl]);
 
   const handleOpenSharedHistoryManager = useCallback(() => {
-    refreshSharedManagerGatewayUrl();
+    refreshSharedManagerBackendUrl();
     setSharedManagerOpen(true);
     void refreshSharedHistoryItems().then((items) => {
       items.forEach(handleLoadSharedHistoryStatus);
     });
-  }, [handleLoadSharedHistoryStatus, refreshSharedHistoryItems, refreshSharedManagerGatewayUrl]);
+  }, [handleLoadSharedHistoryStatus, refreshSharedHistoryItems, refreshSharedManagerBackendUrl]);
 
   const handleDisableSharedHistory = useCallback(
     (conversation: ChatHistorySummary) => {
@@ -421,7 +421,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
     sharedManagerLoadingIds,
     sharedManagerUpdatingIds,
     sharedManagerErrors,
-    sharedManagerGatewayUrlLoading,
+    sharedManagerBackendUrlLoading,
     sharedManagerShareOrigin,
     sharedHistoryItems,
     removeSharedHistoryItems,

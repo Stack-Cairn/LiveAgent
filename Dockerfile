@@ -51,9 +51,10 @@ RUN cargo build -p agent-backend --release \
 # node:22-bookworm-slim 自带 Node 和必要的系统库，不需手动装 runtime
 FROM node:22.17.1-bookworm-slim AS runtime
 
-# 非 root 用户：权限隔离
+# 非 root 用户：权限隔离。数据目录 /var/lib/liveagent 建好并归属该用户，
+# 供 VOLUME 挂载持久化。
 RUN useradd --system --uid 10001 --user-group --home-dir /nonexistent --shell /usr/sbin/nologin liveagent \
-    && install -d -o liveagent -g liveagent -m 0700 /opt/liveagent/engine
+    && install -d -o liveagent -g liveagent -m 0700 /opt/liveagent/engine /var/lib/liveagent
 
 # 从 backend-builder 阶段复制 Rust 二进制
 COPY --from=backend-builder /out/target/release/agent-backend /usr/local/bin/agent-backend
@@ -61,15 +62,18 @@ COPY --from=backend-builder /out/target/release/agent-backend /usr/local/bin/age
 # 从 engine-builder 阶段复制 Node 引擎 bundle
 COPY --from=engine-builder /src/crates/agent-core-js/dist/index.js /opt/liveagent/engine/index.js
 
-# 入口脚本：把平台注入的环境变量翻成 argv（后端只认 argv）
-COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
-
 # 调整所有权为 liveagent 用户
 RUN chown -R liveagent:liveagent /opt/liveagent
 
 USER liveagent
 
+# 后端直接认环境变量（PORT、LIVEAGENT_BACKEND_PASSWORD、LIVEAGENT_TLS_CERT/KEY
+# 也可覆盖），不再需要 entrypoint 脚本翻译。
+ENV LIVEAGENT_DATA_DIR=/var/lib/liveagent \
+    LIVEAGENT_ENGINE_BUNDLE=/opt/liveagent/engine
+
+VOLUME ["/var/lib/liveagent"]
+
 EXPOSE 8443
 
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/agent-backend"]

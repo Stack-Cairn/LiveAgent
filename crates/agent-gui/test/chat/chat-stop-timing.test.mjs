@@ -228,11 +228,11 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
           return { text, isEmpty: !text.trim(), segments: [{ type: "text", text }] };
         },
       },
-      "../gateway/gatewayBridgeTypes": {
-        normalizeGatewayExecutionMode(value) {
+      "../gateway/backendBridgeTypes": {
+        normalizeBackendExecutionMode(value) {
           return value;
         },
-        normalizeGatewayWorkdir(value) {
+        normalizeBackendWorkdir(value) {
           return value;
         },
       },
@@ -387,11 +387,11 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
           return { text, isEmpty: !text.trim(), segments: [{ type: "text", text }] };
         },
       },
-      "../gateway/gatewayBridgeTypes": {
-        normalizeGatewayExecutionMode(value) {
+      "../gateway/backendBridgeTypes": {
+        normalizeBackendExecutionMode(value) {
           return value;
         },
-        normalizeGatewayWorkdir(value) {
+        normalizeBackendWorkdir(value) {
           return value;
         },
       },

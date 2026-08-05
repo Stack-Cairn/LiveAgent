@@ -1,7 +1,7 @@
 import { type MutableRefObject, useCallback, useRef } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
-import type { SendChatAction } from "../gateway/gatewayBridgeTypes";
+import type { SendChatAction } from "../bridge/bridgeTypes";
 
 type UseEditResendParams = {
   isSending: boolean;

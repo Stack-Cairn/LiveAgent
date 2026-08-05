@@ -6,9 +6,6 @@
 //! 决策：壳与独立 agent-backend 不能同机并跑（同一 ~/.liveagent 库）——
 //! 壳内嵌就是为了避开这个。
 
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::net::TcpListener;
 
 /// 后端服务状态。
@@ -20,6 +17,17 @@ pub struct BackendServer {
     pub password: String,
     /// Node 引擎进程句柄。持有这个句柄直到后端服务关闭，保证引擎进程生命周期。
     pub engine: std::sync::Arc<tokio::sync::Mutex<Option<agent_backend::engine_process::EngineProcess>>>,
+}
+
+impl BackendServer {
+    /// 壳退出时关闭 Node 引擎。EngineProcess 的 Drop 会同步 kill child。
+    pub fn shutdown_engine(&self) {
+        // 同步上下文里用 try_lock：除守护循环外没人长期持锁，失败时
+        // EngineProcess 的 kill_on_drop 仍会兜底。
+        if let Ok(mut guard) = self.engine.try_lock() {
+            drop(guard.take());
+        }
+    }
 }
 
 /// 启动内嵌后端服务，并可选启动 Node 引擎。

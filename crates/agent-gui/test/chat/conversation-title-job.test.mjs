@@ -73,7 +73,7 @@ test("conversation title job disables thinking, caching, and native web search",
     locale: "en-US",
     sidebarStore,
     titleJobRef,
-    gatewayBridgeEvents: {
+    backendBridgeEvents: {
       queueTitle: (nextTitle) => forwardedTitles.push(nextTitle),
     },
   });
@@ -110,7 +110,7 @@ test("conversation title job disables thinking, caching, and native web search",
     locale: "zh-CN",
     sidebarStore,
     titleJobRef,
-    gatewayBridgeEvents: {
+    backendBridgeEvents: {
       queueTitle: (nextTitle) => forwardedTitles.push(nextTitle),
     },
   });

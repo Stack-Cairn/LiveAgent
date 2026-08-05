@@ -112,25 +112,25 @@ import {
   ChatComposerBar,
   ChatHeader,
   ChatTranscript,
-  type EnsureGatewayBridgeConversationReadyOptions,
+  type EnsureBackendBridgeConversationReadyOptions,
   MAX_UPLOAD_FILES,
   pruneIdleConversationRuntimeCaches,
   type SendChatAction,
+  useBackendBridgeListeners,
   useChatPageRuntimeStore,
   useChatSkills,
   useConversationHistoryActions,
   useEditResend,
-  useGatewayBridgeListeners,
   useLiveTranscriptController,
   usePendingUploads,
 } from "./chat";
+import { useBackendBridgeReadiness } from "./chat/bridge/useBridgeReadiness";
+import { useRemoteRuntimeStatus } from "./chat/bridge/useRemoteRuntimeStatus";
+import { useBackendRunMirrorCoordinator } from "./chat/bridge/useRunMirrorCoordinator";
 import { appendManagedSkillSelections } from "./chat/chatPageUtils";
 import { ChatFileDropOverlay } from "./chat/components/ChatFileDropOverlay";
 import { WorkspaceOverlayHost } from "./chat/components/WorkspaceOverlayHost";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
-import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
-import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
-import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
 import { useBackendEventSubscription } from "./chat/hooks/useBackendEventSubscription";
@@ -313,7 +313,7 @@ export function ChatPage(props: ChatPageProps) {
     prepareComposerForConversationChangeActionRef,
   });
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const { remoteRuntimeStatus, setRemoteRuntimeStatus } = useGatewayStatus();
+  const { remoteRuntimeStatus, setRemoteRuntimeStatus } = useRemoteRuntimeStatus();
   const tauriTunnelClient = useMemo<LocalTunnelClient>(() => createTauriTunnelClient(), []);
 
   // The only page-level subscription to the sidebar list: ChatPage's own
@@ -333,7 +333,7 @@ export function ChatPage(props: ChatPageProps) {
     sharedManagerLoadingIds,
     sharedManagerUpdatingIds,
     sharedManagerErrors,
-    sharedManagerGatewayUrlLoading,
+    sharedManagerBackendUrlLoading,
     sharedManagerShareOrigin,
     sharedHistoryItems,
     removeSharedHistoryItems,
@@ -412,7 +412,7 @@ export function ChatPage(props: ChatPageProps) {
   const previousHistoryScopeKeyRef = useRef(historyScopeKey);
   const currentConversationHistoryUpdatedAtRef = useRef<number | null>(null);
   const locallySyncedHistoryUpdatedAtRef = useRef(new Map<string, number>());
-  const gatewayBridgeHistorySummaryRef = useRef(new Map<string, ChatHistorySummary>());
+  const backendBridgeHistorySummaryRef = useRef(new Map<string, ChatHistorySummary>());
   const openInitialActionRef = useRef<(id: string) => Promise<"cache-hit" | "painted">>(
     async () => "painted",
   );
@@ -427,8 +427,8 @@ export function ChatPage(props: ChatPageProps) {
     [],
   );
   const sendActionRef = useRef<SendChatAction>(async () => false);
-  const ensureGatewayBridgeConversationReadyRef = useRef<
-    (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
+  const ensureBackendBridgeConversationReadyRef = useRef<
+    (id: string, options?: EnsureBackendBridgeConversationReadyOptions) => Promise<string>
   >(async (id) => id.trim());
   const stopSendingActionRef = useRef<() => void>(() => undefined);
   const hydratingConversationIdRef = useRef<string | null>(hydratingConversationId);
@@ -461,11 +461,11 @@ export function ChatPage(props: ChatPageProps) {
     currentConversationId,
   });
   const {
-    queueGatewayBridgeEventForRequest,
-    flushGatewayBridgeEventsForRequest,
-    registerGatewayRunMirror,
-    finishGatewayRunMirror,
-  } = useGatewayRunMirrorCoordinator();
+    queueBackendBridgeEventForRequest,
+    flushBackendBridgeEventsForRequest,
+    registerBackendRunMirror,
+    finishBackendRunMirror,
+  } = useBackendRunMirrorCoordinator();
   const {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
@@ -1032,8 +1032,8 @@ export function ChatPage(props: ChatPageProps) {
     moveQueuedTurnUp,
     editQueuedTurn,
     removeQueuedTurn,
-    shouldQueueGatewayChatRequest,
-    enqueueGatewayChatRequest,
+    shouldQueueBackendChatRequest,
+    enqueueBackendChatRequest,
   } = useChatTurnQueue({
     settings,
     currentConversationId,
@@ -1082,7 +1082,7 @@ export function ChatPage(props: ChatPageProps) {
       if (!key) return;
       deleteCachedComposerDraftState(key);
       locallySyncedHistoryUpdatedAtRef.current.delete(key);
-      gatewayBridgeHistorySummaryRef.current.delete(key);
+      backendBridgeHistorySummaryRef.current.delete(key);
       setPendingUploadsForConversation(key, []);
       memoryExtraction.dispose(key);
       deleteConversationArtifacts(key);
@@ -1305,7 +1305,7 @@ export function ChatPage(props: ChatPageProps) {
     [],
   );
 
-  const { ensureGatewayBridgeConversationReady } = useGatewayBridgeReadiness({
+  const { ensureBackendBridgeConversationReady } = useBackendBridgeReadiness({
     settings,
     conversationState,
     currentConversationIdRef,
@@ -1314,14 +1314,14 @@ export function ChatPage(props: ChatPageProps) {
     syncVisibleConversationRuntime,
     isConversationRunning,
     sidebarStore,
-    gatewayBridgeHistorySummaryRef,
+    backendBridgeHistorySummaryRef,
     hydratingConversationIdRef,
     hydrationFailedConversationIdRef,
     setHydratingConversationId,
     setHydrationFailedConversationId,
   });
 
-  ensureGatewayBridgeConversationReadyRef.current = ensureGatewayBridgeConversationReady;
+  ensureBackendBridgeConversationReadyRef.current = ensureBackendBridgeConversationReady;
 
   useEffect(() => {
     currentConversationIdRef.current = currentConversationId;
@@ -1466,14 +1466,14 @@ export function ChatPage(props: ChatPageProps) {
     setContext(currentRequestContext);
   }, [currentRequestContext, setContext]);
 
-  useGatewayBridgeListeners({
+  useBackendBridgeListeners({
     currentConversationIdRef,
     conversationRuntimeCacheRef,
-    ensureGatewayBridgeConversationReadyRef,
+    ensureBackendBridgeConversationReadyRef,
     sendActionRef,
-    queueGatewayBridgeEventForRequest,
-    shouldQueueGatewayChatRequest,
-    enqueueGatewayChatRequest,
+    queueBackendBridgeEventForRequest,
+    shouldQueueBackendChatRequest,
+    enqueueBackendChatRequest,
     isConversationRunning,
     getConversationAbortController,
     requestConversationStop,
@@ -1521,11 +1521,11 @@ export function ChatPage(props: ChatPageProps) {
     resetLiveTranscript,
     settleLiveTranscript,
     updateToolStatus,
-    queueGatewayBridgeEventForRequest,
-    flushGatewayBridgeEventsForRequest,
-    registerGatewayRunMirror,
-    finishGatewayRunMirror,
-    gatewayBridgeHistorySummaryRef,
+    queueBackendBridgeEventForRequest,
+    flushBackendBridgeEventsForRequest,
+    registerBackendRunMirror,
+    finishBackendRunMirror,
+    backendBridgeHistorySummaryRef,
     availableSkills,
     skillsRootDir,
     refreshSkills,
@@ -1975,7 +1975,7 @@ export function ChatPage(props: ChatPageProps) {
             isUpdating={shareUpdating}
             errorMessage={shareError}
             shareOrigin={sharedManagerShareOrigin}
-            shareOriginLoading={sharedManagerGatewayUrlLoading}
+            shareOriginLoading={sharedManagerBackendUrlLoading}
             onToggle={handleToggleHistoryShare}
             onRedactToolContentChange={handleSetShareRedactToolContent}
             onClose={handleCloseShareModal}
@@ -1990,7 +1990,7 @@ export function ChatPage(props: ChatPageProps) {
             updatingIds={sharedManagerUpdatingIds}
             errors={sharedManagerErrors}
             shareOrigin={sharedManagerShareOrigin}
-            shareOriginLoading={sharedManagerGatewayUrlLoading}
+            shareOriginLoading={sharedManagerBackendUrlLoading}
             onRefresh={handleRefreshSharedHistoryStatuses}
             onLoadStatus={handleLoadSharedHistoryStatus}
             onDisableShare={handleDisableSharedHistory}

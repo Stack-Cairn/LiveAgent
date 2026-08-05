@@ -8,6 +8,7 @@ import {
 } from "../../components/icons";
 
 import { useLocale } from "../../i18n";
+import { peekStoredEndpoint } from "../../lib/backend/endpoint";
 import type { AppSettings } from "../../lib/settings";
 import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";
@@ -71,6 +72,7 @@ export function RemoteSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
   const { remote } = settings;
+  const storedEndpoint = peekStoredEndpoint();
 
   return (
     <div className="space-y-6">
@@ -90,6 +92,33 @@ export function RemoteSection(props: SettingsSectionProps) {
           title={remote.enabled ? t("settings.remoteDisable") : t("settings.remoteEnable")}
           onToggle={() => updateRemoteSettings(setSettings, { enabled: !remote.enabled })}
         />
+      </div>
+
+      <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 bg-card p-5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Server className="h-4 w-4 text-muted-foreground" />
+            {t("settings.backendServerTitle")}
+          </div>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {storedEndpoint
+              ? `${storedEndpoint.host}:${storedEndpoint.port}`
+              : t("settings.backendServerEmbedded")}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted"
+          onClick={() => {
+            // 整页导航到连接页（AuthGate 识别 ?connect）：换服务器后所有
+            // 连接与缓存都要重建，整页重载是最干净的路径。
+            const url = new URL(window.location.href);
+            url.searchParams.set("connect", "1");
+            window.location.assign(url);
+          }}
+        >
+          {t("settings.backendServerChange")}
+        </button>
       </div>
 
       <div className="space-y-4 rounded-xl border border-border/60 bg-card p-5">

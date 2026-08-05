@@ -2,17 +2,17 @@ import type { MentionComposerDraft } from "../../../components/chat/MentionCompo
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
 import type {
-  GatewayChatRuntimeControlsEvent,
-  GatewaySelectedModelEvent,
-} from "../gateway/gatewayBridgeTypes";
+  BackendChatRuntimeControlsEvent,
+  BackendSelectedModelEvent,
+} from "../bridge/bridgeTypes";
 
-export type QueuedGatewayChatRequest = {
+export type QueuedBackendChatRequest = {
   requestId: string;
   clientRequestId?: string;
   workerId?: string;
   queuePolicy?: "auto" | "append" | "interrupt";
-  selectedModel?: GatewaySelectedModelEvent;
-  runtimeControls?: GatewayChatRuntimeControlsEvent;
+  selectedModel?: BackendSelectedModelEvent;
+  runtimeControls?: BackendChatRuntimeControlsEvent;
 };
 
 export type QueuedChatTurn = {
@@ -24,7 +24,7 @@ export type QueuedChatTurn = {
   workdir: string;
   runtimeControls: ChatRuntimeControls;
   createdAt: number;
-  gatewayRequest?: QueuedGatewayChatRequest;
+  gatewayRequest?: QueuedBackendChatRequest;
 };
 
 export type ChatQueueItemSummary = {

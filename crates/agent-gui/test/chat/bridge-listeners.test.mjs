@@ -123,12 +123,12 @@ test("gateway bridge listener keeps one worker across renders and handles native
         },
       },
     });
-    const { useGatewayBridgeListeners } = loader.loadModule(
-      "src/pages/chat/gateway/useGatewayBridgeListeners.ts",
+    const { useBackendBridgeListeners } = loader.loadModule(
+      "src/pages/chat/bridge/useBridgeListeners.ts",
     );
 
     const currentConversationIdRef = { current: "conversation-1" };
-    const ensureGatewayBridgeConversationReadyRef = {
+    const ensureBackendBridgeConversationReadyRef = {
       current: async (id) => id || "conversation-1",
     };
     const sendActionRef = { current: async () => true };
@@ -140,13 +140,13 @@ test("gateway bridge listener keeps one worker across renders and handles native
     const baseParams = {
       currentConversationIdRef,
       conversationRuntimeCacheRef: { current: new Map() },
-      ensureGatewayBridgeConversationReadyRef,
+      ensureBackendBridgeConversationReadyRef,
       sendActionRef,
-      queueGatewayBridgeEventForRequest() {},
-      shouldQueueGatewayChatRequest() {
+      queueBackendBridgeEventForRequest() {},
+      shouldQueueBackendChatRequest() {
         return false;
       },
-      async enqueueGatewayChatRequest() {
+      async enqueueBackendChatRequest() {
         return false;
       },
       isConversationRunning() {
@@ -168,7 +168,7 @@ test("gateway bridge listener keeps one worker across renders and handles native
       },
     };
 
-    hookHarness.render(() => useGatewayBridgeListeners(baseParams));
+    hookHarness.render(() => useBackendBridgeListeners(baseParams));
 
     assert.ok(
       invokeCalls.some((call) => call.command === "gateway_chat_claim_next"),
@@ -191,12 +191,12 @@ test("gateway bridge listener keeps one worker across renders and handles native
     const workerId = runtimeHeartbeatsBeforeRender[0].payload.worker_id;
 
     hookHarness.render(() =>
-      useGatewayBridgeListeners({
+      useBackendBridgeListeners({
         ...baseParams,
-        shouldQueueGatewayChatRequest() {
+        shouldQueueBackendChatRequest() {
           return true;
         },
-        async enqueueGatewayChatRequest() {
+        async enqueueBackendChatRequest() {
           return true;
         },
         getConversationAbortController() {
@@ -238,7 +238,7 @@ test("gateway bridge listener keeps one worker across renders and handles native
     // A cancel that finds nothing to stop must consume its own stop intent —
     // a leftover flag would silently swallow the conversation's next send.
     hookHarness.render(() =>
-      useGatewayBridgeListeners({
+      useBackendBridgeListeners({
         ...baseParams,
         getConversationAbortController() {
           return null;

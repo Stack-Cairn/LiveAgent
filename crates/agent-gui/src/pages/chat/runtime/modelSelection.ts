@@ -1,8 +1,8 @@
 import type { AppSettings, ProviderId, SelectedModel } from "../../../lib/settings";
 import {
-  type GatewaySelectedModelEvent,
-  normalizeGatewayProviderType,
-} from "../gateway/gatewayBridgeTypes";
+  type BackendSelectedModelEvent,
+  normalizeBackendProviderType,
+} from "../bridge/bridgeTypes";
 
 export type EffectiveChatModelSelection = {
   selectedModel: SelectedModel;
@@ -28,7 +28,7 @@ export function resolvePersistedConversationModelSelection(params: {
 export function resolveEffectiveChatModelSelection(params: {
   settings: AppSettings;
   conversationSelectedModel?: SelectedModel;
-  gatewaySelectedModel?: GatewaySelectedModelEvent;
+  gatewaySelectedModel?: BackendSelectedModelEvent;
 }): EffectiveChatModelSelection {
   const { settings, conversationSelectedModel, gatewaySelectedModel } = params;
   const resolveLocalSelection = (): EffectiveChatModelSelection => {
@@ -60,7 +60,7 @@ export function resolveEffectiveChatModelSelection(params: {
 
   const customProviderId = gatewaySelectedModel.customProviderId.trim();
   const model = gatewaySelectedModel.model.trim();
-  const providerType = normalizeGatewayProviderType(gatewaySelectedModel.providerType);
+  const providerType = normalizeBackendProviderType(gatewaySelectedModel.providerType);
   if (!customProviderId || !model || !providerType) {
     throw new Error("远程请求携带的模型配置无效，请在 WebUI 重新选择模型后重试。");
   }

@@ -1,19 +1,16 @@
 /**
- * 登录门禁：决定先渲染 App 还是先渲染登录页。
+ * 登录门禁：决定先渲染 App 还是先渲染连接页。
  *
- * 桌面壳里这个组件是透明的——`isDesktopShell()` 为真就直接渲染 App，一次
- * 网络探测都不做，没有闪屏，没有登录页。这是决策 8 的「桌面版开箱体验不能
- * 退化」落地的地方。
- *
- * 浏览器里才有门禁：存档里没有凭据就直接进登录页；有凭据则先探一次，
- * 把「密码过期」「填成了旧 Gateway 的地址」「后端没起来」三种情况在这里
- * 分辨清楚——否则用户看到的是应用加载后满屏失败的请求。
+ * 三条初始路径，壳与浏览器共用同一条状态机：
+ *   - URL 带 `?connect`（设置页「切换后端服务器」入口）：直接进连接页。
+ *   - 存档里有端点（用户手填过远程地址）：先探一次再放行，无论壳还是浏览器。
+ *   - 什么都没有：桌面壳直接放行（内嵌后端，零配置零闪屏，决策 8）；
+ *     浏览器进登录页。
  */
 
 import { useEffect, useState } from "react";
 import {
   clearStoredEndpoint,
-  hasStoredCredentials,
   isDesktopShell,
   peekStoredEndpoint,
 } from "../../lib/backend/endpoint";
@@ -25,12 +22,20 @@ type GateState =
   | { status: "login"; message?: string }
   | { status: "ready" };
 
+/** 摘掉 `?connect`，免得下次整页刷新又回到连接页。 */
+function stripConnectParam(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("connect")) return;
+  url.searchParams.delete("connect");
+  window.history.replaceState(null, "", url);
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<GateState>(() =>
-    isDesktopShell() || !hasStoredCredentials()
-      ? { status: isDesktopShell() ? "ready" : "login" }
-      : { status: "checking" },
-  );
+  const [state, setState] = useState<GateState>(() => {
+    if (new URLSearchParams(window.location.search).has("connect")) return { status: "login" };
+    if (peekStoredEndpoint()) return { status: "checking" };
+    return { status: isDesktopShell() ? "ready" : "login" };
+  });
 
   useEffect(() => {
     if (state.status !== "checking") return;
@@ -70,7 +75,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   return (
     <LoginPage
       initialMessage={state.message}
-      onAuthenticated={() => setState({ status: "ready" })}
+      onAuthenticated={() => {
+        stripConnectParam();
+        setState({ status: "ready" });
+      }}
     />
   );
 }

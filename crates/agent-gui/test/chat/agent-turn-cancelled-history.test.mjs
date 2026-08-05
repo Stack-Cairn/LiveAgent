@@ -198,7 +198,7 @@ test("agent turn preserves suppressed parent Agent trace for cancellation persis
     createdAt: 1,
     titlePromise: null,
     transcriptStore: {},
-    gatewayBridgeEvents: {
+    backendBridgeEvents: {
       queueToken: noOp,
       queueEvent: noOp,
       queueToolStatus: noOp,
@@ -367,7 +367,7 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
       createdAt: 1,
       titlePromise: null,
       transcriptStore: {},
-      gatewayBridgeEvents: {
+      backendBridgeEvents: {
         queueToken: noOp,
         queueEvent(event) {
           gatewayEvents.push(event);

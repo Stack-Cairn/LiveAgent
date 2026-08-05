@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef } from "react";
 
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
 import {
-  buildGatewayRuntimeSnapshotEntries,
-  type GatewayRuntimeSnapshotState,
+  type BackendRuntimeSnapshotState,
+  buildBackendRuntimeSnapshotEntries,
 } from "./chatRuntimeSnapshot";
 
 const CHAT_INGRESS_BATCH_MAX_RECORDS = 64;
@@ -20,27 +20,27 @@ const CHAT_INGRESS_COMPLETED_RUN_RETENTION_MS = 10 * 60_000;
 // the former) until app exit.
 const CHAT_INGRESS_ABANDONED_RUN_TTL_MS = 10 * 60_000;
 
-type GatewayIngressRecordInput = {
+type BackendIngressRecordInput = {
   eventJson: string;
   workerId?: string;
 };
 
-type PendingGatewayIngressRecord = {
+type PendingBackendIngressRecord = {
   event: Record<string, unknown>;
   eventJson: string;
   workerId?: string;
   encodedBytes: number;
 };
 
-type GatewayRunMirror = {
+type BackendRunMirror = {
   runId: string;
   conversationId: string;
   workerId?: string;
   userMessage?: Message;
   transcriptStore?: LiveTranscriptStore;
   revision: number;
-  state: GatewayRuntimeSnapshotState;
-  pendingRecords: PendingGatewayIngressRecord[];
+  state: BackendRuntimeSnapshotState;
+  pendingRecords: PendingBackendIngressRecord[];
   pendingBytes: number;
   flushTimer: ReturnType<typeof setTimeout> | null;
   operationChain: Promise<void>;
@@ -50,34 +50,34 @@ type GatewayRunMirror = {
   lastExternalEventAt: number;
   runningCheckpointCommit: Promise<void> | null;
   terminalPersisted: boolean;
-  terminalCheckpoint: GatewayRunTerminalCheckpoint | null;
-  terminalCommit: Promise<GatewayChatCheckpointCommitResult> | null;
+  terminalCheckpoint: BackendRunTerminalCheckpoint | null;
+  terminalCommit: Promise<BackendChatCheckpointCommitResult> | null;
   cleanupTimer: ReturnType<typeof setTimeout> | null;
 };
 
-type GatewayRunTerminalCheckpoint = {
+type BackendRunTerminalCheckpoint = {
   revision: number;
   entriesJson: string;
-  state: GatewayRuntimeSnapshotState;
+  state: BackendRuntimeSnapshotState;
   errorCode?: string;
   errorMessage?: string;
   contentComplete: boolean;
   historyRequired: boolean;
 };
 
-export type GatewayChatIngressBatchResult = {
+export type BackendChatIngressBatchResult = {
   firstSeq: number;
   lastSeq: number;
   locallyAccepted: boolean;
 };
 
-export type GatewayChatCheckpointCommitResult = {
+export type BackendChatCheckpointCommitResult = {
   sourceSeq: number;
   durablyPersisted: boolean;
   sha256: string;
 };
 
-export type GatewayRunMirrorCheckpointRequest = {
+export type BackendRunMirrorCheckpointRequest = {
   runId: string;
   conversationId: string;
   reason: string;
@@ -87,20 +87,20 @@ export type GatewayRunMirrorCheckpointRequest = {
   journalBytes?: number;
 };
 
-export type RegisterGatewayRunMirrorInput = {
+export type RegisterBackendRunMirrorInput = {
   runId: string;
   conversationId: string;
   workerId?: string;
   userMessage: Message;
   transcriptStore: LiveTranscriptStore;
-  state?: GatewayRuntimeSnapshotState;
+  state?: BackendRuntimeSnapshotState;
 };
 
-export type FinishGatewayRunMirrorInput = {
+export type FinishBackendRunMirrorInput = {
   runId: string;
   conversationId: string;
   entriesJson: string;
-  state: GatewayRuntimeSnapshotState;
+  state: BackendRuntimeSnapshotState;
   errorCode?: string;
   errorMessage?: string;
   contentComplete: boolean;
@@ -120,7 +120,7 @@ function encodePendingRecord(event: Record<string, unknown>, workerId?: string) 
   };
 }
 
-function encodedBatchBaseBytes(run: GatewayRunMirror) {
+function encodedBatchBaseBytes(run: BackendRunMirror) {
   return (
     textEncoder.encode(run.runId).byteLength +
     textEncoder.encode(run.conversationId).byteLength +
@@ -141,7 +141,7 @@ function isPlainTextDelta(event: Record<string, unknown>) {
 }
 
 function canMergeTextDelta(
-  previous: PendingGatewayIngressRecord,
+  previous: PendingBackendIngressRecord,
   event: Record<string, unknown>,
   workerId?: string,
 ) {
@@ -155,7 +155,7 @@ function canMergeTextDelta(
   );
 }
 
-function toIngressRecord(record: PendingGatewayIngressRecord): GatewayIngressRecordInput {
+function toIngressRecord(record: PendingBackendIngressRecord): BackendIngressRecordInput {
   return {
     eventJson: record.eventJson,
     ...(record.workerId ? { workerId: record.workerId } : {}),
@@ -163,7 +163,7 @@ function toIngressRecord(record: PendingGatewayIngressRecord): GatewayIngressRec
 }
 
 function assertAcceptedSequence(
-  run: GatewayRunMirror,
+  run: BackendRunMirror,
   firstSeq: number,
   lastSeq: number,
   recordCount: number,
@@ -191,7 +191,7 @@ function createRunMirror(
   runId: string,
   conversationId: string,
   workerId?: string,
-): GatewayRunMirror {
+): BackendRunMirror {
   return {
     runId,
     conversationId,
@@ -214,8 +214,8 @@ function createRunMirror(
   };
 }
 
-export function useGatewayRunMirrorCoordinator() {
-  const runsRef = useRef(new Map<string, GatewayRunMirror>());
+export function useBackendRunMirrorCoordinator() {
+  const runsRef = useRef(new Map<string, BackendRunMirror>());
 
   const ensureRun = useCallback((runId: string, conversationId: string, workerId?: string) => {
     const normalizedRunId = runId.trim();
@@ -240,7 +240,7 @@ export function useGatewayRunMirrorCoordinator() {
   }, []);
 
   const enqueueOperation = useCallback(
-    <T>(run: GatewayRunMirror, operation: () => Promise<T>): Promise<T> => {
+    <T>(run: BackendRunMirror, operation: () => Promise<T>): Promise<T> => {
       const result = run.operationChain.then(operation);
       run.operationChain = result.then(
         () => undefined,
@@ -259,7 +259,7 @@ export function useGatewayRunMirrorCoordinator() {
   );
 
   const flushRun = useCallback(
-    (run: GatewayRunMirror): Promise<GatewayChatIngressBatchResult> | null => {
+    (run: BackendRunMirror): Promise<BackendChatIngressBatchResult> | null => {
       if (run.flushTimer !== null) {
         clearTimeout(run.flushTimer);
         run.flushTimer = null;
@@ -271,7 +271,7 @@ export function useGatewayRunMirrorCoordinator() {
       run.pendingRecords = [];
       run.pendingBytes = 0;
       return enqueueOperation(run, async () => {
-        const result = await invoke<GatewayChatIngressBatchResult>(
+        const result = await invoke<BackendChatIngressBatchResult>(
           "gateway_send_chat_ingress_batch",
           {
             input: {
@@ -293,12 +293,12 @@ export function useGatewayRunMirrorCoordinator() {
 
   const commitCheckpoint = useCallback(
     (
-      run: GatewayRunMirror,
+      run: BackendRunMirror,
       input: {
         kind: "checkpoint" | "terminal";
         revision?: number;
         entriesJson: string;
-        state: GatewayRuntimeSnapshotState;
+        state: BackendRuntimeSnapshotState;
         errorCode?: string;
         errorMessage?: string;
         contentComplete: boolean;
@@ -309,7 +309,7 @@ export function useGatewayRunMirrorCoordinator() {
       const revision = input.revision ?? run.revision + 1;
       run.revision = Math.max(run.revision, revision);
       return enqueueOperation(run, async () => {
-        const result = await invoke<GatewayChatCheckpointCommitResult>(
+        const result = await invoke<BackendChatCheckpointCommitResult>(
           "gateway_commit_chat_checkpoint",
           {
             input: {
@@ -340,7 +340,7 @@ export function useGatewayRunMirrorCoordinator() {
   );
 
   const commitRunningCheckpoint = useCallback(
-    (run: GatewayRunMirror): Promise<void> => {
+    (run: BackendRunMirror): Promise<void> => {
       if (run.closing) return Promise.resolve();
       if (run.runningCheckpointCommit) {
         return run.runningCheckpointCommit;
@@ -355,7 +355,7 @@ export function useGatewayRunMirrorCoordinator() {
           return;
         }
         flushRun(run);
-        const entries = buildGatewayRuntimeSnapshotEntries({
+        const entries = buildBackendRuntimeSnapshotEntries({
           userMessage: run.userMessage,
           liveTranscript: run.transcriptStore.getSnapshot(),
         });
@@ -385,7 +385,7 @@ export function useGatewayRunMirrorCoordinator() {
   );
 
   const scheduleFlush = useCallback(
-    (run: GatewayRunMirror) => {
+    (run: BackendRunMirror) => {
       if (run.flushTimer !== null) {
         return;
       }
@@ -397,7 +397,7 @@ export function useGatewayRunMirrorCoordinator() {
     [flushRun],
   );
 
-  const queueGatewayBridgeEventForRequest = useCallback(
+  const queueBackendBridgeEventForRequest = useCallback(
     (
       requestId: string,
       event: Record<string, unknown>,
@@ -471,7 +471,7 @@ export function useGatewayRunMirrorCoordinator() {
     [commitRunningCheckpoint, ensureRun, flushRun, scheduleFlush],
   );
 
-  const flushGatewayBridgeEventsForRequest = useCallback(
+  const flushBackendBridgeEventsForRequest = useCallback(
     async (requestId: string) => {
       const run = runsRef.current.get(requestId.trim());
       if (!run) {
@@ -486,8 +486,8 @@ export function useGatewayRunMirrorCoordinator() {
     [flushRun],
   );
 
-  const registerGatewayRunMirror = useCallback(
-    (input: RegisterGatewayRunMirrorInput) => {
+  const registerBackendRunMirror = useCallback(
+    (input: RegisterBackendRunMirrorInput) => {
       const run = ensureRun(input.runId, input.conversationId, input.workerId);
       if (run.closing || run.terminalPersisted || run.terminalCommit) {
         const error = new Error(`gateway chat run id cannot be reused: ${input.runId}`);
@@ -508,8 +508,8 @@ export function useGatewayRunMirrorCoordinator() {
     [ensureRun],
   );
 
-  const finishGatewayRunMirror = useCallback(
-    async (input: FinishGatewayRunMirrorInput) => {
+  const finishBackendRunMirror = useCallback(
+    async (input: FinishBackendRunMirrorInput) => {
       const run = ensureRun(input.runId, input.conversationId);
       if (run.terminalPersisted) {
         return;
@@ -561,7 +561,7 @@ export function useGatewayRunMirrorCoordinator() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    void listen<GatewayRunMirrorCheckpointRequest>("gateway:chat-checkpoint-requested", (event) => {
+    void listen<BackendRunMirrorCheckpointRequest>("gateway:chat-checkpoint-requested", (event) => {
       const run = runsRef.current.get(event.payload.runId.trim());
       if (run) {
         void commitRunningCheckpoint(run).catch(() => undefined);
@@ -601,7 +601,7 @@ export function useGatewayRunMirrorCoordinator() {
         if (run.state !== "running" || run.closing) {
           continue;
         }
-        queueGatewayBridgeEventForRequest(
+        queueBackendBridgeEventForRequest(
           run.runId,
           { type: "run_heartbeat", conversation_id: run.conversationId },
           { workerId: run.workerId },
@@ -609,7 +609,7 @@ export function useGatewayRunMirrorCoordinator() {
       }
     }, CHAT_INGRESS_HEARTBEAT_MS);
     return () => clearInterval(timer);
-  }, [queueGatewayBridgeEventForRequest]);
+  }, [queueBackendBridgeEventForRequest]);
 
   useEffect(
     () => () => {
@@ -627,9 +627,9 @@ export function useGatewayRunMirrorCoordinator() {
   );
 
   return {
-    queueGatewayBridgeEventForRequest,
-    flushGatewayBridgeEventsForRequest,
-    registerGatewayRunMirror,
-    finishGatewayRunMirror,
+    queueBackendBridgeEventForRequest,
+    flushBackendBridgeEventsForRequest,
+    registerBackendRunMirror,
+    finishBackendRunMirror,
   };
 }

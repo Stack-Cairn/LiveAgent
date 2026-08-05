@@ -1,7 +1,7 @@
 // Desktop (Tauri) transport for the ManagedProcess store: direct invoke
-// calls plus change events emitted by the Rust registry notifier. This file
-// is the per-platform adapter — the web frontend ships its own copy speaking
-// the gateway process.* protocol.
+// calls plus change events emitted by the Rust registry notifier. The invoke
+// shim routes these managed_process_* commands over the network to the
+// backend's command handlers.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";

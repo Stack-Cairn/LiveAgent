@@ -3,13 +3,13 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { createGatewayBridgeEventController } = loader.loadModule(
-  "src/lib/chat/conversation/run/gatewayBridgeEvents.ts",
+const { createBackendBridgeEventController } = loader.loadModule(
+  "src/lib/chat/conversation/run/bridgeEvents.ts",
 );
 
 function createController(options = {}) {
   const sent = [];
-  const controller = createGatewayBridgeEventController({
+  const controller = createBackendBridgeEventController({
     conversationId: options.conversationId ?? "conversation-1",
     requestId: options.requestId ?? "request-1",
     workerId: options.workerId,
