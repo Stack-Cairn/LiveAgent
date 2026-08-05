@@ -7,7 +7,7 @@ const loader = createTsModuleLoader();
 const anthropicModels = loader.loadModule("src/lib/providers/anthropicModels.ts");
 const longContext = loader.loadModule("src/lib/providers/runtime/anthropicLongContext.ts");
 const payloadPipeline = loader.loadModule("src/lib/providers/runtime/payloadPipeline.ts");
-const modelFactory = loader.loadModule("src/lib/providers/runtime/modelFactory.ts");
+const modelFactory = loader.loadModule("src/lib/models/modelFactory.ts");
 const settings = loader.loadModule("src/lib/settings/index.ts");
 
 const CONTEXT_1M_BETA = "context-1m-2025-08-07";

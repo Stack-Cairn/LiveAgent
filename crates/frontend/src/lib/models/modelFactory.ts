@@ -5,25 +5,25 @@ import {
   resolveModelThinking,
   type ThinkingLevelMap,
   toThinkingLevelMap,
-} from "../../models/modelThinking";
+} from "./modelThinking";
 import {
   type CodexRequestFormat,
   getProviderModelDefaults,
   type ProviderId,
   type ProviderModelConfig,
-} from "../../settings";
+} from "../settings";
 import {
   findBuiltinAnthropicModel,
   isAnthropicAdaptiveModelId,
   resolveAnthropicContextWindow,
   resolveAnthropicWireModelId,
-} from "../anthropicModels";
+} from "../providers/anthropicModels";
 import {
   applyDeepSeekModelDefaults,
   isDeepSeekCodexTarget,
   resolveDeepSeekOpenAICompletionsOverrides,
-} from "../deepSeekProviderAdapter";
-import { isXaiProviderTarget } from "./xaiResponsesPayload";
+} from "../providers/deepSeekProviderAdapter";
+import { isXaiProviderTarget } from "../providers/runtime/xaiResponsesPayload";
 
 // ---------------------------------------------------------------------------
 // 思考档位：可用性一律来自 lib/models/modelThinking（生成目录），此处只保留

@@ -10,7 +10,7 @@ export {
   normalizeGeminiThoughtSignatures,
 } from "./runtime/geminiToolPayload";
 export { assistantMessageToText, createStreamingTextReconciler } from "./runtime/messageUtils";
-export { createModelFromConfig } from "./runtime/modelFactory";
+export { createModelFromConfig } from "../models/modelFactory";
 export { parseModelValue, toModelValue } from "./runtime/modelValue";
 export { attachProviderNativeWebSearch } from "./runtime/nativeSearchPayload";
 export {

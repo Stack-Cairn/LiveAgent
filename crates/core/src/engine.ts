@@ -49,7 +49,7 @@ import {
   buildPreparedContext as buildPreparedConversationContext,
   buildResumeContext as buildResumeConversationContext,
 } from "./turns/conversationContextBuilders";
-import { resolveEffectiveChatModelSelection } from "./turns/modelSelection";
+import { resolveEffectiveChatModelSelection } from "./models/modelSelection";
 import { resolveMemorySummaryModelSelection } from "./turns/providerRuntimeConfig";
 import {
   runAgentConversationTurn,

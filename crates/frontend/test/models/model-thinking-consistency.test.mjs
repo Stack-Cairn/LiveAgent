@@ -12,7 +12,7 @@ const realPiAi = await import(
 const loader = createTsModuleLoader();
 const { resolveModelThinking } = loader.loadModule("src/lib/models/modelThinking.ts");
 const catalog = loader.loadModule("src/lib/models/modelCatalog.ts");
-const { createModelFromConfig } = loader.loadModule("src/lib/providers/runtime/modelFactory.ts");
+const { createModelFromConfig } = loader.loadModule("src/lib/models/modelFactory.ts");
 
 const NATIVE = [
   ["claude_code", "anthropic", "https://api.anthropic.com"],

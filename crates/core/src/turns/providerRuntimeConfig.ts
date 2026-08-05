@@ -1,5 +1,5 @@
 import type { AppSettings, SelectedModel } from "../settings";
-import type { EffectiveChatModelSelection } from "./modelSelection";
+import type { EffectiveChatModelSelection } from "../models/modelSelection";
 
 export function resolveMemorySummaryModelSelection(
   settings: AppSettings,

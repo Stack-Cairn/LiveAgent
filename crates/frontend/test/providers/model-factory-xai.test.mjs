@@ -4,7 +4,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { createModelFromConfig } = loader.loadModule("src/lib/providers/runtime/modelFactory.ts");
+const { createModelFromConfig } = loader.loadModule("src/lib/models/modelFactory.ts");
 
 test("xAI direct base URLs are forced onto the openai-responses API even when completions is requested", () => {
   const model = createModelFromConfig(

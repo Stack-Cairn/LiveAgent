@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const modelVendor = loader.loadModule("src/lib/providers/modelVendor.ts");
+const modelVendor = loader.loadModule("src/lib/models/modelVendor.ts");
 
 test("resolveModelVendor covers supported model id prefixes", () => {
   const cases = [

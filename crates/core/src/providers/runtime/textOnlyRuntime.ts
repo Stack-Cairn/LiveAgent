@@ -18,7 +18,7 @@ import { providerSupportsNativeWebSearch } from "../nativeWebSearch";
 import { appendSystemPrompt, normalizeSessionId } from "./common";
 import { normalizeErrorMessage } from "./errors";
 import { createStreamingTextReconciler } from "./messageUtils";
-import { createModelFromConfig } from "./modelFactory";
+import { createModelFromConfig } from "../../models/modelFactory";
 import { finalizeProviderStreamOptions } from "./payloadPipeline";
 import {
   buildProviderRequestMetadata,

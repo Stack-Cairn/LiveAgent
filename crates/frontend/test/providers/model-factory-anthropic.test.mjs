@@ -18,7 +18,7 @@ const loader = createTsModuleLoader({
   },
 });
 
-const { createModelFromConfig } = loader.loadModule("src/lib/providers/runtime/modelFactory.ts");
+const { createModelFromConfig } = loader.loadModule("src/lib/models/modelFactory.ts");
 const { resolveModelThinking } = loader.loadModule("src/lib/models/modelThinking.ts");
 const { streamSimpleByApi } = loader.loadModule("src/lib/providers/runtime/streamByApi.ts");
 

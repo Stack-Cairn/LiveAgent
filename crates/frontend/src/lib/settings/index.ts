@@ -32,9 +32,21 @@ import {
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "../transcript-width/transcriptWidthModel";
+import {
+  normalizeSelectedModel,
+  normalizeSelectedModelForProviders,
+  type SelectedModel,
+} from "../models/selectedModel";
 import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
 
 export { normalizeFontFamily } from "../system/fontFamily";
+export {
+  normalizeSelectedModel,
+  normalizeSelectedModelForProviders,
+  parseSelectedModelJson,
+  type SelectedModel,
+  serializeSelectedModelJson,
+} from "../models/selectedModel";
 
 export function isThinkingAlwaysOnForModel(
   providerId: ProviderId,
@@ -229,11 +241,6 @@ export type WorkspaceProject = {
   lastConversationAt?: number;
   isPinned?: boolean;
   pinnedAt?: number | null;
-};
-
-export type SelectedModel = {
-  customProviderId: string;
-  model: string;
 };
 
 export type ProviderModelConfig = {
@@ -1712,32 +1719,6 @@ export function normalizeSkillsSettings(input: unknown): SkillsSettings {
   };
 }
 
-export function normalizeSelectedModel(input: unknown): SelectedModel | undefined {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const customProviderId =
-    typeof obj.customProviderId === "string" ? obj.customProviderId.trim() : "";
-  const model = typeof obj.model === "string" ? obj.model.trim() : "";
-
-  if (!customProviderId || !model) return undefined;
-  return { customProviderId, model };
-}
-
-export function parseSelectedModelJson(json: string | null | undefined): SelectedModel | undefined {
-  if (!json?.trim()) return undefined;
-  try {
-    return normalizeSelectedModel(JSON.parse(json));
-  } catch {
-    return undefined;
-  }
-}
-
-export function serializeSelectedModelJson(
-  selectedModel: SelectedModel | undefined,
-): string | undefined {
-  const normalized = normalizeSelectedModel(selectedModel);
-  return normalized ? JSON.stringify(normalized) : undefined;
-}
-
 export function normalizeTheme(input: unknown): Theme {
   if (input === "dark") return "dark";
   if (input === "system" || input === "auto") return "system";
@@ -1887,22 +1868,6 @@ export function computeNextMemoryOrganizerRunAt(
     candidate.setDate(candidate.getDate() + 1);
   }
   return candidate.getTime();
-}
-
-export function normalizeSelectedModelForProviders(
-  selectedModel: SelectedModel | undefined,
-  customProviders: CustomProvider[],
-): SelectedModel | undefined {
-  if (!selectedModel) {
-    return undefined;
-  }
-
-  const provider = customProviders.find((item) => item.id === selectedModel.customProviderId);
-  if (!provider) {
-    return undefined;
-  }
-
-  return provider.activeModels.includes(selectedModel.model) ? selectedModel : undefined;
 }
 
 export function normalizeMemorySettings(

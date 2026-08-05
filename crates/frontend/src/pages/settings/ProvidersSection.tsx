@@ -70,7 +70,7 @@ import {
   applyModelOrderSnapshot,
   createModelOrderSnapshot,
   findNewModelIds,
-} from "../../lib/providers/modelVendor";
+} from "../../lib/models/modelVendor";
 import {
   getProviderUsageCardDisplay,
   getUsagePlanDisplay,
