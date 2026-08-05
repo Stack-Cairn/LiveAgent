@@ -1,5 +1,4 @@
-import { invoke } from "../../lib/tauriBridge";
-import { listen } from "../../lib/tauriBridge";
+import { invoke, listen } from "../../lib/tauriBridge";
 import type {
   RawSshLocalForwardAction,
   RawSshLocalForwardEvent,

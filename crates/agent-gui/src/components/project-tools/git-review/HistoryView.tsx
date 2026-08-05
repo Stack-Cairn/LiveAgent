@@ -7,7 +7,6 @@
 // relative or @tauri-apps/* imports are allowed here.
 
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { openUrl } from "../../../lib/tauriBridge";
 import {
   type MouseEvent as ReactMouseEvent,
   type UIEvent as ReactUIEvent,
@@ -28,6 +27,7 @@ import {
 } from "../../../lib/git/gitGraph";
 import type { GitCommitFile, GitCommitSummary } from "../../../lib/git/types";
 import { cn } from "../../../lib/shared/utils";
+import { openUrl } from "../../../lib/tauriBridge";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
 import {
   Cloud,

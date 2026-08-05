@@ -2,7 +2,6 @@ import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
-import { openUrl } from "../lib/tauriBridge";
 import {
   type ComponentProps,
   cloneElement,
@@ -37,6 +36,7 @@ import {
 } from "../lib/markdownCodeBlockPolicy";
 import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { cn } from "../lib/shared/utils";
+import { openUrl } from "../lib/tauriBridge";
 import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, X } from "./icons";
 import { Button } from "./ui/button";
 

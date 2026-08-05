@@ -1,5 +1,4 @@
 import type { Context } from "@earendil-works/pi-ai";
-import { listen } from "../../lib/tauriBridge";
 import { useEffect, useRef } from "react";
 import type { CompletePromptRunInput, PromptRunRequest } from "../../lib/automation";
 import { backend } from "../../lib/automation/backend";
@@ -20,6 +19,7 @@ import {
   isAlwaysEnabledSkillName,
   type SkillSummary,
 } from "../../lib/skills";
+import { listen } from "../../lib/tauriBridge";
 import { buildBuiltinToolRegistry } from "../../lib/tools/builtinRegistry";
 import { createFileToolState } from "../../lib/tools/fileToolState";
 import type { SkillAccessPolicy } from "../../lib/tools/skillAccessPolicy";

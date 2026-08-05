@@ -1,4 +1,3 @@
-import { invoke, isTauri } from "../../lib/tauriBridge";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../../src-tauri/icons/custom/ccswitch.png";
@@ -30,7 +29,6 @@ import {
   X,
   Zap,
 } from "../../components/icons";
-
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "../../components/ui/confirm-dialog";
 import {
@@ -95,13 +93,14 @@ import {
 } from "../../lib/settings";
 import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
+import { invoke, isTauri } from "../../lib/tauriBridge";
+import { openFolderPicker } from "../chat/workspace/HeadlessFolderPicker";
 import {
   type CherryProviderImportItem,
   type CherryProvidersResponse,
   CherryStudioImportModal,
 } from "./CherryStudioImportModal";
 import { ModelPicker } from "./modelPicker";
-import { openFolderPicker } from "../chat/workspace/HeadlessFolderPicker";
 import {
   applyModelBulkActiveState,
   applyUsageQueryModePreset,

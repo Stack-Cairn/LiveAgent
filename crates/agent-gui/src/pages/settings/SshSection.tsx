@@ -1,4 +1,3 @@
-import { invoke } from "../../lib/tauriBridge";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -18,7 +17,6 @@ import {
   Trash2,
   Upload,
 } from "../../components/icons";
-
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "../../components/ui/confirm-dialog";
 import { Input } from "../../components/ui/input";
@@ -39,6 +37,7 @@ import {
   type SshScanResult,
   scanSshImportCandidates,
 } from "../../lib/ssh/scan";
+import { invoke } from "../../lib/tauriBridge";
 import type { TerminalSession } from "../../lib/terminal/types";
 import { ConfirmActionPopover, PromptTag } from "./shared";
 import type { SettingsSectionProps } from "./types";

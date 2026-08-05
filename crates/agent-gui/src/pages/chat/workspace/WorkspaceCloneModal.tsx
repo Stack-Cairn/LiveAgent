@@ -1,4 +1,3 @@
-import { invoke, isTauri } from "../../../lib/tauriBridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FolderOpen, GitBranch, Loader2, X } from "../../../components/icons";
@@ -14,6 +13,7 @@ import {
 } from "../../../components/ui/select";
 import { useLocale } from "../../../i18n";
 import { useModalMotion } from "../../../lib/shared/modalMotion";
+import { invoke, isTauri } from "../../../lib/tauriBridge";
 import { openFolderPicker } from "./HeadlessFolderPicker";
 
 type RemoteBranches = {

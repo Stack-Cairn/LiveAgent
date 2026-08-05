@@ -1,4 +1,3 @@
-import { openUrl } from "../../../lib/tauriBridge";
 import {
   type FocusEvent,
   type MouseEvent,
@@ -15,6 +14,7 @@ import { getFileTypeIcon } from "../../../components/chat/fileTypeIcons";
 import { mentionChipClassName } from "../../../components/chat/mentionChipStyles";
 import { SkillIcon } from "../../../components/icons";
 import { useLocale } from "../../../i18n";
+import { openUrl } from "../../../lib/tauriBridge";
 
 import {
   type CodeMentionReference,

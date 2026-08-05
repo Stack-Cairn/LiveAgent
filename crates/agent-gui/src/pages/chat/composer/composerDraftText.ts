@@ -1,4 +1,3 @@
-import { invoke } from "../../../lib/tauriBridge";
 import type {
   MentionComposerCommitMention,
   MentionComposerDraft,
@@ -15,6 +14,7 @@ import {
   type PendingUploadedFile,
   withPastedTextDisplayMetadata,
 } from "../../../lib/chat/messages/uploadedFiles";
+import { invoke } from "../../../lib/tauriBridge";
 
 type SystemImportPastedTextsResponse = {
   files: PendingUploadedFile[];

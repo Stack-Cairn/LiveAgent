@@ -1,4 +1,3 @@
-import { openUrl } from "../../lib/tauriBridge";
 import {
   type CSSProperties,
   memo,
@@ -22,6 +21,7 @@ import type {
   SshHostConfig,
 } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
+import { openUrl } from "../../lib/tauriBridge";
 import type { TerminalClient, TerminalSession } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import { X } from "../icons";

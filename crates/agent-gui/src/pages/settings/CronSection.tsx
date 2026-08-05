@@ -1,4 +1,3 @@
-import { invoke, isTauri } from "../../lib/tauriBridge";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -11,7 +10,6 @@ import {
   Terminal,
   Trash2,
 } from "../../components/icons";
-
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
 import {
@@ -22,10 +20,11 @@ import {
 } from "../../lib/automation";
 import { buildModelOptions } from "../../lib/chat/page/chatPageHelpers";
 import { isAgentExecutionMode, workspaceProjectPathKey } from "../../lib/settings";
+import { invoke, isTauri } from "../../lib/tauriBridge";
+import { openFolderPicker } from "../chat/workspace/HeadlessFolderPicker";
 import { type CronTaskFormData, CronTaskModal } from "./CronTaskModal";
 import { CronTaskViewModal } from "./CronTaskViewModal";
 import { AgentActivationSwitch, ConfirmDeletePopover } from "./shared";
-import { openFolderPicker } from "../chat/workspace/HeadlessFolderPicker";
 import type { SettingsSectionProps } from "./types";
 
 const TASK_TYPE_ICON: Record<CronTaskType, typeof Terminal> = {

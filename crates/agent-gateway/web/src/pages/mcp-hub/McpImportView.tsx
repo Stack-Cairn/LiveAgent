@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GlassPanel } from "../../components/hub/HubChrome";
 import {
@@ -22,6 +21,7 @@ import {
   scanExternalMcpServers,
   scanMcpConfigFile,
 } from "../../lib/skills";
+import { invoke } from "../../lib/tauriBridge";
 
 const EXTERNAL_MCP_TOOL_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",

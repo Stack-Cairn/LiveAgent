@@ -3,7 +3,7 @@
 // shim intercepts every `memory_*` command and forwards it over the websocket
 // to the connected desktop agent.
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 import type {
   ApplyDecision,
   MemoryConfidence,

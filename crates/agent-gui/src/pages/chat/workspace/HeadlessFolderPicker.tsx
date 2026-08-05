@@ -15,9 +15,10 @@
 //
 // The imperative API mirrors `system_pick_folder`: call openFolderPicker()
 // and await the chosen absolute path (or null when cancelled).
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ChevronRight,
@@ -32,8 +33,8 @@ import {
   X,
 } from "../../../components/icons";
 import { DEFAULT_LOCALE, type Locale, t as translate } from "../../../i18n/config";
-import { invokeFs } from "../../../lib/tools/fsBackend";
 import { cn } from "../../../lib/shared/utils";
+import { invokeFs } from "../../../lib/tools/fsBackend";
 
 type FsDirEntry = {
   path: string;
@@ -277,15 +278,7 @@ function FolderPickerDialog({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    confirmSelection,
-    enterDirectory,
-    goUp,
-    loading,
-    onResolve,
-    selectedIndex,
-    visibleEntries,
-  ]);
+  }, [confirmSelection, enterDirectory, goUp, loading, onResolve, selectedIndex, visibleEntries]);
 
   // Focus the dialog on mount so keyboard shortcuts work immediately.
   useEffect(() => {
@@ -355,7 +348,10 @@ function FolderPickerDialog({
         onClick={() => onResolve(null)}
         aria-label={t("settings.cancel")}
       />
-      <div data-state="open" className="settings-modal-panel relative z-10 flex w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-black/[0.07] bg-white/[0.93] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_32px_80px_-24px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-background/[0.93] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_32px_80px_-24px_rgba(0,0,0,0.7)]">
+      <div
+        data-state="open"
+        className="settings-modal-panel relative z-10 flex w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-black/[0.07] bg-white/[0.93] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_32px_80px_-24px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-background/[0.93] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_32px_80px_-24px_rgba(0,0,0,0.7)]"
+      >
         {/* Header */}
         <div className="settings-modal-header flex items-center gap-3 border-b border-black/[0.06] px-6 py-4 dark:border-white/[0.08]">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-foreground/70 shadow-sm dark:border-white/10 dark:bg-white/[0.07] dark:text-foreground/80">
@@ -381,10 +377,15 @@ function FolderPickerDialog({
 
         {/* Breadcrumb + up button */}
         <div className="flex items-center gap-2 border-b border-black/[0.06] px-5 py-2.5 dark:border-white/[0.08]">
-          <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto" aria-label={t("folderPicker.breadcrumb")}>
+          <nav
+            className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+            aria-label={t("folderPicker.breadcrumb")}
+          >
             {breadcrumbs.map((segment, index) => (
               <span key={`${segment.path}:${index}`} className="flex shrink-0 items-center">
-                {index > 0 ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" /> : null}
+                {index > 0 ? (
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
+                ) : null}
                 <button
                   type="button"
                   onClick={() => jumpTo(segment.path)}
@@ -491,6 +492,7 @@ function FolderPickerDialog({
                       onKeyDown={(event) => {
                         if (event.key === "Enter") enterDirectory(entry.path);
                       }}
+                      // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: folder-picker rows use the standard ARIA listbox/option pattern
                       role="option"
                       aria-selected={selected}
                       tabIndex={-1}
@@ -511,7 +513,9 @@ function FolderPickerDialog({
               </ul>
             )}
             {truncated ? (
-              <p className="mt-1 text-[10px] text-muted-foreground">{t("folderPicker.truncated")}</p>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {t("folderPicker.truncated")}
+              </p>
             ) : null}
           </div>
         </div>
@@ -538,9 +542,7 @@ function FolderPickerDialog({
               spellCheck={false}
               className="h-9 w-full rounded-lg border border-black/[0.08] bg-white/70 px-3 font-mono text-xs outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/20 dark:border-white/10 dark:bg-white/[0.05]"
             />
-            {inputError ? (
-              <p className="mt-1 text-[10px] text-destructive">{inputError}</p>
-            ) : null}
+            {inputError ? <p className="mt-1 text-[10px] text-destructive">{inputError}</p> : null}
           </div>
           <button
             type="button"
@@ -554,9 +556,7 @@ function FolderPickerDialog({
             onClick={confirmSelection}
             className="h-9 shrink-0 rounded-lg bg-primary px-4 text-xs font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
           >
-            {selectedPath
-              ? t("folderPicker.chooseSelected")
-              : t("folderPicker.chooseThis")}
+            {selectedPath ? t("folderPicker.chooseSelected") : t("folderPicker.chooseThis")}
           </button>
         </div>
       </div>

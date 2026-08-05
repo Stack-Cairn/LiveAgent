@@ -1,12 +1,11 @@
-import { invoke } from "../../../lib/tauriBridge";
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
-
 import type { MentionComposerHandle } from "../../../components/chat/MentionComposer";
 import type { NotifyItem } from "../../../components/chat/NotifyToast";
 import {
   mergePendingUploadedFiles,
   type PendingUploadedFile,
 } from "../../../lib/chat/messages/uploadedFiles";
+import { invoke } from "../../../lib/tauriBridge";
 
 type SystemPickReadableFilesResponse = {
   files: PendingUploadedFile[];

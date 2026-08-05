@@ -1,7 +1,6 @@
-import { invoke } from "../../../lib/tauriBridge";
-import { listen } from "../../../lib/tauriBridge";
 import { useEffect, useState } from "react";
 import type { AppSettings } from "../../../lib/settings";
+import { invoke, listen } from "../../../lib/tauriBridge";
 import { buildFallbackGatewayStatus, type GatewayRuntimeStatus } from "./gatewayRuntimeStatusModel";
 
 type UseGatewayStatusParams = {

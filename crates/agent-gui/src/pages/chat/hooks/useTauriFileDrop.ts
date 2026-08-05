@@ -1,6 +1,5 @@
-import { isTauri } from "../../../lib/tauriBridge";
-import { getCurrentWebview } from "../../../lib/tauriBridge";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
+import { getCurrentWebview, isTauri } from "../../../lib/tauriBridge";
 
 type UseTauriFileDropParams = {
   canDropUpload: boolean;

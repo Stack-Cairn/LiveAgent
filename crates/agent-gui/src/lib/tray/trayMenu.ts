@@ -10,8 +10,8 @@
  * - 非 Tauri 环境（vite dev / WebUI 无此模块）invoke 失败静默。
  */
 
-import { invoke } from "../../lib/tauriBridge";
 import { type Locale, t } from "../../i18n/config";
+import { invoke } from "../../lib/tauriBridge";
 import type { CronTask } from "../automation/types";
 import type { AppSettings, Theme, WorkspaceProject } from "../settings";
 import { workspaceProjectPathKey } from "../settings";

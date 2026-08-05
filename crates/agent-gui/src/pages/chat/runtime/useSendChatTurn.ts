@@ -1,5 +1,4 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
-import { invoke } from "../../../lib/tauriBridge";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { useCallback } from "react";
 import type {
@@ -66,6 +65,7 @@ import {
   pruneSubagentRunsForConversation,
   type SubagentStoreManager,
 } from "../../../lib/subagents";
+import { invoke } from "../../../lib/tauriBridge";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import { appendManagedSkillSelections, asErrorMessage } from "../chatPageUtils";
 import {

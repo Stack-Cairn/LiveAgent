@@ -1,5 +1,4 @@
 import type { Context } from "@earendil-works/pi-ai";
-import { listen } from "../lib/tauriBridge";
 import {
   type CSSProperties,
   type SetStateAction,
@@ -90,6 +89,7 @@ import { createSidebarStore } from "../lib/sidebar/store";
 import { useSidebarSelector } from "../lib/sidebar/useSidebarSelector";
 import { mergeAlwaysEnabledSkillNames } from "../lib/skills";
 import { createSubagentStoreManager } from "../lib/subagents";
+import { listen } from "../lib/tauriBridge";
 import { terminalSessionBelongsToProject } from "../lib/terminal/sessionStore";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";

@@ -22,9 +22,9 @@
  */
 
 import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow as tauriGetCurrentWindow } from "@tauri-apps/api/window";
-import { getCurrentWebview as tauriGetCurrentWebview } from "@tauri-apps/api/webview";
 import { homeDir as tauriHomeDir } from "@tauri-apps/api/path";
+import { getCurrentWebview as tauriGetCurrentWebview } from "@tauri-apps/api/webview";
+import { getCurrentWindow as tauriGetCurrentWindow } from "@tauri-apps/api/window";
 
 export { isTauri };
 
@@ -63,10 +63,7 @@ function resolveHeadlessBaseUrl(): string {
  * In a headless browser it POSTs to the headless server and normalizes the
  * {ok, value|error} envelope back to Tauri-style promise semantics.
  */
-export async function invoke<T>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T> {
+export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauriRuntime()) {
     const { invoke: tauriInvoke } = await import("@tauri-apps/api/core");
     return tauriInvoke<T>(cmd, args as never);
@@ -83,7 +80,9 @@ export async function invoke<T>(
       if (attempt < maxRetries) {
         // Exponential backoff: 500ms, 1500ms
         const delay = 500 * (attempt + 1);
-        console.warn(`[headless] invoke ${cmd} got 429, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+        console.warn(
+          `[headless] invoke ${cmd} got 429, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`,
+        );
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }

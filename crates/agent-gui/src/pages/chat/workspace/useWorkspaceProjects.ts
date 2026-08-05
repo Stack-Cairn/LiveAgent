@@ -1,5 +1,3 @@
-import { invoke, isTauri } from "../../../lib/tauriBridge";
-import { revealItemInDir } from "../../../lib/tauriBridge";
 import {
   type Dispatch,
   type MutableRefObject,
@@ -22,14 +20,15 @@ import { sidebarScopeKey } from "../../../lib/sidebar/scope";
 import type { SidebarStore } from "../../../lib/sidebar/store";
 import type { SidebarScope } from "../../../lib/sidebar/types";
 import { useSidebarSelector } from "../../../lib/sidebar/useSidebarSelector";
+import { invoke, isTauri, revealItemInDir } from "../../../lib/tauriBridge";
 import { invokeFs } from "../../../lib/tools/fsBackend";
 import {
   findWorkspaceProject,
   mergeWorkspaceProjectsWithHistory,
 } from "../../../lib/workspaceProjects";
 import { asErrorMessage } from "../chatPageUtils";
-import { openFolderPicker } from "./HeadlessFolderPicker";
 import { startWorkspaceCloneTask } from "./cloneTasks";
+import { openFolderPicker } from "./HeadlessFolderPicker";
 import {
   createWorkspaceProjectFromPath,
   getDefaultWorkspaceProjectPath,

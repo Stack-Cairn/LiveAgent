@@ -1,4 +1,3 @@
-import { openUrl } from "../../lib/tauriBridge";
 import {
   type ClipboardEvent,
   type FocusEvent,
@@ -35,6 +34,7 @@ import {
 import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
 import { readClipboardText } from "../../lib/system/clipboardText";
+import { openUrl } from "../../lib/tauriBridge";
 import { invokeFs } from "../../lib/tools/fsBackend";
 import { Blend, ClipboardPaste, Copy, ScanText, Scissors, SKILL_ICON_SVG_MARKUP } from "../icons";
 import { getFileTypeIcon, getFileTypeIconSvg } from "./fileTypeIcons";

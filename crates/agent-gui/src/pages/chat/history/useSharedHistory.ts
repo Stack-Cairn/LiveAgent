@@ -1,4 +1,3 @@
-import { invoke } from "../../../lib/tauriBridge";
 import {
   type Dispatch,
   type SetStateAction,
@@ -18,6 +17,7 @@ import {
 import type { AppSettings } from "../../../lib/settings";
 import { sortSidebarConversations } from "../../../lib/sidebar/reconcile";
 import type { SidebarStore } from "../../../lib/sidebar/store";
+import { invoke } from "../../../lib/tauriBridge";
 import { asErrorMessage } from "../chatPageUtils";
 import type { GatewayRuntimeStatus } from "../gateway/gatewayRuntimeStatusModel";
 
