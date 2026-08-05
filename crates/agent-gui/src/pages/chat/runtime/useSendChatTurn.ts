@@ -1,7 +1,7 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { backendFetch, subscribeEvents } from "../../../lib/backend/client";
 import type {
   MentionComposerDraft,
@@ -26,7 +26,6 @@ import {
 } from "../../../lib/chat/conversation/run";
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
 import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
-import type { MemoryExtractionStatusKey } from "../../../lib/chat/memory/extractionEngine";
 import {
   createUserMessageWithUploads,
   mergePendingUploadedFiles,
@@ -45,16 +44,10 @@ import { buildMemoryOverviewSection } from "../../../lib/memory/prompts/injectio
 import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import {
   type AppSettings,
-  applyMcpOpsToAppSettings,
   type ChatRuntimeControls,
   type ExecutionMode,
-  getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
-  type SelectedModel,
-  updateMemorySettings,
-  updateSkills,
-  workspaceProjectPathKey,
 } from "../../../lib/settings";
 import type { SidebarStore } from "../../../lib/sidebar/store";
 import {
@@ -67,8 +60,7 @@ import {
   pruneSubagentRunsForConversation,
   type SubagentStoreManager,
 } from "../../../lib/subagents";
-import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
-import { appendManagedSkillSelections, asErrorMessage } from "../chatPageUtils";
+import { asErrorMessage } from "../chatPageUtils";
 import {
   buildTextFromComposerDraft,
   importPastedTextsAsFiles,
@@ -102,7 +94,6 @@ import {
 } from "./modelSelection";
 import {
   resolveConversationTitleModelSelection,
-  resolveMemorySummaryModelSelection,
   selectedModelsMatch,
 } from "./providerRuntimeConfig";
 
@@ -192,6 +183,60 @@ type UseSendChatTurnParams = {
  * closure is recreated per render so it always reads current settings.
  */
 export function useSendChatTurn(params: UseSendChatTurnParams) {
+  const {
+    settings,
+    t,
+    sidebarStore,
+    titleJobRef,
+    subagentStoresRef,
+    scrollFollowRef,
+    composerRef,
+    composerDraftCacheRef,
+    clearCachedComposerDraft,
+    resetVisibleTransientState,
+    isImportingPastedTextRef,
+    setIsImportingPastedText,
+    setErrorMessage,
+    hydratingConversationIdRef,
+    hydrationFailedConversationIdRef,
+    currentConversationIdRef,
+    conversationRuntimeCacheRef,
+    buildRuntimeEntryFromVisibleState,
+    updateConversationRuntimeEntry,
+    setConversationAbortController,
+    getConversationStopRequestVersion,
+    isConversationStopRequested,
+    consumeConversationStop,
+    setConversationStopHandler,
+    clearConversationStopHandler,
+    setConversationSendingState,
+    pendingUploadedFiles,
+    getPendingUploadsForConversation,
+    setPendingUploadsForConversation,
+    getConversationLiveTranscriptStore,
+    getCompactionController,
+    clearAbortSnapshot,
+    getAbortSnapshot,
+    resetLiveTranscript,
+    settleLiveTranscript,
+    appendDraftAssistantText,
+    updateToolStatus,
+    queueGatewayBridgeEventForRequest,
+    flushGatewayBridgeEventsForRequest,
+    registerGatewayRunMirror,
+    finishGatewayRunMirror,
+    gatewayBridgeHistorySummaryRef,
+    availableSkills,
+    skillsRootDir,
+    refreshSkills,
+    selectedSkillNames,
+    activeAgentPrompt,
+    persistConversation,
+    replaceConversationAtMessage,
+    pruneIdleConversationCaches,
+    requestQueuedChatTurnProcessing,
+  } = params;
+
   // 订阅 WS 事件用于 turn 增量驱动 UI 更新
   useEffect(() => {
     const unsubscribe = subscribeEvents((message) => {
@@ -233,67 +278,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     };
   }, [appendDraftAssistantText, updateToolStatus]);
 
-  const {
-    settings,
-    setSettings,
-    getMcpSettings,
-    getToolPolicies,
-    t,
-    sidebarStore,
-    titleJobRef,
-    subagentStoresRef,
-    scrollFollowRef,
-    composerRef,
-    composerDraftCacheRef,
-    clearCachedComposerDraft,
-    resetVisibleTransientState,
-    isImportingPastedTextRef,
-    setIsImportingPastedText,
-    setErrorMessage,
-    hydratingConversationIdRef,
-    hydrationFailedConversationIdRef,
-    currentConversationIdRef,
-    conversationRuntimeCacheRef,
-    buildRuntimeEntryFromVisibleState,
-    updateConversationRuntimeEntry,
-    setConversationAbortController,
-    getConversationStopRequestVersion,
-    isConversationStopRequested,
-    consumeConversationStop,
-    setConversationStopHandler,
-    clearConversationStopHandler,
-    setConversationSendingState,
-    pendingUploadedFiles,
-    getPendingUploadsForConversation,
-    setPendingUploadsForConversation,
-    getConversationLiveTranscriptStore,
-    getCompactionController,
-    clearAbortSnapshot,
-    getAbortSnapshot,
-    resetLiveTranscript,
-    settleLiveTranscript,
-    appendDraftAssistantText,
-    batchLiveRoundsUpdate,
-    updateToolStatus,
-    updateRetryAttempts,
-    queueGatewayBridgeEventForRequest,
-    flushGatewayBridgeEventsForRequest,
-    registerGatewayRunMirror,
-    finishGatewayRunMirror,
-    gatewayBridgeHistorySummaryRef,
-    availableSkills,
-    skillsRootDir,
-    refreshSkills,
-    selectedSkillNames,
-    activeAgentPrompt,
-    ensureTunnelToolTab,
-    ensureSshTunnelToolTab,
-    persistConversation,
-    replaceConversationAtMessage,
-    pruneIdleConversationCaches,
-    requestQueuedChatTurnProcessing,
-  } = params;
-
   // The sidebar store keeps workdir activity/summaries fresh from the
   // persist-driven upsert (locally and via sync events); no settings write,
   // no extra workdirs IPC.
@@ -308,19 +292,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       await persistPromise.catch(() => false);
     }
   }
-
-  const enableManagedSkills = useCallback(
-    (names: readonly string[]) => {
-      const normalizedNames = names.map((name) => String(name).trim()).filter(Boolean);
-      if (normalizedNames.length === 0) return;
-      setSettings((prev) => {
-        const selected = appendManagedSkillSelections(prev.skills.selected, normalizedNames);
-        if (selected.join("\n") === prev.skills.selected.join("\n")) return prev;
-        return updateSkills(prev, { selected });
-      });
-    },
-    [setSettings],
-  );
 
   async function send(overrides?: {
     textOverride?: string;
@@ -359,11 +330,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       gatewayBridgeRequest?.workdirOverride ??
       (effectiveIsAgentMode ? (runtimeEntry?.workdir ?? settings.system.workdir) : "")
     ).trim();
-    const effectiveProjectPathKey = workspaceProjectPathKey(effectiveWorkdir);
-    const effectiveAssociatedSshHostIds = getSshProjectHostIds(
-      settings.ssh,
-      effectiveProjectPathKey,
-    );
     const effectiveIsAgentDevExecutionMode = isAgentDevMode(effectiveExecutionMode);
     const effectiveSkillsEnabled = settings.skills.enabled && effectiveIsAgentMode;
     const hasRemoteGatewayTarget =
@@ -391,10 +357,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     };
     // Mirrors the live retry-attempt list to remote WebUI clients alongside
     // the local live-transcript update.
-    const updateGatewayBridgeRetryAttempts: typeof updateRetryAttempts = (attempts, store) => {
-      gatewayBridgeEvents.queueRetryAttempts(attempts);
-      updateRetryAttempts(attempts, store);
-    };
     const setConversationErrorState = (message: string | null) => {
       updateConversationRuntimeEntry(conversationId, (prev) => ({
         ...prev,
@@ -465,38 +427,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       runtimeControls,
       settings.customSettings.providerIdentities,
     );
-    const memorySummaryModelSelection = resolveMemorySummaryModelSelection(settings);
-    const memoryExtractionModel = memorySummaryModelSelection
-      ? {
-          providerId: memorySummaryModelSelection.providerId,
-          model: memorySummaryModelSelection.model,
-          runtime: createProviderRuntimeConfig(
-            memorySummaryModelSelection.provider,
-            memorySummaryModelSelection.model,
-            runtimeControls,
-            settings.customSettings.providerIdentities,
-          ),
-          selectedModel: memorySummaryModelSelection.selectedModel,
-        }
-      : undefined;
-    const handleMemoryExtractionModelFailure = memoryExtractionModel
-      ? (failedModel: { selectedModel?: SelectedModel }) => {
-          const failedSelectedModel = failedModel.selectedModel;
-          setSettings((prev) => {
-            if (!selectedModelsMatch(prev.memory.summaryModel, failedSelectedModel)) {
-              return prev;
-            }
-            return updateMemorySettings(prev, { summaryModel: undefined });
-          });
-        }
-      : undefined;
-    const memoryExtractionStatusText = (
-      key: MemoryExtractionStatusKey,
-      counts: { accepted: number; rejected: number },
-    ) =>
-      t(`chat.memoryExtraction.${key}`)
-        .replace("{accepted}", String(counts.accepted))
-        .replace("{rejected}", String(counts.rejected));
     const runtimeModel = createModelFromConfig(
       providerId,
       model,
@@ -592,22 +522,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     // 轮次级取消：会话 abort controller 只注册 userStop 一次；每个 LLM 请求
     // （主请求/压缩摘要/标题任务）各自派生子 scope，杜绝 abort 换代丢停止的窗口。
     const cancellation = createTurnCancellation();
-    const conversationDebugLogger = createStreamDebugLogger({
-      enabled: effectiveIsAgentDevExecutionMode,
-      conversationId,
-      executionMode: effectiveExecutionMode,
-      streamKind: "conversation",
-      providerId,
-      model,
-    });
-    const recoveryDebugLogger = createStreamDebugLogger({
-      enabled: effectiveIsAgentDevExecutionMode,
-      conversationId,
-      executionMode: effectiveExecutionMode,
-      streamKind: "conversation_recovery",
-      providerId,
-      model,
-    });
     const compactionDebugLogger = createStreamDebugLogger({
       enabled: effectiveIsAgentDevExecutionMode,
       conversationId,
@@ -1135,16 +1049,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     acknowledgeGatewayRunStarted();
     let skillsPrompt = "";
     let memoryPrompt = "";
-    let skillsRootDirForTools = skillsRootDir;
-    let skillAccessPolicyForTools: SkillAccessPolicy | undefined = effectiveSkillsEnabled
-      ? {
-          allowedSkillNames: [],
-          allowedSkillBaseDirs: [],
-          allowSkillInventory: false,
-          allowSkillManagement: false,
-          allowSkillMutation: true,
-        }
-      : undefined;
 
     function buildPreparedContext(
       state: ConversationViewState,
@@ -1279,26 +1183,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }
 
       const selectedSkills = selectedSkillNames.map((n) => byName.get(n)!).filter(Boolean);
-      const allowBuiltinSkillManagement = selectedSkills.some(
-        (skill) => skill.name === "skills-creator" || skill.name === "skills-installer",
-      );
-
       // IMPORTANT: Claude Code-style skills are progressive disclosure.
       // We only provide metadata in the system prompt. The model decides whether to read the skill file.
-      skillsRootDirForTools = rootDir;
-      skillAccessPolicyForTools = {
-        allowedSkillNames: selectedSkills.map((skill) => skill.name),
-        allowedSkillBaseDirs: selectedSkills.map((skill) => skill.baseDir),
-        protectedSkillNames: selectedSkills
-          .filter((skill) => skill.builtIn === true)
-          .map((skill) => skill.name),
-        protectedSkillBaseDirs: selectedSkills
-          .filter((skill) => skill.builtIn === true)
-          .map((skill) => skill.baseDir),
-        allowSkillInventory: true,
-        allowSkillManagement: allowBuiltinSkillManagement,
-        allowSkillMutation: true,
-      };
       const explicitSkills = resolveExplicitSkillMentions({
         text,
         structured: composerDraft?.skillMentions ?? [],

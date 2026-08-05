@@ -14,5 +14,7 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src/index.ts", "src/backendClient.ts", "src/events.ts"],
+  "exclude": ["src/chat", "src/providers", "src/tools", "src/turns"]
 }
+
