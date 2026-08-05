@@ -31,6 +31,10 @@ pub enum Decision {
 /// 待审批请求的参数。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalPayload {
+    /// 所属会话。前端靠它把审批卡片挂到正确的会话里。
+    pub conversation_id: String,
+    /// 触发审批的工具调用 id。前端审批 UI 以它为 key 关联转录里的工具卡片。
+    pub tool_call_id: String,
     /// 工具名（e.g. "bash", "git_clone"）。
     pub tool_name: String,
     /// 命令/参数摘要（供审批卡片展示）。
@@ -109,13 +113,17 @@ impl ApprovalRegistry {
         }
 
         // 广播请求事件。前端 WS 收到，显示审批卡片。
+        // timeout_ms 一并广播:前端用它算倒计时,不自设窗口——超时权威在这里。
         events.emit(
             "tool-approval:request",
             serde_json::json!({
                 "approval_id": &approval_id,
+                "conversation_id": &payload.conversation_id,
+                "tool_call_id": &payload.tool_call_id,
                 "tool_name": &payload.tool_name,
                 "summary": &payload.summary,
                 "recommended": payload.recommended.map(|d| format!("{:?}", d).to_lowercase()),
+                "timeout_ms": timeout_ms,
             }),
         );
 
@@ -188,6 +196,8 @@ mod tests {
         let registry = Arc::new(ApprovalRegistry::new());
         let events = Arc::new(EventBus::new());
         let payload = ApprovalPayload {
+            conversation_id: "conv-test".to_string(),
+            tool_call_id: "call-test".to_string(),
             tool_name: "bash".to_string(),
             summary: "rm -rf /".to_string(),
             recommended: Some(Decision::Deny),
@@ -207,6 +217,8 @@ mod tests {
         let registry = Arc::new(ApprovalRegistry::new());
         let events = Arc::new(EventBus::new());
         let payload = ApprovalPayload {
+            conversation_id: "conv-test".to_string(),
+            tool_call_id: "call-test".to_string(),
             tool_name: "git".to_string(),
             summary: "git push --force".to_string(),
             recommended: None,
@@ -226,12 +238,14 @@ mod tests {
         let registry = Arc::new(ApprovalRegistry::new());
         let events = Arc::new(EventBus::new());
         let payload = ApprovalPayload {
+            conversation_id: "conv-test".to_string(),
+            tool_call_id: "call-test".to_string(),
             tool_name: "bash".to_string(),
             summary: "echo hello".to_string(),
             recommended: None,
         };
 
-        // 发起 request 并让它运行（不 await，所以它在后台运行）。
+        // 在后台发起 request 并让它运行（不 await，所以它在后台运行）。
         let registry_clone = Arc::clone(&registry);
         let events_clone = Arc::clone(&events);
         let payload_clone = payload.clone();
@@ -285,6 +299,8 @@ mod tests {
         let registry = Arc::new(ApprovalRegistry::new());
         let events = Arc::new(EventBus::new());
         let payload = ApprovalPayload {
+            conversation_id: "conv-test".to_string(),
+            tool_call_id: "call-test".to_string(),
             tool_name: "bash".to_string(),
             summary: "ls -la".to_string(),
             recommended: Some(Decision::Deny),

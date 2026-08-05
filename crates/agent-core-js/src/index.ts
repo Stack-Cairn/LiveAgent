@@ -1,6 +1,14 @@
+// Node 引擎入口:loopback HTTP 服务,只被 Rust(agent-backend)反向代理访问。
+// 业务在 engine.ts;这里只做认证、路由、JSON 编解码。
+
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createLiveTranscriptStore, type LiveTranscriptStore } from "./chat/conversation/liveTranscriptStore";
+import {
+  abortConversation,
+  acceptChatSend,
+  type ChatSendRequest,
+  getConversationLiveSnapshot,
+} from "./engine";
 
 const nodePort = process.env.LIVEAGENT_NODE_PORT;
 const backendPort = process.env.LIVEAGENT_BACKEND_PORT;
@@ -22,22 +30,10 @@ if (!internalToken) {
   process.exit(1);
 }
 
-/// 维护每个 conversation 的 live transcript store。
-const transcriptStores = new Map<string, LiveTranscriptStore>();
-
-/// 获取或创建 transcript store。
-function getOrCreateTranscriptStore(conversationId: string): LiveTranscriptStore {
-  if (!transcriptStores.has(conversationId)) {
-    transcriptStores.set(conversationId, createLiveTranscriptStore());
-  }
-  return transcriptStores.get(conversationId)!;
-}
-
 /// 校验请求的 Authorization header。
 function verifyAuth(authHeader: string | undefined): boolean {
   if (!authHeader) return false;
-  const expectedAuth = `Bearer ${internalToken}`;
-  return authHeader === expectedAuth;
+  return authHeader === `Bearer ${internalToken}`;
 }
 
 /// 解析请求体。
@@ -54,69 +50,9 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-/// 处理 POST /chat_send 请求。
-async function handleChatSend(
-  _req: IncomingMessage,
-  res: ServerResponse,
-  _body: unknown
-): Promise<void> {
-  // 暂时返回 202 Accepted
-  res.writeHead(202, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ ok: { status: "accepted" } }));
-
-  // TODO: 实际实现：
-  // 1. 解析请求参数
-  // 2. 调用 runAgentConversationTurn 或 runTextConversationTurn
-  // 3. 将增量事件广播给 Rust 侧
-}
-
-/// 处理 POST /chat_abort 请求。
-async function handleChatAbort(
-  _req: IncomingMessage,
-  res: ServerResponse,
-  body: unknown
-): Promise<void> {
-  try {
-    const { conversationId } = body as { conversationId?: string };
-    if (!conversationId) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "conversationId required" }));
-      return;
-    }
-
-    // TODO: 实际实现：中止进行中的 turn
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: { aborted: true } }));
-  } catch (error) {
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: String(error) }));
-  }
-}
-
-/// 处理 GET /conversation_live 请求。
-async function handleConversationLive(
-  req: IncomingMessage,
-  res: ServerResponse
-): Promise<void> {
-  try {
-    const url = new URL(req.url || "", `http://${req.headers.host}`);
-    const conversationId = url.searchParams.get("conversationId");
-
-    if (!conversationId) {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "conversationId required" }));
-      return;
-    }
-
-    const store = getOrCreateTranscriptStore(conversationId);
-    const state = store.getSnapshot();
-
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: state }));
-  } catch (error) {
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: String(error) }));
-  }
+function respondJson(res: ServerResponse, status: number, payload: unknown) {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(payload));
 }
 
 /// 主 HTTP 服务器。
@@ -129,32 +65,48 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
   }
 
   // 校验认证
-  const authHeader = req.headers.authorization;
-  if (!verifyAuth(authHeader)) {
+  if (!verifyAuth(req.headers.authorization)) {
     res.writeHead(401, { "Content-Type": "text/plain" });
     res.end("Unauthorized");
     return;
   }
 
   try {
-    // 解析请求体（POST 请求）
     const body = req.method === "POST" ? await readBody(req) : undefined;
 
-    // 路由请求
     if (req.method === "POST" && req.url === "/chat_send") {
-      await handleChatSend(req, res, body);
+      // 受理即回 202(决策 2):增量与终态全走 WS 广播,不在这个响应里。
+      const result = acceptChatSend(body as ChatSendRequest);
+      respondJson(res, 202, { ok: result });
     } else if (req.method === "POST" && req.url === "/chat_abort") {
-      await handleChatAbort(req, res, body);
+      const { conversationId } = (body ?? {}) as { conversationId?: string };
+      if (!conversationId) {
+        respondJson(res, 400, { error: "conversationId required" });
+        return;
+      }
+      respondJson(res, 200, { ok: { aborted: abortConversation(conversationId) } });
     } else if (req.method === "GET" && req.url?.startsWith("/conversation_live")) {
-      await handleConversationLive(req, res);
+      const url = new URL(req.url, `http://127.0.0.1:${nodePort}`);
+      const conversationId = url.searchParams.get("conversationId");
+      if (!conversationId) {
+        respondJson(res, 400, { error: "conversationId required" });
+        return;
+      }
+      const snapshot = getConversationLiveSnapshot(conversationId);
+      if (!snapshot) {
+        // 引擎内存里没有 ≠ 会话不存在:可能只是本进程还没跑过它的 turn。
+        // 前端应把 404 当作「无 live 增量」,基线走历史接口。
+        respondJson(res, 404, { error: "no live session for conversation" });
+        return;
+      }
+      respondJson(res, 200, { ok: snapshot });
     } else {
       res.writeHead(404, { "Content-Type": "text/plain" });
       res.end("Not Found");
     }
   } catch (error) {
     console.error("Request handling error:", error);
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: String(error) }));
+    respondJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
   }
 });
 
@@ -174,4 +126,3 @@ process.on("SIGINT", () => {
     process.exit(0);
   });
 });
-

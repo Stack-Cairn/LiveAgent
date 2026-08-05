@@ -8,7 +8,7 @@ if (!internalToken || !backendPort) {
 
 export async function callBackend<T = unknown>(
   command: string,
-  args: unknown,
+  args?: unknown,
   signal?: AbortSignal
 ): Promise<T> {
   const url = `http://127.0.0.1:${backendPort}/api/${command}`;
@@ -19,7 +19,8 @@ export async function callBackend<T = unknown>(
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${internalToken}`,
     },
-    body: JSON.stringify(args),
+    // 与 tauri invoke 一致:不带参数的命令发空对象,后端按无字段结构体反序列化。
+    body: JSON.stringify(args ?? {}),
     signal,
   });
 

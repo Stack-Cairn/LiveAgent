@@ -1,8 +1,7 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { useEffect } from "react";
-import { backendFetch, subscribeEvents } from "../../../lib/backend/client";
+import { backendFetch } from "../../../lib/backend/client";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
@@ -148,10 +147,7 @@ type UseSendChatTurnParams = {
   getAbortSnapshot: LiveTranscriptController["getAbortSnapshot"];
   resetLiveTranscript: LiveTranscriptController["resetLiveTranscript"];
   settleLiveTranscript: LiveTranscriptController["settleLiveTranscript"];
-  appendDraftAssistantText: LiveTranscriptController["appendDraftAssistantText"];
-  batchLiveRoundsUpdate: LiveTranscriptController["batchLiveRoundsUpdate"];
   updateToolStatus: LiveTranscriptController["updateToolStatus"];
-  updateRetryAttempts: LiveTranscriptController["updateRetryAttempts"];
   queueGatewayBridgeEventForRequest: GatewayRunMirrorCoordinator["queueGatewayBridgeEventForRequest"];
   flushGatewayBridgeEventsForRequest: GatewayRunMirrorCoordinator["flushGatewayBridgeEventsForRequest"];
   registerGatewayRunMirror: GatewayRunMirrorCoordinator["registerGatewayRunMirror"];
@@ -219,7 +215,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     getAbortSnapshot,
     resetLiveTranscript,
     settleLiveTranscript,
-    appendDraftAssistantText,
     updateToolStatus,
     queueGatewayBridgeEventForRequest,
     flushGatewayBridgeEventsForRequest,
@@ -236,10 +231,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     pruneIdleConversationCaches,
     requestQueuedChatTurnProcessing,
   } = params;
-
-  // TODO: WS 事件处理需要挪到能访问 per-conversation store 的层。
-  // 当前 Node 端尚未调用 emitEvent，事件系统不完整，先移除残破的订阅逻辑。
-  // 实装时须按 payload 里的 conversationId 路由到对应 transcriptStore。
 
   // The sidebar store keeps workdir activity/summaries fresh from the
   // persist-driven upsert (locally and via sync events); no settings write,
@@ -1286,20 +1277,27 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     }
 
     try {
+      // 引擎在后端 Node 进程里跑(阶段 3):这里只提交请求,增量与终态走 WS 事件。
+      // clientRequestId 供引擎幂等去重——网络重试不会跑出第二个 turn。
       if (effectiveIsAgentMode) {
         await backendFetch<void>("chat_send", {
           conversationId,
+          clientRequestId: pendingUserMessage.id,
           sessionId,
           mode: "agent",
+          text,
           selectedModel,
           workdir: effectiveWorkdir,
           skillsEnabled: effectiveSkillsEnabled,
+          selectedSkillNames,
         });
       } else {
         await backendFetch<void>("chat_send", {
           conversationId,
+          clientRequestId: pendingUserMessage.id,
           sessionId,
           mode: "text",
+          text,
           selectedModel,
           workdir: effectiveWorkdir,
         });

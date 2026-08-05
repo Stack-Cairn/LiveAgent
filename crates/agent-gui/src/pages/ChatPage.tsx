@@ -131,6 +131,8 @@ import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirr
 import { useGatewayStatus } from "./chat/gateway/useGatewayStatus";
 import { useBranchConversation } from "./chat/history/useBranchConversation";
 import { useSharedHistory } from "./chat/history/useSharedHistory";
+import { backendFetch } from "../lib/backend/client";
+import { useBackendEventSubscription } from "./chat/hooks/useBackendEventSubscription";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
 import {
@@ -193,6 +195,18 @@ export function ChatPage(props: ChatPageProps) {
   const isImportingPastedTextRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [hookWarning, setHookWarning] = useState<string | null>(null);
+  const [backendApprovalRequests, setBackendApprovalRequests] = useState<
+    Map<
+      string,
+      {
+        approval_id: string;
+        conversation_id: string;
+        tool_name: string;
+        summary: string;
+        recommended?: string;
+      }
+    >
+  >(new Map());
   const [hydratingConversationId, setHydratingConversationIdState] = useState<string | null>(null);
   const [hydrationFailedConversationId, setHydrationFailedConversationIdState] = useState<
     string | null
@@ -444,9 +458,7 @@ export function ChatPage(props: ChatPageProps) {
     resetLiveTranscript,
     settleLiveTranscript,
     appendDraftAssistantText,
-    batchLiveRoundsUpdate,
     updateToolStatus,
-    updateRetryAttempts,
   } = useLiveTranscriptController({
     currentConversationId,
   });
@@ -526,6 +538,23 @@ export function ChatPage(props: ChatPageProps) {
     updateConversationRuntimeEntry,
   });
 
+  // 订阅后端 WS 事件，按 conversationId 路由到对应 transcript store
+  useBackendEventSubscription({
+    currentConversationId,
+    getConversationLiveTranscriptStore,
+    updateToolStatus,
+    appendDraftAssistantText,
+    settleLiveTranscript,
+    onBackendToolApprovalRequest: (payload) => {
+      const key = `${payload.conversation_id}:${payload.approval_id}`;
+      setBackendApprovalRequests((prev) => {
+        const next = new Map(prev);
+        next.set(key, payload);
+        return next;
+      });
+    },
+  });
+
   function cancelConversationLoad() {
     conversationLoadSequenceRef.current += 1;
     setHydratingConversationId(null);
@@ -534,24 +563,97 @@ export function ChatPage(props: ChatPageProps) {
 
   const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
 
+  // 处理后端审批请求的响应
+  const handleBackendToolApprovalDecision = useCallback(
+    async (approvalId: string, decision: "approve" | "deny" | "approve_session") => {
+      try {
+        await backendFetch<void>("tool_approval_respond", {
+          approval_id: approvalId,
+          decision,
+        });
+        // 从列表中移除已应答的请求
+        setBackendApprovalRequests((prev) => {
+          const next = new Map(prev);
+          const keyToDelete = Array.from(next.keys()).find(
+            (key) => next.get(key)?.approval_id === approvalId,
+          );
+          if (keyToDelete) {
+            next.delete(keyToDelete);
+          }
+          return next;
+        });
+        return { ok: true };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        // 409 表示已被其它前端应答
+        if (message.includes("409") || message.includes("AlreadyAnswered")) {
+          return { ok: false, message: t("chat.toolApproval.alreadyAnswered") || "已被其它前端应答" };
+        }
+        return { ok: false, message };
+      }
+    },
+    [t],
+  );
+
   // 当前会话的待审批工具:订阅审批服务版本,pending 表变更即重取。用于输入框上方
   // 的集中审批栏(取代埋在每个折叠项里的分散卡片)。
   useSyncExternalStore(subscribeToolApprovals, getToolApprovalVersion, getToolApprovalVersion);
   const pendingToolApprovals = listPendingToolApprovalsForConversation(currentConversationId);
+
+  // 后端审批请求（当前会话）
+  const currentBackendApprovals = Array.from(backendApprovalRequests.values()).filter(
+    (req) => req.conversation_id === currentConversationId,
+  );
+
+  // 合并本地审批和后端审批
+  const allPendingApprovals = [
+    ...pendingToolApprovals.map((item) => ({
+      id: item.toolCallId,
+      toolName: item.toolName,
+      summary: item.summary,
+      deadlineAt: item.deadlineAt,
+      source: "local" as const,
+    })),
+    ...currentBackendApprovals.map((req) => ({
+      id: req.approval_id,
+      toolName: req.tool_name,
+      summary: req.summary,
+      deadlineAt: Date.now() + 60000, // 后端审批一般60秒超时
+      source: "backend" as const,
+    })),
+  ];
+
   const approvalBar =
-    pendingToolApprovals.length > 0 ? (
+    allPendingApprovals.length > 0 ? (
       <ToolApprovalBar
-        pending={pendingToolApprovals}
-        onDecide={(toolCallId, decision) =>
-          Promise.resolve(
-            answerToolApproval(toolCallId, decision, { conversationId: currentConversationId }),
-          )
-        }
+        pending={allPendingApprovals.map((item) => ({
+          toolCallId: item.id,
+          toolName: item.toolName,
+          summary: item.summary,
+          deadlineAt: item.deadlineAt,
+        }))}
+        onDecide={(id, decision) => {
+          const item = allPendingApprovals.find((x) => x.id === id);
+          if (!item) return Promise.resolve({ ok: false });
+
+          if (item.source === "local") {
+            return Promise.resolve(
+              answerToolApproval(id, decision, { conversationId: currentConversationId }),
+            );
+          } else {
+            return handleBackendToolApprovalDecision(id, decision);
+          }
+        }}
         onDecideAll={async (decision) => {
-          for (const item of pendingToolApprovals) {
-            answerToolApproval(item.toolCallId, decision, {
-              conversationId: currentConversationId,
-            });
+          // 分别处理本地和后端审批
+          const localItems = allPendingApprovals.filter((x) => x.source === "local");
+          const backendItems = allPendingApprovals.filter((x) => x.source === "backend");
+
+          for (const item of localItems) {
+            answerToolApproval(item.id, decision, { conversationId: currentConversationId });
+          }
+          for (const item of backendItems) {
+            await handleBackendToolApprovalDecision(item.id, decision);
           }
         }}
       />
@@ -1006,6 +1108,16 @@ export function ChatPage(props: ChatPageProps) {
           disposeTodoToolState(conversationId);
           cancelPendingAskUserQuestionsForConversation(conversationId);
           cancelPendingToolApprovalsForConversation(conversationId);
+          // 清理该会话的后端审批请求
+          setBackendApprovalRequests((prev) => {
+            const next = new Map(prev);
+            for (const [key, value] of next) {
+              if (value.conversation_id === conversationId) {
+                next.delete(key);
+              }
+            }
+            return next;
+          });
         },
       });
     },
@@ -1407,10 +1519,7 @@ export function ChatPage(props: ChatPageProps) {
     getAbortSnapshot,
     resetLiveTranscript,
     settleLiveTranscript,
-    appendDraftAssistantText,
-    batchLiveRoundsUpdate,
     updateToolStatus,
-    updateRetryAttempts,
     queueGatewayBridgeEventForRequest,
     flushGatewayBridgeEventsForRequest,
     registerGatewayRunMirror,

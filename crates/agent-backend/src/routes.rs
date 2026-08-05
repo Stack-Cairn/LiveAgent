@@ -64,10 +64,14 @@ pub(crate) fn respond<T: serde::Serialize, E: serde::Serialize>(result: Result<T
 /// 工具审批请求。Node 调此接口时会长时间挂起，直到前端应答或超时。
 #[derive(Debug, Deserialize)]
 pub struct ToolApprovalRequestBody {
+    pub conversation_id: String,
+    pub tool_call_id: String,
     pub tool_name: String,
     pub summary: String,
     #[serde(rename = "recommended")]
     pub recommended: Option<String>, // "approve" | "deny" | "approve_session"
+    /// 审批窗口毫秒数。Node 侧传 TOOL_APPROVAL_TIMEOUT_MS;缺省兜底 60s。
+    pub timeout_ms: Option<u64>,
 }
 
 /// 工具审批请求的响应。
@@ -91,6 +95,8 @@ async fn handler_tool_approval_request(
     });
 
     let payload = crate::approval::ApprovalPayload {
+        conversation_id: body.conversation_id,
+        tool_call_id: body.tool_call_id,
         tool_name: body.tool_name,
         summary: body.summary,
         recommended,
@@ -100,7 +106,7 @@ async fn handler_tool_approval_request(
     // 注意：此处会 await 很久（最多 60 秒左右），这是正常的。
     let (_, decision) = state
         .approvals
-        .request(payload, 60000, state.events.clone())
+        .request(payload, body.timeout_ms.unwrap_or(60_000), state.events.clone())
         .await;
 
     // 转换为字符串响应。
