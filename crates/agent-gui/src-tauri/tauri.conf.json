@@ -37,7 +37,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../../crates/agent-core-js/dist/index.js"
+      "../../agent-core-js/dist/index.js"
     ],
     "windows": {
       "nsis": {

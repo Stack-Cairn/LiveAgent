@@ -8,6 +8,7 @@ pub mod app_commands;
 pub mod gateway;
 
 pub use app_commands::app;
+pub use app_commands::backend;
 pub use app_commands::system;
 pub use app_commands::tray;
 pub use app_commands::update;

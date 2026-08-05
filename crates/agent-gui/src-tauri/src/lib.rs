@@ -1,3 +1,4 @@
+mod backend_server;
 mod commands;
 mod gateway_sink;
 mod services;
@@ -147,6 +148,7 @@ macro_rules! app_invoke_handler {
             commands::app::app_toggle_window_pin,
             commands::app::app_confirmed_exit,
             commands::app::app_macos_traffic_light_metrics,
+            commands::backend::get_backend_endpoint,
             commands::tray::app_tray_menu_sync,
             // Hooks
             tauri_commands::hook::hook_run_script,
@@ -838,6 +840,39 @@ pub fn run() {
                         }
                     }
                 });
+
+                // 启动内嵌后端服务（HTTP + Node 引擎）。
+                // 这必须在 tokio runtime 上下文里运行（setup 被 runtime.enter() 保护了）。
+                let backend_endpoint = Arc::new(tokio::sync::RwLock::new(None));
+                let backend_endpoint_clone = Arc::clone(&backend_endpoint);
+                tokio::spawn(async move {
+                    // dev 模式下指向 crates/agent-core-js/dist/index.js。
+                    // 路径相对于壳的根目录（src-tauri 父目录）。
+                    let engine_bundle = if cfg!(debug_assertions) {
+                        Some(std::path::PathBuf::from("../agent-core-js/dist"))
+                    } else {
+                        // 生产环境下由容器提供，或从资源目录加载。
+                        // 现阶段阶段 3，只处理开发模式。
+                        None
+                    };
+
+                    match backend_server::start_backend_server(engine_bundle).await {
+                        Ok(server) => {
+                            eprintln!("内嵌后端服务启动成功：端口 {}", server.port);
+                            *backend_endpoint_clone.write().await = Some(
+                                commands::backend::BackendEndpoint {
+                                    port: server.port,
+                                    password: server.password,
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("启动内嵌后端服务失败：{e}");
+                        }
+                    }
+                });
+                app.manage(backend_endpoint);
+
                 Ok(())
             }
         })

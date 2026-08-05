@@ -6,10 +6,5 @@
 
 #![allow(unused_imports)]
 
-use agent_core::services::skills::*;
-
-#[tauri::command]
-pub async fn system_list_skill_files() -> Result<SystemListSkillFilesResponse, String> {
-    agent_core::services::skills::system_list_skill_files().await
-}
-
+// 注意：system_list_skill_files 的实现已迁入 commands/app/system.rs，
+// 避免重复定义。该函数通过 commands::system 注册。
