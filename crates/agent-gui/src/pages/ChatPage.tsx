@@ -110,7 +110,6 @@ import {
   ChatComposerBar,
   ChatHeader,
   ChatTranscript,
-  createChatRuntimeHost,
   type EnsureGatewayBridgeConversationReadyOptions,
   MAX_UPLOAD_FILES,
   pruneIdleConversationRuntimeCaches,
@@ -385,7 +384,6 @@ export function ChatPage(props: ChatPageProps) {
     () => buildRequestContext(conversationState),
     [conversationState],
   );
-  const chatRuntimeHost = useMemo(() => createChatRuntimeHost(), []);
 
   const scrollFollowRef = useRef<ScrollFollowHandle | null>(null);
   const composerBusyRef = useRef(false);
@@ -1379,7 +1377,6 @@ export function ChatPage(props: ChatPageProps) {
     setErrorMessage,
     sidebarStore,
     titleJobRef,
-    chatRuntimeHost,
     subagentStoresRef,
     scrollFollowRef,
     composerRef,

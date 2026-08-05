@@ -1,7 +1,8 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
+import { backendFetch, subscribeEvents } from "../../../lib/backend/client";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
@@ -83,7 +84,6 @@ import type { useGatewayRunMirrorCoordinator } from "../gateway/useGatewayRunMir
 import type { PersistConversationParams } from "../history/useConversationHistoryActions";
 import type { useChatPageRuntimeStore } from "../hooks/useChatPageRuntimeStore";
 import type { useLiveTranscriptController } from "../hooks/useLiveTranscriptController";
-import type { createChatRuntimeHost } from "./ChatRuntimeHost";
 import { buildErrorAssistantMessage, formatHookWarningMessage } from "./chatPageRuntime";
 import {
   finalizeChatRunInOrder,
@@ -123,7 +123,6 @@ type UseSendChatTurnParams = {
   t: (key: string) => string;
   sidebarStore: SidebarStore;
   titleJobRef: MutableRefObject<TitleJobRefValue>;
-  chatRuntimeHost: ReturnType<typeof createChatRuntimeHost>;
   subagentStoresRef: MutableRefObject<SubagentStoreManager>;
   scrollFollowRef: MutableRefObject<ScrollFollowHandle | null>;
   composerRef: MutableRefObject<MentionComposerHandle | null>;
@@ -193,6 +192,47 @@ type UseSendChatTurnParams = {
  * closure is recreated per render so it always reads current settings.
  */
 export function useSendChatTurn(params: UseSendChatTurnParams) {
+  // 订阅 WS 事件用于 turn 增量驱动 UI 更新
+  useEffect(() => {
+    const unsubscribe = subscribeEvents((message) => {
+      const { event, payload } = message;
+
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+
+      // 按事件类型处理，驱动现有的 UI 状态更新
+      // 事件结构参考 gatewayBridgeEvents 的约定
+      switch (event) {
+        case "token": {
+          const p = payload as any;
+          if (typeof p.text === "string") {
+            // Token 增量，追加到 draft text
+            // TODO: 需要根据 conversation_id 找到对应的 transcriptStore 并调用 appendDraftAssistantText
+          }
+          break;
+        }
+        case "tool_status": {
+          // TODO: 工具状态更新
+          break;
+        }
+        case "error": {
+          // TODO: 错误处理
+          break;
+        }
+        case "tool_approval": {
+          // TODO: 工具审批事件处理
+          break;
+        }
+        // 其他事件类型继续添加
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [appendDraftAssistantText, updateToolStatus]);
+
   const {
     settings,
     setSettings,
@@ -201,7 +241,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     t,
     sidebarStore,
     titleJobRef,
-    chatRuntimeHost,
     subagentStoresRef,
     scrollFollowRef,
     composerRef,
@@ -1399,116 +1438,21 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
     try {
       if (effectiveIsAgentMode) {
-        await chatRuntimeHost.runTurn({
+        await backendFetch<void>("chat_send", {
+          conversationId,
+          sessionId,
           mode: "agent",
-          params: {
-            providerId,
-            model,
-            runtime: providerConfig,
-            runtimeModel,
-            selectedModel,
-            memoryExtractionModel,
-            onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
-            memoryExtractionStatusText,
-            effectiveWorkdir,
-            effectiveSkillsEnabled,
-            showSilentMemoryExtraction: effectiveIsAgentDevExecutionMode,
-            skillsRootDir: skillsRootDirForTools,
-            skillAccessPolicy: skillAccessPolicyForTools,
-            onManagedSkillsChanged: (change) => {
-              enableManagedSkills(change.names);
-            },
-            agentTemplates: settings.agents,
-            getMcpSettings,
-            getToolPolicies,
-            applyMcpOps: (ops) => {
-              setSettings((prev) => applyMcpOpsToAppSettings(prev, ops));
-            },
-            remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
-            // 一隧道一端口（P2-30）：publicUrl 指向本机端口，网关地址与它无关，
-            // 传了只会把链接改写到没有监听的主机上。
-            tunnelPublicBaseUrl: "",
-            sshHosts: settings.ssh.hosts,
-            associatedSshHostIds: effectiveAssociatedSshHostIds,
-            sshManagerRemoteAllowed:
-              !gatewayBridgeRequest || settings.remote.enableWebSshTerminal === true,
-            onSshSessionsChanged: (change) => {
-              if (change.action === "create") {
-                ensureSshTunnelToolTab(change.projectPathKey);
-              }
-            },
-            onTunnelsChanged: (change) => {
-              if (change.action === "create") {
-                ensureTunnelToolTab(change.projectPathKey);
-              }
-            },
-            sessionId,
-            conversationId,
-            conversationCwd,
-            fallbackTitle,
-            createdAt,
-            titlePromise,
-            transcriptStore,
-            gatewayBridgeEvents,
-            hookLifecycle,
-            conversationDebugLogger,
-            subagentStore: subagentStoresRef.current.get(conversationId),
-            getNextConversationState: () => nextConversationState,
-            applyConversationState,
-            buildPreparedContext,
-            compaction,
-            cancellation,
-            resetLiveTranscript,
-            settleLiveTranscript,
-            batchLiveRoundsUpdate,
-            updateToolStatus,
-            updateRetryAttempts: updateGatewayBridgeRetryAttempts,
-            updatePersistableAgentProgress: (progress) => {
-              persistableAgentProgress = progress;
-            },
-            commitVisibleAbortedConversation,
-            persistConversationWithHistorySync: persistTerminalConversation,
-            freezeGatewayFinalProjection,
-          },
+          selectedModel,
+          workdir: effectiveWorkdir,
+          skillsEnabled: effectiveSkillsEnabled,
         });
       } else {
-        await chatRuntimeHost.runTurn({
+        await backendFetch<void>("chat_send", {
+          conversationId,
+          sessionId,
           mode: "text",
-          params: {
-            providerId,
-            model,
-            runtime: providerConfig,
-            runtimeModel,
-            selectedModel,
-            memoryExtractionModel,
-            onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
-            memoryExtractionStatusText,
-            sessionId,
-            conversationId,
-            conversationCwd,
-            fallbackTitle,
-            createdAt,
-            titlePromise,
-            transcriptStore,
-            gatewayBridgeEvents,
-            hookLifecycle,
-            conversationDebugLogger,
-            recoveryDebugLogger,
-            getNextConversationState: () => nextConversationState,
-            applyConversationState,
-            buildPreparedContext,
-            compaction,
-            cancellation,
-            resetLiveTranscript,
-            settleLiveTranscript,
-            appendDraftAssistantText,
-            batchLiveRoundsUpdate,
-            updateGatewayBridgeToolStatus,
-            updateRetryAttempts: updateGatewayBridgeRetryAttempts,
-            commitVisibleAbortedConversation,
-            persistConversationWithHistorySync: persistTerminalConversation,
-            freezeGatewayFinalProjection,
-          },
+          selectedModel,
+          workdir: effectiveWorkdir,
         });
       }
     } catch (err) {
