@@ -6,11 +6,11 @@ if (!internalToken || !backendPort) {
   process.exit(1);
 }
 
-export async function callBackend(
+export async function callBackend<T = unknown>(
   command: string,
   args: unknown,
   signal?: AbortSignal
-): Promise<unknown> {
+): Promise<T> {
   const url = `http://127.0.0.1:${backendPort}/api/${command}`;
 
   try {
@@ -25,21 +25,19 @@ export async function callBackend(
     });
 
     const text = await response.text();
+    const parsed = JSON.parse(text);
 
     if (!response.ok) {
-      throw new Error(`Backend call failed for command "${command}": ${response.status} ${text}`);
+      if (parsed && typeof parsed === 'object' && 'error' in parsed) {
+        throw parsed.error;
+      }
+      throw new Error(`Backend call failed for command "${command}": ${response.status}`);
     }
 
-    return JSON.parse(text);
+    return parsed.ok;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw error;
-    }
-    if (error instanceof Error && error.message.startsWith('Backend call failed')) {
-      throw error;
-    }
-    if (error instanceof Error) {
-      throw new Error(`Backend call failed for command "${command}": ${error.message}`);
     }
     throw error;
   }
