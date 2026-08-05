@@ -2063,6 +2063,7 @@ test("SkillsManager management can auto-enable installed Skills without exposing
   });
   const previousWindow = globalThis.window;
   globalThis.window = {
+    __TAURI__: {},
     dispatchEvent(event) {
       events.push(event.type);
     },
@@ -2288,6 +2289,7 @@ test("SkillsManager create action builds payload and refreshes skill discovery",
   });
   const previousWindow = globalThis.window;
   globalThis.window = {
+    __TAURI__: {},
     dispatchEvent(event) {
       events.push(event.type);
     },

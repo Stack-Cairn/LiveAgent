@@ -109,11 +109,11 @@ test("Gateway chat file opens run off-loop with bounded host concurrency", () =>
     envelopeHandler.indexOf("Payload::ChatFileOpen"),
     envelopeHandler.indexOf("Payload::FsWriteText"),
   );
-  assert.match(branch, /tauri::async_runtime::spawn/);
+  assert.match(branch, /crate::compat::async_runtime::spawn/);
   assert.match(branch, /let sender = self\.current_outbound_sender\(\)\?/);
   assert.match(branch, /send_agent_envelope_to\(sender, envelope\)/);
   assert.ok(
-    branch.indexOf("tauri::async_runtime::spawn") <
+    branch.indexOf("crate::compat::async_runtime::spawn") <
       branch.indexOf("handle_chat_file_open(request).await"),
   );
   assert.match(chatFileLinks, /tokio::time::timeout\(CHAT_FILE_OPEN_TIMEOUT/);
