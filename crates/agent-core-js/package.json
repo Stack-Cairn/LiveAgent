@@ -7,7 +7,8 @@
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^0.80.6",
-    "@earendil-works/pi-ai": "^0.80.6"
+    "@earendil-works/pi-ai": "^0.80.6",
+    "typebox": "1.1.38"
   },
   "devDependencies": {
     "@types/node": "^22",

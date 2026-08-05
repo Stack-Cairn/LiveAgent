@@ -429,3 +429,9 @@ pub(crate) fn package_installed_skill(
         archive: display_path(&archive),
     })
 }
+
+pub async fn system_list_skill_files() -> Result<SystemListSkillFilesResponse, String> {
+    tokio::task::spawn_blocking(system_list_skill_files_sync)
+        .await
+        .map_err(|e| format!("system_list_skill_files join 失败：{e}"))?
+}

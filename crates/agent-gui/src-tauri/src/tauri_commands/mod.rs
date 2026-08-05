@@ -15,5 +15,6 @@ pub mod sftp;
 pub mod shell;
 pub mod subagent_store;
 pub mod subagent_worktree;
+pub mod system;
 pub mod terminal;
 pub mod tunnel;

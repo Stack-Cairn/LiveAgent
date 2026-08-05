@@ -3499,6 +3499,15 @@ mod subagent_worktree_status {
     }
 }
 
+mod system_list_skill_files {
+    use super::*;
+    use agent_core::services::skills::*;
+
+    pub async fn handle() -> Response {
+        respond(agent_core::services::skills::system_list_skill_files().await)
+    }
+}
+
 mod terminal_answer_ssh_prompt {
     use super::*;
     use agent_core::commands::terminal::*;
@@ -4230,6 +4239,7 @@ pub fn gen_router() -> Router<AppState> {
         .route("/subagent_worktree_cleanup", post(subagent_worktree_cleanup::handle))
         .route("/subagent_worktree_create", post(subagent_worktree_create::handle))
         .route("/subagent_worktree_status", post(subagent_worktree_status::handle))
+        .route("/system_list_skill_files", post(system_list_skill_files::handle))
         .route("/terminal_answer_ssh_prompt", post(terminal_answer_ssh_prompt::handle))
         .route("/terminal_cancel_ssh_prompt", post(terminal_cancel_ssh_prompt::handle))
         .route("/terminal_close", post(terminal_close::handle))
@@ -4410,6 +4420,7 @@ pub const ROUTED_COMMANDS: &[&str] = &[
     "subagent_worktree_cleanup",
     "subagent_worktree_create",
     "subagent_worktree_status",
+    "system_list_skill_files",
     "terminal_answer_ssh_prompt",
     "terminal_cancel_ssh_prompt",
     "terminal_close",

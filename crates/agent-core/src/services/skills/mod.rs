@@ -42,7 +42,7 @@ pub(crate) use install::*;
 pub(crate) use jobs::*;
 pub(crate) use library::*;
 pub use library::{
-    system_list_skill_files_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
+    system_list_skill_files, system_list_skill_files_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
 };
 pub use manager::system_manage_skill_sync;
 pub(crate) use metadata::*;
