@@ -1,9 +1,21 @@
-export type SubagentStoreManager = any;
+export const AGENT_TOOL_NAME = "invoke_agent";
+export const SUBAGENT_PARENT_ID = "parent";
 
-export function collectRetainedSubagentParentToolCallIds(state: any): Set<string> {
-  return new Set();
+export type SubagentTemplate = any;
+export type SubagentConversationStore = any;
+
+export function buildRosterReminder(_config: any): string {
+  return "";
 }
 
-export function pruneSubagentRunsForConversation(state: any): any {
-  return state;
+export function createSubagentScheduler(_config: any): any {
+  return {};
+}
+
+export function renderMessageBusSnapshot(_snapshot: any): string {
+  return "";
+}
+
+export function isSubagentCardToolCall(_call: any): boolean {
+  return false;
 }

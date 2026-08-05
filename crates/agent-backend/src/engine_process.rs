@@ -115,7 +115,8 @@ pub async fn spawn_engine(state: AppState, bundle_path: PathBuf) -> Result<Engin
         .env("LIVEAGENT_BACKEND_PORT", state.backend_port.to_string())
         .env("LIVEAGENT_INTERNAL_TOKEN", &state.internal_token)
         .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit());
+        .stderr(std::process::Stdio::inherit())
+        .kill_on_drop(true);
 
     let mut child = cmd
         .spawn()
@@ -249,7 +250,8 @@ async fn spawn_monitor(
             .env("LIVEAGENT_BACKEND_PORT", state.backend_port.to_string())
             .env("LIVEAGENT_INTERNAL_TOKEN", &state.internal_token)
             .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit());
+            .stderr(std::process::Stdio::inherit())
+            .kill_on_drop(true);
 
         match cmd.spawn() {
             Ok(new_child) => {

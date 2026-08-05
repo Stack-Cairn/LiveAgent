@@ -237,52 +237,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     requestQueuedChatTurnProcessing,
   } = params;
 
-  // 订阅 WS 事件用于 turn 增量驱动 UI 更新
-  useEffect(() => {
-    const unsubscribe = subscribeEvents((message) => {
-      const { event, payload } = message;
-
-      if (!payload || typeof payload !== "object") {
-        return;
-      }
-
-      // 按事件类型处理，驱动现有的 UI 状态更新
-      // 事件结构参考 gatewayBridgeEvents 的约定
-      switch (event) {
-        case "token": {
-          const p = payload as any;
-          if (typeof p.text === "string") {
-            // Token 增量，追加到 draft text
-            appendDraftAssistantText(p.text);
-          }
-          break;
-        }
-        case "tool_status": {
-          const p = payload as any;
-          if (typeof p.status === "string" || p.status === null) {
-            updateToolStatus(p.status, transcriptStore);
-          }
-          break;
-        }
-        case "error": {
-          const p = payload as any;
-          const errorMessage = typeof p.message === "string" ? p.message : "Unknown error from backend";
-          setConversationErrorState(errorMessage);
-          break;
-        }
-        case "tool_approval": {
-          // 工具审批事件：前端会在单独的审批卡片组件中处理
-          // 此处只更新状态，实际的交互由审批卡片组件处理
-          break;
-        }
-        // 其他事件类型继续添加
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [appendDraftAssistantText, updateToolStatus]);
+  // TODO: WS 事件处理需要挪到能访问 per-conversation store 的层。
+  // 当前 Node 端尚未调用 emitEvent，事件系统不完整，先移除残破的订阅逻辑。
+  // 实装时须按 payload 里的 conversationId 路由到对应 transcriptStore。
 
   // The sidebar store keeps workdir activity/summaries fresh from the
   // persist-driven upsert (locally and via sync events); no settings write,

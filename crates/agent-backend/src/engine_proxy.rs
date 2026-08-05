@@ -97,8 +97,13 @@ pub async fn proxy_to_node(
     };
 
     // 重写目标 URL。入口路径如 `/api/chat_send` 剥掉 `/api` 后变 `/chat_send`。
-    let path = req.uri().path();
-    let target_path = path.strip_prefix("/api").unwrap_or(path);
+    // 保留 query string，如 `/api/conversation_live?conversationId=x` 转发时不丢 query。
+    let path_and_query = req.uri().path_and_query().map(|pq| pq.as_str()).unwrap_or("");
+    let target_path = if let Some(stripped) = path_and_query.strip_prefix("/api") {
+        stripped
+    } else {
+        path_and_query
+    };
     let target_url = format!("http://127.0.0.1:{}{}", port, target_path);
 
     // 构造代理请求。保留原始方法、header、body。
@@ -154,9 +159,19 @@ pub async fn proxy_to_node(
                 Ok(body_bytes) => {
                     let mut response_builder = axum::http::Response::builder().status(status);
 
-                    // 复制 header。
+                    // 复制 header，但剥掉 hop-by-hop 头。
+                    // 因为 body 已通过 resp.bytes() 读完解码，不能再有 Transfer-Encoding 等编码声明。
+                    let hop_by_hop = [
+                        "transfer-encoding",
+                        "connection",
+                        "keep-alive",
+                        "content-length",
+                    ];
                     for (key, value) in headers.iter() {
-                        response_builder = response_builder.header(key.clone(), value.clone());
+                        let key_lower = key.as_str().to_lowercase();
+                        if !hop_by_hop.contains(&key_lower.as_str()) {
+                            response_builder = response_builder.header(key.clone(), value.clone());
+                        }
                     }
 
                     response_builder

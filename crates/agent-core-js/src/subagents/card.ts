@@ -1,1 +1,3 @@
-export type Card = any;
+export function isSubagentCardToolCall(toolCall: any): boolean {
+  return false;
+}

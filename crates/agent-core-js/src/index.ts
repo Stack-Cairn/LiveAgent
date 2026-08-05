@@ -1,6 +1,5 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { callBackend } from "./backendClient";
 import { createLiveTranscriptStore, type LiveTranscriptStore } from "./chat/conversation/liveTranscriptStore";
 
 const nodePort = process.env.LIVEAGENT_NODE_PORT;
@@ -57,7 +56,7 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 
 /// 处理 POST /chat_send 请求。
 async function handleChatSend(
-  req: IncomingMessage,
+  _req: IncomingMessage,
   res: ServerResponse,
   _body: unknown
 ): Promise<void> {

@@ -105,19 +105,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = build_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
 
-    match tls::from_args(args.tls_cert, args.tls_key)? {
+    // 处理 SIGTERM/SIGINT，确保退出时 kill child。
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::mpsc::channel(1);
+    tokio::spawn(async move {
+        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("设置 SIGTERM handler 失败");
+        let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+            .expect("设置 SIGINT handler 失败");
+        tokio::select! {
+            _ = sigterm.recv() => {
+                eprintln!("收到 SIGTERM，关闭...");
+            }
+            _ = sigint.recv() => {
+                eprintln!("收到 SIGINT，关闭...");
+            }
+        }
+        let _ = shutdown_tx.send(()).await;
+    });
+
+    let server_future = match tls::from_args(args.tls_cert, args.tls_key)? {
         Some(paths) => {
             let config = tls::load(&paths).await?;
             eprintln!("agent-backend 监听 https://{addr}");
-            axum_server::bind_rustls(addr, config)
-                .serve(app.into_make_service())
-                .await?;
+            tokio::select! {
+                result = axum_server::bind_rustls(addr, config)
+                    .serve(app.into_make_service()) => {
+                    result?
+                },
+                _ = shutdown_rx.recv() => {
+                    drop(_engine);
+                    return Ok(());
+                }
+            };
+            Ok(())
         }
         None => {
             eprintln!("agent-backend 监听 http://{addr}（无 TLS）");
             let listener = tokio::net::TcpListener::bind(addr).await?;
-            axum::serve(listener, app).await?;
+            tokio::select! {
+                result = axum::serve(listener, app) => {
+                    result?
+                },
+                _ = shutdown_rx.recv() => {
+                    drop(_engine);
+                    return Ok(());
+                }
+            };
+            Ok(())
         }
-    }
-    Ok(())
+    };
+    server_future
 }

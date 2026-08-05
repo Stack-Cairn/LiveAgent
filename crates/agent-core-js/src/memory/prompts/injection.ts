@@ -1,3 +1,3 @@
-export function buildMemoryOverviewSection(workdir: string): Promise<string> {
-  return Promise.resolve('');
+export function buildMemoryToolsSuffixSection(_config: any): string {
+  return "";
 }

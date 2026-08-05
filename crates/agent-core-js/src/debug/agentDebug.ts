@@ -1,9 +1,16 @@
 export type StreamDebugLogger = {
-  logResult: (data: any) => void;
+  logRequest?: (payload: any) => void;
+  logResponse?: (payload: any) => void;
+  logResult?: (result: any) => void;
+  logError?: (error: any) => void;
+  flush?: () => Promise<void>;
+  enabled?: boolean;
 };
 
-export function createStreamDebugLogger(config: any): StreamDebugLogger {
-  return {
-    logResult: () => {},
-  };
+export function buildStreamRequestDebugPayload(req: any): any {
+  return {};
 }
+
+export const StreamDebugLogger = {
+  enabled: false,
+};
