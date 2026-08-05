@@ -253,20 +253,26 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           const p = payload as any;
           if (typeof p.text === "string") {
             // Token 增量，追加到 draft text
-            // TODO: 需要根据 conversation_id 找到对应的 transcriptStore 并调用 appendDraftAssistantText
+            appendDraftAssistantText(p.text);
           }
           break;
         }
         case "tool_status": {
-          // TODO: 工具状态更新
+          const p = payload as any;
+          if (typeof p.status === "string" || p.status === null) {
+            updateToolStatus(p.status, transcriptStore);
+          }
           break;
         }
         case "error": {
-          // TODO: 错误处理
+          const p = payload as any;
+          const errorMessage = typeof p.message === "string" ? p.message : "Unknown error from backend";
+          setConversationErrorState(errorMessage);
           break;
         }
         case "tool_approval": {
-          // TODO: 工具审批事件处理
+          // 工具审批事件：前端会在单独的审批卡片组件中处理
+          // 此处只更新状态，实际的交互由审批卡片组件处理
           break;
         }
         // 其他事件类型继续添加
