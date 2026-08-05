@@ -6,6 +6,9 @@ import { callBackend } from "../backendClient";
 /** 审批窗口毫秒数:复用 AskUserQuestion 的时长常量,行为口径一致。 */
 export const TOOL_APPROVAL_TIMEOUT_MS = 60_000; // 由 Rust 侧兜底,此处为参考值
 
+/** 会话级已批准工具表:conversationId → Set<toolName>。记录"批准后续免审"决策。 */
+const sessionApprovedTools = new Map<string, Set<string>>();
+
 /** approve:本次放行;deny:本次拒绝;approve_session:本会话内该工具后续免审。 */
 export type ToolApprovalDecision = "approve" | "deny" | "approve_session";
 
@@ -38,6 +41,15 @@ export async function requestToolApproval(params: {
       },
       params.signal
     );
+    // 若返回"后续免审"决策,登记到会话级已批准表。
+    if (response.kind === "decided" && response.decision === "approve_session") {
+      let tools = sessionApprovedTools.get(params.conversationId);
+      if (!tools) {
+        tools = new Set();
+        sessionApprovedTools.set(params.conversationId, tools);
+      }
+      tools.add(params.toolName);
+    }
     return response;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -45,5 +57,11 @@ export async function requestToolApproval(params: {
     }
     throw error;
   }
+}
+
+/** 检查该工具在本会话是否已获"批准后续免审"。 */
+export function isSessionApproved(conversationId: string, toolName: string): boolean {
+  const tools = sessionApprovedTools.get(conversationId);
+  return tools?.has(toolName) ?? false;
 }
 

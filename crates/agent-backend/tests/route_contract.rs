@@ -92,7 +92,7 @@ fn build_app() -> axum::Router {
         ));
         std::fs::create_dir_all(&dir).expect("创建测试 HOME 临时目录失败");
         std::env::set_var("HOME", &dir);
-        let state = build_state(Arc::new(auth::AuthConfig::new(TOKEN.to_string())))
+        let state = build_state(Arc::new(auth::AuthConfig::new(TOKEN.to_string(), "internal-token-test".to_string())), "internal-token-test".to_string())
             .expect("build_state 失败");
         build_router(state)
     })

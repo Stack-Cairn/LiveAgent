@@ -44,8 +44,12 @@ pub struct AppState {
     /// 隧道状态。数据面（真正的监听）藏在它内部持有的 `TunnelDataPlane` 里，
     /// 所以这里只需要一个句柄——命令层不该直接碰监听。
     pub tunnels: Arc<TunnelStore>,
-    /// 认证凭据。密码即 Bearer token（决策 7）。
+    /// 认证凭据。密码即 Bearer token（决策 7）。用户密码和内部 token 都存这里。
     pub auth: Arc<crate::auth::AuthConfig>,
+    /// 内部服务 token（Node 引擎⇄Rust 后端）。spawn 子进程时经环境变量传出。
+    pub internal_token: String,
     /// WS 事件流入口：EventBus 往里写，每个 `/api/events` 连接订阅它。
     pub ws_sink: Arc<crate::ws::WsEventSink>,
+    /// 工具审批注册表。
+    pub approvals: Arc<crate::approval::ApprovalRegistry>,
 }
