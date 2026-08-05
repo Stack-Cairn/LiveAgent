@@ -4,7 +4,7 @@
 
 | 层 | 路径 | 职责 |
 |---|---|---|
-| builtin source | `crates/agent-gui/src-tauri/prompt/skills/<skill-name>` | 内置 skills 源文件。 |
+| builtin source | `crates/frontend/src-tauri/prompt/skills/<skill-name>` | 内置 skills 源文件。 |
 | runtime root | `~/.liveagent/skills` | 用户运行时 skills 根目录。 |
 | Rust service | `src-tauri/src/services/skills/*` | seed builtin、list/read/manage/install/create/validate/package/ClawHub。写侧由进程级 `skills_write_guard()` 串行化（agent 调用、gateway 转发、UI 后台安装线程、builtin seeding 四路写者）；安装走 stage-then-swap：内容（含 `_meta.json`）先在 `<root>/.staging/` 完整构建，再原子 rename 入位，读者永远看不到半成品。 |
 | Frontend lib | `src/lib/skills/*`、WebUI copy | discover skills（仅 managed list，经 `SkillsManager list`）、build prompt、ClawHub client、install status。 |

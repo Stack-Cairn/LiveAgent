@@ -36,33 +36,33 @@ jobs:
       - name: Check command classification is complete
         run: make check-command-classes
 
-      # 编译期防线的 CI 版：agent-core 是跨壳内核，一旦它依赖 tauri，
+      # 编译期防线的 CI 版：backend 是跨壳内核，一旦它依赖 tauri，
       # headless 后端就再也编不出来了。依赖链上出现 tauri 直接失败。
-      - name: Ensure agent-core stays Tauri-free
+      - name: Ensure backend stays Tauri-free
         run: |
           set -euo pipefail
           # 先落到变量：直接 `cargo tree | grep -q` 的话，cargo tree 自己失败会让
           # grep 收到空输入从而"通过"，门禁就成了摆设。
-          tree="$(cargo tree -p agent-core)"
+          tree="$(cargo tree -p backend)"
           if printf '%s\n' "$tree" | grep -q tauri; then
-            echo "::error::agent-core 依赖树里出现了 tauri，跨壳内核的防线破了"
+            echo "::error::backend 依赖树里出现了 tauri，跨壳内核的防线破了"
             printf '%s\n' "$tree" | grep tauri
             exit 1
           fi
-          echo "agent-core 依赖树干净，无 tauri"
+          echo "backend 依赖树干净，无 tauri"
 
-      - name: Test agent-backend and agent-core
+      - name: Test backend and backend
         env:
           CARGO_TERM_COLOR: always
-        run: cargo test -p agent-backend -p agent-core
+        run: cargo test -p backend
 
       # 只 lint 后端这两个 crate：src-tauri 也在同一 workspace 里，用
       # --workspace 会把 GTK/WebKit 那套系统依赖拖进这个 job。src-tauri
       # 由 tauri-rust job 单独覆盖。
-      - name: Clippy agent-backend and agent-core
+      - name: Clippy backend and backend
         env:
           CARGO_TERM_COLOR: always
-        run: cargo clippy -p agent-backend -p agent-core --all-targets -- -D warnings
+        run: cargo clippy -p backend --all-targets -- -D warnings
 
   backend-docker:
     name: Backend Docker Smoke
@@ -121,23 +121,23 @@ jobs:
         run: npm install -g pnpm@10.32.1
 
       - name: Install dependencies
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck and build GUI frontend
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: pnpm build
 
       - name: Lint GUI frontend
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: pnpm lint
 
       - name: Test frontend modules
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: pnpm test:frontend
 
       - name: Test release scripts
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: pnpm test:release
 
   tauri-rust:
@@ -160,32 +160,32 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/agent-gui/src-tauri
+          workspaces: crates/frontend/src-tauri
 
       - name: Check Tauri backend tests
         env:
           CARGO_TERM_COLOR: always
-        run: cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests
+        run: cargo check --manifest-path crates/frontend/src-tauri/Cargo.toml --tests
 
       - name: Test Tauri history migrations
         env:
           CARGO_TERM_COLOR: always
-        run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml chat_history --lib
+        run: cargo test --manifest-path crates/frontend/src-tauri/Cargo.toml chat_history --lib
 
       - name: Test SSH local forwarding
         env:
           CARGO_TERM_COLOR: always
-        run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml ssh_local_forward --lib
+        run: cargo test --manifest-path crates/frontend/src-tauri/Cargo.toml ssh_local_forward --lib
 
       - name: Test Tauri shell-runner cancellation
         env:
           CARGO_TERM_COLOR: always
-        run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml shell_runner --lib
+        run: cargo test --manifest-path crates/frontend/src-tauri/Cargo.toml shell_runner --lib
 
       - name: Test Tauri MCP integration
         env:
           CARGO_TERM_COLOR: always
-        run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml integration_commands::mcp --lib
+        run: cargo test --manifest-path crates/frontend/src-tauri/Cargo.toml integration_commands::mcp --lib
 
   whitespace:
     name: Diff Hygiene

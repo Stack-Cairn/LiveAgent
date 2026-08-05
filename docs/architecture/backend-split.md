@@ -1,4 +1,4 @@
-# agent-core 拆分与 agent-backend API 设计
+# backend 拆分与 backend API 设计
 
 配套文档:`backend-boundary.md`(234 个 command 的三分类)。
 本文件记录**怎么拆**和**HTTP/WS 长什么样**。
@@ -7,16 +7,16 @@
 
 ```
 crates/
-  agent-core/          后端核心 · Cargo.toml 禁 tauri（编译期防线）
-  agent-backend/       axum HTTP/WS 服务 · 依赖 agent-core · 175 条路由 + /api/events
-  agent-gui/src-tauri/ 桌面壳 · 依赖 agent-core + agent-backend（隧道数据面）
+  backend/          后端核心 · Cargo.toml 禁 tauri（编译期防线）
+  backend/       axum HTTP/WS 服务 · 依赖 backend · 175 条路由 + /api/events
+  frontend/src-tauri/ 桌面壳 · 依赖 backend + backend（隧道数据面）
                        · 只剩 #[tauri::command] 薄包装 + 托盘/窗口/更新
 ```
 
-两个 crate 均已建立并接通,`cargo tree` 对 agent-core / agent-backend 都零 tauri。
+两个 crate 均已建立并接通,`cargo tree` 对 backend / backend 都零 tauri。
 
-桌面壳依赖 agent-backend 只为复用隧道数据面(`TunnelDataPlane`)——两边跑同一份
-实现,行为不可能不一致。这不构成环:agent-backend 不依赖 src-tauri。
+桌面壳依赖 backend 只为复用隧道数据面(`TunnelDataPlane`)——两边跑同一份
+实现,行为不可能不一致。这不构成环:backend 不依赖 src-tauri。
 
 ## 路由约定:命令式,不做 REST 化
 
@@ -58,7 +58,7 @@ invoke("git_status", { workdir })   →   POST /api/git_status   { "workdir": ".
 `registry.rs` 的 2 个裸 `thread::spawn`(PTY 读线程)**不碰** async runtime。
 
 唯一例外:`services/proxy.rs:83` `pub fn start_proxy_server()` 是同步 fn 且从
-Tauri `.setup()` 调用。但该文件正好被 agent-backend 取代
+Tauri `.setup()` 调用。但该文件正好被 backend 取代
 (`proxy_get_server_info` 已在删除清单),自然消失。
 
 **结论:可以机械替换。**
@@ -76,7 +76,7 @@ Tauri `.setup()` 调用。但该文件正好被 agent-backend 取代
 
 待迁移代码有 580 处 `pub(crate)`,但**留在壳里的代码只引用 29 个不同符号路径**。
 所以不要批量提升为 `pub`,只提升真正跨界的那些——其余保持 `pub(crate)`
-(在 agent-core 内部依然有效)。
+(在 backend 内部依然有效)。
 
 ## 已决的设计决策
 

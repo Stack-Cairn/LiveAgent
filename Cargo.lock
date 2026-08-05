@@ -46,64 +46,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent-backend"
-version = "0.1.0"
-dependencies = [
- "agent-core",
- "axum",
- "axum-server",
- "futures-util",
- "http-body-util",
- "rand 0.9.4",
- "reqwest",
- "serde",
- "serde_json",
- "subtle",
- "tokio",
- "tokio-tungstenite 0.29.0",
- "tower",
- "tower-http",
- "uuid",
-]
-
-[[package]]
-name = "agent-core"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "dirs",
- "futures-util",
- "globset",
- "ignore",
- "leveldb-core",
- "lopdf",
- "notify",
- "percent-encoding",
- "portable-pty",
- "quick-xml 0.41.0",
- "regex",
- "reqwest",
- "rquickjs",
- "rusqlite",
- "russh",
- "russh-sftp",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-cron-scheduler",
- "toml 0.9.12+spec-1.1.0",
- "uuid",
- "wait-timeout",
- "walkdir",
- "windows-sys 0.61.2",
- "zip 8.6.0",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -456,6 +398,51 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
+]
+
+[[package]]
+name = "backend"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "axum-server",
+ "base64 0.22.1",
+ "chrono",
+ "dirs",
+ "futures-util",
+ "globset",
+ "http-body-util",
+ "ignore",
+ "leveldb-core",
+ "lopdf",
+ "notify",
+ "percent-encoding",
+ "portable-pty",
+ "quick-xml 0.41.0",
+ "rand 0.9.4",
+ "regex",
+ "reqwest",
+ "rquickjs",
+ "rusqlite",
+ "russh",
+ "russh-sftp",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-cron-scheduler",
+ "tokio-tungstenite 0.29.0",
+ "toml 0.9.12+spec-1.1.0",
+ "tower",
+ "tower-http",
+ "uuid",
+ "wait-timeout",
+ "walkdir",
+ "windows-sys 0.61.2",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -3413,10 +3400,9 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 name = "liveagent"
 version = "1.3.0-dev.0"
 dependencies = [
- "agent-backend",
- "agent-core",
  "arboard",
  "axum",
+ "backend",
  "base64 0.22.1",
  "chardetng",
  "chrono",

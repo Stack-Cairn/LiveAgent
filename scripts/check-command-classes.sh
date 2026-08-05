@@ -15,7 +15,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-lib_rs="$repo_root/crates/agent-gui/src-tauri/src/lib.rs"
+lib_rs="$repo_root/crates/frontend/src-tauri/src/lib.rs"
 class_dir="$repo_root/docs/architecture/command-classes"
 
 for f in "$lib_rs" "$class_dir/backend.txt" "$class_dir/frontend.txt" "$class_dir/deleted.txt"; do

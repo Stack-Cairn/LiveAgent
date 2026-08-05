@@ -260,14 +260,14 @@ Expand the Development Guide below for the full set of Make commands.
                              │ HTTP POST /api/<command>  (JSON)
                              │ WebSocket /api/events     (JSON)
 ┌────────────────────────────▼─────────────────────────────────┐
-│                   Backend · agent-backend                     │
+│                   Backend · backend                     │
 │     Rust · axum · SQLite · password auth · static assets      │
 │        The only public listener. Holds the API keys.          │
 │            (laptop / home server / Docker / VPS)              │
 └────────────────────────────┬─────────────────────────────────┘
                              │ loopback HTTP (never exposed)
 ┌────────────────────────────▼─────────────────────────────────┐
-│                    Engine · agent-core-js                     │
+│                    Engine · core                     │
 │                Node 22 · TypeScript · pi-agent-core           │
 ├──────────┬────────────┬───────────┬────────────┬─────────────┤
 │ Models   │ Runtime    │ Tools     │ Skills     │ Memory/Cron │
@@ -289,9 +289,9 @@ the same frontend at a remote backend URL and everything works identically.
 | **Frontend** · Styling | Tailwind CSS 4 + Base UI |
 | **Frontend** · Rendering | streamdown + KaTeX + Mermaid + Monaco Editor |
 | **Desktop shell** | Tauri 2 (optional — the browser is a first-class target) |
-| **Backend** · `agent-backend` | Rust + Tokio + axum + SQLite (rusqlite) |
+| **Backend** · `backend` | Rust + Tokio + axum + SQLite (rusqlite) |
 | **Backend** · Protocol | JSON over HTTP + WebSocket |
-| **Engine** · `agent-core-js` | Node 22 + TypeScript |
+| **Engine** · `core` | Node 22 + TypeScript |
 | **Engine** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
 | **Deployment** | Docker (backend + Node runtime in one image) · Railway CI/CD |
 
@@ -320,7 +320,7 @@ the same frontend at a remote backend URL and everything works identically.
 ```
 LiveAgent/
 ├── crates/
-│   ├── agent-gui/                # Frontend + desktop shell
+│   ├── frontend/                # Frontend + desktop shell
 │   │   ├── src/                  # React frontend (browser and desktop share it)
 │   │   │   ├── components/       #   UI components
 │   │   │   ├── lib/              #   Core logic (chat, tools, skills, memory)
@@ -329,14 +329,14 @@ LiveAgent/
 │   │   │   └── prompt/           #   System prompt templates
 │   │   └── src-tauri/            # Tauri 2 desktop shell (Rust)
 │   │
-│   ├── agent-backend/            # Rust backend — the only public listener
+│   ├── backend/            # Rust backend — the only public listener
 │   │   ├── routes.rs             #   HTTP command routes (/api/<command>)
 │   │   ├── ws.rs                 #   Event WebSocket (/api/events)
 │   │   └── engine_process.rs     #   Spawns and supervises the Node engine
 │   │
-│   ├── agent-core/               # Shared Rust core (tools, runtime, storage)
+│   ├── backend/               # Shared Rust core (tools, runtime, storage)
 │   │
-│   └── agent-core-js/            # Node engine — model calls and the agent loop
+│   └── core/            # Node engine — model calls and the agent loop
 │       └── src/                  #   TypeScript, bundled with esbuild
 │
 ├── docs/                         # Project docs
@@ -464,17 +464,17 @@ Issues and pull requests are welcome! See the [Development Guide](docs/operation
 
 Before submitting a PR, make sure all of the following checks pass (they match the CI gates):
 
-**Frontend · `crates/agent-gui`**
+**Frontend · `crates/frontend`**
 
 1. Type check & build pass: `pnpm build`
 2. Lint passes: `pnpm lint`
 3. Frontend unit tests pass: `pnpm test:frontend` (also run `pnpm test:release` when touching release scripts)
-4. Desktop shell check passes: `cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests` (run from the repo root)
+4. Desktop shell check passes: `cargo check --manifest-path crates/frontend/src-tauri/Cargo.toml --tests` (run from the repo root)
 
-**Backend · `crates/agent-backend` (if changed)**
+**Backend · `crates/backend` (if changed)**
 
 1. Generated routes are in sync: `make check-routes` (adding a command without a route must fail here)
-2. Backend tests pass: `cargo test -p agent-backend`
+2. Backend tests pass: `cargo test -p backend`
 
 **Diff hygiene**
 

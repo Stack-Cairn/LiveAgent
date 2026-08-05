@@ -14,9 +14,9 @@ body:
       label: Affected area
       description: Choose the module this issue mainly affects.
       options:
-        - Desktop UI (agent-gui / React)
+        - Desktop UI (frontend / React)
         - Desktop core (Tauri / Rust)
-        - Backend (agent-backend / Rust)
+        - Backend (backend / Rust)
         - Agent sessions / streaming
         - Tool execution / MCP / Skills
         - Model providers

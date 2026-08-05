@@ -4,7 +4,7 @@
 
 ## 项目一句话
 
-LiveAgent 是一个后端持有全部能力、前端只做渲染的 Agent 应用：Rust 后端（`agent-backend` + `agent-core`）提供唯一的网络入口和全部本地能力，Node 引擎（`agent-core-js`）跑对话循环，一份前端代码经 HTTP + WebSocket 连上去——不管它跑在 Tauri 桌面壳里还是浏览器里。
+LiveAgent 是一个后端持有全部能力、前端只做渲染的 Agent 应用：Rust 后端（`backend` + `backend`）提供唯一的网络入口和全部本地能力，Node 引擎（`core`）跑对话循环，一份前端代码经 HTTP + WebSocket 连上去——不管它跑在 Tauri 桌面壳里还是浏览器里。
 
 ## 文档目录
 
@@ -39,7 +39,7 @@ LiveAgent 是一个后端持有全部能力、前端只做渲染的 Agent 应用
 
 | 边界 | 当前结论 |
 |---|---|
-| Agent 执行位置 | Node 引擎（`agent-core-js`）跑对话循环，工具经同一套 HTTP API 打回 Rust 后端执行。两者都在**后端**这一侧 |
+| Agent 执行位置 | Node 引擎（`core`）跑对话循环，工具经同一套 HTTP API 打回 Rust 后端执行。两者都在**后端**这一侧 |
 | Rust 后端职责 | 唯一对外网络入口、认证与 TLS、fs/shell/git/terminal/sftp/sqlite/cron/mcp/memory/tunnel 的实现、事件广播、Node 引擎守护 |
 | 前端职责 | 渲染与交互。前端不在场不阻塞后端主流程；壳专属能力靠运行时探测降级 |
 | 设置与密钥 | 真相源是后端的 `~/.liveagent/config.sqlite`。前端不再持有 provider key，脱敏快照那一套随 Gateway 一起消失 |

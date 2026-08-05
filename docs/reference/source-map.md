@@ -14,62 +14,62 @@
 
 | 功能 | 路径 |
 |---|---|
-| App shell | `crates/agent-gui/src/App.tsx` |
-| React entry | `crates/agent-gui/src/main.tsx` |
-| Chat page | `crates/agent-gui/src/pages/ChatPage.tsx` |
-| Chat turn | `crates/agent-gui/src/pages/chat/runTextConversationTurn.ts`、`runAgentConversationTurn.ts` |
-| Chat transcript | `crates/agent-gui/src/pages/chat/ChatTranscript.tsx`、`AssistantBubble.tsx` |
-| Composer/header | `crates/agent-gui/src/pages/chat/ChatComposerBar.tsx`、`ChatHeader.tsx` |
-| History sidebar | `crates/agent-gui/src/components/chat/ChatHistorySidebar.tsx` |
-| Gateway bridge hooks | `crates/agent-gui/src/pages/chat/useGatewayBridgeListeners.ts`、`useGatewayBridgeBatcher.ts` |
-| Context builders | `crates/agent-gui/src/pages/chat/conversationContextBuilders.ts` |
-| Settings page | `crates/agent-gui/src/pages/SettingsPage.tsx`、`src/pages/settings/*` |
-| Skills Hub | `crates/agent-gui/src/pages/skills-hub/*` |
-| MCP Hub | `crates/agent-gui/src/pages/mcp-hub/*` |
-| Shared hub chrome | `crates/agent-gui/src/components/hub/HubChrome.tsx` |
-| i18n | `crates/agent-gui/src/i18n/*` |
+| App shell | `crates/frontend/src/App.tsx` |
+| React entry | `crates/frontend/src/main.tsx` |
+| Chat page | `crates/frontend/src/pages/ChatPage.tsx` |
+| Chat turn | `crates/frontend/src/pages/chat/runTextConversationTurn.ts`、`runAgentConversationTurn.ts` |
+| Chat transcript | `crates/frontend/src/pages/chat/ChatTranscript.tsx`、`AssistantBubble.tsx` |
+| Composer/header | `crates/frontend/src/pages/chat/ChatComposerBar.tsx`、`ChatHeader.tsx` |
+| History sidebar | `crates/frontend/src/components/chat/ChatHistorySidebar.tsx` |
+| Gateway bridge hooks | `crates/frontend/src/pages/chat/useGatewayBridgeListeners.ts`、`useGatewayBridgeBatcher.ts` |
+| Context builders | `crates/frontend/src/pages/chat/conversationContextBuilders.ts` |
+| Settings page | `crates/frontend/src/pages/SettingsPage.tsx`、`src/pages/settings/*` |
+| Skills Hub | `crates/frontend/src/pages/skills-hub/*` |
+| MCP Hub | `crates/frontend/src/pages/mcp-hub/*` |
+| Shared hub chrome | `crates/frontend/src/components/hub/HubChrome.tsx` |
+| i18n | `crates/frontend/src/i18n/*` |
 
 ## GUI Libraries
 
 | 功能 | 路径 |
 |---|---|
-| Model provider layer | `crates/agent-gui/src/lib/providers/llm.ts` |
-| Provider proxy helpers | `crates/agent-gui/src/lib/providers/proxy.ts` |
-| Settings defaults/storage/sync | `crates/agent-gui/src/lib/settings/*` |
-| Builtin tool registry | `crates/agent-gui/src/lib/tools/builtinRegistry.ts` |
-| FS tools | `crates/agent-gui/src/lib/tools/fsTools.ts` |
-| Shell tools | `crates/agent-gui/src/lib/tools/shellTools.ts` |
-| MCP tools | `crates/agent-gui/src/lib/tools/mcpTools.ts`、`mcpManagerTools.ts` |
-| Skills tools | `crates/agent-gui/src/lib/tools/skillTools.ts` |
-| Memory tools | `crates/agent-gui/src/lib/tools/memoryTools.ts` |
-| Cron tools | `crates/agent-gui/src/lib/tools/cronTools.ts` |
-| Subagent tools（Agent/SendMessage） | `crates/agent-gui/src/lib/subagents/*` |
-| Conversation state | `crates/agent-gui/src/lib/chat/conversation/*` |
-| Memory prompt/policy | `crates/agent-gui/src/lib/chat/memory/*` |
-| Skills discovery | `crates/agent-gui/src/lib/skills/*` |
-| MCP registry | `crates/agent-gui/src/lib/mcpRegistry/*` |
+| Model provider layer | `crates/frontend/src/lib/providers/llm.ts` |
+| Provider proxy helpers | `crates/frontend/src/lib/providers/proxy.ts` |
+| Settings defaults/storage/sync | `crates/frontend/src/lib/settings/*` |
+| Builtin tool registry | `crates/frontend/src/lib/tools/builtinRegistry.ts` |
+| FS tools | `crates/frontend/src/lib/tools/fsTools.ts` |
+| Shell tools | `crates/frontend/src/lib/tools/shellTools.ts` |
+| MCP tools | `crates/frontend/src/lib/tools/mcpTools.ts`、`mcpManagerTools.ts` |
+| Skills tools | `crates/frontend/src/lib/tools/skillTools.ts` |
+| Memory tools | `crates/frontend/src/lib/tools/memoryTools.ts` |
+| Cron tools | `crates/frontend/src/lib/tools/cronTools.ts` |
+| Subagent tools（Agent/SendMessage） | `crates/frontend/src/lib/subagents/*` |
+| Conversation state | `crates/frontend/src/lib/chat/conversation/*` |
+| Memory prompt/policy | `crates/frontend/src/lib/chat/memory/*` |
+| Skills discovery | `crates/frontend/src/lib/skills/*` |
+| MCP registry | `crates/frontend/src/lib/mcpRegistry/*` |
 
 ## Tauri Rust
 
 | 功能 | 路径 |
 |---|---|
-| Tauri entry | `crates/agent-gui/src-tauri/src/main.rs` |
-| App builder/invoke handler | `crates/agent-gui/src-tauri/src/lib.rs` |
-| Chat history commands | `crates/agent-gui/src-tauri/src/commands/chat_history.rs` |
-| Settings commands | `crates/agent-gui/src-tauri/src/commands/settings.rs` |
-| Memory commands | `crates/agent-gui/src-tauri/src/commands/memory.rs` |
-| MCP commands/runtime | `crates/agent-gui/src-tauri/src/commands/mcp.rs` |
-| File commands | `crates/agent-gui/src-tauri/src/commands/fs.rs` |
-| Shell/process commands | `crates/agent-gui/src-tauri/src/commands/shell.rs`、`process.rs` |
-| System commands | `crates/agent-gui/src-tauri/src/commands/system.rs`、`system_tools.rs` |
-| Gateway commands | `crates/agent-gui/src-tauri/src/commands/gateway.rs` |
-| Subagent worktree commands | `crates/agent-gui/src-tauri/src/commands/workspace/subagent_worktree.rs` |
-| Subagent store | `crates/agent-gui/src-tauri/src/commands/history/subagent_store.rs` |
-| MemoryStore | `crates/agent-gui/src-tauri/src/services/memory.rs` |
-| Skills service | `crates/agent-gui/src-tauri/src/services/skills.rs` |
-| Gateway service | `crates/agent-gui/src-tauri/src/services/gateway.rs`、`gateway_bridge.rs` |
-| Cron service | `crates/agent-gui/src-tauri/src/services/cron.rs` |
-| Runtime shell/process | `crates/agent-gui/src-tauri/src/runtime/*` |
+| Tauri entry | `crates/frontend/src-tauri/src/main.rs` |
+| App builder/invoke handler | `crates/frontend/src-tauri/src/lib.rs` |
+| Chat history commands | `crates/frontend/src-tauri/src/commands/chat_history.rs` |
+| Settings commands | `crates/frontend/src-tauri/src/commands/settings.rs` |
+| Memory commands | `crates/frontend/src-tauri/src/commands/memory.rs` |
+| MCP commands/runtime | `crates/frontend/src-tauri/src/commands/mcp.rs` |
+| File commands | `crates/frontend/src-tauri/src/commands/fs.rs` |
+| Shell/process commands | `crates/frontend/src-tauri/src/commands/shell.rs`、`process.rs` |
+| System commands | `crates/frontend/src-tauri/src/commands/system.rs`、`system_tools.rs` |
+| Gateway commands | `crates/frontend/src-tauri/src/commands/gateway.rs` |
+| Subagent worktree commands | `crates/frontend/src-tauri/src/commands/workspace/subagent_worktree.rs` |
+| Subagent store | `crates/frontend/src-tauri/src/commands/history/subagent_store.rs` |
+| MemoryStore | `crates/frontend/src-tauri/src/services/memory.rs` |
+| Skills service | `crates/frontend/src-tauri/src/services/skills.rs` |
+| Gateway service | `crates/frontend/src-tauri/src/services/gateway.rs`、`gateway_bridge.rs` |
+| Cron service | `crates/frontend/src-tauri/src/services/cron.rs` |
+| Runtime shell/process | `crates/frontend/src-tauri/src/runtime/*` |
 
 ## Gateway
 

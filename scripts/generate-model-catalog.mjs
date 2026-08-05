@@ -4,7 +4,7 @@
 // merged Codex-first from openai/codex models.json, then supplemented by the
 // models.dev open database; every other section comes from models.dev. The
 // output is written to:
-//   crates/agent-gui/src/lib/models/catalog.generated.ts
+//   crates/frontend/src/lib/models/catalog.generated.ts
 //
 // Usage: node scripts/generate-model-catalog.mjs
 //          [--source <url|file>] [--codex-source <url|file>] [--check]
@@ -23,7 +23,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT_PATH = join(
   repoRoot,
   "crates",
-  "agent-gui",
+  "frontend",
   "src",
   "lib",
   "models",

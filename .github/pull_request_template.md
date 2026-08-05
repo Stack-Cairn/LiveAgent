@@ -20,7 +20,7 @@ Closes #
 
 <!-- List the affected modules and key files/directories so reviewers can locate the change quickly. -->
 
-- Modules: <!-- e.g. agent-gui / agent-backend / src-tauri -->
+- Modules: <!-- e.g. frontend / backend / src-tauri -->
 - Key paths:
 
 ## Screenshots / preview

@@ -10,9 +10,9 @@ body:
       label: Affected area
       description: Choose the module this proposal mainly involves.
       options:
-        - Desktop UI (agent-gui / React)
+        - Desktop UI (frontend / React)
         - Desktop core (Tauri / Rust)
-        - Backend (agent-backend / Rust)
+        - Backend (backend / Rust)
         - Agent sessions / streaming
         - Tool execution / MCP / Skills
         - Model providers
@@ -42,8 +42,8 @@ body:
       label: Estimated change scope
       description: If you plan to implement this yourself, list the modules / directories / files you expect to touch, to help assess complexity.
       placeholder: |
-        crates/agent-gui/src/...
-        crates/agent-backend/src/...
+        crates/frontend/src/...
+        crates/backend/src/...
     validations:
       required: false
   - type: textarea

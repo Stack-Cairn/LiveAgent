@@ -2,7 +2,7 @@
 
 ## 定位
 
-**只有一个前端源码树**：`crates/agent-gui/src`。阶段 5 把 `agent-gateway/web`
+**只有一个前端源码树**：`crates/frontend/src`。阶段 5 把 `agent-gateway/web`
 （126,934 行）整个删掉，以 GUI 为基线合并（决策 16）。
 
 同一份代码跑在两种宿主里：
@@ -29,7 +29,7 @@
 | 领域库 | `src/lib/{settings,skills,memory,terminal,sftp,git,tools,mcpRegistry,tunnels,…}` | 各功能域的前端侧逻辑 |
 
 **`src/lib/providers`、`src/lib/chat`、`src/lib/tools` 已不再承载对话运行时**——
-引擎在 `crates/agent-core-js`。前端保留的是渲染、设置与工具目录展示所需的部分。
+引擎在 `crates/core`。前端保留的是渲染、设置与工具目录展示所需的部分。
 
 ## 后端客户端（`src/lib/backend/`）
 
@@ -143,7 +143,7 @@ WS 重连：500ms 起指数退避、上限 10s；**全局只允许一个待触�
 ## 测试
 
 ```bash
-node --test 'crates/agent-gui/test/**/*.test.mjs'
+node --test 'crates/frontend/test/**/*.test.mjs'
 ```
 
 1371 个测试。行为型测试走 `helpers/load-ts-module.mjs`，用 `vm` 真实执行 TS，

@@ -3,7 +3,7 @@
 自 v2 起，线上协议只有一种：**JSON**。protobuf、buf 工具链、`proto/v2` 全部删除
 （决策 6）。契约不再需要代码生成，也就不再有生成物漂移门禁。
 
-权威定义就是代码本身：`crates/agent-backend/src/routes.rs`（响应形状）、
+权威定义就是代码本身：`crates/backend/src/routes.rs`（响应形状）、
 `routes_gen.rs`（命令路由，由 `scripts/generate-routes.mjs` 生成）、
 `ws.rs`（事件帧）、`engine_proxy.rs`（引擎代理与事件回流）。
 
@@ -86,10 +86,10 @@ snake_case，没写的用 camelCase（Tauri 默认）。已知不一致的有
 
 | 命令 | 作用 |
 |---|---|
-| `make update-routes` | 从 `crates/agent-gui/src-tauri/src/tauri_commands/*.rs` 重新生成 `routes_gen.rs` |
+| `make update-routes` | 从 `crates/frontend/src-tauri/src/tauri_commands/*.rs` 重新生成 `routes_gen.rs` |
 | `make check-routes` | 校验一致性，漂移即失败（CI 用） |
 
-另有契约测试拿 `routes::routed_commands()` 与 agent-core 导出的命令清单比对：
+另有契约测试拿 `routes::routed_commands()` 与 backend 导出的命令清单比对：
 **新增 command 未加路由必须导致测试失败**。
 
 > 「路由可达」≠「命令可用」。契约测试把 400 也算通过（空 body 反序列化失败是正常
@@ -125,7 +125,7 @@ snake_case，没写的用 camelCase（Tauri 默认）。已知不一致的有
 
 ### 事件来源分流
 
-桌面壳内嵌的 `agent-backend` 是**另一个** EventBus 实例，所以「壳发的」和
+桌面壳内嵌的 `backend` 是**另一个** EventBus 实例，所以「壳发的」和
 「后端发的」两组事件名**互不相交**，按名字分流是确定的：
 
 | 来源 | 事件 | 通道 |
@@ -137,7 +137,7 @@ snake_case，没写的用 camelCase（Tauri 默认）。已知不一致的有
 
 ## Chat 协议
 
-Chat 是唯一不落在 `agent-core` 上的能力——它在 Node 引擎里。Rust 反向代理三条
+Chat 是唯一不落在 `backend` 上的能力——它在 Node 引擎里。Rust 反向代理三条
 路由，剥掉 `/api` 前缀转发到 `http://127.0.0.1:<node_port>`，并补上内部 token。
 
 | 步骤 | 请求 | 响应 |

@@ -19,14 +19,14 @@
 `proto/v2` 一起删是因为决策 6 把线上协议定为 JSON —— 契约不再需要 protobuf,
 `prost`/`protobufjs` 依赖、buf codegen、生成物漂移门禁一并消失。
 
-> 注意 `crates/agent-gui/src-tauri/build.rs` 里有 prost-build 调用编译
+> 注意 `crates/frontend/src-tauri/build.rs` 里有 prost-build 调用编译
 > `crates/agent-gateway/proto/v2/*.proto`,删 proto 时要同步清理。
 
 ## 构建与 CI 切换
 
 | 项 | 现在 | 之后 |
 |---|---|---|
-| `Dockerfile` | 3 阶段:node 构建 SPA → golang 构建二进制 → debian-slim | 构建 `agent-backend` + 打包 Node runtime |
+| `Dockerfile` | 3 阶段:node 构建 SPA → golang 构建二进制 → debian-slim | 构建 `backend` + 打包 Node runtime |
 | CI `gateway` job | proto lint + breaking check + 生成物漂移 + golangci-lint + go test | `cargo test` + `cargo clippy` |
 | CI `GUI/WebUI Mirror Check` | 强制两套前端字节相同 | 阶段 5 已删 |
 | `Makefile` | `dev-gateway` / `gateway-build` / `gateway-docker-*` | 改名为 `dev-backend` / `backend-build` / … |
@@ -34,7 +34,7 @@
 
 新增门禁建议:
 
-- `cargo tree -p agent-core | grep tauri` 命中则失败(编译期防线的 CI 版)
+- `cargo tree -p backend | grep tauri` 命中则失败(编译期防线的 CI 版)
 - 阶段 1 的 command 分类 diff(P1-13)
 
 ## 文档重写
@@ -51,7 +51,7 @@
 ## README 需要修的三处
 
 1. **技术栈表(第 283 行附近)** 列了 `@openai/codex-sdk` 和 `claude-agent-sdk`,
-   但 `crates/agent-gui/package.json` **没有这两个依赖** —— 实际只有
+   但 `crates/frontend/package.json` **没有这两个依赖** —— 实际只有
    `@earendil-works/pi-ai` 和 `@earendil-works/pi-agent-core`。这是现存的事实错误,
    与本次迁移无关但顺手修掉。
 2. **架构图(第 254–270 行)** 的三层结构整体作废,重画。
@@ -69,7 +69,7 @@ find . -name '*.go' -not -path './target/*' | wc -l   # 期望 0
 find . -name '*.proto' -not -path '*/node_modules/*' | wc -l   # 期望 0
 
 cargo test --workspace && cargo clippy --workspace -- -D warnings
-cargo tree -p agent-core | grep -q tauri && echo "防线破了" || echo "防线完好"
+cargo tree -p backend | grep -q tauri && echo "防线破了" || echo "防线完好"
 ```
 
 端到端:
@@ -114,7 +114,7 @@ cargo tree -p agent-core | grep -q tauri && echo "防线破了" || echo "防线�
    验收标准里「Docker 跑 headless 后端,笔记本上的桌面端连过去」**当前实现
    不支持**,远程访问只有浏览器一条路。
 
-2. **容器数据落点未验证。** `agent-core/src/storage.rs` 用
+2. **容器数据落点未验证。** `backend/src/storage.rs` 用
    `dirs::home_dir()` 解析 `~/.liveagent`,而 Dockerfile 把 runtime 用户建成
    `--home-dir /nonexistent`,镜像也没有为数据目录预留卷。容器重建是否丢
    设置库/历史库/记忆文件,没有实测过(本机无 docker,未能验证)。

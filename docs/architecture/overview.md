@@ -11,10 +11,10 @@
 
 | 层 | 路径 | 技术栈 | 职责 |
 |---|---|---|---|
-| 前端 | `crates/agent-gui/src` | React、TypeScript、Vite、Tailwind | Chat、Settings、Skills/MCP Hub、Memory、终端、Git、历史。**只经网络与后端通信。** |
-| 桌面壳（可选） | `crates/agent-gui/src-tauri` | Tauri 2、Rust | 托盘、窗口、自更新、原生对话框、剪贴板；并在进程内启动后端。19 个壳专属 command。 |
-| Rust 后端 | `crates/agent-backend` + `crates/agent-core` | axum、tokio、rusqlite | 唯一对外网络入口（HTTP + WS）、认证、TLS；fs/shell/git/terminal PTY/sftp/sqlite/cron/mcp/memory/tunnel 的实现。 |
-| Node 引擎 | `crates/agent-core-js` | TypeScript、`@earendil-works/pi-agent-core`、`pi-ai` | 对话循环：上下文构造、模型流式、工具执行、压缩、记忆抽取、历史落库。**只监听 loopback。** |
+| 前端 | `crates/frontend/src` | React、TypeScript、Vite、Tailwind | Chat、Settings、Skills/MCP Hub、Memory、终端、Git、历史。**只经网络与后端通信。** |
+| 桌面壳（可选） | `crates/frontend/src-tauri` | Tauri 2、Rust | 托盘、窗口、自更新、原生对话框、剪贴板；并在进程内启动后端。19 个壳专属 command。 |
+| Rust 后端 | `crates/backend` + `crates/backend` | axum、tokio、rusqlite | 唯一对外网络入口（HTTP + WS）、认证、TLS；fs/shell/git/terminal PTY/sftp/sqlite/cron/mcp/memory/tunnel 的实现。 |
+| Node 引擎 | `crates/core` | TypeScript、`@earendil-works/pi-agent-core`、`pi-ai` | 对话循环：上下文构造、模型流式、工具执行、压缩、记忆抽取、历史落库。**只监听 loopback。** |
 
 浏览器形态下「桌面壳」这一层不存在，其余三层不变——这正是决策 16 要的效果。
 
@@ -28,8 +28,8 @@
                 │  HTTP  POST /api/<command>   Bearer <password>
                 │  WS    GET  /api/events?token=<password>
                 ▼
-┌─ Rust 后端（agent-backend，唯一对外入口）───────┐
-│  routes_gen.rs  176 条命令路由 → agent-core      │
+┌─ Rust 后端（backend，唯一对外入口）───────┐
+│  routes_gen.rs  176 条命令路由 → backend      │
 │  ws.rs          EventBus → broadcast → WS        │
 │  engine_proxy.rs  chat_* 反代 → Node             │
 │  auth.rs / tls.rs / ssrf.rs                      │
@@ -38,20 +38,20 @@
                 │  Rust→Node: POST /chat_send /chat_abort, GET /conversation_live
                 │  Node→Rust: POST /api/<command>, POST /api/engine_emit_event
                 ▼
-┌─ Node 引擎（agent-core-js，127.0.0.1:<随机端口>）┐
+┌─ Node 引擎（core，127.0.0.1:<随机端口>）┐
 │  engine.ts  runOneTurn：模型流式 + 工具循环      │
 │  工具落到 callBackend() → 打回 Rust 的同一批命令 │
 └──────────────────────────────────────────────────┘
 ```
 
-**一套 API，两类客户端。** 前端和 Node 引擎打的是同一批路由、调的是 `agent-core`
+**一套 API，两类客户端。** 前端和 Node 引擎打的是同一批路由、调的是 `backend`
 里同一批函数，所以工具行为不可能两边不一致——这是取消 Go 中继的直接收益。
 
 ## 两种运行形态
 
 | | 桌面壳内嵌 | 独立后端 |
 |---|---|---|
-| 后端从哪来 | Tauri `.setup()` 里 `start_backend_server()` 起在同进程（`src-tauri/src/backend_server.rs`） | `agent-backend --port 8443 --engine-bundle <path>` |
+| 后端从哪来 | Tauri `.setup()` 里 `start_backend_server()` 起在同进程（`src-tauri/src/backend_server.rs`） | `backend --port 8443 --engine-bundle <path>` |
 | 监听地址 | `127.0.0.1:<系统分配的空闲端口>` | `0.0.0.0:<--port>` |
 | 密码 | 每次启动随机生成，前端经 `get_backend_endpoint` 拿到 | `--password`，不给则随机生成并打到 stderr |
 | 登录页 | 跳过（壳注入端点） | 浏览器输入 host/port/密码，或用 `?backendHost=&backendPort=&token=` 链接 |
@@ -83,7 +83,7 @@
 
 | 模块 | 文件 | 说明 |
 |---|---|---|
-| 路由装配 | `agent-backend/src/lib.rs` | `build_router()` 挂 `/healthz`（免认证）+ `/api/*`（Bearer）+ permissive CORS |
+| 路由装配 | `backend/src/lib.rs` | `build_router()` 挂 `/healthz`（免认证）+ `/api/*`（Bearer）+ permissive CORS |
 | 命令路由 | `routes.rs` + `routes_gen.rs` | 176 条由 `scripts/generate-routes.mjs` 从 `src-tauri/src/tauri_commands/*.rs` 生成；`make check-routes` 防漂移 |
 | 状态装配 | `lib.rs::build_state()` | 建库、装 registry、把 EventBus 接到 WS sink 与各子系统 |
 | 事件流 | `ws.rs` | EventBus → `broadcast`(256) → 每连接一个 pump；队列满丢最旧帧，不阻塞业务线程 |
@@ -94,13 +94,13 @@
 | 出网防护 | `ssrf.rs` | IP 黑名单，含 NAT64/6to4 内嵌 IPv4 递归检查 |
 | TLS | `tls.rs` | `--tls-cert` / `--tls-key`，内建与反代都支持（决策 14） |
 
-能力实现在 `crates/agent-core`：`commands/`（automation / config / history /
+能力实现在 `crates/backend`：`commands/`（automation / config / history /
 integration / runtime / workspace）、`services/`（automation / memory / skills /
 tunnel / workspace_watch / provider_models / provider_usage / system_proxy /
 power_activity / chat_run_ledger）、`runtime/`（terminal / sftp / shell_runner /
 managed_process / process / task_runner / project_path / platform）。
 
-**`agent-core` 的 `Cargo.toml` 禁止依赖 tauri**（决策 2）。这是编译期防线：
+**`backend` 的 `Cargo.toml` 禁止依赖 tauri**（决策 2）。这是编译期防线：
 后端要能在没有窗口系统的容器里跑，靠人自觉守不住。
 
 ## Node 引擎内部
@@ -140,7 +140,7 @@ managed_process / process / task_runner / project_path / platform）。
 | 一份前端代码 | 壳能力运行时探测降级，不做构建分叉（决策 16） |
 | 前端不在场不阻塞 | 引擎跑在后端，前端只是渲染；该超时超时，有推荐项自动选（决策 10） |
 | 重连不补发 | 拉快照 + 订阅增量；没有 `seq`/`after_seq`/replay buffer（决策 19） |
-| 编译期防线优于约定 | `agent-core` 禁 tauri 依赖，CI 另有 `cargo tree` 门禁 |
+| 编译期防线优于约定 | `backend` 禁 tauri 依赖，CI 另有 `cargo tree` 门禁 |
 
 ## 相关文档
 

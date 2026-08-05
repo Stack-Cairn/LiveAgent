@@ -264,14 +264,14 @@ location / {
                              │ HTTP POST /api/<command>  (JSON)
                              │ WebSocket /api/events     (JSON)
 ┌────────────────────────────▼─────────────────────────────────┐
-│                     后端 · agent-backend                      │
+│                     后端 · backend                      │
 │      Rust · axum · SQLite · 密码鉴权 · 前端静态资源托管         │
 │           唯一对外监听者。密钥只存在这一层。                     │
 │              (笔记本 / 家庭服务器 / Docker / VPS)              │
 └────────────────────────────┬─────────────────────────────────┘
                              │ loopback HTTP(不对外暴露)
 ┌────────────────────────────▼─────────────────────────────────┐
-│                     引擎 · agent-core-js                      │
+│                     引擎 · core                      │
 │              Node 22 · TypeScript · pi-agent-core             │
 ├──────────┬───────────┬───────────┬───────────┬───────────────┤
 │ 模型协议  │ Agent运行时 │  工具执行   │  Skills   │  Memory/Cron  │
@@ -292,9 +292,9 @@ location / {
 | **前端** · 样式 | Tailwind CSS 4 + Base UI |
 | **前端** · 渲染 | streamdown + KaTeX + Mermaid + Monaco Editor |
 | **桌面壳** | Tauri 2(可选 —— 浏览器是一等公民) |
-| **后端** · `agent-backend` | Rust + Tokio + axum + SQLite (rusqlite) |
+| **后端** · `backend` | Rust + Tokio + axum + SQLite (rusqlite) |
 | **后端** · 协议 | JSON over HTTP + WebSocket |
-| **引擎** · `agent-core-js` | Node 22 + TypeScript |
+| **引擎** · `core` | Node 22 + TypeScript |
 | **引擎** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
 | **部署** | Docker(后端与 Node runtime 同一镜像)· Railway CI/CD |
 
@@ -323,7 +323,7 @@ location / {
 ```
 LiveAgent/
 ├── crates/
-│   ├── agent-gui/                # 前端 + 桌面壳
+│   ├── frontend/                # 前端 + 桌面壳
 │   │   ├── src/                  # React 前端(浏览器与桌面端共用)
 │   │   │   ├── components/       #   UI 组件
 │   │   │   ├── lib/              #   核心逻辑 (chat, tools, skills, memory)
@@ -332,14 +332,14 @@ LiveAgent/
 │   │   │   └── prompt/           #   System Prompt 模板
 │   │   └── src-tauri/            # Tauri 2 桌面壳 (Rust)
 │   │
-│   ├── agent-backend/            # Rust 后端 —— 唯一对外监听者
+│   ├── backend/            # Rust 后端 —— 唯一对外监听者
 │   │   ├── routes.rs             #   HTTP 命令路由 (/api/<command>)
 │   │   ├── ws.rs                 #   事件 WebSocket (/api/events)
 │   │   └── engine_process.rs     #   拉起并守护 Node 引擎进程
 │   │
-│   ├── agent-core/               # 共享 Rust 核心(工具、运行时、存储)
+│   ├── backend/               # 共享 Rust 核心(工具、运行时、存储)
 │   │
-│   └── agent-core-js/            # Node 引擎 —— 模型调用与 Agent 循环
+│   └── core/            # Node 引擎 —— 模型调用与 Agent 循环
 │       └── src/                  #   TypeScript,esbuild 打包
 │
 ├── docs/                         # 项目文档
@@ -396,17 +396,17 @@ LiveAgent/
 
 提交 PR 前,请确保以下检查全部通过(与 CI 门禁一致):
 
-**前端 · `crates/agent-gui`**
+**前端 · `crates/frontend`**
 
 1. 类型检查与构建通过:`pnpm build`
 2. 代码规范检查通过:`pnpm lint`
 3. 前端单元测试通过:`pnpm test:frontend`(改动发布脚本时另跑 `pnpm test:release`)
-4. 桌面壳检查通过:`cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests`(仓库根目录执行)
+4. 桌面壳检查通过:`cargo check --manifest-path crates/frontend/src-tauri/Cargo.toml --tests`(仓库根目录执行)
 
-**后端 · `crates/agent-backend`(如有改动)**
+**后端 · `crates/backend`(如有改动)**
 
 1. 生成的路由无漂移:`make check-routes`(新增 command 未加路由必须在这里失败)
-2. 后端测试通过:`cargo test -p agent-backend`
+2. 后端测试通过:`cargo test -p backend`
 
 **Diff 卫生**
 

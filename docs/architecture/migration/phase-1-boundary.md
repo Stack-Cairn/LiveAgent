@@ -4,7 +4,7 @@
 
 ## 目标
 
-把 234 个 `#[tauri::command]` 分成三类,决定哪些进 `agent-core`(独立进程、禁 tauri
+把 234 个 `#[tauri::command]` 分成三类,决定哪些进 `backend`(独立进程、禁 tauri
 依赖)、哪些永远留在 Tauri 壳、哪些直接删除。
 
 **不写实现代码。** 这份分类是后续所有阶段的前提 —— 分错一个,后端就会被迫
@@ -85,7 +85,7 @@
 ## 验证
 
 ```bash
-cd crates/agent-gui/src-tauri/src
+cd crates/frontend/src-tauri/src
 sed -n '43,286p' lib.rs \
   | rg -o '^\s+[a-z_]+::[a-z_]+::([a-z_0-9]+),$' -r '$1' \
   | sort > /tmp/registered.txt

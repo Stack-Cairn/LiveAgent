@@ -6,8 +6,8 @@
 
 | 形态 | 后端 | 前端 | 适用 |
 |---|---|---|---|
-| 桌面端自带 | Tauri 壳在自己进程里起 `agent-backend`，监听 `127.0.0.1:<随机端口>` | 壳内 WebView | 单机使用，装完即用 |
-| 独立后端 | Docker 跑 `agent-backend`，监听 `0.0.0.0:8443` | 浏览器打开同一台机器提供的页面并填地址+密码 | 后端放服务器/家里的机器，从别处访问 |
+| 桌面端自带 | Tauri 壳在自己进程里起 `backend`，监听 `127.0.0.1:<随机端口>` | 壳内 WebView | 单机使用，装完即用 |
+| 独立后端 | Docker 跑 `backend`，监听 `0.0.0.0:8443` | 浏览器打开同一台机器提供的页面并填地址+密码 | 后端放服务器/家里的机器，从别处访问 |
 
 两者**不能同机并跑**——共用同一个 `~/.liveagent` 数据目录。
 
@@ -22,15 +22,15 @@
 
 | 阶段 | 内容 |
 |---|---|
-| `engine-builder` | Node 22 + pnpm，`tsc --noEmit` + esbuild 把 `agent-core-js` 打成单文件 `dist/index.js` |
-| `backend-builder` | Rust，`cargo build -p agent-backend --release` |
+| `engine-builder` | Node 22 + pnpm，`tsc --noEmit` + esbuild 把 `core` 打成单文件 `dist/index.js` |
+| `backend-builder` | Rust，`cargo build -p backend --release` |
 | `runtime` | `node:22.17.1-bookworm-slim`，非 root（uid 10001），二进制 + 引擎 bundle |
 
 ```
 ENV LIVEAGENT_DATA_DIR=/var/lib/liveagent LIVEAGENT_ENGINE_BUNDLE=/opt/liveagent/engine
 VOLUME ["/var/lib/liveagent"]
 EXPOSE 8443
-ENTRYPOINT ["/usr/local/bin/agent-backend"]
+ENTRYPOINT ["/usr/local/bin/backend"]
 ```
 
 运行时基底是 `node:*-slim` 而不是 `debian-slim`：Node runtime 要随产物分发
@@ -49,7 +49,7 @@ make backend-docker-smoke     # 起容器 + 轮询 /healthz，60s 上限
 
 ## 启动参数
 
-`agent-backend` 每个命令行参数都有环境变量兜底，**argv 优先**（手写解析，
+`backend` 每个命令行参数都有环境变量兜底，**argv 优先**（手写解析，
 不引 clap——六个参数不值一整棵依赖树）：
 
 | 参数 | 环境变量 | 默认 | 说明 |
@@ -77,7 +77,7 @@ make backend-docker-smoke     # 起容器 + 轮询 /healthz，60s 上限
 
 ## 数据持久化
 
-后端把全部状态写在**数据目录**下（`agent-core/src/storage.rs`）。解析顺序：
+后端把全部状态写在**数据目录**下（`backend/src/storage.rs`）。解析顺序：
 `--data-dir` → `LIVEAGENT_DATA_DIR` → 运行用户的 `~/.liveagent`（路径是写死的
 字符串，不随包名漂移——桌面壳不传参数，永远落在 `~/.liveagent`）：
 
@@ -140,13 +140,13 @@ URL 参数会被持久化到 localStorage，下次打开不用重填。`secure` 
 
 | Job | 内容 |
 |---|---|
-| Backend Rust | `make check-routes`（生成物漂移）、`make check-command-classes`（新命令必须归类）、**`cargo tree -p agent-core \| grep tauri` 命中即失败**、`cargo test` + `clippy -D warnings` |
+| Backend Rust | `make check-routes`（生成物漂移）、`make check-command-classes`（新命令必须归类）、**`cargo tree -p backend \| grep tauri` 命中即失败**、`cargo test` + `clippy -D warnings` |
 | Backend Docker Smoke | 构建镜像、起容器、轮询 `/healthz` |
 | GUI | 前端测试 |
 | Tauri Rust Check | `src-tauri` 单独跑（它要 GTK/WebKit，不能塞进后端 job） |
 | Diff Hygiene | 空白字符检查 |
 
-「agent-core 不许依赖 tauri」是编译期防线的 CI 版：这个 crate 一旦依赖 tauri，
+「backend 不许依赖 tauri」是编译期防线的 CI 版：这个 crate 一旦依赖 tauri，
 headless 后端就再也编不出来了，而这种依赖是顺手 `use` 一下就会引入的。
 
 ## 发布
@@ -161,7 +161,7 @@ headless 后端就再也编不出来了，而这种依赖是顺手 `use` 一下�
 
 ### 桌面版本号来源
 
-日常开发只维护一处：`crates/agent-gui/package.json`。Tauri 配置、前端 About 页和
+日常开发只维护一处：`crates/frontend/package.json`。Tauri 配置、前端 About 页和
 Rust 运行时都从这里读。
 
 正式发布**不依赖人工改 package.json**。`desktop-release.yml` 先解析 tag：

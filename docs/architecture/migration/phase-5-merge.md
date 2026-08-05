@@ -10,7 +10,7 @@
 
 | 前端 | 现在 | 阶段 3 抽走引擎后 |
 |---|---|---|
-| `crates/agent-gui/src` | 151,713 行 | 约 116,500 行 |
+| `crates/frontend/src` | 151,713 行 | 约 116,500 行 |
 | `crates/agent-gateway/web/src` | 126,934 行 | 126,934 行(本来就不含引擎) |
 
 **抽走引擎后两边体量几乎一样。** 而且 `scripts/mirror-manifest.json` 已经在用 CI
@@ -47,7 +47,7 @@ if (hasShell()) { renderTrayMenu() }
 
 ## 20 个脆测试
 
-`crates/agent-gui/test/` 里有 20 个文件用 `readFileSync` + 正则断言**源码文本**:
+`crates/frontend/test/` 里有 20 个文件用 `readFileSync` + 正则断言**源码文本**:
 
 ```js
 assert.match(composer, /lastEditorSelectionRef = useRef<Range \| null>\(null\)/)
@@ -142,7 +142,7 @@ file-tree/model.ts),已改用 capabilities。
 
 - ✅ 只有一个前端源码树
 - ✅ mirror-manifest 与 Mirror Check job 删除
-- ✅ `node --test 'crates/agent-gui/test/**/*.test.mjs'` 1371/1371 绿
+- ✅ `node --test 'crates/frontend/test/**/*.test.mjs'` 1371/1371 绿
   (脆测试已改写或删除,无 skip)
 - ⬜ 「同一份代码在 Tauri 壳与浏览器里都能跑」——降级代码已就位,
   但未实际起浏览器验证

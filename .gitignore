@@ -13,10 +13,10 @@ lerna-debug.log*
 .codex-artifacts
 .liveagent
 workspace
-!crates/agent-gui/src-tauri/src/commands/workspace/
-!crates/agent-gui/src-tauri/src/commands/workspace/**
-!crates/agent-gui/src/pages/chat/workspace/
-!crates/agent-gui/src/pages/chat/workspace/**
+!crates/frontend/src-tauri/src/commands/workspace/
+!crates/frontend/src-tauri/src/commands/workspace/**
+!crates/frontend/src/pages/chat/workspace/
+!crates/frontend/src/pages/chat/workspace/**
 cert/
 node_modules
 dist

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates the axum route layer for the 195 backend commands from the Tauri
-// thin-wrapper layer (crates/agent-gui/src-tauri/src/tauri_commands/*.rs).
+// thin-wrapper layer (crates/frontend/src-tauri/src/tauri_commands/*.rs).
 //
 // The wrappers are the authoritative source for the HTTP contract:
 //   - command name  →  POST /api/<command_name>
@@ -11,7 +11,7 @@
 //   - sync/async    →  whether the handler awaits the core call
 //   - return type   →  non-Result returns get wrapped in Ok(...)
 //
-// Output is written to crates/agent-backend/src/routes_gen.rs (byte-identical,
+// Output is written to crates/backend/src/routes_gen.rs (byte-identical,
 // enforced by `--check`). The ROUTED_COMMANDS const and the .route() calls in
 // gen_router() are generated from the same list, so registration and the
 // contract-test name list can never drift.
@@ -24,10 +24,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const WRAPPER_DIR = join(repoRoot, "crates", "agent-gui", "src-tauri", "src", "tauri_commands");
-const OUTPUT_PATH = join(repoRoot, "crates", "agent-backend", "src", "routes_gen.rs");
+const WRAPPER_DIR = join(repoRoot, "crates", "frontend", "src-tauri", "src", "tauri_commands");
+const OUTPUT_PATH = join(repoRoot, "crates", "backend", "src", "routes_gen.rs");
 
-// State 类型 → AppState 字段（agent-backend/src/state.rs 的 11 个注册表）。
+// State 类型 → AppState 字段（backend/src/state.rs 的 11 个注册表）。
 const STATE_MAP = {
   EventBus: "events",
   AutomationStore: "automation_store",
@@ -82,17 +82,19 @@ function parseParam(paramStr) {
 function parseWrapperFile(filePath) {
   const text = readFileSync(filePath, "utf8");
 
-  // 该文件的 agent_core:: use 行（含跨行块）——每个命令模块原样复制，保证
+  // 该文件的 backend:: use 行（含跨行块）——每个命令模块原样复制，保证
   // 参数类型与 wrapper 用同一来源，且不会跨文件撞 E0252。
   const uses = [];
-  const useRe = /\buse\s+agent_core::[\s\S]*?;/g;
+  const useRe = /\buse\s+backend::[\s\S]*?;/g;
   let um;
   while ((um = useRe.exec(text)) !== null) {
     const before = text.slice(0, um.index);
     const lineStart = before.lastIndexOf("\n");
     const prefix = before.slice(lineStart + 1).trimStart();
     if (prefix.startsWith("//")) continue; // 注释里的字面量
-    uses.push(um[0]);
+    // wrapper（frontend crate）里写的是 backend::…；生成的文件在 backend
+    // crate 内部，同一路径要写成 crate::…。
+    uses.push(um[0].replace(/\bbackend::/g, "crate::"));
   }
 
   const lines = text.split("\n");
@@ -134,18 +136,18 @@ function parseWrapperFile(filePath) {
     const retType = fnMatch[4].trim().replace(/\s*\{\s*$/, "").trim();
 
     // SKIP（前端专属/删除）与 WS_STREAM（流式走 WS）命令不生成路由，直接跳过，
-    // 它们的 body 也不走标准 agent_core 调用（如 proxy_get_server_info 调 services::proxy::）。
+    // 它们的 body 也不走标准 backend 调用（如 proxy_get_server_info 调 services::proxy::）。
     if (WS_STREAM.has(name) || SKIP.has(name)) continue;
 
     const params = splitParams(paramStr).map(parseParam).filter((p) => p.name !== "");
     const stateParams = params.filter((p) => p.state);
     const bodyParams = params.filter((p) => !p.state);
-    const callRe = new RegExp(`agent_core::[\\w:]+?${name}\\s*\\(`);
+    const callRe = new RegExp(`backend::[\\w:]+?${name}\\s*\\(`);
     const callMatch = text.match(callRe);
     if (!callMatch) {
-      throw new Error(`PARSE_FAIL: ${name} 的 body 里找不到 agent_core 调用`);
+      throw new Error(`PARSE_FAIL: ${name} 的 body 里找不到 backend 调用`);
     }
-    const callPath = callMatch[0].replace(/\(\s*$/, "");
+    const callPath = callMatch[0].replace(/\(\s*$/, "").replace(/^backend::/, "crate::");
     const callIdents = callPath.split("::");
     const lastIdent = callIdents[callIdents.length - 1];
     if (lastIdent !== name) {
@@ -159,7 +161,7 @@ function parseWrapperFile(filePath) {
       }
     }
 
-    // params 保留 wrapper 的原始顺序：agent-core 函数签名就是 wrapper 参数顺序
+    // params 保留 wrapper 的原始顺序：backend 函数签名就是 wrapper 参数顺序
     // （body 里 x.inner() 原样转发），乱序会导致参数错位甚至静默交换。
     commands.push({ name, renameAll, isAsync, retType, callPath, stateParams, bodyParams, params, uses });
   }
@@ -212,7 +214,7 @@ function render() {
     const argsStruct = `${pascal}RouteArgs`;
     const hasBody = cmd.bodyParams.length > 0;
 
-    // 每个命令一个私有模块，复制其源 wrapper 文件的 agent_core:: use 行：
+    // 每个命令一个私有模块，复制其源 wrapper 文件的 backend:: use 行：
     // 参数类型与 wrapper 同一来源，跨文件同名符号互不干扰（E0252 不跨模块）。
     out.push(`mod ${cmd.name} {`);
     out.push(`    use super::*;`);

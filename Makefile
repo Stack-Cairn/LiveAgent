@@ -1,8 +1,8 @@
 .DEFAULT_GOAL := dev
 
-AGENT_GUI_DIR := crates/agent-gui
-AGENT_BACKEND_DIR := crates/agent-backend
-AGENT_CORE_JS_DIR := crates/agent-core-js
+AGENT_GUI_DIR := crates/frontend
+AGENT_BACKEND_DIR := crates/backend
+AGENT_CORE_JS_DIR := crates/core
 
 HOST_ARCH := $(shell uname -m)
 
@@ -147,7 +147,7 @@ clean:
 update-model-catalog:
 	node scripts/generate-model-catalog.mjs
 
-# 从 src-tauri/src/tauri_commands/*.rs 重新生成 agent-backend 的路由层（routes_gen.rs）。
+# 从 src-tauri/src/tauri_commands/*.rs 重新生成 backend 的路由层（routes_gen.rs）。
 update-routes:
 	node scripts/generate-routes.mjs
 
@@ -214,14 +214,14 @@ help:
 	@printf "  %-34s %s\n" "make desktop-build-linux" "构建 Linux AppImage/deb/rpm"
 	@printf "  %-34s %s\n" "make github-release-main RELEASE_TAG=vX.Y.Z" "从 main 打 tag 并触发 GitHub Release（自动刷新模型目录并提交）"
 	@printf "\n%s\n" "Backend build"
-	@printf "  %-34s %s\n" "make backend-docker-build" "构建 agent-backend Docker 镜像"
-	@printf "  %-34s %s\n" "make backend-docker-run" "本地运行 agent-backend Docker 镜像"
-	@printf "  %-34s %s\n" "make backend-docker-smoke" "构建并健康检查 agent-backend Docker 镜像"
+	@printf "  %-34s %s\n" "make backend-docker-build" "构建 backend Docker 镜像"
+	@printf "  %-34s %s\n" "make backend-docker-run" "本地运行 backend Docker 镜像"
+	@printf "  %-34s %s\n" "make backend-docker-smoke" "构建并健康检查 backend Docker 镜像"
 	@printf "\n%s\n" "Maintenance"
 	@printf "  %-34s %s\n" "make all" "构建 GUI"
 	@printf "  %-34s %s\n" "make clean" "清理构建产物"
 	@printf "  %-34s %s\n" "make update-model-catalog" "刷新 models.dev 模型目录快照"
-	@printf "  %-34s %s\n" "make update-routes" "从 tauri_commands 重新生成 agent-backend 路由层"
+	@printf "  %-34s %s\n" "make update-routes" "从 tauri_commands 重新生成 backend 路由层"
 	@printf "  %-34s %s\n" "make check-routes" "校验路由层与 wrapper 一致（CI 门禁）"
 	@printf "  %-34s %s\n" "make check-command-classes" "校验 Tauri command 全部已归类（CI 门禁）"
 	@printf "  %-34s %s\n" "make help" "查看可用命令"

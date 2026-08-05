@@ -77,12 +77,12 @@ jobs:
           docker pull "$ref" >/dev/null
           docker rm -f verify-amd64 >/dev/null 2>&1 || true
           docker create --name verify-amd64 "$ref" >/dev/null
-          docker cp verify-amd64:/usr/local/bin/agent-backend /tmp/agent-backend-amd64
+          docker cp verify-amd64:/usr/local/bin/backend /tmp/backend-amd64
           docker rm -f verify-amd64 >/dev/null
-          info="$(file -b /tmp/agent-backend-amd64)"
+          info="$(file -b /tmp/backend-amd64)"
           echo "linux/amd64: $info"
           echo "$info" | grep -q "x86-64" || {
-            echo "::error::linux/amd64 镜像里的 agent-backend 不是 x86-64 二进制"
+            echo "::error::linux/amd64 镜像里的 backend 不是 x86-64 二进制"
             exit 1
           }
 

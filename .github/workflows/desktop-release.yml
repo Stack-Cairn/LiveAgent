@@ -67,7 +67,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Prepare release version config
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: node ../../scripts/release/prepare-app-version-from-tag.mjs "$LIVEAGENT_RELEASE_TAG" --github-env "$GITHUB_ENV" --tauri-config src-tauri/tauri.version.generated.conf.json
 
       - name: Install pnpm
@@ -79,10 +79,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/agent-gui/src-tauri
+          workspaces: crates/frontend/src-tauri
 
       - name: Install frontend dependencies
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: pnpm install --frozen-lockfile
 
       - name: Import Apple signing certificate
@@ -170,7 +170,7 @@ jobs:
 
       - name: Prepare release version config
         shell: bash
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: node ../../scripts/release/prepare-app-version-from-tag.mjs "$LIVEAGENT_RELEASE_TAG" --github-env "$GITHUB_ENV" --tauri-config src-tauri/tauri.version.generated.conf.json
 
       - name: Install pnpm
@@ -180,14 +180,14 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/agent-gui/src-tauri
+          workspaces: crates/frontend/src-tauri
 
       - name: Install frontend dependencies
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: pnpm install --frozen-lockfile
 
       - name: Build Windows bundles
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         shell: bash
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -201,9 +201,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          msi_path="$(find target crates/agent-gui/src-tauri/target -type f -name '*.msi' -path '*bundle*' -print -quit 2>/dev/null || true)"
-          exe_path="$(find target crates/agent-gui/src-tauri/target -type f -name '*.exe' -path '*bundle*' -print -quit 2>/dev/null || true)"
-          portable_exe_path="$(find target crates/agent-gui/src-tauri/target -type f -name 'liveagent.exe' -path '*/release/*' ! -path '*bundle*' -print -quit 2>/dev/null || true)"
+          msi_path="$(find target crates/frontend/src-tauri/target -type f -name '*.msi' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          exe_path="$(find target crates/frontend/src-tauri/target -type f -name '*.exe' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          portable_exe_path="$(find target crates/frontend/src-tauri/target -type f -name 'liveagent.exe' -path '*/release/*' ! -path '*bundle*' -print -quit 2>/dev/null || true)"
           test -n "$msi_path"
           test -n "$exe_path"
           test -n "$portable_exe_path"
@@ -244,7 +244,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Prepare release version config
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: node ../../scripts/release/prepare-app-version-from-tag.mjs "$LIVEAGENT_RELEASE_TAG" --github-env "$GITHUB_ENV" --tauri-config src-tauri/tauri.version.generated.conf.json
 
       - name: Install pnpm
@@ -270,14 +270,14 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: crates/agent-gui/src-tauri
+          workspaces: crates/frontend/src-tauri
 
       - name: Install frontend dependencies
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         run: pnpm install --frozen-lockfile
 
       - name: Build Linux bundles
-        working-directory: crates/agent-gui
+        working-directory: crates/frontend
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -291,21 +291,21 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          appimage_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.AppImage' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          appimage_path="$(find crates/frontend/src-tauri/target target -type f -name '*.AppImage' -path '*bundle*' -print -quit 2>/dev/null || true)"
           test -n "$appimage_path"
           appimage_path="$(realpath "$appimage_path")"
           scripts/release/postprocess-linux-appimage.sh "$appimage_path"
           test ! -e "$appimage_path.sig"
-          pnpm --dir crates/agent-gui tauri signer sign "$appimage_path"
+          pnpm --dir crates/frontend tauri signer sign "$appimage_path"
           test -s "$appimage_path.sig"
 
       - name: Stage Linux artifacts
         run: |
           set -euo pipefail
           mkdir -p dist
-          appimage_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.AppImage' -path '*bundle*' -print -quit 2>/dev/null || true)"
-          deb_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.deb' -path '*bundle*' -print -quit 2>/dev/null || true)"
-          rpm_path="$(find crates/agent-gui/src-tauri/target target -type f -name '*.rpm' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          appimage_path="$(find crates/frontend/src-tauri/target target -type f -name '*.AppImage' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          deb_path="$(find crates/frontend/src-tauri/target target -type f -name '*.deb' -path '*bundle*' -print -quit 2>/dev/null || true)"
+          rpm_path="$(find crates/frontend/src-tauri/target target -type f -name '*.rpm' -path '*bundle*' -print -quit 2>/dev/null || true)"
           test -n "$appimage_path"
           test -n "$deb_path"
           test -n "$rpm_path"

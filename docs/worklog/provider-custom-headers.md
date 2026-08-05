@@ -7,7 +7,7 @@ Add ordered custom HTTP headers to `CustomProvider` in both mirrored TypeScript 
 ## Constraints
 
 - Branch: `feat/provider-custom-headers`, based on `upstream/main` at `b11a0a5`.
-- Keep `crates/agent-gui` and `crates/agent-gateway/web` mirrored.
+- Keep `crates/frontend` and `crates/agent-gateway/web` mirrored.
 - Do not commit, push, or create a PR before manual Tauri validation.
 - Do not change Rust unless the gateway model-discovery path proves it is required and the user approves.
 

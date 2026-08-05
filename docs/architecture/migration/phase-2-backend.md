@@ -10,9 +10,9 @@
 
 产物是两个新 crate:
 
-- **`crates/agent-core`** —— 后端核心。`Cargo.toml` **禁 tauri 依赖**(编译期防线)。
+- **`crates/backend`** —— 后端核心。`Cargo.toml` **禁 tauri 依赖**(编译期防线)。
   装 `runtime/` + `services/`(除 gateway/tray/bridge)+ `commands/` 的实现。
-- **`crates/agent-backend`** —— axum HTTP/WS 服务。密码认证、TLS、事件流。
+- **`crates/backend`** —— axum HTTP/WS 服务。密码认证、TLS、事件流。
 
 `src-tauri` 退化为薄壳:`lib.rs`、托盘/窗口/更新、`gateway/*`(阶段 4 删)、
 以及 195 个 `#[tauri::command]` 薄包装。
@@ -22,7 +22,7 @@
 | # | 要求 | 为什么 |
 |---|---|---|
 | 1 | 每个 command **同时**挂 `#[tauri::command]` 和 HTTP 路由 | 双挂让前端能逐个迁移,任何时刻桌面端都可用 |
-| 2 | `cargo tree -p agent-core` 零 tauri | 编译期防线,不靠自觉 |
+| 2 | `cargo tree -p backend` 零 tauri | 编译期防线,不靠自觉 |
 | 3 | 交付物必须含 API 契约测试 | 决策 18 |
 | 4 | 每次提交都编译绿 + 全量测试绿 | 不做长期分支 |
 | 5 | 桌面端行为零变化 | 阶段 2 是纯重构,不改产品语义 |
@@ -50,13 +50,13 @@ JSON key)。1:1 映射让阶段 4 是机械替换;REST 化等于做 195 次独�
 后端代码此前把两个消费者**硬编码**在发事件的地方:`AppHandle::emit` 和
 `GatewayController`。这让「谁在监听」成为后端的编译期依赖。
 
-现在后端只认识 `agent_core::events::EventSink`:
+现在后端只认识 `backend::events::EventSink`:
 
 | Sink | 位置 | 命运 |
 |---|---|---|
-| `TauriEventSink` | `src-tauri/tauri_sink.rs` | 桌面壳独有,永不进 agent-core |
+| `TauriEventSink` | `src-tauri/tauri_sink.rs` | 桌面壳独有,永不进 backend |
 | `GatewayEventSink` | `src-tauri/gateway_sink.rs` | **过渡设施**,阶段 4 随 Gateway 删除 |
-| `WsEventSink` | `agent-backend/src/ws.rs` | agent-backend 用,`/api/events` |
+| `WsEventSink` | `backend/src/ws.rs` | backend 用,`/api/events` |
 
 payload 统一 `serde_json::Value` —— 这些类型本来就要过 JSON IPC,且线上协议就是 JSON。
 sink 多为「重读当前状态再发布」,避免给 11 个 payload 类型逐个加 `Deserialize`。
@@ -74,9 +74,9 @@ sink 多为「重读当前状态再发布」,避免给 11 个 payload 类型逐�
 顺带纠正一处所有权倒置:`WorkspaceWatchService` 原先由 `GatewayController` **创建**,
 现改为后端创建、controller 接收,`attach_gateway` 删除。
 
-### agent-core crate 建立
+### backend crate 建立
 
-已接通,`events.rs` 迁入,`cargo tree -p agent-core` 零 tauri。
+已接通,`events.rs` 迁入,`cargo tree -p backend` 零 tauri。
 
 ## 进度指标
 
@@ -84,14 +84,14 @@ sink 多为「重读当前状态再发布」,避免给 11 个 payload 类型逐�
 |---|---|---|---|
 | 后端代码里 `GatewayController` 引用 | 65 | **0** | 0 |
 | 后端代码里结构性 tauri 触点 | 13 | **0** | 0 |
-| 已迁入 agent-core 的行数 | 0 | **69,440** | 76,122 |
+| 已迁入 backend 的行数 | 0 | **69,440** | 76,122 |
 | HTTP 路由 | 0 | **175** | 175 |
 
-`agent-core` 依赖树零 tauri,编译期防线生效。`src-tauri` 从 92k 行降到 22,480 行。
+`backend` 依赖树零 tauri,编译期防线生效。`src-tauri` 从 92k 行降到 22,480 行。
 
-行数比原估的 76,122 少,因为 `services/proxy.rs`(阶段 2 末由 agent-backend 取代)
-没搬——搬它会把 axum 拖进 agent-core。`services/tunnel/` 不是「没搬」而是**重写**:
-旧的 2,126 行删除,新实现拆成 agent-core 的状态层(1,193 行)与 agent-backend 的
+行数比原估的 76,122 少,因为 `services/proxy.rs`(阶段 2 末由 backend 取代)
+没搬——搬它会把 axum 拖进 backend。`services/tunnel/` 不是「没搬」而是**重写**:
+旧的 2,126 行删除,新实现拆成 backend 的状态层(1,193 行)与 backend 的
 数据面(816 行),见下方「隧道重写」。
 
 ## ⚠️ 推翻:P2-16/17/18 的顺序假设是错的
@@ -107,7 +107,7 @@ runtime/managed_process_journal.rs                           → crate::services
 三者互相引用,不存在无环的拆分顺序。分步搬只能靠临时垫片,下一步再删掉。
 
 **一次搬完反而更简单**:所有 `crate::runtime::` / `crate::services::` / `crate::commands::`
-内部路径在 agent-core 里原样有效,133 个文件零路径改写。代价只有 18 个编译错误。
+内部路径在 backend 里原样有效,133 个文件零路径改写。代价只有 18 个编译错误。
 
 真正的成本在壳侧:**61 个** `pub(crate)` 需要提升为 `pub`(文档原估 29)。全部由编译器
 `E0603` 点名后提升,没有全局提升——`pub(crate)` 在 crate 内依然有效,只有真正跨界的才该动。
@@ -119,14 +119,14 @@ runtime/managed_process_journal.rs                           → crate::services
 | `tauri::async_runtime` → tokio | ✅ 225 处已换(gateway 除外,阶段 4 删) |
 | `#[tauri::command]` 拆成 impl + wrapper | ✅ 177 个,脚本生成 |
 | `tauri::State<'_, Arc<T>>` → 显式参数 | ✅ 41 处 → `&Arc<T>`,体内 `x.inner()` → `x` |
-| 代码迁入 agent-core | ✅ 69,440 行 |
+| 代码迁入 backend | ✅ 69,440 行 |
 | `pub(crate)` 跨界提升 | ✅ 61 个符号 |
 | **补完 175 条路由(P2-28)** | ✅ 脚本生成,`check-routes` 门禁 |
 | **会话隔离(P2-24)/状态码语义(P2-25)** | ✅ 已决:id 即隔离边界 / 200·400 两档 |
 | **契约测试(P2-29)** | ✅ 175 路由全部可达 + 清单一致性 + 认证语义 + 代表性命令真成功,变异验证通过 |
 | **事件接线缺口** | ✅ WS sink 注册 + 3 registry `set_event_bus` + automation 启动 + managed-process monitor |
 | **tunnel 重写(P2-30)** | ✅ 一隧道一端口,路径 1:1,重写代码 0 行 |
-| **阶段验收(P2-31)** | ✅ 757 测试绿,agent-core 零 tauri,curl/WS 实测通过 |
+| **阶段验收(P2-31)** | ✅ 757 测试绿,backend 零 tauri,curl/WS 实测通过 |
 
 包装与实现的拆分是**脚本生成**的,不是手写:177 次同样的机械变换,手写只会引入
 手写才有的错误。生成后用机器验了前端契约——234 个命令名、`rename_all`、JSON key
@@ -135,14 +135,14 @@ runtime/managed_process_journal.rs                           → crate::services
 ## 路由生成(P2-28)
 
 175 条 HTTP 路由由 `scripts/generate-routes.mjs` 从 `tauri_commands/*.rs` 包装层
-**自动生成**(`crates/agent-backend/src/routes_gen.rs`):
+**自动生成**(`crates/backend/src/routes_gen.rs`):
 
-- 每个命令一个私有模块,复制其源 wrapper 文件的 `agent_core::` use 行——参数类型
+- 每个命令一个私有模块,复制其源 wrapper 文件的 `backend::` use 行——参数类型
   与 wrapper 同一来源,跨文件同名符号互不干扰(E0252 不跨模块)
 - 参数结构体 `#[serde(rename_all = ...)]` 逐命令镜像 tauri 属性(约 67 条 camelCase、
   103 条 snake_case),不能统一
 - State 参数按 `Arc<T>` 类型映射到 `AppState` 字段,与 body 参数**保持 wrapper 原始
-  顺序**——agent-core 函数签名就是 wrapper 参数顺序,乱序会静默交换参数
+  顺序**——backend 函数签名就是 wrapper 参数顺序,乱序会静默交换参数
 - 3 个非 Result 返回(`terminal_shell_options`/`terminal_list`/`runtime_cancel`)包
   `Ok::<_, String>`
 - `ROUTED_COMMANDS` const 与 `.route()` 调用同源生成,注册与名字清单永不漂移
@@ -212,8 +212,8 @@ cookie 只看域名不看端口,不带 id 会互相覆盖)。
 持有**并直接交给 axum。若改成 store 先探测端口再让数据面重绑,中间那个释放窗口
 就是 TOCTOU。现在这个窗口不存在。
 
-代价是 agent-core 要定义 `TunnelDataPlane` trait 而实现留在 agent-backend——
-agent-core 不能依赖 axum(编译期防线只挡 tauri,但把 HTTP 服务器塞进核心库同样
+代价是 backend 要定义 `TunnelDataPlane` trait 而实现留在 backend——
+backend 不能依赖 axum(编译期防线只挡 tauri,但把 HTTP 服务器塞进核心库同样
 是错的)。桌面壳直接复用同一份实现,两边行为不可能不一致。
 
 ### 落库的是意图,不是运行态
@@ -253,7 +253,7 @@ token 每次进程启动重新分配:上次的端口这次可能已被占用,而
 逐站点核查:后端所有 spawn 都只从 async 上下文可达(`scheduler.rs` 的 5 个同步 fn
 调用方都在 `async fn fire`/`execute_fire` 内;`spawn_ssh_reconnect_runner` 3 个调用点
 都在 async fn 内)。`registry.rs` 的 2 个裸 `thread::spawn`(PTY 读线程)不碰 async runtime。
-唯一例外 `services/proxy.rs:83` 会被 agent-backend 取代而消失。
+唯一例外 `services/proxy.rs:83` 会被 backend 取代而消失。
 
 > 并行分析给出「语义等价已验证」但**漏掉了 runtime 前提**这一条。
 
@@ -301,7 +301,7 @@ let _guard = runtime.enter();
 - ⚠️ 真问题是 **`pub(crate)` 跨 crate 变私有**(`E0603`),`include!` 把文件摊平放大了这个面
 
 580 处 `pub(crate)`,但壳侧只引用 **29 个符号路径**。只提升跨界的那些,
-其余保持 `pub(crate)`(在 agent-core 内部依然有效)。
+其余保持 `pub(crate)`(在 backend 内部依然有效)。
 
 > 并行分析把 `include!()` 列为**头号 blocker**,这是错的。
 
@@ -323,27 +323,27 @@ let _guard = runtime.enter();
 
 已补防线(P2-14):`GatewayController` 持有 `tauri::AppHandle`,单测造不出来,所以把
 **路由决策**(`action_for`,纯函数)和**执行**(`emit_json`,只剩转发)分开——踩过的那次
-回归本质就是路由错误。断言用 agent-core 导出的事件常量本身而非字面量:后端改名测试
+回归本质就是路由错误。断言用 backend 导出的事件常量本身而非字面量:后端改名测试
 跟着变,后端新增事件却忘了接就掉进 `Ignore` 被抓住。已用变异验证:删掉
 `HISTORY_UPSERT_EVENT` 分支,测试立即失败。
 
 `settings_save_remote` 是最后一处 `GatewayController` 耦合,已按同款模式切断:
 发 `settings:remote-saved`,sink 接住去调 `apply_config`。
 
-**桌面壳与 agent-backend 不能同机并跑。** 两者打开同一个 `~/.liveagent` 库:
+**桌面壳与 backend 不能同机并跑。** 两者打开同一个 `~/.liveagent` 库:
 cron 任务会被两个进程各触发一次,同一条隧道 spec 会被两个数据面各绑一个端口。
 managed-process journal 有 owner_pid 互斥,automation 和 tunnel 没有等价机制——
-当前架构假设同机只跑一个后端实例(桌面壳**或** agent-backend)。阶段 3 桌面壳
-改为连接 agent-backend 时,这个假设变成结构性保证;在那之前它只是运行约定。
+当前架构假设同机只跑一个后端实例(桌面壳**或** backend)。阶段 3 桌面壳
+改为连接 backend 时,这个假设变成结构性保证;在那之前它只是运行约定。
 
 ## 验证
 
 ```bash
 cargo test --workspace                    # 757 绿
-cargo tree -p agent-core | grep -q tauri && echo "防线破了" || echo "防线完好"
+cargo tree -p backend | grep -q tauri && echo "防线破了" || echo "防线完好"
 make check-routes                         # routes_gen.rs 与 wrapper 层一致
 node scripts/check-mirror.mjs             # GUI/WebUI 镜像副本一致
-node --test 'crates/agent-gui/test/**/*.test.mjs'   # 1435 绿
+node --test 'crates/frontend/test/**/*.test.mjs'   # 1435 绿
 ```
 
 > `cargo clippy --workspace -- -D warnings` 当前报 93 个 error,**全部是既有代码**

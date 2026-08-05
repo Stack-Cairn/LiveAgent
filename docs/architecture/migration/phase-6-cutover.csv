@@ -2,9 +2,9 @@ id,task,status,blocker,verify,notes
 P6-01,删除 crates/agent-gateway 全部 Go,todo,P5-09,"find . -name '*.go' -not -path './target/*' 输出 0 行",13914 手写 + 17357 生成 + 10827 测试
 P6-02,删除 proto/v2 与 buf 工具链,todo,P6-01,"find . -name '*.proto' -not -path '*/node_modules/*' 输出 0 行；cargo build 通过","决策 6 定了 JSON 协议。⚠️ src-tauri/build.rs 里有 prost-build 编译 proto/v2，删时要同步清理"
 P6-03,移除 prost/protobufjs 依赖,todo,P6-02,"Cargo.toml 与 package.json 里无 prost/protobufjs；构建通过",
-P6-04,Dockerfile 改为构建 agent-backend,todo,P5-09;P3-02,"docker build 成功；容器内 /healthz 返回 ok",需打包 Node runtime
+P6-04,Dockerfile 改为构建 backend,todo,P5-09;P3-02,"docker build 成功；容器内 /healthz 返回 ok",需打包 Node runtime
 P6-05,CI gateway job 换成 cargo test/clippy,todo,P6-01,"ci.yml 里无 go test/golangci-lint/buf；新 job 绿",
-P6-06,CI 加编译期防线门禁,todo,P6-05,"故意给 agent-core 加 tauri 依赖后 CI 失败","cargo tree -p agent-core | grep tauri 命中则失败"
+P6-06,CI 加编译期防线门禁,todo,P6-05,"故意给 backend 加 tauri 依赖后 CI 失败","cargo tree -p backend | grep tauri 命中则失败"
 P6-07,CI 加 command 分类 diff 门禁,todo,P6-05,"新增一个未分类的 command 后 CI 失败",即阶段 1 的 P1-13
 P6-08,Makefile 目标改名,todo,P6-04,"make dev-backend / backend-build / backend-docker-build 可用",原 dev-gateway / gateway-build / gateway-docker-*
 P6-09,删除 docs/architecture/gateway.md,todo,P6-01,"文件不存在；其他文档无指向它的死链",

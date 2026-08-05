@@ -2,7 +2,7 @@
 
 ## Goal
 
-Redesign the mirrored provider add/edit dialogs in agent-gui and agent-gateway/web using mockups/provider-dialog.html as the interaction baseline: responsive two-column navigation, dedicated basic/network/header panels, table/card header editing, and inline model capability editing.
+Redesign the mirrored provider add/edit dialogs in frontend and agent-gateway/web using mockups/provider-dialog.html as the interaction baseline: responsive two-column navigation, dedicated basic/network/header panels, table/card header editing, and inline model capability editing.
 
 ## Constraints
 

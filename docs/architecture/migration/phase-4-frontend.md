@@ -74,7 +74,7 @@ const backend = createBackendClient({ baseUrl, password });
   行为一致
 - 桌面版双击即用:壳注入密码、跳过登录页、无感
 - 浏览器访问远程后端:走登录页、输密码
-- `rg '@tauri-apps/api/core' crates/agent-gui/src` 只剩前端专属命令的文件
+- `rg '@tauri-apps/api/core' crates/frontend/src` 只剩前端专属命令的文件
 - 旧 gateway 镜像仍可拉、旧桌面端仍可连
 
 ---
@@ -106,7 +106,7 @@ const backend = createBackendClient({ baseUrl, password });
 
 | 目标 | 状态 |
 |---|---|
-| `services/gateway/*.rs` | ✅ 已删(`crates/agent-core/src/services/` 下不再有 `gateway/`) |
+| `services/gateway/*.rs` | ✅ 已删(`crates/backend/src/services/` 下不再有 `gateway/`) |
 | `services/gateway_bridge.rs` | ✅ 已删 |
 | `src-tauri/gateway_sink.rs` | ✅ 已删 |
 | `commands/integration/gateway.rs` 的 20 个中继命令 | ✅ 已删 |

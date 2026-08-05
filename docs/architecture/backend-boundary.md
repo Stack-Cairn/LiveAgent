@@ -1,7 +1,7 @@
 # 后端边界
 
 本文件是「统一网络通信」重构的**第一交付物**。它把当前 234 个 `#[tauri::command]` 分成三类,
-决定哪些进入 `crates/agent-backend`(独立进程、禁 tauri 依赖)、哪些永远留在 Tauri 壳、哪些直接删除。
+决定哪些进入 `crates/backend`(独立进程、禁 tauri 依赖)、哪些永远留在 Tauri 壳、哪些直接删除。
 
 **这份分类是后续所有阶段的前提。** 分错一个,后端就会被迫 `use tauri::`,headless 模式编译不出来。
 
@@ -20,12 +20,12 @@
 
 | 类别 | 数量 |
 |---|---|
-| 后端(`crates/agent-backend`) | **195** |
+| 后端(`crates/backend`) | **195** |
 | 前端专属(Tauri 壳) | **18** |
 | 删除 | **21** |
 | 合计 | **234** |
 
-数据来源:`crates/agent-gui/src-tauri/src/lib.rs` 第 43–286 行的 `tauri::generate_handler![…]` 块。
+数据来源:`crates/frontend/src-tauri/src/lib.rs` 第 43–286 行的 `tauri::generate_handler![…]` 块。
 该区间内非空非注释行共 234 条,全部匹配 `<mod>::<mod>::<cmd>,` 形式,无重复、无遗漏。
 
 > ⚠️ 统计时注意两个坑:
@@ -38,7 +38,7 @@
 
 ## A. 后端(195)
 
-进 `crates/agent-backend`,同时暴露为 HTTP/WS JSON API。前端与 Node 引擎都是它的客户端。
+进 `crates/backend`,同时暴露为 HTTP/WS JSON API。前端与 Node 引擎都是它的客户端。
 
 | 模块 | 数量 | 备注 |
 |---|---|---|
@@ -185,8 +185,8 @@ if inside_workspace && !open_in_file_manager { … }
 
 ## 编译期防线
 
-分类靠自觉守不住。`crates/agent-backend/Cargo.toml` **不得出现任何 tauri 依赖** ——
-一旦有人把前端专属 command 挪进后端,`cargo build -p agent-backend` 直接失败。
+分类靠自觉守不住。`crates/backend/Cargo.toml` **不得出现任何 tauri 依赖** ——
+一旦有人把前端专属 command 挪进后端,`cargo build -p backend` 直接失败。
 
 这是方案风险 4 的唯一对策,不要用文档约定代替。
 
@@ -196,7 +196,7 @@ if inside_workspace && !open_in_file_manager { … }
 (`backend.txt` / `frontend.txt` / `deleted.txt`,每行一个 command 名)。
 
 ```bash
-cd crates/agent-gui/src-tauri/src
+cd crates/frontend/src-tauri/src
 
 # 从注册块提取真实清单(注意块以不带分号的 `]` 结尾)
 sed -n '43,286p' lib.rs \

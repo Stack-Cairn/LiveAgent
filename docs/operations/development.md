@@ -23,7 +23,7 @@
 | 子项目 | Manifest | 说明 |
 |---|---|---|
 | Rust workspace | `Cargo.toml` | 根工作区，包含 Tauri/Rust crate。 |
-| GUI frontend | `crates/agent-gui/package.json` | 桌面 React/Tauri 前端依赖与脚本。 |
+| GUI frontend | `crates/frontend/package.json` | 桌面 React/Tauri 前端依赖与脚本。 |
 | Gateway | `crates/agent-gateway/go.mod` | Go Gateway 依赖。 |
 | Gateway WebUI | `crates/agent-gateway/web/package.json` | 浏览器 WebUI 依赖与构建脚本。 |
 
@@ -31,13 +31,13 @@
 
 | 场景 | 命令 |
 |---|---|
-| GUI build | `pnpm -C crates/agent-gui build` |
+| GUI build | `pnpm -C crates/frontend build` |
 | WebUI build | `pnpm -C crates/agent-gateway/web build` |
 | Gateway tests | `cd crates/agent-gateway && go test ./...` |
 | Gateway lint | `cd crates/agent-gateway && golangci-lint run ./...` |
 | Proto 检查 | `make proto-check`（buf lint + 对 origin/main 的 breaking 检查） |
-| Tauri/Rust tests | `cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml` |
-| 前端专项测试 | `pnpm -C crates/agent-gui test:frontend` |
+| Tauri/Rust tests | `cargo test --manifest-path crates/frontend/src-tauri/Cargo.toml` |
+| 前端专项测试 | `pnpm -C crates/frontend test:frontend` |
 | diff 空白检查 | `git diff --check` |
 | 当前改动 | `git status --short` |
 
@@ -83,7 +83,7 @@
 
 | 改动类型 | 需要同步检查 |
 |---|---|
-| Settings 子页面 | `crates/agent-gui/src/pages/settings/*` 与 `crates/agent-gateway/web/src/pages/settings/*`。 |
+| Settings 子页面 | `crates/frontend/src/pages/settings/*` 与 `crates/agent-gateway/web/src/pages/settings/*`。 |
 | Chat 气泡/侧边栏/上传 | GUI `src/pages/chat`/`src/components/chat` 与 WebUI 对应 copy。 |
 | Skills Hub | GUI/WebUI `pages/skills-hub`、`lib/skills`、i18n。 |
 | MCP Hub | GUI/WebUI `pages/mcp-hub`、`lib/mcpRegistry`、i18n。 |

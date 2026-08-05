@@ -10,7 +10,7 @@
 
 ### 1. 桌面壳无法连接远程后端
 
-- **来源**:阶段 6 文档重写时发现。`crates/agent-gui/src-tauri/src/commands/app/backend.rs`
+- **来源**:阶段 6 文档重写时发现。`crates/frontend/src-tauri/src/commands/app/backend.rs`
   的 `get_backend_endpoint` 只返回内嵌后端端点(host 恒为 `127.0.0.1`);前端
   `lib/backend/endpoint.ts` 在壳内只走 `askShellForEndpoint()`,没有填写远程地址的入口。
 - **影响**:验收标准「Docker 跑 headless 后端,笔记本上的桌面端连过去」当前实现不支持,
@@ -20,7 +20,7 @@
 
 ### 2. 容器数据落点未验证,重建可能丢数据 —— 已解决
 
-- **来源**:阶段 6。`crates/agent-core/src/storage.rs` 用 `dirs::home_dir()` 解析
+- **来源**:阶段 6。`crates/backend/src/storage.rs` 用 `dirs::home_dir()` 解析
   `~/.liveagent`,而 `Dockerfile` 把 runtime 用户建成 `--home-dir /nonexistent`,
   镜像也没有为数据目录预留卷。
 - **影响**:CI smoke 绿只说明进程能起,数据可能落在未挂卷路径,容器重建丢
@@ -72,7 +72,7 @@
 
 ### 8. 后端不读环境变量,靠 entrypoint 薄壳翻译 —— 已解决
 
-- **来源**:阶段 6。`agent-backend` 只认 argv(main.rs 无一处 `env::var`),
+- **来源**:阶段 6。`backend` 只认 argv(main.rs 无一处 `env::var`),
   容器场景靠新增的 `scripts/docker-entrypoint.sh` 把
   `PORT` / `LIVEAGENT_BACKEND_PASSWORD` / `LIVEAGENT_TLS_CERT+KEY` 翻成 argv。
 - **影响**:能用,但属架构欠账;所有容器平台的配置都多绕一层 shell。
@@ -98,7 +98,7 @@
 ### 11. 前端残留的 gateway 旧称与旧文件
 
 - **来源**:阶段 5/6。
-  - `crates/agent-gui/src/pages/chat/gateway/` 仍有 7 个文件
+  - `crates/frontend/src/pages/chat/gateway/` 仍有 7 个文件
     (chatRuntimeSnapshot / gatewayBridge* / useGateway* 等),命名与部分逻辑
     沿用 gateway 时代。
   - `src/lib/managed-process/backend.ts:4` 与 `src/lib/automation/backend.ts:4`
@@ -119,8 +119,8 @@
   gateway 相关字段随 Gateway 删除,web 权限开关仍需要;计划阶段 4 拆成两半,
   已记入 `backend-boundary.md`「已知分类缺陷」。
 - **处置**:✅ 已核对完成(阶段 4 P4-08)。`RemoteSettingsPayload`
-  (`agent-core/src/commands/config/settings/types.rs`)与前端 `RemoteSettings`
-  (`agent-gui/src/lib/settings/index.ts`)都只剩 `enabled` + `enableWeb*` 权限开关,
+  (`backend/src/commands/config/settings/types.rs`)与前端 `RemoteSettings`
+  (`frontend/src/lib/settings/index.ts`)都只剩 `enabled` + `enableWeb*` 权限开关,
   gateway 连接字段已删,旧库遗留键由 serde 默认行为忽略。
   backend-boundary.md 的「已知分类缺陷」一节已销记。
 

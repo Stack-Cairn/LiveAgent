@@ -42,7 +42,7 @@ lib/tools（11,126 行）里                                                    
 pi-agent-core 使用点                                                  agentRunner.ts 单文件
 ```
 
-而且**引擎能在 Node 里跑已被每日验证**:`crates/agent-gui/test/` 148 个测试文件中
+而且**引擎能在 Node 里跑已被每日验证**:`crates/frontend/test/` 148 个测试文件中
 **131 个**走 `helpers/load-ts-module.mjs` —— 用 `vm` 转译执行真实 TS,并直接 import
 pi-ai 的 `json-parse`/`validation`/`event-stream` 内部实现(注释原文:
 "so ... code paths behave exactly like runtime")。
@@ -70,7 +70,7 @@ pi-ai 的 `json-parse`/`validation`/`event-stream` 内部实现(注释原文:
 | `src/pages/chat/turns/run*.ts` | 1,800 |
 | **合计** | **35,182** |
 
-目标位置:`crates/agent-core-js/`(Node 包,esbuild 打单文件)。
+目标位置:`crates/core/`(Node 包,esbuild 打单文件)。
 
 ## 风险 1 · 工具审批反向往返(最大设计风险)
 

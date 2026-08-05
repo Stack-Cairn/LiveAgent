@@ -3,8 +3,8 @@ P4-01,设计并实现 backendClient,todo,P2-28,"createBackendClient({baseUrl, pa
 P4-02,实现 WS 事件订阅客户端,todo,P4-01;P2-26,"前端能收到 terminal/sftp/history/workspace 等事件；断线自动重连后重新订阅","替代 17 个文件里的 listen()。重连语义按决策 19：拉快照 + 订阅增量，不补发"
 P4-03,Tauri 壳注入密码并跳过登录页,todo,P4-01,"桌面版双击启动直接可用，不出现登录页",决策 8。密码初始化动态生成、用户可改
 P4-04,浏览器登录页,todo,P4-01,"浏览器访问远程后端出现登录页，输对密码后进入",
-P4-05,替换 57 个文件的 invoke 调用,todo,P4-01,"rg '@tauri-apps/api/core' crates/agent-gui/src 只剩前端专属命令的文件",前端专属的 18 个 command 保留 invoke——托盘/窗口/更新不该走网络
-P4-06,替换 17 个文件的 listen 调用,todo,P4-02,"rg '@tauri-apps/api/event' crates/agent-gui/src 只剩壳事件",
+P4-05,替换 57 个文件的 invoke 调用,todo,P4-01,"rg '@tauri-apps/api/core' crates/frontend/src 只剩前端专属命令的文件",前端专属的 18 个 command 保留 invoke——托盘/窗口/更新不该走网络
+P4-06,替换 17 个文件的 listen 调用,todo,P4-02,"rg '@tauri-apps/api/event' crates/frontend/src 只剩壳事件",
 P4-07,处理 plugin-opener 的 7 处,todo,P4-05,"浏览器里打开外链降级为 window.open；桌面里仍走原生",
 P4-08,拆分 settings_save_remote,todo,P4-05,"Gateway 连接字段消失；enable_web_* 权限开关仍生效且能门控远程前端","阶段 1 遗留缺陷。RemoteSettingsPayload（settings/types.rs:23）混了两类字段"
 P4-09,删除 21 个 deleted.txt 里的 command,todo,P4-05;P3-15,"cargo check -p liveagent 通过；deleted.txt 里的命令名在代码中无残留",
