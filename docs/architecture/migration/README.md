@@ -73,7 +73,7 @@ Go 的选型没有任何文档依据:它出现在 root commit `487af778`(2026-05
 |---|---|---|
 | 1 · 划清后端边界 | [phase-1-boundary.md](phase-1-boundary.md) | ✅ 完成 |
 | 2 · Rust 后端网络化 | [phase-2-backend.md](phase-2-backend.md) | ✅ 完成 |
-| 3 · 抽 Node 引擎 | [phase-3-engine.md](phase-3-engine.md) | ⬜ 未开始 |
+| 3 · 抽 Node 引擎 | [phase-3-engine.md](phase-3-engine.md) | 🔴 被阻塞(P3-01 stub + 7 关键问题) |
 | 4 · 前端网络化 | [phase-4-frontend.md](phase-4-frontend.md) | ⬜ 未开始 |
 | 5 · 前端合并 | [phase-5-merge.md](phase-5-merge.md) | ⬜ 未开始 |
 | 6 · 删除 Go 与切换发布 | [phase-6-cutover.md](phase-6-cutover.md) | ⬜ 未开始 |
