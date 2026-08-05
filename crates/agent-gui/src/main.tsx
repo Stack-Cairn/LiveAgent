@@ -1,3 +1,5 @@
+// 必须最先 import：浏览器环境下安装 __TAURI_INTERNALS__ 网络 shim
+import "./lib/backend/tauriShim";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

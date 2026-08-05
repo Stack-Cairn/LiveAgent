@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { backendFetch, subscribeEvents } from "../../../lib/backend/client";
+import { backendFetchGet, subscribeEvents } from "../../../lib/backend/client";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
 
 type UseBackendEventSubscriptionParams = {
@@ -95,10 +95,10 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
 
     (async () => {
       try {
-        const snapshot = await backendFetch<unknown>("conversation_live", {
+        const snapshot = await backendFetchGet<unknown>("conversation_live", {
           conversationId: currentConversationId,
         });
-        // 快照已在 backendFetch 调用点记录，这里仅作为恢复点
+        // 快照已在 backendFetchGet 调用点记录，这里仅作为恢复点
         console.debug("Conversation live snapshot fetched", snapshot);
       } catch (error) {
         console.warn("Failed to fetch conversation live snapshot", error);

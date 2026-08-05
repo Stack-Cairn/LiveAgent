@@ -56,6 +56,34 @@ export async function backendFetch<T = unknown>(
     signal,
   });
 
+  return parseBackendResponse<T>(command, response);
+}
+
+/**
+ * GET 型后端调用：参数走 query string。engine_proxy 的快照类端点
+ * （如 conversation_live）是 GET，与命令式 POST 路由不同。
+ */
+export async function backendFetchGet<T = unknown>(
+  command: string,
+  params: Record<string, string>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const endpoint = await getBackendEndpoint();
+  const url = new URL(`http://${endpoint.host}:${endpoint.port}/api/${command}`);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: { Authorization: `Bearer ${endpoint.password}` },
+    signal,
+  });
+
+  return parseBackendResponse<T>(command, response);
+}
+
+async function parseBackendResponse<T>(command: string, response: Response): Promise<T> {
   const text = await response.text();
 
   // 解析响应，处理空 body

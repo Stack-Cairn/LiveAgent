@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isNetworkShimActive } from "../backend/tauriShim";
 import { type Locale, normalizeLocale } from "../../i18n/config";
 import { normalizeCliIdentitySettings } from "../providers/cliIdentityCore";
 
@@ -346,6 +347,8 @@ export async function persistSettings(
 }
 
 export async function publishGatewaySettingsSync(settings: AppSettings): Promise<void> {
+  // 浏览器（网络 shim）里没有 gateway 镜像，也没有壳命令可调。
+  if (isNetworkShimActive()) return;
   await invoke("gateway_publish_settings_sync", {
     payload: buildGatewaySettingsSyncPayload(settings),
   } as any);

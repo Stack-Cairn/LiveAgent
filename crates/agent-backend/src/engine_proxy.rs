@@ -106,17 +106,9 @@ pub async fn proxy_to_node(
     };
     let target_url = format!("http://127.0.0.1:{}{}", port, target_path);
 
-    // 构造代理请求。保留原始方法、header、body。
+    // 构造代理请求。保留原始方法与 body；header 不透传（Node 只认内部 token）。
     let method = req.method().clone();
-    let (mut parts, body) = req.into_parts();
-
-    // 移除 Host header，让 reqwest 自动设置。
-    parts.headers.remove("host");
-
-    // 带上内部 token。
-    if let Ok(header_value) = format!("Bearer {}", state.internal_token).parse() {
-        parts.headers.insert("authorization", header_value);
-    }
+    let (_parts, body) = req.into_parts();
 
     // 读取 body。
     let body_bytes = match axum::body::to_bytes(body, usize::MAX).await {
@@ -130,12 +122,19 @@ pub async fn proxy_to_node(
         }
     };
 
-    // 用 reqwest 转发请求。
+    // 用 reqwest 转发请求。Node 只认内部 token，这里显式带上——
+    // parts.headers 不会被 reqwest 自动使用，漏带就是 401。
+    let internal_auth = format!("Bearer {}", state.internal_token);
     let client = reqwest::Client::new();
     let response = match method.as_str() {
-        "GET" => client.get(&target_url).send().await,
+        "GET" => client
+            .get(&target_url)
+            .header("authorization", &internal_auth)
+            .send()
+            .await,
         "POST" => client
             .post(&target_url)
+            .header("authorization", &internal_auth)
             .header("content-type", "application/json")
             .body(body_bytes)
             .send()

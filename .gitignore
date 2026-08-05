@@ -41,3 +41,5 @@ chatroom
 *.sw?
 .pnpm-store
 workspace.zip
+.codegraph/
+.playwright-mcp/

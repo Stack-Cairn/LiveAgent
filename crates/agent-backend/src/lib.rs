@@ -46,15 +46,20 @@ use crate::state::AppState;
 pub fn build_router(state: AppState) -> Router {
     let protected =
         routes::api_router()
-            .merge(ws::router())
             .route_layer(axum::middleware::from_fn_with_state(
                 state.clone(),
                 auth::require_bearer_with_identity,
-            ));
+            ))
+            // WS 不能过 bearer 中间件：浏览器 WebSocket API 设不了 Authorization
+            // header。ws_handler 自己用 ?token= 做等价校验。
+            .merge(ws::router());
 
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .nest("/api", protected)
+        // 浏览器前端（vite dev / WebUI）跨源访问：认证是 Bearer token 而非
+        // cookie/同源，permissive CORS 不引入新的攻击面。
+        .layer(tower_http::cors::CorsLayer::permissive())
         .with_state(state)
 }
 
