@@ -14,6 +14,7 @@ import {
 } from "../../../components/ui/select";
 import { useLocale } from "../../../i18n";
 import { useModalMotion } from "../../../lib/shared/modalMotion";
+import { hasNativeFileDialogs } from "../../../lib/shell/capabilities";
 
 type RemoteBranches = {
   defaultBranch: string;
@@ -48,6 +49,9 @@ export function WorkspaceCloneModal({
   onClose,
 }: WorkspaceCloneModalProps) {
   const { t } = useLocale();
+  // 原生文件夹对话框选的是**后端机器**上的目录。浏览器里没有对应物：藏掉
+  // 「打开文件夹」和「选择父目录」，父目录改为手输。
+  const nativeFileDialogs = hasNativeFileDialogs();
   const [remoteUrl, setRemoteUrl] = useState("");
   const [parent, setParent] = useState(initialParent);
   const [name, setName] = useState("");
@@ -181,27 +185,31 @@ export function WorkspaceCloneModal({
         </div>
 
         <div className="space-y-5 px-6 py-5">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-auto w-full justify-start gap-3 rounded-2xl p-4 text-left"
-            onClick={() => {
-              onOpenFolder();
-              requestClose();
-            }}
-          >
-            <FolderOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
-            <span>
-              <span className="block font-medium">{t("chat.workspaceOpenFolder")}</span>
-              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                {t("chat.workspaceOpenFolderDescription")}
-              </span>
-            </span>
-          </Button>
+          {nativeFileDialogs ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto w-full justify-start gap-3 rounded-2xl p-4 text-left"
+                onClick={() => {
+                  onOpenFolder();
+                  requestClose();
+                }}
+              >
+                <FolderOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <span>
+                  <span className="block font-medium">{t("chat.workspaceOpenFolder")}</span>
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                    {t("chat.workspaceOpenFolderDescription")}
+                  </span>
+                </span>
+              </Button>
 
-          <div className="relative py-1 text-center text-xs text-muted-foreground before:absolute before:inset-x-0 before:top-1/2 before:border-t before:border-border/60">
-            <span className="relative bg-background px-3">{t("chat.workspaceOr")}</span>
-          </div>
+              <div className="relative py-1 text-center text-xs text-muted-foreground before:absolute before:inset-x-0 before:top-1/2 before:border-t before:border-border/60">
+                <span className="relative bg-background px-3">{t("chat.workspaceOr")}</span>
+              </div>
+            </>
+          ) : null}
 
           <section className="rounded-2xl border border-border/60 bg-muted/20 p-4">
             <div className="mb-4 flex items-start gap-3">
@@ -239,18 +247,21 @@ export function WorkspaceCloneModal({
                   <Input
                     id="workspace-clone-parent"
                     value={parent}
-                    readOnly
+                    readOnly={nativeFileDialogs}
+                    onChange={(event) => setParent(event.currentTarget.value)}
                     placeholder={t("chat.workspaceCloneParentPlaceholder")}
                   />
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="self-end"
-                  onClick={() => void chooseParent()}
-                >
-                  {t("chat.workspaceCloneChooseParent")}
-                </Button>
+                {nativeFileDialogs ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="self-end"
+                    onClick={() => void chooseParent()}
+                  >
+                    {t("chat.workspaceCloneChooseParent")}
+                  </Button>
+                ) : null}
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">

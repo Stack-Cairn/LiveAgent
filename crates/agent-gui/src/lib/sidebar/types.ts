@@ -1,9 +1,7 @@
-// Shared, end-agnostic shapes for the sidebar state layer. This file is
-// byte-mirrored between agent-gui and agent-gateway/web (see
-// scripts/mirror-manifest.json); platform differences belong in the per-end
-// backend adapters, never here. All timestamps are epoch milliseconds — the
-// web adapter normalizes the gateway's second-based fields before they reach
-// this layer.
+// Shared, end-agnostic shapes for the sidebar state layer. Platform
+// differences belong in the per-end backend adapters, never here. All
+// timestamps are epoch milliseconds — the web adapter normalizes the
+// gateway's second-based fields before they reach this layer.
 
 export type SidebarConversation = {
   id: string;

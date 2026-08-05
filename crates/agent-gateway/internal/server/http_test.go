@@ -28,8 +28,8 @@ func TestNewHTTPServerServesRootWithoutRedirect(t *testing.T) {
 	if location := rec.Header().Get("Location"); location != "" {
 		t.Fatalf("expected no redirect location, got %q", location)
 	}
-	if !strings.Contains(rec.Body.String(), "<title>LiveAgent Gateway</title>") {
-		t.Fatalf("expected WebUI index.html, got body %q", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "<title>Gateway WebUI 已退役</title>") {
+		t.Fatalf("expected retirement index.html, got body %q", rec.Body.String())
 	}
 	if cacheControl := rec.Header().Get("Cache-Control"); !strings.Contains(cacheControl, "no-store") {
 		t.Fatalf("Cache-Control = %q, want no-store for index.html", cacheControl)
@@ -49,8 +49,8 @@ func TestNewHTTPServerServesSpaFallbackWithoutRedirect(t *testing.T) {
 	if location := rec.Header().Get("Location"); location != "" {
 		t.Fatalf("expected no redirect location, got %q", location)
 	}
-	if !strings.Contains(rec.Body.String(), "<title>LiveAgent Gateway</title>") {
-		t.Fatalf("expected WebUI index.html, got body %q", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "<title>Gateway WebUI 已退役</title>") {
+		t.Fatalf("expected retirement index.html, got body %q", rec.Body.String())
 	}
 }
 

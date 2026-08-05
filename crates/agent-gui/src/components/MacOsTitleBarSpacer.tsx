@@ -2,10 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import type { AppUpdateController } from "../lib/appUpdates";
 import { cn } from "../lib/shared/utils";
+import { hasWindowControls } from "../lib/shell/capabilities";
 import { AppUpdateButton } from "./AppUpdateButton";
 import { PanelLeft, PanelLeftClose, Settings } from "./icons";
-
-type TauriWindow = Window & { __TAURI_INTERNALS__?: unknown };
 
 type MacOsTrafficLightMetrics = {
   top: number;
@@ -77,10 +76,11 @@ function useMacOsTrafficLightMetrics(enabled: boolean) {
   return metrics;
 }
 
+// 红绿灯留白只在「壳自己画标题栏」时才有意义。浏览器里窗口边框归浏览器管，
+// 而且 tauriShim 装的假 internals 会让直接探 __TAURI_INTERNALS__ 的写法误判。
 export function isMacOsTauri(): boolean {
   if (typeof window === "undefined") return false;
-  const hasTauri = !!(window as TauriWindow).__TAURI_INTERNALS__;
-  return hasTauri && /Mac/i.test(navigator.platform);
+  return hasWindowControls() && /Mac/i.test(navigator.platform);
 }
 
 /** Vertical spacer at the top of a sidebar column — clears the macOS traffic lights. */

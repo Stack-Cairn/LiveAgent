@@ -45,7 +45,8 @@ type ChatSidebarContainerProps = {
   onSelectProject: (project: WorkspaceProject) => void;
   onNewConversationForProject: (project: WorkspaceProject) => void;
   onBrowseProjectInFileTree: (project: WorkspaceProject) => void;
-  onBrowseProjectInSystemFileManager: (project: WorkspaceProject) => void;
+  /** 缺省表示宿主没有系统文件管理器（浏览器）：不渲染「在资源管理器浏览」。 */
+  onBrowseProjectInSystemFileManager?: (project: WorkspaceProject) => void;
   onStartRenamingProject: (project: WorkspaceProject) => void;
   onProjectRenameDraftChange: (value: string) => void;
   onCommitProjectRename: () => void;

@@ -1,5 +1,4 @@
 // Scope keys and scope filtering for the sidebar conversation list.
-// Byte-mirrored between agent-gui and agent-gateway/web.
 
 import type { SidebarConversation, SidebarScope } from "./types";
 

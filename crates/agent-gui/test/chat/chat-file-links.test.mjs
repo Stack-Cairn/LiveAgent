@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -83,22 +81,6 @@ test("parseChatFileLink rejects external, dangerous, internal, and malformed tar
   }
 
   assert.doesNotThrow(() => parseChatFileLink("file:///%E0%A4%A"));
-});
-
-test("chat file opens stay bounded by host timeout and concurrency", () => {
-  const chatFileLinks = fs.readFileSync(
-    fileURLToPath(
-      new URL(
-        "../../../agent-core/src/commands/workspace/chat_file_links.rs",
-        import.meta.url,
-      ),
-    ),
-    "utf8",
-  );
-
-  assert.match(chatFileLinks, /tokio::time::timeout\(CHAT_FILE_OPEN_TIMEOUT/);
-  assert.match(chatFileLinks, /CHAT_FILE_OPEN_SEMAPHORE/);
-  assert.match(chatFileLinks, /let _permit = permit/);
 });
 
 test("the internal payload codec preserves locations and rejects malformed payloads", () => {

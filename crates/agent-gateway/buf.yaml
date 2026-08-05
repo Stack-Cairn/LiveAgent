@@ -2,9 +2,6 @@
 version: v2
 modules:
   - path: .
-    excludes:
-      # 排除 WebUI node_modules 里的第三方 .proto。
-      - web
 lint:
   use:
     - STANDARD

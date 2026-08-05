@@ -33,6 +33,7 @@ import {
   buildGatewaySettingsSyncPayload,
   type GatewaySettingsSyncPayload,
 } from "./lib/settings/sync";
+import { hasUpdater, hasWindowControls } from "./lib/shell/capabilities";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
 import { applyFontFamilies } from "./lib/system/fontFamily";
 import { ChatPage } from "./pages/ChatPage";
@@ -204,7 +205,7 @@ export default function App() {
   ]);
 
   useEffect(() => {
-    if (!settingsReady) return;
+    if (!settingsReady || !hasWindowControls()) return;
     void invoke("app_set_close_window_behavior", {
       behavior: settings.closeWindowBehavior,
     }).catch(() => {
@@ -218,9 +219,11 @@ export default function App() {
   }, []);
 
   // 窗口置顶状态：Rust 侧是唯一事实源（快捷键或指示器切换都经它广播），
-  // 挂载时查询一次以覆盖 webview 重载后指示器丢失的情况。
+  // 挂载时查询一次以覆盖 webview 重载后指示器丢失的情况。浏览器里窗口归浏览器
+  // 管，既查不到也不会有人广播，整个 effect 早退，指示器永远不显示。
   const [windowPinned, setWindowPinned] = useState(false);
   useEffect(() => {
+    if (!hasWindowControls()) return undefined;
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     invoke<boolean>("app_window_pinned")
@@ -479,7 +482,8 @@ export default function App() {
   );
 
   const appUpdate = useAppUpdateController({
-    enabled: settingsReady,
+    // 自更新是壳的能力：浏览器里版本随后端走，没有「下载安装并重启」这回事。
+    enabled: settingsReady && hasUpdater(),
     includePrereleases: settings.updates.includePrereleases,
     messages: appUpdateMessages,
   });

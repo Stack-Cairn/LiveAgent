@@ -1,6 +1,5 @@
 // AskUserQuestion 的共享纯逻辑：类型、流式参数容错解析与应答校验。
-// 该文件在 agent-gui 与 agent-gateway/web 之间逐字节镜像
-// （见 scripts/mirror-manifest.json），因此必须保持零依赖纯数据逻辑。
+// 必须保持零依赖纯数据逻辑。
 
 export const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 

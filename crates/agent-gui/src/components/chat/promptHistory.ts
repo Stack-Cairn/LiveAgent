@@ -8,9 +8,6 @@
  * first (↑) or last (↓) logical line, so arrow keys keep moving the caret
  * inside multi-line drafts; any edit must reset the session because cursor
  * and stash are only meaningful while the recalled text is untouched.
- *
- * Byte-identical between agent-gui and agent-gateway/web
- * (scripts/mirror-manifest.json).
  */
 
 export type PromptHistoryStash<TPaste> = {

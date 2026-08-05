@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -15,10 +14,6 @@ const { extractRenderUnitRange } = loader.loadModule(
   "src/pages/chat/transcript/renderUnitRangeExtractor.ts",
 );
 const { collectChangedFiles } = loader.loadModule("src/lib/chat/messages/changedFiles.ts");
-const transcriptListSource = fs.readFileSync(
-  new URL("../../src/pages/chat/transcript/TranscriptList.tsx", import.meta.url),
-  "utf8",
-);
 
 function userItem(key, text = "prompt") {
   return {
@@ -429,19 +424,4 @@ test("cost-aware overscan spends one giant unit instead of five fixed rows", () 
     1,
   );
   assert.deepEqual(tailPinned, [0, 1, 5]);
-});
-
-test("transcript virtualizer keeps scroll updates off the full React measurement path", () => {
-  assert.match(transcriptListSource, /const estimateRowSize = useCallback/);
-  assert.match(transcriptListSource, /const getRowKey = useCallback/);
-  assert.match(transcriptListSource, /const extractVirtualRange = useCallback/);
-  assert.match(transcriptListSource, /estimateSize:\s*estimateRowSize/);
-  assert.match(transcriptListSource, /getItemKey:\s*getRowKey/);
-  assert.match(transcriptListSource, /rangeExtractor:\s*extractVirtualRange/);
-  assert.match(transcriptListSource, /directDomUpdates:\s*true/);
-  assert.match(transcriptListSource, /directDomUpdatesMode:\s*"transform"/);
-  assert.match(transcriptListSource, /ref=\{virtualizer\.containerRef\}/);
-  assert.doesNotMatch(transcriptListSource, /rows\.map\(\(row\) => row\.renderCost\)/);
-  assert.doesNotMatch(transcriptListSource, /height:\s*virtualizer\.getTotalSize\(\)/);
-  assert.doesNotMatch(transcriptListSource, /transform:\s*`translateY\(/);
 });

@@ -67,5 +67,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <LoginPage initialMessage={state.message} onAuthenticated={() => setState({ status: "ready" })} />;
+  return (
+    <LoginPage
+      initialMessage={state.message}
+      onAuthenticated={() => setState({ status: "ready" })}
+    />
+  );
 }

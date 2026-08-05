@@ -8,11 +8,6 @@
 // activation); our own mutations refresh explicitly after they land. Only
 // when no activity client exists (no-push environment) does a low-frequency
 // fallback poll run while the panel is active.
-//
-// MIRROR NOTICE: every file under components/project-tools/git-review exists
-// byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; only
-// relative or @tauri-apps/* imports are allowed here.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "../../../i18n";

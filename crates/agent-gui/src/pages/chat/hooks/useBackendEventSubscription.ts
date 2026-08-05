@@ -38,7 +38,9 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
 
       const payloadObj = payload as Record<string, unknown>;
       // 后端广播的是 conversation_id，但也支持 conversationId 以兼容两种命名
-      const conversationId = (payloadObj.conversation_id ?? payloadObj.conversationId) as string | undefined;
+      const conversationId = (payloadObj.conversation_id ?? payloadObj.conversationId) as
+        | string
+        | undefined;
 
       if (!conversationId) {
         console.warn(`Event ${event} missing conversation_id in payload`, payload);

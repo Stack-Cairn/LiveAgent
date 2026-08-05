@@ -13,7 +13,6 @@ import {
 // 在生成期归一化）。本模块只回答"这个模型有哪些思考档、能否关闭"——UI 档位
 // 列表与请求期钳制都从这里派生，保证两者永不漂移。每档发什么请求参数
 // （adaptive/budget、effort 字段名、值改写）是流式运行时的领域，不归这里管。
-// 本文件在 scripts/mirror-manifest.json 中，两端逐字节镜像。
 
 export type ThinkingLevel = CatalogThinkingLevel;
 

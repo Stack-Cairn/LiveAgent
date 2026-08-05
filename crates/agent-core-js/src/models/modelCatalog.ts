@@ -5,8 +5,7 @@ import { type CatalogModelEntry, type CatalogProviderId, MODEL_CATALOG } from ".
 // ---------------------------------------------------------------------------
 // 数据来自 catalog.generated.ts（构建期由 scripts/generate-model-catalog.mjs
 // 对 OpenAI 采用 Codex models.json 优先、models.dev 补充，其余供应商来自
-// models.dev；刷新走 make update-model-catalog）。本文件与生成文件均在
-// scripts/mirror-manifest.json 中，两端逐字节镜像。
+// models.dev；刷新走 make update-model-catalog）。
 // 思考档位/API 选择/compat 等请求路径行为不归这里管——那些是流式运行时
 // （pi-ai）的领域；这里只回答"这个模型的窗口和输出上限是多少"。
 

@@ -1,10 +1,8 @@
 /**
  * Subagent UI wire protocol.
  *
- * This file is mirrored byte-for-byte between agent-gui and agent-gateway/web
- * (see scripts/mirror-manifest.json). It must stay dependency-free: both
- * frontends render subagent tool calls purely from these shapes, which travel
- * inside tool_call/tool_result payloads.
+ * Must stay dependency-free: the frontend renders subagent tool calls purely
+ * from these shapes, which travel inside tool_call/tool_result payloads.
  */
 
 export type SubagentProtocolMode = "readonly" | "worktree";

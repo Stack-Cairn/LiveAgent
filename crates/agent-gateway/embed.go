@@ -2,11 +2,10 @@ package gateway
 
 import "embed"
 
-// WebUIAssets contains the embedded WebUI build output served by the HTTP server.
+// WebUIAssets contains the retirement notice served by the HTTP server in place
+// of the former embedded WebUI. The WebUI source tree was folded into the
+// unified frontend (crates/agent-gui); the gateway now only serves a static
+// page pointing at the migration guide.
 //
-// The all: prefix is required because Vite may emit chunks whose names begin
-// with "_" (for example, lodash's _baseFor chunk). Plain directory embeds
-// silently exclude files and directories beginning with "." or "_".
-//
-//go:embed all:web/dist
+//go:embed webui-retired
 var WebUIAssets embed.FS

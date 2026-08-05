@@ -1,6 +1,5 @@
 // Pure reducers for the sidebar conversation list: sort, merge, upsert,
-// authoritative reconcile, and backend-event application. Framework-free and
-// byte-mirrored between agent-gui and agent-gateway/web.
+// authoritative reconcile, and backend-event application. Framework-free.
 
 import type { SidebarBackendEvent, SidebarConversation } from "./types";
 

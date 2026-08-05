@@ -1,6 +1,5 @@
-// 用量查询共享核心(状态归约、协调器与 hook、展示派生纯函数)。本文件在
-// GUI 与 Gateway WebUI 之间逐字节镜像(scripts/mirror-manifest.json);平台传输差异
-// 只进各端的 usageQuery.ts 适配层。展示派生函数返回 token/结构,不接触 i18n。
+// 用量查询共享核心(状态归约、协调器与 hook、展示派生纯函数)。平台传输差异
+// 只进 usageQuery.ts 适配层。展示派生函数返回 token/结构,不接触 i18n。
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // 富结果模型:与桌面端 Rust UsageData(serde camelCase)同构。字段全可选,

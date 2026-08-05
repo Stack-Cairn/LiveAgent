@@ -4,25 +4,20 @@ import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react
 import iconSimpleUrl from "../../src-tauri/icons/icon-simple.png";
 import { useLocale } from "../i18n";
 import { cn } from "../lib/shared/utils";
+import { hasWindowControls } from "../lib/shell/capabilities";
 import { Maximize2, Minimize2, Minus, X } from "./icons";
-
-type TauriRuntimeWindow = Window & {
-  __TAURI__?: unknown;
-  __TAURI_INTERNALS__?: unknown;
-};
 
 type AppWindow = ReturnType<typeof getCurrentWindow>;
 
+// 自绘标题栏（最小化/最大化/关闭）要的是真窗口控制能力。浏览器里既没有这些
+// 按钮的对应物，tauriShim 装的假 internals 也会让直接探 __TAURI__ 的写法误判。
 function isWindowsTauriRuntime() {
   if (typeof window === "undefined") {
     return false;
   }
 
-  const runtimeWindow = window as TauriRuntimeWindow;
-  const hasTauriRuntime =
-    runtimeWindow.__TAURI__ !== undefined || runtimeWindow.__TAURI_INTERNALS__ !== undefined;
   const platformText = `${navigator.userAgent} ${navigator.platform}`;
-  return hasTauriRuntime && /\bWindows\b|Win32|Win64|WOW64/i.test(platformText);
+  return hasWindowControls() && /\bWindows\b|Win32|Win64|WOW64/i.test(platformText);
 }
 
 function reportWindowChromeError(action: string, error: unknown) {

@@ -7,7 +7,7 @@
  * - 每次全量推送 + JSON 签名去抖（照 `lib/settings/storage.ts` 的 hasChanged）。
  * - 列表在前端截断（最近 8 / 工作空间 8 / 运行中 10 / 定时任务 10）；
  *   Rust 侧另有防御性上限。标题消毒（& 转义/宽度截断）统一在 Rust。
- * - 非 Tauri 环境（vite dev / WebUI 无此模块）invoke 失败静默。
+ * - 浏览器里没有托盘：syncTrayMenu 早退，模型的组装也就不会发生。
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -15,6 +15,7 @@ import { type Locale, t } from "../../i18n/config";
 import type { CronTask } from "../automation/types";
 import type { Theme, WorkspaceProject } from "../settings";
 import { workspaceProjectPathKey } from "../settings";
+import { hasTray } from "../shell/capabilities";
 import { readGlobalShortcutBindings } from "../shortcuts/globalShortcuts";
 import type { SidebarConversation } from "../sidebar/types";
 import type { TrayPrefs } from "./trayPrefs";
@@ -198,8 +199,9 @@ export function buildTrayMenuModel(input: BuildTrayMenuModelInput): TrayMenuMode
 
 let lastSyncedSignature: string | null = null;
 
-/** 签名去抖的全量推送；非 Tauri 环境静默。 */
+/** 签名去抖的全量推送；浏览器里没有托盘，早退。 */
 export async function syncTrayMenu(model: TrayMenuModel): Promise<void> {
+  if (!hasTray()) return;
   const signature = JSON.stringify(model);
   if (signature === lastSyncedSignature) {
     return;

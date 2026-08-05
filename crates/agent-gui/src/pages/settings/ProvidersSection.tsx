@@ -96,6 +96,7 @@ import {
 } from "../../lib/settings";
 import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
+import { hasNativeFileDialogs } from "../../lib/shell/capabilities";
 import {
   type CherryProviderImportItem,
   type CherryProvidersResponse,
@@ -4163,7 +4164,9 @@ export function ProvidersSection(
           isExisting={(item) =>
             settings.customProviders.some((provider) => provider.id === cherryProviderId(item))
           }
-          onChooseDataDirectory={() => void chooseCherryDataDirectory()}
+          onChooseDataDirectory={
+            hasNativeFileDialogs() ? () => void chooseCherryDataDirectory() : undefined
+          }
           onResetDataDirectory={resetCherryDataDirectory}
           onConfirm={(items) => void importCherryProviders(items)}
           onClose={() => setCherryImportType(null)}

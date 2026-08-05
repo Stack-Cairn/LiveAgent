@@ -3,10 +3,7 @@
 // status polling runs ONLY while some run is pending/running — idle panels
 // never poll.
 //
-// MIRROR NOTICE: every file in pages/settings/memory except platform.tsx
-// exists byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; platform
-// differences belong in ./platform, never here.
+// Platform-specific dependencies belong in ./platform, never here.
 
 import { useEffect, useState } from "react";
 import {

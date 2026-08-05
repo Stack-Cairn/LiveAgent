@@ -51,7 +51,8 @@ type CherryStudioImportModalProps = {
   scanning: boolean;
   dataPath: string | null;
   isExisting: (item: CherryProviderImportItem) => boolean;
-  onChooseDataDirectory: () => void;
+  /** 缺省表示宿主没有原生文件夹对话框（浏览器）：不渲染「选择数据目录」按钮。 */
+  onChooseDataDirectory?: () => void;
   onResetDataDirectory: () => void;
   onClose: () => void;
   onConfirm: (items: CherryProviderImportItem[]) => void;
@@ -408,22 +409,24 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                 className="h-9 min-w-0 flex-1 text-xs"
                 title={resolvedDataPath}
               />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-9 w-9 shrink-0"
-                disabled={scanning || importing}
-                onClick={onChooseDataDirectory}
-                title="选择数据目录"
-                aria-label="选择 Cherry Studio 数据目录"
-              >
-                {scanning ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FolderOpen className="h-4 w-4" />
-                )}
-              </Button>
+              {onChooseDataDirectory ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  disabled={scanning || importing}
+                  onClick={onChooseDataDirectory}
+                  title="选择数据目录"
+                  aria-label="选择 Cherry Studio 数据目录"
+                >
+                  {scanning ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FolderOpen className="h-4 w-4" />
+                  )}
+                </Button>
+              ) : null}
             </div>
             {dataPath ? (
               <div className="mt-4 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">

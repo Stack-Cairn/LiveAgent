@@ -1,9 +1,4 @@
 // Context menu for the right-dock file tree panel.
-//
-// MIRROR NOTICE: every file under components/project-tools/file-tree/ exists
-// byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; only
-// relative, npm-package, or @tauri-apps/* imports are allowed here.
 // Desktop-only entries are gated at runtime via FILE_TREE_HAS_OS_INTEGRATION.
 
 import {

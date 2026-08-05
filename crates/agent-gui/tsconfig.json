@@ -19,7 +19,8 @@
        而不是运行时的 undefined。 */
     "paths": {
       "@tauri-apps/api/core": ["./src/lib/backend/tauriCore.ts"],
-      "@tauri-apps/api/event": ["./src/lib/backend/tauriEvent.ts"]
+      "@tauri-apps/api/event": ["./src/lib/backend/tauriEvent.ts"],
+      "@tauri-apps/plugin-opener": ["./src/lib/backend/tauriOpener.ts"]
     },
 
     /* Linting */

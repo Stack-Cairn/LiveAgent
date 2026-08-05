@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const STORAGE_KEY = "liveagent.globalShortcuts.v1";
+
+// 全局快捷键只在桌面壳里注册（lib/shell/capabilities）。Node 里没有壳，
+// 探测必然为 false，而这些用例考的是**载荷怎么拼**，与宿主无关——所以把
+// 能力探测固定为「有壳」，让 applyGlobalShortcuts 走到 invoke 那一步。
+const CAPABILITIES_PATH = fileURLToPath(
+  new URL("../../src/lib/shell/capabilities.ts", import.meta.url),
+);
 
 function createMemoryLocalStorage(initial = {}) {
   const store = new Map(Object.entries(initial));
@@ -37,11 +45,14 @@ async function withWindow(localStorage, task) {
   }
 }
 
-function loadGlobalShortcuts({ invoke } = {}) {
+function loadGlobalShortcuts({ invoke, hasGlobalShortcuts = true } = {}) {
   const loader = createTsModuleLoader({
     mocks: {
       "@tauri-apps/api/core": {
         invoke: invoke ?? (async () => []),
+      },
+      [CAPABILITIES_PATH]: {
+        hasGlobalShortcuts: () => hasGlobalShortcuts,
       },
     },
   });
@@ -135,7 +146,7 @@ test("applyGlobalShortcuts registers only enabled bindings with non-empty accele
   assert.deepEqual(failures, [{ action: "summon", accelerator: "Ctrl+KeyA", error: "taken" }]);
 });
 
-test("applyGlobalShortcuts tolerates non-Tauri environments and bad responses", async () => {
+test("applyGlobalShortcuts tolerates bad responses and skips the shell in browsers", async () => {
   const { applyGlobalShortcuts: applyWithThrow } = loadGlobalShortcuts({
     invoke: async () => {
       throw new Error("not tauri");
@@ -153,6 +164,18 @@ test("applyGlobalShortcuts tolerates non-Tauri environments and bad responses", 
     await applyWithBadResponse({ summon: { accelerator: "Ctrl+KeyA", enabled: true } }),
     [],
   );
+
+  // 浏览器里没有系统级快捷键：连 invoke 都不该发出去。
+  const browserCalls = [];
+  const { applyGlobalShortcuts: applyInBrowser } = loadGlobalShortcuts({
+    hasGlobalShortcuts: false,
+    invoke: async (command, args) => {
+      browserCalls.push({ command, args });
+      return [];
+    },
+  });
+  assert.deepEqual(await applyInBrowser({ summon: { accelerator: "Ctrl+KeyA", enabled: true } }), []);
+  assert.deepEqual(browserCalls, []);
 });
 
 test("applyStoredGlobalShortcuts skips the backend when nothing is bound", async () => {

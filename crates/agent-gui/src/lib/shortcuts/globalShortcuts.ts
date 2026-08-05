@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { hasGlobalShortcuts } from "../shell/capabilities";
+
 /**
  * 全局快捷键（桌面端专属能力）。
  * 绑定只存本机 localStorage —— 快捷键是设备偏好，不进入设置同步/网关。
@@ -98,11 +100,12 @@ export function writeGlobalShortcutBindings(bindings: GlobalShortcutBindings): v
 
 /**
  * 把绑定应用到 Tauri 端（全量替换式注册，仅注册已启用的绑定）。
- * 返回注册失败的条目；非 Tauri 环境（纯浏览器 dev）返回空数组。
+ * 返回注册失败的条目；浏览器里没有系统级快捷键，直接返回空数组。
  */
 export async function applyGlobalShortcuts(
   bindings: GlobalShortcutBindings,
 ): Promise<GlobalShortcutFailure[]> {
+  if (!hasGlobalShortcuts()) return [];
   const payload = GLOBAL_SHORTCUT_ACTIONS.flatMap((action) => {
     const binding = bindings[action];
     const accelerator = binding?.accelerator.trim();

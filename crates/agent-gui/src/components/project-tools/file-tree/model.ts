@@ -1,11 +1,6 @@
 // Pure model helpers for the right-dock file tree panel.
-//
-// MIRROR NOTICE: every file under components/project-tools/file-tree/ exists
-// byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; only
-// relative, npm-package, or @tauri-apps/* imports are allowed here. Platform
-// differences are resolved at runtime (see FILE_TREE_HAS_OS_INTEGRATION).
 
+import { hasSystemFileOpener } from "../../../lib/shell/capabilities";
 import type { WorkspaceActivityEventPayload } from "../../../lib/workspace-activity/types";
 
 export type FileTreeKind = "file" | "dir";
@@ -31,17 +26,12 @@ export type FileTreeRowModel =
 
 export const ROOT_PATH = "";
 
-// Desktop-only OS integration (`fs_open_workspace_path`) exists only behind
-// the Tauri bridge; the gateway web shim has no equivalent command. Probing
-// the bridge at runtime keeps this mirrored source byte-identical on both
-// ends while the desktop-only menu entries stay hidden on the web.
-export const FILE_TREE_HAS_OS_INTEGRATION =
-  typeof window !== "undefined" &&
-  "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>);
+// 「用系统程序打开 / 在文件管理器显示」(`fs_open_workspace_path`) 是壳能力：
+// 它操作的是这台机器上的路径，浏览器连远程后端时没有对应物。同一份代码在两种
+// 宿主里跑，靠运行时探测决定这些菜单项在不在（阶段 5 已删掉 WebUI 镜像树）。
+export const FILE_TREE_HAS_OS_INTEGRATION = hasSystemFileOpener();
 
-// The desktop keeps the pre-rewrite compact 28px rows while the web build
-// keeps its larger touch-friendly 32px rows (mirroring the styling the two
-// panels had before they were unified into one byte-identical source).
+// 桌面壳沿用改版前的紧凑 28px 行高，浏览器沿用更适合触摸的 32px 行高。
 export const FILE_TREE_ROW_HEIGHT = FILE_TREE_HAS_OS_INTEGRATION ? 28 : 32;
 
 // ---------------------------------------------------------------------------

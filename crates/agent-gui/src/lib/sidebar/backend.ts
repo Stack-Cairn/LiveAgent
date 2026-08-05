@@ -1,7 +1,6 @@
 // The platform boundary of the sidebar state layer. Each end implements this
 // once (GUI: Tauri IPC + CHAT_HISTORY_SYNC_EVENT; web: gateway WebSocket +
 // activity-store bridge); the store never touches a transport directly.
-// Byte-mirrored between agent-gui and agent-gateway/web.
 
 import type {
   SidebarBackendEvent,

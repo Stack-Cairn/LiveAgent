@@ -3,10 +3,7 @@
 // unchanged; pre-v4 runs degrade to a read-only legacy view (summaries and
 // review notes only: no decisions, no manual apply).
 //
-// MIRROR NOTICE: every file in pages/settings/memory except platform.tsx
-// exists byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; platform
-// differences belong in ./platform, never here.
+// Platform-specific dependencies belong in ./platform, never here.
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";

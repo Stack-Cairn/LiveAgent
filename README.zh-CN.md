@@ -295,7 +295,6 @@ location / {
 | `make dev` | 启动 Tauri 开发环境 |
 | `make build` | 构建桌面应用 |
 | `make dev-gateway` | 启动 Gateway 开发服务 |
-| `make dev-webui` | 启动 WebUI 开发服务 |
 | `make gateway-build` | 构建 Gateway 二进制 |
 | `make gateway-docker-build` | 构建 Docker 镜像 |
 | `make gateway-docker-smoke` | 构建 + 健康检查 |
@@ -325,8 +324,7 @@ LiveAgent/
 │   └── agent-gateway/            # Go 网关服务
 │       ├── cmd/gateway/          #   入口
 │       ├── internal/             #   核心实现
-│       ├── proto/v2/             #   Protobuf 定义
-│       └── web/                  #   嵌入式 WebUI
+│       └── proto/v2/             #   Protobuf 定义
 │
 ├── docs/                         # 项目文档
 │   ├── architecture/             #   架构设计
@@ -392,12 +390,10 @@ LiveAgent/
 **Gateway · `crates/agent-gateway`(如有改动)**
 
 1. Go 单元测试通过:`go test ./...`
-2. WebUI 构建 / Lint / 测试通过:`pnpm build && pnpm lint && pnpm test`(在 `web/` 目录执行)
-3. Proto 变更后重新生成并提交产物:`make proto`
+2. Proto 变更后重新生成并提交产物:`make proto`
 
-**跨端一致性**
+**Diff 卫生**
 
-- GUI 与 WebUI 的镜像文件必须逐字节一致:`node scripts/check-mirror.mjs`
 - 保持 diff 干净 (无行尾空白):`git diff --check`
 
 ---

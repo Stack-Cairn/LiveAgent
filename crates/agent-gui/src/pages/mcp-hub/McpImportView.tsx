@@ -16,6 +16,7 @@ import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
 import { type AppSettings, type McpServerConfig, updateMcp } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
+import { hasNativeFileDialogs } from "../../lib/shell/capabilities";
 import {
   type ExternalMcpServerEntry,
   type ExternalMcpToolScan,
@@ -321,21 +322,23 @@ export function McpImportView(props: {
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 rounded-full"
-                  disabled={filePicking}
-                  title={t("mcpHub.importFromFileHint")}
-                  onClick={() => void pickFileAndScan()}
-                >
-                  {filePicking ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5" />
-                  )}
-                  {t("mcpHub.importFromFile")}
-                </Button>
+                {hasNativeFileDialogs() ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 rounded-full"
+                    disabled={filePicking}
+                    title={t("mcpHub.importFromFileHint")}
+                    onClick={() => void pickFileAndScan()}
+                  >
+                    {filePicking ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <FileText className="h-3.5 w-3.5" />
+                    )}
+                    {t("mcpHub.importFromFile")}
+                  </Button>
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"

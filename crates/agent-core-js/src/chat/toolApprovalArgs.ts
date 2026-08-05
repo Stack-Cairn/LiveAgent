@@ -2,7 +2,6 @@
 // 时间”标记(见 gatewayToolPreview),WebUI 据此渲染审批卡片并显示倒计时。
 // 这些是 __ 前缀的合成参数,不参与展示(见 toolCallArgsForDisplay 过滤),也不
 // 影响本地工具执行(执行用真实 arguments,非网关预览副本)。
-// 本文件在 agent-gui 与 agent-gateway/web 之间逐字节镜像。
 
 /** 工具调用正等待用户审批(真时 WebUI 渲染审批卡片)。 */
 export const TOOL_APPROVAL_PENDING_ARG = "__toolApprovalPending";

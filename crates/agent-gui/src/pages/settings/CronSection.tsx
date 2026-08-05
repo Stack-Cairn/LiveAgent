@@ -22,6 +22,7 @@ import {
 } from "../../lib/automation";
 import { buildModelOptions } from "../../lib/chat/page/chatPageHelpers";
 import { isAgentExecutionMode, workspaceProjectPathKey } from "../../lib/settings";
+import { hasNativeFileDialogs } from "../../lib/shell/capabilities";
 import { type CronTaskFormData, CronTaskModal } from "./CronTaskModal";
 import { CronTaskViewModal } from "./CronTaskViewModal";
 import { AgentActivationSwitch, ConfirmDeletePopover } from "./shared";
@@ -334,7 +335,7 @@ export function CronSection(props: SettingsSectionProps) {
           providers={settings.customProviders}
           workspaceOptions={workspaceOptions}
           executionMode={settings.system.executionMode}
-          onPickWorkdir={pickWorkdirDirectory}
+          onPickWorkdir={hasNativeFileDialogs() ? pickWorkdirDirectory : undefined}
           onSave={modal.mode === "add" ? handleAdd : handleEdit}
           onClose={() => setModal({ open: false })}
         />

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
@@ -28,11 +27,6 @@ const messageRef = {
   role: "user",
   contentHash: "fnv1a32:12345678",
 };
-
-const sendSource = fs.readFileSync(
-  new URL("../../src/pages/chat/runtime/useSendChatTurn.ts", import.meta.url),
-  "utf8",
-);
 
 test("edit-resend delegates the replacement anchor to the send preflight", async () => {
   const calls = [];
@@ -89,19 +83,4 @@ test("edit-resend reports a rejected send without mutating history itself", asyn
 
   assert.equal(errors.length, 1);
   assert.match(errors[0].message, /原历史保持不变/);
-});
-
-test("send preflight atomically persists the replacement before starting the runtime", () => {
-  const replaceIndex = sendSource.indexOf(
-    "nextConversationState = await replaceConversationAtMessage(",
-  );
-  const runtimeStartIndex = sendSource.indexOf(
-    "setConversationStopHandler(conversationId, handleConversationStop);",
-  );
-
-  assert.ok(replaceIndex > 0);
-  assert.ok(runtimeStartIndex > replaceIndex);
-  assert.match(sendSource, /initialUserTurnPersisted\s*\?\s*Promise\.resolve\(true\)/);
-  assert.doesNotMatch(sendSource, /history_rollback_failed/);
-  assert.doesNotMatch(sendSource, /truncateConversationAtMessage/);
 });

@@ -2839,12 +2839,11 @@ body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor:grabbing"]
 }
 
 /*
- * Right-dock header metrics — the dock markup is byte-mirrored with the
- * gateway WebUI and therefore carries the web-sized utilities (h-11 header,
- * h-8 tab row, no vertical padding). The desktop GUI restores its own
- * metrics here. MUST stay outside @layer so these rules beat the Tailwind
- * utility classes baked into the mirrored markup (unlayered styles win over
- * the utilities layer in Tailwind v4).
+ * Right-dock header metrics — the dock markup carries web-sized utilities
+ * (h-11 header, h-8 tab row, no vertical padding) inherited from the former
+ * gateway WebUI. The desktop GUI restores its own metrics here. MUST stay
+ * outside @layer so these rules beat the Tailwind utility classes baked into
+ * that markup (unlayered styles win over the utilities layer in Tailwind v4).
  */
 .project-tools-panel-header {
   height: 3.25rem;

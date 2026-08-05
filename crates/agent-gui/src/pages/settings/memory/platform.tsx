@@ -1,9 +1,8 @@
 // Platform adapter for the memory settings panel — desktop GUI end.
-// This file is NOT mirrored: it is the ONLY module in pages/settings/memory
-// that may import platform-specific dependencies (@base-ui/react, lib/chat,
-// the local organizer service, shared UI chrome). Every sibling file is
-// byte-identical with crates/agent-gateway/web/src/pages/settings/memory and
-// may only reach platform-specific code through the exports below.
+// The ONLY module in pages/settings/memory that may import platform-specific
+// dependencies (@base-ui/react, lib/chat, the local organizer service, shared
+// UI chrome). Every sibling file reaches platform-specific code through the
+// exports below.
 
 import { Select as SelectPrimitive } from "@base-ui/react";
 import { Check, ChevronDown } from "../../../components/icons";

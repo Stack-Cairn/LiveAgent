@@ -36,6 +36,7 @@ import {
   updateCustomSettings,
   updateSystem,
 } from "../../lib/settings";
+import { hasTray, hasWindowControls } from "../../lib/shell/capabilities";
 import {
   buildFontFamilySelectOptions,
   FONT_FAMILY_CUSTOM_SELECT_VALUE,
@@ -582,102 +583,108 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Minimize2 className="h-4 w-4 text-muted-foreground" />
-          {t("settings.closeWindowBehavior")}
-        </div>
+      {hasWindowControls() ? (
+        <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <Minimize2 className="h-4 w-4 text-muted-foreground" />
+            {t("settings.closeWindowBehavior")}
+          </div>
 
-        <div className="grid gap-2 sm:grid-cols-2">
-          {CLOSE_WINDOW_BEHAVIOR_OPTIONS.map((behavior) => {
-            const selected = settings.closeWindowBehavior === behavior;
-            const isMinimize = behavior === "minimize";
-            return (
-              <button
-                key={behavior}
-                type="button"
-                onClick={() =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    closeWindowBehavior: behavior,
-                  }))
-                }
-                className={`group relative flex h-full items-start gap-3 rounded-xl border px-3.5 py-3.5 text-left transition-all ${
-                  selected
-                    ? "border-primary bg-primary/5 shadow-sm shadow-primary/10"
-                    : "border-border/60 bg-background/80 hover:border-border hover:bg-muted/35"
-                }`}
-              >
-                <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+          <div className="grid gap-2 sm:grid-cols-2">
+            {CLOSE_WINDOW_BEHAVIOR_OPTIONS.map((behavior) => {
+              const selected = settings.closeWindowBehavior === behavior;
+              const isMinimize = behavior === "minimize";
+              return (
+                <button
+                  key={behavior}
+                  type="button"
+                  onClick={() =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      closeWindowBehavior: behavior,
+                    }))
+                  }
+                  className={`group relative flex h-full items-start gap-3 rounded-xl border px-3.5 py-3.5 text-left transition-all ${
                     selected
-                      ? "bg-primary/10 text-primary"
-                      : "bg-muted text-muted-foreground group-hover:bg-accent/80"
+                      ? "border-primary bg-primary/5 shadow-sm shadow-primary/10"
+                      : "border-border/60 bg-background/80 hover:border-border hover:bg-muted/35"
                   }`}
                 >
-                  {isMinimize ? (
-                    <Minimize2 className="h-4.5 w-4.5" />
-                  ) : (
-                    <LogOut className="h-4.5 w-4.5" />
-                  )}
-                </div>
-                <div className="min-w-0 pr-6">
-                  <div className="text-sm font-semibold">
-                    {isMinimize ? t("settings.closeWindowMinimize") : t("settings.closeWindowExit")}
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                      selected
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted text-muted-foreground group-hover:bg-accent/80"
+                    }`}
+                  >
+                    {isMinimize ? (
+                      <Minimize2 className="h-4.5 w-4.5" />
+                    ) : (
+                      <LogOut className="h-4.5 w-4.5" />
+                    )}
                   </div>
-                  <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    {isMinimize
-                      ? t("settings.closeWindowMinimizeDesc")
-                      : t("settings.closeWindowExitDesc")}
+                  <div className="min-w-0 pr-6">
+                    <div className="text-sm font-semibold">
+                      {isMinimize
+                        ? t("settings.closeWindowMinimize")
+                        : t("settings.closeWindowExit")}
+                    </div>
+                    <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                      {isMinimize
+                        ? t("settings.closeWindowMinimizeDesc")
+                        : t("settings.closeWindowExitDesc")}
+                    </div>
                   </div>
-                </div>
-                {selected ? (
-                  <div className="absolute right-3 top-3">
-                    <CheckCircle2 className="h-4.5 w-4.5 text-primary" />
-                  </div>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
-          {t("settings.trayTitle")}
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-sm text-foreground">{t("settings.trayShowTitles")}</div>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {t("settings.trayShowTitlesDesc")}
-            </p>
+                  {selected ? (
+                    <div className="absolute right-3 top-3">
+                      <CheckCircle2 className="h-4.5 w-4.5 text-primary" />
+                    </div>
+                  ) : null}
+                </button>
+              );
+            })}
           </div>
-          <AgentActivationSwitch
-            checked={trayPrefs.showConversationTitles}
-            title={t("settings.trayShowTitles")}
-            onToggle={() =>
-              writeTrayPrefs({ showConversationTitles: !trayPrefs.showConversationTitles })
-            }
-          />
-        </div>
-        {isMacPlatform ? (
+        </section>
+      ) : null}
+
+      {hasTray() ? (
+        <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+            <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
+            {t("settings.trayTitle")}
+          </div>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-sm text-foreground">{t("settings.trayRunningBadge")}</div>
+              <div className="text-sm text-foreground">{t("settings.trayShowTitles")}</div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {t("settings.trayRunningBadgeDesc")}
+                {t("settings.trayShowTitlesDesc")}
               </p>
             </div>
             <AgentActivationSwitch
-              checked={trayPrefs.showRunningBadge}
-              title={t("settings.trayRunningBadge")}
-              onToggle={() => writeTrayPrefs({ showRunningBadge: !trayPrefs.showRunningBadge })}
+              checked={trayPrefs.showConversationTitles}
+              title={t("settings.trayShowTitles")}
+              onToggle={() =>
+                writeTrayPrefs({ showConversationTitles: !trayPrefs.showConversationTitles })
+              }
             />
           </div>
-        ) : null}
-      </section>
+          {isMacPlatform ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm text-foreground">{t("settings.trayRunningBadge")}</div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t("settings.trayRunningBadgeDesc")}
+                </p>
+              </div>
+              <AgentActivationSwitch
+                checked={trayPrefs.showRunningBadge}
+                title={t("settings.trayRunningBadge")}
+                onToggle={() => writeTrayPrefs({ showRunningBadge: !trayPrefs.showRunningBadge })}
+              />
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">

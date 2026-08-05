@@ -7,6 +7,7 @@ import {
   mergePendingUploadedFiles,
   type PendingUploadedFile,
 } from "../../../lib/chat/messages/uploadedFiles";
+import { hasNativeFileDialogs } from "../../../lib/shell/capabilities";
 
 type SystemPickReadableFilesResponse = {
   files: PendingUploadedFile[];
@@ -54,6 +55,34 @@ async function fileToUploadInput(file: File): Promise<SystemUploadedReadableFile
     mimeType: file.type || undefined,
     contentBase64: arrayBufferToBase64(await file.arrayBuffer()),
   };
+}
+
+/**
+ * 浏览器里的「选择文件」：临时 `<input type=file>`。
+ *
+ * 壳里 `system_pick_readable_files` 弹的是本机原生对话框，选中的路径由 Rust
+ * 直接读；浏览器里没有路径可言，只能把 File 内容传给后端——正好就是拖拽和
+ * 粘贴已经在走的那条路（system_import_uploaded_readable_files），两边产出的
+ * 都是 SystemPickReadableFilesResponse。
+ *
+ * 用户取消时 `cancel` 事件收尾；旧浏览器不发这个事件的话 Promise 就悬着，
+ * 此时没有持有任何锁或忙标记，代价只是一个闭包。
+ */
+function pickFilesWithBrowserDialog(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.style.display = "none";
+    const settle = (files: File[]) => {
+      input.remove();
+      resolve(files);
+    };
+    input.addEventListener("change", () => settle([...(input.files ?? [])]), { once: true });
+    input.addEventListener("cancel", () => settle([]), { once: true });
+    document.body.appendChild(input);
+    input.click();
+  });
 }
 
 export function usePendingUploads(params: UsePendingUploadsParams) {
@@ -285,19 +314,52 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     ],
   );
 
-  const pickReadableFiles = useCallback(
-    () =>
-      runUploadTask({
+  // 把已经拿到手的 File 内容上传（拖拽、粘贴，以及浏览器里的「选择文件」）。
+  const importFileObjects = useCallback(
+    async (files: File[], messages: { emptySelectionMessage: string; errorFallback: string }) => {
+      if (files.length === 0) return;
+      await runUploadTask({
+        emptySelectionMessage: messages.emptySelectionMessage,
+        errorFallback: messages.errorFallback,
+        importer: async ({ targetWorkdir, remainingFileSlots }) => {
+          const importBatch = files.slice(0, remainingFileSlots);
+          const ignoredForLimit = files.length - importBatch.length;
+          if (ignoredForLimit > 0) {
+            addNotify(
+              "warning",
+              `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${ignoredForLimit} 个额外文件`,
+            );
+          }
+          const uploadFiles = await Promise.all(importBatch.map(fileToUploadInput));
+          return invoke<SystemPickReadableFilesResponse>("system_import_uploaded_readable_files", {
+            workdir: targetWorkdir,
+            files: uploadFiles,
+            maxFiles: remainingFileSlots,
+          });
+        },
+      });
+    },
+    [addNotify, runUploadTask],
+  );
+
+  const pickReadableFiles = useCallback(async () => {
+    if (!hasNativeFileDialogs()) {
+      await importFileObjects(await pickFilesWithBrowserDialog(), {
         emptySelectionMessage: "所选文件均不受当前 Read 支持",
         errorFallback: "导入文件失败",
-        importer: ({ targetWorkdir, remainingFileSlots }) =>
-          invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
-            workdir: targetWorkdir,
-            maxFiles: remainingFileSlots,
-          }),
-      }),
-    [runUploadTask],
-  );
+      });
+      return;
+    }
+    await runUploadTask({
+      emptySelectionMessage: "所选文件均不受当前 Read 支持",
+      errorFallback: "导入文件失败",
+      importer: ({ targetWorkdir, remainingFileSlots }) =>
+        invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
+          workdir: targetWorkdir,
+          maxFiles: remainingFileSlots,
+        }),
+    });
+  }, [importFileObjects, runUploadTask]);
 
   const importReadableFilePaths = useCallback(
     async (paths: string[]) => {
@@ -318,29 +380,12 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
 
   const importReadableFiles = useCallback(
     async (files: File[]) => {
-      if (files.length === 0) return;
-      await runUploadTask({
+      await importFileObjects(files, {
         emptySelectionMessage: "剪贴板文件均不受当前 Read 支持",
         errorFallback: "导入剪贴板文件失败",
-        importer: async ({ targetWorkdir, remainingFileSlots }) => {
-          const importBatch = files.slice(0, remainingFileSlots);
-          const ignoredForLimit = files.length - importBatch.length;
-          if (ignoredForLimit > 0) {
-            addNotify(
-              "warning",
-              `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${ignoredForLimit} 个额外文件`,
-            );
-          }
-          const uploadFiles = await Promise.all(importBatch.map(fileToUploadInput));
-          return invoke<SystemPickReadableFilesResponse>("system_import_uploaded_readable_files", {
-            workdir: targetWorkdir,
-            files: uploadFiles,
-            maxFiles: remainingFileSlots,
-          });
-        },
       });
     },
-    [addNotify, runUploadTask],
+    [importFileObjects],
   );
 
   const removePendingUpload = useCallback(

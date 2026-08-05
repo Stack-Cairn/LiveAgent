@@ -1,9 +1,4 @@
 // GitReview model: pure types and helpers shared by the git-review modules.
-//
-// MIRROR NOTICE: every file under components/project-tools/git-review exists
-// byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; only
-// relative or @tauri-apps/* imports are allowed here.
 
 import type { GraphRow } from "../../../lib/git/gitGraph";
 import type {

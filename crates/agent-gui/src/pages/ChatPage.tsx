@@ -80,6 +80,7 @@ import {
   workspaceProjectPathKey,
 } from "../lib/settings";
 import { cn } from "../lib/shared/utils";
+import { hasSystemFileOpener } from "../lib/shell/capabilities";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import {
   type ConversationOpenState,
@@ -1912,7 +1913,9 @@ export function ChatPage(props: ChatPageProps) {
           onSelectProject={handleSelectWorkspaceProject}
           onNewConversationForProject={handleNewConversationForProject}
           onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
-          onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
+          onBrowseProjectInSystemFileManager={
+            hasSystemFileOpener() ? handleBrowseWorkspaceProjectInSystemFileManager : undefined
+          }
           onStartRenamingProject={handleStartRenamingWorkspaceProject}
           onProjectRenameDraftChange={setProjectRenameDraft}
           onCommitProjectRename={handleCommitWorkspaceProjectRename}

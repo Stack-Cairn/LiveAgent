@@ -298,7 +298,6 @@ Expand the Development Guide below for the full set of Make commands.
 | `make dev` | Start the Tauri development environment |
 | `make build` | Build the desktop app |
 | `make dev-gateway` | Start the Gateway dev server |
-| `make dev-webui` | Start the WebUI dev server |
 | `make gateway-build` | Build the Gateway binary |
 | `make gateway-docker-build` | Build the Docker image |
 | `make gateway-docker-smoke` | Build + health check |
@@ -328,8 +327,7 @@ LiveAgent/
 │   └── agent-gateway/            # Go gateway service
 │       ├── cmd/gateway/          #   Entry point
 │       ├── internal/             #   Core implementation
-│       ├── proto/v2/             #   Protobuf definitions
-│       └── web/                  #   Embedded WebUI
+│       └── proto/v2/             #   Protobuf definitions
 │
 ├── docs/                         # Project docs
 │   ├── architecture/             #   Architecture design
@@ -466,12 +464,10 @@ Before submitting a PR, make sure all of the following checks pass (they match t
 **Gateway · `crates/agent-gateway` (if changed)**
 
 1. Go unit tests pass: `go test ./...`
-2. WebUI build / lint / tests pass: `pnpm build && pnpm lint && pnpm test` (run in `web/`)
-3. Regenerate and commit artifacts after proto changes: `make proto`
+2. Regenerate and commit artifacts after proto changes: `make proto`
 
-**Cross-frontend consistency**
+**Diff hygiene**
 
-- Mirrored files between GUI and WebUI must be byte-identical: `node scripts/check-mirror.mjs`
 - Keep the diff clean (no trailing whitespace): `git diff --check`
 
 ---

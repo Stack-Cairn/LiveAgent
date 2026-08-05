@@ -48,7 +48,7 @@ func NewHTTPServer(cfg *config.Config, sm *session.Manager, tokens *agenttoken.S
 	apiMux.HandleFunc("DELETE /api/agents/{id}", handler.DeleteAgent(sm, tokens))
 	rootMux.Handle("/api/", auth.HTTPMiddleware(cfg.Token, apiMux))
 
-	webFS, err := fs.Sub(gateway.WebUIAssets, "web/dist")
+	webFS, err := fs.Sub(gateway.WebUIAssets, "webui-retired")
 	if err != nil {
 		panic(err)
 	}

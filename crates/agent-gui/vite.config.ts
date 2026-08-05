@@ -37,6 +37,10 @@ export default defineConfig(async () => ({
         find: "@tauri-apps/api/event",
         replacement: fileURLToPath(new URL("./src/lib/backend/tauriEvent.ts", import.meta.url)),
       },
+      {
+        find: "@tauri-apps/plugin-opener",
+        replacement: fileURLToPath(new URL("./src/lib/backend/tauriOpener.ts", import.meta.url)),
+      },
     ],
   },
 

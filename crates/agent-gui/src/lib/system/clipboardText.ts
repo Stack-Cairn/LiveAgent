@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { hasShell } from "../shell/capabilities";
 
 /**
  * 桌面端自定义菜单"粘贴"的唯一剪贴板读取入口。
@@ -13,10 +14,13 @@ import { invoke } from "@tauri-apps/api/core";
  * 调用方可自行决定是否退回浏览器原生粘贴行为。
  */
 export async function readClipboardText(): Promise<string | null> {
-  try {
-    return await invoke<string>("system_clipboard_read_text");
-  } catch {
-    // Fall through to the webview clipboard API.
+  // 浏览器里没有壳，跳过注定失败的 invoke，直接走 webview API。
+  if (hasShell()) {
+    try {
+      return await invoke<string>("system_clipboard_read_text");
+    } catch {
+      // Fall through to the webview clipboard API.
+    }
   }
   try {
     return (await navigator.clipboard?.readText?.()) ?? "";

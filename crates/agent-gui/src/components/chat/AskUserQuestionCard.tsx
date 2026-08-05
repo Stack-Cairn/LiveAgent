@@ -1,7 +1,6 @@
 // AskUserQuestion 的聊天卡片：顶部 tabs 切换多个问题，每题单选、推荐项
 // 排在首位；纯展示组件，提交动作由调用方注入（GUI 直连工具挂起表，WebUI 走网关）。
-// 本文件在 agent-gui 与 agent-gateway/web 之间逐字节镜像
-// （见 scripts/mirror-manifest.json），端差异一律留在各端的 ToolCallItem。
+// 端差异一律留在各端的 ToolCallItem。
 import { useEffect, useMemo, useState } from "react";
 
 import { useLocale } from "../../i18n";

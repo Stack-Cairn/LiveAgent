@@ -1,9 +1,4 @@
 // Workspace activity invalidation types.
-//
-// MIRROR NOTICE: this file exists byte-for-byte in both frontends
-// (crates/agent-gui/src/lib/workspace-activity/ and
-// crates/agent-gateway/web/src/lib/workspace-activity/). Keep changes in sync
-// on both ends; only relative or @tauri-apps/* imports are allowed here.
 
 export type WorkspaceActivity = {
   workdir: string;

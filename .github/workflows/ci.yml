@@ -51,13 +51,6 @@ jobs:
           go-version-file: crates/agent-gateway/go.mod
           cache-dependency-path: crates/agent-gateway/go.sum
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install pnpm
-        run: npm install -g pnpm@10.32.1
-
       - name: Install buf
         uses: bufbuild/buf-action@v1
         with:
@@ -68,12 +61,6 @@ jobs:
         run: |
           go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
-      - name: Build embedded Gateway WebUI
-        working-directory: crates/agent-gateway/web
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm build
 
       - name: Proto lint and breaking-change check
         run: make proto-check BUF_BREAKING_AGAINST='../../.git#branch=origin/main,subdir=crates/agent-gateway'
@@ -130,35 +117,6 @@ jobs:
           echo "Gateway Docker smoke test failed; container logs:"
           docker logs liveagent-gateway-smoke || true
           exit 1
-
-  webui:
-    name: Gateway WebUI
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install pnpm
-        run: npm install -g pnpm@10.32.1
-
-      - name: Install dependencies
-        working-directory: crates/agent-gateway/web
-        run: pnpm install --frozen-lockfile
-
-      - name: Build WebUI
-        working-directory: crates/agent-gateway/web
-        run: pnpm build
-
-      - name: Lint WebUI
-        working-directory: crates/agent-gateway/web
-        run: pnpm lint
-
-      - name: Test WebUI modules
-        working-directory: crates/agent-gateway/web
-        run: pnpm test
 
   gui:
     name: GUI
@@ -240,19 +198,6 @@ jobs:
         env:
           CARGO_TERM_COLOR: always
         run: cargo test --manifest-path crates/agent-gui/src-tauri/Cargo.toml integration_commands::mcp --lib
-
-  mirror:
-    name: GUI/WebUI Mirror Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Check mirrored files are byte-identical
-        run: node scripts/check-mirror.mjs
 
   whitespace:
     name: Diff Hygiene

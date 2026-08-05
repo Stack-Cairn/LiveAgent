@@ -3,8 +3,7 @@
 // 取代此前埋在每个 Tool Activity 折叠项里的分散卡片(并行多个时逐个展开点击很繁琐)。
 //
 // 纯展示 + 决定回调;数据(pending 列表)与提交动作由各端注入:GUI 直连桌面审批服务,
-// WebUI 走网关 tool_approval。本文件在 agent-gui 与 agent-gateway/web 之间逐字节镜像
-// (见 scripts/mirror-manifest.json),端差异一律留在各端宿主。
+// WebUI 走网关 tool_approval。端差异一律留在各端宿主。
 import { useEffect, useState } from "react";
 
 import { useLocale } from "../../i18n";

@@ -2,10 +2,7 @@
 // accept/delete/wipe, plus mounting the settings drawer (which owns the
 // organizer history modal).
 //
-// MIRROR NOTICE: every file in pages/settings/memory except platform.tsx
-// exists byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; platform
-// differences belong in ./platform, never here.
+// Platform-specific dependencies belong in ./platform, never here.
 
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";

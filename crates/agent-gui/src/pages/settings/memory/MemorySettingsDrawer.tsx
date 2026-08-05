@@ -1,10 +1,7 @@
 // Memory settings drawer: organizer model/schedule/scope/mode, extraction
 // summary model, Run Now, quota-ladder banner and the wipe-all danger zone.
 //
-// MIRROR NOTICE: every file in pages/settings/memory except platform.tsx
-// exists byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; platform
-// differences belong in ./platform, never here.
+// Platform-specific dependencies belong in ./platform, never here.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";

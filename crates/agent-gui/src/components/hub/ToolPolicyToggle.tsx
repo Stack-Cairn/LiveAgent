@@ -1,6 +1,5 @@
 // 工具审批策略三态控件(allow/ask/deny)。抽出后供系统工具设置页与 MCP Hub 就地
 // 复用,保证各处外观一致。
-// 本文件在 agent-gui 与 agent-gateway/web 之间逐字节镜像。
 
 import { useLocale } from "../../i18n";
 import type { ToolPolicy } from "../../lib/settings";

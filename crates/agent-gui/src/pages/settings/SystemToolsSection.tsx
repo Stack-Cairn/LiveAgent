@@ -1,7 +1,7 @@
 // 系统工具设置:展示 Agent 模式下自动注册的内置工具,并为每个工具设置审批策略
 //(allow 直接执行 / ask 执行前询问 / deny 直接拒绝)。纯设置读写
 //(settings.system.toolPolicies),经 settings sync 自然同步到 WebUI;裁决在桌面端
-// resolveToolPolicy。本文件在 agent-gui 与 agent-gateway/web 之间逐字节镜像。
+// resolveToolPolicy。
 //
 // 说明:MCP 工具按 server、插件工具按工具的策略已就地内联到各自 Hub 卡片旁
 //(需运行时数据),不在本节;本节聚焦内置工具,补上内置工具此前不可管控的缺口。

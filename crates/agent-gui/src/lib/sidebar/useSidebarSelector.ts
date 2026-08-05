@@ -1,8 +1,7 @@
 // Selector-scoped subscription to the sidebar store. This is the only way
 // React code reads the store: a commit re-renders exactly the components
 // whose selection changed (per isEqual), so activity ticks and list updates
-// never cascade through page-level components. Byte-mirrored between
-// agent-gui and agent-gateway/web.
+// never cascade through page-level components.
 //
 // The selector must be pure with respect to the snapshot: for one snapshot it
 // must always produce an equivalent selection (its identity may change per

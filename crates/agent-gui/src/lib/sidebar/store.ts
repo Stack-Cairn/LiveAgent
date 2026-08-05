@@ -2,8 +2,8 @@
 // workspace/conversation sidebar domain — conversation list, workdir
 // summaries, running set, and per-row mutations. Consumed from React through
 // useSidebarSelector so a store commit re-renders selector subscribers only,
-// never the page-level components. Byte-mirrored between agent-gui and
-// agent-gateway/web; everything platform-specific arrives via SidebarBackend.
+// never the page-level components. Everything platform-specific arrives via
+// SidebarBackend.
 //
 // Consistency policy (stale-while-revalidate):
 // - a fetch failure never clears the visible list;

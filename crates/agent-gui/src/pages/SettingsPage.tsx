@@ -16,6 +16,7 @@ import {
 import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
 
 import { useLocale } from "../i18n";
+import { hasGlobalShortcuts } from "../lib/shell/capabilities";
 import { AboutSection } from "./settings/AboutSection";
 import { AgentsSection } from "./settings/AgentsSection";
 import { CronSection } from "./settings/CronSection";
@@ -159,7 +160,12 @@ export function SettingsPage(props: SettingsPageProps) {
     about: t("settings.navAbout"),
   };
 
-  const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
+  const hiddenSectionSet = useMemo(() => {
+    const hidden = new Set(hiddenSections);
+    // 全局快捷键是系统级注册，只有壳做得到；浏览器里整个 section 没有意义。
+    if (!hasGlobalShortcuts()) hidden.add("shortcuts");
+    return hidden;
+  }, [hiddenSections]);
   const navGroups = useMemo(
     () =>
       NAV_GROUPS.map((group) => ({

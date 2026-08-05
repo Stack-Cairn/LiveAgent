@@ -1,10 +1,5 @@
 // GitReview status view: staged/unstaged change lists, the commit bar, the
 // working-tree/branch diff pane and the change context menus.
-//
-// MIRROR NOTICE: every file under components/project-tools/git-review exists
-// byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; only
-// relative or @tauri-apps/* imports are allowed here.
 
 import {
   type MouseEvent as ReactMouseEvent,
@@ -19,6 +14,7 @@ import {
 import { useLocale } from "../../../i18n";
 import type { GitStatusEntry } from "../../../lib/git/types";
 import { cn } from "../../../lib/shared/utils";
+import { hasSystemFileOpener } from "../../../lib/shell/capabilities";
 import { getFileTypeIcon } from "../../chat/fileTypeIcons";
 import {
   BrushCleaning,
@@ -397,7 +393,9 @@ export function GitReviewStatusView(props: {
     [onRevealInFileTree],
   );
 
-  const canOpenSystemFileLocation = typeof gitClient?.openSystemFileLocation === "function";
+  // 客户端提供了这个方法**且**宿主真有系统文件管理器（浏览器里没有）。
+  const canOpenSystemFileLocation =
+    typeof gitClient?.openSystemFileLocation === "function" && hasSystemFileOpener();
 
   const openEntrySystemFileLocation = useCallback(
     (entry: GitStatusEntry) => {

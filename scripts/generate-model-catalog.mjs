@@ -1,12 +1,10 @@
 #!/usr/bin/env node
 // Generates the model metadata catalog (context window / max output /
-// thinking capability) consumed by both frontends. OpenAI model metadata is
+// thinking capability) consumed by the frontend. OpenAI model metadata is
 // merged Codex-first from openai/codex models.json, then supplemented by the
 // models.dev open database; every other section comes from models.dev. The
-// output is written byte-identically to:
+// output is written to:
 //   crates/agent-gui/src/lib/models/catalog.generated.ts
-//   crates/agent-gateway/web/src/lib/models/catalog.generated.ts
-// and is enforced in sync by scripts/check-mirror.mjs.
 //
 // Usage: node scripts/generate-model-catalog.mjs
 //          [--source <url|file>] [--codex-source <url|file>] [--check]
@@ -22,10 +20,15 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const OUTPUT_PATHS = [
-  join(repoRoot, "crates", "agent-gui", "src", "lib", "models", "catalog.generated.ts"),
-  join(repoRoot, "crates", "agent-gateway", "web", "src", "lib", "models", "catalog.generated.ts"),
-];
+const OUTPUT_PATH = join(
+  repoRoot,
+  "crates",
+  "agent-gui",
+  "src",
+  "lib",
+  "models",
+  "catalog.generated.ts",
+);
 
 const DEFAULT_SOURCE = "https://models.dev/api.json";
 const DEFAULT_CODEX_SOURCE =
@@ -485,16 +488,13 @@ for (const sentinel of SENTINELS) {
   }
 }
 
-const existingContents = OUTPUT_PATHS.map(readExisting);
+const existingContent = readExisting(OUTPUT_PATH);
 const today = new Date().toISOString().slice(0, 10);
 const nextContent = renderCatalog(catalog, today);
 
 const unchanged =
-  existingContents.every((content) => content !== null) &&
-  existingContents.every(
-    (content) => stripSnapshotDate(content) === stripSnapshotDate(nextContent),
-  ) &&
-  existingContents[0] === existingContents[1];
+  existingContent !== null &&
+  stripSnapshotDate(existingContent) === stripSnapshotDate(nextContent);
 
 if (args.check) {
   if (!unchanged) {
@@ -510,8 +510,6 @@ if (unchanged) {
   process.exit(0);
 }
 
-for (const path of OUTPUT_PATHS) writeFileSync(path, nextContent);
-const [guiBytes, webBytes] = OUTPUT_PATHS.map((path) => readFileSync(path));
-if (!guiBytes.equals(webBytes)) fail("post-write self-check failed: outputs differ");
+writeFileSync(OUTPUT_PATH, nextContent);
 const total = SECTIONS.reduce((sum, section) => sum + catalog[section.key].length, 0);
 console.log(`catalog updated (${total} models, snapshot ${today})`);

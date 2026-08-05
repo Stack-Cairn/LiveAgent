@@ -2,9 +2,7 @@ import type { SystemToolRuntimeScope } from "./systemToolOptions";
 
 /**
  * Display-only catalog of the built-in tools registered by the agent runtime.
- * This file is mirrored byte-for-byte between agent-gui and agent-gateway/web
- * (see scripts/mirror-manifest.json), so it must stay pure data: no runtime
- * bundle imports (the WebUI tree does not have them).
+ * Must stay pure data: no runtime bundle imports.
  */
 
 export type BuiltinToolCategoryId =

@@ -1,10 +1,5 @@
 // GitReview transient overlay scrollbar system.
 //
-// MIRROR NOTICE: every file under components/project-tools/git-review exists
-// byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; only
-// relative or @tauri-apps/* imports are allowed here.
-//
 // Scroll containers opt in via GIT_REVIEW_TRANSIENT_SCROLLBAR_CLASS plus the
 // onScroll handler returned by useOverlayScrollbar(). The overlay thumbs are
 // lazily attached to document.body on first scroll; every element that gained

@@ -3,6 +3,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { read, utils } from "xlsx";
 import { useLocale } from "../../i18n";
 import { cn } from "../../lib/shared/utils";
+import { hasSystemFileOpener } from "../../lib/shell/capabilities";
 import { invokeFs } from "../../lib/tools/fsBackend";
 import { type FileTypeIconComponent, getFileTypeIcon } from "../chat/fileTypeIcons";
 import {
@@ -471,7 +472,11 @@ export function WorkspaceFilePreviewOverlay(props: WorkspaceFilePreviewOverlayPr
     [activePath, activePreviewRequest?.imagePaths, kind],
   );
   const canOpenEditor = Boolean(activePreviewRequest && isWorkspaceEditablePreviewPath(activePath));
-  const canOpenExternal = Boolean(activePreviewRequest && activePath && !canOpenEditor);
+  // 「用系统程序打开」是壳能力（fs_open_workspace_path 打开的是这台机器上的
+  // 文件），浏览器里没有对应物，入口直接不渲染。
+  const canOpenExternal = Boolean(
+    activePreviewRequest && activePath && !canOpenEditor && hasSystemFileOpener(),
+  );
 
   const openImagePath = useCallback(
     (path: string, transitionDirection: ImagePreviewTransitionDirection = 0) => {

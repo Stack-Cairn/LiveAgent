@@ -15,6 +15,7 @@ import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
 import type { AppUpdateCheckResult, AppUpdateController } from "../../lib/appUpdates";
 import { updateUpdateSettings } from "../../lib/settings";
+import { hasUpdater } from "../../lib/shell/capabilities";
 import { formatReleaseDate } from "./aboutDate";
 import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";
@@ -61,6 +62,9 @@ function releaseNotesBody(result?: AppUpdateCheckResult) {
 export function AboutSection(props: AboutSectionProps) {
   const { settings, setSettings, appUpdate } = props;
   const { t } = useLocale();
+  // 自更新是壳能力：浏览器里版本随后端走，检查/安装/重启都无从谈起，
+  // 整块更新 UI（状态卡、安装按钮、预发布通道开关）不渲染，只留版本号。
+  const updaterAvailable = hasUpdater();
   const includePrereleases = settings.updates.includePrereleases;
   const checkState = appUpdate.state;
 
@@ -151,20 +155,22 @@ export function AboutSection(props: AboutSectionProps) {
               {t("settings.aboutOpenRelease")}
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => void appUpdate.runCheck().catch(() => undefined)}
-            disabled={checking || installing || restarting}
-          >
-            {checking ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            {t("settings.aboutCheckUpdate")}
-          </Button>
+          {updaterAvailable ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void appUpdate.runCheck().catch(() => undefined)}
+              disabled={checking || installing || restarting}
+            >
+              {checking ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              {t("settings.aboutCheckUpdate")}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -185,64 +191,68 @@ export function AboutSection(props: AboutSectionProps) {
             </div>
           </div>
 
-          <div className="rounded-xl border border-border/60 bg-background/70 p-4">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
-                {checkState.status === "error" ? (
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                ) : restarting ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                ) : latestResult?.available || latestResult?.manualDownload ? (
-                  <Download className="h-4 w-4 text-primary" />
-                ) : checking ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold">{statusTitle}</div>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  {statusDescription}
-                </p>
+          {updaterAvailable ? (
+            <div className="rounded-xl border border-border/60 bg-background/70 p-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                  {checkState.status === "error" ? (
+                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  ) : restarting ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  ) : latestResult?.available || latestResult?.manualDownload ? (
+                    <Download className="h-4 w-4 text-primary" />
+                  ) : checking ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">{statusTitle}</div>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {statusDescription}
+                  </p>
 
-                {nextVersion ? (
-                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                    <div className="rounded-lg bg-muted/45 px-3 py-2">
-                      <div className="text-muted-foreground">
-                        {t("settings.aboutLatestVersion")}
+                  {nextVersion ? (
+                    <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                      <div className="rounded-lg bg-muted/45 px-3 py-2">
+                        <div className="text-muted-foreground">
+                          {t("settings.aboutLatestVersion")}
+                        </div>
+                        <div className="mt-0.5 font-medium tabular-nums">v{nextVersion}</div>
                       </div>
-                      <div className="mt-0.5 font-medium tabular-nums">v{nextVersion}</div>
+                      <div className="rounded-lg bg-muted/45 px-3 py-2">
+                        <div className="text-muted-foreground">
+                          {t("settings.aboutReleaseDate")}
+                        </div>
+                        <div className="mt-0.5 truncate font-medium">{releaseDate || "N/A"}</div>
+                      </div>
                     </div>
-                    <div className="rounded-lg bg-muted/45 px-3 py-2">
-                      <div className="text-muted-foreground">{t("settings.aboutReleaseDate")}</div>
-                      <div className="mt-0.5 truncate font-medium">{releaseDate || "N/A"}</div>
-                    </div>
-                  </div>
-                ) : null}
+                  ) : null}
+                </div>
               </div>
-            </div>
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                onClick={installed ? handleRestartApp : handleInstallUpdate}
-                disabled={(installed ? false : !canInstall) || installing || restarting}
-              >
-                {installing || restarting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : installed ? (
-                  <RefreshCw className="h-4 w-4" />
-                ) : (
-                  <Download className="h-4 w-4" />
-                )}
-                {installed ? t("settings.aboutRestartApp") : t("settings.aboutInstallUpdate")}
-              </Button>
-              <div className="text-xs text-muted-foreground">
-                {latestResult?.repository || "Stack-Cairn/LiveAgent"}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={installed ? handleRestartApp : handleInstallUpdate}
+                  disabled={(installed ? false : !canInstall) || installing || restarting}
+                >
+                  {installing || restarting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : installed ? (
+                    <RefreshCw className="h-4 w-4" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {installed ? t("settings.aboutRestartApp") : t("settings.aboutInstallUpdate")}
+                </Button>
+                <div className="text-xs text-muted-foreground">
+                  {latestResult?.repository || "Stack-Cairn/LiveAgent"}
+                </div>
               </div>
             </div>
-          </div>
+          ) : null}
 
           {latestReleaseNotes ? (
             <div className="space-y-2 rounded-xl border border-border/60 bg-background/70 p-4">
@@ -258,30 +268,32 @@ export function AboutSection(props: AboutSectionProps) {
         </section>
 
         <aside className="space-y-4">
-          <section className="rounded-2xl border border-border/60 bg-card p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <Shield className="h-4 w-4 text-muted-foreground" />
-                  {t("settings.aboutPrereleaseTitle")}
+          {updaterAvailable ? (
+            <section className="rounded-2xl border border-border/60 bg-card p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    {t("settings.aboutPrereleaseTitle")}
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    {t("settings.aboutPrereleaseDesc")}
+                  </p>
                 </div>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  {t("settings.aboutPrereleaseDesc")}
-                </p>
+                <AgentActivationSwitch
+                  checked={includePrereleases}
+                  title={t("settings.aboutPrereleaseToggle")}
+                  onToggle={() =>
+                    setSettings((prev) =>
+                      updateUpdateSettings(prev, {
+                        includePrereleases: !prev.updates.includePrereleases,
+                      }),
+                    )
+                  }
+                />
               </div>
-              <AgentActivationSwitch
-                checked={includePrereleases}
-                title={t("settings.aboutPrereleaseToggle")}
-                onToggle={() =>
-                  setSettings((prev) =>
-                    updateUpdateSettings(prev, {
-                      includePrereleases: !prev.updates.includePrereleases,
-                    }),
-                  )
-                }
-              />
-            </div>
-          </section>
+            </section>
+          ) : null}
 
           <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
             <div className="text-sm font-semibold">{t("settings.aboutNotesTitle")}</div>

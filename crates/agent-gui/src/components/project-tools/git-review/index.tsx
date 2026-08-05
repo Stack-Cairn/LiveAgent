@@ -1,11 +1,6 @@
 // GitReview panel assembly: reads the right-dock tool context, owns the
 // layout/presentation state shared across views and composes the toolbar,
 // status view and history view around the data layer.
-//
-// MIRROR NOTICE: every file under components/project-tools/git-review exists
-// byte-for-byte in both frontends (crates/agent-gui/src and
-// crates/agent-gateway/web/src). Keep changes in sync on both ends; only
-// relative or @tauri-apps/* imports are allowed here.
 
 import { memo, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { useLocale } from "../../../i18n";

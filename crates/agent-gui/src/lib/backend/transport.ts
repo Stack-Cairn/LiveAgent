@@ -7,12 +7,7 @@
  * 两条路都落到这里，所以整个前端只有一条 WS 连接、一份端点解析。
  */
 
-import {
-  type BackendEndpoint,
-  httpBaseUrl,
-  resolveEndpoint,
-  wsBaseUrl,
-} from "./endpoint";
+import { type BackendEndpoint, httpBaseUrl, resolveEndpoint, wsBaseUrl } from "./endpoint";
 
 /** 密码不对。登录页据此提示，而不是笼统地说「连接失败」。 */
 export class UnauthorizedError extends Error {
@@ -123,7 +118,10 @@ function dispatch(frame: BackendEvent) {
 
 function ensureSocket() {
   if (connecting || reconnectTimer !== null) return;
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)
+  ) {
     return;
   }
   connecting = true;

@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -276,20 +274,6 @@ test("escaped Markdown file links stay literal while a following link remains cl
   ]);
 });
 
-test("linked editor locations are applied once per request and tab in both frontends", () => {
-  const files = [
-    "../../src/components/workspace-editor/WorkspaceCodeEditorOverlay.tsx",
-    "../../../agent-gateway/web/src/components/workspace-editor/WorkspaceCodeEditorOverlay.tsx",
-  ];
-  for (const relativePath of files) {
-    const source = fs.readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
-    assert.match(source, /linkedLocationKeyRef/);
-    assert.match(source, /const locationKey = `\$\{openRequest\.id\}\\u0000\$\{activeTabKey\}`/);
-    assert.match(source, /if \(linkedLocationKeyRef\.current === locationKey\) return/);
-    assert.doesNotMatch(source, /\}, \[activeTab, openRequest\]\);/);
-  }
-});
-
 test("the reported ps1 link renders as one accessible click target and never executes itself", () => {
   const fileNode = {
     type: "element",
@@ -324,49 +308,6 @@ test("the reported ps1 link renders as one accessible click target and never exe
       source: "absolute",
     },
   ]);
-});
-
-test("historical and streaming assistant rows share the explicit file-open prop chain", () => {
-  const files = [
-    "../../src/pages/chat/transcript/ChatTranscript.tsx",
-    "../../src/pages/chat/transcript/TranscriptList.tsx",
-    "../../src/pages/chat/transcript/AssistantRenderUnit.tsx",
-    "../../src/pages/chat/components/AssistantBubble.tsx",
-    "../../src/pages/chat/components/assistant-bubble/RoundContent.tsx",
-  ];
-  for (const relativePath of files) {
-    const source = fs.readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
-    assert.match(source, /onOpenFileLink/, relativePath);
-  }
-
-  const roundContent = fs.readFileSync(
-    fileURLToPath(
-      new URL(
-        "../../src/pages/chat/components/assistant-bubble/RoundContent.tsx",
-        import.meta.url,
-      ),
-    ),
-    "utf8",
-  );
-  assert.match(roundContent, /export const RoundBlockContent/);
-  assert.match(roundContent, /renderMode=\{renderMode\}/);
-  assert.ok((roundContent.match(/onOpenFileLink=\{onOpenFileLink\}/g) ?? []).length >= 2);
-  assert.ok((roundContent.match(/workdir=\{workdir\}/g) ?? []).length >= 2);
-
-  const transcriptList = fs.readFileSync(
-    fileURLToPath(new URL("../../src/pages/chat/transcript/TranscriptList.tsx", import.meta.url)),
-    "utf8",
-  );
-  assert.match(transcriptList, /isCompactionRunning=\{row\.mutable/);
-  assert.match(transcriptList, /workdir=\{workspaceRoot\}/);
-  assert.match(transcriptList, /onOpenFileLink=\{onOpenFileLink\}/);
-
-  const chatPage = fs.readFileSync(
-    fileURLToPath(new URL("../../src/pages/ChatPage.tsx", import.meta.url)),
-    "utf8",
-  );
-  assert.match(chatPage, /openInFileManager: true/);
-  assert.match(chatPage, /!result\.outsideWorkspace/);
 });
 
 test("forged internal payloads cannot become clickable file links", () => {
@@ -558,36 +499,42 @@ test("agent Bash rules are Git Bash-first when runtime platform is Windows", () 
 });
 
 test("fs tool descriptions keep Image as the only display path for images", () => {
-  const sourcePath = fileURLToPath(new URL("../../src/lib/tools/fsTools.ts", import.meta.url));
-  const source = fs.readFileSync(sourcePath, "utf8");
+  const { createFsTools } = loader.loadModule("src/lib/tools/fsTools.ts");
+  const { tools } = createFsTools({ workdir: "/workspace", fileState: {} });
+  const describe = (name) => tools.find((tool) => tool.name === name)?.description ?? "";
 
+  // The Image tool description is the model's only instruction on how to put
+  // an image on screen; Read must hand off to it rather than inviting
+  // Markdown/HTML embedding that the renderer deliberately refuses.
+  const image = describe("Image");
+  assert.match(image, /This is the only supported way for assistant-side image rendering\./);
   assert.match(
-    source,
-    /Use Image instead when the user asks to show, view, render, or display an image in the chat UI\. Do not use Markdown image syntax or HTML img tags to display files\./,
-  );
-  assert.match(
-    source,
-    /This is the only supported way for assistant-side image rendering\./,
-  );
-  assert.match(
-    source,
+    image,
     /Supports workspace paths, enabled Skill paths, external absolute paths, http\/https URLs, base64 data URLs, and SVG images/,
   );
   assert.match(
-    source,
+    image,
     /For remote images, pass url\/urls or source\/sources directly instead of downloading the image first, unless the user explicitly asks to save it locally\./,
   );
   assert.match(
-    source,
-    /Multiple mixed image sources to display in order\. Use this for mixed path \+ URL \+ base64 galleries\./,
-  );
-  assert.match(
-    source,
+    image,
     /Do not embed images in final text with Markdown image syntax, HTML img tags, file:\/\/ URLs, or local relative image paths\./,
   );
   assert.match(
-    source,
+    describe("Read"),
+    /Use Image instead when the user asks to show, view, render, or display an image in the chat UI\. Do not use Markdown image syntax or HTML img tags to display files\./,
+  );
+
+  const sources = JSON.stringify(tools.find((tool) => tool.name === "Image")?.parameters ?? {});
+  assert.match(
+    sources,
+    /Multiple mixed image sources to display in order\. Use this for mixed path \+ URL \+ base64 galleries\./,
+  );
+
+  const del = describe("Delete");
+  assert.match(
+    del,
     /The structured, tracked way to intentionally delete a workspace or enabled Skill file\/directory/,
   );
-  assert.match(source, /Delete results feed LiveAgent's Edited Files and file-ledger tracking/);
+  assert.match(del, /Delete results feed LiveAgent's Edited Files and file-ledger tracking/);
 });

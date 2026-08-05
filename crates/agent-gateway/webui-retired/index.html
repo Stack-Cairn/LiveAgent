@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gateway WebUI 已退役</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #111;
+        color: #eee;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        line-height: 1.7;
+      }
+      main {
+        max-width: 34rem;
+        padding: 2rem;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 1rem;
+      }
+      code {
+        background: #222;
+        padding: 0.1em 0.35em;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Gateway WebUI 已退役</h1>
+      <p>
+        原先内嵌在 gateway 中的 WebUI 已并入统一前端 v2（<code>crates/agent-gui</code>），
+        不再单独构建与分发。
+      </p>
+      <p>
+        gateway 本身也将在下一阶段整体移除，其职责由 <code>agent-backend</code> 承担。
+        迁移指引见仓库 README 与 <code>docs/architecture/migration/</code>。
+      </p>
+    </main>
+  </body>
+</html>

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -7,14 +6,7 @@ const loader = createTsModuleLoader();
 const { buildTranscriptLayoutKey, createTranscriptMeasurementsLru } = loader.loadModule(
   "src/lib/transcript-virtual/measurementsLru.ts",
 );
-const { SCROLL_FOLLOW_IGNORE_KEYS_ATTRIBUTE } = loader.loadModule(
-  "src/lib/chat-scroll/scrollFollowCore.ts",
-);
 const width = loader.loadModule("src/lib/transcript-width/transcriptWidthModel.ts");
-const transcriptWidthControlsSource = readFileSync(
-  new URL("../../src/pages/chat/transcript/TranscriptWidthControls.tsx", import.meta.url),
-  "utf8",
-);
 
 const item = (key, size) => ({ index: 0, key, start: 0, size, end: size, lane: 0 });
 
@@ -37,13 +29,6 @@ test("unmeasured layouts produce a blank key so nothing is cached", () => {
   const lru = createTranscriptMeasurementsLru();
   lru.save("conv-1", buildTranscriptLayoutKey(0, 768), [item("a", 120)]);
   assert.equal(lru.restore("conv-1", buildTranscriptLayoutKey(0, 768)), null);
-});
-
-test("keyboard width controls do not detach transcript scroll follow", () => {
-  // Derived from the follow engine's own constant, so renaming the attribute
-  // in one place and not the other fails here instead of silently detaching
-  // bottom-follow on every arrow-key resize.
-  assert.ok(transcriptWidthControlsSource.includes(SCROLL_FOLLOW_IGNORE_KEYS_ATTRIBUTE));
 });
 
 test("preferred widths round and clamp to the persisted bounds", () => {

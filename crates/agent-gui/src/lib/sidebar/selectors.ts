@@ -1,6 +1,5 @@
 // Small pure selectors over SidebarSnapshot plus the shallow-equal helper
-// used with useSidebarSelector for composite selections. Byte-mirrored
-// between agent-gui and agent-gateway/web.
+// used with useSidebarSelector for composite selections.
 
 import type { SidebarSnapshot } from "./store";
 import type { SidebarMutationKind } from "./types";
