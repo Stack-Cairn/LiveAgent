@@ -7,8 +7,8 @@
 //!
 //! 契约清单唯一来源是 docs/architecture/command-classes/backend.txt（阶段起点
 //! 8c90a424 已机器核对其与 #[tauri::command] 注册清单一致）。排除集与
-//! scripts/generate-routes.mjs 保持一致：17 条无 wrapper（system_*/
-//! provider_usage_*/workspace_watch_set）+ 3 条 WS 流式 = 195 − 20 = 175 条。
+//! scripts/generate-routes.mjs 保持一致：16 条无 wrapper（provider_usage_*/
+//! workspace_watch_set/system_* 除 system_list_skill_files）+ 3 条 WS 流式 = 195 − 19 = 176 条。
 //!
 //! ⚠️ MemoryStore::open() / AutomationStore::open() / config_db_path() 都从
 //! dirs::home_dir() 取路径。测试必须先把 $HOME 重定向到临时目录，否则
@@ -44,7 +44,6 @@ const NO_WRAPPER: &[&str] = &[
     "system_import_pasted_texts",
     "system_import_readable_file_paths",
     "system_import_uploaded_readable_files",
-    "system_list_skill_files",
     "system_manage_skill",
     "system_read_skill_metadata",
     "system_read_skill_text",

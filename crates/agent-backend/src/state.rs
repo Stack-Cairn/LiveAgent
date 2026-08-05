@@ -55,4 +55,6 @@ pub struct AppState {
     pub approvals: Arc<crate::approval::ApprovalRegistry>,
     /// Node 引擎监听端口。127.0.0.1:node_port 为反向代理目标。未启动时为 None。
     pub node_port: Arc<RwLock<Option<u16>>>,
+    /// HTTP 后端监听端口。传给 Node 引擎的 LIVEAGENT_BACKEND_PORT。
+    pub backend_port: u16,
 }

@@ -23,7 +23,7 @@ RUN pnpm build
 
 # 阶段2：构建 Rust 后端二进制
 # agent-backend（workspace 内，agent-core 是依赖）
-FROM --platform=$BUILDPLATFORM rust:latest-bookworm AS backend-builder
+FROM --platform=$BUILDPLATFORM rust:1-bookworm AS backend-builder
 
 # 保持这些 ARG 裸露：不赋默认值，让 buildx 按每平台注入
 ARG TARGETOS

@@ -32,15 +32,8 @@ export type GatewayContext = {
 };
 
 function buildGatewayContext(): GatewayContext | null {
-  // 浏览器环境下尝试从 window 读取；Node 环境返回 null
-  // 实际使用时由调用方传入正确的 context
-  if (typeof window !== "undefined" && window.location) {
-    const token = (window.localStorage as Storage)?.getItem?.(GATEWAY_TOKEN_STORAGE_KEY)?.trim() ?? "";
-    return {
-      origin: window.location.origin,
-      token,
-    };
-  }
+  // Node 环境中没有 window 对象，必须由调用方显式传入 context。
+  // 不支持浏览器环境的隐式 localStorage 读取。
   return null;
 }
 

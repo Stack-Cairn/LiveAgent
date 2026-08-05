@@ -105,7 +105,9 @@ async function connectWebSocket(): Promise<WebSocket> {
 
   wsConnecting = (async () => {
     const endpoint = await getBackendEndpoint();
-    const ws = new WebSocket(`ws://${endpoint.host}:${endpoint.port}/api/events`);
+    const wsUrl = new URL(`ws://${endpoint.host}:${endpoint.port}/api/events`);
+    wsUrl.searchParams.set("token", endpoint.password);
+    const ws = new WebSocket(wsUrl.toString());
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {

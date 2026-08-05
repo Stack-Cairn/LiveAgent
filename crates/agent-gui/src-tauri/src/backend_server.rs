@@ -18,6 +18,8 @@ pub struct BackendServer {
     pub port: u16,
     /// 认证密码（生成的随机字符串）。
     pub password: String,
+    /// Node 引擎进程句柄。持有这个句柄直到后端服务关闭，保证引擎进程生命周期。
+    pub engine: std::sync::Arc<tokio::sync::Mutex<Option<agent_backend::engine_process::EngineProcess>>>,
 }
 
 /// 启动内嵌后端服务，并可选启动 Node 引擎。
@@ -29,7 +31,7 @@ pub struct BackendServer {
 /// 4. 启动 HTTP 服务（async 任务）
 /// 5. 如果提供了 bundle_path，启动 Node 引擎
 /// 6. 返回服务元数据给前端
-pub async fn start_backend_server(engine_bundle: Option<PathBuf>) -> Result<BackendServer, String> {
+pub async fn start_backend_server(engine_bundle: Option<std::path::PathBuf>) -> Result<BackendServer, String> {
     // 找一个空闲的 TCP 端口。
     let port = find_free_port().await?;
 
@@ -38,32 +40,35 @@ pub async fn start_backend_server(engine_bundle: Option<PathBuf>) -> Result<Back
     let internal_token = agent_backend::auth::generate_password();
 
     // 生成认证配置。
-    let auth = Arc::new(agent_backend::auth::AuthConfig::new(password.clone(), internal_token.clone()));
+    let auth = std::sync::Arc::new(agent_backend::auth::AuthConfig::new(password.clone(), internal_token.clone()));
 
     // 构造后端状态。
-    let state = agent_backend::build_state(auth, internal_token)
+    let state = agent_backend::build_state(auth, internal_token, port)
         .map_err(|e| format!("构造后端状态失败：{e}"))?;
 
     // 启动 Node 引擎（如果提供了 bundle 路径）。
     // 这必须在 HTTP 服务启动之前，因为引擎需要就绪探测。
-    if let Some(bundle_path) = engine_bundle {
+    let engine = if let Some(bundle_path) = engine_bundle {
         match agent_backend::engine_process::spawn_engine(state.clone(), bundle_path).await {
-            Ok(_engine) => {
+            Ok(engine_process) => {
                 eprintln!("Node 引擎启动成功");
+                std::sync::Arc::new(tokio::sync::Mutex::new(Some(engine_process)))
             }
             Err(e) => {
                 eprintln!("警告：启动 Node 引擎失败，纯 API 模式继续运行：{e}");
+                std::sync::Arc::new(tokio::sync::Mutex::new(None))
             }
         }
     } else {
         eprintln!("未提供 Node 引擎 bundle，纯 API 模式运行");
-    }
+        std::sync::Arc::new(tokio::sync::Mutex::new(None))
+    };
 
     // 启动 HTTP 服务（运行在后台）。
     // 注意：这里不 await，服务在后台持续运行。如果 tokio runtime 退出，服务自动停止。
     tokio::spawn(async move {
         let app = agent_backend::build_router(state);
-        let addr = SocketAddr::from(([127, 0, 0, 1], port));
+        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 
         if let Err(e) = axum::serve(
             TcpListener::bind(addr).await.expect("绑定 localhost 端口失败"),
@@ -75,7 +80,7 @@ pub async fn start_backend_server(engine_bundle: Option<PathBuf>) -> Result<Back
         }
     });
 
-    Ok(BackendServer { port, password })
+    Ok(BackendServer { port, password, engine })
 }
 
 /// 选一个空闲的 TCP 端口。

@@ -69,7 +69,7 @@ pub fn build_router(state: AppState) -> Router {
 ///
 /// 隧道**不在**这里恢复：`TunnelStore::initialize` 要读库还要起监听，是 async
 /// 且会失败的。放进 `serve` 前由调用方显式 await，见 `main.rs`。
-pub fn build_state(auth: Arc<auth::AuthConfig>, internal_token: String) -> Result<AppState, String> {
+pub fn build_state(auth: Arc<auth::AuthConfig>, internal_token: String, backend_port: u16) -> Result<AppState, String> {
     use agent_core::events::EventBus;
     use agent_core::services::automation::AutomationNotifier;
     use agent_core::services::tunnel::TunnelStore;
@@ -144,5 +144,6 @@ pub fn build_state(auth: Arc<auth::AuthConfig>, internal_token: String) -> Resul
         ws_sink,
         approvals: Arc::new(crate::approval::ApprovalRegistry::new()),
         node_port: Arc::new(tokio::sync::RwLock::new(None)),
+        backend_port,
     })
 }

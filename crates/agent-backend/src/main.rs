@@ -73,9 +73,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 生成内部 token（Rust⇄Node 通信）。
     let internal_token = auth::generate_password();
-    eprintln!("内部 token（供 Node 引擎使用）：{internal_token}");
 
-    let state = build_state(Arc::new(auth::AuthConfig::new(password, internal_token.clone())), internal_token)?;
+    let state = build_state(Arc::new(auth::AuthConfig::new(password, internal_token.clone())), internal_token, args.port)?;
     // 恢复上次留下的隧道：读库、给存活的重新起监听。端口和 token 是本次进程
     // 新分配的，所以链接会变——这是有意的（见 services/tunnel/store.rs 文档）。
     // 失败只记日志不中止：隧道起不来不该让整个后端服务不起来。

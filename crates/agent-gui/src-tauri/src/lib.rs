@@ -845,22 +845,42 @@ pub fn run() {
                 // 这必须在 tokio runtime 上下文里运行（setup 被 runtime.enter() 保护了）。
                 let backend_endpoint = Arc::new(tokio::sync::RwLock::new(None));
                 let backend_endpoint_clone = Arc::clone(&backend_endpoint);
-                tokio::spawn(async move {
-                    // dev 模式下指向 crates/agent-core-js/dist/index.js。
-                    // 路径相对于壳的根目录（src-tauri 父目录）。
-                    let engine_bundle = if cfg!(debug_assertions) {
-                        Some(std::path::PathBuf::from("../agent-core-js/dist"))
-                    } else {
-                        // 生产环境下由容器提供，或从资源目录加载。
-                        // 现阶段阶段 3，只处理开发模式。
-                        None
-                    };
 
+                // 计算引擎 bundle 路径。dev 模式从项目相对路径读，release 从资源目录读。
+                let engine_bundle = if cfg!(debug_assertions) {
+                    Some(std::path::PathBuf::from("../agent-core-js/dist"))
+                } else {
+                    // release 模式：从 Tauri 资源目录查找 index.js。
+                    // tauri.conf.json 的 resources 配置为 ../../agent-core-js/dist/index.js。
+                    let resource_dir = app.path().resource_dir()
+                        .map_err(|e| format!("获取资源目录失败：{e}"))
+                        .ok();
+
+                    resource_dir.and_then(|dir| {
+                        // 查找 index.js 或 dist 目录。
+                        let dist_path = dir.join("agent-core-js").join("dist");
+                        if dist_path.exists() {
+                            Some(dist_path)
+                        } else {
+                            // 或者直接在资源根目录寻找。
+                            let root_index = dir.join("index.js");
+                            if root_index.exists() {
+                                Some(dir)
+                            } else {
+                                eprintln!("警告：未找到 Node 引擎 bundle");
+                                None
+                            }
+                        }
+                    })
+                };
+
+                tokio::spawn(async move {
                     match backend_server::start_backend_server(engine_bundle).await {
                         Ok(server) => {
                             eprintln!("内嵌后端服务启动成功：端口 {}", server.port);
                             *backend_endpoint_clone.write().await = Some(
                                 commands::backend::BackendEndpoint {
+                                    host: "127.0.0.1".to_string(),
                                     port: server.port,
                                     password: server.password,
                                 },

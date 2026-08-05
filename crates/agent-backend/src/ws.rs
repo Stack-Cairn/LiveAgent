@@ -11,8 +11,9 @@
 
 use agent_core::events::EventSink;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use futures_util::{SinkExt, StreamExt};
+use serde::Deserialize;
 use tokio::sync::broadcast;
 
 /// 事件队列容量。根据实时事件流特性：
@@ -21,6 +22,13 @@ use tokio::sync::broadcast;
 /// - 慢客户端（网络延迟、处理滞后）超过这个窗口就丢帧，这是可接受的折中
 ///   （不是关键数据，只是 UI 更新）
 const WS_EVENT_QUEUE_CAPACITY: usize = 256;
+
+/// WebSocket 连接的 query 参数。支持通过 ?token=... 传递认证令牌。
+#[derive(Debug, Deserialize)]
+pub struct WsConnectQuery {
+    /// 认证令牌（Bearer token）。
+    token: Option<String>,
+}
 
 /// WebSocket 事件流 sink：接收来自 EventBus 的事件，缓冲后通过 broadcast channel
 /// 推送给所有连接的 WebSocket 客户端。
@@ -78,12 +86,31 @@ impl EventSink for WsEventSink {
 /// sink 从 `AppState` 拿（`build_state` 建它并注册进 EventBus）。
 /// 客户端连接后立即订阅事件流，收不到连接前的历史事件（决策 19）。
 /// 断开时 task 自行退出，没有 per-connection 状态要清理。
+///
+/// 认证支持两种方式（因为浏览器 WebSocket API 无法设置自定义 header）：
+/// - URL query 参数：?token=...
+/// - Sec-WebSocket-Protocol header（握手阶段）
 pub async fn ws_handler(
     State(state): State<crate::state::AppState>,
+    Query(query): Query<WsConnectQuery>,
     upgrade: WebSocketUpgrade,
-) -> impl axum::response::IntoResponse {
+) -> Result<impl axum::response::IntoResponse, axum::http::StatusCode> {
+    // 从 query 参数获取 token。
+    let token = query.token;
+
+    if let Some(token_str) = token {
+        // 验证 token。
+        if !state.auth.verify(&token_str) {
+            return Err(axum::http::StatusCode::UNAUTHORIZED);
+        }
+    } else {
+        // 如果 query 参数中没有 token，返回 401。
+        // 前端必须通过 ?token=... 提供认证令牌。
+        return Err(axum::http::StatusCode::UNAUTHORIZED);
+    }
+
     let events = state.ws_sink.subscribe();
-    upgrade.on_upgrade(move |socket| handle_socket(socket, events))
+    Ok(upgrade.on_upgrade(move |socket| handle_socket(socket, events)))
 }
 
 /// 把 broadcast 里的事件泵进单个 WebSocket 连接，直到任一侧断开。

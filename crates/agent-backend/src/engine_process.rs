@@ -112,6 +112,7 @@ pub async fn spawn_engine(state: AppState, bundle_path: PathBuf) -> Result<Engin
     let mut cmd = Command::new("node");
     cmd.arg(bundle_path.join("index.js"))
         .env("LIVEAGENT_NODE_PORT", node_port.to_string())
+        .env("LIVEAGENT_BACKEND_PORT", state.backend_port.to_string())
         .env("LIVEAGENT_INTERNAL_TOKEN", &state.internal_token)
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit());
@@ -245,6 +246,7 @@ async fn spawn_monitor(
         let mut cmd = Command::new("node");
         cmd.arg(bundle_path.join("index.js"))
             .env("LIVEAGENT_NODE_PORT", current_port.to_string())
+            .env("LIVEAGENT_BACKEND_PORT", state.backend_port.to_string())
             .env("LIVEAGENT_INTERNAL_TOKEN", &state.internal_token)
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit());
