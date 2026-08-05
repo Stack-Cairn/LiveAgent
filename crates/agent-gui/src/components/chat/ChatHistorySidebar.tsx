@@ -119,7 +119,10 @@ type ChatHistorySidebarProps = {
   onCancelRename: () => void;
   onSetPinned: (id: string, isPinned: boolean) => void;
   onMoveToWorkspace: (id: string, cwd: string) => void;
-  onMoveConversationsToWorkspace: (ids: readonly string[], cwd: string) => Promise<void>;
+  onMoveConversationsToWorkspace: (
+    ids: readonly string[],
+    cwd: string,
+  ) => Promise<readonly string[]>;
   canShareConversations: boolean;
   sharedConversationCount: number;
   onShareConversation: (item: SidebarConversation) => void;
@@ -1280,10 +1283,14 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     }
     setIsBulkMoving(true);
     try {
-      await onMoveConversationsToWorkspace(ids, cwd);
-      setSelectionMode(false);
-      setSelectedConversationIds(new Set());
-      selectionAnchorRef.current = null;
+      const failedIds = await onMoveConversationsToWorkspace(ids, cwd);
+      const orderedConversationIdSet = new Set(orderedConversationIds);
+      const remainingFailedIds = failedIds.filter((id) => orderedConversationIdSet.has(id));
+      setSelectedConversationIds(new Set(remainingFailedIds));
+      selectionAnchorRef.current = remainingFailedIds[0] ?? null;
+      if (remainingFailedIds.length === 0) {
+        setSelectionMode(false);
+      }
     } finally {
       setIsBulkMoving(false);
     }

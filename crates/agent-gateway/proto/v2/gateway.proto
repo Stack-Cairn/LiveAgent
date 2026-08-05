@@ -61,6 +61,7 @@ message GatewayEnvelope {
     HistoryBranchRequest history_branch = 92;
     ProviderUsageRequest provider_usage = 93;
     ChatFileOpenRequest chat_file_open = 94;
+    HistorySetCwdRequest history_set_cwd = 95;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -135,6 +136,7 @@ message AgentEnvelope {
     ChatIngressFragment chat_ingress_fragment = 97;
     ChatFileOpenResponse chat_file_open_resp = 98;
     ErrorResponse error = 99;
+    HistorySetCwdResponse history_set_cwd_resp = 100;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1279,4 +1281,13 @@ message ChatIngressAck {
     SEND_CHECKPOINT = 3;
     REJECTED = 4;
   }
+}
+
+message HistorySetCwdRequest {
+  string conversation_id = 1;
+  string cwd = 2;
+}
+
+message HistorySetCwdResponse {
+  ConversationSummary conversation = 1;
 }

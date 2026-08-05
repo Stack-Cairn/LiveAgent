@@ -35,12 +35,22 @@ function createFakeBackend() {
     listError: null,
     workdirs: [],
     workdirsError: null,
-    calls: { list: [], workdirs: 0, rename: [], pin: [], delete: [], subscribes: 0, unsubscribes: 0 },
+    calls: {
+      list: [],
+      workdirs: 0,
+      rename: [],
+      pin: [],
+      move: [],
+      delete: [],
+      subscribes: 0,
+      unsubscribes: 0,
+    },
     listeners: new Set(),
     connectionListeners: new Set(),
     protectedIds: [],
     listImpl: null,
     renameImpl: null,
+    moveImpl: null,
     deleteImpl: null,
   };
 
@@ -80,6 +90,13 @@ function createFakeBackend() {
     setConversationPinned: async (id, isPinned) => {
       state.calls.pin.push({ id, isPinned });
       return conversation(id, { isPinned, pinnedAt: isPinned ? 500 : null });
+    },
+    setConversationCwd: async (id, cwd) => {
+      state.calls.move.push({ id, cwd });
+      if (state.moveImpl) {
+        return state.moveImpl(id, cwd);
+      }
+      return conversation(id, { cwd });
     },
     deleteConversation: async (id) => {
       state.calls.delete.push(id);
@@ -274,6 +291,44 @@ test("rename is blocked for a running conversation without a backend call", asyn
 
   store.applyRunningPatch({ conversationId: "one", running: false });
   assert.equal(store.getSnapshot().runningConversationIds.size, 0);
+  store.stop();
+});
+
+test("move leaves the current scope optimistically, rolls back on failure, and blocks running rows", async () => {
+  const fake = createFakeBackend();
+  fake.state.pages.set("cwd:/tmp/a", [
+    conversation("one", { cwd: "/tmp/a", updatedAt: 20 }),
+    conversation("two", { cwd: "/tmp/a", updatedAt: 10 }),
+  ]);
+  const store = createSidebarStore(fake.backend);
+  store.setScope(SCOPE_A);
+  store.start();
+  await tick();
+
+  let resolveMove;
+  fake.state.moveImpl = (id, cwd) =>
+    new Promise((resolve) => {
+      resolveMove = () => resolve(conversation(id, { cwd }));
+    });
+  const moving = store.setCwd("one", "/tmp/b");
+  assert.deepEqual(
+    store.getSnapshot().conversations.map((item) => item.id),
+    ["two"],
+  );
+  assert.equal(store.getSnapshot().mutations.get("one"), "move");
+  resolveMove();
+  assert.equal(await moving, true);
+  assert.deepEqual(fake.state.calls.move, [{ id: "one", cwd: "/tmp/b" }]);
+
+  fake.state.moveImpl = () => Promise.reject(new Error("move failed"));
+  assert.equal(await store.setCwd("two", "/tmp/b"), false);
+  assert.equal(store.getSnapshot().conversations[0].cwd, "/tmp/a");
+  assert.equal(store.getSnapshot().mutationErrors.get("two"), "moveFailed");
+
+  store.applyRunningPatch({ conversationId: "two", running: true, workdir: "/tmp/a" });
+  assert.equal(await store.setCwd("two", "/tmp/b"), false);
+  assert.equal(store.getSnapshot().mutationErrors.get("two"), "moveBlockedRunning");
+  assert.equal(fake.state.calls.move.length, 2);
   store.stop();
 });
 

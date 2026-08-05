@@ -136,6 +136,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.renameFailed": "修改历史对话标题失败",
     "chat.history.renameBlockedRunning": "后台任务仍在运行，暂时不能修改该对话标题。",
     "chat.history.pinFailed": "更新历史对话置顶状态失败",
+    "chat.history.moveFailed": "移动历史对话工作空间失败",
+    "chat.history.moveBlockedRunning": "后台任务仍在运行，暂时不能移动该对话。",
     "chat.history.deleteFailed": "删除历史对话失败",
     "chat.history.deleteBlockedRunning": "后台任务仍在运行，暂时不能删除该对话。",
     "chat.history.openFailed": "读取历史对话失败",
@@ -2403,6 +2405,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.renameBlockedRunning":
       "A background task is still running; the title cannot be changed yet.",
     "chat.history.pinFailed": "Failed to update pin state",
+    "chat.history.moveFailed": "Failed to move conversation to workspace",
+    "chat.history.moveBlockedRunning":
+      "A background task is still running; the conversation cannot be moved yet.",
     "chat.history.deleteFailed": "Failed to delete conversation",
     "chat.history.deleteBlockedRunning":
       "A background task is still running; the conversation cannot be deleted yet.",

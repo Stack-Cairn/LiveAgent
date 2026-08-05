@@ -20,6 +20,7 @@ export type SidebarBackend = {
   listWorkdirs(): Promise<SidebarWorkdirSummary[]>;
   renameConversation(id: string, title: string): Promise<SidebarConversation>;
   setConversationPinned(id: string, isPinned: boolean): Promise<SidebarConversation>;
+  setConversationCwd(id: string, cwd: string): Promise<SidebarConversation>;
   deleteConversation(id: string): Promise<void>;
   // The single event subscription for this end. The store subscribes exactly
   // once per start() and applies every event through the reconcile reducers.

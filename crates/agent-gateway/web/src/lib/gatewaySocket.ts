@@ -2527,6 +2527,13 @@ export class GatewayWebSocketClient {
     });
   }
 
+  async setHistoryCwd(conversationId: string, cwd: string): Promise<ConversationSummary> {
+    return this.request<ConversationSummary>("history.set_cwd", {
+      conversation_id: conversationId,
+      cwd,
+    });
+  }
+
   async getHistoryShare(conversationId: string): Promise<HistoryShareStatus> {
     return this.requestWithRecovery<HistoryShareStatus>("history.share.get", {
       conversation_id: conversationId,
@@ -3816,6 +3823,7 @@ export type GatewayWebSocketClientLike = {
     baseMessageRef: HistoryMessageRef,
   ): Promise<ConversationSummary>;
   pinHistory(conversationId: string, isPinned: boolean): Promise<ConversationSummary>;
+  setHistoryCwd(conversationId: string, cwd: string): Promise<ConversationSummary>;
   getHistoryShare(conversationId: string): Promise<HistoryShareStatus>;
   setHistoryShare(
     conversationId: string,
