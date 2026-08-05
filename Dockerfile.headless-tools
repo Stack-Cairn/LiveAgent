@@ -1,0 +1,192 @@
+# syntax=docker/dockerfile:1.7
+
+# 构建 profile（core 或 full），必须在第一个 FROM 之前声明。
+ARG TARGET_PROFILE=core
+
+# LiveAgent Headless — 开发工具增强镜像（core / full）
+#
+# 设计哲学（对齐 GitHub devcontainers / Gitpod 的成熟做法：镜像保持克制，
+# 工具按需分层，而不是把所有语言运行时都塞进一个镜像）：
+#
+#   base : Debian bookworm-slim + 高频基础工具（git / 编译链 / 调试 / 网络 / 编辑器）
+#   core : base + mise + go 1.25.12 + node 22.19.0 + python 3.12 + pnpm + bun  (~0.9 GB)
+#   full : core + java temurin-17 + maven 3.9                            (~1.2 GB)
+#
+# 语言运行时全部由 mise 管理（镜像内置全局 config，见 docker/mise.{core,full}.toml），
+# 用户可在 compose 里用 MISE_<TOOL>_VERSION 环境变量切换任意版本，缺失的版本
+# 首次启动自动补装（懒加载，见 docker/entrypoint.sh）。
+# 注意：go/node/python 由 mise core backend 从 GitHub/go.dev/nodejs.org 下载，
+# pnpm/bun 走 npm backend，registry 指向 npmmirror（MISE_NPM_REGISTRY_URL），
+# 国内网络下 npm 类工具安装/补装不依赖 GitHub。
+#
+# 构建（GitHub Actions，官方源可达；用 TARGET_PROFILE 选择 core 或 full）：
+#   docker build --build-arg TARGET_PROFILE=core -f Dockerfile.headless-tools -t liveagent-core .
+#   docker build --build-arg TARGET_PROFILE=full -f Dockerfile.headless-tools -t liveagent-full .
+
+# ---- Frontend stage: build the WebUI dist on the native builder ----
+FROM --platform=$BUILDPLATFORM node:22.19.0-bookworm-slim AS frontend
+
+WORKDIR /app
+
+# pnpm 10 requires pnpm-workspace.yaml (allowBuilds). Copy manifests first
+# for layer caching, then the sources needed by `pnpm build` (tsc + vite).
+COPY crates/agent-gui/package.json crates/agent-gui/pnpm-lock.yaml crates/agent-gui/pnpm-workspace.yaml ./
+RUN npm install -g pnpm@10.32.1 && pnpm install --frozen-lockfile
+
+COPY crates/agent-gui/index.html crates/agent-gui/vite.config.ts \
+     crates/agent-gui/tsconfig.json crates/agent-gui/tsconfig.node.json \
+     crates/agent-gui/postcss.config.js crates/agent-gui/tailwind.config.js ./
+COPY crates/agent-gui/src ./src
+COPY crates/agent-gui/public ./public
+COPY crates/agent-gui/src-tauri/icons ./src-tauri/icons
+
+RUN pnpm build
+
+# ---- Builder stage: compile the headless binary with embedded WebUI ----
+FROM --platform=$BUILDPLATFORM rust:1.97-bookworm AS builder
+
+# Install system dependencies for the build
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    pkg-config \
+    libssl-dev \
+    libclang-dev \
+    protobuf-compiler \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# Auto-provided build args (buildx). Declared before the cache-mount RUN
+# layers so $TARGETARCH is available for per-arch cache ids.
+ARG TARGETOS
+ARG TARGETARCH
+
+# Copy workspace Cargo files for dependency caching
+COPY Cargo.toml Cargo.lock ./
+COPY crates/agent-gui/src-tauri/Cargo.toml ./crates/agent-gui/src-tauri/
+
+# Create dummy source files for dependency caching
+RUN mkdir -p crates/agent-gui/src-tauri/src && \
+    echo 'fn main() {}' > crates/agent-gui/src-tauri/src/main.rs && \
+    echo 'pub fn dummy() {}' > crates/agent-gui/src-tauri/src/lib.rs
+
+# Build dependencies only (cached layer)
+# NOTE: per-arch cache ids prevent parallel amd64/arm64 builders from
+# racing on the same cargo registry dir (tower-*.cargo-ok File exists).
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-$TARGETARCH \
+    --mount=type=cache,target=/src/target,id=cargo-target-$TARGETARCH \
+    cargo build --release --no-default-features -p liveagent || true
+
+# Copy actual source code
+COPY . .
+
+# Copy the WebUI dist built in the frontend stage so build.rs embeds it.
+# (.dockerignore excludes **/dist, so this is the only dist in the image.)
+COPY --from=frontend /app/dist ./crates/agent-gui/dist
+
+# Build the headless binary with embedded assets
+RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-$TARGETARCH \
+    --mount=type=cache,target=/src/target,id=cargo-target-$TARGETARCH \
+    cargo build --release --no-default-features -p liveagent && \
+    cp target/release/liveagent /usr/local/bin/liveagent
+
+# ---- Base: 运行环境 + 高频基础工具链 ----
+# 只预装高频且体积可控的工具；低频大件（gdb/valgrind/clang/rust/php/ruby 等）
+# 不预装，需要时 apt 或 mise 按需安装（见 README "开发工具镜像" 一节）。
+FROM debian:bookworm-slim AS base
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        bash \
+        git \
+        curl \
+        wget \
+        unzip \
+        xz-utils \
+        zstd \
+        locales \
+        build-essential \
+        cmake \
+        pkg-config \
+        ninja-build \
+        strace \
+        vim \
+        tmux \
+        less \
+        nano \
+        file \
+        jq \
+        procps \
+        iputils-ping \
+        dnsutils \
+        iproute2 \
+        netcat-openbsd \
+        tcpdump \
+    && rm -rf /var/lib/apt/lists/*
+
+# 生成 en_US.UTF-8 locale（默认 POSIX 环境影响部分中文/国际化工具）
+RUN sed -i 's/^# \(en_US.UTF-8\)/\1/' /etc/locale.gen && locale-gen
+
+# ---- Core: mise + 高频开发语言运行时 ----
+FROM base AS core
+
+# mise 版本管理器（单二进制）。GitHub Actions 官方源可达；MISE_VERSION 锁定可复现。
+# 先下载到文件再执行：curl -f 失败会直接中断构建，不会因管道空输入被吞。
+# MISE_NPM_REGISTRY_URL：npm backend（pnpm/bun）统一走 npmmirror，
+# 保证国内网络（NAS/容器）下安装与懒加载补装都不依赖 GitHub。
+ENV MISE_DATA_DIR=/opt/mise \
+    MISE_GLOBAL_CONFIG_FILE=/etc/mise/config.toml \
+    MISE_NPM_REGISTRY_URL=https://registry.npmmirror.com \
+    MISE_YES=true
+
+RUN curl -fsSL https://mise.run -o /tmp/mise-install.sh && \
+    MISE_VERSION=v2026.4.27 MISE_INSTALL_PATH=/usr/local/bin/mise sh /tmp/mise-install.sh && \
+    rm /tmp/mise-install.sh && \
+    mise --version
+
+# 预装 core 默认工具链：go / node / pnpm / python（python 走预编译二进制，不编译源码）
+COPY docker/mise.core.toml /etc/mise/config.toml
+RUN mise install --jobs 4
+
+# ---- Full: Core + Java 工具链（JDK 17 默认 + Maven；Java 8 懒加载见 README） ----
+FROM core AS full
+
+COPY docker/mise.full.toml /etc/mise/config.toml
+RUN mise install --jobs 4
+
+# ---- Final: 按 TARGET_PROFILE 选择 core 或 full ----
+FROM ${TARGET_PROFILE} AS final
+
+COPY --from=builder /usr/local/bin/liveagent /usr/local/bin/liveagent
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+RUN chmod +x /usr/local/bin/entrypoint.sh && \
+    # 非 root 用户；home 在数据卷上（app 把历史/设置存 $HOME/.liveagent）
+    useradd --system --uid 10001 --user-group --home-dir /var/lib/liveagent --shell /bin/bash liveagent && \
+    install -d -o liveagent -g liveagent -m 0700 /var/lib/liveagent && \
+    # mise 数据目录交给 liveagent 可写（懒加载补装的版本也要落盘）
+    chown -R liveagent:liveagent /opt/mise && \
+    # --- mise 环境注入（工具链 PATH/JAVA_HOME 等）---
+    # 1) /etc/profile.d/mise.sh：login shell 无论交互与否都加载（/etc/profile 会
+    #    source profile.d/*.sh），覆盖 liveagent 的 bash -lc 执行路径；
+    # 2) /etc/bash.bashrc 尾部：覆盖非登录交互式 shell（docker exec -it bash）。
+    #    两者叠加即所有 bash 场景都有完整工具链。
+    printf 'eval "$(mise env --shell bash)" 2>/dev/null\n' > /etc/profile.d/mise.sh && \
+    echo 'eval "$(mise env --shell bash)" 2>/dev/null' >> /etc/bash.bashrc
+
+USER liveagent
+
+# 兜底：把 mise shims 放进 PATH，覆盖不经 shell 直接 fork 的进程；
+# 正常 bash 场景由 profile.d/bash.bashrc 的 mise env 注入（含 installs 路径）。
+ENV PATH=/opt/mise/shims:$PATH \
+    LIVEAGENT_HEADLESS_HOST=0.0.0.0 \
+    LIVEAGENT_HEADLESS_PORT=17890 \
+    LIVEAGENT_DATA_DIR=/var/lib/liveagent \
+    LANG=en_US.UTF-8
+
+VOLUME ["/var/lib/liveagent"]
+
+EXPOSE 17890
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

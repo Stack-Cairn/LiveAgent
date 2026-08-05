@@ -3,8 +3,8 @@
 // is the per-platform adapter — the web frontend ships its own copy speaking
 // the gateway cron.manage protocol.
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke } from "../../lib/tauriBridge";
+import { listen } from "../../lib/tauriBridge";
 
 import type {
   AutomationApplyInput,

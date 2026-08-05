@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke } from "../../lib/tauriBridge";
+import { listen } from "../../lib/tauriBridge";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,

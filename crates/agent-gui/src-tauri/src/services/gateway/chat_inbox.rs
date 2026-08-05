@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use serde_json::json;
-use tauri::Emitter;
 
+use crate::events::EventEmitterExt;
 use crate::services::chat_run_ledger::{ChatRunLedger, ChatRunLedgerState};
 
 use super::*;
@@ -793,7 +793,7 @@ impl GatewayController {
             }
         }
         if wake {
-            let _ = self.app_handle.emit(
+            let _ = self.event_emitter.emit(
                 "gateway:chat-request-ready",
                 json!({ "reason": "lease_expired" }),
             );

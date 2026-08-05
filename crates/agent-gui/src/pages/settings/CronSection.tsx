@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "../../lib/tauriBridge";
 import { useMemo, useState } from "react";
 import {
   AlertTriangle,
@@ -25,6 +25,7 @@ import { isAgentExecutionMode, workspaceProjectPathKey } from "../../lib/setting
 import { type CronTaskFormData, CronTaskModal } from "./CronTaskModal";
 import { CronTaskViewModal } from "./CronTaskViewModal";
 import { AgentActivationSwitch, ConfirmDeletePopover } from "./shared";
+import { openFolderPicker } from "../chat/workspace/HeadlessFolderPicker";
 import type { SettingsSectionProps } from "./types";
 
 const TASK_TYPE_ICON: Record<CronTaskType, typeof Terminal> = {
@@ -124,10 +125,16 @@ export function CronSection(props: SettingsSectionProps) {
   }
 
   async function pickWorkdirDirectory(initialWorkdir: string): Promise<string | null> {
-    // The command is rename_all=snake_case: a camelCase key would silently
-    // deserialize the Option param as None (see memory: tauri-invoke-snake_case).
-    return await invoke<string | null>("system_pick_folder", {
-      initial_workdir: initialWorkdir || undefined,
+    if (isTauri()) {
+      // Desktop: native file dialog
+      return await invoke<string | null>("system_pick_folder", {
+        initial_workdir: initialWorkdir || undefined,
+      });
+    }
+    // Headless: international-style folder picker dialog
+    return openFolderPicker({
+      title: "选择目录",
+      initialPath: initialWorkdir || "/",
     });
   }
 

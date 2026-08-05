@@ -19,9 +19,8 @@ pub struct CcsProvidersResponse {
     pub providers: Vec<CcsProviderImportItem>,
 }
 
-#[tauri::command]
 pub async fn settings_list_ccswitch_providers() -> Result<CcsProvidersResponse, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+    crate::compat::async_runtime::spawn_blocking(|| {
         let candidates = ccswitch_db_candidates();
         let path = candidates.iter().find(|path| path.exists());
         let providers = match path {

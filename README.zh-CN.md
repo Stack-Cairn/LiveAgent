@@ -279,7 +279,7 @@ location / {
 | **Agent GUI** · 样式 | Tailwind CSS 4 + Radix UI |
 | **Agent GUI** · 渲染 | streamdown + KaTeX + Mermaid + Monaco Editor |
 | **Agent GUI** · 后端 | Rust + Tokio + SQLite (rusqlite) + WebSocket (tokio-tungstenite) |
-| **Agent GUI** · LLM | @earendil-works/pi-ai · @openai/codex-sdk · claude-agent-sdk |
+| **Agent GUI** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
 | **Gateway** · 语言 | Go 1.25 |
 | **Gateway** · 协议 | WebSocket + Protobuf + HTTP |
 | **Gateway** · Web UI | React + Vite + Tailwind CSS(嵌入式) |
@@ -407,7 +407,7 @@ LiveAgent/
 感谢所有为 LiveAgent 做出贡献的朋友们！
 
 <a href="https://github.com/Stack-Cairn/LiveAgent/graphs/contributors">
-  <img src="docs/images/contributors.svg" alt="Contributors" />
+  <img src="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/contributors.svg" alt="Contributors" />
 </a>
 
 ---
@@ -417,9 +417,9 @@ LiveAgent/
 <a href="https://www.star-history.com/?repos=Stack-Cairn%2FLiveAgent&type=date&legend=top-left">
 
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="docs/images/star-history-dark.svg" />
-   <source media="(prefers-color-scheme: light)" srcset="docs/images/star-history-light.svg" />
-   <img alt="Star History Chart" src="docs/images/star-history-light.svg" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-light.svg" />
+   <img alt="Star History Chart" src="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-light.svg" />
  </picture>
 </a>
 

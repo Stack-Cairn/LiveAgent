@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "../../../lib/tauriBridge";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FolderOpen, GitBranch, Loader2, X } from "../../../components/icons";
@@ -14,6 +14,7 @@ import {
 } from "../../../components/ui/select";
 import { useLocale } from "../../../i18n";
 import { useModalMotion } from "../../../lib/shared/modalMotion";
+import { openFolderPicker } from "./HeadlessFolderPicker";
 
 type RemoteBranches = {
   defaultBranch: string;
@@ -78,9 +79,18 @@ export function WorkspaceCloneModal({
 
   async function chooseParent() {
     try {
-      const selected = await invoke<string | null>("system_pick_folder", {
-        initial_workdir: parent || undefined,
-      });
+      let selected: string | null;
+      if (isTauri()) {
+        selected = await invoke<string | null>("system_pick_folder", {
+          initial_workdir: parent || undefined,
+        });
+      } else {
+        // Headless: international-style folder picker dialog
+        selected = await openFolderPicker({
+          title: "选择父目录",
+          initialPath: parent || "/",
+        });
+      }
       const path = selected?.trim();
       if (path) setParent(path);
     } catch (reason) {

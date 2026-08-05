@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 import { prepareProxyRequest } from "../../lib/providers/proxy";
 import { isGatewayWebuiRuntime } from "../../lib/runtimeEnv";
 import {

@@ -4,11 +4,9 @@ import { createUuid } from "../../shared/id";
 import {
   ANTHROPIC_DEFAULT_REQUEST_HEADERS,
   CODEX_CONVERSATION_ID_HEADER,
-  CODEX_DEFAULT_USER_AGENT,
   CODEX_SESSION_ID_HEADER,
   isAnthropicOAuthApiKey,
   mergeCustomHeaders,
-  XAI_DEFAULT_USER_AGENT,
 } from "../customHeaders";
 import { type PreparedProxyRequest, prepareProxyRequest } from "../proxy";
 import { normalizeSessionId } from "./common";
@@ -57,30 +55,22 @@ export function buildProviderRequestHeaders(
   }
   if (providerId === "codex") {
     // 标准 Chat Completions 是无状态协议，只需 Authorization——
-    // codex_cli_rs UA 与 session_id/conversation_id 是 Responses（Codex CLI）
-    // 链路专属身份头，不得泄漏进 completions 格式的请求。
+    // session_id/conversation_id 是 Responses（Codex CLI）链路专属头，
+    // 不得泄漏进 completions 格式的请求。
     if (requestFormat === "openai-completions") return authHeaders;
     const requestSessionId = normalizeSessionId(sessionId) ?? createUuid();
     return {
       ...authHeaders,
-      "User-Agent": CODEX_DEFAULT_USER_AGENT,
       [CODEX_SESSION_ID_HEADER]: requestSessionId,
       [CODEX_CONVERSATION_ID_HEADER]: requestSessionId,
     };
   }
-  if (providerId === "xai") {
-    // xai 走 Bearer + grok CLI 身份 UA，不带 Codex CLI 的 session 头。
-    return {
-      ...authHeaders,
-      "User-Agent": XAI_DEFAULT_USER_AGENT,
-    };
-  }
-  // 其它 OpenAI 兼容端：仅 Bearer，不带 CLI 身份头。
+  // 其它 OpenAI 兼容端：仅 Bearer。
   return authHeaders;
 }
 
 /**
- * 供应商上游请求的唯一装配入口：内置身份头 → 合并用户自定义头 → 过本地反代。
+ * 供应商上游请求的唯一装配入口：内置头 → 合并用户自定义头 → 过本地反代。
  * 聊天 / 文本 / 摘要三条链路都走这里，杜绝各自重复装配时漏掉 customHeaders。
  */
 export async function prepareProviderRequest(

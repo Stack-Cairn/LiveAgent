@@ -16,6 +16,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex, Weak};
 
 use crate::services::gateway::GatewayController;
+use crate::events::EventEmitter;
 
 pub const WORKSPACE_ACTIVITY_EVENT: &str = "workspace:activity";
 
@@ -35,7 +36,7 @@ struct WatchInner {
 }
 
 pub struct WorkspaceWatchService {
-    app_handle: tauri::AppHandle,
+    event_emitter: Arc<dyn EventEmitter>,
     gateway: Mutex<Option<Weak<GatewayController>>>,
     inner: Mutex<WatchInner>,
     // Per-workdir monotonic revision counters. Kept outside WatchInner so they
@@ -45,9 +46,9 @@ pub struct WorkspaceWatchService {
 }
 
 impl WorkspaceWatchService {
-    pub fn new(app_handle: tauri::AppHandle) -> Self {
+    pub fn new(event_emitter: Arc<dyn EventEmitter>) -> Self {
         Self {
-            app_handle,
+            event_emitter,
             gateway: Mutex::new(None),
             inner: Mutex::new(WatchInner::default()),
             revisions: Mutex::new(HashMap::new()),

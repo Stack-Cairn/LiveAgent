@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
-import { CliIdentityUpdateHost } from "@/components/CliIdentityUpdateHost";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
@@ -4631,7 +4630,6 @@ export default function GatewayApp() {
     <LocaleContext.Provider value={localeContextValue}>
       <AppErrorBoundary>
         <div className="gateway-shell">
-          <CliIdentityUpdateHost settings={settings} setSettings={setSettings} />
           <input
             ref={fileInputRef}
             type="file"
@@ -5117,34 +5115,34 @@ export default function GatewayApp() {
                   </section>
                 </div>
               )}
+              <WorkspaceOverlayHost
+                locale={settings.locale}
+                theme={effectiveTheme}
+                workspaceEditorMounted={workspaceEditorMounted}
+                workspaceEditorOpenRequest={workspaceEditorOpenRequest}
+                workspaceEditorCloseRequestId={workspaceEditorCloseRequestId}
+                workspaceEditorOpen={workspaceEditorOpen}
+                workspaceEditorCleanupPending={workspaceEditorCleanupPending}
+                onWorkspaceEditorPreviewFile={openWorkspaceFilePreview}
+                onWorkspaceEditorInsertCodeMention={handleInsertCodeMention}
+                onWorkspaceEditorHide={handleWorkspaceEditorHide}
+                onWorkspaceEditorClose={handleWorkspaceEditorClosed}
+                workspaceFilePreviewMounted={workspaceFilePreviewMounted}
+                workspaceFilePreviewOpenRequest={workspaceFilePreviewOpenRequest}
+                workspaceFilePreviewOpen={workspaceFilePreviewOpen}
+                onWorkspaceFilePreviewOpenEditor={openWorkspaceEditorFile}
+                onWorkspaceFilePreviewRequestClose={requestWorkspaceFilePreviewClose}
+                onWorkspaceFilePreviewClose={handleWorkspaceFilePreviewClosed}
+                workspaceSshTerminalMounted={workspaceSshTerminalMounted}
+                workspaceSshTerminalOpenRequest={workspaceSshTerminalOpenRequest}
+                workspaceSshTerminalOpen={workspaceSshTerminalOpen}
+                terminalProjectPathKey={terminalProjectPathKey}
+                terminalClient={terminalClient}
+                sftpClient={sftpClient}
+                terminalSessions={terminalSessions}
+                onWorkspaceSshTerminalHide={hideWorkspaceSshTerminalOverlay}
+              />
             </main>
-            <WorkspaceOverlayHost
-              locale={settings.locale}
-              theme={effectiveTheme}
-              workspaceEditorMounted={workspaceEditorMounted}
-              workspaceEditorOpenRequest={workspaceEditorOpenRequest}
-              workspaceEditorCloseRequestId={workspaceEditorCloseRequestId}
-              workspaceEditorOpen={workspaceEditorOpen}
-              workspaceEditorCleanupPending={workspaceEditorCleanupPending}
-              onWorkspaceEditorPreviewFile={openWorkspaceFilePreview}
-              onWorkspaceEditorInsertCodeMention={handleInsertCodeMention}
-              onWorkspaceEditorHide={handleWorkspaceEditorHide}
-              onWorkspaceEditorClose={handleWorkspaceEditorClosed}
-              workspaceFilePreviewMounted={workspaceFilePreviewMounted}
-              workspaceFilePreviewOpenRequest={workspaceFilePreviewOpenRequest}
-              workspaceFilePreviewOpen={workspaceFilePreviewOpen}
-              onWorkspaceFilePreviewOpenEditor={openWorkspaceEditorFile}
-              onWorkspaceFilePreviewRequestClose={requestWorkspaceFilePreviewClose}
-              onWorkspaceFilePreviewClose={handleWorkspaceFilePreviewClosed}
-              workspaceSshTerminalMounted={workspaceSshTerminalMounted}
-              workspaceSshTerminalOpenRequest={workspaceSshTerminalOpenRequest}
-              workspaceSshTerminalOpen={workspaceSshTerminalOpen}
-              terminalProjectPathKey={terminalProjectPathKey}
-              terminalClient={terminalClient}
-              sftpClient={sftpClient}
-              terminalSessions={terminalSessions}
-              onWorkspaceSshTerminalHide={hideWorkspaceSshTerminalOverlay}
-            />
           </div>
 
           {terminalClient ? (

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../../lib/tauriBridge";
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 
 import type { MentionComposerHandle } from "../../../components/chat/MentionComposer";

@@ -1,5 +1,5 @@
 import type { Context } from "@earendil-works/pi-ai";
-import { listen } from "@tauri-apps/api/event";
+import { listen } from "../../lib/tauriBridge";
 import { useEffect, useRef } from "react";
 import type { CompletePromptRunInput, PromptRunRequest } from "../../lib/automation";
 import { backend } from "../../lib/automation/backend";
@@ -206,15 +206,10 @@ async function executeCronPromptRun(
     providerId: provider.type,
     model: request.model,
     runtime: {
-      ...createProviderRuntimeConfig(
-        provider,
-        request.model,
-        {
-          ...DEFAULT_CHAT_RUNTIME_CONTROLS,
-          reasoning: resolveCronReasoning(request.reasoning),
-        },
-        settings.customSettings.providerIdentities,
-      ),
+      ...createProviderRuntimeConfig(provider, request.model, {
+        ...DEFAULT_CHAT_RUNTIME_CONTROLS,
+        reasoning: resolveCronReasoning(request.reasoning),
+      }),
       // 后台定时任务恒开提示词缓存：与前台会话共享同一前缀，命中率远高于按
       // 供应商开关逐个判断。
       promptCachingEnabled: true,

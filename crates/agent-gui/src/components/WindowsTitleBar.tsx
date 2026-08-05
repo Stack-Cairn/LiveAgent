@@ -1,4 +1,4 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "../lib/tauriBridge";
 import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import iconSimpleUrl from "../../src-tauri/icons/icon-simple.png";

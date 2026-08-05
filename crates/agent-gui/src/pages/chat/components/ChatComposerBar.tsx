@@ -573,6 +573,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
       )}
     >
       <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 bg-background"
+        style={{ height: "1rem" }}
+      />
+      <div
         className={cn(
           "pointer-events-auto relative w-full max-w-[768px]",
           // justify-end：展开动画途中卡片被钳在中间高度时保持贴底，向上生长。

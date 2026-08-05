@@ -1,5 +1,5 @@
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { homeDir } from "@tauri-apps/api/path";
+import { homeDir } from "../../lib/tauriBridge";
 import type { RuntimePlatform } from "../runtimePlatform";
 import {
   type McpSettings,

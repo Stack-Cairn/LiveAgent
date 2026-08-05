@@ -12,7 +12,7 @@ type UseWorkspaceOverlaysParams = {
 };
 
 /**
- * State machine for the three full-window workspace overlays (code editor,
+ * State machine for the three main-column workspace overlays (code editor,
  * file preview, SSH terminal): mount/open/request state, mutual exclusion on
  * open, and the cleanup pass when the right-dock file tree tab closes.
  */

@@ -1,5 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { isTauri } from "../../../lib/tauriBridge";
+import { getCurrentWebview } from "../../../lib/tauriBridge";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 
 type UseTauriFileDropParams = {

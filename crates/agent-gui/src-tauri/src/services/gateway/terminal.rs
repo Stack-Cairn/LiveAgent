@@ -30,9 +30,9 @@ impl GatewayController {
         self: &Arc<Self>,
         config: RemoteSettingsPayload,
         stop_rx: watch::Receiver<bool>,
-    ) -> tauri::async_runtime::JoinHandle<()> {
+    ) -> crate::compat::async_runtime::JoinHandle<()> {
         let controller = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             controller.run_terminal_stream_ws(config, stop_rx).await;
         })
     }

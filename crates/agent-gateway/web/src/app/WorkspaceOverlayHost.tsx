@@ -61,6 +61,11 @@ type WorkspaceOverlayHostProps = {
   onWorkspaceSshTerminalHide: () => void;
 };
 
+/**
+ * Lazy mount host for workspace overlays. Must live inside `.gateway-main-shell`
+ * (not the outer editor host) so absolute inset-0 only covers the main column
+ * and leaves the chat sidebar usable.
+ */
 export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
   const {
     locale,

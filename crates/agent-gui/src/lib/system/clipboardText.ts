@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 
 /**
  * 桌面端自定义菜单"粘贴"的唯一剪贴板读取入口。

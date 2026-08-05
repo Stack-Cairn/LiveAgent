@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+#[cfg(feature = "desktop")]
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -694,7 +695,7 @@ fn gc_upload_staging_in(base: &Path, now: SystemTime, retention: std::time::Dura
 
 /// 启动时清理过期的上传批次；失败只记录，绝不阻断启动。
 pub fn gc_upload_staging_on_startup() {
-    tauri::async_runtime::spawn_blocking(|| {
+    crate::compat::async_runtime::spawn_blocking(|| {
         if let Ok(base) = upload_staging_base() {
             gc_upload_staging_in(&base, SystemTime::now(), UPLOAD_STAGING_RETENTION);
         }
@@ -849,6 +850,7 @@ fn infer_native_attachment_mime(path: &Path, kind: Option<&str>) -> String {
     }
 }
 
+#[cfg(feature = "desktop")]
 fn system_pick_readable_files_sync(
     workdir: String,
     max_files: Option<usize>,
@@ -1207,6 +1209,7 @@ fn system_append_debug_jsonl_sync(conversation_id: String, entry: Value) -> Resu
     Ok(())
 }
 
+#[cfg(feature = "desktop")]
 fn resolve_pick_folder_initial_dir(initial_workdir: Option<String>) -> Option<PathBuf> {
     let raw = initial_workdir?;
     let trimmed = raw.trim();
@@ -1332,9 +1335,9 @@ pub(crate) fn system_create_project_folder_sync(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[cfg(feature = "desktop")]
 pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut dialog = FileDialog::new();
         if let Some(initial_dir) = resolve_pick_folder_initial_dir(initial_workdir) {
             dialog = dialog.set_directory(initial_dir);
@@ -1348,13 +1351,13 @@ pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Optio
     .map_err(|e| format!("system_pick_folder join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
+#[cfg(feature = "desktop")]
 pub async fn system_pick_file(
     initial_workdir: Option<String>,
     filter_name: Option<String>,
     extensions: Option<Vec<String>>,
 ) -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut dialog = FileDialog::new();
         if let Some(initial_dir) = resolve_pick_folder_initial_dir(initial_workdir) {
             dialog = dialog.set_directory(initial_dir);
@@ -1372,60 +1375,64 @@ pub async fn system_pick_file(
     .map_err(|e| format!("system_pick_file join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_create_project_folder(
     parent: String,
     name: String,
 ) -> Result<SystemCreateProjectFolderResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || system_create_project_folder_sync(parent, name))
+    crate::compat::async_runtime::spawn_blocking(move || system_create_project_folder_sync(parent, name))
         .await
         .map_err(|e| format!("system_create_project_folder join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_pick_readable_files(
     workdir: String,
     max_files: Option<usize>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        system_pick_readable_files_sync(workdir, max_files)
+    crate::compat::async_runtime::spawn_blocking(move || {
+        #[cfg(feature = "desktop")]
+        {
+            system_pick_readable_files_sync(workdir, max_files)
+        }
+        #[cfg(not(feature = "desktop"))]
+        {
+            // Headless 无原生文件对话框：该命令仅桌面前端使用。
+            let _ = (workdir, max_files);
+            Err("file picker is unavailable in headless mode".to_string())
+        }
     })
     .await
     .map_err(|e| format!("system_pick_readable_files join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_import_readable_file_paths(
     workdir: String,
     paths: Vec<String>,
     max_files: Option<usize>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_import_readable_file_paths_sync(workdir, paths, max_files)
     })
     .await
     .map_err(|e| format!("system_import_readable_file_paths join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_import_uploaded_readable_files(
     workdir: String,
     files: Vec<SystemUploadedReadableFileInput>,
     max_files: Option<usize>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_import_uploaded_readable_files_from_base64_sync(workdir, files, max_files)
     })
     .await
     .map_err(|e| format!("system_import_uploaded_readable_files join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_import_pasted_texts(
     workdir: String,
     texts: Vec<SystemPastedTextInput>,
 ) -> Result<SystemPickReadableFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let uploads = texts
             .into_iter()
             .map(|text| SystemReadableFileUploadInput {
@@ -1440,123 +1447,120 @@ pub async fn system_import_pasted_texts(
     .map_err(|e| format!("system_import_pasted_texts join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_read_uploaded_image_preview(
     workdir: String,
     absolute_path: String,
 ) -> Result<SystemUploadedImagePreviewResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_read_uploaded_image_preview_sync(workdir, absolute_path)
     })
     .await
     .map_err(|e| format!("system_read_uploaded_image_preview join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_read_uploaded_native_attachment(
     workdir: String,
     absolute_path: Option<String>,
     kind: Option<String>,
 ) -> Result<SystemUploadedNativeAttachmentResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_read_uploaded_native_attachment_sync(workdir, absolute_path, kind)
     })
     .await
     .map_err(|e| format!("system_read_uploaded_native_attachment join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn system_list_skill_files() -> Result<SystemListSkillFilesResponse, String> {
-    tauri::async_runtime::spawn_blocking(system_list_skill_files_sync)
+    crate::compat::async_runtime::spawn_blocking(system_list_skill_files_sync)
         .await
         .map_err(|e| format!("system_list_skill_files join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn system_ensure_builtin_skills(
 ) -> Result<Vec<crate::services::skills::SystemBuiltinSkillSeedResponse>, String> {
-    tauri::async_runtime::spawn_blocking(crate::services::skills::ensure_builtin_agent_skills_sync)
+    crate::compat::async_runtime::spawn_blocking(crate::services::skills::ensure_builtin_agent_skills_sync)
         .await
         .map_err(|e| format!("system_ensure_builtin_skills join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_manage_skill(payload: Value) -> Result<SystemManageSkillResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         crate::services::skills::system_manage_skill_sync(payload)
     })
     .await
     .map_err(|e| format!("system_manage_skill join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn system_read_skill_text(
     path: String,
     offset: Option<usize>,
     length: Option<usize>,
 ) -> Result<SystemReadSkillTextResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || system_read_skill_text_sync(path, offset, length))
+    crate::compat::async_runtime::spawn_blocking(move || system_read_skill_text_sync(path, offset, length))
         .await
         .map_err(|e| format!("system_read_skill_text join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn system_read_skill_metadata(
     path: String,
 ) -> Result<SystemReadSkillMetadataResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || system_read_skill_metadata_sync(path))
+    crate::compat::async_runtime::spawn_blocking(move || system_read_skill_metadata_sync(path))
         .await
         .map_err(|e| format!("system_read_skill_metadata join 失败：{e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn system_append_debug_jsonl(
     conversation_id: String,
     entry: Value,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_append_debug_jsonl_sync(conversation_id, entry)
     })
     .await
     .map_err(|e| format!("system_append_debug_jsonl join 失败：{e}"))?
 }
 
-// 桌面端读系统剪贴板的唯一通道：WKWebView 的 navigator.clipboard.readText()
-// 对来自其他应用的剪贴板内容会弹出原生"粘贴"确认气泡（DOM paste access），
-// 自定义右键菜单的粘贴必须绕开 webview 直接读原生剪贴板。
+/// 桌面端读系统剪贴板的唯一通道：WKWebView 的 navigator.clipboard.readText()
+/// 对来自其他应用的剪贴板内容会弹出原生"粘贴"确认气泡（DOM paste access），
+/// 自定义右键菜单的粘贴必须绕开 webview 直接读原生剪贴板。
+/// Headless 构建无剪贴板，直接报错（该命令仅桌面前端会调用）。
 fn system_clipboard_read_text_sync() -> Result<String, String> {
-    let mut clipboard =
-        arboard::Clipboard::new().map_err(|e| format!("clipboard unavailable: {e}"))?;
-    match clipboard.get_text() {
-        Ok(text) => Ok(text),
-        // 剪贴板无文本内容（空/图片/文件）时按空文本处理，前端据此静默收起菜单。
-        Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
-        Err(e) => Err(format!("clipboard read failed: {e}")),
+    #[cfg(feature = "desktop")]
+    {
+        let mut clipboard =
+            arboard::Clipboard::new().map_err(|e| format!("clipboard unavailable: {e}"))?;
+        match clipboard.get_text() {
+            Ok(text) => Ok(text),
+            // 剪贴板无文本内容（空/图片/文件）时按空文本处理，前端据此静默收起菜单。
+            Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
+            Err(e) => Err(format!("clipboard read failed: {e}")),
+        }
+    }
+    #[cfg(not(feature = "desktop"))]
+    {
+        Err("clipboard is unavailable in headless mode".to_string())
     }
 }
 
-#[tauri::command]
 pub async fn system_clipboard_read_text() -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(system_clipboard_read_text_sync)
+    crate::compat::async_runtime::spawn_blocking(system_clipboard_read_text_sync)
         .await
         .map_err(|e| format!("system_clipboard_read_text join failed: {e}"))?
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn system_begin_power_activity(
     activity_id: String,
     reason: String,
     ttl_ms: Option<u64>,
-    power_activity: tauri::State<'_, Arc<PowerActivityManager>>,
+    power_activity: &Arc<PowerActivityManager>,
 ) -> Result<(), String> {
     power_activity.begin(activity_id, reason, ttl_ms);
     Ok(())
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub fn system_end_power_activity(
     activity_id: String,
-    power_activity: tauri::State<'_, Arc<PowerActivityManager>>,
+    power_activity: &Arc<PowerActivityManager>,
 ) -> Result<(), String> {
     power_activity.end(activity_id);
     Ok(())

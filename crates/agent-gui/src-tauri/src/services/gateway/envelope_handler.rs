@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use serde_json::Value;
-use tauri::Emitter;
 
+use crate::events::EventEmitterExt;
 use crate::commands::chat_history::{self};
 use crate::commands::settings::{
     apply_ssh_patch_with_conn, open_db, redact_gateway_settings_sync_payload,
@@ -110,7 +110,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryList(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_list(request).await {
                         Ok(response) => {
                             controller
@@ -137,7 +137,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryWorkdirs(_request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_workdirs().await {
                         Ok(response) => {
                             controller
@@ -166,7 +166,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryGet(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_get(request).await {
                         Ok(response) => {
                             controller
@@ -193,7 +193,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryPrefix(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_prefix(request).await {
                         Ok(response) => {
                             controller
@@ -220,7 +220,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryRename(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_rename(request).await {
                         Ok(response) => {
                             if let Some(conversation) = response.conversation.as_ref() {
@@ -254,7 +254,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryBranch(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_branch(request).await {
                         Ok(response) => {
                             if let Some(conversation) = response.conversation.as_ref() {
@@ -288,7 +288,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryPin(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_pin(request).await {
                         Ok(response) => {
                             if let Some(conversation) = response.conversation.as_ref() {
@@ -322,7 +322,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryShareGet(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_share_get(request).await {
                         Ok(response) => {
                             controller
@@ -351,7 +351,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryShareSet(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_share_set(request).await {
                         Ok(response) => {
                             if let Some(share) = response.share.as_ref() {
@@ -400,7 +400,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::HistoryShareResolve(request)) => {
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_share_resolve(request).await {
                         Ok(response) => {
                             controller
@@ -431,7 +431,7 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::HistoryDelete(request)) => {
                 let deleted_conversation_id = request.conversation_id.trim().to_string();
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match gateway_bridge::handle_history_delete(request).await {
                         Ok(response) => {
                             controller
@@ -479,7 +479,7 @@ impl GatewayController {
             Some(proto::gateway_envelope::Payload::ProviderUsage(request)) => {
                 let sender = self.current_outbound_sender()?;
                 let provider_usage_service = Arc::clone(&self.provider_usage_service);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let envelope = match gateway_bridge::handle_provider_usage(
                         provider_usage_service,
                         request,
@@ -537,7 +537,7 @@ impl GatewayController {
                         if snapshot.get(SSH_PATCH_FIELD).is_some() {
                             let patch_payload = snapshot.clone();
                             let apply_response =
-                                match tauri::async_runtime::spawn_blocking(move || {
+                                match crate::compat::async_runtime::spawn_blocking(move || {
                                     let mut conn = open_db()?;
                                     apply_ssh_patch_with_conn(&mut conn, patch_payload)
                                 })
@@ -589,7 +589,7 @@ impl GatewayController {
                                     }
                                 };
                             if let Err(error) = self
-                                .app_handle
+                                .event_emitter
                                 .emit(GATEWAY_SETTINGS_SYNC_EVENT, event_payload)
                             {
                                 return self
@@ -655,7 +655,7 @@ impl GatewayController {
                             return self.send_error_response(request_id, 500, error).await;
                         }
                         match self
-                            .app_handle
+                            .event_emitter
                             .emit(GATEWAY_SETTINGS_SYNC_EVENT, event_payload)
                         {
                             Ok(()) => {
@@ -803,7 +803,7 @@ impl GatewayController {
             }
             Some(proto::gateway_envelope::Payload::ChatFileOpen(request)) => {
                 let sender = self.current_outbound_sender()?;
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let envelope = match gateway_bridge::handle_chat_file_open(request).await {
                         Ok(response) => proto::AgentEnvelope {
                             request_id,
@@ -1036,7 +1036,7 @@ impl GatewayController {
                 // A stop carries a bounded TERM grace; run it off the inbound
                 // stream loop so tunnel frames and pings keep flowing.
                 let controller = Arc::clone(self);
-                tauri::async_runtime::spawn(async move {
+                crate::compat::async_runtime::spawn(async move {
                     let result = match controller.handle_managed_process_request(request).await {
                         Ok(response) => {
                             controller
