@@ -24,6 +24,7 @@ use agent_core::services::power_activity::PowerActivityManager;
 use agent_core::services::provider_usage::ProviderUsageService;
 use agent_core::services::tunnel::TunnelStore;
 use agent_core::services::workspace_watch::WorkspaceWatchService;
+use tokio::sync::RwLock;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -52,4 +53,6 @@ pub struct AppState {
     pub ws_sink: Arc<crate::ws::WsEventSink>,
     /// 工具审批注册表。
     pub approvals: Arc<crate::approval::ApprovalRegistry>,
+    /// Node 引擎监听端口。127.0.0.1:node_port 为反向代理目标。未启动时为 None。
+    pub node_port: Arc<RwLock<Option<u16>>>,
 }

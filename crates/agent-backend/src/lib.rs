@@ -21,6 +21,7 @@
 
 pub mod approval;
 pub mod auth;
+pub mod engine_proxy;
 pub mod json;
 pub mod routes;
 pub mod routes_gen;
@@ -47,7 +48,7 @@ pub fn build_router(state: AppState) -> Router {
             .merge(ws::router())
             .route_layer(axum::middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_bearer,
+                auth::require_bearer_with_identity,
             ));
 
     Router::new()
@@ -141,5 +142,6 @@ pub fn build_state(auth: Arc<auth::AuthConfig>, internal_token: String) -> Resul
         internal_token,
         ws_sink,
         approvals: Arc::new(crate::approval::ApprovalRegistry::new()),
+        node_port: Arc::new(tokio::sync::RwLock::new(None)),
     })
 }

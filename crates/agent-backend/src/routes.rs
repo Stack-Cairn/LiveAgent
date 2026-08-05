@@ -164,7 +164,7 @@ async fn handler_tool_approval_respond(
 }
 
 pub fn api_router() -> Router<AppState> {
-    // 手动挂载自定义路由（approval）。
+    // 手动挂载自定义路由（approval 和 engine_proxy）。
     Router::new()
         .route(
             "/tool_approval_request",
@@ -174,6 +174,7 @@ pub fn api_router() -> Router<AppState> {
             "/tool_approval_respond",
             axum::routing::post(handler_tool_approval_respond),
         )
+        .merge(crate::engine_proxy::router())
         .merge(routes_gen::gen_router())
 }
 

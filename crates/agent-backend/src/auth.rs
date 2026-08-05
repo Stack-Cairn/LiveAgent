@@ -26,11 +26,13 @@ impl AuthConfig {
 
     /// 常量时间验证 Bearer token。接受用户密码或内部 token。
     ///
+    /// 返回调用方身份：`Some(CallerIdentity)` 如果验证成功，否则 `None`。
+    ///
     /// 长度不等时跟自己比：比较耗时始终只取决于存储值的长度，
     /// 不让攻击者通过响应时间推断有没有猜中。
     ///
     /// 两个 token 一个比不上就试另一个，最后一个才是真正的比较目标。
-    pub fn verify(&self, presented: &str) -> bool {
+    pub fn verify_with_identity(&self, presented: &str) -> Option<crate::engine_proxy::CallerIdentity> {
         let password_bytes = self.password.as_bytes();
         let internal_bytes = self.internal_token.as_bytes();
         let presented_bytes = presented.as_bytes();
@@ -44,7 +46,7 @@ impl AuthConfig {
         };
 
         if password_match {
-            return true;
+            return Some(crate::engine_proxy::CallerIdentity::User);
         }
 
         // 用户密码不匹配，尝试内部 token。
@@ -55,7 +57,21 @@ impl AuthConfig {
             len_eq && data_eq
         };
 
-        internal_match
+        if internal_match {
+            return Some(crate::engine_proxy::CallerIdentity::Internal);
+        }
+
+        None
+    }
+
+    /// 常量时间验证 Bearer token。接受用户密码或内部 token。
+    ///
+    /// 长度不等时跟自己比：比较耗时始终只取决于存储值的长度，
+    /// 不让攻击者通过响应时间推断有没有猜中。
+    ///
+    /// 两个 token 一个比不上就试另一个，最后一个才是真正的比较目标。
+    pub fn verify(&self, presented: &str) -> bool {
+        self.verify_with_identity(presented).is_some()
     }
 }
 
@@ -79,7 +95,30 @@ pub fn generate_password() -> String {
     password
 }
 
-/// Axum middleware：校验 Authorization: Bearer <token> header。
+/// Axum middleware：校验 Authorization: Bearer <token> header，并把调用方身份放入 extensions。
+///
+/// 三种失败情况（缺 header、格式错、密码错）都返回同样的 401，不暴露细节。
+pub async fn require_bearer_with_identity(
+    axum::extract::State(state): axum::extract::State<crate::state::AppState>,
+    mut req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Result<axum::response::Response, axum::http::StatusCode> {
+    let headers = req.headers();
+
+    // 试图从 Authorization header 提取 Bearer token。
+    let token = extract_bearer_token(headers).ok_or(axum::http::StatusCode::UNAUTHORIZED)?;
+
+    // 用 auth 配置验证，并获取调用方身份。
+    if let Some(identity) = state.auth.verify_with_identity(token) {
+        // 把身份信息放入 request extensions。
+        req.extensions_mut().insert(identity);
+        Ok(next.run(req).await)
+    } else {
+        Err(axum::http::StatusCode::UNAUTHORIZED)
+    }
+}
+
+/// Axum middleware：校验 Authorization: Bearer <token> header（兼容性）。
 ///
 /// 三种失败情况（缺 header、格式错、密码错）都返回同样的 401，不暴露细节。
 pub async fn require_bearer(

@@ -9,8 +9,6 @@
 //! 重连语义：按决策 19，**不补发历史事件**。客户端重连后自己拉快照再订阅增量。
 //! 没有 seq 号，没有 after_seq 参数，没有 replay buffer。
 
-use std::sync::Arc;
-
 use agent_core::events::EventSink;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
@@ -127,6 +125,7 @@ pub fn router() -> axum::Router<crate::state::AppState> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use super::*;
 
     #[test]
