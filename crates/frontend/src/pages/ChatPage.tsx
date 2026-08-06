@@ -538,6 +538,7 @@ export function ChatPage(props: ChatPageProps) {
     updateToolStatus,
     appendDraftAssistantText,
     settleLiveTranscript,
+    getLiveSnapshot: (targetStore) => getAbortSnapshot(targetStore),
     onBackendToolApprovalRequest: (payload) => {
       const key = `${payload.conversation_id}:${payload.approval_id}`;
       setBackendApprovalRequests((prev) => {

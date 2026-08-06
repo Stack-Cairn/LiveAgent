@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { backendFetchGet, subscribeEvents } from "../../../lib/backend/client";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import { type RunEndedResult, resolveRunEnded } from "../runtime/runEndedWaiters";
 
 type UseBackendEventSubscriptionParams = {
   currentConversationId: string;
@@ -8,6 +9,8 @@ type UseBackendEventSubscriptionParams = {
   updateToolStatus: (status: string | null, targetStore: LiveTranscriptStore) => void;
   appendDraftAssistantText: (delta: string, targetStore: LiveTranscriptStore) => void;
   settleLiveTranscript: (targetStore: LiveTranscriptStore) => void;
+  /** 结算前取快照（会先冲掉 rAF 批处理里还没落库的增量）。 */
+  getLiveSnapshot: (targetStore: LiveTranscriptStore) => { draftAssistantText: string };
   onBackendToolApprovalRequest?: (payload: {
     approval_id: string;
     conversation_id: string;
@@ -24,6 +27,7 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
     updateToolStatus,
     appendDraftAssistantText,
     settleLiveTranscript,
+    getLiveSnapshot,
     onBackendToolApprovalRequest,
   } = params;
 
@@ -61,8 +65,21 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
         const status = payloadObj.status as string | null | undefined;
         updateToolStatus(status ?? null, transcriptStore);
       }
-      // 处理运行终态
+      // 处理运行终态：先带着结算前的正文快照兑现发送方的 waiter，
+      // 再 settle 清空 live 状态——顺序反了正文就丢了。
       else if (event === "run_ended") {
+        const rawState = payloadObj.state;
+        const state: RunEndedResult["state"] =
+          rawState === "failed" || rawState === "cancelled" ? rawState : "completed";
+        const errorMessage =
+          typeof payloadObj.errorMessage === "string" && payloadObj.errorMessage
+            ? payloadObj.errorMessage
+            : null;
+        resolveRunEnded(conversationId, {
+          state,
+          errorMessage,
+          draftAssistantText: getLiveSnapshot(transcriptStore).draftAssistantText,
+        });
         settleLiveTranscript(transcriptStore);
       }
       // 处理后端工具审批请求：将其转发给前端本地审批系统处理
@@ -83,11 +100,11 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
       unsubscribe();
     };
   }, [
-    currentConversationId,
     getConversationLiveTranscriptStore,
     updateToolStatus,
     appendDraftAssistantText,
     settleLiveTranscript,
+    getLiveSnapshot,
     onBackendToolApprovalRequest,
   ]);
 

@@ -74,7 +74,11 @@ import {
 import type { PersistConversationParams } from "../history/useConversationHistoryActions";
 import type { useChatPageRuntimeStore } from "../hooks/useChatPageRuntimeStore";
 import type { useLiveTranscriptController } from "../hooks/useLiveTranscriptController";
-import { buildErrorAssistantMessage, formatHookWarningMessage } from "./chatPageRuntime";
+import {
+  buildErrorAssistantMessage,
+  buildPartialAssistantMessage,
+  formatHookWarningMessage,
+} from "./chatPageRuntime";
 import {
   finalizeChatRunInOrder,
   releaseChatRunUi,
@@ -94,6 +98,7 @@ import {
   resolveConversationTitleModelSelection,
   selectedModelsMatch,
 } from "./providerRuntimeConfig";
+import { waitForRunEnded } from "./runEndedWaiters";
 
 type LiveTranscriptController = ReturnType<typeof useLiveTranscriptController>;
 type ChatPageRuntimeStore = ReturnType<typeof useChatPageRuntimeStore>;
@@ -1259,8 +1264,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     }
 
     try {
-      // 引擎在后端 Node 进程里跑(阶段 3):这里只提交请求,增量与终态走 WS 事件。
+      // 引擎在后端进程里跑：chat_send 只是受理（202），增量走 WS 事件，
+      // 终态是 run_ended。waiter 必须在提交**之前**注册，否则短回复的
+      // run_ended 可能赶在注册前到达，这轮就永远等不到了。
       // clientRequestId 供引擎幂等去重——网络重试不会跑出第二个 turn。
+      const runEndedPromise = waitForRunEnded(conversationId, cancellation.userStop.signal);
       await backendFetch<void>("chat_send", {
         conversationId,
         clientRequestId: pendingUserMessage.id,
@@ -1272,6 +1280,37 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         skillsEnabled: effectiveSkillsEnabled,
         selectedSkillNames,
       });
+      const runEnded = await runEndedPromise;
+      if (runEnded.state === "cancelled") {
+        throw new Error("已取消");
+      }
+      if (runEnded.state === "failed") {
+        throw new Error(runEnded.errorMessage || "Request failed");
+      }
+      // 完成态：把这轮跑出来的正文落进会话历史并持久化。
+      // live 快照在 run_ended 时已被 settle 清空，正文从 waiter 带回来。
+      const assistantMessage = buildPartialAssistantMessage({
+        model: runtimeModel,
+        text: runEnded.draftAssistantText,
+        stopReason: "stop",
+      });
+      if (assistantMessage) {
+        const finalState = appendMessagesToConversation(nextConversationState, [assistantMessage]);
+        applyConversationState(finalState);
+        freezeBackendFinalProjection(finalState, true);
+        terminalHistoryPersistPromise = persistTerminalConversation({
+          conversationId,
+          sessionId,
+          providerId,
+          model,
+          selectedModel,
+          cwd: conversationCwd,
+          state: finalState,
+          fallbackTitle,
+          createdAt,
+          titlePromise,
+        });
+      }
     } catch (err) {
       const aborted = cancellation.userStop.signal.aborted || isAbortLikeError(err);
       gatewayRuntimeFinalState = aborted ? "cancelled" : "failed";
