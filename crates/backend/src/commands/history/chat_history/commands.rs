@@ -38,13 +38,6 @@ pub async fn chat_history_shared_list(
     .map_err(|e| format!("chat_history_shared_list join failed: {e}"))?
 }
 
-pub async fn chat_history_search(
-    args: ChatHistorySearchArgs) -> Result<ChatHistorySearchResponse, String> {
-    tokio::task::spawn_blocking(move || search_chat_history_sync(args))
-        .await
-        .map_err(|e| format!("chat_history_search join 失败：{e}"))?
-}
-
 pub async fn chat_history_get_summary_inner(
     id: String,
 ) -> Result<ChatHistorySummary, String> {

@@ -85,13 +85,21 @@ pub async fn settings_save_agents(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_agents join 失败：{e}"))?
 }
 
-pub async fn settings_save_ssh(payload: Value) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || {
-        let mut conn = open_db()?;
-        save_ssh(&mut conn, payload)
-    })
-    .await
-    .map_err(|e| format!("settings_save_ssh join 失败：{e}"))?
+/// 从供应商 API 拉模型列表。网络请求收在后端（后端是唯一网络入口），
+/// 前端拿到的是供应商原始 JSON（数组或含 data/models 的对象）。
+pub async fn provider_models_fetch(
+    provider_type: String,
+    base_url: String,
+    api_key: String,
+    use_system_proxy: bool) -> Result<Value, String> {
+    let payload = crate::services::provider_models::fetch_provider_models(
+        &provider_type,
+        &base_url,
+        &api_key,
+        use_system_proxy,
+    )
+    .await?;
+    serde_json::from_str(&payload).map_err(|e| format!("解析供应商模型列表失败：{e}"))
 }
 
 pub async fn settings_apply_ssh_patch(payload: Value) -> Result<SshPatchApplyResponse, String> {

@@ -161,14 +161,6 @@ pub async fn fs_roots() -> Result<FsRootsResponse, String> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub async fn fs_list_dirs(
-    path: String,
-    max_results: Option<usize>,
-) -> Result<FsListDirsResponse, String> {
-    backend::commands::fs::fs_list_dirs(path, max_results).await
-}
-
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_list(
     workdir: String,
     path: Option<String>,

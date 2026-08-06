@@ -337,173 +337,6 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   hookHarness.cleanup();
 });
 
-test("gateway tool_answer forwards validated JSON with conversation isolation", async () => {
-  const hookHarness = createHookHarness();
-  const listeners = new Map();
-  const responses = [];
-  const answerCalls = [];
-  const loader = createTsModuleLoader({
-    mocks: {
-      react: hookHarness.react,
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
-          if (command === "gateway_chat_queue_respond") {
-            responses.push(args);
-          }
-          return undefined;
-        },
-      },
-      "@tauri-apps/api/event": {
-        async listen(eventName, callback) {
-          listeners.set(eventName, callback);
-          return () => listeners.delete(eventName);
-        },
-      },
-      "../../../lib/settings": {
-        normalizeChatRuntimeControls(value) {
-          return value ?? {};
-        },
-        normalizeSystemToolSelection(value) {
-          return Array.isArray(value) ? value : [];
-        },
-      },
-      "../../../lib/tools/askUserQuestionTools": {
-        answerAskUserQuestion(toolCallId, answers, options) {
-          answerCalls.push({ toolCallId, answers, options });
-          if (options.conversationId !== "conversation-owner") {
-            return { ok: false, message: "Question belongs to a different conversation." };
-          }
-          return { ok: true };
-        },
-      },
-      "../composer/composerDraftText": {
-        createTextComposerDraft(text) {
-          return { text, isEmpty: !text.trim(), segments: [{ type: "text", text }] };
-        },
-      },
-      "../gateway/backendBridgeTypes": {
-        normalizeBackendExecutionMode(value) {
-          return value;
-        },
-        normalizeBackendWorkdir(value) {
-          return value;
-        },
-      },
-    },
-  });
-  const { useChatTurnQueue } = loader.loadModule(
-    "src/pages/chat/queue/useChatTurnQueue.ts",
-  );
-
-  hookHarness.render(() =>
-    useChatTurnQueue({
-      settings: {
-        system: { executionMode: "chat", workdir: "", selectedSystemTools: [] },
-        chatRuntimeControls: {},
-      },
-      currentConversationId: "conversation-owner",
-      currentConversationIdRef: { current: "conversation-owner" },
-      conversationRuntimeCacheRef: { current: new Map() },
-      buildRuntimeEntryFromVisibleState() {
-        return { workdir: "" };
-      },
-      isConversationRunning() {
-        return false;
-      },
-      runningConversationIds: new Set(),
-      getConversationAbortController() {
-        return null;
-      },
-      setConversationAbortController() {},
-      setConversationSendingState() {},
-      requestConversationStop() {
-        return false;
-      },
-      getConversationStopRequestVersion() {
-        return 0;
-      },
-      isConversationStopRequested() {
-        return false;
-      },
-      consumeConversationStop() {
-        return false;
-      },
-      requestActiveConversationStop() {
-        return false;
-      },
-      getConversationLiveTranscriptStore() {
-        return {};
-      },
-      captureAbortSnapshot() {},
-      updateToolStatus() {},
-      composerRef: { current: null },
-      pendingUploadedFiles: [],
-      setPendingUploadsForConversation() {},
-      clearCachedComposerDraft() {},
-      displayedConversationWorkdir: "",
-      sendActionRef: { current: async () => true },
-    }),
-  );
-
-  const listener = listeners.get("gateway:chat-queue-request");
-  assert.ok(listener);
-  const answers = [{ questionId: "choice", selectedLabel: "Second" }];
-
-  listener({
-    payload: {
-      requestId: "request-accepted",
-      action: "tool_answer",
-      conversationId: "conversation-owner",
-      itemId: "call-ask-remote",
-      requestJson: JSON.stringify(answers),
-    },
-  });
-  await flushPromises();
-  assert.deepEqual(answerCalls[0], {
-    toolCallId: "call-ask-remote",
-    answers,
-    options: { conversationId: "conversation-owner" },
-  });
-  assert.equal(
-    responses.find((response) => response.input.requestId === "request-accepted").input.accepted,
-    true,
-  );
-
-  listener({
-    payload: {
-      requestId: "request-mismatch",
-      action: "tool_answer",
-      conversationId: "conversation-other",
-      itemId: "call-ask-remote",
-      requestJson: JSON.stringify(answers),
-    },
-  });
-  await flushPromises();
-  const mismatch = responses.find((response) => response.input.requestId === "request-mismatch");
-  assert.equal(mismatch.input.accepted, false);
-  assert.equal(mismatch.input.errorCode, "not_found");
-  assert.match(mismatch.input.message, /different conversation/);
-
-  listener({
-    payload: {
-      requestId: "request-invalid-json",
-      action: "tool_answer",
-      conversationId: "conversation-owner",
-      itemId: "call-ask-remote",
-      requestJson: "{broken",
-    },
-  });
-  await flushPromises();
-  const invalid = responses.find(
-    (response) => response.input.requestId === "request-invalid-json",
-  );
-  assert.equal(invalid.input.accepted, false);
-  assert.equal(invalid.input.errorCode, "invalid_payload");
-  assert.equal(answerCalls.length, 2);
-
-  hookHarness.cleanup();
-});
-
 test("slow chat finalization cannot delay synchronous UI release", async () => {
   const loader = createTsModuleLoader();
   const { releaseChatRunUi, settleChatRunFinalization } = loader.loadModule(
@@ -530,13 +363,12 @@ test("slow chat finalization cannot delay synchronous UI release", async () => {
   gate.resolve();
 });
 
-test("finalization flushes the gateway stream only after history persists", async () => {
+test("finalization waits for the history persist barrier", async () => {
   const loader = createTsModuleLoader();
   const { finalizeChatRunInOrder } = loader.loadModule(
     "src/pages/chat/runtime/chatRunFinalization.ts",
   );
   const persistGate = deferred();
-  const closeGate = deferred();
   const events = [];
 
   const finalization = finalizeChatRunInOrder({
@@ -545,54 +377,27 @@ test("finalization flushes the gateway stream only after history persists", asyn
       await persistGate.promise;
       events.push("persist:done");
     },
-    closeBridge: async () => {
-      events.push("close:start");
-      await closeGate.promise;
-      events.push("close:done");
-    },
-    finishRuntimeRun: async () => {
-      events.push("finish");
-    },
   });
   await flushPromises();
 
-  // The 26f2561 invariant: the stream close / terminal snapshot must never
-  // overtake history persistence, or a WebUI client can hydrate a truncated
-  // conversation.
-  assert.deepEqual(events, ["persist:start"], "flushes must wait for the persist barrier");
+  assert.deepEqual(events, ["persist:start"], "finalization must wait for the persist barrier");
 
   persistGate.resolve();
-  await flushPromises();
-  assert.deepEqual(
-    events,
-    ["persist:start", "persist:done", "close:start"],
-    "terminal checkpoint must wait for the final delta flush",
-  );
-  closeGate.resolve();
   await finalization;
-  assert.deepEqual(events, ["persist:start", "persist:done", "close:start", "close:done", "finish"]);
+  assert.deepEqual(events, ["persist:start", "persist:done"]);
 });
 
-test("a failing persist barrier still lets the finalization flushes run", async () => {
+test("a failing persist barrier does not reject the finalization", async () => {
   const loader = createTsModuleLoader();
   const { finalizeChatRunInOrder } = loader.loadModule(
     "src/pages/chat/runtime/chatRunFinalization.ts",
   );
-  const events = [];
 
   await finalizeChatRunInOrder({
     waitForPersistBarrier: async () => {
       throw new Error("persist failed");
     },
-    closeBridge: async () => {
-      events.push("close");
-    },
-    finishRuntimeRun: async () => {
-      events.push("finish");
-    },
   });
-
-  assert.deepEqual(events, ["close", "finish"]);
 });
 
 test("terminal history persistence marks both false results and thrown errors", async () => {

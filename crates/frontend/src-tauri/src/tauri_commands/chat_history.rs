@@ -75,13 +75,6 @@ pub async fn chat_history_shared_list(
 }
 
 #[tauri::command]
-pub async fn chat_history_search(
-    args: ChatHistorySearchArgs,
-) -> Result<ChatHistorySearchResponse, String> {
-    backend::commands::chat_history::chat_history_search(args).await
-}
-
-#[tauri::command]
 pub async fn chat_history_get_window(
     id: String,
     max_messages: i64,

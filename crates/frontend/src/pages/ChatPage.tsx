@@ -114,7 +114,6 @@ import {
   MAX_UPLOAD_FILES,
   pruneIdleConversationRuntimeCaches,
   type SendChatAction,
-  useBackendBridgeListeners,
   useChatPageRuntimeStore,
   useChatSkills,
   useConversationHistoryActions,
@@ -124,7 +123,6 @@ import {
 } from "./chat";
 import { useBackendBridgeReadiness } from "./chat/bridge/useBridgeReadiness";
 import { useRemoteRuntimeStatus } from "./chat/bridge/useRemoteRuntimeStatus";
-import { useBackendRunMirrorCoordinator } from "./chat/bridge/useRunMirrorCoordinator";
 import { appendManagedSkillSelections } from "./chat/chatPageUtils";
 import { ChatFileDropOverlay } from "./chat/components/ChatFileDropOverlay";
 import { WorkspaceOverlayHost } from "./chat/components/WorkspaceOverlayHost";
@@ -456,12 +454,6 @@ export function ChatPage(props: ChatPageProps) {
   } = useLiveTranscriptController({
     currentConversationId,
   });
-  const {
-    queueBackendBridgeEventForRequest,
-    flushBackendBridgeEventsForRequest,
-    registerBackendRunMirror,
-    finishBackendRunMirror,
-  } = useBackendRunMirrorCoordinator();
   const {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
@@ -1018,8 +1010,6 @@ export function ChatPage(props: ChatPageProps) {
     queuedChatTurnEditSlotRef,
     setQueuedChatTurnsState,
     queuedChatTurnsForCurrentConversation,
-    publishChatQueueSnapshots,
-    collectChatQueueSnapshotConversationIds,
     stopSending,
     stopConversation,
     enqueueCurrentComposerTurn,
@@ -1028,8 +1018,6 @@ export function ChatPage(props: ChatPageProps) {
     moveQueuedTurnUp,
     editQueuedTurn,
     removeQueuedTurn,
-    shouldQueueBackendChatRequest,
-    enqueueBackendChatRequest,
   } = useChatTurnQueue({
     settings,
     currentConversationId,
@@ -1056,21 +1044,6 @@ export function ChatPage(props: ChatPageProps) {
     displayedConversationWorkdir,
     sendActionRef,
   });
-
-  // Queue snapshots publish on queue mutation only; after a gateway
-  // reconnect (new session) the gateway's in-memory queue view is empty, so
-  // republish the current queue for every conversation that has one.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: connection identity intentionally drives the republish
-  useEffect(() => {
-    if (!canShareHistory) {
-      return;
-    }
-    publishChatQueueSnapshots(
-      collectChatQueueSnapshotConversationIds(queuedChatTurnsRef.current, [
-        currentConversationIdRef.current,
-      ]),
-    );
-  }, [canShareHistory, remoteRuntimeStatus.connectedSince, remoteRuntimeStatus.sessionId]);
 
   const deleteConversationLocalCaches = useCallback(
     (conversationId: string) => {
@@ -1460,21 +1433,6 @@ export function ChatPage(props: ChatPageProps) {
     setContext(currentRequestContext);
   }, [currentRequestContext, setContext]);
 
-  useBackendBridgeListeners({
-    currentConversationIdRef,
-    conversationRuntimeCacheRef,
-    ensureBackendBridgeConversationReadyRef,
-    sendActionRef,
-    queueBackendBridgeEventForRequest,
-    shouldQueueBackendChatRequest,
-    enqueueBackendChatRequest,
-    isConversationRunning,
-    getConversationAbortController,
-    requestConversationStop,
-    requestActiveConversationStop,
-    consumeConversationStop,
-  });
-
   const { send } = useSendChatTurn({
     settings,
     setSettings,
@@ -1515,10 +1473,6 @@ export function ChatPage(props: ChatPageProps) {
     resetLiveTranscript,
     settleLiveTranscript,
     updateToolStatus,
-    queueBackendBridgeEventForRequest,
-    flushBackendBridgeEventsForRequest,
-    registerBackendRunMirror,
-    finishBackendRunMirror,
     backendBridgeHistorySummaryRef,
     availableSkills,
     skillsRootDir,

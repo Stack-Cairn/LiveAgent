@@ -1,8 +1,4 @@
 import type { AppSettings, ProviderId, SelectedModel } from "../../../lib/settings";
-import {
-  type BackendSelectedModelEvent,
-  normalizeBackendProviderType,
-} from "../bridge/bridgeTypes";
 
 export type EffectiveChatModelSelection = {
   selectedModel: SelectedModel;
@@ -28,63 +24,24 @@ export function resolvePersistedConversationModelSelection(params: {
 export function resolveEffectiveChatModelSelection(params: {
   settings: AppSettings;
   conversationSelectedModel?: SelectedModel;
-  gatewaySelectedModel?: BackendSelectedModelEvent;
 }): EffectiveChatModelSelection {
-  const { settings, conversationSelectedModel, gatewaySelectedModel } = params;
-  const resolveLocalSelection = (): EffectiveChatModelSelection => {
-    const activeSelectedModel = resolveActiveModelSelection(settings, conversationSelectedModel);
-    if (!activeSelectedModel) {
-      throw new Error("请先在左上角选择一个模型（或先去设置添加模型）。");
-    }
-
-    const { customProviderId, model } = activeSelectedModel;
-    const provider = settings.customProviders.find((item) => item.id === customProviderId);
-    if (!provider) {
-      throw new Error("所选供应商不存在，请重新选择模型。");
-    }
-    if (!provider.activeModels.includes(model)) {
-      throw new Error("所选模型未启用，请重新选择模型。");
-    }
-
-    return {
-      selectedModel: activeSelectedModel,
-      provider,
-      providerId: provider.type,
-      model,
-    };
-  };
-
-  if (!gatewaySelectedModel) {
-    return resolveLocalSelection();
+  const { settings, conversationSelectedModel } = params;
+  const activeSelectedModel = resolveActiveModelSelection(settings, conversationSelectedModel);
+  if (!activeSelectedModel) {
+    throw new Error("请先在左上角选择一个模型（或先去设置添加模型）。");
   }
 
-  const customProviderId = gatewaySelectedModel.customProviderId.trim();
-  const model = gatewaySelectedModel.model.trim();
-  const providerType = normalizeBackendProviderType(gatewaySelectedModel.providerType);
-  if (!customProviderId || !model || !providerType) {
-    throw new Error("远程请求携带的模型配置无效，请在 WebUI 重新选择模型后重试。");
-  }
-
+  const { customProviderId, model } = activeSelectedModel;
   const provider = settings.customProviders.find((item) => item.id === customProviderId);
   if (!provider) {
-    throw new Error(
-      "远程请求所选模型对应的供应商不存在，请同步桌面端设置后在 WebUI 重新选择模型。",
-    );
-  }
-  if (provider.type !== providerType) {
-    throw new Error(
-      "远程请求所选模型的供应商类型与桌面端配置不一致，请同步桌面端设置后在 WebUI 重新选择模型。",
-    );
+    throw new Error("所选供应商不存在，请重新选择模型。");
   }
   if (!provider.activeModels.includes(model)) {
-    throw new Error("远程请求所选模型未在桌面端启用，请同步桌面端设置后在 WebUI 重新选择模型。");
+    throw new Error("所选模型未启用，请重新选择模型。");
   }
 
   return {
-    selectedModel: {
-      customProviderId: provider.id,
-      model,
-    },
+    selectedModel: activeSelectedModel,
     provider,
     providerId: provider.type,
     model,

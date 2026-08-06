@@ -60,7 +60,6 @@ test("conversation title job disables thinking, caching, and native web search",
     },
   };
   const titleJobRef = { current: null };
-  const forwardedTitles = [];
 
   const title = await startConversationTitleJob({
     providerId: "codex",
@@ -73,9 +72,6 @@ test("conversation title job disables thinking, caching, and native web search",
     locale: "en-US",
     sidebarStore,
     titleJobRef,
-    backendBridgeEvents: {
-      queueTitle: (nextTitle) => forwardedTitles.push(nextTitle),
-    },
   });
 
   assert.equal(title, "Fast title");
@@ -88,7 +84,6 @@ test("conversation title job disables thinking, caching, and native web search",
   assert.equal(capturedParams.nativeWebSearch, false);
   assert.equal(capturedParams.cacheRetention, "none");
   assert.equal(historyItemsById.get("conversation-1").title, "Fast title");
-  assert.equal(forwardedTitles[0], "Fast title");
   // The requested locale must reach the model, not just the prompt builders.
   assert.match(capturedParams.context.systemPrompt, /concise conversation titles/i);
   assert.match(capturedParams.context.messages[0].content, /within 10 words/i);
@@ -110,9 +105,6 @@ test("conversation title job disables thinking, caching, and native web search",
     locale: "zh-CN",
     sidebarStore,
     titleJobRef,
-    backendBridgeEvents: {
-      queueTitle: (nextTitle) => forwardedTitles.push(nextTitle),
-    },
   });
 
   assert.match(capturedParams.context.systemPrompt, /简体中文/);

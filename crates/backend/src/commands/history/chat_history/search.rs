@@ -590,31 +590,6 @@ fn search_chat_history_fts_with_refresh(
     Ok(matches)
 }
 
-fn search_chat_history_sync(
-    args: ChatHistorySearchArgs,
-) -> Result<ChatHistorySearchResponse, String> {
-    let query = args.query.trim();
-    if query.is_empty() {
-        return Ok(ChatHistorySearchResponse {
-            matches: Vec::new(),
-        });
-    }
-    let limit = args
-        .limit
-        .unwrap_or(DEFAULT_HISTORY_SEARCH_LIMIT)
-        .clamp(1, MAX_HISTORY_SEARCH_LIMIT);
-    let filter = resolve_history_search_filter(
-        args.history_since,
-        args.history_until,
-        args.history_date_local.as_deref(),
-        args.history_time_mode.as_deref(),
-    )?;
-    let conn = open_db()?;
-    Ok(ChatHistorySearchResponse {
-        matches: search_chat_history_fts_with_refresh(&conn, query, limit, &filter)?,
-    })
-}
-
 fn should_include_history_for_memory_search(args: &MemorySearchArgs) -> bool {
     args.include_history.unwrap_or(false)
 }

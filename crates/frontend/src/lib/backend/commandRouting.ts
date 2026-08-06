@@ -42,35 +42,15 @@ export const SHELL_ONLY_COMMANDS = new Set([
 ]);
 
 /**
- * 已经删掉的命令（deleted.txt）：20 个 gateway_* 中继 + proxy_get_server_info。
+ * 已经删掉的命令（deleted.txt）里仍有前端调用点的部分。
  *
- * Rust 侧已随阶段 4 一起移除，壳里和后端里都不存在了。仍有前端调用点
- * （src/pages/chat/bridge/*）没清干净，走 IPC 会得到 "command not found"、
- * 走 HTTP 会得到 404——两种都是让人猜的错误。这里本地拦下并给迁移提示。
+ * 20 个 gateway_* 中继命令的调用点已随运行镜像/远程队列协议一并清除，
+ * 不再需要拦截。剩下 proxy_get_server_info：本地反代自举，前端 LLM 流式
+ * （标题任务等）仍在调用，但 Rust 侧已随阶段 4 移除——走 IPC 会得到
+ * "command not found"、走 HTTP 会得到 404。这里本地拦下并给迁移提示，
+ * 直到该链路在后端重建（见迁移文档 B 组能力）。
  */
-export const REMOVED_GATEWAY_COMMANDS = new Set([
-  "gateway_chat_cancel_request",
-  "gateway_chat_claim_next",
-  "gateway_chat_complete",
-  "gateway_chat_fail",
-  "gateway_chat_heartbeat",
-  "gateway_chat_mark_local_cancelled",
-  "gateway_chat_mark_local_started",
-  "gateway_chat_mark_queued_in_gui",
-  "gateway_chat_mark_started",
-  "gateway_chat_queue_respond",
-  "gateway_chat_release_lease",
-  "gateway_chat_runtime_heartbeat",
-  "gateway_commit_chat_checkpoint",
-  "gateway_connect",
-  "gateway_disconnect",
-  "gateway_nudge_connection",
-  "gateway_publish_chat_queue_event",
-  "gateway_publish_settings_sync",
-  "gateway_send_chat_ingress_batch",
-  "gateway_status",
-  "proxy_get_server_info",
-]);
+export const REMOVED_GATEWAY_COMMANDS = new Set(["proxy_get_server_info"]);
 
 /**
  * 这条命令该走 Tauri 壳吗？

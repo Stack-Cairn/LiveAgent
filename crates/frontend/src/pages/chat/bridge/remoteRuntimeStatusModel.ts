@@ -1,5 +1,3 @@
-import { createUuid } from "../../../lib/shared/id";
-
 export type RemoteRuntimeStatus = {
   online: boolean;
   enabled: boolean;
@@ -24,7 +22,3 @@ export const OFFLINE_REMOTE_STATUS: RemoteRuntimeStatus = {
   lastHeartbeat: null,
   lastError: null,
 };
-
-export function createLocalChatRunId(conversationId: string) {
-  return `conversation-live-${conversationId}-${createUuid()}`;
-}

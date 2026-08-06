@@ -1,19 +1,6 @@
 import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
-import type {
-  BackendChatRuntimeControlsEvent,
-  BackendSelectedModelEvent,
-} from "../bridge/bridgeTypes";
-
-export type QueuedBackendChatRequest = {
-  requestId: string;
-  clientRequestId?: string;
-  workerId?: string;
-  queuePolicy?: "auto" | "append" | "interrupt";
-  selectedModel?: BackendSelectedModelEvent;
-  runtimeControls?: BackendChatRuntimeControlsEvent;
-};
 
 export type QueuedChatTurn = {
   id: string;
@@ -24,27 +11,6 @@ export type QueuedChatTurn = {
   workdir: string;
   runtimeControls: ChatRuntimeControls;
   createdAt: number;
-  gatewayRequest?: QueuedBackendChatRequest;
-};
-
-export type ChatQueueItemSummary = {
-  id: string;
-  previewText: string;
-  fileCount: number;
-  createdAt: number;
-  source: "gui" | "webui";
-  editable: boolean;
-};
-
-export type ChatQueueSnapshot = {
-  conversationId: string;
-  revision: number;
-  items: ChatQueueItemSummary[];
-};
-
-export type ChatQueueItemDetail = ChatQueueItemSummary & {
-  draftJson: string;
-  uploadedFilesJson: string;
 };
 
 export type QueuedChatTurnInput = Omit<QueuedChatTurn, "createdAt" | "id"> & {
@@ -70,7 +36,6 @@ export function createQueuedChatTurn(input: QueuedChatTurnInput): QueuedChatTurn
     workdir: input.workdir.trim(),
     runtimeControls: { ...input.runtimeControls },
     createdAt,
-    gatewayRequest: input.gatewayRequest ? { ...input.gatewayRequest } : undefined,
   };
 }
 

@@ -54,12 +54,6 @@ pub fn set_model(provider: &str, model_id: &str) -> Value {
     })
 }
 
-/// 列出 pi 认识的全部模型。只在按前端给的 provider 直接切模型失败后才用，
-/// 所以这次多余的往返只发生在映射对不上的会话里。
-pub fn get_available_models() -> Value {
-    json!({ "type": "get_available_models" })
-}
-
 /// 回应扩展的对话框请求。`value` 是自由文本，不必是 `options` 里的选项
 /// （已实测：pi 原样交给扩展）。审批桥用空串表示放行、非空表示拦截理由。
 pub fn extension_ui_value(id: &str, value: &str) -> Value {
@@ -98,8 +92,7 @@ pub struct PiResponse {
     pub command: String,
     pub success: bool,
     pub error: Option<String>,
-    /// 查询类命令的返回值（如 `get_available_models` 的模型表）。
-    /// 只读命令才用得上；`prompt`/`abort` 这类没有。
+    /// 查询类命令的返回值。只读命令才用得上；`prompt`/`abort` 这类没有。
     pub data: Option<Value>,
 }
 

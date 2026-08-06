@@ -192,23 +192,6 @@ pub struct ChatHistorySegmentMutationInput {
     pub segment: ChatHistorySegmentInput,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatHistorySearchArgs {
-    pub query: String,
-    pub limit: Option<usize>,
-    pub history_since: Option<i64>,
-    pub history_until: Option<i64>,
-    pub history_date_local: Option<String>,
-    pub history_time_mode: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ChatHistorySearchResponse {
-    pub matches: Vec<MemoryHistorySearchMatch>,
-}
-
 #[derive(Debug, Clone)]
 struct ChatHistoryFtsConversationInfo {
     id: String,

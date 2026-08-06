@@ -97,7 +97,7 @@
 能力实现在 `crates/backend`：`commands/`（automation / config / history /
 integration / runtime / workspace）、`services/`（automation / memory / skills /
 tunnel / workspace_watch / provider_models / provider_usage / system_proxy /
-power_activity / chat_run_ledger）、`runtime/`（terminal / sftp / shell_runner /
+power_activity）、`runtime/`（terminal / sftp / shell_runner /
 managed_process / process / task_runner / project_path / platform）。
 
 **`backend` 的 `Cargo.toml` 禁止依赖 tauri**（决策 2）。这是编译期防线：

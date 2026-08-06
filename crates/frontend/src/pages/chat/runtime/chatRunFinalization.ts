@@ -34,50 +34,31 @@ export async function settleChatRunFinalization(
 
 export async function trackTerminalHistoryPersist(
   persist: () => Promise<boolean>,
-  markFailed: () => void,
+  markFailed?: () => void,
 ): Promise<boolean> {
   try {
     const persisted = await persist();
     if (!persisted) {
-      markFailed();
+      markFailed?.();
     }
     return persisted;
   } catch (error) {
-    markFailed();
+    markFailed?.();
     throw error;
   }
 }
 
 /**
- * Ordered chat-run finalization: history persistence must land before the
- * gateway stream close / terminal runtime snapshot become observable remotely
- * (26f2561 — "done" is only sent after persist), otherwise a WebUI client can
- * hydrate a truncated conversation.
+ * Ordered chat-run finalization: the run only counts as finished after its
+ * history persistence has landed, so the next queued turn never starts on a
+ * truncated conversation.
  */
 export async function finalizeChatRunInOrder(params: {
   waitForPersistBarrier: () => Promise<unknown>;
-  closeBridge: () => Promise<unknown>;
-  finishRuntimeRun: () => Promise<unknown>;
 }): Promise<void> {
   try {
     await params.waitForPersistBarrier();
   } catch (error) {
     console.warn("chat run persist barrier failed", error);
-  }
-  let finalizationError: unknown = null;
-  try {
-    await params.closeBridge();
-  } catch (error) {
-    finalizationError = error;
-    console.warn("chat run delta flush failed", error);
-  }
-  try {
-    await params.finishRuntimeRun();
-  } catch (error) {
-    finalizationError ??= error;
-    console.warn("chat run terminal checkpoint failed", error);
-  }
-  if (finalizationError) {
-    throw finalizationError;
   }
 }

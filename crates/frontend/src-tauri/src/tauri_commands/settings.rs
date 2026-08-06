@@ -66,9 +66,21 @@ pub async fn settings_save_agents(payload: Value) -> Result<(), String> {
     backend::commands::settings::settings_save_agents(payload).await
 }
 
-#[tauri::command]
-pub async fn settings_save_ssh(payload: Value) -> Result<(), String> {
-    backend::commands::settings::settings_save_ssh(payload).await
+// 前端传 snake_case key（provider_type/base_url/...），rename_all 与之对齐。
+#[tauri::command(rename_all = "snake_case")]
+pub async fn provider_models_fetch(
+    provider_type: String,
+    base_url: String,
+    api_key: String,
+    use_system_proxy: bool,
+) -> Result<Value, String> {
+    backend::commands::settings::provider_models_fetch(
+        provider_type,
+        base_url,
+        api_key,
+        use_system_proxy,
+    )
+    .await
 }
 
 #[tauri::command]

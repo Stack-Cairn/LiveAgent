@@ -1222,7 +1222,7 @@ fn resolve_pick_folder_initial_dir(initial_workdir: Option<String>) -> Option<Pa
 
 /// Mirror of the fs command layer's `display_path`: strip the Windows `\\?\`
 /// verbatim prefix and use forward slashes so the returned path matches the
-/// shape `fs_roots`/`fs_list_dirs` hand to the WebUI picker (a mismatched
+/// shape `fs_roots` hands to the WebUI picker (a mismatched
 /// shape shows up as a duplicate tree node after the parent refresh).
 fn project_folder_display_path(path: &Path) -> String {
     let normalized = path.to_string_lossy().replace('\\', "/");

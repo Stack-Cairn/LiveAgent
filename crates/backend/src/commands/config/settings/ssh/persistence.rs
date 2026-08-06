@@ -105,6 +105,9 @@ fn save_ssh_rows(conn: &Connection, payload: Value) -> Result<(), String> {
     Ok(())
 }
 
+// settings_save_ssh 命令已删（前端走 settings_apply_ssh_patch），
+// 现在只剩测试用它整份写入种子数据。
+#[cfg(test)]
 fn save_ssh(conn: &mut Connection, payload: Value) -> Result<(), String> {
     let tx = conn
         .transaction()

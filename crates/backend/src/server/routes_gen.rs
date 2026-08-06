@@ -368,26 +368,6 @@ mod chat_history_replace_from_message {
     }
 }
 
-mod chat_history_search {
-    use super::*;
-    use crate::commands::chat_history::*;
-    use crate::commands::{history_db, subagent_store};
-    use crate::events::EventBus;
-    use crate::services::memory::{MemoryHistorySearchMatch, MemorySearchArgs};
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct ChatHistorySearchRouteArgs {
-        args: ChatHistorySearchArgs,
-    }
-
-    pub async fn handle(
-    Json(args): Json<ChatHistorySearchRouteArgs>,
-    ) -> Response {
-        respond(crate::commands::chat_history::chat_history_search(args.args).await)
-    }
-}
-
 mod chat_history_set_model {
     use super::*;
     use crate::commands::chat_history::*;
@@ -705,25 +685,6 @@ mod fs_list {
     Json(args): Json<FsListRouteArgs>,
     ) -> Response {
         respond(crate::commands::fs::fs_list(args.workdir, args.path, args.depth, args.offset, args.max_results, args.show_hidden).await)
-    }
-}
-
-mod fs_list_dirs {
-    use super::*;
-    use crate::commands::fs::*;
-    use crate::runtime::platform::expand_tilde_path;
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "snake_case")]
-    pub struct FsListDirsRouteArgs {
-        path: String,
-        max_results: Option<usize>,
-    }
-
-    pub async fn handle(
-    Json(args): Json<FsListDirsRouteArgs>,
-    ) -> Response {
-        respond(crate::commands::fs::fs_list_dirs(args.path, args.max_results).await)
     }
 }
 
@@ -2663,6 +2624,29 @@ mod memory_write {
     }
 }
 
+mod provider_models_fetch {
+    use super::*;
+    use crate::commands::settings::*;
+    use crate::events::EventBus;
+    use crate::runtime::project_path::project_path_key as normalize_project_path_key;
+    use crate::services::automation::AutomationScheduler;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub struct ProviderModelsFetchRouteArgs {
+        provider_type: String,
+        base_url: String,
+        api_key: String,
+        use_system_proxy: bool,
+    }
+
+    pub async fn handle(
+    Json(args): Json<ProviderModelsFetchRouteArgs>,
+    ) -> Response {
+        respond(crate::commands::settings::provider_models_fetch(args.provider_type, args.base_url, args.api_key, args.use_system_proxy).await)
+    }
+}
+
 mod runtime_cancel {
     use super::*;
     use crate::commands::shell::*;
@@ -2877,26 +2861,6 @@ mod settings_save_remote {
     Json(args): Json<SettingsSaveRemoteRouteArgs>,
     ) -> Response {
         respond(crate::commands::settings::settings_save_remote(args.payload, &state.events).await)
-    }
-}
-
-mod settings_save_ssh {
-    use super::*;
-    use crate::commands::settings::*;
-    use crate::events::EventBus;
-    use crate::runtime::project_path::project_path_key as normalize_project_path_key;
-    use crate::services::automation::AutomationScheduler;
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    pub struct SettingsSaveSshRouteArgs {
-        payload: Value,
-    }
-
-    pub async fn handle(
-    Json(args): Json<SettingsSaveSshRouteArgs>,
-    ) -> Response {
-        respond(crate::commands::settings::settings_save_ssh(args.payload).await)
     }
 }
 
@@ -4164,7 +4128,6 @@ pub fn gen_router() -> Router<AppState> {
         .route("/chat_history_list", post(chat_history_list::handle))
         .route("/chat_history_rename", post(chat_history_rename::handle))
         .route("/chat_history_replace_from_message", post(chat_history_replace_from_message::handle))
-        .route("/chat_history_search", post(chat_history_search::handle))
         .route("/chat_history_set_model", post(chat_history_set_model::handle))
         .route("/chat_history_set_pinned", post(chat_history_set_pinned::handle))
         .route("/chat_history_share_get", post(chat_history_share_get::handle))
@@ -4180,7 +4143,6 @@ pub fn gen_router() -> Router<AppState> {
         .route("/fs_glob", post(fs_glob::handle))
         .route("/fs_grep", post(fs_grep::handle))
         .route("/fs_list", post(fs_list::handle))
-        .route("/fs_list_dirs", post(fs_list_dirs::handle))
         .route("/fs_mention_list", post(fs_mention_list::handle))
         .route("/fs_path_status", post(fs_path_status::handle))
         .route("/fs_read_editable_text", post(fs_read_editable_text::handle))
@@ -4261,6 +4223,7 @@ pub fn gen_router() -> Router<AppState> {
         .route("/memory_update", post(memory_update::handle))
         .route("/memory_wipe_all", post(memory_wipe_all::handle))
         .route("/memory_write", post(memory_write::handle))
+        .route("/provider_models_fetch", post(provider_models_fetch::handle))
         .route("/runtime_cancel", post(runtime_cancel::handle))
         .route("/settings_apply_ssh_patch", post(settings_apply_ssh_patch::handle))
         .route("/settings_list_ccswitch_providers", post(settings_list_ccswitch_providers::handle))
@@ -4273,7 +4236,6 @@ pub fn gen_router() -> Router<AppState> {
         .route("/settings_save_memory", post(settings_save_memory::handle))
         .route("/settings_save_providers", post(settings_save_providers::handle))
         .route("/settings_save_remote", post(settings_save_remote::handle))
-        .route("/settings_save_ssh", post(settings_save_ssh::handle))
         .route("/settings_save_system", post(settings_save_system::handle))
         .route("/sftp_cancel_transfer", post(sftp_cancel_transfer::handle))
         .route("/sftp_delete", post(sftp_delete::handle))
@@ -4349,7 +4311,6 @@ pub const ROUTED_COMMANDS: &[&str] = &[
     "chat_history_list",
     "chat_history_rename",
     "chat_history_replace_from_message",
-    "chat_history_search",
     "chat_history_set_model",
     "chat_history_set_pinned",
     "chat_history_share_get",
@@ -4365,7 +4326,6 @@ pub const ROUTED_COMMANDS: &[&str] = &[
     "fs_glob",
     "fs_grep",
     "fs_list",
-    "fs_list_dirs",
     "fs_mention_list",
     "fs_path_status",
     "fs_read_editable_text",
@@ -4446,6 +4406,7 @@ pub const ROUTED_COMMANDS: &[&str] = &[
     "memory_update",
     "memory_wipe_all",
     "memory_write",
+    "provider_models_fetch",
     "runtime_cancel",
     "settings_apply_ssh_patch",
     "settings_list_ccswitch_providers",
@@ -4458,7 +4419,6 @@ pub const ROUTED_COMMANDS: &[&str] = &[
     "settings_save_memory",
     "settings_save_providers",
     "settings_save_remote",
-    "settings_save_ssh",
     "settings_save_system",
     "sftp_cancel_transfer",
     "sftp_delete",

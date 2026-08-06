@@ -1,3 +1,5 @@
+chat_history_search
+fs_list_dirs
 gateway_chat_cancel_request
 gateway_chat_claim_next
 gateway_chat_complete
@@ -19,3 +21,4 @@ gateway_publish_settings_sync
 gateway_send_chat_ingress_batch
 gateway_status
 proxy_get_server_info
+settings_save_ssh

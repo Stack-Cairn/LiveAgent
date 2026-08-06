@@ -14,7 +14,6 @@ chat_history_get_window
 chat_history_list
 chat_history_rename
 chat_history_replace_from_message
-chat_history_search
 chat_history_set_model
 chat_history_set_pinned
 chat_history_share_get
@@ -30,7 +29,6 @@ fs_edit_text
 fs_glob
 fs_grep
 fs_list
-fs_list_dirs
 fs_mention_list
 fs_path_status
 fs_read_editable_text
@@ -111,6 +109,7 @@ memory_today_local_date
 memory_update
 memory_wipe_all
 memory_write
+provider_models_fetch
 provider_usage_query
 provider_usage_test
 runtime_cancel
@@ -125,7 +124,6 @@ settings_save_mcp
 settings_save_memory
 settings_save_providers
 settings_save_remote
-settings_save_ssh
 settings_save_system
 sftp_cancel_transfer
 sftp_delete
