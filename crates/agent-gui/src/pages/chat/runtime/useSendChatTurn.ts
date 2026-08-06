@@ -28,7 +28,7 @@ import {
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
 import {
   applyGoalCommand,
-  formatGoalSummary,
+  formatGoalCommandFeedback,
   GOAL_COMMAND_USAGE,
   parseGoalCommand,
   shouldStartDefaultGoal,
@@ -658,18 +658,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       try {
         const commandResult = applyGoalCommand(baseConversationState.meta.goal, goalCommand);
         const nextState = updateConversationGoal(baseConversationState, commandResult.goal);
+        const commandFeedback = formatGoalCommandFeedback(commandResult);
         if (commandResult.action === "set" || commandResult.action === "clear") {
           getOrCreateTodoToolState(conversationId).clear();
         }
         updateConversationRuntimeEntry(conversationId, (prev) => ({
           ...prev,
           state: nextState,
-          errorMessage:
-            commandResult.action === "usage"
-              ? GOAL_COMMAND_USAGE
-              : commandResult.action === "show"
-                ? formatGoalSummary(commandResult.goal)
-                : null,
+          errorMessage: commandFeedback,
         }));
         const persisted = await persistConversation({
           conversationId,
@@ -684,6 +680,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           titlePromise: null,
         });
         if (!persisted) return false;
+        if (commandFeedback) {
+          updateConversationRuntimeEntry(conversationId, (prev) => ({
+            ...prev,
+            errorMessage: commandFeedback,
+          }));
+        }
         if (shouldConsumeGoalCommandComposer) {
           clearCachedComposerDraft(conversationId);
           if (isConversationVisible()) {

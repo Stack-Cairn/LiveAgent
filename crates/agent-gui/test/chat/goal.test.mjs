@@ -274,6 +274,33 @@ test("goal prompt treats the objective as data and requires an explicit terminal
   assert.match(prompt, /runtime may continue automatically/i);
 });
 
+test("inactive goals do not steer later ordinary prompts", () => {
+  const current = goal.createConversationGoal("old objective", undefined, 10);
+
+  for (const status of ["paused", "blocked", "usageLimited", "budgetLimited", "complete"]) {
+    assert.equal(goal.buildGoalSystemPrompt({ ...current, status }), "");
+  }
+});
+
+test("goal command feedback and progress detection distinguish informational output and failures", () => {
+  assert.equal(
+    goal.formatGoalCommandFeedback({ goal: null, action: "show", shouldStart: false }),
+    "No goal is currently set.",
+  );
+  assert.equal(
+    goal.formatGoalCommandFeedback({ goal: null, action: "usage", shouldStart: false }),
+    goal.GOAL_COMMAND_USAGE,
+  );
+  assert.equal(
+    goal.hasSuccessfulGoalToolProgress([{ role: "toolResult", isError: true }]),
+    false,
+  );
+  assert.equal(
+    goal.hasSuccessfulGoalToolProgress([{ role: "toolResult", isError: false }]),
+    true,
+  );
+});
+
 test("goal tools read, create, and update the persisted goal state", async () => {
   const changes = [];
   const state = goal.createGoalState({ onChange: (next) => changes.push(next) });

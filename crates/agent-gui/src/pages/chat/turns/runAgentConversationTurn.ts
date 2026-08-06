@@ -33,7 +33,11 @@ import type {
   GatewayBridgeEventController,
 } from "../../../lib/chat/conversation/run";
 import type { TurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
-import { createGoalState, isActiveConversationGoal } from "../../../lib/chat/goal";
+import {
+  createGoalState,
+  hasSuccessfulGoalToolProgress,
+  isActiveConversationGoal,
+} from "../../../lib/chat/goal";
 import { memoryExtraction } from "../../../lib/chat/memory/extractionController";
 import type {
   MemoryExtractionModelConfig,
@@ -1200,9 +1204,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
 
     const goal = completedState.meta.goal;
     const assistantText = assistantMessageToText(iterationResult.assistant).trim();
-    const madeToolProgress = iterationResult.emittedMessages.some(
-      (message) => message.role === "toolResult",
-    );
+    const madeToolProgress = hasSuccessfulGoalToolProgress(iterationResult.emittedMessages);
     noToolProgressCount = madeToolProgress ? 0 : noToolProgressCount + 1;
     if (assistantText && assistantText === previousGoalAssistantText && !madeToolProgress) {
       repeatedGoalAssistantCount += 1;

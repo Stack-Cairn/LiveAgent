@@ -390,12 +390,24 @@ export function formatGoalSummary(goal: ConversationGoal | null | undefined): st
   return `Goal ${goalStatusLabel(goal.status)}. Objective: ${goal.objective}. Tokens: ${formatGoalTokens(goal.tokensUsed)}${budget}. Time: ${formatGoalDuration(getGoalElapsedSeconds(goal))}.`;
 }
 
+export function formatGoalCommandFeedback(result: GoalCommandResult): string | null {
+  if (result.action === "usage") return GOAL_COMMAND_USAGE;
+  if (result.action === "show") return formatGoalSummary(result.goal);
+  return null;
+}
+
+export function hasSuccessfulGoalToolProgress(
+  messages: readonly { role?: unknown; isError?: unknown }[],
+): boolean {
+  return messages.some((message) => message.role === "toolResult" && message.isError !== true);
+}
+
 function escapeXml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 export function buildGoalSystemPrompt(goal: ConversationGoal | null | undefined): string {
-  if (!goal) return "";
+  if (!goal || goal.status !== "active") return "";
   const budget = goal.tokenBudget
     ? `Tokens used: ${goal.tokensUsed}; token budget: ${goal.tokenBudget}; remaining: ${Math.max(0, goal.tokenBudget - goal.tokensUsed)}.`
     : `Tokens used: ${goal.tokensUsed}; token budget: unbounded.`;
