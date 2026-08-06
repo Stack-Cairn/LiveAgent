@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+
 
 // 反漂移锁：UI 档位列表（resolveModelThinking）与请求期钳制
 // （pi-ai getSupportedThinkingLevels 读 createModelFromConfig 产物）必须逐档一致，
@@ -10,9 +20,9 @@ const realPiAi = await import(
 );
 
 const loader = createTsModuleLoader();
-const { resolveModelThinking } = loader.loadModule("src/lib/models/modelThinking.ts");
-const catalog = loader.loadModule("src/lib/models/modelCatalog.ts");
-const { createModelFromConfig } = loader.loadModule("src/lib/models/modelFactory.ts");
+const { resolveModelThinking } = loader.loadModule(coreSrc("models/modelThinking.ts"));
+const catalog = loader.loadModule(coreSrc("models/modelCatalog.ts"));
+const { createModelFromConfig } = loader.loadModule(coreSrc("models/modelFactory.ts"));
 
 const NATIVE = [
   ["claude_code", "anthropic", "https://api.anthropic.com"],

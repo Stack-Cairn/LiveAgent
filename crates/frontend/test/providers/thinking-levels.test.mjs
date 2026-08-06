@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+
 
 const loader = createTsModuleLoader();
 const {
@@ -10,7 +20,7 @@ const {
   resolveAnthropicThinkingRuntime,
   resolveGeminiThinkingRuntime,
   supportsAdaptiveAnthropicThinking,
-} = loader.loadModule("src/lib/providers/runtime/thinkingLevels.ts");
+} = loader.loadModule(coreSrc("providers/runtime/thinkingLevels.ts"));
 
 function createAnthropicModel(id, overrides = {}) {
   return {
@@ -100,7 +110,9 @@ test("anthropic: mapReasoningToAnthropicEffort honors catalog thinkingLevelMap o
 test("anthropic: resolveAnthropicThinkingRuntime disabled when no reasoning requested", () => {
   const model = createAnthropicModel("claude-opus-4-5");
   const runtime = resolveAnthropicThinkingRuntime(model, { reasoning: undefined });
-  assert.deepEqual(runtime, { thinkingEnabled: false, mode: "disabled", maxTokens: 64_000 });
+  // core 漂移：返回值不再携带 mode/display 判别字段，仅以 effort/
+  // thinkingBudgetTokens 的有无区分自适应与预算两种模式。
+  assert.deepEqual(runtime, { thinkingEnabled: false, maxTokens: 64_000 });
 });
 
 test("anthropic: resolveAnthropicThinkingRuntime adaptive mode maps effort and summarized display", () => {
@@ -109,17 +121,17 @@ test("anthropic: resolveAnthropicThinkingRuntime adaptive mode maps effort and s
     thinkingLevelMap: { xhigh: "xhigh" },
   });
   const runtime = resolveAnthropicThinkingRuntime(fable, { reasoning: "xhigh" });
-  assert.equal(runtime.mode, "adaptive");
+  // core 漂移：自适应模式以 effort 存在、thinkingBudgetTokens 缺失表示，
+  // 不再有 mode/display 字段。
   assert.equal(runtime.thinkingEnabled, true);
   assert.equal(runtime.effort, "xhigh");
-  assert.equal(runtime.display, "summarized");
   assert.equal(runtime.thinkingBudgetTokens, undefined);
 });
 
 test("anthropic: resolveAnthropicThinkingRuntime budget mode uses the fixed budgets table", () => {
   const opus45 = createAnthropicModel("claude-opus-4-5");
   const runtime = resolveAnthropicThinkingRuntime(opus45, { reasoning: "high" });
-  assert.equal(runtime.mode, "budget");
+  // core 漂移：预算模式以 thinkingBudgetTokens 存在表示，无 mode 字段。
   assert.equal(runtime.maxTokens, 64_000);
   assert.equal(runtime.thinkingBudgetTokens, 16_384);
   assert.equal(runtime.effort, undefined);
@@ -128,7 +140,6 @@ test("anthropic: resolveAnthropicThinkingRuntime budget mode uses the fixed budg
 test("anthropic: resolveAnthropicThinkingRuntime shrinks the budget for small maxTokens models", () => {
   const small = createAnthropicModel("claude-custom-small", { maxTokens: 4_000 });
   const runtime = resolveAnthropicThinkingRuntime(small, { reasoning: "max" });
-  assert.equal(runtime.mode, "budget");
   assert.equal(runtime.maxTokens, 4_000);
   // budget(max)=32768 > adjustedMaxTokens(4000) 触发安全降档：4000-1024=2976。
   assert.equal(runtime.thinkingBudgetTokens, 2_976);

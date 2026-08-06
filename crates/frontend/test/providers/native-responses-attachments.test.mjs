@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 
 function createLoader(invoke) {
   return createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": { invoke },
+      [backendClientPath]: { callBackend: invoke },
     },
   });
 }
@@ -20,7 +31,7 @@ test("OpenAI Responses native attachment adapter adds input_image and input_file
     return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
     {
@@ -82,7 +93,7 @@ test("OpenAI Chat Completions native attachment adapter adds image_url blocks", 
     return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
     {
@@ -136,7 +147,7 @@ test("OpenAI Responses native attachment adapter preserves Read fallback when na
     throw new Error("too large");
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
     {
@@ -170,7 +181,7 @@ test("OpenAI Responses native attachment adapter skips tool output turns", async
     return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const firstMessage = uploadedFiles.createUserMessageWithUploads("Use a tool first", []);
   const uploadMessage = uploadedFiles.createUserMessageWithUploads("Inspect the upload", [
@@ -225,7 +236,7 @@ test("Anthropic Messages native attachment adapter adds image and document block
     return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
     {
@@ -292,7 +303,7 @@ test("Anthropic Messages native attachment adapter sends text files as text docu
     return { mimeType: "text/plain", data: "SGVsbG8gQ2xhdWRl", sizeBytes: 12 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Summarize this", [
     {
@@ -331,7 +342,7 @@ test("Anthropic Messages native attachment adapter preserves Read fallback for u
     throw new Error("should not read unsupported archive");
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
     {
@@ -365,7 +376,7 @@ test("Anthropic Messages native attachment adapter skips tool result turns", asy
     return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const firstMessage = uploadedFiles.createUserMessageWithUploads("Use a tool first", []);
   const uploadMessage = uploadedFiles.createUserMessageWithUploads("Inspect the upload", [
@@ -422,7 +433,7 @@ test("Gemini native attachment adapter adds inlineData parts", async () => {
     return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
     {
@@ -490,7 +501,7 @@ test("Gemini native attachment adapter follows Gemini image MIME support", async
     return { mimeType: "image/gif", data: "Z2lm", sizeBytes: 3 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
     {
@@ -536,7 +547,7 @@ test("Gemini native attachment adapter preserves Read fallback for unsupported f
     throw new Error("should not read unsupported archive");
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
     {
@@ -574,7 +585,7 @@ test("Gemini native attachment adapter preserves Read fallback when inline data 
     };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
     {
@@ -609,7 +620,7 @@ test("Gemini native attachment adapter skips synthetic tool image turns", async 
     return { mimeType: "image/png", data: "dXNlci1pbWFnZQ==", sizeBytes: 10 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const firstMessage = uploadedFiles.createUserMessageWithUploads("First turn", []);
   const uploadMessage = uploadedFiles.createUserMessageWithUploads("Inspect the upload", [
@@ -667,7 +678,7 @@ test("Gemini native attachment adapter enforces cumulative inline request budget
     return { mimeType: "image/png", data: largeInlineData, sizeBytes: 8 * 1024 * 1024 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
     {
@@ -712,7 +723,7 @@ test("Gemini native attachment adapter enforces inline budget across user turns"
     return { mimeType: "image/png", data: largeInlineData, sizeBytes: 8 * 1024 * 1024 };
   });
   const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const nativeAttachments = loader.loadModule("src/lib/providers/nativeResponsesAttachments.ts");
+  const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const firstMessage = uploadedFiles.createUserMessageWithUploads("First", [
     {

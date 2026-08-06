@@ -12,6 +12,7 @@ import { runAssistantWithTools } from "../chat/runner/agentRunner";
 import type { ProviderRuntimeConfig } from "../providers/runtime/types";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
+import type { ToolStatus } from "../protocol/wireEvents";
 import { renderMessageBusSnapshot } from "./bus";
 import { toolErrorResult } from "./errors";
 import type { SubagentWorktreeIpc } from "./ipc/worktree";
@@ -66,7 +67,7 @@ export type SubagentRunEnvironment = {
     execute: ChildToolExecutor,
   ) => { tools: Tool[]; execute: ChildToolExecutor };
   enqueueWorktreeApply: <T>(run: () => Promise<T>) => Promise<T>;
-  onStatus?: (status: string | null) => void;
+  onStatus?: (status: ToolStatus | null) => void;
 };
 
 export type SubagentRunRequest = {
@@ -312,7 +313,11 @@ export async function executeSubagentRun(
 
   const settleWorktree = async (terminal: "completed" | "failed" | "cancelled") => {
     if (!worktree) return;
-    env.onStatus?.(`Inspecting worktree changes for ${identity.name}…`);
+    env.onStatus?.({
+      kind: "subagent_progress",
+      phase: "worktree_inspecting",
+      agent_name: identity.name,
+    });
     await fetchWorktreeStatus();
 
     const agentSucceeded = terminal === "completed";
@@ -325,7 +330,11 @@ export async function executeSubagentRun(
         candidateArtifacts = applyDecision.candidateArtifacts;
       }
       if (worktreeStatus?.changed && applyDecision?.shouldApply) {
-        env.onStatus?.(`Applying worktree changes from ${identity.name}…`);
+        env.onStatus?.({
+      kind: "subagent_progress",
+      phase: "worktree_applying",
+      agent_name: identity.name,
+    });
         try {
           const applyResult = await env.enqueueWorktreeApply(() =>
             env.worktree.apply({
@@ -373,7 +382,11 @@ export async function executeSubagentRun(
       : { shouldCleanup: false, reason: applySkippedReason ?? "agent_failed" };
     worktreeCleanupReason = cleanupDecision.reason;
     if (cleanupDecision.shouldCleanup) {
-      env.onStatus?.(`Cleaning up worktree for ${identity.name}…`);
+      env.onStatus?.({
+      kind: "subagent_progress",
+      phase: "worktree_cleanup",
+      agent_name: identity.name,
+    });
       try {
         const cleanupResult = await env.worktree.cleanup({
           worktreeRoot: worktree.worktreeRoot,
@@ -425,7 +438,11 @@ export async function executeSubagentRun(
           "worktree_unavailable: Agent mode=worktree is not available in this runtime.",
         );
       }
-      env.onStatus?.(`Creating isolated worktree for ${identity.name}…`);
+      env.onStatus?.({
+      kind: "subagent_progress",
+      phase: "worktree_creating",
+      agent_name: identity.name,
+    });
       worktree = await env.worktree.create({
         workdir: env.workdir,
         label: buildWorktreeLabel({

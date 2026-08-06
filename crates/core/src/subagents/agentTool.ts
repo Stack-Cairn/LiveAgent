@@ -19,7 +19,7 @@ import {
   type SubagentIssue,
   toolErrorResult,
 } from "./errors";
-import { type SubagentWorktreeIpc, tauriSubagentWorktreeIpc } from "./ipc/worktree";
+import { type SubagentWorktreeIpc, backendSubagentWorktreeIpc } from "./ipc/worktree";
 import { selectReadOnlyTools } from "./policy";
 import type { SubagentBatchDetails, SubagentReportDetails } from "./protocol";
 import {
@@ -207,7 +207,7 @@ export function createSubagentTools(params: {
   const store = params.store;
   const templates = params.templates;
   const messageBusEnabled = Boolean(store.conversationId);
-  const worktreeIpc = params.worktreeIpc ?? tauriSubagentWorktreeIpc;
+  const worktreeIpc = params.worktreeIpc ?? backendSubagentWorktreeIpc;
   const readonlyTools = selectReadOnlyTools({
     tools: params.baseTools,
     metadataByName: params.metadataByName,

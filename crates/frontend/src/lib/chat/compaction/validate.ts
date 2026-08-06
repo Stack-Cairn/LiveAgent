@@ -34,25 +34,6 @@ const POSIX_PATH_SIGNAL_RE =
 const WINDOWS_PATH_SIGNAL_RE =
   /(?:[A-Za-z]:\\[^\s"'`]+|\\\\[^\s"'`]+|(?:[A-Za-z0-9._-]+\\){1,}[A-Za-z0-9._-]+(?:\.[A-Za-z0-9._-]+)?)/g;
 
-function extractTagContent(text: string, tag: string): string | null {
-  const re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i");
-  const m = text.match(re);
-  return m ? m[1].trim() : null;
-}
-
-export function parseCompactionSummaryXml(raw: string): CompactionSummaryParsed {
-  const cleaned = raw
-    .replace(/^```[a-z]*\n?/i, "")
-    .replace(/\n?```$/i, "")
-    .trim();
-
-  const result = {} as CompactionSummaryParsed;
-  for (const tag of SUMMARY_TAGS) {
-    result[tag] = extractTagContent(cleaned, tag) ?? "";
-  }
-  return result;
-}
-
 function pushVerificationSignal(
   out: string[],
   seen: Set<string>,
@@ -131,6 +112,25 @@ function collectSummarySearchCorpus(parsed: CompactionSummaryParsed) {
     if (value) out.push(value.toLowerCase());
   }
   return out;
+}
+
+function extractTagContent(text: string, tag: string): string | null {
+  const re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i");
+  const m = text.match(re);
+  return m ? m[1].trim() : null;
+}
+
+export function parseCompactionSummaryXml(raw: string): CompactionSummaryParsed {
+  const cleaned = raw
+    .replace(/^```[a-z]*\n?/i, "")
+    .replace(/\n?```$/i, "")
+    .trim();
+
+  const result = {} as CompactionSummaryParsed;
+  for (const tag of SUMMARY_TAGS) {
+    result[tag] = extractTagContent(cleaned, tag) ?? "";
+  }
+  return result;
 }
 
 export function formatSummaryForContext(s: CompactionSummaryParsed): string {

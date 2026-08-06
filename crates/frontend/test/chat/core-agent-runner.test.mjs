@@ -4,10 +4,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const llmModulePath = path.join(rootDir, "src/lib/providers/llm.ts");
-const proxyModulePath = path.join(rootDir, "src/lib/providers/proxy.ts");
-const powerActivityModulePath = path.join(rootDir, "src/lib/system/powerActivity.ts");
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+
+// This suite drives the engine that actually ships: crates/core. The frontend
+// copy under src/lib is a leftover that battle 2 removes.
+const frontendRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const rootDir = path.resolve(frontendRootDir, "../core");
+const llmModulePath = path.join(rootDir, "src/providers/llm.ts");
+const proxyModulePath = path.join(rootDir, "src/providers/proxy.ts");
+const powerActivityModulePath = path.join(rootDir, "src/system/powerActivity.ts");
 
 const streamQueue = [];
 const streamSideEffects = [];
@@ -323,6 +329,7 @@ const llmMock = {
 };
 
 const loader = createTsModuleLoader({
+  rootDir,
   mocks: {
     [llmModulePath]: llmMock,
     [proxyModulePath]: {
@@ -338,8 +345,8 @@ const loader = createTsModuleLoader({
   },
 });
 
-const { runAssistantWithTools } = loader.loadModule("src/lib/chat/runner/agentRunner.ts");
-const { createSubagentScheduler } = loader.loadModule("src/lib/subagents/scheduler.ts");
+const { runAssistantWithTools } = loader.loadModule("src/chat/runner/agentRunner.ts");
+const { createSubagentScheduler } = loader.loadModule("src/subagents/scheduler.ts");
 
 function resetFakeStreams(...assistants) {
   streamQueue.length = 0;
@@ -606,7 +613,7 @@ test("runAssistantWithTools announces execution start before invoking the tool e
 });
 
 test("AskUserQuestion is pending before the next user-event task after execution start", async () => {
-  const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
+  const askTools = loader.loadModule("src/tools/askUserQuestionTools.ts");
   const bundle = askTools.createAskUserQuestionTools({
     conversationId: "conversation-runner",
     timeoutMs: 200,
@@ -798,7 +805,14 @@ test("runAssistantWithTools runs consecutive Agent tool calls in parallel", asyn
     executedToolCalls.map((call) => call.id).sort(),
     ["call-agent-a", "call-agent-b"],
   );
-  assert.ok(statuses.some((status) => /并行执行 2 个 Agent 调用/.test(status)));
+  assert.ok(
+    statuses.some(
+      (status) =>
+        status.kind === "parallel_tools_running" &&
+        status.tool_name === "Agent" &&
+        status.count === 2,
+    ),
+  );
   assert.deepEqual(
     result.emittedMessages.map((message) => message.role),
     ["assistant", "toolResult", "toolResult", "assistant"],
@@ -854,7 +868,14 @@ test("runAssistantWithTools canonicalizes lowercase Agent calls before parallel 
     executedToolCalls.map((call) => call.name),
     ["Agent", "Agent"],
   );
-  assert.ok(statuses.some((status) => /并行执行 2 个 Agent 调用/.test(status)));
+  assert.ok(
+    statuses.some(
+      (status) =>
+        status.kind === "parallel_tools_running" &&
+        status.tool_name === "Agent" &&
+        status.count === 2,
+    ),
+  );
   assert.deepEqual(
     result.emittedMessages[0].content.map((block) => block.name),
     ["Agent", "Agent"],
@@ -1005,7 +1026,10 @@ test("runAssistantWithTools keeps consecutive Bash calls sequential", async () =
     executedToolCalls.map((call) => call.id),
     ["call-bash-a", "call-bash-b", "call-bash-c"],
   );
-  assert.equal(statuses.some((status) => /并行执行 3 个 Bash 命令/.test(status)), false);
+  assert.equal(
+    statuses.some((status) => status.kind === "parallel_tools_running"),
+    false,
+  );
 });
 
 test("runAssistantWithTools applies turn context overrides without duplicating compacted messages", async () => {
@@ -2334,4 +2358,123 @@ test("runAssistantWithTools ignores malformed toolUse turns that have no tool re
 
   assert.equal(beforeNextTurnCalls, 0);
   assert.equal(result.assistant.stopReason, "toolUse");
+});
+
+test("resolveToolGate blocks a recovered seed tool call before it executes", async () => {
+  // Regression: recovered text-shaped tool calls used to be executed by a
+  // hand-rolled loop that bypassed the approval gate entirely.
+  resetFakeStreams(
+    createTextAssistant(`Before
+<seed:tool_call>
+  <function name="Read">
+    <parameter name="path">/etc/passwd</parameter>
+  </function>
+</seed:tool_call>
+After`),
+    createTextAssistant("after refusal"),
+  );
+  const gatedToolCalls = [];
+  const { params, executedToolCalls } = createBaseParams({
+    resolveToolGate: async (toolCall) => {
+      gatedToolCalls.push(toolCall);
+      return { allow: false, reason: "Denied by policy" };
+    },
+  });
+
+  const result = await runAssistantWithTools(params);
+
+  assert.deepEqual(gatedToolCalls.map((call) => call.name), ["Read"]);
+  assert.deepEqual(gatedToolCalls[0].arguments, { path: "/etc/passwd" });
+  assert.deepEqual(executedToolCalls, []);
+
+  const toolResults = result.messages.filter((message) => message.role === "toolResult");
+  assert.equal(toolResults.length, 1);
+  assert.equal(toolResults[0].isError, true);
+  assert.match(toolResults[0].content[0].text, /Denied by policy/);
+});
+
+test("resolveToolGate allows a recovered seed tool call through to execution", async () => {
+  resetFakeStreams(
+    createTextAssistant(`Before
+<seed:tool_call>
+  <function name="Read">
+    <parameter name="path">src/App.tsx</parameter>
+  </function>
+</seed:tool_call>
+After`),
+    createTextAssistant("after recovered tool"),
+  );
+  const gatedToolCalls = [];
+  const { params, executedToolCalls } = createBaseParams({
+    resolveToolGate: async (toolCall) => {
+      gatedToolCalls.push(toolCall);
+      return { allow: true };
+    },
+  });
+
+  await runAssistantWithTools(params);
+
+  assert.deepEqual(gatedToolCalls.map((call) => call.name), ["Read"]);
+  assert.deepEqual(executedToolCalls.map((call) => call.name), ["Read"]);
+  assert.deepEqual(executedToolCalls[0].arguments, { path: "src/App.tsx" });
+});
+
+test("resolveToolGate blocks a structured tool call before it executes", async () => {
+  const toolCall = createToolCall("call-1", "Read", { path: "/etc/shadow" });
+  resetFakeStreams(createToolUseAssistant(toolCall), createTextAssistant("after refusal"));
+  const { params, executedToolCalls } = createBaseParams({
+    resolveToolGate: async () => ({ allow: false, reason: "Denied by policy" }),
+  });
+
+  const result = await runAssistantWithTools(params);
+
+  assert.deepEqual(executedToolCalls, []);
+  const toolResults = result.messages.filter((message) => message.role === "toolResult");
+  assert.equal(toolResults.length, 1);
+  assert.match(toolResults[0].content[0].text, /Denied by policy/);
+});
+
+test("a truncated recovered tool call is refused without consulting the gate", async () => {
+  // The truncation guard runs before the gate, so an unusable call never
+  // reaches an interactive approval prompt.
+  const toolCall = createToolCall("call-1", "Read", { path: "src/App.tsx" });
+  resetFakeStreams(
+    createQueuedStream(
+      [
+        { type: "start", partial: { ...createToolUseAssistant(toolCall), content: [] } },
+        {
+          type: "toolcall_start",
+          contentIndex: 0,
+          partial: { ...createToolUseAssistant(toolCall), content: [toolCall] },
+        },
+        {
+          type: "toolcall_delta",
+          contentIndex: 0,
+          delta: '{"path": "src/App',
+          partial: {
+            ...createToolUseAssistant(toolCall),
+            content: [createToolCall("call-1", "Read", { path: "src/App" })],
+          },
+        },
+        { type: "done", reason: "toolUse", message: createToolUseAssistant(toolCall) },
+      ],
+      createToolUseAssistant(toolCall),
+    ),
+    createTextAssistant("after refusal"),
+  );
+  const gatedToolCalls = [];
+  const { params, executedToolCalls } = createBaseParams({
+    resolveToolGate: async (call) => {
+      gatedToolCalls.push(call);
+      return { allow: true };
+    },
+  });
+
+  const result = await runAssistantWithTools(params);
+
+  assert.deepEqual(gatedToolCalls, []);
+  assert.deepEqual(executedToolCalls, []);
+  const toolResults = result.messages.filter((message) => message.role === "toolResult");
+  assert.equal(toolResults.length, 1);
+  assert.match(toolResults[0].content[0].text, /truncated in transit/);
 });

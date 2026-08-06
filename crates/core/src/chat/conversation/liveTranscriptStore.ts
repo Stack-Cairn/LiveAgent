@@ -1,3 +1,5 @@
+import type { ToolStatus } from "../../protocol/wireEvents";
+import { toolStatusKey } from "../../protocol/wireEvents";
 import type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
 import type { LiveRound } from "../messages/uiMessages";
 
@@ -5,7 +7,7 @@ export type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
 
 export type LiveTranscriptState = {
   draftAssistantText: string;
-  toolStatus: string | null;
+  toolStatus: ToolStatus | null;
   liveRounds: LiveRound[];
   retryAttempts: RetryAttemptRecord[];
   isSettled: boolean;
@@ -17,7 +19,7 @@ export type LiveTranscriptStore = {
   reset: () => void;
   settle: () => void;
   appendDraftAssistantText: (delta: string) => void;
-  setToolStatus: (toolStatus: string | null) => void;
+  setToolStatus: (toolStatus: ToolStatus | null) => void;
   setRetryAttempts: (retryAttempts: RetryAttemptRecord[]) => void;
   updateLiveRounds: (updater: (prev: LiveRound[]) => LiveRound[]) => void;
 };
@@ -93,7 +95,8 @@ export function createLiveTranscriptStore(
       emitChange();
     },
     setToolStatus: (toolStatus) => {
-      if (state.toolStatus === toolStatus) return;
+      // tagged union 是对象，引用比较会把每次同状态都当成变化。
+      if (toolStatusKey(state.toolStatus) === toolStatusKey(toolStatus)) return;
       state = {
         ...state,
         toolStatus,

@@ -5,10 +5,19 @@ import { fileURLToPath } from "node:url";
 import { validateToolArguments } from "@earendil-works/pi-ai";
 import * as typebox from "typebox";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 import { createFakeStoreIpc } from "../subagents/harness.mjs";
 
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const agentRunnerModulePath = path.join(rootDir, "src/lib/chat/runner/agentRunner.ts");
+const agentRunnerModulePath = coreSrc("chat/runner/agentRunner.ts");
 
 function createAssistant(text) {
   return {
@@ -32,12 +41,12 @@ function createTodoToolCall(argumentsValue, id = "call-todo") {
 
 function loadTodoTools() {
   const loader = createTsModuleLoader();
-  return loader.loadModule("src/lib/tools/todoTools.ts");
+  return loader.loadModule(coreSrc("tools/todoTools.ts"));
 }
 
 test("TodoWrite schema accepts a well-formed todos array", () => {
   const loader = createTsModuleLoader({ mocks: { typebox } });
-  const { createTodoTools, createTodoToolState } = loader.loadModule("src/lib/tools/todoTools.ts");
+  const { createTodoTools, createTodoToolState } = loader.loadModule(coreSrc("tools/todoTools.ts"));
   const bundle = createTodoTools({ state: createTodoToolState() });
   const tool = bundle.tools.find((candidate) => candidate.name === "TodoWrite");
   assert.ok(tool);
@@ -55,7 +64,7 @@ test("TodoWrite schema accepts a well-formed todos array", () => {
 
 test("TodoWrite schema rejects a todo item missing content", () => {
   const loader = createTsModuleLoader({ mocks: { typebox } });
-  const { createTodoTools, createTodoToolState } = loader.loadModule("src/lib/tools/todoTools.ts");
+  const { createTodoTools, createTodoToolState } = loader.loadModule(coreSrc("tools/todoTools.ts"));
   const bundle = createTodoTools({ state: createTodoToolState() });
   const tool = bundle.tools.find((candidate) => candidate.name === "TodoWrite");
 
@@ -71,7 +80,7 @@ test("TodoWrite schema rejects a todo item missing content", () => {
 
 test("TodoWrite schema rejects a todo item missing status", () => {
   const loader = createTsModuleLoader({ mocks: { typebox } });
-  const { createTodoTools, createTodoToolState } = loader.loadModule("src/lib/tools/todoTools.ts");
+  const { createTodoTools, createTodoToolState } = loader.loadModule(coreSrc("tools/todoTools.ts"));
   const bundle = createTodoTools({ state: createTodoToolState() });
   const tool = bundle.tools.find((candidate) => candidate.name === "TodoWrite");
 
@@ -87,7 +96,7 @@ test("TodoWrite schema rejects a todo item missing status", () => {
 
 test("TodoWrite schema rejects a todo item missing activeForm", () => {
   const loader = createTsModuleLoader({ mocks: { typebox } });
-  const { createTodoTools, createTodoToolState } = loader.loadModule("src/lib/tools/todoTools.ts");
+  const { createTodoTools, createTodoToolState } = loader.loadModule(coreSrc("tools/todoTools.ts"));
   const bundle = createTodoTools({ state: createTodoToolState() });
   const tool = bundle.tools.find((candidate) => candidate.name === "TodoWrite");
 
@@ -103,7 +112,7 @@ test("TodoWrite schema rejects a todo item missing activeForm", () => {
 
 test("TodoWrite schema rejects an invalid status literal", () => {
   const loader = createTsModuleLoader({ mocks: { typebox } });
-  const { createTodoTools, createTodoToolState } = loader.loadModule("src/lib/tools/todoTools.ts");
+  const { createTodoTools, createTodoToolState } = loader.loadModule(coreSrc("tools/todoTools.ts"));
   const bundle = createTodoTools({ state: createTodoToolState() });
   const tool = bundle.tools.find((candidate) => candidate.name === "TodoWrite");
 
@@ -119,7 +128,7 @@ test("TodoWrite schema rejects an invalid status literal", () => {
 
 test("TodoWrite schema rejects a non-array todos value", () => {
   const loader = createTsModuleLoader({ mocks: { typebox } });
-  const { createTodoTools, createTodoToolState } = loader.loadModule("src/lib/tools/todoTools.ts");
+  const { createTodoTools, createTodoToolState } = loader.loadModule(coreSrc("tools/todoTools.ts"));
   const bundle = createTodoTools({ state: createTodoToolState() });
   const tool = bundle.tools.find((candidate) => candidate.name === "TodoWrite");
 
@@ -249,8 +258,8 @@ function createRegistryHarness() {
           return "/Users/test";
         },
       },
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "mcp_list_tools") {
             return [];
           }
@@ -293,9 +302,9 @@ async function buildRegistry(
   { withSubagentRuntime, runtimeScope = "chat", withTodoState = true, storeIpc } = {},
 ) {
   const { loader } = harness;
-  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
-  const { createTodoToolState } = loader.loadModule("src/lib/tools/todoTools.ts");
+  const { buildBuiltinToolRegistry } = loader.loadModule(coreSrc("tools/builtinRegistry.ts"));
+  const { createFileToolState } = loader.loadModule(coreSrc("tools/fileToolState.ts"));
+  const { createTodoToolState } = loader.loadModule(coreSrc("tools/todoTools.ts"));
   const mcpSettingsHolder = { value: { selected: [], servers: [DOCS_SERVER] } };
   const baseParams = {
     workdir: "/tmp/liveagent-todo-registry-test",
@@ -310,8 +319,8 @@ async function buildRegistry(
     return { registry: await buildBuiltinToolRegistry(baseParams), mcpSettingsHolder };
   }
 
-  const storeModule = loader.loadModule("src/lib/subagents/store.ts");
-  const schedulerModule = loader.loadModule("src/lib/subagents/scheduler.ts");
+  const storeModule = loader.loadModule(coreSrc("subagents/store.ts"));
+  const schedulerModule = loader.loadModule(coreSrc("subagents/scheduler.ts"));
   const ipc = storeIpc ?? createFakeStoreIpc();
   const store = storeModule.createSubagentConversationStore({
     conversationId: "conversation-1",
@@ -319,8 +328,9 @@ async function buildRegistry(
   });
   const registry = await buildBuiltinToolRegistry({
     ...baseParams,
-    subagentRuntime: {
-      providerId: "codex",
+    // crates/core renamed this from `subagentRuntime` and reads providerId from
+    // the top-level params instead of repeating it here.
+    subagents: {
       model: "gpt-5",
       runtime: { baseUrl: "https://api.example.test/v1", apiKey: "test-key" },
       sessionId: "parent-session",

@@ -382,7 +382,7 @@ function redactMap(map: Record<string, string> | undefined) {
   return Object.fromEntries(Object.keys(map).map((key) => [key, "<redacted>"]));
 }
 
-function redactMcpServerConfig(server: McpServerConfig): McpServerConfig {
+export function redactMcpServerConfig(server: McpServerConfig): McpServerConfig {
   return {
     ...server,
     env: redactMap(server.env),

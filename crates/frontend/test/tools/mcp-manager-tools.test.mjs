@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 
 const baseServer = {
   id: "demo",
@@ -29,8 +40,8 @@ function createMcpBundle({
   const events = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           events.push(`invoke:${command}`);
           if (invokeImpl) {
@@ -41,8 +52,8 @@ function createMcpBundle({
       },
     },
   });
-  const mcpOps = loader.loadModule("src/lib/settings/mcpOps.ts");
-  const mcpManagerTools = loader.loadModule("src/lib/tools/mcpManagerTools.ts");
+  const mcpOps = loader.loadModule(coreSrc("settings/mcpOps.ts"));
+  const mcpManagerTools = loader.loadModule(coreSrc("tools/mcpManagerTools.ts"));
   // The harness mirrors App.setSettings: reads and commits are synchronous
   // against a single mutable authority, writes go through the real reducer.
   let currentSettings = settings;
@@ -89,8 +100,8 @@ async function callMcpManager(bundle, arguments_, signal) {
 
 test("McpManager is always registered as a builtin tool", async () => {
   const loader = createTsModuleLoader();
-  const registryModule = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const fileToolState = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const registryModule = loader.loadModule(coreSrc("tools/builtinRegistry.ts"));
+  const fileToolState = loader.loadModule(coreSrc("tools/fileToolState.ts"));
 
   const registry = await registryModule.buildBuiltinToolRegistry({
     workdir: "/workspace",
@@ -107,8 +118,8 @@ test("McpManager is always registered as a builtin tool", async () => {
 
 test("builtin registry resolves tool names with casing drift before execution", async () => {
   const loader = createTsModuleLoader();
-  const registryModule = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const fileToolState = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const registryModule = loader.loadModule(coreSrc("tools/builtinRegistry.ts"));
+  const fileToolState = loader.loadModule(coreSrc("tools/fileToolState.ts"));
 
   const registry = await registryModule.buildBuiltinToolRegistry({
     workdir: "/workspace",
@@ -135,8 +146,8 @@ test("builtin registry resolves tool names with casing drift before execution", 
 
 test("ManagedProcess is registered only for chat runtime", async () => {
   const loader = createTsModuleLoader();
-  const registryModule = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const fileToolState = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const registryModule = loader.loadModule(coreSrc("tools/builtinRegistry.ts"));
+  const fileToolState = loader.loadModule(coreSrc("tools/fileToolState.ts"));
 
   const baseParams = {
     workdir: "/workspace",

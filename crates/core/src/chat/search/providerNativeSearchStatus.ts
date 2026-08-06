@@ -1,7 +1,8 @@
 import { providerSupportsNativeWebSearch } from "../../providers/nativeWebSearch";
+import type { ToolStatus } from "../../protocol/wireEvents";
 import type { ProviderId } from "../../settings";
 
-export const PROVIDER_NATIVE_WEB_SEARCH_STATUS = "正在联网搜索...";
+export const PROVIDER_NATIVE_WEB_SEARCH_STATUS: ToolStatus = { kind: "native_web_search" };
 export const PROVIDER_NATIVE_WEB_SEARCH_STATUS_DELAY_MS = 1_200;
 
 export function resolveProviderNativeWebSearchStatus(params: {
@@ -10,7 +11,7 @@ export function resolveProviderNativeWebSearchStatus(params: {
   enabled?: boolean;
   baseUrl?: string;
   modelId?: string;
-}) {
+}): ToolStatus | null {
   if (!params.enabled) return null;
   return providerSupportsNativeWebSearch(params.providerId, params.api, {
     baseUrl: params.baseUrl,
@@ -21,8 +22,8 @@ export function resolveProviderNativeWebSearchStatus(params: {
 }
 
 export function createDeferredProviderNativeWebSearchStatus(params: {
-  status: string | null;
-  onStatus: (status: string | null) => void;
+  status: ToolStatus | null;
+  onStatus: (status: ToolStatus | null) => void;
   delayMs?: number;
 }) {
   let timer: ReturnType<typeof setTimeout> | null = null;

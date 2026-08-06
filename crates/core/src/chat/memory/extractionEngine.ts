@@ -14,6 +14,7 @@ import type {
   UserMessage,
 } from "@earendil-works/pi-ai";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
+import type { ToolStatus } from "../../protocol/wireEvents";
 import {
   type MemoryMeta,
   memoryApplyBatch,
@@ -73,7 +74,7 @@ export type MemoryExtractionVisibleEvents = {
   onToolExecutionStart?: (toolCall: ToolCall, round: number) => void;
   onToolResult?: (toolCall: ToolCall, toolResult: ToolResultMessage, round: number) => void;
   onAssistantMessage?: (assistant: AssistantMessage, round: number) => void;
-  onToolStatus?: (status: string | null) => void;
+  onToolStatus?: (status: ToolStatus | null) => void;
 };
 
 export type MemoryExtractionStatusKey = "done" | "noop" | "partial";

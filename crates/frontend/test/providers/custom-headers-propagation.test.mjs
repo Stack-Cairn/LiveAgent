@@ -9,6 +9,14 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 // 断言 customHeaders 与 promptCacheRetention 一路抵达上游头集与覆盖包。
 
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(rootDir, "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// 前端 llm.ts 仍走 src/lib（KEEP），其电源活动边界还是前端模块路径。
 const powerActivityModulePath = path.join(rootDir, "src/lib/system/powerActivity.ts");
 
 const PROXY_SERVER_INFO = { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
@@ -187,7 +195,7 @@ test("compaction summarizer forwards the whole runtime config untouched", async 
   // 摘要器只改 reasoning 档位（展开派生），其余字段必须原样透传——曾经的
   // 逐字段转抄正是在这一层之上把 customHeaders 抹掉的。
   const loader = createTsModuleLoader();
-  const { summarizeConversation } = loader.loadModule("src/lib/chat/compaction/summarizer.ts");
+  const { summarizeConversation } = loader.loadModule(coreSrc("chat/compaction/summarizer.ts"));
   const runtime = buildRuntime();
   const seen = [];
 

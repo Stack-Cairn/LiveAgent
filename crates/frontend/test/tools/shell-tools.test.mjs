@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 
 function createBashCall(command = "echo ready") {
   return {
@@ -18,8 +29,8 @@ test("Bash tool keeps one Bash entry and uses Git Bash-first policy for Claude C
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           assert.equal(command, "shell_run");
           return {
@@ -42,7 +53,7 @@ test("Bash tool keeps one Bash entry and uses Git Bash-first policy for Claude C
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -75,8 +86,8 @@ test("Bash tool uses the same Git Bash-first policy for Codex", async () => {
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           assert.equal(command, "shell_run");
           return {
@@ -99,7 +110,7 @@ test("Bash tool uses the same Git Bash-first policy for Codex", async () => {
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "codex",
@@ -122,8 +133,8 @@ test("Bash tool schema allows larger timeout values but clamps for Codex", async
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           assert.equal(command, "shell_run");
           return {
@@ -143,7 +154,7 @@ test("Bash tool schema allows larger timeout values but clamps for Codex", async
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "codex",
@@ -170,8 +181,8 @@ test("Bash tool rejects unsupported root arguments", async () => {
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -179,7 +190,7 @@ test("Bash tool rejects unsupported root arguments", async () => {
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "codex",
@@ -202,8 +213,8 @@ test("Bash tool rejects background commands that keep stdio attached", async () 
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -211,7 +222,7 @@ test("Bash tool rejects background commands that keep stdio attached", async () 
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -232,8 +243,8 @@ test("Bash tool rejects background commands when redirects belong to another com
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -241,7 +252,7 @@ test("Bash tool rejects background commands when redirects belong to another com
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -261,8 +272,8 @@ test("Bash tool rejects background commands with only stderr append redirected",
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -270,7 +281,7 @@ test("Bash tool rejects background commands with only stderr append redirected",
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -290,8 +301,8 @@ test("Bash tool applies POSIX ampersand background validation on Windows", async
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("shell_run should not be invoked for rejected commands");
         },
@@ -299,7 +310,7 @@ test("Bash tool applies POSIX ampersand background validation on Windows", async
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "codex",
@@ -319,8 +330,8 @@ test("Bash tool allows detached background commands on Windows", async () => {
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           assert.equal(command, "shell_run");
           return {
@@ -343,7 +354,7 @@ test("Bash tool allows detached background commands on Windows", async () => {
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "codex",
@@ -361,8 +372,8 @@ test("Bash tool allows detached background commands on Windows", async () => {
 function createWindowsFailureLoader(shellFamily, shell) {
   return createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           assert.equal(command, "shell_run");
           return {
             exit_code: 1,
@@ -387,7 +398,7 @@ function createWindowsFailureLoader(shellFamily, shell) {
 
 test("Bash tool hints about missing Git Bash when Windows falls back to PowerShell", async () => {
   const loader = createWindowsFailureLoader("powershell", "pwsh");
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -403,7 +414,7 @@ test("Bash tool hints about missing Git Bash when Windows falls back to PowerShe
 
 test("Bash tool does not hint about Git Bash when a Windows failure ran under Git Bash", async () => {
   const loader = createWindowsFailureLoader("posix", "bash");
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -420,8 +431,8 @@ test("Bash tool allows background commands with detached stdio", async () => {
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           assert.equal(command, "shell_run");
           return {
@@ -441,7 +452,7 @@ test("Bash tool allows background commands with detached stdio", async () => {
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -457,7 +468,7 @@ test("Bash tool allows background commands with detached stdio", async () => {
 
 test("ManagedProcess can be omitted from shell tools for non-chat runtimes", async () => {
   const loader = createTsModuleLoader();
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -484,8 +495,8 @@ test("ManagedProcess starts foreground commands through process manager", async 
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           assert.equal(command, "managed_process_start");
           return {
@@ -508,7 +519,7 @@ test("ManagedProcess starts foreground commands through process manager", async 
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -545,8 +556,8 @@ test("ManagedProcess abort stops a process returned after cancellation", async (
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           if (command === "managed_process_start") {
             return startPromise;
@@ -559,7 +570,7 @@ test("ManagedProcess abort stops a process returned after cancellation", async (
       },
     },
   });
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -613,8 +624,8 @@ test("ManagedProcess rejects nested shell background operators", async () => {
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -622,7 +633,7 @@ test("ManagedProcess rejects nested shell background operators", async () => {
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -648,8 +659,8 @@ test("ManagedProcess rejects background ampersand commands on Windows", async ()
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("managed_process_start should not be invoked for rejected commands");
         },
@@ -657,7 +668,7 @@ test("ManagedProcess rejects background ampersand commands on Windows", async ()
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -682,8 +693,8 @@ test("ManagedProcess rejects background ampersand commands on Windows", async ()
 test("Bash tool marks stdio-open shell responses as errors", async () => {
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           assert.equal(command, "shell_run");
           return {
             exit_code: 0,
@@ -703,7 +714,7 @@ test("Bash tool marks stdio-open shell responses as errors", async () => {
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -720,8 +731,8 @@ test("Bash tool can execute from the fixed Skills root with relative cwd", async
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           assert.equal(command, "shell_run");
           return {
@@ -741,7 +752,7 @@ test("Bash tool can execute from the fixed Skills root with relative cwd", async
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -772,8 +783,8 @@ test("Bash tool allows enabled Skill scripts by direct absolute path without cd"
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           assert.equal(command, "shell_run");
           return {
@@ -793,7 +804,7 @@ test("Bash tool allows enabled Skill scripts by direct absolute path without cd"
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -827,8 +838,8 @@ test("Bash tool enforces enabled Skill allowlist for skill cwd", async () => {
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -836,7 +847,7 @@ test("Bash tool enforces enabled Skill allowlist for skill cwd", async () => {
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -868,8 +879,8 @@ test("Bash tool blocks absolute Skills root access from workspace commands", asy
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -877,7 +888,7 @@ test("Bash tool blocks absolute Skills root access from workspace commands", asy
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -909,8 +920,8 @@ test("Bash tool blocks fixed Skills root access even when Skills are disabled", 
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -918,7 +929,7 @@ test("Bash tool blocks fixed Skills root access even when Skills are disabled", 
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",
@@ -943,8 +954,8 @@ test("Bash tool blocks workspace skills guesses before shell execution", async (
   const calls = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           calls.push({ command, args });
           throw new Error("unexpected invoke");
         },
@@ -952,7 +963,7 @@ test("Bash tool blocks workspace skills guesses before shell execution", async (
     },
   });
 
-  const { createShellTools } = loader.loadModule("src/lib/tools/shellTools.ts");
+  const { createShellTools } = loader.loadModule(coreSrc("tools/shellTools.ts"));
   const bundle = createShellTools({
     workdir: "/repo",
     providerId: "claude_code",

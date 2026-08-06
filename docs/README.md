@@ -23,6 +23,7 @@ LiveAgent 是一个后端持有全部能力、前端只做渲染的 Agent 应用
 | [operations/development.md](operations/development.md) | 本地开发、构建、测试、端口、运行路径 | 日常开发 |
 | [operations/deployment.md](operations/deployment.md) | 部署形态、后端镜像与启动参数、CI/CD、桌面 Release | 发布维护 |
 | [reference/source-map.md](reference/source-map.md) | 按功能域列出的源码路径索引 | 快速定位源码 |
+| [adr/](adr/) | 架构决策记录（不可轻易回退的取舍及其理由） | 想知道「为什么不那样做」 |
 
 ## 架构阅读顺序
 

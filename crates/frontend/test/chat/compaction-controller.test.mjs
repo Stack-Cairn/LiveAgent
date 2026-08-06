@@ -181,7 +181,9 @@ test("pre-send compaction: checkpoint, persist, re-appended user message, paired
 
   // bridge 状态成对：running 时 isCompaction=true，结束后清 null。
   const bridgeEvents = recorder.byKind("bridge");
-  assert.match(bridgeEvents[0][1], /正在压缩历史/);
+  // 状态是 tagged union；中文文案在前端渲染层生成。
+  assert.equal(bridgeEvents[0][1].kind, "compaction_running");
+  assert.equal(bridgeEvents[0][1].intent, "optimization");
   assert.equal(bridgeEvents[0][2], true);
   assert.equal(bridgeEvents.at(-1)[1], null);
 });
@@ -432,14 +434,14 @@ test("escalation ladder: consecutive ineffective compactions advise but never ha
   assert.equal(completeCalls, 3);
   assert.equal(controller.stats.compactionsApplied, 3);
 
-  const runningTexts = recorder
+  const runningStatuses = recorder
     .byKind("bridge")
     .filter(([, , isCompaction]) => isCompaction === true)
-    .map(([, text]) => text);
-  assert.equal(runningTexts.length, 3);
-  assert.doesNotMatch(runningTexts[0], /建议适时开启新会话/);
-  // 连续两次低效后顶格，第三次给出建议性提示但仍执行压缩。
-  assert.match(runningTexts[2], /建议适时开启新会话/);
+    .map(([, status]) => status);
+  assert.equal(runningStatuses.length, 3);
+  assert.equal(runningStatuses[0].near_model_limit, false);
+  // 连续两次低效后顶格，第三次标记接近模型极限（前端据此追加建议性提示）但仍执行压缩。
+  assert.equal(runningStatuses[2].near_model_limit, true);
 });
 
 test("registry hands out one controller per conversation and disposes cleanly", () => {

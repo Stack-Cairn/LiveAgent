@@ -352,3 +352,109 @@ export async function memoryTodayLocalDate(rolloverHour?: number) {
 }
 
 
+
+// ---------------------------------------------------------------------------
+// Organizer runs. The Rust store owns the run queue and the run records; the
+// engine claims a run, drives it, and writes progress back through these.
+// ---------------------------------------------------------------------------
+
+export type MemoryQuotaScopeSummary = {
+  scope: MemoryScope;
+  workdirHash: string;
+  used: number;
+  limit: number;
+  headroom: number;
+  archivedCount: number;
+  unreviewedCount: number;
+  oldestUnreviewedAgeDays?: number | null;
+};
+
+export type MemoryQuotaSummaryResponse = {
+  scopes: MemoryQuotaScopeSummary[];
+};
+
+export type MemoryOrganizeRunStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+export type MemoryOrganizeTrigger = "manual" | "scheduled";
+
+export type MemoryOrganizeRun = {
+  runId: string;
+  trigger: MemoryOrganizeTrigger;
+  status: MemoryOrganizeRunStatus;
+  createdAt: number;
+  startedAt?: number | null;
+  finishedAt?: number | null;
+  dueAt?: number | null;
+  claimedAt?: number | null;
+  model: unknown;
+  scope: string;
+  mode: string;
+  inputCount: number;
+  clusterCount: number;
+  safeApplied: number;
+  reviewSkipped: number;
+  createdCount: number;
+  updatedCount: number;
+  deletedCount: number;
+  mergedCount: number;
+  parseFailures: number;
+  error?: string | null;
+  finalSummary?: string | null;
+  phase?: string | null;
+  finalCount: number;
+  compressionRatio?: number | null;
+  compressionTarget?: number | null;
+  dryRun: boolean;
+  tokenUsageTotal: number;
+  quotaHeadroomAtStart?: number | null;
+  overrideReviewed: boolean;
+  /** Typed run report; parse only via organizer/runRecord.ts. */
+  report: unknown;
+};
+
+export type MemoryOrganizeRunUpdateArgs = {
+  runId: string;
+  status?: MemoryOrganizeRunStatus;
+  startedAt?: number;
+  finishedAt?: number;
+  inputCount?: number;
+  clusterCount?: number;
+  safeApplied?: number;
+  reviewSkipped?: number;
+  createdCount?: number;
+  updatedCount?: number;
+  deletedCount?: number;
+  mergedCount?: number;
+  parseFailures?: number;
+  error?: string;
+  finalSummary?: string;
+  phase?: string;
+  finalCount?: number;
+  compressionRatio?: number;
+  compressionTarget?: number;
+  dryRun?: boolean;
+  tokenUsageTotal?: number;
+  quotaHeadroomAtStart?: number;
+  overrideReviewed?: boolean;
+  report?: unknown;
+};
+
+export async function memoryOrganizeRunUpdate(args: MemoryOrganizeRunUpdateArgs) {
+  return callBackend<MemoryOrganizeRun | null>("memory_organize_run_update", { args });
+}
+
+export async function memoryOrganizeDueComplete(args: MemoryOrganizeRunUpdateArgs) {
+  return callBackend<MemoryOrganizeRun | null>("memory_organize_due_complete", { args });
+}
+
+export async function memoryQuotaSummary(args?: { workdir?: string }) {
+  return callBackend<MemoryQuotaSummaryResponse>("memory_quota_summary", {
+    args: args ?? {},
+  });
+}

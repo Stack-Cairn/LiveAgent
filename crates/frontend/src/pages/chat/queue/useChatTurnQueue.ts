@@ -1,6 +1,7 @@
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MentionComposerHandle } from "../../../components/chat/MentionComposer";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import type { ToolStatus } from "../../../lib/protocol/wireEvents";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { AppSettings, ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
 import type { SendChatAction } from "../bridge/bridgeTypes";
@@ -43,7 +44,7 @@ type UseChatTurnQueueParams = {
   requestActiveConversationStop: (conversationId: string, options: { force: boolean }) => boolean;
   getConversationLiveTranscriptStore: (conversationId: string) => LiveTranscriptStore;
   captureAbortSnapshot: (store: LiveTranscriptStore) => void;
-  updateToolStatus: (status: string | null, store: LiveTranscriptStore) => void;
+  updateToolStatus: (status: ToolStatus | null, store: LiveTranscriptStore) => void;
   composerRef: MutableRefObject<MentionComposerHandle | null>;
   pendingUploadedFiles: PendingUploadedFile[];
   setPendingUploadsForConversation: (
@@ -172,7 +173,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const transcriptStore = getConversationLiveTranscriptStore(targetConversationId);
     if (controller) {
       captureAbortSnapshot(transcriptStore);
-      updateToolStatus("正在停止当前任务...", transcriptStore);
+      updateToolStatus({ kind: "ui_stopping" }, transcriptStore);
       controller.abort();
     }
     const handled = requestActiveConversationStop(targetConversationId, { force });

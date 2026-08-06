@@ -6,6 +6,7 @@
 //! 反向代理路由：
 //! - POST /api/chat_send        → http://127.0.0.1:$node_port/chat_send
 //! - POST /api/chat_abort       → http://127.0.0.1:$node_port/chat_abort
+//! - POST /api/conversation_dispose → .../conversation_dispose
 //! - GET /api/conversation_live → http://127.0.0.1:$node_port/conversation_live
 //!
 //! 事件回流路由（仅 loopback，来自本机 Node 引擎）：
@@ -183,6 +184,9 @@ pub fn router() -> Router<AppState> {
         // 使用单独的路由挂载三条代理路由。
         .route("/chat_send", axum::routing::post(proxy_to_node))
         .route("/chat_abort", axum::routing::post(proxy_to_node))
+        .route("/conversation_dispose", axum::routing::post(proxy_to_node))
+        .route("/memory_organize_run", axum::routing::post(proxy_to_node))
+        .route("/cron_prompt_poke", axum::routing::post(proxy_to_node))
         .route("/conversation_live", axum::routing::get(proxy_to_node))
 }
 

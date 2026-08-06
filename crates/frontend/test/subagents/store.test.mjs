@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
-import { createFakeStoreIpc, sleep } from "./harness.mjs";
+import { coreRootDir, coreSrc, createFakeStoreIpc, sleep } from "./harness.mjs";
 
-const loader = createTsModuleLoader();
-const storeModule = loader.loadModule("src/lib/subagents/store.ts");
-const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
+const loader = createTsModuleLoader({ rootDir: coreRootDir });
+const storeModule = loader.loadModule(coreSrc("subagents/store.ts"));
+const conversationState = loader.loadModule(coreSrc("chat/conversation/conversationState.ts"));
 
 const SCHEMA_VERSION = 2;
 

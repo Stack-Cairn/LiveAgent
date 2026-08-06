@@ -34,6 +34,12 @@ const piAiEventStream = await import(
 const piAiRetry = await import(
   new URL("../../node_modules/@earendil-works/pi-ai/dist/utils/retry.js", import.meta.url).href
 );
+// crates/core's compaction summarizer detects context-overflow errors with the
+// official pi-ai patterns instead of hand-rolled regexes, so the mock has to
+// expose them too.
+const piAiOverflow = await import(
+  new URL("../../node_modules/@earendil-works/pi-ai/dist/utils/overflow.js", import.meta.url).href
+);
 const piAiProvidersAll = await import(
   new URL(
     "../../node_modules/@earendil-works/pi-ai/dist/providers/all.js",
@@ -110,6 +116,8 @@ function createDefaultMocks() {
       getSupportedThinkingLevels: piAiModels.getSupportedThinkingLevels,
       clampThinkingLevel: piAiModels.clampThinkingLevel,
       isRetryableAssistantError: piAiRetry.isRetryableAssistantError,
+      getOverflowPatterns: piAiOverflow.getOverflowPatterns,
+      isContextOverflow: piAiOverflow.isContextOverflow,
       createAssistantMessageEventStream: piAiEventStream.createAssistantMessageEventStream,
       EventStream: class EventStream {
         constructor() {

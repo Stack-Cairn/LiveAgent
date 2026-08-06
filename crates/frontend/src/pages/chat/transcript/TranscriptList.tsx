@@ -28,7 +28,8 @@ import {
   type CommitDetailsLoader,
   type CommitDisplayReference,
 } from "../../../lib/chat/messages/userMessageContent";
-import { normalizeLiveToolStatus } from "../../../lib/chat/page/chatPageHelpers";
+import { VIBING_STATUS } from "../../../lib/chat/page/chatPageHelpers";
+import { formatToolStatus } from "../runtime/toolStatusText";
 import type { GitClient } from "../../../lib/git/types";
 import { createEntranceRegistry } from "../../../lib/transcript-virtual/entranceOnce";
 import { createLiveRowScrollAdjustPolicy } from "../../../lib/transcript-virtual/liveScrollAdjustPolicy";
@@ -255,7 +256,11 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     setEditingMessageKey(null);
   }, []);
 
-  const displayedToolStatus = normalizeLiveToolStatus(liveState.toolStatus);
+  // 状态是 tagged union；model_generating 显示为 Vibing，其余 kind 映射中文文案。
+  const displayedToolStatus =
+    liveState.toolStatus?.kind === "model_generating"
+      ? VIBING_STATUS
+      : formatToolStatus(liveState.toolStatus);
 
   // Restored once per mount: at conversation-switch remounts the viewport is
   // already live, so a same-width snapshot skips straight to exact layout.

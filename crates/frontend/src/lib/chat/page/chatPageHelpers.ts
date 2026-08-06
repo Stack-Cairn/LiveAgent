@@ -14,7 +14,6 @@ const TITLE_MAX_CHARS = 80;
 // Global on purpose: only ever used with String#match below, never with #test
 // (a sticky lastIndex would make alternating calls disagree).
 const CJK_CHAR_PATTERN = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/g;
-const MODEL_GENERATING_STATUS_PATTERN = /^第\s*\d+\s*轮：模型生成中\.\.\.$/;
 
 export const VIBING_STATUS = "Vibing...";
 
@@ -188,11 +187,6 @@ export function buildFallbackConversationTitle(content: string) {
   if (!singleLine) return "新对话";
   if (singleLine.length <= FALLBACK_TITLE_MAX_CHARS) return singleLine;
   return `${singleLine.slice(0, FALLBACK_TITLE_MAX_CHARS).trimEnd()}...`;
-}
-
-export function normalizeLiveToolStatus(status: string | null) {
-  if (status && MODEL_GENERATING_STATUS_PATTERN.test(status)) return VIBING_STATUS;
-  return status;
 }
 
 export function getFirstUserMessageText(context: Context) {

@@ -1,11 +1,9 @@
-import type { Message } from "@earendil-works/pi-ai";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useRef } from "react";
 import {
   type ConversationViewState,
   createConversationStateFromContext,
   createTranscriptProjection,
   getActiveSegment,
-  type HistoryMessageRef,
   prependTranscriptProjection,
 } from "../../../lib/chat/conversation/conversationState";
 import {
@@ -16,7 +14,6 @@ import {
   getChatHistoryWindow,
   persistConversationRuntime,
   renameChatHistory,
-  replaceChatHistoryFromMessage,
 } from "../../../lib/chat/history/chatHistory";
 import {
   createConversationIdentity,
@@ -307,29 +304,22 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     return task;
   }
 
-  async function replaceConversationAtMessage(
-    conversationId: string,
-    messageRef: HistoryMessageRef,
-    replacementMessage: Message,
-  ) {
+  // Edit-resend rebase: the truncation itself now runs inside the core
+  // engine (chat_send carries editResendBaseMessageRef); this refetches the
+  // authoritative window afterwards and adopts it as the local baseline.
+  async function reloadConversationFromHistory(conversationId: string) {
     const id = conversationId.trim();
     const current = conversationRuntimeCacheRef.current.get(id);
     if (!id || !current) {
-      throw new Error("无法替换未加载的历史会话");
-    }
-    const expectedRevision = current.state.transcript.revision;
-    if (!expectedRevision) {
-      throw new Error("历史会话缺少 revision，无法安全替换消息");
+      throw new Error("无法重载未加载的历史会话");
     }
 
-    const replaced = await replaceChatHistoryFromMessage({
+    const replaced = await getChatHistoryWindow({
       id,
-      baseMessageRef: messageRef,
-      replacementMessage,
       maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
-      expectedRevision,
+      includeActiveSegment: true,
     });
-    if (!replaced.activeSegment) throw new Error("历史替换结果缺少活跃分段");
+    if (!replaced.activeSegment) throw new Error("历史窗口缺少活跃分段");
     const state = buildConversationStateFromWindow(replaced);
     const entry = {
       ...current,
@@ -509,7 +499,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     startNewConversation,
     openInitial,
     loadEarlier,
-    replaceConversationAtMessage,
+    reloadConversationFromHistory,
     cleanupDeletedConversation,
     persistConversation,
   };

@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
 
 const loader = createTsModuleLoader();
 const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
 const uiMessages = loader.loadModule("src/lib/chat/messages/uiMessages.ts");
 const hostedSearch = loader.loadModule("src/lib/chat/messages/hostedSearch.ts");
-const seedToolCalls = loader.loadModule("src/lib/chat/runner/seedToolCalls.ts");
+const seedToolCalls = loader.loadModule(coreSrc("chat/runner/seedToolCalls.ts"));
 const chatHelpers = loader.loadModule("src/lib/chat/page/chatPageHelpers.ts");
 const gatewayToolPreview = loader.loadModule("src/pages/chat/turns/gatewayToolPreview.ts");
 const toolPreview = loader.loadModule("src/lib/chat/messages/toolPreview.ts");
@@ -2326,8 +2335,6 @@ test("chat page helpers keep model options stable and normalize status/title edg
   assert.match(chatHelpers.buildConversationTitlePrompt("hello", "zh-CN"), /简体中文标题/);
   assert.match(chatHelpers.buildConversationTitlePrompt("hello", "en-US"), /within 10 words/i);
   assert.equal(chatHelpers.buildFallbackConversationTitle("x".repeat(60)), `${"x".repeat(48)}...`);
-  assert.equal(chatHelpers.normalizeLiveToolStatus("第 2 轮：模型生成中..."), chatHelpers.VIBING_STATUS);
-  assert.equal(chatHelpers.normalizeLiveToolStatus("Running"), "Running");
   assert.equal(chatHelpers.isAbortLikeError(new Error("AbortError: aborted")), true);
   assert.equal(chatHelpers.isAbortLikeError("network failed"), false);
 });

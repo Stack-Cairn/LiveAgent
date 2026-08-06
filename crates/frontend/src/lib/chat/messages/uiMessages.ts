@@ -128,14 +128,6 @@ export function getMessageText(message: Message) {
   return "";
 }
 
-export function assistantMessageToThinkingText(message: AssistantMessage) {
-  let text = "";
-  for (const block of message.content) {
-    if (block.type === "thinking") text += block.thinking;
-  }
-  return text;
-}
-
 export function toolResultMessageToText(message: ToolResultMessage) {
   let text = "";
   for (const block of message.content) {

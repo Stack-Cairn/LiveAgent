@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { createCompactionControllerRegistry } from "../../../lib/chat/compaction/controller";
+import type { ToolStatus } from "../../../lib/protocol/wireEvents";
 import {
   cloneLiveRoundSnapshots,
   type LiveRoundSnapshot,
@@ -85,7 +86,7 @@ type LiveTranscriptArtifacts = {
   lrFlushCancel: (() => void) | null;
   // Last-wins tool-status coalescing: a burst of status changes lands as one
   // store emit per frame.
-  pendingToolStatus: { value: string | null } | null;
+  pendingToolStatus: { value: ToolStatus | null } | null;
   toolStatusFlushCancel: (() => void) | null;
   pendingRetryAttempts: { value: RetryAttemptRecord[] } | null;
   retryAttemptsFlushCancel: (() => void) | null;
@@ -356,7 +357,7 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
   );
 
   const updateToolStatus = useCallback(
-    (status: string | null, targetStore: LiveTranscriptStore = liveTranscriptStore) => {
+    (status: ToolStatus | null, targetStore: LiveTranscriptStore = liveTranscriptStore) => {
       const artifacts = resolveLiveTranscriptArtifacts(targetStore);
       if (!artifacts) {
         targetStore.setToolStatus(status);

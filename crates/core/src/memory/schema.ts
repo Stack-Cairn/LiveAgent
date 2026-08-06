@@ -166,3 +166,30 @@ export type OrganizerScope = (typeof ORGANIZER_SCOPES)[number];
 export const MEMORY_REVIEWER_MODES = ["strict", "standard", "lenient"] as const;
 export type MemoryReviewerMode = (typeof MEMORY_REVIEWER_MODES)[number];
 export const DEFAULT_MEMORY_REVIEWER_MODE: MemoryReviewerMode = "standard";
+
+export const ORGANIZER_ACTIONS = [
+  "keep",
+  "merge_into",
+  "delete",
+  "mark_review",
+  "rewrite_hint",
+] as const;
+export type OrganizerAction = (typeof ORGANIZER_ACTIONS)[number];
+
+export const RISK_LEVELS = ["low", "medium", "high"] as const;
+export type RiskLevel = (typeof RISK_LEVELS)[number];
+
+export const ORGANIZE_PHASES = ["scan", "cluster", "plan", "gate", "apply"] as const;
+export type OrganizePhase = (typeof ORGANIZE_PHASES)[number];
+
+export const REJECTION_BUCKET_KEYS = [
+  "reviewedProtected",
+  "lowConfidence",
+  "crossType",
+  "crossScope",
+  "reviewRequiredByLlm",
+  "missingPayload",
+  "unsupported",
+] as const;
+export type RejectionBucketKey = (typeof REJECTION_BUCKET_KEYS)[number];
+export type RejectionBuckets = Record<RejectionBucketKey, number>;

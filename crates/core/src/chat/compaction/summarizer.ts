@@ -19,7 +19,7 @@ import { detectCompactionSummaryLanguage } from "./summaryLanguage";
 import { buildCompactionSystemPrompt, buildRepairPromptText } from "./summaryPrompt";
 import { estimateTextTokens } from "./tokenLedger";
 import type { ProviderRuntimeConfig } from "./types";
-import { validateCompactionSummary } from "./validate";
+import { buildVerificationSignals, validateCompactionSummary } from "./validate";
 
 export type CompleteAssistantFn = typeof completeAssistantMessage;
 
@@ -139,7 +139,10 @@ async function requestSummary(params: SummarizerRequest): Promise<AssistantMessa
       } as AssistantMessage,
       {
         role: "user",
-        content: buildRepairPromptText(params.repair.validationError),
+        content: buildRepairPromptText(
+          params.repair.validationError,
+          buildVerificationSignals(params.payload),
+        ),
         timestamp: Date.now() + 2,
       },
     );
@@ -211,6 +214,7 @@ export async function summarizeConversation(params: {
       const { summaryText } = validateCompactionSummary(
         assistantMessageToText(validated),
         payloadTokens,
+        payload,
       );
       return {
         summaryText,

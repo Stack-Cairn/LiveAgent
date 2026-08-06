@@ -35,6 +35,7 @@ import {
 } from "../chat/search/providerNativeSearchStatus";
 import type { StreamDebugLogger } from "../debug/agentDebug";
 import { assistantMessageToText, streamAssistantMessage } from "../providers/llm";
+import type { ToolStatus } from "../protocol/wireEvents";
 import type { ProviderId } from "../settings";
 import { buildPartialAssistantMessage } from "./chatPageRuntime";
 
@@ -92,10 +93,9 @@ export type RunTextConversationTurnParams = {
     updater: (prev: LiveRound[]) => LiveRound[],
     store: LiveTranscriptStore,
   ) => void;
-  updateGatewayBridgeToolStatus: (status: string | null, isCompaction?: boolean) => void;
+  updateGatewayBridgeToolStatus: (status: ToolStatus | null, isCompaction?: boolean) => void;
   updateRetryAttempts: (attempts: RetryAttemptRecord[], store: LiveTranscriptStore) => void;
   commitVisibleAbortedConversation: () => boolean;
-  freezeGatewayFinalProjection: (state: ConversationViewState, contentComplete?: boolean) => void;
   persistConversationWithHistorySync: (params: PersistConversationParams) => Promise<boolean>;
   memoryExtractionModel?: MemoryExtractionModelConfig;
   onMemoryExtractionModelFailure?: (model: MemoryExtractionModelConfig) => void;
@@ -132,7 +132,6 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     updateGatewayBridgeToolStatus,
     updateRetryAttempts,
     commitVisibleAbortedConversation,
-    freezeGatewayFinalProjection,
     persistConversationWithHistorySync,
     memoryExtractionModel,
     onMemoryExtractionModelFailure,
@@ -150,8 +149,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   let protectionCompactionDisabled = false;
 
   function commitAssistantRoundMeta(assistant: AssistantMessage, round: number) {
-    gatewayBridgeEvents.queueToken("", {
-      round,
+    gatewayBridgeEvents.queueRoundMeta(round, {
       provider: assistant.provider,
       model: assistant.model,
       api: assistant.api,
@@ -199,13 +197,8 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     ensureTextLiveRound(round);
     gatewayBridgeEvents.queueEvent({
       type: "hosted_search",
-      id: hostedSearch.id,
-      provider: hostedSearch.provider,
-      status: hostedSearch.status,
-      queries: hostedSearch.queries,
-      sources: hostedSearch.sources,
-      updatedAt: hostedSearch.updatedAt,
       round,
+      hosted_search: hostedSearch,
       conversation_id: conversationId,
     });
     batchLiveRoundsUpdate(
@@ -274,7 +267,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           nativeWebSearch: nativeWebSearchEnabled,
           onTextDelta: (delta) => {
             nativeWebSearchStatusController.noteVisibleActivity();
-            gatewayBridgeEvents.queueToken(delta, { round: textRound });
+            gatewayBridgeEvents.queueToken(delta, textRound);
             if (textModeUsesLiveRounds) {
               batchLiveRoundsUpdate(
                 (prev) =>
@@ -308,7 +301,12 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           signal: scope.controller.signal,
           debugLogger: streamAttempt === 0 ? conversationDebugLogger : recoveryDebugLogger,
           onRetryStatus: (attempt, maxAttempts, errorMessage) => {
-            updateGatewayBridgeToolStatus(`连接已断开，正在重试 (${attempt}/${maxAttempts})...`);
+            updateGatewayBridgeToolStatus({
+              kind: "stream_retrying",
+              round: null,
+              attempt,
+              max_attempts: maxAttempts,
+            });
             retryAttemptsForAttempt.push({ attempt, maxAttempts, errorMessage });
             updateRetryAttempts(retryAttemptsForAttempt.slice(), transcriptStore);
           },
@@ -383,14 +381,13 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
 
   const gatewayAssistantText = assistantMessageToText(finalAssistant);
   if (!gatewayBridgeEvents.hasForwardedText() && gatewayAssistantText.length > 0) {
-    gatewayBridgeEvents.queueToken(gatewayAssistantText, { round: textRound });
+    gatewayBridgeEvents.queueToken(gatewayAssistantText, textRound);
   }
   const finalState = appendMessagesToConversation(getNextConversationState(), [finalAssistant]);
   const shouldRunMemoryExtraction =
     finalAssistant.stopReason !== "error" && finalAssistant.stopReason !== "aborted";
   commitAssistantRoundMeta(finalAssistant, textRound);
   applyConversationState(finalState);
-  freezeGatewayFinalProjection(finalState, true);
   settleLiveTranscript(transcriptStore);
   hookLifecycle.ensureMessageEnded();
   hookLifecycle.endAgent();

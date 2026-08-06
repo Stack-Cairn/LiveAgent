@@ -197,7 +197,11 @@ test("worktree lifecycle: create -> run -> status -> auto apply -> cleanup", asy
   assert.equal(report.worktreeCleanupReason, "applied");
   assert.equal(report.worktreeBranchDeleted, true);
   assert.deepEqual(report.changedPaths, ["src/app.ts", "src/new.ts"]);
-  assert.ok(emittedStatuses.some((status) => /Applying worktree changes/.test(status ?? "")));
+  assert.ok(
+    emittedStatuses.some(
+      (status) => status?.kind === "subagent_progress" && status.phase === "worktree_applying",
+    ),
+  );
 
   const finalSave = harness.storeIpc.appliedSaves.at(-1);
   assert.equal(finalSave.run.worktreeRoot, worktreeRoot);

@@ -1,6 +1,7 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
 
 import type { StreamDebugLogger } from "../../debug/agentDebug";
+import type { ToolStatus } from "../../protocol/wireEvents";
 import type { ProviderId } from "../../settings";
 import { type ConversationViewState, getActiveSegment } from "../conversation/conversationState";
 import type { TurnCancellation } from "../conversation/turnCancellation";
@@ -43,7 +44,7 @@ export type CompactionSinks = {
   // 运行中换底：apply + 清空 live transcript（压缩/prune 结果落地后旧流式内容已过期）。
   applyStateMidRun?: (state: ConversationViewState) => void;
   publishStatus?: (status: CompactionStatus) => void;
-  setBridgeToolStatus?: (status: string | null, isCompaction?: boolean) => void;
+  setBridgeToolStatus?: (status: ToolStatus | null, isCompaction?: boolean) => void;
   queueCheckpoint?: (state: ConversationViewState) => void;
   persist?: (state: ConversationViewState) => Promise<unknown>;
   restoreComposer?: (

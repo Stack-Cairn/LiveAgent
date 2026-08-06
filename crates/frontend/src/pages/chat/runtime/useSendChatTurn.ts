@@ -48,11 +48,7 @@ import {
   resolveExplicitSkillMentions,
   type SkillSummary,
 } from "../../../lib/skills";
-import {
-  collectRetainedSubagentParentToolCallIds,
-  pruneSubagentRunsForConversation,
-  type SubagentStoreManager,
-} from "../../../lib/subagents";
+import { type SubagentStoreManager } from "../../../lib/subagents";
 import { asErrorMessage } from "../chatPageUtils";
 import {
   buildTextFromComposerDraft,
@@ -147,11 +143,7 @@ type UseSendChatTurnParams = {
   ensureTunnelToolTab: (projectPathKey?: string) => void;
   ensureSshTunnelToolTab: (projectPathKey?: string) => void;
   persistConversation: (params: PersistConversationParams) => Promise<boolean>;
-  replaceConversationAtMessage: (
-    conversationId: string,
-    messageRef: HistoryMessageRef,
-    replacementMessage: UserMessage,
-  ) => Promise<ConversationViewState>;
+  reloadConversationFromHistory: (conversationId: string) => Promise<ConversationViewState>;
   pruneIdleConversationCaches: (extraKeepIds?: Iterable<string>) => void;
   requestQueuedChatTurnProcessing: (conversationId: string) => void;
 };
@@ -209,7 +201,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     selectedSkillNames,
     activeAgentPrompt,
     persistConversation,
-    replaceConversationAtMessage,
+    reloadConversationFromHistory,
     pruneIdleConversationCaches,
     requestQueuedChatTurnProcessing,
   } = params;
@@ -467,6 +459,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     async function persistTerminalConversation(
       input: Parameters<typeof persistConversationWithHistorySync>[0],
     ) {
+      // 编辑重发对齐失败时本地 state 仍带旧尾巴，落库会把被截断的历史
+      // 复活；此时终态历史以引擎侧持久化为准，前端整轮禁写。
+      if (suppressFrontendHistoryPersist) return true;
       return trackTerminalHistoryPersist(() => persistConversationWithHistorySync(input));
     }
 
@@ -543,28 +538,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return true;
     }
 
-    if (overrides?.editResendBaseMessageRef) {
-      try {
-        nextConversationState = await replaceConversationAtMessage(
-          conversationId,
-          overrides.editResendBaseMessageRef,
-          pendingUserMessage,
-        );
-        initialUserTurnPersisted = true;
-        const keepParentToolCallIds =
-          collectRetainedSubagentParentToolCallIds(nextConversationState);
-        subagentStoresRef.current.invalidate(conversationId);
-        await pruneSubagentRunsForConversation({
-          parentConversationId: conversationId,
-          keepParentToolCallIds,
-        }).catch((error) => {
-          console.warn("edit-resend subagent cleanup failed", error);
-        });
-      } catch (error) {
-        cancellation.userStop.abort();
-        setConversationErrorState(asErrorMessage(error, "替换编辑消息失败，原历史保持不变。"));
-        return false;
-      }
+    // 编辑重发:截断与子代理清理已迁入 core 引擎（chat_send 带
+    // editResendBaseMessageRef，引擎在受理响应前完成截断+清理）。前端不再
+    // 本地改写历史；受理成功后重拉历史窗口对齐本地基线（见 chat_send 之后）。
+    // 初始用户消息落库随截断由引擎完成，这里跳过前端的 initial persist。
+    const editResendBaseMessageRef = overrides?.editResendBaseMessageRef ?? null;
+    let suppressFrontendHistoryPersist = false;
+    if (editResendBaseMessageRef) {
+      initialUserTurnPersisted = true;
     }
 
     setConversationStopHandler(conversationId, handleConversationStop);
@@ -831,7 +812,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
       const snapshot = getAbortSnapshot(transcriptStore);
       const partialMessages = buildPersistableMessagesFromSnapshot({
+        executionMode: effectiveExecutionMode,
         model: runtimeModel,
+        draftAssistantText: "",
         liveRounds: snapshot.liveRounds,
         completedThroughRound: persistableAgentProgress.completedThroughRound,
         suppressedToolTrace: persistableAgentProgress.suppressedToolTrace,
@@ -861,7 +844,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const commitErroredConversation = (rawMessage: string) => {
       const snapshot = getAbortSnapshot(transcriptStore);
       const partialMessages = buildPersistableMessagesFromSnapshot({
+        executionMode: effectiveExecutionMode,
         model: runtimeModel,
+        draftAssistantText: "",
         liveRounds: snapshot.liveRounds,
         completedThroughRound: persistableAgentProgress.completedThroughRound,
         suppressedToolTrace: persistableAgentProgress.suppressedToolTrace,
@@ -927,7 +912,32 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         workdir: effectiveWorkdir,
         skillsEnabled: effectiveSkillsEnabled,
         selectedSkillNames,
+        // WireMessageRef 契约形态（crates/core/src/protocol/wireEvents.ts）。
+        ...(editResendBaseMessageRef
+          ? {
+              editResendBaseMessageRef: {
+                segment_index: editResendBaseMessageRef.segmentIndex,
+                message_index: editResendBaseMessageRef.messageIndex,
+                segment_id: editResendBaseMessageRef.segmentId,
+                message_id: editResendBaseMessageRef.messageId,
+                role: editResendBaseMessageRef.role,
+                content_hash: editResendBaseMessageRef.contentHash,
+              },
+            }
+          : {}),
       });
+      if (editResendBaseMessageRef) {
+        // 受理返回即代表引擎已把截断落库；重拉权威窗口替换本地基线，
+        // 后续终态追加/落库都以它为底。子代理花名册同步失效。
+        try {
+          const reloaded = await reloadConversationFromHistory(conversationId);
+          applyConversationState(reloaded);
+          subagentStoresRef.current.invalidate(conversationId);
+        } catch (error) {
+          suppressFrontendHistoryPersist = true;
+          console.warn("edit-resend 历史窗口对齐失败，本轮跳过前端历史落库", error);
+        }
+      }
       const runEnded = await runEndedPromise;
       if (runEnded.state === "cancelled") {
         throw new Error("已取消");
@@ -942,7 +952,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       const completedMessages =
         runEnded.liveRounds.length > 0
           ? buildPersistableMessagesFromSnapshot({
+              executionMode: effectiveExecutionMode,
               model: runtimeModel,
+              draftAssistantText: runEnded.draftAssistantText,
               liveRounds: runEnded.liveRounds,
               completedThroughRound: runEnded.liveRounds[runEnded.liveRounds.length - 1].round,
             })

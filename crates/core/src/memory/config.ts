@@ -110,3 +110,25 @@ export const MEMORY_BODY_LIMIT_BYTES = 8 * 1024;
 
 // --- Settings panel ------------------------------------------------------------
 
+
+/** Structural cluster size when the library is small enough to skip the
+ *  LLM topic pass. */
+export const ORGANIZER_STRUCTURAL_CLUSTER_SIZE = 8;
+/** Max entries per LLM topic cluster. */
+export const ORGANIZER_TOPIC_CLUSTER_SIZE = 12;
+/** Per-entry body excerpt shown inside a cluster planning prompt. */
+export const ORGANIZER_BODY_EXCERPT_CHARS = 3_000;
+/** Per-entry excerpt in the global inventory / meta-cluster prompt. */
+export const ORGANIZER_META_BODY_EXCERPT_CHARS = 600;
+export const ORGANIZER_GLOBAL_INVENTORY_CHARS = 8_000;
+/** Cap of raw model output preserved per cluster in the run report. */
+export const ORGANIZER_RAW_PROTOCOL_CHARS = 4_000;
+
+/** Quota ladder thresholds on remaining headroom (entries left in scope). */
+export const QUOTA_LADDER_THRESHOLDS = {
+  /** headroom > notice ⇒ normal */
+  notice: 100,
+  degraded: 50,
+  critical: 20,
+  exhausted: 5,
+} as const;

@@ -2,10 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { validateToolArguments } from "@earendil-works/pi-ai";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 
 const loader = createTsModuleLoader();
-const pathUtils = loader.loadModule("src/lib/tools/pathUtils.ts");
-const skillBuiltinHelpers = loader.loadModule("src/lib/skills/builtin.ts");
+const pathUtils = loader.loadModule(coreSrc("tools/pathUtils.ts"));
+const skillBuiltinHelpers = loader.loadModule(coreSrc("skills/builtin.ts"));
 
 test("ToolPathResolver accepts broad workspace path inputs", async () => {
   const resolver = new pathUtils.ToolPathResolver({ workdir: "/workspace/project" });
@@ -481,8 +492,8 @@ test("file tools can read enabled Skill files via skill URLs", async () => {
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "fs_read_text");
           return {
@@ -502,8 +513,8 @@ test("file tools can read enabled Skill files via skill URLs", async () => {
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -555,16 +566,16 @@ test("file tool schemas are strict and reject unsupported root arguments", async
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw new Error("unexpected invoke");
         },
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -594,16 +605,16 @@ test("file tools enforce enabled Skill allowlist for skill URLs", async () => {
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw new Error("unexpected invoke");
         },
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -645,8 +656,8 @@ test("file tools allow direct mutations inside enabled Skills when mutation is g
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "fs_path_status") {
             return {
@@ -671,8 +682,8 @@ test("file tools allow direct mutations inside enabled Skills when mutation is g
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -722,8 +733,8 @@ test("file tools allow direct mutations inside enabled Skills when mutation is g
 
 test("Write strips legacy mode before schema validation and omits it from the schema", async () => {
   const fsLoader = createTsModuleLoader();
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -756,8 +767,8 @@ test("Write auto-primes a full text snapshot before overwriting an unread file",
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "fs_path_status") {
             return {
@@ -798,8 +809,8 @@ test("Write auto-primes a full text snapshot before overwriting an unread file",
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -852,8 +863,8 @@ test("Write drops the auto-primed snapshot when the backend write fails", async 
   let failWrites = true;
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "fs_path_status") {
             return {
               path: args.path,
@@ -894,8 +905,8 @@ test("Write drops the auto-primed snapshot when the backend write fails", async 
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -937,8 +948,8 @@ test("Write rejects directory paths with filename guidance before touching the b
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "fs_path_status");
           return {
@@ -952,8 +963,8 @@ test("Write rejects directory paths with filename guidance before touching the b
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -992,8 +1003,8 @@ test("Write does not infer filenames from content when path is a directory", asy
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "fs_path_status");
           return {
@@ -1008,8 +1019,8 @@ test("Write does not infer filenames from content when path is a directory", asy
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -1045,8 +1056,8 @@ test("Write preserves extensionless file paths instead of adding a content-deriv
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "fs_path_status") {
             return {
@@ -1071,8 +1082,8 @@ test("Write preserves extensionless file paths instead of adding a content-deriv
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -1117,8 +1128,8 @@ test("Write replays the Gomoku failure sequence with generic directory recovery 
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "fs_path_status") {
             return {
@@ -1142,8 +1153,8 @@ test("Write replays the Gomoku failure sequence with generic directory recovery 
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -1229,16 +1240,16 @@ test("file tools block direct mutations inside backend-verified built-in Skills"
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw new Error("unexpected invoke");
         },
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -1273,8 +1284,8 @@ test("file tools normalize absolute enabled Skill paths", async () => {
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "fs_read_text");
           return {
@@ -1293,8 +1304,8 @@ test("file tools normalize absolute enabled Skill paths", async () => {
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -1336,16 +1347,16 @@ test("file tool runtime string errors surface the backend message with the displ
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw "I/O error: No such file or directory (os error 2)";
         },
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -1388,8 +1399,8 @@ test("file tool runtime string errors surface the backend message with the displ
 test("file tool not_found errors offer didYouMean or Glob/List recovery", async () => {
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           assert.equal(command, "fs_read_text");
           throw {
             code: "not_found",
@@ -1402,8 +1413,8 @@ test("file tool not_found errors offer didYouMean or Glob/List recovery", async 
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -1438,8 +1449,8 @@ test("Grep passes file paths straight to the backend and reports the single-file
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "fs_grep");
           assert.equal(args.path, "src/App.tsx");
@@ -1473,8 +1484,8 @@ test("Grep passes file paths straight to the backend and reports the single-file
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -1505,8 +1516,8 @@ test("Edit auto-primes a full text snapshot before replacement", async () => {
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "fs_path_status") {
             assert.equal(args.path, "src/App.tsx");
@@ -1551,8 +1562,8 @@ test("Edit auto-primes a full text snapshot before replacement", async () => {
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -1582,8 +1593,8 @@ test("Edit reuses full-read snapshots across path spellings via fileId", async (
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "fs_read_text") {
             assert.equal(args.path, "src/App.tsx");
@@ -1629,8 +1640,8 @@ test("Edit reuses full-read snapshots across path spellings via fileId", async (
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -1670,8 +1681,8 @@ test("SkillsManager read accepts explicit skill entry paths", async () => {
   const invocations = [];
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           return {
@@ -1687,7 +1698,7 @@ test("SkillsManager read accepts explicit skill entry paths", async () => {
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const bundle = skillTools.createSkillTools();
 
   assert.equal(bundle.metadataByName.get("SkillsManager").kind, "manage_skill");
@@ -1733,8 +1744,8 @@ test("SkillsManager install resolves local relative sources against the workspac
   const invocations = [];
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           return {
@@ -1753,7 +1764,7 @@ test("SkillsManager install resolves local relative sources against the workspac
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const bundle = skillTools.createSkillTools({
     workdir: "/Users/me/project",
     skillAccessPolicy: {
@@ -1784,8 +1795,8 @@ test("SkillsManager clawhub_install forwards owner handle for slug disambiguatio
   const invocations = [];
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           return {
@@ -1807,7 +1818,7 @@ test("SkillsManager clawhub_install forwards owner handle for slug disambiguatio
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const bundle = skillTools.createSkillTools({
     skillAccessPolicy: {
       allowedSkillNames: ["skills-installer"],
@@ -1837,15 +1848,15 @@ test("SkillsManager blocks unread enabled-Skill policy violations before backend
   const invocations = [];
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw new Error("unexpected invoke");
         },
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const bundle = skillTools.createSkillTools({
     skillAccessPolicy: {
       allowedSkillNames: ["skills-creator"],
@@ -1907,15 +1918,15 @@ test("SkillsManager blocks built-in Skill create/install targets before backend 
   const invocations = [];
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw new Error("unexpected invoke");
         },
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const bundle = skillTools.createSkillTools({
     skillAccessPolicy: {
       allowedSkillNames: ["skills-creator", "skills-installer", "liveagent-code-review"],
@@ -1975,8 +1986,8 @@ test("SkillsManager management can auto-enable installed Skills without exposing
   const events = [];
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           const action = args.payload.action;
@@ -2048,7 +2059,7 @@ test("SkillsManager management can auto-enable installed Skills without exposing
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const policy = {
     allowedSkillNames: ["skills-creator", "skills-installer"],
     allowedSkillBaseDirs: ["skills-creator", "skills-installer"],
@@ -2141,8 +2152,8 @@ test("SkillsManager management can auto-enable installed Skills without exposing
 test("SkillsManager list filters installed Skills when inventory is explicitly allowed", async () => {
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command) {
+      [backendClientPath]: {
+        async callBackend(command) {
           assert.equal(command, "system_manage_skill");
           return {
             action: "list",
@@ -2167,7 +2178,7 @@ test("SkillsManager list filters installed Skills when inventory is explicitly a
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const bundle = skillTools.createSkillTools({
     skillAccessPolicy: {
       allowedSkillNames: ["skills-creator"],
@@ -2194,15 +2205,15 @@ test("SkillsManager list filters installed Skills when inventory is explicitly a
 test("SkillsManager read errors route sibling Skill files back to file tools", async () => {
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command) {
+      [backendClientPath]: {
+        async callBackend(command) {
           assert.equal(command, "system_manage_skill");
           throw new Error("Failed to resolve the Skill file: No such file or directory (os error 2)");
         },
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const bundle = skillTools.createSkillTools();
 
   const result = await bundle.executeToolCall({
@@ -2228,8 +2239,8 @@ test("SkillsManager create action builds payload and refreshes skill discovery",
   const changes = [];
   const skillLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           const action = args.payload.action;
@@ -2273,7 +2284,7 @@ test("SkillsManager create action builds payload and refreshes skill discovery",
       },
     },
   });
-  const skillTools = skillLoader.loadModule("src/lib/tools/skillTools.ts");
+  const skillTools = skillLoader.loadModule(coreSrc("tools/skillTools.ts"));
   const policy = {
     allowedSkillNames: ["skills-creator", "skills-installer"],
     allowedSkillBaseDirs: ["skills-creator", "skills-installer"],
@@ -2406,8 +2417,8 @@ test("Image file tool returns display image details and inline image content", a
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           return {
             kind: "image",
@@ -2422,8 +2433,8 @@ test("Image file tool returns display image details and inline image content", a
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -2481,8 +2492,8 @@ test("Image file tool reads installed Skill images through skill URLs", async ()
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           return {
             kind: "image",
@@ -2497,8 +2508,8 @@ test("Image file tool reads installed Skill images through skill URLs", async ()
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -2542,8 +2553,8 @@ test("Image file tool normalizes absolute workspace and Skill image paths", asyn
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           return {
             kind: "image",
@@ -2558,8 +2569,8 @@ test("Image file tool normalizes absolute workspace and Skill image paths", asyn
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -2610,16 +2621,16 @@ test("Image file tool blocks fixed Skills root paths when Skills are disabled", 
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw new Error("unexpected invoke");
         },
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/Users/me/project",
     fileState: fileToolState.createFileToolState(),
@@ -2642,16 +2653,16 @@ test("Image runtime errors surface the backend message for resolved local paths"
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw "I/O error: No such file or directory (os error 2)";
         },
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     skillsRootEnabled: true,
@@ -2688,16 +2699,16 @@ test("Image runtime errors surface the backend message for resolved local paths"
 test("Image base64 errors keep exact-source guidance when no path was resolved", async () => {
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command) {
+      [backendClientPath]: {
+        async callBackend(command) {
           assert.equal(command, "fs_read_image_source");
           throw "unsupported image data";
         },
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -2749,16 +2760,16 @@ test("Image file tool returns multiple inline images from one call", async () =>
   ]);
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           return imageByPath.get(args.source);
         },
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -2798,8 +2809,8 @@ test("Image file tool forwards SVG sources as inline images", async () => {
   const svgSource = '<svg xmlns="http://www.w3.org/2000/svg"/>';
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           return {
             kind: "image",
@@ -2814,8 +2825,8 @@ test("Image file tool forwards SVG sources as inline images", async () => {
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -2849,8 +2860,8 @@ test("Image file tool accepts absolute paths, URLs, and base64 input", async () 
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           return {
             kind: "image",
@@ -2868,8 +2879,8 @@ test("Image file tool accepts absolute paths, URLs, and base64 input", async () 
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -2920,8 +2931,8 @@ test("Image generic source infers raw base64 image input", async () => {
   const invocations = [];
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           return {
             kind: "image",
@@ -2936,8 +2947,8 @@ test("Image generic source infers raw base64 image input", async () => {
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),
@@ -2981,8 +2992,8 @@ test("Write rejection for external paths echoes the resolved path and a correcte
 test("repeated identical failing calls escalate with a loop-breaking notice", async () => {
   const fsLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           assert.equal(command, "fs_path_status");
           return {
             path: args.path,
@@ -2996,8 +3007,8 @@ test("repeated identical failing calls escalate with a loop-breaking notice", as
       },
     },
   });
-  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
-  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const fsTools = fsLoader.loadModule(coreSrc("tools/fsTools.ts"));
+  const fileToolState = fsLoader.loadModule(coreSrc("tools/fileToolState.ts"));
   const bundle = fsTools.createFsTools({
     workdir: "/workspace",
     fileState: fileToolState.createFileToolState(),

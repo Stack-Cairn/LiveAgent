@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 
 const SSH_HOST = {
   id: "host-1",
@@ -59,8 +70,8 @@ function createSshSession(overrides = {}) {
 
 async function buildRegistry(params = {}) {
   const loader = createTsModuleLoader();
-  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const { buildBuiltinToolRegistry } = loader.loadModule(coreSrc("tools/builtinRegistry.ts"));
+  const { createFileToolState } = loader.loadModule(coreSrc("tools/fileToolState.ts"));
   return buildBuiltinToolRegistry({
     workdir: "/workspace",
     providerId: "codex",
@@ -112,7 +123,7 @@ test("SSHManager is auto-registered by project hosts, runtime, and remote switch
 
 test("SSHManager list_hosts redacts configured secrets", async () => {
   const loader = createTsModuleLoader();
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -148,8 +159,8 @@ test("SSHManager create_session defaults SFTP on and refuses SSH prompts", async
   const changes = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_create_ssh") {
             return { session: createSshSession(), output: "", truncated: false };
@@ -159,7 +170,7 @@ test("SSHManager create_session defaults SFTP on and refuses SSH prompts", async
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -197,8 +208,8 @@ test("SSHManager exec auto-creates a visible session before running command", as
   const changes = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return { sessions: [] };
@@ -222,7 +233,7 @@ test("SSHManager exec auto-creates a visible session before running command", as
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -264,8 +275,8 @@ test("SSHManager exec abort requests runtime cancellation", async () => {
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return { sessions: [createSshSession()] };
@@ -281,7 +292,7 @@ test("SSHManager exec abort requests runtime cancellation", async () => {
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -329,8 +340,8 @@ test("SSHManager exec reuses an existing running SSH session for the same host",
   const changes = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return {
@@ -368,7 +379,7 @@ test("SSHManager exec reuses an existing running SSH session for the same host",
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -403,8 +414,8 @@ test("SSHManager exec can intentionally create an additional SSH session", async
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_create_ssh") {
             return {
@@ -431,7 +442,7 @@ test("SSHManager exec can intentionally create an additional SSH session", async
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -466,8 +477,8 @@ test("SSHManager can require an existing session without implicitly creating one
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return { sessions: [] };
@@ -477,7 +488,7 @@ test("SSHManager can require an existing session without implicitly creating one
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -524,8 +535,8 @@ test("SSHManager never dials keyboard-interactive hosts itself", async () => {
   let listedSessions = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return { sessions: listedSessions };
@@ -545,7 +556,7 @@ test("SSHManager never dials keyboard-interactive hosts itself", async () => {
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -607,15 +618,15 @@ test("SSHManager rejects conflicting session_id and new session strategy", async
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw new Error(`unexpected invoke ${command}`);
         },
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -642,8 +653,8 @@ test("SSHManager validates current project sessions before SFTP actions", async 
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return { sessions: [createSshSession()] };
@@ -656,7 +667,7 @@ test("SSHManager validates current project sessions before SFTP actions", async 
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -696,8 +707,8 @@ test("SSHManager SFTP actions reuse SFTP-enabled host sessions", async () => {
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return {
@@ -721,7 +732,7 @@ test("SSHManager SFTP actions reuse SFTP-enabled host sessions", async () => {
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -752,8 +763,8 @@ test("SSHManager SFTP actions create a new session when no SFTP-enabled session 
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return {
@@ -780,7 +791,7 @@ test("SSHManager SFTP actions create a new session when no SFTP-enabled session 
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -812,8 +823,8 @@ test("SSHManager SFTP actions can intentionally create an additional SFTP-enable
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_create_ssh") {
             return {
@@ -833,7 +844,7 @@ test("SSHManager SFTP actions can intentionally create an additional SFTP-enable
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",
@@ -869,8 +880,8 @@ test("SSHManager rejects unauthorized hosts and cross-project sessions before in
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "terminal_list") {
             return {
@@ -887,7 +898,7 @@ test("SSHManager rejects unauthorized hosts and cross-project sessions before in
       },
     },
   });
-  const { createSSHManagerTools } = loader.loadModule("src/lib/tools/sshManagerTools.ts");
+  const { createSSHManagerTools } = loader.loadModule(coreSrc("tools/sshManagerTools.ts"));
   const bundle = createSSHManagerTools({
     enabled: true,
     runtimeScope: "chat",

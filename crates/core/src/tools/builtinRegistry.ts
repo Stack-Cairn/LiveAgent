@@ -14,7 +14,7 @@ import type {
   BuiltinToolMetadata,
 } from "./builtinTypes";
 import { createCronTools } from "./cronTools";
-import type { FileToolState } from "./fileToolState";
+import { createFileToolState, type FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
@@ -23,6 +23,12 @@ import { createShellTools } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
 import { createSSHManagerTools, type SshManagerSessionChange } from "./sshManagerTools";
+import { createSubagentTools } from "../subagents/agentTool";
+import { createSendMessageTools } from "../subagents/sendMessageTool";
+import type { SubagentConversationStore } from "../subagents/store";
+import type { SubagentScheduler } from "../subagents/scheduler";
+import { SUBAGENT_PARENT_ID, type SubagentTemplate } from "../subagents/types";
+import type { ProviderRuntimeConfig } from "../providers/runtime/types";
 import type { SystemToolRuntimeScope } from "./systemToolOptions";
 import { createTerminalTools } from "./terminalTools";
 import { createTodoTools, type TodoToolState } from "./todoTools";
@@ -266,6 +272,15 @@ export async function buildBuiltinToolRegistry(
     todoState?: TodoToolState;
     /** chat 场景注入交互式提问工具；自动化场景无人值守，不注册。 */
     askUserQuestionConversationId?: string;
+    /** 存在即启用子代理委派(Agent/SendMessage);缺省则完全不注册。 */
+    subagents?: {
+      model: string;
+      runtime: ProviderRuntimeConfig;
+      sessionId?: string;
+      templates?: SubagentTemplate[];
+      store: SubagentConversationStore;
+      scheduler: SubagentScheduler;
+    };
   },
 ) {
   const baseBundles = await buildBaseBuiltinToolBundles(params);
@@ -277,5 +292,58 @@ export async function buildBuiltinToolRegistry(
     params.runtimeScope === "chat" && params.askUserQuestionConversationId
       ? [createAskUserQuestionTools({ conversationId: params.askUserQuestionConversationId })]
       : [];
-  return createBuiltinToolRegistry([...baseBundles, ...todoBundles, ...askUserQuestionBundles]);
+  const coreBundles = [...baseBundles, ...todoBundles, ...askUserQuestionBundles];
+
+  // 子代理只在 chat 场景注册:自动化(cron)无人值守,不该再派生子代理。
+  const subagentConfig = params.runtimeScope === "chat" ? params.subagents : undefined;
+  if (!subagentConfig) {
+    return createBuiltinToolRegistry(coreBundles);
+  }
+
+  // 父级工具表是子代理 readonly 模式的取材来源,故先建一次基础 registry;
+  // Agent/SendMessage 再作为独立 bundle 合并进最终 registry。
+  const parentRegistry = createBuiltinToolRegistry(coreBundles);
+  // roster/templates 块要反映最新 store 状态,故在构造工具描述前先 hydrate。
+  await subagentConfig.store.ready().catch(() => undefined);
+
+  const subagentBundle = createSubagentTools({
+    providerId: params.providerId,
+    model: subagentConfig.model,
+    runtime: subagentConfig.runtime,
+    runtimePlatform: params.runtimePlatform,
+    workdir: params.workdir,
+    resolveHomeDir,
+    sessionId: subagentConfig.sessionId,
+    templates: subagentConfig.templates ?? [],
+    store: subagentConfig.store,
+    scheduler: subagentConfig.scheduler,
+    baseTools: parentRegistry.tools,
+    executeToolCall: (toolCall, signal) => parentRegistry.executeToolCall(toolCall, signal),
+    metadataByName: parentRegistry.metadataByName,
+    // worktree 模式的子代理在隔离工作目录上重建一份自己的工具表(不含子代理工具)。
+    createSubagentToolRegistry: async (childWorkdir) => {
+      const childBundles = await buildBaseBuiltinToolBundles({
+        ...params,
+        workdir: childWorkdir,
+        fileState: createFileToolState(),
+        // selectWorktreeTools 只放行只读 memory;rw 元数据会把它整个滤掉。
+        memoryToolMode: "ro",
+      });
+      const childRegistry = createBuiltinToolRegistry(childBundles);
+      return {
+        tools: childRegistry.tools,
+        executeToolCall: childRegistry.executeToolCall,
+        metadataByName: childRegistry.metadataByName,
+      };
+    },
+  });
+
+  // 父级自己的 SendMessage:让主 agent 也能回信给子代理。
+  const parentSendMessageBundle = createSendMessageTools({
+    store: subagentConfig.store,
+    senderId: SUBAGENT_PARENT_ID,
+    senderName: "Parent Agent",
+  });
+
+  return createBuiltinToolRegistry([...coreBundles, subagentBundle, parentSendMessageBundle]);
 }

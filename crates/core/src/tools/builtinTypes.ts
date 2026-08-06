@@ -1,5 +1,6 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 
+import type { ToolStatus } from "../protocol/wireEvents";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
@@ -40,7 +41,7 @@ export type BuiltinToolExecutionContext = {
   emitToolCall?: (toolCall: ToolCall) => void;
   emitToolExecutionStart?: (toolCall: ToolCall) => void;
   emitToolResult?: (toolCall: ToolCall, toolResult: ToolResultMessage) => void;
-  emitToolStatus?: (status: string | null) => void;
+  emitToolStatus?: (status: ToolStatus | null) => void;
 };
 
 export type BuiltinToolExecutor = (

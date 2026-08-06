@@ -7,8 +7,12 @@ import {
   abortConversation,
   acceptChatSend,
   type ChatSendRequest,
+  disposeConversation,
   getConversationLiveSnapshot,
 } from "./engine";
+import type { MemoryOrganizeRun } from "./memory/api";
+import { acceptOrganizerRun } from "./memory/organizer/run";
+import { pokeCronPromptRuns, startCronPromptRunner } from "./automation/cronPromptRunner";
 
 const nodePort = process.env.LIVEAGENT_NODE_PORT;
 const backendPort = process.env.LIVEAGENT_BACKEND_PORT;
@@ -59,7 +63,8 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
     if (req.method === "POST" && req.url === "/chat_send") {
       // 受理即回 202(决策 2):增量与终态全走 WS 广播,不在这个响应里。
-      const result = acceptChatSend(body as ChatSendRequest);
+      // 编辑重发是例外:acceptChatSend 会等截断落库后才 resolve。
+      const result = await acceptChatSend(body as ChatSendRequest);
       respondJson(res, 202, { ok: result });
     } else if (req.method === "POST" && req.url === "/chat_abort") {
       const { conversationId } = (body ?? {}) as { conversationId?: string };
@@ -68,6 +73,25 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         return;
       }
       respondJson(res, 200, { ok: { aborted: abortConversation(conversationId) } });
+    } else if (req.method === "POST" && req.url === "/conversation_dispose") {
+      const { conversationId } = (body ?? {}) as { conversationId?: string };
+      if (!conversationId) {
+        respondJson(res, 400, { error: "conversationId required" });
+        return;
+      }
+      respondJson(res, 200, { ok: { disposed: disposeConversation(conversationId) } });
+    } else if (req.method === "POST" && req.url === "/memory_organize_run") {
+      // 受理即回 202:一次整理可能跑几分钟,阶段进度与终态走 memory_organize_* 事件。
+      const { run } = (body ?? {}) as { run?: MemoryOrganizeRun };
+      if (!run) {
+        respondJson(res, 400, { error: "run required" });
+        return;
+      }
+      respondJson(res, 202, { ok: acceptOrganizerRun(run) });
+    } else if (req.method === "POST" && req.url === "/cron_prompt_poke") {
+      // 立即认领:引擎自带对账定时器,这条只是把「刚排进队列」提前告知,
+      // 省掉一个轮询周期。执行进度与终态走 cron_prompt_* 事件。
+      respondJson(res, 202, { ok: pokeCronPromptRuns() });
     } else if (req.method === "GET" && req.url?.startsWith("/conversation_live")) {
       const url = new URL(req.url, `http://127.0.0.1:${nodePort}`);
       const conversationId = url.searchParams.get("conversationId");
@@ -95,6 +119,8 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
 
 server.listen(parseInt(nodePort), "127.0.0.1", () => {
   console.log(`Node engine listening on 127.0.0.1:${nodePort}`);
+  // 定时任务的对账循环归引擎所有:不开界面也照常跑。
+  startCronPromptRunner();
 });
 
 // 优雅关闭

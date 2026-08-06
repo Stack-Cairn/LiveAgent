@@ -38,6 +38,7 @@ import {
 import type { RetryAttemptRecord } from "../../providers/runtime/streamRetry";
 import type { RuntimePlatform } from "../../runtimePlatform";
 import type { ProviderId, ReasoningLevel } from "../../settings";
+import type { ToolStatus } from "../../protocol/wireEvents";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
@@ -278,14 +279,12 @@ function getParallelToolBatch(
   return parallelToolBatches.get(batchKey) ?? null;
 }
 
-function getParallelToolBatchStatus(batch: ParallelToolBatch) {
-  if (batch.toolName === "Bash") {
-    return `正在并行执行 ${batch.toolCalls.length} 个 Bash 命令...`;
-  }
-  if (batch.toolName === "Agent") {
-    return `正在并行执行 ${batch.toolCalls.length} 个 Agent 调用...`;
-  }
-  return `正在并行执行 ${batch.toolCalls.length} 个 ${batch.toolName} 调用...`;
+function getParallelToolBatchStatus(batch: ParallelToolBatch): ToolStatus {
+  return {
+    kind: "parallel_tools_running",
+    tool_name: batch.toolName,
+    count: batch.toolCalls.length,
+  };
 }
 
 function toMessageToolResult(message: Message, toolCall: ToolCall): ToolResultMessage {
@@ -301,30 +300,14 @@ function toMessageToolResult(message: Message, toolCall: ToolCall): ToolResultMe
   };
 }
 
-type TurnContextOverride = {
-  context: Context;
-  emittedMessages: Message[];
-} | null;
-
 type ToolExecutionEventContext = {
   parentToolCall: ToolCall;
   subagentScheduler: SubagentScheduler;
   emitToolCall: (toolCall: ToolCall) => void;
   emitToolExecutionStart: (toolCall: ToolCall) => void;
   emitToolResult: (toolCall: ToolCall, toolResult: ToolResultMessage) => void;
-  emitToolStatus: (status: string | null) => void;
+  emitToolStatus: (status: ToolStatus | null) => void;
 };
-
-function getAgentMessages(agent: Agent | null): Message[] {
-  return agent ? (agent.state.messages as Message[]) : [];
-}
-
-function getMessagesSinceBaseline(agent: Agent | null, baselineIndex: number): Message[] {
-  const messages = getAgentMessages(agent);
-  if (baselineIndex <= 0) return messages.slice();
-  if (baselineIndex >= messages.length) return [];
-  return messages.slice(baselineIndex);
-}
 
 function findLastAssistantMessage(messages: Message[]): AssistantMessage | null {
   return (
@@ -369,7 +352,7 @@ export async function runAssistantWithTools(params: {
     context: Context;
     emittedMessages: Message[];
   } | null>;
-  onToolStatus?: (status: string | null) => void;
+  onToolStatus?: (status: ToolStatus | null) => void;
   onRetryAttempts?: (round: number, attempts: RetryAttemptRecord[]) => void;
   signal?: AbortSignal;
   debugLogger?: StreamDebugLogger;
@@ -649,19 +632,14 @@ export async function runAssistantWithTools(params: {
       params.runtimePlatform,
     );
     let currentSystemPrompt = params.context.systemPrompt;
-    let pendingTurnOverridePromise: Promise<TurnContextOverride> | null = null;
-    let emittedBaselineIndex = params.context.messages.length;
+    // Set once onBeforeNextTurn replaces the transcript; until then the emitted
+    // tail is simply the loop's newMessages.
+    let overriddenEmittedMessages: Message[] | null = null;
+    // How much of the loop's newMessages the caller had already seen at the
+    // moment of the last override; everything past it is still ours to report.
+    let overriddenNewMessagesIndex = 0;
     let latestAgentEndMessages: Message[] = [];
     let agentTools: AgentTool<any>[] = [];
-    const pendingRecoveredSeedTurnRef: {
-      current: {
-        round: number;
-        assistant: AssistantMessage;
-        toolCalls: ToolCall[];
-      } | null;
-    } = {
-      current: null,
-    };
     let agent: Agent | null = null;
     const hostedSearchBlocksByRound = new Map<number, HostedSearchBlock[]>();
     const hostedSearchOrderedBlocksByRound = new Map<number, HostedSearchOrderedBlock[]>();
@@ -761,67 +739,38 @@ export async function runAssistantWithTools(params: {
       return controller.finalization;
     }
 
-    function replaceAgentStateMessage(target: Message, replacement: Message) {
-      const currentAgent = agent;
-      if (!currentAgent) return false;
-      const stateMessages = getAgentMessages(currentAgent);
-      let targetIndex = stateMessages.lastIndexOf(target);
-      if (targetIndex < 0) {
-        for (let index = stateMessages.length - 1; index >= 0; index -= 1) {
-          const message = stateMessages[index];
-          if (!message) continue;
-          if (message.role !== target.role) continue;
-          if (message.role !== "assistant" || target.role !== "assistant") continue;
-          if (
-            typeof message.timestamp === "number" &&
-            typeof target.timestamp === "number" &&
-            message.timestamp === target.timestamp
-          ) {
-            targetIndex = index;
-            break;
-          }
-        }
-      }
-      if (targetIndex < 0) return false;
-      currentAgent.state.messages = [
-        ...stateMessages.slice(0, targetIndex),
-        replacement,
-        ...stateMessages.slice(targetIndex + 1),
-      ];
-      return true;
-    }
-
+    // pi-agent-core hands listeners the live message object: the loop keeps it in
+    // its own context array, Agent pushes the same reference into state.messages,
+    // and the post-message_end tool-call scan reads it once more. Mutating the
+    // message in place therefore reaches every holder at once — which is why no
+    // code below ever replaces an entry of either message array.
     function applyHostedSearchBlocksToAssistant(
       assistant: AssistantMessage,
       round: number,
       hostedSearchBlocks: HostedSearchBlock[],
     ) {
-      return appendHostedSearchBlocksToAssistant(
+      const next = appendHostedSearchBlocksToAssistant(
         assistant as AssistantMessage & { content: unknown[] },
         hostedSearchBlocks,
         {
           orderedBlocks: hostedSearchOrderedBlocksByRound.get(round),
         },
       ) as AssistantMessage;
+      if (next !== assistant) {
+        assistant.content = next.content;
+      }
+      return assistant;
     }
 
     function queueHostedSearchFinalization(
       round: number,
       mode: "completed" | "failed" | "dispose",
-      assistantRef?: { current: AssistantMessage },
+      assistant?: AssistantMessage,
     ) {
       const finalization = finishHostedSearchRound(round, mode)
         .then((hostedSearchBlocks) => {
-          if (!assistantRef) return;
-          const nextAssistant = applyHostedSearchBlocksToAssistant(
-            assistantRef.current,
-            round,
-            hostedSearchBlocks,
-          );
-          if (nextAssistant === assistantRef.current) return;
-          if (replaceAgentStateMessage(assistantRef.current, nextAssistant)) {
-            assistantRef.current = nextAssistant;
-          }
+          if (!assistant) return;
+          applyHostedSearchBlocksToAssistant(assistant, round, hostedSearchBlocks);
         })
         .catch(() => undefined);
       hostedSearchFinalizations.add(finalization);
@@ -842,24 +791,25 @@ export async function runAssistantWithTools(params: {
       }
     }
 
-    async function consumePendingTurnOverride(): Promise<TurnContextOverride> {
-      const pending = pendingTurnOverridePromise;
-      if (!pending) return null;
-      pendingTurnOverridePromise = null;
-      return pending;
+    // The loop owns the transcript. `prepareNextTurnWithContext` reports the
+    // context it will use for the next request, so out-params read from here
+    // rather than from agent.state (which the loop only syncs at message_end).
+    let currentLoopMessages: Message[] = params.context.messages.slice();
+
+    function getRuntimeMessages(): Message[] {
+      return currentLoopMessages;
     }
 
-    function applyTurnContextOverride(override: Exclude<TurnContextOverride, null>) {
-      if (!agent) return;
-      currentSystemPrompt = override.context.systemPrompt;
-      agent.state.systemPrompt = buildSystemPrompt(currentSystemPrompt, toolsSuffix);
-      agent.state.messages = override.context.messages.slice();
-      agent.state.tools = agentTools;
-      emittedBaselineIndex = Math.max(
-        0,
-        override.context.messages.length - override.emittedMessages.length,
-      );
-      latestAgentEndMessages = [];
+    // What this run appended on top of the caller's starting context. Normally
+    // that is the loop's own newMessages; after an onBeforeNextTurn override
+    // replaced the transcript, it is the tail the caller kept plus everything
+    // the loop has appended since that point.
+    function getEmittedMessages(): Message[] {
+      if (overriddenEmittedMessages === null) return latestAgentEndMessages.slice();
+      return [
+        ...overriddenEmittedMessages,
+        ...latestAgentEndMessages.slice(overriddenNewMessagesIndex),
+      ];
     }
 
     const visibleAgentTools: AgentTool<any>[] = llmTools.map((tool) => ({
@@ -999,14 +949,17 @@ export async function runAssistantWithTools(params: {
         reasoning: normalizeStreamReasoning(options?.reasoning) ?? fallbackReasoning,
         streamRetry: {
           onRetry: (attempt, maxAttempts, errorMessage) => {
-            params.onToolStatus?.(
-              `第 ${round} 轮：连接已断开，正在重试 (${attempt}/${maxAttempts})...`,
-            );
+            params.onToolStatus?.({
+              kind: "stream_retrying",
+              round,
+              attempt,
+              max_attempts: maxAttempts,
+            });
             retryAttemptsForRound.push({ attempt, maxAttempts, errorMessage });
             params.onRetryAttempts?.(round, retryAttemptsForRound.slice());
           },
           onRetryRecovered: () => {
-            params.onToolStatus?.(`第 ${round} 轮：模型生成中...`);
+            params.onToolStatus?.({ kind: "model_generating", round });
           },
         },
       };
@@ -1072,9 +1025,10 @@ export async function runAssistantWithTools(params: {
     // never reaches beforeToolCall (pi-agent-core validates first), so the
     // model would see a schema error blaming its own call. Rewrite such tool
     // results into the truthful transport-error teaching before the next turn.
-    const reconcileTruncatedToolResults = () => {
-      if (incompleteToolCallArguments.size === 0) return;
-      const messages = getAgentMessages(agent);
+    // Pure: the rewrite only shapes the outgoing request, so it maps the
+    // messages the loop hands us instead of writing back into agent.state.
+    const reconcileTruncatedToolResults = (messages: Message[]): Message[] => {
+      if (incompleteToolCallArguments.size === 0) return messages;
       let changed = false;
       const next = messages.map((message) => {
         if (message.role !== "toolResult" || !message.isError) return message;
@@ -1090,9 +1044,7 @@ export async function runAssistantWithTools(params: {
           ],
         };
       });
-      if (changed && agent) {
-        agent.state.messages = next;
-      }
+      return changed ? next : messages;
     };
 
     agent = new Agent({
@@ -1170,13 +1122,54 @@ export async function runAssistantWithTools(params: {
         }
         return undefined;
       },
-      transformContext: async (_messages, _signal) => {
-        const override = await consumePendingTurnOverride();
-        if (override) {
-          applyTurnContextOverride(override);
+      transformContext: async (messages, _signal) => {
+        currentLoopMessages = messages as Message[];
+        return reconcileTruncatedToolResults(messages as Message[]);
+      },
+      // Fires right after turn_end, before the loop decides on another request.
+      // Returning a context here replaces the loop's own transcript wholesale,
+      // which is exactly what mid-run compaction needs — no state rewriting.
+      prepareNextTurnWithContext: async (turnContext) => {
+        const assistant = turnContext.message;
+        const toolResults = turnContext.toolResults;
+        currentLoopMessages = turnContext.context.messages as Message[];
+        if (
+          !params.onBeforeNextTurn ||
+          assistant.role !== "assistant" ||
+          assistant.stopReason !== "toolUse" ||
+          toolResults.length === 0
+        ) {
+          return undefined;
         }
-        reconcileTruncatedToolResults();
-        return getAgentMessages(agent).slice();
+
+        const override = await params.onBeforeNextTurn({
+          round: currentRound,
+          assistant,
+          toolResults,
+          runtimeContext: {
+            systemPrompt: currentSystemPrompt,
+            messages: (turnContext.context.messages as Message[]).slice(),
+            tools: llmTools,
+          },
+          emittedMessages: (turnContext.newMessages as Message[]).slice(),
+          signal: params.signal,
+        });
+        if (!override) return undefined;
+
+        currentSystemPrompt = override.context.systemPrompt;
+        currentLoopMessages = override.context.messages.slice();
+        // newMessages keeps accumulating across the whole run, so it can no
+        // longer serve as the "since baseline" cursor once the transcript is
+        // replaced. Track the emitted tail explicitly from here on.
+        overriddenEmittedMessages = override.emittedMessages.slice();
+        overriddenNewMessagesIndex = turnContext.newMessages.length;
+        return {
+          context: {
+            systemPrompt: buildSystemPrompt(currentSystemPrompt, toolsSuffix),
+            messages: currentLoopMessages,
+            tools: agentTools,
+          },
+        };
       },
     });
 
@@ -1187,7 +1180,7 @@ export async function runAssistantWithTools(params: {
         case "turn_start":
           currentRound += 1;
           params.onTurnStart?.(currentRound);
-          params.onToolStatus?.(`第 ${currentRound} 轮：模型生成中...`);
+          params.onToolStatus?.({ kind: "model_generating", round: currentRound });
           break;
         case "message_update": {
           const streamEvent = event.assistantMessageEvent;
@@ -1261,73 +1254,79 @@ export async function runAssistantWithTools(params: {
                   ? "failed"
                   : "completed";
             const hostedSearchBlocks = getHostedSearchBlocksForRound(currentRound);
-            const assistantWithCanonicalToolNames = normalizeAssistantToolCallNamesForExecution(
-              event.message as AssistantMessage,
-            );
-            const assistantWithHostedSearch = applyHostedSearchBlocksToAssistant(
-              assistantWithCanonicalToolNames,
+            // Every helper below mutates this one object; the loop reads it back
+            // immediately after this listener returns to decide what to execute.
+            const assistantMessage = event.message as AssistantMessage;
+            normalizeAssistantToolCallNamesForExecution(assistantMessage);
+            applyHostedSearchBlocksToAssistant(
+              assistantMessage,
               currentRound,
               hostedSearchBlocks,
             );
-            const normalizedSeedTurn = recoverAssistantSeedToolCalls(assistantWithHostedSearch);
+
+            // Text-shaped tool calls (seed / DeepSeek DSML) are parsed out of the
+            // message and spliced in as real toolCall blocks. Because the loop
+            // scans this same object once we return, it executes them natively —
+            // through beforeToolCall, so the approval gate and the truncated-
+            // argument guard apply exactly as they do to structured calls.
+            const normalizedSeedTurn = recoverAssistantSeedToolCalls(assistantMessage);
             let recoveredSeedToolCalls: ToolCall[] = [];
-            let assistantWithRecoveredToolCalls =
-              normalizedSeedTurn?.assistant ?? assistantWithHostedSearch;
             if (normalizedSeedTurn) {
               const deduped = dedupeRecoveredToolCallsAgainstExisting({
-                existingAssistant: assistantWithHostedSearch,
+                existingAssistant: assistantMessage,
                 recoveredToolCalls: normalizedSeedTurn.toolCalls,
                 canonicalizeToolName,
               });
               recoveredSeedToolCalls = deduped.uniqueToolCalls;
-              if (deduped.duplicateToolCallIds.size > 0) {
-                assistantWithRecoveredToolCalls = {
-                  ...assistantWithRecoveredToolCalls,
-                  content: assistantWithRecoveredToolCalls.content.filter(
-                    (block) =>
-                      block.type !== "toolCall" || !deduped.duplicateToolCallIds.has(block.id),
-                  ),
-                };
+              assistantMessage.content = normalizedSeedTurn.assistant.content.filter(
+                (block) =>
+                  block.type !== "toolCall" || !deduped.duplicateToolCallIds.has(block.id),
+              );
+              normalizeAssistantToolCallNamesForExecution(assistantMessage);
+              if (recoveredSeedToolCalls.length > 0) {
+                // A "length" stop means the response was cut off, so the markup
+                // we just parsed may itself be incomplete — leave that stop
+                // reason alone and let the loop refuse the batch.
+                if (assistantMessage.stopReason !== "length") {
+                  assistantMessage.stopReason = "toolUse";
+                }
+                params.debugLogger?.logResponse({
+                  type: "seed_tool_call_recovery",
+                  round: currentRound,
+                  toolCalls: recoveredSeedToolCalls,
+                });
               }
             }
-            const assistantMessage = normalizeAssistantToolCallNamesForExecution(
-              assistantWithRecoveredToolCalls,
+            queueHostedSearchFinalization(
+              currentRound,
+              hostedSearchFinishMode,
+              assistantMessage,
             );
-            if (
-              normalizedSeedTurn ||
-              assistantMessage !== event.message ||
-              assistantWithHostedSearch !== event.message
-            ) {
-              const stateMessages = getAgentMessages(agent);
-              if (stateMessages.length > 0) {
-                agent.state.messages = [...stateMessages.slice(0, -1), assistantMessage];
-              }
-            }
-            if (normalizedSeedTurn && recoveredSeedToolCalls.length > 0) {
-              pendingRecoveredSeedTurnRef.current = {
-                round: currentRound,
-                assistant: assistantMessage,
-                toolCalls: recoveredSeedToolCalls,
-              };
-              params.debugLogger?.logResponse({
-                type: "seed_tool_call_recovery",
-                round: currentRound,
-                toolCalls: recoveredSeedToolCalls,
-              });
-            }
-            queueHostedSearchFinalization(currentRound, hostedSearchFinishMode, {
-              current: assistantMessage,
-            });
             params.debugLogger?.logResult({
               round: currentRound,
               assistant: assistantMessage,
             });
-            const toolCallCount = getAssistantToolCalls(assistantMessage).filter(
+            const visibleToolCalls = getAssistantToolCalls(assistantMessage).filter(
               (toolCall) => !shouldSilenceProviderNativeToolCall(toolCall),
-            ).length;
-            if (toolCallCount > 0) {
+            );
+            if (visibleToolCalls.length > 0) {
               nativeWebSearchStatusController.pause();
-              params.onToolStatus?.(`第 ${currentRound} 轮：准备执行 ${toolCallCount} 个工具...`);
+              const visibleRecoveredCount = recoveredSeedToolCalls.filter(
+                (toolCall) => !shouldSilenceProviderNativeToolCall(toolCall),
+              ).length;
+              params.onToolStatus?.(
+                visibleRecoveredCount > 0
+                  ? {
+                      kind: "tools_resuming",
+                      round: currentRound,
+                      tool_count: visibleRecoveredCount,
+                    }
+                  : {
+                      kind: "tools_preparing",
+                      round: currentRound,
+                      tool_count: visibleToolCalls.length,
+                    },
+              );
             }
             params.onAssistantMessage?.(assistantMessage, currentRound);
           } else if (event.message.role === "toolResult") {
@@ -1342,35 +1341,6 @@ export async function runAssistantWithTools(params: {
             }
           }
           break;
-        case "turn_end": {
-          const toolResults = event.toolResults.filter(
-            (message): message is ToolResultMessage => message.role === "toolResult",
-          );
-          if (
-            params.onBeforeNextTurn &&
-            event.message.role === "assistant" &&
-            event.message.stopReason === "toolUse" &&
-            toolResults.length > 0
-          ) {
-            const runtimeMessages = getAgentMessages(agent);
-            const runtimeSnapshot: Context = {
-              systemPrompt: currentSystemPrompt,
-              messages: runtimeMessages.slice(),
-              tools: llmTools,
-            };
-            const emittedSnapshot = getMessagesSinceBaseline(agent, emittedBaselineIndex);
-            const assistant = event.message;
-            pendingTurnOverridePromise = params.onBeforeNextTurn({
-              round: currentRound,
-              assistant,
-              toolResults,
-              runtimeContext: runtimeSnapshot,
-              emittedMessages: emittedSnapshot,
-              signal: params.signal,
-            });
-          }
-          break;
-        }
         case "tool_execution_start": {
           nativeWebSearchStatusController.pause();
           const toolCall =
@@ -1392,7 +1362,7 @@ export async function runAssistantWithTools(params: {
           if (parallelBatch && parallelBatch.toolCalls.length > 1) {
             params.onToolStatus?.(getParallelToolBatchStatus(parallelBatch));
           } else {
-            params.onToolStatus?.(`正在执行：${summarizeToolCall(toolCall)}`);
+            params.onToolStatus?.({ kind: "tool_running", summary: summarizeToolCall(toolCall) });
           }
           params.onToolExecutionStart?.(toolCall, currentRound);
           break;
@@ -1423,96 +1393,16 @@ export async function runAssistantWithTools(params: {
     }
 
     try {
-      let recoveredSeedTurnCount = 0;
-      while (true) {
-        throwIfRunnerCancelled(params.signal);
-        await agent.continue();
-        throwIfRunnerCancelled(params.signal);
-
-        const override = await consumePendingTurnOverride();
-        throwIfRunnerCancelled(params.signal);
-        if (override) {
-          applyTurnContextOverride(override);
-        }
-
-        const recoveredSeedTurn = pendingRecoveredSeedTurnRef.current;
-        pendingRecoveredSeedTurnRef.current = null;
-        if (recoveredSeedTurn === null) {
-          break;
-        }
-        const recoveredSeedRound = recoveredSeedTurn.round;
-        const recoveredSeedAssistant = recoveredSeedTurn.assistant;
-        const recoveredSeedToolCalls = recoveredSeedTurn.toolCalls;
-
-        recoveredSeedTurnCount += 1;
-        if (recoveredSeedTurnCount > 8) {
-          throw new Error("Too many seed tool-call recovery attempts");
-        }
-
-        const visibleRecoveredSeedToolCalls = recoveredSeedToolCalls.filter(
-          (toolCall) => !shouldSilenceProviderNativeToolCall(toolCall),
-        );
-        if (visibleRecoveredSeedToolCalls.length > 0) {
-          params.onToolStatus?.(
-            `第 ${recoveredSeedRound} 轮：恢复执行 ${visibleRecoveredSeedToolCalls.length} 个工具...`,
-          );
-        }
-
-        const syntheticToolResults: ToolResultMessage[] = [];
-        for (const toolCall of recoveredSeedToolCalls) {
-          throwIfRunnerCancelled(params.signal);
-          toolCallsById.set(toolCall.id, toolCall);
-          const shouldSilenceToolCall = shouldSilenceProviderNativeToolCall(toolCall);
-          if (!shouldSilenceToolCall) {
-            params.onToolCall?.(toolCall, recoveredSeedRound);
-            params.onToolStatus?.(`正在执行：${summarizeToolCall(toolCall)}`);
-            params.onToolExecutionStart?.(toolCall, recoveredSeedRound);
-          }
-
-          const result = await executeSingleToolCall(toolCall, params.signal);
-          throwIfRunnerCancelled(params.signal);
-          const toolResult = {
-            role: "toolResult",
-            toolCallId: toolCall.id,
-            toolName: toolCall.name,
-            content: result.content,
-            details: result.details,
-            isError: toolResultErrorFlags.get(toolCall.id) ?? false,
-            timestamp: Date.now(),
-          } satisfies ToolResultMessage;
-
-          syntheticToolResults.push(toolResult);
-          if (!shouldSilenceToolCall) {
-            params.onToolResult?.(toolCall, toolResult, recoveredSeedRound);
-          }
-        }
-
-        if (syntheticToolResults.length > 0) {
-          agent.state.messages = [...getAgentMessages(agent), ...syntheticToolResults];
-        }
-
-        if (params.onBeforeNextTurn) {
-          throwIfRunnerCancelled(params.signal);
-          pendingTurnOverridePromise = params.onBeforeNextTurn({
-            round: recoveredSeedRound,
-            assistant: recoveredSeedAssistant,
-            toolResults: syntheticToolResults,
-            runtimeContext: {
-              systemPrompt: currentSystemPrompt,
-              messages: getAgentMessages(agent).slice(),
-              tools: llmTools,
-            },
-            emittedMessages: getMessagesSinceBaseline(agent, emittedBaselineIndex),
-            signal: params.signal,
-          });
-        }
-      }
-
       throwIfRunnerCancelled(params.signal);
+      // One call. Recovered text tool calls, mid-run compaction and follow-up
+      // turns are all handled inside the library loop now.
+      await agent.continue();
+      throwIfRunnerCancelled(params.signal);
+
       await waitForHostedSearchFinalizations();
       throwIfRunnerCancelled(params.signal);
 
-      const messages = getAgentMessages(agent).slice();
+      const messages = getRuntimeMessages().slice();
       const assistant =
         findLastAssistantMessage(messages) ?? findLastAssistantMessage(latestAgentEndMessages);
 
@@ -1531,7 +1421,7 @@ export async function runAssistantWithTools(params: {
       return {
         messages,
         assistant,
-        emittedMessages: getMessagesSinceBaseline(agent, emittedBaselineIndex),
+        emittedMessages: getEmittedMessages(),
       };
     } catch (error) {
       queueAllHostedSearchFinalizations(params.signal?.aborted ? "dispose" : "failed");

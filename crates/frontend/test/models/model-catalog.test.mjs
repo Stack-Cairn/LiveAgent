@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
 
 const loader = createTsModuleLoader();
-const catalog = loader.loadModule("src/lib/models/modelCatalog.ts");
+const catalog = loader.loadModule(coreSrc("models/modelCatalog.ts"));
 
 // 与 scripts/generate-model-catalog.mjs 的 SECTIONS 同值（键、序、质量门）：
 // 上游被截断时刷新会硬错，这里锁住已入库快照的完整性。前四家是应用供应商

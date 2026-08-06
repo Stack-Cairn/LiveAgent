@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 
 function createToolCall(id, name, args = {}) {
   return {
@@ -28,8 +39,8 @@ test("MCP business tool calls are serialized per server", async () => {
   const events = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "mcp_list_tools") {
             return [
               {
@@ -68,7 +79,7 @@ test("MCP business tool calls are serialized per server", async () => {
     },
   });
 
-  const { createMcpTools } = loader.loadModule("src/lib/tools/mcpTools.ts");
+  const { createMcpTools } = loader.loadModule(coreSrc("tools/mcpTools.ts"));
   const bundle = await createMcpTools({
     servers: [createServer("docs")],
   });
@@ -94,8 +105,8 @@ test("MCP business tool calls on different servers can run concurrently", async 
   let maxActiveCalls = 0;
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "mcp_list_tools") {
             return [
               {
@@ -132,7 +143,7 @@ test("MCP business tool calls on different servers can run concurrently", async 
     },
   });
 
-  const { createMcpTools } = loader.loadModule("src/lib/tools/mcpTools.ts");
+  const { createMcpTools } = loader.loadModule(coreSrc("tools/mcpTools.ts"));
   const bundle = await createMcpTools({
     servers: [createServer("docs"), createServer("issues")],
   });
@@ -158,8 +169,8 @@ test("MCP abort releases the tool call and requests Rust runtime cancellation", 
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "mcp_list_tools") {
             return [
@@ -183,7 +194,7 @@ test("MCP abort releases the tool call and requests Rust runtime cancellation", 
       },
     },
   });
-  const { createMcpTools } = loader.loadModule("src/lib/tools/mcpTools.ts");
+  const { createMcpTools } = loader.loadModule(coreSrc("tools/mcpTools.ts"));
   const bundle = await createMcpTools({ servers: [createServer("docs")] });
   const search = bundle.tools[0];
   const controller = new AbortController();
@@ -225,8 +236,8 @@ test("an abort while queued on the per-server lock still releases the lock", asy
   let sawFirstCall = false;
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command) {
+      [backendClientPath]: {
+        async callBackend(command) {
           if (command === "mcp_list_tools") {
             return [
               {
@@ -260,7 +271,7 @@ test("an abort while queued on the per-server lock still releases the lock", asy
       },
     },
   });
-  const { createMcpTools } = loader.loadModule("src/lib/tools/mcpTools.ts");
+  const { createMcpTools } = loader.loadModule(coreSrc("tools/mcpTools.ts"));
   const bundle = await createMcpTools({ servers: [createServer("docs")] });
   const [searchTool, readTool] = bundle.tools;
 

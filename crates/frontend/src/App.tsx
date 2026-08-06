@@ -550,7 +550,7 @@ export default function App() {
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppChrome>
-        <CronPromptRunner settings={settings} />
+        <CronPromptRunner />
         <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
         <AppErrorBoundary>
           <ChatPage

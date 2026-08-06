@@ -3,10 +3,19 @@ import test from "node:test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 import { createFakeStoreIpc } from "../subagents/harness.mjs";
 
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const agentRunnerModulePath = path.join(rootDir, "src/lib/chat/runner/agentRunner.ts");
+const agentRunnerModulePath = coreSrc("chat/runner/agentRunner.ts");
 
 function createAssistant(text) {
   return {
@@ -52,8 +61,8 @@ function createRegistryHarness() {
           return "/Users/test";
         },
       },
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "mcp_list_tools") {
             listedServerIds.push((args.servers ?? []).map((server) => server.id));
             listedServerCommands.push((args.servers ?? []).map((server) => server.command));
@@ -103,8 +112,8 @@ function createRegistryHarness() {
 
 async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
   const { loader } = harness;
-  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const { buildBuiltinToolRegistry } = loader.loadModule(coreSrc("tools/builtinRegistry.ts"));
+  const { createFileToolState } = loader.loadModule(coreSrc("tools/fileToolState.ts"));
   const mcpSettingsHolder = { value: { selected: ["docs"], servers: [DOCS_SERVER] } };
   const baseParams = {
     workdir: "/tmp/liveagent-subagent-registry-test",
@@ -118,8 +127,8 @@ async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
     return { registry: await buildBuiltinToolRegistry(baseParams), mcpSettingsHolder };
   }
 
-  const storeModule = loader.loadModule("src/lib/subagents/store.ts");
-  const schedulerModule = loader.loadModule("src/lib/subagents/scheduler.ts");
+  const storeModule = loader.loadModule(coreSrc("subagents/store.ts"));
+  const schedulerModule = loader.loadModule(coreSrc("subagents/scheduler.ts"));
   const ipc = storeIpc ?? createFakeStoreIpc();
   const store = storeModule.createSubagentConversationStore({
     conversationId: "conversation-1",
@@ -127,8 +136,9 @@ async function buildRegistry(harness, { withSubagentRuntime, storeIpc } = {}) {
   });
   const registry = await buildBuiltinToolRegistry({
     ...baseParams,
-    subagentRuntime: {
-      providerId: "codex",
+    // crates/core renamed this from `subagentRuntime` and reads providerId from
+    // the top-level params instead of repeating it here.
+    subagents: {
       model: "gpt-5",
       runtime: { baseUrl: "https://api.example.test/v1", apiKey: "test-key" },
       sessionId: "parent-session",

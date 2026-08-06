@@ -85,10 +85,10 @@ function buildHeadTailPreview(input: string, maxChars = GATEWAY_TOOL_TEXT_PREVIE
   };
 }
 
-// The canonical producer of streaming tool previews: bridge events
-// (tool_call / tool_call_delta / tool_result) and runtime snapshot entries
-// all pass through here, so every remote representation of a file tool's
-// args carries the same truncated text + true metrics + monotonic progress.
+// The canonical producer of streaming tool previews: wire events
+// (tool_call / tool_result) and runtime snapshot entries all pass through
+// here, so every remote representation of a file tool's args carries the
+// same truncated text + true metrics + monotonic progress.
 export function buildGatewayToolCallPreviewArguments(
   toolCall: Pick<ToolCall, "id" | "name" | "arguments">,
 ) {
@@ -136,4 +136,12 @@ export function buildGatewayToolCallPreviewArguments(
   }
 
   return args;
+}
+
+/**
+ * 工具调用的 wire 形态:原样的 pi-ai ToolCall,参数换成裁剪过的预览版。
+ * 所有 tool_call / tool_result 发射点都走这里,免得各自拍平出不同的字段名。
+ */
+export function buildWireToolCall(toolCall: ToolCall): ToolCall {
+  return { ...toolCall, arguments: buildGatewayToolCallPreviewArguments(toolCall) };
 }

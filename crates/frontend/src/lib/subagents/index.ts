@@ -1,8 +1,8 @@
-export { createSubagentTools, type SubagentRuntimeConfig } from "./agentTool";
-export { renderMessageBusSnapshot } from "./bus";
+// 前端 barrel：只保留 UI 真正消费的符号（卡片解析 + store 管理）。
+// 引擎执行链（agentTool / run / bus / roster / sendMessageTool 等）已删除——
+// 引擎在 crates/core/src/subagents 运行，test/subagents/* 直接加载 core 模块。
+// scheduler.ts 仅因 builtinTypes 的类型引用保留。
 export { isSubagentCardToolCall } from "./card";
-export type { SubagentStoreIpc } from "./ipc/store";
-export type { SubagentWorktreeIpc } from "./ipc/worktree";
 export type {
   SubagentBatchDetails,
   SubagentCardArguments,
@@ -11,14 +11,6 @@ export type {
   SubagentReportDetails,
 } from "./protocol";
 export { buildSubagentCardToolCallId, isSubagentCardArguments } from "./protocol";
-export { buildRosterReminder } from "./roster";
-export {
-  createSubagentScheduler,
-  DEFAULT_SUBAGENT_MAX_PARALLEL_RUNS,
-  SubagentScheduler,
-  type SubagentSchedulerLimits,
-} from "./scheduler";
-export { createSendMessageTools } from "./sendMessageTool";
 export {
   collectRetainedSubagentParentToolCallIds,
   createSubagentStoreManager,
@@ -26,13 +18,3 @@ export {
   type SubagentConversationStore,
   type SubagentStoreManager,
 } from "./store";
-export {
-  AGENT_TOOL_NAME,
-  SEND_MESSAGE_TOOL_NAME,
-  SUBAGENT_BROADCAST_RECIPIENT,
-  SUBAGENT_PARENT_ID,
-  type SubagentIdentity,
-  type SubagentRunSummary,
-  type SubagentTemplate,
-  type SubagentToolRegistry,
-} from "./types";

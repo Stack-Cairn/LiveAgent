@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
 
 const rawPlugin = () => {};
 const sanitizePlugin = () => {};
@@ -66,7 +75,8 @@ const loader = createTsModuleLoader({
     "@earendil-works/pi-agent-core": {
       Agent: class Agent {},
     },
-    "../providers/llm": {
+    // agentRunner 迁到 crates/core 后，其内部依赖的 mock 键改为 core 侧绝对路径。
+    [coreSrc("providers/llm.ts")]: {
       buildProviderRequestMetadata() {},
       createModelFromConfig() {},
       finalizeProviderStreamOptions() {},
@@ -87,32 +97,32 @@ const loader = createTsModuleLoader({
         return {};
       },
     },
-    "../debug/agentDebug": {
+    [coreSrc("debug/agentDebug.ts")]: {
       buildStreamRequestDebugPayload() {
         return {};
       },
     },
-    "../system/powerActivity": {
+    [coreSrc("system/powerActivity.ts")]: {
       withPowerActivity(task) {
         return task;
       },
     },
-    "../providers/proxy": {
+    [coreSrc("providers/proxy.ts")]: {
       prepareProxyRequest() {
         return {};
       },
     },
-    "./uiMessages": {
+    [coreSrc("chat/messages/uiMessages.ts")]: {
       summarizeToolCall() {
         return "";
       },
     },
-    "./seedToolCalls": {
+    [coreSrc("chat/runner/seedToolCalls.ts")]: {
       recoverAssistantSeedToolCalls() {
         return null;
       },
     },
-    "./requestContextSanitizer": {
+    [coreSrc("chat/context/requestContextSanitizer.ts")]: {
       sanitizeContextForModelRequest(context) {
         return context;
       },
@@ -121,7 +131,7 @@ const loader = createTsModuleLoader({
 });
 
 const markdownModule = loader.loadModule("src/components/Markdown.tsx");
-const agentRunnerModule = loader.loadModule("src/lib/chat/runner/agentRunner.ts");
+const agentRunnerModule = loader.loadModule(coreSrc("chat/runner/agentRunner.ts"));
 
 test("markdown image syntax falls back to alt text instead of rendering a real image", () => {
   const node = markdownModule.markdownComponents.img({
@@ -499,7 +509,7 @@ test("agent Bash rules are Git Bash-first when runtime platform is Windows", () 
 });
 
 test("fs tool descriptions keep Image as the only display path for images", () => {
-  const { createFsTools } = loader.loadModule("src/lib/tools/fsTools.ts");
+  const { createFsTools } = loader.loadModule(coreSrc("tools/fsTools.ts"));
   const { tools } = createFsTools({ workdir: "/workspace", fileState: {} });
   const describe = (name) => tools.find((tool) => tool.name === name)?.description ?? "";
 

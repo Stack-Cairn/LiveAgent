@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { callBackend } from "../../backendClient";
 
 import type {
   SubagentWorktreeApplyResult,
@@ -33,16 +33,16 @@ function stripNulls<T extends object>(record: T): T {
   return output as T;
 }
 
-export const tauriSubagentWorktreeIpc: SubagentWorktreeIpc = {
+export const backendSubagentWorktreeIpc: SubagentWorktreeIpc = {
   create: async (input) =>
-    stripNulls(await invoke<SubagentWorktreeInfo>("subagent_worktree_create", { input })),
+    stripNulls(await callBackend<SubagentWorktreeInfo>("subagent_worktree_create", { input })),
   status: async (input) =>
-    stripNulls(await invoke<SubagentWorktreeStatus>("subagent_worktree_status", { input })),
+    stripNulls(await callBackend<SubagentWorktreeStatus>("subagent_worktree_status", { input })),
   apply: async (input) =>
-    stripNulls(await invoke<SubagentWorktreeApplyResult>("subagent_worktree_apply", { input })),
+    stripNulls(await callBackend<SubagentWorktreeApplyResult>("subagent_worktree_apply", { input })),
   cleanup: async (input) =>
     stripNulls(
-      await invoke<SubagentWorktreeCleanupResult>("subagent_worktree_cleanup", {
+      await callBackend<SubagentWorktreeCleanupResult>("subagent_worktree_cleanup", {
         input: { ...input, dryRun: false, force: true, deleteBranch: true },
       }),
     ),

@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
 
 const loader = createTsModuleLoader();
 const { createUuid } = loader.loadModule("src/lib/shared/id.ts");
@@ -12,7 +21,7 @@ const { normalizeAgentPromptTemplate, normalizeCustomProvider, normalizeSshSetti
 let capturedCronOps = [];
 const cronLoader = createTsModuleLoader({
   mocks: {
-    "../automation": {
+    [coreSrc("automation/index.ts")]: {
       async applyCronOps(ops) {
         capturedCronOps = ops;
         return {
@@ -39,7 +48,7 @@ const cronLoader = createTsModuleLoader({
     },
   },
 });
-const { createCronTools } = cronLoader.loadModule("src/lib/tools/cronTools.ts");
+const { createCronTools } = cronLoader.loadModule(coreSrc("tools/cronTools.ts"));
 
 const UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -159,23 +168,24 @@ test("hook scopes and Hook/Cron HTTP request drafts work without crypto.randomUU
   });
 });
 
-test("CronTaskManager generates request IDs without crypto.randomUUID", async () => {
+test("CronTaskManager generates request IDs via crypto.randomUUID", async () => {
   capturedCronOps = [];
-  await withCryptoAsync({}, async () => {
-    const cronTools = createCronTools({});
-    const result = await cronTools.executeToolCall({
-      id: "tool-call-id",
-      name: "CronTaskManager",
-      arguments: {
-        action: "create",
-        name: "HTTP task",
-        type: "http",
-        cron: "0 * * * *",
-        requests: [{ method: "GET", url: "https://example.com" }],
-      },
-    });
-
-    assert.equal(result.isError, false);
-    assert.match(capturedCronOps[0].item.requests[0].id, UUID_V4_PATTERN);
+  // core 漂移：crates/core 的 shared/id.ts 去掉了浏览器降级路径，
+  // 直接调用 globalThis.crypto.randomUUID（Node 环境保证存在），
+  // 所以这里不再模拟"无 randomUUID"的浏览器环境。
+  const cronTools = createCronTools({});
+  const result = await cronTools.executeToolCall({
+    id: "tool-call-id",
+    name: "CronTaskManager",
+    arguments: {
+      action: "create",
+      name: "HTTP task",
+      type: "http",
+      cron: "0 * * * *",
+      requests: [{ method: "GET", url: "https://example.com" }],
+    },
   });
+
+  assert.equal(result.isError, false);
+  assert.match(capturedCronOps[0].item.requests[0].id, UUID_V4_PATTERN);
 });

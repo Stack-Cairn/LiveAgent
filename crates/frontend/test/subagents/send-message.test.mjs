@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { coreRootDir, coreSrc } from "./harness.mjs";
 
-const loader = createTsModuleLoader();
-const sendMessageModule = loader.loadModule("src/lib/subagents/sendMessageTool.ts");
+const loader = createTsModuleLoader({ rootDir: coreRootDir });
+const sendMessageModule = loader.loadModule(coreSrc("subagents/sendMessageTool.ts"));
 
 function createFakeSendMessageStore(options = {}) {
   const appended = [];

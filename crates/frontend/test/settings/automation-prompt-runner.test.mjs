@@ -1,13 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 
 const invokeCalls = [];
 const loader = createTsModuleLoader({
   mocks: {
-    "@tauri-apps/api/core": {
-      async invoke(command, args) {
+    [backendClientPath]: {
+      async callBackend(command, args) {
         invokeCalls.push({ command, args });
         if (command === "automation_claim_prompt_runs") return [];
         if (command === "automation_complete_prompt_run") {
@@ -18,21 +29,16 @@ const loader = createTsModuleLoader({
         }
       },
     },
-    "@tauri-apps/api/event": {
-      async listen() {
-        return () => {};
-      },
-    },
   },
 });
 
-const { backend } = loader.loadModule("src/lib/automation/backend.ts");
+const { backend } = loader.loadModule(coreSrc("automation/backend.ts"));
 const {
   findManualCronRun,
   isManualCronRunFinished,
   MANUAL_CRON_RUN_POLL_INTERVAL_MS,
   MANUAL_CRON_RUN_TIMEOUT_MS,
-} = loader.loadModule("src/lib/automation/types.ts");
+} = loader.loadModule(coreSrc("automation/types.ts"));
 const { createCompletePromptRunInput } = loader.loadModule(
   "src/components/cron/promptRunProtocol.ts",
 );

@@ -1,7 +1,10 @@
 // 无头 chat 引擎:桌面版 useSendChatTurn 的 Node 化。
 // 差异只在宿主:UI 状态(sidebar/scroll/composer)没有了,增量改经
-// emitEvent 回流 Rust 再 WS 广播;其余(状态机、压缩、审批、持久化)
+// emitWireEvent 回流 Rust 再 WS 广播;其余(状态机、压缩、审批、持久化)
 // 与桌面路径共用同一批模块。
+//
+// 事件契约见 ./protocol/wireEvents.ts:core 是唯一真相源,事件名就是
+// WireEvent 的 type,backend 原样扇出、不解释,前端按同一个名字订阅。
 //
 // 并发模型(决策 6):多会话 async 并发,同会话内一条 Promise 链串行。
 // 崩溃语义(决策 5):进程守护在 Rust;这里不做任何断点续跑。
@@ -16,6 +19,10 @@ import {
   type ConversationViewState,
   createConversationStateFromContext,
 } from "./chat/conversation/conversationState";
+import {
+  applyEditResendTruncation,
+  historyMessageRefFromWire,
+} from "./chat/conversation/editResend";
 import { createLiveTranscriptStore, type LiveTranscriptStore, type RetryAttemptRecord } from "./chat/conversation/liveTranscriptStore";
 import type { LiveRound } from "./chat/messages/uiMessages";
 import {
@@ -24,6 +31,7 @@ import {
 } from "./chat/conversation/run";
 import { createTurnCancellation, type TurnCancellation } from "./chat/conversation/turnCancellation";
 import { createCompactionControllerRegistry } from "./chat/compaction/controller";
+import { memoryExtraction } from "./chat/memory/extractionController";
 import {
   buildConversationStateFromWindow,
   CHAT_HISTORY_WINDOW_MESSAGES,
@@ -37,11 +45,13 @@ import {
   getFirstUserMessageText,
 } from "./chat/page/chatPageHelpers";
 import { createStreamDebugLogger } from "./debug/agentDebug";
-import { emitEvent } from "./events";
+import { emitWireEvent } from "./events";
 import { buildMemoryOverviewSection } from "./memory/prompts/injection";
 import { createModelFromConfig, createProviderRuntimeConfig } from "./providers/llm";
+import type { ToolStatus, WireMessageRef } from "./protocol/wireEvents";
 import { loadPersistedSettingsWithDefaults } from "./settings/storage";
 import type { SelectedModel } from "./settings";
+import { createSubagentStoreManager } from "./subagents";
 import { buildSkillsSystemPrompt, discoverSkills, resolveExplicitSkillMentions } from "./skills";
 import type { SkillAccessPolicy } from "./tools/skillAccessPolicy";
 import { buildErrorAssistantMessage } from "./turns/chatPageRuntime";
@@ -67,6 +77,8 @@ export type ChatSendRequest = {
   skillsEnabled?: boolean;
   selectedModel?: SelectedModel;
   selectedSkillNames?: string[];
+  /** 编辑重发:被编辑的历史用户消息(截断基点),WireMessageRef 契约形态。 */
+  editResendBaseMessageRef?: WireMessageRef;
 };
 
 type LiveSession = {
@@ -84,6 +96,8 @@ type LiveSession = {
 
 const sessions = new Map<string, LiveSession>();
 const compactionRegistry = createCompactionControllerRegistry();
+// 子代理花名册/私有上下文的会话级缓存;SQLite(backend)是持久层。
+const subagentStores = createSubagentStoreManager();
 
 function getOrCreateSession(conversationId: string): LiveSession {
   let session = sessions.get(conversationId);
@@ -124,8 +138,30 @@ export function abortConversation(conversationId: string): boolean {
   return true;
 }
 
-/** 受理一次 chat_send:同步去重 + 入队,立即返回;turn 在队列里异步跑。 */
-export function acceptChatSend(request: ChatSendRequest): { accepted: boolean; duplicate?: boolean } {
+/**
+ * 会话删除:释放本进程内该会话的全部状态。
+ *
+ * 记忆抽取跑在引擎里(runAgentConversationTurn → memoryExtraction),所以
+ * 「会话没了」这件事必须传到这里 —— 否则一次删除会留下还在写记忆的抽取。
+ */
+export function disposeConversation(conversationId: string): boolean {
+  const key = conversationId.trim();
+  if (!key) return false;
+  const session = sessions.get(key);
+  session?.cancellation?.userStop.abort();
+  sessions.delete(key);
+  compactionRegistry.dispose(key);
+  memoryExtraction.dispose(key);
+  subagentStores.dispose(key);
+  return Boolean(session);
+}
+
+/** 受理一次 chat_send:同步去重 + 入队,立即返回;turn 在队列里异步跑。
+ *  例外:编辑重发要等截断落库后才响应——前端拿到响应立刻重拉历史窗口
+ *  作为本地展示/落库基线,早回就会短暂用旧尾巴覆盖。 */
+export async function acceptChatSend(
+  request: ChatSendRequest,
+): Promise<{ accepted: boolean; duplicate?: boolean }> {
   const conversationId = request.conversationId.trim();
   if (!conversationId) throw new Error("conversationId required");
   if (!request.text?.trim()) throw new Error("text required");
@@ -139,12 +175,27 @@ export function acceptChatSend(request: ChatSendRequest): { accepted: boolean; d
     session.seenClientRequestIds.add(clientRequestId);
   }
 
+  let prepared: { promise: Promise<void>; resolve: () => void; reject: (e: unknown) => void } | null =
+    null;
+  if (request.editResendBaseMessageRef) {
+    let resolve!: () => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    prepared = { promise, resolve, reject };
+  }
+
   session.queue = session.queue.then(() =>
-    runOneTurn(conversationId, session, request).catch((error) => {
+    runOneTurn(conversationId, session, request, prepared ?? undefined).catch((error) => {
       // 队列不能因单个 turn 失败而断链;错误已在 runOneTurn 内广播过终态。
+      // 截断前失败没有终态事件,靠 reject 把错误带回 chat_send 响应。
+      prepared?.reject(error);
       console.error(`[engine] turn failed for ${conversationId}:`, error);
     }),
   );
+  if (prepared) await prepared.promise;
   return { accepted: true };
 }
 
@@ -171,7 +222,12 @@ async function loadConversationState(
   }
 }
 
-async function runOneTurn(conversationId: string, session: LiveSession, request: ChatSendRequest) {
+async function runOneTurn(
+  conversationId: string,
+  session: LiveSession,
+  request: ChatSendRequest,
+  prepared?: { resolve: () => void },
+) {
   const { settings } = await loadPersistedSettingsWithDefaults();
   const isAgentMode = (request.mode ?? "agent") === "agent";
   // ExecutionMode 三值:text / tools / agent-dev;网络请求只区分 agent|text。
@@ -205,8 +261,28 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
   if (!userMessage) throw new Error("Message is required.");
 
   const baseState = await loadConversationState(conversationId, session);
+
+  // 编辑重发:截断历史 + 清理被截断分支的子代理,失败直接抛——
+  // acceptChatSend 会把错误带回 chat_send 响应,历史保持不变。
+  const editResendBaseRef = request.editResendBaseMessageRef
+    ? historyMessageRefFromWire(request.editResendBaseMessageRef)
+    : null;
+  let editResendState: ConversationViewState | null = null;
+  if (editResendBaseRef) {
+    const truncation = await applyEditResendTruncation({
+      conversationId,
+      baseMessageRef: editResendBaseRef,
+      replacementMessage: userMessage,
+      invalidateSubagentStore: (id) => subagentStores.invalidate(id),
+    });
+    editResendState = truncation.state;
+    session.state = truncation.state;
+    session.persistenceCursor = truncation.cursor;
+  }
+  prepared?.resolve();
+
   const fallbackTitle = buildFallbackConversationTitle(
-    getFirstUserMessageText(buildRequestContext(baseState)) || text,
+    getFirstUserMessageText(buildRequestContext(editResendState ?? baseState)) || text,
   );
 
   const transcriptStore = session.transcriptStore;
@@ -225,30 +301,20 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
       model,
     });
 
-  // 事件回流:gatewayBridge 的 wire 事件翻译成前端订阅的扁平事件名。
-  // token → token_delta、tool_status → tool_status_change,其余原样打包转发。
+  // 事件回流:core 是唯一事件真相源,bridge 产出的 WireEvent 原样出栈 ——
+  // 没有改名,没有重打包。backend 只做扇出,前端按 WireEvent["type"] 订阅。
   const bridgeEvents = createGatewayBridgeEventController({
     conversationId,
     requestId: `run-${Date.now()}`,
     enabled: true,
     sendEvent: (_requestId, event) => {
-      const type = event.type;
-      if (type === "token") {
-        void emitEvent("token_delta", { conversation_id: conversationId, delta: event.text });
-      } else if (type === "tool_status") {
-        void emitEvent("tool_status_change", {
-          conversation_id: conversationId,
-          status: event.status ?? null,
-          isCompaction: event.isCompaction === true,
-          retryAttempts: event.retryAttempts,
-        });
-      } else {
-        void emitEvent("chat:run-event", { conversation_id: conversationId, ...event });
-      }
+      emitWireEvent(event);
     },
   });
 
-  let nextConversationState = appendMessagesToConversation(baseState, [userMessage]);
+  // 编辑重发时替换消息已随截断落进历史,不再追加。
+  let nextConversationState =
+    editResendState ?? appendMessagesToConversation(baseState, [userMessage]);
   const applyConversationState = (state: ConversationViewState) => {
     nextConversationState = state;
     session.state = state;
@@ -356,7 +422,13 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
     conversationId,
     workdir: effectiveWorkdir,
     onWarning: (warning) => {
-      void emitEvent("chat:hook-warning", { conversation_id: conversationId, warning });
+      emitWireEvent({
+        type: "hook_warning",
+        conversation_id: conversationId,
+        hook_name: warning.hookName,
+        hook_type: warning.hookType,
+        message: warning.message,
+      });
     },
   });
   const hookLifecycle = createConversationHookLifecycle((event) => {
@@ -427,7 +499,7 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
         transcriptStore.reset();
       },
       publishStatus: (status) =>
-        void emitEvent("chat:compaction-status", { conversation_id: conversationId, status }),
+        emitWireEvent({ type: "compaction_status", conversation_id: conversationId, status }),
       setBridgeToolStatus: (status, isCompaction) =>
         bridgeEvents.queueToolStatus(status, isCompaction),
       queueCheckpoint: (state) => bridgeEvents.queueCheckpoint(state),
@@ -479,7 +551,12 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
     : undefined;
 
   transcriptStore.reset();
-  await bridgeEvents.queueUserMessage(text, [], { messageId: userMessage.id });
+  await bridgeEvents.queueUserMessage(text, [], {
+    messageId: userMessage.id,
+    // 其他已连接客户端靠 base_message_ref + reason:"edit_resend" 在同一
+    // 位置截断各自的 transcript。
+    ...(editResendBaseRef ? { baseMessageRef: editResendBaseRef } : {}),
+  });
 
   let finalState: "completed" | "failed" | "cancelled" = "completed";
   let finalErrorMessage = "";
@@ -514,9 +591,6 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
       updateRetryAttempts: (attempts: RetryAttemptRecord[], store: LiveTranscriptStore) =>
         store.setRetryAttempts(attempts),
       commitVisibleAbortedConversation,
-      freezeGatewayFinalProjection: () => {
-        // 无 gateway 镜像可冻结:旧 Go 中继路径专属,这里保持空实现以满足签名。
-      },
       persistConversationWithHistorySync: persistConversation,
     };
 
@@ -525,6 +599,10 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
         ...sharedParams,
         effectiveWorkdir,
         effectiveSkillsEnabled: skillsEnabled,
+        subagentStore: subagentStores.get(conversationId),
+        subagentTemplates: settings.agents
+          .filter((template) => template.enabled)
+          .map(({ id, name, description, prompt }) => ({ id, name, description, prompt })),
         showSilentMemoryExtraction: false,
         skillsRootDir: skillsRootDirForTools,
         skillAccessPolicy: skillAccessPolicyForTools,
@@ -534,7 +612,7 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
         tunnelPublicBaseUrl: "",
         sshHosts: settings.ssh.hosts,
         sshManagerRemoteAllowed: true,
-        updateToolStatus: (status: string | null, store: LiveTranscriptStore) =>
+        updateToolStatus: (status: ToolStatus | null, store: LiveTranscriptStore) =>
           store.setToolStatus(status),
         updatePersistableAgentProgress: (progress) => {
           persistableAgentProgress = progress as typeof persistableAgentProgress;
@@ -588,10 +666,11 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
     session.cancellation = null;
     session.isRunning = false;
     await bridgeEvents.close();
-    void emitEvent("run_ended", {
+    emitWireEvent({
+      type: "run_ended",
       conversation_id: conversationId,
       state: finalState,
-      errorMessage: finalErrorMessage || undefined,
+      error_message: finalErrorMessage || undefined,
     });
   }
 }

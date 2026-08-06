@@ -5,9 +5,17 @@ import path from "node:path";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(rootDir, "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+
 const loader = createTsModuleLoader({ rootDir });
 const { wrapStreamWithToolCallArgumentGuard } = loader.loadModule(
-  "src/lib/chat/runner/toolCallArgumentGuard.ts",
+  coreSrc("chat/runner/toolCallArgumentGuard.ts"),
 );
 
 const piAiJsonParse = await import(

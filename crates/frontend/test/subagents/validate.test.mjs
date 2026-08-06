@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
-import { createAgentToolCall, createSubagentHarness } from "./harness.mjs";
+import { coreRootDir, coreSrc, createAgentToolCall, createSubagentHarness } from "./harness.mjs";
 
-const loader = createTsModuleLoader();
-const validate = loader.loadModule("src/lib/subagents/validate.ts");
+const loader = createTsModuleLoader({ rootDir: coreRootDir });
+const validate = loader.loadModule(coreSrc("subagents/validate.ts"));
 
 const TEMPLATES = [
   {

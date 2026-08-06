@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
 
 const loader = createTsModuleLoader();
 const { detectCompactionSummaryLanguage } = loader.loadModule(
-  "src/lib/chat/compaction/summaryLanguage.ts",
+  coreSrc("chat/compaction/summaryLanguage.ts"),
 );
 const { buildCompactionSystemPrompt, COMPACTION_SYSTEM_PROMPT } = loader.loadModule(
-  "src/lib/chat/compaction/summaryPrompt.ts",
+  coreSrc("chat/compaction/summaryPrompt.ts"),
 );
 
 function payloadWith({ userTexts = [], nextUserMessage } = {}) {
@@ -112,7 +121,7 @@ test("buildCompactionSystemPrompt embeds the detected language directive", () =>
 });
 
 test("summarizeConversation sends the language directive for chinese payloads", async () => {
-  const { summarizeConversation } = loader.loadModule("src/lib/chat/compaction/summarizer.ts");
+  const { summarizeConversation } = loader.loadModule(coreSrc("chat/compaction/summarizer.ts"));
   const validXml = `<summary>
 <task>重构压缩子系统</task>
 <state>已修改 src/app.ts，${"细节说明。".repeat(60)}</state>

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import { coreRootDir, coreSrc } from "./harness.mjs";
 
-const loader = createTsModuleLoader();
-const bus = loader.loadModule("src/lib/subagents/bus.ts");
-const roster = loader.loadModule("src/lib/subagents/roster.ts");
+const loader = createTsModuleLoader({ rootDir: coreRootDir });
+const bus = loader.loadModule(coreSrc("subagents/bus.ts"));
+const roster = loader.loadModule(coreSrc("subagents/roster.ts"));
 
 let nextSeq = 0;
 function makeMessage(overrides = {}) {

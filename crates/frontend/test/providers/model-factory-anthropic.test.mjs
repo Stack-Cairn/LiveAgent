@@ -3,6 +3,17 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+
+
 // 走真实 pi-ai anthropic stream()，用 onPayload 截获请求体后中断，
 // 断言的是最终线格式（thinking/output_config），不是中间结构。
 const realAnthropic = await import(
@@ -18,9 +29,9 @@ const loader = createTsModuleLoader({
   },
 });
 
-const { createModelFromConfig } = loader.loadModule("src/lib/models/modelFactory.ts");
-const { resolveModelThinking } = loader.loadModule("src/lib/models/modelThinking.ts");
-const { streamSimpleByApi } = loader.loadModule("src/lib/providers/runtime/streamByApi.ts");
+const { createModelFromConfig } = loader.loadModule(coreSrc("models/modelFactory.ts"));
+const { resolveModelThinking } = loader.loadModule(coreSrc("models/modelThinking.ts"));
+const { streamSimpleByApi } = loader.loadModule(coreSrc("providers/runtime/streamByApi.ts"));
 
 const RELAY_BASE_URL = "https://relay.example.com/v1";
 

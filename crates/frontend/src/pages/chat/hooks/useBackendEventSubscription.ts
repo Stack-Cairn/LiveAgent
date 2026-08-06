@@ -1,23 +1,44 @@
-import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolCall, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
 import { useEffect } from "react";
 import { backendFetchGet, subscribeEvents } from "../../../lib/backend/client";
 import type { LiveRoundSnapshot } from "../../../lib/chat/conversation/chatAbort";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import type { HostedSearchBlock } from "../../../lib/chat/messages/hostedSearch";
 import {
   appendTextDeltaToRound,
   appendThinkingDeltaToRound,
   attachToolResultToRound,
+  collapseThinking,
   type LiveRound,
   markToolCallRunningInRound,
   updateEnsuredLiveRound,
+  upsertHostedSearchToRound,
   upsertToolCallToRound,
 } from "../../../lib/chat/messages/uiMessages";
 import { type RunEndedResult, resolveRunEnded } from "../runtime/runEndedWaiters";
+import { type WireToolStatus } from "../runtime/toolStatusText";
+
+/**
+ * 这个订阅认领的会话事件。名字与 core 的 WireEvent["type"] 一一对应
+ * （crates/core/src/protocol/wireEvents.ts）；新增会话事件要同时加到这里，
+ * 否则会被当成别人的事件静默丢掉。
+ */
+const CHAT_EVENTS = new Set([
+  "token_delta",
+  "thinking_delta",
+  "round_meta",
+  "tool_call",
+  "tool_result",
+  "hosted_search",
+  "tool_status_change",
+  "run_ended",
+  "tool-approval:request",
+]);
 
 type UseBackendEventSubscriptionParams = {
   currentConversationId: string;
   getConversationLiveTranscriptStore: (conversationId: string) => LiveTranscriptStore;
-  updateToolStatus: (status: string | null, targetStore: LiveTranscriptStore) => void;
+  updateToolStatus: (status: WireToolStatus | null, targetStore: LiveTranscriptStore) => void;
   appendDraftAssistantText: (delta: string, targetStore: LiveTranscriptStore) => void;
   batchLiveRoundsUpdate: (
     updater: (prev: LiveRound[]) => LiveRound[],
@@ -54,16 +75,23 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
     const unsubscribe = subscribeEvents((message) => {
       const { event, payload } = message;
 
-      // 所有事件都应该包含 conversation_id 用于路由（后端使用下划线命名）
+      // 事件名与载荷结构由 core 的 WireEvent 契约给定
+      // （crates/core/src/protocol/wireEvents.ts）：backend 只原样扇出，
+      // 中间没有改名层，所以这里的分支名就是 core 发射时写的 type。
       if (!payload || typeof payload !== "object") {
         return;
       }
 
       const payloadObj = payload as Record<string, unknown>;
-      // 后端广播的是 conversation_id，但也支持 conversationId 以兼容两种命名
-      const conversationId = (payloadObj.conversation_id ?? payloadObj.conversationId) as
-        | string
-        | undefined;
+
+      // 后台任务事件（memory_organize_*、cron_prompt_*）不属于任何会话，
+      // 由各自的订阅方处理。这里先按名字挑出会话事件，否则它们会掉进下面
+      // 「缺 conversation_id」的告警里刷屏。
+      if (!CHAT_EVENTS.has(event)) {
+        return;
+      }
+
+      const conversationId = payloadObj.conversation_id as string | undefined;
 
       if (!conversationId) {
         console.warn(`Event ${event} missing conversation_id in payload`, payload);
@@ -105,9 +133,31 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
           );
         }
       }
-      // 工具调用开始：落卡片并标记运行中。
+      // 一轮助手消息落定时的 provider/model/usage，渲染轮次页脚。
+      else if (event === "round_meta") {
+        if (round !== null) {
+          const usage = payloadObj.usage as Usage | undefined;
+          batchLiveRoundsUpdate(
+            (prev) =>
+              updateEnsuredLiveRound(prev, round, (target) => ({
+                ...collapseThinking(target),
+                meta: {
+                  provider: String(payloadObj.provider ?? ""),
+                  model: String(payloadObj.model ?? ""),
+                  api: String(payloadObj.api ?? ""),
+                  stopReason: String(payloadObj.stop_reason ?? ""),
+                  usage,
+                  usageTotalTokens: usage?.totalTokens,
+                },
+              })),
+            transcriptStore,
+          );
+        }
+      }
+      // 工具调用出现/更新：落卡片并标记运行中。流式增量、执行开始、审批标记
+      // 补发共用这一个事件，upsert 幂等，重复到达不会叠加。
       else if (event === "tool_call") {
-        const toolCall = payloadObj.toolCall as ToolCall | undefined;
+        const toolCall = payloadObj.tool_call as ToolCall | undefined;
         if (toolCall && typeof toolCall.id === "string" && round !== null) {
           batchLiveRoundsUpdate(
             (prev) =>
@@ -121,27 +171,21 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
           );
         }
       }
-      // 工具结果：贴回对应卡片（后端已按 id 定位到实际轮次）。
+      // 工具结果：贴回对应卡片。core 一并带上 tool_call，不必从轮次里反查。
       else if (event === "tool_result") {
-        const toolResult = payloadObj.toolResult as ToolResultMessage | undefined;
+        const toolResult = payloadObj.tool_result as ToolResultMessage | undefined;
+        const toolCall = payloadObj.tool_call as ToolCall | undefined;
         if (toolResult && typeof toolResult.toolCallId === "string" && round !== null) {
           batchLiveRoundsUpdate(
             (prev) =>
               updateEnsuredLiveRound(prev, round, (target) => {
-                const existing = target.blocks.find(
-                  (block) =>
-                    block.kind === "tool" && block.item.toolCall.id === toolResult.toolCallId,
-                );
-                const toolCall: ToolCall =
-                  existing?.kind === "tool"
-                    ? existing.item.toolCall
-                    : ({
-                        type: "toolCall",
-                        id: toolResult.toolCallId,
-                        name: toolResult.toolName,
-                        arguments: {},
-                      } as ToolCall);
-                const next = attachToolResultToRound(target, toolCall, toolResult);
+                const resolvedToolCall: ToolCall = toolCall ?? {
+                  type: "toolCall",
+                  id: toolResult.toolCallId,
+                  name: toolResult.toolName,
+                  arguments: {},
+                };
+                const next = attachToolResultToRound(target, resolvedToolCall, toolResult);
                 return {
                   ...next,
                   runningToolCallIds: next.runningToolCallIds.filter(
@@ -153,9 +197,22 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
           );
         }
       }
-      // 处理工具状态变化
+      // provider 原生托管搜索块的增量更新。
+      else if (event === "hosted_search") {
+        const hostedSearch = payloadObj.hosted_search as HostedSearchBlock | undefined;
+        if (hostedSearch && typeof hostedSearch.id === "string" && round !== null) {
+          batchLiveRoundsUpdate(
+            (prev) =>
+              updateEnsuredLiveRound(prev, round, (target) =>
+                upsertHostedSearchToRound(collapseThinking(target), hostedSearch),
+              ),
+            transcriptStore,
+          );
+        }
+      }
+      // 工具状态：core 只发事实（tagged union），中文文案在渲染层生成。
       else if (event === "tool_status_change") {
-        const status = payloadObj.status as string | null | undefined;
+        const status = payloadObj.status as WireToolStatus | null | undefined;
         updateToolStatus(status ?? null, transcriptStore);
       }
       // 处理运行终态：先带着结算前的正文/轮次快照兑现发送方的 waiter，
@@ -165,8 +222,8 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
         const state: RunEndedResult["state"] =
           rawState === "failed" || rawState === "cancelled" ? rawState : "completed";
         const errorMessage =
-          typeof payloadObj.errorMessage === "string" && payloadObj.errorMessage
-            ? payloadObj.errorMessage
+          typeof payloadObj.error_message === "string" && payloadObj.error_message
+            ? payloadObj.error_message
             : null;
         const snapshot = getLiveSnapshot(transcriptStore);
         resolveRunEnded(conversationId, {
@@ -177,7 +234,8 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
         });
         settleLiveTranscript(transcriptStore);
       }
-      // 处理后端工具审批请求：将其转发给前端本地审批系统处理
+      // 处理后端工具审批请求：将其转发给前端本地审批系统处理。
+      // 唯一由 Rust backend（approval.rs）而非 core 发射的聊天事件。
       else if (event === "tool-approval:request") {
         if (onBackendToolApprovalRequest) {
           onBackendToolApprovalRequest({

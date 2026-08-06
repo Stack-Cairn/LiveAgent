@@ -2,12 +2,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-export const agentRunnerModulePath = path.join(rootDir, "src/lib/chat/runner/agentRunner.ts");
-export const compactionControllerModulePath = path.join(
-  rootDir,
-  "src/lib/chat/compaction/controller.ts",
-);
+// This suite drives the engine that actually ships: crates/core. The frontend
+// copies under src/lib/subagents were removed by battle 2.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const frontendRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+export const coreRootDir = path.resolve(frontendRootDir, "../core");
+export const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+export const agentRunnerModulePath = coreSrc("chat/runner/agentRunner.ts");
+export const compactionControllerModulePath = coreSrc("chat/compaction/controller.ts");
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -397,10 +400,10 @@ export async function createSubagentHarness(options = {}) {
       options.compactionMock ?? createDefaultCompactionMock(compactionCalls),
   };
 
-  const loader = createTsModuleLoader({ mocks });
-  const storeModule = loader.loadModule("src/lib/subagents/store.ts");
-  const schedulerModule = loader.loadModule("src/lib/subagents/scheduler.ts");
-  const agentToolModule = loader.loadModule("src/lib/subagents/agentTool.ts");
+  const loader = createTsModuleLoader({ rootDir: coreRootDir, mocks });
+  const storeModule = loader.loadModule(coreSrc("subagents/store.ts"));
+  const schedulerModule = loader.loadModule(coreSrc("subagents/scheduler.ts"));
+  const agentToolModule = loader.loadModule(coreSrc("subagents/agentTool.ts"));
 
   const storeIpc = options.storeIpc ?? createFakeStoreIpc(options.storeIpcOptions);
   const worktreeIpc = options.worktreeIpc ?? createFakeWorktreeIpc(options.worktreeOptions);

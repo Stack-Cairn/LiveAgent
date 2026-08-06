@@ -43,7 +43,6 @@ import {
   type RenderTimelineItem,
 } from "../lib/chat/conversation/conversationState";
 import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
-import { memoryExtraction } from "../lib/chat/memory/extractionController";
 import type { CodeMentionReference } from "../lib/chat/messages/mentionReferences";
 import { openChatFileLink } from "../lib/chat/openChatFileLink";
 import {
@@ -1053,7 +1052,9 @@ export function ChatPage(props: ChatPageProps) {
       locallySyncedHistoryUpdatedAtRef.current.delete(key);
       backendBridgeHistorySummaryRef.current.delete(key);
       setPendingUploadsForConversation(key, []);
-      memoryExtraction.dispose(key);
+      // 记忆抽取跑在 core 引擎里，会话状态也在那边：删除必须传到引擎，
+      // 否则会留下一个还在给已删会话写记忆的抽取。
+      void backendFetch("conversation_dispose", { conversationId: key }).catch(() => undefined);
       deleteConversationArtifacts(key);
       setQueuedChatTurnsState((current) => removeQueuedChatTurnsForConversation(current, key));
     },
@@ -1134,7 +1135,7 @@ export function ChatPage(props: ChatPageProps) {
     startNewConversation,
     openInitial: openConversationInitial,
     loadEarlier: loadEarlierConversationHistory,
-    replaceConversationAtMessage,
+    reloadConversationFromHistory,
     cleanupDeletedConversation,
     persistConversation,
   } = useConversationHistoryActions({
@@ -1482,7 +1483,7 @@ export function ChatPage(props: ChatPageProps) {
     ensureTunnelToolTab,
     ensureSshTunnelToolTab,
     persistConversation,
-    replaceConversationAtMessage,
+    reloadConversationFromHistory,
     pruneIdleConversationCaches,
     requestQueuedChatTurnProcessing,
   });

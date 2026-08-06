@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+
 
 function createUsage() {
   return {
@@ -85,7 +95,7 @@ test("openai-completions: compatible endpoint recovers usable text missing finis
       },
     },
   });
-  const { streamSimpleByApi } = loader.loadModule("src/lib/providers/runtime/streamByApi.ts");
+  const { streamSimpleByApi } = loader.loadModule(coreSrc("providers/runtime/streamByApi.ts"));
 
   const stream = streamSimpleByApi(createModel(), { messages: [] }, {
     recoverMissingFinishReason: true,
@@ -106,7 +116,7 @@ test("openai-completions: compatible endpoint recovers usable text missing finis
 test("openai-completions: empty stream still fails when finish_reason is missing", async () => {
   const loader = createTsModuleLoader();
   const { recoverOpenAICompletionsMissingFinishReason } = loader.loadModule(
-    "src/lib/providers/runtime/openAICompletionsStream.ts",
+    coreSrc("providers/runtime/openAICompletionsStream.ts"),
   );
   const assistant = createAssistant([]);
   const stream = recoverOpenAICompletionsMissingFinishReason(createErrorSource(assistant));
@@ -122,7 +132,7 @@ test("openai-completions: empty stream still fails when finish_reason is missing
 test("openai-completions: unrelated errors are never recovered", async () => {
   const loader = createTsModuleLoader();
   const { recoverOpenAICompletionsMissingFinishReason } = loader.loadModule(
-    "src/lib/providers/runtime/openAICompletionsStream.ts",
+    coreSrc("providers/runtime/openAICompletionsStream.ts"),
   );
   const assistant = createAssistant(
     [{ type: "text", text: "partial" }],
@@ -138,10 +148,10 @@ test("openai-completions: unrelated errors are never recovered", async () => {
 test("openai-completions: recovered tool calls retain truncation guard coverage", async () => {
   const loader = createTsModuleLoader();
   const { recoverOpenAICompletionsMissingFinishReason } = loader.loadModule(
-    "src/lib/providers/runtime/openAICompletionsStream.ts",
+    coreSrc("providers/runtime/openAICompletionsStream.ts"),
   );
   const { wrapStreamWithToolCallArgumentGuard } = loader.loadModule(
-    "src/lib/chat/runner/toolCallArgumentGuard.ts",
+    coreSrc("chat/runner/toolCallArgumentGuard.ts"),
   );
   const toolCall = {
     type: "toolCall",
@@ -178,7 +188,7 @@ test("openai-completions: recovered tool calls retain truncation guard coverage"
 test("openai-completions: compatibility is enabled only for non-official endpoints", () => {
   const loader = createTsModuleLoader();
   const { finalizeProviderStreamOptions } = loader.loadModule(
-    "src/lib/providers/runtime/payloadPipeline.ts",
+    coreSrc("providers/runtime/payloadPipeline.ts"),
   );
   const model = createModel();
 

@@ -1,3 +1,10 @@
+import type {
+  ToolStatus,
+  WireEvent,
+  WireMessageRef,
+  WireRetryAttempt,
+} from "../../../protocol/wireEvents";
+import { toolStatusKey } from "../../../protocol/wireEvents";
 import type { ConversationViewState, HistoryMessageRef } from "../conversationState";
 import type { RetryAttemptRecord } from "../liveTranscriptStore";
 
@@ -21,9 +28,16 @@ type QueueUserMessageOptions = {
   messageRef?: HistoryMessageRef;
 };
 
-// Wire shape mirror of the gateway's ChatMessageRef (snake_case), matching
-// the webui's buildHistoryMessageRefPayload byte for byte.
-function buildGatewayMessageRefPayload(ref: HistoryMessageRef): Record<string, unknown> {
+/** 一轮助手消息落定时的元信息,与 wire 的 round_meta 同构。 */
+export type RoundMeta = {
+  provider?: string;
+  model?: string;
+  api?: string;
+  stopReason?: string;
+  usage?: unknown;
+};
+
+function buildWireMessageRef(ref: HistoryMessageRef): WireMessageRef {
   return {
     segment_index: ref.segmentIndex,
     message_index: ref.messageIndex,
@@ -43,7 +57,7 @@ type GatewayBridgeEventControllerParams = {
   enabled: boolean;
   sendEvent: (
     requestId: string,
-    event: Record<string, unknown>,
+    event: WireEvent,
     options?: { workerId?: string },
   ) => GatewayBridgeSendResult;
   flushEvents?: (requestId: string) => Promise<void>;
@@ -51,18 +65,16 @@ type GatewayBridgeEventControllerParams = {
 };
 
 export type GatewayBridgeEventController = {
-  queueEvent: (
-    event: Record<string, unknown>,
-    options?: QueueEventOptions,
-  ) => GatewayBridgeSendResult;
+  queueEvent: (event: WireEvent, options?: QueueEventOptions) => GatewayBridgeSendResult;
   queueUserMessage: (
     message: string,
     uploadedFiles?: readonly unknown[],
     options?: QueueUserMessageOptions,
   ) => GatewayBridgeSendResult;
-  queueToken: (delta: string, extra?: Record<string, unknown>) => void;
+  queueToken: (delta: string, round: number) => void;
+  queueRoundMeta: (round: number, meta: RoundMeta) => void;
   queueTitle: (nextTitle: string, allowAfterClose?: boolean) => void;
-  queueToolStatus: (status: string | null, isCompaction?: boolean) => void;
+  queueToolStatus: (status: ToolStatus | null, isCompaction?: boolean) => void;
   queueRetryAttempts: (attempts: readonly RetryAttemptRecord[]) => void;
   queueCheckpoint: (state: ConversationViewState) => void;
   emitError: (message: string, conversationIdOverride?: string) => void;
@@ -78,49 +90,48 @@ export function createGatewayBridgeEventController(
   let streamClosed = false;
   let closePromise: Promise<void> | null = null;
   let lastToolStatusKey = "";
-  let lastToolStatus: string | null = null;
+  let lastToolStatus: ToolStatus | null = null;
   let lastToolStatusIsCompaction = false;
   let lastRetryAttemptsKey = "[]";
 
-  const queueEvent = (event: Record<string, unknown>, options?: QueueEventOptions) => {
+  const queueEvent = (event: WireEvent, options?: QueueEventOptions) => {
     if (!params.enabled) return;
     if (streamClosed && !options?.allowAfterClose) return;
     return params.sendEvent(params.requestId, event, { workerId: params.workerId });
   };
 
-  const queueToolStatus = (status: string | null, isCompaction = false) => {
-    const normalizedStatus = status?.trim() ?? "";
-    const statusKey = `${normalizedStatus}::${isCompaction ? "1" : "0"}`;
+  const queueToolStatus = (status: ToolStatus | null, isCompaction = false) => {
+    const statusKey = `${toolStatusKey(status)}::${isCompaction ? "1" : "0"}`;
     if (statusKey === lastToolStatusKey) return;
     lastToolStatusKey = statusKey;
-    lastToolStatus = normalizedStatus || null;
+    lastToolStatus = status;
     lastToolStatusIsCompaction = isCompaction;
     queueEvent({
-      type: "tool_status",
-      status: normalizedStatus || null,
-      isCompaction,
+      type: "tool_status_change",
+      status,
+      is_compaction: isCompaction,
       conversation_id: params.conversationId,
     });
   };
 
-  // Rides on the tool_status wire event (re-sending the current status text)
-  // so the WebUI can mirror the desktop's expandable retry-details block
-  // without a new event type. Events without a retryAttempts array leave the
-  // WebUI's list untouched; an explicit empty array clears it.
+  // Rides on the tool_status_change wire event (re-sending the current status)
+  // so remote viewers can mirror the desktop's expandable retry-details block
+  // without a new event type. Events without a retry_attempts array leave the
+  // consumer's list untouched; an explicit empty array clears it.
   const queueRetryAttempts = (attempts: readonly RetryAttemptRecord[]) => {
-    const payload = attempts.map((entry) => ({
+    const payload: WireRetryAttempt[] = attempts.map((entry) => ({
       attempt: entry.attempt,
-      maxAttempts: entry.maxAttempts,
-      errorMessage: entry.errorMessage,
+      max_attempts: entry.maxAttempts,
+      error_message: entry.errorMessage,
     }));
     const attemptsKey = JSON.stringify(payload);
     if (attemptsKey === lastRetryAttemptsKey) return;
     lastRetryAttemptsKey = attemptsKey;
     queueEvent({
-      type: "tool_status",
+      type: "tool_status_change",
       status: lastToolStatus,
-      isCompaction: lastToolStatusIsCompaction,
-      retryAttempts: payload,
+      is_compaction: lastToolStatusIsCompaction,
+      retry_attempts: payload,
       conversation_id: params.conversationId,
     });
   };
@@ -137,27 +148,35 @@ export function createGatewayBridgeEventController(
           file && typeof file === "object" ? { ...(file as Record<string, unknown>) } : file,
         ),
         conversation_id: params.conversationId,
-        ...(options?.messageRef
-          ? { message_ref: buildGatewayMessageRefPayload(options.messageRef) }
-          : {}),
+        ...(options?.messageRef ? { message_ref: buildWireMessageRef(options.messageRef) } : {}),
         ...(options?.baseMessageRef
           ? {
-              base_message_ref: buildGatewayMessageRefPayload(options.baseMessageRef),
-              reason: "edit_resend",
+              base_message_ref: buildWireMessageRef(options.baseMessageRef),
+              reason: "edit_resend" as const,
             }
           : {}),
       });
     },
-    queueToken(delta: string, extra?: Record<string, unknown>) {
-      if (delta.length === 0 && !extra) return;
-      if (delta.length > 0) {
-        forwardedText = true;
-      }
+    queueToken(delta: string, round: number) {
+      if (delta.length === 0) return;
+      forwardedText = true;
       queueEvent({
-        type: "token",
-        text: delta,
+        type: "token_delta",
+        round,
+        delta,
         conversation_id: params.conversationId,
-        ...extra,
+      });
+    },
+    queueRoundMeta(round: number, meta: RoundMeta) {
+      queueEvent({
+        type: "round_meta",
+        round,
+        provider: meta.provider,
+        model: meta.model,
+        api: meta.api,
+        stop_reason: meta.stopReason,
+        usage: meta.usage,
+        conversation_id: params.conversationId,
       });
     },
     queueTitle(nextTitle: string, allowAfterClose = false) {
@@ -165,10 +184,9 @@ export function createGatewayBridgeEventController(
       if (!title) return;
       queueEvent(
         {
-          type: "token",
-          text: "",
+          type: "conversation_title",
           title,
-          titleFinal: allowAfterClose === true,
+          final: allowAfterClose === true,
           conversation_id: params.conversationId,
         },
         { allowAfterClose },
@@ -182,22 +200,19 @@ export function createGatewayBridgeEventController(
       if (!summary?.content.trim()) return;
 
       queueEvent({
-        type: "token",
-        text: summary.content,
-        provider: "liveagent",
-        model: "summary",
-        api: "liveagent-compaction",
+        type: "compaction_checkpoint",
+        summary_text: summary.content,
         conversation_id: params.conversationId,
         checkpoint: {
-          summaryId: summary.id,
-          segmentIndex: activeSegment.segmentIndex,
-          coveredMessageCount: summary.summaryMeta.coveredMessageCount,
-          coversThroughMessageId: summary.summaryMeta.coversThroughMessageId,
+          summary_id: summary.id,
+          segment_index: activeSegment.segmentIndex,
+          covered_message_count: summary.summaryMeta.coveredMessageCount,
+          covers_through_message_id: summary.summaryMeta.coversThroughMessageId,
           timestamp: summary.timestamp,
-          generatedBy: {
-            providerId: summary.summaryMeta.generatedBy.providerId,
+          generated_by: {
+            provider_id: summary.summaryMeta.generatedBy.providerId,
             model: summary.summaryMeta.generatedBy.model,
-            promptVersion: summary.summaryMeta.generatedBy.promptVersion,
+            prompt_version: summary.summaryMeta.generatedBy.promptVersion,
           },
         },
       });

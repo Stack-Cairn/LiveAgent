@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Battle 2: this suite now drives crates/core, the engine that actually ships.
+// The frontend copy under src/lib was a duplicate and has been removed.
+// crates/core modules that talk to the Rust backend read this at import time.
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+// core 走 HTTP callBackend，前端副本走 tauri invoke —— 迁移后 mock 换成前者。
+const backendClientPath = coreSrc("backendClient.ts");
 
 function createTunnel(overrides = {}) {
   return {
@@ -41,8 +52,8 @@ function createToolCall(args) {
 
 async function buildRegistry(params = {}) {
   const loader = createTsModuleLoader();
-  const { buildBuiltinToolRegistry } = loader.loadModule("src/lib/tools/builtinRegistry.ts");
-  const { createFileToolState } = loader.loadModule("src/lib/tools/fileToolState.ts");
+  const { buildBuiltinToolRegistry } = loader.loadModule(coreSrc("tools/builtinRegistry.ts"));
+  const { createFileToolState } = loader.loadModule(coreSrc("tools/fileToolState.ts"));
   return buildBuiltinToolRegistry({
     workdir: "/workspace",
     providerId: "codex",
@@ -84,8 +95,8 @@ test("TunnelManager list/create/close/check call tunnel commands", async () => {
   const tunnels = [createTunnel()];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           if (command === "tunnel_state") {
             return createSnapshot([...tunnels]);
@@ -115,7 +126,7 @@ test("TunnelManager list/create/close/check call tunnel commands", async () => {
       },
     },
   });
-  const { createTunnelManagerTools } = loader.loadModule("src/lib/tools/tunnelManagerTools.ts");
+  const { createTunnelManagerTools } = loader.loadModule(coreSrc("tools/tunnelManagerTools.ts"));
   const changes = [];
   const bundle = createTunnelManagerTools({
     enabled: true,
@@ -175,8 +186,8 @@ test("TunnelManager list/create/close/check call tunnel commands", async () => {
   assert.deepEqual(
     invocations.map((call) => [call.command, call.args]),
     [
-      ["tunnel_state", undefined],
-      ["tunnel_state", undefined],
+      ["tunnel_state", {}],
+      ["tunnel_state", {}],
       [
         "tunnel_create",
         {
@@ -188,10 +199,10 @@ test("TunnelManager list/create/close/check call tunnel commands", async () => {
           },
         },
       ],
-      ["tunnel_state", undefined],
+      ["tunnel_state", {}],
       ["tunnel_close", { tunnel_id: "tun-1" }],
       ["tunnel_check", { tunnel_id: "tun-created" }],
-      ["tunnel_state", undefined],
+      ["tunnel_state", {}],
     ],
   );
   assert.deepEqual(
@@ -208,15 +219,15 @@ test("TunnelManager rejects invalid arguments before invoking tunnel commands", 
   const invocations = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           invocations.push({ command, args });
           throw new Error("unexpected invoke");
         },
       },
     },
   });
-  const { createTunnelManagerTools } = loader.loadModule("src/lib/tools/tunnelManagerTools.ts");
+  const { createTunnelManagerTools } = loader.loadModule(coreSrc("tools/tunnelManagerTools.ts"));
   const bundle = createTunnelManagerTools({ enabled: true, runtimeScope: "chat" });
 
   const invalidAction = await bundle.executeToolCall(createToolCall({ action: "probe" }));
