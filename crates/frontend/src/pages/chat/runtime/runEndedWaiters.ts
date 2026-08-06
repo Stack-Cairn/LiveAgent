@@ -9,11 +9,15 @@
  * agent_settled（即 run_ended 的来源）只在排队消息全部排空后发一次。
  */
 
+import type { LiveRoundSnapshot } from "../../../lib/chat/conversation/chatAbort";
+
 export type RunEndedResult = {
   state: "completed" | "failed" | "cancelled";
   errorMessage: string | null;
   /** run_ended 时刻、settle 清空之前的累计正文。完成态用它落史。 */
   draftAssistantText: string;
+  /** 同一时刻的 liveRounds 快照——思考/工具调用链靠它落史，空数组回退纯文本。 */
+  liveRounds: LiveRoundSnapshot[];
 };
 
 const waiters = new Map<string, Set<(result: RunEndedResult) => void>>();
@@ -43,7 +47,7 @@ export function waitForRunEnded(
       resolve(result);
     };
     const onAbort = () => {
-      settle({ state: "cancelled", errorMessage: null, draftAssistantText: "" });
+      settle({ state: "cancelled", errorMessage: null, draftAssistantText: "", liveRounds: [] });
     };
     handlers.add(settle);
     if (signal) {

@@ -1287,15 +1287,27 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       if (runEnded.state === "failed") {
         throw new Error(runEnded.errorMessage || "Request failed");
       }
-      // 完成态：把这轮跑出来的正文落进会话历史并持久化。
-      // live 快照在 run_ended 时已被 settle 清空，正文从 waiter 带回来。
-      const assistantMessage = buildPartialAssistantMessage({
-        model: runtimeModel,
-        text: runEnded.draftAssistantText,
-        stopReason: "stop",
-      });
-      if (assistantMessage) {
-        const finalState = appendMessagesToConversation(nextConversationState, [assistantMessage]);
+      // 完成态：把这轮跑出来的内容落进会话历史并持久化。
+      // live 快照在 run_ended 时已被 settle 清空，内容从 waiter 带回来。
+      // 优先用 liveRounds 快照——它带完整的思考/工具调用链；轮次事件全丢
+      // （如 WS 掉帧）时回退到纯正文。
+      const completedMessages =
+        runEnded.liveRounds.length > 0
+          ? buildPersistableMessagesFromSnapshot({
+              model: runtimeModel,
+              liveRounds: runEnded.liveRounds,
+              completedThroughRound: runEnded.liveRounds[runEnded.liveRounds.length - 1].round,
+            })
+          : (() => {
+              const assistantMessage = buildPartialAssistantMessage({
+                model: runtimeModel,
+                text: runEnded.draftAssistantText,
+                stopReason: "stop",
+              });
+              return assistantMessage ? [assistantMessage] : [];
+            })();
+      if (completedMessages.length > 0) {
+        const finalState = appendMessagesToConversation(nextConversationState, completedMessages);
         applyConversationState(finalState);
         freezeBackendFinalProjection(finalState, true);
         terminalHistoryPersistPromise = persistTerminalConversation({

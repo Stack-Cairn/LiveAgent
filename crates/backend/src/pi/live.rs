@@ -236,7 +236,12 @@ impl LiveState {
         self.rounds.last_mut().expect("刚 push 过，必然非空")
     }
 
-    pub fn push_text_delta(&mut self, delta: &str, content_index: i64) {
+    /// 当前轮的下标。内容事件要随事件广播轮次，前端据此落块。
+    fn current_round_index(&self) -> usize {
+        self.rounds.len().saturating_sub(1)
+    }
+
+    pub fn push_text_delta(&mut self, delta: &str, content_index: i64) -> usize {
         let round = self.current_round();
         // 正文一出现，思考块就算收起来了。
         round.thinking_open = false;
@@ -251,9 +256,10 @@ impl LiveState {
                 text: delta.to_string(),
             }),
         }
+        self.current_round_index()
     }
 
-    pub fn push_thinking_delta(&mut self, delta: &str, content_index: i64) {
+    pub fn push_thinking_delta(&mut self, delta: &str, content_index: i64) -> usize {
         let round = self.current_round();
         round.thinking_open = true;
         match round.blocks.last_mut() {
@@ -266,9 +272,10 @@ impl LiveState {
                 text: delta.to_string(),
             }),
         }
+        self.current_round_index()
     }
 
-    pub fn begin_tool(&mut self, tool_call_id: &str, tool_name: &str, args: Value) {
+    pub fn begin_tool(&mut self, tool_call_id: &str, tool_name: &str, args: Value) -> usize {
         let round = self.current_round();
         round.thinking_open = false;
         round.blocks.push(Block::Tool {
@@ -278,9 +285,10 @@ impl LiveState {
             result: None,
         });
         round.running_tool_call_ids.push(tool_call_id.to_string());
+        self.current_round_index()
     }
 
-    /// 工具结果落到对应的块上。
+    /// 工具结果落到对应的块上。返回落点轮次与到达时刻（供广播），没配上则 None。
     ///
     /// 按 id 从后往前找**所有**轮次：并行工具调用下结束顺序与开始顺序无关，
     /// 而压缩续跑又可能让上一轮的工具在新轮开始后才回来。
@@ -290,9 +298,9 @@ impl LiveState {
         content: Value,
         details: Value,
         is_error: bool,
-    ) {
+    ) -> Option<(usize, u64)> {
         let timestamp_ms = now_ms();
-        for round in self.rounds.iter_mut().rev() {
+        for (round_index, round) in self.rounds.iter_mut().enumerate().rev() {
             round.running_tool_call_ids.retain(|id| id != tool_call_id);
             let slot = round.blocks.iter_mut().rev().find_map(|block| match block {
                 Block::Tool {
@@ -309,9 +317,10 @@ impl LiveState {
                     is_error,
                     timestamp_ms,
                 });
-                return;
+                return Some((round_index, timestamp_ms));
             }
         }
+        None
     }
 
     /// 一条 assistant 消息落定，把 meta 记到当前轮上。

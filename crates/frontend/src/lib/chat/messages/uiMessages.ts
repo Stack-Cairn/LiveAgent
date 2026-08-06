@@ -1149,6 +1149,33 @@ export function updateLiveRound(
   return next;
 }
 
+/**
+ * 同 `updateLiveRound`，但目标轮次不存在时先把空轮补齐到该下标再更新。
+ * 后端事件流按轮次广播增量，而 pi 不为第一轮发 turn_start，轮次只能在
+ * 第一个内容事件到达时惰性创建——与后端 LiveState 的策略一致。
+ */
+export function updateEnsuredLiveRound(
+  prev: LiveRound[],
+  round: number,
+  updater: (target: LiveRound) => LiveRound,
+) {
+  let next = prev;
+  if (!prev.some((item) => item.round === round)) {
+    next = prev.slice();
+    const start = prev.length === 0 ? 0 : prev[prev.length - 1].round + 1;
+    for (let n = start; n <= round; n += 1) {
+      next.push({
+        round: n,
+        key: `r${n}`,
+        blocks: [],
+        runningToolCallIds: [],
+        thinkingOpen: false,
+      });
+    }
+  }
+  return updateLiveRound(next, round, updater);
+}
+
 export function collapseThinking(target: LiveRound) {
   if (!target.thinkingOpen || !getRoundThinkingText(target).trim()) return target;
   return { ...target, thinkingOpen: false };

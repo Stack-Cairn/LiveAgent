@@ -451,6 +451,7 @@ export function ChatPage(props: ChatPageProps) {
     resetLiveTranscript,
     settleLiveTranscript,
     appendDraftAssistantText,
+    batchLiveRoundsUpdate,
     updateToolStatus,
   } = useLiveTranscriptController({
     currentConversationId,
@@ -537,6 +538,7 @@ export function ChatPage(props: ChatPageProps) {
     getConversationLiveTranscriptStore,
     updateToolStatus,
     appendDraftAssistantText,
+    batchLiveRoundsUpdate,
     settleLiveTranscript,
     getLiveSnapshot: (targetStore) => getAbortSnapshot(targetStore),
     onBackendToolApprovalRequest: (payload) => {

@@ -34,6 +34,24 @@ Node core --POST /api/engine_emit_event {event, payload}--> Rust EventBus --WS �
   让 serde 用 `IgnoredAny` 扫过去而不建对象（见 `crates/backend/src/pi/protocol.rs`）。
 - 增量按 `contentIndex` 区分内容块；thinking 块是另一个事件类型（`thinking_delta`），
   **不**映射到 token_delta。
+- 2026-08 补充：payload 增加 `round`（当前轮下标），前端据此把正文同时落进
+  liveRounds（渲染优先 liveRounds，草稿正文只作落史回退源）。
+
+### 2.1b `thinking_delta` / `tool_call` / `tool_result` ✅（2026-08 新增）
+
+思维链与工具调用链的前端可视化事件，形状对齐前端 `LiveRound` 的块结构：
+
+```ts
+{ conversation_id, delta: string, round: number }                    // thinking_delta
+{ conversation_id, round, toolCall: {type,id,name,arguments} }       // tool_call
+{ conversation_id, round, toolResult: {role,toolCallId,toolName,content,details,isError,timestamp} }  // tool_result
+```
+
+- 前端在 `useBackendEventSubscription` 里按 `round` 落进对应会话的 liveRounds
+  （轮次缺失时惰性补齐，与后端 LiveState 的第一轮惰性创建对齐）。
+- `run_ended` 时发送方 waiter 带走 liveRounds 快照落史（思考/工具链随之持久化），
+  快照为空时回退纯 `draftAssistantText`。
+
 
 ### 2.2 `tool_status_change` ✅（部分字段）
 
@@ -164,8 +182,10 @@ Node core --POST /api/engine_emit_event {event, payload}--> Rust EventBus --WS �
 
 | pi 事件 | 前端事件 |
 |---|---|
-| `message_update` (text_delta) | `token_delta` |
-| `tool_execution_start/end` | `tool_status_change` |
+| `message_update` (text_delta) | `token_delta`（带 `round`） |
+| `message_update` (thinking_delta) | `thinking_delta` |
+| `tool_execution_start` | `tool_status_change` + `tool_call` |
+| `tool_execution_end` | `tool_status_change` + `tool_result` |
 | `compaction_start/end` | `tool_status_change` (isCompaction) |
 | `auto_retry_start/end` | `tool_status_change` (retryAttempts) |
 | `agent_settled` | `run_ended` |

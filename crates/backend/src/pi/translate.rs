@@ -43,7 +43,8 @@ pub fn apply(
             with_live(live, |state| state.begin_turn());
         }
 
-        // 思考增量不映射成 token_delta（契约 §2.1），只进 liveRounds。
+        // 思考增量不映射成 token_delta（契约 §2.1），走独立的 thinking_delta
+        // 事件带轮次落到前端 liveRounds。
         PiEvent::ThinkingDelta {
             delta,
             content_index,
@@ -51,10 +52,14 @@ pub fn apply(
             if delta.is_empty() {
                 return;
             }
-            with_live(live, |state| {
-                state.push_thinking_delta(&delta, content_index);
+            let round = with_live(live, |state| {
                 state.is_settled = false;
+                state.push_thinking_delta(&delta, content_index)
             });
+            events.emit_json(
+                "thinking_delta",
+                json!({ "conversation_id": conversation_id, "delta": delta, "round": round }),
+            );
         }
 
         PiEvent::TextDelta {
@@ -64,14 +69,14 @@ pub fn apply(
             if delta.is_empty() {
                 return;
             }
-            with_live(live, |state| {
+            let round = with_live(live, |state| {
                 state.draft_assistant_text.push_str(&delta);
-                state.push_text_delta(&delta, content_index);
                 state.is_settled = false;
+                state.push_text_delta(&delta, content_index)
             });
             events.emit_json(
                 "token_delta",
-                json!({ "conversation_id": conversation_id, "delta": delta }),
+                json!({ "conversation_id": conversation_id, "delta": delta, "round": round }),
             );
         }
 
@@ -81,24 +86,55 @@ pub fn apply(
             args,
         } => {
             let status = format!("正在执行：{}", summarize_tool_call(&tool_name, &args));
-            with_live(live, |state| {
+            let round = with_live(live, |state| {
                 state.tool_status = Some(status.clone());
-                state.begin_tool(&tool_call_id, &tool_name, args);
+                state.begin_tool(&tool_call_id, &tool_name, args.clone())
             });
             emit_tool_status(events, conversation_id, Some(status), false, &[]);
+            events.emit_json(
+                "tool_call",
+                json!({
+                    "conversation_id": conversation_id,
+                    "round": round,
+                    "toolCall": {
+                        "type": "toolCall",
+                        "id": tool_call_id,
+                        "name": tool_name,
+                        "arguments": args,
+                    },
+                }),
+            );
         }
         PiEvent::ToolEnd {
             tool_call_id,
+            tool_name,
             content,
             details,
             is_error,
-            ..
         } => {
-            with_live(live, |state| {
+            let landed = with_live(live, |state| {
                 state.tool_status = None;
-                state.finish_tool(&tool_call_id, content, details, is_error);
+                state.finish_tool(&tool_call_id, content.clone(), details.clone(), is_error)
             });
             emit_tool_status(events, conversation_id, None, false, &[]);
+            if let Some((round, timestamp_ms)) = landed {
+                events.emit_json(
+                    "tool_result",
+                    json!({
+                        "conversation_id": conversation_id,
+                        "round": round,
+                        "toolResult": {
+                            "role": "toolResult",
+                            "toolCallId": tool_call_id,
+                            "toolName": tool_name,
+                            "content": content,
+                            "details": details,
+                            "isError": is_error,
+                            "timestamp": timestamp_ms,
+                        },
+                    }),
+                );
+            }
         }
 
         PiEvent::CompactionStart => {
@@ -388,7 +424,7 @@ mod tests {
         );
     }
 
-    /// 思考只进 liveRounds，绝不能发成 token_delta（那等于把思考吐给用户）。
+    /// 思考走独立的 thinking_delta，绝不能发成 token_delta（那等于把思考吐给用户）。
     #[test]
     fn thinking_deltas_never_reach_the_frontend_as_text() {
         let (sink, live) = drive(&[
@@ -399,7 +435,11 @@ mod tests {
             },
         ]);
 
-        assert!(emitted(&sink).is_empty(), "思考不该产生任何前端事件");
+        let events = emitted(&sink);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, "thinking_delta");
+        assert_eq!(events[0].1["delta"], "内心戏");
+        assert_eq!(events[0].1["round"], 0);
         let state = live.lock().expect("live lock");
         assert!(
             state.draft_assistant_text.is_empty(),
