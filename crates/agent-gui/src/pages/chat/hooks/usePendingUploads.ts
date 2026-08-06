@@ -5,7 +5,7 @@ import {
   mergePendingUploadedFiles,
   type PendingUploadedFile,
 } from "../../../lib/chat/messages/uploadedFiles";
-import { invoke } from "../../../lib/tauriBridge";
+import { invoke, isTauri } from "../../../lib/tauriBridge";
 
 type SystemPickReadableFilesResponse = {
   files: PendingUploadedFile[];
@@ -53,6 +53,25 @@ async function fileToUploadInput(file: File): Promise<SystemUploadedReadableFile
     mimeType: file.type || undefined,
     contentBase64: arrayBufferToBase64(await file.arrayBuffer()),
   };
+}
+
+/**
+ * Headless (non-Tauri) fallback for the "pick files" button: there is no
+ * native file dialog, so open the browser's file picker and hand the chosen
+ * files back for the base64 upload path (same as drag & drop / paste).
+ */
+function pickBrowserFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.onchange = () => {
+      resolve(Array.from(input.files ?? []));
+    };
+    // Cancel / Escape dismisses the picker without selecting anything.
+    input.oncancel = () => resolve([]);
+    input.click();
+  });
 }
 
 export function usePendingUploads(params: UsePendingUploadsParams) {
@@ -289,11 +308,29 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       runUploadTask({
         emptySelectionMessage: "所选文件均不受当前 Read 支持",
         errorFallback: "导入文件失败",
-        importer: ({ targetWorkdir, remainingFileSlots }) =>
-          invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
+        importer: async ({ targetWorkdir, remainingFileSlots }) => {
+          if (!isTauri()) {
+            // Headless: no native dialog — use the browser file picker and
+            // route through the same base64 upload path as drag & drop/paste.
+            const picked = await pickBrowserFiles();
+            if (picked.length === 0) return { files: [], skipped: [] };
+            const uploadFiles = await Promise.all(
+              picked.slice(0, remainingFileSlots).map(fileToUploadInput),
+            );
+            return invoke<SystemPickReadableFilesResponse>(
+              "system_import_uploaded_readable_files",
+              {
+                workdir: targetWorkdir,
+                files: uploadFiles,
+                maxFiles: remainingFileSlots,
+              },
+            );
+          }
+          return invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
             workdir: targetWorkdir,
             maxFiles: remainingFileSlots,
-          }),
+          });
+        },
       }),
     [runUploadTask],
   );

@@ -26,7 +26,7 @@ use std::time::Instant;
 use dirs;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{ConnectInfo, Extension, FromRef, Path as AxumPath, Query, State, State as AxumState};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, Extension, FromRef, Path as AxumPath, Query, State, State as AxumState};
 use axum::http::{header, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -2417,6 +2417,16 @@ pub fn build_router(state: HeadlessState) -> Router {
     let cors_config = CorsConfig::from_env();
     // Default: 60 requests per minute for /api/invoke
     let limiter = RateLimiter::new(60, std::time::Duration::from_secs(60));
+    // /api/invoke carries file uploads as base64 inside a JSON body (the
+    // headless WebUI reuses the Tauri command surface), which expands ~33%.
+    // axum's default Json body limit is 2MB, so anything above ~1.5MB of
+    // uploaded files was rejected with HTTP 413. Allow a configurable cap
+    // (default 128MB of JSON body, i.e. ~96MB of raw files).
+    let max_body_bytes = std::env::var("LIVEAGENT_HEADLESS_MAX_BODY_MB")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .map(|mb| mb * 1024 * 1024)
+        .unwrap_or(128 * 1024 * 1024);
 
     Router::new()
         .route("/health", get(health))
@@ -2438,6 +2448,10 @@ pub fn build_router(state: HeadlessState) -> Router {
         .layer(middleware::from_fn_with_state(limiter, rate_limit_middleware))
         // Outermost: enforce same-origin / allow-list before anything else.
         .layer(middleware::from_fn_with_state(cors_config, cors_origin_middleware))
+        // Raise the body limit for base64 file uploads inside /api/invoke
+        // (and /proxy bodies). Default 128MB, override via
+        // LIVEAGENT_HEADLESS_MAX_BODY_MB.
+        .layer(DefaultBodyLimit::max(max_body_bytes))
 }
 
 /// Build the axum state (registries that are not part of AppContext).
