@@ -8,9 +8,8 @@ const i18nPath = fileURLToPath(new URL("../../src/i18n/index.ts", import.meta.ur
 const iconsPath = fileURLToPath(new URL("../../src/components/icons/index.ts", import.meta.url));
 const utilsPath = fileURLToPath(new URL("../../src/lib/shared/utils.ts", import.meta.url));
 
-const { ASK_USER_QUESTION_TIMEOUT_MS } = createTsModuleLoader().loadModule(
-  "src/lib/chat/askUserQuestion.ts",
-);
+const { ASK_USER_QUESTION_TIMEOUT_MS, INTERACTIVE_TIMEOUT_MAX_MINUTES } =
+  createTsModuleLoader().loadModule("src/lib/chat/askUserQuestion.ts");
 
 const questions = [
   {
@@ -250,6 +249,24 @@ test("a far-future deadline (long timeout window) is trusted and counts down to 
   );
   assert.equal(optionButtons.every((button) => button.props.disabled === false), true);
   assert.match(treeText(tree), /(?:8:00|7:59) chat\.askUser\.timeoutHint/);
+});
+
+test("a deadline beyond the largest configurable window is distrusted as clock skew", () => {
+  const card = createCardHarness();
+  const tree = card.render({
+    // 本机时钟慢于桌面盖章时钟：截止时间超出「最大可配置窗口」，视为时钟不可比。
+    // 上界随配置上限而非默认窗口，长窗口（≈永不超时）本身仍被采信（见上一条）。
+    deadlineAt: Date.now() + (INTERACTIVE_TIMEOUT_MAX_MINUTES + 1) * 60_000,
+    onSubmit: async () => ({ ok: true }),
+  });
+
+  const optionButtons = findAll(
+    tree,
+    (node) => node.type === "button" && node.props?.role === "radio",
+  );
+  // 卡片仍可作答，倒计时回退为挂载时刻的默认窗口近似，而不是把偏移量当剩余时间。
+  assert.equal(optionButtons.every((button) => button.props.disabled === false), true);
+  assert.match(treeText(tree), /(?:3:00|2:59) chat\.askUser\.timeoutHint/);
 });
 
 test("a complete answer before the deadline submits the selected non-first option", async () => {

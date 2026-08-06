@@ -14,9 +14,7 @@ import { BUILTIN_TOOL_CATALOG, BUILTIN_TOOL_CATEGORIES } from "../../lib/tools/b
 import type { SettingsSectionProps } from "./types";
 
 // 档位表：60 分钟内细调，超过 1 小时直跳最大档 99999。
-const TIMEOUT_STOPS = [
-  1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 99999,
-];
+const TIMEOUT_STOPS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 99999];
 
 export function SystemToolsSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
@@ -126,7 +124,9 @@ export function SystemToolsSection(props: SettingsSectionProps) {
                           step={1}
                           value={timeoutStopIndex}
                           aria-label={t("settings.interactiveTimeout.title")}
-                          onChange={(event) => onTimeoutStopChange(Number(event.currentTarget.value))}
+                          onChange={(event) =>
+                            onTimeoutStopChange(Number(event.currentTarget.value))
+                          }
                           className="w-full accent-primary"
                         />
                         <div className="mt-1 text-right text-xs text-muted-foreground">
