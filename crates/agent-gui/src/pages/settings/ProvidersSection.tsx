@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../../src-tauri/icons/custom/ccswitch.png";
@@ -30,7 +29,6 @@ import {
   X,
   Zap,
 } from "../../components/icons";
-
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "../../components/ui/confirm-dialog";
 import {
@@ -95,6 +93,8 @@ import {
 } from "../../lib/settings";
 import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
+import { invoke, isTauri } from "../../lib/tauriBridge";
+import { openFolderPicker } from "../chat/workspace/HeadlessFolderPicker";
 import {
   type CherryProviderImportItem,
   type CherryProvidersResponse,
@@ -3682,9 +3682,18 @@ export function ProvidersSection(
   }
 
   async function chooseCherryDataDirectory() {
-    const selected = await invoke<string | null>("system_pick_folder", {
-      initial_workdir: cherryDataPath ?? cherryProviders?.dataPath ?? undefined,
-    });
+    let selected: string | null;
+    if (isTauri()) {
+      selected = await invoke<string | null>("system_pick_folder", {
+        initial_workdir: cherryDataPath ?? cherryProviders?.dataPath ?? undefined,
+      });
+    } else {
+      // Headless: international-style folder picker dialog
+      selected = await openFolderPicker({
+        title: "选择 Cherry Studio 数据目录",
+        initialPath: cherryDataPath ?? cherryProviders?.dataPath ?? "/",
+      });
+    }
     if (!selected) return;
 
     setCherryLoading(true);

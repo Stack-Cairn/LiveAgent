@@ -1,0 +1,80 @@
+name: LiveAgent Headless Tools Image (minimal/core/full)
+
+# 构建并发布三个镜像到 GHCR（main 分支 push / v* tag 触发，可手动 dispatch）：
+#   ghcr.io/<owner>/liveagent-minimal  (~0.7 GB, 仅基础工具 + liveagent，生产部署推荐)
+#   ghcr.io/<owner>/liveagent-core     (~1.8 GB, 默认开发沙箱)
+#   ghcr.io/<owner>/liveagent-full     (~2.2 GB, 含 Java 17 + Maven, Java 8 懒加载)
+# 同一 Dockerfile（Dockerfile.headless-tools），用 TARGET_PROFILE 区分；
+# minimal/core/full 共享 base 层，pull 时不重复下载。
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish, for example v0.1.0
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    name: Build and Push (${{ matrix.profile }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: minimal
+            image: ghcr.io/${{ github.repository_owner }}/liveagent-minimal
+          - profile: core
+            image: ghcr.io/${{ github.repository_owner }}/liveagent-core
+          - profile: full
+            image: ghcr.io/${{ github.repository_owner }}/liveagent-full
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ github.event.inputs.tag || github.ref_name }}
+            type=raw,value=latest,enable=${{ github.event.inputs.tag == '' && startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.headless-tools
+          build-args: |
+            TARGET_PROFILE=${{ matrix.profile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false

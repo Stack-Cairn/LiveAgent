@@ -3,7 +3,7 @@
 // conversation run owns a cancellable scope: aborting the run drops its
 // queued hooks and kills its in-flight script via the Rust scope registry.
 
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 
 import { createUuid } from "../shared/id";
 import type { HookDef, HookEvent, HookType } from "./types";

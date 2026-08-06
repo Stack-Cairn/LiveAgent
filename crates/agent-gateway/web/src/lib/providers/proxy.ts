@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "../../lib/tauriBridge";
 
 import type { ProviderId } from "../settings";
 
@@ -78,6 +78,14 @@ function normalizeProxyServerInfo(info: ProxyServerInfo): ProxyServerInfo {
 async function getProxyServerInfo(): Promise<ProxyServerInfo> {
   if (!proxyServerInfoPromise) {
     proxyServerInfoPromise = invoke<ProxyServerInfo>("proxy_get_server_info")
+      .then((info) => {
+        if (!isTauri()) {
+          // headless（BFF）：反代路由挂在主 HTTP 服务上，baseUrl 用页面 origin
+          // （同机或远程浏览器都正确，无需硬编码主机）；token 沿用服务端随机 token。
+          return { baseUrl: window.location.origin, token: info.token };
+        }
+        return info;
+      })
       .then(normalizeProxyServerInfo)
       .catch((error) => {
         proxyServerInfoPromise = null;

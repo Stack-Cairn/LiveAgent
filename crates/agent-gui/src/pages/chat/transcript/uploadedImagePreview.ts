@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
+import { invoke } from "../../../lib/tauriBridge";
 
 type UploadedImagePreviewResponse = {
   mimeType: string;

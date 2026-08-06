@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   type Dispatch,
   type MutableRefObject,
@@ -22,6 +20,7 @@ import { sidebarScopeKey } from "../../../lib/sidebar/scope";
 import type { SidebarStore } from "../../../lib/sidebar/store";
 import type { SidebarScope } from "../../../lib/sidebar/types";
 import { useSidebarSelector } from "../../../lib/sidebar/useSidebarSelector";
+import { invoke, isTauri, revealItemInDir } from "../../../lib/tauriBridge";
 import { invokeFs } from "../../../lib/tools/fsBackend";
 import {
   findWorkspaceProject,
@@ -29,6 +28,7 @@ import {
 } from "../../../lib/workspaceProjects";
 import { asErrorMessage } from "../chatPageUtils";
 import { startWorkspaceCloneTask } from "./cloneTasks";
+import { openFolderPicker } from "./HeadlessFolderPicker";
 import {
   createWorkspaceProjectFromPath,
   getDefaultWorkspaceProjectPath,
@@ -349,9 +349,20 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
 
   const handleOpenWorkspaceFolder = useCallback(async () => {
     try {
-      const picked = await invoke<string | null>("system_pick_folder", {
-        initial_workdir: activeWorkspaceProjectPath || workdir,
-      });
+      let picked: string | null;
+      if (isTauri()) {
+        // Desktop: native file dialog
+        picked = await invoke<string | null>("system_pick_folder", {
+          initial_workdir: activeWorkspaceProjectPath || workdir,
+        });
+      } else {
+        // Headless: international-style folder picker (breadcrumbs, quick
+        // places, directory listing) instead of a bare text input.
+        picked = await openFolderPicker({
+          title: "选择工作空间目录",
+          initialPath: activeWorkspaceProjectPath || workdir || "/",
+        });
+      }
       const path = picked?.trim();
       if (!path) return;
       activateWorkspaceProject(createWorkspaceProjectFromPath(path, "managed"));

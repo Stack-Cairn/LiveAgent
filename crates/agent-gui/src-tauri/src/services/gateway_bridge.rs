@@ -77,7 +77,7 @@ pub async fn handle_cron_manage(
     let result_json = match action.as_str() {
         "snapshot" => {
             let store = Arc::clone(&store);
-            let snapshot = tauri::async_runtime::spawn_blocking(move || store.snapshot())
+            let snapshot = crate::compat::async_runtime::spawn_blocking(move || store.snapshot())
                 .await
                 .map_err(|e| format!("gateway automation snapshot join failed: {e}"))??;
             serialize_cron_manage_result(&snapshot)?
@@ -85,7 +85,7 @@ pub async fn handle_cron_manage(
         "cron_apply" => {
             let input = parse_apply_input(&request.task_json)?;
             let store = Arc::clone(&store);
-            let response = tauri::async_runtime::spawn_blocking(move || store.cron_apply(input))
+            let response = crate::compat::async_runtime::spawn_blocking(move || store.cron_apply(input))
                 .await
                 .map_err(|e| format!("gateway cron apply join failed: {e}"))??;
             serialize_cron_manage_result(&response)?
@@ -93,7 +93,7 @@ pub async fn handle_cron_manage(
         "hooks_apply" => {
             let input = parse_apply_input(&request.task_json)?;
             let store = Arc::clone(&store);
-            let response = tauri::async_runtime::spawn_blocking(move || store.hooks_apply(input))
+            let response = crate::compat::async_runtime::spawn_blocking(move || store.hooks_apply(input))
                 .await
                 .map_err(|e| format!("gateway hooks apply join failed: {e}"))??;
             serialize_cron_manage_result(&response)?
@@ -103,7 +103,7 @@ pub async fn handle_cron_manage(
             let limit = parse_runs_limit(&request.task_json)?;
             let store = Arc::clone(&store);
             let runs =
-                tauri::async_runtime::spawn_blocking(move || store.list_runs(&task_id, limit))
+                crate::compat::async_runtime::spawn_blocking(move || store.list_runs(&task_id, limit))
                     .await
                     .map_err(|e| format!("gateway list_runs join failed: {e}"))??;
             serialize_cron_manage_result(&json!({ "runs": runs }))?
@@ -111,7 +111,7 @@ pub async fn handle_cron_manage(
         "clear_runs" => {
             let task_id = parse_required_cron_task_id(&request, "clear_runs")?;
             let store = Arc::clone(&store);
-            let cleared = tauri::async_runtime::spawn_blocking(move || store.clear_runs(&task_id))
+            let cleared = crate::compat::async_runtime::spawn_blocking(move || store.clear_runs(&task_id))
                 .await
                 .map_err(|e| format!("gateway clear_runs join failed: {e}"))??;
             serialize_cron_manage_result(&json!({ "clearedCount": cleared }))?
@@ -120,14 +120,14 @@ pub async fn handle_cron_manage(
             let task_id = parse_required_cron_task_id(&request, "run_now")?;
             let store = Arc::clone(&store);
             let response =
-                tauri::async_runtime::spawn_blocking(move || store.run_cron_task_now(&task_id))
+                crate::compat::async_runtime::spawn_blocking(move || store.run_cron_task_now(&task_id))
                     .await
                     .map_err(|e| format!("gateway run_now join failed: {e}"))??;
             serialize_cron_manage_result(&response)?
         }
         "validate" => {
             let expression = parse_validate_expression(&request.task_json)?;
-            tauri::async_runtime::spawn_blocking(move || validate_cron_expression(&expression))
+            crate::compat::async_runtime::spawn_blocking(move || validate_cron_expression(&expression))
                 .await
                 .map_err(|e| format!("gateway cron validate join failed: {e}"))??;
             serialize_cron_manage_result(&json!({ "valid": true }))?
@@ -357,7 +357,7 @@ pub async fn handle_history_delete(
 }
 
 pub async fn handle_provider_list() -> Result<proto::ProviderListResponse, String> {
-    let providers = tauri::async_runtime::spawn_blocking(move || {
+    let providers = crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         load_providers(&conn)
     })
@@ -384,7 +384,7 @@ pub async fn handle_provider_models(
 }
 
 pub async fn handle_skill_files_list() -> Result<proto::SkillFilesListResponse, String> {
-    tauri::async_runtime::spawn_blocking(system_list_skill_files_sync)
+    crate::compat::async_runtime::spawn_blocking(system_list_skill_files_sync)
         .await
         .map_err(|e| format!("gateway skill files list join failed: {e}"))?
         .map(|response| proto::SkillFilesListResponse {
@@ -401,7 +401,7 @@ pub async fn handle_file_mention_list(
         .ok()
         .filter(|value| *value > 0);
 
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         fs_mention_list_sync(
             request.workdir,
             max_results,
@@ -426,7 +426,7 @@ pub async fn handle_file_mention_list(
 }
 
 pub async fn handle_fs_roots() -> Result<proto::FsRootsResponse, String> {
-    tauri::async_runtime::spawn_blocking(fs_roots_sync)
+    crate::compat::async_runtime::spawn_blocking(fs_roots_sync)
         .await
         .map_err(|e| format!("gateway fs roots join failed: {e}"))?
         .map(|response| proto::FsRootsResponse {
@@ -446,7 +446,7 @@ pub async fn handle_fs_roots() -> Result<proto::FsRootsResponse, String> {
 pub async fn handle_fs_list_dirs(
     request: proto::FsListDirsRequest,
 ) -> Result<proto::FsListDirsResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let max_results = usize::try_from(request.max_results)
             .ok()
             .filter(|value| *value > 0);
@@ -471,7 +471,7 @@ pub async fn handle_fs_list_dirs(
 pub async fn handle_fs_create_project_folder(
     request: proto::FsCreateProjectFolderRequest,
 ) -> Result<proto::FsCreateProjectFolderResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_create_project_folder_sync(request.parent, request.name)
     })
     .await
@@ -497,7 +497,7 @@ pub async fn handle_fs_list(
         .ok()
         .filter(|value| *value > 0);
 
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         fs_list_sync(
             request.workdir,
             path,
@@ -536,7 +536,7 @@ pub async fn handle_fs_list(
 pub async fn handle_fs_read_editable_text(
     request: proto::FsReadEditableTextRequest,
 ) -> Result<proto::FsReadEditableTextResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         fs_read_editable_text_sync(request.workdir, request.path)
     })
     .await
@@ -555,7 +555,7 @@ pub async fn handle_fs_read_editable_text(
 pub async fn handle_fs_read_workspace_image(
     request: proto::FsReadWorkspaceImageRequest,
 ) -> Result<proto::FsReadWorkspaceImageResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         fs_read_workspace_image_sync(request.workdir, request.path)
     })
     .await
@@ -618,7 +618,7 @@ pub async fn handle_fs_write_text(
         None
     };
 
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         fs_write_text_sync(
             request.workdir,
             request.path,
@@ -645,7 +645,7 @@ pub async fn handle_fs_write_text(
 pub async fn handle_fs_create_dir(
     request: proto::FsCreateDirRequest,
 ) -> Result<proto::FsCreateDirResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || fs_create_dir_sync(request.workdir, request.path))
+    crate::compat::async_runtime::spawn_blocking(move || fs_create_dir_sync(request.workdir, request.path))
         .await
         .map_err(|e| format!("gateway fs create dir join failed: {e}"))?
         .map_err(|e| e.message)
@@ -658,7 +658,7 @@ pub async fn handle_fs_create_dir(
 pub async fn handle_fs_rename(
     request: proto::FsRenameRequest,
 ) -> Result<proto::FsRenameResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         fs_rename_sync(request.workdir, request.from_path, request.to_path)
     })
     .await
@@ -674,7 +674,7 @@ pub async fn handle_fs_rename(
 pub async fn handle_fs_delete(
     request: proto::FsDeleteRequest,
 ) -> Result<proto::FsDeleteResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || fs_delete_sync(request.workdir, request.path))
+    crate::compat::async_runtime::spawn_blocking(move || fs_delete_sync(request.workdir, request.path))
         .await
         .map_err(|e| format!("gateway fs delete join failed: {e}"))?
         .map_err(|e| e.message)
@@ -689,7 +689,7 @@ pub async fn handle_git_request(
     clone_task_registry: Arc<GitCloneTaskRegistry>,
 ) -> Result<proto::GitResponse, String> {
     let action = request.action.trim().to_string();
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let result = git_gateway_clone_task_action_sync(
             action.clone(),
             request.workdir,
@@ -723,7 +723,7 @@ pub async fn handle_upload_readable_files(
         })
         .collect();
 
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_import_uploaded_readable_files_sync(workdir, uploads)
     })
     .await
@@ -747,7 +747,7 @@ pub async fn handle_upload_readable_files(
 pub async fn handle_uploaded_image_preview(
     request: proto::UploadedImagePreviewRequest,
 ) -> Result<proto::UploadedImagePreviewResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_read_uploaded_image_preview_sync(request.workdir, request.absolute_path)
     })
     .await
@@ -762,7 +762,7 @@ pub async fn handle_memory_manage(
     memory_store: Arc<MemoryStore>,
     request: proto::MemoryManageRequest,
 ) -> Result<proto::MemoryManageResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || handle_memory_manage_sync(memory_store, request))
+    crate::compat::async_runtime::spawn_blocking(move || handle_memory_manage_sync(memory_store, request))
         .await
         .map_err(|e| format!("gateway memory manage join failed: {e}"))?
 }
@@ -925,7 +925,7 @@ fn parse_memory_value(raw: &str, command: &str) -> Result<Value, String> {
 pub async fn handle_skill_metadata_read(
     request: proto::SkillMetadataReadRequest,
 ) -> Result<proto::SkillMetadataReadResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || system_read_skill_metadata_sync(request.path))
+    crate::compat::async_runtime::spawn_blocking(move || system_read_skill_metadata_sync(request.path))
         .await
         .map_err(|e| format!("gateway skill metadata read join failed: {e}"))?
         .map(|response| proto::SkillMetadataReadResponse {
@@ -944,7 +944,7 @@ pub async fn handle_skill_text_read(
         .ok()
         .filter(|value| *value > 0);
 
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         system_read_skill_text_sync(request.path, offset, length)
     })
     .await
@@ -965,7 +965,7 @@ pub async fn handle_skill_manage(
             .map_err(|e| format!("invalid skill manage payload JSON: {e}"))?
     };
 
-    tauri::async_runtime::spawn_blocking(move || system_manage_skill_sync(payload))
+    crate::compat::async_runtime::spawn_blocking(move || system_manage_skill_sync(payload))
         .await
         .map_err(|e| format!("gateway skill manage join failed: {e}"))?
         .and_then(|response| {

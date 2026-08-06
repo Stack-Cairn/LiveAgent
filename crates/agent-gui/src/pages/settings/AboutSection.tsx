@@ -1,4 +1,3 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -15,6 +14,7 @@ import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
 import type { AppUpdateCheckResult, AppUpdateController } from "../../lib/appUpdates";
 import { updateUpdateSettings } from "../../lib/settings";
+import { openUrl } from "../../lib/tauriBridge";
 import { formatReleaseDate } from "./aboutDate";
 import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";

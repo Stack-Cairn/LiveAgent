@@ -1,6 +1,4 @@
 import type { Context } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
@@ -35,6 +33,7 @@ import {
 } from "./lib/settings/sync";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
 import { applyFontFamilies } from "./lib/system/fontFamily";
+import { invoke, listen } from "./lib/tauriBridge";
 import { ChatPage } from "./pages/ChatPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import type { SectionId } from "./pages/settings/types";

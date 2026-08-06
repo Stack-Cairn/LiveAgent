@@ -6,7 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter};
+
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use uuid::Uuid;
 
@@ -14,6 +14,8 @@ use crate::runtime::platform::expand_tilde_path;
 use crate::runtime::project_path::{
     project_path_key as normalize_project_path_key, project_path_keys_equal,
 };
+use crate::events::EventEmitter;
+use crate::events::EventEmitterExt;
 use crate::runtime::terminal::{
     TerminalSessionRegistry, TerminalSftpConnection, TerminalSshSessionInfo,
 };
@@ -118,7 +120,7 @@ pub struct SftpSessionRegistry {
     sessions: Mutex<HashMap<String, SftpCachedConnection>>,
     transfers: Mutex<HashMap<String, Arc<SftpTransferTask>>>,
     transfer_states: Mutex<HashMap<String, SftpTransferState>>,
-    app_handle: Mutex<Option<AppHandle>>,
+    event_emitter: Mutex<Option<Arc<dyn EventEmitter>>>,
     subscribers: Arc<Mutex<HashMap<usize, mpsc::Sender<SftpEvent>>>>,
     next_subscriber_id: AtomicUsize,
 }
@@ -158,15 +160,15 @@ impl SftpSessionRegistry {
             sessions: Mutex::new(HashMap::new()),
             transfers: Mutex::new(HashMap::new()),
             transfer_states: Mutex::new(HashMap::new()),
-            app_handle: Mutex::new(None),
+            event_emitter: Mutex::new(None),
             subscribers: Arc::new(Mutex::new(HashMap::new())),
             next_subscriber_id: AtomicUsize::new(0),
         }
     }
 
-    pub fn attach_app_handle(&self, app_handle: AppHandle) {
-        if let Ok(mut slot) = self.app_handle.lock() {
-            *slot = Some(app_handle);
+    pub fn attach_event_emitter(&self, event_emitter: Arc<dyn EventEmitter>) {
+        if let Ok(mut slot) = self.event_emitter.lock() {
+            *slot = Some(event_emitter);
         }
     }
 
@@ -506,7 +508,7 @@ impl SftpSessionRegistry {
 
         let failed_template = initial.clone();
         let registry = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             let result = if direction == "upload" {
                 registry
                     .upload(
@@ -634,9 +636,9 @@ impl SftpSessionRegistry {
             transfer_states.insert(key, payload.transfer.clone());
         }
 
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
-                let _ = app_handle.emit(SFTP_EVENT_NAME, &payload);
+        if let Ok(event_emitter) = self.event_emitter.lock() {
+            if let Some(event_emitter) = event_emitter.as_ref() {
+                let _ = event_emitter.emit(SFTP_EVENT_NAME, &payload);
             }
         }
 

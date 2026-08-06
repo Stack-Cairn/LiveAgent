@@ -1,0 +1,4983 @@
+[
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/app.rs",
+  "module": "app",
+  "name": "app_window_pinned",
+  "is_async": false,
+  "params": [
+   {
+    "name": "pin_state",
+    "type": "State<'_, Arc<WindowPinState>>"
+   }
+  ],
+  "ret": "bool",
+  "line": 26
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/app.rs",
+  "module": "app",
+  "name": "app_toggle_window_pin",
+  "is_async": false,
+  "params": [
+   {
+    "name": "app",
+    "type": "AppHandle"
+   }
+  ],
+  "ret": null,
+  "line": 33
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/app.rs",
+  "module": "app",
+  "name": "app_set_global_shortcuts",
+  "is_async": false,
+  "params": [
+   {
+    "name": "app",
+    "type": "AppHandle"
+   },
+   {
+    "name": "bindings",
+    "type": "Vec<GlobalShortcutBinding>"
+   },
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<GlobalShortcutRegistry>>"
+   }
+  ],
+  "ret": "Result<Vec<GlobalShortcutFailure>, String>",
+  "line": 72
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/app.rs",
+  "module": "app",
+  "name": "app_runtime_platform",
+  "is_async": false,
+  "params": [],
+  "ret": "RuntimePlatformResponse",
+  "line": 139
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/app.rs",
+  "module": "app",
+  "name": "app_set_close_window_behavior",
+  "is_async": false,
+  "params": [
+   {
+    "name": "behavior",
+    "type": "String"
+   },
+   {
+    "name": "close_window_behavior",
+    "type": "State<'_, Arc<CloseWindowBehaviorState>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 151
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/app.rs",
+  "module": "app",
+  "name": "app_confirmed_exit",
+  "is_async": false,
+  "params": [
+   {
+    "name": "app",
+    "type": "AppHandle"
+   },
+   {
+    "name": "allow_exit",
+    "type": "State<'_, Arc<AtomicBool>>"
+   },
+   {
+    "name": "terminal_registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 160
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/app.rs",
+  "module": "app",
+  "name": "app_macos_traffic_light_metrics",
+  "is_async": true,
+  "params": [
+   {
+    "name": "window",
+    "type": "tauri::Window"
+   }
+  ],
+  "ret": "Result<Option<MacOsTrafficLightMetrics>, String>",
+  "line": 173
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/tray.rs",
+  "module": "tray",
+  "name": "app_tray_menu_sync",
+  "is_async": true,
+  "params": [
+   {
+    "name": "app",
+    "type": "tauri::AppHandle"
+   },
+   {
+    "name": "model",
+    "type": "TrayMenuModel"
+   },
+   {
+    "name": "handles",
+    "type": "tauri::State<'_, Arc<TrayMenuHandles>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 8
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/update.rs",
+  "module": "update",
+  "name": "app_update_check",
+  "is_async": true,
+  "params": [
+   {
+    "name": "app",
+    "type": "AppHandle"
+   },
+   {
+    "name": "include_prerelease",
+    "type": "bool"
+   }
+  ],
+  "ret": "Result<AppUpdateCheckResponse, String>",
+  "line": 472
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/update.rs",
+  "module": "update",
+  "name": "app_update_install",
+  "is_async": true,
+  "params": [
+   {
+    "name": "app",
+    "type": "AppHandle"
+   },
+   {
+    "name": "include_prerelease",
+    "type": "bool"
+   }
+  ],
+  "ret": "Result<AppUpdateCheckResponse, String>",
+  "line": 516
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/update.rs",
+  "module": "update",
+  "name": "app_restart",
+  "is_async": false,
+  "params": [
+   {
+    "name": "app",
+    "type": "AppHandle"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 571
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_pick_folder",
+  "is_async": true,
+  "params": [
+   {
+    "name": "initial_workdir",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<Option<String>, String>",
+  "line": 1336
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_pick_file",
+  "is_async": true,
+  "params": [
+   {
+    "name": "initial_workdir",
+    "type": "Option<String>"
+   },
+   {
+    "name": "filter_name",
+    "type": "Option<String>"
+   },
+   {
+    "name": "extensions",
+    "type": "Option<Vec<String>>"
+   }
+  ],
+  "ret": "Result<Option<String>, String>",
+  "line": 1352
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_create_project_folder",
+  "is_async": true,
+  "params": [
+   {
+    "name": "parent",
+    "type": "String"
+   },
+   {
+    "name": "name",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SystemCreateProjectFolderResponse, String>",
+  "line": 1376
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_pick_readable_files",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "max_files",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<SystemPickReadableFilesResponse, String>",
+  "line": 1386
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_import_readable_file_paths",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "paths",
+    "type": "Vec<String>"
+   },
+   {
+    "name": "max_files",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<SystemPickReadableFilesResponse, String>",
+  "line": 1398
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_import_uploaded_readable_files",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "files",
+    "type": "Vec<SystemUploadedReadableFileInput>"
+   },
+   {
+    "name": "max_files",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<SystemPickReadableFilesResponse, String>",
+  "line": 1411
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_import_pasted_texts",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "texts",
+    "type": "Vec<SystemPastedTextInput>"
+   }
+  ],
+  "ret": "Result<SystemPickReadableFilesResponse, String>",
+  "line": 1424
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_read_uploaded_image_preview",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "absolute_path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SystemUploadedImagePreviewResponse, String>",
+  "line": 1444
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_read_uploaded_native_attachment",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "absolute_path",
+    "type": "Option<String>"
+   },
+   {
+    "name": "kind",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<SystemUploadedNativeAttachmentResponse, String>",
+  "line": 1456
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_list_skill_files",
+  "is_async": true,
+  "params": [],
+  "ret": "Result<SystemListSkillFilesResponse, String>",
+  "line": 1469
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_ensure_builtin_skills",
+  "is_async": true,
+  "params": [],
+  "ret": "Result<Vec<crate::services::skills::SystemBuiltinSkillSeedResponse>, String>",
+  "line": 1476
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_manage_skill",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   }
+  ],
+  "ret": "Result<SystemManageSkillResponse, String>",
+  "line": 1484
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_read_skill_text",
+  "is_async": true,
+  "params": [
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "offset",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "length",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<SystemReadSkillTextResponse, String>",
+  "line": 1493
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_read_skill_metadata",
+  "is_async": true,
+  "params": [
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SystemReadSkillMetadataResponse, String>",
+  "line": 1504
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_append_debug_jsonl",
+  "is_async": true,
+  "params": [
+   {
+    "name": "conversation_id",
+    "type": "String"
+   },
+   {
+    "name": "entry",
+    "type": "Value"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 1513
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_clipboard_read_text",
+  "is_async": true,
+  "params": [],
+  "ret": "Result<String, String>",
+  "line": 1539
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_begin_power_activity",
+  "is_async": false,
+  "params": [
+   {
+    "name": "activity_id",
+    "type": "String"
+   },
+   {
+    "name": "reason",
+    "type": "String"
+   },
+   {
+    "name": "ttl_ms",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "power_activity",
+    "type": "tauri::State<'_, Arc<PowerActivityManager>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 1546
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "app/system.rs",
+  "module": "system",
+  "name": "system_end_power_activity",
+  "is_async": false,
+  "params": [
+   {
+    "name": "activity_id",
+    "type": "String"
+   },
+   {
+    "name": "power_activity",
+    "type": "tauri::State<'_, Arc<PowerActivityManager>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 1557
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "cron_validate_expression",
+  "is_async": true,
+  "params": [
+   {
+    "name": "expression",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 10
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_snapshot",
+  "is_async": true,
+  "params": [
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<AutomationSnapshot, String>",
+  "line": 17
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_cron_apply",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "AutomationApplyInput"
+   },
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<CronApplyResponse, String>",
+  "line": 27
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_hooks_apply",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "AutomationApplyInput"
+   },
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<HooksApplyResponse, String>",
+  "line": 38
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_list_runs",
+  "is_async": true,
+  "params": [
+   {
+    "name": "task_id",
+    "type": "String"
+   },
+   {
+    "name": "limit",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<Vec<CronRunRecord>, String>",
+  "line": 49
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_clear_runs",
+  "is_async": true,
+  "params": [
+   {
+    "name": "task_id",
+    "type": "String"
+   },
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<usize, String>",
+  "line": 61
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_run_cron_now",
+  "is_async": true,
+  "params": [
+   {
+    "name": "task_id",
+    "type": "String"
+   },
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<CronRunNowResponse, String>",
+  "line": 72
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_claim_prompt_runs",
+  "is_async": true,
+  "params": [
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<Vec<PromptRunRequest>, String>",
+  "line": 83
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_release_prompt_run",
+  "is_async": true,
+  "params": [
+   {
+    "name": "execution_id",
+    "type": "String"
+   },
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 93
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/cron.rs",
+  "module": "cron",
+  "name": "automation_complete_prompt_run",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "CompletePromptRunInput"
+   },
+   {
+    "name": "store",
+    "type": "tauri::State<'_, Arc<AutomationStore>>"
+   }
+  ],
+  "ret": "Result<PromptCompletionResponse, String>",
+  "line": 104
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/hook.rs",
+  "module": "hook",
+  "name": "hook_run_script",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "Option<String>"
+   },
+   {
+    "name": "script",
+    "type": "String"
+   },
+   {
+    "name": "timeout_ms",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "scope_id",
+    "type": "Option<String>"
+   },
+   {
+    "name": "context",
+    "type": "Option<HashMap<String, String>>"
+   },
+   {
+    "name": "registry",
+    "type": "tauri::State<'_, Arc<HookScopeRegistry>>"
+   }
+  ],
+  "ret": "Result<ShellRunResponse, String>",
+  "line": 270
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/hook.rs",
+  "module": "hook",
+  "name": "hook_run_http_requests",
+  "is_async": true,
+  "params": [
+   {
+    "name": "requests",
+    "type": "Vec<HttpRequestInput>"
+   },
+   {
+    "name": "scope_id",
+    "type": "Option<String>"
+   },
+   {
+    "name": "registry",
+    "type": "tauri::State<'_, Arc<HookScopeRegistry>>"
+   }
+  ],
+  "ret": "Result<HookHttpRunResponse, String>",
+  "line": 288
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "automation/hook.rs",
+  "module": "hook",
+  "name": "hook_cancel_scope",
+  "is_async": true,
+  "params": [
+   {
+    "name": "scope_id",
+    "type": "String"
+   },
+   {
+    "name": "registry",
+    "type": "tauri::State<'_, Arc<HookScopeRegistry>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 302
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/ccs_import.rs",
+  "module": "settings",
+  "name": "settings_list_ccswitch_providers",
+  "is_async": true,
+  "params": [],
+  "ret": "Result<CcsProvidersResponse, String>",
+  "line": 23
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/cherry_import.rs",
+  "module": "settings",
+  "name": "settings_list_cherry_studio_providers",
+  "is_async": true,
+  "params": [],
+  "ret": "Result<CherryProvidersResponse, String>",
+  "line": 83
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/cherry_import.rs",
+  "module": "settings",
+  "name": "settings_list_cherry_studio_providers_from_path",
+  "is_async": true,
+  "params": [
+   {
+    "name": "data_path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<CherryProvidersResponse, String>",
+  "line": 92
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_load_all",
+  "is_async": true,
+  "params": [],
+  "ret": "Result<SettingsLoadResponse, String>",
+  "line": 2
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_save_providers",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 22
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_save_system",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   },
+   {
+    "name": "automation_scheduler",
+    "type": "tauri::State<'_, Arc<AutomationScheduler>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 32
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_save_mcp",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 51
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_save_remote",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 61
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_save_memory",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 75
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_save_agents",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 85
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_save_ssh",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 95
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_apply_ssh_patch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   }
+  ],
+  "ret": "Result<SshPatchApplyResponse, String>",
+  "line": 105
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "config/settings/commands.rs",
+  "module": "settings",
+  "name": "settings_reset_ssh_known_host",
+  "is_async": true,
+  "params": [
+   {
+    "name": "host",
+    "type": "String"
+   },
+   {
+    "name": "port",
+    "type": "u16"
+   }
+  ],
+  "ret": "Result<SshKnownHostResetResponse, String>",
+  "line": 115
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/subagent_store.rs",
+  "module": "subagent_store",
+  "name": "subagent_identity_upsert",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentIdentityUpsertInput"
+   }
+  ],
+  "ret": "Result<SubagentIdentityRecord, String>",
+  "line": 1255
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/subagent_store.rs",
+  "module": "subagent_store",
+  "name": "subagent_identity_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentIdentityListInput"
+   }
+  ],
+  "ret": "Result<Vec<SubagentIdentityRecord>, String>",
+  "line": 1267
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/subagent_store.rs",
+  "module": "subagent_store",
+  "name": "subagent_run_save",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentRunSaveInput"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 1279
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/subagent_store.rs",
+  "module": "subagent_store",
+  "name": "subagent_run_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentRunListInput"
+   }
+  ],
+  "ret": "Result<Vec<SubagentRunRecord>, String>",
+  "line": 1289
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/subagent_store.rs",
+  "module": "subagent_store",
+  "name": "subagent_run_load",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentRunLoadInput"
+   }
+  ],
+  "ret": "Result<Option<SubagentRunStateRecord>, String>",
+  "line": 1301
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/subagent_store.rs",
+  "module": "subagent_store",
+  "name": "subagent_run_prune",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentRunPruneInput"
+   }
+  ],
+  "ret": "Result<SubagentPruneResult, String>",
+  "line": 1313
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/subagent_store.rs",
+  "module": "subagent_store",
+  "name": "subagent_message_append",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentMessageAppendInput"
+   }
+  ],
+  "ret": "Result<SubagentMessageRecord, String>",
+  "line": 1322
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/subagent_store.rs",
+  "module": "subagent_store",
+  "name": "subagent_message_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentMessageListInput"
+   }
+  ],
+  "ret": "Result<Vec<SubagentMessageRecord>, String>",
+  "line": 1334
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/branch.rs",
+  "module": "chat_history",
+  "name": "chat_history_branch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   },
+   {
+    "name": "base_message_ref",
+    "type": "ChatHistoryMessageRef"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistorySummary, String>",
+  "line": 226
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "page",
+    "type": "i64"
+   },
+   {
+    "name": "page_size",
+    "type": "i64"
+   },
+   {
+    "name": "cwd",
+    "type": "Option<String>"
+   },
+   {
+    "name": "cwd_empty",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<ChatHistoryListResponse, String>",
+  "line": 2
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_workdirs",
+  "is_async": true,
+  "params": [],
+  "ret": "Result<ChatHistoryWorkdirsResponse, String>",
+  "line": 25
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_shared_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "page",
+    "type": "i64"
+   },
+   {
+    "name": "page_size",
+    "type": "i64"
+   }
+  ],
+  "ret": "Result<ChatHistoryListResponse, String>",
+  "line": 35
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_search",
+  "is_async": true,
+  "params": [
+   {
+    "name": "args",
+    "type": "ChatHistorySearchArgs"
+   }
+  ],
+  "ret": "Result<ChatHistorySearchResponse, String>",
+  "line": 47
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_get_window",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   },
+   {
+    "name": "max_messages",
+    "type": "i64"
+   },
+   {
+    "name": "before_offset",
+    "type": "Option<i64>"
+   },
+   {
+    "name": "expected_revision",
+    "type": "Option<String>"
+   },
+   {
+    "name": "include_active_segment",
+    "type": "bool"
+   }
+  ],
+  "ret": "Result<ChatHistoryWindowRecord, String>",
+  "line": 214
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_upsert",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "ChatHistoryUpsertInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistorySummary, String>",
+  "line": 281
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_upsert_active_segment",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "ChatHistorySegmentMutationInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistorySummary, String>",
+  "line": 316
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_append_segment",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "ChatHistorySegmentMutationInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistorySummary, String>",
+  "line": 352
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_rename",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   },
+   {
+    "name": "title",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistorySummary, String>",
+  "line": 376
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_set_pinned",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   },
+   {
+    "name": "is_pinned",
+    "type": "bool"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistorySummary, String>",
+  "line": 401
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_set_model",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   },
+   {
+    "name": "selected_model_json",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistorySummary, String>",
+  "line": 426
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_share_get",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<ChatHistoryShareStatus, String>",
+  "line": 450
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/commands.rs",
+  "module": "chat_history",
+  "name": "chat_history_share_set",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   },
+   {
+    "name": "enabled",
+    "type": "bool"
+   },
+   {
+    "name": "redact_tool_content",
+    "type": "Option<bool>"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistoryShareStatus, String>",
+  "line": 468
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/delete.rs",
+  "module": "chat_history",
+  "name": "chat_history_delete",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 63
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "history/chat_history/replace.rs",
+  "module": "chat_history",
+  "name": "chat_history_replace_from_message",
+  "is_async": true,
+  "params": [
+   {
+    "name": "id",
+    "type": "String"
+   },
+   {
+    "name": "base_message_ref",
+    "type": "ChatHistoryMessageRef"
+   },
+   {
+    "name": "replacement_message",
+    "type": "Value"
+   },
+   {
+    "name": "max_messages",
+    "type": "i64"
+   },
+   {
+    "name": "expected_revision",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<ChatHistoryWindowRecord, String>",
+  "line": 157
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "provider_usage_query",
+  "is_async": true,
+  "params": [
+   {
+    "name": "provider_id",
+    "type": "String"
+   },
+   {
+    "name": "refresh",
+    "type": "bool"
+   },
+   {
+    "name": "provider_usage_service",
+    "type": "tauri::State<'_, Arc<ProviderUsageService>>"
+   }
+  ],
+  "ret": "Result<ProviderUsageResult, String>",
+  "line": 18
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "provider_usage_test",
+  "is_async": true,
+  "params": [
+   {
+    "name": "provider_id",
+    "type": "String"
+   },
+   {
+    "name": "config_json",
+    "type": "String"
+   },
+   {
+    "name": "provider_usage_service",
+    "type": "tauri::State<'_, Arc<ProviderUsageService>>"
+   }
+  ],
+  "ret": "Result<ProviderUsageResult, String>",
+  "line": 27
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_connect",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Option<Value>"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 38
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_disconnect",
+  "is_async": false,
+  "params": [
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 60
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_status",
+  "is_async": false,
+  "params": [
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<GatewayStatusSnapshot, String>",
+  "line": 67
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_nudge_connection",
+  "is_async": false,
+  "params": [
+   {
+    "name": "reason",
+    "type": "Option<String>"
+   },
+   {
+    "name": "force_reconnect",
+    "type": "Option<bool>"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<bool, String>",
+  "line": 74
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_send_chat_ingress_batch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "GatewayChatIngressBatchInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<GatewayChatIngressAcceptResult, String>",
+  "line": 86
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_commit_chat_checkpoint",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "GatewayChatCheckpointInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<GatewayChatCheckpointCommitResult, String>",
+  "line": 94
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_claim_next",
+  "is_async": true,
+  "params": [
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "lease_ms",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<Option<GatewayChatClaimedRequest>, String>",
+  "line": 102
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_mark_started",
+  "is_async": true,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "conversation_id",
+    "type": "String"
+   },
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 113
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_mark_local_started",
+  "is_async": true,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "conversation_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 125
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_mark_local_cancelled",
+  "is_async": true,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "conversation_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 136
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_mark_queued_in_gui",
+  "is_async": true,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "conversation_id",
+    "type": "String"
+   },
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 147
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_complete",
+  "is_async": true,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "conversation_id",
+    "type": "String"
+   },
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 159
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_fail",
+  "is_async": true,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "conversation_id",
+    "type": "Option<String>"
+   },
+   {
+    "name": "error_code",
+    "type": "String"
+   },
+   {
+    "name": "message",
+    "type": "String"
+   },
+   {
+    "name": "terminal",
+    "type": "bool"
+   },
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 171
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_cancel_request",
+  "is_async": true,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "conversation_id",
+    "type": "String"
+   },
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 193
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_heartbeat",
+  "is_async": false,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 205
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_runtime_heartbeat",
+  "is_async": true,
+  "params": [
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "state",
+    "type": "String"
+   },
+   {
+    "name": "visible",
+    "type": "bool"
+   },
+   {
+    "name": "active_run_count",
+    "type": "u32"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 214
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_release_lease",
+  "is_async": false,
+  "params": [
+   {
+    "name": "request_id",
+    "type": "String"
+   },
+   {
+    "name": "worker_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 227
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_chat_queue_respond",
+  "is_async": false,
+  "params": [
+   {
+    "name": "input",
+    "type": "GatewayChatQueueResponseInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 236
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_publish_chat_queue_event",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "GatewayChatQueueEventInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 244
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_publish_settings_sync",
+  "is_async": true,
+  "params": [
+   {
+    "name": "payload",
+    "type": "Value"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 252
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_tunnel_state",
+  "is_async": false,
+  "params": [
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<TunnelStatePayload, String>",
+  "line": 260
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_tunnel_create",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "GatewayTunnelCreateInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 267
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_tunnel_update",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "GatewayTunnelUpdateInput"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 275
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_tunnel_close",
+  "is_async": true,
+  "params": [
+   {
+    "name": "tunnel_id",
+    "type": "String"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 283
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "gateway_tunnel_check",
+  "is_async": true,
+  "params": [
+   {
+    "name": "tunnel_id",
+    "type": "Option<String>"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 291
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/gateway.rs",
+  "module": "gateway",
+  "name": "workspace_watch_set",
+  "is_async": false,
+  "params": [
+   {
+    "name": "workdirs",
+    "type": "Vec<String>"
+   },
+   {
+    "name": "gateway_controller",
+    "type": "tauri::State<'_, Arc<GatewayController>>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 299
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/mcp.rs",
+  "module": "mcp",
+  "name": "mcp_list_tools",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "tauri::State<'_, Arc<McpRuntimeManager>>"
+   },
+   {
+    "name": "servers",
+    "type": "Vec<McpServerConfig>"
+   }
+  ],
+  "ret": "Result<Vec<McpToolInfo>, String>",
+  "line": 1645
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/mcp.rs",
+  "module": "mcp",
+  "name": "mcp_call_tool",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "tauri::State<'_, Arc<McpRuntimeManager>>"
+   },
+   {
+    "name": "run_registry",
+    "type": "tauri::State<'_, Arc<ShellRunRegistry>>"
+   },
+   {
+    "name": "server_id",
+    "type": "String"
+   },
+   {
+    "name": "tool_name",
+    "type": "String"
+   },
+   {
+    "name": "arguments",
+    "type": "Value"
+   },
+   {
+    "name": "run_id",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<McpCallToolResponse, String>",
+  "line": 1696
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/mcp.rs",
+  "module": "mcp",
+  "name": "mcp_runtime_status",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "tauri::State<'_, Arc<McpRuntimeManager>>"
+   },
+   {
+    "name": "server_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<McpRuntimeStatus, String>",
+  "line": 1754
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/mcp.rs",
+  "module": "mcp",
+  "name": "mcp_stop_server",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "tauri::State<'_, Arc<McpRuntimeManager>>"
+   },
+   {
+    "name": "server_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<McpStopServerResponse, String>",
+  "line": 1766
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/mcp.rs",
+  "module": "mcp",
+  "name": "mcp_test_server",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "tauri::State<'_, Arc<McpRuntimeManager>>"
+   },
+   {
+    "name": "server",
+    "type": "McpServerConfig"
+   },
+   {
+    "name": "include_schema",
+    "type": "Option<bool>"
+   },
+   {
+    "name": "persist",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<McpRuntimeTestResponse, String>",
+  "line": 1783
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "integration/mcp.rs",
+  "module": "mcp",
+  "name": "mcp_restart_server",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "tauri::State<'_, Arc<McpRuntimeManager>>"
+   },
+   {
+    "name": "server",
+    "type": "McpServerConfig"
+   },
+   {
+    "name": "include_schema",
+    "type": "Option<bool>"
+   },
+   {
+    "name": "persist",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<McpRuntimeTestResponse, String>",
+  "line": 1802
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryListArgs"
+   }
+  ],
+  "ret": "Result<MemoryListResponse, String>",
+  "line": 21
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_read",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryReadArgs"
+   }
+  ],
+  "ret": "Result<MemoryReadResponse, String>",
+  "line": 32
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_search",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemorySearchArgs"
+   }
+  ],
+  "ret": "Result<MemorySearchResponse, String>",
+  "line": 43
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_write",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryWriteArgs"
+   }
+  ],
+  "ret": "Result<MemoryMutationResponse, String>",
+  "line": 60
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_update",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryUpdateArgs"
+   }
+  ],
+  "ret": "Result<MemoryMutationResponse, String>",
+  "line": 71
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_delete",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryDeleteArgs"
+   }
+  ],
+  "ret": "Result<MemoryMutationResponse, String>",
+  "line": 82
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_delete_project",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryDeleteProjectArgs"
+   }
+  ],
+  "ret": "Result<MemoryDeleteProjectResponse, String>",
+  "line": 93
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_accept",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryAcceptArgs"
+   }
+  ],
+  "ret": "Result<MemoryMutationResponse, String>",
+  "line": 104
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_apply_batch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryBatchArgs"
+   }
+  ],
+  "ret": "Result<MemoryBatchResponse, String>",
+  "line": 115
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_organize_run_create",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryOrganizeRunCreateArgs"
+   }
+  ],
+  "ret": "Result<MemoryOrganizeRunCreateResponse, String>",
+  "line": 126
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_organize_run_update",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryOrganizeRunUpdateArgs"
+   }
+  ],
+  "ret": "Result<Option<MemoryOrganizeRun>, String>",
+  "line": 137
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_organize_run_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "Option<MemoryOrganizeRunListArgs>"
+   }
+  ],
+  "ret": "Result<MemoryOrganizeRunListResponse, String>",
+  "line": 148
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_organize_run_read",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryOrganizeRunReadArgs"
+   }
+  ],
+  "ret": "Result<Option<MemoryOrganizeRun>, String>",
+  "line": 160
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_organize_run_clear_history",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   }
+  ],
+  "ret": "Result<MemoryOrganizeRunClearHistoryResponse, String>",
+  "line": 171
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_organize_due_claim",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryOrganizeDueClaimArgs"
+   }
+  ],
+  "ret": "Result<MemoryOrganizeDueClaimResponse, String>",
+  "line": 181
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_organize_due_complete",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "MemoryOrganizeRunUpdateArgs"
+   }
+  ],
+  "ret": "Result<Option<MemoryOrganizeRun>, String>",
+  "line": 192
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_index_overview",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "workdir",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<MemoryOverviewResponse, String>",
+  "line": 203
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_paths_info",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   }
+  ],
+  "ret": "Result<MemoryPathsInfo, String>",
+  "line": 214
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_recent_rejections",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "Option<MemoryRecentRejectionsArgs>"
+   }
+  ],
+  "ret": "Result<MemoryRecentRejectionsResponse, String>",
+  "line": 224
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_today_local_date",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "rollover_hour",
+    "type": "Option<u32>"
+   }
+  ],
+  "ret": "Result<String, String>",
+  "line": 236
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_today_daily",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "rollover_hour",
+    "type": "Option<u32>"
+   }
+  ],
+  "ret": "Result<Option<MemoryReadResponse>, String>",
+  "line": 244
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_quota_summary",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   },
+   {
+    "name": "args",
+    "type": "Option<MemoryQuotaSummaryArgs>"
+   }
+  ],
+  "ret": "Result<MemoryQuotaSummaryResponse, String>",
+  "line": 255
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "integration/memory.rs",
+  "module": "memory",
+  "name": "memory_wipe_all",
+  "is_async": true,
+  "params": [
+   {
+    "name": "state",
+    "type": "State<'_, Arc<MemoryStore>>"
+   }
+  ],
+  "ret": "Result<MemoryPathsInfo, String>",
+  "line": 267
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/process.rs",
+  "module": "process",
+  "name": "managed_process_start",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<ManagedProcessRegistry>>"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "command",
+    "type": "String"
+   },
+   {
+    "name": "cwd",
+    "type": "Option<String>"
+   },
+   {
+    "name": "label",
+    "type": "Option<String>"
+   },
+   {
+    "name": "isolated",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<ManagedProcessStartResponse, String>",
+  "line": 11
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/process.rs",
+  "module": "process",
+  "name": "managed_process_status",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<ManagedProcessRegistry>>"
+   },
+   {
+    "name": "process_id",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<ManagedProcessStatusResponse, String>",
+  "line": 23
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/process.rs",
+  "module": "process",
+  "name": "managed_process_stop",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<ManagedProcessRegistry>>"
+   },
+   {
+    "name": "process_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<ManagedProcessStopResponse, String>",
+  "line": 31
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/process.rs",
+  "module": "process",
+  "name": "managed_process_read_log",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<ManagedProcessRegistry>>"
+   },
+   {
+    "name": "process_id",
+    "type": "String"
+   },
+   {
+    "name": "max_bytes",
+    "type": "Option<u64>"
+   }
+  ],
+  "ret": "Result<ManagedProcessLogResponse, String>",
+  "line": 39
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/process.rs",
+  "module": "process",
+  "name": "managed_process_snapshot",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<ManagedProcessRegistry>>"
+   }
+  ],
+  "ret": "Result<ManagedProcessSnapshot, String>",
+  "line": 48
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/process.rs",
+  "module": "process",
+  "name": "managed_process_clear",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<ManagedProcessRegistry>>"
+   },
+   {
+    "name": "process_id",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<ManagedProcessSnapshot, String>",
+  "line": 55
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "side",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<SftpListResponse, String>",
+  "line": 11
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_stat",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "side",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<SftpStatResponse, String>",
+  "line": 25
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_read_text",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "offset",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "max_bytes",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<SftpReadTextResponse, String>",
+  "line": 39
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_write_text",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "content",
+    "type": "String"
+   },
+   {
+    "name": "overwrite",
+    "type": "Option<bool>"
+   },
+   {
+    "name": "create_parent_dirs",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<SftpActionResponse, String>",
+  "line": 53
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_mkdir",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "side",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SftpActionResponse, String>",
+  "line": 75
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_rename",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "side",
+    "type": "String"
+   },
+   {
+    "name": "from_path",
+    "type": "String"
+   },
+   {
+    "name": "to_path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SftpActionResponse, String>",
+  "line": 89
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_delete",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "side",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "recursive",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<SftpActionResponse, String>",
+  "line": 111
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_transfer",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "direction",
+    "type": "String"
+   },
+   {
+    "name": "source_path",
+    "type": "String"
+   },
+   {
+    "name": "target_path",
+    "type": "String"
+   },
+   {
+    "name": "recursive",
+    "type": "Option<bool>"
+   },
+   {
+    "name": "overwrite",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<SftpTransferResponse, String>",
+  "line": 133
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_cancel_transfer",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "transfer_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 161
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/sftp.rs",
+  "module": "sftp",
+  "name": "sftp_transfer_status",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "transfer_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SftpTransferResponse, String>",
+  "line": 170
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_shell_options",
+  "is_async": false,
+  "params": [],
+  "ret": "TerminalShellOptionsResponse",
+  "line": 17
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_list",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "TerminalListResponse",
+  "line": 22
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_create",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "cwd",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "shell",
+    "type": "Option<String>"
+   },
+   {
+    "name": "title",
+    "type": "Option<String>"
+   },
+   {
+    "name": "cols",
+    "type": "Option<u16>"
+   },
+   {
+    "name": "rows",
+    "type": "Option<u16>"
+   }
+  ],
+  "ret": "Result<TerminalSnapshotResponse, String>",
+  "line": 30
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_create_ssh",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "cwd",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "ssh_host_id",
+    "type": "String"
+   },
+   {
+    "name": "title",
+    "type": "Option<String>"
+   },
+   {
+    "name": "cols",
+    "type": "Option<u16>"
+   },
+   {
+    "name": "rows",
+    "type": "Option<u16>"
+   },
+   {
+    "name": "sftp_enabled",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<TerminalSshCreateResponse, String>",
+  "line": 43
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_answer_ssh_prompt",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "prompt_id",
+    "type": "String"
+   },
+   {
+    "name": "prompt_answer",
+    "type": "Option<String>"
+   },
+   {
+    "name": "trust_host_key",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<TerminalSshCreateResponse, String>",
+  "line": 69
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_cancel_ssh_prompt",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "prompt_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 83
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_ssh_reconnect",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<TerminalSessionRecord, String>",
+  "line": 91
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_ssh_latency",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<TerminalSshLatencyResponse, String>",
+  "line": 99
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_ssh_exec",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "run_registry",
+    "type": "State<'_, Arc<ShellRunRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "command",
+    "type": "String"
+   },
+   {
+    "name": "cwd",
+    "type": "Option<String>"
+   },
+   {
+    "name": "timeout_ms",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "max_bytes",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "run_id",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<TerminalSshExecResponse, String>",
+  "line": 107
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_ssh_local_forward_start",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   },
+   {
+    "name": "remote_host",
+    "type": "String"
+   },
+   {
+    "name": "remote_port",
+    "type": "u32"
+   },
+   {
+    "name": "local_port",
+    "type": "Option<u32>"
+   }
+  ],
+  "ret": "Result<SshLocalForwardActionResponse, String>",
+  "line": 143
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_ssh_local_forward_list",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "Option<String>"
+   },
+   {
+    "name": "project_path_key",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<SshLocalForwardListResponse, String>",
+  "line": 165
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_ssh_local_forward_stop",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "forward_id",
+    "type": "String"
+   },
+   {
+    "name": "session_id",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<SshLocalForwardActionResponse, String>",
+  "line": 174
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_ssh_local_forward_check_port",
+  "is_async": true,
+  "params": [
+   {
+    "name": "local_port",
+    "type": "u32"
+   }
+  ],
+  "ret": "Result<bool, String>",
+  "line": 185
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "ssh_terminal_tabs_list",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "project_path_key",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SshTerminalTabsSnapshot, String>",
+  "line": 195
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "ssh_terminal_tab_open",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "kind",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SshTerminalTabsSnapshot, String>",
+  "line": 203
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "ssh_terminal_tab_close",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "tab_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<SshTerminalTabsSnapshot, String>",
+  "line": 212
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_stream_attach",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "max_bytes",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<TerminalStreamSnapshotResponse, String>",
+  "line": 220
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_stream_input",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "bytes",
+    "type": "Vec<u8>"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 229
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_stream_resize",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "cols",
+    "type": "u16"
+   },
+   {
+    "name": "rows",
+    "type": "u16"
+   }
+  ],
+  "ret": "Result<(), String>",
+  "line": 238
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_rename",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   },
+   {
+    "name": "title",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<TerminalSessionRecord, String>",
+  "line": 248
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_close",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "sftp_registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "session_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<TerminalSessionRecord, String>",
+  "line": 257
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_close_project",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "sftp_registry",
+    "type": "State<'_, Arc<SftpSessionRegistry>>"
+   },
+   {
+    "name": "project_path_key",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<TerminalListResponse, String>",
+  "line": 268
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/terminal.rs",
+  "module": "terminal",
+  "name": "terminal_read_tail",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<TerminalSessionRegistry>>"
+   },
+   {
+    "name": "project_path_key",
+    "type": "String"
+   },
+   {
+    "name": "session_id",
+    "type": "Option<String>"
+   },
+   {
+    "name": "max_bytes",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<TerminalReadTailResponse, String>",
+  "line": 281
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/shell.rs",
+  "module": "shell",
+  "name": "shell_run",
+  "is_async": true,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<ShellRunRegistry>>"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "command",
+    "type": "String"
+   },
+   {
+    "name": "cwd",
+    "type": "Option<String>"
+   },
+   {
+    "name": "timeout_ms",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "max_timeout_ms",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "provider_id",
+    "type": "Option<String>"
+   },
+   {
+    "name": "run_id",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<ShellRunResponse, String>",
+  "line": 14
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "runtime/shell.rs",
+  "module": "shell",
+  "name": "runtime_cancel",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "State<'_, Arc<ShellRunRegistry>>"
+   },
+   {
+    "name": "run_id",
+    "type": "String"
+   }
+  ],
+  "ret": "ShellCancelResponse",
+  "line": 53
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/chat_file_links.rs",
+  "module": "chat_file_links",
+  "name": "open_chat_file_link",
+  "is_async": true,
+  "params": [
+   {
+    "name": "conversation_id",
+    "type": "String"
+   },
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "source",
+    "type": "String"
+   },
+   {
+    "name": "line",
+    "type": "Option<u32>"
+   },
+   {
+    "name": "end_line",
+    "type": "Option<u32>"
+   },
+   {
+    "name": "column",
+    "type": "Option<u32>"
+   },
+   {
+    "name": "open_in_file_manager",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<ChatFileLinkOpenResponse, ChatFileLinkError>",
+  "line": 628
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_read_image_source",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "source",
+    "type": "String"
+   },
+   {
+    "name": "source_type",
+    "type": "Option<String>"
+   },
+   {
+    "name": "mime_type",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<ReadResponse, FsCommandError>",
+  "line": 2491
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_read_workspace_image",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<ReadResponse, FsCommandError>",
+  "line": 2519
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_read_text",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "start_line",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "limit",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "page_start",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "page_limit",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "cell_start",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "cell_limit",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<ReadResponse, FsCommandError>",
+  "line": 2752
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_read_editable_text",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<ReadEditableTextResponse, FsCommandError>",
+  "line": 2843
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_path_status",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<PathStatusResponse, FsCommandError>",
+  "line": 2914
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_write_text",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "content",
+    "type": "String"
+   },
+   {
+    "name": "mode",
+    "type": "String"
+   },
+   {
+    "name": "expected_mtime_ms",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "expected_content_hash",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<WriteTextResponse, FsCommandError>",
+  "line": 3014
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_edit_text",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "old_string",
+    "type": "String"
+   },
+   {
+    "name": "new_string",
+    "type": "String"
+   },
+   {
+    "name": "expected_replacements",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "replace_all",
+    "type": "Option<bool>"
+   },
+   {
+    "name": "expected_mtime_ms",
+    "type": "Option<u64>"
+   },
+   {
+    "name": "expected_content_hash",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<EditTextResponse, FsCommandError>",
+  "line": 3155
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_delete",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<DeleteResponse, FsCommandError>",
+  "line": 3238
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_open_workspace_path",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "mode",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<OpenWorkspacePathResponse, FsCommandError>",
+  "line": 3362
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_create_dir",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<CreateDirResponse, FsCommandError>",
+  "line": 3414
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_rename",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "from_path",
+    "type": "String"
+   },
+   {
+    "name": "to_path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<RenameResponse, FsCommandError>",
+  "line": 3492
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_roots",
+  "is_async": true,
+  "params": [],
+  "ret": "Result<FsRootsResponse, String>",
+  "line": 3614
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_list_dirs",
+  "is_async": true,
+  "params": [
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "max_results",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<FsListDirsResponse, String>",
+  "line": 3679
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "Option<String>"
+   },
+   {
+    "name": "depth",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "offset",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "max_results",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "show_hidden",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<ListResponse, FsCommandError>",
+  "line": 3869
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_glob",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "Option<String>"
+   },
+   {
+    "name": "pattern",
+    "type": "String"
+   },
+   {
+    "name": "offset",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "max_results",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "sort_by",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GlobResponse, FsCommandError>",
+  "line": 4009
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_grep",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "Option<String>"
+   },
+   {
+    "name": "pattern",
+    "type": "String"
+   },
+   {
+    "name": "file_pattern",
+    "type": "Option<String>"
+   },
+   {
+    "name": "ignore_case",
+    "type": "Option<bool>"
+   },
+   {
+    "name": "output_mode",
+    "type": "Option<String>"
+   },
+   {
+    "name": "head_limit",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "offset",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "context",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "multiline",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<GrepResponse, FsCommandError>",
+  "line": 4329
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/fs.rs",
+  "module": "fs",
+  "name": "fs_mention_list",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "max_results",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "query",
+    "type": "Option<String>"
+   },
+   {
+    "name": "show_hidden",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<MentionListResponse, String>",
+  "line": 4549
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_status",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitRepositoryState, String>",
+  "line": 3136
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_discover_repositories",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitRepositoryDiscovery, String>",
+  "line": 3143
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_branches",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitBranchesResponse, String>",
+  "line": 3150
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_switch_branch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "branch",
+    "type": "String"
+   },
+   {
+    "name": "kind",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3157
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_create_branch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "branch",
+    "type": "String"
+   },
+   {
+    "name": "start_point",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3168
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_init",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "branch",
+    "type": "Option<String>"
+   },
+   {
+    "name": "user_name",
+    "type": "Option<String>"
+   },
+   {
+    "name": "user_email",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3181
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_clone_repository",
+  "is_async": true,
+  "params": [
+   {
+    "name": "parent",
+    "type": "String"
+   },
+   {
+    "name": "name",
+    "type": "String"
+   },
+   {
+    "name": "remote_url",
+    "type": "String"
+   },
+   {
+    "name": "branch",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3200
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_clone_repository_start",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "tauri::State<'_, Arc<GitCloneTaskRegistry>>"
+   },
+   {
+    "name": "parent",
+    "type": "String"
+   },
+   {
+    "name": "name",
+    "type": "String"
+   },
+   {
+    "name": "remote_url",
+    "type": "String"
+   },
+   {
+    "name": "branch",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitCloneTask, String>",
+  "line": 3214
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_clone_repository_tasks",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "tauri::State<'_, Arc<GitCloneTaskRegistry>>"
+   }
+  ],
+  "ret": "Result<Vec<GitCloneTask>, String>",
+  "line": 3225
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_clone_repository_cancel",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "tauri::State<'_, Arc<GitCloneTaskRegistry>>"
+   },
+   {
+    "name": "task_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitCloneTask, String>",
+  "line": 3232
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_clone_repository_dismiss",
+  "is_async": false,
+  "params": [
+   {
+    "name": "registry",
+    "type": "tauri::State<'_, Arc<GitCloneTaskRegistry>>"
+   },
+   {
+    "name": "task_id",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<Vec<GitCloneTask>, String>",
+  "line": 3240
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_list_remote_branches",
+  "is_async": true,
+  "params": [
+   {
+    "name": "remote_url",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitRemoteBranchesResponse, String>",
+  "line": 3249
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_diff",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "mode",
+    "type": "Option<String>"
+   },
+   {
+    "name": "path",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitDiffResponse, String>",
+  "line": 3258
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_log",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "limit",
+    "type": "Option<usize>"
+   },
+   {
+    "name": "skip",
+    "type": "Option<usize>"
+   }
+  ],
+  "ret": "Result<GitLogResponse, String>",
+  "line": 3269
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_commit_details",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "commit",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitCommitDetailsResponse, String>",
+  "line": 3280
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_compare_commit_with_remote",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "commit",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitDiffResponse, String>",
+  "line": 3290
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_commit_diff",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "commit",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitDiffResponse, String>",
+  "line": 3302
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_stage",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3313
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_stage_all",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3320
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_unstage",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3327
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_unstage_all",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3334
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_discard",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   },
+   {
+    "name": "old_path",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3341
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_discard_all",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3352
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_add_to_gitignore",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3359
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_open_system_file_location",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "path",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3369
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_commit",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "message",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3379
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_fetch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3386
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_pull",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3393
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_set_remote",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "remote_url",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3400
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_push",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3410
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_delete_branch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "branch",
+    "type": "String"
+   },
+   {
+    "name": "force",
+    "type": "Option<bool>"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3417
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_rename_branch",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "branch",
+    "type": "String"
+   },
+   {
+    "name": "new_branch",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3428
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_stash_push",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   },
+   {
+    "name": "message",
+    "type": "Option<String>"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3441
+ },
+ {
+  "attr": "#[tauri::command(rename_all = \"snake_case\")]",
+  "file": "workspace/git.rs",
+  "module": "git",
+  "name": "git_stash_pop",
+  "is_async": true,
+  "params": [
+   {
+    "name": "workdir",
+    "type": "String"
+   }
+  ],
+  "ret": "Result<GitOperationResponse, String>",
+  "line": 3451
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "workspace/subagent_worktree.rs",
+  "module": "subagent_worktree",
+  "name": "subagent_worktree_create",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentWorktreeCreateInput"
+   }
+  ],
+  "ret": "Result<SubagentWorktreeCreateResponse, String>",
+  "line": 1052
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "workspace/subagent_worktree.rs",
+  "module": "subagent_worktree",
+  "name": "subagent_worktree_status",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentWorktreeStatusInput"
+   }
+  ],
+  "ret": "Result<SubagentWorktreeStatusResponse, String>",
+  "line": 1142
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "workspace/subagent_worktree.rs",
+  "module": "subagent_worktree",
+  "name": "subagent_worktree_apply",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentWorktreeApplyInput"
+   }
+  ],
+  "ret": "Result<SubagentWorktreeApplyResponse, String>",
+  "line": 1153
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "workspace/subagent_worktree.rs",
+  "module": "subagent_worktree",
+  "name": "subagent_worktree_cleanup",
+  "is_async": true,
+  "params": [
+   {
+    "name": "input",
+    "type": "SubagentWorktreeCleanupInput"
+   }
+  ],
+  "ret": "Result<SubagentWorktreeCleanupItem, String>",
+  "line": 1164
+ },
+ {
+  "attr": "#[tauri::command]",
+  "file": "../services/proxy.rs",
+  "module": "proxy",
+  "name": "proxy_get_server_info",
+  "is_async": false,
+  "params": [
+   {
+    "name": "state",
+    "type": "tauri::State<'_, Arc<ProxyServerState>>"
+   }
+  ],
+  "ret": "ProxyServerInfo",
+  "line": 79,
+  "is_service": true
+ }
+]

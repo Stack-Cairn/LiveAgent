@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { prepareProxyRequest } from "../../lib/providers/proxy";
 import { isGatewayWebuiRuntime } from "../../lib/runtimeEnv";
 import {
@@ -14,6 +13,7 @@ import {
   type UsageQueryMode,
 } from "../../lib/settings";
 import { normalizeBaseUrl } from "../../lib/settings/normalize";
+import { invoke } from "../../lib/tauriBridge";
 
 const GATEWAY_TOKEN_STORAGE_KEY = "liveagent.gateway.token";
 const CODEX_MODELS_SUFFIXES = ["/chat/completions", "/responses", "/response"];

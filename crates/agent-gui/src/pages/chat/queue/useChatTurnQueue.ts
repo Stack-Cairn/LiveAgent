@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   MentionComposerDraft,
@@ -14,6 +12,7 @@ import {
   isAgentExecutionMode,
   normalizeChatRuntimeControls,
 } from "../../../lib/settings";
+import { invoke, listen } from "../../../lib/tauriBridge";
 import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
 import { answerToolApproval } from "../../../lib/tools/toolApproval";
 import type { ChatQueueTurnPreview } from "../components/ChatComposerBar";

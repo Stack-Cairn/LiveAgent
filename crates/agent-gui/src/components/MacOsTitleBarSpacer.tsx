@@ -1,7 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import type { AppUpdateController } from "../lib/appUpdates";
 import { cn } from "../lib/shared/utils";
+import { invoke } from "../lib/tauriBridge";
 import { AppUpdateButton } from "./AppUpdateButton";
 import { PanelLeft, PanelLeftClose, Settings } from "./icons";
 

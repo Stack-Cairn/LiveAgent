@@ -9,10 +9,11 @@ use std::time::Duration;
 use rusqlite::{params, Connection, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::Emitter;
 use tokio::sync::oneshot;
 
 use super::{now_unix_seconds, GATEWAY_CHAT_CHECKPOINT_REQUESTED_EVENT};
+use crate::events::EventEmitter;
+use crate::events::EventEmitterExt;
 
 const CHAT_INGRESS_DB_FILENAME: &str = "gateway-chat-sync.sqlite3";
 const CHAT_INGRESS_DB_SCHEMA_VERSION: i64 = 2;
@@ -209,13 +210,13 @@ enum ChatIngressCommand {
 }
 
 impl ChatIngressMirror {
-    pub(crate) fn spawn(app_handle: tauri::AppHandle) -> Self {
+    pub(crate) fn spawn(event_emitter: Arc<dyn EventEmitter>) -> Self {
         let (tx, rx) = std_mpsc::sync_channel(CHAT_INGRESS_ACTOR_QUEUE_COMMANDS);
         let queued_bytes = Arc::new(AtomicUsize::new(0));
         let actor_queued_bytes = Arc::clone(&queued_bytes);
         thread::Builder::new()
             .name("gateway-chat-ingress".to_string())
-            .spawn(move || run_actor(app_handle, rx, actor_queued_bytes))
+            .spawn(move || run_actor(event_emitter, rx, actor_queued_bytes))
             .expect("spawn gateway chat ingress actor");
         Self { tx, queued_bytes }
     }
@@ -381,7 +382,7 @@ struct ChatIngressActor {
     journal: Result<ChatIngressJournal, String>,
     rings: HashMap<(String, String), RunDeltaRing>,
     global_ring_bytes: usize,
-    app_handle: Option<tauri::AppHandle>,
+    event_emitter: Option<Arc<dyn EventEmitter>>,
 }
 
 #[derive(Default)]
@@ -398,7 +399,7 @@ struct RingDelta {
 }
 
 fn run_actor(
-    app_handle: tauri::AppHandle,
+    event_emitter: Arc<dyn EventEmitter>,
     rx: std_mpsc::Receiver<QueuedChatIngressCommand>,
     queued_bytes: Arc<AtomicUsize>,
 ) {
@@ -407,7 +408,7 @@ fn run_actor(
         journal,
         rings: HashMap::new(),
         global_ring_bytes: 0,
-        app_handle: Some(app_handle),
+        event_emitter: Some(event_emitter),
     };
     while let Ok(queued) = rx.recv() {
         actor.handle(queued.command);
@@ -863,8 +864,8 @@ impl ChatIngressActor {
             delta_bytes: ring.map(|ring| ring.bytes).unwrap_or(0),
             journal_bytes,
         };
-        if let Some(app_handle) = &self.app_handle {
-            if let Err(error) = app_handle.emit(GATEWAY_CHAT_CHECKPOINT_REQUESTED_EVENT, event) {
+        if let Some(event_emitter) = &self.event_emitter {
+            if let Err(error) = event_emitter.emit(GATEWAY_CHAT_CHECKPOINT_REQUESTED_EVENT, event) {
                 eprintln!("emit gateway chat checkpoint request failed: {error}");
             }
         }
@@ -1851,7 +1852,7 @@ mod tests {
                 journal: Ok(journal),
                 rings: HashMap::new(),
                 global_ring_bytes: 0,
-                app_handle: None,
+                event_emitter: None,
             },
         )
     }

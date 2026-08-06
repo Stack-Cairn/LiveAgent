@@ -1,5 +1,5 @@
 import type { Context, Model } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 
 import {
   getUserMessageAttachments,

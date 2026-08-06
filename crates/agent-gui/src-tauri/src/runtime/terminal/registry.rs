@@ -4,8 +4,9 @@ use std::io::{Read, Write};
 use std::sync::atomic::Ordering;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use tauri::AppHandle;
 
+
+use crate::events::EventEmitter;
 use crate::runtime::project_path::{
     project_path_key as normalize_project_path_key, project_path_keys_equal,
 };
@@ -13,9 +14,9 @@ use crate::runtime::project_path::{
 use super::*;
 
 impl TerminalSessionRegistry {
-    pub fn attach_app_handle(&self, app_handle: AppHandle) {
-        if let Ok(mut slot) = self.app_handle.lock() {
-            *slot = Some(app_handle);
+    pub fn attach_event_emitter(&self, event_emitter: Arc<dyn EventEmitter>) {
+        if let Ok(mut slot) = self.event_emitter.lock() {
+            *slot = Some(event_emitter);
         }
     }
 

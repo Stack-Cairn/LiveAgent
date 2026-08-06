@@ -1,5 +1,5 @@
 import type { Context } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 
 import type { CodexRequestFormat, ExecutionMode, ProviderId, ReasoningLevel } from "../settings";
 

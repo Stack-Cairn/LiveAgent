@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Check,
@@ -23,10 +21,10 @@ import {
   Wifi,
   WifiOff,
 } from "../../components/icons";
-
 import { Input } from "../../components/ui/input";
 import { useLocale } from "../../i18n";
 import type { AppSettings } from "../../lib/settings";
+import { invoke, listen } from "../../lib/tauriBridge";
 import { normalizeIntegerDraftInput, parseIntegerDraftValue } from "./remoteInput";
 import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";

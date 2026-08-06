@@ -25,7 +25,7 @@ function createMemoryLocalStorage(initial = {}) {
 
 async function withWindow(localStorage, task) {
   const previousWindow = globalThis.window;
-  globalThis.window = { localStorage };
+  globalThis.window = { __TAURI__: {}, localStorage };
   try {
     return await task();
   } finally {

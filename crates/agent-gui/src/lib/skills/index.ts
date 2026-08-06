@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 
 import { sortSkillsForDisplay } from "./builtin";
 import type { ClawHubSkillCard } from "./clawHub";

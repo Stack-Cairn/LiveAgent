@@ -1,8 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
 import { Terminal } from "../../../components/icons";
 import type { ConfirmDialogOptions } from "../../../components/ui/confirm-dialog";
+import { invoke, listen } from "../../../lib/tauriBridge";
 import {
   applyTerminalEventToSessions,
   sortTerminalSessions,

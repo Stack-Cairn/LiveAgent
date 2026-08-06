@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::sync::{Arc, Mutex, Weak};
 
-use tauri::Emitter;
+
 use tokio::io::{copy_bidirectional, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{watch, Semaphore};
@@ -10,6 +10,7 @@ use tokio::task::JoinSet;
 use tokio::time::timeout;
 
 use crate::runtime::project_path::project_path_keys_equal;
+use crate::events::EventEmitterExt;
 
 use super::*;
 
@@ -31,7 +32,7 @@ struct SshLocalForwardState {
 struct SshLocalForwardEntry {
     record: SshLocalForwardRecord,
     cancel_tx: watch::Sender<bool>,
-    task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    task: Mutex<Option<crate::compat::async_runtime::JoinHandle<()>>>,
 }
 
 impl Default for SshLocalForwardRegistry {
@@ -196,7 +197,7 @@ impl TerminalSessionRegistry {
         let weak_registry = Arc::downgrade(self);
         let global_connections = Arc::clone(&self.ssh_local_forwards.global_connections);
         let forward_connections = Arc::new(Semaphore::new(SSH_LOCAL_FORWARD_MAX_CONNECTIONS));
-        let task = tauri::async_runtime::spawn(run_ssh_local_forward_listener(
+        let task = crate::compat::async_runtime::spawn(run_ssh_local_forward_listener(
             weak_registry,
             forward_id.clone(),
             listener,
@@ -379,9 +380,9 @@ impl TerminalSessionRegistry {
         // The desktop webview listens on the dedicated channel; gateway
         // subscribers get a terminal event so the WebUI shares the stream
         // without a second event pipeline.
-        if let Ok(app_handle) = self.app_handle.lock() {
-            if let Some(app_handle) = app_handle.as_ref() {
-                let _ = app_handle.emit(SSH_LOCAL_FORWARD_EVENT_NAME, payload.clone());
+        if let Ok(event_emitter) = self.event_emitter.lock() {
+            if let Some(event_emitter) = event_emitter.as_ref() {
+                let _ = event_emitter.emit(SSH_LOCAL_FORWARD_EVENT_NAME, payload.clone());
             }
         }
         let subscribers = self

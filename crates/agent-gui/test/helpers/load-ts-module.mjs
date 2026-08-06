@@ -47,6 +47,28 @@ const piAiModels = await import(
   ).href
 );
 
+// `import.meta` shims for modules loaded through the vm wrapper (which runs
+// every module as a CommonJS function, where the meta-property is a parse
+// error). `env` is empty so Vite-only guards like `import.meta.env.DEV` are
+// falsy; `url` points at the loaded source file.
+globalThis.__TEST_IMPORT_META_ENV__ ??= {};
+globalThis.__TEST_IMPORT_META_URL__ ??= "file:///__test__/";
+
+// Persistent `window` marking the runtime as a Tauri webview. Modules loaded
+// through the vm wrapper branch on `isTauri()`/`__TAURI__` (e.g.
+// tauriBridge), and tests mock `@tauri-apps/api/*` — so the desktop path must
+// be active even after a module finishes loading, not just during it.
+globalThis.window ??= {
+  setTimeout,
+  clearTimeout,
+  __TAURI__: {},
+  dispatchEvent() {
+    return true;
+  },
+  addEventListener() {},
+  removeEventListener() {},
+};
+
 function createDefaultMocks() {
   const typeboxMock = {
     Type: {
@@ -279,7 +301,14 @@ export function createTsModuleLoader(options = {}) {
     }
 
     const source = fs.readFileSync(filePath, "utf8");
-    const transpiled = ts.transpileModule(source, {
+    // The vm wrapper runs each module as a CommonJS function, where the
+    // `import.meta` meta-property is a parse error. Swap it for a test shim so
+    // Vite-only code (e.g. `import.meta.env.*`) can still be loaded and unit
+    // tested. The shim's `env` is empty and `url` points at the source file.
+    const shimmedSource = source
+      .replace(/\bimport\.meta\.env\b/g, "globalThis.__TEST_IMPORT_META_ENV__")
+      .replace(/\bimport\.meta\.url\b/g, "globalThis.__TEST_IMPORT_META_URL__");
+    const transpiled = ts.transpileModule(shimmedSource, {
       fileName: filePath,
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
@@ -322,6 +351,11 @@ export function createTsModuleLoader(options = {}) {
       globalThis.window = {
         setTimeout,
         clearTimeout,
+        // Mark the runtime as a Tauri webview so modules that branch on
+        // `isTauri()`/`__TAURI__` (e.g. tauriBridge) take the desktop path,
+        // where tests mock `@tauri-apps/api/*` instead of hitting the
+        // headless HTTP/WebSocket transport.
+        __TAURI__: {},
       };
     }
 

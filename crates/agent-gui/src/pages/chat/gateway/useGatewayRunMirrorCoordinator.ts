@@ -1,9 +1,7 @@
 import type { Message } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef } from "react";
-
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
+import { invoke, listen } from "../../../lib/tauriBridge";
 import {
   buildGatewayRuntimeSnapshotEntries,
   type GatewayRuntimeSnapshotState,

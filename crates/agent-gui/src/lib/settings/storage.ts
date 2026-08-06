@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { type Locale, normalizeLocale } from "../../i18n/config";
+import { invoke } from "../../lib/tauriBridge";
 
 import {
   type AppSettings,

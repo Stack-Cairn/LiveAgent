@@ -214,7 +214,7 @@ pub(crate) async fn chat_history_branch_inner(
     id: String,
     anchor: ChatHistoryMessageRef,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         chat_history_branch_sync(&mut conn, &id, &anchor)
     })
@@ -222,11 +222,10 @@ pub(crate) async fn chat_history_branch_inner(
     .map_err(|e| format!("chat_history_branch join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_branch(
     id: String,
     base_message_ref: ChatHistoryMessageRef,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_branch_inner(id, base_message_ref).await?;
     gateway_controller

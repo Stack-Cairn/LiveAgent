@@ -5,8 +5,8 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
+import { invoke } from "../../lib/tauriBridge";
 import {
   type BuiltinToolBundle,
   type BuiltinToolResultDetails,

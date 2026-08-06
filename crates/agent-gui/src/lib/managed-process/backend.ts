@@ -3,8 +3,7 @@
 // is the per-platform adapter — the web frontend ships its own copy speaking
 // the gateway process.* protocol.
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke, listen } from "../../lib/tauriBridge";
 
 import type { ManagedProcessBackend, ManagedProcessRecord, ManagedProcessState } from "./types";
 

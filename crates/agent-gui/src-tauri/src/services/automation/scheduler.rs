@@ -60,7 +60,7 @@ impl AutomationScheduler {
     }
 
     pub fn start(self: Arc<Self>) {
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             self.run_loop().await;
         });
     }
@@ -73,7 +73,7 @@ impl AutomationScheduler {
     async fn run_loop(self: Arc<Self>) {
         {
             let store = Arc::clone(&self.store);
-            let recovered = tauri::async_runtime::spawn_blocking(move || {
+            let recovered = crate::compat::async_runtime::spawn_blocking(move || {
                 store.recover_interrupted_prompt_runs()
             })
             .await;
@@ -106,7 +106,7 @@ impl AutomationScheduler {
                 }
                 _ = sweep.tick() => {
                     let store = Arc::clone(&self.store);
-                    let result = tauri::async_runtime::spawn_blocking(move || {
+                    let result = crate::compat::async_runtime::spawn_blocking(move || {
                         store.sweep_expired_prompt_runs()
                     })
                     .await;
@@ -143,7 +143,7 @@ impl AutomationScheduler {
         self.ensure_scheduler().await?;
 
         let store = Arc::clone(&self.store);
-        let tasks = tauri::async_runtime::spawn_blocking(move || store.runnable_cron_tasks())
+        let tasks = crate::compat::async_runtime::spawn_blocking(move || store.runnable_cron_tasks())
             .await
             .map_err(|e| format!("automation reload join 失败：{e}"))??;
 
@@ -238,8 +238,8 @@ impl AutomationScheduler {
     fn report_task_error(self: &Arc<Self>, task_id: &str, error: Option<String>) {
         let store = Arc::clone(&self.store);
         let task_id = task_id.to_string();
-        tauri::async_runtime::spawn(async move {
-            let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::compat::async_runtime::spawn(async move {
+            let result = crate::compat::async_runtime::spawn_blocking(move || {
                 store.set_task_error(&task_id, error.as_deref())
             })
             .await;
@@ -255,7 +255,7 @@ impl AutomationScheduler {
         let fresh = {
             let store = Arc::clone(&self.store);
             let task_id = task_id.clone();
-            tauri::async_runtime::spawn_blocking(move || {
+            crate::compat::async_runtime::spawn_blocking(move || {
                 store.cron_task_for_scheduled_fire(&task_id)
             })
             .await
@@ -307,7 +307,7 @@ impl AutomationScheduler {
         }
 
         let manager = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             manager.execute_fire(task, workdir, trigger).await;
         });
         true
@@ -320,7 +320,7 @@ impl AutomationScheduler {
             let can_run = {
                 let store = Arc::clone(&self.store);
                 let task_id = task_id.clone();
-                tauri::async_runtime::spawn_blocking(move || store.task_can_run(&task_id)).await
+                crate::compat::async_runtime::spawn_blocking(move || store.task_can_run(&task_id)).await
             };
             match can_run {
                 Ok(Ok(true)) => {}
@@ -375,7 +375,7 @@ impl AutomationScheduler {
             let store = Arc::clone(&self.store);
             let queue_task = task.clone();
             let queue_workdir = workdir.clone();
-            let result = tauri::async_runtime::spawn_blocking(move || {
+            let result = crate::compat::async_runtime::spawn_blocking(move || {
                 store.queue_prompt_run(&queue_task, &queue_workdir, trigger.counted())
             })
             .await;
@@ -400,7 +400,7 @@ impl AutomationScheduler {
             return;
         }
 
-        let run = tauri::async_runtime::spawn_blocking(move || {
+        let run = crate::compat::async_runtime::spawn_blocking(move || {
             let mut run = execute_blocking(task, workdir);
             run.counted = trigger.counted();
             run
@@ -426,8 +426,8 @@ impl AutomationScheduler {
     fn disable_task_detached(&self, task_id: &str, error: String) {
         let store = Arc::clone(&self.store);
         let task_id = task_id.to_string();
-        tauri::async_runtime::spawn(async move {
-            let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::compat::async_runtime::spawn(async move {
+            let result = crate::compat::async_runtime::spawn_blocking(move || {
                 store.disable_task_with_error(&task_id, &error)
             })
             .await;
@@ -441,9 +441,9 @@ impl AutomationScheduler {
 
     fn record_run_detached(&self, run: CompletedRun) {
         let store = Arc::clone(&self.store);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             let result =
-                tauri::async_runtime::spawn_blocking(move || store.record_completed_run(run)).await;
+                crate::compat::async_runtime::spawn_blocking(move || store.record_completed_run(run)).await;
             match result {
                 Ok(Err(error)) => eprintln!("Cron run 记录失败：{error}"),
                 Err(error) => eprintln!("Cron run 记录 join 失败：{error}"),

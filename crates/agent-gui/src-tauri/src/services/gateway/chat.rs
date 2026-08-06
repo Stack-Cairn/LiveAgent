@@ -2,10 +2,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::json;
-use tauri::Emitter;
 use tokio::sync::oneshot;
 use uuid::Uuid;
 
+use crate::events::EventEmitterExt;
 use crate::services::chat_run_ledger::ChatRunLedgerEntry;
 
 use super::*;
@@ -101,7 +101,7 @@ impl GatewayController {
                     "cancelled",
                 )
                 .await?;
-                self.app_handle
+                self.event_emitter
                     .emit(
                         "gateway:chat-cancel",
                         GatewayChatCancelEvent {
@@ -146,7 +146,7 @@ impl GatewayController {
             return Err(error);
         }
         if enqueue_outcome.should_wake_runtime {
-            self.app_handle
+            self.event_emitter
                 .emit(
                     "gateway:chat-request-ready",
                     json!({ "requestId": enqueue_outcome.request_id }),
@@ -276,7 +276,7 @@ impl GatewayController {
             .insert(request_id.clone(), tx);
 
         if let Err(error) = self
-            .app_handle
+            .event_emitter
             .emit("gateway:chat-queue-request", event_payload)
         {
             let _ = self
