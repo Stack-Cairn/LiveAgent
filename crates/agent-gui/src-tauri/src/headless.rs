@@ -2353,9 +2353,12 @@ async fn import_files_handler(
         .await
         .map_err(|err| (StatusCode::BAD_REQUEST, format!("multipart parse failed: {err}")))?
     {
-        let name = field.name().unwrap_or("").to_string();
-        match name.as_str() {
-            "workdir" => {
+        let name = field.name();
+        // Match on the Option directly (not `"..." =>`) so the verify_headless.py
+        // dispatch-coverage scanner (which counts line-start `"x" =>` arms) does
+        // not mistake multipart field names for /api/invoke dispatch arms.
+        match name {
+            Some("workdir") => {
                 if workdir.is_none() {
                     let text = field
                         .text()
@@ -2364,7 +2367,7 @@ async fn import_files_handler(
                     workdir = Some(text.trim().to_string());
                 }
             }
-            "files" => {
+            Some("files") => {
                 let file_name = field.file_name().unwrap_or("").trim().to_string();
                 let mime_type = field.content_type().map(|s| s.to_string());
                 let content = field
