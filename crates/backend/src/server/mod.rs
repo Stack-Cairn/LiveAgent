@@ -27,7 +27,6 @@ pub mod chat;
 pub mod json;
 pub mod routes_gen;
 pub mod state;
-pub mod tls;
 pub mod ws;
 
 use axum::http::StatusCode;

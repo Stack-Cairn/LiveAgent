@@ -49,8 +49,8 @@ COPY --from=backend-builder /out/target/release/backend /usr/local/bin/backend
 
 USER liveagent
 
-# 后端直接认环境变量（PORT、LIVEAGENT_BACKEND_PASSWORD、LIVEAGENT_TLS_CERT/KEY
-# 也可覆盖），不再需要 entrypoint 脚本翻译。
+# 后端直接认环境变量（PORT、LIVEAGENT_BACKEND_PASSWORD 也可覆盖），
+# 不再需要 entrypoint 脚本翻译。
 # pi 走 PATH（上面 npm -g 装的），需要换实现时用 LIVEAGENT_PI_BIN 覆盖。
 #
 # HOME 显式指到数据卷：pi 会读写 `~/.pi`（设置、扩展发现）。原先这个用户的

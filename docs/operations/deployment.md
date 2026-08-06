@@ -63,32 +63,25 @@ chat 引擎——pi 进程要到第一次 `chat_send` 才惰性拉起，所以�
 ## 启动参数
 
 `backend` 每个命令行参数都有环境变量兜底，**argv 优先**（手写解析，
-不引 clap——六个参数不值一整棵依赖树）：
+不引 clap——三个参数不值一整棵依赖树）：
 
 | 参数 | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
 | `--port <PORT>` | `PORT` | `8443` | 监听端口，绑 `0.0.0.0`。Railway 一类平台注入的 `PORT` 直接生效 |
-| `--password <PW>` | `LIVEAGENT_BACKEND_PASSWORD` | 随机生成 | Bearer token。不给就生成一个 32 位 base62 串并**打到 stderr** |
-| `--tls-cert <PEM>` `--tls-key <PEM>` | `LIVEAGENT_TLS_CERT` / `LIVEAGENT_TLS_KEY` | 无 | 两个一起给才启用内建 TLS；只给一个直接报错退出 |
+| `--password <PW>` | `LIVEAGENT_BACKEND_PASSWORD` | `pleasechangethepassword` | Bearer token。不给就用这个众所周知的默认值并在 stderr 警告——对外部署**必须**显式设置 |
 | `--data-dir <DIR>` | `LIVEAGENT_DATA_DIR` | `~/.liveagent` | 数据目录。官方镜像预设为 `/var/lib/liveagent` |
 
 chat 引擎没有对应的 argv 参数：默认取 PATH 上的 `pi`，用 `LIVEAGENT_PI_BIN`
 指向别处。引擎位置是部署事实，不是每次启动要调的旋钮。
 
-密码打 stderr 不打 stdout，是为了让 stdout 能被管道消费。
-
 ## TLS
 
-三种都支持（决策 14），选一种：
+后端只监听明文 HTTP，不内建 TLS。对外部署时由外层终结加密，二选一：
 
 | 方式 | 配置 |
 |---|---|
-| 内建 TLS | `--tls-cert cert.pem --tls-key key.pem`，直接 `https://` 对外 |
-| 反向代理 | 不给证书参数，明文监听，由 nginx / Caddy / 平台终结 TLS |
-| 隧道 | tailscale / cloudflared 自带加密，后端明文监听即可 |
-
-官方镜像的冒烟与 CI 都跑**明文**路径——容器内不配证书，TLS 由外层终结是更常见的
-部署姿势。
+| 反向代理 | nginx / Caddy / 平台（Railway 等）终结 TLS |
+| 隧道 | tailscale / cloudflared 自带加密 |
 
 ## 数据持久化
 
@@ -132,7 +125,7 @@ URL 参数会被持久化到 localStorage，下次打开不用重填。`secure` 
 ### 桌面端
 
 桌面端连的是**它自己进程里那个后端**：`get_backend_endpoint` 返回的 host 恒为
-`127.0.0.1`，端口和随机密码由壳注入，用户永远不输密码、也看不到登录页。
+`127.0.0.1`，端口和密码由壳注入，用户永远不输密码、也看不到登录页。
 
 > ⚠️ **桌面壳目前无法连接远程后端。** `commands/app/backend.rs` 只会返回内嵌后端
 > 的端点，没有填写远程地址的入口。阶段 6 验收里「Docker 跑 headless 后端，
@@ -145,7 +138,7 @@ URL 参数会被持久化到 localStorage，下次打开不用重填。`secure` 
 | 旧镜像 `ghcr.io/<owner>/liveagent-gateway` | **历史 tag 全部保留、仍可拉取**（决策 15）。只是不再发布新 tag |
 | 新镜像 | `ghcr.io/<owner>/liveagent-backend:vX.Y.Z` / `:latest` |
 | 旧桌面端 | 仍可连旧 gateway 镜像。这是大版本切换，不是原地升级 |
-| `LIVEAGENT_GATEWAY_*` 环境变量 | 全部作废。新后端认 `PORT`、`LIVEAGENT_BACKEND_PASSWORD`、`LIVEAGENT_TLS_CERT/KEY`、`LIVEAGENT_DATA_DIR`、`LIVEAGENT_PI_BIN`（argv 优先） |
+| `LIVEAGENT_GATEWAY_*` 环境变量 | 全部作废。新后端认 `PORT`、`LIVEAGENT_BACKEND_PASSWORD`、`LIVEAGENT_DATA_DIR`、`LIVEAGENT_PI_BIN`（argv 优先） |
 | `LIVEAGENT_ENGINE_BUNDLE` / `--engine-bundle` | 已删除。Node 引擎被 `pi --mode rpc` 取代，不再有 bundle 可指 |
 | 每 Agent 凭证、`agent_id`、多 Agent 目录 | 概念消失。一个前端只连一个后端（决策 12） |
 | 浏览器里的旧 token | 前端检测到 `liveagent.gateway.token` 会在登录页给迁移提示 |

@@ -13,7 +13,7 @@ use tokio::net::TcpListener;
 pub struct BackendServer {
     /// HTTP 服务监听的端口。
     pub port: u16,
-    /// 认证密码（生成的随机字符串）。
+    /// 认证密码（固定默认值，壳注入给前端）。
     pub password: String,
     /// pi 会话表。持有它是为了壳退出时能把子进程收干净。
     pi_sessions: std::sync::Arc<backend::pi::PiSessionManager>,
@@ -30,7 +30,7 @@ impl BackendServer {
 ///
 /// 执行流程：
 /// 1. 找一个空闲端口
-/// 2. 生成随机密码和内部 token
+/// 2. 构造后端状态（固定默认密码）
 /// 3. 构造后端状态
 /// 4. 启动 HTTP 服务（async 任务）
 /// 5. 返回服务元数据给前端
@@ -41,15 +41,15 @@ pub async fn start_backend_server() -> Result<BackendServer, String> {
     // 找一个空闲的 TCP 端口。
     let port = find_free_port().await?;
 
-    // 生成密码和内部 token。
-    let password = backend::server::auth::generate_password();
-    let internal_token = backend::server::auth::generate_password();
+    // 桌面端只在 127.0.0.1 上服务自己，本不需要密码。为了和独立后端
+    // 共用同一条认证路径，直接注入固定默认密码，不另走特例。
+    let password = backend::server::auth::DEFAULT_PASSWORD.to_string();
 
     // 生成认证配置。
-    let auth = std::sync::Arc::new(backend::server::auth::AuthConfig::new(password.clone(), internal_token.clone()));
+    let auth = std::sync::Arc::new(backend::server::auth::AuthConfig::new(password.clone()));
 
     // 构造后端状态。
-    let state = backend::build_state(auth, internal_token, port)
+    let state = backend::build_state(auth, port)
         .map_err(|e| format!("构造后端状态失败：{e}"))?;
     let pi_sessions = std::sync::Arc::clone(&state.pi_sessions);
 

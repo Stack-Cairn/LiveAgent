@@ -74,7 +74,7 @@ pub fn build_router(state: AppState) -> Router {
         server::api_router()
             .route_layer(axum::middleware::from_fn_with_state(
                 state.clone(),
-                server::auth::require_bearer_with_identity,
+                server::auth::require_bearer,
             ))
             // WS 不能过 bearer 中间件：浏览器 WebSocket API 设不了 Authorization
             // header。ws_handler 自己用 ?token= 做等价校验。
@@ -100,7 +100,7 @@ pub fn build_router(state: AppState) -> Router {
 ///
 /// 隧道**不在**这里恢复：`TunnelStore::initialize` 要读库还要起监听，是 async
 /// 且会失败的。放进 `serve` 前由调用方显式 await，见 `main.rs`。
-pub fn build_state(auth: Arc<server::auth::AuthConfig>, internal_token: String, backend_port: u16) -> Result<AppState, String> {
+pub fn build_state(auth: Arc<server::auth::AuthConfig>, backend_port: u16) -> Result<AppState, String> {
     use crate::events::EventBus;
     use crate::services::automation::AutomationNotifier;
     use crate::services::tunnel::TunnelStore;
@@ -179,7 +179,6 @@ pub fn build_state(auth: Arc<server::auth::AuthConfig>, internal_token: String, 
         workspace_watch,
         tunnels,
         auth,
-        internal_token,
         ws_sink,
         approvals,
         pi_sessions,
