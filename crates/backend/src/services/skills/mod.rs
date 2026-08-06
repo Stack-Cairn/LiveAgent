@@ -32,7 +32,7 @@ mod types;
 mod util;
 mod validate;
 
-pub use builtin::ensure_builtin_agent_skills_sync;
+pub use builtin::{ensure_builtin_agent_skills_sync, system_ensure_builtin_skills};
 pub(crate) use builtin::*;
 pub(crate) use clawhub::*;
 pub(crate) use create::*;
@@ -42,9 +42,10 @@ pub(crate) use install::*;
 pub(crate) use jobs::*;
 pub(crate) use library::*;
 pub use library::{
-    system_list_skill_files, system_list_skill_files_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
+    system_list_skill_files, system_list_skill_files_sync, system_read_skill_metadata,
+    system_read_skill_metadata_sync, system_read_skill_text, system_read_skill_text_sync,
 };
-pub use manager::system_manage_skill_sync;
+pub use manager::{system_manage_skill, system_manage_skill_sync};
 pub(crate) use metadata::*;
 pub use paths::skills_root_dir;
 pub(crate) use paths::*;

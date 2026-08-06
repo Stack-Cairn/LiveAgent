@@ -143,6 +143,12 @@ pub fn ensure_builtin_agent_skills_sync() -> Result<Vec<SystemBuiltinSkillSeedRe
     ensure_builtin_agent_skills_in_root(&root)
 }
 
+pub async fn system_ensure_builtin_skills() -> Result<Vec<SystemBuiltinSkillSeedResponse>, String> {
+    tokio::task::spawn_blocking(ensure_builtin_agent_skills_sync)
+        .await
+        .map_err(|e| format!("system_ensure_builtin_skills join 失败：{e}"))?
+}
+
 pub(crate) fn builtin_skill_files_match(
     target: &Path,
     builtin: &BuiltinSkill,

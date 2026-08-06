@@ -435,3 +435,21 @@ pub async fn system_list_skill_files() -> Result<SystemListSkillFilesResponse, S
         .await
         .map_err(|e| format!("system_list_skill_files join 失败：{e}"))?
 }
+
+pub async fn system_read_skill_metadata(
+    path: String,
+) -> Result<SystemReadSkillMetadataResponse, String> {
+    tokio::task::spawn_blocking(move || system_read_skill_metadata_sync(path))
+        .await
+        .map_err(|e| format!("system_read_skill_metadata join 失败：{e}"))?
+}
+
+pub async fn system_read_skill_text(
+    path: String,
+    offset: Option<usize>,
+    length: Option<usize>,
+) -> Result<SystemReadSkillTextResponse, String> {
+    tokio::task::spawn_blocking(move || system_read_skill_text_sync(path, offset, length))
+        .await
+        .map_err(|e| format!("system_read_skill_text join 失败：{e}"))?
+}

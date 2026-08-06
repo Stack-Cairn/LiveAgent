@@ -30,6 +30,12 @@ fn require_payload_string<'a>(
     object_string(payload, key).ok_or_else(|| format!("SkillsManager {action} requires {key}"))
 }
 
+pub async fn system_manage_skill(payload: Value) -> Result<SystemManageSkillResponse, String> {
+    tokio::task::spawn_blocking(move || system_manage_skill_sync(payload))
+        .await
+        .map_err(|e| format!("system_manage_skill join 失败：{e}"))?
+}
+
 pub fn system_manage_skill_sync(payload: Value) -> Result<SystemManageSkillResponse, String> {
     let root = skills_root_dir()?;
     let root_dir = skill_root_display(&root);
