@@ -183,6 +183,20 @@ fn normalize_archived_workspace_project_paths(raw: Option<&Value>) -> Value {
     Value::Array(out)
 }
 
+/// 归一化交互式应答超时（分钟）：正数原样保留、上限 99999（≈永不超时），
+/// 缺省/非法/非正回默认 3。与前端 normalizeInteractiveTimeoutMinutes 同口径，
+/// 保证桌面端落库值与 GUI/WebUI 归一化结果一致。
+fn normalize_interactive_timeout_minutes_value(raw: Option<&Value>) -> Value {
+    let minutes = raw
+        .and_then(Value::as_f64)
+        .filter(|minutes| minutes.is_finite() && *minutes > 0.0)
+        .map(|minutes| minutes.min(MAX_INTERACTIVE_TIMEOUT_MINUTES))
+        .unwrap_or(DEFAULT_INTERACTIVE_TIMEOUT_MINUTES);
+    Number::from_f64(minutes)
+        .map(Value::Number)
+        .unwrap_or_else(|| json!(DEFAULT_INTERACTIVE_TIMEOUT_MINUTES))
+}
+
 fn normalize_system_proxy_value(raw: Option<&Value>) -> Value {
     let obj = match raw {
         Some(Value::Object(map)) => map.clone(),
@@ -340,6 +354,12 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_SYSTEM_PROXY_KEY.to_string(),
         normalize_system_proxy_value(system.get(SYSTEM_SYSTEM_PROXY_KEY)),
     );
+    system.insert(
+        SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY.to_string(),
+        normalize_interactive_timeout_minutes_value(
+            system.get(SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY),
+        ),
+    );
 
     Value::Object(system)
 }
@@ -387,6 +407,7 @@ fn save_system_with_default_workdir(
         SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY,
         SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY,
         SYSTEM_SYSTEM_PROXY_KEY,
+        SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY,
     ] {
         let value = system.get(key).cloned().unwrap_or(Value::Null);
         tx.execute(

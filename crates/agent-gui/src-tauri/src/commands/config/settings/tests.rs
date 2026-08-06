@@ -1120,7 +1120,7 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 9);
+        assert_eq!(row_count, 10);
         assert_eq!(
             keys,
             vec![
@@ -1128,6 +1128,7 @@ mod tests {
                 SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
                 SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
+                SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY.to_string(),
                 SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_SYSTEM_PROXY_KEY.to_string(),
                 SYSTEM_TOOL_POLICIES_KEY.to_string(),
@@ -1144,6 +1145,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
+                "interactiveTimeoutMinutes": 3.0,
                 "workdir": default_workdir.clone(),
                 "toolPolicies": { "Bash": "ask", "server:docs-mcp": "deny" },
                 "workspaceProjects": [
@@ -1188,6 +1190,46 @@ mod tests {
         );
     }
 
+    /// 交互式应答超时必须真正落库：该键此前不在保存白名单里，前端调完滑块
+    /// 重启即回默认值，功能等于没生效。顺带覆盖归一化（非正/非法回默认、
+    /// 超上限钳制），与前端 normalizeInteractiveTimeoutMinutes 同口径。
+    #[test]
+    fn save_system_round_trips_interactive_timeout_minutes() {
+        let cases = [
+            (json!(30), json!(30.0)),
+            (json!(99999), json!(99999.0)),
+            // 超上限钳制到 99999；非正/非法/缺省回默认 3。
+            (json!(200000), json!(99999.0)),
+            (json!(0), json!(3.0)),
+            (json!(-5), json!(3.0)),
+            (json!("12"), json!(3.0)),
+            (Value::Null, json!(3.0)),
+        ];
+
+        for (input, expected) in cases {
+            let mut conn = open_memory_db();
+            save_system_with_default_workdir(
+                &mut conn,
+                json!({
+                    "executionMode": "tools",
+                    "workdir": "/tmp/liveagent-default-project",
+                    "interactiveTimeoutMinutes": input,
+                }),
+                "/tmp/liveagent-default-project",
+            )
+            .expect("save system");
+
+            let loaded = load_system(&conn)
+                .expect("load system")
+                .expect("system settings");
+            assert_eq!(
+                loaded.get(SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY),
+                Some(&expected),
+                "interactiveTimeoutMinutes must survive the save/load round trip"
+            );
+        }
+    }
+
     #[test]
     fn save_system_backfills_empty_workdir_with_default_project() {
         let mut conn = open_memory_db();
@@ -1211,6 +1253,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
+                "interactiveTimeoutMinutes": 3.0,
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
                 "workspaceProjects": [
@@ -1262,6 +1305,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
+                "interactiveTimeoutMinutes": 3.0,
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
                 "workspaceProjects": [
@@ -1295,6 +1339,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
+                "interactiveTimeoutMinutes": 3.0,
                 "workdir": "/tmp/liveagent-default-project",
                 "workspaceProjects": [
                     {

@@ -37,6 +37,14 @@ const SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY: &str = "hiddenWorkspaceProjectP
 const SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY: &str = "missingWorkspaceProjectPaths";
 const SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY: &str = "archivedWorkspaceProjectPaths";
 const SYSTEM_SYSTEM_PROXY_KEY: &str = "systemProxy";
+// 交互式应答超时(分钟):AskUserQuestion 提问卡与工具审批栏共用的等待窗口。
+// 与 toolPolicies 同理必须进保存白名单,否则前端改完滑块重启即回默认值。
+const SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY: &str = "interactiveTimeoutMinutes";
+/// 交互式应答超时的默认值与上限（分钟）。上限与前端档位表最大档一致：
+/// 分钟数换算成毫秒后由前端分段续期计时，不再受 setTimeout 32 位延迟上限影响，
+/// 但仍保留上限以免手改配置写入荒谬值（并与前端归一化口径保持一致）。
+const DEFAULT_INTERACTIVE_TIMEOUT_MINUTES: f64 = 3.0;
+const MAX_INTERACTIVE_TIMEOUT_MINUTES: f64 = 99_999.0;
 const DEFAULT_WORKSPACE_PROJECT_ID: &str = "default-project";
 const DEFAULT_WORKSPACE_PROJECT_NAME: &str = "Default Project";
 pub(crate) const PROVIDER_API_KEY_UPDATES_FIELD: &str = "providerApiKeyUpdates";
