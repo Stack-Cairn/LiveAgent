@@ -53,7 +53,7 @@ serde_json = "1.0.150"
 reqwest = { version = "0.13.4", features = ["blocking", "json", "stream", "socks"] }
 rquickjs = { version = "0.8", features = ["array-buffer", "classes", "bindgen"] }
 percent-encoding = "2.3.2"
-axum = { version = "0.8.9", features = ["ws"] }
+axum = { version = "0.8.9", features = ["ws", "multipart"] }
 tower-http = { version = "0.6.4", features = ["fs", "cors"] }
 tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util", "rt-multi-thread"] }
 tokio-stream = "0.1.18"

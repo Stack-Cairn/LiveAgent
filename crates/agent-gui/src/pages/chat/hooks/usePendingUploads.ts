@@ -6,6 +6,7 @@ import {
   type PendingUploadedFile,
 } from "../../../lib/chat/messages/uploadedFiles";
 import { invoke, isTauri } from "../../../lib/tauriBridge";
+import { importReadableFilesViaMultipart } from "../../../lib/uploadReadableFiles";
 
 type SystemPickReadableFilesResponse = {
   files: PendingUploadedFile[];
@@ -311,19 +312,13 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         importer: async ({ targetWorkdir, remainingFileSlots }) => {
           if (!isTauri()) {
             // Headless: no native dialog — use the browser file picker and
-            // route through the same base64 upload path as drag & drop/paste.
+            // upload via the same multipart endpoint as drag & drop/paste
+            // (POST /api/files/import, agent-gateway-compatible protocol).
             const picked = await pickBrowserFiles();
             if (picked.length === 0) return { files: [], skipped: [] };
-            const uploadFiles = await Promise.all(
-              picked.slice(0, remainingFileSlots).map(fileToUploadInput),
-            );
-            return invoke<SystemPickReadableFilesResponse>(
-              "system_import_uploaded_readable_files",
-              {
-                workdir: targetWorkdir,
-                files: uploadFiles,
-                maxFiles: remainingFileSlots,
-              },
+            return importReadableFilesViaMultipart(
+              targetWorkdir,
+              picked.slice(0, remainingFileSlots),
             );
           }
           return invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
@@ -366,6 +361,11 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
               "warning",
               `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${ignoredForLimit} 个额外文件`,
             );
+          }
+          if (!isTauri()) {
+            // Headless: multipart upload (POST /api/files/import), same
+            // protocol as the agent-gateway WebUI — no base64 expansion.
+            return importReadableFilesViaMultipart(targetWorkdir, importBatch);
           }
           const uploadFiles = await Promise.all(importBatch.map(fileToUploadInput));
           return invoke<SystemPickReadableFilesResponse>("system_import_uploaded_readable_files", {

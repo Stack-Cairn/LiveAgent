@@ -44,7 +44,7 @@ function isTauri(): boolean {
   return isTauriRuntime();
 }
 
-function resolveHeadlessBaseUrl(): string {
+export function resolveHeadlessBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_LIVEAGENT_HEADLESS_URL as string | undefined;
   if (fromEnv) return fromEnv.replace(/\/+$/, "");
   if (typeof window !== "undefined" && window.__LIVEAGENT_HEADLESS_URL__) {

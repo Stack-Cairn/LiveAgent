@@ -26,6 +26,7 @@ use std::time::Instant;
 use dirs;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::multipart::Multipart;
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Extension, FromRef, Path as AxumPath, Query, State, State as AxumState};
 use axum::http::{header, Method, StatusCode};
 use axum::middleware::{self, Next};
@@ -2014,11 +2015,13 @@ async fn auth_middleware(
     req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Only the command execution endpoint is protected by the API token.
-    // Everything else (static assets, /health, /api/status, /proxy/*,
-    // /image-proxy) is public by design; WebSocket auth is handled separately
-    // in ws_handler (same-origin is allowed, otherwise ?token= required).
-    if req.uri().path() != "/api/invoke" {
+    // Only the command execution and file-import endpoints are protected by
+    // the API token. Everything else (static assets, /health, /api/status,
+    // /proxy/*, /image-proxy) is public by design; WebSocket auth is handled
+    // separately in ws_handler (same-origin is allowed, otherwise ?token=
+    // required).
+    let protected = matches!(req.uri().path(), "/api/invoke" | "/api/files/import");
+    if !protected {
         return Ok(next.run(req).await);
     }
     match &config.api_token {
@@ -2325,6 +2328,81 @@ async fn invoke_handler(
     }
 }
 
+/// POST /api/files/import — multipart file upload, mirroring the
+/// agent-gateway WebUI protocol
+/// (crates/agent-gateway/web/src/lib/uploadReadableFiles.ts). Multipart
+/// fields: `workdir` (string) + one or more `files` (file parts). The
+/// `agent_id` query param is accepted for protocol parity and ignored
+/// (headless mode is single-agent).
+///
+/// Returns the same shape as the Tauri command surface:
+///   { "files": [{ relativePath, absolutePath, fileName, kind, sizeBytes }],
+///     "skipped": [...] }
+/// This replaces the base64-in-JSON path for /api/invoke uploads: no 33%
+/// base64 expansion, no JSON double-buffering — multipart parts are read
+/// straight into memory per file (same as the Go gateway's io.ReadAll).
+async fn import_files_handler(
+    AxumState(_state): AxumState<HeadlessState>,
+    mut multipart: Multipart,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let mut workdir: Option<String> = None;
+    let mut uploads = Vec::new();
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|err| (StatusCode::BAD_REQUEST, format!("multipart parse failed: {err}")))?
+    {
+        let name = field.name().unwrap_or("").to_string();
+        match name.as_str() {
+            "workdir" => {
+                if workdir.is_none() {
+                    let text = field
+                        .text()
+                        .await
+                        .map_err(|err| (StatusCode::BAD_REQUEST, format!("read workdir failed: {err}")))?;
+                    workdir = Some(text.trim().to_string());
+                }
+            }
+            "files" => {
+                let file_name = field.file_name().unwrap_or("").trim().to_string();
+                let mime_type = field.content_type().map(|s| s.to_string());
+                let content = field
+                    .bytes()
+                    .await
+                    .map_err(|err| (StatusCode::BAD_REQUEST, format!("read file part failed: {err}")))?
+                    .to_vec();
+                uploads.push(crate::commands::system::SystemReadableFileUploadInput {
+                    file_name,
+                    mime_type,
+                    content,
+                });
+            }
+            // Unknown fields are ignored for forward compatibility (the Go
+            // gateway only reads workdir/files via FormValue as well).
+            _ => {}
+        }
+    }
+
+    let workdir =
+        workdir.ok_or_else(|| (StatusCode::BAD_REQUEST, "workdir is required".to_string()))?;
+    if uploads.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "files is required".to_string()));
+    }
+
+    // Reuse the exact same import pipeline as the Tauri commands (kind
+    // detection, UTF-8 transcode, staging write, entry building).
+    match crate::commands::system::system_import_uploaded_readable_files_sync(workdir, uploads) {
+        Ok(response) => {
+            let value = serde_json::to_value(response).map_err(|err| {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize response: {err}"))
+            })?;
+            Ok(Json(value))
+        }
+        Err(message) => Err((StatusCode::BAD_REQUEST, message)),
+    }
+}
+
 async fn ws_handler(
     ws: WebSocketUpgrade,
     AxumState(state): AxumState<HeadlessState>,
@@ -2417,11 +2495,12 @@ pub fn build_router(state: HeadlessState) -> Router {
     let cors_config = CorsConfig::from_env();
     // Default: 60 requests per minute for /api/invoke
     let limiter = RateLimiter::new(60, std::time::Duration::from_secs(60));
-    // /api/invoke carries file uploads as base64 inside a JSON body (the
-    // headless WebUI reuses the Tauri command surface), which expands ~33%.
-    // axum's default Json body limit is 2MB, so anything above ~1.5MB of
-    // uploaded files was rejected with HTTP 413. Allow a configurable cap
-    // (default 128MB of JSON body, i.e. ~96MB of raw files).
+    // File uploads now arrive as multipart parts on /api/files/import (the
+    // same protocol as the agent-gateway WebUI), but /api/invoke bodies may
+    // still carry paste/attachment payloads. axum's default body limit is
+    // 2MB, so allow a configurable cap (default 128MB, override via
+    // LIVEAGENT_HEADLESS_MAX_BODY_MB). Multipart import parts are not
+    // base64-expanded (~33% smaller than the old JSON path).
     let max_body_bytes = std::env::var("LIVEAGENT_HEADLESS_MAX_BODY_MB")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
@@ -2432,6 +2511,9 @@ pub fn build_router(state: HeadlessState) -> Router {
         .route("/health", get(health))
         .route("/api/status", get(api_status))
         .route("/api/invoke", post(invoke_handler))
+        // Multipart file import — same protocol as the agent-gateway WebUI.
+        // Body limit is governed by max_body_bytes below (default 128MB).
+        .route("/api/files/import", post(import_files_handler))
         .route("/ws", get(ws_handler))
         // BFF 出网反代：复用本地反代的 handler，把出网统一收敛到主服务端口，
         // 浏览器同源请求即可，无 CORS/随机端口问题（agent-gateway 同款架构）。
