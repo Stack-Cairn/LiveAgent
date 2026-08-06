@@ -1,17 +1,20 @@
 # syntax=docker/dockerfile:1.7
 
-# 构建 profile（core 或 full），必须在第一个 FROM 之前声明。
+# 构建 profile（minimal / core / full），必须在第一个 FROM 之前声明。
 ARG TARGET_PROFILE=core
 
-# LiveAgent Headless — 开发工具增强镜像（core / full）
+# LiveAgent Headless — 开发工具增强镜像（minimal / core / full）
 #
 # 设计哲学（对齐 GitHub devcontainers / Gitpod 的成熟做法：镜像保持克制，
 # 工具按需分层，而不是把所有语言运行时都塞进一个镜像）：
 #
-#   base : Debian bookworm-slim + 高频基础工具（git / 编译链 / 调试 / 网络 / 编辑器）
-#   core : base + mise + go 1.25.12 + node 22.19.0 + python 3.12 + pnpm + bun  (~0.9 GB)
-#   full : core + java temurin-17 + maven 3.9                            (~1.2 GB)
+#   base    : Debian bookworm-slim + 高频基础工具（git / 编译链 / 调试 / 网络 / 编辑器）
+#   minimal : base + liveagent 二进制，无任何语言运行时（生产部署推荐）  (~0.7 GB)
+#   core    : minimal + mise + go 1.25.12 + node 22.19.0 + python 3.12 + pnpm + bun  (~1.8 GB)
+#   full    : core + java temurin-17 + maven 3.9                             (~2.2 GB)
 #
+# minimal 与 core/full 的差异只有语言运行时：liveagent 主服务是 Rust 静态二进制，
+# entrypoint 对 mise 是可选依赖（见 docker/entrypoint.sh），minimal 可直接跑主服务。
 # 语言运行时全部由 mise 管理（镜像内置全局 config，见 docker/mise.{core,full}.toml），
 # 用户可在 compose 里用 MISE_<TOOL>_VERSION 环境变量切换任意版本，缺失的版本
 # 首次启动自动补装（懒加载，见 docker/entrypoint.sh）。
@@ -19,7 +22,8 @@ ARG TARGET_PROFILE=core
 # pnpm/bun 走 npm backend，registry 指向 npmmirror（MISE_NPM_REGISTRY_URL），
 # 国内网络下 npm 类工具安装/补装不依赖 GitHub。
 #
-# 构建（GitHub Actions，官方源可达；用 TARGET_PROFILE 选择 core 或 full）：
+# 构建（GitHub Actions，官方源可达；用 TARGET_PROFILE 选择 minimal / core / full）：
+#   docker build --build-arg TARGET_PROFILE=minimal -f Dockerfile.headless-tools -t liveagent-minimal .
 #   docker build --build-arg TARGET_PROFILE=core -f Dockerfile.headless-tools -t liveagent-core .
 #   docker build --build-arg TARGET_PROFILE=full -f Dockerfile.headless-tools -t liveagent-full .
 
@@ -128,6 +132,16 @@ RUN apt-get update && \
 # 生成 en_US.UTF-8 locale（默认 POSIX 环境影响部分中文/国际化工具）
 RUN sed -i 's/^# \(en_US.UTF-8\)/\1/' /etc/locale.gen && locale-gen
 
+# liveagent 用户提前在 base 创建（uid 10001 固定，三个 profile 共用）：
+# core/full 的 mise 运行时将以该 uid 安装，/opt/mise 属主写入时即正确，
+# final 无需再 chown -R /opt/mise —— 否则 overlayfs 会对整个目录树做
+# copy-up，镜像白白多出 ~1GB（chown 改 inode 元数据必然触发整树复制）。
+RUN useradd --system --uid 10001 --user-group --create-home \
+    --home-dir /var/lib/liveagent --shell /bin/bash liveagent
+
+# ---- Minimal: base + liveagent 二进制（无任何语言运行时，生产部署推荐） ----
+FROM base AS minimal
+
 # ---- Core: mise + 高频开发语言运行时 ----
 FROM base AS core
 
@@ -146,34 +160,43 @@ RUN curl -fsSL https://mise.run -o /tmp/mise-install.sh && \
     mise --version
 
 # 预装 core 默认工具链：go / node / pnpm / python（python 走预编译二进制，不编译源码）
+# 以 liveagent(uid 10001) 身份安装：/opt/mise 写入时属主即正确，final 不再 chown -R
+# （否则 overlayfs 整树 copy-up 额外 ~1GB 层）。安装后清掉 npm/core 下载缓存
+# （~/.npm ~/.cache），镜像瘦身；懒加载补装按需重新下载。
 COPY docker/mise.core.toml /etc/mise/config.toml
-RUN mise install --jobs 4
+RUN install -d -o liveagent -g liveagent /opt/mise
+USER liveagent
+RUN mise install --jobs 4 && \
+    rm -rf /var/lib/liveagent/.npm /var/lib/liveagent/.cache
+USER root
 
 # ---- Full: Core + Java 工具链（JDK 17 默认 + Maven；Java 8 懒加载见 README） ----
 FROM core AS full
 
 COPY docker/mise.full.toml /etc/mise/config.toml
-RUN mise install --jobs 4
+USER liveagent
+RUN mise install --jobs 4 && \
+    rm -rf /var/lib/liveagent/.npm /var/lib/liveagent/.cache
+USER root
 
-# ---- Final: 按 TARGET_PROFILE 选择 core 或 full ----
+# ---- Final: 按 TARGET_PROFILE 选择 minimal / core / full ----
 FROM ${TARGET_PROFILE} AS final
 
 COPY --from=builder /usr/local/bin/liveagent /usr/local/bin/liveagent
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh && \
-    # 非 root 用户；home 在数据卷上（app 把历史/设置存 $HOME/.liveagent）
-    useradd --system --uid 10001 --user-group --home-dir /var/lib/liveagent --shell /bin/bash liveagent && \
+    # liveagent 用户已在 base 创建；home 属主纠正 + 收紧权限（数据在 $HOME/.liveagent）
     install -d -o liveagent -g liveagent -m 0700 /var/lib/liveagent && \
-    # mise 数据目录交给 liveagent 可写（懒加载补装的版本也要落盘）
-    chown -R liveagent:liveagent /opt/mise && \
-    # --- mise 环境注入（工具链 PATH/JAVA_HOME 等）---
+    # --- mise 环境注入（仅 core/full 含 mise 时写入；minimal 无 mise 跳过）---
     # 1) /etc/profile.d/mise.sh：login shell 无论交互与否都加载（/etc/profile 会
     #    source profile.d/*.sh），覆盖 liveagent 的 bash -lc 执行路径；
     # 2) /etc/bash.bashrc 尾部：覆盖非登录交互式 shell（docker exec -it bash）。
     #    两者叠加即所有 bash 场景都有完整工具链。
-    printf 'eval "$(mise env --shell bash)" 2>/dev/null\n' > /etc/profile.d/mise.sh && \
-    echo 'eval "$(mise env --shell bash)" 2>/dev/null' >> /etc/bash.bashrc
+    if command -v mise >/dev/null 2>&1; then \
+      printf 'eval "$(mise env --shell bash)" 2>/dev/null\n' > /etc/profile.d/mise.sh && \
+      echo 'eval "$(mise env --shell bash)" 2>/dev/null' >> /etc/bash.bashrc; \
+    fi
 
 USER liveagent
 

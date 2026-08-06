@@ -1,10 +1,11 @@
-name: LiveAgent Headless Tools Image (core/full)
+name: LiveAgent Headless Tools Image (minimal/core/full)
 
-# 构建并发布两个开发工具镜像到 GHCR（main 分支 push / v* tag 触发，可手动 dispatch）：
-#   ghcr.io/<owner>/liveagent-core  (~0.9 GB, 默认开发沙箱)
-#   ghcr.io/<owner>/liveagent-full  (~1.2 GB, 含 Java 17 + Maven, Java 8 懒加载)
+# 构建并发布三个镜像到 GHCR（main 分支 push / v* tag 触发，可手动 dispatch）：
+#   ghcr.io/<owner>/liveagent-minimal  (~0.7 GB, 仅基础工具 + liveagent，生产部署推荐)
+#   ghcr.io/<owner>/liveagent-core     (~1.8 GB, 默认开发沙箱)
+#   ghcr.io/<owner>/liveagent-full     (~2.2 GB, 含 Java 17 + Maven, Java 8 懒加载)
 # 同一 Dockerfile（Dockerfile.headless-tools），用 TARGET_PROFILE 区分；
-# core/full 共享 base 层，pull 时不重复下载。
+# minimal/core/full 共享 base 层，pull 时不重复下载。
 
 on:
   push:
@@ -30,6 +31,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - profile: minimal
+            image: ghcr.io/${{ github.repository_owner }}/liveagent-minimal
           - profile: core
             image: ghcr.io/${{ github.repository_owner }}/liveagent-core
           - profile: full

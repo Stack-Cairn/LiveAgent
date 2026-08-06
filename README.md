@@ -239,16 +239,17 @@ location / {
 
 
 
-### Headless Dev-Tools Image (`core` / `full`)
+### Headless Dev-Tools Image (`minimal` / `core` / `full`)
 
 A drop-in development sandbox built on the headless runtime. Instead of one ever-growing "kitchen-sink" image, the toolchain is **layered and kept lean** (mirroring the GitHub devcontainers / Gitpod approach):
 
 | Image | Contents | Approx. size |
 |---|---|---|
-| `liveagent-core` | git · build-essential · cmake · ninja · pkg-config · strace · vim · tmux · network tools **+** go 1.25.12 · node 22.19.0 · pnpm · bun · python 3.12 (all managed by [mise](https://mise.jdx.dev)) | ~0.9 GB |
-| `liveagent-full` | everything in `core` **+** Java (Temurin 17) · Maven 3.9 | ~1.2 GB |
+| `liveagent-minimal` | base tools (git · build-essential · cmake · ninja · pkg-config · strace · vim · tmux · network tools) **+** liveagent binary, **no language runtimes** — recommended for production | ~0.7 GB |
+| `liveagent-core` | everything in `minimal` **+** go 1.25.12 · node 22.19.0 · pnpm · bun · python 3.12 (all managed by [mise](https://mise.jdx.dev)) | ~1.8 GB |
+| `liveagent-full` | everything in `core` **+** Java (Temurin 17) · Maven 3.9 | ~2.2 GB |
 
-Both images are built by GitHub Actions from the same `Dockerfile.headless-tools` (`TARGET_PROFILE=core|full`), multi-arch amd64/arm64, and share the same base layers — pulling `full` never re-downloads the `core` layers.
+All images are built by GitHub Actions from the same `Dockerfile.headless-tools` (`TARGET_PROFILE=minimal|core|full`), multi-arch amd64/arm64, and share the same base layers — pulling `full` never re-downloads the `core` layers. The headless server itself is a static Rust binary, so `minimal` runs the full service with no runtimes at all.
 
 **Quick start (compose):**
 
