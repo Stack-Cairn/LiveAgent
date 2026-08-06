@@ -787,14 +787,39 @@ pub fn run() {
                     }
                 });
 
-                // 启动内嵌后端服务（HTTP）。chat 引擎不在这里起——
-                // pi 进程由后端在首次 chat_send 时按会话惰性拉起。
+                // 启动内嵌后端服务（HTTP + Node 引擎）。
                 // 这必须在 tokio runtime 上下文里运行（setup 被 runtime.enter() 保护了）。
                 let backend_endpoint = Arc::new(tokio::sync::RwLock::new(None));
                 let backend_endpoint_clone = Arc::clone(&backend_endpoint);
 
+                // 计算引擎 bundle 路径。dev 模式从项目相对路径读，release 从资源目录读。
+                let engine_bundle = if cfg!(debug_assertions) {
+                    Some(std::path::PathBuf::from("../core/dist"))
+                } else {
+                    // release 模式：从 Tauri 资源目录查找 index.js。
+                    // tauri.conf.json 的 resources 配置为 ../../core/dist/index.js。
+                    let resource_dir = app.path().resource_dir()
+                        .map_err(|e| format!("获取资源目录失败：{e}"))
+                        .ok();
+
+                    resource_dir.and_then(|dir| {
+                        let dist_path = dir.join("core").join("dist");
+                        if dist_path.exists() {
+                            Some(dist_path)
+                        } else {
+                            let root_index = dir.join("index.js");
+                            if root_index.exists() {
+                                Some(dir)
+                            } else {
+                                eprintln!("警告：未找到 Node 引擎 bundle");
+                                None
+                            }
+                        }
+                    })
+                };
+
                 tokio::spawn(async move {
-                    match backend_server::start_backend_server().await {
+                    match backend_server::start_backend_server(engine_bundle).await {
                         Ok(server) => {
                             eprintln!("内嵌后端服务启动成功：端口 {}", server.port);
                             *backend_endpoint_clone.write().await = Some(
@@ -804,7 +829,7 @@ pub fn run() {
                                     password: server.password.clone(),
                                 },
                             );
-                            // 持有 server 直到退出：它握着 pi 会话表，退出时据此收子进程。
+                            // 持有 server 直到退出：它握着 Node 引擎句柄，退出时据此收子进程。
                             *backend_server_slot.lock().expect("backend server slot poisoned") =
                                 Some(server);
                         }
@@ -876,7 +901,7 @@ pub fn run() {
                     .ok()
                     .and_then(|mut slot| slot.take())
                 {
-                    server.shutdown_sessions();
+                    server.shutdown_engine();
                 }
                 power_activity.clear_all();
             }

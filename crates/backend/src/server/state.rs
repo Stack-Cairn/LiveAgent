@@ -50,8 +50,8 @@ pub struct AppState {
     pub ws_sink: Arc<crate::server::ws::WsEventSink>,
     /// 工具审批注册表。
     pub approvals: Arc<crate::approval::ApprovalRegistry>,
-    /// pi 引擎会话表。每个 conversationId 一个 `pi --mode rpc` 子进程。
-    pub pi_sessions: Arc<crate::pi::PiSessionManager>,
+    /// Node 引擎监听端口。引擎未就绪时为 None（代理返回 503）。
+    pub node_port: Arc<tokio::sync::RwLock<Option<u16>>>,
     /// HTTP 后端监听端口。
     pub backend_port: u16,
 }

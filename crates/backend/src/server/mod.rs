@@ -23,7 +23,6 @@
 //! 自定义路由（不是 tauri 命令）单独在本模块定义和挂载。
 
 pub mod auth;
-pub mod chat;
 pub mod json;
 pub mod routes_gen;
 pub mod state;
@@ -67,6 +66,58 @@ pub(crate) fn respond<T: serde::Serialize, E: serde::Serialize>(result: Result<T
                 .into_response(),
         },
     }
+}
+
+/// 工具审批请求。Node 引擎调此接口时会长时间挂起，直到前端应答或超时。
+#[derive(Debug, Deserialize)]
+pub struct ToolApprovalRequestBody {
+    pub conversation_id: String,
+    pub tool_call_id: String,
+    pub tool_name: String,
+    pub summary: String,
+    pub recommended: Option<String>, // "approve" | "deny" | "approve_session"
+    /// 审批窗口毫秒数。Node 侧传 TOOL_APPROVAL_TIMEOUT_MS；缺省兜底 60s。
+    pub timeout_ms: Option<u64>,
+}
+
+/// 处理工具审批请求（内部，Node 引擎调）。
+/// Node 在执行工具前调此接口，长时间挂起直到前端作出决定。
+async fn handler_tool_approval_request(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    Json(body): Json<ToolApprovalRequestBody>,
+) -> Response {
+    let recommended = body.recommended.as_deref().and_then(|s| match s {
+        "approve" => Some(crate::approval::Decision::Approve),
+        "deny" => Some(crate::approval::Decision::Deny),
+        "approve_session" => Some(crate::approval::Decision::ApproveSession),
+        _ => None,
+    });
+
+    let payload = crate::approval::ApprovalPayload {
+        conversation_id: body.conversation_id,
+        tool_call_id: body.tool_call_id,
+        tool_name: body.tool_name,
+        summary: body.summary,
+        recommended,
+    };
+
+    // 发起审批请求，长时间等待直到应答或超时。
+    let (_, outcome) = state
+        .approvals
+        .request(payload, body.timeout_ms.unwrap_or(60_000), state.events.clone())
+        .await;
+
+    // 超时无人应答且无推荐项：按拒绝执行（fail-safe）。
+    let decision_str = match outcome {
+        crate::approval::Outcome::Decided(crate::approval::Decision::Approve) => "approve",
+        crate::approval::Outcome::Decided(crate::approval::Decision::Deny) => "deny",
+        crate::approval::Outcome::Decided(crate::approval::Decision::ApproveSession) => {
+            "approve_session"
+        }
+        crate::approval::Outcome::TimedOut => "deny",
+    };
+
+    respond::<serde_json::Value, String>(Ok(json!({ "decision": decision_str })))
 }
 
 /// 工具审批应答请求。
@@ -118,13 +169,17 @@ async fn handler_tool_approval_respond(
 }
 
 pub fn api_router() -> Router<AppState> {
-    // 手动挂载自定义路由（approval 和 chat）。
+    // 手动挂载自定义路由（approval 和 engine 代理）。
     Router::new()
+        .route(
+            "/tool_approval_request",
+            axum::routing::post(handler_tool_approval_request),
+        )
         .route(
             "/tool_approval_respond",
             axum::routing::post(handler_tool_approval_respond),
         )
-        .merge(crate::server::chat::router())
+        .merge(crate::engine_proxy::router())
         .merge(routes_gen::gen_router())
 }
 

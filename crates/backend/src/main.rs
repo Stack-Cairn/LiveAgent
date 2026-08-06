@@ -12,20 +12,21 @@
 //! 不给密码就用默认值 `pleasechangethepassword` 并在 stderr 警告（决策 8）。
 //! 传输加密不归这个进程管：对外部署放在平台/反代的 TLS 终结之后。
 //!
-//! chat 引擎是按会话拉起的 `pi --mode rpc` 子进程，默认取 PATH 上的 `pi`，
-//! 用 `LIVEAGENT_PI_BIN` 覆盖。它没有对应的 argv 参数——引擎位置是部署事实，
-//! 不是每次启动要调的旋钮。
+//! chat 引擎是 Node 子进程（core bundle），用 `--engine-bundle` 指向打包产物
+//! 目录（内含 index.js），环境变量兜底 `LIVEAGENT_ENGINE_BUNDLE`。
+//! 不给则纯 API 模式运行（chat 三条路由 503）。
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use backend::server::auth;
-use backend::{build_router, build_state};
+use backend::{build_router, build_state, engine_process};
 
 struct Args {
     port: u16,
     password: Option<String>,
+    engine_bundle: Option<PathBuf>,
 }
 
 /// 非空环境变量，空串按未设置处理（`FOO=` 是平台 UI 里清空后留下的残渣）。
@@ -37,7 +38,7 @@ fn env_var(name: &str) -> Option<String> {
 /// argv 没给的项从环境变量补齐，之后不再有第二条配置路径。
 fn parse_args() -> Result<Args, String> {
     let mut port: Option<u16> = None;
-    let mut args = Args { port: 0, password: None };
+    let mut args = Args { port: 0, password: None, engine_bundle: None };
     let mut data_dir: Option<PathBuf> = None;
     let mut it = std::env::args().skip(1);
     while let Some(flag) = it.next() {
@@ -51,12 +52,15 @@ fn parse_args() -> Result<Args, String> {
                 );
             }
             "--password" => args.password = Some(take("--password")?),
+            "--engine-bundle" => {
+                args.engine_bundle = Some(PathBuf::from(take("--engine-bundle")?))
+            }
             "--data-dir" => data_dir = Some(PathBuf::from(take("--data-dir")?)),
             "--help" | "-h" => {
                 println!(
-                    "backend [--port <PORT>] [--password <PW>] [--data-dir <DIR>]\n\
-                     环境变量兜底：PORT、LIVEAGENT_BACKEND_PASSWORD、LIVEAGENT_DATA_DIR\n\
-                     chat 引擎：默认调 PATH 上的 pi，LIVEAGENT_PI_BIN 可覆盖"
+                    "backend [--port <PORT>] [--password <PW>] [--engine-bundle <DIR>] [--data-dir <DIR>]\n\
+                     环境变量兜底：PORT、LIVEAGENT_BACKEND_PASSWORD、LIVEAGENT_ENGINE_BUNDLE、LIVEAGENT_DATA_DIR\n\
+                     --engine-bundle 指向 Node 引擎打包产物目录（内含 index.js），不给则纯 API 模式"
                 );
                 std::process::exit(0);
             }
@@ -70,6 +74,9 @@ fn parse_args() -> Result<Args, String> {
         .transpose()?;
     args.port = port.or(env_port).unwrap_or(8443);
     args.password = args.password.or_else(|| env_var("LIVEAGENT_BACKEND_PASSWORD"));
+    args.engine_bundle = args
+        .engine_bundle
+        .or_else(|| env_var("LIVEAGENT_ENGINE_BUNDLE").map(PathBuf::from));
 
     // 数据目录反着走：backend 的路径解析只认 LIVEAGENT_DATA_DIR 环境变量
     // （见 backend::storage），--data-dir 就翻译成它。这里还在 main 的
@@ -107,9 +114,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 周期清扫过期隧道：TTL 的强制执行就在这里，不起它 TTL 只是显示值。
     state.tunnels.spawn_sweeper();
 
-    // chat 引擎不在这里启动：pi 进程由 PiSessionManager 在首次 chat_send
-    // 时按会话惰性拉起。退出时统一收掉（决策 11：不留孤儿子进程）。
-    let pi_sessions = std::sync::Arc::clone(&state.pi_sessions);
+    // 启动 Node 引擎（如果提供了 bundle）。句柄要活到进程退出，
+    // drop 即同步 kill 子进程（决策 11：不留孤儿）。
+    let _engine = if let Some(bundle_path) = args.engine_bundle.clone() {
+        match engine_process::spawn_engine(state.clone(), bundle_path).await {
+            Ok(engine) => Some(engine),
+            Err(e) => {
+                eprintln!("警告：启动 Node 引擎失败，纯 API 模式继续运行：{e}");
+                None
+            }
+        }
+    } else {
+        eprintln!("未提供 --engine-bundle，纯 API 模式运行");
+        None
+    };
 
     let app = build_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
@@ -134,10 +152,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("backend 监听 http://{addr}");
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    // with_connect_info：认证中间件靠对端地址做 loopback 豁免（本机 Node 引擎）。
     tokio::select! {
-        result = axum::serve(listener, app) => result?,
+        result = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()) => result?,
         _ = shutdown_rx.recv() => {
-            pi_sessions.shutdown_all();
+            drop(_engine);
         }
     }
     Ok(())

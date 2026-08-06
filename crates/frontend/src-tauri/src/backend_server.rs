@@ -1,7 +1,7 @@
 //! Tauri 壳内嵌后端服务启动。
 //!
 //! 直接在壳内启动 backend 的 HTTP 服务，避免与独立 backend 共享库文件冲突。
-//! 前端打到 Rust，chat 引擎是 Rust 按会话拉起的 `pi --mode rpc` 子进程。
+//! 前端打到 Rust，Rust 反向代理 chat 请求到 Node 引擎（core bundle）。
 //!
 //! 决策：壳与独立 backend 不能同机并跑（同一 ~/.liveagent 库）——
 //! 壳内嵌就是为了避开这个。
@@ -15,29 +15,32 @@ pub struct BackendServer {
     pub port: u16,
     /// 认证密码（固定默认值，壳注入给前端）。
     pub password: String,
-    /// pi 会话表。持有它是为了壳退出时能把子进程收干净。
-    pi_sessions: std::sync::Arc<backend::pi::PiSessionManager>,
+    /// Node 引擎进程句柄。持有它直到壳退出，drop 即同步 kill 子进程。
+    engine: std::sync::Arc<tokio::sync::Mutex<Option<backend::engine_process::EngineProcess>>>,
 }
 
 impl BackendServer {
-    /// 壳退出时收掉所有 pi 会话进程。
-    pub fn shutdown_sessions(&self) {
-        self.pi_sessions.shutdown_all();
+    /// 壳退出时关闭 Node 引擎。EngineProcess 的 Drop 会同步 kill child。
+    pub fn shutdown_engine(&self) {
+        // 同步上下文里用 try_lock：除守护循环外没人长期持锁，失败时
+        // EngineProcess 的 kill_on_drop 仍会兜底。
+        if let Ok(mut guard) = self.engine.try_lock() {
+            drop(guard.take());
+        }
     }
 }
 
-/// 启动内嵌后端服务。
+/// 启动内嵌后端服务，并可选启动 Node 引擎。
 ///
 /// 执行流程：
 /// 1. 找一个空闲端口
 /// 2. 构造后端状态（固定默认密码）
-/// 3. 构造后端状态
+/// 3. 如果提供了 bundle 路径，启动 Node 引擎（失败降级为纯 API 模式）
 /// 4. 启动 HTTP 服务（async 任务）
 /// 5. 返回服务元数据给前端
-///
-/// 这里不再拉起 chat 引擎：pi 进程由 `PiSessionManager` 在首次 chat_send
-/// 时按会话惰性启动，壳启动路径上没有引擎就绪这一步了。
-pub async fn start_backend_server() -> Result<BackendServer, String> {
+pub async fn start_backend_server(
+    engine_bundle: Option<std::path::PathBuf>,
+) -> Result<BackendServer, String> {
     // 找一个空闲的 TCP 端口。
     let port = find_free_port().await?;
 
@@ -51,7 +54,23 @@ pub async fn start_backend_server() -> Result<BackendServer, String> {
     // 构造后端状态。
     let state = backend::build_state(auth, port)
         .map_err(|e| format!("构造后端状态失败：{e}"))?;
-    let pi_sessions = std::sync::Arc::clone(&state.pi_sessions);
+
+    // 启动 Node 引擎（如果提供了 bundle 路径）。
+    let engine = if let Some(bundle_path) = engine_bundle {
+        match backend::engine_process::spawn_engine(state.clone(), bundle_path).await {
+            Ok(engine_process) => {
+                eprintln!("Node 引擎启动成功");
+                std::sync::Arc::new(tokio::sync::Mutex::new(Some(engine_process)))
+            }
+            Err(e) => {
+                eprintln!("警告：启动 Node 引擎失败，纯 API 模式继续运行：{e}");
+                std::sync::Arc::new(tokio::sync::Mutex::new(None))
+            }
+        }
+    } else {
+        eprintln!("未提供 Node 引擎 bundle，纯 API 模式运行");
+        std::sync::Arc::new(tokio::sync::Mutex::new(None))
+    };
 
     // 启动 HTTP 服务（运行在后台）。
     // 注意：这里不 await，服务在后台持续运行。如果 tokio runtime 退出，服务自动停止。
@@ -59,9 +78,10 @@ pub async fn start_backend_server() -> Result<BackendServer, String> {
         let app = backend::build_router(state);
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 
+        // with_connect_info：认证中间件靠对端地址做 loopback 豁免（Node 引擎回调）。
         if let Err(e) = axum::serve(
             TcpListener::bind(addr).await.expect("绑定 localhost 端口失败"),
-            app,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
         )
         .await
         {
@@ -69,11 +89,7 @@ pub async fn start_backend_server() -> Result<BackendServer, String> {
         }
     });
 
-    Ok(BackendServer {
-        port,
-        password,
-        pi_sessions,
-    })
+    Ok(BackendServer { port, password, engine })
 }
 
 /// 选一个空闲的 TCP 端口。
@@ -90,4 +106,3 @@ async fn find_free_port() -> Result<u16, String> {
     drop(listener);
     Ok(port)
 }
-

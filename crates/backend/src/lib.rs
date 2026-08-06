@@ -3,8 +3,10 @@
 //! 这是后端**唯一的对外网络入口**（决策 5）。桌面壳和 WebUI 打的是同一套 API，
 //! 调的是本 crate 里同一批函数——所以工具行为不可能两边不一致。
 //!
-//! chat 引擎是 `pi --mode rpc` 子进程，由 `pi` 模块管理（每会话一进程），
-//! 事件经翻译层直接进 EventBus。前端契约见 docs/design/pi-rpc-event-contract.md。
+//! chat 引擎运行在 Node 子进程（`crates/core`，内嵌 pi 库），由 `engine_process`
+//! spawn 守护；`engine_proxy` 把三条 chat 路由代理过去，事件经
+//! `engine_emit_event` 回流进 EventBus。backend↔core 走 127.0.0.1 明文 HTTP，
+//! 认证靠 loopback 豁免（见 server/auth.rs）。
 //!
 //! 核心能力模块（`commands` / `runtime` / `services` / `storage`）**不含任何 UI
 //! 框架依赖**——见 Cargo.toml 的编译期防线说明。两个消费者：
@@ -29,8 +31,9 @@
 
 pub mod approval;
 pub mod commands;
+pub mod engine_process;
+pub mod engine_proxy;
 pub mod events;
-pub mod pi;
 pub mod runtime;
 pub mod server;
 pub mod services;
@@ -154,13 +157,9 @@ pub fn build_state(auth: Arc<server::auth::AuthConfig>, backend_port: u16) -> Re
     });
     Arc::clone(&automation_scheduler).start();
 
-    // 审批注册表要同时给 HTTP 路由（前端应答）和 pi 会话（发起审批）用，
-    // 所以先建再分发——两边必须是同一张 pending 表，否则应答找不到请求。
+    // 审批注册表给 HTTP 路由两头用：Node 引擎经 /api/tool_approval_request
+    // 发起并长挂起，前端经 /api/tool_approval_respond 应答——同一张 pending 表。
     let approvals = Arc::new(crate::approval::ApprovalRegistry::new());
-    let pi_sessions = Arc::new(crate::pi::PiSessionManager::new(
-        Arc::clone(&events),
-        Arc::clone(&approvals),
-    ));
 
     Ok(AppState {
         events,
@@ -181,7 +180,7 @@ pub fn build_state(auth: Arc<server::auth::AuthConfig>, backend_port: u16) -> Re
         auth,
         ws_sink,
         approvals,
-        pi_sessions,
+        node_port: Arc::new(tokio::sync::RwLock::new(None)),
         backend_port,
     })
 }

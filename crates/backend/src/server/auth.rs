@@ -39,12 +39,22 @@ impl AuthConfig {
 
 /// Axum middleware：校验 Authorization: Bearer <token> header。
 ///
+/// loopback 豁免：对端地址是 127.0.0.1/::1 的请求直接放行——本机 Node 引擎
+/// （core）调后端命令与 engine_emit_event 全靠这条，不带任何凭据。
 /// 三种失败情况（缺 header、格式错、密码错）都返回同样的 401，不暴露细节。
 pub async fn require_bearer(
     axum::extract::State(state): axum::extract::State<crate::server::state::AppState>,
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> Result<axum::response::Response, axum::http::StatusCode> {
+    if let Some(connect_info) = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+    {
+        if connect_info.0.ip().is_loopback() {
+            return Ok(next.run(req).await);
+        }
+    }
     let token = extract_bearer_token(req.headers()).ok_or(axum::http::StatusCode::UNAUTHORIZED)?;
     if state.auth.verify(token) {
         Ok(next.run(req).await)
