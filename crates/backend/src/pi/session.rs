@@ -28,7 +28,7 @@ use super::process::{PiProcess, PiSpawnConfig};
 use super::protocol::{self, PiEvent};
 use super::translate;
 use crate::approval::ApprovalRegistry;
-use crate::events::{EventBus, EventSink};
+use crate::events::EventBus;
 
 /// pi 可执行文件的环境变量覆盖。不设就走 PATH 上的 `pi`。
 const PI_BIN_ENV: &str = "LIVEAGENT_PI_BIN";
@@ -130,9 +130,7 @@ impl PiSessionManager {
         }
 
         if let Some(model) = &request.selected_model {
-            session
-                .apply_model(model, conversation_id, self.events.as_ref())
-                .await;
+            session.apply_model(model).await?;
         }
 
         session.process.send(protocol::prompt(text))?;
@@ -292,30 +290,27 @@ impl PiSession {
     ///    （"claude-opus-4-8" 这种）两边是同一个字符串。id 在目录里唯一时，
     ///    provider 就是可推出来的。
     ///
-    /// 都不成只告警 + 发一条状态行，不拒收消息：为一次映射失败把整条消息退回去，
-    /// 代价远大于用默认模型跑完这一轮。完整的模型目录迁移是 B13/C7 的事。
-    async fn apply_model(&self, model: &SelectedModel, conversation_id: &str, events: &EventBus) {
+    /// 都不成就报错拒收这条消息：静默换成别的模型跑，比让用户重发一次糟糕得多。
+    async fn apply_model(&self, model: &SelectedModel) -> Result<(), String> {
         let requested = format!("{}/{}", model.custom_provider_id, model.model);
 
         if self
             .try_set_model(&model.custom_provider_id, &model.model)
             .await
         {
-            return;
+            return Ok(());
         }
 
         match self.resolve_provider_by_model_id(&model.model).await {
             Some(provider) => {
                 if self.try_set_model(&provider, &model.model).await {
-                    return;
+                    return Ok(());
                 }
-                self.report_model_fallback(
-                    conversation_id,
-                    events,
-                    &format!("{requested}（按模型名匹配到 provider {provider} 后仍被拒）"),
-                );
+                Err(format!(
+                    "无法切换到所选模型 {requested}（按模型名匹配到 provider {provider} 后仍被拒）"
+                ))
             }
-            None => self.report_model_fallback(conversation_id, events, &requested),
+            None => Err(format!("无法切换到所选模型 {requested}")),
         }
     }
 
@@ -344,24 +339,6 @@ impl PiSession {
             return None;
         }
         unique_provider_for_model(response.data.as_ref()?, model_id)
-    }
-
-    /// 把「没用上你选的模型」告诉用户。
-    ///
-    /// 走 `tool_status_change` 是因为前端只消费三个事件，这是唯一能显示一行
-    /// 文字的通道。它会被随后的工具状态覆盖掉，所以日志才是权威记录。
-    fn report_model_fallback(&self, conversation_id: &str, events: &EventBus, requested: &str) {
-        let message = format!("未能切换到所选模型 {requested}，本轮使用 pi 的默认模型");
-        eprintln!("{message}（会话 {conversation_id}）");
-        events.emit_json(
-            "tool_status_change",
-            serde_json::json!({
-                "conversation_id": conversation_id,
-                "status": message,
-                "isCompaction": false,
-                "retryAttempts": [],
-            }),
-        );
     }
 }
 
@@ -461,7 +438,7 @@ fn install_approval_extension() -> Result<PathBuf, String> {
 /// 从 `get_available_models` 的返回里，按模型 id 找出唯一的 provider。
 ///
 /// 多个 provider 提供同名模型时返回 None：这时候猜哪个都可能是错的，而错的
-/// provider 意味着用错 key、算错钱。宁可退回默认模型并如实告诉用户。
+/// provider 意味着用错 key、算错钱。宁可报错让用户自己选。
 fn unique_provider_for_model(data: &Value, model_id: &str) -> Option<String> {
     let mut matched: Vec<&str> = data
         .get("models")?
