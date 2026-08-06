@@ -1,6 +1,6 @@
 //! 工具审批状态机。
 //!
-//! Node 在执行工具前调 /api/tool_approval_request，长时间挂起直到用户在前端作出决定。
+//! pi 的审批扩展经 extension_ui_request 触发 `request()`，长时间挂起直到用户在前端作出决定。
 //! 前端应答经 /api/tool_approval_respond 传来，触发 respond 操作。
 //!
 //! 并发语义：HashMap.remove 是原子的（Rust 保证），先到先得——两个并发响应者，
@@ -26,6 +26,32 @@ pub enum Decision {
     Deny,
     /// 本会话内该工具后续免审。
     ApproveSession,
+}
+
+/// 一次审批的落定方式。
+///
+/// 与 `Decision` 分开是有意的：`Decision` 是**前端能回的三个值**，是线上契约的
+/// 一部分（`tool_approval_respond` 收的就是它）。「超时」不是用户能选的东西，
+/// 塞进那个枚举会让 `recommended: "timeout"` 这种无意义组合变得可表达。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    /// 用户作出了选择，或超时时套用了 `recommended`。
+    Decided(Decision),
+    /// 窗口内没有任何决定，且没有 `recommended` 可套用。
+    ///
+    /// 调用方据此给模型一个不同的说法：「没人确认」和「用户明确拒绝」对
+    /// 下一步的指示是不一样的。两者都按拒绝执行。
+    TimedOut,
+}
+
+impl Outcome {
+    /// 是否放行。超时按拒绝处理（fail-safe，与迁移前一致）。
+    pub fn is_approved(self) -> bool {
+        matches!(
+            self,
+            Outcome::Decided(Decision::Approve) | Outcome::Decided(Decision::ApproveSession)
+        )
+    }
 }
 
 /// 待审批请求的参数。
@@ -86,13 +112,14 @@ impl ApprovalRegistry {
     /// 5. 超时：有推荐项选推荐项；无则 Deny
     ///
     /// # 返回
-    /// (approval_id, decision) 的 tuple。
+    /// (approval_id, outcome) 的 tuple。`Outcome::TimedOut` 表示窗口内无人应答
+    /// 且无 `recommended` 兜底——调用方要能把它和「用户明确拒绝」分开说。
     pub async fn request(
         &self,
         payload: ApprovalPayload,
         timeout_ms: u64,
         events: Arc<EventBus>,
-    ) -> (String, Decision) {
+    ) -> (String, Outcome) {
         let approval_id = Uuid::new_v4().to_string();
         let created_at_ms = Self::now_ms();
 
@@ -128,17 +155,25 @@ impl ApprovalRegistry {
         );
 
         // await 超时或应答。
-        let decision = tokio::time::timeout(
+        // 两种「没拿到决定」并作一类：超时，以及 sender 被 drop（正常流程里
+        // 不会发生——respond 要么 send 要么根本没拿到这一项）。语义都是
+        // 「窗口内没有决定」。
+        let settled = tokio::time::timeout(
             std::time::Duration::from_millis(timeout_ms),
             receiver,
         )
         .await
         .ok()
-        .and_then(|r| r.ok())
-        .unwrap_or_else(|| {
-            // 超时：有推荐项则选推荐，无则拒绝。
-            payload.recommended.unwrap_or(Decision::Deny)
-        });
+        .and_then(|r| r.ok());
+
+        let outcome = match settled {
+            Some(decision) => Outcome::Decided(decision),
+            // 有推荐项就按推荐落定——那是一个真决定，不是超时。
+            None => match payload.recommended {
+                Some(recommended) => Outcome::Decided(recommended),
+                None => Outcome::TimedOut,
+            },
+        };
 
         // 清理 pending（幂等，可能已被 respond 移除）。
         {
@@ -146,7 +181,7 @@ impl ApprovalRegistry {
             pending.remove(&approval_id);
         }
 
-        (approval_id, decision)
+        (approval_id, outcome)
     }
 
     /// 应答一个待审批项。
@@ -207,8 +242,8 @@ mod tests {
             .request(payload, 10, events) // 10ms 超时
             .await;
 
-        // 应该自动选了推荐的 Deny。
-        assert_eq!(decision, Decision::Deny);
+        // 套用了推荐项——这是一个真决定，不是 TimedOut。
+        assert_eq!(decision, Outcome::Decided(Decision::Deny));
     }
 
     /// 超时时无推荐项：拒绝。
@@ -228,8 +263,10 @@ mod tests {
             .request(payload, 10, events) // 10ms 超时
             .await;
 
-        // 应该自动拒绝。
-        assert_eq!(decision, Decision::Deny);
+        // 无人应答且无推荐项可套 → TimedOut。仍按拒绝执行，但调用方
+        // 能据此给模型一个不同的说法。
+        assert_eq!(decision, Outcome::TimedOut);
+        assert!(!decision.is_approved());
     }
 
     /// 双响应：只有先者生效，后者返回 409。
@@ -335,7 +372,8 @@ mod tests {
 
         // request 应该立即返回应答的决定。
         let (returned_id, returned_decision) = request_handle.await.unwrap();
-        assert_eq!(returned_decision, Decision::Approve);
+        assert_eq!(returned_decision, Outcome::Decided(Decision::Approve));
+        assert!(returned_decision.is_approved());
         assert_eq!(returned_id, approval_id);
     }
 

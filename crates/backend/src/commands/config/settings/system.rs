@@ -421,3 +421,13 @@ pub fn initialize_system_proxy_from_db() -> Result<(), String> {
     let conn = open_db()?;
     refresh_system_proxy_state(&conn)
 }
+
+/// 读取工具审批策略（工具名 → allow/ask/deny）。
+///
+/// 每次审批都现读一次，不缓存：策略是用户随时可改的设置，缓存住就会出现
+/// 「设置里改了但下一次工具调用还按老策略」。读的是本地 sqlite 的一行，
+/// 相对于一次工具执行的开销可以忽略。
+pub fn load_tool_policies() -> Result<Option<Value>, String> {
+    let conn = open_db()?;
+    Ok(load_system(&conn)?.and_then(|system| system.get(SYSTEM_TOOL_POLICIES_KEY).cloned()))
+}

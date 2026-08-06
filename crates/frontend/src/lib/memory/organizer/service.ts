@@ -246,7 +246,6 @@ async function runOrganizerModelPrompt(params: {
         provider,
         model,
         DEFAULT_CHAT_RUNTIME_CONTROLS,
-        params.settings.customSettings.providerIdentities,
       ),
       // 后台整理恒开提示词缓存：多轮 prompt 共享同一前缀，命中率远高于按供应商
       // 开关逐个判断。

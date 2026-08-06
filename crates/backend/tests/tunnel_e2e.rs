@@ -11,7 +11,7 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
-use backend::tunnel::TunnelDataPlane;
+use backend::services::tunnel::data_plane::TunnelDataPlane;
 use backend::services::tunnel::{TunnelBinding, TunnelDataPlane as _};
 use axum::routing::{get, post};
 use axum::Router;

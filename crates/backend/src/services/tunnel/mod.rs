@@ -33,6 +33,7 @@
 //! 数据流:`TunnelStore` 拥有全部状态 → 发 `tunnel:state` 事件到 EventBus →
 //! 前端(webview sink 或 WS sink)收到后重渲染。
 
+pub mod data_plane;
 pub mod probe;
 pub mod store;
 

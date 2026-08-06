@@ -61,7 +61,6 @@ import {
   getRightDockProjectState,
   getSshProjectHostIds,
   isAgentDevMode,
-  isAgentExecutionMode,
   isRightDockSingletonTabOpen,
   normalizeSelectedModelForProviders,
   openRightDockSingletonTab,
@@ -76,7 +75,6 @@ import {
   updateRightDockWidth,
   updateSkills,
   updateSshProjectHostIds,
-  updateSystem,
   workspaceProjectPathKey,
 } from "../lib/settings";
 import { cn } from "../lib/shared/utils";
@@ -235,10 +233,8 @@ export function ChatPage(props: ChatPageProps) {
   });
   const { confirm: requestConfirmDialog, dialog: confirmDialog } = useConfirmDialog();
 
-  const isAgentMode = isAgentExecutionMode(settings.system.executionMode);
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
-  const skillsConfigured = settings.skills.enabled;
-  const skillsEnabled = skillsConfigured && isAgentMode;
+  const skillsEnabled = settings.skills.enabled;
   const activeAgentPrompt = useMemo(() => {
     const activeTemplate = settings.agents.find(
       (template) => template.enabled && template.prompt.trim(),
@@ -303,7 +299,6 @@ export function ChatPage(props: ChatPageProps) {
     settings,
     setSettings,
     sidebarStore,
-    isAgentMode,
     workdir,
     t,
     setErrorMessage,
@@ -666,8 +661,9 @@ export function ChatPage(props: ChatPageProps) {
   const displayedConversationWorkdir =
     currentConversationPersistedCwd ||
     currentConversationRuntimeWorkdir ||
-    (isAgentMode ? activeWorkspaceProjectPath || workdir : "");
-  const terminalProjectPath = isAgentMode ? activeWorkspaceProjectPath.trim() : "";
+    activeWorkspaceProjectPath ||
+    workdir;
+  const terminalProjectPath = activeWorkspaceProjectPath.trim();
   const terminalProjectPathKey = terminalProjectPath
     ? workspaceProjectPathKey(terminalProjectPath)
     : "";
@@ -713,11 +709,9 @@ export function ChatPage(props: ChatPageProps) {
     () => getSshProjectHostIds(settings.ssh, terminalProjectPathKey),
     [settings.ssh, terminalProjectPathKey],
   );
-  const terminalDisabledMessage = !isAgentMode
-    ? "Project tools require Agent project mode."
-    : !terminalProjectPath
-      ? "Select a project to use project tools."
-      : undefined;
+  const terminalDisabledMessage = !terminalProjectPath
+    ? "Select a project to use project tools."
+    : undefined;
   const tunnelEnabled = settings.remote.enableWebTunnels === true;
   const tunnelDisabledMessage = !settings.remote.enableWebTunnels
     ? t("projectTools.tunnelWebDisabled")
@@ -981,7 +975,6 @@ export function ChatPage(props: ChatPageProps) {
     importReadableFiles,
     removePendingUpload,
   } = usePendingUploads({
-    isAgentMode,
     workdir: displayedConversationWorkdir,
     conversationId: currentConversationId,
     currentConversationIdRef,
@@ -1188,8 +1181,7 @@ export function ChatPage(props: ChatPageProps) {
     disposeSubagentsForConversation: (conversationId) => {
       subagentStoresRef.current.dispose(conversationId);
     },
-    getDefaultNewConversationWorkdir: () =>
-      isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+    getDefaultNewConversationWorkdir: () => activeWorkspaceProjectPath || undefined,
     resolveConversationSelectedModel: (json) =>
       normalizeSelectedModelForProviders(parseSelectedModelJson(json), settings.customProviders),
     setCurrentConversationId,
@@ -1240,7 +1232,7 @@ export function ChatPage(props: ChatPageProps) {
 
   useEffect(() => {
     const nextWorkdir = activeWorkspaceProjectPath.trim();
-    if (!isAgentMode || !nextWorkdir) {
+    if (!nextWorkdir) {
       return;
     }
     const conversationId = currentConversationIdRef.current.trim();
@@ -1269,7 +1261,6 @@ export function ChatPage(props: ChatPageProps) {
   }, [
     activeWorkspaceProjectPath,
     conversationState.meta.totalMessageCount,
-    isAgentMode,
     isConversationRunning,
     isSending,
     pendingUploadedFiles.length,
@@ -1558,9 +1549,9 @@ export function ChatPage(props: ChatPageProps) {
     openController.cancel();
     prepareComposerForConversationChange();
     startNewConversationActionRef.current({
-      workdir: isAgentMode ? activeWorkspaceProjectPath || undefined : undefined,
+      workdir: activeWorkspaceProjectPath || undefined,
     });
-  }, [activeWorkspaceProjectPath, isAgentMode, openController]);
+  }, [activeWorkspaceProjectPath, openController]);
 
   // 动作总线（Rust `app:action`）里 ChatPage 拥有的动作在下方统一监听
   // （handleSelectConversation 定义之后）；这里先备好 ref 镜像。
@@ -1841,15 +1832,12 @@ export function ChatPage(props: ChatPageProps) {
     isConversationHydrationFailed ||
     isImportingPastedText ||
     isUploadingFiles;
-  const canDropUpload =
-    isAgentMode && Boolean(displayedConversationWorkdir.trim()) && !isComposerInputDisabled;
+  const canDropUpload = Boolean(displayedConversationWorkdir.trim()) && !isComposerInputDisabled;
   const fileDropTitle = canDropUpload
     ? t("chat.upload.dropReady")
-    : !isAgentMode
-      ? t("chat.upload.onlyInTools")
-      : !displayedConversationWorkdir.trim()
-        ? t("chat.upload.requireWorkdir")
-        : t("chat.upload.dropBusy");
+    : !displayedConversationWorkdir.trim()
+      ? t("chat.upload.requireWorkdir")
+      : t("chat.upload.dropBusy");
   const fileDropDescription = canDropUpload
     ? t("chat.upload.dropHint")
     : t("chat.upload.dropDisabledHint");
@@ -1899,7 +1887,7 @@ export function ChatPage(props: ChatPageProps) {
           isOpen={sidebarOpen}
           fontScale={settings.customSettings.fontScale.sidebar}
           activeView={activeView}
-          showProjects={isAgentMode}
+          showProjects
           projects={workspaceProjects}
           activeProjectId={activeWorkspaceProject?.id}
           missingProjectPathKeys={missingWorkspaceProjectPathKeys}
@@ -2023,7 +2011,6 @@ export function ChatPage(props: ChatPageProps) {
               setSettings={setSettings}
               initialSkills={availableSkills}
               initialRootDir={skillsRootDir}
-              isAgentMode={isAgentMode}
               sidebarOpen={sidebarOpen}
               onOpenSidebar={handleOpenSidebar}
             />
@@ -2031,7 +2018,6 @@ export function ChatPage(props: ChatPageProps) {
             <McpHubPage
               settings={settings}
               setSettings={setSettings}
-              isAgentMode={isAgentMode}
               sidebarOpen={sidebarOpen}
               onOpenSidebar={handleOpenSidebar}
             />
@@ -2040,20 +2026,6 @@ export function ChatPage(props: ChatPageProps) {
               <div className="relative z-20">
                 <ChatHeader
                   settings={settings}
-                  onSelectExecutionMode={(mode) =>
-                    setSettings((prev) => {
-                      const current = prev.system.executionMode;
-                      if (mode === "text") {
-                        return current === "text"
-                          ? prev
-                          : updateSystem(prev, { executionMode: "text" });
-                      }
-                      // 切回 Agent：仅从 Chat 切换；agent-dev 视为 Agent，保持不降级。
-                      return current === "text"
-                        ? updateSystem(prev, { executionMode: "tools" })
-                        : prev;
-                    })
-                  }
                   hasModels={hasModels}
                   currentModelLabel={currentModelLabel}
                   modelOptions={modelOptions}
@@ -2107,7 +2079,6 @@ export function ChatPage(props: ChatPageProps) {
                   onLoadEarlierHistory={handleLoadEarlierHistory}
                   isHistorySwitching={conversationOpenState.showOverlay}
                   isSending={isSending}
-                  isAgentMode={isAgentMode}
                   showUsage={isAgentDevExecutionMode}
                   usageContextWindow={currentModelContextWindow}
                   liveTranscriptStore={liveTranscriptStore}
@@ -2138,7 +2109,6 @@ export function ChatPage(props: ChatPageProps) {
                 inputPlaceholder={composerPlaceholder}
                 workdir={displayedConversationWorkdir}
                 enabledSkills={enabledComposerSkills}
-                isAgentMode={isAgentMode}
                 chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                 reasoningOptions={chatRuntimeReasoningOptions}
                 thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
@@ -2198,7 +2168,7 @@ export function ChatPage(props: ChatPageProps) {
         client={tauriTerminalClient}
         gitClient={tauriGitClient}
         gitWriteEnabled
-        tunnelClient={isAgentMode ? tauriTunnelClient : null}
+        tunnelClient={tauriTunnelClient}
         tunnelEnabled={tunnelEnabled}
         tunnelDisabledMessage={tunnelDisabledMessage}
         // 一隧道一端口（P2-30）：publicUrl 指向本机端口，网关地址与它无关，

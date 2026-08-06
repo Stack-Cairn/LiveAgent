@@ -1,7 +1,10 @@
 //! LiveAgent 后端：HTTP/WS 服务 + 核心能力（工具、存储、运行时）。
 //!
-//! 这是后端**唯一的对外网络入口**（决策 5）。桌面壳和 Node 引擎打的是同一套 API，
+//! 这是后端**唯一的对外网络入口**（决策 5）。桌面壳和 WebUI 打的是同一套 API，
 //! 调的是本 crate 里同一批函数——所以工具行为不可能两边不一致。
+//!
+//! chat 引擎是 `pi --mode rpc` 子进程，由 `pi` 模块管理（每会话一进程），
+//! 事件经翻译层直接进 EventBus。前端契约见 docs/design/pi-rpc-event-contract.md。
 //!
 //! 核心能力模块（`commands` / `runtime` / `services` / `storage`）**不含任何 UI
 //! 框架依赖**——见 Cargo.toml 的编译期防线说明。两个消费者：
@@ -25,22 +28,13 @@
 //! 流式端点是唯一例外，走 WS（`/api/events`）。
 
 pub mod approval;
-pub mod auth;
 pub mod commands;
-pub mod engine_process;
-pub mod engine_proxy;
 pub mod events;
-pub mod json;
-pub mod routes;
-pub mod routes_gen;
+pub mod pi;
 pub mod runtime;
+pub mod server;
 pub mod services;
-pub mod ssrf;
-pub mod state;
 pub mod storage;
-pub mod tls;
-pub mod tunnel;
-pub mod ws;
 
 use std::sync::{Arc, OnceLock};
 
@@ -69,7 +63,7 @@ pub fn app_version() -> &'static str {
 use axum::routing::get;
 use axum::Router;
 
-use crate::state::AppState;
+use crate::server::state::AppState;
 
 /// 组装整个应用的路由。
 ///
@@ -77,14 +71,14 @@ use crate::state::AppState;
 /// 它也**不泄露任何信息**——只回 `ok`。
 pub fn build_router(state: AppState) -> Router {
     let protected =
-        routes::api_router()
+        server::api_router()
             .route_layer(axum::middleware::from_fn_with_state(
                 state.clone(),
-                auth::require_bearer_with_identity,
+                server::auth::require_bearer_with_identity,
             ))
             // WS 不能过 bearer 中间件：浏览器 WebSocket API 设不了 Authorization
             // header。ws_handler 自己用 ?token= 做等价校验。
-            .merge(ws::router());
+            .merge(server::ws::router());
 
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
@@ -106,7 +100,7 @@ pub fn build_router(state: AppState) -> Router {
 ///
 /// 隧道**不在**这里恢复：`TunnelStore::initialize` 要读库还要起监听，是 async
 /// 且会失败的。放进 `serve` 前由调用方显式 await，见 `main.rs`。
-pub fn build_state(auth: Arc<auth::AuthConfig>, internal_token: String, backend_port: u16) -> Result<AppState, String> {
+pub fn build_state(auth: Arc<server::auth::AuthConfig>, internal_token: String, backend_port: u16) -> Result<AppState, String> {
     use crate::events::EventBus;
     use crate::services::automation::AutomationNotifier;
     use crate::services::tunnel::TunnelStore;
@@ -141,11 +135,11 @@ pub fn build_state(auth: Arc<auth::AuthConfig>, internal_token: String, backend_
     );
     let tunnels = Arc::new(TunnelStore::new(
         Arc::clone(&events),
-        Arc::new(crate::tunnel::TunnelDataPlane::new()),
+        Arc::new(crate::services::tunnel::data_plane::TunnelDataPlane::new()),
     ));
 
     // 事件接线（顺序与桌面壳 setup 一致）。
-    let ws_sink = Arc::new(crate::ws::WsEventSink::new());
+    let ws_sink = Arc::new(crate::server::ws::WsEventSink::new());
     events.register(ws_sink.clone());
     terminals.set_event_bus(Arc::clone(&events));
     sftp.set_event_bus(Arc::clone(&events));
@@ -159,6 +153,14 @@ pub fn build_state(auth: Arc<auth::AuthConfig>, internal_token: String, backend_
         scheduler: Arc::downgrade(&automation_scheduler),
     });
     Arc::clone(&automation_scheduler).start();
+
+    // 审批注册表要同时给 HTTP 路由（前端应答）和 pi 会话（发起审批）用，
+    // 所以先建再分发——两边必须是同一张 pending 表，否则应答找不到请求。
+    let approvals = Arc::new(crate::approval::ApprovalRegistry::new());
+    let pi_sessions = Arc::new(crate::pi::PiSessionManager::new(
+        Arc::clone(&events),
+        Arc::clone(&approvals),
+    ));
 
     Ok(AppState {
         events,
@@ -179,8 +181,8 @@ pub fn build_state(auth: Arc<auth::AuthConfig>, internal_token: String, backend_
         auth,
         internal_token,
         ws_sink,
-        approvals: Arc::new(crate::approval::ApprovalRegistry::new()),
-        node_port: Arc::new(tokio::sync::RwLock::new(None)),
+        approvals,
+        pi_sessions,
         backend_port,
     })
 }

@@ -332,15 +332,14 @@ LiveAgent/
 │   │   │   └── prompt/           #   System Prompt 模板
 │   │   └── src-tauri/            # Tauri 2 桌面壳 (Rust)
 │   │
-│   ├── backend/            # Rust 后端 —— 唯一对外监听者
-│   │   ├── routes.rs             #   HTTP 命令路由 (/api/<command>)
-│   │   ├── ws.rs                 #   事件 WebSocket (/api/events)
-│   │   └── engine_process.rs     #   拉起并守护 Node 引擎进程
-│   │
-│   ├── backend/               # 共享 Rust 核心(工具、运行时、存储)
-│   │
-│   └── core/            # Node 引擎 —— 模型调用与 Agent 循环
-│       └── src/                  #   TypeScript,esbuild 打包
+│   └── backend/            # Rust 后端 —— 唯一对外监听者，
+│       │                     #   同时是共享核心(工具、运行时、存储)
+│       ├── routes.rs             #   HTTP 命令路由 (/api/<command>)
+│       ├── ws.rs                 #   事件 WebSocket (/api/events)
+│       ├── chat_routes.rs        #   chat_send / chat_abort / conversation_live
+│       ├── pi/                   #   pi --mode rpc 引擎：进程、协议、
+│       │                         #   事件翻译、审批桥
+│       └── pi-extension/         #   最小 pi TS 扩展(审批挂点)
 │
 ├── docs/                         # 项目文档
 │   ├── architecture/             #   架构设计
@@ -349,7 +348,7 @@ LiveAgent/
 │
 ├── scripts/release/              # 发布自动化
 ├── .github/workflows/            # CI/CD
-├── Dockerfile                    # 后端容器镜像(Rust + Node runtime)
+├── Dockerfile                    # 后端容器镜像(Rust 二进制 + pi CLI)
 ├── Makefile                      # 构建命令集
 └── Cargo.toml                    # Rust workspace
 ```

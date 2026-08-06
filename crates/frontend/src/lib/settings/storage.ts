@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { type Locale, normalizeLocale } from "../../i18n/config";
-import { normalizeCliIdentitySettings } from "../providers/cliIdentityCore";
 
 import {
   type AppSettings,
@@ -84,7 +83,6 @@ function readLocalUiSettings(): {
     ) as Record<string, unknown>;
     return {
       conversationTitleModel: normalizeSelectedModel(obj.conversationTitleModel),
-      providerIdentities: normalizeCliIdentitySettings(obj.providerIdentities),
       chatSidebar: {
         projectsCollapsed: chatSidebar.projectsCollapsed === true,
         recentCollapsed: chatSidebar.recentCollapsed === true,

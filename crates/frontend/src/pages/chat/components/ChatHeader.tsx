@@ -1,5 +1,5 @@
 import { Popover } from "@base-ui/react";
-import { memo, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 import {
   ArrowDownAZ,
   Check,
@@ -32,8 +32,6 @@ import { type ModelOption, parseModelValue } from "../../../lib/providers/llm";
 import {
   type AppSettings,
   getNextTheme,
-  isAgentDevMode,
-  isAgentExecutionMode,
   type ProviderId,
   type SelectedModel,
   type Theme,
@@ -63,9 +61,6 @@ export const ChatHeader = memo(function ChatHeader(props: {
   selectedValue?: string;
   sidebarOpen: boolean;
   onSelectModel: (selection: SelectedModel) => void;
-  // 模型下拉内嵌的执行模式分段器：请求切到 Chat("text") 或 Agent("tools")。
-  // agent-dev 视为 Agent 的一种，由调用方决定是否保持不降级。
-  onSelectExecutionMode: (mode: "text" | "tools") => void;
   onOpenSettings: (section?: SectionId, providerId?: string) => void;
   onToggleTheme: () => void;
   onOpenSidebar: () => void;
@@ -80,7 +75,6 @@ export const ChatHeader = memo(function ChatHeader(props: {
     selectedValue,
     sidebarOpen,
     onSelectModel,
-    onSelectExecutionMode,
     onOpenSettings,
     onToggleTheme,
     onOpenSidebar,
@@ -102,7 +96,6 @@ export const ChatHeader = memo(function ChatHeader(props: {
     readStoredProviderSortMode(),
   );
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const executionModeRadioName = useId();
   const macOsTauri = isMacOsTauri();
 
   useEffect(() => {
@@ -199,61 +192,6 @@ export const ChatHeader = memo(function ChatHeader(props: {
                 aria-label={t("chat.selectModel")}
                 className="model-selector-dropdown w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-xl border bg-popover p-0 text-xs text-popover-foreground shadow-md outline-none"
               >
-                {(() => {
-                  const isAgent = isAgentExecutionMode(settings.system.executionMode);
-                  const isDev = isAgentDevMode(settings.system.executionMode);
-                  return (
-                    <div className="px-2 pt-2">
-                      <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1.5">
-                        <span className="text-[11px] font-medium text-muted-foreground">
-                          {t("settings.executionMode")}
-                        </span>
-                        <div
-                          role="radiogroup"
-                          aria-label={t("settings.executionMode")}
-                          className="flex rounded-md bg-background/80 p-0.5 shadow-sm ring-1 ring-border/40"
-                        >
-                          <label
-                            className={cn(
-                              "relative cursor-pointer rounded-[5px] px-2.5 py-1 text-[11px] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
-                              isAgent
-                                ? "text-muted-foreground hover:text-foreground"
-                                : "bg-foreground/[0.07] text-foreground",
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name={executionModeRadioName}
-                              value="text"
-                              checked={!isAgent}
-                              onChange={() => onSelectExecutionMode("text")}
-                              className="sr-only"
-                            />
-                            Chat
-                          </label>
-                          <label
-                            className={cn(
-                              "relative cursor-pointer rounded-[5px] px-2.5 py-1 text-[11px] font-medium transition-colors has-[:focus-visible]:outline-none has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/40",
-                              isAgent
-                                ? "bg-foreground/[0.07] text-foreground"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name={executionModeRadioName}
-                              value="tools"
-                              checked={isAgent}
-                              onChange={() => onSelectExecutionMode("tools")}
-                              className="sr-only"
-                            />
-                            {isDev ? "Agent·dev" : "Agent"}
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
                 <div className="px-2 py-1.5">
                   <div className="flex items-center gap-1.5">
                     <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">

@@ -262,40 +262,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           {t("settings.executionMode")}
         </div>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          <button
-            type="button"
-            onClick={() =>
-              setSettings((prev) => updateSystem(prev, { executionMode: "text" as ExecutionMode }))
-            }
-            className={`group relative flex flex-col items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
-              executionMode === "text"
-                ? "border-primary bg-primary/5 shadow-sm shadow-primary/10"
-                : "border-transparent bg-muted/40 hover:border-border hover:bg-muted/60"
-            }`}
-          >
-            <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-                executionMode === "text"
-                  ? "bg-primary/10 text-primary"
-                  : "bg-muted text-muted-foreground group-hover:bg-accent"
-              }`}
-            >
-              <MessageSquare className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold">{t("settings.chatMode")}</div>
-              <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {t("settings.chatModeDesc")}
-              </div>
-            </div>
-            {executionMode === "text" ? (
-              <div className="absolute right-3 top-3">
-                <CheckCircle2 className="h-4.5 w-4.5 text-primary" />
-              </div>
-            ) : null}
-          </button>
-
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <button
             type="button"
             onClick={() =>

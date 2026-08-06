@@ -114,7 +114,7 @@ function assertCustomHeadersReachedUpstream(options) {
 
   // 1) 普通自定义头抵达请求头集。
   assert.equal(readHeader(headers, "x-trace-id"), "liveagent-e2e");
-  // 2) 同名内置头被替换而非并存（内置值是 claude-cli/... 的 UA）。
+  // 2) 自定义 UA 作为普通自定义头原样抵达，绝不重复、绝不被别的头覆盖。
   assert.equal(readHeader(headers, "user-agent"), "my-agent/9.9");
   // 3) 浏览器禁止头名同样进入头集，并由覆盖包负责真正送达。
   assert.equal(readHeader(headers, "cookie"), "session=abc");

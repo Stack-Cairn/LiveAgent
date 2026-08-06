@@ -83,7 +83,6 @@ import {
   useUsageNowTicker,
 } from "../../lib/providers/usageQuery";
 import {
-  type AppSettings,
   CODEX_REQUEST_FORMAT_LABELS,
   type CodexRequestFormat,
   type CustomProvider,
@@ -103,7 +102,6 @@ import {
   CherryStudioImportModal,
 } from "./CherryStudioImportModal";
 import { ModelPicker } from "./modelPicker";
-import { ProviderIdentityDrawer, ProviderIdentitySummary } from "./ProviderIdentityDrawer";
 import {
   applyModelBulkActiveState,
   applyUsageQueryModePreset,
@@ -131,7 +129,6 @@ import type { SettingsSectionProps } from "./types";
 type ModalProps = {
   providerType: ProviderId;
   initialData?: CustomProvider;
-  providerIdentities: AppSettings["customSettings"]["providerIdentities"];
   onSave: (data: Omit<CustomProvider, "id">) => void;
   onClose: () => void;
 };
@@ -391,7 +388,6 @@ function itemsByIdOrder<T extends { id: string }>(items: readonly T[], order: re
 function ProviderModal({
   providerType,
   initialData,
-  providerIdentities,
   onSave,
   onClose,
 }: ModalProps) {
@@ -1619,16 +1615,6 @@ function ProviderModal({
             ) : activePanel === "request" ? (
               <section key="request" className="provider-panel-enter">
                 <div className="text-sm font-semibold">{t("settings.providerDialogRequest")}</div>
-
-                <div className="mt-3">
-                  <ProviderIdentitySummary
-                    providerId={providerType}
-                    apiKey={apiKeyForRequest}
-                    requestFormat={requestFormat}
-                    customHeaders={customHeaders}
-                    identities={providerIdentities}
-                  />
-                </div>
 
                 <div
                   className={cn(
@@ -3635,7 +3621,6 @@ export function ProvidersSection(
 
   const [activeTab, setActiveTab] = useState<ProviderId>("claude_code");
   const [modalOpen, setModalOpen] = useState(false);
-  const [identityDrawerOpen, setIdentityDrawerOpen] = useState(false);
   const [customSettingsOpen, setCustomSettingsOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<CustomProvider | null>(null);
   const [ccsImportType, setCcsImportType] = useState<ProviderId | null>(null);
@@ -4076,17 +4061,6 @@ export function ProvidersSection(
             variant="ghost"
             size="icon"
             className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={() => setIdentityDrawerOpen(true)}
-            title={t("settings.cliIdentityOpen")}
-            aria-label={t("settings.cliIdentityOpen")}
-          >
-            <Waypoints className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
             onClick={() => setCustomSettingsOpen(true)}
             title={t("settings.openCustomSettings")}
             aria-label={t("settings.openCustomSettings")}
@@ -4140,7 +4114,6 @@ export function ProvidersSection(
         <ProviderModal
           providerType={activeTab}
           initialData={editingProvider ?? undefined}
-          providerIdentities={settings.customSettings.providerIdentities}
           onSave={handleSave}
           onClose={closeModal}
         />
@@ -4177,13 +4150,6 @@ export function ProvidersSection(
           settings={settings}
           setSettings={setSettings}
           onClose={() => setCustomSettingsOpen(false)}
-        />
-      ) : null}
-      {identityDrawerOpen ? (
-        <ProviderIdentityDrawer
-          settings={settings}
-          setSettings={setSettings}
-          onClose={() => setIdentityDrawerOpen(false)}
         />
       ) : null}
     </>

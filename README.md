@@ -329,15 +329,14 @@ LiveAgent/
 │   │   │   └── prompt/           #   System prompt templates
 │   │   └── src-tauri/            # Tauri 2 desktop shell (Rust)
 │   │
-│   ├── backend/            # Rust backend — the only public listener
-│   │   ├── routes.rs             #   HTTP command routes (/api/<command>)
-│   │   ├── ws.rs                 #   Event WebSocket (/api/events)
-│   │   └── engine_process.rs     #   Spawns and supervises the Node engine
-│   │
-│   ├── backend/               # Shared Rust core (tools, runtime, storage)
-│   │
-│   └── core/            # Node engine — model calls and the agent loop
-│       └── src/                  #   TypeScript, bundled with esbuild
+│   └── backend/            # Rust backend — the only public listener,
+│       │                     #   plus the shared core (tools, runtime, storage)
+│       ├── routes.rs             #   HTTP command routes (/api/<command>)
+│       ├── ws.rs                 #   Event WebSocket (/api/events)
+│       ├── chat_routes.rs        #   chat_send / chat_abort / conversation_live
+│       ├── pi/                   #   pi --mode rpc engine: process, protocol,
+│       │                         #   event translation, approval bridge
+│       └── pi-extension/         #   Minimal pi TS extension (approval hook)
 │
 ├── docs/                         # Project docs
 │   ├── architecture/             #   Architecture design
@@ -346,7 +345,7 @@ LiveAgent/
 │
 ├── scripts/release/              # Release automation
 ├── .github/workflows/            # CI/CD
-├── Dockerfile                    # Backend container image (Rust + Node runtime)
+├── Dockerfile                    # Backend container image (Rust binary + pi CLI)
 ├── Makefile                      # Build commands
 └── Cargo.toml                    # Rust workspace
 ```

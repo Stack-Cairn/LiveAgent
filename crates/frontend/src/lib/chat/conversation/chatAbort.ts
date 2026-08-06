@@ -7,7 +7,6 @@ import type {
   Usage,
 } from "@earendil-works/pi-ai";
 
-import type { ExecutionMode } from "../../settings";
 import { isSubagentCardToolCall } from "../../subagents/card";
 import {
   getRoundToolTrace,
@@ -127,25 +126,13 @@ export function isAbortedAssistantMessage(
 }
 
 export function buildAbortedMessagesFromSnapshot(params: {
-  executionMode: ExecutionMode;
   model: Model<any>;
-  draftAssistantText: string;
   liveRounds: LiveRoundSnapshot[];
   completedThroughRound?: number;
   suppressedToolTrace?: SuppressedToolTraceSnapshot[];
   timestamp?: number;
 }): Message[] {
   const timestamp = params.timestamp ?? Date.now();
-
-  if (params.executionMode === "text" && !params.liveRounds.some(hasRoundContent)) {
-    const assistant = buildAssistantMessage({
-      model: params.model,
-      blocks: [{ kind: "text", id: "text-1", text: params.draftAssistantText }],
-      stopReason: "aborted",
-      timestamp,
-    });
-    return assistant ? [assistant] : [];
-  }
 
   const messages: Message[] = [];
   const rounds = params.liveRounds.filter((round) => hasRoundContent(round));
@@ -248,9 +235,7 @@ export function sanitizeAbortedHistoryMessages(messages: Message[]): Message[] {
 }
 
 export function buildPersistableMessagesFromSnapshot(params: {
-  executionMode: ExecutionMode;
   model: Model<any>;
-  draftAssistantText: string;
   liveRounds: LiveRoundSnapshot[];
   completedThroughRound?: number;
   suppressedToolTrace?: SuppressedToolTraceSnapshot[];

@@ -11,7 +11,7 @@
 //   - sync/async    →  whether the handler awaits the core call
 //   - return type   →  non-Result returns get wrapped in Ok(...)
 //
-// Output is written to crates/backend/src/routes_gen.rs (byte-identical,
+// Output is written to crates/backend/src/server/routes_gen.rs (byte-identical,
 // enforced by `--check`). The ROUTED_COMMANDS const and the .route() calls in
 // gen_router() are generated from the same list, so registration and the
 // contract-test name list can never drift.
@@ -25,9 +25,9 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WRAPPER_DIR = join(repoRoot, "crates", "frontend", "src-tauri", "src", "tauri_commands");
-const OUTPUT_PATH = join(repoRoot, "crates", "backend", "src", "routes_gen.rs");
+const OUTPUT_PATH = join(repoRoot, "crates", "backend", "src", "server", "routes_gen.rs");
 
-// State 类型 → AppState 字段（backend/src/state.rs 的 11 个注册表）。
+// State 类型 → AppState 字段（backend/src/server/state.rs 的 11 个注册表）。
 const STATE_MAP = {
   EventBus: "events",
   AutomationStore: "automation_store",
@@ -49,6 +49,22 @@ const WS_STREAM = new Set(["terminal_stream_attach", "terminal_stream_input", "t
 // 不在 backend.txt 里的 wrapper：删除清单（proxy）或前端专属（frontend.txt）。
 // 路由它们会破坏「后端是唯一网络入口」的边界。
 const SKIP = new Set(["proxy_get_server_info", "open_chat_file_link", "fs_open_workspace_path", "git_open_system_file_location"]);
+
+// 不在 wrapper 目录里的命令：实现与 #[tauri::command] 都在 backend / commands/app，
+// 扫描不到，但仍是 backend.txt 契约的一部分，手工列在这里保持路由完整。
+const EXTRA_COMMANDS = [
+  {
+    name: "system_list_skill_files",
+    renameAll: "camelCase",
+    isAsync: true,
+    retType: "Result<SystemListSkillFilesResponse, String>",
+    callPath: "crate::services::skills::system_list_skill_files",
+    stateParams: [],
+    bodyParams: [],
+    params: [],
+    uses: ["use crate::services::skills::*;"],
+  },
+];
 
 // 按深度切分参数列表，正确处理嵌套泛型（Option<HashMap<String,String>>、Vec<McpServerConfig>）。
 function splitParams(paramStr) {
@@ -185,6 +201,10 @@ function render() {
     }
   }
 
+  for (const cmd of EXTRA_COMMANDS) {
+    commands.push(cmd);
+  }
+
   // 确定性排序：按命令名，保证输出稳定。
   commands.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const names = commands.map((c) => c.name);
@@ -203,10 +223,10 @@ function render() {
   out.push("use serde_json::Value;");
   out.push("use std::collections::HashMap;");
   out.push("// 不用 axum::Json：它的提取失败是 422/415 纯文本，违反「所有失败都是");
-  out.push("// 400 + {error}」的契约（routes.rs）。crate::json::Json 把它们折进同一形状。");
-  out.push("use crate::json::Json;");
-  out.push("use crate::routes::respond;");
-  out.push("use crate::state::AppState;");
+  out.push("// 400 + {error}」的契约（server/mod.rs）。crate::server::json::Json 把它们折进同一形状。");
+  out.push("use crate::server::json::Json;");
+  out.push("use crate::server::respond;");
+  out.push("use crate::server::state::AppState;");
   out.push("");
 
   for (const cmd of commands) {

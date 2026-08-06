@@ -15,7 +15,6 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   row: AssistantUnitRow;
   showUsage?: boolean;
   usageContextWindow?: number;
-  isAgentMode: boolean;
   isCompactionRunning: boolean;
   toolStatus: string | null;
   retryAttempts?: RetryAttemptRecord[];
@@ -26,7 +25,6 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
     row,
     showUsage,
     usageContextWindow,
-    isAgentMode,
     isCompactionRunning,
     toolStatus,
     retryAttempts,
@@ -80,7 +78,7 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
       )}
       <div
         className={`min-w-0 flex-1 space-y-2 ${
-          unit.kind === "placeholder" && unit.showFallbackStatus && isAgentMode
+          unit.kind === "placeholder" && unit.showFallbackStatus
             ? "pt-1"
             : row.showAvatar
               ? "pt-0.5"

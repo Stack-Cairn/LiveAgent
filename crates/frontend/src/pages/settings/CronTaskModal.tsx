@@ -37,9 +37,7 @@ import {
 import { parseModelValue, toModelValue } from "../../lib/providers/llm";
 import {
   type CustomProvider,
-  type ExecutionMode,
   getChatRuntimeReasoningLevelsForProvider,
-  isAgentExecutionMode,
   isThinkingAlwaysOnForModel,
 } from "../../lib/settings";
 import { useModalMotion } from "../../lib/shared/modalMotion";
@@ -159,7 +157,6 @@ type CronTaskModalProps = {
   modelOptions: CronPromptModelOption[];
   providers: CustomProvider[];
   workspaceOptions: CronWorkspaceOption[];
-  executionMode: ExecutionMode;
   /**
    * Platform directory picker injected by each end's CronSection (native
    * dialog on desktop, remote path prompt on the WebUI). The browse button
@@ -176,13 +173,11 @@ export function CronTaskModal({
   modelOptions,
   providers,
   workspaceOptions,
-  executionMode,
   onPickWorkdir,
   onSave,
   onClose,
 }: CronTaskModalProps) {
   const { t } = useLocale();
-  const autoPromptSupported = isAgentExecutionMode(executionMode);
 
   const [name, setName] = useState(initialData?.name ?? "");
   const [description, setDescription] = useState(initialData?.description ?? "");
@@ -297,9 +292,6 @@ export function CronTaskModal({
         throw new Error(t("settings.cronCommandRequired"));
       }
       if (type === "prompt") {
-        if (!autoPromptSupported) {
-          throw new Error(t("settings.cronPromptAgentModeRequired"));
-        }
         if (!trimmedPrompt) {
           throw new Error(t("settings.cronPromptRequired"));
         }
@@ -804,12 +796,6 @@ export function CronTaskModal({
             {/* Prompt config */}
             {type === "prompt" ? (
               <div className="space-y-3">
-                {!autoPromptSupported ? (
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-3.5 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
-                    {t("settings.cronPromptAgentModeOnlyHint")}
-                  </div>
-                ) : null}
-
                 <div className="settings-form-grid grid gap-4 sm:grid-cols-[minmax(0,1fr)_9rem]">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium text-muted-foreground">

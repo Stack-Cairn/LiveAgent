@@ -36,9 +36,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "../../core/dist/index.js"
-    ],
     "windows": {
       "nsis": {
         "installerIcon": "icons/icon.ico"

@@ -12,7 +12,6 @@ import { McpServerEditModal, McpServersForm } from "./McpServersForm";
 type McpHubPageProps = {
   settings: AppSettings;
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
-  isAgentMode: boolean;
   sidebarOpen: boolean;
   onOpenSidebar: () => void;
 };

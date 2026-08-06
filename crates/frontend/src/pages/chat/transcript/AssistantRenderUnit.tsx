@@ -14,7 +14,6 @@ export type AssistantRenderUnitProps = {
   row: AssistantUnitRow;
   showUsage?: boolean;
   usageContextWindow?: number;
-  isAgentMode: boolean;
   isCompactionRunning: boolean;
   toolStatus: string | null;
   retryAttempts?: RetryAttemptRecord[];
@@ -78,7 +77,6 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
     row,
     showUsage,
     usageContextWindow,
-    isAgentMode,
     isCompactionRunning,
     toolStatus,
     retryAttempts,
@@ -107,7 +105,6 @@ export const AssistantRenderUnit = memo(function AssistantRenderUnit(
         row={row}
         showUsage={showUsage}
         usageContextWindow={usageContextWindow}
-        isAgentMode={isAgentMode}
         isCompactionRunning={isCompactionRunning}
         toolStatus={toolStatus}
         retryAttempts={retryAttempts}

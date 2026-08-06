@@ -29,7 +29,8 @@
 | 领域库 | `src/lib/{settings,skills,memory,terminal,sftp,git,tools,mcpRegistry,tunnels,…}` | 各功能域的前端侧逻辑 |
 
 **`src/lib/providers`、`src/lib/chat`、`src/lib/tools` 已不再承载对话运行时**——
-引擎在 `crates/core`。前端保留的是渲染、设置与工具目录展示所需的部分。
+引擎是后端按会话拉起的 `pi --mode rpc` 子进程。前端保留的是渲染、设置与
+工具目录展示所需的部分。
 
 ## 后端客户端（`src/lib/backend/`）
 

@@ -2,7 +2,6 @@
 
 AGENT_GUI_DIR := crates/frontend
 AGENT_BACKEND_DIR := crates/backend
-AGENT_CORE_JS_DIR := crates/core
 
 HOST_ARCH := $(shell uname -m)
 
@@ -142,7 +141,7 @@ backend-docker-smoke: backend-docker-build
 ## Maintenance
 clean:
 	cargo clean
-	rm -rf $(AGENT_GUI_DIR)/dist $(AGENT_CORE_JS_DIR)/dist
+	rm -rf $(AGENT_GUI_DIR)/dist
 
 update-model-catalog:
 	node scripts/generate-model-catalog.mjs

@@ -208,9 +208,6 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
         },
       },
       "../../../lib/settings": {
-        isAgentExecutionMode() {
-          return false;
-        },
         normalizeChatRuntimeControls(value) {
           return value ?? {};
         },
@@ -363,9 +360,6 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
         },
       },
       "../../../lib/settings": {
-        isAgentExecutionMode() {
-          return false;
-        },
         normalizeChatRuntimeControls(value) {
           return value ?? {};
         },

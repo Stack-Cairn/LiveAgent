@@ -37,13 +37,11 @@ function toolResult(id, name = "Read", text = "ok", timestamp = 3) {
 
 test("persistable cancelled snapshot strips incomplete tool artifacts but keeps visible text", () => {
   const messages = chatAbort.buildPersistableMessagesFromSnapshot({
-    executionMode: "agent",
     model: {
       api: "openai-responses",
       provider: "openai",
       id: "gpt-5",
     },
-    draftAssistantText: "",
     liveRounds: [
       {
         round: 1,
@@ -78,13 +76,11 @@ test("persistable cancelled snapshot keeps visible provider hosted search blocks
     sources: [],
   };
   const messages = chatAbort.buildPersistableMessagesFromSnapshot({
-    executionMode: "text",
     model: {
       api: "openai-responses",
       provider: "openai",
       id: "gpt-5",
     },
-    draftAssistantText: "",
     liveRounds: [
       {
         round: 1,
@@ -110,13 +106,11 @@ test("persistable cancelled snapshot restores suppressed parent Agent trace with
     details: { kind: "subagent_batch" },
   };
   const messages = chatAbort.buildPersistableMessagesFromSnapshot({
-    executionMode: "agent",
     model: {
       api: "openai-responses",
       provider: "codex",
       id: "gpt-5",
     },
-    draftAssistantText: "",
     liveRounds: [
       {
         round: 1,

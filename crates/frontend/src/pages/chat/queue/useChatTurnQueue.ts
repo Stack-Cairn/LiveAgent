@@ -11,7 +11,6 @@ import {
   type AppSettings,
   type ChatRuntimeControls,
   type ExecutionMode,
-  isAgentExecutionMode,
   normalizeChatRuntimeControls,
 } from "../../../lib/settings";
 import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
@@ -390,14 +389,12 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         ? queuedChatTurnEditSlotRef.current
         : null;
     const executionMode = editSlot?.executionMode ?? settings.system.executionMode;
-    const workdirForTurn = isAgentExecutionMode(executionMode)
-      ? (
-          editSlot?.workdir ??
-          runtimeEntry.workdir ??
-          displayedConversationWorkdir ??
-          settings.system.workdir
-        ).trim()
-      : "";
+    const workdirForTurn = (
+      editSlot?.workdir ??
+      runtimeEntry.workdir ??
+      displayedConversationWorkdir ??
+      settings.system.workdir
+    ).trim();
     const queuedTurn = createQueuedChatTurn({
       id: editSlot?.originalId,
       conversationId,
@@ -727,7 +724,7 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       draft: createTextComposerDraft(message),
       uploadedFiles,
       executionMode,
-      workdir: isAgentExecutionMode(executionMode) ? workdir : "",
+      workdir,
       runtimeControls,
       gatewayRequest: {
         requestId,

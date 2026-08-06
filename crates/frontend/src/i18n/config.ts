@@ -252,7 +252,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.upload.button": "上传文件",
     "chat.upload.selectFiles": "选择并导入一个或多个当前对话可读取的文件",
     "chat.upload.uploading": "上传中...",
-    "chat.upload.onlyInTools": "文件上传仅在 tools 模式可用",
     "chat.upload.requireWorkdir": "请先选择一个项目",
     "chat.upload.removeFile": "移除文件",
     "chat.upload.previewImage": "预览图片",
@@ -328,7 +327,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.hookWarningTitle": "Hooks 告警",
 
     /* ── MCP chip ── */
-    "mcp.onlyInTools": "MCP 仅在 tools 模式可用",
     "mcp.noEnabled": "未发现启用中的 MCP Server",
     "mcp.goAdd": "前往 MCP Hub 添加或启用",
     "mcp.noName": "启用中的 Server 缺少有效名称",
@@ -336,7 +334,6 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     /* ── Skills chip ── */
     "skills.disabled": "Skills 已在设置中禁用",
-    "skills.disabledInChatMode": "Chat 模式下已禁用 Skills",
     "skills.select": "选择 Skills",
     "skills.scanning": "扫描中...",
     "skills.noSkill": "未发现任何技能文件",
@@ -1291,8 +1288,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.fontFamilyCustom": "自定义…",
     "settings.fontFamilyPlaceholder": '例如 "Maple Mono", "PingFang SC"',
     "settings.executionMode": "执行模式",
-    "settings.chatMode": "Chat 模式",
-    "settings.chatModeDesc": "纯文本对话，模型只输出文本与 Markdown",
     "settings.agentMode": "Agent 模式",
     "settings.agentModeDesc": "允许调用工具，执行文件与命令行操作",
     "settings.agentDevMode": "Agent dev 模式",
@@ -1419,28 +1414,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.baseUrl": "Base URL",
     "settings.apiKey": "API Key",
     "settings.customHeaders": "自定义请求头",
-    "settings.cliIdentityTitle": "CLI 身份",
-    "settings.cliIdentityDescription": "统一管理供应商请求使用的 CLI 版本标识。",
-    "settings.cliIdentityOpen": "管理 CLI 身份",
-    "settings.cliIdentityClose": "关闭 CLI 身份管理",
-    "settings.cliIdentityCheck": "检查更新",
-    "settings.cliIdentityCurrent": "当前生效",
-    "settings.cliIdentityLatest": "官方稳定版",
-    "settings.cliIdentityEffectiveUserAgent": "实际 User-Agent",
-    "settings.cliIdentityUpToDate": "已是最新",
-    "settings.cliIdentityRollback": "回滚到上一版本",
-    "settings.cliIdentityLastChecked": "上次检查：{time}",
-    "settings.cliIdentityCheckFailed": "检查失败，请稍后重试",
-    "settings.cliIdentityImpact":
-      "应用全局 {count} 个，自定义覆盖 {overrides} 个，协议不注入 {disabled} 个",
-    "settings.cliIdentitySafetyNote":
-      "只读取官方版本号，完整 UA 在本地生成；更新后新请求立即生效。",
-    "settings.cliIdentityMode.builtin": "内置兼容",
-    "settings.cliIdentityMode.auto": "自动跟随",
-    "settings.cliIdentityEffective": "CLI 身份",
-    "settings.cliIdentitySourceGlobal": "全局身份",
-    "settings.cliIdentitySourceCustom": "自定义覆盖",
-    "settings.cliIdentitySourceDisabled": "当前协议不注入",
     "settings.providerDialogNavigation": "供应商配置导航",
     "settings.providerDialogGeneral": "普通配置",
     "settings.providerDialogRequest": "请求配置",
@@ -1801,10 +1774,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.cronPromptRequired": "请输入要执行的 Prompt 内容。",
     "settings.cronPromptRunHint":
       "Auto Prompt 会在后台独立执行，不会进入主页面最近对话，只会将最终结论写入当前任务的日志列表。",
-    "settings.cronPromptAgentModeOnlyHint":
-      "Auto Prompt 仅在系统执行模式为 Agent 模式或 Agent dev 模式时可运行。",
-    "settings.cronPromptAgentModeRequired":
-      "请先将 系统设置 -> 执行模式 切换为 Agent 模式或 Agent dev 模式，再运行 Auto Prompt。",
     "settings.cronPromptPlaceholder": "输入要执行的 Prompt 内容...",
     "settings.cronCommandList": "脚本",
     "settings.cronCommandHint": "输入普通 Shell 脚本，可多行",
@@ -2091,8 +2060,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsScan": "扫描",
     "settings.skillsScanning": "扫描中",
     "settings.skillsDisabledHint": "技能功能已关闭，开启后才会将选中的技能注入 system prompt",
-    "settings.skillsDisabledInChatMode":
-      "Chat 模式下不启用技能。切换到 Agent 模式后，才会恢复扫描、选择和注入能力。",
     "settings.skillsNotFound": "未发现任何技能",
     "settings.skillsNotFoundHint":
       "在应用 Skills 目录中添加 skill.json、SKILL.md 或 README.md 文件",
@@ -2501,7 +2468,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.upload.button": "Upload Files",
     "chat.upload.selectFiles": "Select and attach one or more readable files to this conversation",
     "chat.upload.uploading": "Uploading...",
-    "chat.upload.onlyInTools": "File upload is only available in tools mode",
     "chat.upload.requireWorkdir": "Select a project first",
     "chat.upload.removeFile": "Remove file",
     "chat.upload.previewImage": "Preview image",
@@ -2577,7 +2543,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.hookWarningTitle": "Hooks Warning",
 
     /* ── MCP chip ── */
-    "mcp.onlyInTools": "MCP is only available in tools mode",
     "mcp.noEnabled": "No enabled MCP Server found",
     "mcp.goAdd": "Go to MCP Hub to add or enable",
     "mcp.noName": "Enabled servers are missing valid names",
@@ -2585,7 +2550,6 @@ export const translations: Record<Locale, Record<string, string>> = {
 
     /* ── Skills chip ── */
     "skills.disabled": "Skills is disabled in settings",
-    "skills.disabledInChatMode": "Skills is disabled in Chat mode",
     "skills.select": "Select Skills",
     "skills.scanning": "Scanning...",
     "skills.noSkill": "No Skill files found",
@@ -3583,8 +3547,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.fontFamilyCustom": "Custom…",
     "settings.fontFamilyPlaceholder": 'e.g. "Maple Mono", "PingFang SC"',
     "settings.executionMode": "Execution Mode",
-    "settings.chatMode": "Chat Mode",
-    "settings.chatModeDesc": "Plain text conversation, model outputs text and Markdown only",
     "settings.agentMode": "Agent Mode",
     "settings.agentModeDesc": "Allows tool calls, file and command-line operations",
     "settings.agentDevMode": "Agent Dev Mode",
@@ -3714,28 +3676,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.baseUrl": "Base URL",
     "settings.apiKey": "API Key",
     "settings.customHeaders": "Custom request headers",
-    "settings.cliIdentityTitle": "CLI identity",
-    "settings.cliIdentityDescription": "Manage the CLI version identity used by provider requests.",
-    "settings.cliIdentityOpen": "Manage CLI identity",
-    "settings.cliIdentityClose": "Close CLI identity manager",
-    "settings.cliIdentityCheck": "Check for updates",
-    "settings.cliIdentityCurrent": "Current",
-    "settings.cliIdentityLatest": "Official stable",
-    "settings.cliIdentityEffectiveUserAgent": "Effective User-Agent",
-    "settings.cliIdentityUpToDate": "Up to date",
-    "settings.cliIdentityRollback": "Roll back to previous version",
-    "settings.cliIdentityLastChecked": "Last checked: {time}",
-    "settings.cliIdentityCheckFailed": "Check failed. Please try again later.",
-    "settings.cliIdentityImpact":
-      "{count} use global, {overrides} custom, {disabled} disabled by protocol",
-    "settings.cliIdentitySafetyNote":
-      "Only official version numbers are fetched; complete UAs are generated locally and new requests use updates immediately.",
-    "settings.cliIdentityMode.builtin": "Compatible",
-    "settings.cliIdentityMode.auto": "Auto-follow",
-    "settings.cliIdentityEffective": "CLI identity",
-    "settings.cliIdentitySourceGlobal": "Global identity",
-    "settings.cliIdentitySourceCustom": "Custom override",
-    "settings.cliIdentitySourceDisabled": "Not injected for this protocol",
     "settings.providerDialogNavigation": "Provider configuration",
     "settings.providerDialogGeneral": "Basic",
     "settings.providerDialogRequest": "Request",
@@ -4118,10 +4058,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.cronPromptRequired": "Enter the prompt content to execute.",
     "settings.cronPromptRunHint":
       "Auto Prompt runs in the background, does not appear in recent conversations, and only writes the final conclusion to this task's log list.",
-    "settings.cronPromptAgentModeOnlyHint":
-      "Auto Prompt runs only when System -> Execution Mode is Agent Mode or Agent Dev Mode.",
-    "settings.cronPromptAgentModeRequired":
-      "Switch System -> Execution Mode to Agent Mode or Agent Dev Mode before running Auto Prompt.",
     "settings.cronPromptPlaceholder": "Enter the prompt content to execute...",
     "settings.cronCommandList": "Script",
     "settings.cronCommandHint": "Enter a regular Shell script. Multiple lines are supported.",
@@ -4420,8 +4356,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsScanning": "Scanning",
     "settings.skillsDisabledHint":
       "Skills is off. Enable it to inject selected skills into the system prompt.",
-    "settings.skillsDisabledInChatMode":
-      "Skills stays disabled in Chat mode. Switch to Agent mode to scan, select, and inject skills again.",
     "settings.skillsNotFound": "No Skills found",
     "settings.skillsNotFoundHint":
       "Add skill.json, SKILL.md, or README.md files to the Skills directory",

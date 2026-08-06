@@ -3,31 +3,33 @@
 //! 用法：
 //! ```text
 //! backend --port 8443 [--password <pw>] [--tls-cert a.pem --tls-key b.pem] \
-//!     [--engine-bundle <path>] [--data-dir <dir>]
+//!     [--data-dir <dir>]
 //! ```
 //!
 //! 每个参数都有对应的环境变量兜底（argv 优先）：`PORT`、
 //! `LIVEAGENT_BACKEND_PASSWORD`、`LIVEAGENT_TLS_CERT`/`LIVEAGENT_TLS_KEY`、
-//! `LIVEAGENT_ENGINE_BUNDLE`、`LIVEAGENT_DATA_DIR`。容器平台（Railway 等）
+//! `LIVEAGENT_DATA_DIR`。容器平台（Railway 等）
 //! 只会给环境变量，以前靠一层 entrypoint 脚本翻译，现在后端直接认。
 //!
 //! 不给密码就动态生成一个并打印到 stderr（决策 8：本地密码初始化
 //! 动态生成、可改）。打到 stderr 而不是 stdout，是为了让 stdout 能被管道消费。
 //!
-//! `--engine-bundle` 指向 Node 引擎的打包产物（index.js）。阶段 3：必须给它（容器模式）。
+//! chat 引擎是按会话拉起的 `pi --mode rpc` 子进程，默认取 PATH 上的 `pi`，
+//! 用 `LIVEAGENT_PI_BIN` 覆盖。它没有对应的 argv 参数——引擎位置是部署事实，
+//! 不是每次启动要调的旋钮。
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use backend::{auth, build_router, build_state, engine_process, tls};
+use backend::server::{auth, tls};
+use backend::{build_router, build_state};
 
 struct Args {
     port: u16,
     password: Option<String>,
     tls_cert: Option<PathBuf>,
     tls_key: Option<PathBuf>,
-    engine_bundle: Option<PathBuf>,
 }
 
 /// 非空环境变量，空串按未设置处理（`FOO=` 是平台 UI 里清空后留下的残渣）。
@@ -44,7 +46,6 @@ fn parse_args() -> Result<Args, String> {
         password: None,
         tls_cert: None,
         tls_key: None,
-        engine_bundle: None,
     };
     let mut data_dir: Option<PathBuf> = None;
     let mut it = std::env::args().skip(1);
@@ -61,12 +62,12 @@ fn parse_args() -> Result<Args, String> {
             "--password" => args.password = Some(take("--password")?),
             "--tls-cert" => args.tls_cert = Some(PathBuf::from(take("--tls-cert")?)),
             "--tls-key" => args.tls_key = Some(PathBuf::from(take("--tls-key")?)),
-            "--engine-bundle" => args.engine_bundle = Some(PathBuf::from(take("--engine-bundle")?)),
             "--data-dir" => data_dir = Some(PathBuf::from(take("--data-dir")?)),
             "--help" | "-h" => {
                 println!(
-                    "backend [--port <PORT>] [--password <PW>] [--tls-cert <PEM> --tls-key <PEM>] [--engine-bundle <PATH>] [--data-dir <DIR>]\n\
-                     环境变量兜底：PORT、LIVEAGENT_BACKEND_PASSWORD、LIVEAGENT_TLS_CERT/LIVEAGENT_TLS_KEY、LIVEAGENT_ENGINE_BUNDLE、LIVEAGENT_DATA_DIR"
+                    "backend [--port <PORT>] [--password <PW>] [--tls-cert <PEM> --tls-key <PEM>] [--data-dir <DIR>]\n\
+                     环境变量兜底：PORT、LIVEAGENT_BACKEND_PASSWORD、LIVEAGENT_TLS_CERT/LIVEAGENT_TLS_KEY、LIVEAGENT_DATA_DIR\n\
+                     chat 引擎：默认调 PATH 上的 pi，LIVEAGENT_PI_BIN 可覆盖"
                 );
                 std::process::exit(0);
             }
@@ -82,9 +83,6 @@ fn parse_args() -> Result<Args, String> {
     args.password = args.password.or_else(|| env_var("LIVEAGENT_BACKEND_PASSWORD"));
     args.tls_cert = args.tls_cert.or_else(|| env_var("LIVEAGENT_TLS_CERT").map(PathBuf::from));
     args.tls_key = args.tls_key.or_else(|| env_var("LIVEAGENT_TLS_KEY").map(PathBuf::from));
-    args.engine_bundle = args
-        .engine_bundle
-        .or_else(|| env_var("LIVEAGENT_ENGINE_BUNDLE").map(PathBuf::from));
 
     // 数据目录反着走：backend 的路径解析只认 LIVEAGENT_DATA_DIR 环境变量
     // （见 backend::storage），--data-dir 就翻译成它。这里还在 main 的
@@ -110,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // 生成内部 token（Rust⇄Node 通信）。
+    // 生成内部 token（内部调用方走 Bearer 认证用）。
     let internal_token = auth::generate_password();
 
     let state = build_state(Arc::new(auth::AuthConfig::new(password, internal_token.clone())), internal_token, args.port)?;
@@ -123,28 +121,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 周期清扫过期隧道：TTL 的强制执行就在这里，不起它 TTL 只是显示值。
     state.tunnels.spawn_sweeper();
 
-    // 启动 Node 引擎进程。决策 3/5/11 链条：单 Docker 镜像；Node 只监听 loopback；
-    // 后端退出时 kill child。
-    let _engine = if let Some(bundle_path) = args.engine_bundle {
-        match engine_process::spawn_engine(state.clone(), bundle_path).await {
-            Ok(engine) => {
-                eprintln!("Node 引擎启动成功");
-                Some(engine)
-            }
-            Err(e) => {
-                eprintln!("警告：启动 Node 引擎失败，纯 API 模式继续运行：{e}");
-                None
-            }
-        }
-    } else {
-        eprintln!("未提供 --engine-bundle，纯 API 模式运行");
-        None
-    };
+    // chat 引擎不在这里启动：pi 进程由 PiSessionManager 在首次 chat_send
+    // 时按会话惰性拉起。退出时统一收掉（决策 11：不留孤儿子进程）。
+    let pi_sessions = std::sync::Arc::clone(&state.pi_sessions);
 
     let app = build_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
 
-    // 处理 SIGTERM/SIGINT，确保退出时 kill child。
+    // 处理 SIGTERM/SIGINT，确保退出时收掉 pi 子进程。
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::mpsc::channel(1);
     tokio::spawn(async move {
         let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
@@ -172,7 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     result?
                 },
                 _ = shutdown_rx.recv() => {
-                    drop(_engine);
+                    pi_sessions.shutdown_all();
                     return Ok(());
                 }
             };
@@ -186,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     result?
                 },
                 _ = shutdown_rx.recv() => {
-                    drop(_engine);
+                    pi_sessions.shutdown_all();
                     return Ok(());
                 }
             };

@@ -38,7 +38,6 @@ type UseWorkspaceProjectsParams = {
   settings: AppSettings;
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   sidebarStore: SidebarStore;
-  isAgentMode: boolean;
   workdir: string;
   t: (key: string) => string;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
@@ -62,7 +61,6 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     settings,
     setSettings,
     sidebarStore,
-    isAgentMode,
     workdir,
     t,
     setErrorMessage,
@@ -108,12 +106,10 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
   const activeWorkspaceProjectPath = activeWorkspaceProject?.path.trim() ?? "";
   const sidebarScope = useMemo<SidebarScope>(
     () =>
-      isAgentMode
-        ? activeWorkspaceProjectPath
-          ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
-          : { kind: "none" }
-        : { kind: "unscoped" },
-    [activeWorkspaceProjectPath, isAgentMode],
+      activeWorkspaceProjectPath
+        ? { kind: "workdir", cwd: activeWorkspaceProjectPath }
+        : { kind: "none" },
+    [activeWorkspaceProjectPath],
   );
   useEffect(() => {
     sidebarStore.setScope(sidebarScope);

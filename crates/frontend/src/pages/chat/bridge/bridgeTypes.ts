@@ -113,7 +113,6 @@ export function normalizeBackendExecutionMode(
   switch (value?.trim()) {
     case "tools":
     case "agent-dev":
-    case "text":
       return value.trim() as ExecutionMode;
     default:
       return undefined;

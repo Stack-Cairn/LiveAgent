@@ -17,8 +17,8 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use backend::auth;
-use backend::routes::routed_commands;
+use backend::server::auth;
+use backend::server::routed_commands;
 use backend::{build_router, build_state};
 use axum::body::Body;
 use axum::http::{header, Method, Request, StatusCode};
@@ -239,7 +239,7 @@ async fn auth_and_error_semantics() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
     // 合法 JSON 但缺必填字段 → 也必须是 400 + {"error": ...}。
-    // axum 默认给 422 纯文本，会把按契约解析错误体的客户端炸掉（crate::json::Json 的存在理由）。
+    // axum 默认给 422 纯文本，会把按契约解析错误体的客户端炸掉（crate::server::json::Json 的存在理由）。
     let assert_error_shape = |status: StatusCode, bytes: &[u8], case: &str| {
         assert_eq!(status, StatusCode::BAD_REQUEST, "{case}: 状态必须是 400");
         let value: serde_json::Value =

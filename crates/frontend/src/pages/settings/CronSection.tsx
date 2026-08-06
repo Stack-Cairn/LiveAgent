@@ -21,7 +21,7 @@ import {
   useAutomation,
 } from "../../lib/automation";
 import { buildModelOptions } from "../../lib/chat/page/chatPageHelpers";
-import { isAgentExecutionMode, workspaceProjectPathKey } from "../../lib/settings";
+import { workspaceProjectPathKey } from "../../lib/settings";
 import { hasNativeFileDialogs } from "../../lib/shell/capabilities";
 import { type CronTaskFormData, CronTaskModal } from "./CronTaskModal";
 import { CronTaskViewModal } from "./CronTaskViewModal";
@@ -74,7 +74,6 @@ export function CronSection(props: SettingsSectionProps) {
   const [actionError, setActionError] = useState<string | null>(null);
   const { cron } = useAutomation();
   const tasks = cron.tasks;
-  const autoPromptSupported = isAgentExecutionMode(settings.system.executionMode);
   const modelOptions = useMemo(
     () =>
       buildModelOptions(settings).map((option) => ({
@@ -177,12 +176,6 @@ export function CronSection(props: SettingsSectionProps) {
           </Button>
         </div>
       </div>
-
-      {!autoPromptSupported ? (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
-          {t("settings.cronPromptAgentModeOnlyHint")}
-        </div>
-      ) : null}
 
       {actionError ? (
         <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-xs text-destructive">
@@ -334,7 +327,6 @@ export function CronSection(props: SettingsSectionProps) {
           modelOptions={modelOptions}
           providers={settings.customProviders}
           workspaceOptions={workspaceOptions}
-          executionMode={settings.system.executionMode}
           onPickWorkdir={hasNativeFileDialogs() ? pickWorkdirDirectory : undefined}
           onSave={modal.mode === "add" ? handleAdd : handleEdit}
           onClose={() => setModal({ open: false })}

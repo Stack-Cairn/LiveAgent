@@ -112,7 +112,6 @@ export type TranscriptListProps = {
   // virtualizer's resize-compensation carve-out for live-row growth.
   isViewportFollowing?: () => boolean;
   isSending: boolean;
-  isAgentMode: boolean;
   isCompactionRunning: boolean;
   showUsage: boolean;
   usageContextWindow?: number;
@@ -148,7 +147,6 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     layoutWidth,
     isViewportFollowing,
     isSending,
-    isAgentMode,
     isCompactionRunning,
     showUsage,
     usageContextWindow,
@@ -521,7 +519,6 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
                 row={row}
                 showUsage={showUsage}
                 usageContextWindow={usageContextWindow}
-                isAgentMode={isAgentMode}
                 isCompactionRunning={row.mutable ? isCompactionRunning : false}
                 toolStatus={row.mutable ? displayedToolStatus : null}
                 retryAttempts={row.mutable ? liveState.retryAttempts : undefined}

@@ -180,7 +180,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   inputPlaceholder: string;
   workdir: string;
   enabledSkills: MentionComposerSkill[];
-  isAgentMode: boolean;
   chatRuntimeControls: ChatRuntimeControls;
   reasoningOptions: ReasoningLevel[];
   thinkingAlwaysOn: boolean;
@@ -215,7 +214,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     inputPlaceholder,
     workdir,
     enabledSkills,
-    isAgentMode,
     chatRuntimeControls,
     reasoningOptions,
     thinkingAlwaysOn,
@@ -265,7 +263,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   const [queueScrollbar, setQueueScrollbar] = useState<QueueScrollbarState>(
     DEFAULT_QUEUE_SCROLLBAR_STATE,
   );
-  const uploadDisabled = isInputDisabled || isUploadingFiles || !isAgentMode || !workdir;
+  const uploadDisabled = isInputDisabled || isUploadingFiles || !workdir;
   const controlsDisabled = isInputDisabled;
   const hasSendableDraft = !composerIsEmpty || pendingUploadedFiles.length > 0;
   // 档位为空但恒开（deepseek-reasoner 型"恒开不可调"）也算支持思考——
@@ -287,11 +285,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
       : (reasoningOptions[reasoningOptions.length - 1] ?? DEFAULT_CHAT_RUNTIME_CONTROLS.reasoning);
   const uploadTooltip = isUploadingFiles
     ? t("chat.upload.uploading")
-    : !isAgentMode
-      ? t("chat.upload.onlyInTools")
-      : !workdir
-        ? t("chat.upload.requireWorkdir")
-        : t("chat.upload.button");
+    : !workdir
+      ? t("chat.upload.requireWorkdir")
+      : t("chat.upload.button");
   const thinkingTooltip = !thinkingSupported
     ? t("chat.runtime.thinkingUnavailable")
     : t("chat.runtime.thinkingTooltip");
@@ -830,11 +826,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                   aria-label={
                     isUploadingFiles
                       ? t("chat.upload.uploading")
-                      : !isAgentMode
-                        ? t("chat.upload.onlyInTools")
-                        : !workdir
-                          ? t("chat.upload.requireWorkdir")
-                          : t("chat.upload.selectFiles")
+                      : !workdir
+                        ? t("chat.upload.requireWorkdir")
+                        : t("chat.upload.selectFiles")
                   }
                   className={cn(
                     "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",

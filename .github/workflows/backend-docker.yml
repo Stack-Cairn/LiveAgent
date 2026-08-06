@@ -86,19 +86,18 @@ jobs:
             exit 1
           }
 
-      # 引擎 bundle 漏进镜像的话，后端会退化成"纯 API 模式"静默跑起来 ——
-      # /healthz 照样返回 ok，问题要到用户发第一条消息才暴露。这里提前拦。
-      - name: Verify Node engine bundle is present
+      # pi 漏装的话，后端照样起得来 —— /healthz 返回 ok，chat 引擎要到用户发
+      # 第一条消息才惰性拉起，那时才报"启动 pi 失败"。这里提前拦。
+      # 用 run 而不是 docker cp：要验的是「pi 能在容器里跑起来」，
+      # 光有文件不代表 Node 版本满足它的 engines 下限。
+      - name: Verify pi CLI is runnable in the image
         run: |
           set -euo pipefail
           repo="$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')"
           ref="$repo@${{ steps.push.outputs.digest }}"
-          docker rm -f verify-engine >/dev/null 2>&1 || true
-          docker create --name verify-engine "$ref" >/dev/null
-          docker cp verify-engine:/opt/liveagent/engine/index.js /tmp/engine-index.js
-          docker rm -f verify-engine >/dev/null
-          test -s /tmp/engine-index.js || {
-            echo "::error::镜像里的 Node 引擎 bundle 是空的"
+          version="$(docker run --rm --entrypoint pi "$ref" --version)"
+          echo "pi in image: $version"
+          test -n "$version" || {
+            echo "::error::镜像里的 pi 没有输出版本号"
             exit 1
           }
-          echo "engine bundle: $(wc -c < /tmp/engine-index.js) bytes"

@@ -13,8 +13,8 @@
 |---|---|---|---|
 | 前端 | `crates/frontend/src` | React、TypeScript、Vite、Tailwind | Chat、Settings、Skills/MCP Hub、Memory、终端、Git、历史。**只经网络与后端通信。** |
 | 桌面壳（可选） | `crates/frontend/src-tauri` | Tauri 2、Rust | 托盘、窗口、自更新、原生对话框、剪贴板；并在进程内启动后端。19 个壳专属 command。 |
-| Rust 后端 | `crates/backend` + `crates/backend` | axum、tokio、rusqlite | 唯一对外网络入口（HTTP + WS）、认证、TLS；fs/shell/git/terminal PTY/sftp/sqlite/cron/mcp/memory/tunnel 的实现。 |
-| Node 引擎 | `crates/core` | TypeScript、`@earendil-works/pi-agent-core`、`pi-ai` | 对话循环：上下文构造、模型流式、工具执行、压缩、记忆抽取、历史落库。**只监听 loopback。** |
+| Rust 后端 | `crates/backend` | axum、tokio、rusqlite | 唯一对外网络入口（HTTP + WS）、认证、TLS；fs/shell/git/terminal PTY/sftp/sqlite/cron/mcp/memory/tunnel 的实现。 |
+| chat 引擎 | `pi` CLI（外部程序） | `pi --mode rpc` | 对话循环：上下文构造、模型流式、工具执行、压缩。后端按会话把它作为**子进程**拉起，走 stdin/stdout 的 JSONL RPC，不监听任何端口。翻译层在 `crates/backend/src/pi/`。 |
 
 浏览器形态下「桌面壳」这一层不存在，其余三层不变——这正是决策 16 要的效果。
 
@@ -51,11 +51,11 @@
 
 | | 桌面壳内嵌 | 独立后端 |
 |---|---|---|
-| 后端从哪来 | Tauri `.setup()` 里 `start_backend_server()` 起在同进程（`src-tauri/src/backend_server.rs`） | `backend --port 8443 --engine-bundle <path>` |
+| 后端从哪来 | Tauri `.setup()` 里 `start_backend_server()` 起在同进程（`src-tauri/src/backend_server.rs`） | `backend --port 8443` |
 | 监听地址 | `127.0.0.1:<系统分配的空闲端口>` | `0.0.0.0:<--port>` |
 | 密码 | 每次启动随机生成，前端经 `get_backend_endpoint` 拿到 | `--password`，不给则随机生成并打到 stderr |
 | 登录页 | 跳过（壳注入端点） | 浏览器输入 host/port/密码，或用 `?backendHost=&backendPort=&token=` 链接 |
-| 退出 | 壳退出即带走后端与 Node 子进程（决策 11） | SIGTERM/SIGINT → kill Node child |
+| 退出 | 壳退出即带走后端与全部 pi 子进程（决策 11） | SIGTERM/SIGINT → 收掉全部 pi 会话进程 |
 
 两者**不能同机并跑**：它们共用同一个 `~/.liveagent` 数据目录。
 

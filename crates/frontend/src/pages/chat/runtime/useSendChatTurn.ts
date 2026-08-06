@@ -46,7 +46,6 @@ import {
   type ChatRuntimeControls,
   type ExecutionMode,
   isAgentDevMode,
-  isAgentExecutionMode,
 } from "../../../lib/settings";
 import type { SidebarStore } from "../../../lib/sidebar/store";
 import {
@@ -278,14 +277,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       overrides?.executionModeOverride ??
       backendBridgeRequest?.executionModeOverride ??
       settings.system.executionMode;
-    const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
     const effectiveWorkdir = (
       overrides?.workdirOverride ??
       backendBridgeRequest?.workdirOverride ??
-      (effectiveIsAgentMode ? (runtimeEntry?.workdir ?? settings.system.workdir) : "")
+      runtimeEntry?.workdir ??
+      settings.system.workdir
     ).trim();
     const effectiveIsAgentDevExecutionMode = isAgentDevMode(effectiveExecutionMode);
-    const effectiveSkillsEnabled = settings.skills.enabled && effectiveIsAgentMode;
+    const effectiveSkillsEnabled = settings.skills.enabled;
     // 没有「连到哪个 Backend」了：开着远程访问就意味着可能有远程前端在看。
     const hasRemoteBackendTarget = settings.remote.enabled;
     const mirrorsLocalRunToBackend = !backendBridgeRequest && hasRemoteBackendTarget;
@@ -373,12 +372,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       backendBridgeRequest?.runtimeControlsOverride ??
       overrides?.runtimeControlsOverride ??
       settings.chatRuntimeControls;
-    const providerConfig = createProviderRuntimeConfig(
-      provider,
-      model,
-      runtimeControls,
-      settings.customSettings.providerIdentities,
-    );
+    const providerConfig = createProviderRuntimeConfig(provider, model, runtimeControls);
     const runtimeModel = createModelFromConfig(
       providerId,
       model,
@@ -396,19 +390,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     let text = hasTextOverride
       ? textOverride.trim()
       : composerDraft
-        ? (effectiveIsAgentMode && composerDraft.largePastes.length > 0
+        ? (composerDraft.largePastes.length > 0
             ? composerDraft.textWithoutLargePastes
             : buildTextFromComposerDraft(composerDraft)
           ).trim()
         : "";
     let uploadedFiles = overrides?.uploadedFilesOverride ?? pendingUploadedFiles;
 
-    if (
-      effectiveIsAgentMode &&
-      composerDraft &&
-      composerDraft.largePastes.length > 0 &&
-      !hasTextOverride
-    ) {
+    if (composerDraft && composerDraft.largePastes.length > 0 && !hasTextOverride) {
       isImportingPastedTextRef.current = true;
       setIsImportingPastedText(true);
       try {
@@ -513,7 +502,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         titleModelSelection.provider,
         titleModelSelection.model,
         runtimeControls,
-        settings.customSettings.providerIdentities,
       );
       titlePromise = startConversationTitleJob({
         providerId: titleModelSelection.providerId,
@@ -1188,9 +1176,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
       const snapshot = getAbortSnapshot(transcriptStore);
       const partialMessages = buildPersistableMessagesFromSnapshot({
-        executionMode: effectiveExecutionMode,
         model: runtimeModel,
-        draftAssistantText: snapshot.draftAssistantText,
         liveRounds: snapshot.liveRounds,
         completedThroughRound: persistableAgentProgress.completedThroughRound,
         suppressedToolTrace: persistableAgentProgress.suppressedToolTrace,
@@ -1221,9 +1207,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const commitErroredConversation = (rawMessage: string) => {
       const snapshot = getAbortSnapshot(transcriptStore);
       const partialMessages = buildPersistableMessagesFromSnapshot({
-        executionMode: effectiveExecutionMode,
         model: runtimeModel,
-        draftAssistantText: snapshot.draftAssistantText,
         liveRounds: snapshot.liveRounds,
         completedThroughRound: persistableAgentProgress.completedThroughRound,
         suppressedToolTrace: persistableAgentProgress.suppressedToolTrace,
@@ -1277,29 +1261,17 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     try {
       // 引擎在后端 Node 进程里跑(阶段 3):这里只提交请求,增量与终态走 WS 事件。
       // clientRequestId 供引擎幂等去重——网络重试不会跑出第二个 turn。
-      if (effectiveIsAgentMode) {
-        await backendFetch<void>("chat_send", {
-          conversationId,
-          clientRequestId: pendingUserMessage.id,
-          sessionId,
-          mode: "agent",
-          text,
-          selectedModel,
-          workdir: effectiveWorkdir,
-          skillsEnabled: effectiveSkillsEnabled,
-          selectedSkillNames,
-        });
-      } else {
-        await backendFetch<void>("chat_send", {
-          conversationId,
-          clientRequestId: pendingUserMessage.id,
-          sessionId,
-          mode: "text",
-          text,
-          selectedModel,
-          workdir: effectiveWorkdir,
-        });
-      }
+      await backendFetch<void>("chat_send", {
+        conversationId,
+        clientRequestId: pendingUserMessage.id,
+        sessionId,
+        mode: "agent",
+        text,
+        selectedModel,
+        workdir: effectiveWorkdir,
+        skillsEnabled: effectiveSkillsEnabled,
+        selectedSkillNames,
+      });
     } catch (err) {
       const aborted = cancellation.userStop.signal.aborted || isAbortLikeError(err);
       gatewayRuntimeFinalState = aborted ? "cancelled" : "failed";

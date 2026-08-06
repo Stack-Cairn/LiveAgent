@@ -18,24 +18,35 @@
 
 ## 后端镜像
 
-根目录 `Dockerfile`，三阶段：
+根目录 `Dockerfile`，两阶段：
 
 | 阶段 | 内容 |
 |---|---|
-| `engine-builder` | Node 22 + pnpm，`tsc --noEmit` + esbuild 把 `core` 打成单文件 `dist/index.js` |
 | `backend-builder` | Rust，`cargo build -p backend --release` |
-| `runtime` | `node:22.17.1-bookworm-slim`，非 root（uid 10001），二进制 + 引擎 bundle |
+| `runtime` | `node:22.19.0-bookworm-slim`，非 root（uid 10001），Rust 二进制 + 全局安装的 pi CLI |
 
 ```
-ENV LIVEAGENT_DATA_DIR=/var/lib/liveagent LIVEAGENT_ENGINE_BUNDLE=/opt/liveagent/engine
+ARG PI_VERSION=0.83.0
+RUN npm install -g "@earendil-works/pi-coding-agent@${PI_VERSION}"
+
+ENV LIVEAGENT_DATA_DIR=/var/lib/liveagent HOME=/var/lib/liveagent
 VOLUME ["/var/lib/liveagent"]
 EXPOSE 8443
 ENTRYPOINT ["/usr/local/bin/backend"]
 ```
 
-运行时基底是 `node:*-slim` 而不是 `debian-slim`：Node runtime 要随产物分发
-（决策 3），自带比手装干净。**代价是镜像比旧的 Go 版本大**——这是决策 3 的已知
-成本，记下来而不是假装没有。
+运行时基底是 `node:*-slim` 而不是 `debian-slim`：chat 引擎 pi 是 Node 程序，
+后端按会话把它作为子进程拉起，底座必须自带 Node。**代价是镜像比旧的 Go 版本
+大**——这是决策 3 的已知成本，记下来而不是假装没有。
+
+两处版本不能随手改：
+
+- **Node 不得低于 22.19.0**。pi 的 `engines.node` 就是这个下限，低于它 npm 装不上。
+  与 `mise.toml` 固定的开发期版本一致，避免容器和本地跑在两个 Node 上。
+- **pi 锁到具体补丁号**。它的 RPC 事件形状是翻译层的输入契约
+  （见 [pi-rpc-event-contract.md](../design/pi-rpc-event-contract.md)），
+  让它随 `^` 漂移等于让契约漂移。升级 pi 是一次要重新核对事件契约的动作，
+  不该由一次镜像重建悄悄发生。
 
 本地构建与冒烟：
 
@@ -45,7 +56,9 @@ make backend-docker-run       # -p 8443:8443
 make backend-docker-smoke     # 起容器 + 轮询 /healthz，60s 上限
 ```
 
-冒烟给 60s 而不是 30s：Node 引擎的就绪探测本身最多等 30s。
+冒烟给 60s 而不是 30s：留给冷启动和镜像首次落盘的余量。`/healthz` 不依赖
+chat 引擎——pi 进程要到第一次 `chat_send` 才惰性拉起，所以健康检查通过
+**不等于** pi 可用。
 
 ## 启动参数
 
@@ -57,8 +70,10 @@ make backend-docker-smoke     # 起容器 + 轮询 /healthz，60s 上限
 | `--port <PORT>` | `PORT` | `8443` | 监听端口，绑 `0.0.0.0`。Railway 一类平台注入的 `PORT` 直接生效 |
 | `--password <PW>` | `LIVEAGENT_BACKEND_PASSWORD` | 随机生成 | Bearer token。不给就生成一个 32 位 base62 串并**打到 stderr** |
 | `--tls-cert <PEM>` `--tls-key <PEM>` | `LIVEAGENT_TLS_CERT` / `LIVEAGENT_TLS_KEY` | 无 | 两个一起给才启用内建 TLS；只给一个直接报错退出 |
-| `--engine-bundle <DIR>` | `LIVEAGENT_ENGINE_BUNDLE` | 无 | Node 引擎 bundle 目录（内含 `index.js`）。不给则以**纯 API 模式**运行——命令全部可用，但没有 chat |
 | `--data-dir <DIR>` | `LIVEAGENT_DATA_DIR` | `~/.liveagent` | 数据目录。官方镜像预设为 `/var/lib/liveagent` |
+
+chat 引擎没有对应的 argv 参数：默认取 PATH 上的 `pi`，用 `LIVEAGENT_PI_BIN`
+指向别处。引擎位置是部署事实，不是每次启动要调的旋钮。
 
 密码打 stderr 不打 stdout，是为了让 stdout 能被管道消费。
 
@@ -130,7 +145,8 @@ URL 参数会被持久化到 localStorage，下次打开不用重填。`secure` 
 | 旧镜像 `ghcr.io/<owner>/liveagent-gateway` | **历史 tag 全部保留、仍可拉取**（决策 15）。只是不再发布新 tag |
 | 新镜像 | `ghcr.io/<owner>/liveagent-backend:vX.Y.Z` / `:latest` |
 | 旧桌面端 | 仍可连旧 gateway 镜像。这是大版本切换，不是原地升级 |
-| `LIVEAGENT_GATEWAY_*` 环境变量 | 全部作废。新后端认 `PORT`、`LIVEAGENT_BACKEND_PASSWORD`、`LIVEAGENT_TLS_CERT/KEY`、`LIVEAGENT_ENGINE_BUNDLE`、`LIVEAGENT_DATA_DIR`（argv 优先） |
+| `LIVEAGENT_GATEWAY_*` 环境变量 | 全部作废。新后端认 `PORT`、`LIVEAGENT_BACKEND_PASSWORD`、`LIVEAGENT_TLS_CERT/KEY`、`LIVEAGENT_DATA_DIR`、`LIVEAGENT_PI_BIN`（argv 优先） |
+| `LIVEAGENT_ENGINE_BUNDLE` / `--engine-bundle` | 已删除。Node 引擎被 `pi --mode rpc` 取代，不再有 bundle 可指 |
 | 每 Agent 凭证、`agent_id`、多 Agent 目录 | 概念消失。一个前端只连一个后端（决策 12） |
 | 浏览器里的旧 token | 前端检测到 `liveagent.gateway.token` 会在登录页给迁移提示 |
 

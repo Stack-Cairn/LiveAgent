@@ -20,10 +20,6 @@ import {
   resolveAnthropicKnownModelLimits,
   shouldSendAnthropicLongContextHeader,
 } from "../providers/anthropicModels";
-import {
-  type CliIdentitySettings,
-  normalizeCliIdentitySettings,
-} from "../providers/cliIdentityCore";
 import { createUuid } from "../shared/id";
 import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
 import { normalizeFontFamily } from "../system/fontFamily";
@@ -57,7 +53,7 @@ export function isThinkingAlwaysOnForModel(
 
 export type ProviderId = "codex" | "claude_code" | "gemini" | "xai";
 
-export type ExecutionMode = "text" | "tools" | "agent-dev";
+export type ExecutionMode = "tools" | "agent-dev";
 
 export type CodexRequestFormat = "openai-completions" | "openai-responses";
 
@@ -178,7 +174,6 @@ export type ChatTranscriptSettings = {
 
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
-  providerIdentities: CliIdentitySettings;
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
@@ -570,17 +565,12 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
 
 function normalizeExecutionMode(input: unknown): ExecutionMode {
   switch (input) {
-    case "text":
     case "tools":
     case "agent-dev":
       return input;
     default:
       return "tools";
   }
-}
-
-export function isAgentExecutionMode(mode: ExecutionMode): boolean {
-  return mode !== "text";
 }
 
 export function isAgentDevMode(mode: ExecutionMode): boolean {
@@ -2132,7 +2122,6 @@ export function normalizeCustomSettings(
       normalizeSelectedModel(obj.conversationTitleModel),
       customProviders,
     ),
-    providerIdentities: normalizeCliIdentitySettings(obj.providerIdentities),
     chatSidebar: {
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,
