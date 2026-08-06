@@ -13,6 +13,7 @@ import {
   buildDefaultAskUserQuestionAnswers,
   parseAskUserQuestionItems,
   resolveAskUserQuestionAnswers,
+  scheduleAtDeadline,
 } from "../chat/askUserQuestion";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
 
@@ -229,13 +230,13 @@ export function createAskUserQuestionTools(params: {
       const settle = (value: AskUserQuestionSettlement) => {
         pendingByToolCallId.delete(toolCall.id);
         signal?.removeEventListener("abort", onAbort);
-        clearTimeout(timeoutId);
+        cancelTimeout();
         resolve(value);
       };
       const onAbort = () => settle({ kind: "cancelled" });
-      const timeoutId = setTimeout(
-        () => settle({ kind: "timeout", answers: buildDefaultAskUserQuestionAnswers(questions) }),
-        Math.max(0, deadlineAt - Date.now()),
+      // 分段续期计时：超长窗口（≈永不超时）不会被 setTimeout 的 32 位延迟上限回绕。
+      const cancelTimeout = scheduleAtDeadline(deadlineAt, () =>
+        settle({ kind: "timeout", answers: buildDefaultAskUserQuestionAnswers(questions) }),
       );
       pendingByToolCallId.set(toolCall.id, {
         conversationId: params.conversationId,

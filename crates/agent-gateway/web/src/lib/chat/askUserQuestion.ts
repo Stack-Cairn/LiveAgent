@@ -11,6 +11,46 @@ export const ASK_USER_QUESTION_MAX_OPTIONS = 6;
  *  运行时实际窗口由设置 system.interactiveTimeoutMinutes 驱动（正数分钟；超长≈永不超时），
  *  此常量仅作未注入时的兜底默认，保持历史行为与测试注入口径一致。 */
 export const ASK_USER_QUESTION_TIMEOUT_MS = 3 * 60 * 1000;
+/** 交互式应答超时（分钟）的默认值与上限，与桌面端 Rust 归一化同口径。
+ *  上限存在的意义不是规避 setTimeout 溢出（那由分段续期解决），
+ *  而是避免手改配置写入荒谬值。 */
+export const INTERACTIVE_TIMEOUT_MIN_MINUTES = 1;
+export const INTERACTIVE_TIMEOUT_MAX_MINUTES = 99_999;
+/** setTimeout 的延迟形参是 IDL long（32 位有符号），超过 2^31-1 会被 ToInt32
+ *  回绕：99999 分钟被截成约 19.7 天，而 35792～200000 分钟之间的值回绕成负数后
+ *  被钳为 0，导致「永不超时」瞬间立刻超时。故长延迟必须分段续期。 */
+export const MAX_SAFE_TIMEOUT_DELAY_MS = 2_147_483_647;
+
+/**
+ * 分段续期的长延迟定时器：单次 setTimeout 只排最多 MAX_SAFE_TIMEOUT_DELAY_MS，
+ * 到点后按剩余时间继续排，直到真正跨过 deadline 才触发 onDeadline。返回取消函数。
+ *
+ * 与裸 setTimeout 一致，回调恒异步触发（deadline 已过也先让出一轮），
+ * 这样调用方仍可在同一同步块里先拿到取消函数再在回调中引用它。
+ */
+export function scheduleAtDeadline(deadlineAt: number, onDeadline: () => void): () => void {
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  let cancelled = false;
+  const arm = () => {
+    if (cancelled) return;
+    const remainingMs = deadlineAt - Date.now();
+    if (remainingMs <= 0) {
+      onDeadline();
+      return;
+    }
+    timerId = setTimeout(arm, Math.min(remainingMs, MAX_SAFE_TIMEOUT_DELAY_MS));
+  };
+  // 首拍也走 setTimeout，保证回调不会在本函数返回前同步触发。
+  timerId = setTimeout(
+    arm,
+    Math.min(Math.max(0, deadlineAt - Date.now()), MAX_SAFE_TIMEOUT_DELAY_MS),
+  );
+  return () => {
+    cancelled = true;
+    if (timerId !== undefined) clearTimeout(timerId);
+  };
+}
+
 /** UI 合成"其他（自行输入）"应答的最大长度；超出部分截断。 */
 export const ASK_USER_QUESTION_CUSTOM_MAX_LENGTH = 2000;
 /**

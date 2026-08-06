@@ -290,6 +290,81 @@ test("a very long timeout window behaves like never within the test window", asy
   assert.equal(tools.hasPendingAskUserQuestion("call-ask-long-window"), false);
 });
 
+// 回归：最大档 99999 分钟换算成毫秒后超过 setTimeout 的 32 位延迟上限，
+// 裸 setTimeout 会 ToInt32 回绕（99999 分钟被截成约 19.7 天，35792～200000
+// 分钟之间更会回绕成负数并被钳为 0 → 「永不超时」瞬间立刻超时）。
+// scheduleAtDeadline 分段续期后，deadline 必须仍是完整窗口且不会提前落定。
+test("the largest configurable window is not truncated by the 32-bit setTimeout limit", async () => {
+  const { shared, tools } = loadModules();
+  const timeoutMs = shared.INTERACTIVE_TIMEOUT_MAX_MINUTES * 60_000;
+  assert.ok(timeoutMs > shared.MAX_SAFE_TIMEOUT_DELAY_MS, "该用例必须跨过 32 位上限才有意义");
+
+  const bundle = tools.createAskUserQuestionTools({
+    conversationId: "conv-max-window",
+    timeoutMs,
+  });
+  const toolCall = createToolCall(buildQuestionsArgs(), "call-ask-max-window");
+
+  const startedAt = Date.now();
+  const resultPromise = bundle.executeToolCall(toolCall);
+  const deadline = tools.getAskUserQuestionDeadlineAt("call-ask-max-window");
+  // deadline 记的是完整窗口，而不是回绕后的约 19.7 天。
+  assert.ok(deadline >= startedAt + timeoutMs - 1000, "deadline 必须是完整窗口");
+
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(tools.hasPendingAskUserQuestion("call-ask-max-window"), true);
+
+  tools.answerAskUserQuestion("call-ask-max-window", [
+    { questionId: "storage", selectedLabel: "应用数据目录" },
+    { questionId: "q2", selectedLabel: "不迁移" },
+  ]);
+  const result = await resultPromise;
+  assert.equal(result.isError, false);
+  assert.equal(result.details.timedOut, undefined);
+});
+
+// scheduleAtDeadline 自身语义：分段续期、可取消、回调恒异步。
+test("scheduleAtDeadline caps each hop, stays cancellable, and fires asynchronously", async () => {
+  const { shared } = loadModules();
+
+  // 1) 已过期的 deadline 也不同步触发（调用方要能先拿到取消函数）。
+  let firedSync = true;
+  const cancelPast = shared.scheduleAtDeadline(Date.now() - 10_000, () => {
+    firedSync = false;
+  });
+  assert.equal(firedSync, true, "回调不得在 scheduleAtDeadline 返回前同步触发");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(firedSync, false, "已过期的 deadline 应在下一拍触发");
+  cancelPast();
+
+  // 2) 短 deadline 正常触发。
+  const firedAt = await new Promise((resolve) => {
+    const t0 = Date.now();
+    shared.scheduleAtDeadline(t0 + 30, () => resolve(Date.now() - t0));
+  });
+  assert.ok(firedAt >= 25, "应等到 deadline 才触发，实际 " + firedAt + "ms");
+
+  // 3) 取消后不再触发。
+  let cancelledFired = false;
+  const cancel = shared.scheduleAtDeadline(Date.now() + 20, () => {
+    cancelledFired = true;
+  });
+  cancel();
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(cancelledFired, false, "取消后不得触发");
+
+  // 4) 超长 deadline 不会因回绕而立即触发（裸 setTimeout 在此会立刻落定）。
+  const overflowMinutes = 40_000; // ToInt32 后为负数的区间
+  assert.ok(((overflowMinutes * 60_000) | 0) < 0, "该分钟数必须落在回绕成负数的区间");
+  let overflowFired = false;
+  const cancelOverflow = shared.scheduleAtDeadline(Date.now() + overflowMinutes * 60_000, () => {
+    overflowFired = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(overflowFired, false, "超长窗口不得因 32 位回绕而立即触发");
+  cancelOverflow();
+});
+
 test("immediate answers are pending synchronously and never fall through to timeout defaults", async () => {
   const { tools } = loadModules();
   const bundle = tools.createAskUserQuestionTools({ conversationId: "conv-fast", timeoutMs: 100 });

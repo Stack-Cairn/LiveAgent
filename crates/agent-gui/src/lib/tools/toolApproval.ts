@@ -7,7 +7,7 @@
 // 远端(WebUI)应答经 gateway chat_queue.tool_approval 转发到桌面后走同一入口
 // answerToolApproval(第 3 步接线)。
 
-import { ASK_USER_QUESTION_TIMEOUT_MS } from "../chat/askUserQuestion";
+import { ASK_USER_QUESTION_TIMEOUT_MS, scheduleAtDeadline } from "../chat/askUserQuestion";
 
 /** 审批窗口毫秒数:复用 AskUserQuestion 的时长常量,行为口径一致。 */
 export const TOOL_APPROVAL_TIMEOUT_MS = ASK_USER_QUESTION_TIMEOUT_MS;
@@ -178,7 +178,7 @@ export function requestToolApproval(params: {
         pendingByToolCallId.delete(toolCallId);
       }
       params.signal?.removeEventListener("abort", onAbort);
-      clearTimeout(timeoutId);
+      cancelTimeout();
       if (settlement.kind === "decided" && settlement.decision === "approve_session") {
         rememberSessionApproval(params.conversationId, params.toolName);
       }
@@ -186,7 +186,9 @@ export function requestToolApproval(params: {
       resolve(settlement);
     };
     const onAbort = () => settle({ kind: "cancelled" });
-    const timeoutId = setTimeout(() => settle({ kind: "timeout" }), Math.max(0, timeoutMs));
+    // 分段续期定时器：审批窗口可配到远超 setTimeout 的 32 位延迟上限，
+    // 直接传大延迟会被静默截断（甚至立即触发）。见 scheduleAtDeadline。
+    const cancelTimeout = scheduleAtDeadline(deadlineAt, () => settle({ kind: "timeout" }));
     const pending: PendingToolApproval = {
       conversationId: params.conversationId,
       toolName: params.toolName,
