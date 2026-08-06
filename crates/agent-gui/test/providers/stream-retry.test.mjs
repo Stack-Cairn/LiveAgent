@@ -3,8 +3,12 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { withStreamRetry, computeStreamRetryBackoffMs, DEFAULT_STREAM_RETRY_MAX_ATTEMPTS } =
-  loader.loadModule("src/lib/providers/runtime/streamRetry.ts");
+const {
+  withStreamRetry,
+  computeStreamRetryBackoffMs,
+  DEFAULT_STREAM_RETRY_MAX_ATTEMPTS,
+  isRetryableProviderErrorMessage,
+} = loader.loadModule("src/lib/providers/runtime/streamRetry.ts");
 
 function createUsage() {
   return {
@@ -118,6 +122,28 @@ test("withStreamRetry succeeds after N retryable errors without leaking failed-a
   const final = await wrapped.result();
   assert.equal(final.stopReason, "stop");
   assert.equal(final.content[0].text, "final answer");
+});
+
+test("stream_read_error is classified as retryable and recovers before content commits", async () => {
+  assert.equal(isRetryableProviderErrorMessage("Request failed: stream_read_error"), true);
+  assert.equal(isRetryableProviderErrorMessage("insufficient_quota: billing required"), false);
+
+  let calls = 0;
+  const wrapped = withStreamRetry(
+    () => {
+      calls += 1;
+      return calls === 1 ? createErrorStream("stream_read_error") : createSuccessStream("recovered");
+    },
+    { maxAttempts: 2 },
+  );
+
+  const events = await collectEvents(wrapped);
+  assert.equal(calls, 2);
+  assert.deepEqual(
+    events.map((event) => event.type),
+    ["start", "text_delta", "done"],
+  );
+  assert.equal((await wrapped.result()).content[0].text, "recovered");
 });
 
 test("withStreamRetry invokes onRetry per attempt and onRetryRecovered once content commits", async () => {

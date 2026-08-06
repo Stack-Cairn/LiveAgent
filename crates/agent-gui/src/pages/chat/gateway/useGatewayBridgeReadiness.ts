@@ -21,6 +21,7 @@ import {
   type ConversationRuntimeEntry,
   createConversationRuntimeEntry,
   setConversationRuntimeCacheEntry,
+  shouldReuseConversationRuntimeCache,
 } from "../runtime/chatPageRuntime";
 import type { EnsureGatewayBridgeConversationReadyOptions } from "./gatewayBridgeTypes";
 
@@ -66,12 +67,13 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     cached?: ConversationRuntimeEntry;
   }) {
     const { conversationId, summary, state, activeSegmentIndex, activeSegmentId, cached } = params;
+    const preserveTransientRuntime = isConversationRunning(conversationId);
     const entry = createConversationRuntimeEntry({
       state,
       sessionId: summary.sessionId ?? summary.id,
       createdAt: summary.createdAt,
-      compactionStatus: cached?.compactionStatus,
-      isSending: cached?.isSending,
+      compactionStatus: preserveTransientRuntime ? cached?.compactionStatus : undefined,
+      isSending: preserveTransientRuntime ? cached?.isSending : false,
       workdir: summary.cwd,
       selectedModel: normalizeSelectedModelForProviders(
         parseSelectedModelJson(summary.selectedModelJson),
@@ -127,7 +129,10 @@ export function useGatewayBridgeReadiness(params: UseGatewayBridgeReadinessParam
     if (
       cached &&
       !forceReload &&
-      (conversationPersistenceCursorRef.current.has(id) || cached.isSending || isPending)
+      shouldReuseConversationRuntimeCache({
+        isRunning: isConversationRunning(id),
+        isPending,
+      })
     ) {
       return id;
     }

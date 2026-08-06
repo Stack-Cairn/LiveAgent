@@ -1,3 +1,19 @@
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatHistoryGoalSummary {
+    pub goal_id: String,
+    pub objective: String,
+    pub status: String,
+    pub token_budget: Option<i64>,
+    pub tokens_used: i64,
+    pub time_used_seconds: i64,
+    pub running_since: Option<i64>,
+    pub consecutive_api_error_count: i64,
+    pub last_api_error: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatHistorySummary {
@@ -8,6 +24,7 @@ pub struct ChatHistorySummary {
     pub session_id: Option<String>,
     pub cwd: Option<String>,
     pub selected_model_json: Option<String>,
+    pub goal: Option<ChatHistoryGoalSummary>,
     pub message_count: i64,
     pub created_at: i64,
     pub updated_at: i64,

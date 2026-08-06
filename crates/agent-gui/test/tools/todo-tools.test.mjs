@@ -168,6 +168,22 @@ test("executor replaces rather than merges on a second full-replacement call", a
   assert.deepEqual(state.getTodos(), secondTodos);
 });
 
+test("todo state notifies subscribers when the checklist changes or clears", () => {
+  const { createTodoToolState } = loadTodoTools();
+  const state = createTodoToolState();
+  let notifications = 0;
+  const unsubscribe = state.subscribe(() => {
+    notifications += 1;
+  });
+
+  state.setTodos([{ content: "Run tests", status: "pending", activeForm: "Running tests" }]);
+  state.clear();
+  unsubscribe();
+  state.setTodos([]);
+
+  assert.equal(notifications, 2);
+});
+
 test("executor rejects a call with more than one in_progress item", async () => {
   const { createTodoTools, createTodoToolState } = loadTodoTools();
   const state = createTodoToolState();

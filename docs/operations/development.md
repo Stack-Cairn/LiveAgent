@@ -27,6 +27,18 @@
 | Gateway | `crates/agent-gateway/go.mod` | Go Gateway 依赖。 |
 | Gateway WebUI | `crates/agent-gateway/web/package.json` | 浏览器 WebUI 依赖与构建脚本。 |
 
+## 上游同步
+
+本地开发仓库使用 `origin` 保存派生仓库,使用 `upstream` 跟踪 `Stack-Cairn/LiveAgent` 原仓库。同步原仓库后续更新:
+
+```bash
+git fetch upstream
+git merge upstream/main
+git push origin main
+```
+
+目标模式的持久化元数据、`/goal` 命令、目标工具和自动 continuation 分布在 `crates/agent-gui` 的 chat state、tool registry 与 agent turn runtime 中;合并上游时需要一起处理这些模块的冲突。
+
 ## 常用检查命令
 
 | 场景 | 命令 |

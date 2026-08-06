@@ -4,10 +4,15 @@ import type {
   Message,
   ToolCall,
   ToolResultMessage,
+  UserMessage,
 } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "../../../lib/chat/askUserQuestion";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
-import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
+import { createSyntheticContinueUserMessage } from "../../../lib/chat/compaction/engine";
+import {
+  estimateTextTokenUnits,
+  getUsageTotalTokens,
+} from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
 import {
   isAbortedAssistantMessage,
@@ -17,6 +22,7 @@ import {
   appendMessagesToConversation,
   appendRenderOnlyMessagesToConversation,
   type ConversationViewState,
+  updateConversationGoal,
 } from "../../../lib/chat/conversation/conversationState";
 import type {
   LiveTranscriptStore,
@@ -27,6 +33,7 @@ import type {
   GatewayBridgeEventController,
 } from "../../../lib/chat/conversation/run";
 import type { TurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
+import { createGoalState, isActiveConversationGoal } from "../../../lib/chat/goal";
 import { memoryExtraction } from "../../../lib/chat/memory/extractionController";
 import type {
   MemoryExtractionModelConfig,
@@ -41,6 +48,7 @@ import {
   collapseThinking,
   type LiveRound,
   markToolCallRunningInRound,
+  toolResultMessageToText,
   updateLiveRound,
   upsertHostedSearchToRound,
   upsertToolCallToRound,
@@ -48,6 +56,7 @@ import {
 import { runAssistantWithTools } from "../../../lib/chat/runner/agentRunner";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText } from "../../../lib/providers/llm";
+import { isRetryableProviderErrorMessage } from "../../../lib/providers/runtime/streamRetry";
 import { resolveRuntimePlatform } from "../../../lib/runtimePlatform";
 import {
   type AppSettings,
@@ -102,6 +111,24 @@ export type PersistConversationParams = {
 
 const AGENT_PERF_LOG_THRESHOLD_MS = 250;
 const TOOL_CALL_DELTA_RAF_FALLBACK_DELAY_MS = 64;
+const MAX_NON_GOAL_PROVIDER_RECOVERY_ATTEMPTS = 1;
+const PROVIDER_RECOVERY_BASE_DELAY_MS = 250;
+
+function waitForProviderRecovery(attempt: number, signal: AbortSignal): Promise<void> {
+  const delayMs = Math.min(4_000, PROVIDER_RECOVERY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1));
+  if (signal.aborted) return Promise.reject(signal.reason ?? new Error("Cancelled"));
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new Error("Cancelled"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, delayMs);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 function perfNowMs() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -245,6 +272,7 @@ export type RunAgentConversationTurnParams = {
   conversationDebugLogger: StreamDebugLogger;
   subagentStore?: SubagentConversationStore;
   getNextConversationState: () => ConversationViewState;
+  initialResumeMessage?: UserMessage;
   applyConversationState: (state: ConversationViewState) => void;
   buildPreparedContext: (
     state: ConversationViewState,
@@ -309,6 +337,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     conversationDebugLogger,
     subagentStore,
     getNextConversationState,
+    initialResumeMessage: initialResumeMessageParam,
     applyConversationState,
     buildPreparedContext,
     compaction,
@@ -393,6 +422,12 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   };
   const fileState = createFileToolState();
   const todoState = getOrCreateTodoToolState(conversationId);
+  const goalState = createGoalState({
+    initialGoal: getNextConversationState().meta.goal,
+    onChange: (goal) => {
+      applyConversationState(updateConversationGoal(getNextConversationState(), goal));
+    },
+  });
   const subagentScheduler = createSubagentScheduler();
   const runtimePlatform = await resolveRuntimePlatform();
   const buildRegistryStartedAt = perfNowMs();
@@ -402,6 +437,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     runtimePlatform,
     fileState,
     todoState,
+    goalState,
     askUserQuestionConversationId: conversationId,
     skillsEnabled: effectiveSkillsEnabled,
     skillsRootDir,
@@ -477,6 +513,14 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     context?: BuiltinToolExecutionContext,
   ) => Promise<Message> = (tc, signal, context) =>
     builtinRegistry.executeToolCall(tc, signal, context);
+
+  const stopActiveGoalAfterError = (error: unknown) => {
+    // A user stop is an intentional pause, not a provider failure. Keep
+    // transient provider failures resumable, and pause only after the
+    // configured consecutive-error threshold is reached.
+    if (cancellation.userStop.signal.aborted) return;
+    goalState.recordError(error);
+  };
 
   // 工具审批门:按实时策略裁决每次调用。deny → 直接拦;ask → 挂起等用户在
   // 聊天审批卡片作决定(本会话已“记住”的工具免审);allow → 放行。
@@ -715,19 +759,38 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   }
 
   let midStreamProtectionDisabled = false;
-  while (!result) {
+  let continuationRoundOffset = 0;
+  let completedState: ConversationViewState | null = null;
+  let previousGoalAssistantText = "";
+  let repeatedGoalAssistantCount = 0;
+  let noToolProgressCount = 0;
+  let providerRecoveryAttempts = 0;
+  let initialResumeMessage = initialResumeMessageParam;
+  while (true) {
+    result = null;
+    goalState.startIteration();
+    const goalIterationStartedAt = perfNowMs();
+    while (!result) {
     let streamedAgentText = "";
     let streamedAgentTokenUnits = 0;
     let protectionCheckChars = 0;
     let midStreamCompactionRequested = false;
     let sawToolCallInRound = false;
     const nativeWebSearchEnabled = runtime.nativeWebSearchEnabled !== false;
-    const agentContext = withSubagentRuntimeContext(
+    const preparedContext =
       pendingAgentContext ??
-        buildPreparedContext(getNextConversationState(), combinedTools, {
-          includeUploadedFilesMetadata: true,
-        }),
+      buildPreparedContext(getNextConversationState(), combinedTools, {
+        includeUploadedFilesMetadata: true,
+      });
+    const agentContext = withSubagentRuntimeContext(
+      initialResumeMessage && !pendingAgentContext
+        ? {
+            ...preparedContext,
+            messages: [...preparedContext.messages, initialResumeMessage],
+          }
+        : preparedContext,
     );
+    initialResumeMessage = undefined;
     pendingAgentContext = null;
     // 主请求跑在派生 scope 上：mid-stream 压缩只 abort 该 scope，用户停止
     // （userStop）随时链式传导，不存在换代窗口。
@@ -773,7 +836,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onTextDelta: (delta, round) => {
           gatewayBridgeEvents.queueToken(delta, { round });
           streamedAgentText += delta;
-          streamedAgentTokenUnits += estimateTextTokenUnits(delta);
+          const deltaTokenUnits = estimateTextTokenUnits(delta);
+          streamedAgentTokenUnits += deltaTokenUnits;
+          goalState.recordLiveTokens(deltaTokenUnits);
           batchLiveRoundsUpdate(
             (prev) =>
               updateLiveRound(prev, round, (target) => {
@@ -800,6 +865,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           scope.controller.abort();
         },
         onThinkingDelta: (delta, round) => {
+          goalState.recordLiveTokens(estimateTextTokenUnits(delta));
           gatewayBridgeEvents.queueEvent({
             type: "thinking",
             text: delta,
@@ -851,6 +917,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onToolExecutionStart: (toolCall, round) => {
           sawToolCallInRound = true;
           discardPendingToolCallDelta(toolCall, round);
+          goalState.recordLiveTokens(
+            estimateTextTokenUnits(toolCall.name) +
+              estimateTextTokenUnits(JSON.stringify(toolCall.arguments ?? {}) ?? ""),
+          );
           if (!isSubagentCardToolCall(toolCall)) {
             hookLifecycle.toolExecutionStarted();
           }
@@ -875,6 +945,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onToolResult: (toolCall, toolResult, round) => {
           if (toolResult.role !== "toolResult") return;
           discardPendingToolCallDelta(toolCall, round);
+          goalState.recordLiveTokens(
+            estimateTextTokenUnits(toolResultMessageToText(toolResult as ToolResultMessage)),
+          );
           if (!isSubagentCardToolCall(toolCall)) {
             hookLifecycle.toolResultReceived(round);
           }
@@ -894,7 +967,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             (prev) =>
               updateLiveRound(prev, round, (target) => {
                 const tr: ToolResultMessage = toolResult as ToolResultMessage;
-                const nextTarget = attachToolResultToRound(collapseThinking(target), toolCall, tr);
+                const nextTarget = attachToolResultToRound(
+                  collapseThinking(target),
+                  toolCall,
+                  tr,
+                );
 
                 return {
                   ...nextTarget,
@@ -926,6 +1003,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onRetryAttempts: (_round, attempts) => {
           updateRetryAttempts(attempts, transcriptStore);
         },
+        roundOffset: continuationRoundOffset,
         onBeforeNextTurn: async ({ round, assistant, toolResults, emittedMessages }) => {
           publishPersistableAgentProgress(round, assistant, toolResults);
           latestAgentEmittedMessages = emittedMessages.slice();
@@ -975,7 +1053,56 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       );
     } catch (error) {
       if (!midStreamCompactionRequested) {
-        throw error;
+        stopActiveGoalAfterError(error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const goalAfterError = getNextConversationState().meta.goal;
+        const canRecover =
+          isRetryableProviderErrorMessage(errorMessage) &&
+          !cancellation.userStop.signal.aborted &&
+          (isActiveConversationGoal(goalAfterError) ||
+            providerRecoveryAttempts < MAX_NON_GOAL_PROVIDER_RECOVERY_ATTEMPTS);
+        if (!canRecover) {
+          throw error;
+        }
+
+        providerRecoveryAttempts += 1;
+        hookLifecycle.ensureMessageEnded();
+        if (activeAgentRound > 0) {
+          hookLifecycle.endTurn(activeAgentRound);
+        }
+        resetLiveTranscript(transcriptStore);
+        pendingTerminalAssistantMetaRef.current = null;
+        pendingToolCallDeltas.clear();
+        cancelPendingToolCallDeltaFlush = null;
+
+        // Keep completed assistant/tool messages from the failed Agent run in
+        // the retry context, but discard the incomplete assistant response.
+        if (latestAgentEmittedMessages.length > 0) {
+          const recoveryState = appendMessagesToConversation(
+            getNextConversationState(),
+            latestAgentEmittedMessages,
+          );
+          applyConversationState(recoveryState);
+          pendingAgentContext = withSubagentRuntimeContext(
+            buildPreparedContext(recoveryState, combinedTools, {
+              includeUploadedFilesMetadata: true,
+            }),
+          );
+          latestAgentEmittedMessages = [];
+        } else {
+          pendingAgentContext = null;
+        }
+        clearPersistableAgentProgress();
+        continuationRoundOffset = Math.max(
+          continuationRoundOffset,
+          Math.max(0, activeAgentRound - 1),
+        );
+
+        const recoveryStatus = "Connection lost; retrying...";
+        gatewayBridgeEvents.queueToolStatus(recoveryStatus);
+        updateToolStatus(recoveryStatus, transcriptStore);
+        await waitForProviderRecovery(providerRecoveryAttempts, cancellation.userStop.signal);
+        continue;
       }
 
       hookLifecycle.ensureMessageEnded();
@@ -1012,7 +1139,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       });
 
       if (!compactionResult.context) {
-        throw new Error("Mid-stream compaction did not provide a continuation context.");
+        const error = new Error("Mid-stream compaction did not provide a continuation context.");
+        stopActiveGoalAfterError(error);
+        throw error;
       }
       pendingAgentContext = compactionResult.context;
       if (compactionResult.shouldDisableProtection) {
@@ -1021,25 +1150,119 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     } finally {
       scope.release();
     }
-  }
-
-  const assistantStopReason = result.assistant.stopReason;
-  if (
-    isAbortedAssistantMessage(result.assistant) ||
-    isAbortedAssistantMessage(result.messages[result.messages.length - 1])
-  ) {
-    if (commitVisibleAbortedConversation()) {
-      return;
     }
-    throw new Error("Cancelled");
+
+    const iterationResult = result as Awaited<ReturnType<typeof runAssistantWithTools>>;
+
+    const iterationAssistantUsage = iterationResult.assistant.usage;
+
+    if (
+      isAbortedAssistantMessage(iterationResult.assistant) ||
+      isAbortedAssistantMessage(iterationResult.messages[iterationResult.messages.length - 1])
+    ) {
+      if (commitVisibleAbortedConversation()) {
+        return;
+      }
+      throw new Error("Cancelled");
+    }
+
+    const roundState = appendMessagesToConversation(
+      getNextConversationState(),
+      iterationResult.emittedMessages,
+    );
+    applyConversationState(roundState);
+    completedState = roundState;
+
+    const pendingTerminalAssistantMeta = pendingTerminalAssistantMetaRef.current;
+    if (pendingTerminalAssistantMeta) {
+      commitAssistantRoundMeta(
+        pendingTerminalAssistantMeta.assistant,
+        pendingTerminalAssistantMeta.round,
+      );
+      pendingTerminalAssistantMetaRef.current = null;
+    }
+
+    const emittedTokenUsage = iterationResult.emittedMessages.reduce((total, message) => {
+      if (message.role !== "assistant") return total;
+      return total + (getUsageTotalTokens(message.usage) ?? 0);
+    }, 0);
+    const iterationTokenUsage =
+      emittedTokenUsage > 0
+        ? emittedTokenUsage
+        : (getUsageTotalTokens(iterationAssistantUsage) ?? 0);
+    goalState.recordProgress(
+      iterationTokenUsage,
+      Math.max(0, Math.round((perfNowMs() - goalIterationStartedAt) / 1000)),
+      Date.now(),
+    );
+    providerRecoveryAttempts = 0;
+    completedState = getNextConversationState();
+
+    const goal = completedState.meta.goal;
+    const assistantText = assistantMessageToText(iterationResult.assistant).trim();
+    const madeToolProgress = iterationResult.emittedMessages.some(
+      (message) => message.role === "toolResult",
+    );
+    noToolProgressCount = madeToolProgress ? 0 : noToolProgressCount + 1;
+    if (assistantText && assistantText === previousGoalAssistantText && !madeToolProgress) {
+      repeatedGoalAssistantCount += 1;
+    } else if (assistantText || madeToolProgress) {
+      repeatedGoalAssistantCount = 0;
+    } else {
+      repeatedGoalAssistantCount += 1;
+    }
+    previousGoalAssistantText = assistantText;
+
+    if (
+      (repeatedGoalAssistantCount >= 2 || noToolProgressCount >= 2) &&
+      isActiveConversationGoal(goal)
+    ) {
+      goalState.setGoal({ ...goal, status: "blocked", updatedAt: Date.now() });
+      completedState = getNextConversationState();
+      break;
+    }
+
+    if (!isActiveConversationGoal(goal)) {
+      break;
+    }
+
+    const persistedRound = await persistConversationWithHistorySync({
+      conversationId,
+      sessionId,
+      providerId,
+      model,
+      cwd: conversationCwd,
+      state: completedState,
+      fallbackTitle,
+      createdAt,
+      titlePromise,
+    });
+    if (!persistedRound) {
+      break;
+    }
+
+    continuationRoundOffset = activeAgentRound;
+    const resumeContext = withSubagentRuntimeContext(
+      buildPreparedContext(completedState, combinedTools, {
+        includeUploadedFilesMetadata: true,
+      }),
+    );
+    pendingAgentContext = {
+      ...resumeContext,
+      messages: [...resumeContext.messages, createSyntheticContinueUserMessage()],
+    };
+    latestAgentEmittedMessages = [];
+    clearPersistableAgentProgress();
   }
 
-  const finalState = appendMessagesToConversation(
-    getNextConversationState(),
-    result.emittedMessages,
-  );
-  let completedState = finalState;
-  const gatewayAssistantText = assistantMessageToText(result.assistant);
+  if (!result || !completedState) {
+    throw new Error("Goal run did not produce a completed model response.");
+  }
+
+  const finalResult = result as Awaited<ReturnType<typeof runAssistantWithTools>>;
+  const assistantStopReason = finalResult.assistant.stopReason;
+  const finalState = completedState;
+  const gatewayAssistantText = assistantMessageToText(finalResult.assistant);
   if (!gatewayBridgeEvents.hasForwardedText() && gatewayAssistantText.length > 0) {
     gatewayBridgeEvents.queueToken(gatewayAssistantText, {
       round: activeAgentRound || 1,
@@ -1202,13 +1425,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         extraction.emittedMessages,
       );
     }
-  }
-  const pendingTerminalAssistantMeta = pendingTerminalAssistantMetaRef.current;
-  if (pendingTerminalAssistantMeta) {
-    commitAssistantRoundMeta(
-      pendingTerminalAssistantMeta.assistant,
-      pendingTerminalAssistantMeta.round,
-    );
   }
   hookLifecycle.endAgent();
   applyConversationState(completedState);

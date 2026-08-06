@@ -1,4 +1,5 @@
 import {
+  type AssistantMessage,
   type AssistantMessageEvent,
   type AssistantMessageEventStream,
   createAssistantMessageEventStream,
@@ -16,6 +17,26 @@ export type RetryAttemptRecord = {
 
 const STREAM_RETRY_BASE_DELAY_MS = 200;
 const STREAM_RETRY_BACKOFF_FACTOR = 2;
+const ADDITIONAL_RETRYABLE_STREAM_ERROR_PATTERN =
+  /(?:stream[_\s-]*read[_\s-]*error|stream[_\s-]*error|premature[_\s-]*(?:stream|eof)|unexpected[_\s-]*end)/i;
+
+/**
+ * Extends pi-ai's provider classifier with transport errors emitted by
+ * compatible gateways. These failures can happen after a stream has started,
+ * so callers may use this for a request-level recovery as well.
+ */
+export function isRetryableProviderErrorMessage(errorMessage: string | undefined): boolean {
+  const message = errorMessage?.trim();
+  if (!message) return false;
+  const assistantMessage = {
+    stopReason: "error",
+    errorMessage: message,
+  } as AssistantMessage;
+  return (
+    isRetryableAssistantError(assistantMessage) ||
+    ADDITIONAL_RETRYABLE_STREAM_ERROR_PATTERN.test(message)
+  );
+}
 
 export type StreamRetryConfig = {
   maxAttempts?: number;
@@ -77,8 +98,8 @@ function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<vo
  *
  * Events are buffered per attempt until the first content-bearing event
  * ("committed": text_delta / thinking_delta / toolcall_start) is observed. An
- * attempt that ends in error before committing, classified retryable by
- * pi-ai's `isRetryableAssistantError`, is discarded wholesale and replaced by
+ * attempt that ends in error before committing, classified retryable by the
+ * provider error classifier, is discarded wholesale and replaced by
  * a fresh `factory()` call after a codex-style backoff — the caller never
  * sees the failed attempt's events. Once committed, or once retries are
  * exhausted/disabled, events pass straight through untouched. `onRetry` /
@@ -130,8 +151,9 @@ export function withStreamRetry(
       }
 
       if (terminal?.type === "error" && !committed && !disabled && attempt < maxAttempts) {
-        if (isRetryableAssistantError(terminalMessage(terminal))) {
-          const errorMessage = terminalMessage(terminal)?.errorMessage || "Unknown error";
+        const failedMessage = terminalMessage(terminal);
+        if (isRetryableProviderErrorMessage(failedMessage?.errorMessage)) {
+          const errorMessage = failedMessage?.errorMessage || "Unknown error";
           attempt += 1;
           options?.onRetry?.(attempt - 1, maxAttempts - 1, errorMessage);
           hasRetried = true;

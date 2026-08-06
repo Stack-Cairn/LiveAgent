@@ -30,6 +30,7 @@ import {
   createConversationRuntimeEntry,
   pruneIdleConversationRuntimeCaches,
   setConversationRuntimeCacheEntry,
+  shouldReuseConversationRuntimeCache,
 } from "../runtime/chatPageRuntime";
 import { resolvePersistedConversationModelSelection } from "../runtime/modelSelection";
 
@@ -129,6 +130,10 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
   } = params;
 
   const earlierPageLoadsRef = useRef(new Map<string, Promise<void>>());
+  const runtimeHydrationRequestsRef = useRef(
+    new Map<string, Promise<ConversationRuntimeEntry | null>>(),
+  );
+  const deletedRuntimeConversationIdsRef = useRef(new Set<string>());
 
   function pruneIdleConversationCaches(extraKeepIds: Iterable<string> = []) {
     pruneIdleConversationRuntimeCaches({
@@ -151,6 +156,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     clearError?: boolean;
   }) {
     const { conversationId, entry, persistenceCursor, clearError = false } = params;
+    deletedRuntimeConversationIdsRef.current.delete(conversationId);
     setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, conversationId, entry);
     if (persistenceCursor) {
       conversationPersistenceCursorRef.current.set(conversationId, persistenceCursor);
@@ -186,6 +192,74 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     });
   }
 
+  async function readPersistedConversationRuntime(id: string) {
+    const record = await getChatHistoryWindow({
+      id,
+      maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
+      includeActiveSegment: true,
+    });
+    if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
+    return {
+      entry: createConversationRuntimeEntry({
+        state: buildConversationStateFromWindow(record),
+        sessionId: record.conversation.sessionId ?? record.conversation.id,
+        createdAt: record.conversation.createdAt,
+        workdir: record.conversation.cwd,
+        selectedModel: resolveConversationSelectedModel(record.conversation.selectedModelJson),
+      }),
+      persistenceCursor: {
+        activeSegmentIndex: record.activeSegment.segmentIndex,
+        activeSegmentId: record.activeSegment.segmentId,
+      },
+    };
+  }
+
+  /** Load one conversation into its own runtime cache without changing the visible conversation. */
+  function hydrateConversationRuntime(
+    conversationId: string,
+  ): Promise<ConversationRuntimeEntry | null> {
+    const id = conversationId.trim();
+    if (!id || deletedRuntimeConversationIdsRef.current.has(id)) return Promise.resolve(null);
+
+    const cached = conversationRuntimeCacheRef.current.get(id);
+    if (
+      cached &&
+      (isConversationRunning(id) ||
+        cached.state.meta.totalMessageCount > 0 ||
+        Boolean(cached.state.meta.goal))
+    ) {
+      return Promise.resolve(cached);
+    }
+
+    const existing = runtimeHydrationRequestsRef.current.get(id);
+    if (existing) return existing;
+
+    const request = (async () => {
+      const current = conversationRuntimeCacheRef.current.get(id);
+      if (
+        current &&
+        (isConversationRunning(id) ||
+          current.state.meta.totalMessageCount > 0 ||
+          Boolean(current.state.meta.goal))
+      ) {
+        return current;
+      }
+      const loaded = await readPersistedConversationRuntime(id);
+      if (deletedRuntimeConversationIdsRef.current.has(id)) return null;
+      const runningEntry = conversationRuntimeCacheRef.current.get(id);
+      if (runningEntry && isConversationRunning(id)) return runningEntry;
+      setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, id, loaded.entry);
+      conversationPersistenceCursorRef.current.set(id, loaded.persistenceCursor);
+      return loaded.entry;
+    })().finally(() => {
+      if (runtimeHydrationRequestsRef.current.get(id) === request) {
+        runtimeHydrationRequestsRef.current.delete(id);
+      }
+    });
+    runtimeHydrationRequestsRef.current.set(id, request);
+    return request;
+  }
+
   async function openInitial(id: string): Promise<"cache-hit" | "painted"> {
     const loadSequence = conversationLoadSequenceRef.current + 1;
     conversationLoadSequenceRef.current = loadSequence;
@@ -205,9 +279,10 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     if (cached) {
       const isPendingHistoryItem = sidebarStore.peek(id)?.isPending === true;
       if (
-        conversationPersistenceCursorRef.current.has(id) ||
-        cached.isSending ||
-        isPendingHistoryItem
+        shouldReuseConversationRuntimeCache({
+          isRunning: isConversationRunning(id),
+          isPending: isPendingHistoryItem,
+        })
       ) {
         setHydratingConversationId(null);
         activateConversation({
@@ -221,31 +296,15 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     }
 
     try {
-      const record = await getChatHistoryWindow({
-        id,
-        maxMessages: CHAT_HISTORY_WINDOW_MESSAGES,
-        includeActiveSegment: true,
-      });
+      const entry = await hydrateConversationRuntime(id);
       if (conversationLoadSequenceRef.current !== loadSequence) {
         return "painted";
       }
-
-      if (!record.activeSegment) throw new Error("历史窗口缺少活跃分段");
-      const state = buildConversationStateFromWindow(record);
-      const entry = createConversationRuntimeEntry({
-        state,
-        sessionId: record.conversation.sessionId ?? record.conversation.id,
-        createdAt: record.conversation.createdAt,
-        workdir: record.conversation.cwd,
-        selectedModel: resolveConversationSelectedModel(record.conversation.selectedModelJson),
-      });
+      if (!entry) throw new Error("历史对话加载已取消");
       activateConversation({
-        conversationId: record.conversation.id,
+        conversationId: id,
         entry,
-        persistenceCursor: {
-          activeSegmentIndex: record.activeSegment.segmentIndex,
-          activeSegmentId: record.activeSegment.segmentId,
-        },
+        persistenceCursor: conversationPersistenceCursorRef.current.get(id),
         clearError: true,
       });
       setHydratingConversationId((current) => (current === id ? null : current));
@@ -355,6 +414,8 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
   // IPC delete); this evicts local caches and replaces the visible
   // conversation with a blank one when the deleted one was open.
   function cleanupDeletedConversation(id: string) {
+    deletedRuntimeConversationIdsRef.current.add(id);
+    runtimeHydrationRequestsRef.current.delete(id);
     conversationPersistenceCursorRef.current.delete(id);
     conversationRuntimeCacheRef.current.delete(id);
     deleteConversationArtifacts(id);
@@ -509,6 +570,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     startNewConversation,
     openInitial,
     loadEarlier,
+    hydrateConversationRuntime,
     replaceConversationAtMessage,
     cleanupDeletedConversation,
     persistConversation,

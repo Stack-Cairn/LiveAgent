@@ -311,6 +311,9 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   assert.equal(queue.enqueueCurrentComposerTurn("end"), true);
   draftText = "second queued turn";
   assert.equal(queue.enqueueCurrentComposerTurn("end"), true);
+  assert.equal(queue.enqueueTextTurn("/goal pause"), true);
+  assert.equal(queue.queuedChatTurnsRef.current.at(-1)?.draft.text, "/goal pause");
+  assert.deepEqual(activeStopOptions, [], "queueing a command must not stop the active run");
   queue.requestQueuedChatTurnProcessing("conversation-1");
   await flushPromises();
   assert.equal(sendCalls.length, 1);
@@ -330,12 +333,12 @@ test("a direct queue stop pauses processing until composer Stop resumes it", asy
   await flushPromises();
 
   assert.equal(sendCalls.length, 1, "the second queued turn must remain paused after Stop");
-  assert.equal(queue.queuedChatTurnsRef.current.length, 1);
+  assert.equal(queue.queuedChatTurnsRef.current.length, 2);
 
   queue.stopSending();
   await flushPromises();
 
-  assert.equal(sendCalls.length, 2, "composer Stop must continue with the queued turn");
+  assert.equal(sendCalls.length, 3, "composer Stop must drain the queued turns in order");
   assert.equal(queue.queuedChatTurnsRef.current.length, 0);
   hookHarness.cleanup();
 });

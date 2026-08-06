@@ -6,6 +6,11 @@ export type TodoToolState = ReturnType<typeof createTodoToolState>;
 
 export function createTodoToolState() {
   let todos: TodoItem[] = [];
+  const listeners = new Set<() => void>();
+
+  function notify() {
+    for (const listener of listeners) listener();
+  }
 
   return {
     getTodos(): TodoItem[] {
@@ -13,9 +18,15 @@ export function createTodoToolState() {
     },
     setTodos(next: TodoItem[]) {
       todos = next;
+      notify();
     },
     clear() {
       todos = [];
+      notify();
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
   };
 }

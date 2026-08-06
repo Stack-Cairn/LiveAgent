@@ -86,6 +86,9 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
   const conversationAbortControllersRef = useRef(new Map<string, AbortController>());
   const conversationStopRequestsRef = useRef(new Set<string>());
   const conversationStopRequestVersionsRef = useRef(new Map<string, number>());
+  const conversationIdleWaitersRef = useRef(
+    new Map<string, Set<(idle: boolean) => void>>(),
+  );
   const conversationStopHandlersRef = useRef(
     new Map<string, (options: { force: boolean; requestVersion: number }) => void>(),
   );
@@ -287,6 +290,33 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     [],
   );
 
+  const waitForConversationIdle = useCallback((conversationId: string, timeoutMs = 15_000) => {
+    const key = conversationId.trim();
+    if (!key) return Promise.resolve(false);
+
+    const entry = conversationRuntimeCacheRef.current.get(key);
+    if (!runningConversationIdsRef.current.has(key) && !entry?.isSending) {
+      return Promise.resolve(true);
+    }
+
+    return new Promise<boolean>((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const finish = (idle: boolean) => {
+        if (timer !== null) clearTimeout(timer);
+        const waiters = conversationIdleWaitersRef.current.get(key);
+        waiters?.delete(finish);
+        if (waiters && waiters.size === 0) {
+          conversationIdleWaitersRef.current.delete(key);
+        }
+        resolve(idle);
+      };
+      const waiters = conversationIdleWaitersRef.current.get(key) ?? new Set();
+      waiters.add(finish);
+      conversationIdleWaitersRef.current.set(key, waiters);
+      timer = setTimeout(() => finish(false), Math.max(0, timeoutMs));
+    });
+  }, []);
+
   const setConversationSendingState = useCallback(
     (conversationId: string, value: boolean) => {
       updateConversationRuntimeEntry(conversationId, (prev) => ({
@@ -312,6 +342,11 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
         next.delete(key);
         return next;
       });
+      const waiters = conversationIdleWaitersRef.current.get(key);
+      if (waiters) {
+        for (const resolve of waiters) resolve(true);
+        conversationIdleWaitersRef.current.delete(key);
+      }
     },
     [setRunningConversationIds, updateConversationRuntimeEntry],
   );
@@ -352,6 +387,10 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
       conversationAbortControllersRef.current.clear();
       conversationStopRequestsRef.current.clear();
       conversationStopRequestVersionsRef.current.clear();
+      for (const waiters of conversationIdleWaitersRef.current.values()) {
+        for (const resolve of waiters) resolve(false);
+      }
+      conversationIdleWaitersRef.current.clear();
       conversationStopHandlersRef.current.clear();
     },
     [],
@@ -376,6 +415,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     setConversationStopHandler,
     clearConversationStopHandler,
     requestActiveConversationStop,
+    waitForConversationIdle,
     setConversationSendingState,
   };
 }

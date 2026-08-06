@@ -106,6 +106,7 @@ async function replayCancelledHistoryScenario(params) {
 }
 
 let runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+let capturedGoalState = null;
 
 const loader = createTsModuleLoader({
   mocks: {
@@ -118,7 +119,8 @@ const loader = createTsModuleLoader({
       },
     },
     [builtinRegistryPath]: {
-      async buildBuiltinToolRegistry() {
+      async buildBuiltinToolRegistry(params) {
+        capturedGoalState = params.goalState;
         return {
           tools: [],
           async executeToolCall() {
@@ -135,6 +137,7 @@ const loader = createTsModuleLoader({
     [memoryExtractionPath]: {
       memoryExtraction: {
         noteTurnBoundary() {},
+        requestExtraction: async () => null,
       },
     },
     [fileToolStatePath]: {
@@ -160,7 +163,9 @@ function noOp() {}
 function createHookLifecycle() {
   return {
     startAgent: noOp,
+    endAgent: noOp,
     startTurn: noOp,
+    endTurn: noOp,
     ensureMessageEnded: noOp,
     assistantMessageCompleted: noOp,
     toolExecutionStarted: noOp,
@@ -417,4 +422,282 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
   assert.equal(protectionChecks, 0);
   assert.equal(toolCallEvents("AskUserQuestion").length, 1);
   assert.equal(askTools.getAskUserQuestionDeadlineAt(askToolCall.id), askDeadlineAt);
+});
+
+test("active goals continue past eight model turns until the goal becomes terminal", async () => {
+  const goalModule = loader.loadModule("src/lib/chat/goal.ts");
+  let state = conversationState.normalizeConversationState({
+    meta: {
+      goal: goalModule.createConversationGoal("finish the long-running task", undefined, 1),
+    },
+    segments: [],
+  });
+  const contexts = [];
+  const persistedStates = [];
+  let calls = 0;
+
+  runAssistantWithToolsScenario = async (params) => {
+    calls += 1;
+    contexts.push(params.context);
+    params.onTurnStart?.(1);
+
+    const toolCall = {
+      type: "toolCall",
+      id: `call-progress-${calls}`,
+      name: "Read",
+      arguments: { path: `progress-${calls}.txt` },
+    };
+    const toolResult = {
+      role: "toolResult",
+      toolCallId: toolCall.id,
+      toolName: toolCall.name,
+      content: [{ type: "text", text: `progress ${calls}` }],
+      isError: false,
+      timestamp: calls,
+    };
+    const assistant = {
+      role: "assistant",
+      provider: "codex",
+      api: "openai-responses",
+      model: "gpt-5",
+      content: [toolCall],
+      stopReason: "toolUse",
+      usage: { input: 1, output: 1, totalTokens: 2 },
+      timestamp: calls,
+    };
+
+    params.onToolCall?.(toolCall, 1);
+    params.onToolExecutionStart?.(toolCall, 1);
+    params.onToolResult?.(toolCall, toolResult, 1);
+    params.onAssistantMessage?.(assistant, 1);
+
+    if (calls === 9) {
+      const current = capturedGoalState.getGoal();
+      capturedGoalState.setGoal({ ...current, status: "complete", updatedAt: 10 });
+    }
+
+    return {
+      assistant,
+      messages: [assistant, toolResult],
+      // Some providers attach usage only to the final assistant result, not
+      // to the assistant copy returned in emittedMessages.
+      emittedMessages: [{ ...assistant, usage: undefined }, toolResult],
+    };
+  };
+
+  try {
+    await runAgentConversationTurn({
+      providerId: "codex",
+      model: "gpt-5",
+      runtime: {},
+      runtimeModel: { provider: "codex", api: "openai-responses", id: "gpt-5" },
+      selectedModel: { customProviderId: "codex", model: "gpt-5" },
+      effectiveWorkdir: "C:/workspace",
+      effectiveSkillsEnabled: false,
+      showSilentMemoryExtraction: false,
+      agentTemplates: [],
+      getMcpSettings: () => ({ servers: [], selected: [] }),
+      sessionId: "session-goal",
+      conversationId: "conversation-goal-continuation",
+      fallbackTitle: "goal",
+      createdAt: 1,
+      titlePromise: null,
+      transcriptStore: {},
+      gatewayBridgeEvents: {
+        queueToken: noOp,
+        queueEvent: noOp,
+        queueToolStatus: noOp,
+        hasForwardedText: () => false,
+      },
+      hookLifecycle: createHookLifecycle(),
+      conversationDebugLogger: { enabled: false, logResult: noOp },
+      getNextConversationState: () => state,
+      initialResumeMessage: {
+        role: "user",
+        content: [{ type: "text", text: "resume persisted goal" }],
+        timestamp: 1,
+      },
+      applyConversationState(next) {
+        state = next;
+      },
+      buildPreparedContext: () => ({ systemPrompt: "", messages: [] }),
+      compaction: {
+        async maybeCompactPreSend() {},
+        beginRequest: noOp,
+        shouldProtectMidStream: () => false,
+        async compactDuringRun() {
+          return { context: null, shouldDisableProtection: false };
+        },
+      },
+      cancellation: {
+        userStop: new AbortController(),
+        deriveScope() {
+          return { controller: new AbortController(), release: noOp };
+        },
+      },
+      resetLiveTranscript: noOp,
+      settleLiveTranscript: noOp,
+      batchLiveRoundsUpdate(updater) {
+        updater([]);
+      },
+      updateToolStatus: noOp,
+      updatePersistableAgentProgress: noOp,
+      commitVisibleAbortedConversation() {
+        return false;
+      },
+      freezeGatewayFinalProjection: noOp,
+      async persistConversationWithHistorySync(params) {
+        persistedStates.push(params.state);
+        return true;
+      },
+    });
+  } finally {
+    runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+  }
+
+  assert.equal(calls, 9);
+  assert.equal(state.meta.goal.status, "complete");
+  assert.equal(state.meta.goal.tokensUsed, 18);
+  assert.equal(contexts[0].messages.at(-1).content[0].text, "resume persisted goal");
+  assert.equal(
+    state.segments
+      .flatMap((segment) => segment.messages)
+      .filter((message) => message.role === "user").length,
+    0,
+  );
+  const finalPersistedState = persistedStates.at(-1);
+  assert.equal(finalPersistedState.meta.goal.status, "complete");
+  assert.ok(
+    finalPersistedState.segments.some((segment) =>
+      segment.messages.some((message) => message.role === "assistant"),
+    ),
+  );
+  assert.ok(
+    finalPersistedState.segments.some((segment) =>
+      segment.messages.some((message) => message.role === "toolResult"),
+    ),
+  );
+  assert.ok(
+    contexts.slice(1).every((context) =>
+      context.messages.some(
+        (message) =>
+          message.role === "user" &&
+          message.content.includes("Continue if you have next steps"),
+      ),
+    ),
+  );
+});
+
+test("agent goals recover from a committed stream_read_error and continue", async () => {
+  const goalModule = loader.loadModule("src/lib/chat/goal.ts");
+  let state = conversationState.normalizeConversationState({
+    meta: {
+      goal: goalModule.createConversationGoal("recover the interrupted task", undefined, 1),
+    },
+    segments: [],
+  });
+  let calls = 0;
+  let resetCount = 0;
+
+  runAssistantWithToolsScenario = async (params) => {
+    calls += 1;
+    params.onTurnStart?.(1);
+    if (calls === 1) {
+      params.onTextDelta?.("partial response", 1);
+      throw new Error("Request failed: stream_read_error");
+    }
+
+    const assistant = {
+      role: "assistant",
+      provider: "codex",
+      api: "openai-responses",
+      model: "gpt-5",
+      content: [{ type: "text", text: "recovered response" }],
+      stopReason: "stop",
+      usage: { input: 1, output: 1, totalTokens: 2 },
+      timestamp: calls,
+    };
+    params.onTextDelta?.("recovered response", 1);
+    params.onAssistantMessage?.(assistant, 1);
+    capturedGoalState.setGoal({
+      ...capturedGoalState.getGoal(),
+      status: "complete",
+      updatedAt: 10,
+    });
+    return {
+      assistant,
+      messages: [assistant],
+      emittedMessages: [assistant],
+    };
+  };
+
+  try {
+    await runAgentConversationTurn({
+      providerId: "codex",
+      model: "gpt-5",
+      runtime: {},
+      runtimeModel: { provider: "codex", api: "openai-responses", id: "gpt-5" },
+      selectedModel: { customProviderId: "codex", model: "gpt-5" },
+      effectiveWorkdir: "C:/workspace",
+      effectiveSkillsEnabled: false,
+      showSilentMemoryExtraction: false,
+      agentTemplates: [],
+      getMcpSettings: () => ({ servers: [], selected: [] }),
+      sessionId: "session-goal-recovery",
+      conversationId: "conversation-goal-recovery",
+      fallbackTitle: "goal",
+      createdAt: 1,
+      titlePromise: null,
+      transcriptStore: {},
+      gatewayBridgeEvents: {
+        queueToken: noOp,
+        queueEvent: noOp,
+        queueToolStatus: noOp,
+        hasForwardedText: () => false,
+      },
+      hookLifecycle: createHookLifecycle(),
+      conversationDebugLogger: { enabled: false, logResult: noOp },
+      getNextConversationState: () => state,
+      applyConversationState(next) {
+        state = next;
+      },
+      buildPreparedContext: () => ({ systemPrompt: "", messages: [] }),
+      compaction: {
+        async maybeCompactPreSend() {},
+        beginRequest: noOp,
+        shouldProtectMidStream: () => false,
+        async compactDuringRun() {
+          return { context: null, shouldDisableProtection: false };
+        },
+      },
+      cancellation: {
+        userStop: new AbortController(),
+        deriveScope() {
+          return { controller: new AbortController(), release: noOp };
+        },
+      },
+      resetLiveTranscript() {
+        resetCount += 1;
+      },
+      settleLiveTranscript: noOp,
+      batchLiveRoundsUpdate(updater) {
+        updater([]);
+      },
+      updateToolStatus: noOp,
+      updatePersistableAgentProgress: noOp,
+      commitVisibleAbortedConversation() {
+        return false;
+      },
+      freezeGatewayFinalProjection: noOp,
+      async persistConversationWithHistorySync() {
+        return true;
+      },
+    });
+  } finally {
+    runAssistantWithToolsScenario = replayCancelledHistoryScenario;
+  }
+
+  assert.equal(calls, 2);
+  assert.equal(resetCount, 1);
+  assert.equal(state.meta.goal.status, "complete");
 });

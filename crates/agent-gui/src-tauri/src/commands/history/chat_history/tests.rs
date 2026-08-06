@@ -116,6 +116,39 @@ mod tests {
     }
 
     #[test]
+    fn history_summary_exposes_persisted_active_goal_metadata() {
+        let conn = open_test_db().expect("open test db");
+        let mut conversation = sample_conversation();
+        conversation.context_meta_json = json!({
+            "goal": {
+                "goalId": "goal-1",
+                "objective": "resume after restart",
+                "status": "active",
+                "tokensUsed": 12,
+                "timeUsedSeconds": 4,
+                "runningSince": 1_700_000_000_300_i64,
+                "consecutiveApiErrorCount": 0,
+                "createdAt": 1_700_000_000_100_i64,
+                "updatedAt": 1_700_000_000_300_i64
+            }
+        })
+        .to_string();
+        upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+
+        let summary = list_chat_history_sync(&conn, 1, 20)
+            .expect("list history")
+            .items
+            .into_iter()
+            .find(|item| item.id == conversation.id)
+            .expect("summary");
+        let goal = summary.goal.expect("goal metadata");
+        assert_eq!(goal.goal_id, "goal-1");
+        assert_eq!(goal.status, "active");
+        assert_eq!(goal.objective, "resume after restart");
+        assert_eq!(goal.tokens_used, 12);
+    }
+
+    #[test]
     fn initialize_db_migrates_legacy_pin_columns() {
         let conn =
             Connection::open_in_memory().expect("open legacy in-memory chat history database");

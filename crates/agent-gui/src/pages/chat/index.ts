@@ -1,4 +1,5 @@
 export { ChatComposerBar, type ChatQueueTurnPreview } from "./components/ChatComposerBar";
+export { GoalProgressPanel } from "./components/GoalProgressPanel";
 export { ChatHeader } from "./components/ChatHeader";
 export type {
   ActiveGatewayBridgeRequest,

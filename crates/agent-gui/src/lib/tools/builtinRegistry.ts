@@ -1,5 +1,6 @@
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { homeDir } from "@tauri-apps/api/path";
+import type { GoalState } from "../chat/goal";
 import type { RuntimePlatform } from "../runtimePlatform";
 import {
   type McpSettings,
@@ -23,6 +24,7 @@ import type {
 import { createCronTools } from "./cronTools";
 import { createFileToolState, type FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
+import { createGoalTools } from "./goalTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
@@ -269,6 +271,7 @@ export async function buildBuiltinToolRegistry(
   params: BuildBuiltinBaseToolRegistryParams & {
     subagentRuntime?: SubagentRuntimeConfig;
     todoState?: TodoToolState;
+    goalState?: GoalState;
     /** chat 场景注入交互式提问工具；子代理/自动化场景无人值守，不注册。 */
     askUserQuestionConversationId?: string;
   },
@@ -278,11 +281,15 @@ export async function buildBuiltinToolRegistry(
     params.runtimeScope === "chat" && params.todoState
       ? [createTodoTools({ state: params.todoState })]
       : [];
+  const goalBundles =
+    params.runtimeScope === "chat" && params.goalState
+      ? [createGoalTools({ state: params.goalState })]
+      : [];
   const askUserQuestionBundles =
     params.runtimeScope === "chat" && params.askUserQuestionConversationId
       ? [createAskUserQuestionTools({ conversationId: params.askUserQuestionConversationId })]
       : [];
-  const chatBundles = [...todoBundles, ...askUserQuestionBundles];
+  const chatBundles = [...todoBundles, ...goalBundles, ...askUserQuestionBundles];
 
   const subagentRuntime = params.subagentRuntime;
   if (!subagentRuntime) {

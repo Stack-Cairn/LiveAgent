@@ -1,3 +1,17 @@
+fn read_goal_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<Option<ChatHistoryGoalSummary>> {
+    let context_meta_json: Option<String> = row.get("context_meta_json")?;
+    let Some(context_meta_json) = context_meta_json else {
+        return Ok(None);
+    };
+    let Ok(context_meta) = serde_json::from_str::<Value>(&context_meta_json) else {
+        return Ok(None);
+    };
+    let Some(goal) = context_meta.get("goal") else {
+        return Ok(None);
+    };
+    Ok(serde_json::from_value(goal.clone()).ok())
+}
+
 fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatHistorySummary> {
     Ok(ChatHistorySummary {
         id: row.get("id")?,
@@ -7,6 +21,7 @@ fn row_to_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChatHistorySummar
         session_id: row.get("session_id")?,
         cwd: row.get("cwd")?,
         selected_model_json: row.get("selected_model_json")?,
+        goal: read_goal_summary(row)?,
         message_count: row.get("total_message_count")?,
         created_at: row.get("created_at")?,
         updated_at: row.get("updated_at")?,
@@ -64,6 +79,7 @@ fn get_summary_by_id(conn: &Connection, id: &str) -> Result<ChatHistorySummary, 
             h.session_id AS session_id,
             h.cwd AS cwd,
             h.selected_model_json AS selected_model_json,
+            h.context_meta_json AS context_meta_json,
             h.total_message_count AS total_message_count,
             h.created_at AS created_at,
             h.updated_at AS updated_at,
@@ -206,6 +222,7 @@ pub(crate) fn list_chat_history_sync_with_filter(
                 h.session_id AS session_id,
                 h.cwd AS cwd,
                 h.selected_model_json AS selected_model_json,
+                h.context_meta_json AS context_meta_json,
                 h.total_message_count AS total_message_count,
                 h.created_at AS created_at,
                 h.updated_at AS updated_at,
@@ -315,6 +332,7 @@ pub(crate) fn list_shared_chat_history_sync(
                 h.session_id AS session_id,
                 h.cwd AS cwd,
                 h.selected_model_json AS selected_model_json,
+                h.context_meta_json AS context_meta_json,
                 h.total_message_count AS total_message_count,
                 h.created_at AS created_at,
                 h.updated_at AS updated_at,

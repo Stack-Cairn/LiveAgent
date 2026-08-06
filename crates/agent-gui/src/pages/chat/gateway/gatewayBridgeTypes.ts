@@ -79,6 +79,8 @@ export type SendChatAction = (overrides?: {
   preserveComposerOnStart?: boolean;
   beforeRuntimeStart?: () => Promise<void>;
   afterInitialHistoryPersist?: () => Promise<void>;
+  goalCommandHandled?: boolean;
+  goalContinuation?: boolean;
   // Edit-resend atomically replaces this user message and its following
   // history before the model runtime starts, then forwards the same anchor
   // so other connected clients can apply the rebase.

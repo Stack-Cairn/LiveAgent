@@ -21,6 +21,7 @@ const loader = createTsModuleLoader({
 const {
   pruneIdleConversationRuntimeCaches,
   setConversationRuntimeCacheEntry,
+  shouldReuseConversationRuntimeCache,
 } = loader.loadModule("src/pages/chat/runtime/chatPageRuntime.ts");
 
 function createEntry(id, options = {}) {
@@ -46,6 +47,21 @@ function createCursor(id) {
     activeSegmentId: `${id}-segment`,
   };
 }
+
+test("history cache reuse requires a live run or a pending conversation", () => {
+  assert.equal(
+    shouldReuseConversationRuntimeCache({ isRunning: true, isPending: false }),
+    true,
+  );
+  assert.equal(
+    shouldReuseConversationRuntimeCache({ isRunning: false, isPending: true }),
+    true,
+  );
+  assert.equal(
+    shouldReuseConversationRuntimeCache({ isRunning: false, isPending: false }),
+    false,
+  );
+});
 
 test("pruneIdleConversationRuntimeCaches evicts oldest idle runtime entries", () => {
   const runtimeCache = new Map();

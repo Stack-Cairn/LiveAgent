@@ -19,6 +19,19 @@ export type SidebarConversation = {
   pinnedAt?: number | null;
   isShared?: boolean;
   selectedModelJson?: string;
+  goal?: {
+    goalId: string;
+    objective: string;
+    status: "active" | "paused" | "blocked" | "usageLimited" | "budgetLimited" | "complete";
+    tokenBudget?: number;
+    tokensUsed: number;
+    timeUsedSeconds: number;
+    runningSince?: number;
+    consecutiveApiErrorCount: number;
+    lastApiError?: string;
+    createdAt: number;
+    updatedAt: number;
+  };
   // Local-only draft/persisting row; survives authoritative reconciles until
   // the backend confirms (an upsert event clears it) or it is removed locally.
   isPending?: boolean;

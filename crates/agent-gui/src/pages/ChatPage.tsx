@@ -40,7 +40,10 @@ import {
   type ConversationViewState,
   createConversationStateFromContext,
   type RenderTimelineItem,
+  updateConversationGoal,
+  updateConversationGoalMode,
 } from "../lib/chat/conversation/conversationState";
+import { applyGoalCommand, type ConversationGoal, type GoalCommand } from "../lib/chat/goal";
 import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
 import type { CodeMentionReference } from "../lib/chat/messages/mentionReferences";
@@ -93,7 +96,7 @@ import { createSubagentStoreManager } from "../lib/subagents";
 import { terminalSessionBelongsToProject } from "../lib/terminal/sessionStore";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
-import { disposeTodoToolState } from "../lib/tools/todoTools";
+import { disposeTodoToolState, getOrCreateTodoToolState } from "../lib/tools/todoTools";
 import {
   answerToolApproval,
   cancelPendingToolApprovalsForConversation,
@@ -112,6 +115,7 @@ import {
   ChatTranscript,
   createChatRuntimeHost,
   type EnsureGatewayBridgeConversationReadyOptions,
+  GoalProgressPanel,
   MAX_UPLOAD_FILES,
   pruneIdleConversationRuntimeCaches,
   type SendChatAction,
@@ -408,6 +412,7 @@ export function ChatPage(props: ChatPageProps) {
   );
   const loadEarlierHistoryActionRef = useRef<(id: string) => Promise<void>>(async () => undefined);
   const cleanupDeletedConversationActionRef = useRef<(id: string) => void>(() => undefined);
+  const goalActionInFlightRef = useRef(new Set<string>());
   const openController = useMemo(
     () =>
       createConversationOpenController({
@@ -475,6 +480,7 @@ export function ChatPage(props: ChatPageProps) {
     setConversationStopHandler,
     clearConversationStopHandler,
     requestActiveConversationStop,
+    waitForConversationIdle,
     setConversationSendingState,
   } = useChatPageRuntimeStore({
     initialConversation: initialConversationRef.current,
@@ -535,6 +541,16 @@ export function ChatPage(props: ChatPageProps) {
   }
 
   const isDraftConversation = !historyItems.some((item) => item.id === currentConversationId);
+
+  const todoState = useMemo(
+    () => getOrCreateTodoToolState(currentConversationId),
+    [currentConversationId],
+  );
+  const currentTodos = useSyncExternalStore(
+    todoState.subscribe,
+    todoState.getTodos,
+    todoState.getTodos,
+  );
 
   // 当前会话的待审批工具:订阅审批服务版本,pending 表变更即重取。用于输入框上方
   // 的集中审批栏(取代埋在每个折叠项里的分散卡片)。
@@ -926,6 +942,7 @@ export function ChatPage(props: ChatPageProps) {
     stopSending,
     stopConversation,
     enqueueCurrentComposerTurn,
+    interruptAndSendCurrentComposerTurn,
     requestQueuedChatTurnProcessing,
     runQueuedTurnNow,
     moveQueuedTurnUp,
@@ -1091,6 +1108,119 @@ export function ChatPage(props: ChatPageProps) {
   openInitialActionRef.current = openConversationInitial;
   loadEarlierHistoryActionRef.current = loadEarlierConversationHistory;
   cleanupDeletedConversationActionRef.current = cleanupDeletedConversation;
+
+  const persistConversationEntry = useCallback(
+    async (
+      conversationId: string,
+      entry: {
+        state: ConversationViewState;
+        sessionId: string;
+        createdAt: number;
+        workdir?: string;
+        selectedModel?: SelectedModel;
+      },
+    ) => {
+      const historyItem = sidebarStore.peek(conversationId);
+      const selectedModel = entry.selectedModel ?? activeSelectedModel;
+      const fallbackTitle =
+        historyItem && !historyItem.isPending
+          ? historyItem.title
+          : buildFallbackConversationTitle(
+              getFirstUserMessageText(buildRequestContext(entry.state)),
+            );
+      return persistConversation({
+        conversationId,
+        sessionId: entry.sessionId || historyItem?.sessionId || conversationId,
+        providerId: selectedModel?.customProviderId ?? historyItem?.providerId ?? "pending",
+        model: selectedModel?.model ?? historyItem?.model ?? "pending",
+        selectedModel,
+        cwd: (historyItem?.cwd ?? entry.workdir ?? displayedConversationWorkdir) || undefined,
+        state: entry.state,
+        fallbackTitle,
+        createdAt: entry.createdAt || historyItem?.createdAt || Date.now(),
+        titlePromise: null,
+      });
+    },
+    [activeSelectedModel, displayedConversationWorkdir, persistConversation, sidebarStore],
+  );
+
+  const startGoalContinuation = useCallback(
+    async (conversationId: string, goal: ConversationGoal) => {
+      const id = conversationId.trim();
+      if (!id || goal.status !== "active") return false;
+      if (isConversationRunning(id)) return false;
+
+      let entry = conversationRuntimeCacheRef.current.get(id);
+      if (!entry || entry.isSending || entry.state.meta.goal?.goalId !== goal.goalId) {
+        return false;
+      }
+      const currentGoal = entry.state.meta.goal;
+      if (!currentGoal || currentGoal.status !== "active") return false;
+
+      return sendActionRef.current({
+        textOverride: currentGoal.objective,
+        goalCommandHandled: true,
+        goalContinuation: true,
+        executionModeOverride: isAgentExecutionMode(settings.system.executionMode)
+          ? settings.system.executionMode
+          : "tools",
+        preserveComposerOnStart: true,
+      });
+    },
+    [conversationRuntimeCacheRef, settings.system.executionMode, isConversationRunning],
+  );
+
+  const handleToggleGoalMode = useCallback(
+    (enabled: boolean) => {
+      const conversationId = currentConversationIdRef.current.trim();
+      if (!conversationId) return;
+      const currentEntry =
+        conversationRuntimeCacheRef.current.get(conversationId) ??
+        (conversationId === currentConversationIdRef.current
+          ? buildRuntimeEntryFromVisibleState()
+          : null);
+      if (!currentEntry || currentEntry.state.meta.goalModeEnabled === enabled) return;
+
+      const nextEntry = updateConversationRuntimeEntry(conversationId, (prev) => ({
+        ...prev,
+        state: updateConversationGoalMode(prev.state, enabled),
+      }));
+      if (nextEntry.state.meta.goalModeEnabled !== enabled) return;
+
+      const historyItem = sidebarStore.peek(conversationId);
+      const selectedModel = nextEntry.selectedModel ?? activeSelectedModel;
+      const fallbackTitle =
+        historyItem && !historyItem.isPending
+          ? historyItem.title
+          : buildFallbackConversationTitle(
+              getFirstUserMessageText(buildRequestContext(nextEntry.state)),
+            );
+      void persistConversation({
+        conversationId,
+        sessionId: nextEntry.sessionId || currentConversationSessionId,
+        providerId: selectedModel?.customProviderId ?? historyItem?.providerId ?? "pending",
+        model: selectedModel?.model ?? historyItem?.model ?? "pending",
+        selectedModel,
+        cwd: (historyItem?.cwd ?? nextEntry.workdir ?? displayedConversationWorkdir) || undefined,
+        state: nextEntry.state,
+        fallbackTitle,
+        createdAt: nextEntry.createdAt || currentConversationCreatedAt,
+        titlePromise: null,
+      });
+    },
+    [
+      activeSelectedModel,
+      buildRuntimeEntryFromVisibleState,
+      conversationRuntimeCacheRef,
+      currentConversationCreatedAt,
+      currentConversationIdRef,
+      currentConversationSessionId,
+      displayedConversationWorkdir,
+      persistConversation,
+      sidebarStore,
+      updateConversationRuntimeEntry,
+    ],
+  );
 
   const {
     handleRemoveWorkspaceProject,
@@ -1710,6 +1840,92 @@ export function ChatPage(props: ChatPageProps) {
     stopSendingActionRef.current();
   }, []);
 
+  const handleGoalAction = useCallback(
+    async (command: GoalCommand) => {
+      const conversationId = currentConversationIdRef.current.trim();
+      if (!conversationId || goalActionInFlightRef.current.has(conversationId)) return;
+
+      const currentEntry =
+        conversationRuntimeCacheRef.current.get(conversationId) ??
+        (conversationId === currentConversationIdRef.current
+          ? buildRuntimeEntryFromVisibleState()
+          : null);
+      const currentGoal = currentEntry?.state.meta.goal;
+      if (!currentEntry || !currentGoal) return;
+
+      goalActionInFlightRef.current.add(conversationId);
+      try {
+        const commandResult = applyGoalCommand(currentGoal, command);
+        let nextEntry = updateConversationRuntimeEntry(conversationId, (prev) => ({
+          ...prev,
+          state: updateConversationGoal(prev.state, commandResult.goal),
+          errorMessage: null,
+        }));
+        if (commandResult.action === "clear") {
+          getOrCreateTodoToolState(conversationId).clear();
+        }
+
+        const wasRunning = isConversationRunning(conversationId) || currentEntry.isSending === true;
+        const shouldStopCurrentRun =
+          wasRunning && ["pause", "clear", "edit"].includes(commandResult.action);
+        if (shouldStopCurrentRun) {
+          stopConversation(conversationId);
+          await waitForConversationIdle(conversationId);
+          const stopRequestVersion = getConversationStopRequestVersion(conversationId);
+          if (isConversationStopRequested(conversationId)) {
+            consumeConversationStop(conversationId, stopRequestVersion);
+          }
+        }
+
+        nextEntry = conversationRuntimeCacheRef.current.get(conversationId) ?? nextEntry;
+        if (!(await persistConversationEntry(conversationId, nextEntry))) return;
+
+        if (commandResult.shouldStart && commandResult.goal) {
+          const latestEntry = conversationRuntimeCacheRef.current.get(conversationId);
+          const latestGoal = latestEntry?.state.meta.goal;
+          if (latestGoal?.status === "active" && latestGoal.goalId === commandResult.goal.goalId) {
+            await waitForConversationIdle(conversationId);
+            void startGoalContinuation(conversationId, latestGoal);
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        updateConversationRuntimeEntry(conversationId, (prev) => ({
+          ...prev,
+          errorMessage: message,
+        }));
+      } finally {
+        goalActionInFlightRef.current.delete(conversationId);
+      }
+    },
+    [
+      buildRuntimeEntryFromVisibleState,
+      consumeConversationStop,
+      conversationRuntimeCacheRef,
+      currentConversationIdRef,
+      getConversationStopRequestVersion,
+      isConversationStopRequested,
+      isConversationRunning,
+      persistConversationEntry,
+      startGoalContinuation,
+      stopConversation,
+      updateConversationRuntimeEntry,
+      waitForConversationIdle,
+    ],
+  );
+
+  const goalPanel = conversationState.meta.goal ? (
+    <GoalProgressPanel
+      goal={conversationState.meta.goal}
+      isRunning={isConversationRunning(currentConversationId)}
+      todos={currentTodos}
+      onEdit={(objective) => void handleGoalAction({ kind: "edit", objective })}
+      onPause={() => void handleGoalAction({ kind: "pause" })}
+      onResume={() => void handleGoalAction({ kind: "resume" })}
+      onClear={() => void handleGoalAction({ kind: "clear" })}
+    />
+  ) : null;
+
   const handleComposerBusyChange = useCallback((isBusy: boolean) => {
     composerBusyRef.current = isBusy;
   }, []);
@@ -1989,7 +2205,6 @@ export function ChatPage(props: ChatPageProps) {
                 />
                 <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
               </div>
-
               <ChangedFilesActionsProvider value={changedFilesActions}>
                 <ChatTranscript
                   conversationId={currentConversationId}
@@ -2041,6 +2256,7 @@ export function ChatPage(props: ChatPageProps) {
                 workspaceActivityClient={tauriWorkspaceActivityClient}
                 onSend={handleSend}
                 onStop={handleStopSending}
+                onInterruptAndSend={interruptAndSendCurrentComposerTurn}
                 onComposerBusyChange={handleComposerBusyChange}
                 onChatRuntimeControlsChange={handleChatRuntimeControlsChange}
                 onPickReadableFiles={pickReadableFiles}
@@ -2055,6 +2271,9 @@ export function ChatPage(props: ChatPageProps) {
                 onRemoveQueuedTurn={removeQueuedTurn}
                 onHeightChange={setComposerOverlayHeight}
                 approvalBar={approvalBar}
+                goalPanel={goalPanel}
+                goalModeEnabled={conversationState.meta.goalModeEnabled}
+                onToggleGoalMode={handleToggleGoalMode}
               />
               {isFileDropActive ? (
                 <ChatFileDropOverlay

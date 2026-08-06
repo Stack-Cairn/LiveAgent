@@ -35,7 +35,9 @@ import {
   Sparkle,
   Square,
   SquarePen,
+  Target,
   Trash2,
+  Zap,
 } from "../../../components/icons";
 import { Button } from "../../../components/ui/button";
 import {
@@ -55,6 +57,7 @@ import {
 } from "../../../lib/settings";
 import { cn } from "../../../lib/shared/utils";
 import type { WorkspaceActivityClient } from "../../../lib/workspace-activity/types";
+import { AgentActivationSwitch } from "../../settings/shared";
 import { useUploadedImagePreview } from "../transcript/uploadedImagePreview";
 
 const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
@@ -190,6 +193,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   workspaceActivityClient?: WorkspaceActivityClient | null;
   onSend: () => void;
   onStop: () => void;
+  onInterruptAndSend: () => void;
   onComposerBusyChange: (isBusy: boolean) => void;
   onChatRuntimeControlsChange: (patch: Partial<ChatRuntimeControls>) => void;
   onPickReadableFiles: () => void;
@@ -206,6 +210,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
   onHeightChange?: (height: number) => void;
   /** 输入框上方的集中审批栏(待审批时由上层注入,渲染在队列面板之上)。 */
   approvalBar?: ReactNode;
+  goalPanel?: ReactNode;
+  goalModeEnabled: boolean;
+  onToggleGoalMode: (enabled: boolean) => void;
 }) {
   const {
     composerRef,
@@ -225,6 +232,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     workspaceActivityClient,
     onSend,
     onStop,
+    onInterruptAndSend,
     onComposerBusyChange,
     onChatRuntimeControlsChange,
     onPickReadableFiles,
@@ -239,6 +247,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
     onRemoveQueuedTurn,
     onHeightChange,
     approvalBar,
+    goalPanel,
+    goalModeEnabled,
+    onToggleGoalMode,
   } = props;
   const { t } = useLocale();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -585,6 +596,11 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
         )}
       >
         {approvalBar}
+        {goalPanel ? (
+          <div className="relative z-40 mx-auto mb-2 w-[calc(100%-1.5rem)] max-w-[720px]">
+            {goalPanel}
+          </div>
+        ) : null}
         {queuedTurns.length > 0 ? (
           <div
             ref={queuePanelRef}
@@ -975,6 +991,25 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                 </div>
               ) : null}
 
+              <RuntimeControlTooltip label={t("chat.goal.modeToggle")}>
+                <span
+                  className={cn(
+                    "inline-flex h-8 shrink-0 items-center gap-1 rounded-full px-1.5 transition-colors",
+                    goalModeEnabled
+                      ? "bg-sky-500/10 text-sky-600 dark:bg-sky-400/10 dark:text-sky-300"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground dark:hover:text-white",
+                  )}
+                >
+                  <Target className="h-3.5 w-3.5" aria-hidden />
+                  <AgentActivationSwitch
+                    checked={goalModeEnabled}
+                    title={t("chat.goal.modeToggle")}
+                    disabled={controlsDisabled}
+                    onToggle={() => onToggleGoalMode(!goalModeEnabled)}
+                  />
+                </span>
+              </RuntimeControlTooltip>
+
               <GitBranchSelector
                 workdir={workdir}
                 gitClient={gitClient}
@@ -986,6 +1021,24 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
+              {canQueueDraftWhileSending ? (
+                <RuntimeControlTooltip label={t("chat.queue.interruptAndSend")}>
+                  <Button
+                    onClick={onInterruptAndSend}
+                    size="sm"
+                    title={t("chat.queue.interruptAndSend")}
+                    aria-label={t("chat.queue.interruptAndSend")}
+                    style={{
+                      backgroundColor: "hsl(38 92% 48%)",
+                      backgroundImage: "none",
+                      color: "white",
+                    }}
+                    className="h-8 w-8 shrink-0 rounded-full border-0 p-0 shadow-none transition-all hover:brightness-105 active:scale-95"
+                  >
+                    <Zap className="h-4 w-4" />
+                  </Button>
+                </RuntimeControlTooltip>
+              ) : null}
               <Button
                 disabled={isSending ? false : sendDisabled}
                 onClick={() => {

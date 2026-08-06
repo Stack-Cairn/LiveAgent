@@ -56,6 +56,13 @@ export function createConversationRuntimeEntry(params: {
   };
 }
 
+export function shouldReuseConversationRuntimeCache(params: {
+  isRunning: boolean;
+  isPending: boolean;
+}) {
+  return params.isRunning || params.isPending;
+}
+
 function createEmptyAssistantUsage(): AssistantMessage["usage"] {
   return {
     input: 0,

@@ -8,6 +8,7 @@ import type {
 } from "../../../components/chat/MentionComposer";
 import { getAutomationState } from "../../../lib/automation";
 import { createHookRunScope } from "../../../lib/automation/hookRunner";
+import { createSyntheticContinueUserMessage } from "../../../lib/chat/compaction/engine";
 import {
   buildPersistableMessagesFromSnapshot,
   type SuppressedToolTraceSnapshot,
@@ -18,12 +19,20 @@ import {
   type ConversationViewState,
   findHistoryMessageRefByMessageId,
   type HistoryMessageRef,
+  updateConversationGoal,
 } from "../../../lib/chat/conversation/conversationState";
 import {
   createConversationHookLifecycle,
   createGatewayBridgeEventController,
 } from "../../../lib/chat/conversation/run";
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
+import {
+  applyGoalCommand,
+  formatGoalSummary,
+  GOAL_COMMAND_USAGE,
+  parseGoalCommand,
+  shouldStartDefaultGoal,
+} from "../../../lib/chat/goal";
 import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
 import type { MemoryExtractionStatusKey } from "../../../lib/chat/memory/extractionEngine";
 import {
@@ -67,6 +76,7 @@ import {
   type SubagentStoreManager,
 } from "../../../lib/subagents";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
+import { getOrCreateTodoToolState } from "../../../lib/tools/todoTools";
 import { appendManagedSkillSelections, asErrorMessage } from "../chatPageUtils";
 import {
   buildTextFromComposerDraft,
@@ -296,6 +306,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     beforeRuntimeStart?: () => Promise<void>;
     afterInitialHistoryPersist?: () => Promise<void>;
     editResendBaseMessageRef?: HistoryMessageRef;
+    goalCommandHandled?: boolean;
+    goalContinuation?: boolean;
   }) {
     const overrideConversationId = overrides?.conversationIdOverride?.trim() ?? "";
     const conversationId = overrideConversationId || currentConversationIdRef.current;
@@ -332,6 +344,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       settings.remote.gatewayUrl.trim() !== "" &&
       settings.remote.token.trim() !== "";
     const mirrorsLocalRunToGateway = !gatewayBridgeRequest && hasRemoteGatewayTarget;
+    const isGoalContinuation =
+      overrides?.goalContinuation === true && !gatewayBridgeRequest && !hasRemoteGatewayTarget;
     const gatewayBridgeRequestId =
       gatewayBridgeRequest?.requestId ?? createLocalGatewayChatRunId(conversationId);
     const gatewayBridgeWorkerId =
@@ -519,7 +533,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return false;
     }
 
-    const userMessage = createUserMessageWithUploads(text, uploadedFiles, Date.now());
+    const userMessage = isGoalContinuation
+      ? createSyntheticContinueUserMessage()
+      : createUserMessageWithUploads(text, uploadedFiles, Date.now());
     if (!userMessage) {
       if (gatewayBridgeRequest) {
         const message = "Message is required.";
@@ -572,6 +588,26 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       model,
     });
     const baseConversationState = runtimeEntry.state;
+    const parsedGoalCommand =
+      !overrides?.goalCommandHandled && uploadedFiles.length === 0
+        ? parseGoalCommand(content)
+        : null;
+    const goalCommand =
+      parsedGoalCommand ??
+      (!overrides?.goalCommandHandled &&
+      shouldStartDefaultGoal({
+        enabled: baseConversationState.meta.goalModeEnabled,
+        isAgentMode: effectiveIsAgentMode,
+        currentGoal: baseConversationState.meta.goal,
+        objective: content,
+        })
+        ? { kind: "set" as const, objective: content.trim() }
+        : null);
+    const shouldConsumeGoalCommandComposer =
+      goalCommand !== null &&
+      !hasTextOverride &&
+      !overrides?.composerDraftOverride &&
+      !overrides?.preserveComposerOnStart;
     const isFirstTurn = baseConversationState.meta.totalMessageCount === 0;
     const existingHistoryItem =
       sidebarStore.peek(conversationId) ??
@@ -593,7 +629,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           );
 
     let titlePromise: Promise<string | null> | null = null;
-    if (isFirstTurn || isBranchDefaultTitle) {
+    if (!goalCommand && (isFirstTurn || isBranchDefaultTitle)) {
       const titleModelSelection = resolveConversationTitleModelSelection(
         settings,
         effectiveSelectedModel,
@@ -618,6 +654,65 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       });
     }
 
+    if (goalCommand) {
+      try {
+        const commandResult = applyGoalCommand(baseConversationState.meta.goal, goalCommand);
+        const nextState = updateConversationGoal(baseConversationState, commandResult.goal);
+        if (commandResult.action === "set" || commandResult.action === "clear") {
+          getOrCreateTodoToolState(conversationId).clear();
+        }
+        updateConversationRuntimeEntry(conversationId, (prev) => ({
+          ...prev,
+          state: nextState,
+          errorMessage:
+            commandResult.action === "usage"
+              ? GOAL_COMMAND_USAGE
+              : commandResult.action === "show"
+                ? formatGoalSummary(commandResult.goal)
+                : null,
+        }));
+        const persisted = await persistConversation({
+          conversationId,
+          sessionId,
+          providerId,
+          model,
+          selectedModel,
+          cwd: conversationCwd,
+          state: nextState,
+          fallbackTitle,
+          createdAt,
+          titlePromise: null,
+        });
+        if (!persisted) return false;
+        if (shouldConsumeGoalCommandComposer) {
+          clearCachedComposerDraft(conversationId);
+          if (isConversationVisible()) {
+            composerRef.current?.clear();
+          }
+        }
+        await gatewayBridgeEvents.close();
+        if (commandResult.shouldStart && commandResult.goal) {
+          return send({
+            ...overrides,
+            textOverride: commandResult.goal.objective,
+            goalCommandHandled: true,
+            goalContinuation: commandResult.action === "resume",
+            executionModeOverride: effectiveIsAgentMode ? effectiveExecutionMode : "tools",
+            preserveComposerOnStart: true,
+          });
+        }
+        return true;
+      } catch (error) {
+        const message = asErrorMessage(error, GOAL_COMMAND_USAGE);
+        updateConversationRuntimeEntry(conversationId, (prev) => ({
+          ...prev,
+          errorMessage: message,
+        }));
+        await gatewayBridgeEvents.close();
+        return false;
+      }
+    }
+
     if (shouldCreatePendingHistoryItem) {
       sidebarStore.upsertLocal(
         createPendingHistoryItem({
@@ -634,9 +729,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
     clearAbortSnapshot(transcriptStore);
 
-    let nextConversationState = appendMessagesToConversation(baseConversationState, [
-      pendingUserMessage,
-    ]);
+    let nextConversationState = isGoalContinuation
+      ? baseConversationState
+      : appendMessagesToConversation(baseConversationState, [pendingUserMessage]);
+    const getLatestConversationState = () =>
+      conversationRuntimeCacheRef.current.get(conversationId)?.state ?? nextConversationState;
     let conversationRunStarted = false;
     let conversationUiReleased = false;
     let gatewayRunStarted = false;
@@ -648,7 +745,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     let frozenGatewayFinalProjectionJson: string | null = null;
     let frozenGatewayContentComplete = false;
     let terminalHistoryPersistFailed = false;
-    let initialUserTurnPersisted = false;
+    let initialUserTurnPersisted = isGoalContinuation;
     let initialPersistPromise: Promise<boolean> | null = null;
     let terminalHistoryPersistPromise: Promise<boolean> | null = null;
     let runCleanupPromise: Promise<void> = Promise.resolve();
@@ -1075,14 +1172,16 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         return true;
       }
     }
-    await gatewayBridgeEvents.queueUserMessage(text, uploadedFiles, {
-      messageId: pendingUserMessage.id,
-      baseMessageRef: overrides?.editResendBaseMessageRef,
-      // The new message's own stable identity: lets remote transcripts bind
-      // their user bubble's messageRef immediately, so a follow-up edit of
-      // this message can anchor its rebase without a history round-trip.
-      messageRef: findHistoryMessageRefByMessageId(nextConversationState, pendingUserMessage.id),
-    });
+    if (!isGoalContinuation) {
+      await gatewayBridgeEvents.queueUserMessage(text, uploadedFiles, {
+        messageId: pendingUserMessage.id,
+        baseMessageRef: overrides?.editResendBaseMessageRef,
+        // The new message's own stable identity: lets remote transcripts bind
+        // their user bubble's messageRef immediately, so a follow-up edit of
+        // this message can anchor its rebase without a history round-trip.
+        messageRef: findHistoryMessageRefByMessageId(nextConversationState, pendingUserMessage.id),
+      });
+    }
     if (await finishRequestedStopBeforeRuntime()) {
       return true;
     }
@@ -1144,10 +1243,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       buildResumeContext,
       presend: {
         baseState: baseConversationState,
-        pendingUserText: content,
-        composerText: content,
+        pendingUserText: isGoalContinuation ? "" : content,
+        composerText: isGoalContinuation ? "" : content,
         uploadedFiles,
-        composeAppliedState: (state) => appendMessagesToConversation(state, [pendingUserMessage]),
+        composeAppliedState: (state) =>
+          isGoalContinuation ? state : appendMessagesToConversation(state, [pendingUserMessage]),
       },
       sinks: {
         applyState: applyConversationState,
@@ -1314,7 +1414,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
       if (partialMessages.length === 0) return false;
 
-      const finalState = appendMessagesToConversation(nextConversationState, partialMessages);
+      const finalState = appendMessagesToConversation(
+        getLatestConversationState(),
+        partialMessages,
+      );
       abortedConversationCommitted = true;
       applyConversationState(finalState);
       freezeGatewayFinalProjection(finalState, true);
@@ -1349,7 +1452,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         errorMessage: rawMessage,
         timestamp: Date.now() + partialMessages.length,
       });
-      const finalState = appendMessagesToConversation(nextConversationState, [
+      const finalState = appendMessagesToConversation(getLatestConversationState(), [
         ...partialMessages,
         errorAssistant,
       ]);
@@ -1444,7 +1547,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             hookLifecycle,
             conversationDebugLogger,
             subagentStore: subagentStoresRef.current.get(conversationId),
-            getNextConversationState: () => nextConversationState,
+            getNextConversationState: getLatestConversationState,
+            initialResumeMessage: isGoalContinuation
+              ? createSyntheticContinueUserMessage()
+              : undefined,
             applyConversationState,
             buildPreparedContext,
             compaction,
@@ -1485,7 +1591,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             hookLifecycle,
             conversationDebugLogger,
             recoveryDebugLogger,
-            getNextConversationState: () => nextConversationState,
+            getNextConversationState: getLatestConversationState,
             applyConversationState,
             buildPreparedContext,
             compaction,

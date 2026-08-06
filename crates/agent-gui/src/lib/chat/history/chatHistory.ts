@@ -12,6 +12,7 @@ import {
   type StoredSummaryMessage,
   type TranscriptSegmentSlice,
 } from "../conversation/conversationState";
+import { type ConversationGoal, normalizeConversationGoal } from "../goal";
 import { parseHistorySegments, type SerializedHistorySegment } from "./chatHistoryParser";
 
 // Single window/page size for every windowed history read (open, load
@@ -26,6 +27,8 @@ export type ChatHistorySummary = {
   sessionId?: string;
   cwd?: string;
   selectedModelJson?: string;
+  /** Lightweight goal metadata exposed by history listing for manual resume UI. */
+  goal?: ConversationGoal;
   messageCount?: number;
   createdAt: number;
   updatedAt: number;
@@ -225,11 +228,17 @@ function parseStoredChatContextMeta(
   const systemPrompt = normalizeConversationSystemPrompt(
     typeof parsed.systemPrompt === "string" ? parsed.systemPrompt : fallbackSystemPrompt,
   );
+  const goal = normalizeConversationGoal(parsed.goal);
 
   return {
     schemaVersion: 3,
     systemPrompt,
     tools: Array.isArray(parsed.tools) ? parsed.tools : undefined,
+    goal,
+    // Conversations written before the per-conversation switch had a goal
+    // only when default goal mode was in effect. Preserve that intent for
+    // those conversations while keeping ordinary legacy chats disabled.
+    goalModeEnabled: parsed.goalModeEnabled === true || Boolean(goal),
     activeSegmentIndex: counts.activeSegmentIndex,
     totalSegmentCount: counts.totalSegmentCount,
     totalMessageCount: counts.totalMessageCount,
@@ -251,6 +260,34 @@ export async function listChatHistory(
 
 export async function listChatHistoryWorkdirs() {
   return invoke<ChatHistoryWorkdirsResponse>("chat_history_workdirs");
+}
+
+const CHAT_HISTORY_ALL_ITEMS_PAGE_SIZE = 200;
+
+/**
+ * Read every persisted conversation summary without loading transcript bodies.
+ * Callers that need messages should still use getChatHistoryWindow for the
+ * selected ids. Listing never starts or resumes a conversation.
+ */
+export async function listAllChatHistory(filter?: ChatHistoryListFilter) {
+  const byId = new Map<string, ChatHistorySummary>();
+  let totalCount = 0;
+  for (let page = 1; ; page += 1) {
+    const response = await listChatHistory(page, CHAT_HISTORY_ALL_ITEMS_PAGE_SIZE, filter);
+    totalCount = Math.max(totalCount, response.totalCount);
+    for (const item of response.items) {
+      const id = item.id.trim();
+      if (id) byId.set(id, item);
+    }
+    if (
+      response.items.length === 0 ||
+      byId.size >= totalCount ||
+      response.items.length < CHAT_HISTORY_ALL_ITEMS_PAGE_SIZE
+    ) {
+      break;
+    }
+  }
+  return Array.from(byId.values());
 }
 
 export async function listSharedChatHistory(page: number, pageSize: number) {

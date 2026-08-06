@@ -62,6 +62,8 @@ import { comparableToolCall } from "./flattenedToolCallText";
 import { recoverAssistantSeedToolCalls, stripSeedToolCallMarkup } from "./seedToolCalls";
 import { wrapStreamWithToolCallArgumentGuard } from "./toolCallArgumentGuard";
 
+const MAX_SEED_TOOL_CALL_RECOVERY_ATTEMPTS = 8;
+
 function throwIfRunnerCancelled(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new Error("Cancelled");
@@ -675,6 +677,8 @@ export async function runAssistantWithTools(params: {
   } | null>;
   onToolStatus?: (status: string | null) => void;
   onRetryAttempts?: (round: number, attempts: RetryAttemptRecord[]) => void;
+  /** Offset visible round numbers when one user turn contains continuations. */
+  roundOffset?: number;
   signal?: AbortSignal;
   debugLogger?: StreamDebugLogger;
   subagentScheduler?: SubagentScheduler;
@@ -747,7 +751,7 @@ export async function runAssistantWithTools(params: {
       normalizeToolCallName(toolCall, canonicalizeToolName);
     const normalizeAssistantToolCallNamesForExecution = (assistant: AssistantMessage) =>
       normalizeAssistantToolCallNames(assistant, canonicalizeToolName);
-    let currentRound = 0;
+    let currentRound = Math.max(0, Math.floor(params.roundOffset ?? 0));
 
     const executeSingleToolCall = async (
       toolCall: ToolCall,
@@ -1751,7 +1755,7 @@ export async function runAssistantWithTools(params: {
         const recoveredSeedToolCalls = recoveredSeedTurn.toolCalls;
 
         recoveredSeedTurnCount += 1;
-        if (recoveredSeedTurnCount > 8) {
+        if (recoveredSeedTurnCount > MAX_SEED_TOOL_CALL_RECOVERY_ATTEMPTS) {
           throw new Error("Too many seed tool-call recovery attempts");
         }
 

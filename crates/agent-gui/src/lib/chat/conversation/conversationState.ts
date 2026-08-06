@@ -12,6 +12,7 @@ import {
   sanitizeMessagesForModelContext,
 } from "../context/requestContextSanitizer";
 import { normalizeConversationSystemPrompt } from "../context/systemPrompt";
+import { type ConversationGoal, normalizeConversationGoal } from "../goal";
 import { buildUiMessages, type UiRound } from "../messages/uiMessages";
 import {
   getUserMessageAttachments,
@@ -70,6 +71,8 @@ export type StoredChatContextMeta = {
   schemaVersion: 3;
   systemPrompt?: string;
   tools?: Context["tools"];
+  goal?: ConversationGoal;
+  goalModeEnabled: boolean;
   activeSegmentIndex: number;
   totalSegmentCount: number;
   totalMessageCount: number;
@@ -378,6 +381,8 @@ function countMessages(segments: StoredContextSegment[]) {
 function buildConversationMeta(params: {
   systemPrompt?: string;
   tools?: Context["tools"];
+  goal?: ConversationGoal | null;
+  goalModeEnabled?: boolean;
   segments: StoredContextSegment[];
   activeSegmentIndex?: number;
   totalSegmentCount?: number;
@@ -393,6 +398,8 @@ function buildConversationMeta(params: {
     schemaVersion: 3,
     systemPrompt,
     tools: params.tools,
+    goal: params.goal ? normalizeConversationGoal(params.goal) : undefined,
+    goalModeEnabled: params.goalModeEnabled === true,
     activeSegmentIndex,
     totalSegmentCount:
       params.totalSegmentCount ??
@@ -979,6 +986,8 @@ export function normalizeConversationState(input: {
   const meta = buildConversationMeta({
     systemPrompt: input.meta.systemPrompt,
     tools: input.meta.tools,
+    goal: input.meta.goal,
+    goalModeEnabled: input.meta.goalModeEnabled,
     segments,
     activeSegmentIndex,
     totalSegmentCount: Math.max(input.meta.totalSegmentCount ?? 0, activeAbsoluteIndex + 1),
@@ -1018,11 +1027,42 @@ export function createConversationStateFromContext(context: Context): Conversati
     meta: {
       systemPrompt: context.systemPrompt,
       tools: context.tools,
+      goalModeEnabled: false,
     },
     segments: [createEmptySegment(0)],
   });
 
   return appendMessagesToConversation(seed, context.messages);
+}
+
+export function updateConversationGoal(
+  state: ConversationViewState,
+  goal: ConversationGoal | null | undefined,
+): ConversationViewState {
+  const normalizedGoal = goal ? normalizeConversationGoal(goal) : undefined;
+  if (state.meta.goal === normalizedGoal) return state;
+  return {
+    ...state,
+    meta: {
+      ...state.meta,
+      goal: normalizedGoal,
+    },
+  };
+}
+
+export function updateConversationGoalMode(
+  state: ConversationViewState,
+  enabled: boolean,
+): ConversationViewState {
+  const nextEnabled = enabled === true;
+  if (state.meta.goalModeEnabled === nextEnabled) return state;
+  return {
+    ...state,
+    meta: {
+      ...state.meta,
+      goalModeEnabled: nextEnabled,
+    },
+  };
 }
 
 export function buildRequestContext(
@@ -1117,6 +1157,8 @@ export function appendMessagesToConversation(
   const meta = buildConversationMeta({
     systemPrompt: state.meta.systemPrompt,
     tools: state.meta.tools,
+    goal: state.meta.goal,
+    goalModeEnabled: state.meta.goalModeEnabled,
     segments: normalizedSegments,
     activeSegmentIndex,
     totalSegmentCount: Math.max(
@@ -1256,6 +1298,8 @@ export function replaceActiveSegmentMessages(
   const meta = buildConversationMeta({
     systemPrompt: state.meta.systemPrompt,
     tools: state.meta.tools,
+    goal: state.meta.goal,
+    goalModeEnabled: state.meta.goalModeEnabled,
     segments: normalizedSegments,
     activeSegmentIndex: state.activeSegmentIndex,
     totalSegmentCount: state.meta.totalSegmentCount,

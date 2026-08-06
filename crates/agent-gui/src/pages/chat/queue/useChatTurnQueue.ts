@@ -423,6 +423,44 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     return true;
   }
 
+  function enqueueTextTurn(text: string) {
+    const conversationId = currentConversationIdRef.current.trim();
+    const normalizedText = text.trim();
+    if (!conversationId || !normalizedText) return false;
+
+    const runtimeEntry =
+      conversationRuntimeCacheRef.current.get(conversationId) ??
+      buildRuntimeEntryFromVisibleState();
+    const executionMode = settings.system.executionMode;
+    const workdirForTurn = isAgentExecutionMode(executionMode)
+      ? (runtimeEntry.workdir ?? displayedConversationWorkdir ?? settings.system.workdir).trim()
+      : "";
+    const queuedTurn = createQueuedChatTurn({
+      conversationId,
+      draft: createTextComposerDraft(normalizedText),
+      uploadedFiles: [],
+      executionMode,
+      workdir: workdirForTurn,
+      runtimeControls: settings.chatRuntimeControls,
+    });
+
+    setQueuedChatTurnsState((current) => appendQueuedChatTurn(current, queuedTurn));
+    return true;
+  }
+
+  function interruptAndSendCurrentComposerTurn() {
+    const conversationId = currentConversationIdRef.current.trim();
+    if (!conversationId) return false;
+    const queuedIds = new Set(queuedChatTurnsRef.current.map((item) => item.id));
+    if (!enqueueCurrentComposerTurn("end")) return false;
+    const queuedTurn = queuedChatTurnsRef.current.find(
+      (item) => item.conversationId === conversationId && !queuedIds.has(item.id),
+    );
+    if (!queuedTurn) return false;
+    runQueuedTurnNow(queuedTurn.id);
+    return true;
+  }
+
   function isQueuedChatTurnEditBlockingProcessing(conversationId: string) {
     const slot = queuedChatTurnEditSlotRef.current;
     if (!slot || slot.conversationId !== conversationId.trim()) return false;
@@ -614,7 +652,10 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     const queuedTurn = queuedChatTurnsRef.current.find((item) => item.id === id.trim());
     if (!queuedTurn) return;
     setQueuedChatTurnsState((current) => promoteQueuedChatTurn(current, queuedTurn.id));
-    if (isConversationRunning(queuedTurn.conversationId)) {
+    const conversationIsRunning =
+      isConversationRunning(queuedTurn.conversationId) ||
+      conversationRuntimeCacheRef.current.get(queuedTurn.conversationId)?.isSending === true;
+    if (conversationIsRunning) {
       stopConversation(queuedTurn.conversationId);
       // 登记恢复意图（须在 stopConversation bump 版本号之后取值），运行结束后
       // drain effect 据此消费 stop 标记并自动发送刚置顶的轮次。
@@ -1046,6 +1087,8 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     stopConversation,
     stopSending,
     enqueueCurrentComposerTurn,
+    enqueueTextTurn,
+    interruptAndSendCurrentComposerTurn,
     requestQueuedChatTurnProcessing,
     runQueuedTurnNow,
     moveQueuedTurnUp,

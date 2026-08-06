@@ -4,6 +4,7 @@ import {
   buildRequestContext,
   type ConversationViewState,
 } from "../../../lib/chat/conversation/conversationState";
+import { buildGoalSystemPrompt } from "../../../lib/chat/goal";
 import { appendSystemPrompt } from "./chatPageRuntime";
 
 export type ConversationContextBuildOptions = {
@@ -50,6 +51,10 @@ export function buildPreparedContext(params: {
   }
   if (params.memoryPrompt) {
     systemPrompt = appendSystemPrompt(systemPrompt, params.memoryPrompt);
+  }
+  const goalPrompt = buildGoalSystemPrompt(params.state.meta.goal);
+  if (goalPrompt) {
+    systemPrompt = appendSystemPrompt(systemPrompt, goalPrompt);
   }
 
   return typeof systemPrompt === "string"

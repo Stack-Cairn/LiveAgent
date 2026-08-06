@@ -119,6 +119,12 @@ LiveAgent is a **local-first** AI agent desktop client. It deeply integrates lar
 - **Access from any browser** — Go gateway (WebSocket + Protobuf) with a WebUI for remotely controlling the local agent
 - **Disconnect recovery** — a bounded seq window replays short outages, with desktop-side persistence as the safety net
 
+### 🎯 Goal mode
+
+Type `/goal <objective>` in the chat composer, for example `/goal refactor the login module and run the tests`. The goal is persisted with the conversation. Use `/goal status`, `/goal pause`, `/goal resume`, `/goal edit <objective>`, `/goal complete`, `/goal blocked`, or `/goal clear` to manage it. Goal mode is toggled per conversation from the goal bar above the composer; when enabled, ordinary Agent prompts become persistent goals.
+
+While a goal is `active`, the model receives one internal continuation after each completed model turn in the same run. There is no fixed eight-continuation cap; the run stops on a terminal goal state, an explicit token budget, provider/runtime errors, provider usage limits, or repeated no-progress output. Five consecutive provider/runtime failures pause the goal automatically; successful progress and manual resume reset that streak. New prompts and goal controls entered while a run is active are queued by default. The composer shows the objective and TodoWrite checklist with pause, resume, and delete controls; queued items can be explicitly interrupted and run immediately. Goal runs automatically use Agent tool mode.
+
 ---
 
 ## Download & Deployment
