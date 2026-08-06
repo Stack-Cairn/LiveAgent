@@ -1,3 +1,20 @@
+/// 按 id 读一条完整（含 apiKey）的供应商配置。给 pi 的 models.json 注入用，
+/// 不做任何脱敏——调用方是后端内部，绝不能把结果原样发给前端。
+pub fn load_provider_payload(provider_id: &str) -> Result<Option<Value>, String> {
+    let conn = open_db()?;
+    let payload_json: Option<String> = conn
+        .query_row(
+            "SELECT payload_json FROM provider_settings WHERE provider_id = ?1",
+            params![provider_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("读取 {PROVIDER_SETTINGS_TABLE} 失败：{e}"))?;
+    payload_json
+        .map(|payload| parse_json(&payload, PROVIDER_SETTINGS_TABLE))
+        .transpose()
+}
+
 pub fn load_providers(conn: &Connection) -> Result<Option<Value>, String> {
     let mut stmt = conn
         .prepare(PROVIDER_SETTINGS_SELECT_SQL)

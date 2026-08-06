@@ -34,6 +34,9 @@ use crate::events::EventBus;
 const PI_BIN_ENV: &str = "LIVEAGENT_PI_BIN";
 /// 会话文件目录，挂在应用数据目录下。
 const SESSION_SUBDIR: &str = "pi-sessions";
+/// 每会话的 pi agent 配置目录（`PI_CODING_AGENT_DIR`）根。models.json 落在
+/// `pi-agent/<conversationId>/` 下，一份只含当前 provider，绝不碰 `~/.pi/agent/`。
+const AGENT_DIR_SUBDIR: &str = "pi-agent";
 /// 审批扩展的落盘目录。
 const EXTENSION_SUBDIR: &str = "pi-extensions";
 /// 审批扩展的文件名。
@@ -111,7 +114,20 @@ impl PiSessionManager {
             return Err("text 不能为空".to_string());
         }
 
-        let session = self.get_or_spawn(conversation_id, request.workdir.as_deref())?;
+        // 先把所选 provider 渲染成 models.json 内容。进程按这份内容拉起，
+        // 内容变了（换 provider、换 key、加模型）就重写文件、换进程——
+        // pi 只在启动时读 models.json，RPC 没有重载命令，respawn 是唯一正路。
+        let models_json = request
+            .selected_model
+            .as_ref()
+            .map(render_models_json)
+            .transpose()?;
+
+        let session = self.get_or_spawn(
+            conversation_id,
+            request.workdir.as_deref(),
+            models_json.as_deref(),
+        )?;
 
         // 去重在拉起进程之后、发命令之前：重复请求不该产生第二条 prompt，
         // 但也不该妨碍会话本身建起来。
@@ -190,6 +206,7 @@ impl PiSessionManager {
         &self,
         conversation_id: &str,
         workdir: Option<&str>,
+        models_json: Option<&str>,
     ) -> Result<Arc<PiSession>, String> {
         let mut sessions = self
             .sessions
@@ -198,15 +215,26 @@ impl PiSessionManager {
 
         if let Some(session) = sessions.get(conversation_id) {
             if !session.process.has_exited() {
-                return Ok(Arc::clone(session));
+                // provider/model 配置没变就继续用手里的进程。变了必须换进程：
+                // pi 只在启动时读 models.json。None（前端没带 selectedModel）
+                // 视为「维持现状」，不触发 respawn。
+                match models_json {
+                    Some(next) if session.models_json.as_deref() != Some(next) => {
+                        eprintln!("模型配置已变（{conversation_id}），重启 pi 进程");
+                        sessions.remove(conversation_id);
+                    }
+                    _ => return Ok(Arc::clone(session)),
+                }
+            } else {
+                eprintln!("pi 进程已退出（{conversation_id}），重新拉起");
+                sessions.remove(conversation_id);
             }
-            eprintln!("pi 进程已退出（{conversation_id}），重新拉起");
-            sessions.remove(conversation_id);
         }
 
         let session = Arc::new(PiSession::spawn(
             conversation_id,
             workdir,
+            models_json,
             Arc::clone(&self.events),
             Arc::clone(&self.approvals),
         )?);
@@ -218,6 +246,9 @@ impl PiSessionManager {
 struct PiSession {
     process: PiProcess,
     live: Arc<Mutex<LiveState>>,
+    /// 进程拉起时写进 agent dir 的 models.json 内容。get_or_spawn 拿它判断
+    /// 「provider/模型配置变没变」——变了就换进程。None = 没注入过。
+    models_json: Option<String>,
     /// 见过的 `clientRequestId`，FIFO 淘汰。条目少，线性查比再挂一个
     /// HashSet 便宜，也省掉「两个容器不同步」这类 bug。
     seen_request_ids: Mutex<VecDeque<String>>,
@@ -227,10 +258,16 @@ impl PiSession {
     fn spawn(
         conversation_id: &str,
         workdir: Option<&str>,
+        models_json: Option<&str>,
         events: Arc<EventBus>,
         approvals: Arc<ApprovalRegistry>,
     ) -> Result<Self, String> {
         let session_dir = session_dir()?;
+        let agent_dir = agent_dir(conversation_id)?;
+        if let Some(json) = models_json {
+            std::fs::write(agent_dir.join("models.json"), json)
+                .map_err(|e| format!("写入 pi models.json 失败：{e}"))?;
+        }
         let workdir = workdir
             .map(str::trim)
             .filter(|dir| !dir.is_empty())
@@ -250,6 +287,7 @@ impl PiSession {
             bin: pi_binary(),
             session_id: conversation_id.to_string(),
             session_dir,
+            agent_dir,
             workdir,
             extension,
         })?;
@@ -270,6 +308,7 @@ impl PiSession {
         Ok(Self {
             process,
             live,
+            models_json: models_json.map(str::to_string),
             seen_request_ids: Mutex::new(VecDeque::new()),
         })
     }
@@ -279,66 +318,26 @@ impl PiSession {
         remember_request_id(&self.seen_request_ids, id)
     }
 
-    /// 切模型。
-    ///
-    /// 两步，先便宜的：
-    /// 1. 直接拿前端的 `customProviderId`/`model` 试 `set_model`。provider 命名
-    ///    对得上时一次往返就完了，绝大多数情况走这条。
-    /// 2. 试不通再拉 `get_available_models`，按 **modelId 唯一匹配** 找 provider。
-    ///    `customProviderId` 是 LiveAgent 自己的自定义 provider id（用户起的名，
-    ///    如 "my-openai"），跟 pi 的 provider 名本来就不是一个命名空间；但模型 id
-    ///    （"claude-opus-4-8" 这种）两边是同一个字符串。id 在目录里唯一时，
-    ///    provider 就是可推出来的。
-    ///
-    /// 都不成就报错拒收这条消息：静默换成别的模型跑，比让用户重发一次糟糕得多。
+    /// 切模型。一步：models.json 已按 customProviderId 注入（provider 命名
+    /// 空间两边一致），`set_model` 一次往返即命中。被拒就报错拒收这条消息：
+    /// 静默换成别的模型跑，比让用户重发一次糟糕得多。
     async fn apply_model(&self, model: &SelectedModel) -> Result<(), String> {
-        let requested = format!("{}/{}", model.custom_provider_id, model.model);
-
-        if self
-            .try_set_model(&model.custom_provider_id, &model.model)
-            .await
-        {
-            return Ok(());
-        }
-
-        match self.resolve_provider_by_model_id(&model.model).await {
-            Some(provider) => {
-                if self.try_set_model(&provider, &model.model).await {
-                    return Ok(());
-                }
-                Err(format!(
-                    "无法切换到所选模型 {requested}（按模型名匹配到 provider {provider} 后仍被拒）"
-                ))
-            }
-            None => Err(format!("无法切换到所选模型 {requested}")),
-        }
-    }
-
-    async fn try_set_model(&self, provider: &str, model_id: &str) -> bool {
-        match self
-            .process
-            .request(protocol::set_model(provider, model_id), COMMAND_TIMEOUT)
-            .await
-        {
-            Ok(response) => response.success,
-            Err(error) => {
-                eprintln!("pi set_model 失败（{provider}/{model_id}）：{error}");
-                false
-            }
-        }
-    }
-
-    /// 在 pi 的模型目录里按 id 找唯一的 provider。
-    async fn resolve_provider_by_model_id(&self, model_id: &str) -> Option<String> {
         let response = self
             .process
-            .request(protocol::get_available_models(), COMMAND_TIMEOUT)
-            .await
-            .ok()?;
-        if !response.success {
-            return None;
+            .request(
+                protocol::set_model(&model.custom_provider_id, &model.model),
+                COMMAND_TIMEOUT,
+            )
+            .await?;
+        if response.success {
+            return Ok(());
         }
-        unique_provider_for_model(response.data.as_ref()?, model_id)
+        Err(format!(
+            "无法切换到所选模型 {}/{}：{}",
+            model.custom_provider_id,
+            model.model,
+            response.error.unwrap_or_else(|| "pi 未给出错误信息".to_string())
+        ))
     }
 }
 
@@ -435,27 +434,6 @@ fn install_approval_extension() -> Result<PathBuf, String> {
     Ok(path)
 }
 
-/// 从 `get_available_models` 的返回里，按模型 id 找出唯一的 provider。
-///
-/// 多个 provider 提供同名模型时返回 None：这时候猜哪个都可能是错的，而错的
-/// provider 意味着用错 key、算错钱。宁可报错让用户自己选。
-fn unique_provider_for_model(data: &Value, model_id: &str) -> Option<String> {
-    let mut matched: Vec<&str> = data
-        .get("models")?
-        .as_array()?
-        .iter()
-        .filter(|model| model.get("id").and_then(Value::as_str) == Some(model_id))
-        .filter_map(|model| model.get("provider").and_then(Value::as_str))
-        .collect();
-    matched.sort_unstable();
-    matched.dedup();
-
-    match matched.as_slice() {
-        [provider] => Some((*provider).to_string()),
-        _ => None,
-    }
-}
-
 /// 记下一个 clientRequestId，返回 false 表示见过。
 ///
 /// 独立成函数是为了能脱开 pi 进程测——去重是真业务逻辑，
@@ -486,6 +464,27 @@ fn session_dir() -> Result<PathBuf, String> {
     let dir = crate::storage::app_storage_dir()?.join(SESSION_SUBDIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建 pi 会话目录失败：{e}"))?;
     Ok(dir)
+}
+
+/// 每会话独立的 agent dir：`pi-agent/<conversationId>/`。写 models.json 和
+/// spawn 在同一临界区里，天然无并发写竞态。
+fn agent_dir(conversation_id: &str) -> Result<PathBuf, String> {
+    let dir = crate::storage::app_storage_dir()?
+        .join(AGENT_DIR_SUBDIR)
+        .join(conversation_id);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建 pi agent 目录失败：{e}"))?;
+    Ok(dir)
+}
+
+/// 从设置库读所选 provider 的完整配置，渲染成单 provider 的 models.json。
+fn render_models_json(model: &SelectedModel) -> Result<String, String> {
+    let provider_id = model.custom_provider_id.trim();
+    if provider_id.is_empty() || model.model.trim().is_empty() {
+        return Err("selectedModel 的 customProviderId/model 不能为空".to_string());
+    }
+    let payload = crate::commands::settings::load_provider_payload(provider_id)?
+        .ok_or_else(|| format!("供应商配置不存在：{provider_id}"))?;
+    super::models_json::build_models_json(provider_id, &payload, model.model.trim())
 }
 
 #[cfg(test)]
@@ -569,52 +568,5 @@ mod tests {
             seen.lock().expect("seen lock").len(),
             SEEN_REQUEST_ID_CAPACITY
         );
-    }
-
-    fn catalog(models: serde_json::Value) -> serde_json::Value {
-        serde_json::json!({ "models": models })
-    }
-
-    #[test]
-    fn a_uniquely_named_model_reveals_its_provider() {
-        let data = catalog(serde_json::json!([
-            { "id": "claude-opus-4-8", "provider": "anthropic" },
-            { "id": "gpt-5", "provider": "openai" },
-        ]));
-        assert_eq!(
-            unique_provider_for_model(&data, "claude-opus-4-8").as_deref(),
-            Some("anthropic")
-        );
-    }
-
-    /// 同名模型挂在两个 provider 下时必须放弃：猜错 provider 等于用错 key、算错钱。
-    #[test]
-    fn an_ambiguous_model_name_resolves_to_nothing() {
-        let data = catalog(serde_json::json!([
-            { "id": "llama-3", "provider": "groq" },
-            { "id": "llama-3", "provider": "together" },
-        ]));
-        assert!(unique_provider_for_model(&data, "llama-3").is_none());
-    }
-
-    /// 同一个 provider 在目录里重复列出不算歧义。
-    #[test]
-    fn duplicate_entries_from_one_provider_are_not_ambiguous() {
-        let data = catalog(serde_json::json!([
-            { "id": "gpt-5", "provider": "openai" },
-            { "id": "gpt-5", "provider": "openai" },
-        ]));
-        assert_eq!(
-            unique_provider_for_model(&data, "gpt-5").as_deref(),
-            Some("openai")
-        );
-    }
-
-    #[test]
-    fn an_unknown_model_or_malformed_catalog_resolves_to_nothing() {
-        let data = catalog(serde_json::json!([{ "id": "gpt-5", "provider": "openai" }]));
-        assert!(unique_provider_for_model(&data, "nope").is_none());
-        assert!(unique_provider_for_model(&serde_json::json!({}), "gpt-5").is_none());
-        assert!(unique_provider_for_model(&serde_json::json!(null), "gpt-5").is_none());
     }
 }

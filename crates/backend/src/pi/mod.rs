@@ -19,6 +19,7 @@
 
 pub mod approval;
 pub mod live;
+pub mod models_json;
 pub mod process;
 pub mod protocol;
 pub mod session;

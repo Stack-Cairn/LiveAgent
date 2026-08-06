@@ -33,6 +33,9 @@ pub struct PiSpawnConfig {
     pub session_id: String,
     /// pi 的 `--session-dir`。
     pub session_dir: PathBuf,
+    /// pi 的 agent 配置目录（`PI_CODING_AGENT_DIR`）。每会话独立，
+    /// models.json 落在这里，绝不碰用户自己的 `~/.pi/agent/`。
+    pub agent_dir: PathBuf,
     /// 子进程工作目录。给 None 就继承后端进程的 cwd。
     pub workdir: Option<PathBuf>,
     /// 审批扩展的路径（`-e`）。没有它 pi 不会有任何工具审批。
@@ -63,6 +66,7 @@ impl PiProcess {
             .arg(&config.session_id)
             .arg("--session-dir")
             .arg(&config.session_dir)
+            .env("PI_CODING_AGENT_DIR", &config.agent_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
