@@ -3,6 +3,10 @@
 # 构建 profile（minimal / core / full），必须在第一个 FROM 之前声明。
 ARG TARGET_PROFILE=core
 
+# apt 镜像源（国内构建时传 --build-arg APT_MIRROR=mirrors.tuna.tsinghua.edu.cn；
+# 默认官方源 deb.debian.org，GitHub Actions 可达）。
+ARG APT_MIRROR=deb.debian.org
+
 # LiveAgent Headless — 开发工具增强镜像（minimal / core / full）
 #
 # 设计哲学（对齐 GitHub devcontainers / Gitpod 的成熟做法：镜像保持克制，
@@ -50,7 +54,11 @@ RUN pnpm build
 FROM --platform=$BUILDPLATFORM rust:1.97-bookworm AS builder
 
 # Install system dependencies for the build
-RUN apt-get update && \
+ARG APT_MIRROR=deb.debian.org
+# gai.conf: 强制 IPv4 优先（部分国内环境 IPv6 解析通但出网不通，apt 会失败）
+RUN (sed -i 's/^#\s*precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf 2>/dev/null || echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf) && \
+    sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
@@ -99,7 +107,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-$TARGE
 # 不预装，需要时 apt 或 mise 按需安装（见 README "开发工具镜像" 一节）。
 FROM debian:bookworm-slim AS base
 
-RUN apt-get update && \
+ARG APT_MIRROR=deb.debian.org
+# gai.conf: 强制 IPv4 优先（部分国内环境 IPv6 解析通但出网不通，apt 会失败）
+RUN (sed -i 's/^#\s*precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf 2>/dev/null || echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf) && \
+    sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list 2>/dev/null || true && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates \
         bash \
@@ -163,8 +175,11 @@ RUN curl -fsSL https://mise.run -o /tmp/mise-install.sh && \
 # 以 liveagent(uid 10001) 身份安装：/opt/mise 写入时属主即正确，final 不再 chown -R
 # （否则 overlayfs 整树 copy-up 额外 ~1GB 层）。安装后清掉 npm/core 下载缓存
 # （~/.npm ~/.cache），镜像瘦身；懒加载补装按需重新下载。
+# 注意：不用 COPY --chmod —— 某些 overlayfs 驱动下 BuildKit 的 --chmod 会产出
+# 非 root 不可读的文件；构建时 RUN chmod（触发 copy-up）才可靠。
 COPY docker/mise.core.toml /etc/mise/config.toml
-RUN install -d -o liveagent -g liveagent /opt/mise
+RUN chmod 0644 /etc/mise/config.toml && \
+    install -d -o liveagent -g liveagent /opt/mise
 USER liveagent
 RUN mise install --jobs 4 && \
     rm -rf /var/lib/liveagent/.npm /var/lib/liveagent/.cache
@@ -174,6 +189,7 @@ USER root
 FROM core AS full
 
 COPY docker/mise.full.toml /etc/mise/config.toml
+RUN chmod 0644 /etc/mise/config.toml
 USER liveagent
 RUN mise install --jobs 4 && \
     rm -rf /var/lib/liveagent/.npm /var/lib/liveagent/.cache
@@ -185,7 +201,7 @@ FROM ${TARGET_PROFILE} AS final
 COPY --from=builder /usr/local/bin/liveagent /usr/local/bin/liveagent
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN chmod +x /usr/local/bin/entrypoint.sh && \
+RUN chmod 755 /usr/local/bin/entrypoint.sh && \
     # liveagent 用户已在 base 创建；home 属主纠正 + 收紧权限（数据在 $HOME/.liveagent）
     install -d -o liveagent -g liveagent -m 0700 /var/lib/liveagent && \
     # --- mise 环境注入（仅 core/full 含 mise 时写入；minimal 无 mise 跳过）---
