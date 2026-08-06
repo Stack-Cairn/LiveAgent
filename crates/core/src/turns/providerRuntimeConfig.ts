@@ -1,4 +1,4 @@
-import type { AppSettings, SelectedModel } from "../settings";
+import type { AppSettings } from "../settings";
 import type { EffectiveChatModelSelection } from "../models/modelSelection";
 
 export function resolveMemorySummaryModelSelection(
@@ -24,36 +24,4 @@ export function resolveMemorySummaryModelSelection(
   };
 }
 
-export function resolveConversationTitleModelSelection(
-  settings: AppSettings,
-  fallback: EffectiveChatModelSelection,
-): EffectiveChatModelSelection {
-  const titleModel = settings.customSettings.conversationTitleModel;
-  if (!titleModel) {
-    return fallback;
-  }
 
-  const provider = settings.customProviders.find((item) => item.id === titleModel.customProviderId);
-  if (!provider || !provider.activeModels.includes(titleModel.model)) {
-    return fallback;
-  }
-
-  return {
-    selectedModel: titleModel,
-    provider,
-    providerId: provider.type,
-    model: titleModel.model,
-  };
-}
-
-export function selectedModelsMatch(
-  left: SelectedModel | undefined,
-  right: SelectedModel | undefined,
-) {
-  return (
-    Boolean(left) &&
-    Boolean(right) &&
-    left?.customProviderId === right?.customProviderId &&
-    left?.model === right?.model
-  );
-}

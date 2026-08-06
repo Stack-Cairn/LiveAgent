@@ -39,7 +39,6 @@ function resolveDeepSeekAnthropicThinkingRuntime(
   const effort = mapDeepSeekReasoningEffort(options.reasoning) as AnthropicEffort | undefined;
   return {
     thinkingEnabled: Boolean(effort),
-    mode: effort ? "adaptive" : "disabled",
     maxTokens: resolveMaxTokens(options.maxTokens, model.maxTokens),
     ...(effort ? { effort } : {}),
   };
@@ -87,7 +86,8 @@ function buildOpenAIBaseOptions(model: Model<any>, options: StreamOptionsEx) {
 export function streamSimpleByApi(model: Model<any>, context: Context, options: StreamOptionsEx) {
   switch (model.api) {
     case "anthropic-messages": {
-      // Anthropic：需要我们自己调用 streamAnthropic()，以便显式传 toolChoice（以及启用/禁用 thinking）。
+      // 直调 streamAnthropic() 而非 streamSimple()：后者经 buildBaseOptions() 会把
+      // toolChoice 丢掉（详见 thinkingLevels.ts 顶部说明），而本仓库依赖它。
       const isDeepSeekAnthropic =
         Boolean(options.deepSeekProviderAdapter || options.deepSeekDsmlToolCallRepair) ||
         isDeepSeekAnthropicTarget({

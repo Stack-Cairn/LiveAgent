@@ -29,8 +29,18 @@ import {
 import type { FileToolState } from "./fileToolState";
 import { invokeFs, isFsBackendError } from "./fsBackend";
 import { buildFsErrorText, buildRequiresFullReadText, buildWriteDirectoryText } from "./pathErrors";
-import { formatResolvedTarget, type ResolvedPath, ToolPathResolver } from "./pathUtils";
+import { formatResolvedTarget, type ResolvedPath } from "./pathUtils";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
+import {
+  asErrorMessage,
+  assertKnownArguments,
+  buildToolErrorResult,
+  buildToolResultMessage,
+  buildToolTextResult,
+  buildUnknownToolResult,
+  createSkillsAwarePathResolver,
+  strictToolParameters,
+} from "./toolResultHelpers";
 
 type ToolOk<TDetails extends BuiltinToolResultDetails = BuiltinToolResultDetails> = {
   content: (TextContent | ImageContent)[];
@@ -39,21 +49,6 @@ type ToolOk<TDetails extends BuiltinToolResultDetails = BuiltinToolResultDetails
 
 const MAX_DISPLAY_IMAGE_PATHS = 12;
 const AUTO_FULL_READ_MAX_LINES = 5_000;
-
-function strictToolParameters(properties: Record<string, unknown>) {
-  return Type.Object(properties as any, { additionalProperties: false });
-}
-
-function assertKnownArguments(toolName: string, args: unknown, allowed: readonly string[]) {
-  if (!args || typeof args !== "object" || Array.isArray(args)) return;
-  const allowedSet = new Set(allowed);
-  const unknown = Object.keys(args).filter((key) => !allowedSet.has(key));
-  if (unknown.length > 0) {
-    throw new Error(
-      `${toolName} received unsupported argument${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}`,
-    );
-  }
-}
 
 type DisplayImageSourceType = "path" | "url" | "base64" | "auto";
 
@@ -68,10 +63,6 @@ type DisplayImageSourceInput = {
 type DisplayImageEntry = {
   content?: ImageContent;
   details: DisplayImageItemDetails;
-};
-
-type SystemListSkillFilesResponse = {
-  rootDir?: string | null;
 };
 
 type ReadCommandResponse = {
@@ -184,10 +175,6 @@ type GrepCommandResponse = {
   }>;
 };
 
-function asErrorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
-
 function previewSnippet(input: string, maxChars = 500) {
   const text = input || "";
   if (text.length <= maxChars) return text;
@@ -283,30 +270,12 @@ export function createFsTools(params: {
   const { workdir, fileState } = params;
   const allowSkillsRoot = params.skillsRootEnabled === true;
   const skillAccessPolicy = params.skillAccessPolicy;
-  let cachedSkillsRootDir =
-    typeof params.skillsRootDir === "string" ? params.skillsRootDir.trim() : "";
-
-  async function resolveSkillsRootDir() {
-    if (!allowSkillsRoot) {
-      throw new Error("Skill paths are only available when Skills are enabled");
-    }
-    if (cachedSkillsRootDir) return cachedSkillsRootDir;
-    const response = await callBackend<SystemListSkillFilesResponse>("system_list_skill_files", {});
-    const rootDir = typeof response.rootDir === "string" ? response.rootDir.trim() : "";
-    if (!rootDir) {
-      throw new Error("Skills root is unavailable; refresh Skills discovery and retry.");
-    }
-    cachedSkillsRootDir = rootDir;
-    return cachedSkillsRootDir;
-  }
-
-  const pathResolver = new ToolPathResolver({
+  const { pathResolver } = createSkillsAwarePathResolver({
     workdir,
     resolveHomeDir: params.resolveHomeDir,
     skillsRootEnabled: allowSkillsRoot,
-    skillsRootDir: cachedSkillsRootDir,
+    skillsRootDir: params.skillsRootDir,
     skillAccessPolicy,
-    resolveSkillsRootDir,
   });
 
   // Loop breaker: models sometimes retry a failing call with identical
@@ -1817,15 +1786,7 @@ export function createFsTools(params: {
   ): Promise<ToolResultMessage> {
     const now = Date.now();
     if (!workdir.trim()) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: "Working directory is not configured; cannot run tools." }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildToolErrorResult(toolCall, "Working directory is not configured; cannot run tools.", now);
     }
 
     try {
@@ -1860,37 +1821,24 @@ export function createFsTools(params: {
           result = await execGrep(toolCall.arguments, signal);
           break;
         default:
-          return {
-            role: "toolResult",
-            toolCallId: toolCall.id,
-            toolName: toolCall.name,
-            content: [{ type: "text", text: `Unknown tool: ${toolCall.name}` }],
-            details: {},
-            isError: true,
-            timestamp: now,
-          };
+          return buildUnknownToolResult(toolCall, now);
       }
 
       noteToolCallSucceeded();
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
+      return buildToolResultMessage({
+        toolCall,
         content: result.content,
         details: result.details,
         isError: false,
         timestamp: now,
-      };
+      });
     } catch (err) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: annotateRepeatedFailure(toolCall, asErrorMessage(err)) }],
-        details: {},
+      return buildToolTextResult({
+        toolCall,
+        text: annotateRepeatedFailure(toolCall, asErrorMessage(err)),
         isError: true,
         timestamp: now,
-      };
+      });
     }
   }
 

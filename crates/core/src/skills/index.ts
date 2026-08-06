@@ -1,7 +1,23 @@
 import { callBackend } from "../backendClient";
 
 import { sortSkillsForDisplay } from "./builtin";
-import type { ClawHubSkillCard } from "./clawHub";
+/** ClawHub 技能市场卡片，随 skills 命令响应回流，仅作数据透传。 */
+export type ClawHubSkillCard = {
+  slug: string;
+  displayName: string;
+  summary: string;
+  /** ClawHub 上的自由标签，用于本地分类与卡片标签展示。 */
+  topics: string[];
+  latestVersion: string | null;
+  downloads: number;
+  stars: number;
+  installsCurrent: number;
+  updatedAt: number | null;
+  ownerHandle: string | null;
+  webUrl?: string | null;
+  downloadUrl?: string | null;
+};
+
 
 const SKILLS_DISCOVERY_UPDATED_EVENT = "liveagent:skills-discovery-updated";
 

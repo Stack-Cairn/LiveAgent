@@ -35,6 +35,12 @@ import type {
   MemoryType,
 } from "../memory/schema";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
+import {
+  buildCancelledToolResult,
+  buildToolErrorResult,
+  buildToolTextResult,
+  buildUnknownToolResult,
+} from "./toolResultHelpers";
 
 type MemoryToolMode = "rw" | "ro";
 
@@ -444,41 +450,17 @@ export function createMemoryTools(params: {
   ): Promise<ToolResultMessage> {
     const now = Date.now();
     if (signal?.aborted) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: "Cancelled" }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildCancelledToolResult(toolCall, now);
     }
     if (toolCall.name !== "MemoryManager") {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: `Unknown tool: ${toolCall.name}` }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildUnknownToolResult(toolCall, now);
     }
 
     const args = asRecord(toolCall.arguments);
     const action = asString(args.action);
     const readonlyAction = action === "list" || action === "read" || action === "search";
     if (mode === "ro" && !readonlyAction) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: "MemoryManager is read-only in this context." }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildToolErrorResult(toolCall, "MemoryManager is read-only in this context.", now);
     }
 
     try {
@@ -488,15 +470,13 @@ export function createMemoryTools(params: {
           ...listArgs,
           includeDaily: args.include_daily === true || listArgs.memoryType === "daily",
         });
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: buildListResultText(result) }],
+        return buildToolTextResult({
+          toolCall,
+          text: buildListResultText(result),
           details: result,
           isError: false,
           timestamp: now,
-        };
+        });
       }
       if (action === "read") {
         const result = await memoryRead({
@@ -506,30 +486,26 @@ export function createMemoryTools(params: {
           offset: optionalInt(args.offset),
           length: optionalInt(args.length),
         });
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: buildReadResultText(result) }],
+        return buildToolTextResult({
+          toolCall,
+          text: buildReadResultText(result),
           details: result,
           isError: false,
           timestamp: now,
-        };
+        });
       }
       if (action === "search") {
         const result = await memorySearch({
           query: requireQuery(args),
           ...buildArgs(args, params.workdir),
         });
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: buildSearchResultText(result) }],
+        return buildToolTextResult({
+          toolCall,
+          text: buildSearchResultText(result),
           details: result,
           isError: false,
           timestamp: now,
-        };
+        });
       }
       if (action === "write") {
         const result = await memoryWrite({
@@ -544,15 +520,13 @@ export function createMemoryTools(params: {
           model: params.model,
           evidence: evidenceFromArgs(args),
         });
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: buildMutationText(result) }],
+        return buildToolTextResult({
+          toolCall,
+          text: buildMutationText(result),
           details: result,
           isError: false,
           timestamp: now,
-        };
+        });
       }
       if (action === "update") {
         const rawMode = asString(args.mode);
@@ -582,15 +556,13 @@ export function createMemoryTools(params: {
           model: params.model,
           evidence,
         });
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: buildMutationText(result) }],
+        return buildToolTextResult({
+          toolCall,
+          text: buildMutationText(result),
           details: result,
           isError: false,
           timestamp: now,
-        };
+        });
       }
       if (action === "delete") {
         // MemoryManager deletes in normal chat are user-directed forget
@@ -605,15 +577,13 @@ export function createMemoryTools(params: {
           conversationId: params.conversationId,
           model: params.model,
         });
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: buildMutationText(result) }],
+        return buildToolTextResult({
+          toolCall,
+          text: buildMutationText(result),
           details: result,
           isError: false,
           timestamp: now,
-        };
+        });
       }
       if (action === "accept") {
         const result = await memoryAccept({
@@ -621,29 +591,23 @@ export function createMemoryTools(params: {
           scope: requireWriteScope(args.scope),
           workdir: params.workdir,
         });
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: buildMutationText(result) }],
+        return buildToolTextResult({
+          toolCall,
+          text: buildMutationText(result),
           details: result,
           isError: false,
           timestamp: now,
-        };
+        });
       }
       throw new Error(
         "MemoryManager action must be list, read, search, write, update, delete, or accept.",
       );
     } catch (error) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: `MemoryManager failed: ${formatMemoryError(error)}` }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildToolErrorResult(
+        toolCall,
+        `MemoryManager failed: ${formatMemoryError(error)}`,
+        now,
+      );
     }
   }
 

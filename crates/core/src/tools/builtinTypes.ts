@@ -6,6 +6,7 @@ import type {
   SubagentMessageDetails,
 } from "../subagents/protocol";
 import type { SubagentScheduler } from "../subagents/scheduler";
+import type { PathScope } from "./pathUtils";
 
 export type BuiltinToolGroupId =
   | "fs"
@@ -69,8 +70,11 @@ export function createBuiltinMetadataMap(
 }
 
 export type FsEntryKind = "file" | "dir";
-export type PathScope = "workspace" | "skill" | "external" | "uploads";
 
+/** 路径作用域的唯一定义在 pathUtils(解析器持有语义),这里仅转出给工具结果类型用。 */
+export type { PathScope };
+
+/** 所有「解析过路径」的工具结果共享的定位字段。 */
 export type ResolvedPathResultDetails = {
   scope?: PathScope;
   absolutePath?: string;
@@ -79,14 +83,9 @@ export type ResolvedPathResultDetails = {
   fileId?: string;
 };
 
-export type ReadTextResultDetails = {
+export type ReadTextResultDetails = ResolvedPathResultDetails & {
   kind: "read_text";
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   startLine: number;
   numLines: number;
   totalLines: number;
@@ -97,14 +96,9 @@ export type ReadTextResultDetails = {
   reusedExisting: boolean;
 };
 
-export type ReadImageResultDetails = {
+export type ReadImageResultDetails = ResolvedPathResultDetails & {
   kind: "read_image";
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   mimeType: string;
   sizeBytes: number;
   mtimeMs: number;
@@ -112,13 +106,8 @@ export type ReadImageResultDetails = {
   reusedExisting: boolean;
 };
 
-export type DisplayImageItemDetails = {
+export type DisplayImageItemDetails = ResolvedPathResultDetails & {
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   sourceType?: "path" | "url" | "base64" | "auto";
   renderMode?: "inline" | "proxy";
   sourceUrl?: string;
@@ -139,14 +128,9 @@ export type DisplayImageResultDetails = {
   contentHash?: string;
 };
 
-export type ReadPdfResultDetails = {
+export type ReadPdfResultDetails = ResolvedPathResultDetails & {
   kind: "read_pdf";
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   pageStart: number;
   numPages: number;
   totalPages: number;
@@ -156,14 +140,9 @@ export type ReadPdfResultDetails = {
   reusedExisting: boolean;
 };
 
-export type ReadNotebookResultDetails = {
+export type ReadNotebookResultDetails = ResolvedPathResultDetails & {
   kind: "read_notebook";
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   cellStart: number;
   numCells: number;
   totalCells: number;
@@ -173,14 +152,9 @@ export type ReadNotebookResultDetails = {
   reusedExisting: boolean;
 };
 
-export type ReadDocumentResultDetails = {
+export type ReadDocumentResultDetails = ResolvedPathResultDetails & {
   kind: "read_word" | "read_spreadsheet" | "read_archive";
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   truncated: boolean;
   mimeType?: string;
   sizeBytes?: number;
@@ -238,14 +212,9 @@ export type McpManagerResultDetails = {
   errors?: string[];
 };
 
-export type WriteResultDetails = {
+export type WriteResultDetails = ResolvedPathResultDetails & {
   kind: "write";
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   mode: "rewrite";
   existedBefore: boolean;
   bytesWritten: number;
@@ -258,14 +227,9 @@ export type WriteResultDetails = {
 /** Matching pass that located old_string, strictest first. */
 export type EditMatchStrategy = "exact" | "line-endings" | "trailing-whitespace" | "indentation";
 
-export type EditResultDetails = {
+export type EditResultDetails = ResolvedPathResultDetails & {
   kind: "edit";
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   replacements: number;
   replaceAll: boolean;
   matchStrategy?: EditMatchStrategy;
@@ -277,14 +241,9 @@ export type EditResultDetails = {
   newPreview: string;
 };
 
-export type DeleteResultDetails = {
+export type DeleteResultDetails = ResolvedPathResultDetails & {
   kind: "delete";
   path: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   targetKind: string;
 };
 
@@ -293,14 +252,9 @@ export type ListResultEntry = {
   kind: FsEntryKind;
 };
 
-export type ListResultDetails = {
+export type ListResultDetails = ResolvedPathResultDetails & {
   kind: "list";
   path?: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   targetKind?: FsEntryKind;
   depth: number;
   offset: number;
@@ -310,14 +264,9 @@ export type ListResultDetails = {
   entries: ListResultEntry[];
 };
 
-export type GlobResultDetails = {
+export type GlobResultDetails = ResolvedPathResultDetails & {
   kind: "glob";
   path?: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   targetKind?: FsEntryKind;
   pattern: string;
   sortBy: "path";
@@ -342,14 +291,9 @@ export type GrepResultFileSummary = {
   firstLine?: number;
 };
 
-export type GrepResultDetails = {
+export type GrepResultDetails = ResolvedPathResultDetails & {
   kind: "grep";
   path?: string;
-  scope?: PathScope;
-  absolutePath?: string;
-  relativePath?: string;
-  displayPath?: string;
-  fileId?: string;
   targetKind?: FsEntryKind;
   pattern: string;
   filePattern?: string;

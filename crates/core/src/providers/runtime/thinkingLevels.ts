@@ -8,18 +8,33 @@ import type { StreamOptionsEx } from "./types";
 type ReasoningInput = SimpleStreamOptions["reasoning"] | undefined;
 
 // ---------------------------------------------------------------------------
+// 为什么这里要重算思维档位，而不是直接用 pi-ai 的 streamSimple()
+//
+// streamSimple() 会把选项过一遍 api/simple-options.ts 的 buildBaseOptions()，
+// 而该函数的返回字段里没有 toolChoice；anthropic-messages 与 google-generative-ai
+// 两个 api 的 streamSimple() 自身也从不读 options.toolChoice。也就是说走
+// streamSimple() 时 toolChoice 会被静默丢弃——而本仓库真的依赖它：
+// textOnlyRuntime.ts 用 "none" 关掉工具、agentRunner.ts 按有无工具传 "auto"。
+// 因此这两个 api 必须由 streamByApi.ts 直接调用底层 stream() 并显式下发
+// toolChoice；一旦绕开 streamSimple()，它内部的思维档位映射也就拿不到了，只能
+// 在本文件复算。（openai-completions 的 streamSimple() 确实透传 toolChoice，
+// 但它无条件下发，会踩中 streamByApi.ts 里「无 tools 时不发 tool_choice」的
+// 400 兼容修补，故一并保持直调。）
+//
+// pi-ai 未导出 mapThinkingLevelToEffort / getThinkingLevel / getGoogleBudget
+// （均为各 api 模块私有），所以下面的映射无法改成调用库函数。
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Anthropic
 // ---------------------------------------------------------------------------
 
 export type { AnthropicEffort };
-export type AnthropicThinkingMode = "disabled" | "adaptive" | "budget";
 export type AnthropicThinkingRuntime = {
   thinkingEnabled: boolean;
-  mode: AnthropicThinkingMode;
   maxTokens: number;
   effort?: AnthropicEffort;
   thinkingBudgetTokens?: number;
-  display?: "summarized";
 };
 
 function anthropicCompat(model: Model<any>) {
@@ -41,6 +56,9 @@ const ANTHROPIC_THINKING_BUDGETS: Record<NonNullable<ReasoningInput>, number> = 
   max: 32_768,
 };
 
+// 与 pi-ai mapThinkingLevelToEffort 同语义，但有意不同：库版的 default 分支把
+// xhigh/max 一并压成 "high"，本地则原样透传，以便 Opus 4.6+ 的 xhigh/max 档真的
+// 下发到 API。改用库版会静默降级这两档。
 export function mapReasoningToAnthropicEffort(
   reasoning: ReasoningInput,
   model: Model<any>,
@@ -71,19 +89,20 @@ export function resolveAnthropicThinkingRuntime(
 ): AnthropicThinkingRuntime {
   const maxTokens = resolveMaxTokens(options.maxTokens, model.maxTokens);
   if (!options.reasoning) {
-    return { thinkingEnabled: false, mode: "disabled", maxTokens };
+    return { thinkingEnabled: false, maxTokens };
   }
 
   if (supportsAdaptiveAnthropicThinking(model)) {
     return {
       thinkingEnabled: true,
-      mode: "adaptive",
       maxTokens,
       effort: mapReasoningToAnthropicEffort(options.reasoning, model),
-      display: "summarized",
     };
   }
 
+  // 预算档的 maxTokens/budget 夹取公式与 pi-ai adjustMaxTokensForThinking 一致，
+  // 但档位表不同：库版先经 clampReasoning 把 xhigh/max 折成 high(16K)，本地保留
+  // max=32K。自定义中转模型没有 compat、必走本分支，改用库版会砍半其思维预算。
   let thinkingBudgetTokens = ANTHROPIC_THINKING_BUDGETS[options.reasoning];
   const adjustedMaxTokens = Math.min(maxTokens + thinkingBudgetTokens, model.maxTokens);
   if (adjustedMaxTokens <= thinkingBudgetTokens) {
@@ -92,7 +111,6 @@ export function resolveAnthropicThinkingRuntime(
 
   return {
     thinkingEnabled: true,
-    mode: "budget",
     maxTokens: adjustedMaxTokens,
     thinkingBudgetTokens,
   };
@@ -121,9 +139,9 @@ export function clampOpenAIReasoningEffort(
 export type GeminiThinkingLevel = "MINIMAL" | "LOW" | "MEDIUM" | "HIGH";
 type GeminiEffort = "minimal" | "low" | "medium" | "high";
 
-// pi-ai 未把「档位字段 vs 预算字段」这个派发方式收进目录数据，其自身 streamSimple(Gemini)
-// 内部也是靠这三个 id 正则判定——此处逐字镜像，与档位可用性（走目录 thinkingLevelMap /
-// clampThinkingLevel）是两回事，不可替代。
+// 「档位字段 vs 预算字段」的派发方式没有收进 pi-ai 的目录数据，库内部同样靠这三个
+// id 正则判定（api/google-generative-ai.ts 的 streamSimple），且未导出，只能在此复算。
+// 这与档位可用性（走目录 thinkingLevelMap / clampThinkingLevel）是两回事。
 function isGemini3ProModel(modelId: string) {
   return /gemini-3(?:\.\d+)?-pro/.test(modelId.toLowerCase());
 }

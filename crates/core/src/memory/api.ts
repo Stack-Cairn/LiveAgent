@@ -13,8 +13,6 @@ import type {
   MemorySearchType,
   MemoryType,
   MemoryUpdateMode,
-  OrganizerMode,
-  OrganizerScope,
 } from "./schema";
 
 export type MemoryHistoryTimeMode = "message" | "updated" | "conversation";
@@ -126,11 +124,6 @@ export type MemoryMutationResponse = {
   autoDowngraded?: boolean | null;
 };
 
-export type MemoryDeleteProjectResponse = {
-  workdirHash: string;
-  deletedCount: number;
-  quarantinePath?: string | null;
-};
 
 export type MemoryOverviewEntry = {
   slug: string;
@@ -153,12 +146,6 @@ export type MemoryOverviewResponse = {
   workdirHash?: string | null;
 };
 
-export type MemoryPathsInfo = {
-  root: string;
-  isFresh: boolean;
-  isInCloud: boolean;
-  cloudProvider?: string | null;
-};
 
 export type MemoryRejectionEntry = {
   slug: string;
@@ -173,20 +160,7 @@ export type MemoryRecentRejectionsResponse = {
   entries: MemoryRejectionEntry[];
 };
 
-export type MemoryQuotaScopeSummary = {
-  scope: MemoryScope;
-  workdirHash: string;
-  used: number;
-  limit: number;
-  headroom: number;
-  archivedCount: number;
-  unreviewedCount: number;
-  oldestUnreviewedAgeDays?: number | null;
-};
 
-export type MemoryQuotaSummaryResponse = {
-  scopes: MemoryQuotaScopeSummary[];
-};
 
 export type MemoryBatchResponse = {
   created: string[];
@@ -206,71 +180,8 @@ export type MemoryBatchWarning = {
   details?: unknown;
 };
 
-export type MemoryOrganizeRunStatus =
-  | "pending"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "skipped"
-  | "cancelled";
 
-export type MemoryOrganizeTrigger = "manual" | "scheduled";
 
-export type MemoryOrganizeRun = {
-  runId: string;
-  trigger: MemoryOrganizeTrigger;
-  status: MemoryOrganizeRunStatus;
-  createdAt: number;
-  startedAt?: number | null;
-  finishedAt?: number | null;
-  dueAt?: number | null;
-  claimedAt?: number | null;
-  model: unknown;
-  scope: string;
-  mode: string;
-  inputCount: number;
-  clusterCount: number;
-  safeApplied: number;
-  reviewSkipped: number;
-  createdCount: number;
-  updatedCount: number;
-  deletedCount: number;
-  mergedCount: number;
-  parseFailures: number;
-  error?: string | null;
-  finalSummary?: string | null;
-  phase?: string | null;
-  finalCount: number;
-  compressionRatio?: number | null;
-  compressionTarget?: number | null;
-  dryRun: boolean;
-  tokenUsageTotal: number;
-  quotaHeadroomAtStart?: number | null;
-  overrideReviewed: boolean;
-  /** Typed run report; parse only via organizer/runRecord.ts. */
-  report: unknown;
-};
-
-export type MemoryOrganizeRunCreateResponse = {
-  run?: MemoryOrganizeRun | null;
-  accepted: boolean;
-  alreadyRunning: boolean;
-  activeRun?: MemoryOrganizeRun | null;
-};
-
-export type MemoryOrganizeDueClaimResponse = {
-  run?: MemoryOrganizeRun | null;
-  skippedReason?: string | null;
-};
-
-export type MemoryOrganizeRunListResponse = {
-  runs: MemoryOrganizeRun[];
-};
-
-export type MemoryOrganizeRunClearHistoryResponse = {
-  deletedCount: number;
-  retainedActiveCount: number;
-};
 
 export type MemoryErrorPayload = {
   error: string;
@@ -279,7 +190,7 @@ export type MemoryErrorPayload = {
   candidates?: unknown[];
 };
 
-export function parseMemoryError(error: unknown): MemoryErrorPayload | null {
+function parseMemoryError(error: unknown): MemoryErrorPayload | null {
   const message = error instanceof Error ? error.message : String(error);
   try {
     const parsed = JSON.parse(message);
@@ -389,13 +300,6 @@ export async function memoryDelete(args: {
   return callBackend<MemoryMutationResponse>("memory_delete", { args });
 }
 
-export async function memoryDeleteProject(args: {
-  workdir: string;
-  actor?: "user" | "tool" | "extractor" | "reconcile";
-  reason?: string;
-}) {
-  return callBackend<MemoryDeleteProjectResponse>("memory_delete_project", { args });
-}
 
 export async function memoryAccept(args: {
   slug: string;
@@ -420,78 +324,12 @@ export async function memoryApplyBatch(args: {
   return callBackend<MemoryBatchResponse>("memory_apply_batch", { args });
 }
 
-export async function memoryOrganizeRunCreate(args: {
-  trigger: MemoryOrganizeTrigger;
-  dueAt?: number;
-  model?: unknown;
-  scope?: OrganizerScope;
-  mode?: OrganizerMode;
-}) {
-  return callBackend<MemoryOrganizeRunCreateResponse>("memory_organize_run_create", { args });
-}
 
-export async function memoryOrganizeRunUpdate(args: {
-  runId: string;
-  status?: MemoryOrganizeRunStatus;
-  startedAt?: number;
-  finishedAt?: number;
-  inputCount?: number;
-  clusterCount?: number;
-  safeApplied?: number;
-  reviewSkipped?: number;
-  createdCount?: number;
-  updatedCount?: number;
-  deletedCount?: number;
-  mergedCount?: number;
-  parseFailures?: number;
-  error?: string;
-  finalSummary?: string;
-  phase?: string;
-  finalCount?: number;
-  compressionRatio?: number;
-  compressionTarget?: number;
-  dryRun?: boolean;
-  tokenUsageTotal?: number;
-  quotaHeadroomAtStart?: number;
-  overrideReviewed?: boolean;
-  report?: unknown;
-}) {
-  return callBackend<MemoryOrganizeRun | null>("memory_organize_run_update", { args });
-}
 
-export async function memoryOrganizeRunList(args?: {
-  status?: MemoryOrganizeRunStatus;
-  limit?: number;
-}) {
-  return callBackend<MemoryOrganizeRunListResponse>("memory_organize_run_list", {
-    args: args ?? {},
-  });
-}
 
-export async function memoryOrganizeRunRead(args: { runId: string }) {
-  return callBackend<MemoryOrganizeRun | null>("memory_organize_run_read", { args });
-}
 
-export async function memoryOrganizeRunClearHistory() {
-  return callBackend<MemoryOrganizeRunClearHistoryResponse>("memory_organize_run_clear_history");
-}
 
-export async function memoryOrganizeDueClaim(args: {
-  enabled?: boolean;
-  dueAt?: number;
-  now?: number;
-  model?: unknown;
-  scope?: OrganizerScope;
-  mode?: OrganizerMode;
-}) {
-  return callBackend<MemoryOrganizeDueClaimResponse>("memory_organize_due_claim", { args });
-}
 
-export async function memoryOrganizeDueComplete(
-  args: Parameters<typeof memoryOrganizeRunUpdate>[0],
-) {
-  return callBackend<MemoryOrganizeRun | null>("memory_organize_due_complete", { args });
-}
 
 export async function memoryIndexOverview(workdir?: string) {
   return callBackend<MemoryOverviewResponse>("memory_index_overview", { workdir });
@@ -507,24 +345,10 @@ export async function memoryRecentRejections(args?: {
   });
 }
 
-export async function memoryQuotaSummary(args?: { workdir?: string }) {
-  return callBackend<MemoryQuotaSummaryResponse>("memory_quota_summary", {
-    args: args ?? {},
-  });
-}
 
-export async function memoryPathsInfo() {
-  return callBackend<MemoryPathsInfo>("memory_paths_info");
-}
 
 export async function memoryTodayLocalDate(rolloverHour?: number) {
   return callBackend<string>("memory_today_local_date", { rolloverHour });
 }
 
-export async function memoryTodayDaily(rolloverHour?: number) {
-  return callBackend<MemoryReadResponse | null>("memory_today_daily", { rolloverHour });
-}
 
-export async function memoryWipeAll() {
-  return callBackend<MemoryPathsInfo>("memory_wipe_all");
-}

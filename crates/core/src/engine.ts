@@ -205,7 +205,6 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
   if (!userMessage) throw new Error("Message is required.");
 
   const baseState = await loadConversationState(conversationId, session);
-  const isFirstTurn = baseState.meta.totalMessageCount === 0;
   const fallbackTitle = buildFallbackConversationTitle(
     getFirstUserMessageText(buildRequestContext(baseState)) || text,
   );
@@ -529,7 +528,6 @@ async function runOneTurn(conversationId: string, session: LiveSession, request:
         showSilentMemoryExtraction: false,
         skillsRootDir: skillsRootDirForTools,
         skillAccessPolicy: skillAccessPolicyForTools,
-        agentTemplates: settings.agents,
         getMcpSettings: () => settings.mcp,
         getToolPolicies: () => settings.system.toolPolicies,
         remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,

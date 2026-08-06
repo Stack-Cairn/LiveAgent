@@ -15,6 +15,13 @@ import {
   requestRuntimeCancel,
   waitForAbortablePromise,
 } from "./invokeWithAbort";
+import {
+  asErrorMessage,
+  buildCancelledToolResult,
+  buildToolErrorResult,
+  buildToolResultMessage,
+  buildUnknownToolResult,
+} from "./toolResultHelpers";
 import { normalizeToolParametersSchema } from "./toolSchema";
 
 type McpToolInfo = {
@@ -154,15 +161,8 @@ export async function createMcpTools(params: {
       tools: [],
       metadataByName: new Map(),
       toolNameMap: new Map(),
-      executeToolCall: async (toolCall) => ({
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: "No MCP servers are configured or enabled." }],
-        details: {},
-        isError: true,
-        timestamp: Date.now(),
-      }),
+      executeToolCall: async (toolCall) =>
+        buildToolErrorResult(toolCall, "No MCP servers are configured or enabled.", Date.now()),
     };
   }
 
@@ -232,28 +232,12 @@ export async function createMcpTools(params: {
   ): Promise<ToolResultMessage> {
     const now = Date.now();
     if (signal?.aborted) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: "Cancelled" }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildCancelledToolResult(toolCall, now);
     }
 
     const mapped = toolNameMap.get(toolCall.name);
     if (!mapped) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: `Unknown MCP tool: ${toolCall.name}` }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildUnknownToolResult(toolCall, now, "Unknown MCP tool");
     }
 
     try {
@@ -261,15 +245,7 @@ export async function createMcpTools(params: {
         mapped.serverId,
         async () => {
           if (signal?.aborted) {
-            return {
-              role: "toolResult",
-              toolCallId: toolCall.id,
-              toolName: toolCall.name,
-              content: [{ type: "text", text: "Cancelled" }],
-              details: {},
-              isError: true,
-              timestamp: Date.now(),
-            };
+            return buildCancelledToolResult(toolCall, Date.now());
           }
 
           const runId = createToolRunId("mcp", toolCall.id);
@@ -285,10 +261,8 @@ export async function createMcpTools(params: {
             { onAbort: () => requestRuntimeCancel(runId) },
           );
 
-          return {
-            role: "toolResult",
-            toolCallId: toolCall.id,
-            toolName: toolCall.name,
+          return buildToolResultMessage({
+            toolCall,
             content: (res?.content ?? [{ type: "text", text: "" }]) as any,
             details: {
               serverId: mapped.serverId,
@@ -298,21 +272,16 @@ export async function createMcpTools(params: {
             },
             isError: Boolean(res?.isError),
             timestamp: Date.now(),
-          };
+          });
         },
         signal,
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: msg || "MCP call failed" }],
-        details: { serverId: mapped.serverId, tool: mapped.toolName },
-        isError: true,
-        timestamp: now,
-      };
+      const msg = asErrorMessage(err);
+      return buildToolErrorResult(toolCall, msg || "MCP call failed", now, {
+        serverId: mapped.serverId,
+        tool: mapped.toolName,
+      });
     }
   }
 

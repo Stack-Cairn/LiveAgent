@@ -7,12 +7,6 @@ import {
   type SshHostConfig,
   selectEnabledMcpServers,
 } from "../settings";
-import {
-  createSendMessageTools,
-  createSubagentTools,
-  SUBAGENT_PARENT_ID,
-  type SubagentRuntimeConfig,
-} from "../subagents";
 import { createAskUserQuestionTools } from "./askUserQuestionTools";
 import type {
   BuiltinToolBundle,
@@ -20,7 +14,7 @@ import type {
   BuiltinToolMetadata,
 } from "./builtinTypes";
 import { createCronTools } from "./cronTools";
-import { createFileToolState, type FileToolState } from "./fileToolState";
+import type { FileToolState } from "./fileToolState";
 import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
@@ -269,9 +263,8 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
 
 export async function buildBuiltinToolRegistry(
   params: BuildBuiltinBaseToolRegistryParams & {
-    subagentRuntime?: SubagentRuntimeConfig;
     todoState?: TodoToolState;
-    /** chat 场景注入交互式提问工具；子代理/自动化场景无人值守，不注册。 */
+    /** chat 场景注入交互式提问工具；自动化场景无人值守，不注册。 */
     askUserQuestionConversationId?: string;
   },
 ) {
@@ -284,59 +277,5 @@ export async function buildBuiltinToolRegistry(
     params.runtimeScope === "chat" && params.askUserQuestionConversationId
       ? [createAskUserQuestionTools({ conversationId: params.askUserQuestionConversationId })]
       : [];
-  const chatBundles = [...todoBundles, ...askUserQuestionBundles];
-
-  const subagentRuntime = params.subagentRuntime;
-  if (!subagentRuntime) {
-    return createBuiltinToolRegistry([...baseBundles, ...chatBundles]);
-  }
-
-  const baseRegistry = createBuiltinToolRegistry(baseBundles);
-  // The Agent tool description embeds the roster, so the store must be
-  // hydrated before the bundle is created. Roster load failures degrade to an
-  // empty roster instead of blocking the whole registry.
-  try {
-    await subagentRuntime.store.ready();
-  } catch (error) {
-    console.warn("Failed to load subagent roster for the Agent tool", error);
-  }
-  const parentMessageBundle = subagentRuntime.store.conversationId
-    ? createSendMessageTools({
-        store: subagentRuntime.store,
-        senderId: SUBAGENT_PARENT_ID,
-        senderName: "Parent Agent",
-      })
-    : null;
-  const parentBundles = parentMessageBundle ? [...baseBundles, parentMessageBundle] : baseBundles;
-  return createBuiltinToolRegistry([
-    ...parentBundles,
-    ...chatBundles,
-    createSubagentTools({
-      providerId: subagentRuntime.providerId,
-      model: subagentRuntime.model,
-      runtime: subagentRuntime.runtime,
-      runtimePlatform: params.runtimePlatform,
-      workdir: params.workdir,
-      resolveHomeDir,
-      sessionId: subagentRuntime.sessionId,
-      templates: subagentRuntime.templates,
-      store: subagentRuntime.store,
-      scheduler: subagentRuntime.scheduler,
-      baseTools: baseRegistry.tools,
-      executeToolCall: baseRegistry.executeToolCall,
-      metadataByName: baseRegistry.metadataByName,
-      createSubagentToolRegistry: async (workdir) =>
-        createBuiltinToolRegistry(
-          await buildBaseBuiltinToolBundles({
-            ...params,
-            workdir,
-            fileState: createFileToolState(),
-            skillsEnabled: false,
-            applyMcpOps: undefined,
-            mcpLoadFailureMode: "continue",
-            memoryToolMode: "ro",
-          }),
-        ),
-    }),
-  ]);
+  return createBuiltinToolRegistry([...baseBundles, ...todoBundles, ...askUserQuestionBundles]);
 }

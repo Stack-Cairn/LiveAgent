@@ -90,6 +90,14 @@ function sleepWithAbort(ms: number, signal: AbortSignal | undefined): Promise<vo
  * soon as they're called, independent of consumer iteration — some callers
  * only await `.result()` without ever iterating events, and that pattern must
  * keep working through this wrapper.
+ *
+ * This is the only retry layer, not a second one stacked on the library's:
+ * pi-ai builds its SDK request options with `maxRetries: options?.maxRetries ?? 0`
+ * (dist/api/{anthropic-messages,openai-completions,openai-responses}.js; the
+ * Google path has no retry at all), so SDK-level retries stay off unless a
+ * caller opts in — and `streamByApi` never does. It only forwards
+ * `maxRetryDelayMs`, which makes the SDK fail fast on long server-requested
+ * delays precisely so this layer can retry them with user-visible status.
  */
 export function withStreamRetry(
   factory: () => AssistantMessageEventStream,

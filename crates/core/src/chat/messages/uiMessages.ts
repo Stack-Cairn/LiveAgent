@@ -128,21 +128,7 @@ export function getMessageText(message: Message) {
   return "";
 }
 
-export function assistantMessageToThinkingText(message: AssistantMessage) {
-  let text = "";
-  for (const block of message.content) {
-    if (block.type === "thinking") text += block.thinking;
-  }
-  return text;
-}
 
-export function toolResultMessageToText(message: ToolResultMessage) {
-  let text = "";
-  for (const block of message.content) {
-    if (block.type === "text") text += block.text;
-  }
-  return text;
-}
 
 export function safeStringify(value: unknown) {
   try {
@@ -584,11 +570,6 @@ function redactMcpManagerArgsForDisplay(args: Record<string, unknown>) {
   return out;
 }
 
-export function previewText(input: string, maxChars = 1200) {
-  const text = input || "";
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars)}\n...（已截断预览，len=${text.length}）...`;
-}
 
 // Deterministic next id for a text-like block: one more than the highest
 // existing ordinal of the same kind. A pure function of the current array, so

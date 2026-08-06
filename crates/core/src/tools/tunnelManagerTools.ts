@@ -10,6 +10,7 @@ import {
   type TunnelTtlSeconds,
 } from "../tunnels/constants";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
+import { asErrorMessage, buildCancelledToolResult, buildToolTextResult } from "./toolResultHelpers";
 
 export type TunnelChangeAction = "create" | "close" | "check";
 
@@ -18,7 +19,10 @@ export type TunnelManagerChange = {
   projectPathKey?: string;
 };
 
-type TunnelManagerAction = "list" | "create" | "close" | "check";
+// action 字面量的唯一来源:TS 类型、TypeBox schema、运行时守卫全部由此派生。
+const TUNNEL_MANAGER_ACTIONS = ["list", "create", "close", "check"] as const;
+
+type TunnelManagerAction = (typeof TUNNEL_MANAGER_ACTIONS)[number];
 
 type TunnelManagerDetails = {
   kind: "tunnel_manager";
@@ -33,7 +37,7 @@ const TUNNEL_MANAGER_TOOL: Tool = {
     "Manage temporary HTTP/WebSocket/SSE tunnels to local services. Use list to inspect active tunnels and their health, create to expose a localhost or IPv4/IPv6 http service, check to re-run health probes, and close to revoke a tunnel. Each tunnel gets its own port; the returned public URL already contains the access token.",
   parameters: Type.Object({
     action: Type.Union(
-      [Type.Literal("list"), Type.Literal("create"), Type.Literal("close"), Type.Literal("check")],
+      TUNNEL_MANAGER_ACTIONS.map((action) => Type.Literal(action)),
       {
         description: "Tunnel action to perform.",
       },
@@ -63,18 +67,20 @@ const TUNNEL_MANAGER_TOOL: Tool = {
   }),
 };
 
-function asErrorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
-
 function asArgs(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
 
+const TUNNEL_MANAGER_ACTION_SET = new Set<string>(TUNNEL_MANAGER_ACTIONS);
+
+function isTunnelManagerAction(value: unknown): value is TunnelManagerAction {
+  return typeof value === "string" && TUNNEL_MANAGER_ACTION_SET.has(value);
+}
+
 function normalizeAction(value: unknown): TunnelManagerAction {
-  if (value === "list" || value === "create" || value === "close" || value === "check") {
+  if (isTunnelManagerAction(value)) {
     return value;
   }
   throw new Error('TunnelManager.action must be "list", "create", "close", or "check".');
@@ -142,15 +148,13 @@ function okResult(params: {
     ...(params.tunnels ? { tunnels: params.tunnels } : {}),
     ...(params.tunnel ? { tunnel: params.tunnel } : {}),
   };
-  return {
-    role: "toolResult",
-    toolCallId: params.toolCall.id,
-    toolName: params.toolCall.name,
-    content: [{ type: "text", text: params.text }],
+  return buildToolTextResult({
+    toolCall: params.toolCall,
+    text: params.text,
     details,
     isError: false,
     timestamp: Date.now(),
-  };
+  });
 }
 
 function errorResult(
@@ -158,11 +162,9 @@ function errorResult(
   message: string,
   action: TunnelManagerAction = "list",
 ): ToolResultMessage {
-  return {
-    role: "toolResult",
-    toolCallId: toolCall.id,
-    toolName: toolCall.name,
-    content: [{ type: "text", text: `TunnelManager failed: ${message}` }],
+  return buildToolTextResult({
+    toolCall,
+    text: `TunnelManager failed: ${message}`,
     details: {
       kind: "tunnel_manager",
       action,
@@ -170,7 +172,7 @@ function errorResult(
     },
     isError: true,
     timestamp: Date.now(),
-  };
+  });
 }
 
 async function fetchTunnelState() {
@@ -187,15 +189,7 @@ async function executeTunnelManager(
   signal?: AbortSignal,
 ): Promise<ToolResultMessage> {
   if (signal?.aborted) {
-    return {
-      role: "toolResult",
-      toolCallId: toolCall.id,
-      toolName: toolCall.name,
-      content: [{ type: "text", text: "Cancelled" }],
-      details: {},
-      isError: true,
-      timestamp: Date.now(),
-    };
+    return buildCancelledToolResult(toolCall, Date.now());
   }
 
   const publicBaseUrl = params.publicBaseUrl?.trim() ?? "";
@@ -294,13 +288,7 @@ async function executeTunnelManager(
     });
   } catch (err) {
     const args = asArgs(toolCall.arguments);
-    const action =
-      args.action === "create" ||
-      args.action === "close" ||
-      args.action === "check" ||
-      args.action === "list"
-        ? args.action
-        : undefined;
+    const action = isTunnelManagerAction(args.action) ? args.action : undefined;
     return errorResult(toolCall, asErrorMessage(err), action);
   }
 }

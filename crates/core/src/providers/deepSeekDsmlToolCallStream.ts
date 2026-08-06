@@ -1,8 +1,9 @@
-import type {
-  AssistantMessage,
-  AssistantMessageEvent,
-  AssistantMessageEventStream,
-  ToolCall,
+import {
+  type AssistantMessage,
+  type AssistantMessageEvent,
+  type AssistantMessageEventStream,
+  createAssistantMessageEventStream,
+  type ToolCall,
 } from "@earendil-works/pi-ai";
 import { parseDsmlToolCallMarkup } from "../chat/runner/deepSeekDsml";
 import {
@@ -53,12 +54,6 @@ function snapshotAssistant(message: AssistantMessage): AssistantMessage {
 
 function isTerminalEvent(event: AssistantMessageEvent) {
   return event.type === "done" || event.type === "error";
-}
-
-function terminalMessage(event: AssistantMessageEvent) {
-  if (event.type === "done") return event.message;
-  if (event.type === "error") return event.error;
-  return null;
 }
 
 function createFallbackAssistant(message?: AssistantMessage): AssistantMessage {
@@ -150,14 +145,10 @@ export function wrapDeepSeekDsmlToolCallStream(
   source: AssistantMessageEventStream,
 ): AssistantMessageEventStream {
   const streamSourceKey = `stream:${++deepSeekDsmlRepairStreamSequence}`;
-  const queue: AssistantMessageEvent[] = [];
-  const waiting: Array<(result: IteratorResult<AssistantMessageEvent>) => void> = [];
+  // 事件管道用库的 EventStream：push() 遇到 done/error 会自行 resolve result()，
+  // 与这里过去手写的 queue/waiting/settleFinal 同语义。DSML 修复状态机在下面。
+  const events = createAssistantMessageEventStream();
   let closed = false;
-  let finalResolved = false;
-  let resolveFinal!: (message: AssistantMessage) => void;
-  const finalResult = new Promise<AssistantMessage>((resolve) => {
-    resolveFinal = resolve;
-  });
 
   let output: AssistantMessage | null = null;
   let extractedToolCalls = false;
@@ -211,43 +202,10 @@ export function wrapDeepSeekDsmlToolCallStream(
     } satisfies AssistantMessage;
   };
 
-  const settleFinal = (message: AssistantMessage) => {
-    if (finalResolved) return;
-    finalResolved = true;
-    resolveFinal(message);
-  };
-
-  const notifyDone = () => {
-    while (waiting.length > 0) {
-      waiting.shift()?.({ value: undefined, done: true });
-    }
-  };
-
   const enqueue = (event: AssistantMessageEvent) => {
     if (closed) return;
-    const terminal = isTerminalEvent(event);
-    const message = terminalMessage(event);
-    if (message) {
-      settleFinal(message);
-    }
-
-    const waiter = waiting.shift();
-    if (waiter) {
-      waiter({ value: event, done: false });
-    } else {
-      queue.push(event);
-    }
-
-    if (terminal) {
-      closed = true;
-      if (queue.length === 0) notifyDone();
-    }
-  };
-
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    notifyDone();
+    if (isTerminalEvent(event)) closed = true;
+    events.push(event);
   };
 
   const emitError = (error: unknown) => {
@@ -859,8 +817,8 @@ export function wrapDeepSeekDsmlToolCallStream(
           activeThinkingSourceIndex = null;
         }
         emitPendingFlattenedToolRequests();
-        settleFinal(snapshotAssistant(ensureOutput()));
-        close();
+        closed = true;
+        events.end(snapshotAssistant(ensureOutput()));
       }
     } catch (error) {
       if (isRecoverableAnthropicStreamEndError(error) && hasRecoverableOutput()) {
@@ -886,27 +844,5 @@ export function wrapDeepSeekDsmlToolCallStream(
     }
   })();
 
-  return {
-    async *[Symbol.asyncIterator]() {
-      while (true) {
-        if (queue.length > 0) {
-          const event = queue.shift();
-          if (event) {
-            yield event;
-          }
-          if (closed && queue.length === 0) notifyDone();
-          continue;
-        }
-        if (closed) return;
-        const result = await new Promise<IteratorResult<AssistantMessageEvent>>((resolve) =>
-          waiting.push(resolve),
-        );
-        if (result.done) return;
-        yield result.value;
-      }
-    },
-    result() {
-      return finalResult;
-    },
-  } as unknown as AssistantMessageEventStream;
+  return events;
 }

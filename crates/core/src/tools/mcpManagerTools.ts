@@ -14,23 +14,29 @@ import {
   createBuiltinMetadataMap,
   type McpManagerResultDetails,
 } from "./builtinTypes";
+import { throwIfToolInvocationAborted, ToolInvocationCancelledError } from "./invokeWithAbort";
 import { ToolPathResolver } from "./pathUtils";
 import type { SystemToolRuntimeScope } from "./systemToolOptions";
+import { asErrorMessage, buildToolTextResult, buildUnknownToolResult } from "./toolResultHelpers";
 
-type McpManagerAction =
-  | "list"
-  | "read"
-  | "create"
-  | "update"
-  | "delete"
-  | "enable"
-  | "disable"
-  | "validate"
-  | "test"
-  | "diagnose"
-  | "restart"
-  | "stop"
-  | "tools";
+// action 字面量的唯一来源:TS 类型、TypeBox schema、运行时守卫全部由此派生。
+const MCP_MANAGER_ACTIONS = [
+  "list",
+  "read",
+  "create",
+  "update",
+  "delete",
+  "enable",
+  "disable",
+  "validate",
+  "test",
+  "diagnose",
+  "restart",
+  "stop",
+  "tools",
+] as const;
+
+type McpManagerAction = (typeof MCP_MANAGER_ACTIONS)[number];
 
 type McpDiagnosticToolInfo = {
   serverId: string;
@@ -151,21 +157,7 @@ const MCP_SERVER_PATCH_PARAMETERS = Type.Object(
 );
 
 const MCP_MANAGER_PARAMETERS = Type.Object({
-  action: Type.Union([
-    Type.Literal("list"),
-    Type.Literal("read"),
-    Type.Literal("create"),
-    Type.Literal("update"),
-    Type.Literal("delete"),
-    Type.Literal("enable"),
-    Type.Literal("disable"),
-    Type.Literal("validate"),
-    Type.Literal("test"),
-    Type.Literal("diagnose"),
-    Type.Literal("restart"),
-    Type.Literal("stop"),
-    Type.Literal("tools"),
-  ]),
+  action: Type.Union(MCP_MANAGER_ACTIONS.map((action) => Type.Literal(action))),
   server_id: Type.Optional(Type.String({ description: "Target MCP Server id." })),
   server_ids: Type.Optional(Type.Array(Type.String(), { description: "Target MCP Server ids." })),
   server: Type.Optional(MCP_SERVER_PARAMETERS),
@@ -177,40 +169,14 @@ const MCP_MANAGER_PARAMETERS = Type.Object({
   include_stderr: Type.Optional(Type.Boolean()),
 });
 
-class McpManagerCancelledError extends Error {
-  constructor() {
-    super("Cancelled");
-  }
-}
-
-function throwIfAborted(signal?: AbortSignal) {
-  if (signal?.aborted) throw new McpManagerCancelledError();
-}
-
-function asErrorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
+const MCP_MANAGER_ACTION_SET = new Set<string>(MCP_MANAGER_ACTIONS);
 
 function normalizeAction(value: unknown): McpManagerAction {
   const action = typeof value === "string" ? value.trim() : "";
-  switch (action) {
-    case "list":
-    case "read":
-    case "create":
-    case "update":
-    case "delete":
-    case "enable":
-    case "disable":
-    case "validate":
-    case "test":
-    case "diagnose":
-    case "restart":
-    case "stop":
-    case "tools":
-      return action;
-    default:
-      throw new Error(`McpManager.action is not supported: ${JSON.stringify(value)}`);
+  if (MCP_MANAGER_ACTION_SET.has(action)) {
+    return action as McpManagerAction;
   }
+  throw new Error(`McpManager.action is not supported: ${JSON.stringify(value)}`);
 }
 
 function asObject(value: unknown, label: string): Record<string, unknown> {
@@ -416,7 +382,7 @@ function redactMap(map: Record<string, string> | undefined) {
   return Object.fromEntries(Object.keys(map).map((key) => [key, "<redacted>"]));
 }
 
-export function redactMcpServerConfig(server: McpServerConfig): McpServerConfig {
+function redactMcpServerConfig(server: McpServerConfig): McpServerConfig {
   return {
     ...server,
     env: redactMap(server.env),
@@ -752,7 +718,7 @@ export function createMcpManagerTools(params: {
         normalizeServerInput(args.server),
         "McpManager.server.cwd",
       );
-      throwIfAborted(signal);
+      throwIfToolInvocationAborted(signal);
       const validation = validateServer(server);
       if (!validation.ok) {
         return {
@@ -784,7 +750,7 @@ export function createMcpManagerTools(params: {
     if (action === "update") {
       const serverId = requireServerId(args.server_id);
       const patch = await resolvePatchCwd(normalizePatch(args.patch), "McpManager.patch.cwd");
-      throwIfAborted(signal);
+      throwIfToolInvocationAborted(signal);
       const { server, validation, changed } = commitUpdate(serverId, patch);
       if (!changed) {
         return {
@@ -852,7 +818,7 @@ export function createMcpManagerTools(params: {
       const server = hasInlineServer
         ? await resolveServerCwd(normalizeServerInput(args.server), "McpManager.server.cwd")
         : requireExistingServer(currentSettings(), requireServerId(args.server_id));
-      throwIfAborted(signal);
+      throwIfToolInvocationAborted(signal);
       const validation = validateServer(server, hasInlineServer ? undefined : currentSettings());
       let runtime: McpRuntimeStatus | null = null;
       if (!hasInlineServer) {
@@ -863,7 +829,7 @@ export function createMcpManagerTools(params: {
           transport: server.transport,
           lastError: asErrorMessage(err),
         }));
-        throwIfAborted(signal);
+        throwIfToolInvocationAborted(signal);
       }
       if (!validation.ok) {
         const suggestions = buildSuggestions({ validation, server });
@@ -920,49 +886,34 @@ export function createMcpManagerTools(params: {
   ): Promise<ToolResultMessage> {
     const now = Date.now();
     if (toolCall.name !== "McpManager") {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: `Unknown tool: ${toolCall.name}` }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildUnknownToolResult(toolCall, now);
     }
 
     try {
-      throwIfAborted(signal);
+      throwIfToolInvocationAborted(signal);
       const result = await executeAction(
         (toolCall.arguments ?? {}) as Record<string, unknown>,
         signal,
       );
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: formatMcpManagerResult(result) }],
+      return buildToolTextResult({
+        toolCall,
+        text: formatMcpManagerResult(result),
         details: detailsForResult(result),
         isError: false,
         timestamp: now,
-      };
+      });
     } catch (err) {
-      if (err instanceof McpManagerCancelledError) {
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: "Cancelled" }],
-          details: {},
+      if (err instanceof ToolInvocationCancelledError) {
+        return buildToolTextResult({
+          toolCall,
+          text: "Cancelled",
           isError: true,
           timestamp: now,
-        };
+        });
       }
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: `McpManager failed: ${asErrorMessage(err)}` }],
+      return buildToolTextResult({
+        toolCall,
+        text: `McpManager failed: ${asErrorMessage(err)}`,
         details: {
           kind: "manage_mcp",
           action: "unknown",
@@ -971,7 +922,7 @@ export function createMcpManagerTools(params: {
         },
         isError: true,
         timestamp: now,
-      };
+      });
     }
   }
 

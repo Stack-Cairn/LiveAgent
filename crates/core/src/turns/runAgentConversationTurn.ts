@@ -57,16 +57,7 @@ import {
   selectEnabledMcpServers,
   workspaceProjectPathKey,
 } from "../settings";
-import {
-  AGENT_TOOL_NAME,
-  buildRosterReminder,
-  createSubagentScheduler,
-  isSubagentCardToolCall,
-  renderMessageBusSnapshot,
-  SUBAGENT_PARENT_ID,
-  type SubagentConversationStore,
-  type SubagentTemplate,
-} from "../subagents";
+import { AGENT_TOOL_NAME, createSubagentScheduler, isSubagentCardToolCall } from "../subagents";
 import { buildBuiltinToolRegistry } from "../tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../tools/builtinTypes";
 import { createFileToolState } from "../tools/fileToolState";
@@ -76,7 +67,7 @@ import { getOrCreateTodoToolState } from "../tools/todoTools";
 import { isSessionApproved, requestToolApproval } from "../tools/toolApproval";
 import { resolveToolPolicy } from "../tools/toolPolicy";
 import type { TunnelManagerChange } from "../tools/tunnelManagerTools";
-import { appendSystemPrompt, buildPartialAssistantMessage } from "./chatPageRuntime";
+import { buildPartialAssistantMessage } from "./chatPageRuntime";
 import {
   buildGatewayToolCallPreviewArguments,
   summarizeToolCallForApproval,
@@ -101,7 +92,6 @@ export type PersistConversationParams = {
 };
 
 const AGENT_PERF_LOG_THRESHOLD_MS = 250;
-const TOOL_CALL_DELTA_RAF_FALLBACK_DELAY_MS = 64;
 
 function perfNowMs() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -159,18 +149,6 @@ function finishAgentPerfSpan(
   return durationMs;
 }
 
-// Only enabled, non-empty templates are resolvable from Agent calls.
-function enabledSubagentTemplates(agentTemplates: AppSettings["agents"]): SubagentTemplate[] {
-  return (agentTemplates ?? [])
-    .filter((template) => template.enabled && template.prompt.trim())
-    .map((template) => ({
-      id: template.id,
-      name: template.name,
-      description: template.description,
-      prompt: template.prompt,
-    }));
-}
-
 // The parent Agent call is suppressed in favor of the per-agent cards; a
 // rejected batch (error result) stays visible so validation failures are
 // never silent.
@@ -199,7 +177,6 @@ export type RunAgentConversationTurnParams = {
     names: string[];
     baseDirs: string[];
   }) => void | Promise<void>;
-  agentTemplates: AppSettings["agents"];
   getMcpSettings: () => AppSettings["mcp"];
   /** 工具审批策略的实时读取(权威 settingsRef,非 turn 级快照),缺省视为空表。 */
   getToolPolicies?: () => AppSettings["system"]["toolPolicies"];
@@ -221,7 +198,6 @@ export type RunAgentConversationTurnParams = {
   gatewayBridgeEvents: GatewayBridgeEventController;
   hookLifecycle: ConversationHookLifecycle;
   conversationDebugLogger: StreamDebugLogger;
-  subagentStore?: SubagentConversationStore;
   getNextConversationState: () => ConversationViewState;
   applyConversationState: (state: ConversationViewState) => void;
   buildPreparedContext: (
@@ -264,7 +240,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     skillsRootDir,
     skillAccessPolicy,
     onManagedSkillsChanged,
-    agentTemplates,
     getMcpSettings,
     getToolPolicies,
     applyMcpOps,
@@ -285,7 +260,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     gatewayBridgeEvents,
     hookLifecycle,
     conversationDebugLogger,
-    subagentStore,
     getNextConversationState,
     applyConversationState,
     buildPreparedContext,
@@ -313,62 +287,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   // this turn. In-flight extraction from the previous turn keeps running.
   memoryExtraction.noteTurnBoundary(conversationId);
 
-  const loadParentBusSnapshot = async () => {
-    if (!subagentStore) return "";
-    try {
-      return renderMessageBusSnapshot({
-        messages: await subagentStore.listBusMessages(SUBAGENT_PARENT_ID),
-        currentAgentId: SUBAGENT_PARENT_ID,
-        currentAgentName: "Parent Agent",
-      });
-    } catch (error) {
-      console.warn("Failed to load parent message bus snapshot", error);
-      return "";
-    }
-  };
-  const subagentStoreReadyStartedAt = perfNowMs();
-  let subagentReminder = "";
-  let parentMessageBusSnapshot = "";
-  if (subagentStore) {
-    try {
-      await subagentStore.ready();
-      subagentReminder = buildRosterReminder({
-        identities: subagentStore.listIdentities(),
-        latestRunsByAgent: subagentStore.latestRunsByAgent(),
-      });
-    } catch (error) {
-      console.warn("Failed to load the subagent roster", error);
-    }
-    parentMessageBusSnapshot = await loadParentBusSnapshot();
-  }
-  finishAgentPerfSpan(
-    conversationDebugLogger,
-    "subagent_store.ready",
-    subagentStoreReadyStartedAt,
-    {
-      conversationId,
-      identityCount: subagentStore?.listIdentities().length ?? 0,
-    },
-  );
-  const refreshParentMessageBusSnapshot = async () => {
-    parentMessageBusSnapshot = await loadParentBusSnapshot();
-    return parentMessageBusSnapshot;
-  };
-  const withSubagentRuntimeContext = (context: Context): Context => {
-    let systemPrompt = context.systemPrompt;
-    if (subagentReminder) {
-      systemPrompt = appendSystemPrompt(systemPrompt, subagentReminder);
-    }
-    if (parentMessageBusSnapshot) {
-      systemPrompt = appendSystemPrompt(systemPrompt, parentMessageBusSnapshot);
-    }
-    return systemPrompt !== context.systemPrompt
-      ? {
-          ...context,
-          systemPrompt,
-        }
-      : context;
-  };
   const fileState = createFileToolState();
   const todoState = getOrCreateTodoToolState(conversationId);
   const subagentScheduler = createSubagentScheduler();
@@ -402,17 +320,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       console.warn(warning);
       updateToolStatus(warning, transcriptStore);
     },
-    subagentRuntime: subagentStore
-      ? {
-          providerId,
-          model,
-          runtime,
-          sessionId,
-          templates: enabledSubagentTemplates(agentTemplates),
-          store: subagentStore,
-          scheduler: subagentScheduler,
-        }
-      : undefined,
   });
   finishAgentPerfSpan(conversationDebugLogger, "builtin_registry.build", buildRegistryStartedAt, {
     toolCount: builtinRegistry.tools.length,
@@ -432,11 +339,9 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
 
   const preCompactionStartedAt = perfNowMs();
   await compaction.maybeCompactPreSend({
-    budgetContext: withSubagentRuntimeContext(
-      buildPreparedContext(getNextConversationState(), combinedTools, {
-        includeUploadedFilesMetadata: true,
-      }),
-    ),
+    budgetContext: buildPreparedContext(getNextConversationState(), combinedTools, {
+      includeUploadedFilesMetadata: true,
+    }),
     tools: combinedTools,
     includeUploadedFilesMetadata: true,
   });
@@ -700,12 +605,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     let midStreamCompactionRequested = false;
     let sawToolCallInRound = false;
     const nativeWebSearchEnabled = runtime.nativeWebSearchEnabled !== false;
-    const agentContext = withSubagentRuntimeContext(
+    const agentContext =
       pendingAgentContext ??
-        buildPreparedContext(getNextConversationState(), combinedTools, {
-          includeUploadedFilesMetadata: true,
-        }),
-    );
+      buildPreparedContext(getNextConversationState(), combinedTools, {
+        includeUploadedFilesMetadata: true,
+      });
     pendingAgentContext = null;
     // 主请求跑在派生 scope 上：mid-stream 压缩只 abort 该 scope，用户停止
     // （userStop）随时链式传导，不存在换代窗口。
@@ -907,35 +811,24 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onBeforeNextTurn: async ({ round, assistant, toolResults, emittedMessages }) => {
           publishPersistableAgentProgress(round, assistant, toolResults);
           latestAgentEmittedMessages = emittedMessages.slice();
-          await refreshParentMessageBusSnapshot();
           const tempState = appendMessagesToConversation(
             getNextConversationState(),
             emittedMessages,
           );
-          const tempContext = withSubagentRuntimeContext(
-            buildPreparedContext(tempState, combinedTools, {
-              includeUploadedFilesMetadata: true,
-            }),
-          );
           const { context: compactedContext } = await compaction.compactDuringRun({
             trigger: "post-tool",
             state: tempState,
-            budgetContext: tempContext,
+            budgetContext: buildPreparedContext(tempState, combinedTools, {
+              includeUploadedFilesMetadata: true,
+            }),
             tools: combinedTools,
             includeUploadedFilesMetadata: true,
           });
-          if (!compactedContext) {
-            return parentMessageBusSnapshot
-              ? {
-                  context: tempContext,
-                  emittedMessages,
-                }
-              : null;
-          }
+          if (!compactedContext) return null;
           latestAgentEmittedMessages = [];
           clearPersistableAgentProgress();
           return {
-            context: withSubagentRuntimeContext(compactedContext),
+            context: compactedContext,
             emittedMessages: [],
           };
         },
@@ -978,12 +871,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       const compactionResult = await compaction.compactDuringRun({
         trigger: "mid-stream",
         state: tempState,
-        budgetContext: withSubagentRuntimeContext(
-          buildPreparedContext(tempState, combinedTools, {
-            includeAbortedMessages: true,
-            includeUploadedFilesMetadata: true,
-          }),
-        ),
+        budgetContext: buildPreparedContext(tempState, combinedTools, {
+          includeAbortedMessages: true,
+          includeUploadedFilesMetadata: true,
+        }),
         tools: combinedTools,
         includeAbortedMessages: true,
         includeUploadedFilesMetadata: true,

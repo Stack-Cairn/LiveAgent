@@ -345,27 +345,6 @@ function buildHistoryMessageRef(params: {
   };
 }
 
-// Stable identity of a persisted user message, looked up by its message id.
-// Used at send time to stamp the just-appended user message's own ref onto
-// the outgoing user_message event, so remote subscribers can anchor a later
-// edit-resend rebase without waiting for a history refresh.
-export function findHistoryMessageRefByMessageId(
-  state: ConversationViewState,
-  messageId: string,
-): HistoryMessageRef | undefined {
-  const target = messageId.trim();
-  if (!target) return undefined;
-  for (let segmentIndex = state.segments.length - 1; segmentIndex >= 0; segmentIndex -= 1) {
-    const segment = state.segments[segmentIndex];
-    if (!segment) continue;
-    for (let messageIndex = segment.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-      const message = segment.messages[messageIndex];
-      if (!message || readMessageStringId(message) !== target) continue;
-      return buildHistoryMessageRef({ segment, message, messageIndex });
-    }
-  }
-  return undefined;
-}
 
 function getSummaryId(summary: StoredSummaryMessage | undefined) {
   return summary?.id;
@@ -736,38 +715,6 @@ export function createTranscriptProjection(params: {
   };
 }
 
-export function prependTranscriptProjection(
-  state: ConversationViewState,
-  page: TranscriptProjection,
-): ConversationViewState {
-  const segmentWindows = new Map<string, TranscriptSegmentWindow>();
-  for (const window of [...page.segmentWindows, ...state.transcript.segmentWindows]) {
-    const previous = segmentWindows.get(window.segmentId);
-    segmentWindows.set(
-      window.segmentId,
-      previous
-        ? {
-            ...previous,
-            startMessageIndex: Math.min(previous.startMessageIndex, window.startMessageIndex),
-            endMessageIndex: Math.max(previous.endMessageIndex, window.endMessageIndex),
-          }
-        : window,
-    );
-  }
-
-  return {
-    ...state,
-    transcript: {
-      items: [...page.items, ...state.transcript.items],
-      segmentWindows: Array.from(segmentWindows.values()).sort(
-        (left, right) => left.segmentIndex - right.segmentIndex,
-      ),
-      oldestMessageOffset: page.oldestMessageOffset,
-      hasMoreBefore: page.hasMoreBefore,
-      revision: page.revision,
-    },
-  };
-}
 
 function markTimelineItemCompacted(item: RenderTimelineItem): RenderTimelineItem {
   if (item.kind === "summary" || item.isFromCompactedSegment) {

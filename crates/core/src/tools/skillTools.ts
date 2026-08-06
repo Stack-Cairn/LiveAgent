@@ -27,10 +27,12 @@ import {
   normalizeSkillBaseDir,
   type SkillAccessPolicy,
 } from "./skillAccessPolicy";
-
-function asErrorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
+import {
+  asErrorMessage,
+  buildCancelledToolResult,
+  buildToolTextResult,
+  buildUnknownToolResult,
+} from "./toolResultHelpers";
 
 function normalizeSkillPath(input: unknown) {
   const raw = typeof input === "string" ? input.trim() : "";
@@ -617,27 +619,11 @@ export function createSkillTools(
   ): Promise<ToolResultMessage> {
     const now = Date.now();
     if (signal?.aborted) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: "Cancelled" }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildCancelledToolResult(toolCall, now);
     }
 
     if (toolCall.name !== "SkillsManager") {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: `Unknown tool: ${toolCall.name}` }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildUnknownToolResult(toolCall, now);
     }
 
     try {
@@ -699,40 +685,31 @@ export function createSkillTools(
         const body = content || "(empty skill file)";
         const suffix = visibleResult.truncated ? "\n\n[...truncated...]\n" : "";
         const pathRules = buildSkillReadPathRules(path);
-        return {
-          role: "toolResult",
-          toolCallId: toolCall.id,
-          toolName: toolCall.name,
-          content: [{ type: "text", text: `${header}\n\n${body}${suffix}${pathRules}` }],
+        return buildToolTextResult({
+          toolCall,
+          text: `${header}\n\n${body}${suffix}${pathRules}`,
           details,
           isError: false,
           timestamp: now,
-        };
+        });
       }
 
       const details = buildActionDetails(visibleResult);
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [
-          { type: "text", text: formatManageSkillResultText(visibleResult, skillAccessPolicy) },
-        ],
+      return buildToolTextResult({
+        toolCall,
+        text: formatManageSkillResultText(visibleResult, skillAccessPolicy),
         details,
         isError: false,
         timestamp: now,
-      };
+      });
     } catch (err) {
       const args = (toolCall.arguments ?? {}) as Record<string, unknown>;
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: buildSkillManagerErrorText(args, err) }],
-        details: {},
+      return buildToolTextResult({
+        toolCall,
+        text: buildSkillManagerErrorText(args, err),
         isError: true,
         timestamp: now,
-      };
+      });
     }
   }
 

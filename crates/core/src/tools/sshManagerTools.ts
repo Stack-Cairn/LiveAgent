@@ -11,27 +11,32 @@ import {
   throwIfToolInvocationAborted,
 } from "./invokeWithAbort";
 import { ToolPathResolver } from "./pathUtils";
+import { asErrorMessage, buildToolTextResult } from "./toolResultHelpers";
 
-type SSHManagerAction =
-  | "list_hosts"
-  | "list_sessions"
-  | "create_session"
-  | "read_session"
-  | "send_input"
-  | "resize_session"
-  | "close_session"
-  | "exec"
-  | "sftp_list"
-  | "sftp_stat"
-  | "sftp_read_text"
-  | "sftp_write_text"
-  | "sftp_mkdir"
-  | "sftp_rename"
-  | "sftp_delete"
-  | "sftp_upload"
-  | "sftp_download"
-  | "sftp_transfer_status"
-  | "sftp_cancel_transfer";
+// action 字面量的唯一来源:TS 类型、TypeBox schema、运行时守卫全部由此派生。
+const SSH_MANAGER_ACTIONS = [
+  "list_hosts",
+  "list_sessions",
+  "create_session",
+  "read_session",
+  "send_input",
+  "resize_session",
+  "close_session",
+  "exec",
+  "sftp_list",
+  "sftp_stat",
+  "sftp_read_text",
+  "sftp_write_text",
+  "sftp_mkdir",
+  "sftp_rename",
+  "sftp_delete",
+  "sftp_upload",
+  "sftp_download",
+  "sftp_transfer_status",
+  "sftp_cancel_transfer",
+] as const;
+
+type SSHManagerAction = (typeof SSH_MANAGER_ACTIONS)[number];
 
 type RawTerminalSession = {
   id?: string;
@@ -130,27 +135,7 @@ const SSH_MANAGER_TOOL: Tool = {
     'Manage SSH sessions and remote SFTP files for SSH hosts explicitly associated with the current project. Use host_id from list_hosts. If list_hosts reports credential=saved, LiveAgent already has the configured password/private key/passphrase; do not ask the user to paste credentials into chat, and call create_session, exec, or SFTP actions directly. If list_hosts reports credential=missing, ask the user to configure credentials in Settings > SSH instead of requesting secrets in chat. If list_hosts reports credential=interactive, the host uses keyboard-interactive login: SSHManager never connects such hosts itself — create_session fails, and exec/SFTP only reuse a session the user already opened; if none is running, ask the user to connect in the SSH Tunnel tab first. Default session strategy is reuse_or_create: exec and SFTP reuse the same running session for that host before LiveAgent creates a visible session. To intentionally run multiple SSH sessions, call create_session or set session_strategy="new", then use the returned session_id for follow-up operations. Use session_strategy="require_existing" when you want to fail instead of implicitly creating a session. Do not combine session_id with session_strategy="new". Authentication prompts, unknown host keys, changed host keys, and MFA must be completed by the user in the SSH Tunnel tab before retrying.',
   parameters: Type.Object({
     action: Type.Union(
-      [
-        Type.Literal("list_hosts"),
-        Type.Literal("list_sessions"),
-        Type.Literal("create_session"),
-        Type.Literal("read_session"),
-        Type.Literal("send_input"),
-        Type.Literal("resize_session"),
-        Type.Literal("close_session"),
-        Type.Literal("exec"),
-        Type.Literal("sftp_list"),
-        Type.Literal("sftp_stat"),
-        Type.Literal("sftp_read_text"),
-        Type.Literal("sftp_write_text"),
-        Type.Literal("sftp_mkdir"),
-        Type.Literal("sftp_rename"),
-        Type.Literal("sftp_delete"),
-        Type.Literal("sftp_upload"),
-        Type.Literal("sftp_download"),
-        Type.Literal("sftp_transfer_status"),
-        Type.Literal("sftp_cancel_transfer"),
-      ],
+      SSH_MANAGER_ACTIONS.map((action) => Type.Literal(action)),
       { description: "SSH/SFTP action to perform." },
     ),
     host_id: Type.Optional(
@@ -217,34 +202,11 @@ function asArgs(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function asErrorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
+const SSH_MANAGER_ACTION_SET = new Set<string>(SSH_MANAGER_ACTIONS);
 
 function normalizeAction(value: unknown): SSHManagerAction {
   const action = typeof value === "string" ? value.trim() : "";
-  const actions = new Set<SSHManagerAction>([
-    "list_hosts",
-    "list_sessions",
-    "create_session",
-    "read_session",
-    "send_input",
-    "resize_session",
-    "close_session",
-    "exec",
-    "sftp_list",
-    "sftp_stat",
-    "sftp_read_text",
-    "sftp_write_text",
-    "sftp_mkdir",
-    "sftp_rename",
-    "sftp_delete",
-    "sftp_upload",
-    "sftp_download",
-    "sftp_transfer_status",
-    "sftp_cancel_transfer",
-  ]);
-  if (actions.has(action as SSHManagerAction)) {
+  if (SSH_MANAGER_ACTION_SET.has(action)) {
     return action as SSHManagerAction;
   }
   throw new Error("SSHManager.action is invalid.");
@@ -359,11 +321,9 @@ function okResult(params: {
   text: string;
   details?: Record<string, unknown>;
 }): ToolResultMessage {
-  return {
-    role: "toolResult",
-    toolCallId: params.toolCall.id,
-    toolName: params.toolCall.name,
-    content: [{ type: "text", text: params.text }],
+  return buildToolTextResult({
+    toolCall: params.toolCall,
+    text: params.text,
     details: {
       kind: "ssh_manager",
       action: params.action,
@@ -371,7 +331,7 @@ function okResult(params: {
     },
     isError: false,
     timestamp: Date.now(),
-  };
+  });
 }
 
 function errorResult(
@@ -379,11 +339,9 @@ function errorResult(
   action: SSHManagerAction,
   message: string,
 ): ToolResultMessage {
-  return {
-    role: "toolResult",
-    toolCallId: toolCall.id,
-    toolName: toolCall.name,
-    content: [{ type: "text", text: `SSHManager failed: ${message}` }],
+  return buildToolTextResult({
+    toolCall,
+    text: `SSHManager failed: ${message}`,
     details: {
       kind: "ssh_manager",
       action,
@@ -391,7 +349,7 @@ function errorResult(
     },
     isError: true,
     timestamp: Date.now(),
-  };
+  });
 }
 
 async function listProjectSessions(projectPathKey: string, signal?: AbortSignal) {

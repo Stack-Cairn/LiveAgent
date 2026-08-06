@@ -1,4 +1,9 @@
-import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
+import {
+  type AssistantMessage,
+  type Context,
+  getOverflowPatterns,
+  isRetryableAssistantError,
+} from "@earendil-works/pi-ai";
 
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import { assistantMessageToText, completeAssistantMessage } from "../../providers/llm";
@@ -14,7 +19,7 @@ import { detectCompactionSummaryLanguage } from "./summaryLanguage";
 import { buildCompactionSystemPrompt, buildRepairPromptText } from "./summaryPrompt";
 import { estimateTextTokens } from "./tokenLedger";
 import type { ProviderRuntimeConfig } from "./types";
-import { buildVerificationSignals, validateCompactionSummary } from "./validate";
+import { validateCompactionSummary } from "./validate";
 
 export type CompleteAssistantFn = typeof completeAssistantMessage;
 
@@ -32,7 +37,7 @@ export function createCompactionAbortError() {
   return error;
 }
 
-export async function sleepWithAbort(ms: number, signal?: AbortSignal) {
+async function sleepWithAbort(ms: number, signal?: AbortSignal) {
   if (!Number.isFinite(ms) || ms <= 0) return;
   if (signal?.aborted) throw createCompactionAbortError();
 
@@ -50,26 +55,30 @@ export async function sleepWithAbort(ms: number, signal?: AbortSignal) {
   });
 }
 
-function getRetryDelayMs(attempt: number) {
-  return Math.min(1_500, 400 * 2 ** Math.max(0, attempt));
+// 只在瞬态失败后退避一次,固定间隔即可(此前的 min(1500, 400*2**attempt) 只被
+// attempt=0 调用过,指数部分从未生效)。
+const RETRY_DELAY_MS = 400;
+
+// completeAssistantMessage 会把 stopReason="error" 的 AssistantMessage 转成普通
+// Error 抛出(providers/runtime/textOnlyRuntime.ts),错误消息之外的字段都丢了。
+// pi-ai 的 isRetryableAssistantError 签名要 AssistantMessage,因此这里按其只读取
+// 的两个字段做最小适配;溢出判定则直接借用库导出的跨 provider 正则表。
+function asAssistantErrorMessage(error: unknown): AssistantMessage {
+  return {
+    stopReason: "error",
+    errorMessage: error instanceof Error ? error.message : String(error),
+  } as AssistantMessage;
 }
+
+const OVERFLOW_PATTERNS = getOverflowPatterns();
 
 function isOverflowError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /context|token|too long|maximum context|input.*too large|overflow/i.test(message);
-}
-
-function isNonRetryableError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /unauthorized|authentication|invalid api key|quota|rate limit|insufficient|forbidden/i.test(
-    message,
-  );
+  return OVERFLOW_PATTERNS.some((pattern) => pattern.test(message));
 }
 
 function isTransientError(error: unknown) {
-  if (isNonRetryableError(error)) return false;
-  const message = error instanceof Error ? error.message : String(error);
-  return /timeout|timed out|network|socket|econn|5\d\d|temporar/i.test(message);
+  return isRetryableAssistantError(asAssistantErrorMessage(error));
 }
 
 function buildSummarizerRuntime(providerId: ProviderId, runtime: ProviderRuntimeConfig) {
@@ -130,10 +139,7 @@ async function requestSummary(params: SummarizerRequest): Promise<AssistantMessa
       } as AssistantMessage,
       {
         role: "user",
-        content: buildRepairPromptText(
-          params.repair.validationError,
-          buildVerificationSignals(params.payload),
-        ),
+        content: buildRepairPromptText(params.repair.validationError),
         timestamp: Date.now() + 2,
       },
     );
@@ -194,7 +200,7 @@ export async function summarizeConversation(params: {
           event: "compaction_request_retry",
           reason: error instanceof Error ? error.message : String(error),
         });
-        await sleepWithAbort(getRetryDelayMs(0), params.signal);
+        await sleepWithAbort(RETRY_DELAY_MS, params.signal);
         continue;
       }
       throw error;
@@ -205,7 +211,6 @@ export async function summarizeConversation(params: {
       const { summaryText } = validateCompactionSummary(
         assistantMessageToText(validated),
         payloadTokens,
-        payload,
       );
       return {
         summaryText,

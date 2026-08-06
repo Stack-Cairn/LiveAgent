@@ -23,17 +23,6 @@ export type MemoryConfidence = (typeof MEMORY_CONFIDENCES)[number];
 export const MEMORY_UPDATE_MODES = ["replace", "merge", "append"] as const;
 export type MemoryUpdateMode = (typeof MEMORY_UPDATE_MODES)[number];
 
-export const MEMORY_MANAGER_ACTIONS = [
-  "list",
-  "read",
-  "search",
-  "write",
-  "update",
-  "delete",
-  "accept",
-] as const;
-export type MemoryManagerAction = (typeof MEMORY_MANAGER_ACTIONS)[number];
-export const MEMORY_MANAGER_RO_ACTIONS = ["list", "read", "search"] as const;
 
 /** high requires a >=5-char verbatim quote, medium a non-empty one; the store
  *  downgrades one step per violated rule and records auto_downgraded. */
@@ -54,10 +43,6 @@ export type MemoryEvidenceFields = {
   overrideReject?: string;
 };
 
-export function normalizeMemoryConfidence(raw: unknown): MemoryConfidence {
-  if (raw === "high" || raw === "medium" || raw === "low") return raw;
-  return "unknown";
-}
 
 export function isMemoryScope(value: unknown): value is MemoryScope {
   return value === "global" || value === "project";
@@ -164,14 +149,6 @@ export type ApplyDecision = {
 // Organizer domain
 // ---------------------------------------------------------------------------
 
-export const ORGANIZER_ACTIONS = [
-  "keep",
-  "merge_into",
-  "delete",
-  "mark_review",
-  "rewrite_hint",
-] as const;
-export type OrganizerAction = (typeof ORGANIZER_ACTIONS)[number];
 
 export const ORGANIZER_MODES = ["conservative", "standard", "aggressive"] as const;
 export type OrganizerMode = (typeof ORGANIZER_MODES)[number];
@@ -179,23 +156,8 @@ export type OrganizerMode = (typeof ORGANIZER_MODES)[number];
 export const ORGANIZER_SCOPES = ["all", "global", "projects", "current-project"] as const;
 export type OrganizerScope = (typeof ORGANIZER_SCOPES)[number];
 
-export const RISK_LEVELS = ["low", "medium", "high"] as const;
-export type RiskLevel = (typeof RISK_LEVELS)[number];
 
-export const ORGANIZE_PHASES = ["scan", "cluster", "plan", "gate", "apply"] as const;
-export type OrganizePhase = (typeof ORGANIZE_PHASES)[number];
 
-export const REJECTION_BUCKET_KEYS = [
-  "reviewedProtected",
-  "lowConfidence",
-  "crossType",
-  "crossScope",
-  "reviewRequiredByLlm",
-  "missingPayload",
-  "unsupported",
-] as const;
-export type RejectionBucketKey = (typeof REJECTION_BUCKET_KEYS)[number];
-export type RejectionBuckets = Record<RejectionBucketKey, number>;
 
 // ---------------------------------------------------------------------------
 // Reviewer mode (extraction strictness)

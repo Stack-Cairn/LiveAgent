@@ -48,12 +48,6 @@ export {
   serializeSelectedModelJson,
 } from "../models/selectedModel";
 
-export function isThinkingAlwaysOnForModel(
-  providerId: ProviderId,
-  modelId: string | undefined,
-): boolean {
-  return resolveModelThinking(providerId, modelId).alwaysOn;
-}
 
 export type ProviderId = "codex" | "claude_code" | "gemini" | "xai";
 
@@ -120,7 +114,6 @@ export const RIGHT_DOCK_TOOL_KINDS = ["fileTree", "gitReview", "tunnel", "sshTun
 
 export type RightDockToolKind = (typeof RIGHT_DOCK_TOOL_KINDS)[number];
 
-export type RightDockTabKind = RightDockToolKind | "terminal" | "backgroundTasks";
 
 export type RightDockToolTab = {
   openedAt: number;
@@ -158,9 +151,6 @@ export type RightDockFileTreeState = {
   revision: number;
 };
 
-export type RightDockFileTreeStatePatch = Partial<RightDockFileTreeState> & {
-  bumpRevision?: boolean;
-};
 
 export type FontScaleSettings = {
   sidebar: number;
@@ -398,13 +388,7 @@ export type EffectiveTheme = "light" | "dark";
 export type Theme = EffectiveTheme | "system";
 export type CloseWindowBehavior = "minimize" | "exit";
 
-export const THEME_OPTIONS = ["light", "dark", "system"] as const satisfies readonly Theme[];
-export const CLOSE_WINDOW_BEHAVIOR_OPTIONS = [
-  "minimize",
-  "exit",
-] as const satisfies readonly CloseWindowBehavior[];
 
-const SYSTEM_THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
 
 /**
  * 后端的远程访问控制：门控「连过来的远程前端能干什么」。
@@ -438,10 +422,6 @@ export type AppSettings = {
   closeWindowBehavior: CloseWindowBehavior;
 };
 
-export const CODEX_REQUEST_FORMAT_LABELS: Record<CodexRequestFormat, string> = {
-  "openai-completions": "OpenAI-Completions",
-  "openai-responses": "Responses API",
-};
 
 const CODEX_RESPONSES_SUFFIX = "/responses";
 const CODEX_RESPONSE_SUFFIX = "/response";
@@ -579,9 +559,6 @@ function normalizeExecutionMode(input: unknown): ExecutionMode {
   }
 }
 
-export function isAgentExecutionMode(mode: ExecutionMode): boolean {
-  return mode !== "text";
-}
 
 export function isAgentDevMode(mode: ExecutionMode): boolean {
   return mode === "agent-dev";
@@ -1008,36 +985,6 @@ export function normalizeChatRuntimeControlsForProvider(
   };
 }
 
-export function updateChatRuntimeControlsForProvider(
-  input: unknown,
-  patch: Partial<ChatRuntimeControls>,
-  params: {
-    providerId?: ProviderId;
-    requestFormat?: CodexRequestFormat;
-    modelId?: string;
-  },
-): ChatRuntimeControls {
-  const key = getChatRuntimeReasoningProviderKey(params);
-  const levels = getChatRuntimeReasoningLevelsForProvider(params);
-  const controls = normalizeChatRuntimeControls({
-    ...normalizeChatRuntimeControls(input),
-    ...patch,
-  });
-  const reasoningByProvider = {
-    ...DEFAULT_CHAT_RUNTIME_CONTROLS.reasoningByProvider,
-    ...controls.reasoningByProvider,
-  };
-  if (patch.reasoning !== undefined) {
-    reasoningByProvider[key] = normalizeChatRuntimeReasoningForLevels(patch.reasoning, levels);
-  }
-  return normalizeChatRuntimeControlsForProvider(
-    {
-      ...controls,
-      reasoningByProvider,
-    },
-    params,
-  );
-}
 
 function normalizeStringArray(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -1614,18 +1561,6 @@ export function getDefaultSystemProxyConfig(): SystemProxyConfig {
   };
 }
 
-export function isValidSystemProxyHost(input: string): boolean {
-  const host = input.trim();
-  if (!host || /[\s/\\@#?%]/.test(host)) return false;
-  const bracketed = host.startsWith("[") && host.endsWith("]");
-  const hostForUrl = host.includes(":") && !bracketed ? `[${host}]` : host;
-  try {
-    const parsed = new URL(`http://${hostForUrl}`);
-    return parsed.hostname.length > 0 && parsed.port === "";
-  } catch {
-    return false;
-  }
-}
 
 export function normalizeSystemProxyConfig(input: unknown): SystemProxyConfig {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
@@ -1729,32 +1664,8 @@ export function normalizeCloseWindowBehavior(input: unknown): CloseWindowBehavio
   return input === "exit" ? "exit" : "minimize";
 }
 
-export function resolveEffectiveTheme(theme: Theme): EffectiveTheme {
-  if (theme !== "system") return theme;
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
-  return window.matchMedia(SYSTEM_THEME_MEDIA_QUERY).matches ? "dark" : "light";
-}
 
-export function getNextTheme(theme: Theme): Theme {
-  if (theme === "light") return "dark";
-  if (theme === "dark") return "system";
-  return "light";
-}
 
-export function subscribeToSystemThemePreference(listener: () => void): () => void {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return () => undefined;
-  }
-
-  const query = window.matchMedia(SYSTEM_THEME_MEDIA_QUERY);
-  if (typeof query.addEventListener === "function") {
-    query.addEventListener("change", listener);
-    return () => query.removeEventListener("change", listener);
-  }
-
-  query.addListener(listener);
-  return () => query.removeListener(listener);
-}
 
 function localTimezone() {
   try {
@@ -1911,26 +1822,13 @@ export const RIGHT_DOCK_SINGLETON_TAB_IDS = {
   sshTunnel: "tool:sshTunnel",
 } as const satisfies Record<RightDockToolKind, string>;
 
-const RIGHT_DOCK_TOOL_KIND_BY_TAB_ID = new Map<string, RightDockToolKind>(
-  RIGHT_DOCK_TOOL_KINDS.map((kind) => [RIGHT_DOCK_SINGLETON_TAB_IDS[kind], kind]),
-);
 
-export function rightDockToolKindForTabId(tabId: string): RightDockToolKind | undefined {
-  return RIGHT_DOCK_TOOL_KIND_BY_TAB_ID.get(tabId);
-}
 
 // Empty buckets whose tools were closed act as tombstones so a stale snapshot
 // cannot resurrect them through merge; they expire after this window.
 const RIGHT_DOCK_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const MAX_RIGHT_DOCK_PROJECTS = 100;
 
-export const DEFAULT_RIGHT_DOCK_FILE_TREE_STATE: RightDockFileTreeState = {
-  query: "",
-  selectedPath: "",
-  expandedPaths: [""],
-  showHidden: false,
-  revision: 0,
-};
 
 function normalizeRightDockFileTreeSearchQuery(query: unknown): string {
   return typeof query === "string" ? query.slice(0, 200) : "";
@@ -2235,129 +2133,15 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
   };
 }
 
-export function updateSystem(prev: AppSettings, patch: Partial<SystemSettings>): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    system: {
-      ...prev.system,
-      ...patch,
-    },
-  });
-}
 
-export function updateMcp(prev: AppSettings, patch: Partial<McpSettings>): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    mcp: {
-      ...prev.mcp,
-      ...patch,
-    },
-  });
-}
 
-export function updateAgents(prev: AppSettings, agents: AgentPromptTemplate[]): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    agents,
-  });
-}
 
-export function updateSsh(prev: AppSettings, patch: Partial<SshSettings>): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    ssh: {
-      ...prev.ssh,
-      ...patch,
-    },
-  });
-}
 
-function normalizeSshProjectHostIdList(ssh: SshSettings, hostIds: readonly string[]): string[] {
-  const availableHostIds = new Set(ssh.hosts.map((host) => host.id));
-  const seen = new Set<string>();
-  const ids: string[] = [];
-  for (const rawHostId of hostIds) {
-    const hostId = rawHostId.trim();
-    if (!hostId || !availableHostIds.has(hostId) || seen.has(hostId)) continue;
-    seen.add(hostId);
-    ids.push(hostId);
-    if (ids.length >= 64) break;
-  }
-  return ids;
-}
 
-export function getSshProjectHostIds(ssh: SshSettings, projectPathKey: string): string[] {
-  const normalizedPathKey = workspaceProjectPathKey(projectPathKey);
-  if (!normalizedPathKey) return [];
-  return normalizeSshProjectHostIdList(ssh, ssh.projectHostAssociations[normalizedPathKey] ?? []);
-}
 
-export function updateSshProjectHostIds(
-  prev: AppSettings,
-  projectPathKey: string,
-  hostIds: readonly string[],
-): AppSettings {
-  const normalizedPathKey = workspaceProjectPathKey(projectPathKey);
-  if (!normalizedPathKey) return prev;
-  const nextHostIds = normalizeSshProjectHostIdList(prev.ssh, hostIds);
-  const currentHostIds = getSshProjectHostIds(prev.ssh, normalizedPathKey);
-  if (
-    currentHostIds.length === nextHostIds.length &&
-    currentHostIds.every((hostId, index) => hostId === nextHostIds[index])
-  ) {
-    return prev;
-  }
-  const projectHostAssociations = { ...prev.ssh.projectHostAssociations };
-  if (nextHostIds.length > 0) {
-    projectHostAssociations[normalizedPathKey] = nextHostIds;
-  } else {
-    delete projectHostAssociations[normalizedPathKey];
-  }
-  return updateSsh(prev, { projectHostAssociations });
-}
 
-export function removeSshHostFromProjectAssociations(
-  prev: AppSettings,
-  hostId: string,
-): AppSettings {
-  const normalizedHostId = hostId.trim();
-  if (!normalizedHostId) return prev;
-  let changed = false;
-  const projectHostAssociations: Record<string, string[]> = {};
-  for (const [pathKey, hostIds] of Object.entries(prev.ssh.projectHostAssociations)) {
-    const nextHostIds = hostIds.filter((item) => item !== normalizedHostId);
-    if (nextHostIds.length !== hostIds.length) {
-      changed = true;
-    }
-    if (nextHostIds.length > 0) {
-      projectHostAssociations[pathKey] = nextHostIds;
-    }
-  }
-  return changed ? updateSsh(prev, { projectHostAssociations }) : prev;
-}
 
-export function updateSkills(prev: AppSettings, patch: Partial<SkillsSettings>): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    skills: {
-      ...prev.skills,
-      ...patch,
-    },
-  });
-}
 
-export function updateMemorySettings(
-  prev: AppSettings,
-  patch: Partial<MemorySettings>,
-): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    memory: {
-      ...prev.memory,
-      ...patch,
-    },
-  });
-}
 
 export function updateCustomSettings(
   prev: AppSettings,
@@ -2418,19 +2202,6 @@ function rightDockProjectContentKey(state: RightDockProjectState): string {
   });
 }
 
-function rightDockFileTreeStateEqual(
-  left: RightDockFileTreeState,
-  right: RightDockFileTreeState,
-): boolean {
-  return (
-    left.query === right.query &&
-    left.selectedPath === right.selectedPath &&
-    left.showHidden === right.showHidden &&
-    left.revision === right.revision &&
-    left.expandedPaths.length === right.expandedPaths.length &&
-    left.expandedPaths.every((path, index) => path === right.expandedPaths[index])
-  );
-}
 
 export function getRightDockProjectState(
   customSettings: CustomSettings,
@@ -2442,22 +2213,7 @@ export function getRightDockProjectState(
   );
 }
 
-export function updateChatTranscriptWidth(prev: AppSettings, width: number): AppSettings {
-  const nextWidth = normalizeChatTranscriptSettings({ width }).width;
-  if (prev.customSettings.chatTranscript.width === nextWidth) return prev;
-  return updateCustomSettings(prev, { chatTranscript: { width: nextWidth } });
-}
 
-export function updateRightDockWidth(prev: AppSettings, width: number): AppSettings {
-  const nextWidth = normalizeIntegerInRange(width, 320, 1280, 420);
-  if (prev.customSettings.rightDock.width === nextWidth) return prev;
-  return updateCustomSettings(prev, {
-    rightDock: {
-      ...prev.customSettings.rightDock,
-      width: nextWidth,
-    },
-  });
-}
 
 // All persisted dock mutations funnel through here: the updater describes
 // content only, and version stamping (stateVersion / writerId / lastUsedAt)
@@ -2488,185 +2244,15 @@ export function updateRightDockProjectState(
   });
 }
 
-export function createRightDockToolTab(kind: RightDockToolKind): RightDockToolTab {
-  return {
-    openedAt: Date.now(),
-    ...(kind === "fileTree" ? { uiState: DEFAULT_RIGHT_DOCK_FILE_TREE_STATE } : {}),
-  };
-}
 
-export function openRightDockToolTabState(
-  current: RightDockProjectState,
-  kind: RightDockToolKind,
-): RightDockProjectState {
-  const tabId = RIGHT_DOCK_SINGLETON_TAB_IDS[kind];
-  const alreadyOpen = Boolean(current.tools[kind]);
-  if (alreadyOpen && current.activeTabId === tabId && current.tabOrder.includes(tabId)) {
-    return current;
-  }
-  return {
-    ...current,
-    activeTabId: tabId,
-    tabOrder: current.tabOrder.includes(tabId) ? current.tabOrder : [...current.tabOrder, tabId],
-    tools: alreadyOpen ? current.tools : { ...current.tools, [kind]: createRightDockToolTab(kind) },
-    openVersion: current.openVersion + (alreadyOpen ? 0 : 1),
-  };
-}
 
-export function openRightDockSingletonTab(
-  prev: AppSettings,
-  projectPathKey: string,
-  kind: RightDockToolKind,
-): AppSettings {
-  return updateRightDockProjectState(prev, projectPathKey, (current) =>
-    openRightDockToolTabState(current, kind),
-  );
-}
 
-export function isRightDockSingletonTabOpen(
-  customSettings: CustomSettings,
-  projectPathKey: string,
-  kind: RightDockToolKind,
-): boolean {
-  const state = getRightDockProjectState(customSettings, projectPathKey);
-  return Boolean(state.tools[kind]);
-}
 
-export function removeRightDockProjectState(
-  prev: AppSettings,
-  projectPathKey: string,
-): AppSettings {
-  const normalizedPathKey = workspaceProjectPathKey(projectPathKey);
-  if (!normalizedPathKey) return prev;
-  const hasRightDockProject = Object.hasOwn(
-    prev.customSettings.rightDock.projects,
-    normalizedPathKey,
-  );
-  const hasSshProjectAssociation = Object.hasOwn(
-    prev.ssh.projectHostAssociations,
-    normalizedPathKey,
-  );
-  if (!hasRightDockProject && !hasSshProjectAssociation) return prev;
-  const currentRightDockProject = getRightDockProjectState(prev.customSettings, normalizedPathKey);
-  const hasRightDockTools = Object.keys(currentRightDockProject.tools).length > 0;
-  if (hasRightDockProject && !hasRightDockTools && !hasSshProjectAssociation) return prev;
 
-  const projects = hasRightDockProject
-    ? { ...prev.customSettings.rightDock.projects }
-    : prev.customSettings.rightDock.projects;
-  if (hasRightDockProject && hasRightDockTools) {
-    projects[normalizedPathKey] = {
-      tabOrder: [],
-      tools: {},
-      openVersion: currentRightDockProject.openVersion + 1,
-      stateVersion: currentRightDockProject.stateVersion + 1,
-      writerId: getRightDockWriterId(),
-      lastUsedAt: Date.now(),
-    };
-  }
-  const projectHostAssociations = hasSshProjectAssociation
-    ? { ...prev.ssh.projectHostAssociations }
-    : prev.ssh.projectHostAssociations;
-  if (hasSshProjectAssociation) delete projectHostAssociations[normalizedPathKey];
 
-  return normalizeSettings({
-    ...prev,
-    ssh: {
-      ...prev.ssh,
-      projectHostAssociations,
-    },
-    customSettings: {
-      ...prev.customSettings,
-      rightDock: {
-        ...prev.customSettings.rightDock,
-        projects,
-      },
-    },
-  });
-}
 
-export function getRightDockFileTreeState(
-  customSettings: CustomSettings,
-  projectPathKey: string,
-): RightDockFileTreeState {
-  const projectState = getRightDockProjectState(customSettings, projectPathKey);
-  const state = projectState.tools.fileTree?.uiState;
-  return state ? normalizeRightDockFileTreeState(state) : DEFAULT_RIGHT_DOCK_FILE_TREE_STATE;
-}
 
-export function updateRightDockFileTreeState(
-  prev: AppSettings,
-  projectPathKey: string,
-  patch: RightDockFileTreeStatePatch,
-): AppSettings {
-  const normalizedPathKey = workspaceProjectPathKey(projectPathKey);
-  if (!normalizedPathKey) return prev;
-  const current = getRightDockFileTreeState(prev.customSettings, normalizedPathKey);
-  const next: RightDockFileTreeState = {
-    query:
-      patch.query !== undefined
-        ? normalizeRightDockFileTreeSearchQuery(patch.query)
-        : current.query,
-    selectedPath:
-      patch.selectedPath !== undefined
-        ? normalizeRightDockFileTreePath(patch.selectedPath)
-        : current.selectedPath,
-    expandedPaths:
-      patch.expandedPaths !== undefined
-        ? normalizeRightDockFileTreeExpandedPaths(patch.expandedPaths)
-        : current.expandedPaths,
-    showHidden: patch.showHidden ?? current.showHidden,
-    revision: patch.bumpRevision
-      ? current.revision + 1
-      : patch.revision !== undefined
-        ? normalizeIntegerInRange(patch.revision, 0, Number.MAX_SAFE_INTEGER, 0)
-        : current.revision,
-  };
-  if (rightDockFileTreeStateEqual(current, next)) return prev;
-  return updateRightDockProjectState(prev, normalizedPathKey, (projectState) => {
-    const tab = projectState.tools.fileTree ?? createRightDockToolTab("fileTree");
-    return {
-      ...projectState,
-      tools: {
-        ...projectState.tools,
-        fileTree: { ...tab, uiState: next },
-      },
-    };
-  });
-}
 
-export function updateUpdateSettings(
-  prev: AppSettings,
-  patch: Partial<UpdateSettings>,
-): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    updates: {
-      ...prev.updates,
-      ...patch,
-    },
-  });
-}
-
-export function updateCustomProviders(
-  prev: AppSettings,
-  customProviders: CustomProvider[],
-): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    customProviders,
-  });
-}
-
-export function setSelectedModel(
-  prev: AppSettings,
-  selectedModel: SelectedModel | undefined,
-): AppSettings {
-  return normalizeSettings({
-    ...prev,
-    selectedModel,
-  });
-}
 
 export {
   applyMcpOps,

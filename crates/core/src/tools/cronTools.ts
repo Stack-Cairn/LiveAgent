@@ -12,23 +12,26 @@ import {
 } from "../automation";
 import { createUuid } from "../shared/id";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
+import {
+  asErrorMessage,
+  buildCancelledToolResult,
+  buildToolTextResult,
+  buildUnknownToolResult,
+} from "./toolResultHelpers";
 
 type SelectedModelInput = {
   customProviderId: string;
   model: string;
 };
 
-type CronTaskAction = "create" | "read" | "update" | "delete" | "list_logs";
+// action 字面量的唯一来源:TS 类型、TypeBox schema、运行时守卫全部由此派生。
+const CRON_TASK_ACTIONS = ["create", "read", "update", "delete", "list_logs"] as const;
+
+type CronTaskAction = (typeof CRON_TASK_ACTIONS)[number];
 
 const MANAGE_CRON_TASK_PARAMETERS = Type.Object({
   action: Type.Union(
-    [
-      Type.Literal("create"),
-      Type.Literal("read"),
-      Type.Literal("update"),
-      Type.Literal("delete"),
-      Type.Literal("list_logs"),
-    ],
+    CRON_TASK_ACTIONS.map((action) => Type.Literal(action)),
     {
       description:
         "Action for Settings -> Cron. Use create to add a scheduled task, read to list tasks or inspect one task, update to edit an existing task by task_id, delete to remove a task by task_id, and list_logs to view recent execution logs for one task.",
@@ -145,10 +148,6 @@ const MANAGE_CRON_TASK_PARAMETERS = Type.Object({
   ),
 });
 
-function asErrorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -158,20 +157,16 @@ function normalizeText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+const CRON_TASK_ACTION_SET = new Set<string>(CRON_TASK_ACTIONS);
+
 function parseAction(value: unknown): CronTaskAction {
   const normalized = normalizeText(value);
-  switch (normalized) {
-    case "create":
-    case "read":
-    case "update":
-    case "delete":
-    case "list_logs":
-      return normalized;
-    default:
-      throw new Error(
-        `CronTaskManager action must be one of: create, read, update, delete, list_logs. Received: ${JSON.stringify(value)}`,
-      );
+  if (CRON_TASK_ACTION_SET.has(normalized)) {
+    return normalized as CronTaskAction;
   }
+  throw new Error(
+    `CronTaskManager action must be one of: create, read, update, delete, list_logs. Received: ${JSON.stringify(value)}`,
+  );
 }
 
 function requireTaskId(args: Record<string, unknown>, action: CronTaskAction) {
@@ -387,27 +382,11 @@ export function createCronTools(params: {
     const now = Date.now();
 
     if (signal?.aborted) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: "Cancelled" }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildCancelledToolResult(toolCall, now);
     }
 
     if (toolCall.name !== "CronTaskManager") {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: `Unknown tool: ${toolCall.name}` }],
-        details: {},
-        isError: true,
-        timestamp: now,
-      };
+      return buildUnknownToolResult(toolCall, now);
     }
 
     try {
@@ -416,25 +395,14 @@ export function createCronTools(params: {
         params.currentChatModel,
         params.workdir,
       );
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text }],
-        details: {},
-        isError: false,
-        timestamp: now,
-      };
+      return buildToolTextResult({ toolCall, text, isError: false, timestamp: now });
     } catch (err) {
-      return {
-        role: "toolResult",
-        toolCallId: toolCall.id,
-        toolName: toolCall.name,
-        content: [{ type: "text", text: `Cron task manager failed: ${asErrorMessage(err)}` }],
-        details: {},
+      return buildToolTextResult({
+        toolCall,
+        text: `Cron task manager failed: ${asErrorMessage(err)}`,
         isError: true,
         timestamp: now,
-      };
+      });
     }
   }
 
