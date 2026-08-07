@@ -742,22 +742,20 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         data-state={isOpen ? "open" : "closed"}
         data-project-tools-resizing={isResizing ? "true" : undefined}
         className={cn(
-          "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden shadow-[0_-12px_40px_-18px_rgba(15,23,42,0.28)] motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
+          // Desktop: single drawer (track width + panel slide). Do NOT fade
+          // opacity first then collapse width — that reads as a double close.
+          // Mobile: bottom sheet via translate-y only.
+          "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 h-[min(72vh,34rem)] min-h-0 w-full shrink-0 overflow-hidden border-t shadow-[0_-12px_40px_-18px_rgba(15,23,42,0.28)] motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:border-l md:border-t-0 md:shadow-none",
           isOpen
-            ? "pointer-events-auto translate-y-0 border-t opacity-100 md:w-[var(--project-tools-panel-width)] md:translate-x-0 md:border-l md:border-t-0"
-            : "pointer-events-none translate-y-full border-t border-transparent opacity-0 md:translate-x-3 md:translate-y-0 md:border-l-0 md:border-t-0",
-          effectiveWidthCollapsed ? "md:w-0" : "md:w-[var(--project-tools-panel-width)]",
+            ? "pointer-events-auto translate-y-0 md:translate-y-0"
+            : "pointer-events-none translate-y-full border-transparent md:translate-y-0",
+          effectiveWidthCollapsed
+            ? "md:w-0"
+            : "md:w-[var(--project-tools-panel-width)]",
         )}
         style={{ ...panelStyle, "--zone-font-scale": fontScale } as CSSProperties}
       >
-        <div
-          className={cn(
-            "project-tools-panel-inner flex h-full min-h-0 w-full flex-col motion-reduce:transition-none md:w-[var(--project-tools-panel-width)] md:min-w-[var(--project-tools-panel-width)]",
-            isOpen
-              ? "translate-y-0 opacity-100 md:translate-x-0"
-              : "translate-y-3 opacity-0 md:translate-x-2 md:translate-y-0",
-          )}
-        >
+        <div className="project-tools-panel-inner flex h-full min-h-0 w-full flex-col md:w-[var(--project-tools-panel-width)] md:min-w-[var(--project-tools-panel-width)]">
           {effectiveShouldRenderContent ? (
             <>
               <div className="project-tools-panel-handle" aria-hidden="true" />

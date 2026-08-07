@@ -1234,13 +1234,55 @@
     z-index: 20;
   }
 
-  /* Sidebar structural material + soft edge (scroll-edge, not a hard divider) */
+  /*
+   * Sidebar open/close — single drawer motion.
+   * Width-only clipping with a strong ease-out looked like two phases: content
+   * vanished early, then the empty shell finished shrinking. Slide the fixed
+   * 272px panel with transform while the track width collapses on the same
+   * curve so chrome + content move as one piece.
+   */
   .chat-history-sidebar {
+    --chat-sidebar-width: 272px;
+    --chat-sidebar-motion-duration: 200ms;
+    --chat-sidebar-motion-ease: var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
+    position: relative;
+    width: var(--chat-sidebar-width);
+    overflow: hidden;
     background: hsl(var(--sidebar-bg));
     border-right-color: hsl(var(--sidebar-separator) / 0.9);
+    transition:
+      width var(--chat-sidebar-motion-duration) var(--chat-sidebar-motion-ease),
+      border-color var(--chat-sidebar-motion-duration) var(--chat-sidebar-motion-ease);
+  }
+  .chat-history-sidebar[data-state="closed"] {
+    width: 0;
+    border-right-color: transparent;
   }
   .chat-history-sidebar-inner {
-    position: relative;
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: var(--chat-sidebar-width);
+    min-width: var(--chat-sidebar-width);
+    transform: translate3d(0, 0, 0);
+    transition: transform var(--chat-sidebar-motion-duration) var(--chat-sidebar-motion-ease);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  .chat-history-sidebar[data-state="closed"] .chat-history-sidebar-inner {
+    transform: translate3d(-100%, 0, 0);
+  }
+  /* While the shell is animating, freeze section row transitions so grid
+     height easing cannot play a second “content collapse” on top of the slide. */
+  .chat-history-sidebar[data-state="closed"] .chat-history-sidebar-sections,
+  .chat-history-sidebar[data-animating="true"] .chat-history-sidebar-sections {
+    transition: none !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .chat-history-sidebar,
+    .chat-history-sidebar-inner {
+      transition: none;
+    }
   }
   .chat-sidebar-section-label {
     font-size: calc(11px * var(--zone-font-scale, 1));
@@ -3077,7 +3119,10 @@ body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor:grabbing"]
   transform: none;
 }
 
-.chat-history-sidebar,
+/*
+ * Only contain rows — not the sidebar shell. `contain: paint` on the shell
+ * fights width transitions (content disappears, then the column snaps).
+ */
 .chat-history-row {
   contain: layout paint style;
 }
@@ -3488,23 +3533,60 @@ body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor:grabbing"]
 }
 
 /*
- * Right-dock chrome — materials aligned with chat header/sidebar.
- * Metrics override the mirrored WebUI utilities (h-11 header, h-8 tabs).
+ * Right-dock chrome + open/close motion.
+ * Desktop used to fade/slide content (opacity + translate) for ~220ms, then
+ * collapse width — a clear two-phase close. Now: track width + panel slide
+ * share one curve (same as left sidebar drawer). No opacity.
  * MUST stay outside @layer so unlayered styles beat Tailwind utilities.
  */
 .project-tools-panel {
+  --project-tools-motion-duration: 200ms;
+  --project-tools-motion-ease: var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
   background: hsl(var(--sidebar-bg));
   border-color: hsl(var(--sidebar-separator) / 0.85);
   transition:
-    opacity var(--duration-ui) var(--ease-out),
-    transform var(--duration-ui) var(--ease-out),
-    width var(--duration-ui) var(--ease-out);
+    width var(--project-tools-motion-duration) var(--project-tools-motion-ease),
+    border-color var(--project-tools-motion-duration) var(--project-tools-motion-ease),
+    transform var(--project-tools-motion-duration) var(--project-tools-motion-ease);
 }
 .project-tools-panel-inner {
   background: hsl(var(--sidebar-bg));
-  transition:
-    opacity var(--duration-ui) var(--ease-out),
-    transform var(--duration-ui) var(--ease-out);
+}
+@media (min-width: 768px) {
+  .project-tools-panel {
+    overflow: hidden;
+  }
+  .project-tools-panel-inner {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: var(--project-tools-panel-width);
+    min-width: var(--project-tools-panel-width);
+    transform: translate3d(0, 0, 0);
+    transition: transform var(--project-tools-motion-duration) var(--project-tools-motion-ease);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  .project-tools-panel[data-state="closed"] .project-tools-panel-inner {
+    transform: translate3d(100%, 0, 0);
+  }
+  .project-tools-panel[data-state="open"] .project-tools-panel-inner {
+    transform: translate3d(0, 0, 0);
+  }
+  /* While dragging the resize handle, kill width transition so the panel
+     tracks the pointer 1:1 without lag. */
+  .project-tools-panel[data-project-tools-resizing="true"] {
+    transition: none;
+  }
+  .project-tools-panel[data-project-tools-resizing="true"] .project-tools-panel-inner {
+    transition: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-tools-panel,
+  .project-tools-panel-inner {
+    transition: none;
+  }
 }
 .project-tools-panel-header {
   position: relative;

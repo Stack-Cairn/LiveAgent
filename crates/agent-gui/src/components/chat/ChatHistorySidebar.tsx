@@ -1659,15 +1659,45 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     ],
   );
 
+  // Track open→closed / closed→open so section grid transitions stay frozen
+  // for the duration of the shell slide (avoids a second content collapse).
+  const [sidebarMotionActive, setSidebarMotionActive] = useState(false);
+  const sidebarMotionTimerRef = useRef<number | null>(null);
+  const prevOpenRef = useRef(isOpen);
+  useEffect(() => {
+    if (prevOpenRef.current === isOpen) return;
+    prevOpenRef.current = isOpen;
+    setSidebarMotionActive(true);
+    if (sidebarMotionTimerRef.current !== null) {
+      window.clearTimeout(sidebarMotionTimerRef.current);
+    }
+    // Match --chat-sidebar-motion-duration (200ms) + a frame of slack.
+    sidebarMotionTimerRef.current = window.setTimeout(() => {
+      sidebarMotionTimerRef.current = null;
+      setSidebarMotionActive(false);
+    }, 220);
+    return () => {
+      if (sidebarMotionTimerRef.current !== null) {
+        window.clearTimeout(sidebarMotionTimerRef.current);
+        sidebarMotionTimerRef.current = null;
+      }
+    };
+  }, [isOpen]);
+
   return (
     <aside
+      data-state={isOpen ? "open" : "closed"}
+      data-animating={sidebarMotionActive || undefined}
+      aria-hidden={!isOpen}
+      // Width on the track + translate on the fixed 272px panel share one curve
+      // so content and chrome slide as a single drawer (no opacity / dual phase).
       className={cn(
-        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r transition-[width,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
-        isOpen ? "w-[272px] opacity-100" : "w-0 opacity-0",
+        "chat-history-sidebar zone-font-scale h-full shrink-0 border-r",
+        !isOpen && "pointer-events-none",
       )}
       style={{ "--zone-font-scale": fontScale } as CSSProperties}
     >
-      <div className="chat-history-sidebar-inner flex w-[272px] min-w-[272px] min-h-0 flex-1 flex-col">
+      <div className="chat-history-sidebar-inner flex min-h-0 flex-col">
         <MacOsTitleBarSpacer className="bg-[hsl(var(--sidebar-bg))]" />
         <div className="shrink-0 px-2 pb-2.5 pt-3">
           <div className="flex items-center justify-between gap-2 px-1">
@@ -1764,8 +1794,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
           ref={sidebarSectionsRef}
           style={{ gridTemplateRows: sidebarSectionLayout.gridTemplateRows }}
           className={cn(
-            "grid min-h-0 flex-1 content-start",
-            isProjectSectionResizing ? undefined : SIDEBAR_SECTION_ROWS_TRANSITION_CLASS,
+            "chat-history-sidebar-sections grid min-h-0 flex-1 content-start",
+            // Freeze row-height easing while the shell is sliding open/closed.
+            isProjectSectionResizing || sidebarMotionActive || !isOpen
+              ? undefined
+              : SIDEBAR_SECTION_ROWS_TRANSITION_CLASS,
           )}
         >
           {showProjects ? (

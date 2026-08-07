@@ -143,7 +143,9 @@ export const ChatHeader = memo(function ChatHeader(props: {
     <header
       data-tauri-drag-region
       className={cn(
-        "chat-header relative flex items-center justify-between gap-2 py-2.5 pr-4",
+        // pl transition matches sidebar drawer motion (200ms) so traffic-light
+        // inset doesn't jump ahead of the collapsing column on macOS.
+        "chat-header relative flex items-center justify-between gap-2 py-2.5 pr-4 transition-[padding] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
         !sidebarOpen && macOsTauri ? "pl-[232px]" : "pl-4",
       )}
     >
