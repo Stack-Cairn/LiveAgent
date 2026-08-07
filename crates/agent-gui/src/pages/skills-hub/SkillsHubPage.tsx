@@ -10,7 +10,14 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { GlassPanel, HubBackdrop, HubHeader } from "../../components/hub/HubChrome";
+import {
+  GlassPanel,
+  HubBackdrop,
+  HubHeader,
+  HubSegmentButton,
+  HubSegmentedTrack,
+  HubStatusBanner,
+} from "../../components/hub/HubChrome";
 import {
   Activity,
   AlertTriangle,
@@ -1126,9 +1133,9 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
           onOpenPreview(skill);
         }}
         className={cn(
-          "hub-skill-card skill-card-enter group flex h-full min-h-[13rem] w-full cursor-pointer flex-col rounded-2xl border border-border/50 bg-background/75 p-3.5 text-left shadow-[0_1px_0_rgba(255,255,255,0.55)_inset,0_4px_18px_-12px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-0.5 hover:border-border/60 hover:bg-background/85 hover:shadow-[0_4px_16px_-10px_rgba(15,23,42,0.18)] dark:border-white/[0.08] dark:bg-white/[0.05] dark:shadow-[0_1px_0_rgba(255,255,255,0.05)_inset,0_4px_18px_-12px_rgba(0,0,0,0.5)] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.07] dark:hover:shadow-[0_4px_16px_-10px_rgba(0,0,0,0.55)] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-foreground/15",
+          "hub-skill-card skill-card-enter group flex h-full min-h-[13rem] w-full cursor-pointer flex-col p-3.5 text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-foreground/15",
           "[content-visibility:auto] [contain-intrinsic-size:auto_13rem]",
-          bulkMode ? "cursor-default hover:translate-y-0" : null,
+          bulkMode ? "hub-skill-card--static cursor-default" : null,
         )}
       >
         {card}
@@ -1165,14 +1172,15 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
         onOpenPreview(skill);
       }}
       className={cn(
-        "hub-skill-card skill-card-enter group relative flex h-full min-h-[13rem] w-full flex-col rounded-2xl border p-3.5 text-left transition-all",
+        "hub-skill-card skill-card-enter group relative flex h-full min-h-[13rem] w-full flex-col p-3.5 text-left",
         "cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-foreground/15",
         "[content-visibility:auto] [contain-intrinsic-size:auto_13rem]",
         // Enabled style always visible; bulk selection overlays primary ring.
         checked
           ? "border-emerald-500/35 bg-emerald-50/90 shadow-[0_1px_0_rgba(255,255,255,0.55)_inset,0_4px_14px_-12px_rgba(16,185,129,0.28)] dark:border-emerald-400/30 dark:bg-emerald-500/12 dark:shadow-[0_1px_0_rgba(255,255,255,0.05)_inset,0_4px_14px_-12px_rgba(16,185,129,0.22)]"
-          : "border-border/40 bg-muted/45 text-muted-foreground shadow-none hover:-translate-y-0.5 hover:border-border/55 hover:bg-muted/55 dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:border-white/[0.10] dark:hover:bg-white/[0.04]",
+          : "border-border/40 bg-muted/45 text-muted-foreground shadow-none",
         bulkSelected ? "ring-2 ring-primary/50 ring-offset-1 ring-offset-background" : null,
+        bulkMode ? "hub-skill-card--static" : null,
       )}
     >
       {card}
@@ -2360,22 +2368,13 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
         <div className="hub-scroll min-h-0 flex-1 overflow-hidden px-5 pb-6 pt-2 sm:px-6 lg:px-8 xl:px-10">
           <div className="hub-content-stage mx-auto flex h-full min-h-0 w-full max-w-[1320px] flex-col gap-4">
             {/* Status pill row */}
-            <div
-              className={cn(
-                "hub-panel-enter relative overflow-hidden rounded-2xl border backdrop-blur-xl",
-                skillsEnabled
-                  ? "border-border/50 bg-background/75 shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_8px_24px_-18px_rgba(15,23,42,0.18)] dark:border-white/[0.09] dark:bg-white/[0.05] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_8px_24px_-18px_rgba(0,0,0,0.6)]"
-                  : "border-border/40 bg-background/60",
-              )}
-            >
+            <HubStatusBanner ready={skillsEnabled}>
               <div className="flex items-center gap-3 px-4 py-3.5 sm:gap-x-5 sm:px-5">
                 <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-3.5">
                   <div
                     className={cn(
-                      "relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition-colors",
-                      skillsEnabled
-                        ? "border-border/50 bg-background/80 text-foreground/85 shadow-[0_1px_0_rgba(255,255,255,0.55)_inset] dark:border-white/[0.09] dark:bg-white/[0.06] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset]"
-                        : "border-border/40 bg-muted/40 text-muted-foreground",
+                      "hub-header-icon relative flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] transition-colors",
+                      skillsEnabled ? "text-foreground/85" : "text-muted-foreground opacity-80",
                     )}
                   >
                     <Plug className="h-5 w-5" />
@@ -2385,7 +2384,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                      <div className="text-[13.5px] font-semibold tracking-tight text-foreground">
+                      <div className="text-[13.5px] font-semibold tracking-[-0.015em] text-foreground">
                         {skillsEnabled
                           ? t("settings.skillsHubEnabled")
                           : t("settings.skillsHubDisabled")}
@@ -2393,7 +2392,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                       {selectableSkills.length > 0 && (
                         <span
                           className={cn(
-                            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium tabular-nums backdrop-blur-md",
+                            "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-medium tabular-nums",
                             selectedCount > 0
                               ? "bg-foreground/[0.06] text-foreground/85 ring-1 ring-border/50"
                               : "bg-background/60 text-muted-foreground ring-1 ring-border/40",
@@ -2409,7 +2408,7 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                       )}
                     </div>
                     {skillsStatusHint ? (
-                      <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
+                      <div className="mt-0.5 truncate text-[11.5px] tracking-[-0.005em] text-muted-foreground">
                         {skillsStatusHint}
                       </div>
                     ) : null}
@@ -2474,10 +2473,10 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   </Button>
                 </div>
               </div>
-            </div>
+            </HubStatusBanner>
 
             <div className="hub-panel-enter flex items-center justify-between gap-3 max-sm:flex-col max-sm:items-stretch max-sm:gap-2">
-              <div className="inline-flex shrink-0 rounded-2xl border border-border/40 bg-background/60 p-1 backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.5)_inset] max-sm:max-w-full max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
+              <HubSegmentedTrack className="max-sm:max-w-full max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
                 {[
                   {
                     value: "installed" as const,
@@ -2499,37 +2498,20 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
                   },
                 ].map((item) => {
                   const Icon = item.icon;
-                  const active = view === item.value;
                   return (
-                    <button
+                    <HubSegmentButton
                       key={item.value}
-                      type="button"
+                      active={view === item.value}
+                      icon={<Icon className="h-3.5 w-3.5" />}
+                      count={item.count}
+                      className="max-sm:shrink-0"
                       onClick={() => setView(item.value)}
-                      className={cn(
-                        "relative inline-flex h-9 items-center justify-center gap-2 rounded-xl px-4 text-[12.5px] font-medium transition-all max-sm:shrink-0",
-                        active
-                          ? "bg-background/85 text-foreground shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_4px_12px_-8px_rgba(15,23,42,0.18)] ring-1 ring-border/45 dark:bg-white/[0.08] dark:ring-white/[0.09] dark:shadow-[0_1px_0_rgba(255,255,255,0.07)_inset,0_4px_12px_-8px_rgba(0,0,0,0.55)]"
-                          : "text-muted-foreground hover:bg-background/70 hover:text-foreground",
-                      )}
                     >
-                      <Icon className="h-3.5 w-3.5" />
-                      <span>{item.label}</span>
-                      {item.count !== null && item.count > 0 ? (
-                        <span
-                          className={cn(
-                            "ml-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] font-semibold tabular-nums",
-                            active
-                              ? "bg-foreground/[0.08] text-foreground/85"
-                              : "bg-muted/70 text-muted-foreground",
-                          )}
-                        >
-                          {item.count}
-                        </span>
-                      ) : null}
-                    </button>
+                      {item.label}
+                    </HubSegmentButton>
                   );
                 })}
-              </div>
+              </HubSegmentedTrack>
 
               {!lockedByChatMode ? (
                 <div className="flex w-full min-w-0 items-center justify-end gap-2">
