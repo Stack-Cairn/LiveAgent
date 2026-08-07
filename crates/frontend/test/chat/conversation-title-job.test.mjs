@@ -103,10 +103,10 @@ test("core title job disables thinking, caching, and native web search", async (
   assert.deepEqual(captured.params.tools, []);
   // The persisted UI locale must reach the model, not just the prompt builders.
   assert.match(captured.params.context.systemPrompt, /concise conversation titles/i);
-  assert.match(captured.params.context.messages[0].content, /within 10 words/i);
+  assert.match(captured.params.context.messages[0].content, /under 10 words/i);
 });
 
-test("core title job follows the persisted zh-CN locale", async () => {
+test("core title job uses language-of-content prompt for zh-CN input", async () => {
   const { mod, captured } = loadCoreTitleModule({
     settings: { ...baseSettings, locale: "zh-CN" },
     streamImpl: () => ({ text: "很快的设置抽屉" }),
@@ -117,8 +117,8 @@ test("core title job follows the persisted zh-CN locale", async () => {
   });
 
   assert.equal(title, "很快的设置抽屉");
-  assert.match(captured.params.context.systemPrompt, /简体中文/);
-  assert.match(captured.params.context.messages[0].content, /简体中文标题/);
+  assert.match(captured.params.context.systemPrompt, /Match the language of the content/i);
+  assert.match(captured.params.context.messages[0].content, /under 10 words/i);
 });
 
 test("core title job prefers the configured title model over the conversation model", async () => {
