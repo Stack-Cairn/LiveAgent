@@ -53,8 +53,8 @@ pub async fn handler_engine_emit_event(
     // 直接广播到 EventBus。
     state.events.emit_json(&body.event, body.payload);
 
-    // 返回 200 OK，不包装。
-    (StatusCode::OK, "").into_response()
+    // 与所有命令路由同构：200 { "ok": ... }。core 的 callBackend 校验 ok 字段。
+    crate::server::respond(Ok::<(), String>(()))
 }
 
 /// 反向代理到 Node 的通用处理。剥掉 /api 前缀后转发。

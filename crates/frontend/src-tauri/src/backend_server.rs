@@ -33,16 +33,23 @@ impl BackendServer {
 /// 启动内嵌后端服务，并可选启动 Node 引擎。
 ///
 /// 执行流程：
-/// 1. 找一个空闲端口
-/// 2. 构造后端状态（固定默认密码）
+/// 1. bind :0 拿系统分配的空闲端口（监听立即生效，没有「先探测再 bind」的窗口）
+/// 2. 构造后端状态（固定默认密码），启动 HTTP 服务（async 任务）
 /// 3. 如果提供了 bundle 路径，启动 Node 引擎（失败降级为纯 API 模式）
-/// 4. 启动 HTTP 服务（async 任务）
-/// 5. 返回服务元数据给前端
+/// 4. 返回服务元数据给前端
+///
+/// 顺序是硬约束：Node 引擎启动即回调 backend（cron claim、事件回流），
+/// 监听必须先于 spawn 生效，否则引擎启动窗口内的回调全部 ECONNREFUSED。
 pub async fn start_backend_server(
     engine_bundle: Option<std::path::PathBuf>,
 ) -> Result<BackendServer, String> {
-    // 找一个空闲的 TCP 端口。
-    let port = find_free_port().await?;
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| format!("绑定 localhost 端口失败：{e}"))?;
+    let port = listener
+        .local_addr()
+        .map_err(|e| format!("获取本地地址失败：{e}"))?
+        .port();
 
     // 桌面端只在 127.0.0.1 上服务自己，本不需要密码。为了和独立后端
     // 共用同一条认证路径，直接注入固定默认密码，不另走特例。
@@ -55,9 +62,21 @@ pub async fn start_backend_server(
     let state = backend::build_state(auth, port)
         .map_err(|e| format!("构造后端状态失败：{e}"))?;
 
+    // 启动 HTTP 服务（运行在后台）。listener 已 bind，内核在排队连接，
+    // 此后 spawn 的 Node 引擎随时可以回调。
+    // 注意：这里不 await，服务在后台持续运行。如果 tokio runtime 退出，服务自动停止。
+    let app = backend::build_router(state.clone());
+    tokio::spawn(async move {
+        // 认证只看 Bearer 凭据（Node 引擎带 spawn 时下发的引擎凭据），
+        // 对端地址不参与判断，所以不需要 with_connect_info。
+        if let Err(e) = axum::serve(listener, app.into_make_service()).await {
+            eprintln!("后端 HTTP 服务崩溃：{e}");
+        }
+    });
+
     // 启动 Node 引擎（如果提供了 bundle 路径）。
     let engine = if let Some(bundle_path) = engine_bundle {
-        match backend::engine_process::spawn_engine(state.clone(), bundle_path).await {
+        match backend::engine_process::spawn_engine(state, bundle_path).await {
             Ok(engine_process) => {
                 eprintln!("Node 引擎启动成功");
                 std::sync::Arc::new(tokio::sync::Mutex::new(Some(engine_process)))
@@ -72,38 +91,5 @@ pub async fn start_backend_server(
         std::sync::Arc::new(tokio::sync::Mutex::new(None))
     };
 
-    // 启动 HTTP 服务（运行在后台）。
-    // 注意：这里不 await，服务在后台持续运行。如果 tokio runtime 退出，服务自动停止。
-    tokio::spawn(async move {
-        let app = backend::build_router(state);
-        let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-
-        // 认证只看 Bearer 凭据（Node 引擎带 spawn 时下发的引擎凭据），
-        // 对端地址不参与判断，所以不需要 with_connect_info。
-        if let Err(e) = axum::serve(
-            TcpListener::bind(addr).await.expect("绑定 localhost 端口失败"),
-            app.into_make_service(),
-        )
-        .await
-        {
-            eprintln!("后端 HTTP 服务崩溃：{e}");
-        }
-    });
-
     Ok(BackendServer { port, password, engine })
-}
-
-/// 选一个空闲的 TCP 端口。
-///
-/// 通过 bind :0 让操作系统分配，然后立即释放。
-async fn find_free_port() -> Result<u16, String> {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .map_err(|e| format!("bind 失败：{e}"))?;
-    let port = listener
-        .local_addr()
-        .map_err(|e| format!("获取本地地址失败：{e}"))?
-        .port();
-    drop(listener);
-    Ok(port)
 }

@@ -794,7 +794,7 @@ pub fn run() {
 
                 // 计算引擎 bundle 路径。dev 模式从项目相对路径读，release 从资源目录读。
                 let engine_bundle = if cfg!(debug_assertions) {
-                    Some(std::path::PathBuf::from("../core/dist"))
+                    Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../core/dist"))
                 } else {
                     // release 模式：从 Tauri 资源目录查找 index.js。
                     // tauri.conf.json 的 resources 配置为 ../../core/dist/index.js。
