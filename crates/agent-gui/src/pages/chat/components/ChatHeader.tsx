@@ -143,7 +143,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
     <header
       data-tauri-drag-region
       className={cn(
-        "flex items-center justify-between gap-2 py-2.5 pr-4",
+        "chat-header relative flex items-center justify-between gap-2 py-2.5 pr-4",
         !sidebarOpen && macOsTauri ? "pl-[232px]" : "pl-4",
       )}
     >
@@ -167,8 +167,8 @@ export const ChatHeader = memo(function ChatHeader(props: {
                 variant="ghost"
                 disabled={!hasModels}
                 className={cn(
-                  "model-selector-trigger h-8 max-w-[min(20rem,calc(100vw-8.5rem))] -translate-y-px justify-between gap-1.5 overflow-hidden rounded-lg px-2.5 py-1 cursor-pointer text-xs font-normal text-foreground transition-all duration-200 ease-out hover:bg-muted/60 dark:text-white",
-                  isModelPickerOpen && "bg-muted/60",
+                  "model-selector-trigger h-8 max-w-[min(20rem,calc(100vw-8.5rem))] -translate-y-px justify-between gap-1.5 overflow-hidden rounded-lg px-2.5 py-1 cursor-pointer text-xs font-normal text-foreground transition-[background-color,color,transform,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-muted/60 dark:text-white",
+                  isModelPickerOpen && "bg-muted/70 shadow-[inset_0_0_0_1px_hsl(var(--border)/0.55)]",
                 )}
               />
             }
@@ -181,7 +181,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
             </span>
             <ChevronDown
               className={cn(
-                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-out dark:text-white",
+                "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none dark:text-white",
                 isModelPickerOpen && "rotate-180",
               )}
             />
@@ -190,14 +190,14 @@ export const ChatHeader = memo(function ChatHeader(props: {
             <Popover.Positioner
               side="bottom"
               align="start"
-              sideOffset={4}
+              sideOffset={6}
               collisionPadding={8}
               className="z-[9999]"
             >
               <Popover.Popup
                 initialFocus={searchInputRef}
                 aria-label={t("chat.selectModel")}
-                className="model-selector-dropdown w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-xl border bg-popover p-0 text-xs text-popover-foreground shadow-md outline-none"
+                className="model-selector-dropdown w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-border/60 bg-popover/95 p-0 text-xs text-popover-foreground shadow-[0_16px_48px_-18px_rgba(15,23,42,0.38),0_1px_0_rgba(255,255,255,0.55)_inset] outline-none backdrop-blur-xl backdrop-saturate-150 dark:border-white/[0.1] dark:shadow-[0_16px_48px_-18px_rgba(0,0,0,0.7),0_1px_0_rgba(255,255,255,0.06)_inset]"
               >
                 {(() => {
                   const isAgent = isAgentExecutionMode(settings.system.executionMode);
@@ -362,7 +362,8 @@ export const ChatHeader = memo(function ChatHeader(props: {
                           {expanded
                             ? group.opts.map((option) => {
                                 const isSelected = option.value === selectedValue;
-                                const itemAnimationDelay = `${Math.min(animationIndex, 5) * 0.025}s`;
+                                // Cap stagger so long lists don't feel slow (30–40ms steps, max ~5).
+                                const itemAnimationDelay = `${Math.min(animationIndex, 5) * 0.035}s`;
                                 animationIndex += 1;
                                 return (
                                   <button
@@ -376,7 +377,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
                                       setIsModelPickerOpen(false);
                                     }}
                                     className={cn(
-                                      "model-selector-item flex h-[30px] w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-md px-2 py-0 text-left text-xs font-normal leading-5 text-foreground transition-none hover:bg-foreground/[0.05] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white",
+                                      "model-selector-item flex h-[30px] w-full max-w-full shrink-0 cursor-pointer items-center justify-between gap-3 overflow-hidden rounded-lg px-2 py-0 text-left text-xs font-normal leading-5 text-foreground hover:bg-foreground/[0.05] focus-visible:bg-foreground/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:text-white",
                                       isSelected &&
                                         "bg-foreground/[0.07] font-medium text-foreground hover:bg-foreground/[0.09] focus-visible:bg-foreground/[0.09]",
                                     )}
@@ -390,7 +391,7 @@ export const ChatHeader = memo(function ChatHeader(props: {
                                       <span className="min-w-0 truncate">{option.model}</span>
                                     </span>
                                     {isSelected ? (
-                                      <Check className="h-4 w-4 shrink-0 text-primary" />
+                                      <Check className="model-selector-check h-4 w-4 shrink-0 text-primary" />
                                     ) : null}
                                   </button>
                                 );
