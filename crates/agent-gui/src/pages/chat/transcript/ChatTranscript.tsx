@@ -286,9 +286,9 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
         data-scroll-viewport
         className="h-full w-full overflow-y-auto [overflow-anchor:none]"
       >
-        <div className="mx-auto w-full max-w-[var(--chat-transcript-content-width)] px-5 py-4 [overflow-anchor:none]">
+        <div className="chat-transcript-scroll-pad mx-auto w-full max-w-[var(--chat-transcript-content-width)] px-5 pb-4 [overflow-anchor:none]">
           {showNoModelsState || showStartChatState ? (
-            <div className="flex min-h-[calc(100vh-220px)] flex-col items-center justify-center">
+            <div className="flex min-h-[calc(100vh-var(--chat-header-height)-12rem)] flex-col items-center justify-center">
               {/* Keyed per conversation so the hero entrance replays when
                   switching between empty conversations, not just on mount. */}
               <ChatEmptyState
@@ -360,7 +360,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
           aria-label={jumpToBottomLabel}
           title={jumpToBottomLabel}
           onClick={() => scrollFollowHandle.jumpToBottom()}
-          className="chat-jump-to-bottom absolute left-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+          className="chat-jump-to-bottom absolute left-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full motion-reduce:active:scale-100"
           style={{ bottom: Math.ceil(bottomReservePx) + 16 }}
         >
           <ChevronDown className="h-4 w-4" />
