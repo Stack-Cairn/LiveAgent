@@ -310,12 +310,13 @@ const HistoryRow = memo(function HistoryRow(props: {
 
   return (
     <div
+      data-selected={isSelectionMode && isSelected ? "true" : undefined}
       className={cn(
-        "chat-history-row group/item grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
+        "chat-history-row chat-sidebar-row group/item grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-[10px] pl-1",
         isSelectionMode && isSelected
           ? "bg-primary/10 text-foreground hover:bg-primary/[0.14]"
           : isActive
-            ? "bg-foreground/[0.07] text-foreground hover:bg-foreground/[0.09]"
+            ? "chat-sidebar-row-active text-foreground hover:bg-foreground/[0.1]"
             : "text-foreground/85 hover:bg-foreground/[0.05] hover:text-foreground",
         isSelectionMode && isSelectionDisabled && "opacity-50",
       )}
@@ -353,8 +354,10 @@ const HistoryRow = memo(function HistoryRow(props: {
       ) : (
         <button
           type="button"
+          data-sidebar-row-select=""
           onClick={handleSelect}
           onMouseDown={(event) => {
+            // Keep shift-click from stealing focus so bulk range select stays crisp.
             if (event.shiftKey) event.preventDefault();
           }}
           onDoubleClick={(event) => {
@@ -365,7 +368,7 @@ const HistoryRow = memo(function HistoryRow(props: {
           }}
           aria-pressed={isSelectionMode ? isSelected : undefined}
           disabled={isSelectionMode && isSelectionDisabled}
-          className="flex h-[30px] min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex h-[30px] min-w-0 items-center gap-2 rounded-md px-2 text-left outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           title={item.title}
         >
           {isSelectionMode ? (
@@ -629,14 +632,15 @@ const ProjectRow = memo(function ProjectRow(props: {
   return (
     <div
       ref={rowRef}
+      data-tone={isMissing ? "danger" : isArchived ? "muted" : undefined}
       className={cn(
-        "group/project grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-lg pl-1 transition-colors",
+        "chat-sidebar-row group/project grid h-[30px] grid-cols-[minmax(0,1fr)_auto] items-center rounded-[10px] pl-1",
         isMissing
           ? "text-destructive hover:bg-destructive/10"
           : isArchived
             ? "text-muted-foreground/60 hover:bg-foreground/[0.03]"
             : isActive
-              ? "bg-foreground/[0.07] text-foreground hover:bg-foreground/[0.09]"
+              ? "chat-sidebar-row-active text-foreground hover:bg-foreground/[0.1]"
               : "text-foreground/85 hover:bg-foreground/[0.05] hover:text-foreground",
       )}
     >
@@ -689,9 +693,10 @@ const ProjectRow = memo(function ProjectRow(props: {
             render={
               <button
                 type="button"
+                data-sidebar-row-select=""
                 aria-disabled={isArchived || undefined}
                 className={cn(
-                  "flex h-[30px] min-w-0 items-center gap-3 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                  "flex h-[30px] min-w-0 items-center gap-3 rounded-md px-2 text-left outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                   isMissing
                     ? "hover:text-destructive focus-visible:bg-destructive/10"
                     : isArchived
@@ -1657,25 +1662,27 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
   return (
     <aside
       className={cn(
-        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r border-border/50 bg-[hsl(var(--sidebar-bg))] transition-[width,opacity] duration-200 ease-out",
+        "chat-history-sidebar zone-font-scale flex h-full shrink-0 flex-col overflow-hidden border-r transition-[width,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
         isOpen ? "w-[272px] opacity-100" : "w-0 opacity-0",
       )}
       style={{ "--zone-font-scale": fontScale } as CSSProperties}
     >
       <div className="chat-history-sidebar-inner flex w-[272px] min-w-[272px] min-h-0 flex-1 flex-col">
         <MacOsTitleBarSpacer className="bg-[hsl(var(--sidebar-bg))]" />
-        <div className="shrink-0 border-b border-border/50 px-2 pb-3 pt-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 -translate-y-0.5 items-center gap-2">
+        <div className="shrink-0 px-2 pb-2.5 pt-3">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <div className="flex min-w-0 -translate-y-0.5 items-center gap-2.5">
               <img
                 src={iconSimpleUrl}
                 alt=""
                 aria-hidden="true"
                 draggable={false}
-                className="h-8 w-8 shrink-0 select-none rounded-xl object-contain"
+                className="h-7 w-7 shrink-0 select-none rounded-[9px] object-contain"
               />
               <div className="min-w-0">
-                <div className="truncate font-semibold tracking-tight">Live Agent</div>
+                <div className="truncate text-[calc(15px*var(--zone-font-scale,1))] font-semibold tracking-tight text-foreground">
+                  Live Agent
+                </div>
               </div>
             </div>
 
@@ -1686,26 +1693,26 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 size="icon"
                 onClick={onCloseSidebar}
                 title={t("sidebar.closeSidebar")}
-                className="h-9 w-9 shrink-0 rounded-2xl text-muted-foreground hover:text-foreground"
+                className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
               >
                 <PanelLeftClose className="h-4 w-4" />
               </Button>
             )}
           </div>
 
-          <div className="mt-3 flex flex-col gap-0.5">
+          <div className="mt-3.5 flex flex-col gap-0.5">
             <Button
               type="button"
               variant="ghost"
               onClick={onNewConversation}
               className={cn(
-                "chat-history-new-conversation-button h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
+                "chat-history-new-conversation-button h-8 w-full justify-start gap-3 rounded-[10px] px-3 text-[calc(13.5px*var(--zone-font-scale,1))] font-medium leading-5 shadow-none",
                 activeView === "chat"
-                  ? "text-foreground/90 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-                  : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
+                  ? "text-foreground hover:bg-foreground/[0.07] focus-visible:bg-foreground/[0.07]"
+                  : "text-foreground/80 hover:bg-foreground/[0.07] hover:text-foreground focus-visible:bg-foreground/[0.07]",
               )}
             >
-              <CirclePlus className="h-4 w-4 shrink-0 text-foreground/85" />
+              <CirclePlus className="h-4 w-4 shrink-0 text-foreground/80" />
               <span className="chat-history-new-conversation-label">
                 {t("chat.newConversation")}
               </span>
@@ -1715,17 +1722,17 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               onClick={() => onOpenSkillsHub?.()}
               className={cn(
-                "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
+                "sidebar-hub-menu-item h-8 w-full justify-start gap-3 rounded-[10px] px-3 text-[calc(13.5px*var(--zone-font-scale,1))] font-medium leading-5 shadow-none",
                 activeView === "skills-hub"
-                  ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-                  : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
+                  ? "chat-sidebar-row-active text-foreground hover:bg-foreground/[0.09] focus-visible:bg-foreground/[0.09]"
+                  : "text-foreground/80 hover:bg-foreground/[0.07] hover:text-foreground focus-visible:bg-foreground/[0.07]",
               )}
               title="Skills Hub"
             >
               <Blend
                 className={cn(
                   "h-4 w-4 shrink-0",
-                  activeView === "skills-hub" ? "text-amber-500" : "text-foreground/85",
+                  activeView === "skills-hub" ? "text-amber-500" : "text-foreground/75",
                 )}
               />
               <span className="truncate">Skills</span>
@@ -1735,17 +1742,17 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               variant="ghost"
               onClick={() => onOpenMcpHub?.()}
               className={cn(
-                "sidebar-hub-menu-item h-[30px] w-full justify-start gap-3 rounded-lg px-3 text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5 shadow-none transition-colors",
+                "sidebar-hub-menu-item h-8 w-full justify-start gap-3 rounded-[10px] px-3 text-[calc(13.5px*var(--zone-font-scale,1))] font-medium leading-5 shadow-none",
                 activeView === "mcp-hub"
-                  ? "bg-foreground/[0.06] text-foreground hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]"
-                  : "text-foreground/80 hover:bg-foreground/[0.08] hover:text-foreground focus-visible:bg-foreground/[0.08]",
+                  ? "chat-sidebar-row-active text-foreground hover:bg-foreground/[0.09] focus-visible:bg-foreground/[0.09]"
+                  : "text-foreground/80 hover:bg-foreground/[0.07] hover:text-foreground focus-visible:bg-foreground/[0.07]",
               )}
               title="MCP Hub"
             >
               <Cable
                 className={cn(
                   "h-4 w-4 shrink-0",
-                  activeView === "mcp-hub" ? "text-violet-500" : "text-foreground/85",
+                  activeView === "mcp-hub" ? "text-violet-500" : "text-foreground/75",
                 )}
               />
               <span className="truncate">MCP</span>
@@ -1770,13 +1777,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 <button
                   type="button"
                   aria-expanded={!projectsCollapsed}
-                  className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-muted-foreground outline-hidden"
+                  className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 chat-sidebar-section-label outline-hidden"
                   onClick={() => onProjectsCollapsedChange?.(!projectsCollapsed)}
                 >
                   <span>{t("chat.workspaceSection")}</span>
                   <ChevronRight
                     aria-hidden="true"
-                    className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
+                    className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:opacity-100"
                     style={{ transform: `rotate(${projectsCollapsed ? 0 : 90}deg)` }}
                   />
                 </button>
@@ -1943,7 +1950,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             ref={recentHeaderRef}
             className={cn(
               "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-2 pb-2",
-              showProjects ? "border-t border-border/35 pt-0.5" : "pt-3",
+              showProjects ? "border-t border-[hsl(var(--sidebar-separator)/0.7)] pt-1" : "pt-3",
             )}
           >
             {selectionMode ? (
@@ -1964,13 +1971,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               <button
                 type="button"
                 aria-expanded={!recentCollapsed}
-                className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold text-muted-foreground outline-hidden"
+                className="group flex min-w-0 items-center gap-1 rounded-md px-3 py-1 chat-sidebar-section-label outline-hidden"
                 onClick={() => onRecentCollapsedChange?.(!recentCollapsed)}
               >
                 <span className="min-w-0 truncate">{t("chat.recentConversation")}</span>
                 <ChevronRight
                   aria-hidden="true"
-                  className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
+                  className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:opacity-100"
                   style={{ transform: `rotate(${recentCollapsed ? 0 : 90}deg)` }}
                 />
               </button>
@@ -2130,16 +2137,16 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             </div>
           </div>
         </div>
-        <div className="shrink-0 border-t border-border/50 bg-[hsl(var(--sidebar-bg))] px-2 py-1.5">
+        <div className="shrink-0 border-t border-[hsl(var(--sidebar-separator)/0.7)] bg-[hsl(var(--sidebar-bg))] px-2 py-1.5">
           <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
             <Button
               type="button"
               variant="ghost"
               onClick={onOpenSettings}
-              className="h-8 w-full min-w-0 justify-start gap-2.5 rounded-lg px-2.5 text-[calc(13px*var(--zone-font-scale,1))] font-normal text-foreground/85 shadow-none hover:bg-foreground/[0.08] hover:text-foreground"
+              className="h-8 w-full min-w-0 justify-start gap-2.5 rounded-[10px] px-2.5 text-[calc(13px*var(--zone-font-scale,1))] font-medium text-foreground/85 shadow-none hover:bg-foreground/[0.07] hover:text-foreground"
               title={t("tooltip.settings")}
             >
-              <Settings className="h-4 w-4 shrink-0 text-foreground/75" />
+              <Settings className="h-4 w-4 shrink-0 text-foreground/70" />
               <span className="truncate">{t("tooltip.settings")}</span>
             </Button>
             {appUpdate?.showUpdateButton ? (
