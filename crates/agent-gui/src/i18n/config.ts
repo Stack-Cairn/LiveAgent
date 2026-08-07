@@ -1466,6 +1466,10 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.close": "关闭",
     "settings.hideApiKey": "隐藏 API Key",
     "settings.showApiKey": "显示 API Key",
+    "settings.providerAddApiKey": "添加 API Key",
+    "settings.providerRemoveApiKey": "移除该 API Key",
+    "settings.providerApiKeysConfiguredCount": "已配置 {count} 个 API Key，重新填写将替换全部",
+    "settings.providerApiKeyHint": "支持添加多个 Key；优先使用首个，遇到限额/鉴权失败时自动切换下一个",
     "settings.requestFormat": "请求格式",
     "settings.reasoning": "思考强度",
     "settings.reasoning.off": "关闭",
@@ -3764,6 +3768,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.close": "Close",
     "settings.hideApiKey": "Hide API Key",
     "settings.showApiKey": "Show API Key",
+    "settings.providerAddApiKey": "Add API Key",
+    "settings.providerRemoveApiKey": "Remove this API Key",
+    "settings.providerApiKeysConfiguredCount":
+      "{count} API Key(s) configured — re-entering replaces all of them",
+    "settings.providerApiKeyHint":
+      "Multiple keys supported; the first key is used first, and on quota/auth failure it automatically falls over to the next",
     "settings.requestFormat": "Request Format",
     "settings.reasoning": "Reasoning",
     "settings.reasoning.off": "Off",

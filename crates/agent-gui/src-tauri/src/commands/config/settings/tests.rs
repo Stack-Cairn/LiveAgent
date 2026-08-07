@@ -1426,7 +1426,7 @@ mod tests {
 
         assert_eq!(imported.len(), 2);
         assert!(imported.iter().all(|item| item.importable));
-        assert!(imported.iter().all(|item| item.api_key == "secret"));
+        assert!(imported.iter().all(|item| item.api_keys == vec!["secret".to_string()]));
         assert!(imported.iter().all(|item| item.excluded_model_count == 1));
         assert!(!cherry_model_is_chat_compatible(
             &json!({"type": ["image_generation"]}),

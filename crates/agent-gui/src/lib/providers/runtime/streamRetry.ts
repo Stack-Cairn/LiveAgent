@@ -27,6 +27,17 @@ export type StreamRetryConfig = {
   onRetry?: (attempt: number, maxAttempts: number, errorMessage: string) => void;
   /** Invoked once a retried attempt commits its first content-bearing event. */
   onRetryRecovered?: () => void;
+  /**
+   * 多 API Key 故障转移：主 Key 优先，请求失败（429/限额/鉴权等可重试错误）时
+   * 切到下一个 Key 重试。`keys` 为候选列表（首项即主 Key），`rotate` 在每次重试
+   * 前被调用以更新当次尝试的凭据；streamByApi 的 factory 在每次 factory() 调用
+   * 时从 rotate 写入的 mutable holder 重新读取 apiKey/headers，从而让重试落到
+   * 不同 Key 上。一旦开始流式产出（committed）即不再换 Key。
+   */
+  apiKeyFailover?: {
+    keys: string[];
+    rotate: (attemptIndex: number) => void;
+  };
 };
 
 export type StreamRetryOptions = StreamRetryConfig & {
@@ -100,6 +111,8 @@ export function withStreamRetry(
   const signal = options?.signal;
 
   const output = createAssistantMessageEventStream();
+  // 多 Key 故障转移：第 0 次（主 Key）在首请求前对齐，重试时逐一切到下一个 Key。
+  options?.apiKeyFailover?.rotate(0);
   const firstSource = factory();
 
   void (async () => {
@@ -137,6 +150,8 @@ export function withStreamRetry(
           hasRetried = true;
           try {
             await sleepWithAbort(computeStreamRetryBackoffMs(attempt - 1), signal);
+            // 切到下一个 Key（越界时 rotate 自行兜底，通常回到主 Key 重试）。
+            options?.apiKeyFailover?.rotate(attempt - 1);
             source = factory();
             continue;
           } catch {

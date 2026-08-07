@@ -45,10 +45,25 @@ fn redact_provider_credential(provider: Value) -> Result<Value, String> {
             Some(Value::Null) | None => false,
             Some(_) => return Err("provider settings apiKey must be a string".to_string()),
         } || matches!(payload.get("apiKeyConfigured"), Some(Value::Bool(true)));
-    payload.insert(
-        "apiKeyConfigured".to_string(),
-        Value::Bool(api_key_configured),
-    );
+    // 多 API Key：摘除明文数组，仅保留"是否已配置"与"已配置数量"供 WebUI 展示。
+    let api_keys_count = match payload.remove("apiKeys") {
+        Some(Value::Array(items)) => items
+            .into_iter()
+            .filter(|value| matches!(value, Value::String(s) if !s.trim().is_empty()))
+            .count(),
+        Some(Value::Null) | None => 0,
+        Some(_) => return Err("provider settings apiKeys must be an array".to_string()),
+    };
+    let configured = api_key_configured || api_keys_count > 0;
+    let count = if api_keys_count > 0 {
+        api_keys_count
+    } else if api_key_configured {
+        1
+    } else {
+        0
+    };
+    payload.insert("apiKeyConfigured".to_string(), Value::Bool(configured));
+    payload.insert("apiKeyCount".to_string(), Value::from(count as u64));
     if let Some(usage_query) = payload.remove("usageQuery") {
         payload.insert("usageQuery".to_string(), redact_usage_query_secrets(usage_query)?);
     }

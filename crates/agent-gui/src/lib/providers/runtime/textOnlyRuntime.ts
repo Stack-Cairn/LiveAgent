@@ -22,6 +22,7 @@ import { createModelFromConfig } from "./modelFactory";
 import { finalizeProviderStreamOptions } from "./payloadPipeline";
 import {
   buildProviderRequestMetadata,
+  createProviderApiKeyFailover,
   prepareProviderRequest,
   resolveProviderCacheRetention,
   toSimpleStreamReasoning,
@@ -80,8 +81,16 @@ function buildTextOnlyStreamOptions(params: {
     }) && params.nativeWebSearch;
   const usesOpenAIChatNativeWebSearch =
     nativeWebSearch && params.providerId === "codex" && params.model.api === "openai-completions";
+  // 多 Key 故障转移：主 Key 优先，失败时切下一个 Key 重试（见 createProviderApiKeyFailover）。
+  const failover = createProviderApiKeyFailover({
+    providerId: params.providerId,
+    apiKeys: params.runtime.apiKeys,
+    requestFormat: params.runtime.requestFormat,
+    sessionId,
+  });
   const options: StreamOptionsEx = {
     apiKey: params.runtime.apiKey,
+    attemptAuth: failover.attemptAuth,
     headers: withHostedSearchProbeHeader(params.headers, params.hostedSearchProbeId),
     signal: params.signal,
     sessionId,
@@ -105,6 +114,7 @@ function buildTextOnlyStreamOptions(params: {
     streamRetry: {
       onRetry: params.onRetryStatus,
       onRetryRecovered: params.onRetryRecovered,
+      ...(failover.failover ? { apiKeyFailover: failover.failover } : {}),
     },
   };
   return finalizeProviderStreamOptions({

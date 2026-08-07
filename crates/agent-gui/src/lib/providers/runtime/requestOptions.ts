@@ -39,6 +39,74 @@ function buildProviderAuthHeaders(providerId: ProviderId, apiKey: string): Recor
   return buildOpenAIAuthHeaders(apiKey);
 }
 
+export { buildProviderAuthHeaders };
+
+/**
+ * 多 API Key 故障转移：构造当次尝试凭据的 mutable holder + streamRetry.apiKeyFailover
+ * 的 rotate 回调。主 Key（apiKeys[0]）优先；请求失败（429/限额/鉴权等可重试错误）
+ * 时 withStreamRetry 调用 rotate(attemptIndex) 切到下一个 Key，streamByApi 的 factory
+ * 在下次 factory() 调用重新读取 holder.apiKey/headers，重试落到新 Key 上。
+ *
+ * attemptAuth.headers 只含鉴权头（authorization/x-api-key/x-goog-api-key），streamByApi
+ * 的 resolveAttemptHeaders 会把它替换进 options.headers、保留代理路由/会话/自定义头。
+ * 单 Key（或仅 apiKey 旧快照）时不启用故障转移，返回 undefined。
+ */
+export type ProviderApiKeyFailover = {
+  keys: string[];
+  rotate: (attemptIndex: number) => void;
+};
+
+export type ProviderAttemptAuth = {
+  apiKey: string;
+  headers: Record<string, string>;
+};
+
+export function createProviderApiKeyFailover(params: {
+  providerId: ProviderId;
+  apiKeys?: string[];
+  requestFormat?: CodexRequestFormat;
+  sessionId?: string;
+}): { attemptAuth: ProviderAttemptAuth | undefined; failover: ProviderApiKeyFailover | undefined } {
+  const keys = (Array.isArray(params.apiKeys) ? params.apiKeys : [])
+    .map((key) => (typeof key === "string" ? key.trim() : ""))
+    .filter(Boolean);
+  if (keys.length === 0) {
+    // 无候选 Key（旧快照/测试 fixture 仅 apiKey）：不启用故障转移，也不设 attemptAuth，
+    // 让 streamByApi 的 factory 回退到 options.apiKey/options.headers，零回归。
+    return { attemptAuth: undefined, failover: undefined };
+  }
+  if (keys.length === 1) {
+    // 单 Key：不启用故障转移，attemptAuth 持主 Key 供 factory 一致读取。
+    const apiKey = keys[0];
+    return {
+      attemptAuth: {
+        apiKey,
+        headers: buildProviderRequestHeaders(params.providerId, apiKey, params.sessionId, params.requestFormat),
+      },
+      failover: undefined,
+    };
+  }
+  const attemptAuth: ProviderAttemptAuth = {
+    apiKey: keys[0],
+    headers: buildProviderRequestHeaders(params.providerId, keys[0], params.sessionId, params.requestFormat),
+  };
+  const failover: ProviderApiKeyFailover = {
+    keys,
+    rotate: (attemptIndex: number) => {
+      // 主 Key=attemptIndex 0；重试逐一切到下一个，越界回主 Key（继续重试同一 Key）。
+      const key = keys[attemptIndex] ?? keys[0];
+      attemptAuth.apiKey = key;
+      attemptAuth.headers = buildProviderRequestHeaders(
+        params.providerId,
+        key,
+        params.sessionId,
+        params.requestFormat,
+      );
+    },
+  };
+  return { attemptAuth, failover };
+}
+
 export function buildProviderRequestHeaders(
   providerId: ProviderId,
   apiKey: string,

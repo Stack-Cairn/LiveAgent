@@ -258,6 +258,19 @@ const llmMock = {
       headers: { Authorization: `Bearer ${runtime.apiKey}`, "x-liveagent-test": "1" },
     };
   },
+  createProviderApiKeyFailover({ providerId, apiKeys, sessionId }) {
+    // 测试 runtime 多为单 Key（apiKey），仅对齐真实函数：单 Key 返回 attemptAuth、
+    // 不启用故障转移；attemptAuth.headers 仅供 streamByApi 在 factory 里读取（测试
+    // 用 streamSimpleByApi mock，不读 headers）。
+    const key = Array.isArray(apiKeys) && apiKeys.length > 0 ? String(apiKeys[0]).trim() : "";
+    if (!key) return { attemptAuth: undefined, failover: undefined };
+    const headers =
+      providerId === "claude_code" ? { "x-api-key": key } : { Authorization: `Bearer ${key}` };
+    return {
+      attemptAuth: { apiKey: key, headers },
+      failover: undefined,
+    };
+  },
   createModelFromConfig(providerId, modelId, baseUrl) {
     const api = providerId === "claude_code" ? "anthropic-messages" : "openai-responses";
     return {
