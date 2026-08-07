@@ -28,7 +28,7 @@ MODEL_CATALOG_GENERATED_FILES := $(AGENT_CORE_JS_DIR)/src/models/catalog.generat
 BACKEND_DOCKER_IMAGE ?= liveagent-backend:local
 RELEASE_TAG ?=
 
-.PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
+.PHONY: all dev core-build build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
 .PHONY: backend-docker-build backend-docker-run backend-docker-smoke
 .PHONY: clean update-model-catalog check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
 .PHONY: update-routes check-routes check-command-classes check-wire-events check-settings-drift
@@ -36,8 +36,11 @@ RELEASE_TAG ?=
 all: build
 
 ## Desktop app
-dev:
+dev: core-build
 	pnpm --dir $(AGENT_GUI_DIR) tauri dev
+
+core-build:
+	pnpm --dir $(AGENT_CORE_JS_DIR) build
 
 build:
 	pnpm --dir $(AGENT_GUI_DIR) tauri build
