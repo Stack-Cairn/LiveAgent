@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../../src-tauri/icons/custom/ccswitch.png";
@@ -2893,8 +2892,10 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   );
 }
 
-function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => void }) {
-  const { settings, setSettings, onClose } = props;
+function CustomSettingsDrawer(
+  props: SettingsSectionProps & { providerType: ProviderId; onClose: () => void },
+) {
+  const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const [closing, setClosing] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3020,6 +3021,14 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
                 ) : null}
               </div>
             </div>
+          </section>
+
+          <section className="mt-4 space-y-3">
+            <FailoverSettingsCard
+              settings={settings}
+              setSettings={setSettings}
+              providerType={providerType}
+            />
           </section>
         </div>
       </aside>
@@ -3479,8 +3488,6 @@ function ProviderList(props: {
   onEdit: (provider: CustomProvider) => void;
   onDelete: (id: string) => void;
   onReorder: (type: ProviderId, nextIds: string[]) => void;
-  /** Per-vendor auto-failover card rendered below the provider rows. */
-  failoverCard?: ReactNode;
   ccsProviders: CcsProvidersResponse | null;
   ccsLoading: boolean;
   ccsMessage: string | null;
@@ -3505,7 +3512,6 @@ function ProviderList(props: {
     onEdit,
     onDelete,
     onReorder,
-    failoverCard,
     ccsProviders,
     ccsLoading,
     ccsMessage,
@@ -3854,9 +3860,6 @@ function ProviderList(props: {
             )}
           </div>
         )}
-        {failoverCard && filtered.length > 0 ? (
-          <div className="mt-4 pb-1">{failoverCard}</div>
-        ) : null}
       </div>
     </div>
   );
@@ -4342,13 +4345,6 @@ export function ProvidersSection(
                 onEdit={openEdit}
                 onDelete={handleDelete}
                 onReorder={handleProviderReorder}
-                failoverCard={
-                  <FailoverSettingsCard
-                    settings={settings}
-                    setSettings={setSettings}
-                    providerType={tab}
-                  />
-                }
                 ccsProviders={ccsProviders}
                 ccsLoading={ccsLoading}
                 ccsMessage={ccsMessage}
@@ -4406,6 +4402,7 @@ export function ProvidersSection(
         <CustomSettingsDrawer
           settings={settings}
           setSettings={setSettings}
+          providerType={activeTab}
           onClose={() => setCustomSettingsOpen(false)}
         />
       ) : null}

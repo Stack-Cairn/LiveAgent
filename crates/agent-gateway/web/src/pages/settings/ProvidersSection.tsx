@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -2842,8 +2841,10 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   );
 }
 
-function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => void }) {
-  const { settings, setSettings, onClose } = props;
+function CustomSettingsDrawer(
+  props: SettingsSectionProps & { providerType: ProviderId; onClose: () => void },
+) {
+  const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const [closing, setClosing] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2970,6 +2971,14 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
               </div>
             </div>
           </section>
+
+          <section className="mt-4 space-y-3">
+            <FailoverSettingsCard
+              settings={settings}
+              setSettings={setSettings}
+              providerType={providerType}
+            />
+          </section>
         </div>
       </aside>
     </div>,
@@ -2987,8 +2996,6 @@ function ProviderList(props: {
   usageByProvider: ProviderUsageState;
   refreshingProviderIds: ReadonlySet<string>;
   onRefreshUsage: (providerId: string) => void;
-  /** Per-vendor auto-failover card rendered below the provider rows. */
-  failoverCard?: ReactNode;
 }) {
   const { t } = useLocale();
   const {
@@ -3001,7 +3008,6 @@ function ProviderList(props: {
     usageByProvider,
     refreshingProviderIds,
     onRefreshUsage,
-    failoverCard,
   } = props;
   const filtered = providers.filter((provider) => provider.type === type);
   // 30s ticker 驱动"N 分钟前"相对时间;多套餐行的展开态是纯本地 UI 状态。
@@ -3196,9 +3202,6 @@ function ProviderList(props: {
             )}
           </div>
         )}
-        {failoverCard && filtered.length > 0 ? (
-          <div className="mt-4 pb-1">{failoverCard}</div>
-        ) : null}
       </div>
     </div>
   );
@@ -3352,13 +3355,6 @@ export function ProvidersSection(
                 usageByProvider={usageByProvider}
                 refreshingProviderIds={refreshingProviderIds}
                 onRefreshUsage={(providerId) => void refreshProvider(providerId)}
-                failoverCard={
-                  <FailoverSettingsCard
-                    settings={settings}
-                    setSettings={setSettings}
-                    providerType={tab}
-                  />
-                }
               />
             </div>
           ))}
@@ -3377,6 +3373,7 @@ export function ProvidersSection(
         <CustomSettingsDrawer
           settings={settings}
           setSettings={setSettings}
+          providerType={activeTab}
           onClose={() => setCustomSettingsOpen(false)}
         />
       ) : null}
