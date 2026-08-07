@@ -109,7 +109,7 @@ function assertCustomHeadersReachedUpstream(options) {
 
   // 1) 普通自定义头直接抵达上游请求头集。
   assert.equal(readHeader(headers, "x-trace-id"), "liveagent-e2e");
-  // 2) 自定义 UA 原样抵达，绝不重复、绝不被别的头覆盖。
+  // 2) 自定义 UA 作为普通自定义头原样抵达，绝不重复、绝不被别的头覆盖。
   assert.equal(readHeader(headers, "user-agent"), "my-agent/9.9");
   // 3) 曾经的浏览器禁止头名如今直接下发（Node fetch 无 forbidden 限制）。
   assert.equal(readHeader(headers, "cookie"), "session=abc");

@@ -20,6 +20,7 @@ export const DEEPSEEK_THINKING_LEVEL_MAP: Model<"openai-completions">["thinkingL
   low: "high",
   medium: "high",
   high: "high",
+  max: "max",
   xhigh: "max",
 };
 
@@ -150,7 +151,7 @@ export function mapDeepSeekReasoningEffort(
   reasoning: SimpleStreamOptions["reasoning"] | undefined,
 ) {
   if (!reasoning) return undefined;
-  return reasoning === "xhigh" ? "max" : "high";
+  return reasoning === "xhigh" || reasoning === "max" ? "max" : "high";
 }
 
 function sanitizeTextValue(value: string) {
@@ -377,6 +378,8 @@ export function attachDeepSeekProviderPayloadAdapter<TOptions extends DeepSeekSt
   },
 ): TOptions {
   const model = params.model;
+  // DeepSeek adapter 只服务实际选中的 chat/anthropic 协议；Responses 由用户配置决定。
+  if (params.providerId === "codex" && model && model.api !== "openai-completions") return options;
   const isDeepSeek =
     params.providerId === "codex"
       ? isDeepSeekCodexTarget({

@@ -252,7 +252,6 @@ async function runOneTurn(
     provider,
     model,
     runtimeControls,
-    settings.customSettings.providerIdentities,
   );
   const runtimeModel = createModelFromConfig(
     providerId,
@@ -557,7 +556,6 @@ async function runOneTurn(
           memorySummarySelection.provider,
           memorySummarySelection.model,
           runtimeControls,
-          settings.customSettings.providerIdentities,
         ),
         selectedModel: memorySummarySelection.selectedModel,
       }

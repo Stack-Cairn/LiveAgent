@@ -131,6 +131,7 @@ const EXTERNAL_TOOL_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   codebuddy: "CodeBuddy",
+  agents: "Agent Skills",
 };
 
 const STORE_PAGE_LIMIT = 24;

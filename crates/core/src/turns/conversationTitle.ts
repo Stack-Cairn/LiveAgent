@@ -63,7 +63,6 @@ export async function generateConversationTitle(
       selection.provider,
       selection.model,
       settings.chatRuntimeControls,
-      settings.customSettings.providerIdentities,
     ),
   );
 

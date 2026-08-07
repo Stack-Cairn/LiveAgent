@@ -1993,7 +1993,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsHubStoreTab": "技能商店",
     "settings.skillsHubImportTab": "本地导入",
     "settings.skillsImportDesc":
-      "扫描本机 Claude Code、Codex、CodeBuddy 的技能目录，勾选后导入到 LiveAgent。",
+      "扫描本机 Claude Code、Codex、CodeBuddy 与 AGENTS 的技能目录，勾选后导入到 LiveAgent。",
     "settings.skillsImportOverwriteHint": "同名技能将自动备份后覆盖。",
     "settings.skillsImportScanning": "正在扫描本地技能...",
     "settings.skillsImportRescan": "重新扫描",
@@ -4283,7 +4283,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsHubStoreTab": "Skills Store",
     "settings.skillsHubImportTab": "Local Import",
     "settings.skillsImportDesc":
-      "Scan local Claude Code, Codex, and CodeBuddy skill directories, then pick skills to import into LiveAgent.",
+      "Scan local Claude Code, Codex, CodeBuddy, and AGENTS skill directories, then pick skills to import into LiveAgent.",
     "settings.skillsImportOverwriteHint":
       "Skills with the same name are backed up, then overwritten.",
     "settings.skillsImportScanning": "Scanning local skills...",

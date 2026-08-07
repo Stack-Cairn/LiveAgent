@@ -17,12 +17,6 @@ const { createProviderRuntimeConfig } = loader.loadModule(
   coreSrc("providers/runtime/providerRuntimeConfig.ts"),
 );
 const settings = loader.loadModule("src/lib/settings/index.ts");
-// core 漂移：createProviderRuntimeConfig 新增必填第 4 参 providerIdentities
-// （PR #289 之后强制显式传入，防止调用点漏传静默丢头），测试用默认身份。
-const { getDefaultCliIdentitySettings } = loader.loadModule(
-  coreSrc("providers/cliIdentityCore.ts"),
-);
-const IDENTITIES = getDefaultCliIdentitySettings();
 
 function createProvider(overrides = {}) {
   return {
@@ -48,17 +42,12 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
     createProvider(),
     "claude-sonnet-4-6",
     settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
-    IDENTITIES,
   );
 
   assert.equal(runtime.baseUrl, "https://relay.example/v1");
   assert.equal(runtime.apiKey, "test-key");
-  // core 漂移：托管 CLI 身份供应商（claude_code 非 OAuth key）会注入 CLI
-  // 身份 User-Agent 头，用户自定义头保留在其后；不再是"原样透传"。
-  assert.deepEqual(runtime.customHeaders, [
-    { key: "User-Agent", value: "claude-cli/2.1.71 (external, cli)" },
-    { key: "X-Trace-Id", value: "abc" },
-  ]);
+  // 用户自定义头原样透传，工厂不再注入任何内置身份头。
+  assert.deepEqual(runtime.customHeaders, [{ key: "X-Trace-Id", value: "abc" }]);
   assert.equal(runtime.promptCachingEnabled, true);
   assert.equal(runtime.promptCacheRetention, "long");
   assert.equal(runtime.useSystemProxy, true);
@@ -88,7 +77,6 @@ test("createProviderRuntimeConfig gates reasoning on model support", () => {
       ...settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
       thinkingEnabled: false,
     },
-    IDENTITIES,
   );
   assert.equal(thinkingOff.reasoning, "off");
 
@@ -98,7 +86,6 @@ test("createProviderRuntimeConfig gates reasoning on model support", () => {
     createProvider({ type: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta" }),
     "gemini-embedding-001",
     settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
-    IDENTITIES,
   );
   assert.equal(unsupported.reasoning, undefined);
 });

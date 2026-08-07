@@ -239,12 +239,7 @@ async function runOrganizerModelPrompt(params: {
     providerId: provider.type,
     model,
     runtime: {
-      ...createProviderRuntimeConfig(
-        provider,
-        model,
-        DEFAULT_CHAT_RUNTIME_CONTROLS,
-        params.settings.customSettings.providerIdentities,
-      ),
+      ...createProviderRuntimeConfig(provider, model, DEFAULT_CHAT_RUNTIME_CONTROLS),
       // 后台整理恒开提示词缓存：多轮 prompt 共享同一前缀，命中率远高于按供应商
       // 开关逐个判断。
       promptCachingEnabled: true,

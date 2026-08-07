@@ -2100,14 +2100,14 @@ export function ChatPage(props: ChatPageProps) {
               ) : null}
             </>
           )}
+          <WorkspaceOverlayHost
+            overlays={workspaceOverlays}
+            theme={effectiveTheme}
+            terminalProjectPathKey={terminalProjectPathKey}
+            terminalSessions={terminalSessions}
+            onInsertCodeMention={handleInsertCodeMention}
+          />
         </div>
-        <WorkspaceOverlayHost
-          overlays={workspaceOverlays}
-          theme={effectiveTheme}
-          terminalProjectPathKey={terminalProjectPathKey}
-          terminalSessions={terminalSessions}
-          onInsertCodeMention={handleInsertCodeMention}
-        />
       </div>
       <RightDockPanel
         isOpen={activeView === "chat" && rightDockOpen}

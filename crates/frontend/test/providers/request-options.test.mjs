@@ -156,8 +156,6 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     {
       "x-api-key": "secret",
       "x-app": "cli",
-      // 引擎侧内置 CLI 身份 UA（前端副本没有这一层，迁移后以 core 为准）。
-      "User-Agent": "claude-cli/2.1.71 (external, cli)",
       "Content-Type": "application/json",
       "X-Stainless-OS": "MacOS",
       "X-Stainless-Arch": "arm64",
@@ -177,7 +175,6 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   );
   assert.deepEqual(providers.buildProviderRequestHeaders("codex", "secret", "conversation-1"), {
     Authorization: "Bearer secret",
-    "User-Agent": "codex_cli_rs/0.72.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal",
     session_id: "conversation-1",
     conversation_id: "conversation-1",
   });
@@ -186,7 +183,6 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     providers.buildProviderRequestHeaders("codex", "secret", "conversation-1", "openai-responses"),
     {
       Authorization: "Bearer secret",
-      "User-Agent": "codex_cli_rs/0.72.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal",
       session_id: "conversation-1",
       conversation_id: "conversation-1",
     },
@@ -208,10 +204,8 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     "x-goog-api-key": "secret",
   });
   // xai：Bearer，不带 Codex CLI 的 session 头。
-  // xai 走 Bearer + grok CLI 身份 UA，不带 Codex 的 session 头。
   assert.deepEqual(providers.buildProviderRequestHeaders("xai", "secret", "conversation-1"), {
     Authorization: "Bearer secret",
-    "User-Agent": "grok-shell/0.2.110 (linux; x86_64)",
   });
   const generatedCodexHeaders = providers.buildProviderRequestHeaders("codex", "secret");
   assert.match(generatedCodexHeaders.session_id, /^[0-9a-f-]{36}$/i);
@@ -547,29 +541,7 @@ test("Codex Chat Completions streams forward reasoning effort", async () => {
   assert.equal(captured.options.toolChoice, "auto");
 });
 
-test("DeepSeek Codex models force Chat Completions compat", () => {
-  const model = providers.createModelFromConfig(
-    "codex",
-    "deepseek-v4-pro",
-    "https://api.deepseek.com",
-    "openai-responses",
-  );
-
-  assert.equal(model.api, "openai-completions");
-  assert.equal(model.reasoning, true);
-  assert.equal(model.compat.thinkingFormat, "deepseek");
-  assert.equal(model.compat.requiresReasoningContentOnAssistantMessages, true);
-  assert.equal(model.compat.supportsStrictMode, false);
-  assert.equal(model.compat.maxTokensField, "max_tokens");
-  // 档位来自生成目录：deepseek-v4-pro 只有 high/max（minimal/low/medium=null），
-  // xhigh 目录未声明故不复活；wire 改写只补到已支持档位（high→"high"）。
-  assert.equal(model.thinkingLevelMap.minimal, null);
-  assert.equal(model.thinkingLevelMap.high, "high");
-  assert.equal(model.thinkingLevelMap.xhigh, undefined);
-  assert.equal(model.thinkingLevelMap.max, "max");
-});
-
-test("DeepSeek OpenAI payload adapter injects thinking and reasoning_content", async () => {
+test("DeepSeek OpenAI payload adapter maps reasoning=max to reasoning_effort=max (regression)", async () => {
   let captured;
   const localLoader = createTsModuleLoader({
     mocks: {
@@ -586,16 +558,21 @@ test("DeepSeek OpenAI payload adapter injects thinking and reasoning_content", a
     "codex",
     "deepseek-v4-pro",
     "https://api.deepseek.com",
-    "openai-responses",
+    "openai-completions",
   );
 
   const result = localProviders.streamSimpleByApi(
     model,
     { messages: [] },
-    { reasoning: "minimal", toolChoice: "auto" },
+    { reasoning: "max", toolChoice: "auto" },
   );
   assert.equal(typeof result.result, "function");
   assert.equal(typeof captured.options.onPayload, "function");
+  assert.equal(
+    captured.options.reasoningEffort,
+    "max",
+    "clampOpenAIReasoningEffort should preserve max for deepseek-v4-pro",
+  );
 
   const adapted = await captured.options.onPayload(
     {
@@ -617,7 +594,11 @@ test("DeepSeek OpenAI payload adapter injects thinking and reasoning_content", a
   );
 
   assert.deepEqual(adapted.thinking, { type: "enabled" });
-  assert.equal(adapted.reasoning_effort, "high");
+  assert.equal(
+    adapted.reasoning_effort,
+    "max",
+    "wire reasoning_effort should be max when UI selects max",
+  );
   assert.equal(adapted.messages[0].reasoning_content, "");
 });
 

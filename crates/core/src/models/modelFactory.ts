@@ -20,7 +20,6 @@ import {
 } from "../providers/anthropicModels";
 import {
   applyDeepSeekModelDefaults,
-  isDeepSeekCodexTarget,
   resolveDeepSeekOpenAICompletionsOverrides,
 } from "../providers/deepSeekProviderAdapter";
 import { isXaiProviderTarget } from "../providers/runtime/xaiResponsesPayload";
@@ -334,24 +333,13 @@ export function createModelFromConfig(
 
   if (providerId === "codex" || providerId === "xai") {
     const { baseUrl: normalizedBaseUrl, preferredApi } = normalizeCodexBaseUrl(baseUrl);
-    const isDeepSeekCodex =
-      providerId === "codex" &&
-      isDeepSeekCodexTarget({
-        providerId,
-        baseUrl: normalizedBaseUrl,
-        upstreamBaseUrl,
-        modelId,
-      });
     // 正式 xai 供应商，或 Codex 直连 api.x.ai：固定 Responses（agentic 搜索等）。
     const isXaiTarget = isXaiProviderTarget({
       providerId,
       baseUrl: upstreamBaseUrl?.trim() || baseUrl,
     });
-    const api = isDeepSeekCodex
-      ? "openai-completions"
-      : isXaiTarget
-        ? "openai-responses"
-        : inferCodexApi(requestFormat, preferredApi);
+    // DeepSeek 不再按模型 ID 强制协议；requestFormat 优先，DeepSeek 适配只在最终走 completions 时生效。
+    const api = isXaiTarget ? "openai-responses" : inferCodexApi(requestFormat, preferredApi);
     const responsesCompat =
       api === "openai-responses"
         ? resolveCodexOpenAIResponsesCompat({

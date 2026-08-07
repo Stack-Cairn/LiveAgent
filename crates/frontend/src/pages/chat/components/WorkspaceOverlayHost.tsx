@@ -41,10 +41,10 @@ type WorkspaceOverlayHostProps = {
 };
 
 /**
- * Mount host for the three lazy full-window workspace overlays (code editor,
- * file preview, SSH terminal). Rendering state comes straight from
- * useWorkspaceOverlays; the lazy() definitions live here so ChatPage never
- * pays the Monaco import.
+ * Mount host for the three lazy main-column workspace overlays (code editor,
+ * file preview, SSH terminal). Sits inside the chat main column so the left
+ * sidebar stays visible. Rendering state comes from useWorkspaceOverlays; the
+ * lazy() definitions live here so ChatPage never pays the Monaco import.
  */
 export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
   const { overlays, theme, terminalProjectPathKey, terminalSessions, onInsertCodeMention } = props;

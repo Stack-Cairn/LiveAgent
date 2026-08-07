@@ -279,7 +279,14 @@ export function createTsModuleLoader(options = {}) {
       specifier.startsWith("src-tauri/");
 
     if (!isRootRelative && !specifier.startsWith(".") && !path.isAbsolute(specifier)) {
-      return requireFromRoot(specifier);
+      try {
+        return requireFromRoot(specifier);
+      } catch (error) {
+        // 跨 crate 加载 core 源码时，core 独有的依赖（如 fetch-socks）只装在
+        // crates/core/node_modules，前端根解析不到，回退到 core 解析。
+        if (error?.code !== "MODULE_NOT_FOUND") throw error;
+        return requireFromCore(specifier);
+      }
     }
 
     const filePath = resolveLocal(specifier, isRootRelative ? rootDir : parentDir);

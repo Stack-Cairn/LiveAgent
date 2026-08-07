@@ -25,7 +25,7 @@ const baseSettings = {
   selectedModel: { customProviderId: "provider-1", model: "gpt-5" },
   customProviders: [provider],
   chatRuntimeControls: {},
-  customSettings: { providerIdentities: {}, conversationTitleModel: null },
+  customSettings: { conversationTitleModel: null },
 };
 
 function loadCoreTitleModule({ settings, streamImpl }) {
@@ -129,7 +129,6 @@ test("core title job prefers the configured title model over the conversation mo
       ...baseSettings,
       customProviders: [provider, titleProvider],
       customSettings: {
-        providerIdentities: {},
         conversationTitleModel: { customProviderId: "provider-2", model: "gpt-5-mini" },
       },
     },
