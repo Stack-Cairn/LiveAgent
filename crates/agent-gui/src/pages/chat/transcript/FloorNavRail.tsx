@@ -253,15 +253,15 @@ export function FloorNavRail(props: {
         // 收藏区的副本不带定位锚点，展开自动居中永远对准主列表里的当前行。
         data-floor-active={(isActive && !isPinnedCopy) || undefined}
         className={cn(
-          "group/floor flex items-center gap-1 rounded-lg pr-1 transition-colors",
-          isActive ? "bg-foreground/[0.06]" : "hover:bg-foreground/[0.04]",
+          "floor-nav-row group/floor flex items-center gap-1 rounded-[10px] pr-1",
+          isActive ? "bg-foreground/[0.07]" : "hover:bg-foreground/[0.045]",
         )}
       >
         <button
           type="button"
           onClick={() => handleJump(floor.rowKey)}
           className={cn(
-            "min-w-0 flex-1 truncate px-2 py-1.5 text-left text-[12px] leading-tight",
+            "min-w-0 flex-1 truncate px-2 py-1.5 text-left text-[12px] leading-snug tracking-tight",
             isActive ? "font-medium text-foreground" : "text-muted-foreground",
           )}
           title={floor.preview}
@@ -274,10 +274,10 @@ export function FloorNavRail(props: {
           title={isBookmarked ? unpinLabel : pinLabel}
           onClick={() => toggleFloorBookmark(conversationId, floor.messageId)}
           className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-all",
+            "floor-nav-pin flex h-6 w-6 shrink-0 items-center justify-center rounded-md motion-reduce:active:scale-100",
             isBookmarked
-              ? "text-amber-500 hover:text-amber-600"
-              : "text-muted-foreground/50 opacity-0 hover:text-foreground group-hover/floor:opacity-100 focus-visible:opacity-100",
+              ? "text-amber-500 hover:bg-amber-500/10 hover:text-amber-600"
+              : "text-muted-foreground/50 opacity-0 hover:bg-foreground/[0.06] hover:text-foreground group-hover/floor:opacity-100 focus-visible:opacity-100",
             // 触屏没有 hover 显隐，收藏按钮常显。
             isCoarsePointer && "opacity-100",
           )}
@@ -294,7 +294,7 @@ export function FloorNavRail(props: {
       aria-label={railLabel}
       aria-hidden={!railVisible || undefined}
       className={cn(
-        "pointer-events-none absolute right-4 top-2 z-10 flex items-center transition-opacity duration-200",
+        "pointer-events-none absolute right-4 top-2 z-10 flex items-center transition-opacity duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none",
         railVisible ? "opacity-100" : "opacity-0",
       )}
       style={{ bottom: bottomOffset }}
@@ -302,7 +302,7 @@ export function FloorNavRail(props: {
       {expanded ? (
         <div
           className={cn(
-            "floor-nav-panel flex max-h-[min(78%,560px)] w-60 max-w-[calc(100vw-2rem)] touch-manipulation flex-col overflow-hidden rounded-xl border border-border/50 bg-background/85 shadow-[0_12px_32px_-16px_rgba(15,23,42,0.28)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-white/[0.06]",
+            "floor-nav-panel flex max-h-[min(78%,560px)] w-60 max-w-[calc(100vw-2rem)] touch-manipulation flex-col overflow-hidden rounded-2xl",
             // 隐藏态不吃指针事件：触摸透传给转写区，不会点到看不见的控件。
             railVisible ? "pointer-events-auto" : "pointer-events-none",
           )}
@@ -310,8 +310,8 @@ export function FloorNavRail(props: {
         >
           <div ref={panelScrollRef} className="min-h-0 overflow-y-auto p-1.5">
             {bookmarkedFloors.length > 0 ? (
-              <div className="mb-1.5 rounded-lg bg-amber-500/[0.07] p-1 ring-1 ring-amber-500/20">
-                <div className="flex items-center gap-1.5 px-1.5 pb-1 pt-0.5 text-[10.5px] font-medium text-amber-600/90 dark:text-amber-400/90">
+              <div className="mb-1.5 rounded-[10px] bg-amber-500/[0.07] p-1 ring-1 ring-amber-500/20">
+                <div className="chat-sidebar-section-label flex items-center gap-1.5 px-1.5 pb-1 pt-0.5 text-amber-600/90 dark:text-amber-400/90">
                   <Pin className="h-2.5 w-2.5 fill-current" />
                   {pinnedTitle}
                 </div>
@@ -352,7 +352,7 @@ export function FloorNavRail(props: {
                 onClick={() => handleJump(floor.rowKey)}
                 className={cn(
                   // after 伪元素把命中区扩到整条槽位高度，覆盖标记间 7px 间隙。
-                  "relative h-[2.5px] rounded-full transition-all duration-150 after:absolute after:-inset-x-2 after:-inset-y-1 after:content-['']",
+                  "floor-nav-marker relative h-[2.5px] rounded-full after:absolute after:-inset-x-2 after:-inset-y-1 after:content-['']",
                   isActive ? "w-[18px]" : "w-3 hover:w-[18px]",
                   isBookmarked
                     ? "bg-amber-500/90"
