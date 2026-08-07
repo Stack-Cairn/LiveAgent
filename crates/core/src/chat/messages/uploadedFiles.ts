@@ -183,7 +183,11 @@ export function getUserMessageDisplayText(
 export function getUserMessageAttachments(
   message: Pick<Message, "role"> & Record<string, unknown>,
 ) {
-  const raw = message[ATTACHMENTS_FIELD];
+  return normalizePendingUploadedFiles(message[ATTACHMENTS_FIELD]);
+}
+
+/** wire/持久层来的松散对象 → PendingUploadedFile;缺必填字段的条目丢弃。 */
+export function normalizePendingUploadedFiles(raw: unknown): PendingUploadedFile[] {
   if (!Array.isArray(raw)) return [];
 
   return raw.flatMap((item) => {

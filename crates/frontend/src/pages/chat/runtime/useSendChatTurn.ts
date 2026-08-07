@@ -705,6 +705,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         workdir: effectiveWorkdir,
         skillsEnabled: effectiveSkillsEnabled,
         selectedSkillNames,
+        // 菜单点选的 skill mention 带 skillFile/baseDir 消歧;text 里的 /name 引擎自行解析。
+        ...(composerDraft && composerDraft.skillMentions.length > 0
+          ? { skillMentions: composerDraft.skillMentions }
+          : {}),
+        // 只传元数据(路径引用),文件内容已由导入流程落盘,引擎侧模型用 Read 自取。
+        ...(uploadedFiles.length > 0 ? { uploadedFiles } : {}),
         // WireMessageRef 契约形态（crates/core/src/protocol/wireEvents.ts）。
         ...(editResendBaseMessageRef
           ? {

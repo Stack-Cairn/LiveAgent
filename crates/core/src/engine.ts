@@ -39,7 +39,10 @@ import {
   getChatHistoryWindow,
   persistConversationRuntime,
 } from "./chat/history/chatHistory";
-import { createUserMessageWithUploads } from "./chat/messages/uploadedFiles";
+import {
+  createUserMessageWithUploads,
+  normalizePendingUploadedFiles,
+} from "./chat/messages/uploadedFiles";
 import {
   buildFallbackConversationTitle,
   getFirstUserMessageText,
@@ -51,6 +54,7 @@ import { createModelFromConfig, createProviderRuntimeConfig } from "./providers/
 import type { ToolStatus, WireMessageRef } from "./protocol/wireEvents";
 import { loadPersistedSettingsWithDefaults } from "./settings/storage";
 import type { SelectedModel } from "./settings";
+import { getActiveAgentPrompt } from "./settings";
 import { createSubagentStoreManager } from "./subagents";
 import { buildSkillsSystemPrompt, discoverSkills, resolveExplicitSkillMentions } from "./skills";
 import type { SkillAccessPolicy } from "./tools/skillAccessPolicy";
@@ -77,6 +81,11 @@ export type ChatSendRequest = {
   skillsEnabled?: boolean;
   selectedModel?: SelectedModel;
   selectedSkillNames?: string[];
+  /** 菜单点选的 skill mention(带 skillFile/baseDir 消歧);text 里的 /name 引擎自行解析。 */
+  skillMentions?: { name: string; skillFile?: string | null; baseDir?: string | null }[];
+  /** 附件元数据(路径引用,不含文件内容);引擎据此在 user message 里
+   *  附上绝对路径清单,模型用 Read 工具自取。松散形态,引擎侧 normalize。 */
+  uploadedFiles?: unknown[];
   /** 编辑重发:被编辑的历史用户消息(截断基点),WireMessageRef 契约形态。 */
   editResendBaseMessageRef?: WireMessageRef;
 };
@@ -257,7 +266,8 @@ async function runOneTurn(
   const skillsEnabled = isAgentMode && (request.skillsEnabled ?? true);
 
   const text = request.text.trim();
-  const userMessage = createUserMessageWithUploads(text, [], Date.now());
+  const uploadedFiles = normalizePendingUploadedFiles(request.uploadedFiles);
+  const userMessage = createUserMessageWithUploads(text, uploadedFiles, Date.now());
   if (!userMessage) throw new Error("Message is required.");
 
   const baseState = await loadConversationState(conversationId, session);
@@ -282,7 +292,9 @@ async function runOneTurn(
   prepared?.resolve();
 
   const fallbackTitle = buildFallbackConversationTitle(
-    getFirstUserMessageText(buildRequestContext(editResendState ?? baseState)) || text,
+    getFirstUserMessageText(buildRequestContext(editResendState ?? baseState)) ||
+      text ||
+      uploadedFiles.map((file) => file.fileName).join(", "),
   );
 
   const transcriptStore = session.transcriptStore;
@@ -387,7 +399,7 @@ async function runOneTurn(
         selected: selectedSkills,
         explicit: resolveExplicitSkillMentions({
           text,
-          structured: [],
+          structured: request.skillMentions ?? [],
           enabledSkills: selectedSkills,
         }),
       });
@@ -400,7 +412,7 @@ async function runOneTurn(
   } catch {
     memoryPrompt = "";
   }
-  const activeAgentPrompt = "";
+  const activeAgentPrompt = getActiveAgentPrompt(settings);
 
   const buildPreparedContext = (
     state: ConversationViewState,
@@ -490,7 +502,7 @@ async function runOneTurn(
       baseState,
       pendingUserText: text,
       composerText: text,
-      uploadedFiles: [],
+      uploadedFiles,
       composeAppliedState: (state) => appendMessagesToConversation(state, [userMessage]),
     },
     sinks: {
@@ -552,7 +564,7 @@ async function runOneTurn(
     : undefined;
 
   transcriptStore.reset();
-  await bridgeEvents.queueUserMessage(text, [], {
+  await bridgeEvents.queueUserMessage(text, uploadedFiles, {
     messageId: userMessage.id,
     // 其他已连接客户端靠 base_message_ref + reason:"edit_resend" 在同一
     // 位置截断各自的 transcript。

@@ -17,6 +17,7 @@ import { resolveRuntimePlatform } from "../runtimePlatform";
 import {
   type AppSettings,
   DEFAULT_CHAT_RUNTIME_CONTROLS,
+  getActiveAgentPrompt,
   isAgentDevMode,
   type ReasoningLevel,
 } from "../settings";
@@ -51,13 +52,6 @@ function buildCronSystemPrompt(taskName: string) {
     "Do not include raw JSON, tool calls, hidden reasoning, or intermediate execution logs.",
   );
   return lines.join("\n");
-}
-
-function getActiveAgentPrompt(settings: AppSettings) {
-  return (
-    settings.agents.find((template) => template.enabled && template.prompt.trim())?.prompt.trim() ??
-    ""
-  );
 }
 
 async function buildCronSkillsContext(settings: AppSettings) {

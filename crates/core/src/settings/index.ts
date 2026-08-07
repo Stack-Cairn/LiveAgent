@@ -1399,6 +1399,14 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
   };
 }
 
+/** 启用中的 Agent 提示词模板文本;没有启用的模板时返回空串。 */
+export function getActiveAgentPrompt(settings: AppSettings): string {
+  return (
+    settings.agents.find((template) => template.enabled && template.prompt.trim())?.prompt.trim() ??
+    ""
+  );
+}
+
 export function normalizeAgentPromptTemplate(input: unknown): AgentPromptTemplate {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
 
