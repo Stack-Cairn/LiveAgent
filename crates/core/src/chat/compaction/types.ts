@@ -28,8 +28,15 @@ export type CompactionStatus =
       phase: "failed";
       trigger: CompactionTrigger;
       failedAt: number;
+      // 展示文案。保留是为 wire 兼容(前端仍直接渲染它);新前端应改读 reason
+      // 并自行本地化,文案不属于协议。
       message: string;
+      // 结构化失败原因:prune_fallback 表示压缩失败但已 prune 降级续跑,
+      // error 表示压缩失败且未降级(message 为原始错误文本)。
+      reason?: CompactionFailureReason;
     };
+
+export type CompactionFailureReason = "prune_fallback" | "error";
 
 export type CompactionDecisionReason =
   | "disabled"

@@ -15,7 +15,6 @@ import {
 } from "../chat/conversation/chatAbort";
 import {
   appendMessagesToConversation,
-  appendRenderOnlyMessagesToConversation,
   type ConversationViewState,
 } from "../chat/conversation/conversationState";
 import type {
@@ -905,7 +904,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     getNextConversationState(),
     result.emittedMessages,
   );
-  let completedState = finalState;
+  const completedState = finalState;
   const gatewayAssistantText = assistantMessageToText(result.assistant);
   if (!gatewayBridgeEvents.hasForwardedText() && gatewayAssistantText.length > 0) {
     gatewayBridgeEvents.queueToken(gatewayAssistantText, activeAgentRound || 1);
@@ -1053,12 +1052,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         updateToolStatus(s, transcriptStore);
       },
     });
-    if (extraction.emittedMessages.length > 0) {
-      completedState = appendRenderOnlyMessagesToConversation(
-        finalState,
-        extraction.emittedMessages,
-      );
-    }
   }
   const pendingTerminalAssistantMeta = pendingTerminalAssistantMetaRef.current;
   if (pendingTerminalAssistantMeta) {

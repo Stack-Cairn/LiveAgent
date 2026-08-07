@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
+// 调试日志器归引擎（crates/core）：前端副本只是 tauri invoke 版的重复，已删。
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+
 const loader = createTsModuleLoader();
-const agentDebug = loader.loadModule("src/lib/debug/agentDebug.ts");
+const agentDebug = loader.loadModule(coreSrc("debug/agentDebug.ts"));
 
 test("debug sanitizer redacts base64 data URLs", () => {
   const payload = {

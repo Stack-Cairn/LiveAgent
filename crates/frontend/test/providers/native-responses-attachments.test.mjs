@@ -30,7 +30,7 @@ test("OpenAI Responses native attachment adapter adds input_image and input_file
     }
     return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
@@ -92,7 +92,7 @@ test("OpenAI Chat Completions native attachment adapter adds image_url blocks", 
     }
     return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
@@ -146,7 +146,7 @@ test("OpenAI Responses native attachment adapter preserves Read fallback when na
   const loader = createLoader(async () => {
     throw new Error("too large");
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
@@ -180,7 +180,7 @@ test("OpenAI Responses native attachment adapter skips tool output turns", async
     calls.push({ command, args });
     return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const firstMessage = uploadedFiles.createUserMessageWithUploads("Use a tool first", []);
@@ -235,7 +235,7 @@ test("Anthropic Messages native attachment adapter adds image and document block
     }
     return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
@@ -302,7 +302,7 @@ test("Anthropic Messages native attachment adapter sends text files as text docu
     calls.push({ command, args });
     return { mimeType: "text/plain", data: "SGVsbG8gQ2xhdWRl", sizeBytes: 12 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Summarize this", [
@@ -341,7 +341,7 @@ test("Anthropic Messages native attachment adapter preserves Read fallback for u
   const loader = createLoader(async () => {
     throw new Error("should not read unsupported archive");
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
@@ -375,7 +375,7 @@ test("Anthropic Messages native attachment adapter skips tool result turns", asy
     calls.push({ command, args });
     return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const firstMessage = uploadedFiles.createUserMessageWithUploads("Use a tool first", []);
@@ -432,7 +432,7 @@ test("Gemini native attachment adapter adds inlineData parts", async () => {
     }
     return { mimeType: "application/pdf", data: "cGRm", sizeBytes: 3 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
@@ -500,7 +500,7 @@ test("Gemini native attachment adapter follows Gemini image MIME support", async
     }
     return { mimeType: "image/gif", data: "Z2lm", sizeBytes: 3 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
@@ -546,7 +546,7 @@ test("Gemini native attachment adapter preserves Read fallback for unsupported f
   const loader = createLoader(async () => {
     throw new Error("should not read unsupported archive");
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
@@ -584,7 +584,7 @@ test("Gemini native attachment adapter preserves Read fallback when inline data 
       sizeBytes: 20 * 1024 * 1024 + 1,
     };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
@@ -619,7 +619,7 @@ test("Gemini native attachment adapter skips synthetic tool image turns", async 
     calls.push({ command, args });
     return { mimeType: "image/png", data: "dXNlci1pbWFnZQ==", sizeBytes: 10 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const firstMessage = uploadedFiles.createUserMessageWithUploads("First turn", []);
@@ -677,7 +677,7 @@ test("Gemini native attachment adapter enforces cumulative inline request budget
     calls.push({ command, args });
     return { mimeType: "image/png", data: largeInlineData, sizeBytes: 8 * 1024 * 1024 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const message = uploadedFiles.createUserMessageWithUploads("Inspect these", [
@@ -722,7 +722,7 @@ test("Gemini native attachment adapter enforces inline budget across user turns"
     calls.push({ command, args });
     return { mimeType: "image/png", data: largeInlineData, sizeBytes: 8 * 1024 * 1024 };
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
   const nativeAttachments = loader.loadModule(coreSrc("providers/nativeResponsesAttachments.ts"));
 
   const firstMessage = uploadedFiles.createUserMessageWithUploads("First", [
@@ -770,8 +770,8 @@ test("text-mode OpenAI Responses stream forwards workdir for native attachments"
   let capturedPayload = null;
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "proxy_get_server_info") {
             return { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
           }
@@ -785,7 +785,7 @@ test("text-mode OpenAI Responses stream forwards workdir for native attachments"
             attachmentReads.push(args);
             return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
           }
-          throw new Error(`unexpected invoke: ${command}`);
+          throw new Error(`unexpected backend command: ${command}`);
         },
       },
       "@earendil-works/pi-ai/api/openai-responses": {
@@ -820,8 +820,8 @@ test("text-mode OpenAI Responses stream forwards workdir for native attachments"
       },
     },
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const providers = loader.loadModule("src/lib/providers/llm.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
+  const providers = loader.loadModule(coreSrc("providers/llm.ts"));
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
     {
       relativePath: "uploads/1/screenshot.png",
@@ -859,8 +859,8 @@ test("text-mode OpenAI Chat Completions stream forwards workdir for native image
   let capturedPayload = null;
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "proxy_get_server_info") {
             return { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
           }
@@ -874,7 +874,7 @@ test("text-mode OpenAI Chat Completions stream forwards workdir for native image
             attachmentReads.push(args);
             return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
           }
-          throw new Error(`unexpected invoke: ${command}`);
+          throw new Error(`unexpected backend command: ${command}`);
         },
       },
       "@earendil-works/pi-ai/api/openai-completions": {
@@ -909,8 +909,8 @@ test("text-mode OpenAI Chat Completions stream forwards workdir for native image
       },
     },
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const providers = loader.loadModule("src/lib/providers/llm.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
+  const providers = loader.loadModule(coreSrc("providers/llm.ts"));
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
     {
       relativePath: "uploads/1/screenshot.png",
@@ -953,8 +953,8 @@ test("text-mode Anthropic stream forwards workdir for native attachments", async
           return null;
         },
       },
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "proxy_get_server_info") {
             return { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
           }
@@ -968,7 +968,7 @@ test("text-mode Anthropic stream forwards workdir for native attachments", async
             attachmentReads.push(args);
             return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
           }
-          throw new Error(`unexpected invoke: ${command}`);
+          throw new Error(`unexpected backend command: ${command}`);
         },
       },
       "@earendil-works/pi-ai/api/anthropic-messages": {
@@ -1003,8 +1003,8 @@ test("text-mode Anthropic stream forwards workdir for native attachments", async
       },
     },
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const providers = loader.loadModule("src/lib/providers/llm.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
+  const providers = loader.loadModule(coreSrc("providers/llm.ts"));
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
     {
       relativePath: "uploads/1/screenshot.png",
@@ -1048,8 +1048,8 @@ test("text-mode Gemini stream forwards workdir for native attachments", async ()
           return null;
         },
       },
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [backendClientPath]: {
+        async callBackend(command, args) {
           if (command === "proxy_get_server_info") {
             return { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
           }
@@ -1063,7 +1063,7 @@ test("text-mode Gemini stream forwards workdir for native attachments", async ()
             attachmentReads.push(args);
             return { mimeType: "image/png", data: "aW1hZ2U=", sizeBytes: 5 };
           }
-          throw new Error(`unexpected invoke: ${command}`);
+          throw new Error(`unexpected backend command: ${command}`);
         },
       },
       "@earendil-works/pi-ai/api/google-generative-ai": {
@@ -1098,8 +1098,8 @@ test("text-mode Gemini stream forwards workdir for native attachments", async ()
       },
     },
   });
-  const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
-  const providers = loader.loadModule("src/lib/providers/llm.ts");
+  const uploadedFiles = loader.loadModule(coreSrc("chat/messages/uploadedFiles.ts"));
+  const providers = loader.loadModule(coreSrc("providers/llm.ts"));
   const message = uploadedFiles.createUserMessageWithUploads("Inspect", [
     {
       relativePath: "uploads/1/screenshot.png",

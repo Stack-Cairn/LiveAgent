@@ -7,8 +7,8 @@
 //!
 //! 契约清单唯一来源是 docs/architecture/command-classes/backend.txt（阶段起点
 //! 8c90a424 已机器核对其与 #[tauri::command] 注册清单一致）。排除集与
-//! scripts/generate-routes.mjs 保持一致：12 条无 wrapper（provider_usage_*/
-//! workspace_watch_set/system_* 除 5 条 skills 命令）+ 3 条 WS 流式。
+//! scripts/generate-routes.mjs 保持一致：8 条无 wrapper（provider_usage_*/
+//! workspace_watch_set 与桌面对话框类 system_*）+ 3 条 WS 流式。
 //!
 //! ⚠️ MemoryStore::open() / AutomationStore::open() / config_db_path() 都从
 //! dirs::home_dir() 取路径。测试必须先把 $HOME 重定向到临时目录，否则
@@ -27,8 +27,9 @@ use tower::ServiceExt;
 const TOKEN: &str = "test-password";
 
 /// backend.txt 里没有薄包装的命令:`provider_usage_*`/`workspace_watch_set` 与
-/// gateway 脱离未完成,`system_*` 未迁移。它们现在不做 HTTP 路由,等对应阶段
-/// 补上后移出本列表。
+/// gateway 脱离未完成；剩余 `system_*` 是桌面对话框/剪贴板类,headless 后端
+/// 没有实现面。core 会调的 4 条(调试日志/休眠锁/原生附件)已下沉 backend
+/// 并挂路由,移出了本列表。
 ///
 /// 隧道 5 条已随 P2-30 重写补齐路由(名字从 `gateway_tunnel_*` 改为 `tunnel_*`),
 /// 不再在此列。
@@ -36,15 +37,11 @@ const NO_WRAPPER: &[&str] = &[
     "provider_usage_query",
     "provider_usage_test",
     "workspace_watch_set",
-    "system_append_debug_jsonl",
-    "system_begin_power_activity",
     "system_create_project_folder",
-    "system_end_power_activity",
     "system_import_pasted_texts",
     "system_import_readable_file_paths",
     "system_import_uploaded_readable_files",
     "system_read_uploaded_image_preview",
-    "system_read_uploaded_native_attachment",
 ];
 
 /// 流式端点走 WS（/api/events），不做 HTTP 路由。
@@ -78,8 +75,8 @@ fn expected_commands() -> HashSet<String> {
 /// 用 OnceLock 共享同一个 router：三个测试并发各建一份 state 会同时打开
 /// 同一 SQLite 文件（automation WAL），触发 "database is locked"。只建一次，
 /// 测试间 clone 即可。build_router 已 `.with_state`，返回 `Router`（即 `Router<()>`）。
-fn build_app() -> axum::Router {
-    static APP: std::sync::OnceLock<axum::Router> = std::sync::OnceLock::new();
+fn shared_app() -> &'static (axum::Router, String) {
+    static APP: std::sync::OnceLock<(axum::Router, String)> = std::sync::OnceLock::new();
     APP.get_or_init(|| {
         let dir = std::env::temp_dir().join(format!(
             "backend-contract-{}",
@@ -87,11 +84,21 @@ fn build_app() -> axum::Router {
         ));
         std::fs::create_dir_all(&dir).expect("创建测试 HOME 临时目录失败");
         std::env::set_var("HOME", &dir);
-        let state = build_state(Arc::new(auth::AuthConfig::new(TOKEN.to_string())), 0)
-            .expect("build_state 失败");
-        build_router(state)
+        let auth = Arc::new(auth::AuthConfig::new(TOKEN.to_string()));
+        // 引擎凭据也从这一份 AuthConfig 里发，测试才测得到真实的那把钥匙。
+        let engine_token = auth.rotate_engine_token();
+        let state = build_state(auth, 0).expect("build_state 失败");
+        (build_router(state), engine_token)
     })
-    .clone()
+}
+
+fn build_app() -> axum::Router {
+    shared_app().0.clone()
+}
+
+/// 与运行中的 router 共用同一份 AuthConfig 的引擎凭据。
+fn engine_token() -> String {
+    shared_app().1.clone()
 }
 
 /// Test A：ROUTED_COMMANDS 与 backend.txt 契约完全一致（双向）。
@@ -273,4 +280,59 @@ async fn auth_and_error_semantics() {
         .await
         .expect("读响应体失败");
     assert_error_shape(status, &bytes, "缺 Content-Type");
+}
+
+/// Test D：loopback 不再是身份。
+///
+/// 原来这里有一条按来源地址放行的豁免，本机 core 靠它无凭据回流。但
+/// `CorsLayer::permissive` 之下「来自本机」谁都能伪造——浏览器里任意一个页面
+/// 猜中端口就能无凭据调 `shell_run`。现在 core 带 per-spawn 的引擎凭据，
+/// 豁免整个删掉：回环地址不带凭据一律 401，带引擎凭据则与带密码等价。
+#[tokio::test]
+async fn loopback_without_credentials_is_rejected() {
+    let app = build_app();
+    let engine_token = engine_token();
+    let loopback = axum::extract::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 54321)));
+
+    let call = |uri: &'static str, bearer: Option<String>| {
+        let app = app.clone();
+        let loopback = loopback.clone();
+        async move {
+            let mut builder = Request::builder()
+                .method(Method::POST)
+                .uri(uri)
+                .header(header::CONTENT_TYPE, "application/json");
+            if let Some(bearer) = bearer {
+                builder = builder.header(header::AUTHORIZATION, format!("Bearer {bearer}"));
+            }
+            let mut req = builder.body(Body::from("{}")).expect("构造请求失败");
+            req.extensions_mut().insert(loopback);
+            app.oneshot(req).await.expect("请求失败").status()
+        }
+    };
+
+    // 回环 + 无凭据 → 401，连 core 自己的回流路径也不例外。
+    for uri in ["/api/engine_emit_event", "/api/settings_load_all", "/api/shell_run"] {
+        assert_eq!(
+            call(uri, None).await,
+            StatusCode::UNAUTHORIZED,
+            "{uri}：来自回环地址不构成身份"
+        );
+    }
+
+    // 回环 + 引擎凭据 → 放行（后面可能 400/500，但绝不能是 401）。
+    for uri in ["/api/engine_emit_event", "/api/settings_load_all"] {
+        assert_ne!(
+            call(uri, Some(engine_token.clone())).await,
+            StatusCode::UNAUTHORIZED,
+            "{uri}：core 带引擎凭据必须能回流"
+        );
+    }
+
+    // 编的凭据不行（轮换失效由 auth.rs 的单测覆盖）。
+    assert_eq!(
+        call("/api/settings_load_all", Some("not-a-token".to_string())).await,
+        StatusCode::UNAUTHORIZED,
+        "随便编的凭据必须 401"
+    );
 }

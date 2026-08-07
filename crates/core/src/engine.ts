@@ -427,6 +427,7 @@ async function runOneTurn(
         conversation_id: conversationId,
         hook_name: warning.hookName,
         hook_type: warning.hookType,
+        event: warning.event,
         message: warning.message,
       });
     },
@@ -660,6 +661,10 @@ async function runOneTurn(
       finalState = "cancelled";
     }
     compaction.unbindTurn();
+    if (cancellation.userStop.signal.aborted) {
+      // 用户中止：丢掉排队 hook 并取消在跑脚本（scope registry 级联杀进程）。
+      hookScope.cancel();
+    }
     hookLifecycle.endAgent();
     hookScope.close();
     transcriptStore.settle();

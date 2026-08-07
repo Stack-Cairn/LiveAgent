@@ -78,10 +78,11 @@ pub async fn start_backend_server(
         let app = backend::build_router(state);
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 
-        // with_connect_info：认证中间件靠对端地址做 loopback 豁免（Node 引擎回调）。
+        // 认证只看 Bearer 凭据（Node 引擎带 spawn 时下发的引擎凭据），
+        // 对端地址不参与判断，所以不需要 with_connect_info。
         if let Err(e) = axum::serve(
             TcpListener::bind(addr).await.expect("绑定 localhost 端口失败"),
-            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            app.into_make_service(),
         )
         .await
         {

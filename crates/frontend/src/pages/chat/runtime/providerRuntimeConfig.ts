@@ -24,28 +24,6 @@ export function resolveMemorySummaryModelSelection(
   };
 }
 
-export function resolveConversationTitleModelSelection(
-  settings: AppSettings,
-  fallback: EffectiveChatModelSelection,
-): EffectiveChatModelSelection {
-  const titleModel = settings.customSettings.conversationTitleModel;
-  if (!titleModel) {
-    return fallback;
-  }
-
-  const provider = settings.customProviders.find((item) => item.id === titleModel.customProviderId);
-  if (!provider || !provider.activeModels.includes(titleModel.model)) {
-    return fallback;
-  }
-
-  return {
-    selectedModel: titleModel,
-    provider,
-    providerId: provider.type,
-    model: titleModel.model,
-  };
-}
-
 export function selectedModelsMatch(
   left: SelectedModel | undefined,
   right: SelectedModel | undefined,

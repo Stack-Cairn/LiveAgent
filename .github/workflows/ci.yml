@@ -36,6 +36,14 @@ jobs:
       - name: Check command classification is complete
         run: make check-command-classes
 
+      # 事件契约真相源在 core，前端那份是逐字镜像；改一边忘改另一边 → 这里失败。
+      - name: Check wire event contract mirror is in sync
+        run: make check-wire-events
+
+      # settings 契约（任务 #9 止血带）：共享逻辑两侧必须同步，只许登记过的差异。
+      - name: Check settings contract has not forked
+        run: make check-settings-drift
+
       # 编译期防线的 CI 版：backend 是跨壳内核，一旦它依赖 tauri，
       # headless 后端就再也编不出来了。依赖链上出现 tauri 直接失败。
       - name: Ensure backend stays Tauri-free

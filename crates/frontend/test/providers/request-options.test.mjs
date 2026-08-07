@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
+// provider 请求装配（鉴权头、缓存档位、载荷中间件）已整体归 crates/core：
+// 前端不再拼装任何上游请求。proxy / customHeaders / providerUtils 仍是前端的
+// （本地反代与设置页校验），继续走 src/lib。
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+
 const loader = createTsModuleLoader();
-const providers = loader.loadModule("src/lib/providers/llm.ts");
+const providers = loader.loadModule(coreSrc("providers/llm.ts"));
 const proxy = loader.loadModule("src/lib/providers/proxy.ts");
 const customHeaderHelpers = loader.loadModule("src/lib/providers/customHeaders.ts");
 const providerUtils = loader.loadModule("src/pages/settings/providerUtils.ts");
@@ -54,7 +63,7 @@ function loadProvidersWithCapturedAnthropicStream() {
     },
   });
   return {
-    localProviders: localLoader.loadModule("src/lib/providers/llm.ts"),
+    localProviders: localLoader.loadModule(coreSrc("providers/llm.ts")),
     state,
   };
 }
@@ -147,6 +156,8 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     {
       "x-api-key": "secret",
       "x-app": "cli",
+      // 引擎侧内置 CLI 身份 UA（前端副本没有这一层，迁移后以 core 为准）。
+      "User-Agent": "claude-cli/2.1.71 (external, cli)",
       "Content-Type": "application/json",
       "X-Stainless-OS": "MacOS",
       "X-Stainless-Arch": "arm64",
@@ -166,6 +177,7 @@ test("provider request helpers normalize auth, metadata, errors, and model value
   );
   assert.deepEqual(providers.buildProviderRequestHeaders("codex", "secret", "conversation-1"), {
     Authorization: "Bearer secret",
+    "User-Agent": "codex_cli_rs/0.72.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal",
     session_id: "conversation-1",
     conversation_id: "conversation-1",
   });
@@ -174,6 +186,7 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     providers.buildProviderRequestHeaders("codex", "secret", "conversation-1", "openai-responses"),
     {
       Authorization: "Bearer secret",
+      "User-Agent": "codex_cli_rs/0.72.0 (Ubuntu 24.4.0; x86_64) WindowsTerminal",
       session_id: "conversation-1",
       conversation_id: "conversation-1",
     },
@@ -195,8 +208,10 @@ test("provider request helpers normalize auth, metadata, errors, and model value
     "x-goog-api-key": "secret",
   });
   // xai：Bearer，不带 Codex CLI 的 session 头。
+  // xai 走 Bearer + grok CLI 身份 UA，不带 Codex 的 session 头。
   assert.deepEqual(providers.buildProviderRequestHeaders("xai", "secret", "conversation-1"), {
     Authorization: "Bearer secret",
+    "User-Agent": "grok-shell/0.2.110 (linux; x86_64)",
   });
   const generatedCodexHeaders = providers.buildProviderRequestHeaders("codex", "secret");
   assert.match(generatedCodexHeaders.session_id, /^[0-9a-f-]{36}$/i);
@@ -507,7 +522,7 @@ test("Codex Chat Completions streams forward reasoning effort", async () => {
       },
     },
   });
-  const localProviders = localLoader.loadModule("src/lib/providers/llm.ts");
+  const localProviders = localLoader.loadModule(coreSrc("providers/llm.ts"));
   const model = localProviders.createModelFromConfig(
     "codex",
     "deepseek-v4-flash",
@@ -566,7 +581,7 @@ test("DeepSeek OpenAI payload adapter injects thinking and reasoning_content", a
       },
     },
   });
-  const localProviders = localLoader.loadModule("src/lib/providers/llm.ts");
+  const localProviders = localLoader.loadModule(coreSrc("providers/llm.ts"));
   const model = localProviders.createModelFromConfig(
     "codex",
     "deepseek-v4-pro",

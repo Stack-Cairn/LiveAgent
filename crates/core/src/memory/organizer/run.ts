@@ -12,6 +12,10 @@ import type { Context, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai
 import { runAssistantWithTools } from "../../chat/runner/agentRunner";
 import { createStreamDebugLogger } from "../../debug/agentDebug";
 import { emitWireEvent } from "../../events";
+import type {
+  MemoryOrganizeOutcome,
+  MemoryOrganizeSummaryKind,
+} from "../../protocol/wireEvents";
 import { assistantMessageToText, createProviderRuntimeConfig } from "../../providers/llm";
 import { type AppSettings, DEFAULT_CHAT_RUNTIME_CONTROLS, isAgentDevMode } from "../../settings";
 import { loadPersistedSettingsWithDefaults } from "../../settings/storage";
@@ -129,6 +133,27 @@ function buildFinalSummary(stats: OrganizerStats) {
     return `本次整理覆盖 ${stats.inputCount} 条记忆、${stats.clusterCount} 个分组，已生成 ${stats.pendingSafeDecisions} 条安全建议，等待你在历史记录中确认应用；${stats.reviewSkipped} 条风险建议已跳过并保存在历史详情中${failureNote}。`;
   }
   return `本次整理覆盖 ${stats.inputCount} 条记忆、${stats.clusterCount} 个分组，已应用 ${stats.safeApplied} 条安全建议，新增 ${stats.createdCount} 条、更新 ${stats.updatedCount} 条、删除 ${stats.deletedCount} 条；${stats.reviewSkipped} 条风险建议已跳过并保存在历史详情中${failureNote}。`;
+}
+
+// 与 buildFinalSummary 同源的结构化版本:wire 上带 kind + 计数,前端自己组句。
+// buildFinalSummary 仅为未适配的前端保留。
+function resolveSummaryKind(stats: OrganizerStats): MemoryOrganizeSummaryKind {
+  if (stats.inputCount === 0) return "nothing_to_organize";
+  return stats.pendingSafeDecisions > 0 ? "pending_review" : "applied";
+}
+
+function buildOutcome(stats: OrganizerStats): MemoryOrganizeOutcome {
+  return {
+    input_count: stats.inputCount,
+    cluster_count: stats.clusterCount,
+    safe_applied: stats.safeApplied,
+    pending_safe_decisions: stats.pendingSafeDecisions,
+    review_skipped: stats.reviewSkipped,
+    created_count: stats.createdCount,
+    updated_count: stats.updatedCount,
+    deleted_count: stats.deletedCount,
+    parse_failures: stats.parseFailures,
+  };
 }
 
 function toolResultMessage(
@@ -383,15 +408,21 @@ function emitEnded(
   run: MemoryOrganizeRun,
   status: "succeeded" | "failed" | "skipped",
   finalSummary: string,
-  errorMessage?: string,
+  options: {
+    summaryKind: MemoryOrganizeSummaryKind;
+    outcome: MemoryOrganizeOutcome;
+    errorMessage?: string;
+  },
 ) {
   emitWireEvent({
     type: "memory_organize_ended",
     run_id: run.runId,
     trigger: run.trigger,
     status,
+    summary_kind: options.summaryKind,
+    outcome: options.outcome,
     final_summary: finalSummary || undefined,
-    error_message: errorMessage || undefined,
+    error_message: options.errorMessage || undefined,
   });
 }
 
@@ -430,7 +461,10 @@ async function executeOrganizerRun(run: MemoryOrganizeRun, settings: AppSettings
         tokenUsageTotal: tokens.total,
         report,
       });
-      emitEnded(run, "skipped", finalSummary);
+      emitEnded(run, "skipped", finalSummary, {
+        summaryKind: resolveSummaryKind(stats),
+        outcome: buildOutcome(stats),
+      });
       return;
     }
 
@@ -526,7 +560,11 @@ async function executeOrganizerRun(run: MemoryOrganizeRun, settings: AppSettings
         tokenUsageTotal: tokens.total,
         report,
       });
-      emitEnded(run, "failed", finalSummary, message);
+      emitEnded(run, "failed", finalSummary, {
+        summaryKind: "all_clusters_failed",
+        outcome: buildOutcome(stats),
+        errorMessage: message,
+      });
       return;
     }
 
@@ -597,7 +635,10 @@ async function executeOrganizerRun(run: MemoryOrganizeRun, settings: AppSettings
       tokenUsageTotal: tokens.total,
       report,
     });
-    emitEnded(run, "succeeded", finalSummary);
+    emitEnded(run, "succeeded", finalSummary, {
+      summaryKind: resolveSummaryKind(stats),
+      outcome: buildOutcome(stats),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const finalSummary = `本次记忆整理失败：${message}`;
@@ -620,7 +661,11 @@ async function executeOrganizerRun(run: MemoryOrganizeRun, settings: AppSettings
       tokenUsageTotal: tokens.total,
       report,
     });
-    emitEnded(run, "failed", finalSummary, message);
+    emitEnded(run, "failed", finalSummary, {
+      summaryKind: "error",
+      outcome: buildOutcome(stats),
+      errorMessage: message,
+    });
   }
 }
 

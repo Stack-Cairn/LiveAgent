@@ -109,10 +109,15 @@ pub async fn spawn_engine(state: AppState, bundle_path: PathBuf) -> Result<Engin
     eprintln!("启动 Node 引擎：{}", bundle_path.display());
     eprintln!("Node 监听端口：{node_port}");
 
+    // 引擎凭据：core 回调 /api 时的身份。每次 spawn 现生成，旧的当场作废。
+    // 只经环境变量交给子进程，不落盘也不打日志。
+    let engine_token = state.auth.rotate_engine_token();
+
     let mut cmd = Command::new("node");
     cmd.arg(bundle_path.join("index.js"))
         .env("LIVEAGENT_NODE_PORT", node_port.to_string())
         .env("LIVEAGENT_BACKEND_PORT", state.backend_port.to_string())
+        .env("LIVEAGENT_BACKEND_TOKEN", &engine_token)
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .kill_on_drop(true);
@@ -124,6 +129,7 @@ pub async fn spawn_engine(state: AppState, bundle_path: PathBuf) -> Result<Engin
     // 就绪探测。通了才更新 node_port 状态。
     if let Err(e) = wait_for_readiness(node_port, Duration::from_secs(30)).await {
         let _ = child.kill().await;
+        state.auth.clear_engine_token();
         return Err(e);
     }
 
@@ -235,18 +241,23 @@ async fn spawn_monitor(
             }
         }
 
-        // 清空 node_port（重启中）。
+        // 清空 node_port（重启中）。凭据一并作废——引擎不在，就没人该拿它进来。
         {
             let mut port_lock = state.node_port.write().await;
             *port_lock = None;
         }
+        state.auth.clear_engine_token();
 
         // 重启 Node 进程。
         eprintln!("重启 Node 引擎...");
+        // 重启同样换一把新凭据：旧进程即使还残留着，也已经进不来了。
+        let engine_token = state.auth.rotate_engine_token();
+
         let mut cmd = Command::new("node");
         cmd.arg(bundle_path.join("index.js"))
             .env("LIVEAGENT_NODE_PORT", current_port.to_string())
             .env("LIVEAGENT_BACKEND_PORT", state.backend_port.to_string())
+            .env("LIVEAGENT_BACKEND_TOKEN", &engine_token)
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .kill_on_drop(true);

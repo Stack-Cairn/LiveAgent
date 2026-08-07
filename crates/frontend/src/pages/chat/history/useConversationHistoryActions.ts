@@ -7,6 +7,10 @@ import {
   prependTranscriptProjection,
 } from "../../../lib/chat/conversation/conversationState";
 import {
+  clearCompactionCheckpoint,
+  hasPendingCompactionCheckpoint,
+} from "../../../lib/chat/compaction/checkpoints";
+import {
   buildChatHistoryRevision,
   buildConversationStateFromWindow,
   CHAT_HISTORY_WINDOW_MESSAGES,
@@ -151,6 +155,8 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     setConversationRuntimeCacheEntry(conversationRuntimeCacheRef.current, conversationId, entry);
     if (persistenceCursor) {
       conversationPersistenceCursorRef.current.set(conversationId, persistenceCursor);
+      // 游标来自刚拉取的权威历史窗口，压缩 checkpoint 的过期标记就此解除。
+      clearCompactionCheckpoint(conversationId);
     }
     if (clearError) {
       setErrorMessage(null);
@@ -201,10 +207,14 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
     const cached = conversationRuntimeCacheRef.current.get(id);
     if (cached) {
       const isPendingHistoryItem = sidebarStore.peek(id)?.isPending === true;
+      // 压缩 checkpoint 后缓存窗口已过期：非在途会话不复用，落到下面的
+      // 权威窗口重载（activateConversation 带新游标时会解除禁写标记）。
+      const staleFromCheckpoint = hasPendingCompactionCheckpoint(id) && !cached.isSending;
       if (
-        conversationPersistenceCursorRef.current.has(id) ||
-        cached.isSending ||
-        isPendingHistoryItem
+        !staleFromCheckpoint &&
+        (conversationPersistenceCursorRef.current.has(id) ||
+          cached.isSending ||
+          isPendingHistoryItem)
       ) {
         setHydratingConversationId(null);
         activateConversation({
@@ -331,6 +341,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       activeSegmentIndex: replaced.activeSegment.segmentIndex,
       activeSegmentId: replaced.activeSegment.segmentId,
     });
+    clearCompactionCheckpoint(id);
     if (currentConversationIdRef.current === id) {
       setErrorMessage(null);
       syncVisibleConversationRuntime(id, entry);
@@ -345,6 +356,7 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
   // IPC delete); this evicts local caches and replaces the visible
   // conversation with a blank one when the deleted one was open.
   function cleanupDeletedConversation(id: string) {
+    clearCompactionCheckpoint(id);
     conversationPersistenceCursorRef.current.delete(id);
     conversationRuntimeCacheRef.current.delete(id);
     deleteConversationArtifacts(id);
@@ -381,6 +393,13 @@ export function useConversationHistoryActions(params: UseConversationHistoryActi
       titlePromise,
       titleLookahead = true,
     } = params;
+
+    // 压缩 checkpoint 之后前端历史窗口过期：core 已把折叠后的新 segment
+    // 落库，这里再按旧游标整段覆盖会复活被折叠的历史。终态历史以引擎侧
+    // 持久化为准，前端禁写直到重拉权威窗口（见 lib/chat/compaction/checkpoints）。
+    if (hasPendingCompactionCheckpoint(conversationId)) {
+      return true;
+    }
 
     const pendingConversationTitle = t("chat.pendingTitle");
     const currentItem = sidebarStore.peek(conversationId);

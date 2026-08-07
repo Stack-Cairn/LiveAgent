@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { subscribeEvents } from "../../../lib/backend/client";
 import { type AppSettings, updateSkills } from "../../../lib/settings";
 import {
   discoverSkills,
@@ -122,6 +123,17 @@ export function useChatSkills(params: UseChatSkillsParams) {
   useEffect(() => {
     if (!skillsEnabled) return;
     return subscribeSkillsDiscoveryUpdated(() => {
+      void runDiscovery({ force: true });
+    });
+  }, [runDiscovery, skillsEnabled]);
+
+  // agent 在 core 侧经 SkillsManager 增删 skill 时,core 发 skills_changed wire
+  // 事件（crates/core/src/protocol/wireEvents.ts）;上面的 window 事件只覆盖
+  // 浏览器内的 SkillsHubPage 操作,跨进程变更靠这里。
+  useEffect(() => {
+    if (!skillsEnabled) return;
+    return subscribeEvents((message) => {
+      if (message.event !== "skills_changed") return;
       void runDiscovery({ force: true });
     });
   }, [runDiscovery, skillsEnabled]);

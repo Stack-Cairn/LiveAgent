@@ -1,30 +1,70 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-test("conversation title job disables thinking, caching, and native web search", async () => {
+// 标题生成已下沉引擎（crates/core）：这套用例驱动 core 的
+// generateConversationTitle，前端侧只剩一条委托（见文末）。
+process.env.LIVEAGENT_BACKEND_PORT ??= "0";
+const coreRootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)), "../core");
+const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
+
+const provider = {
+  id: "provider-1",
+  type: "codex",
+  baseUrl: "https://example.test",
+  apiKey: "secret",
+  requestFormat: "openai-responses",
+  activeModels: ["gpt-5"],
+};
+
+const baseSettings = {
+  locale: "en-US",
+  selectedModel: { customProviderId: "provider-1", model: "gpt-5" },
+  customProviders: [provider],
+  chatRuntimeControls: {},
+  customSettings: { providerIdentities: {}, conversationTitleModel: null },
+};
+
+function loadCoreTitleModule({ settings, streamImpl }) {
   const rootLoader = createTsModuleLoader();
-  const llmModulePath = rootLoader.resolveLocal("src/lib/providers/llm.ts");
-  let capturedParams = null;
-  const llmMock = {
-    assistantMessageToText: (assistant) => assistant.text,
-    streamAssistantMessage: async (params) => {
-      capturedParams = params;
-      params.onTextDelta("Fast title");
-      return { text: "Fast title" };
-    },
-    toModelValue: (customProviderId, model) => `${customProviderId}::${model}`,
-  };
+  const captured = {};
   const loader = createTsModuleLoader({
     mocks: {
-      "../../../lib/providers/llm": llmMock,
-      [llmModulePath]: llmMock,
+      [rootLoader.resolveLocal(coreSrc("settings/storage.ts"))]: {
+        loadPersistedSettingsWithDefaults: async () => ({ settings }),
+      },
+      [rootLoader.resolveLocal(coreSrc("providers/llm.ts"))]: {
+        assistantMessageToText: (assistant) => assistant.text,
+        createProviderRuntimeConfig: (p, model, controls) => ({
+          baseUrl: p.baseUrl,
+          apiKey: p.apiKey,
+          requestFormat: p.requestFormat,
+          reasoning: "xhigh",
+          promptCachingEnabled: true,
+          nativeWebSearchEnabled: true,
+          modelConfig: { id: model },
+          controls,
+        }),
+        streamAssistantMessage: async (params) => {
+          captured.params = params;
+          return streamImpl(params);
+        },
+      },
     },
   });
-  const { buildConversationTitleRuntime, startConversationTitleJob } = loader.loadModule(
-    "src/pages/chat/runtime/conversationTitleJob.ts",
-  );
+  const mod = loader.loadModule(coreSrc("turns/conversationTitle.ts"));
+  return { mod, captured };
+}
+
+test("core title job disables thinking, caching, and native web search", async () => {
+  const { mod, captured } = loadCoreTitleModule({
+    settings: baseSettings,
+    streamImpl: () => ({ text: "Fast title" }),
+  });
+
   const runtime = {
     baseUrl: "https://example.test",
     apiKey: "secret",
@@ -34,79 +74,161 @@ test("conversation title job disables thinking, caching, and native web search",
     nativeWebSearchEnabled: true,
     modelConfig: { id: "gpt-5", reasoning: true },
   };
-
-  assert.deepEqual(buildConversationTitleRuntime(runtime), {
+  assert.deepEqual(mod.buildConversationTitleRuntime(runtime), {
     ...runtime,
     reasoning: "off",
     promptCachingEnabled: false,
     nativeWebSearchEnabled: false,
   });
+  // The helper must not mutate the caller's runtime.
+  assert.equal(runtime.reasoning, "xhigh");
+  assert.equal(runtime.promptCachingEnabled, true);
+  assert.equal(runtime.nativeWebSearchEnabled, true);
+
+  const title = await mod.generateConversationTitle({
+    titleSourceText: "Please build a fast settings drawer.",
+  });
+
+  assert.equal(title, "Fast title");
+  assert.equal(captured.params.runtime.reasoning, "off");
+  assert.equal(captured.params.runtime.promptCachingEnabled, false);
+  assert.equal(captured.params.runtime.nativeWebSearchEnabled, false);
+  assert.equal(captured.params.nativeWebSearch, false);
+  assert.equal(captured.params.cacheRetention, "none");
+  // The persisted UI locale must reach the model, not just the prompt builders.
+  assert.match(captured.params.context.systemPrompt, /concise conversation titles/i);
+  assert.match(captured.params.context.messages[0].content, /within 10 words/i);
+});
+
+test("core title job follows the persisted zh-CN locale", async () => {
+  const { mod, captured } = loadCoreTitleModule({
+    settings: { ...baseSettings, locale: "zh-CN" },
+    streamImpl: () => ({ text: "很快的设置抽屉" }),
+  });
+
+  const title = await mod.generateConversationTitle({
+    titleSourceText: "请帮我做一个很快的设置抽屉。",
+  });
+
+  assert.equal(title, "很快的设置抽屉");
+  assert.match(captured.params.context.systemPrompt, /简体中文/);
+  assert.match(captured.params.context.messages[0].content, /简体中文标题/);
+});
+
+test("core title job prefers the configured title model over the conversation model", async () => {
+  const titleProvider = {
+    id: "provider-2",
+    type: "openai",
+    baseUrl: "https://title.test",
+    apiKey: "title-secret",
+    requestFormat: "openai-chat",
+    activeModels: ["gpt-5-mini"],
+  };
+  const { mod, captured } = loadCoreTitleModule({
+    settings: {
+      ...baseSettings,
+      customProviders: [provider, titleProvider],
+      customSettings: {
+        providerIdentities: {},
+        conversationTitleModel: { customProviderId: "provider-2", model: "gpt-5-mini" },
+      },
+    },
+    streamImpl: () => ({ text: "Cheap title" }),
+  });
+
+  assert.equal(await mod.generateConversationTitle({ titleSourceText: "hello" }), "Cheap title");
+  assert.equal(captured.params.model, "gpt-5-mini");
+  assert.equal(captured.params.providerId, "openai");
+});
+
+test("core title job returns null for blank source text without calling the model", async () => {
+  const { mod, captured } = loadCoreTitleModule({
+    settings: baseSettings,
+    streamImpl: () => ({ text: "never" }),
+  });
+
+  assert.equal(await mod.generateConversationTitle({ titleSourceText: "   " }), null);
+  assert.equal(captured.params, undefined);
+});
+
+test("frontend title job delegates to the engine command and renames the pending row", async () => {
+  const rootLoader = createTsModuleLoader();
+  const calls = [];
+  const loader = createTsModuleLoader({
+    mocks: {
+      [rootLoader.resolveLocal("src/lib/backend/client.ts")]: {
+        backendFetch: async (command, args) => {
+          calls.push({ command, args });
+          return { title: "Fast title" };
+        },
+      },
+    },
+  });
+  const { startConversationTitleJob } = loader.loadModule(
+    "src/pages/chat/runtime/conversationTitleJob.ts",
+  );
 
   const historyItemsById = new Map([
-    [
-      "conversation-1",
-      {
-        id: "conversation-1",
-        title: "新会话",
-        updatedAt: 1,
-        isPending: true,
-      },
-    ],
+    ["conversation-1", { id: "conversation-1", title: "新会话", updatedAt: 1, isPending: true }],
   ]);
   const sidebarStore = {
     peek: (conversationId) => historyItemsById.get(conversationId),
-    upsertLocal: (conversation) => {
-      historyItemsById.set(conversation.id, conversation);
-    },
+    upsertLocal: (conversation) => historyItemsById.set(conversation.id, conversation),
   };
   const titleJobRef = { current: null };
 
   const title = await startConversationTitleJob({
-    providerId: "codex",
-    model: "gpt-5",
-    runtime,
     signal: new AbortController().signal,
     conversationId: "conversation-1",
     titleSourceText: "Please build a fast settings drawer.",
-    content: "Please build a fast settings drawer.",
-    locale: "en-US",
+    selectedModel: { customProviderId: "provider-1", model: "gpt-5" },
     sidebarStore,
     titleJobRef,
   });
+  await titleJobRef.current.promise;
 
   assert.equal(title, "Fast title");
-  assert.equal(runtime.reasoning, "xhigh");
-  assert.equal(runtime.promptCachingEnabled, true);
-  assert.equal(runtime.nativeWebSearchEnabled, true);
-  assert.equal(capturedParams.runtime.reasoning, "off");
-  assert.equal(capturedParams.runtime.promptCachingEnabled, false);
-  assert.equal(capturedParams.runtime.nativeWebSearchEnabled, false);
-  assert.equal(capturedParams.nativeWebSearch, false);
-  assert.equal(capturedParams.cacheRetention, "none");
+  assert.deepEqual(calls, [
+    {
+      command: "conversation_title_generate",
+      args: {
+        titleSourceText: "Please build a fast settings drawer.",
+        selectedModel: { customProviderId: "provider-1", model: "gpt-5" },
+      },
+    },
+  ]);
   assert.equal(historyItemsById.get("conversation-1").title, "Fast title");
-  // The requested locale must reach the model, not just the prompt builders.
-  assert.match(capturedParams.context.systemPrompt, /concise conversation titles/i);
-  assert.match(capturedParams.context.messages[0].content, /within 10 words/i);
+});
 
-  historyItemsById.set("conversation-1", {
-    id: "conversation-1",
-    title: "新会话",
-    updatedAt: 1,
-    isPending: true,
+test("frontend title job swallows engine failures and keeps the default title", async () => {
+  const rootLoader = createTsModuleLoader();
+  const loader = createTsModuleLoader({
+    mocks: {
+      [rootLoader.resolveLocal("src/lib/backend/client.ts")]: {
+        backendFetch: async () => {
+          throw new Error("engine unreachable");
+        },
+      },
+    },
   });
-  await startConversationTitleJob({
-    providerId: "codex",
-    model: "gpt-5",
-    runtime,
+  const { startConversationTitleJob } = loader.loadModule(
+    "src/pages/chat/runtime/conversationTitleJob.ts",
+  );
+
+  const historyItemsById = new Map([
+    ["conversation-1", { id: "conversation-1", title: "新会话", updatedAt: 1, isPending: true }],
+  ]);
+  const title = await startConversationTitleJob({
     signal: new AbortController().signal,
     conversationId: "conversation-1",
-    titleSourceText: "请帮我做一个很快的设置抽屉。",
-    content: "请帮我做一个很快的设置抽屉。",
-    locale: "zh-CN",
-    sidebarStore,
-    titleJobRef,
+    titleSourceText: "anything",
+    sidebarStore: {
+      peek: (id) => historyItemsById.get(id),
+      upsertLocal: (conversation) => historyItemsById.set(conversation.id, conversation),
+    },
+    titleJobRef: { current: null },
   });
 
-  assert.match(capturedParams.context.systemPrompt, /简体中文/);
-  assert.match(capturedParams.context.messages[0].content, /简体中文标题/);
+  assert.equal(title, null);
+  assert.equal(historyItemsById.get("conversation-1").title, "新会话");
 });

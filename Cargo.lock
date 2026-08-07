@@ -375,8 +375,10 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "chardetng",
  "chrono",
  "dirs",
+ "encoding_rs",
  "futures-util",
  "globset",
  "http-body-util",

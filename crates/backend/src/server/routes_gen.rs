@@ -3463,6 +3463,62 @@ mod subagent_worktree_status {
     }
 }
 
+mod system_append_debug_jsonl {
+    use super::*;
+    use crate::services::uploads::*;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub struct SystemAppendDebugJsonlRouteArgs {
+        conversation_id: String,
+        entry: Value,
+    }
+
+    pub async fn handle(
+    Json(args): Json<SystemAppendDebugJsonlRouteArgs>,
+    ) -> Response {
+        respond(crate::services::uploads::system_append_debug_jsonl(args.conversation_id, args.entry).await)
+    }
+}
+
+mod system_begin_power_activity {
+    use super::*;
+    use crate::services::power_activity::*;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub struct SystemBeginPowerActivityRouteArgs {
+        activity_id: String,
+        reason: String,
+        ttl_ms: Option<u64>,
+    }
+
+    pub async fn handle(
+    State(state): State<AppState>,
+    Json(args): Json<SystemBeginPowerActivityRouteArgs>,
+    ) -> Response {
+        respond(crate::services::power_activity::system_begin_power_activity(args.activity_id, args.reason, args.ttl_ms, &state.power_activity))
+    }
+}
+
+mod system_end_power_activity {
+    use super::*;
+    use crate::services::power_activity::*;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub struct SystemEndPowerActivityRouteArgs {
+        activity_id: String,
+    }
+
+    pub async fn handle(
+    State(state): State<AppState>,
+    Json(args): Json<SystemEndPowerActivityRouteArgs>,
+    ) -> Response {
+        respond(crate::services::power_activity::system_end_power_activity(args.activity_id, &state.power_activity))
+    }
+}
+
 mod system_ensure_builtin_skills {
     use super::*;
     use crate::services::skills::*;
@@ -3531,6 +3587,25 @@ mod system_read_skill_text {
     Json(args): Json<SystemReadSkillTextRouteArgs>,
     ) -> Response {
         respond(crate::services::skills::system_read_skill_text(args.path, args.offset, args.length).await)
+    }
+}
+
+mod system_read_uploaded_native_attachment {
+    use super::*;
+    use crate::services::uploads::*;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "snake_case")]
+    pub struct SystemReadUploadedNativeAttachmentRouteArgs {
+        workdir: String,
+        absolute_path: Option<String>,
+        kind: Option<String>,
+    }
+
+    pub async fn handle(
+    Json(args): Json<SystemReadUploadedNativeAttachmentRouteArgs>,
+    ) -> Response {
+        respond(crate::services::uploads::system_read_uploaded_native_attachment(args.workdir, args.absolute_path, args.kind).await)
     }
 }
 
@@ -4263,11 +4338,15 @@ pub fn gen_router() -> Router<AppState> {
         .route("/subagent_worktree_cleanup", post(subagent_worktree_cleanup::handle))
         .route("/subagent_worktree_create", post(subagent_worktree_create::handle))
         .route("/subagent_worktree_status", post(subagent_worktree_status::handle))
+        .route("/system_append_debug_jsonl", post(system_append_debug_jsonl::handle))
+        .route("/system_begin_power_activity", post(system_begin_power_activity::handle))
+        .route("/system_end_power_activity", post(system_end_power_activity::handle))
         .route("/system_ensure_builtin_skills", post(system_ensure_builtin_skills::handle))
         .route("/system_list_skill_files", post(system_list_skill_files::handle))
         .route("/system_manage_skill", post(system_manage_skill::handle))
         .route("/system_read_skill_metadata", post(system_read_skill_metadata::handle))
         .route("/system_read_skill_text", post(system_read_skill_text::handle))
+        .route("/system_read_uploaded_native_attachment", post(system_read_uploaded_native_attachment::handle))
         .route("/terminal_answer_ssh_prompt", post(terminal_answer_ssh_prompt::handle))
         .route("/terminal_cancel_ssh_prompt", post(terminal_cancel_ssh_prompt::handle))
         .route("/terminal_close", post(terminal_close::handle))
@@ -4446,11 +4525,15 @@ pub const ROUTED_COMMANDS: &[&str] = &[
     "subagent_worktree_cleanup",
     "subagent_worktree_create",
     "subagent_worktree_status",
+    "system_append_debug_jsonl",
+    "system_begin_power_activity",
+    "system_end_power_activity",
     "system_ensure_builtin_skills",
     "system_list_skill_files",
     "system_manage_skill",
     "system_read_skill_metadata",
     "system_read_skill_text",
+    "system_read_uploaded_native_attachment",
     "terminal_answer_ssh_prompt",
     "terminal_cancel_ssh_prompt",
     "terminal_close",

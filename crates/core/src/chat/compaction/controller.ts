@@ -26,6 +26,7 @@ import { type CompleteAssistantFn, createCompactionAbortError } from "./summariz
 import { TokenLedger } from "./tokenLedger";
 import type {
   CompactionDecision,
+  CompactionFailureReason,
   CompactionIntent,
   CompactionStatus,
   CompactionTrigger,
@@ -228,7 +229,7 @@ export class CompactionController {
         pruned ?? pruneConversationState(presend.baseState, resolvePruneOptions(this.pressure));
       if (fallback.applied) {
         binding.sinks.applyState?.(presend.composeAppliedState(fallback.state));
-        this.settleFailed("pre-send", PRUNE_FALLBACK_NOTICE);
+        this.settleFailed("pre-send", PRUNE_FALLBACK_NOTICE, "prune_fallback");
         binding.sinks.setBridgeToolStatus?.(buildPruneFallbackStatus(fallback.prunedMessageCount));
         return true;
       }
@@ -354,7 +355,7 @@ export class CompactionController {
         pruned ?? pruneConversationState(workingState, resolvePruneOptions(this.pressure));
       if (fallback.applied) {
         binding.sinks.applyStateMidRun?.(fallback.state);
-        this.settleFailed(params.trigger, PRUNE_FALLBACK_NOTICE);
+        this.settleFailed(params.trigger, PRUNE_FALLBACK_NOTICE, "prune_fallback");
         binding.sinks.setBridgeToolStatus?.(buildPruneFallbackStatus(fallback.prunedMessageCount));
         return {
           context: buildFallbackContext(fallback.state),
@@ -490,8 +491,12 @@ export class CompactionController {
     });
   }
 
-  private settleFailed(trigger: CompactionTrigger, message: string) {
-    this.publishStatus({ phase: "failed", trigger, failedAt: Date.now(), message });
+  private settleFailed(
+    trigger: CompactionTrigger,
+    message: string,
+    reason: CompactionFailureReason = "error",
+  ) {
+    this.publishStatus({ phase: "failed", trigger, failedAt: Date.now(), message, reason });
   }
 
   private logDecision(decision: CompactionDecision) {

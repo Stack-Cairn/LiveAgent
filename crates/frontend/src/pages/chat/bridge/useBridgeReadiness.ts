@@ -1,4 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { clearCompactionCheckpoint } from "../../../lib/chat/compaction/checkpoints";
 import {
   type ConversationViewState,
   createConversationStateFromContext,
@@ -83,6 +84,8 @@ export function useBackendBridgeReadiness(params: UseBackendBridgeReadinessParam
       activeSegmentIndex,
       activeSegmentId,
     });
+    // 游标来自刚拉取的权威历史窗口，压缩 checkpoint 的过期标记就此解除。
+    clearCompactionCheckpoint(conversationId);
     backendBridgeHistorySummaryRef.current.set(conversationId, summary);
     sidebarStore.upsertLocal(summary);
     if (currentConversationIdRef.current === conversationId) {

@@ -202,6 +202,7 @@ export type HookWarningEvent = WithConversation & {
   type: "hook_warning";
   hook_name: string;
   hook_type: string;
+  event: string;
   message: string;
 };
 
@@ -235,6 +236,33 @@ export type MemoryOrganizeProgressEvent = {
   cluster_count?: number;
 };
 
+/**
+ * 记忆整理终态成因:
+ * - nothing_to_organize:没有可整理的普通记忆,未写入
+ * - pending_review:生成了待确认的安全建议
+ * - applied:安全建议已应用
+ * - all_clusters_failed:所有分组都未提交有效计划
+ * - error:其他失败(error_message 为原始错误)
+ */
+export type MemoryOrganizeSummaryKind =
+  | "nothing_to_organize"
+  | "pending_review"
+  | "applied"
+  | "all_clusters_failed"
+  | "error";
+
+export type MemoryOrganizeOutcome = {
+  input_count: number;
+  cluster_count: number;
+  safe_applied: number;
+  pending_safe_decisions: number;
+  review_skipped: number;
+  created_count: number;
+  updated_count: number;
+  deleted_count: number;
+  parse_failures: number;
+};
+
 /** 记忆整理终态。本次整理的最后一条事件。 */
 export type MemoryOrganizeEndedEvent = {
   type: "memory_organize_ended";
@@ -242,6 +270,14 @@ export type MemoryOrganizeEndedEvent = {
   /** scheduled 的终态才推进下次运行时间(设置归前端所有)。 */
   trigger: MemoryOrganizeTrigger;
   status: "succeeded" | "failed" | "skipped";
+  /**
+   * 结构化终态成因。前端应据此 + outcome 里的计数自行组句;final_summary 只是
+   * 尚未适配的前端的兜底文案,新代码不要解析它。
+   */
+  summary_kind?: MemoryOrganizeSummaryKind;
+  /** 组句所需的计数,与 summary_kind 配套。 */
+  outcome?: MemoryOrganizeOutcome;
+  /** 展示文案(遗留)。文案不属于协议,适配完成后删。 */
   final_summary?: string;
   error_message?: string;
 };
@@ -269,6 +305,17 @@ export type CronPromptEndedEvent = {
   output: string;
 };
 
+/**
+ * Skills 目录变更(agent 经 SkillsManager 安装/创建/删除)。skills 是全局资源,
+ * 不属于任何会话;前端据此强制刷新 skills 发现缓存与列表,不必轮询。
+ */
+export type SkillsChangedEvent = {
+  type: "skills_changed";
+  action: "install" | "create" | "delete";
+  /** 受影响的 skill 名称。当前前端整体重扫,names 仅供日志与定点优化。 */
+  names: string[];
+};
+
 export type WireEvent =
   | TokenDeltaEvent
   | ThinkingDeltaEvent
@@ -287,6 +334,7 @@ export type WireEvent =
   | MemoryOrganizeProgressEvent
   | MemoryOrganizeEndedEvent
   | CronPromptStartedEvent
-  | CronPromptEndedEvent;
+  | CronPromptEndedEvent
+  | SkillsChangedEvent;
 
 export type WireEventName = WireEvent["type"];

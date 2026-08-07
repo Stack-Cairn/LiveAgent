@@ -9,7 +9,7 @@
 //! - POST /api/conversation_dispose → .../conversation_dispose
 //! - GET /api/conversation_live → http://127.0.0.1:$node_port/conversation_live
 //!
-//! 事件回流路由（仅 loopback，来自本机 Node 引擎）：
+//! 事件回流路由（来自本机 Node 引擎，认证走引擎凭据）：
 //! - POST /api/engine_emit_event {event, payload} → 直接广播到 EventBus
 
 use axum::extract::{Request, State};
@@ -29,7 +29,7 @@ pub struct EngineEmitEventBody {
     pub payload: serde_json::Value,
 }
 
-/// 处理引擎事件回流。Node 引擎在本机经 loopback 调入（认证靠 loopback 豁免）。
+/// 处理引擎事件回流。Node 引擎在本机调入，带 spawn 时下发的引擎凭据过认证。
 pub async fn handler_engine_emit_event(
     State(state): State<AppState>,
     req: Request,
@@ -186,6 +186,10 @@ pub fn router() -> Router<AppState> {
         .route("/chat_abort", axum::routing::post(proxy_to_node))
         .route("/conversation_dispose", axum::routing::post(proxy_to_node))
         .route("/memory_organize_run", axum::routing::post(proxy_to_node))
+        .route(
+            "/conversation_title_generate",
+            axum::routing::post(proxy_to_node),
+        )
         .route("/cron_prompt_poke", axum::routing::post(proxy_to_node))
         .route("/conversation_live", axum::routing::get(proxy_to_node))
 }

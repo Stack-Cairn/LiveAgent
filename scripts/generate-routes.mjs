@@ -41,6 +41,7 @@ const STATE_MAP = {
   HookScopeRegistry: "hook_scopes",
   McpRuntimeManager: "mcp",
   TunnelStore: "tunnels",
+  PowerActivityManager: "power_activity",
 };
 
 // 不做 HTTP 路由的命令（走 WS 事件流）。名字与 routes.rs 文档一致。
@@ -115,6 +116,76 @@ const EXTRA_COMMANDS = [
       { name: "length", type: "Option<usize>" },
     ],
     uses: ["use crate::services::skills::*;"],
+  },
+  {
+    name: "system_read_uploaded_native_attachment",
+    renameAll: "snake_case",
+    isAsync: true,
+    retType: "Result<SystemUploadedNativeAttachmentResponse, String>",
+    callPath: "crate::services::uploads::system_read_uploaded_native_attachment",
+    stateParams: [],
+    bodyParams: [
+      { name: "workdir", type: "String" },
+      { name: "absolute_path", type: "Option<String>" },
+      { name: "kind", type: "Option<String>" },
+    ],
+    params: [
+      { name: "workdir", type: "String" },
+      { name: "absolute_path", type: "Option<String>" },
+      { name: "kind", type: "Option<String>" },
+    ],
+    uses: ["use crate::services::uploads::*;"],
+  },
+  {
+    name: "system_append_debug_jsonl",
+    renameAll: "snake_case",
+    isAsync: true,
+    retType: "Result<(), String>",
+    callPath: "crate::services::uploads::system_append_debug_jsonl",
+    stateParams: [],
+    bodyParams: [
+      { name: "conversation_id", type: "String" },
+      { name: "entry", type: "Value" },
+    ],
+    params: [
+      { name: "conversation_id", type: "String" },
+      { name: "entry", type: "Value" },
+    ],
+    uses: ["use crate::services::uploads::*;"],
+  },
+  {
+    name: "system_begin_power_activity",
+    renameAll: "snake_case",
+    isAsync: false,
+    retType: "Result<(), String>",
+    callPath: "crate::services::power_activity::system_begin_power_activity",
+    stateParams: [{ name: "power_activity", state: "PowerActivityManager" }],
+    bodyParams: [
+      { name: "activity_id", type: "String" },
+      { name: "reason", type: "String" },
+      { name: "ttl_ms", type: "Option<u64>" },
+    ],
+    params: [
+      { name: "activity_id", type: "String" },
+      { name: "reason", type: "String" },
+      { name: "ttl_ms", type: "Option<u64>" },
+      { name: "power_activity", state: "PowerActivityManager" },
+    ],
+    uses: ["use crate::services::power_activity::*;"],
+  },
+  {
+    name: "system_end_power_activity",
+    renameAll: "snake_case",
+    isAsync: false,
+    retType: "Result<(), String>",
+    callPath: "crate::services::power_activity::system_end_power_activity",
+    stateParams: [{ name: "power_activity", state: "PowerActivityManager" }],
+    bodyParams: [{ name: "activity_id", type: "String" }],
+    params: [
+      { name: "activity_id", type: "String" },
+      { name: "power_activity", state: "PowerActivityManager" },
+    ],
+    uses: ["use crate::services::power_activity::*;"],
   },
 ];
 

@@ -12,13 +12,7 @@ import {
   sanitizeMessagesForModelContext,
 } from "../context/requestContextSanitizer";
 import { normalizeConversationSystemPrompt } from "../context/systemPrompt";
-import { buildUiMessages, type UiRound } from "../messages/uiMessages";
-import {
-  getUserMessageAttachments,
-  getUserMessageDisplayText,
-  type PendingUploadedFile,
-  stripUploadedFilesMessageMetadata,
-} from "../messages/uploadedFiles";
+import { stripUploadedFilesMessageMetadata } from "../messages/uploadedFiles";
 
 export const INTERNAL_RESUME_MESSAGE_TEXT =
   "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.";
@@ -96,60 +90,6 @@ export type HistoryMessageRef = {
   contentHash: string;
 };
 
-export type RenderSummaryCard = {
-  kind: "summary";
-  key: string;
-  segmentIndex: number;
-  summaryId: string;
-  content: string;
-  coveredMessageCount: number;
-  coversThroughMessageId: string;
-  generatedBy: {
-    providerId: string;
-    model: string;
-    promptVersion?: string;
-  };
-  timestamp: number;
-  collapsed: boolean;
-};
-
-export type RenderUserMessage = {
-  kind: "user";
-  key: string;
-  segmentIndex: number;
-  messageRef?: HistoryMessageRef;
-  text: string;
-  attachments: PendingUploadedFile[];
-  timestamp: number;
-  isFromCompactedSegment: boolean;
-};
-
-export type RenderAssistantGroup = {
-  kind: "assistant";
-  key: string;
-  segmentIndex: number;
-  rounds: UiRound[];
-  timestamp: number;
-  isFromCompactedSegment: boolean;
-};
-
-export type RenderTimelineItem = RenderSummaryCard | RenderUserMessage | RenderAssistantGroup;
-
-export type TranscriptSegmentWindow = {
-  segmentIndex: number;
-  segmentId: string;
-  startMessageIndex: number;
-  endMessageIndex: number;
-};
-
-export type TranscriptProjection = {
-  items: RenderTimelineItem[];
-  segmentWindows: TranscriptSegmentWindow[];
-  oldestMessageOffset: number;
-  hasMoreBefore: boolean;
-  revision: string | null;
-};
-
 export type TranscriptSegmentSlice = {
   segmentIndex: number;
   segmentId: string;
@@ -163,7 +103,6 @@ export type TranscriptSegmentSlice = {
 export type ConversationViewState = {
   meta: StoredChatContextMeta;
   segments: StoredContextSegment[];
-  transcript: TranscriptProjection;
   activeSegmentIndex: number;
 };
 
@@ -304,47 +243,6 @@ function hashFnv1a32(input: string) {
   }
   return `fnv1a32:${hash.toString(16).padStart(8, "0")}`;
 }
-
-export function getHistoryMessageContentHash(message: Message): string {
-  const parts = ["liveagent-history-ref-v1"];
-  appendHashPart(parts, message.role);
-  if (message.role === "user") {
-    appendHashPart(parts, getUserMessageDisplayText(message as Message & Record<string, unknown>));
-    const attachments = getUserMessageAttachments(message as Message & Record<string, unknown>);
-    appendHashPart(parts, attachments.length);
-    for (const file of attachments) {
-      appendHashPart(parts, file.relativePath);
-      appendHashPart(parts, file.fileName);
-      appendHashPart(parts, file.kind);
-      appendHashPart(parts, file.sizeBytes);
-    }
-  } else {
-    appendHashPart(parts, JSON.stringify(message.content ?? null));
-  }
-  return hashFnv1a32(parts.join("|"));
-}
-
-function buildHistoryMessageRef(params: {
-  segment: StoredContextSegment;
-  message: Message | undefined;
-  messageIndex: number;
-}): HistoryMessageRef | undefined {
-  const { segment, message, messageIndex } = params;
-  if (!message) return undefined;
-  const segmentId = segment.segmentId?.trim();
-  const messageId = readMessageStringId(message);
-  const role = typeof message.role === "string" ? message.role.trim() : "";
-  if (!segmentId || !messageId || !role) return undefined;
-  return {
-    segmentIndex: segment.segmentIndex,
-    messageIndex,
-    segmentId,
-    messageId,
-    role,
-    contentHash: getHistoryMessageContentHash(message),
-  };
-}
-
 
 function getSummaryId(summary: StoredSummaryMessage | undefined) {
   return summary?.id;
@@ -575,337 +473,10 @@ export function appendSummaryToSystemPrompt(
   return base ? `${base}\n${summaryBlock}` : summaryBlock.trim();
 }
 
-function buildTimelineItemsForSegment(
-  segment: StoredContextSegment,
-  isCompacted: boolean,
-  startMessageIndex = 0,
-  options?: { includeSummary?: boolean },
-): RenderTimelineItem[] {
-  return buildTimelineItemsForSlice(
-    {
-      segmentIndex: segment.segmentIndex,
-      segmentId: segment.segmentId,
-      summary: segment.summary,
-      messages: segment.messages.slice(startMessageIndex),
-      startMessageIndex,
-      createdAt: segment.createdAt,
-      updatedAt: segment.updatedAt,
-    },
-    isCompacted,
-    options,
-  );
-}
-
-function readInjectedHistoryMessageRef(message: Message | undefined) {
-  if (!message) return undefined;
-  const candidate = (message as Message & { liveAgentHistoryRef?: unknown }).liveAgentHistoryRef;
-  if (!candidate || typeof candidate !== "object") return undefined;
-  const ref = candidate as Partial<HistoryMessageRef>;
-  if (
-    typeof ref.segmentIndex !== "number" ||
-    typeof ref.messageIndex !== "number" ||
-    typeof ref.segmentId !== "string" ||
-    typeof ref.messageId !== "string" ||
-    typeof ref.role !== "string" ||
-    typeof ref.contentHash !== "string"
-  ) {
-    return undefined;
-  }
-  return ref as HistoryMessageRef;
-}
-
-function buildTimelineItemsForSlice(
-  slice: TranscriptSegmentSlice,
-  isCompacted: boolean,
-  options?: { includeSummary?: boolean },
-): RenderTimelineItem[] {
-  const items: RenderTimelineItem[] = [];
-
-  if (options?.includeSummary !== false && slice.startMessageIndex === 0 && slice.summary) {
-    items.push({
-      kind: "summary",
-      key: `summary-${slice.segmentId}-${slice.summary.id}`,
-      segmentIndex: slice.segmentIndex,
-      summaryId: slice.summary.id,
-      content: slice.summary.content,
-      coveredMessageCount: slice.summary.summaryMeta.coveredMessageCount,
-      coversThroughMessageId: slice.summary.summaryMeta.coversThroughMessageId,
-      generatedBy: slice.summary.summaryMeta.generatedBy,
-      timestamp: slice.summary.timestamp,
-      collapsed: true,
-    });
-  }
-
-  const uiMessages = buildUiMessages(slice.messages, slice.startMessageIndex);
-  for (const uiMessage of uiMessages) {
-    if (uiMessage.role === "user") {
-      const absoluteMessageIndex = uiMessage.messageIndex ?? slice.startMessageIndex;
-      const source = slice.messages[absoluteMessageIndex - slice.startMessageIndex];
-      const injectedRef = readInjectedHistoryMessageRef(source);
-      const messageRef =
-        injectedRef?.segmentIndex === slice.segmentIndex &&
-        injectedRef.segmentId === slice.segmentId &&
-        injectedRef.messageIndex === absoluteMessageIndex
-          ? injectedRef
-          : buildHistoryMessageRef({
-              segment: {
-                segmentIndex: slice.segmentIndex,
-                segmentId: slice.segmentId,
-                summary: slice.summary,
-                messages: slice.messages,
-                messageCount: slice.messages.length,
-                createdAt: slice.createdAt,
-                updatedAt: slice.updatedAt,
-              },
-              message: source,
-              messageIndex: absoluteMessageIndex,
-            });
-      items.push({
-        kind: "user",
-        key: `segment-${slice.segmentId}-${uiMessage.key}`,
-        segmentIndex: slice.segmentIndex,
-        messageRef,
-        text: uiMessage.text,
-        attachments: uiMessage.attachments ?? [],
-        timestamp: getMessageTimestamp(source),
-        isFromCompactedSegment: isCompacted,
-      });
-      continue;
-    }
-
-    items.push({
-      kind: "assistant",
-      key: `segment-${slice.segmentId}-${uiMessage.key}`,
-      segmentIndex: slice.segmentIndex,
-      rounds: uiMessage.rounds ?? [],
-      timestamp: uiMessage.timestamp ?? getMessageTimestamp(slice.messages.at(-1)),
-      isFromCompactedSegment: isCompacted,
-    });
-  }
-
-  return items;
-}
-
-export function createTranscriptProjection(params: {
-  segments: TranscriptSegmentSlice[];
-  activeSegmentIndex: number;
-  oldestMessageOffset: number;
-  hasMoreBefore: boolean;
-  revision: string | null;
-}): TranscriptProjection {
-  const segments = params.segments
-    .slice()
-    .sort(
-      (left, right) =>
-        left.segmentIndex - right.segmentIndex || left.startMessageIndex - right.startMessageIndex,
-    );
-  return {
-    items: segments.flatMap((segment) =>
-      buildTimelineItemsForSlice(segment, segment.segmentIndex < params.activeSegmentIndex),
-    ),
-    segmentWindows: segments.map((segment) => ({
-      segmentIndex: segment.segmentIndex,
-      segmentId: segment.segmentId,
-      startMessageIndex: segment.startMessageIndex,
-      endMessageIndex: segment.startMessageIndex + segment.messages.length,
-    })),
-    oldestMessageOffset: params.oldestMessageOffset,
-    hasMoreBefore: params.hasMoreBefore,
-    revision: params.revision,
-  };
-}
-
-
-function markTimelineItemCompacted(item: RenderTimelineItem): RenderTimelineItem {
-  if (item.kind === "summary" || item.isFromCompactedSegment) {
-    return item;
-  }
-
-  return {
-    ...item,
-    isFromCompactedSegment: true,
-  };
-}
-
-function rebuildTimelineForActiveSegment(params: {
-  previousItems: RenderTimelineItem[];
-  segments: StoredContextSegment[];
-  activeSegmentIndex: number;
-  activeStartMessageIndex: number;
-}) {
-  const { previousItems, segments, activeSegmentIndex, activeStartMessageIndex } = params;
-  const activeSegment = segments[activeSegmentIndex];
-  const activeAbsoluteIndex = activeSegment?.segmentIndex ?? 0;
-  const preserved = previousItems
-    .filter((item) => item.segmentIndex < activeAbsoluteIndex)
-    .map(markTimelineItemCompacted);
-  const activeItems = activeSegment
-    ? buildTimelineItemsForSegment(activeSegment, false, activeStartMessageIndex)
-    : [];
-  return [...preserved, ...activeItems];
-}
-
-function getTranscriptSegmentStart(
-  transcript: TranscriptProjection,
-  segment: StoredContextSegment | undefined,
-) {
-  if (!segment) return 0;
-  return (
-    transcript.segmentWindows.find((window) => window.segmentId === segment.segmentId)
-      ?.startMessageIndex ?? segment.messages.length
-  );
-}
-
-function syncTranscriptWindows(
-  transcript: TranscriptProjection,
-  runtimeSegments: StoredContextSegment[],
-  changedSegmentIndexes: Iterable<number>,
-  getInitialStartMessageIndex: (
-    runtimeSegment: StoredContextSegment,
-    localSegmentIndex: number,
-  ) => number,
-) {
-  const windows = new Map(
-    transcript.segmentWindows.map((window) => [window.segmentId, window] as const),
-  );
-  for (const index of changedSegmentIndexes) {
-    const runtimeSegment = runtimeSegments[index];
-    if (!runtimeSegment) continue;
-    const existing = windows.get(runtimeSegment.segmentId);
-    const startMessageIndex = Math.min(
-      existing?.startMessageIndex ?? getInitialStartMessageIndex(runtimeSegment, index),
-      runtimeSegment.messages.length,
-    );
-    windows.set(runtimeSegment.segmentId, {
-      segmentIndex: runtimeSegment.segmentIndex,
-      segmentId: runtimeSegment.segmentId,
-      startMessageIndex,
-      endMessageIndex: runtimeSegment.messages.length,
-    });
-  }
-  return Array.from(windows.values()).sort((left, right) => left.segmentIndex - right.segmentIndex);
-}
-
-// Extends a segment's timeline items after messages were appended to it.
-// Because UI-group boundaries are determined solely by user-message
-// positions, an append can only ever extend the trailing non-user run —
-// every earlier item is returned by identity so memoized rows bail. Returns
-// null when the previous message list is not a reference-identical prefix of
-// the next one (caller falls back to a full rebuild).
-function extendSegmentTimelineItems(
-  previousItems: RenderTimelineItem[],
-  previousSegment: StoredContextSegment,
-  nextSegment: StoredContextSegment,
-  visibleStartMessageIndex: number,
-): RenderTimelineItem[] | null {
-  const prevMessages = previousSegment.messages;
-  const nextMessages = nextSegment.messages;
-  if (nextMessages.length < prevMessages.length) return null;
-  for (let index = 0; index < prevMessages.length; index += 1) {
-    if (nextMessages[index] !== prevMessages[index]) return null;
-  }
-  if (nextMessages.length === prevMessages.length) return previousItems;
-
-  let runStart = prevMessages.length;
-  while (runStart > 0 && prevMessages[runStart - 1].role !== "user") {
-    runStart -= 1;
-  }
-  const visibleRunStart = Math.max(runStart, visibleStartMessageIndex);
-
-  let boundary = prevMessages.length;
-  let reused = previousItems;
-  if (runStart < prevMessages.length && nextMessages[prevMessages.length].role !== "user") {
-    // The trailing assistant run grows: rebuild it from its start. Drop the
-    // previously emitted trailing assistant item for this segment (if any) so
-    // the rebuilt run replaces it; a contentless or render-only tail that
-    // emitted nothing leaves nothing to drop.
-    boundary = visibleRunStart;
-    const trailingItem = previousItems[previousItems.length - 1];
-    if (
-      trailingItem?.kind === "assistant" &&
-      trailingItem.segmentIndex === previousSegment.segmentIndex
-    ) {
-      reused = previousItems.slice(0, -1);
-    }
-  }
-
-  return [
-    ...reused,
-    ...buildTimelineItemsForSegment(nextSegment, false, boundary, { includeSummary: false }),
-  ];
-}
-
-// Timeline update for the append hot path (send twin, settle, checkpoint):
-// O(appended messages) instead of a full active-segment rebuild, with every
-// untouched item preserved by identity so the row layer's caches hold.
-function updateTimelineForAppend(params: {
-  previousItems: RenderTimelineItem[];
-  transcript: TranscriptProjection;
-  previousSegments: StoredContextSegment[];
-  previousActiveSegmentIndex: number;
-  segments: StoredContextSegment[];
-  activeSegmentIndex: number;
-}): RenderTimelineItem[] {
-  const {
-    previousItems,
-    transcript,
-    previousSegments,
-    previousActiveSegmentIndex,
-    segments,
-    activeSegmentIndex,
-  } = params;
-
-  const previousActive = previousSegments[previousActiveSegmentIndex];
-  const nextOfPrevious = segments[previousActiveSegmentIndex];
-  const fallback = () =>
-    rebuildTimelineForActiveSegment({
-      previousItems,
-      segments,
-      activeSegmentIndex,
-      activeStartMessageIndex: getTranscriptSegmentStart(transcript, segments[activeSegmentIndex]),
-    });
-  if (!previousActive || !nextOfPrevious || previousActive.segmentId !== nextOfPrevious.segmentId) {
-    return fallback();
-  }
-
-  const extended = extendSegmentTimelineItems(
-    previousItems,
-    previousActive,
-    nextOfPrevious,
-    getTranscriptSegmentStart(transcript, previousActive),
-  );
-  if (extended === null) {
-    return fallback();
-  }
-  if (activeSegmentIndex === previousActiveSegmentIndex) {
-    return extended;
-  }
-
-  // A compaction checkpoint advanced the active segment: everything before
-  // the new active segment is compacted now, and the checkpoint-born
-  // segments (summary card plus any trailing messages) build from scratch —
-  // they are new and small.
-  const compacted = extended.map((item) =>
-    item.segmentIndex < (segments[activeSegmentIndex]?.segmentIndex ?? 0)
-      ? markTimelineItemCompacted(item)
-      : item,
-  );
-  const appendedSegmentItems = segments
-    .filter((segment) => segment.segmentIndex > previousActive.segmentIndex)
-    .flatMap((segment) =>
-      buildTimelineItemsForSegment(
-        segment,
-        segment.segmentIndex < (segments[activeSegmentIndex]?.segmentIndex ?? 0),
-      ),
-    );
-  return [...compacted, ...appendedSegmentItems];
-}
-
 export function normalizeConversationState(input: {
   meta: Pick<StoredChatContextMeta, "systemPrompt" | "tools"> &
     Partial<Omit<StoredChatContextMeta, "schemaVersion" | "systemPrompt" | "tools">>;
   segments: StoredContextSegment[];
-  transcript?: TranscriptProjection;
 }): ConversationViewState {
   const rawSegments = input.segments.length > 0 ? input.segments : [createEmptySegment(0)];
   // normalizeSegment silently drops non-runtime messages from legacy data.
@@ -934,29 +505,10 @@ export function normalizeConversationState(input: {
         ? Math.max(0, input.meta.totalMessageCount - droppedMessageCount)
         : countMessages(segments),
   });
-  const transcript =
-    input.transcript ??
-    createTranscriptProjection({
-      segments: segments.map((segment) => ({
-        segmentIndex: segment.segmentIndex,
-        segmentId: segment.segmentId,
-        summary: segment.summary,
-        messages: segment.messages,
-        startMessageIndex: 0,
-        createdAt: segment.createdAt,
-        updatedAt: segment.updatedAt,
-      })),
-      activeSegmentIndex: activeAbsoluteIndex,
-      oldestMessageOffset: 0,
-      hasMoreBefore: false,
-      revision: null,
-    });
-
   return {
     meta,
     segments,
     activeSegmentIndex,
-    transcript,
   };
 }
 
@@ -1072,108 +624,10 @@ export function appendMessagesToConversation(
     ),
     totalMessageCount: state.meta.totalMessageCount + appendedMessageCount,
   });
-  const items = updateTimelineForAppend({
-    previousItems: state.transcript.items,
-    transcript: state.transcript,
-    previousSegments: state.segments,
-    previousActiveSegmentIndex,
-    segments: normalizedSegments,
-    activeSegmentIndex,
-  });
-  const segmentWindows = syncTranscriptWindows(
-    state.transcript,
-    normalizedSegments,
-    changedSegmentIndexes,
-    (runtimeSegment, index) => {
-      const previousSegment = state.segments[index];
-      return previousSegment?.segmentId === runtimeSegment.segmentId
-        ? previousSegment.messages.length
-        : 0;
-    },
-  );
-
   return {
     meta,
     segments: normalizedSegments,
     activeSegmentIndex,
-    transcript: {
-      ...state.transcript,
-      items,
-      segmentWindows,
-      revision: null,
-    },
-  };
-}
-
-function shiftUiRounds(rounds: UiRound[], offset: number): UiRound[] {
-  if (offset <= 0) return rounds;
-  return rounds.map((round) => {
-    const ordinalKey = /^r(\d+)$/.exec(round.key);
-    return {
-      ...round,
-      round: round.round + offset,
-      // `r<n>` keys are ordinal-derived and would collide with the merge
-      // target's own rounds; shift them in lockstep. Foreign keys stay put.
-      key: ordinalKey ? `r${Number(ordinalKey[1]) + offset}` : round.key,
-    };
-  });
-}
-
-function getLastRoundNumber(rounds: UiRound[]) {
-  return rounds.reduce((max, round) => Math.max(max, round.round), 0);
-}
-
-export function appendRenderOnlyMessagesToConversation(
-  state: ConversationViewState,
-  incomingMessages: Message[],
-): ConversationViewState {
-  if (incomingMessages.length === 0) return state;
-
-  const uiMessages = buildUiMessages(incomingMessages).filter(
-    (message) => message.role === "assistant" && (message.rounds?.length ?? 0) > 0,
-  );
-  if (uiMessages.length === 0) return state;
-
-  const transcriptItems = state.transcript.items.slice();
-  const timestamp = getMessageTimestamp(incomingMessages[incomingMessages.length - 1]);
-  const activeSegmentIndex = getActiveSegment(state)?.segmentIndex ?? state.meta.activeSegmentIndex;
-
-  for (const uiMessage of uiMessages) {
-    const sourceRounds = uiMessage.rounds ?? [];
-    if (sourceRounds.length === 0) continue;
-
-    const lastIndex = transcriptItems.length - 1;
-    const lastItem = transcriptItems[lastIndex];
-    if (
-      lastItem?.kind === "assistant" &&
-      lastItem.segmentIndex === activeSegmentIndex &&
-      !lastItem.isFromCompactedSegment
-    ) {
-      const roundOffset = getLastRoundNumber(lastItem.rounds);
-      transcriptItems[lastIndex] = {
-        ...lastItem,
-        rounds: [...lastItem.rounds, ...shiftUiRounds(sourceRounds, roundOffset)],
-        timestamp,
-      };
-      continue;
-    }
-
-    transcriptItems.push({
-      kind: "assistant",
-      key: `render-only-${getActiveSegment(state)?.segmentId ?? state.activeSegmentIndex}-${transcriptItems.length}-${timestamp}`,
-      segmentIndex: activeSegmentIndex,
-      rounds: sourceRounds,
-      timestamp,
-      isFromCompactedSegment: false,
-    });
-  }
-
-  return {
-    ...state,
-    transcript: {
-      ...state.transcript,
-      items: transcriptItems,
-    },
   };
 }
 
@@ -1208,29 +662,9 @@ export function replaceActiveSegmentMessages(
     totalSegmentCount: state.meta.totalSegmentCount,
     totalMessageCount: state.meta.totalMessageCount - previousMessageCount + messages.length,
   });
-  const activeStartMessageIndex = getTranscriptSegmentStart(state.transcript, activeSegment);
-  const items = rebuildTimelineForActiveSegment({
-    previousItems: state.transcript.items,
-    segments: normalizedSegments,
-    activeSegmentIndex: state.activeSegmentIndex,
-    activeStartMessageIndex,
-  });
-  const segmentWindows = syncTranscriptWindows(
-    state.transcript,
-    normalizedSegments,
-    [state.activeSegmentIndex],
-    (runtimeSegment) => runtimeSegment.messages.length,
-  );
-
   return {
     meta,
     segments: normalizedSegments,
     activeSegmentIndex: state.activeSegmentIndex,
-    transcript: {
-      ...state.transcript,
-      items,
-      segmentWindows,
-      revision: null,
-    },
   };
 }

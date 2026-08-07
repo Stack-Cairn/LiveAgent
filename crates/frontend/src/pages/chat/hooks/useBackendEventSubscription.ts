@@ -1,6 +1,8 @@
 import type { ToolCall, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
 import { useEffect } from "react";
 import { backendFetchGet, subscribeEvents } from "../../../lib/backend/client";
+import { markCompactionCheckpoint } from "../../../lib/chat/compaction/checkpoints";
+import type { CompactionStatus } from "../../../lib/chat/compaction/types";
 import type { LiveRoundSnapshot } from "../../../lib/chat/conversation/chatAbort";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { HostedSearchBlock } from "../../../lib/chat/messages/hostedSearch";
@@ -16,7 +18,7 @@ import {
   upsertToolCallToRound,
 } from "../../../lib/chat/messages/uiMessages";
 import { type RunEndedResult, resolveRunEnded } from "../runtime/runEndedWaiters";
-import { type WireToolStatus } from "../runtime/toolStatusText";
+import type { WireToolStatus } from "../runtime/toolStatusText";
 
 /**
  * 这个订阅认领的会话事件。名字与 core 的 WireEvent["type"] 一一对应
@@ -31,6 +33,9 @@ const CHAT_EVENTS = new Set([
   "tool_result",
   "hosted_search",
   "tool_status_change",
+  "compaction_status",
+  "compaction_checkpoint",
+  "hook_warning",
   "run_ended",
   "tool-approval:request",
 ]);
@@ -39,6 +44,13 @@ type UseBackendEventSubscriptionParams = {
   currentConversationId: string;
   getConversationLiveTranscriptStore: (conversationId: string) => LiveTranscriptStore;
   updateToolStatus: (status: WireToolStatus | null, targetStore: LiveTranscriptStore) => void;
+  /** 压缩阶段状态机。引擎独占压缩，前端只据此渲染（占位文案、失败 toast）。 */
+  updateCompactionStatus: (conversationId: string, status: CompactionStatus) => void;
+  /** hook 告警。hook 编排在 core 引擎里跑，前端只把告警收进运行时条目做 toast。 */
+  updateHookWarning: (
+    conversationId: string,
+    warning: { hookName: string; hookType: string; event: string; message: string },
+  ) => void;
   appendDraftAssistantText: (delta: string, targetStore: LiveTranscriptStore) => void;
   batchLiveRoundsUpdate: (
     updater: (prev: LiveRound[]) => LiveRound[],
@@ -64,6 +76,8 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
     currentConversationId,
     getConversationLiveTranscriptStore,
     updateToolStatus,
+    updateCompactionStatus,
+    updateHookWarning,
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     settleLiveTranscript,
@@ -215,6 +229,30 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
         const status = payloadObj.status as WireToolStatus | null | undefined;
         updateToolStatus(status ?? null, transcriptStore);
       }
+      // 压缩阶段状态：压缩本身跑在引擎里，前端只把状态收进会话运行时条目，
+      // 由它驱动输入框占位文案与失败 toast。
+      else if (event === "compaction_status") {
+        const status = payloadObj.status as CompactionStatus | undefined;
+        if (status && typeof status.phase === "string") {
+          updateCompactionStatus(conversationId, status);
+        }
+      }
+      // 压缩 checkpoint：core 已把折叠后的新 segment 落库，前端缓存的历史
+      // 窗口从这一刻起过期——标记后本轮（含后续轮）禁写前端历史，直到
+      // reloadConversationFromHistory 重拉权威窗口。摘要内容不在这里消费，
+      // 下次加载历史时随窗口一起回来。
+      else if (event === "compaction_checkpoint") {
+        markCompactionCheckpoint(conversationId);
+      }
+      // hook 告警：不致命，仅收进运行时条目驱动 toast。
+      else if (event === "hook_warning") {
+        updateHookWarning(conversationId, {
+          hookName: String(payloadObj.hook_name ?? ""),
+          hookType: String(payloadObj.hook_type ?? ""),
+          event: String(payloadObj.event ?? ""),
+          message: String(payloadObj.message ?? ""),
+        });
+      }
       // 处理运行终态：先带着结算前的正文/轮次快照兑现发送方的 waiter，
       // 再 settle 清空 live 状态——顺序反了内容就丢了。
       else if (event === "run_ended") {
@@ -255,6 +293,8 @@ export function useBackendEventSubscription(params: UseBackendEventSubscriptionP
   }, [
     getConversationLiveTranscriptStore,
     updateToolStatus,
+    updateCompactionStatus,
+    updateHookWarning,
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     settleLiveTranscript,

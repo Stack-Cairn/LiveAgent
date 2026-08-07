@@ -3,7 +3,8 @@
 // thinking capability) consumed by the frontend. OpenAI model metadata is
 // merged Codex-first from openai/codex models.json, then supplemented by the
 // models.dev open database; every other section comes from models.dev. The
-// output is written to:
+// output is written verbatim to both consumers:
+//   crates/core/src/models/catalog.generated.ts
 //   crates/frontend/src/lib/models/catalog.generated.ts
 //
 // Usage: node scripts/generate-model-catalog.mjs
@@ -20,15 +21,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const OUTPUT_PATH = join(
-  repoRoot,
-  "crates",
-  "frontend",
-  "src",
-  "lib",
-  "models",
-  "catalog.generated.ts",
-);
+// core 与 frontend 各自持有一份完全相同的快照（两个包不共享模块图）。
+// 两份一起写、一起校验：任一份漂移都算快照过期。
+const OUTPUT_PATHS = [
+  join(repoRoot, "crates", "core", "src", "models", "catalog.generated.ts"),
+  join(repoRoot, "crates", "frontend", "src", "lib", "models", "catalog.generated.ts"),
+];
 
 const DEFAULT_SOURCE = "https://models.dev/api.json";
 const DEFAULT_CODEX_SOURCE =
@@ -488,16 +486,19 @@ for (const sentinel of SENTINELS) {
   }
 }
 
-const existingContent = readExisting(OUTPUT_PATH);
 const today = new Date().toISOString().slice(0, 10);
 const nextContent = renderCatalog(catalog, today);
 
-const unchanged =
-  existingContent !== null &&
-  stripSnapshotDate(existingContent) === stripSnapshotDate(nextContent);
+// 快照只在语义变化时重写（日期不算差异）。任一份过期就两份一起重写，
+// 这样两个包的快照永远逐字相同——包括那行 snapshot 日期。
+const stalePaths = OUTPUT_PATHS.filter((path) => {
+  const existing = readExisting(path);
+  return existing === null || stripSnapshotDate(existing) !== stripSnapshotDate(nextContent);
+});
 
 if (args.check) {
-  if (!unchanged) {
+  if (stalePaths.length > 0) {
+    for (const path of stalePaths) console.error(`stale snapshot: ${path}`);
     console.error("catalog snapshot is stale; run: make update-model-catalog");
     process.exit(1);
   }
@@ -505,11 +506,13 @@ if (args.check) {
   process.exit(0);
 }
 
-if (unchanged) {
+if (stalePaths.length === 0) {
   console.log("catalog unchanged");
   process.exit(0);
 }
 
-writeFileSync(OUTPUT_PATH, nextContent);
+for (const path of OUTPUT_PATHS) writeFileSync(path, nextContent);
 const total = SECTIONS.reduce((sum, section) => sum + catalog[section.key].length, 0);
-console.log(`catalog updated (${total} models, snapshot ${today})`);
+console.log(
+  `catalog updated (${total} models, snapshot ${today}) → ${OUTPUT_PATHS.length} files`,
+);

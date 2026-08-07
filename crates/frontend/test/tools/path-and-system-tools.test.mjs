@@ -1683,6 +1683,7 @@ test("SkillsManager read accepts explicit skill entry paths", async () => {
     mocks: {
       [backendClientPath]: {
         async callBackend(command, args) {
+          if (command === "engine_emit_event") return undefined;
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           return {
@@ -1746,6 +1747,7 @@ test("SkillsManager install resolves local relative sources against the workspac
     mocks: {
       [backendClientPath]: {
         async callBackend(command, args) {
+          if (command === "engine_emit_event") return undefined;
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           return {
@@ -1797,6 +1799,7 @@ test("SkillsManager clawhub_install forwards owner handle for slug disambiguatio
     mocks: {
       [backendClientPath]: {
         async callBackend(command, args) {
+          if (command === "engine_emit_event") return undefined;
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           return {
@@ -1988,6 +1991,10 @@ test("SkillsManager management can auto-enable installed Skills without exposing
     mocks: {
       [backendClientPath]: {
         async callBackend(command, args) {
+          if (command === "engine_emit_event") {
+            events.push(args);
+            return undefined;
+          }
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           const action = args.payload.action;
@@ -2072,81 +2079,68 @@ test("SkillsManager management can auto-enable installed Skills without exposing
       changes.push(change);
     },
   });
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    dispatchEvent(event) {
-      events.push(event.type);
+  const installResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "skill-install",
+    name: "SkillsManager",
+    arguments: {
+      action: "install",
+      source: "https://github.com/example/repo/tree/main/skills/new-skill",
+      conflict: "backup",
     },
-  };
+  });
 
-  try {
-    const installResult = await bundle.executeToolCall({
-      type: "toolCall",
-      id: "skill-install",
-      name: "SkillsManager",
-      arguments: {
-        action: "install",
-        source: "https://github.com/example/repo/tree/main/skills/new-skill",
-        conflict: "backup",
-      },
-    });
+  assert.equal(installResult.isError, false);
+  assert.match(installResult.content[0].text, /installed=1/);
+  assert.match(installResult.content[0].text, /skillFile=new-skill\/SKILL\.md/);
+  assert.match(installResult.content[0].text, /enabled=true/);
+  assert.deepEqual(policy.allowedSkillNames, [
+    "skills-creator",
+    "skills-installer",
+    "new-skill",
+  ]);
+  assert.deepEqual(policy.allowedSkillBaseDirs, [
+    "skills-creator",
+    "skills-installer",
+    "new-skill",
+  ]);
+  assert.deepEqual(changes, [
+    {
+      action: "install",
+      names: ["new-skill"],
+      baseDirs: ["new-skill"],
+    },
+  ]);
 
-    assert.equal(installResult.isError, false);
-    assert.match(installResult.content[0].text, /installed=1/);
-    assert.match(installResult.content[0].text, /skillFile=new-skill\/SKILL\.md/);
-    assert.match(installResult.content[0].text, /enabled=true/);
-    assert.deepEqual(policy.allowedSkillNames, [
-      "skills-creator",
-      "skills-installer",
-      "new-skill",
-    ]);
-    assert.deepEqual(policy.allowedSkillBaseDirs, [
-      "skills-creator",
-      "skills-installer",
-      "new-skill",
-    ]);
-    assert.deepEqual(changes, [
-      {
-        action: "install",
-        names: ["new-skill"],
-        baseDirs: ["new-skill"],
-      },
-    ]);
+  const listResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "visible-list-after-install",
+    name: "SkillsManager",
+    arguments: { action: "list" },
+  });
+  assert.equal(listResult.isError, false);
+  assert.match(listResult.content[0].text, /visible=enabled-skills-only/);
+  assert.match(listResult.content[0].text, /skills=3/);
+  assert.match(listResult.content[0].text, /skills-creator/);
+  assert.match(listResult.content[0].text, /skills-installer/);
+  assert.match(listResult.content[0].text, /new-skill/);
+  assert.doesNotMatch(listResult.content[0].text, /hidden-skill/);
+  assert.equal(listResult.details.skillsCount, 3);
 
-    const listResult = await bundle.executeToolCall({
-      type: "toolCall",
-      id: "visible-list-after-install",
-      name: "SkillsManager",
-      arguments: { action: "list" },
-    });
-    assert.equal(listResult.isError, false);
-    assert.match(listResult.content[0].text, /visible=enabled-skills-only/);
-    assert.match(listResult.content[0].text, /skills=3/);
-    assert.match(listResult.content[0].text, /skills-creator/);
-    assert.match(listResult.content[0].text, /skills-installer/);
-    assert.match(listResult.content[0].text, /new-skill/);
-    assert.doesNotMatch(listResult.content[0].text, /hidden-skill/);
-    assert.equal(listResult.details.skillsCount, 3);
-
-    const readResult = await bundle.executeToolCall({
-      type: "toolCall",
-      id: "read-new-skill",
-      name: "SkillsManager",
-      arguments: {
-        action: "read",
-        path: "new-skill/SKILL.md",
-      },
-    });
-    assert.equal(readResult.isError, false);
-    assert.equal(readResult.details.path, "new-skill/SKILL.md");
-    assert.deepEqual(events, ["liveagent:skills-discovery-updated"]);
-  } finally {
-    if (typeof previousWindow === "undefined") {
-      delete globalThis.window;
-    } else {
-      globalThis.window = previousWindow;
-    }
-  }
+  const readResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "read-new-skill",
+    name: "SkillsManager",
+    arguments: {
+      action: "read",
+      path: "new-skill/SKILL.md",
+    },
+  });
+  assert.equal(readResult.isError, false);
+  assert.equal(readResult.details.path, "new-skill/SKILL.md");
+  assert.deepEqual(events, [
+    { event: "skills_changed", payload: { action: "install", names: ["new-skill"] } },
+  ]);
 });
 
 test("SkillsManager list filters installed Skills when inventory is explicitly allowed", async () => {
@@ -2241,6 +2235,10 @@ test("SkillsManager create action builds payload and refreshes skill discovery",
     mocks: {
       [backendClientPath]: {
         async callBackend(command, args) {
+          if (command === "engine_emit_event") {
+            events.push(args);
+            return undefined;
+          }
           invocations.push({ command, args });
           assert.equal(command, "system_manage_skill");
           const action = args.payload.action;
@@ -2297,120 +2295,107 @@ test("SkillsManager create action builds payload and refreshes skill discovery",
       changes.push(change);
     },
   });
-  const previousWindow = globalThis.window;
-  globalThis.window = {
-    dispatchEvent(event) {
-      events.push(event.type);
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "skill-create",
+    name: "SkillsManager",
+    arguments: {
+      action: "create",
+      name: "workflow-skill",
+      description: "Capture a repeated workflow",
+      body: "## Workflow\n\n1. Do the thing.",
+      files: [{ path: "references/notes.md", content: "Notes" }],
+      conflict: "fail",
     },
-  };
+  });
 
-  try {
-    const result = await bundle.executeToolCall({
-      type: "toolCall",
-      id: "skill-create",
-      name: "SkillsManager",
-      arguments: {
-        action: "create",
-        name: "workflow-skill",
-        description: "Capture a repeated workflow",
-        body: "## Workflow\n\n1. Do the thing.",
-        files: [{ path: "references/notes.md", content: "Notes" }],
-        conflict: "fail",
-      },
-    });
+  assert.equal(result.isError, false);
+  assert.equal(result.details.kind, "manage_skill");
+  assert.equal(result.details.action, "create");
+  assert.equal(result.details.createdName, "workflow-skill");
+  assert.equal(result.details.target, "/Users/me/.liveagent/skills/workflow-skill");
+  assert.match(result.content[0].text, /pathScheme=skill:\/\/<baseDir>\/\.\.\./);
+  assert.match(result.content[0].text, /target=skill:\/\/workflow-skill/);
+  assert.match(result.content[0].text, /skillFile=workflow-skill\/SKILL\.md/);
+  assert.match(result.content[0].text, /enabled=true/);
+  assert.doesNotMatch(result.content[0].text, /\/Users\/me\/\.liveagent\/skills/);
+  assert.deepEqual(policy.allowedSkillNames, [
+    "skills-creator",
+    "skills-installer",
+    "workflow-skill",
+  ]);
+  assert.deepEqual(policy.allowedSkillBaseDirs, [
+    "skills-creator",
+    "skills-installer",
+    "workflow-skill",
+  ]);
+  assert.deepEqual(changes, [
+    {
+      action: "create",
+      names: ["workflow-skill"],
+      baseDirs: ["workflow-skill"],
+    },
+  ]);
 
-    assert.equal(result.isError, false);
-    assert.equal(result.details.kind, "manage_skill");
-    assert.equal(result.details.action, "create");
-    assert.equal(result.details.createdName, "workflow-skill");
-    assert.equal(result.details.target, "/Users/me/.liveagent/skills/workflow-skill");
-    assert.match(result.content[0].text, /pathScheme=skill:\/\/<baseDir>\/\.\.\./);
-    assert.match(result.content[0].text, /target=skill:\/\/workflow-skill/);
-    assert.match(result.content[0].text, /skillFile=workflow-skill\/SKILL\.md/);
-    assert.match(result.content[0].text, /enabled=true/);
-    assert.doesNotMatch(result.content[0].text, /\/Users\/me\/\.liveagent\/skills/);
-    assert.deepEqual(policy.allowedSkillNames, [
-      "skills-creator",
-      "skills-installer",
-      "workflow-skill",
-    ]);
-    assert.deepEqual(policy.allowedSkillBaseDirs, [
-      "skills-creator",
-      "skills-installer",
-      "workflow-skill",
-    ]);
-    assert.deepEqual(changes, [
-      {
-        action: "create",
-        names: ["workflow-skill"],
-        baseDirs: ["workflow-skill"],
-      },
-    ]);
+  const validateResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "skill-validate",
+    name: "SkillsManager",
+    arguments: {
+      action: "validate",
+      name: "workflow-skill",
+    },
+  });
+  assert.equal(validateResult.isError, false);
+  assert.equal(validateResult.details.validationOk, true);
 
-    const validateResult = await bundle.executeToolCall({
-      type: "toolCall",
-      id: "skill-validate",
-      name: "SkillsManager",
-      arguments: {
-        action: "validate",
-        name: "workflow-skill",
-      },
-    });
-    assert.equal(validateResult.isError, false);
-    assert.equal(validateResult.details.validationOk, true);
-
-    const packageResult = await bundle.executeToolCall({
-      type: "toolCall",
-      id: "skill-package",
-      name: "SkillsManager",
-      arguments: {
-        action: "package",
-        name: "workflow-skill",
-      },
-    });
-    assert.equal(packageResult.isError, false);
-    assert.match(packageResult.content[0].text, /archive=skill:\/\/\.packages\/workflow-skill\.skill/);
-    assert.deepEqual(events, ["liveagent:skills-discovery-updated"]);
-    assert.deepEqual(invocations, [
-      {
-        command: "system_manage_skill",
-        args: {
-          payload: {
-            action: "create",
-            name: "workflow-skill",
-            description: "Capture a repeated workflow",
-            body: "## Workflow\n\n1. Do the thing.",
-            files: [{ path: "references/notes.md", content: "Notes" }],
-            conflict: "fail",
-          },
+  const packageResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "skill-package",
+    name: "SkillsManager",
+    arguments: {
+      action: "package",
+      name: "workflow-skill",
+    },
+  });
+  assert.equal(packageResult.isError, false);
+  assert.match(packageResult.content[0].text, /archive=skill:\/\/\.packages\/workflow-skill\.skill/);
+  assert.deepEqual(events, [
+    { event: "skills_changed", payload: { action: "create", names: ["workflow-skill"] } },
+  ]);
+  assert.deepEqual(invocations, [
+    {
+      command: "system_manage_skill",
+      args: {
+        payload: {
+          action: "create",
+          name: "workflow-skill",
+          description: "Capture a repeated workflow",
+          body: "## Workflow\n\n1. Do the thing.",
+          files: [{ path: "references/notes.md", content: "Notes" }],
+          conflict: "fail",
         },
       },
-      {
-        command: "system_manage_skill",
-        args: {
-          payload: {
-            action: "validate",
-            name: "workflow-skill",
-          },
+    },
+    {
+      command: "system_manage_skill",
+      args: {
+        payload: {
+          action: "validate",
+          name: "workflow-skill",
         },
       },
-      {
-        command: "system_manage_skill",
-        args: {
-          payload: {
-            action: "package",
-            name: "workflow-skill",
-          },
+    },
+    {
+      command: "system_manage_skill",
+      args: {
+        payload: {
+          action: "package",
+          name: "workflow-skill",
         },
       },
-    ]);
-  } finally {
-    if (typeof previousWindow === "undefined") {
-      delete globalThis.window;
-    } else {
-      globalThis.window = previousWindow;
-    }
-  }
+    },
+  ]);
 });
 
 test("Image file tool returns display image details and inline image content", async () => {

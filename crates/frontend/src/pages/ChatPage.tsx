@@ -136,6 +136,7 @@ import {
   removeQueuedChatTurnsForConversation,
 } from "./chat/queue/chatTurnQueue";
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
+import { formatHookWarningMessage } from "./chat/runtime/chatPageRuntime";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
@@ -232,12 +233,6 @@ export function ChatPage(props: ChatPageProps) {
 
   const isAgentDevExecutionMode = isAgentDevMode(settings.system.executionMode);
   const skillsEnabled = settings.skills.enabled;
-  const activeAgentPrompt = useMemo(() => {
-    const activeTemplate = settings.agents.find(
-      (template) => template.enabled && template.prompt.trim(),
-    );
-    return activeTemplate?.prompt.trim() ?? "";
-  }, [settings.agents]);
   const selectedSkillNames = useMemo(
     () => (skillsEnabled ? mergeAlwaysEnabledSkillNames(settings.skills.selected) : []),
     [skillsEnabled, settings.skills.selected],
@@ -440,7 +435,6 @@ export function ChatPage(props: ChatPageProps) {
   const {
     liveTranscriptStore,
     getConversationLiveTranscriptStore,
-    getCompactionController,
     deleteConversationArtifacts,
     clearAbortSnapshot,
     captureAbortSnapshot,
@@ -528,6 +522,16 @@ export function ChatPage(props: ChatPageProps) {
     currentConversationId,
     getConversationLiveTranscriptStore,
     updateToolStatus,
+    updateCompactionStatus: (conversationId, status) =>
+      updateConversationRuntimeEntry(conversationId, (prev) => ({
+        ...prev,
+        compactionStatus: status,
+      })),
+    updateHookWarning: (conversationId, warning) =>
+      updateConversationRuntimeEntry(conversationId, (prev) => ({
+        ...prev,
+        hookWarning: formatHookWarningMessage(settings.locale, t, warning),
+      })),
     appendDraftAssistantText,
     batchLiveRoundsUpdate,
     settleLiveTranscript,
@@ -1468,7 +1472,6 @@ export function ChatPage(props: ChatPageProps) {
     getPendingUploadsForConversation,
     setPendingUploadsForConversation,
     getConversationLiveTranscriptStore,
-    getCompactionController,
     clearAbortSnapshot,
     getAbortSnapshot,
     resetLiveTranscript,
@@ -1476,10 +1479,8 @@ export function ChatPage(props: ChatPageProps) {
     updateToolStatus,
     backendBridgeHistorySummaryRef,
     availableSkills,
-    skillsRootDir,
     refreshSkills,
     selectedSkillNames,
-    activeAgentPrompt,
     ensureTunnelToolTab,
     ensureSshTunnelToolTab,
     persistConversation,

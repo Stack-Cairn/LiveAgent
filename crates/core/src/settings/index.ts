@@ -26,12 +26,7 @@ import {
 } from "../providers/cliIdentityCore";
 import { createUuid } from "../shared/id";
 import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
-import { normalizeFontFamily } from "../system/fontFamily";
-import {
-  DEFAULT_CHAT_TRANSCRIPT_WIDTH,
-  MAX_CHAT_TRANSCRIPT_WIDTH,
-  MIN_CHAT_TRANSCRIPT_WIDTH,
-} from "../transcript-width/transcriptWidthModel";
+import { normalizeFontFamily } from "../shared/fontFamily";
 import {
   normalizeSelectedModel,
   normalizeSelectedModelForProviders,
@@ -39,7 +34,7 @@ import {
 } from "../models/selectedModel";
 import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
 
-export { normalizeFontFamily } from "../system/fontFamily";
+export { normalizeFontFamily } from "../shared/fontFamily";
 export {
   normalizeSelectedModel,
   normalizeSelectedModelForProviders,
@@ -158,9 +153,10 @@ export type FontScaleSettings = {
   rightDock: number;
 };
 
-// Bounds live with the geometry that enforces them; re-exported here so
-// settings consumers keep a single import site.
-export { DEFAULT_CHAT_TRANSCRIPT_WIDTH, MAX_CHAT_TRANSCRIPT_WIDTH, MIN_CHAT_TRANSCRIPT_WIDTH };
+// Transcript width bounds enforced by normalizeChatTranscriptSettings below.
+export const DEFAULT_CHAT_TRANSCRIPT_WIDTH = 768;
+export const MIN_CHAT_TRANSCRIPT_WIDTH = 560;
+export const MAX_CHAT_TRANSCRIPT_WIDTH = 1200;
 
 export type ChatTranscriptSettings = {
   width: number;
@@ -2156,53 +2152,6 @@ export function updateCustomSettings(
   });
 }
 
-const RIGHT_DOCK_WRITER_ID_STORAGE_KEY = "liveagent.client-id";
-
-let cachedRightDockWriterId = "";
-
-function generateRightDockWriterId(): string {
-  return createUuid().replace(/-/g, "").slice(0, 12);
-}
-
-// Stable per-client id used to break stateVersion ties deterministically in
-// mergeSyncedRightDockSettings: both sides of a merge evaluate the same
-// (stateVersion, writerId) order, so concurrent writers converge without the
-// old "+2 beats the echo" version-bump tricks.
-export function getRightDockWriterId(): string {
-  if (cachedRightDockWriterId) return cachedRightDockWriterId;
-  let stored = "";
-  try {
-    stored = globalThis.localStorage?.getItem(RIGHT_DOCK_WRITER_ID_STORAGE_KEY) ?? "";
-  } catch {
-    stored = "";
-  }
-  const normalized = stored.trim().slice(0, 32);
-  if (normalized) {
-    cachedRightDockWriterId = normalized;
-    return normalized;
-  }
-  const generated = generateRightDockWriterId();
-  try {
-    globalThis.localStorage?.setItem(RIGHT_DOCK_WRITER_ID_STORAGE_KEY, generated);
-  } catch {
-    // Ephemeral id for environments without storage (e.g. tests).
-  }
-  cachedRightDockWriterId = generated;
-  return generated;
-}
-
-// Version fields are stamped centrally by updateRightDockProjectState; content
-// is everything a user can observe or reorder.
-function rightDockProjectContentKey(state: RightDockProjectState): string {
-  return JSON.stringify({
-    activeTabId: state.activeTabId ?? "",
-    tabOrder: state.tabOrder,
-    tools: RIGHT_DOCK_TOOL_KINDS.map((kind) => [kind, state.tools[kind] ?? null]),
-    openVersion: state.openVersion,
-  });
-}
-
-
 export function getRightDockProjectState(
   customSettings: CustomSettings,
   projectPathKey: string,
@@ -2215,34 +2164,6 @@ export function getRightDockProjectState(
 
 
 
-// All persisted dock mutations funnel through here: the updater describes
-// content only, and version stamping (stateVersion / writerId / lastUsedAt)
-// happens centrally so no call site can get the merge bookkeeping wrong.
-export function updateRightDockProjectState(
-  prev: AppSettings,
-  projectPathKey: string,
-  updater: (current: RightDockProjectState) => RightDockProjectState,
-): AppSettings {
-  const normalizedPathKey = workspaceProjectPathKey(projectPathKey);
-  if (!normalizedPathKey) return prev;
-  const current = getRightDockProjectState(prev.customSettings, normalizedPathKey);
-  const next = normalizeRightDockProjectState(updater(current));
-  if (rightDockProjectContentKey(current) === rightDockProjectContentKey(next)) return prev;
-  return updateCustomSettings(prev, {
-    rightDock: {
-      ...prev.customSettings.rightDock,
-      projects: {
-        ...prev.customSettings.rightDock.projects,
-        [normalizedPathKey]: {
-          ...next,
-          stateVersion: current.stateVersion + 1,
-          writerId: getRightDockWriterId(),
-          lastUsedAt: Date.now(),
-        },
-      },
-    },
-  });
-}
 
 
 

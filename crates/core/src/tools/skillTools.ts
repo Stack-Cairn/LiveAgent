@@ -1,7 +1,8 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 
-import { manageSkill, notifySkillsDiscoveryUpdated } from "../skills";
+import { emitWireEvent } from "../events";
+import { manageSkill } from "../skills";
 import { isAlwaysEnabledSkillName } from "../skills/builtin";
 import {
   type BuiltinToolBundle,
@@ -653,10 +654,18 @@ export function createSkillTools(
             console.warn("Failed to auto-enable managed Skills", error);
           }
         }
-        notifySkillsDiscoveryUpdated();
+        emitWireEvent({
+          type: "skills_changed",
+          action: result.action === "create" ? "create" : "install",
+          names: access.names,
+        });
       }
       if (result.action === "delete") {
-        notifySkillsDiscoveryUpdated();
+        emitWireEvent({
+          type: "skills_changed",
+          action: "delete",
+          names: result.deleted?.name ? [result.deleted.name] : [],
+        });
       }
 
       if (visibleResult.action === "read") {

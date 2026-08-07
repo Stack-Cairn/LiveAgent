@@ -6,7 +6,7 @@ import {
   type FileLedger,
   formatFileLedgerBlock,
   mergeMessagesIntoLedger,
-} from "../compaction/fileLedger";
+} from "../context/fileLedger";
 import {
   sanitizeMessagesForContinuation,
   sanitizeMessagesForModelContext,

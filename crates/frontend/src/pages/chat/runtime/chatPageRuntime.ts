@@ -1,6 +1,6 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { HOOK_EVENT_TRANSLATION_KEYS } from "../../../lib/automation";
-import type { HookRunWarning } from "../../../lib/automation/hookRunner";
+import type { HookEvent } from "../../../lib/automation";
 import type { CompactionStatus } from "../../../lib/chat/compaction/types";
 import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
 import type { ConversationPersistenceCursor } from "../../../lib/chat/history/chatHistory";
@@ -206,9 +206,10 @@ export function appendSystemPrompt(base: string | undefined, suffix: string) {
 export function formatHookWarningMessage(
   locale: AppSettings["locale"],
   t: (key: string) => string,
-  warning: HookRunWarning,
+  warning: { hookName: string; event: string; message: string },
 ) {
-  const eventLabel = t(HOOK_EVENT_TRANSLATION_KEYS[warning.event]);
+  const translationKey = HOOK_EVENT_TRANSLATION_KEYS[warning.event as HookEvent];
+  const eventLabel = translationKey ? t(translationKey) : warning.event;
   return locale === "en-US"
     ? `Hook "${warning.hookName}" failed during ${eventLabel}: ${warning.message}`
     : `Hook「${warning.hookName}」在 ${eventLabel} 执行失败：${warning.message}`;

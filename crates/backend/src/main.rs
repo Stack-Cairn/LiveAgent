@@ -152,9 +152,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("backend 监听 http://{addr}");
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    // with_connect_info：认证中间件靠对端地址做 loopback 豁免（本机 Node 引擎）。
+    // 不再需要 with_connect_info：对端地址曾是 loopback 豁免的依据，
+    // 现在认证只看 Bearer 凭据，来源地址不参与任何判断。
     tokio::select! {
-        result = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()) => result?,
+        result = axum::serve(listener, app.into_make_service()) => result?,
         _ = shutdown_rx.recv() => {
             drop(_engine);
         }

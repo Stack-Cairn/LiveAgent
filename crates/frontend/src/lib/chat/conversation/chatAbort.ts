@@ -1,12 +1,12 @@
 import type {
   AssistantMessage,
   Message,
-  Model,
   ToolCall,
   ToolResultMessage,
   Usage,
 } from "@earendil-works/pi-ai";
 
+import type { RuntimeModelIdentity } from "../../models/runtimeModelIdentity";
 import type { ExecutionMode } from "../../settings";
 import { isSubagentCardToolCall } from "../../subagents/card";
 import {
@@ -62,7 +62,8 @@ export function cloneLiveRoundSnapshots(rounds: LiveRoundSnapshot[]): LiveRoundS
 }
 
 function buildAssistantMessage(params: {
-  model: Model<any>;
+  model: RuntimeModelIdentity;
+  meta?: UiRoundMeta;
   blocks?: UiRoundContentBlock[];
   suppressedToolCalls?: ToolCall[];
   stopReason: AssistantMessage["stopReason"];
@@ -107,12 +108,18 @@ function buildAssistantMessage(params: {
 
   if (content.length === 0) return null;
 
+  // 三元组权威值来自 core 的 round_meta（该轮助手消息落定时上报）；该轮
+  // 尚无 meta（如首轮即被中止）时退回按 providerId 推断的兜底身份。
+  const api = params.meta?.api || params.model.api;
+  const provider = params.meta?.provider || params.model.provider;
+  const model = params.meta?.model || params.model.id;
+
   return {
     role: "assistant",
     content,
-    api: params.model.api,
-    provider: params.model.provider,
-    model: params.model.id,
+    api,
+    provider,
+    model,
     usage: cloneValue(ZERO_USAGE),
     stopReason: params.stopReason,
     errorMessage: params.stopReason === "aborted" ? "Request aborted" : undefined,
@@ -128,7 +135,7 @@ export function isAbortedAssistantMessage(
 
 export function buildAbortedMessagesFromSnapshot(params: {
   executionMode: ExecutionMode;
-  model: Model<any>;
+  model: RuntimeModelIdentity;
   draftAssistantText: string;
   liveRounds: LiveRoundSnapshot[];
   completedThroughRound?: number;
@@ -168,6 +175,7 @@ export function buildAbortedMessagesFromSnapshot(params: {
     const roundCompleted = round.round <= completedThroughRound;
     const assistant = buildAssistantMessage({
       model: params.model,
+      meta: round.meta,
       blocks: round.blocks,
       suppressedToolCalls: suppressedToolTrace.map((item) => item.toolCall),
       stopReason: roundCompleted
@@ -249,7 +257,7 @@ export function sanitizeAbortedHistoryMessages(messages: Message[]): Message[] {
 
 export function buildPersistableMessagesFromSnapshot(params: {
   executionMode: ExecutionMode;
-  model: Model<any>;
+  model: RuntimeModelIdentity;
   draftAssistantText: string;
   liveRounds: LiveRoundSnapshot[];
   completedThroughRound?: number;

@@ -12,6 +12,10 @@ import {
 } from "./engine";
 import type { MemoryOrganizeRun } from "./memory/api";
 import { acceptOrganizerRun } from "./memory/organizer/run";
+import {
+  type ConversationTitleRequest,
+  generateConversationTitle,
+} from "./turns/conversationTitle";
 import { pokeCronPromptRuns, startCronPromptRunner } from "./automation/cronPromptRunner";
 
 const nodePort = process.env.LIVEAGENT_NODE_PORT;
@@ -88,6 +92,21 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
         return;
       }
       respondJson(res, 202, { ok: acceptOrganizerRun(run) });
+    } else if (req.method === "POST" && req.url === "/conversation_title_generate") {
+      // 同步返回:标题是一次性的短请求,没有增量可播。失败一律 null,
+      // 调用方沿用 fallbackTitle。
+      const { titleSourceText, selectedModel } = (body ?? {}) as Partial<ConversationTitleRequest>;
+      if (typeof titleSourceText !== "string" || !titleSourceText.trim()) {
+        respondJson(res, 400, { error: "titleSourceText required" });
+        return;
+      }
+      let title: string | null = null;
+      try {
+        title = await generateConversationTitle({ titleSourceText, selectedModel });
+      } catch (error) {
+        console.warn("conversation title generation failed:", error);
+      }
+      respondJson(res, 200, { ok: { title } });
     } else if (req.method === "POST" && req.url === "/cron_prompt_poke") {
       // 立即认领:引擎自带对账定时器,这条只是把「刚排进队列」提前告知,
       // 省掉一个轮询周期。执行进度与终态走 cron_prompt_* 事件。

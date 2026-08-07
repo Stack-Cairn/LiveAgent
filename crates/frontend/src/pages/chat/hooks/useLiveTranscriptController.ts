@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { createCompactionControllerRegistry } from "../../../lib/chat/compaction/controller";
-import type { ToolStatus } from "../../../lib/protocol/wireEvents";
 import {
   cloneLiveRoundSnapshots,
   type LiveRoundSnapshot,
@@ -11,6 +9,7 @@ import {
   type RetryAttemptRecord,
 } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { LiveRound } from "../../../lib/chat/messages/uiMessages";
+import type { ToolStatus } from "../../../lib/protocol/wireEvents";
 
 const LIVE_TRANSCRIPT_RAF_FALLBACK_MS = 96;
 const LIVE_TRANSCRIPT_BACKGROUND_BATCH_MS = 160;
@@ -119,7 +118,6 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
   const liveTranscriptArtifactsByStoreRef = useRef(
     new WeakMap<LiveTranscriptStore, LiveTranscriptArtifacts>(),
   );
-  const compactionControllersRef = useRef(createCompactionControllerRegistry());
 
   const ensureConversationLiveTranscriptArtifacts = useCallback((conversationId: string) => {
     const key = conversationId.trim();
@@ -134,11 +132,6 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
   const getConversationLiveTranscriptStore = useCallback(
     (conversationId: string) => ensureConversationLiveTranscriptArtifacts(conversationId).store,
     [ensureConversationLiveTranscriptArtifacts],
-  );
-
-  const getCompactionController = useCallback(
-    (conversationId: string) => compactionControllersRef.current.get(conversationId),
-    [],
   );
 
   const liveTranscriptStore = useMemo(
@@ -223,7 +216,6 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
       const artifacts = liveTranscriptArtifactsRef.current.get(key);
       cancelPendingLiveUpdates(artifacts ?? null);
       liveTranscriptArtifactsRef.current.delete(key);
-      compactionControllersRef.current.dispose(key);
     },
     [cancelPendingLiveUpdates],
   );
@@ -421,7 +413,6 @@ export function useLiveTranscriptController(params: UseLiveTranscriptControllerP
   return {
     liveTranscriptStore,
     getConversationLiveTranscriptStore,
-    getCompactionController,
     deleteConversationArtifacts,
     clearAbortSnapshot,
     captureAbortSnapshot,

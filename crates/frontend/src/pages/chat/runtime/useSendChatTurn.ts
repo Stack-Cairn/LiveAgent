@@ -1,11 +1,8 @@
-import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
 } from "../../../components/chat/MentionComposer";
-import { getAutomationState } from "../../../lib/automation";
-import { createHookRunScope } from "../../../lib/automation/hookRunner";
 import { backendFetch } from "../../../lib/backend/client";
 import {
   buildPersistableMessagesFromSnapshot,
@@ -17,7 +14,6 @@ import {
   type ConversationViewState,
   type HistoryMessageRef,
 } from "../../../lib/chat/conversation/conversationState";
-import { createConversationHookLifecycle } from "../../../lib/chat/conversation/run";
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
 import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
 import {
@@ -33,22 +29,11 @@ import {
   isAbortLikeError,
 } from "../../../lib/chat/page/chatPageHelpers";
 import type { ScrollFollowHandle } from "../../../lib/chat-scroll/useScrollFollow";
-import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
-import { buildMemoryOverviewSection } from "../../../lib/memory/prompts/injection";
-import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
-import {
-  type AppSettings,
-  type ChatRuntimeControls,
-  type ExecutionMode,
-  isAgentDevMode,
-} from "../../../lib/settings";
+import { resolveRuntimeModelIdentity } from "../../../lib/models/runtimeModelIdentity";
+import type { AppSettings, ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
 import type { SidebarStore } from "../../../lib/sidebar/store";
-import {
-  buildSkillsSystemPrompt,
-  resolveExplicitSkillMentions,
-  type SkillSummary,
-} from "../../../lib/skills";
-import { type SubagentStoreManager } from "../../../lib/subagents";
+import type { SkillSummary } from "../../../lib/skills";
+import type { SubagentStoreManager } from "../../../lib/subagents";
 import { asErrorMessage } from "../chatPageUtils";
 import {
   buildTextFromComposerDraft,
@@ -60,7 +45,6 @@ import type { useLiveTranscriptController } from "../hooks/useLiveTranscriptCont
 import {
   buildErrorAssistantMessage,
   buildPartialAssistantMessage,
-  formatHookWarningMessage,
 } from "./chatPageRuntime";
 import {
   finalizeChatRunInOrder,
@@ -68,19 +52,12 @@ import {
   settleChatRunFinalization,
   trackTerminalHistoryPersist,
 } from "./chatRunFinalization";
-import {
-  buildPreparedContext as buildPreparedConversationContext,
-  buildResumeContext as buildResumeConversationContext,
-} from "./conversationContextBuilders";
 import { startConversationTitleJob } from "./conversationTitleJob";
 import {
   type EffectiveChatModelSelection,
   resolveEffectiveChatModelSelection,
 } from "./modelSelection";
-import {
-  resolveConversationTitleModelSelection,
-  selectedModelsMatch,
-} from "./providerRuntimeConfig";
+import { selectedModelsMatch } from "./providerRuntimeConfig";
 import { waitForRunEnded } from "./runEndedWaiters";
 
 type LiveTranscriptController = ReturnType<typeof useLiveTranscriptController>;
@@ -128,7 +105,6 @@ type UseSendChatTurnParams = {
     uploads: PendingUploadedFile[],
   ) => void;
   getConversationLiveTranscriptStore: LiveTranscriptController["getConversationLiveTranscriptStore"];
-  getCompactionController: LiveTranscriptController["getCompactionController"];
   clearAbortSnapshot: LiveTranscriptController["clearAbortSnapshot"];
   getAbortSnapshot: LiveTranscriptController["getAbortSnapshot"];
   resetLiveTranscript: LiveTranscriptController["resetLiveTranscript"];
@@ -136,10 +112,8 @@ type UseSendChatTurnParams = {
   updateToolStatus: LiveTranscriptController["updateToolStatus"];
   backendBridgeHistorySummaryRef: MutableRefObject<Map<string, ChatHistorySummary>>;
   availableSkills: SkillSummary[];
-  skillsRootDir: string;
   refreshSkills: () => Promise<{ skills: SkillSummary[]; rootDir: string } | null>;
   selectedSkillNames: string[];
-  activeAgentPrompt: string;
   ensureTunnelToolTab: (projectPathKey?: string) => void;
   ensureSshTunnelToolTab: (projectPathKey?: string) => void;
   persistConversation: (params: PersistConversationParams) => Promise<boolean>;
@@ -188,7 +162,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     getPendingUploadsForConversation,
     setPendingUploadsForConversation,
     getConversationLiveTranscriptStore,
-    getCompactionController,
     clearAbortSnapshot,
     getAbortSnapshot,
     resetLiveTranscript,
@@ -196,10 +169,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     updateToolStatus,
     backendBridgeHistorySummaryRef,
     availableSkills,
-    skillsRootDir,
     refreshSkills,
     selectedSkillNames,
-    activeAgentPrompt,
     persistConversation,
     reloadConversationFromHistory,
     pruneIdleConversationCaches,
@@ -251,7 +222,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       runtimeEntry?.workdir ??
       settings.system.workdir
     ).trim();
-    const effectiveIsAgentDevExecutionMode = isAgentDevMode(effectiveExecutionMode);
     const effectiveSkillsEnabled = settings.skills.enabled;
     const setConversationErrorState = (message: string | null) => {
       updateConversationRuntimeEntry(conversationId, (prev) => ({
@@ -299,15 +269,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     updateConversationRuntimeEntry(conversationId, (prev) =>
       selectedModelsMatch(prev.selectedModel, selectedModel) ? prev : { ...prev, selectedModel },
     );
-    const runtimeControls = overrides?.runtimeControlsOverride ?? settings.chatRuntimeControls;
-    const providerConfig = createProviderRuntimeConfig(provider, model, runtimeControls);
-    const runtimeModel = createModelFromConfig(
-      providerId,
-      model,
-      provider.baseUrl.trim(),
-      provider.requestFormat,
-      providerConfig.modelConfig,
-    );
+    // 落库消息的模型三元组兜底；权威值由 core 经 round_meta 逐轮上报
+    // （chatAbort 落库时优先取 round.meta）。请求装配与模型目录归 crates/core。
+    const runtimeModel = resolveRuntimeModelIdentity(providerId, model, provider.requestFormat);
 
     const textOverride =
       typeof overrides?.textOverride === "string" ? overrides.textOverride : null;
@@ -356,8 +320,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       return false;
     }
     const pendingUserMessage = userMessage;
-    const content =
-      typeof pendingUserMessage.content === "string" ? pendingUserMessage.content : "";
 
     const titleSourceText = text || uploadedFiles.map((file) => file.fileName).join(", ");
 
@@ -369,19 +331,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       workdir: conversationCwd,
     }));
     const transcriptStore = getConversationLiveTranscriptStore(conversationId);
-    const compaction = getCompactionController(conversationId);
     const isConversationVisible = () => currentConversationIdRef.current === conversationId;
     // 轮次级取消：会话 abort controller 只注册 userStop 一次；每个 LLM 请求
     // （主请求/压缩摘要/标题任务）各自派生子 scope，杜绝 abort 换代丢停止的窗口。
     const cancellation = createTurnCancellation();
-    const compactionDebugLogger = createStreamDebugLogger({
-      enabled: effectiveIsAgentDevExecutionMode,
-      conversationId,
-      executionMode: effectiveExecutionMode,
-      streamKind: "conversation_compaction",
-      providerId,
-      model,
-    });
     const baseConversationState = runtimeEntry.state;
     const isFirstTurn = baseConversationState.meta.totalMessageCount === 0;
     const existingHistoryItem =
@@ -405,24 +358,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
     let titlePromise: Promise<string | null> | null = null;
     if (isFirstTurn || isBranchDefaultTitle) {
-      const titleModelSelection = resolveConversationTitleModelSelection(
-        settings,
-        effectiveSelectedModel,
-      );
-      const titleProviderConfig = createProviderRuntimeConfig(
-        titleModelSelection.provider,
-        titleModelSelection.model,
-        runtimeControls,
-      );
       titlePromise = startConversationTitleJob({
-        providerId: titleModelSelection.providerId,
-        model: titleModelSelection.model,
-        runtime: titleProviderConfig,
         signal: cancellation.deriveScope().controller.signal,
         conversationId,
         titleSourceText,
-        content,
-        locale: settings.locale,
+        selectedModel,
         sidebarStore,
         titleJobRef,
       });
@@ -453,7 +393,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     let initialPersistPromise: Promise<boolean> | null = null;
     let terminalHistoryPersistPromise: Promise<boolean> | null = null;
     let runCleanupPromise: Promise<void> = Promise.resolve();
-    let compactionBound = false;
     let runStopRequestVersion: number | null = null;
 
     async function persistTerminalConversation(
@@ -526,10 +465,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       if (runStopRequestVersion === null) return false;
       cancellation.userStop.abort();
       releaseConversationRunUi();
-      if (compactionBound) {
-        compaction.unbindTurn();
-        compactionBound = false;
-      }
       clearAbortSnapshot(transcriptStore);
       await finalizeConversationRun();
       clearConversationStopHandler(conversationId, handleConversationStop);
@@ -627,112 +562,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     if (await finishRequestedStopBeforeRuntime()) {
       return true;
     }
-    let skillsPrompt = "";
-    let memoryPrompt = "";
-
-    function buildPreparedContext(
-      state: ConversationViewState,
-      tools?: Context["tools"],
-      options?: { includeAbortedMessages?: boolean; includeUploadedFilesMetadata?: boolean },
-    ): Context {
-      return buildPreparedConversationContext({
-        state,
-        tools,
-        activeAgentPrompt,
-        skillsPrompt,
-        memoryPrompt,
-        includeAbortedMessages: options?.includeAbortedMessages,
-        includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
-      });
-    }
-
-    function buildResumeContext(
-      state: ConversationViewState,
-      resumeMessage?: UserMessage,
-      tools?: Context["tools"],
-      options?: { includeAbortedMessages?: boolean; includeUploadedFilesMetadata?: boolean },
-    ): Context {
-      return buildResumeConversationContext({
-        state,
-        resumeMessage,
-        tools,
-        activeAgentPrompt,
-        skillsPrompt,
-        memoryPrompt,
-        includeAbortedMessages: options?.includeAbortedMessages,
-        includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
-      });
-    }
-
-    compaction.bindTurn({
-      providerId,
-      model,
-      runtime: providerConfig,
-      cancellation,
-      debugLogger: compactionDebugLogger,
-      buildPreparedContext,
-      buildResumeContext,
-      presend: {
-        baseState: baseConversationState,
-        pendingUserText: content,
-        composerText: content,
-        uploadedFiles,
-        composeAppliedState: (state) => appendMessagesToConversation(state, [pendingUserMessage]),
-      },
-      sinks: {
-        applyState: applyConversationState,
-        applyStateMidRun: rebaseConversationStateDuringRun,
-        publishStatus: (status) =>
-          updateConversationRuntimeEntry(conversationId, (prev) => ({
-            ...prev,
-            compactionStatus: status,
-          })),
-        setBridgeToolStatus: (status) => updateToolStatus(status, transcriptStore),
-        persist: (state) =>
-          persistConversation({
-            conversationId,
-            sessionId,
-            providerId,
-            model,
-            selectedModel,
-            cwd: conversationCwd,
-            state,
-            fallbackTitle,
-            createdAt,
-            titlePromise,
-          }),
-        restoreComposer: (composerText, restoredUploads) => {
-          if (isConversationVisible() && typeof composerText === "string") {
-            composerRef.current?.setText(composerText);
-            composerRef.current?.focus();
-          }
-          setPendingUploadsForConversation(conversationId, restoredUploads);
-        },
-        persistRollback: async (state) => {
-          abortedConversationCommitted = true;
-          await persistConversationWithHistorySync({
-            conversationId,
-            sessionId,
-            providerId,
-            model,
-            selectedModel,
-            cwd: conversationCwd,
-            state,
-            fallbackTitle,
-            createdAt,
-            titlePromise,
-          });
-        },
-      },
-    });
-    compactionBound = true;
 
     // Optionally append skills metadata to system prompt (progressive disclosure).
     if (effectiveSkillsEnabled && selectedSkillNames.length > 0) {
       // In case the user sends quickly after startup (availableSkills not loaded yet),
       // do a best-effort refresh before failing.
       let skillsList = availableSkills;
-      let rootDir = skillsRootDir;
       let byName = new Map(skillsList.map((s) => [s.name, s]));
       let missing = selectedSkillNames.filter((n) => !byName.has(n));
       if (missing.length > 0) {
@@ -742,7 +577,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         }
         if (fresh) {
           skillsList = fresh.skills;
-          rootDir = fresh.rootDir;
           byName = new Map(skillsList.map((s) => [s.name, s]));
           missing = selectedSkillNames.filter((n) => !byName.has(n));
         }
@@ -757,47 +591,13 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         restoreComposerOnStartFailure();
         return true;
       }
-
-      const selectedSkills = selectedSkillNames.map((n) => byName.get(n)!).filter(Boolean);
-      // IMPORTANT: Claude Code-style skills are progressive disclosure.
-      // We only provide metadata in the system prompt. The model decides whether to read the skill file.
-      const explicitSkills = resolveExplicitSkillMentions({
-        text,
-        structured: composerDraft?.skillMentions ?? [],
-        enabledSkills: selectedSkills,
-      });
-      skillsPrompt = buildSkillsSystemPrompt({
-        rootDir,
-        selected: selectedSkills,
-        explicit: explicitSkills,
-      });
-    }
-
-    try {
-      memoryPrompt = await buildMemoryOverviewSection(effectiveWorkdir);
-    } catch (error) {
-      console.warn("Failed to build memory overview prompt", error);
-      memoryPrompt = "";
     }
     if (await finishRequestedStopBeforeRuntime()) {
       return true;
     }
 
-    const hookScope = createHookRunScope({
-      hooks: getAutomationState().hooks.hooks,
-      conversationId,
-      workdir: effectiveWorkdir,
-      onWarning: (warning) => {
-        updateConversationRuntimeEntry(conversationId, (prev) => ({
-          ...prev,
-          hookWarning: formatHookWarningMessage(settings.locale, t, warning),
-        }));
-      },
-    });
-
-    const hookLifecycle = createConversationHookLifecycle((event) => {
-      hookScope.dispatch(event);
-    });
+    // hook 编排跑在 core 引擎回合生命周期里（crates/core/src/engine.ts）；
+    // 前端只消费 hook_warning wire 事件做展示，这里不再建 hook scope。
 
     let abortedConversationCommitted = false;
     const persistableAgentProgress: {
@@ -889,13 +689,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }));
     }
 
-    function rebaseConversationStateDuringRun(nextState: ConversationViewState) {
-      // Once a compaction/prune result is committed into visible history, the
-      // corresponding live transcript becomes stale and must be cleared.
-      applyConversationState(nextState);
-      resetLiveTranscript(transcriptStore);
-    }
-
     try {
       // 引擎在后端进程里跑：chat_send 只是受理（202），增量走 WS 事件，
       // 终态是 run_ended。waiter 必须在提交**之前**注册，否则短回复的
@@ -985,12 +778,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     } catch (err) {
       const aborted = cancellation.userStop.signal.aborted || isAbortLikeError(err);
       if (aborted) {
-        hookScope.cancel();
         runCleanupPromise = (async () => {
-          const rolledBack = await compaction.handleTurnAbort();
-          if (!rolledBack) {
-            commitVisibleAbortedConversation();
-          }
+          commitVisibleAbortedConversation();
           if (shouldCreatePendingHistoryItem && !abortedConversationCommitted) {
             sidebarStore.removeLocal(conversationId);
           }
@@ -1004,12 +793,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       }
     } finally {
       releaseConversationRunUi();
-      if (compactionBound) {
-        compaction.unbindTurn();
-        compactionBound = false;
-      }
-      hookLifecycle.endAgent();
-      hookScope.close();
       clearAbortSnapshot(transcriptStore);
       const stopped = runStopRequestVersion !== null || cancellation.userStop.signal.aborted;
       await finalizeConversationRun();

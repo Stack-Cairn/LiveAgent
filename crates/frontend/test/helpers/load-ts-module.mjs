@@ -221,6 +221,9 @@ export function createTsModuleLoader(options = {}) {
     ? path.resolve(options.rootDir)
     : path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
   const requireFromRoot = createRequire(path.join(rootDir, "package.json"));
+  const requireFromCore = createRequire(
+    path.resolve(fileURLToPath(new URL("../../../core", import.meta.url)), "package.json"),
+  );
   const cache = new Map();
   const defaultMocks = createDefaultMocks();
   const mocks = new Map(Object.entries(defaultMocks));
@@ -264,7 +267,9 @@ export function createTsModuleLoader(options = {}) {
     if (mock !== undefined) return mock;
 
     if (specifier === "@earendil-works/pi-agent-core") {
-      const packageJson = requireFromRoot.resolve("@earendil-works/pi-agent-core/package.json");
+      // 引擎只在 crates/core：前端已不依赖 pi-agent-core，跨 crate 加载 core 源码的
+      // 测试从 core 的 package.json 解析它。
+      const packageJson = requireFromCore.resolve("@earendil-works/pi-agent-core/package.json");
       return loadModule(path.join(path.dirname(packageJson), "dist/agent.js"));
     }
 

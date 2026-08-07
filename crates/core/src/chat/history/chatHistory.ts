@@ -3,7 +3,6 @@ import { callBackend } from "../../backendClient";
 import { normalizeConversationSystemPrompt } from "../context/systemPrompt";
 import {
   type ConversationViewState,
-  createTranscriptProjection,
   getActiveSegment,
   type HistoryMessageRef,
   normalizeConversationState,
@@ -136,13 +135,6 @@ export function buildConversationStateFromWindow(
   return normalizeConversationState({
     meta: record.meta,
     segments: [record.activeSegment],
-    transcript: createTranscriptProjection({
-      segments: record.segments,
-      activeSegmentIndex: record.meta.activeSegmentIndex,
-      oldestMessageOffset: record.oldestOffset,
-      hasMoreBefore: record.hasMoreBefore,
-      revision: record.revision,
-    }),
   });
 }
 

@@ -215,24 +215,3 @@ export type HooksApplyResponse = {
   hooks: HooksSnapshot;
 };
 
-export const HOOK_EVENT_TRANSLATION_KEYS: Record<HookEvent, string> = {
-  agent_start: "settings.hooksEventAgentStart",
-  turn_start: "settings.hooksEventTurnStart",
-  message_start: "settings.hooksEventMessageStart",
-  message_end: "settings.hooksEventMessageEnd",
-  tool_execution_start: "settings.hooksEventToolExecutionStart",
-  tool_execution_end: "settings.hooksEventToolExecutionEnd",
-  turn_end: "settings.hooksEventTurnEnd",
-  agent_end: "settings.hooksEventAgentEnd",
-};
-
-export const HOOK_EVENT_DESCRIPTION_TRANSLATION_KEYS: Record<HookEvent, string> = {
-  agent_start: "settings.hooksEventAgentStartDesc",
-  turn_start: "settings.hooksEventTurnStartDesc",
-  message_start: "settings.hooksEventMessageStartDesc",
-  message_end: "settings.hooksEventMessageEndDesc",
-  tool_execution_start: "settings.hooksEventToolExecutionStartDesc",
-  tool_execution_end: "settings.hooksEventToolExecutionEndDesc",
-  turn_end: "settings.hooksEventTurnEndDesc",
-  agent_end: "settings.hooksEventAgentEndDesc",
-};

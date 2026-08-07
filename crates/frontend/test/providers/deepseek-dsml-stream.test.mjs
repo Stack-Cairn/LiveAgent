@@ -13,8 +13,8 @@ process.env.LIVEAGENT_BACKEND_PORT ??= "0";
 const coreRootDir = path.resolve(rootDir, "../core");
 const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
 
-const proxyModulePath = path.join(rootDir, "src/lib/providers/proxy.ts");
-const powerActivityModulePath = path.join(rootDir, "src/lib/system/powerActivity.ts");
+const proxyModulePath = coreSrc("providers/proxy.ts");
+const powerActivityModulePath = coreSrc("system/powerActivity.ts");
 
 const loader = createTsModuleLoader();
 const { wrapDeepSeekDsmlToolCallStream } = loader.loadModule(
@@ -917,7 +917,7 @@ test("streamAssistantMessage replies to recovered DeepSeek DSML tool calls befor
       },
     },
   });
-  const providers = localLoader.loadModule("src/lib/providers/llm.ts");
+  const providers = localLoader.loadModule(coreSrc("providers/llm.ts"));
   const textDeltas = [];
 
   const final = await providers.streamAssistantMessage({
@@ -1000,7 +1000,7 @@ test("streamAssistantMessage normalizes recovered DeepSeek DSML tool calls from 
       },
     },
   });
-  const providers = localLoader.loadModule("src/lib/providers/llm.ts");
+  const providers = localLoader.loadModule(coreSrc("providers/llm.ts"));
 
   await providers.streamAssistantMessage({
     providerId: "claude_code",
@@ -1085,7 +1085,7 @@ test("completeAssistantMessage normalizes recovered DeepSeek DSML tool calls fro
       },
     },
   });
-  const providers = localLoader.loadModule("src/lib/providers/llm.ts");
+  const providers = localLoader.loadModule(coreSrc("providers/llm.ts"));
 
   await providers.completeAssistantMessage({
     providerId: "claude_code",

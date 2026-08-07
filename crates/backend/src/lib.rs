@@ -6,7 +6,7 @@
 //! chat 引擎运行在 Node 子进程（`crates/core`，内嵌 pi 库），由 `engine_process`
 //! spawn 守护；`engine_proxy` 把三条 chat 路由代理过去，事件经
 //! `engine_emit_event` 回流进 EventBus。backend↔core 走 127.0.0.1 明文 HTTP，
-//! 认证靠 loopback 豁免（见 server/auth.rs）。
+//! 认证靠 spawn 时下发的引擎凭据（见 server/auth.rs）。
 //!
 //! 核心能力模块（`commands` / `runtime` / `services` / `storage`）**不含任何 UI
 //! 框架依赖**——见 Cargo.toml 的编译期防线说明。两个消费者：

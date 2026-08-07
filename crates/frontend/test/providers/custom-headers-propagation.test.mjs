@@ -6,7 +6,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 // 回归网：自定义请求头曾在 Agent 聊天 / 文本聊天 / 自动标题 / Compaction 四条链路
 // 上被逐字段转抄的 runtime 对象整体丢弃。这里对每个真实的供应商请求入口各跑一遍，
-// 断言 customHeaders 与 promptCacheRetention 一路抵达上游头集与覆盖包。
+// 断言 customHeaders 与 promptCacheRetention 直接抵达上游请求头集
+//（core 跑在 Node，引擎直连 provider，本地反代与覆盖包已删除）。
 
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
@@ -16,16 +17,14 @@ const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 process.env.LIVEAGENT_BACKEND_PORT ??= "0";
 const coreRootDir = path.resolve(rootDir, "../core");
 const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
-// 前端 llm.ts 仍走 src/lib（KEEP），其电源活动边界还是前端模块路径。
-const powerActivityModulePath = path.join(rootDir, "src/lib/system/powerActivity.ts");
-
-const PROXY_SERVER_INFO = { baseUrl: "http://127.0.0.1:18080", token: "proxy-token" };
+// provider 运行时已整体归 core：电源活动边界也是 core 的模块路径。
+const powerActivityModulePath = coreSrc("system/powerActivity.ts");
 
 const CUSTOM_HEADERS = [
   { key: "X-Trace-Id", value: "liveagent-e2e" },
   // 覆盖内置默认头，且大小写与内置键不同——必须替换而非并存。
   { key: "user-agent", value: "my-agent/9.9" },
-  // 浏览器禁止头名：只能靠覆盖包送达上游。
+  // 浏览器禁止头名：Node/undici 无此限制，必须直接出现在上游头集。
   { key: "Cookie", value: "session=abc" },
   // 保留头：一律丢弃。
   { key: "Authorization", value: "Bearer hijacked" },
@@ -66,19 +65,13 @@ function createAssistantStream() {
 }
 
 /**
- * 走真实的 prepareProviderRequest + prepareProxyRequest（只把 tauri invoke 与
- * 电源活动这两个平台边界换成 mock），因此断言覆盖整条装配链。
+ * 走真实的 prepareProviderRequest + prepareProxyRequest（只把电源活动这个平台
+ * 边界换成 mock），因此断言覆盖整条装配链。
  */
 function loadProvidersWithCapturedStream() {
   const captured = [];
   const loader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command) {
-          if (command === "proxy_get_server_info") return PROXY_SERVER_INFO;
-          throw new Error(`unexpected tauri invoke: ${command}`);
-        },
-      },
       "@earendil-works/pi-ai/api/anthropic-messages": {
         stream(model, context, options) {
           captured.push({ model, context, options });
@@ -92,7 +85,7 @@ function loadProvidersWithCapturedStream() {
       },
     },
   });
-  return { providers: loader.loadModule("src/lib/providers/llm.ts"), captured };
+  return { providers: loader.loadModule(coreSrc("providers/llm.ts")), captured };
 }
 
 function buildRuntime() {
@@ -111,47 +104,24 @@ function readHeader(headers, name) {
   return matches.length === 1 ? headers[matches[0]] : undefined;
 }
 
-function decodeOverrides(headers) {
-  const encoded = readHeader(headers, "x-liveagent-upstream-headers");
-  assert.ok(encoded, "the upstream override package must be present");
-  return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
-}
-
 function assertCustomHeadersReachedUpstream(options) {
   const headers = options.headers ?? {};
 
-  // 1) 普通自定义头抵达请求头集。
+  // 1) 普通自定义头直接抵达上游请求头集。
   assert.equal(readHeader(headers, "x-trace-id"), "liveagent-e2e");
-  // 2) 自定义 UA 作为普通自定义头原样抵达，绝不重复、绝不被别的头覆盖。
+  // 2) 自定义 UA 原样抵达，绝不重复、绝不被别的头覆盖。
   assert.equal(readHeader(headers, "user-agent"), "my-agent/9.9");
-  // 3) 浏览器禁止头名同样进入头集，并由覆盖包负责真正送达。
+  // 3) 曾经的浏览器禁止头名如今直接下发（Node fetch 无 forbidden 限制）。
   assert.equal(readHeader(headers, "cookie"), "session=abc");
   // 4) 保留头不可被自定义头劫持。
   assert.equal(readHeader(headers, "authorization"), undefined);
   assert.equal(readHeader(headers, "x-api-key"), "test-key");
-  // anthropic-beta 由长上下文中间件独占：劫持尝试被保留头策略拦下，中间件算出的
-  // beta 串必须完好无损（覆盖包在其之前构建，不含该头，因此不会回头压掉它）。
+  // anthropic-beta 由长上下文中间件独占：劫持尝试被保留头策略拦下。
   assert.equal(readHeader(headers, "anthropic-beta"), "context-1m-2025-08-07");
-  assert.equal(readHeader(headers, "x-liveagent-proxy-token"), PROXY_SERVER_INFO.token);
-
-  // 5) 覆盖包携带全部非鉴权头，由 Rust 反代在转发前最后一步覆盖写入。
-  const overrides = decodeOverrides(headers);
-  assert.equal(overrides["X-Trace-Id"], "liveagent-e2e");
-  assert.equal(overrides["user-agent"], "my-agent/9.9");
-  assert.equal(overrides.Cookie, "session=abc");
-  for (const excluded of ["authorization", "x-api-key", "x-goog-api-key"]) {
-    assert.ok(
-      !Object.keys(overrides).some((key) => key.toLowerCase() === excluded),
-      `${excluded} must not be duplicated into the override package`,
-    );
-  }
+  // 5) 反代控制头命名空间已随本地反代删除，任何 x-liveagent-* 都不得出现。
   assert.ok(
-    !Object.keys(overrides).some((key) => key.toLowerCase().startsWith("x-liveagent-")),
-    "the proxy's own control headers must never be echoed into the override package",
-  );
-  assert.ok(
-    !Object.keys(overrides).some((key) => key.toLowerCase() === "anthropic-beta"),
-    "anthropic-beta must stay owned by attachAnthropicLongContextBeta",
+    !Object.keys(headers).some((key) => key.toLowerCase().startsWith("x-liveagent-")),
+    "x-liveagent-* headers must never reach the upstream request",
   );
 
   // 6) promptCacheRetention 与 customHeaders 一同在四条链路上失效过，一并锁定。
@@ -188,7 +158,7 @@ test("completeAssistantMessage sends provider custom headers (compaction summari
   const headers = options.headers ?? {};
   assert.equal(readHeader(headers, "x-trace-id"), "liveagent-e2e");
   assert.equal(readHeader(headers, "user-agent"), "my-agent/9.9");
-  assert.equal(decodeOverrides(headers).Cookie, "session=abc");
+  assert.equal(readHeader(headers, "cookie"), "session=abc");
 });
 
 test("compaction summarizer forwards the whole runtime config untouched", async () => {

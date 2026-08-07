@@ -13,7 +13,6 @@ const coreSrc = (rel) => path.join(coreRootDir, "src", rel);
 
 const loader = createTsModuleLoader();
 const { createUuid } = loader.loadModule("src/lib/shared/id.ts");
-const { createHookRunScope } = loader.loadModule("src/lib/automation/hookRunner.ts");
 const { createEmptyRequestDraft } = loader.loadModule("src/pages/settings/httpRequestEditor.tsx");
 const { normalizeAgentPromptTemplate, normalizeCustomProvider, normalizeSshSettings } =
   loader.loadModule("src/lib/settings/index.ts");
@@ -158,12 +157,11 @@ test("settings normalize generated IDs without crypto.randomUUID", () => {
   });
 });
 
-test("hook scopes and Hook/Cron HTTP request drafts work without crypto.randomUUID", () => {
+// hook 编排已下沉 core（Node 环境保证 crypto.randomUUID 存在），
+// 前端不再有 hook scope；这里只剩 HTTP 请求草稿的浏览器降级路径。
+test("Hook/Cron HTTP request drafts work without crypto.randomUUID", () => {
   withCrypto({}, () => {
-    const scope = createHookRunScope({ hooks: [], conversationId: "conversation-id" });
     const request = createEmptyRequestDraft();
-
-    scope.close();
     assert.match(request.id, UUID_V4_PATTERN);
   });
 });

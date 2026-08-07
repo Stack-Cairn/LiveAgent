@@ -23,7 +23,7 @@ DESKTOP_WINDOWS_TAURI_CONFIG ?= src-tauri/tauri.windows.conf.json
 DESKTOP_RELEASE_TAURI_CONFIG ?= src-tauri/tauri.macos.release.conf.json
 DESKTOP_RELEASE_TAURI_CONFIG_FLAGS ?= --config $(DESKTOP_RELEASE_TAURI_CONFIG) $(if $(LIVEAGENT_TAURI_VERSION_CONFIG),--config $(LIVEAGENT_TAURI_VERSION_CONFIG))
 
-MODEL_CATALOG_GENERATED_FILES := $(AGENT_GUI_DIR)/src/lib/models/catalog.generated.ts
+MODEL_CATALOG_GENERATED_FILES := $(AGENT_CORE_JS_DIR)/src/models/catalog.generated.ts $(AGENT_GUI_DIR)/src/lib/models/catalog.generated.ts
 
 BACKEND_DOCKER_IMAGE ?= liveagent-backend:local
 RELEASE_TAG ?=
@@ -31,7 +31,7 @@ RELEASE_TAG ?=
 .PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
 .PHONY: backend-docker-build backend-docker-run backend-docker-smoke
 .PHONY: clean update-model-catalog check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
-.PHONY: update-routes check-routes check-command-classes
+.PHONY: update-routes check-routes check-command-classes check-wire-events check-settings-drift
 
 all: build
 
@@ -159,6 +159,14 @@ check-routes:
 check-command-classes:
 	@bash scripts/check-command-classes.sh
 
+# 校验前端 wireEvents.ts 是 core 那份的逐字镜像（仅允许本地 ui_stopping 差异，CI 用）。
+check-wire-events:
+	node scripts/check-wire-events.mjs
+
+# 校验 settings 契约未分叉：core 版是前端版的有序子序列，mcpOps/normalize 逐字一致（CI 用）。
+check-settings-drift:
+	node scripts/check-settings-drift.mjs
+
 check-rust-target-%:
 	@rustup target list --installed | grep -qx "$*" || (echo "Rust target $* is not installed. Run: rustup target add $*" && exit 1)
 
@@ -224,4 +232,6 @@ help:
 	@printf "  %-34s %s\n" "make update-routes" "从 tauri_commands 重新生成 backend 路由层"
 	@printf "  %-34s %s\n" "make check-routes" "校验路由层与 wrapper 一致（CI 门禁）"
 	@printf "  %-34s %s\n" "make check-command-classes" "校验 Tauri command 全部已归类（CI 门禁）"
+	@printf "  %-34s %s\n" "make check-wire-events" "校验前端 wireEvents 是 core 的逐字镜像（CI 门禁）"
+	@printf "  %-34s %s\n" "make check-settings-drift" "校验 settings 契约两侧未分叉（CI 门禁）"
 	@printf "  %-34s %s\n" "make help" "查看可用命令"

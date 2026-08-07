@@ -1,6 +1,4 @@
-import type { Model } from "@earendil-works/pi-ai";
-import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
-import { findCatalogModel, normalizeModelIdCandidates } from "../models/modelCatalog";
+import { findCatalogModel } from "../models/modelCatalog";
 import { anthropicModelSupportsXHigh, isAnthropicAdaptiveModelId } from "../models/modelThinking";
 
 // ---------------------------------------------------------------------------
@@ -12,32 +10,11 @@ import { anthropicModelSupportsXHigh, isAnthropicAdaptiveModelId } from "../mode
 // 仍给 claude-sonnet-4-5 标 1M，这里以"是否 adaptive 世代"（id 启发式，与目录
 // 世代集合等价）钳出线上真实的有效窗口，供 settings 默认值与请求侧 beta 头
 // 判定共用，预算与信号永不漂移。限额/单价数据本身来自 lib/models/modelCatalog；
-// 本文件对 pi-ai 目录的回查（findBuiltinAnthropicModel）只服务 compat 等请求
-// 路径元数据。
+// pi-ai 目录回查（compat 等请求路径元数据）已随请求装配整体归 crates/core。
 export { normalizeModelIdCandidates as normalizeAnthropicModelIdCandidates } from "../models/modelCatalog";
 
 export const ANTHROPIC_STANDARD_CONTEXT_WINDOW = 200_000;
 export const ANTHROPIC_LONG_CONTEXT_WINDOW = 1_000_000;
-
-// 中转/网关常给官方 Anthropic 模型 id 加装饰，逐字匹配会漏检 pi-ai 目录；
-// 漏检后模型丢失 compat.forceAdaptiveThinking 等请求路径元数据，思考档位失效。
-// 候选链与 lib/models/modelCatalog 的目录回查共用同一实现。
-export function findBuiltinAnthropicModel(
-  modelId: string,
-): Model<"anthropic-messages"> | undefined {
-  const models = getBuiltinModels("anthropic");
-  for (const candidate of normalizeModelIdCandidates(modelId)) {
-    const known = models.find((model) => model.id === candidate);
-    if (known?.api) return known as Model<"anthropic-messages">;
-  }
-  return undefined;
-}
-
-export function getAnthropicCompat(
-  model: Model<"anthropic-messages">,
-): Model<"anthropic-messages">["compat"] | undefined {
-  return model.compat;
-}
 
 export function hasAnthropicLongContextSuffix(modelId: string): boolean {
   return /\[1m\]$/i.test(modelId.trim());

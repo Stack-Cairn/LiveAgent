@@ -19,7 +19,6 @@ export type ClawHubSkillCard = {
 };
 
 
-const SKILLS_DISCOVERY_UPDATED_EVENT = "liveagent:skills-discovery-updated";
 
 export {
   isAlwaysEnabledSkillName,
@@ -380,21 +379,6 @@ export async function ensureBuiltinSkills() {
     }
     throw error;
   }
-}
-
-export function notifySkillsDiscoveryUpdated() {
-  if (typeof window === "undefined") return;
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event(SKILLS_DISCOVERY_UPDATED_EVENT));
-  }
-}
-
-export function subscribeSkillsDiscoveryUpdated(listener: () => void) {
-  if (typeof window === "undefined") {
-    return () => undefined;
-  }
-  window.addEventListener(SKILLS_DISCOVERY_UPDATED_EVENT, listener);
-  return () => window.removeEventListener(SKILLS_DISCOVERY_UPDATED_EVENT, listener);
 }
 
 export function invalidateSkillsDiscoveryCache() {
