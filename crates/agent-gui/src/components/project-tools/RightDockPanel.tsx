@@ -742,9 +742,9 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
         data-state={isOpen ? "open" : "closed"}
         data-project-tools-resizing={isResizing ? "true" : undefined}
         className={cn(
-          "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden bg-background shadow-2xl transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
+          "project-tools-panel zone-font-scale fixed inset-x-0 bottom-0 z-40 flex h-[min(72vh,34rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden shadow-[0_-12px_40px_-18px_rgba(15,23,42,0.28)] motion-reduce:transition-none md:relative md:inset-auto md:z-10 md:h-full md:overflow-visible md:shadow-none",
           isOpen
-            ? "pointer-events-auto translate-y-0 border-t border-border opacity-100 md:w-[var(--project-tools-panel-width)] md:translate-x-0 md:border-l md:border-t-0"
+            ? "pointer-events-auto translate-y-0 border-t opacity-100 md:w-[var(--project-tools-panel-width)] md:translate-x-0 md:border-l md:border-t-0"
             : "pointer-events-none translate-y-full border-t border-transparent opacity-0 md:translate-x-3 md:translate-y-0 md:border-l-0 md:border-t-0",
           effectiveWidthCollapsed ? "md:w-0" : "md:w-[var(--project-tools-panel-width)]",
         )}
@@ -752,7 +752,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
       >
         <div
           className={cn(
-            "project-tools-panel-inner flex h-full min-h-0 w-full flex-col transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none md:w-[var(--project-tools-panel-width)] md:min-w-[var(--project-tools-panel-width)]",
+            "project-tools-panel-inner flex h-full min-h-0 w-full flex-col motion-reduce:transition-none md:w-[var(--project-tools-panel-width)] md:min-w-[var(--project-tools-panel-width)]",
             isOpen
               ? "translate-y-0 opacity-100 md:translate-x-0"
               : "translate-y-3 opacity-0 md:translate-x-2 md:translate-y-0",
@@ -780,7 +780,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
                   )}
                 />
               </button>
-              <div className="project-tools-panel-header flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+              <div className="project-tools-panel-header flex h-11 shrink-0 items-center gap-2 px-3">
                 <div
                   className="project-tools-panel-tabs-shell flex min-w-0 flex-1 flex-col justify-center gap-1"
                   onWheel={handleTabsWheel}
