@@ -145,6 +145,8 @@ pub(crate) struct PendingSshConnectRequest {
     pub(crate) sftp_enabled: bool,
 }
 
+// 连接流程里同一时刻至多一个挂起提示，Box 化只会把 match 点全部改成解引用。
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum PendingSshPrompt {
     HostKey {
         request: PendingSshConnectRequest,

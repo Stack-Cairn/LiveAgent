@@ -29,7 +29,6 @@ import {
   type CommitDisplayReference,
 } from "../../../lib/chat/messages/userMessageContent";
 import { VIBING_STATUS } from "../../../lib/chat/page/chatPageHelpers";
-import { formatToolStatus } from "../runtime/toolStatusText";
 import type { GitClient } from "../../../lib/git/types";
 import { createEntranceRegistry } from "../../../lib/transcript-virtual/entranceOnce";
 import { createLiveRowScrollAdjustPolicy } from "../../../lib/transcript-virtual/liveScrollAdjustPolicy";
@@ -37,6 +36,7 @@ import {
   buildTranscriptLayoutKey,
   createTranscriptMeasurementsLru,
 } from "../../../lib/transcript-virtual/measurementsLru";
+import { formatToolStatus } from "../runtime/toolStatusText";
 import { AssistantRenderUnit } from "./AssistantRenderUnit";
 import { extractRenderUnitRange } from "./renderUnitRangeExtractor";
 import { createTranscriptRowModel } from "./rowModel";

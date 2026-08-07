@@ -11,10 +11,7 @@
 // claim: Run Now (poke) is the only entry then.
 
 import { backendFetch, subscribeEvents } from "../../backend/client";
-import {
-  type AppSettings,
-  computeNextMemoryOrganizerRunAt,
-} from "../../settings";
+import { type AppSettings, computeNextMemoryOrganizerRunAt } from "../../settings";
 import { type MemoryOrganizeRun, memoryOrganizeDueClaim } from "../api";
 import { ORGANIZER_MAX_WAKE_DELAY_MS } from "../config";
 

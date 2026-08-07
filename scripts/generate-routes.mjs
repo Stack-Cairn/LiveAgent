@@ -47,12 +47,11 @@ const STATE_MAP = {
 // 不做 HTTP 路由的命令（走 WS 事件流）。名字与 routes.rs 文档一致。
 const WS_STREAM = new Set(["terminal_stream_attach", "terminal_stream_input", "terminal_stream_resize"]);
 
-// 不在 backend.txt 里的 wrapper：删除清单（proxy）或前端专属（frontend.txt）。
-// 路由它们会破坏「后端是唯一网络入口」的边界。
+// 前端专属/已删除命令：路由它们会破坏「后端是唯一网络入口」的边界。
 const SKIP = new Set(["proxy_get_server_info", "open_chat_file_link", "fs_open_workspace_path", "git_open_system_file_location"]);
 
 // 不在 wrapper 目录里的命令：实现与 #[tauri::command] 都在 backend / commands/app，
-// 扫描不到，但仍是 backend.txt 契约的一部分，手工列在这里保持路由完整。
+// 扫描不到，手工列在这里保持路由完整。
 const EXTRA_COMMANDS = [
   {
     name: "system_list_skill_files",
@@ -411,8 +410,8 @@ function render() {
   for (const n of names) out.push(`        .route("/${n}", post(${n}::handle))`);
   out.push(`}`);
   out.push(``);
-  out.push(`/// 已挂路由的命令名。契约测试拿它和 backend.txt 清单比对，`);
-  out.push(`/// 「新增 command 未加路由」必须导致测试失败。`);
+  out.push(`/// 已挂路由的命令名。契约测试遍历它逐个打可达性，`);
+  out.push(`/// 「新增 command 未加路由」由 check-routes 门禁保证。`);
   out.push(`pub const ROUTED_COMMANDS: &[&str] = &[`);
   for (const n of names) out.push(`    "${n}",`);
   out.push(`];`);

@@ -1,15 +1,3 @@
-impl Default for RemoteSettingsPayload {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            enable_web_terminal: false,
-            enable_web_ssh_terminal: false,
-            enable_web_git: false,
-            enable_web_tunnels: false,
-        }
-    }
-}
-
 /// 全是布尔开关，没有可归一化的东西——反序列化本身就是归一化。
 pub fn parse_remote_settings_payload(value: Value) -> Result<RemoteSettingsPayload, String> {
     serde_json::from_value::<RemoteSettingsPayload>(value)

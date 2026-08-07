@@ -590,6 +590,7 @@ fn insert_organize_run(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn insert_skipped_organize_run(
     conn: &Connection,
     now: i64,

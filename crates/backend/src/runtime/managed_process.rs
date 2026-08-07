@@ -427,7 +427,7 @@ impl ManagedProcessRegistry {
     fn collect_records(&self) -> Result<Vec<ManagedProcessRecord>, String> {
         let processes = self.lock_processes()?;
         let mut records: Vec<ManagedProcessRecord> = processes.values().map(to_record).collect();
-        records.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+        records.sort_by_key(|b| std::cmp::Reverse(b.started_at));
         Ok(records)
     }
 

@@ -42,10 +42,7 @@ import {
 import type { PersistConversationParams } from "../history/useConversationHistoryActions";
 import type { useChatPageRuntimeStore } from "../hooks/useChatPageRuntimeStore";
 import type { useLiveTranscriptController } from "../hooks/useLiveTranscriptController";
-import {
-  buildErrorAssistantMessage,
-  buildPartialAssistantMessage,
-} from "./chatPageRuntime";
+import { buildErrorAssistantMessage, buildPartialAssistantMessage } from "./chatPageRuntime";
 import {
   finalizeChatRunInOrder,
   releaseChatRunUi,

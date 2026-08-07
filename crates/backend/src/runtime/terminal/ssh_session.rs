@@ -14,6 +14,7 @@ use crate::runtime::shell_runner::ShellCancelToken;
 use super::*;
 
 impl TerminalSessionRegistry {
+#[allow(clippy::too_many_arguments)]
     pub async fn create_ssh(
         self: &Arc<Self>,
         cwd: String,
@@ -534,6 +535,7 @@ impl TerminalSessionRegistry {
         }
     }
 
+#[allow(clippy::too_many_arguments)]
     pub(crate) async fn continue_ssh_keyboard_interactive(
         self: &Arc<Self>,
         request: PendingSshConnectRequest,
@@ -956,7 +958,7 @@ impl TerminalSessionRegistry {
             return;
         }
         runtime.clear_connection_if_current(connection_id).await;
-        if message.trim().len() > 0 {
+        if !message.trim().is_empty() {
             self.append_output(&session_id, message);
         }
         if let Ok(entry) = self.entry(&session_id) {

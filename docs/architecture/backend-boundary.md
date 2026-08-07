@@ -190,31 +190,6 @@ if inside_workspace && !open_in_file_manager { … }
 
 这是方案风险 4 的唯一对策,不要用文档约定代替。
 
-## 复核方法
-
-本文件的数字全部可复现。命令名清单维护在 `docs/architecture/command-classes/` 下三个文本文件
-(`backend.txt` / `frontend.txt` / `deleted.txt`,每行一个 command 名)。
-
-```bash
-cd crates/frontend/src-tauri/src
-
-# 从注册块提取真实清单(注意块以不带分号的 `]` 结尾)
-sed -n '43,286p' lib.rs \
-  | rg -o '^\s+[a-z_]+::[a-z_]+::([a-z_0-9]+),$' -r '$1' \
-  | sort > /tmp/registered.txt
-
-D=../../../../docs/architecture/command-classes
-cat $D/backend.txt $D/frontend.txt $D/deleted.txt | sort > /tmp/classified.txt
-
-diff /tmp/registered.txt /tmp/classified.txt && echo "分类完整,无遗漏无幽灵"
-```
-
-新增 command 时必须同步更新对应清单文件,否则该 diff 会红。
-建议在阶段 2 把这条 diff 加进 CI,让「新 command 未分类」变成编译失败之外的第二道门禁。
-
-> 行号 `43,286` 会随 `lib.rs` 变动。若 diff 报出大量差异,先确认块边界:
-> 起点是 `tauri::generate_handler![` 的下一行,终点是与之配对的 `        ]` 行的前一行。
-
 ## 交叉引用
 
 - 总体方案与 19 项决策:`/Users/realm/.claude/plans/go-gateway-git-go-peaceful-wigderson.md`

@@ -75,10 +75,9 @@ impl WorkspaceWatchService {
             .watchers
             .retain(|workdir, _| desired.contains(workdir));
         for workdir in desired {
-            if !inner.watchers.contains_key(&workdir) {
-                let handle = watcher::spawn_workdir_watcher(workdir.clone(), Arc::downgrade(self));
-                inner.watchers.insert(workdir, handle);
-            }
+            inner.watchers.entry(workdir.clone()).or_insert_with(move || {
+                watcher::spawn_workdir_watcher(workdir, Arc::downgrade(self))
+            });
         }
     }
 

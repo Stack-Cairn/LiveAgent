@@ -65,7 +65,7 @@ pub async fn proxy_to_node(
     // 检查 Node 引擎是否已启动。
     let node_port = {
         let port_lock = state.node_port.read().await;
-        port_lock.clone()
+        *port_lock
     };
 
     let Some(port) = node_port else {

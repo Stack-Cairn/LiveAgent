@@ -502,7 +502,7 @@ where
         prepare_http_source_with_progress(
             source,
             tmp.path(),
-            |update| on_progress(update),
+            &mut on_progress,
             should_cancel,
         )?
     } else {

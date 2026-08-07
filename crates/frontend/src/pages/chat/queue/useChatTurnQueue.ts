@@ -1,8 +1,8 @@
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MentionComposerHandle } from "../../../components/chat/MentionComposer";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
-import type { ToolStatus } from "../../../lib/protocol/wireEvents";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
+import type { ToolStatus } from "../../../lib/protocol/wireEvents";
 import type { AppSettings, ChatRuntimeControls } from "../../../lib/settings";
 import type { SendChatAction } from "../bridge/bridgeTypes";
 import type { ChatQueueTurnPreview } from "../components/ChatComposerBar";

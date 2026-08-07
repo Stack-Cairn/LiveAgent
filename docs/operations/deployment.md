@@ -133,7 +133,7 @@ URL 参数会被持久化到 localStorage，下次打开不用重填。`secure` 
 
 | Job | 内容 |
 |---|---|
-| Backend Rust | `make check-routes`（生成物漂移）、`make check-command-classes`（新命令必须归类）、**`cargo tree -p backend \| grep tauri` 命中即失败**、`cargo test` + `clippy -D warnings` |
+| Backend Rust | `make check-routes`（生成物漂移）、**`cargo tree -p backend \| grep tauri` 命中即失败**、`cargo test` + `clippy -D warnings` |
 | Backend Docker Smoke | 构建镜像、起容器、轮询 `/healthz` |
 | GUI | 前端测试 |
 | Tauri Rust Check | `src-tauri` 单独跑（它要 GTK/WebKit，不能塞进后端 job） |

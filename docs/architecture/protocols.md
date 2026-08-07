@@ -238,7 +238,7 @@ token（`src/backendClient.ts`）。所以引擎执行 `fs_read_text` 和前端�
 | 场景 | 必查点 |
 |---|---|
 | 新增后端 command | 在 `src-tauri/src/tauri_commands/*.rs` 加 `#[tauri::command]` → `make update-routes` → 提交生成的 `routes_gen.rs`。**前端分流表不用改**（反向白名单） |
-| 新增壳专属 command | 加进 `commandRouting.ts::SHELL_ONLY_COMMANDS` 和 `docs/architecture/command-classes/frontend.txt`，否则会被当成后端命令打到网络上 |
+| 新增壳专属 command | 加进 `commandRouting.ts::SHELL_ONLY_COMMANDS`，否则会被当成后端命令打到网络上 |
 | 新增事件 | 发布方 emit → 前端订阅。若发布方是壳，还要加进 `isShellEvent()` |
 | 新增 chat 事件 | 引擎 `emitEvent()` → 前端 `useBackendEventSubscription` 加分支。payload 必须带 `conversation_id`，否则前端路由不到会话 |
 | 改命令参数名 | 参数名**就是** JSON key，改名即破坏前端。`rename_all` 也一样 |

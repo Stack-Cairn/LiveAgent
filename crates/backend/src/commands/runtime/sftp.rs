@@ -120,6 +120,7 @@ pub async fn sftp_delete(
         .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn sftp_transfer(
     registry: &Arc<SftpSessionRegistry>,
     session_id: String,

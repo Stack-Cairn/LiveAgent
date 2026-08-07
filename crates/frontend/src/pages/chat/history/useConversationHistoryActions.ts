@@ -1,15 +1,15 @@
 import { type Dispatch, type MutableRefObject, type SetStateAction, useRef } from "react";
 import {
+  clearCompactionCheckpoint,
+  hasPendingCompactionCheckpoint,
+} from "../../../lib/chat/compaction/checkpoints";
+import {
   type ConversationViewState,
   createConversationStateFromContext,
   createTranscriptProjection,
   getActiveSegment,
   prependTranscriptProjection,
 } from "../../../lib/chat/conversation/conversationState";
-import {
-  clearCompactionCheckpoint,
-  hasPendingCompactionCheckpoint,
-} from "../../../lib/chat/compaction/checkpoints";
 import {
   buildChatHistoryRevision,
   buildConversationStateFromWindow,

@@ -287,6 +287,7 @@ fn has_executable_permission(_path: &Path, _metadata: &fs::Metadata) -> bool {
     false
 }
 
+#[allow(clippy::type_complexity)]
 fn normalized_location(
     line: Option<u32>,
     end_line: Option<u32>,
@@ -338,6 +339,7 @@ fn preview_target(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_chat_file_link_plan(
     conversation_id: &str,
     workdir: &str,
@@ -521,6 +523,7 @@ fn build_chat_file_link_plan(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn open_chat_file_link_sync(
     conversation_id: String,
     workdir: String,
@@ -552,6 +555,7 @@ pub(crate) fn open_chat_file_link_sync(
     Ok(plan.response)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn open_chat_file_link_for_conversation(
     conversation_id: String,
     requested_workdir: String,
@@ -624,6 +628,7 @@ pub async fn open_chat_file_link_for_conversation(
     })?
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn open_chat_file_link(
     conversation_id: String,
     workdir: String,

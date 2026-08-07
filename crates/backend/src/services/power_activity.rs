@@ -299,6 +299,27 @@ fn set_windows_keep_awake(active: bool) -> Result<(), String> {
     }
 }
 
+/// HTTP 路由直连的命令面（generate-routes.mjs 的 EXTRA_COMMANDS 指到这里）。
+/// 与桌面壳的 Tauri 薄包装同构：core（Node 引擎）跑长任务时经这两条命令
+/// 请求 / 释放阻止系统休眠。
+pub fn system_begin_power_activity(
+    activity_id: String,
+    reason: String,
+    ttl_ms: Option<u64>,
+    power_activity: &PowerActivityManager,
+) -> Result<(), String> {
+    power_activity.begin(activity_id, reason, ttl_ms);
+    Ok(())
+}
+
+pub fn system_end_power_activity(
+    activity_id: String,
+    power_activity: &PowerActivityManager,
+) -> Result<(), String> {
+    power_activity.end(activity_id);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::PowerActivityManager;
@@ -336,25 +357,4 @@ mod tests {
 
         assert!(activity.snapshot().is_empty());
     }
-}
-
-/// HTTP 路由直连的命令面（generate-routes.mjs 的 EXTRA_COMMANDS 指到这里）。
-/// 与桌面壳的 Tauri 薄包装同构：core（Node 引擎）跑长任务时经这两条命令
-/// 请求 / 释放阻止系统休眠。
-pub fn system_begin_power_activity(
-    activity_id: String,
-    reason: String,
-    ttl_ms: Option<u64>,
-    power_activity: &PowerActivityManager,
-) -> Result<(), String> {
-    power_activity.begin(activity_id, reason, ttl_ms);
-    Ok(())
-}
-
-pub fn system_end_power_activity(
-    activity_id: String,
-    power_activity: &PowerActivityManager,
-) -> Result<(), String> {
-    power_activity.end(activity_id);
-    Ok(())
 }

@@ -31,7 +31,7 @@ RELEASE_TAG ?=
 .PHONY: all dev core-build build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
 .PHONY: backend-docker-build backend-docker-run backend-docker-smoke
 .PHONY: clean update-model-catalog check-rust-target-% check-macos-signing-identity check-macos-notary-profile desktop-store-macos-notary-profile desktop-wait-macos-notary desktop-staple-macos desktop-verify-macos
-.PHONY: update-routes check-routes check-command-classes check-wire-events check-settings-drift
+.PHONY: update-routes check-routes check-wire-events check-settings-drift
 
 all: build
 
@@ -158,10 +158,6 @@ update-routes:
 check-routes:
 	node scripts/generate-routes.mjs --check
 
-# 校验每条已注册的 Tauri command 都在 docs/architecture/command-classes/ 里有归类（CI 用）。
-check-command-classes:
-	@bash scripts/check-command-classes.sh
-
 # 校验前端 wireEvents.ts 是 core 那份的逐字镜像（仅允许本地 ui_stopping 差异，CI 用）。
 check-wire-events:
 	node scripts/check-wire-events.mjs
@@ -234,7 +230,6 @@ help:
 	@printf "  %-34s %s\n" "make update-model-catalog" "刷新 models.dev 模型目录快照"
 	@printf "  %-34s %s\n" "make update-routes" "从 tauri_commands 重新生成 backend 路由层"
 	@printf "  %-34s %s\n" "make check-routes" "校验路由层与 wrapper 一致（CI 门禁）"
-	@printf "  %-34s %s\n" "make check-command-classes" "校验 Tauri command 全部已归类（CI 门禁）"
 	@printf "  %-34s %s\n" "make check-wire-events" "校验前端 wireEvents 是 core 的逐字镜像（CI 门禁）"
 	@printf "  %-34s %s\n" "make check-settings-drift" "校验 settings 契约两侧未分叉（CI 门禁）"
 	@printf "  %-34s %s\n" "make help" "查看可用命令"

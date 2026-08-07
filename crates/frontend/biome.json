@@ -75,6 +75,18 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "src/lib/settings/index.ts"
+      ],
+      "assist": {
+        "actions": {
+          "source": {
+            "organizeImports": "off"
+          }
+        }
+      }
     }
   ]
 }

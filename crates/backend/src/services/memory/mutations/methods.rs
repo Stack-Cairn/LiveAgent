@@ -10,6 +10,8 @@ impl MemoryStore {
             risk_flag: None,
         };
         let mut evidence_applied = None;
+        // evidence 是 Option<&MemoryEvidenceArgs>，filter 谓词收 &&，不能直接传函数指针。
+        #[allow(clippy::redundant_closure)]
         let body = match args
             .evidence
             .as_ref()
@@ -83,6 +85,8 @@ impl MemoryStore {
         // canonical evidence frontmatter here so downstream merge/replace logic
         // (including evidence-only updates) sees a normal body.
         let mut evidence_applied = None;
+        // evidence 是 Option<&MemoryEvidenceArgs>，filter 谓词收 &&，不能直接传函数指针。
+        #[allow(clippy::redundant_closure)]
         if let Some(evidence) = args
             .evidence
             .take()

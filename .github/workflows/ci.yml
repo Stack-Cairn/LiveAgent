@@ -32,10 +32,6 @@ jobs:
       - name: Check generated routes are in sync
         run: make check-routes
 
-      # 阶段 1 的 command 分类门禁：新增 Tauri command 必须归类。
-      - name: Check command classification is complete
-        run: make check-command-classes
-
       # 事件契约真相源在 core，前端那份是逐字镜像；改一边忘改另一边 → 这里失败。
       - name: Check wire event contract mirror is in sync
         run: make check-wire-events
@@ -163,6 +159,21 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@10.32.1
+
+      # tauri.conf.json 把 core/dist/index.js 列进 resources，build script 会要求该文件存在。
+      # 先 build core，否则 cargo check 在 liveagent build script 处失败。
+      - name: Build core engine bundle
+        working-directory: crates/core
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
 
       - uses: dtolnay/rust-toolchain@stable
 

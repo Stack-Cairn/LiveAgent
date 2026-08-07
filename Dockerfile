@@ -30,6 +30,10 @@ ARG TARGETARCH
 
 WORKDIR /src
 
+# rquickjs-sys 的 bindgen 构建脚本要 libclang 才能编译，缺失会在 build.rs 里直接 panic。
+RUN apt-get update && apt-get install -y --no-install-recommends libclang-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # 复制 Cargo workspace 根
 COPY Cargo.toml Cargo.lock ./
 

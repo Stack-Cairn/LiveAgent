@@ -1,4 +1,5 @@
 impl MemoryStore {
+#[allow(clippy::too_many_arguments)]
     fn write_entry(
         &self,
         slug_input: String,

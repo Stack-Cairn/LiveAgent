@@ -34,6 +34,7 @@ pub fn terminal_create(
     registry.create(cwd, project_path_key, shell, title, cols, rows)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn terminal_create_ssh(
     registry: &Arc<TerminalSessionRegistry>,
     cwd: String,
@@ -91,6 +92,7 @@ pub async fn terminal_ssh_latency(
     registry.ssh_latency(session_id).await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn terminal_ssh_exec(
     registry: &Arc<TerminalSessionRegistry>,
     run_registry: &Arc<ShellRunRegistry>,

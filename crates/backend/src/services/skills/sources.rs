@@ -43,7 +43,7 @@ pub(crate) fn safe_extract_zip(zip_path: &Path, dest_dir: &Path) -> Result<(), S
         let mut file = archive
             .by_index(index)
             .map_err(|e| format!("Failed to read archive entry: {e}"))?;
-        let Some(enclosed_name) = file.enclosed_name().map(PathBuf::from) else {
+        let Some(enclosed_name) = file.enclosed_name() else {
             return Err(format!(
                 "Archive entry escapes extraction root: {}",
                 file.name()

@@ -55,6 +55,11 @@ import { useVerticalListReorder } from "../../components/ui/useVerticalListReord
 import { useLocale } from "../../i18n";
 import { buildModelOptions } from "../../lib/chat/page/chatPageHelpers";
 import {
+  applyModelOrderSnapshot,
+  createModelOrderSnapshot,
+  findNewModelIds,
+} from "../../lib/models/modelVendor";
+import {
   CustomHeaderImportError,
   type CustomHeaderImportErrorCode,
   type CustomHeaderImportIssue,
@@ -66,11 +71,6 @@ import {
   parseCustomHeadersImport,
 } from "../../lib/providers/customHeaders";
 import { parseModelValue, toModelValue } from "../../lib/providers/llm";
-import {
-  applyModelOrderSnapshot,
-  createModelOrderSnapshot,
-  findNewModelIds,
-} from "../../lib/models/modelVendor";
 import {
   getProviderUsageCardDisplay,
   getUsagePlanDisplay,
@@ -385,12 +385,7 @@ function itemsByIdOrder<T extends { id: string }>(items: readonly T[], order: re
   });
 }
 
-function ProviderModal({
-  providerType,
-  initialData,
-  onSave,
-  onClose,
-}: ModalProps) {
+function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProps) {
   const { t } = useLocale();
   const isGatewayWebui = isGatewayWebuiRuntime();
   const initialApiKey = initialData?.apiKey ?? "";

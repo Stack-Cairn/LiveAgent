@@ -4371,8 +4371,8 @@ pub fn gen_router() -> Router<AppState> {
         .route("/tunnel_update", post(tunnel_update::handle))
 }
 
-/// 已挂路由的命令名。契约测试拿它和 backend.txt 清单比对，
-/// 「新增 command 未加路由」必须导致测试失败。
+/// 已挂路由的命令名。契约测试遍历它逐个打可达性，
+/// 「新增 command 未加路由」由 check-routes 门禁保证。
 pub const ROUTED_COMMANDS: &[&str] = &[
     "automation_claim_prompt_runs",
     "automation_clear_runs",

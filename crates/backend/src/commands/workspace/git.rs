@@ -343,7 +343,7 @@ impl GitCloneTaskRegistry {
             .values()
             .map(|entry| entry.task.clone())
             .collect::<Vec<_>>();
-        tasks.sort_by(|left, right| right.started_at.cmp(&left.started_at));
+        tasks.sort_by_key(|right| std::cmp::Reverse(right.started_at));
         Ok(tasks)
     }
 
@@ -3424,7 +3424,7 @@ mod tests {
     #[test]
     fn parses_porcelain_v2_branch_and_counts() {
         let raw = b"# branch.head feature\0# branch.upstream origin/feature\0# branch.ab +2 -1\0\
-# stash 3\01 .M N... 100644 100644 100644 a b src/main.rs\0? new.txt\0";
+# stash 3\x001 .M N... 100644 100644 100644 a b src/main.rs\0? new.txt\0";
         let (head, upstream, ahead, behind, stash_count, entries) = parse_status_porcelain_v2(raw);
         assert_eq!(head, "feature");
         assert_eq!(upstream, "origin/feature");

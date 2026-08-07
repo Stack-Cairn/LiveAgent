@@ -583,7 +583,7 @@ async fn bridge_websocket(
                         .map_err(|e| format!("转发 pong 失败：{e}"))?,
                     AxumMessage::Close(frame) => {
                         let close = frame.map(|f| CloseFrame {
-                            code: CloseCode::from(u16::from(f.code)),
+                            code: CloseCode::from(f.code),
                             reason: f.reason.as_str().into(),
                         });
                         let _ = up_tx.send(WsMessage::Close(close)).await;

@@ -1,6 +1,6 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { HOOK_EVENT_TRANSLATION_KEYS } from "../../../lib/automation";
 import type { HookEvent } from "../../../lib/automation";
+import { HOOK_EVENT_TRANSLATION_KEYS } from "../../../lib/automation";
 import type { CompactionStatus } from "../../../lib/chat/compaction/types";
 import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";
 import type { ConversationPersistenceCursor } from "../../../lib/chat/history/chatHistory";

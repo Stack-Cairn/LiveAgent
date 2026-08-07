@@ -9,6 +9,7 @@ pub struct ShellCancelResponse {
     cancelled: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn shell_run(
     registry: &Arc<ShellRunRegistry>,
     workdir: String,
