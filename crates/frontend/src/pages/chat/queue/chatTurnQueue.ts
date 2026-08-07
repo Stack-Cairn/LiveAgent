@@ -1,13 +1,12 @@
 import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
-import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
+import type { ChatRuntimeControls } from "../../../lib/settings";
 
 export type QueuedChatTurn = {
   id: string;
   conversationId: string;
   draft: MentionComposerDraft;
   uploadedFiles: PendingUploadedFile[];
-  executionMode: ExecutionMode;
   workdir: string;
   runtimeControls: ChatRuntimeControls;
   createdAt: number;
@@ -32,7 +31,6 @@ export function createQueuedChatTurn(input: QueuedChatTurnInput): QueuedChatTurn
     conversationId: input.conversationId.trim(),
     draft: input.draft,
     uploadedFiles: input.uploadedFiles.slice(),
-    executionMode: input.executionMode,
     workdir: input.workdir.trim(),
     runtimeControls: { ...input.runtimeControls },
     createdAt,

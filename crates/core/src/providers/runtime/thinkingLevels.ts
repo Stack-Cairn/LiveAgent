@@ -14,7 +14,7 @@ type ReasoningInput = SimpleStreamOptions["reasoning"] | undefined;
 // 而该函数的返回字段里没有 toolChoice；anthropic-messages 与 google-generative-ai
 // 两个 api 的 streamSimple() 自身也从不读 options.toolChoice。也就是说走
 // streamSimple() 时 toolChoice 会被静默丢弃——而本仓库真的依赖它：
-// textOnlyRuntime.ts 用 "none" 关掉工具、agentRunner.ts 按有无工具传 "auto"。
+// agentRunner.ts 按有无工具传 "auto"（无工具的一次性请求同样走它）。
 // 因此这两个 api 必须由 streamByApi.ts 直接调用底层 stream() 并显式下发
 // toolChoice；一旦绕开 streamSimple()，它内部的思维档位映射也就拿不到了，只能
 // 在本文件复算。（openai-completions 的 streamSimple() 确实透传 toolChoice，

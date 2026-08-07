@@ -6,8 +6,9 @@ import {
 } from "@earendil-works/pi-ai";
 
 import type { StreamDebugLogger } from "../../debug/agentDebug";
-import { assistantMessageToText, completeAssistantMessage } from "../../providers/llm";
+import { assistantMessageToText } from "../../providers/llm";
 import type { ProviderId } from "../../settings";
+import { runAssistantWithTools } from "../runner/agentRunner";
 import {
   COMPACTION_PAYLOAD_TOKEN_CAP,
   type CompactionPayload,
@@ -21,7 +22,16 @@ import { estimateTextTokens } from "./tokenLedger";
 import type { ProviderRuntimeConfig } from "./types";
 import { buildVerificationSignals, validateCompactionSummary } from "./validate";
 
-export type CompleteAssistantFn = typeof completeAssistantMessage;
+// 测试注入假模型响应的缝;生产不注入,直接走 agent 运行时(见 requestSummary)。
+export type CompleteAssistantFn = (params: {
+  providerId: ProviderId;
+  model: string;
+  runtime: ProviderRuntimeConfig;
+  context: Context;
+  cacheRetention?: "none";
+  signal?: AbortSignal;
+  debugLogger?: StreamDebugLogger;
+}) => Promise<AssistantMessage>;
 
 export type SummarizeConversationResult = {
   summaryText: string;
@@ -59,8 +69,8 @@ async function sleepWithAbort(ms: number, signal?: AbortSignal) {
 // attempt=0 调用过,指数部分从未生效)。
 const RETRY_DELAY_MS = 400;
 
-// completeAssistantMessage 会把 stopReason="error" 的 AssistantMessage 转成普通
-// Error 抛出(providers/runtime/textOnlyRuntime.ts),错误消息之外的字段都丢了。
+// agent 运行时会把 stopReason="error" 的 AssistantMessage 转成普通
+// Error 抛出(chat/runner/agentRunner.ts),错误消息之外的字段都丢了。
 // pi-ai 的 isRetryableAssistantError 签名要 AssistantMessage,因此这里按其只读取
 // 的两个字段做最小适配;溢出判定则直接借用库导出的跨 provider 正则表。
 function asAssistantErrorMessage(error: unknown): AssistantMessage {
@@ -94,7 +104,7 @@ type SummarizerRequest = {
   payload: CompactionPayload;
   signal?: AbortSignal;
   debugLogger?: StreamDebugLogger;
-  complete: CompleteAssistantFn;
+  complete?: CompleteAssistantFn;
   repair?: { invalidOutput: string; validationError: string };
 };
 
@@ -148,15 +158,39 @@ async function requestSummary(params: SummarizerRequest): Promise<AssistantMessa
     );
   }
 
-  return params.complete({
+  const runtime = buildSummarizerRuntime(params.providerId, params.runtime);
+  const context: Context = {
+    systemPrompt: buildCompactionSystemPrompt(summaryLanguage),
+    messages,
+  };
+  if (params.complete) {
+    return params.complete({
+      providerId: params.providerId,
+      model: params.model,
+      runtime,
+      context,
+      cacheRetention: "none",
+      signal: params.signal,
+      debugLogger: params.debugLogger,
+    });
+  }
+  // 摘要走同一条 agent 运行时,tools 传空;缓存强制关——payload 一次性,写缓存纯浪费。
+  const { assistant } = await runAssistantWithTools({
     providerId: params.providerId,
     model: params.model,
-    runtime: buildSummarizerRuntime(params.providerId, params.runtime),
-    context: { systemPrompt: buildCompactionSystemPrompt(summaryLanguage), messages },
-    cacheRetention: "none",
+    runtime: { ...runtime, promptCachingEnabled: false },
+    context,
+    workdir: "",
+    allowEmptyWorkdir: true,
+    tools: [],
+    executeToolCall: async (toolCall) => {
+      throw new Error(`No tools are available in this request (got ${toolCall.name})`);
+    },
     signal: params.signal,
     debugLogger: params.debugLogger,
+    onTextDelta: () => {},
   });
+  return assistant;
 }
 
 /**
@@ -172,7 +206,6 @@ export async function summarizeConversation(params: {
   debugLogger?: StreamDebugLogger;
   complete?: CompleteAssistantFn;
 }): Promise<SummarizeConversationResult> {
-  const complete = params.complete ?? completeAssistantMessage;
   let payload = params.payload;
   let networkRetryUsed = false;
   let shrinkRetryUsed = false;
@@ -193,7 +226,7 @@ export async function summarizeConversation(params: {
   while (true) {
     let assistant: AssistantMessage;
     try {
-      assistant = await requestSummary({ ...params, complete, payload });
+      assistant = await requestSummary({ ...params, payload });
     } catch (error) {
       if (params.signal?.aborted) throw error;
       if (isOverflowError(error) && tryShrink()) continue;
@@ -235,7 +268,6 @@ export async function summarizeConversation(params: {
       try {
         const repaired = await requestSummary({
           ...params,
-          complete,
           payload,
           repair: {
             invalidOutput: assistantMessageToText(assistant).trim(),

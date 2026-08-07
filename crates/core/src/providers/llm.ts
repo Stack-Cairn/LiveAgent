@@ -33,5 +33,4 @@ export {
   toSimpleStreamReasoning,
 } from "./runtime/requestOptions";
 export { streamSimpleByApi } from "./runtime/streamByApi";
-export { completeAssistantMessage, streamAssistantMessage } from "./runtime/textOnlyRuntime";
 export type { ModelOption, ProviderRuntimeConfig, StreamOptionsEx } from "./runtime/types";

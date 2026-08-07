@@ -53,6 +53,12 @@ function loadCoreTitleModule({ settings, streamImpl }) {
           return streamImpl(params);
         },
       },
+      [rootLoader.resolveLocal(coreSrc("chat/runner/agentRunner.ts"))]: {
+        runAssistantWithTools: async (params) => {
+          captured.params = params;
+          return { assistant: streamImpl(params), messages: [], emittedMessages: [] };
+        },
+      },
     },
   });
   const mod = loader.loadModule(coreSrc("turns/conversationTitle.ts"));
@@ -94,7 +100,7 @@ test("core title job disables thinking, caching, and native web search", async (
   assert.equal(captured.params.runtime.promptCachingEnabled, false);
   assert.equal(captured.params.runtime.nativeWebSearchEnabled, false);
   assert.equal(captured.params.nativeWebSearch, false);
-  assert.equal(captured.params.cacheRetention, "none");
+  assert.deepEqual(captured.params.tools, []);
   // The persisted UI locale must reach the model, not just the prompt builders.
   assert.match(captured.params.context.systemPrompt, /concise conversation titles/i);
   assert.match(captured.params.context.messages[0].content, /within 10 words/i);

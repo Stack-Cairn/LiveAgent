@@ -30,7 +30,7 @@ import {
 } from "../../../lib/chat/page/chatPageHelpers";
 import type { ScrollFollowHandle } from "../../../lib/chat-scroll/useScrollFollow";
 import { resolveRuntimeModelIdentity } from "../../../lib/models/runtimeModelIdentity";
-import type { AppSettings, ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
+import type { AppSettings, ChatRuntimeControls } from "../../../lib/settings";
 import type { SidebarStore } from "../../../lib/sidebar/store";
 import type { SkillSummary } from "../../../lib/skills";
 import type { SubagentStoreManager } from "../../../lib/subagents";
@@ -197,7 +197,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     composerDraftOverride?: MentionComposerDraft;
     uploadedFilesOverride?: PendingUploadedFile[];
     conversationIdOverride?: string;
-    executionModeOverride?: ExecutionMode;
     workdirOverride?: string;
     runtimeControlsOverride?: ChatRuntimeControls;
     preserveComposerOnStart?: boolean;
@@ -215,8 +214,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         ? buildRuntimeEntryFromVisibleState()
         : null);
 
-    const effectiveExecutionMode =
-      overrides?.executionModeOverride ?? settings.system.executionMode;
     const effectiveWorkdir = (
       overrides?.workdirOverride ??
       runtimeEntry?.workdir ??
@@ -612,7 +609,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
 
       const snapshot = getAbortSnapshot(transcriptStore);
       const partialMessages = buildPersistableMessagesFromSnapshot({
-        executionMode: effectiveExecutionMode,
         model: runtimeModel,
         draftAssistantText: "",
         liveRounds: snapshot.liveRounds,
@@ -644,7 +640,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const commitErroredConversation = (rawMessage: string) => {
       const snapshot = getAbortSnapshot(transcriptStore);
       const partialMessages = buildPersistableMessagesFromSnapshot({
-        executionMode: effectiveExecutionMode,
         model: runtimeModel,
         draftAssistantText: "",
         liveRounds: snapshot.liveRounds,
@@ -699,7 +694,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         conversationId,
         clientRequestId: pendingUserMessage.id,
         sessionId,
-        mode: "agent",
         text,
         selectedModel,
         workdir: effectiveWorkdir,
@@ -751,7 +745,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       const completedMessages =
         runEnded.liveRounds.length > 0
           ? buildPersistableMessagesFromSnapshot({
-              executionMode: effectiveExecutionMode,
               model: runtimeModel,
               draftAssistantText: runEnded.draftAssistantText,
               liveRounds: runEnded.liveRounds,

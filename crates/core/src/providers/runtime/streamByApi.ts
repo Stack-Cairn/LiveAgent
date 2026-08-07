@@ -22,7 +22,7 @@ import {
 import { resolveMaxTokens } from "./common";
 import { recoverOpenAICompletionsMissingFinishReason } from "./openAICompletionsStream";
 import { withStreamRetry } from "./streamRetry";
-import { normalizeStructuredToolCallHistoryForDeepSeek } from "./textModeToolRecovery";
+import { normalizeStructuredToolCallHistoryForDeepSeek } from "./deepSeekToolCallRepair";
 import {
   type AnthropicEffort,
   type AnthropicThinkingRuntime,

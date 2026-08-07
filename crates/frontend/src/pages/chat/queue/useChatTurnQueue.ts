@@ -3,7 +3,7 @@ import type { MentionComposerHandle } from "../../../components/chat/MentionComp
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { ToolStatus } from "../../../lib/protocol/wireEvents";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
-import type { AppSettings, ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
+import type { AppSettings, ChatRuntimeControls } from "../../../lib/settings";
 import type { SendChatAction } from "../bridge/bridgeTypes";
 import type { ChatQueueTurnPreview } from "../components/ChatComposerBar";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
@@ -111,7 +111,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
     | (QueuedChatTurnEditSlot & {
         originalId: string;
         createdAt: number;
-        executionMode: ExecutionMode;
         workdir: string;
         runtimeControls: ChatRuntimeControls;
       })
@@ -227,7 +226,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       position === "edit" && queuedChatTurnEditSlotRef.current?.conversationId === conversationId
         ? queuedChatTurnEditSlotRef.current
         : null;
-    const executionMode = editSlot?.executionMode ?? settings.system.executionMode;
     const workdirForTurn = (
       editSlot?.workdir ??
       runtimeEntry.workdir ??
@@ -239,7 +237,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       conversationId,
       draft,
       uploadedFiles,
-      executionMode,
       workdir: workdirForTurn,
       runtimeControls: editSlot?.runtimeControls ?? settings.chatRuntimeControls,
       createdAt: editSlot?.createdAt,
@@ -313,7 +310,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           composerDraftOverride: queuedTurn.draft,
           uploadedFilesOverride: queuedTurn.uploadedFiles,
           conversationIdOverride: targetConversationId,
-          executionModeOverride: queuedTurn.executionMode,
           workdirOverride: queuedTurn.workdir,
           runtimeControlsOverride: queuedTurn.runtimeControls,
           preserveComposerOnStart: true,
@@ -446,7 +442,6 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
       index: sameConversationIndex >= 0 ? sameConversationIndex : undefined,
       originalId: queuedTurn.id,
       createdAt: queuedTurn.createdAt,
-      executionMode: queuedTurn.executionMode,
       workdir: queuedTurn.workdir,
       runtimeControls: { ...queuedTurn.runtimeControls },
     };

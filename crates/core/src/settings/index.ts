@@ -42,7 +42,7 @@ export {
 
 export type ProviderId = "codex" | "claude_code" | "gemini" | "xai";
 
-export type ExecutionMode = "text" | "tools" | "agent-dev";
+export type ExecutionMode = "tools" | "agent-dev";
 
 export type CodexRequestFormat = "openai-completions" | "openai-responses";
 
@@ -541,7 +541,6 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
 
 function normalizeExecutionMode(input: unknown): ExecutionMode {
   switch (input) {
-    case "text":
     case "tools":
     case "agent-dev":
       return input;

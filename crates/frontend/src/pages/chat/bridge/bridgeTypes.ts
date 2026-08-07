@@ -1,7 +1,7 @@
 import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
-import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
+import type { ChatRuntimeControls } from "../../../lib/settings";
 
 export type EnsureBackendBridgeConversationReadyOptions = {
   rebased?: boolean;
@@ -12,7 +12,6 @@ export type SendChatAction = (overrides?: {
   composerDraftOverride?: MentionComposerDraft;
   uploadedFilesOverride?: PendingUploadedFile[];
   conversationIdOverride?: string;
-  executionModeOverride?: ExecutionMode;
   workdirOverride?: string;
   runtimeControlsOverride?: ChatRuntimeControls;
   preserveComposerOnStart?: boolean;

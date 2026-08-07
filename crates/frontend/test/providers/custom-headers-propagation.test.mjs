@@ -4,7 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// 回归网：自定义请求头曾在 Agent 聊天 / 文本聊天 / 自动标题 / Compaction 四条链路
+// 回归网：自定义请求头曾在 Agent 聊天 / 单次补全 / 自动标题 / Compaction 四条链路
 // 上被逐字段转抄的 runtime 对象整体丢弃。这里对每个真实的供应商请求入口各跑一遍，
 // 断言 customHeaders 与 promptCacheRetention 直接抵达上游请求头集
 //（core 跑在 Node，引擎直连 provider，本地反代与覆盖包已删除）。
@@ -85,7 +85,7 @@ function loadProvidersWithCapturedStream() {
       },
     },
   });
-  return { providers: loader.loadModule(coreSrc("providers/llm.ts")), captured };
+  return { providers: loader.loadModule(coreSrc("providers/llm.ts")), captured, loader };
 }
 
 function buildRuntime() {
@@ -128,37 +128,27 @@ function assertCustomHeadersReachedUpstream(options) {
   assert.equal(options.cacheRetention, "long");
 }
 
-test("streamAssistantMessage sends provider custom headers and cache retention", async () => {
-  const { providers, captured } = loadProvidersWithCapturedStream();
+test("agent runner sends provider custom headers and cache retention (title/summary one-shot path)", async () => {
+  const { providers, captured, loader } = loadProvidersWithCapturedStream();
+  void providers;
+  const { runAssistantWithTools } = loader.loadModule(coreSrc("chat/runner/agentRunner.ts"));
 
-  await providers.streamAssistantMessage({
+  await runAssistantWithTools({
     providerId: "claude_code",
     model: "claude-sonnet-4-6",
     runtime: buildRuntime(),
     context: { messages: [{ role: "user", content: "hi", timestamp: 1 }] },
+    workdir: "",
+    allowEmptyWorkdir: true,
+    tools: [],
+    async executeToolCall() {
+      throw new Error("no tools in this test");
+    },
     onTextDelta() {},
   });
 
   assert.equal(captured.length, 1);
   assertCustomHeadersReachedUpstream(captured[0].options);
-});
-
-test("completeAssistantMessage sends provider custom headers (compaction summarizer path)", async () => {
-  const { providers, captured } = loadProvidersWithCapturedStream();
-
-  await providers.completeAssistantMessage({
-    providerId: "claude_code",
-    model: "claude-sonnet-4-6",
-    runtime: buildRuntime(),
-    context: { messages: [{ role: "user", content: "summarize", timestamp: 1 }] },
-  });
-
-  assert.equal(captured.length, 1);
-  const { options } = captured[0];
-  const headers = options.headers ?? {};
-  assert.equal(readHeader(headers, "x-trace-id"), "liveagent-e2e");
-  assert.equal(readHeader(headers, "user-agent"), "my-agent/9.9");
-  assert.equal(readHeader(headers, "cookie"), "session=abc");
 });
 
 test("compaction summarizer forwards the whole runtime config untouched", async () => {

@@ -387,9 +387,9 @@ test("attachProviderNativeWebSearch(gemini) routes agent payloads through the mi
     "Gemini 2.x agent requests must not mix googleSearch into function tools",
   );
 
-  const textPayload = { model: "gemini-2.5-flash", contents: [], config: {} };
-  const textMode = await options.onPayload(textPayload, gemini25);
-  assert.deepEqual(textMode.config.tools, [{ googleSearch: {} }]);
+  const noToolsPayload = { model: "gemini-2.5-flash", contents: [], config: {} };
+  const noToolsResult = await options.onPayload(noToolsPayload, gemini25);
+  assert.deepEqual(noToolsResult.config.tools, [{ googleSearch: {} }]);
 
   const relayOptions = attachProviderNativeWebSearch("gemini", {}, true, {
     baseUrl: RELAY_BASE_URL,

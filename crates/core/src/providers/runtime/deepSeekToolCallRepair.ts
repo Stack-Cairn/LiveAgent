@@ -7,7 +7,7 @@ import {
   isProviderNativeWebSearchToolName as isProviderNativeWebSearchToolCallName,
 } from "../nativeWebSearch";
 
-function buildTextModeUnsupportedToolResult(toolCall: ToolCall): ToolResultMessage {
+function buildUnsupportedToolResult(toolCall: ToolCall): ToolResultMessage {
   return {
     role: "toolResult",
     toolCallId: toolCall.id,
@@ -24,20 +24,7 @@ function buildTextModeUnsupportedToolResult(toolCall: ToolCall): ToolResultMessa
   };
 }
 
-export function buildTextModeToolResultsForAssistant(
-  assistant: AssistantMessage,
-  hostedSearchBlocks: HostedSearchBlock[],
-): ToolResultMessage[] {
-  if (assistant.stopReason !== "toolUse") return [];
-  const toolCalls = assistant.content.filter(
-    (block): block is ToolCall => block.type === "toolCall",
-  );
-  return toolCalls.map((toolCall) =>
-    buildTextModeToolResultForToolCall(toolCall, hostedSearchBlocks),
-  );
-}
-
-function buildTextModeToolResultForToolCall(
+function buildToolResultForToolCall(
   toolCall: ToolCall,
   hostedSearchBlocks: HostedSearchBlock[],
 ): ToolResultMessage {
@@ -59,7 +46,7 @@ function buildTextModeToolResultForToolCall(
         "No hosted search sources were captured for this response. Continue from existing context without repeating raw tool-call markup.",
     });
   }
-  return buildTextModeUnsupportedToolResult(toolCall);
+  return buildUnsupportedToolResult(toolCall);
 }
 
 function findNextNonToolResultMessageIndex(messages: Context["messages"], startIndex: number) {
@@ -122,7 +109,7 @@ export function normalizeStructuredToolCallHistoryForDeepSeek(context: Context):
       const existing = consumedToolResultsById.get(toolCall.id);
       if (existing) return existing;
       changed = true;
-      return buildTextModeToolResultForToolCall(toolCall, []);
+      return buildToolResultForToolCall(toolCall, []);
     });
     messages.push(...orderedToolResults);
 

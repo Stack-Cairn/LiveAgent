@@ -306,17 +306,10 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_ACTIVE_WORKSPACE_PROJECT_ID_KEY.to_string(),
         Value::String(active_project_id),
     );
-    let execution_mode = system
-        .get(SYSTEM_EXECUTION_MODE_KEY)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .unwrap_or("tools");
-    if execution_mode != "text" {
-        system.insert(
-            SYSTEM_WORKDIR_KEY.to_string(),
-            Value::String(active_project_workdir),
-        );
-    }
+    system.insert(
+        SYSTEM_WORKDIR_KEY.to_string(),
+        Value::String(active_project_workdir),
+    );
     system.insert(
         SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
         normalize_hidden_workspace_project_paths(

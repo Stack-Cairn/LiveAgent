@@ -69,12 +69,10 @@ import {
   runAgentConversationTurn,
   type PersistConversationParams,
 } from "./turns/runAgentConversationTurn";
-import { runTextConversationTurn } from "./turns/runTextConversationTurn";
 
 export type ChatSendRequest = {
   conversationId: string;
   clientRequestId?: string;
-  mode?: "agent" | "text";
   text: string;
   sessionId?: string;
   workdir?: string;
@@ -238,9 +236,6 @@ async function runOneTurn(
   prepared?: { resolve: () => void },
 ) {
   const { settings } = await loadPersistedSettingsWithDefaults();
-  const isAgentMode = (request.mode ?? "agent") === "agent";
-  // ExecutionMode 三值:text / tools / agent-dev;网络请求只区分 agent|text。
-  const executionMode = isAgentMode ? ("tools" as const) : ("text" as const);
 
   const effective = resolveEffectiveChatModelSelection({
     settings,
@@ -262,7 +257,7 @@ async function runOneTurn(
   );
 
   const effectiveWorkdir = request.workdir?.trim() || settings.system.workdir || "";
-  const skillsEnabled = isAgentMode && (request.skillsEnabled ?? true);
+  const skillsEnabled = request.skillsEnabled ?? true;
 
   const text = request.text.trim();
   const uploadedFiles = normalizePendingUploadedFiles(request.uploadedFiles);
@@ -303,8 +298,6 @@ async function runOneTurn(
   session.isRunning = true;
 
   // 与 cronPromptRunner / memory organizer 同一个闸门:agent-dev 才落盘。
-  // 注意用 settings.system.executionMode——本函数上面那个 executionMode 已被
-  // 压成 text|tools 供网络层用,永远等不到 agent-dev。
   const debugExecutionMode = settings.system.executionMode;
   const conversationLogger = () =>
     createStreamDebugLogger({
@@ -457,7 +450,6 @@ async function runOneTurn(
     if (abortedConversationCommitted) return true;
     const snapshot = transcriptStore.getSnapshot();
     const partialMessages = buildPersistableMessagesFromSnapshot({
-      executionMode: executionMode,
       model: runtimeModel,
       draftAssistantText: snapshot.draftAssistantText,
       liveRounds: snapshot.liveRounds,
@@ -609,41 +601,30 @@ async function runOneTurn(
       persistConversationWithHistorySync: persistConversation,
     };
 
-    if (isAgentMode) {
-      await runAgentConversationTurn({
-        ...sharedParams,
-        effectiveWorkdir,
-        effectiveSkillsEnabled: skillsEnabled,
-        subagentStore: subagentStores.get(conversationId),
-        subagentTemplates: settings.agents
-          .filter((template) => template.enabled)
-          .map(({ id, name, description, prompt }) => ({ id, name, description, prompt })),
-        showSilentMemoryExtraction: false,
-        skillsRootDir: skillsRootDirForTools,
-        skillAccessPolicy: skillAccessPolicyForTools,
-        getMcpSettings: () => settings.mcp,
-        getToolPolicies: () => settings.system.toolPolicies,
-        remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
-        tunnelPublicBaseUrl: "",
-        sshHosts: settings.ssh.hosts,
-        sshManagerRemoteAllowed: true,
-        updateToolStatus: (status: ToolStatus | null, store: LiveTranscriptStore) =>
-          store.setToolStatus(status),
-        updatePersistableAgentProgress: (progress) => {
-          persistableAgentProgress = progress as typeof persistableAgentProgress;
-        },
-        memoryExtractionModel,
-      });
-    } else {
-      await runTextConversationTurn({
-        ...sharedParams,
-        recoveryDebugLogger: conversationLogger(),
-        appendDraftAssistantText: (delta: string, store: LiveTranscriptStore) =>
-          store.appendDraftAssistantText(delta),
-        updateGatewayBridgeToolStatus: (status, isCompaction) =>
-          bridgeEvents.queueToolStatus(status, isCompaction),
-      });
-    }
+    await runAgentConversationTurn({
+      ...sharedParams,
+      effectiveWorkdir,
+      effectiveSkillsEnabled: skillsEnabled,
+      subagentStore: subagentStores.get(conversationId),
+      subagentTemplates: settings.agents
+        .filter((template) => template.enabled)
+        .map(({ id, name, description, prompt }) => ({ id, name, description, prompt })),
+      showSilentMemoryExtraction: false,
+      skillsRootDir: skillsRootDirForTools,
+      skillAccessPolicy: skillAccessPolicyForTools,
+      getMcpSettings: () => settings.mcp,
+      getToolPolicies: () => settings.system.toolPolicies,
+      remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
+      tunnelPublicBaseUrl: "",
+      sshHosts: settings.ssh.hosts,
+      sshManagerRemoteAllowed: true,
+      updateToolStatus: (status: ToolStatus | null, store: LiveTranscriptStore) =>
+        store.setToolStatus(status),
+      updatePersistableAgentProgress: (progress) => {
+        persistableAgentProgress = progress as typeof persistableAgentProgress;
+      },
+      memoryExtractionModel,
+    });
   } catch (error) {
     const aborted = cancellation.userStop.signal.aborted;
     finalState = aborted ? "cancelled" : "failed";

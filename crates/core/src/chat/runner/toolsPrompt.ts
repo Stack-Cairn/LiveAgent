@@ -11,6 +11,12 @@ export function buildToolsSuffix(
   availableToolNames?: readonly string[],
   runtimePlatformInput?: RuntimePlatform,
 ) {
+  // No tools registered (as opposed to availableToolNames === undefined, which
+  // means "don't filter, allow everything") → nothing to instruct the model
+  // about; a one-shot text-only request must not see tool-execution framing.
+  if (availableToolNames && availableToolNames.length === 0) {
+    return "Do not make any tool calls in this response.";
+  }
   const runtimePlatform = normalizeRuntimePlatform(runtimePlatformInput) ?? inferRuntimePlatform();
   const platformLabel = runtimePlatformLabel(runtimePlatform);
   const allowAll = availableToolNames === undefined;

@@ -1,7 +1,7 @@
 // 会话标题生成：一次性小请求，引擎独占（前端不再直连 LLM）。
 //
-// 与主对话轮次不同，这里没有工具、没有 hook、没有事件流：backend 代理一条
-// POST 过来，跑完一次 text-only 请求就把归一化后的标题同步返回。标题永远是
+// 与主对话轮次不同，这里没有 hook、没有事件流：backend 代理一条 POST 过来，
+// 跑一次无工具的 agent 补全就把归一化后的标题同步返回。标题永远是
 // 可选增强——任何失败（模型未配置、网络错、被取消）都返回 null，调用方沿用
 // 已有的 fallbackTitle，绝不因为标题失败影响会话本身。
 
@@ -10,12 +10,12 @@ import {
   buildConversationTitleSystemPrompt,
   normalizeGeneratedConversationTitle,
 } from "../chat/page/chatPageHelpers";
+import { runAssistantWithTools } from "../chat/runner/agentRunner";
 import { resolveEffectiveChatModelSelection } from "../models/modelSelection";
 import {
   assistantMessageToText,
   createProviderRuntimeConfig,
   type ProviderRuntimeConfig,
-  streamAssistantMessage,
 } from "../providers/llm";
 import type { SelectedModel } from "../settings";
 import { loadPersistedSettingsWithDefaults } from "../settings/storage";
@@ -66,11 +66,16 @@ export async function generateConversationTitle(
     ),
   );
 
-  const assistant = await streamAssistantMessage({
+  const { assistant } = await runAssistantWithTools({
     providerId: selection.providerId,
     model: selection.model,
     runtime,
-    cacheRetention: "none",
+    workdir: "",
+    allowEmptyWorkdir: true,
+    tools: [],
+    executeToolCall: async (toolCall) => {
+      throw new Error(`No tools are available in this request (got ${toolCall.name})`);
+    },
     nativeWebSearch: false,
     context: {
       systemPrompt: buildConversationTitleSystemPrompt(settings.locale),
