@@ -1,10 +1,12 @@
 import type { ProviderId } from "../settings";
+import { LIVEAGENT_USE_SYSTEM_PROXY_HEADER } from "./systemProxy";
 
 // 本地反代已随桌面 Gateway 架构删除（proxy_get_server_info 在删除清单）：
 // 反代的存在理由是 WebView 的 fetch 会丢弃 User-Agent/Cookie 等 forbidden
 // header names、且系统代理凭据只在 Rust 侧。core 跑在 Node（backend spawn
 // 的引擎进程），fetch/undici 没有 forbidden header 限制，请求头直接下发，
-// provider 请求按迁移文档"阶段 3 之后引擎在后端直连 provider"直连上游。
+// provider 请求直连上游。勾选 useSystemProxy 的供应商打标记头，由
+// systemProxy.ts 的 fetch 包装在出网前剥掉并换代理 dispatcher。
 
 export type PreparedProxyRequest = {
   baseUrl: string;
@@ -34,7 +36,7 @@ export async function prepareProxyRequest(
   _providerId: ProviderId,
   upstreamBaseUrl: string,
   headers: Record<string, string>,
-  _options?: { useSystemProxy?: boolean },
+  options?: { useSystemProxy?: boolean },
 ): Promise<PreparedProxyRequest> {
   const normalizedUpstream = upstreamBaseUrl.trim();
   if (!normalizedUpstream) {
@@ -48,6 +50,10 @@ export async function prepareProxyRequest(
 
   return {
     baseUrl: `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`,
-    headers,
+    // 标记头最后展开，用户自定义头覆盖不掉进程内信号。
+    headers:
+      options?.useSystemProxy === true
+        ? { ...headers, [LIVEAGENT_USE_SYSTEM_PROXY_HEADER]: "1" }
+        : headers,
   };
 }

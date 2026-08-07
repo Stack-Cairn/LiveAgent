@@ -12,6 +12,7 @@ import {
 } from "./engine";
 import type { MemoryOrganizeRun } from "./memory/api";
 import { acceptOrganizerRun } from "./memory/organizer/run";
+import { installSystemProxyFetch } from "./providers/systemProxy";
 import {
   type ConversationTitleRequest,
   generateConversationTitle,
@@ -135,6 +136,9 @@ const server = createServer(async (req: IncomingMessage, res: ServerResponse) =>
     respondJson(res, 500, { error: error instanceof Error ? error.message : String(error) });
   }
 });
+
+// 出站代理裁决点必须在任何 provider 请求之前就位。
+installSystemProxyFetch();
 
 server.listen(parseInt(nodePort), "127.0.0.1", () => {
   console.log(`Node engine listening on 127.0.0.1:${nodePort}`);

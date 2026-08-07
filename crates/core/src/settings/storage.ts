@@ -1,4 +1,5 @@
 import { callBackend } from "../backendClient";
+import { updateSystemProxyConfig } from "../providers/systemProxy";
 
 import {
   type AppSettings,
@@ -66,6 +67,10 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     locale: defaults.locale,
     closeWindowBehavior: defaults.closeWindowBehavior,
   });
+
+  // 设置加载是所有请求链路的必经点：在此刷新出站代理快照，
+  // 代理配置变更随下一次加载即时生效，不需要重启引擎。
+  updateSystemProxyConfig(settings.system.systemProxy);
 
   return {
     settings: {
