@@ -128,6 +128,12 @@ jobs:
         working-directory: crates/frontend
         run: pnpm install --frozen-lockfile
 
+      # 前端模块测试会加载 core 源码（test/ 里 localLoader 直接 import core/src），
+      # core 的依赖（fetch-socks 等）必须就位，否则 Cannot find module。
+      - name: Install core dependencies for module tests
+        working-directory: crates/core
+        run: pnpm install --frozen-lockfile
+
       - name: Typecheck and build GUI frontend
         working-directory: crates/frontend
         run: pnpm build
