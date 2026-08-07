@@ -66,19 +66,10 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`settings-nav-item group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-all duration-150 ${
-        active
-          ? "settings-nav-item-active bg-primary/10 font-medium text-primary"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-      }`}
+      data-active={active || undefined}
+      className="settings-nav-item group relative flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left text-[13.5px] tracking-[-0.01em]"
     >
-      <span
-        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors ${
-          active
-            ? "bg-primary/15 text-primary"
-            : "bg-muted/60 text-muted-foreground group-hover:bg-accent group-hover:text-foreground"
-        }`}
-      >
+      <span className="settings-nav-item-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
         {icon}
       </span>
       <span className="truncate leading-none">{label}</span>
@@ -232,34 +223,30 @@ export function SettingsPage(props: SettingsPageProps) {
   const onMac = isMacOsTauri();
 
   return (
-    <div className="flex h-full flex-col bg-background">
+    <div className="settings-page flex h-full flex-col bg-background">
       <div className="flex min-h-0 flex-1">
-        <aside className="settings-sidebar flex w-56 shrink-0 flex-col border-r border-border/60 bg-muted/20">
+        <aside className="settings-sidebar flex w-56 shrink-0 flex-col">
           {onMac && <div data-tauri-drag-region className="h-[38px] shrink-0" />}
-          <div className="border-b border-border/60 px-3 pb-3 pt-3">
-            <button
-              type="button"
-              onClick={onBack}
-              className="settings-back-button flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
-            >
+          <div className="settings-sidebar-header px-3 pb-3 pt-3">
+            <button type="button" onClick={onBack} className="settings-back-button">
               <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
               <span>{t("settings.backToChat")}</span>
             </button>
 
-            <div className="mt-3 flex items-center gap-2.5 px-1">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
-                <Settings2 className="h-3.5 w-3.5 text-primary" />
+            <div className="mt-3.5 flex items-center gap-2.5 px-1">
+              <div className="settings-title-icon flex h-7 w-7 items-center justify-center rounded-[9px]">
+                <Settings2 className="h-3.5 w-3.5" />
               </div>
-              <span className="text-sm font-semibold tracking-tight">{t("settings.title")}</span>
+              <span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">
+                {t("settings.title")}
+              </span>
             </div>
           </div>
 
-          <nav className="settings-nav flex-1 overflow-y-auto px-3 py-3">
+          <nav className="settings-nav flex-1 overflow-y-auto px-2.5 py-2.5">
             {navGroups.map((group, gi) => (
               <div key={group.label} className={gi > 0 ? "mt-4" : ""}>
-                <div className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                  {group.label}
-                </div>
+                <div className="settings-nav-group-label mb-1 px-2.5">{group.label}</div>
                 <div className="space-y-0.5">
                   {group.items.map((item) => (
                     <NavItem
@@ -275,7 +262,7 @@ export function SettingsPage(props: SettingsPageProps) {
             ))}
           </nav>
 
-          <div className="border-t border-border/60 px-3 py-2.5">
+          <div className="settings-sidebar-footer px-3 py-2.5">
             <div
               className="flex items-center gap-1.5 px-2.5 text-[11px] text-muted-foreground"
               title={saveIndicator.title}
@@ -286,10 +273,13 @@ export function SettingsPage(props: SettingsPageProps) {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col">
+        <main className="settings-main flex min-w-0 flex-1 flex-col">
           <MacOsTitleBarSpacer />
-          <div className="border-b px-6 py-3.5">
-            <div key={section} className="settings-section-title-enter text-base font-semibold">
+          <div className="settings-main-header px-6 py-3.5">
+            <div
+              key={section}
+              className="settings-section-title-enter text-[17px] font-semibold tracking-[-0.02em] text-foreground"
+            >
               {sectionLabels[section]}
             </div>
           </div>

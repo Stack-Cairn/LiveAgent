@@ -368,7 +368,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
       <div className="border-t" />
 
       <div className="grid gap-4 md:grid-cols-2">
-        <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+        <section className="settings-card space-y-3">
           <div className="flex items-start gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -415,7 +415,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
           </div>
         </section>
 
-        <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+        <section className="settings-card space-y-3">
           <div className="flex items-start gap-3">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -464,7 +464,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         </section>
       </div>
 
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+      <section className="settings-card space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm font-medium text-foreground">
             <Globe className="h-4 w-4 text-muted-foreground" />
@@ -582,7 +582,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+      <section className="settings-card space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <Minimize2 className="h-4 w-4 text-muted-foreground" />
           {t("settings.closeWindowBehavior")}
@@ -642,7 +642,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         </div>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+      <section className="settings-card space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <MonitorSmartphone className="h-4 w-4 text-muted-foreground" />
           {t("settings.trayTitle")}
@@ -679,7 +679,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         ) : null}
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+      <section className="settings-card space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <ScanText className="h-4 w-4 text-muted-foreground" />
           {t("settings.fontFamily")}
@@ -778,7 +778,7 @@ export function SystemSettingsForm(props: SettingsSectionProps) {
         </datalist>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-border/60 bg-card p-4">
+      <section className="settings-card space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
           <ScanText className="h-4 w-4 text-muted-foreground" />
           {t("settings.fontSize")}

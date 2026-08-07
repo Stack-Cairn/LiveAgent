@@ -1618,9 +1618,9 @@
     }
   }
 
-  /* Settings page section transitions */
+  /* Settings page section transitions — critically damped ease-out */
   .settings-section-enter {
-    animation: settingsSectionIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: settingsSectionIn 0.24s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
     /*
      * No `will-change` here: this class sits on the settings scroll container
      * itself, and a permanent layer promotion on a scroller makes Android
@@ -1630,7 +1630,7 @@
   }
 
   .settings-section-title-enter {
-    animation: settingsSectionTitleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: settingsSectionTitleIn 0.2s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
   }
 
   /* Provider dialog: panel switches (sections are keyed by panel id, so the
@@ -1740,7 +1740,7 @@
   @keyframes settingsSectionIn {
     from {
       opacity: 0;
-      transform: translateY(14px) scale(0.985);
+      transform: translateY(8px) scale(0.99);
     }
     to {
       opacity: 1;
@@ -1751,7 +1751,7 @@
   @keyframes settingsSectionTitleIn {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(4px);
     }
     to {
       opacity: 1;
@@ -1762,7 +1762,7 @@
   /* Settings system-tools tab views: soft enter when switching between the
    * built-in and custom tabs (the view wrapper is keyed by tab). */
   .settings-tools-view-enter {
-    animation: settingsToolsViewIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: settingsToolsViewIn 0.2s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
     will-change: transform, opacity;
   }
 
@@ -3041,6 +3041,141 @@
 @media (max-width: 820px), (pointer: coarse) {
   .transcript-width-controls {
     display: none !important;
+  }
+}
+
+/*
+ * Settings page chrome — Apple-like sidebar + content hierarchy.
+ * Unlayered so materials beat utility borders/backgrounds.
+ */
+.settings-sidebar {
+  background: hsl(var(--sidebar-bg));
+  border-right: 1px solid hsl(var(--sidebar-separator) / 0.85);
+}
+.settings-sidebar-header {
+  border-bottom: 1px solid hsl(var(--sidebar-separator) / 0.7);
+}
+.settings-sidebar-footer {
+  border-top: 1px solid hsl(var(--sidebar-separator) / 0.7);
+}
+.settings-title-icon {
+  color: hsl(var(--foreground) / 0.8);
+  background: hsl(240 12% 97% / 0.7);
+  border: 1px solid hsl(0 0% 0% / 0.08);
+  box-shadow: 0 1px 0 hsl(0 0% 100% / 0.75) inset;
+}
+.dark .settings-title-icon {
+  background: hsl(0 0% 100% / 0.06);
+  border-color: hsl(0 0% 100% / 0.1);
+  box-shadow: 0 1px 0 hsl(0 0% 100% / 0.06) inset;
+}
+
+.settings-back-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  padding: 0.5rem 0.625rem;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: hsl(var(--muted-foreground));
+  transition:
+    background-color 120ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    color 120ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    transform 100ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.settings-back-button:hover {
+  background: hsl(var(--foreground) / 0.06);
+  color: hsl(var(--foreground));
+}
+.settings-back-button:active {
+  transform: scale(0.98);
+}
+
+.settings-nav-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  color: hsl(var(--muted-foreground) / 0.75);
+  text-transform: uppercase;
+}
+
+.settings-nav-item {
+  color: hsl(var(--foreground) / 0.78);
+  transition:
+    background-color 80ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    color 80ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.settings-nav-item:hover {
+  background: hsl(var(--foreground) / 0.05);
+  color: hsl(var(--foreground));
+}
+.settings-nav-item:active {
+  background: hsl(var(--foreground) / 0.09);
+}
+.settings-nav-item[data-active] {
+  background: hsl(var(--foreground) / 0.08);
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+.settings-nav-item-icon {
+  color: inherit;
+  background: hsl(var(--foreground) / 0.05);
+  transition: background-color 120ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.settings-nav-item[data-active] .settings-nav-item-icon {
+  background: hsl(var(--foreground) / 0.1);
+}
+.settings-nav-item:hover .settings-nav-item-icon {
+  background: hsl(var(--foreground) / 0.08);
+}
+
+.settings-main-header {
+  border-bottom: 1px solid hsl(var(--border) / 0.55);
+  background: hsl(var(--background) / 0.72);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+}
+.dark .settings-main-header {
+  border-bottom-color: hsl(0 0% 100% / 0.08);
+  background: hsl(var(--background) / 0.65);
+}
+
+.settings-card {
+  border-radius: 1rem;
+  border: 1px solid hsl(0 0% 0% / 0.08);
+  background: hsl(240 12% 98% / 0.78);
+  padding: 1rem;
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.7) inset,
+    0 6px 18px -14px hsl(220 25% 10% / 0.1);
+}
+.dark .settings-card {
+  border-color: hsl(0 0% 100% / 0.09);
+  background: hsl(0 0% 100% / 0.04);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.05) inset,
+    0 6px 18px -14px hsl(0 0% 0% / 0.45);
+}
+
+.settings-switch {
+  transition: background-color 160ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-back-button:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .settings-main-header,
+  .settings-card {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: hsl(var(--background));
   }
 }
 
