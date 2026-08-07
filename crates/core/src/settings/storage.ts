@@ -63,8 +63,6 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     customSettings: defaults.customSettings,
     updates: defaults.updates,
     selectedModel: defaults.selectedModel,
-    theme: defaults.theme,
-    locale: defaults.locale,
     closeWindowBehavior: defaults.closeWindowBehavior,
   });
 

@@ -1,4 +1,3 @@
-import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../i18n/config";
 import {
   getProviderFallbackLimits,
   normalizeModelLimits,
@@ -22,7 +21,6 @@ import {
 } from "../providers/anthropicModels";
 import { createUuid } from "../shared/id";
 import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
-import { normalizeFontFamily } from "../shared/fontFamily";
 import {
   normalizeSelectedModel,
   normalizeSelectedModelForProviders,
@@ -30,7 +28,6 @@ import {
 } from "../models/selectedModel";
 import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
 
-export { normalizeFontFamily } from "../shared/fontFamily";
 export {
   normalizeSelectedModel,
   normalizeSelectedModelForProviders,
@@ -143,12 +140,6 @@ export type RightDockFileTreeState = {
 };
 
 
-export type FontScaleSettings = {
-  sidebar: number;
-  chat: number;
-  rightDock: number;
-};
-
 // Transcript width bounds enforced by normalizeChatTranscriptSettings below.
 export const DEFAULT_CHAT_TRANSCRIPT_WIDTH = 768;
 export const MIN_CHAT_TRANSCRIPT_WIDTH = 560;
@@ -163,11 +154,6 @@ export type CustomSettings = {
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
-  // Empty strings select the built-in stacks for each typography role.
-  interfaceFontFamily: string;
-  chatFontFamily: string;
-  codeFontFamily: string;
-  fontScale: FontScaleSettings;
 };
 
 export type UpdateSettings = {
@@ -375,8 +361,6 @@ export type CustomProvider = {
   usageQuery: UsageQueryConfig;
 };
 
-export type EffectiveTheme = "light" | "dark";
-export type Theme = EffectiveTheme | "system";
 export type CloseWindowBehavior = "minimize" | "exit";
 
 
@@ -407,8 +391,6 @@ export type AppSettings = {
   skills: SkillsSettings;
   chatRuntimeControls: ChatRuntimeControls;
   selectedModel?: SelectedModel;
-  theme: Theme;
-  locale: Locale;
   /** Desktop-only: close title-bar X to hide to tray or exit the application. */
   closeWindowBehavior: CloseWindowBehavior;
 };
@@ -1652,12 +1634,6 @@ export function normalizeSkillsSettings(input: unknown): SkillsSettings {
   };
 }
 
-export function normalizeTheme(input: unknown): Theme {
-  if (input === "dark") return "dark";
-  if (input === "system" || input === "auto") return "system";
-  return "light";
-}
-
 export function normalizeCloseWindowBehavior(input: unknown): CloseWindowBehavior {
   return input === "exit" ? "exit" : "minimize";
 }
@@ -1989,20 +1965,6 @@ export function normalizeRightDockSettings(input: unknown): RightDockSettings {
   };
 }
 
-export function normalizeFontScale(value: unknown): number {
-  const num = typeof value === "number" && Number.isFinite(value) ? value : 1;
-  return Math.min(1.4, Math.max(0.8, Math.round(num * 100) / 100));
-}
-
-export function normalizeFontScaleSettings(input: unknown): FontScaleSettings {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  return {
-    sidebar: normalizeFontScale(obj.sidebar),
-    chat: normalizeFontScale(obj.chat),
-    rightDock: normalizeFontScale(obj.rightDock),
-  };
-}
-
 export function normalizeChatTranscriptSettings(input: unknown): ChatTranscriptSettings {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   return {
@@ -2034,12 +1996,6 @@ export function normalizeCustomSettings(
     },
     chatTranscript: normalizeChatTranscriptSettings(obj.chatTranscript),
     rightDock: normalizeRightDockSettings(obj.rightDock),
-    // fontFamily was the single pre-split preference. Read it only to migrate
-    // saved local settings into the new interface-specific field.
-    interfaceFontFamily: normalizeFontFamily(obj.interfaceFontFamily ?? obj.fontFamily),
-    chatFontFamily: normalizeFontFamily(obj.chatFontFamily),
-    codeFontFamily: normalizeFontFamily(obj.codeFontFamily),
-    fontScale: normalizeFontScaleSettings(obj.fontScale),
   };
 }
 
@@ -2089,8 +2045,6 @@ export function getDefaultSettings(): AppSettings {
     },
     chatRuntimeControls: DEFAULT_CHAT_RUNTIME_CONTROLS,
     selectedModel: undefined,
-    theme: "light",
-    locale: DEFAULT_LOCALE,
     closeWindowBehavior: "minimize",
   };
 }
@@ -2124,8 +2078,6 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
       obj.chatRuntimeControls ?? defaults.chatRuntimeControls,
     ),
     selectedModel,
-    theme: normalizeTheme(obj.theme),
-    locale: normalizeLocale(obj.locale),
     closeWindowBehavior: normalizeCloseWindowBehavior(obj.closeWindowBehavior),
   };
 }

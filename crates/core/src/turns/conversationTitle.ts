@@ -78,11 +78,11 @@ export async function generateConversationTitle(
     },
     nativeWebSearch: false,
     context: {
-      systemPrompt: buildConversationTitleSystemPrompt(settings.locale),
+      systemPrompt: buildConversationTitleSystemPrompt(),
       messages: [
         {
           role: "user",
-          content: buildConversationTitlePrompt(source, settings.locale),
+          content: buildConversationTitlePrompt(source),
           timestamp: Date.now(),
         },
       ],

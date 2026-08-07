@@ -61,7 +61,8 @@ for (const rel of ["mcpOps.ts", "normalize.ts"]) {
 // core 侧合法独有的行。每行都要能说清"为什么前端不需要它"。
 const CORE_ONLY_LINES = new Set(
   [
-    // import 路径差异：core 里 i18n/shared 的相对层级不同。
+    // import 路径差异：core 已消除 i18n/shared 目录（纯前端概念），
+    // 这几行在 core 中已不存在，保留登记供文档参照。
     'import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../i18n/config";',
     'import { normalizeFontFamily } from "../shared/fontFamily";',
     'export { normalizeFontFamily } from "../shared/fontFamily";',

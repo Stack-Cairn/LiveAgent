@@ -82,24 +82,29 @@ function isIpAddress(hostname: string) {
   return hostname.includes(":");
 }
 
-// Returns an i18n key describing the validation failure, or null when valid.
-export function validateLocalHttpTarget(input: string): string | null {
+export type TunnelValidationError =
+  | "target_required"
+  | "invalid_url"
+  | "localhost_only";
+
+// Returns an error code describing the validation failure, or null when valid.
+export function validateLocalHttpTarget(input: string): TunnelValidationError | null {
   const value = input.trim();
-  if (!value) return "projectTools.tunnelTargetRequired";
+  if (!value) return "target_required";
   try {
     const url = new URL(value);
     if (url.protocol !== "http:") {
-      return "projectTools.tunnelInvalidUrl";
+      return "invalid_url";
     }
     const hostname = normalizeTunnelHostname(url.hostname);
     if (hostname !== "localhost" && !isIpAddress(hostname)) {
-      return "projectTools.tunnelLocalhostOnly";
+      return "localhost_only";
     }
     if (url.username || url.password || url.hash) {
-      return "projectTools.tunnelInvalidUrl";
+      return "invalid_url";
     }
   } catch {
-    return "projectTools.tunnelInvalidUrl";
+    return "invalid_url";
   }
   return null;
 }
