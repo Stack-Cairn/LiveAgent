@@ -54,8 +54,12 @@ FROM node:22.19.0-bookworm-slim AS runtime
 
 # 非 root 用户：权限隔离。数据目录 /var/lib/liveagent 建好并归属该用户，
 # 供 VOLUME 挂载持久化。
-RUN useradd --system --uid 10001 --user-group --home-dir /var/lib/liveagent --shell /usr/sbin/nologin liveagent \
-    && install -d -o liveagent -g liveagent -m 0700 /opt/liveagent/engine /var/lib/liveagent
+# ca-certificates：reqwest 0.13 启动时从系统加载根证书，bookworm-slim 不带，
+# 缺了 Client::new() 直接 panic（backend 一启动就建 HTTP client）。
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && useradd --system --uid 10001 --user-group --home-dir /var/lib/liveagent --shell /usr/sbin/nologin liveagent \
+    && install -d -o liveagent -g liveagent -m 0700 /opt/liveagent/engine /var/lib/liveagent \
+    && rm -rf /var/lib/apt/lists/*
 
 # 从 backend-builder 阶段复制 Rust 二进制
 COPY --from=backend-builder /out/target/release/backend /usr/local/bin/backend
