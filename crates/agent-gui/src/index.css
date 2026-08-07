@@ -167,63 +167,83 @@
 @layer base {
   :root {
     color-scheme: light;
-    --app-font-family: ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
-    --chat-font-family: "OpenAI Sans Semibold", "PingFang SC", "Microsoft YaHei", sans-serif;
+    /* Prefer platform system face (SF Pro / Segoe / PingFang) for optical sizing
+       and tracking tables — Apple typography default before custom faces. */
+    --app-font-family:
+      -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", ui-sans-serif, system-ui,
+      "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --chat-font-family:
+      "OpenAI Sans Semibold", -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
+      sans-serif;
     --code-font-family:
       "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono",
       monospace;
+
+    /* Apple motion vocabulary (WWDC Designing Fluid Interfaces / Emil curves) */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
+    --duration-press: 100ms;
+    --duration-ui: 200ms;
+    --duration-sheet: 320ms;
+    --press-scale: 0.97;
+    /* ChatHeader row (py-2.5 + h-8) — keep in sync with overlay pad / composer top */
+    --chat-header-height: 3.25rem;
+
+    /* Light canvas: near-pure white content, cooler structural sidebar (#F5F5F7) */
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 240 10% 8%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 240 10% 8%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 240 10% 8%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 240 8% 12%;
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 240 6% 96%;
+    --secondary-foreground: 240 8% 12%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 240 6% 96%;
+    --muted-foreground: 240 5% 42%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 240 6% 96%;
+    --accent-foreground: 240 8% 12%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 240 6% 40%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem;
 
-    /* Sidebar */
-    --sidebar-bg: 220 14% 96%;
+    /* Sidebar — heavier material encodes structure (Apple materials hierarchy) */
+    --sidebar-bg: 240 6% 96%;
+    --sidebar-separator: 240 6% 88%;
 
     /* Hub pages (MCP/Skills) canvas — in dark it sits below --background so
        background-tinted glass panels read as elevated surfaces. */
     --hub-canvas: var(--background);
 
     /* Chip / pill buttons (MCP, Skills, 新对话) */
-    --chip-bg: 220 13% 91%;
-    --chip-bg-hover: 220 13% 86%;
+    --chip-bg: 240 6% 91%;
+    --chip-bg-hover: 240 5% 86%;
     /* Send button disabled */
-    --send-disabled-bg: 220 13% 91%;
+    --send-disabled-bg: 240 6% 91%;
 
-    /* Chat-specific tokens */
-    --chat-user-bg: 220 9% 91%;
-    --chat-user-fg: 222 84% 5%;
+    /* Chat-specific tokens — user bubble closer to Messages gray fill */
+    --chat-user-bg: 240 6% 92%;
+    --chat-user-fg: 240 10% 8%;
     --chat-assistant-bg: 0 0% 100%;
-    --chat-assistant-fg: 222.2 84% 4.9%;
+    --chat-assistant-fg: 240 10% 8%;
     --chat-tool-bg: 0 0% 100%;
-    --chat-tool-border: 220 13% 91%;
-    --chat-thinking-bg: 220 14% 97%;
-    --chat-thinking-border: 220 13% 90%;
+    --chat-tool-border: 240 6% 90%;
+    --chat-thinking-bg: 240 6% 97%;
+    --chat-thinking-border: 240 6% 90%;
     --chat-success: 152 60% 42%;
     --chat-error: 0 72% 51%;
     --chat-running: 252 56% 57%;
@@ -252,53 +272,55 @@
   .dark {
     color-scheme: dark;
 
-    --background: 224 22% 9%;
-    --foreground: 210 30% 96%;
+    /* Apple dark canvas (~#1C1C1E content, slightly elevated chrome) */
+    --background: 240 6% 7%;
+    --foreground: 240 8% 96%;
 
-    --card: 224 22% 10%;
-    --card-foreground: 210 30% 96%;
+    --card: 240 5% 9%;
+    --card-foreground: 240 8% 96%;
 
-    --popover: 224 20% 12%;
-    --popover-foreground: 210 30% 96%;
+    --popover: 240 5% 11%;
+    --popover-foreground: 240 8% 96%;
 
-    --primary: 210 30% 96%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 240 8% 96%;
+    --primary-foreground: 240 8% 10%;
 
-    --secondary: 220 18% 17%;
-    --secondary-foreground: 210 30% 96%;
+    --secondary: 240 5% 14%;
+    --secondary-foreground: 240 8% 96%;
 
-    --muted: 220 18% 17%;
-    --muted-foreground: 215 18% 76%;
+    --muted: 240 5% 14%;
+    --muted-foreground: 240 5% 68%;
 
-    --accent: 220 18% 17%;
-    --accent-foreground: 210 30% 96%;
+    --accent: 240 5% 14%;
+    --accent-foreground: 240 8% 96%;
 
-    --destructive: 0 62.8% 36%;
-    --destructive-foreground: 210 30% 96%;
+    --destructive: 0 55% 38%;
+    --destructive-foreground: 240 8% 96%;
 
-    --border: 220 14% 26%;
-    --input: 220 14% 26%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 240 4% 18%;
+    --input: 240 4% 18%;
+    --ring: 240 5% 55%;
 
     /* Chip / pill buttons (dark) */
-    --chip-bg: 220 16% 24%;
-    --chip-bg-hover: 220 16% 30%;
+    --chip-bg: 240 5% 18%;
+    --chip-bg-hover: 240 5% 22%;
     /* Send button disabled (dark) */
-    --send-disabled-bg: 220 16% 24%;
+    --send-disabled-bg: 240 5% 18%;
 
     /* Hub pages canvas (dark) — deeper than --background for glass elevation */
-    --hub-canvas: 224 24% 6.5%;
+    --hub-canvas: 240 8% 5%;
 
     /* Chat-specific tokens (dark) */
-    --sidebar-bg: 224 22% 11%;
-    --chat-user-bg: 220 14% 28%;
-    --chat-user-fg: 210 30% 96%;
-    --chat-assistant-bg: 224 22% 9%;
-    --chat-assistant-fg: 210 30% 96%;
-    --chat-tool-bg: 224 22% 9%;
-    --chat-tool-border: 220 14% 24%;
-    --chat-thinking-bg: 220 18% 13%;
-    --chat-thinking-border: 220 14% 22%;
+    --sidebar-bg: 240 5% 9%;
+    --sidebar-separator: 240 4% 16%;
+    --chat-user-bg: 240 5% 18%;
+    --chat-user-fg: 240 8% 96%;
+    --chat-assistant-bg: 240 6% 7%;
+    --chat-assistant-fg: 240 8% 96%;
+    --chat-tool-bg: 240 6% 7%;
+    --chat-tool-border: 240 4% 16%;
+    --chat-thinking-bg: 240 5% 11%;
+    --chat-thinking-border: 240 4% 16%;
     --chat-success: 152 56% 52%;
     --chat-error: 0 75% 65%;
     --chat-running: 252 60% 70%;
@@ -719,21 +741,55 @@
     --text-2xl: calc(1.5rem * var(--zone-font-scale, 1));
   }
 
+  /*
+   * Assistant markdown — Apple reading rhythm (WWDC UI Typography):
+   * size-specific tracking, inverse leading (tight headings / open body),
+   * hierarchy from weight+size+leading together. Values are intentional.
+   */
   .chat-markdown {
-    @apply text-[calc(15px*var(--zone-font-scale,1))] leading-8 text-foreground;
+    --chat-md-size: calc(15.5px * var(--zone-font-scale, 1));
+    --chat-md-leading: 1.52;
+    --chat-md-tracking: -0.011em;
+    --chat-md-para-gap: 0.7em;
+    --chat-md-block-gap: 0.95em;
+    font-size: var(--chat-md-size);
+    line-height: var(--chat-md-leading);
+    letter-spacing: var(--chat-md-tracking);
+    color: hsl(var(--foreground) / 0.94);
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
   }
 
   .chat-markdown p {
-    @apply my-2 min-w-0 max-w-full break-words text-[calc(15px*var(--zone-font-scale,1))] leading-8 text-foreground [overflow-wrap:anywhere];
+    margin-block: var(--chat-md-para-gap);
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-size: var(--chat-md-size);
+    line-height: var(--chat-md-leading);
+    letter-spacing: var(--chat-md-tracking);
+    color: hsl(var(--foreground) / 0.94);
+  }
+
+  /* Tighter first paragraph under a heading; open air between prose blocks */
+  .chat-markdown [data-streamdown^="heading-"] + p {
+    margin-top: 0.35em;
+  }
+  .chat-markdown p + p {
+    margin-top: var(--chat-md-para-gap);
   }
 
   .chat-markdown strong,
   .chat-markdown [data-streamdown="strong"] {
-    @apply font-medium text-foreground;
+    font-weight: 600;
+    color: hsl(var(--foreground) / 0.98);
+    letter-spacing: -0.005em;
   }
 
   .chat-markdown em {
-    @apply text-foreground/90;
+    font-style: italic;
+    color: hsl(var(--foreground) / 0.9);
   }
 
   /* Hide the retained Streamdown caret without removing its inline slot. */
@@ -741,49 +797,106 @@
     opacity: 0;
   }
 
-  /* Headings */
+  /* Headings — larger → tighter leading + more negative tracking */
   .chat-markdown [data-streamdown="heading-1"] {
-    @apply mb-2 mt-6 text-xl font-semibold tracking-tight text-foreground;
+    margin: 1.35em 0 0.4em;
+    font-size: calc(1.35rem * var(--zone-font-scale, 1));
+    font-weight: 600;
+    line-height: 1.18;
+    letter-spacing: -0.025em;
+    color: hsl(var(--foreground));
   }
   .chat-markdown [data-streamdown="heading-2"] {
-    @apply mb-2 mt-5 text-lg font-semibold tracking-tight text-foreground;
+    margin: 1.2em 0 0.35em;
+    font-size: calc(1.18rem * var(--zone-font-scale, 1));
+    font-weight: 600;
+    line-height: 1.22;
+    letter-spacing: -0.02em;
+    color: hsl(var(--foreground));
   }
   .chat-markdown [data-streamdown="heading-3"] {
-    @apply mb-1.5 mt-4 text-base font-semibold tracking-tight text-foreground;
+    margin: 1.05em 0 0.3em;
+    font-size: calc(1.05rem * var(--zone-font-scale, 1));
+    font-weight: 600;
+    line-height: 1.28;
+    letter-spacing: -0.015em;
+    color: hsl(var(--foreground));
   }
   .chat-markdown [data-streamdown="heading-4"],
   .chat-markdown [data-streamdown="heading-5"] {
-    @apply mb-1 mt-4 text-sm font-semibold tracking-tight text-foreground;
+    margin: 0.95em 0 0.25em;
+    font-size: calc(0.95rem * var(--zone-font-scale, 1));
+    font-weight: 600;
+    line-height: 1.32;
+    letter-spacing: -0.01em;
+    color: hsl(var(--foreground) / 0.96);
   }
   .chat-markdown [data-streamdown="heading-6"] {
-    @apply mb-1 mt-4 text-xs font-semibold tracking-wide text-muted-foreground;
+    margin: 0.9em 0 0.2em;
+    font-size: calc(0.82rem * var(--zone-font-scale, 1));
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    color: hsl(var(--muted-foreground));
   }
 
-  /* Links */
+  /* Links — calm, readable; underline is secondary */
   .chat-markdown [data-streamdown="link"] {
-    @apply rounded-xs font-medium text-primary underline decoration-primary/30 underline-offset-2 transition-colors hover:decoration-primary/70;
+    border-radius: 2px;
+    font-weight: 500;
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--primary) / 0.28);
+    text-underline-offset: 0.18em;
+    text-decoration-thickness: 1px;
+    transition: text-decoration-color 150ms var(--ease-out);
+  }
+  .chat-markdown [data-streamdown="link"]:hover {
+    text-decoration-color: hsl(var(--primary) / 0.65);
   }
 
   /* Inline code */
   .chat-markdown [data-streamdown="inline-code"] {
-    @apply whitespace-pre-wrap break-words rounded-md border-0 bg-foreground/[0.05] px-1.5 py-0.5 font-mono text-[0.92em] font-normal text-foreground [overflow-wrap:anywhere];
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    border-radius: 0.35rem;
+    border: 0;
+    background: hsl(var(--foreground) / 0.055);
+    padding: 0.12em 0.38em;
+    font-family: var(--code-font-family);
+    font-size: 0.9em;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.35;
+    color: hsl(var(--foreground) / 0.95);
   }
 
   /* Code blocks — container, header, body (safe in components layer) */
   .chat-markdown [data-streamdown="code-block"] {
     @apply relative my-4 w-full min-w-0 overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none outline-none ring-0;
+    margin-block: var(--chat-md-block-gap);
   }
   .chat-markdown [data-streamdown="code-block-header"] {
-    @apply h-8 border-0 bg-transparent px-2 py-0 text-[calc(11px*var(--zone-font-scale,1))] font-medium tracking-[0.06em] text-muted-foreground/85 shadow-none;
+    @apply h-8 border-0 bg-transparent px-2 py-0 shadow-none;
+    font-size: calc(11px * var(--zone-font-scale, 1));
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: hsl(var(--muted-foreground) / 0.88);
   }
   .chat-markdown [data-streamdown="code-block-header"] > span {
-    @apply ml-0 font-mono tracking-[0.06em];
+    @apply ml-0 font-mono;
+    letter-spacing: 0.04em;
   }
   .chat-markdown [data-streamdown="code-block-body"] {
-    @apply w-full min-w-0 overflow-x-auto rounded-xl border-0 bg-muted/40 p-4 text-[calc(13px*var(--zone-font-scale,1))] shadow-none outline-none ring-0;
+    @apply w-full min-w-0 overflow-x-auto rounded-xl border-0 bg-muted/40 p-4 shadow-none outline-none ring-0;
+    font-size: calc(13px * var(--zone-font-scale, 1));
+    letter-spacing: 0;
   }
   .chat-markdown [data-streamdown="code-block-body"] pre {
-    @apply leading-6;
+    line-height: 1.55;
+    letter-spacing: 0;
   }
   .chat-markdown--streaming [data-streamdown="code-block"][data-incomplete="true"] {
     @apply relative border-0 bg-transparent;
@@ -797,37 +910,74 @@
     @apply border-0 bg-transparent text-muted-foreground/85;
   }
 
-  /* Blockquotes */
+  /* Blockquotes — secondary voice, not heavy italic (Notes-like) */
   .chat-markdown [data-streamdown="blockquote"] {
-    @apply my-3 min-w-0 max-w-full border-l-2 border-border/70 pl-4 italic text-muted-foreground [overflow-wrap:anywhere];
+    margin-block: var(--chat-md-block-gap);
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    border-left: 2px solid hsl(var(--border) / 0.85);
+    padding-left: 0.9em;
+    font-style: normal;
+    color: hsl(var(--muted-foreground));
+    letter-spacing: -0.005em;
   }
   .chat-markdown [data-streamdown="blockquote"] p {
-    @apply my-0;
+    margin-block: 0.35em;
+    color: inherit;
   }
 
-  /* Lists */
+  /* Lists — slightly tighter than body paragraphs, same type size */
   .chat-markdown [data-streamdown="unordered-list"] {
-    @apply my-2 ml-1 list-disc space-y-0.5 pl-5;
+    margin-block: 0.65em;
+    margin-left: 0.15em;
+    list-style-type: disc;
+    padding-left: 1.35em;
   }
   .chat-markdown [data-streamdown="ordered-list"] {
-    @apply my-2 ml-1 list-decimal space-y-0.5 pl-5;
+    margin-block: 0.65em;
+    margin-left: 0.15em;
+    list-style-type: decimal;
+    padding-left: 1.35em;
   }
   .chat-markdown [data-streamdown="list-item"] {
-    @apply min-w-0 max-w-full break-words pl-1 text-[calc(15px*var(--zone-font-scale,1))] leading-8 [overflow-wrap:anywhere];
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    margin-block: 0.2em;
+    padding-left: 0.2em;
+    font-size: var(--chat-md-size);
+    line-height: var(--chat-md-leading);
+    letter-spacing: var(--chat-md-tracking);
+  }
+  .chat-markdown [data-streamdown="list-item"] > p {
+    margin-block: 0.2em;
   }
   .chat-markdown .contains-task-list {
-    @apply list-none pl-0;
+    list-style: none;
+    padding-left: 0;
   }
   .chat-markdown .task-list-item {
-    @apply flex items-start gap-2 pl-0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding-left: 0;
   }
   .chat-markdown .task-list-item input[type="checkbox"] {
-    @apply mt-[0.45rem] h-3.5 w-3.5 rounded border border-border align-middle accent-emerald-500;
+    margin-top: 0.4em;
+    height: 0.875rem;
+    width: 0.875rem;
+    border-radius: 0.25rem;
+    border: 1px solid hsl(var(--border));
+    vertical-align: middle;
+    accent-color: hsl(152 55% 42%);
   }
 
   /* Tables */
   .chat-markdown [data-streamdown="table-wrapper"] {
     @apply my-4 w-full min-w-0 gap-0 rounded-none border-0 bg-transparent p-0 shadow-none outline-none ring-0;
+    margin-block: var(--chat-md-block-gap);
   }
   .chat-markdown [data-streamdown="table-wrapper"] > div:first-child {
     @apply justify-end gap-1 px-0 pt-0;
@@ -839,31 +989,49 @@
     @apply rounded-md border-0 bg-transparent shadow-none transition-colors hover:bg-foreground/[0.04] hover:text-foreground;
   }
   .chat-markdown [data-streamdown="table"] {
-    @apply my-2 w-full min-w-full table-auto border-collapse border-0 bg-transparent text-sm shadow-none outline-none ring-0;
+    @apply my-2 w-full min-w-full table-auto border-collapse border-0 bg-transparent shadow-none outline-none ring-0;
+    font-size: calc(0.9em * var(--zone-font-scale, 1));
+    letter-spacing: -0.005em;
   }
   .chat-markdown [data-streamdown="table-header"] {
     @apply bg-transparent;
   }
   .chat-markdown [data-streamdown="table-header-cell"] {
-    @apply border-0 border-b border-border/50 px-0 py-2 pr-8 text-left align-bottom text-sm font-semibold tracking-tight text-foreground;
+    border: 0;
+    border-bottom: 1px solid hsl(var(--border) / 0.55);
+    padding: 0.45em 2em 0.45em 0;
+    text-align: left;
+    vertical-align: bottom;
+    font-size: 0.92em;
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.012em;
+    color: hsl(var(--foreground));
   }
   .chat-markdown [data-streamdown="table-cell"] {
-    @apply border-0 border-b border-border/30 px-0 py-1 pr-8 text-left align-middle leading-8 text-foreground/90;
+    border: 0;
+    border-bottom: 1px solid hsl(var(--border) / 0.32);
+    padding: 0.4em 2em 0.4em 0;
+    text-align: left;
+    vertical-align: middle;
+    line-height: 1.45;
+    color: hsl(var(--foreground) / 0.9);
   }
   .chat-markdown [data-streamdown="table-body"] [data-streamdown="table-row"]:nth-child(even) {
     @apply bg-transparent;
   }
   .chat-markdown [data-streamdown="table-header-cell"]:last-child,
   .chat-markdown [data-streamdown="table-cell"]:last-child {
-    @apply pr-0;
+    padding-right: 0;
   }
   .chat-markdown [data-streamdown="table-row"]:last-child [data-streamdown="table-cell"] {
-    @apply border-b-0;
+    border-bottom: 0;
   }
 
   /* Mermaid */
   .chat-markdown [data-streamdown="mermaid-block"] {
     @apply my-4 flex w-full min-w-0 gap-2 rounded-none border-0 bg-transparent p-0 shadow-none;
+    margin-block: var(--chat-md-block-gap);
   }
   .chat-markdown [data-streamdown="mermaid-block"] > div:last-child,
   .chat-markdown [data-streamdown="mermaid"] {
@@ -881,50 +1049,84 @@
 
   /* Math */
   .chat-markdown .katex {
-    @apply text-[1.04em];
+    font-size: 1.05em;
   }
   .chat-markdown .katex-display {
-    @apply my-3.5 block max-w-full overflow-x-auto overflow-y-hidden px-1 py-1.5 text-center;
+    margin-block: 0.9em;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.35em 0.25em;
+    text-align: center;
   }
 
-  /* Thinking markdown */
+  /* Thinking markdown — denser secondary voice; stays subordinate to answer */
   .chat-markdown.thinking-markdown {
-    @apply text-[calc(12px*var(--zone-font-scale,1))] leading-6 text-muted-foreground/80;
+    --chat-md-size: calc(12.5px * var(--zone-font-scale, 1));
+    --chat-md-leading: 1.45;
+    --chat-md-tracking: 0;
+    --chat-md-para-gap: 0.4em;
+    font-size: var(--chat-md-size);
+    line-height: var(--chat-md-leading);
+    letter-spacing: var(--chat-md-tracking);
+    color: hsl(var(--muted-foreground) / 0.82);
   }
   .chat-markdown.thinking-markdown p {
-    @apply my-1 text-[calc(12px*var(--zone-font-scale,1))] leading-6 text-muted-foreground/80;
+    margin-block: var(--chat-md-para-gap);
+    font-size: var(--chat-md-size);
+    line-height: var(--chat-md-leading);
+    color: hsl(var(--muted-foreground) / 0.82);
   }
   .chat-markdown.thinking-markdown [data-streamdown^="heading-"] {
-    @apply mb-0 mt-1 text-[calc(12px*var(--zone-font-scale,1))] font-medium leading-6 tracking-normal text-muted-foreground/90;
+    margin: 0.45em 0 0.15em;
+    font-size: var(--chat-md-size);
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0;
+    color: hsl(var(--muted-foreground) / 0.92);
   }
   .chat-markdown.thinking-markdown [data-streamdown="unordered-list"],
   .chat-markdown.thinking-markdown [data-streamdown="ordered-list"] {
-    @apply my-1 pl-4;
+    margin-block: 0.35em;
+    padding-left: 1.1em;
   }
   .chat-markdown.thinking-markdown [data-streamdown="list-item"] {
-    @apply text-[calc(12px*var(--zone-font-scale,1))] leading-5 text-muted-foreground/80;
+    font-size: var(--chat-md-size);
+    line-height: 1.4;
+    color: hsl(var(--muted-foreground) / 0.82);
   }
   .chat-markdown.thinking-markdown [data-streamdown="blockquote"] {
-    @apply my-1 border-l-0 pl-0 not-italic text-muted-foreground/75;
+    margin-block: 0.35em;
+    border-left: 0;
+    padding-left: 0;
+    font-style: normal;
+    color: hsl(var(--muted-foreground) / 0.75);
   }
   .chat-markdown.thinking-markdown [data-streamdown="inline-code"] {
-    @apply bg-foreground/[0.03] text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/90;
+    background: hsl(var(--foreground) / 0.03);
+    font-size: calc(11px * var(--zone-font-scale, 1));
+    color: hsl(var(--muted-foreground) / 0.9);
   }
   .chat-markdown.thinking-markdown [data-streamdown="code-block-body"] {
-    @apply bg-muted/20 p-3 text-[calc(11px*var(--zone-font-scale,1))];
+    @apply bg-muted/20 p-3;
+    font-size: calc(11px * var(--zone-font-scale, 1));
   }
 
   /* Images */
   .chat-markdown [data-streamdown="image-wrapper"] {
-    @apply my-4 overflow-visible rounded-none border-0 bg-transparent shadow-none;
+    @apply overflow-visible rounded-none border-0 bg-transparent shadow-none;
+    margin-block: var(--chat-md-block-gap);
   }
   .chat-markdown [data-streamdown="image"] {
     @apply block max-h-[34rem] max-w-full rounded-xl border border-border/60 bg-muted/10 object-contain;
   }
 
-  /* Horizontal rule */
+  /* Horizontal rule — soft section break */
   .chat-markdown [data-streamdown="horizontal-rule"] {
-    @apply my-5 border-border/45;
+    margin-block: 1.25em;
+    border: 0;
+    border-top: 1px solid hsl(var(--border) / 0.5);
   }
 
   /* First/last child margin reset */
@@ -968,9 +1170,9 @@
     @apply rounded border border-border/50 bg-muted/60 px-1 py-0.5 font-mono text-[calc(11px*var(--zone-font-scale,1))] text-foreground/90;
   }
 
-  /* Smooth entrance for chat bubbles */
+  /* Smooth entrance for chat bubbles — start from visible scale (never 0) */
   .chat-bubble-enter {
-    animation: chatBubbleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: chatBubbleIn var(--duration-ui) var(--ease-out);
   }
 
   /*
@@ -988,7 +1190,7 @@
   @keyframes chatBubbleIn {
     from {
       opacity: 0;
-      transform: translateY(6px) scale(0.98);
+      transform: translateY(4px) scale(0.98);
     }
     to {
       opacity: 1;
@@ -996,44 +1198,287 @@
     }
   }
 
-  /* Jump-to-bottom affordance: mounted only while scroll-follow is detached,
-   * so it only needs an entrance animation. Centering lives here because the
-   * animation transform would override a Tailwind translate utility.
-   * Frosted-glass treatment follows the .hub-frost-hero idiom (translucent
-   * theme tint + blur/saturate, white-tint override in dark). */
+  /* Floating chat header — translucent material; overlays transcript scroll */
+  .chat-header {
+    background: hsl(var(--background) / 0.72);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+  .chat-header::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(var(--border) / 0.55) 18%,
+      hsl(var(--border) / 0.55) 82%,
+      transparent 100%
+    );
+    opacity: 0.7;
+  }
+
+  /* Scroll content clears the overlay header; messages still pass under it. */
+  .chat-transcript-scroll-pad {
+    padding-top: calc(var(--chat-header-height) + 0.5rem);
+  }
+
+  /* Overlay host: header captures input; siblings can sit under it. */
+  .chat-header-overlay {
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    z-index: 20;
+  }
+
+  /* Sidebar structural material + soft edge (scroll-edge, not a hard divider) */
+  .chat-history-sidebar {
+    background: hsl(var(--sidebar-bg));
+    border-right-color: hsl(var(--sidebar-separator) / 0.9);
+  }
+  .chat-history-sidebar-inner {
+    position: relative;
+  }
+  .chat-sidebar-section-label {
+    font-size: calc(11px * var(--zone-font-scale, 1));
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.25;
+    color: hsl(var(--muted-foreground) / 0.92);
+  }
+  .chat-sidebar-row-active {
+    background: hsl(var(--foreground) / 0.08);
+  }
+  .dark .chat-sidebar-row-active {
+    background: hsl(var(--foreground) / 0.1);
+  }
+
+  /*
+   * Sidebar list touch-down (Apple Response): highlight on pointer-down of the
+   * row's select control, not on release. No scale — list rows are high-frequency
+   * and should only change fill. `:has(button:active)` paints the whole rounded
+   * row while the primary select button is pressed.
+   */
+  .chat-sidebar-row {
+    transition:
+      background-color 80ms var(--ease-out),
+      color 80ms var(--ease-out);
+  }
+
+  .chat-sidebar-row:not(.chat-sidebar-row-active):not([data-selected="true"]):has(
+      > button:active,
+      [data-sidebar-row-select]:active
+    ) {
+    background-color: hsl(var(--foreground) / 0.08);
+    color: hsl(var(--foreground));
+  }
+
+  .chat-sidebar-row.chat-sidebar-row-active:has(> button:active, [data-sidebar-row-select]:active),
+  .chat-sidebar-row[data-selected="true"]:has(> button:active, [data-sidebar-row-select]:active) {
+    background-color: hsl(var(--foreground) / 0.14);
+  }
+
+  .chat-sidebar-row[data-tone="danger"]:has(> button:active, [data-sidebar-row-select]:active) {
+    background-color: hsl(var(--destructive) / 0.12);
+    color: hsl(var(--destructive));
+  }
+
+  .chat-sidebar-row[data-tone="muted"]:has(> button:active, [data-sidebar-row-select]:active) {
+    background-color: hsl(var(--foreground) / 0.05);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-sidebar-row {
+      transition: none;
+    }
+  }
+
+  /* Suggestion cards — light material + press feedback */
+  .chat-suggest-card {
+    border: 1px solid hsl(var(--border) / 0.55);
+    background: hsl(var(--foreground) / 0.03);
+    box-shadow: 0 1px 0 hsl(0 0% 100% / 0.5) inset;
+    transition:
+      background-color var(--duration-ui) var(--ease-out),
+      border-color var(--duration-ui) var(--ease-out),
+      transform var(--duration-press) var(--ease-out),
+      box-shadow var(--duration-ui) var(--ease-out);
+  }
+  .chat-suggest-card:hover {
+    background: hsl(var(--foreground) / 0.055);
+    border-color: hsl(var(--border) / 0.8);
+  }
+  .chat-suggest-card:active {
+    transform: scale(var(--press-scale));
+  }
+  .dark .chat-suggest-card {
+    border-color: hsl(0 0% 100% / 0.08);
+    background: hsl(0 0% 100% / 0.04);
+    box-shadow: 0 1px 0 hsl(0 0% 100% / 0.06) inset;
+  }
+  .dark .chat-suggest-card:hover {
+    background: hsl(0 0% 100% / 0.07);
+    border-color: hsl(0 0% 100% / 0.12);
+  }
+
+  /* Composer toolbar icon buttons — instant press response */
+  .composer-toolbar-action {
+    transition:
+      background-color var(--duration-ui) var(--ease-out),
+      color var(--duration-ui) var(--ease-out),
+      transform var(--duration-press) var(--ease-out);
+  }
+  .composer-toolbar-action:active:not(:disabled) {
+    transform: scale(var(--press-scale));
+  }
+
+  /*
+   * Jump-to-bottom — same glass material family as composer / header.
+   * Centering lives here: entrance animation transform would override a
+   * Tailwind translate utility. Press uses scale (occasional affordance).
+   */
   .chat-jump-to-bottom {
     transform: translateX(-50%);
-    animation: chatJumpToBottomIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    border: 1px solid hsl(var(--border) / 0.55);
-    background: hsl(var(--background) / 0.45);
-    -webkit-backdrop-filter: blur(18px) saturate(180%);
-    backdrop-filter: blur(18px) saturate(180%);
+    animation: chatJumpToBottomIn 180ms var(--ease-out);
+    border: 1px solid hsl(var(--border) / 0.5);
+    background: hsl(var(--background) / 0.55);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
     box-shadow:
-      0 1px 0 hsl(0 0% 100% / 0.45) inset,
-      0 8px 24px -14px hsl(0 0% 0% / 0.35);
+      0 1px 0 hsl(0 0% 100% / 0.5) inset,
+      0 10px 28px -14px hsl(0 0% 0% / 0.32);
+    color: hsl(var(--muted-foreground));
+    transition:
+      background-color 150ms var(--ease-out),
+      color 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out),
+      transform 100ms var(--ease-out);
   }
   .chat-jump-to-bottom:hover {
-    background: hsl(var(--background) / 0.65);
+    background: hsl(var(--background) / 0.72);
+    color: hsl(var(--foreground));
+  }
+  .chat-jump-to-bottom:active {
+    transform: translateX(-50%) scale(var(--press-scale));
   }
   .dark .chat-jump-to-bottom {
     border-color: hsl(0 0% 100% / 0.12);
-    background: hsl(0 0% 100% / 0.06);
+    background: hsl(0 0% 100% / 0.07);
     box-shadow:
       0 1px 0 hsl(0 0% 100% / 0.08) inset,
-      0 8px 24px -14px hsl(0 0% 0% / 0.6);
+      0 10px 28px -14px hsl(0 0% 0% / 0.65);
   }
   .dark .chat-jump-to-bottom:hover {
-    background: hsl(0 0% 100% / 0.11);
+    background: hsl(0 0% 100% / 0.12);
   }
 
   @keyframes chatJumpToBottomIn {
     from {
       opacity: 0;
-      transform: translateX(-50%) translateY(6px);
+      transform: translateX(-50%) translateY(6px) scale(0.96);
     }
     to {
       opacity: 1;
-      transform: translateX(-50%) translateY(0);
+      transform: translateX(-50%) translateY(0) scale(1);
+    }
+  }
+
+  /*
+   * Floor nav panel — floating material aligned with model-selector / composer.
+   * Origin top-right (rail sits on the right edge); enter/exit under 200ms.
+   */
+  .floor-nav-panel {
+    border: 1px solid hsl(var(--border) / 0.5);
+    background: hsl(var(--background) / 0.72);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow:
+      0 1px 0 hsl(0 0% 100% / 0.5) inset,
+      0 16px 40px -18px hsl(15 23% 10% / 0.32);
+    transform-origin: top right;
+    animation: floorNavPanelIn 180ms var(--ease-out);
+  }
+  .dark .floor-nav-panel {
+    border-color: hsl(0 0% 100% / 0.1);
+    background: hsl(0 0% 100% / 0.07);
+    box-shadow:
+      0 1px 0 hsl(0 0% 100% / 0.06) inset,
+      0 16px 40px -18px hsl(0 0% 0% / 0.65);
+  }
+
+  @keyframes floorNavPanelIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.96);
+      filter: blur(2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      filter: blur(0);
+    }
+  }
+
+  .floor-nav-row {
+    transition: background-color 80ms var(--ease-out);
+  }
+  .floor-nav-row:has(button:active) {
+    background-color: hsl(var(--foreground) / 0.09);
+  }
+  .floor-nav-row[data-floor-active]:has(button:active) {
+    background-color: hsl(var(--foreground) / 0.12);
+  }
+
+  .floor-nav-pin {
+    transition:
+      color 120ms var(--ease-out),
+      opacity 120ms var(--ease-out),
+      transform 100ms var(--ease-out),
+      background-color 120ms var(--ease-out);
+  }
+  .floor-nav-pin:active {
+    transform: scale(var(--press-scale));
+  }
+
+  .floor-nav-marker {
+    transition:
+      width 150ms var(--ease-out),
+      background-color 150ms var(--ease-out),
+      opacity 150ms var(--ease-out);
+  }
+  .floor-nav-marker:active {
+    opacity: 1;
+    background-color: hsl(var(--foreground) / 0.7);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-jump-to-bottom {
+      animation: none;
+      transition: background-color 120ms ease, color 120ms ease;
+    }
+    .chat-jump-to-bottom:active {
+      transform: translateX(-50%);
+    }
+    .floor-nav-panel {
+      animation: none;
+    }
+    .floor-nav-pin:active {
+      transform: none;
+    }
+    .floor-nav-marker {
+      transition: background-color 120ms ease;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .chat-jump-to-bottom,
+    .floor-nav-panel {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background: hsl(var(--background));
     }
   }
 
@@ -1042,44 +1487,46 @@
    * rises, then the suggestion cards cascade. Steady-state motion stays
    * transform/opacity-only: a slow float on the logo plus a halo breathe. */
   .chat-hero-logo-enter {
-    animation: chatHeroLogoIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    /* Critically damped feel — no spring overshoot on non-gesture UI */
+    animation: chatHeroLogoIn 0.45s var(--ease-out) backwards;
     will-change: transform, opacity;
   }
 
   /* Float and breathe share one 6s clock, delayed past the entrance so the
-   * pop settles before the idle motion takes over. */
+   * pop settles before the idle motion takes over. Amplitude stays subtle. */
   .chat-hero-logo-float {
-    animation: chatHeroFloat 6s ease-in-out 1.2s infinite;
+    animation: chatHeroFloat 7s ease-in-out 1s infinite;
   }
 
   .chat-hero-halo-breathe {
-    animation: chatHeroHaloBreathe 6s ease-in-out 1.2s infinite;
+    animation: chatHeroHaloBreathe 7s ease-in-out 1s infinite;
   }
 
   .chat-hero-title-enter {
-    animation: chatHeroRiseIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.12s backwards;
+    animation: chatHeroRiseIn 0.48s var(--ease-out) 0.08s backwards;
     will-change: transform, opacity;
+    letter-spacing: -0.02em;
   }
 
   .chat-hero-line-enter {
-    animation: chatHeroRiseIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s backwards;
+    animation: chatHeroRiseIn 0.48s var(--ease-out) 0.14s backwards;
   }
 
   .chat-hero-cta-enter {
-    animation: chatHeroRiseIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.28s backwards;
+    animation: chatHeroRiseIn 0.48s var(--ease-out) 0.2s backwards;
   }
 
   /* Suggestion cards: --chat-hero-delay is staggered per card from JSX.
    * `backwards` (not `both`) so hover styles win once the entrance ends. */
   .chat-hero-card-enter {
-    animation: chatHeroCardIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) var(--chat-hero-delay, 0.26s)
-      backwards;
+    animation: chatHeroCardIn 0.42s var(--ease-out) var(--chat-hero-delay, 0.22s) backwards;
   }
 
   @keyframes chatHeroLogoIn {
     from {
       opacity: 0;
-      transform: translateY(10px) scale(0.72);
+      /* Never animate from scale(0) — start from a visible shape */
+      transform: translateY(8px) scale(0.92);
     }
     to {
       opacity: 1;
@@ -1093,7 +1540,7 @@
       transform: translateY(0);
     }
     50% {
-      transform: translateY(-5px);
+      transform: translateY(-3px);
     }
   }
 
@@ -1103,14 +1550,14 @@
       opacity: 1;
     }
     50% {
-      opacity: 0.6;
+      opacity: 0.7;
     }
   }
 
   @keyframes chatHeroRiseIn {
     from {
       opacity: 0;
-      transform: translateY(12px);
+      transform: translateY(8px);
     }
     to {
       opacity: 1;
@@ -1121,7 +1568,7 @@
   @keyframes chatHeroCardIn {
     from {
       opacity: 0;
-      transform: translateY(14px) scale(0.96);
+      transform: translateY(10px) scale(0.97);
     }
     to {
       opacity: 1;
@@ -1427,6 +1874,11 @@
       animation: none;
     }
 
+    .chat-suggest-card:active,
+    .composer-toolbar-action:active:not(:disabled) {
+      transform: none;
+    }
+
     .sidebar-context-menu,
     .sidebar-context-menu [role="menuitem"] {
       animation: none !important;
@@ -1438,6 +1890,12 @@
       transition: none !important;
     }
 
+    .chat-header {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background: hsl(var(--background));
+    }
+
     .ssh-auth-panel,
     .ssh-collapsible,
     .settings-modal-overlay,
@@ -1445,6 +1903,26 @@
     .ssh-forward-dialog-backdrop,
     .ssh-forward-dialog-popup {
       transition-duration: 1ms;
+    }
+  }
+
+  /* Accessibility: solid surfaces when translucency hurts legibility */
+  @media (prefers-reduced-transparency: reduce) {
+    .chat-header,
+    .project-tools-panel-header {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background: hsl(var(--background));
+    }
+
+    .chat-jump-to-bottom {
+      -webkit-backdrop-filter: none !important;
+      backdrop-filter: none !important;
+      background: hsl(var(--background)) !important;
+    }
+
+    .project-tools-panel {
+      background: hsl(var(--sidebar-bg));
     }
   }
 
@@ -1646,49 +2124,103 @@
     transform: translateY(5px) scale(0.975);
   }
 
-  /* Chat header model selector: grow out of the trigger with a soft slide.
-   * Base UI drives the popup lifecycle, so enter/exit are keyed off
-   * data-starting-style / data-ending-style and the transition delays
-   * unmount (data-state rules never match Base UI popups). */
+  /*
+   * Chat header model selector — origin-aware popover (Apple spatial consistency).
+   * Grows from the trigger via Base UI `--transform-origin`; enter/exit share a
+   * path; exit is faster than enter (asymmetric timing). Materializes with a
+   * light blur so the surface reads as glass arriving, not a flat opacity fade.
+   * Lifecycle: data-starting-style / data-ending-style (not data-state).
+   */
   .model-selector-dropdown {
-    /* Slide from the anchor side; flipped placement overrides per data-side. */
-    --model-menu-slide-y: -6px;
-    transform-origin: var(--transform-origin);
+    --model-menu-slide-y: -8px;
+    --model-menu-slide-x: 0px;
+    /* Fallback when --transform-origin is unset: grow from top-start (align=start). */
+    transform-origin: var(--transform-origin, 16px 0);
     transition:
-      opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity 200ms var(--ease-out),
+      transform 200ms var(--ease-out),
+      filter 200ms var(--ease-out);
   }
 
   .model-selector-dropdown[data-side="top"] {
-    --model-menu-slide-y: 6px;
+    --model-menu-slide-y: 8px;
+  }
+
+  .model-selector-dropdown[data-side="left"],
+  .model-selector-dropdown[data-side="inline-start"] {
+    --model-menu-slide-x: 6px;
+    --model-menu-slide-y: 0px;
+  }
+
+  .model-selector-dropdown[data-side="right"],
+  .model-selector-dropdown[data-side="inline-end"] {
+    --model-menu-slide-x: -6px;
+    --model-menu-slide-y: 0px;
   }
 
   .model-selector-dropdown[data-starting-style],
   .model-selector-dropdown[data-ending-style] {
     opacity: 0;
-    transform: translateY(var(--model-menu-slide-y)) scale(0.96);
+    /* Never scale(0) — start from a visible shape near the trigger */
+    filter: blur(2px);
+    transform: translate(var(--model-menu-slide-x), var(--model-menu-slide-y)) scale(0.96);
   }
 
+  /* Exit: same path, snappier (~half enter) so dismiss feels responsive */
   .model-selector-dropdown[data-ending-style] {
-    transition-duration: 0.12s;
-    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
-    transform: translateY(calc(var(--model-menu-slide-y) / 2)) scale(0.98);
+    transition-duration: 110ms;
+    transition-timing-function: var(--ease-out);
+    filter: blur(1px);
+    transform: translate(
+        calc(var(--model-menu-slide-x) * 0.45),
+        calc(var(--model-menu-slide-y) * 0.45)
+      )
+      scale(0.98);
   }
 
-  /* `backwards` (not `both`): a filled forwards animation would keep holding
-   * transform after it ends and suppress the item highlight translate. */
+  /* Trigger: open state reads as “menu is attached here” */
+  .model-selector-trigger[data-popup-open],
+  .model-selector-trigger[aria-expanded="true"] {
+    background-color: hsl(var(--muted) / 0.7);
+  }
+
+  /* Item cascade on open only — short stagger, never blocks interaction */
   .model-selector-dropdown[data-open] .model-selector-item {
-    animation: modelSelectorItemIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    /* `backwards` (not `both`): don't hold transform after settle (kills hover). */
+    animation: modelSelectorItemIn 160ms var(--ease-out) backwards;
   }
 
   @keyframes modelSelectorItemIn {
     from {
       opacity: 0;
-      transform: translateY(calc(var(--model-menu-slide-y) / 2));
+      transform: translateY(calc(var(--model-menu-slide-y) * 0.35 + 3px));
     }
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  /* List rows: press highlight (no scale — high frequency while menu is open) */
+  .model-selector-item {
+    transition: background-color 100ms var(--ease-out);
+  }
+  .model-selector-item:active {
+    background-color: hsl(var(--foreground) / 0.09);
+  }
+
+  .model-selector-item .model-selector-check {
+    animation: modelSelectorCheckIn 140ms var(--ease-out) both;
+  }
+
+  @keyframes modelSelectorCheckIn {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
     }
   }
 
@@ -1698,7 +2230,8 @@
     .composer-dropdown [role="menuitem"],
     .composer-branch-dropdown,
     .model-selector-dropdown,
-    .model-selector-item {
+    .model-selector-item,
+    .model-selector-item .model-selector-check {
       animation: none !important;
     }
 
@@ -1709,6 +2242,20 @@
     .model-selector-trigger,
     .model-selector-trigger svg {
       transition: none !important;
+    }
+
+    .model-selector-dropdown[data-starting-style],
+    .model-selector-dropdown[data-ending-style] {
+      filter: none;
+      transform: none;
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .model-selector-dropdown[data-starting-style],
+    .model-selector-dropdown[data-ending-style] {
+      filter: none;
     }
   }
 
@@ -2839,15 +3386,149 @@ body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor:grabbing"]
 }
 
 /*
- * Right-dock header metrics — the dock markup is byte-mirrored with the
- * gateway WebUI and therefore carries the web-sized utilities (h-11 header,
- * h-8 tab row, no vertical padding). The desktop GUI restores its own
- * metrics here. MUST stay outside @layer so these rules beat the Tailwind
- * utility classes baked into the mirrored markup (unlayered styles win over
- * the utilities layer in Tailwind v4).
+ * Composer glass material — MUST stay outside @layer so utilities cannot
+ * override fill/blur. Light mode: high-opacity white on pure canvas reads solid;
+ * use cool translucent fill + strong blur so glass remains legible.
  */
+.composer-glass-card {
+  border-width: 1px;
+  border-style: solid;
+  border-color: hsl(0 0% 0% / 0.1);
+  background: hsl(240 12% 97% / 0.48);
+  -webkit-backdrop-filter: blur(40px) saturate(190%);
+  backdrop-filter: blur(40px) saturate(190%);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.85) inset,
+    0 12px 40px -14px hsl(220 25% 10% / 0.18),
+    0 2px 8px -2px hsl(220 25% 10% / 0.08);
+  transition:
+    background-color 180ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    border-color 180ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    box-shadow 180ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.composer-glass-card:focus-within {
+  border-color: hsl(0 0% 0% / 0.14);
+  background: hsl(240 14% 98% / 0.58);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.9) inset,
+    0 16px 48px -14px hsl(220 25% 10% / 0.22),
+    0 4px 12px -4px hsl(220 25% 10% / 0.1);
+}
+.dark .composer-glass-card {
+  border-color: hsl(0 0% 100% / 0.12);
+  background: hsl(0 0% 100% / 0.08);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.1) inset,
+    0 12px 40px -14px hsl(0 0% 0% / 0.72),
+    0 2px 6px -2px hsl(0 0% 0% / 0.42);
+}
+.dark .composer-glass-card:focus-within {
+  border-color: hsl(0 0% 100% / 0.16);
+  background: hsl(0 0% 100% / 0.11);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.12) inset,
+    0 16px 48px -14px hsl(0 0% 0% / 0.78),
+    0 4px 12px -4px hsl(0 0% 0% / 0.5);
+}
+
+.composer-queue-glass {
+  border-width: 1px;
+  border-style: solid;
+  border-color: hsl(0 0% 0% / 0.09);
+  background: hsl(240 12% 97% / 0.48);
+  -webkit-backdrop-filter: blur(36px) saturate(180%);
+  backdrop-filter: blur(36px) saturate(180%);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.8) inset,
+    0 8px 24px -18px hsl(220 25% 10% / 0.2);
+}
+.dark .composer-queue-glass {
+  border-color: hsl(0 0% 100% / 0.1);
+  background: hsl(0 0% 100% / 0.06);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.08) inset,
+    0 8px 24px -18px hsl(0 0% 0% / 0.72);
+}
+
+.composer-queue-item-glass {
+  border-width: 1px;
+  border-style: solid;
+  border-color: hsl(0 0% 0% / 0.06);
+  background: hsl(0 0% 100% / 0.42);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.7);
+}
+.dark .composer-queue-item-glass {
+  border-color: hsl(0 0% 100% / 0.06);
+  background: hsl(0 0% 100% / 0.04);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.05);
+}
+
+.composer-bottom-fade {
+  background: linear-gradient(
+    to top,
+    hsl(var(--background) / 0.88) 0%,
+    hsl(var(--background) / 0.35) 55%,
+    transparent 100%
+  );
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .composer-glass-card,
+  .composer-queue-glass,
+  .composer-queue-item-glass {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: hsl(var(--background)) !important;
+  }
+  .composer-bottom-fade {
+    background: hsl(var(--background));
+  }
+}
+
+/*
+ * Right-dock chrome — materials aligned with chat header/sidebar.
+ * Metrics override the mirrored WebUI utilities (h-11 header, h-8 tabs).
+ * MUST stay outside @layer so unlayered styles beat Tailwind utilities.
+ */
+.project-tools-panel {
+  background: hsl(var(--sidebar-bg));
+  border-color: hsl(var(--sidebar-separator) / 0.85);
+  transition:
+    opacity var(--duration-ui) var(--ease-out),
+    transform var(--duration-ui) var(--ease-out),
+    width var(--duration-ui) var(--ease-out);
+}
+.project-tools-panel-inner {
+  background: hsl(var(--sidebar-bg));
+  transition:
+    opacity var(--duration-ui) var(--ease-out),
+    transform var(--duration-ui) var(--ease-out);
+}
 .project-tools-panel-header {
+  position: relative;
   height: 3.25rem;
+  border-bottom: none;
+  background: hsl(var(--background) / 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+}
+.project-tools-panel-header::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--border) / 0.5) 12%,
+    hsl(var(--border) / 0.5) 88%,
+    transparent 100%
+  );
+  opacity: 0.75;
 }
 .project-tools-panel-tabs {
   height: 2.5rem;
@@ -2858,6 +3539,13 @@ body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor:grabbing"]
  * mobile sheet presentation, so it is never shown here. */
 .project-tools-panel-handle {
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-tools-panel,
+  .project-tools-panel-inner {
+    transition: none;
+  }
 }
 
 /* Composer chip spacing — the gap after a chip is pure presentation; no
