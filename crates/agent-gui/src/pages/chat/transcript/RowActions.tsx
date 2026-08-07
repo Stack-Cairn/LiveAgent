@@ -50,7 +50,7 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
       >
         <button
           type="button"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md p-1 text-muted-foreground transition-[color,background-color,transform] duration-100 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-muted/50 hover:text-foreground active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:active:scale-100"
           title={t("chat.copy")}
           disabled={!replyText}
           onClick={() => {
@@ -74,7 +74,7 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
           {() => (
             <button
               type="button"
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md p-1 text-muted-foreground transition-[color,background-color,transform] duration-100 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-muted/50 hover:text-foreground active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:active:scale-100"
               title={retryTitle}
               disabled={retryDisabled}
             >
@@ -97,7 +97,7 @@ export function AssistantRowFooter(props: AssistantRowFooterProps) {
           {() => (
             <button
               type="button"
-              className={`rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed ${isRowBranchPending ? "" : "disabled:opacity-40"}`}
+              className={`rounded-md p-1 text-muted-foreground transition-[color,background-color,transform] duration-100 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-muted/50 hover:text-foreground active:scale-[0.96] disabled:cursor-not-allowed motion-reduce:active:scale-100 ${isRowBranchPending ? "" : "disabled:opacity-40"}`}
               title={retryMessageRef ? t("chat.branch") : t("chat.branchUnavailable")}
               disabled={isSending || !retryMessageRef || !onBranchConversation || branchPending}
             >
@@ -136,7 +136,7 @@ export function UserRowFooter(props: UserRowFooterProps) {
       <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          className="rounded-md p-1 text-muted-foreground transition-[color,background-color,transform] duration-100 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-muted/50 hover:text-foreground active:scale-[0.96] motion-reduce:active:scale-100"
           title={t("chat.copy")}
           onClick={() => {
             navigator.clipboard.writeText(text);
@@ -147,7 +147,7 @@ export function UserRowFooter(props: UserRowFooterProps) {
         </button>
         <button
           type="button"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md p-1 text-muted-foreground transition-[color,background-color,transform] duration-100 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-muted/50 hover:text-foreground active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:active:scale-100"
           title={editTitle}
           disabled={editDisabled}
           onClick={() => {
