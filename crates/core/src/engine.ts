@@ -54,7 +54,7 @@ import { createModelFromConfig, createProviderRuntimeConfig } from "./providers/
 import type { ToolStatus, WireMessageRef } from "./protocol/wireEvents";
 import { loadPersistedSettingsWithDefaults } from "./settings/storage";
 import type { SelectedModel } from "./settings";
-import { getActiveAgentPrompt } from "./settings";
+import { getActiveAgentPrompt, isAgentDevMode } from "./settings";
 import { createSubagentStoreManager } from "./subagents";
 import { buildSkillsSystemPrompt, discoverSkills, resolveExplicitSkillMentions } from "./skills";
 import type { SkillAccessPolicy } from "./tools/skillAccessPolicy";
@@ -302,11 +302,15 @@ async function runOneTurn(
   session.cancellation = cancellation;
   session.isRunning = true;
 
-  const disabledLogger = () =>
+  // 与 cronPromptRunner / memory organizer 同一个闸门:agent-dev 才落盘。
+  // 注意用 settings.system.executionMode——本函数上面那个 executionMode 已被
+  // 压成 text|tools 供网络层用,永远等不到 agent-dev。
+  const debugExecutionMode = settings.system.executionMode;
+  const conversationLogger = () =>
     createStreamDebugLogger({
-      enabled: false,
+      enabled: isAgentDevMode(debugExecutionMode),
       conversationId,
-      executionMode: executionMode,
+      executionMode: debugExecutionMode,
       streamKind: "conversation",
       providerId,
       model,
@@ -484,7 +488,7 @@ async function runOneTurn(
     model,
     runtime: providerConfig,
     cancellation,
-    debugLogger: disabledLogger(),
+    debugLogger: conversationLogger(),
     buildPreparedContext,
     buildResumeContext: (state, resumeMessage, tools, options) =>
       buildResumeConversationContext({
@@ -587,7 +591,7 @@ async function runOneTurn(
       transcriptStore,
       gatewayBridgeEvents: bridgeEvents,
       hookLifecycle,
-      conversationDebugLogger: disabledLogger(),
+      conversationDebugLogger: conversationLogger(),
       getNextConversationState: () => nextConversationState,
       applyConversationState,
       buildPreparedContext,
@@ -633,7 +637,7 @@ async function runOneTurn(
     } else {
       await runTextConversationTurn({
         ...sharedParams,
-        recoveryDebugLogger: disabledLogger(),
+        recoveryDebugLogger: conversationLogger(),
         appendDraftAssistantText: (delta: string, store: LiveTranscriptStore) =>
           store.appendDraftAssistantText(delta),
         updateGatewayBridgeToolStatus: (status, isCompaction) =>
