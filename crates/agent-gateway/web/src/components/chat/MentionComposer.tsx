@@ -33,7 +33,11 @@ import {
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
 } from "../../lib/chat/mentionReferences";
-import { tokenizeUserMessage } from "../../lib/chat/userMessageContent";
+import {
+  extractGitHubCommitSha,
+  extractGitHubFileReference,
+  tokenizeUserMessage,
+} from "../../lib/chat/userMessageContent";
 import { extractClipboardFiles } from "../../lib/clipboardFiles";
 import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
@@ -745,6 +749,11 @@ function normalizeClipboardCommit(
 ): MentionComposerCommitMention | null {
   const sha = clipboardString(rawCommit, "sha").trim();
   if (!/^[0-9a-f]{7,64}$/i.test(sha)) return null;
+  // Clipboard payloads are untrusted — the text/html fallback channel reads
+  // the payload attribute out of any copied page — and githubUrl feeds the
+  // chip's open-on-GitHub action, so it must pass the same GitHub URL
+  // validation as the plain-text token channel or drop to a link-less chip.
+  const githubUrl = clipboardString(rawCommit, "githubUrl").trim();
   return normalizeCommitMention({
     sha,
     shortSha: clipboardString(rawCommit, "shortSha", sha.slice(0, 7)),
@@ -760,7 +769,7 @@ function normalizeClipboardCommit(
     stat: clipboardString(rawCommit, "stat"),
     remoteName: clipboardString(rawCommit, "remoteName"),
     remoteUrl: clipboardString(rawCommit, "remoteUrl"),
-    githubUrl: clipboardString(rawCommit, "githubUrl") || undefined,
+    githubUrl: extractGitHubCommitSha(githubUrl) ? githubUrl : undefined,
   });
 }
 
@@ -770,6 +779,9 @@ function normalizeClipboardGitFile(
   const path = clipboardString(rawFile, "path").trim().replace(/\\/g, "/");
   const commitSha = clipboardString(rawFile, "commitSha").trim();
   if (!createFileMentionReference(path, "file") || !commitSha) return null;
+  // Same trust boundary as normalizeClipboardCommit: only a real GitHub blob
+  // URL may reach the chip's open action.
+  const githubUrl = clipboardString(rawFile, "githubUrl").trim();
   return normalizeGitFileMention({
     path,
     oldPath: clipboardString(rawFile, "oldPath") || undefined,
@@ -779,7 +791,7 @@ function normalizeClipboardGitFile(
     refName: clipboardString(rawFile, "refName"),
     remoteName: clipboardString(rawFile, "remoteName"),
     remoteUrl: clipboardString(rawFile, "remoteUrl"),
-    githubUrl: clipboardString(rawFile, "githubUrl") || undefined,
+    githubUrl: extractGitHubFileReference(githubUrl) ? githubUrl : undefined,
   });
 }
 
@@ -868,6 +880,24 @@ export function parseComposerClipboardPayload(
   } catch {
     return null;
   }
+}
+
+// Restored segments must obey the same large-paste threshold as direct input:
+// text over the limit collapses into a chip, and carried-over largePaste
+// segments are rebuilt with fresh ids so they cannot collide in the map.
+export function rebuildClipboardSegmentsForPaste(
+  segments: MentionComposerDraftSegment[],
+  createLargePaste: (text: string) => MentionComposerLargePaste,
+): MentionComposerDraftSegment[] {
+  return segments.map((segment) => {
+    if (segment.type === "largePaste") {
+      return { type: "largePaste" as const, paste: createLargePaste(segment.paste.text) };
+    }
+    if (segment.type === "text" && isLargePasteText(segment.text)) {
+      return { type: "largePaste" as const, paste: createLargePaste(segment.text) };
+    }
+    return segment;
+  });
 }
 
 export function parseSerializedComposerText(
@@ -3472,7 +3502,16 @@ export const MentionComposer = memo(
         event.preventDefault();
         writeComposerClipboardSnapshot(event.clipboardData, snapshot);
         resetPromptHistoryRecall();
-        if (!deleteComposerSelection(editor, largePastesRef.current)) return;
+        // execCommand routes the removal through the browser editing pipeline
+        // so Ctrl+Z still restores the cut content — native cut was undoable
+        // before this interception. Its synchronous input event runs
+        // handleInput, which prunes detached large-paste map entries.
+        if (
+          !document.execCommand("delete") &&
+          !deleteComposerSelection(editor, largePastesRef.current)
+        ) {
+          return;
+        }
         closeMentionSession();
         refreshEmptyState();
         refreshMention();
@@ -3499,10 +3538,9 @@ export const MentionComposer = memo(
         const clipboardSegments = readComposerClipboardSegments(e.clipboardData, enabledSkills);
         if (clipboardSegments) {
           e.preventDefault();
-          const restoredSegments = clipboardSegments.map((segment) =>
-            segment.type === "largePaste"
-              ? { type: "largePaste" as const, paste: createLargePaste(segment.paste.text) }
-              : segment,
+          const restoredSegments = rebuildClipboardSegmentsForPaste(
+            clipboardSegments,
+            createLargePaste,
           );
           const editor = editorRef.current;
           if (editor) {

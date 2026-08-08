@@ -168,10 +168,17 @@ function markdownFileReference(label: string, rawDestination: string) {
   return reference;
 }
 
-function extractGitHubCommitSha(value: string) {
+function isGitHubHttpUrl(url: URL) {
+  return (
+    (url.protocol === "https:" || url.protocol === "http:") &&
+    ["github.com", "www.github.com"].includes(url.hostname.toLowerCase())
+  );
+}
+
+export function extractGitHubCommitSha(value: string) {
   try {
     const url = new URL(value);
-    if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) return "";
+    if (!isGitHubHttpUrl(url)) return "";
     const parts = url.pathname.split("/").filter(Boolean);
     const commitIndex = parts.findIndex((part) => part.toLowerCase() === "commit");
     const sha = commitIndex >= 0 ? (parts[commitIndex + 1] ?? "") : "";
@@ -205,10 +212,10 @@ export function buildGitHubCommitUrl(remoteUrl: string, sha: string) {
   }
 }
 
-function extractGitHubFileReference(value: string) {
+export function extractGitHubFileReference(value: string) {
   try {
     const url = new URL(value);
-    if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) return null;
+    if (!isGitHubHttpUrl(url)) return null;
     const parts = url.pathname.split("/").filter(Boolean);
     const blobIndex = parts.findIndex((part) => part.toLowerCase() === "blob");
     const ref = blobIndex >= 0 ? (parts[blobIndex + 1] ?? "") : "";
