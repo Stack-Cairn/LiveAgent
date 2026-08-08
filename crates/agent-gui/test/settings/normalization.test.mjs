@@ -2611,3 +2611,66 @@ test("clearing a configured usage query secret emits an explicit empty update", 
   assert.equal(applied.customProviders[0].usageQuery.apiKey, "");
   assert.equal(applied.customProviders[0].usageQuery.apiKeyConfigured, false);
 });
+
+const FAILOVER_SYNC_PROVIDERS = [
+  {
+    id: "provider-primary",
+    name: "Primary",
+    type: "claude_code",
+    baseUrl: "https://primary.example.com",
+    apiKey: "key-primary",
+    models: [{ id: "claude-fable-5", contextWindow: 200000, maxOutputToken: 8192 }],
+    activeModels: ["claude-fable-5"],
+  },
+  {
+    id: "provider-backup",
+    name: "Backup",
+    type: "claude_code",
+    baseUrl: "https://backup.example.com",
+    apiKey: "key-backup",
+    models: [{ id: "claude-fable-5", contextWindow: 200000, maxOutputToken: 8192 }],
+    activeModels: ["claude-fable-5"],
+  },
+];
+
+test("model failover changes appear in the gateway settings update payload", () => {
+  const previous = settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS });
+  const next = settings.updateModelFailover(previous, "claude_code", {
+    enabled: true,
+    queue: ["provider-backup"],
+  });
+
+  const update = sync.buildGatewaySettingsSyncUpdatePayload(previous, next);
+  assert.deepEqual(update.modelFailover?.claude_code.queue, ["provider-backup"]);
+  assert.equal(update.modelFailover?.claude_code.enabled, true);
+
+  // Untouched settings must not produce a modelFailover entry.
+  const noChange = sync.buildGatewaySettingsSyncUpdatePayload(next, next);
+  assert.equal(Object.hasOwn(noChange, "modelFailover"), false);
+});
+
+test("model failover round-trips through gateway settings sync", () => {
+  const source = settings.updateModelFailover(
+    settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS }),
+    "claude_code",
+    {
+      enabled: true,
+      queue: ["provider-backup"],
+      maxSwitches: 2,
+      failureThreshold: 5,
+      cooldownSeconds: 120,
+    },
+  );
+
+  const payload = sync.buildGatewaySettingsSyncPayload(source);
+  const received = sync.applyGatewaySettingsSyncPayload(
+    settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS }),
+    payload,
+  );
+
+  assert.deepEqual(received.modelFailover, source.modelFailover);
+
+  // A payload without the field keeps the receiver's current config.
+  const partial = sync.applyGatewaySettingsSyncPayload(received, { theme: "dark" });
+  assert.deepEqual(partial.modelFailover, received.modelFailover);
+});

@@ -133,3 +133,28 @@ test("no plan when failover is disabled or nothing qualifies", () => {
     undefined,
   );
 });
+
+test("failover config applied from gateway sync feeds the plan builder", () => {
+  const sync = loader.loadModule("src/lib/settings/sync.ts");
+
+  // WebUI edits the config and publishes it through the sync protocol...
+  const webSide = settings.updateModelFailover(
+    settings.normalizeSettings({ customProviders: PROVIDERS }),
+    "claude_code",
+    { enabled: true, queue: ["provider-a2"] },
+  );
+  const payload = sync.buildGatewaySettingsSyncPayload(webSide);
+
+  // ...the desktop applies the payload and must build a live plan from it.
+  const desktopSide = sync.applyGatewaySettingsSyncPayload(
+    settings.normalizeSettings({ customProviders: PROVIDERS }),
+    payload,
+  );
+  const plan = runtimeConfig.buildModelFailoverPlan(
+    desktopSide,
+    primarySelection("provider-a", "model-1"),
+  );
+  assert.ok(plan, "synced config should produce a failover plan");
+  assert.deepEqual(plan.fallbacks.map((f) => f.selectedModel.customProviderId), ["provider-a2"]);
+  assert.equal(plan.fallbacks[0].model, "model-1");
+});
