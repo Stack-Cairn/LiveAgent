@@ -1120,7 +1120,7 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 9);
+        assert_eq!(row_count, 10);
         assert_eq!(
             keys,
             vec![
@@ -1128,6 +1128,7 @@ mod tests {
                 SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_EXECUTION_MODE_KEY.to_string(),
                 SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
+                SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY.to_string(),
                 SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY.to_string(),
                 SYSTEM_SYSTEM_PROXY_KEY.to_string(),
                 SYSTEM_TOOL_POLICIES_KEY.to_string(),
@@ -1144,6 +1145,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
+                "interactiveTimeoutMinutes": 3,
                 "workdir": default_workdir.clone(),
                 "toolPolicies": { "Bash": "ask", "server:docs-mcp": "deny" },
                 "workspaceProjects": [
@@ -1188,6 +1190,31 @@ mod tests {
         );
     }
 
+    /// 交互式应答超时必须真正落库：该键此前不在保存白名单里，前端调完滑块
+    /// 重启即回默认值，功能等于没生效。
+    #[test]
+    fn save_system_round_trips_interactive_timeout_minutes() {
+        let mut conn = open_memory_db();
+        save_system_with_default_workdir(
+            &mut conn,
+            json!({
+                "executionMode": "tools",
+                "workdir": "/tmp/liveagent-default-project",
+                "interactiveTimeoutMinutes": 30,
+            }),
+            "/tmp/liveagent-default-project",
+        )
+        .expect("save system");
+
+        let loaded = load_system(&conn)
+            .expect("load system")
+            .expect("system settings");
+        assert_eq!(
+            loaded.get(SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY),
+            Some(&json!(30))
+        );
+    }
+
     #[test]
     fn save_system_backfills_empty_workdir_with_default_project() {
         let mut conn = open_memory_db();
@@ -1211,6 +1238,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
+                "interactiveTimeoutMinutes": 3,
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
                 "workspaceProjects": [
@@ -1262,6 +1290,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
+                "interactiveTimeoutMinutes": 3,
                 "workdir": "/tmp/liveagent-default-project",
                 "toolPolicies": null,
                 "workspaceProjects": [
@@ -1295,6 +1324,7 @@ mod tests {
                 "missingWorkspaceProjectPaths": [],
                 "archivedWorkspaceProjectPaths": [],
                 "systemProxy": default_system_proxy_json(),
+                "interactiveTimeoutMinutes": 3,
                 "workdir": "/tmp/liveagent-default-project",
                 "workspaceProjects": [
                     {

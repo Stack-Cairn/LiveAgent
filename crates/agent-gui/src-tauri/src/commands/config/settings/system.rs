@@ -340,6 +340,9 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         SYSTEM_SYSTEM_PROXY_KEY.to_string(),
         normalize_system_proxy_value(system.get(SYSTEM_SYSTEM_PROXY_KEY)),
     );
+    system
+        .entry(SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY.to_string())
+        .or_insert_with(|| json!(3));
 
     Value::Object(system)
 }
@@ -387,6 +390,7 @@ fn save_system_with_default_workdir(
         SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY,
         SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY,
         SYSTEM_SYSTEM_PROXY_KEY,
+        SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY,
     ] {
         let value = system.get(key).cloned().unwrap_or(Value::Null);
         tx.execute(

@@ -37,6 +37,8 @@ const SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY: &str = "hiddenWorkspaceProjectP
 const SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY: &str = "missingWorkspaceProjectPaths";
 const SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY: &str = "archivedWorkspaceProjectPaths";
 const SYSTEM_SYSTEM_PROXY_KEY: &str = "systemProxy";
+// 与 toolPolicies 同理必须进保存白名单,否则前端改完滑块重启即回默认值。
+const SYSTEM_INTERACTIVE_TIMEOUT_MINUTES_KEY: &str = "interactiveTimeoutMinutes";
 const DEFAULT_WORKSPACE_PROJECT_ID: &str = "default-project";
 const DEFAULT_WORKSPACE_PROJECT_NAME: &str = "Default Project";
 pub(crate) const PROVIDER_API_KEY_UPDATES_FIELD: &str = "providerApiKeyUpdates";

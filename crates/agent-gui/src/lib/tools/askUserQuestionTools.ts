@@ -13,6 +13,7 @@ import {
   buildDefaultAskUserQuestionAnswers,
   parseAskUserQuestionItems,
   resolveAskUserQuestionAnswers,
+  scheduleAtDeadline,
 } from "../chat/askUserQuestion";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
 
@@ -46,6 +47,15 @@ function sweepStalePresetDeadlines(now: number) {
   }
 }
 
+// 运行时应答窗口（毫秒）：由设置 system.interactiveTimeoutMinutes 经 App.tsx 注入
+// （正数分钟换算而来；永不超时用很大的值表达）。未注入时回退默认常量。
+let configuredAskUserQuestionTimeoutMs = ASK_USER_QUESTION_TIMEOUT_MS;
+
+/** 由设置层注入运行时应答窗口（毫秒）。 */
+export function setAskUserQuestionTimeoutMs(timeoutMs: number): void {
+  configuredAskUserQuestionTimeoutMs = timeoutMs;
+}
+
 /** 网关侧上报工具参数时取（必要时预置）应答截止时间；挂起后与工具内计时同源。 */
 export function ensureAskUserQuestionDeadlineAt(toolCallId: string): number {
   const trimmed = toolCallId.trim();
@@ -55,7 +65,7 @@ export function ensureAskUserQuestionDeadlineAt(toolCallId: string): number {
   sweepStalePresetDeadlines(now);
   const preset = presetDeadlineByToolCallId.get(trimmed);
   if (preset !== undefined) return preset;
-  const deadlineAt = now + ASK_USER_QUESTION_TIMEOUT_MS;
+  const deadlineAt = now + configuredAskUserQuestionTimeoutMs;
   presetDeadlineByToolCallId.set(trimmed, deadlineAt);
   return deadlineAt;
 }
@@ -112,11 +122,13 @@ export function cancelPendingAskUserQuestionsForConversation(conversationId: str
   }
 }
 
-const ASK_USER_QUESTION_TIMEOUT_MINUTES = Math.round(ASK_USER_QUESTION_TIMEOUT_MS / 60_000);
+/** 工具描述按运行时窗口动态生成：写明具体分钟数与自动选推荐项的兜底语义。
+ *  填很大的分钟数（≈永不超时）时，数字本身表明等待极久。 */
+function buildAskUserQuestionToolDescription(timeoutMs: number): string {
+  const minutes = Math.max(1, Math.round(timeoutMs / 60_000));
+  return `Ask the user up to ${ASK_USER_QUESTION_MAX_QUESTIONS} multiple-choice questions and wait for their selections. Use this whenever you need a decision only the user can make: ambiguous requirements, mutually exclusive approaches, or trade-offs you cannot resolve from the conversation and the workspace.
 
-const ASK_USER_QUESTION_TOOL_DESCRIPTION = `Ask the user up to ${ASK_USER_QUESTION_MAX_QUESTIONS} multiple-choice questions and wait for their selections. Use this whenever you need a decision only the user can make: ambiguous requirements, mutually exclusive approaches, or trade-offs you cannot resolve from the conversation and the workspace.
-
-The questions render as an interactive card; execution pauses until the user answers every question, then the selections come back as the tool result. If the user does not answer within ${ASK_USER_QUESTION_TIMEOUT_MINUTES} minutes, the recommended (or first) option of every question is auto-selected and execution continues — the result text tells you which happened.
+The questions render as an interactive card; execution pauses until the user answers every question, then the selections come back as the tool result. If the user does not answer within ${minutes} minutes, the recommended (or first) option of every question is auto-selected and execution continues — the result text tells you which happened.
 
 Rules:
 - Ask 1-${ASK_USER_QUESTION_MAX_QUESTIONS} focused questions per call; each question needs ${ASK_USER_QUESTION_MIN_OPTIONS}-${ASK_USER_QUESTION_MAX_OPTIONS} options (3-4 is ideal), and every question in one call must have the SAME number of options.
@@ -124,6 +136,7 @@ Rules:
 - The UI automatically appends an "Other" free-text option to every question, so the user can always type their own answer. Do NOT add your own catch-all option (e.g. "Other", "Custom", "其他", "自定义"). When the user types an answer, the result marks it as user-typed and returns their exact words instead of a listed label — treat it as authoritative.
 - Give each question a short header (2-6 chars works best) — it becomes the tab label when several questions show at once.
 - Do not use this for questions answerable from the code or the conversation, and never ask for confirmation of work you can safely do.`;
+}
 
 const askUserQuestionParameters = Type.Object({
   questions: Type.Array(
@@ -171,13 +184,13 @@ function buildErrorResult(toolCall: ToolCall, text: string): ToolResultMessage {
 
 export function createAskUserQuestionTools(params: {
   conversationId: string;
-  /** 应答窗口毫秒数；仅测试注入，生产始终用默认值。 */
+  /** 应答窗口毫秒数；仅测试注入，生产读运行时配置（setAskUserQuestionTimeoutMs）。 */
   timeoutMs?: number;
 }): BuiltinToolBundle {
-  const timeoutMs = params.timeoutMs ?? ASK_USER_QUESTION_TIMEOUT_MS;
+  const timeoutMs = params.timeoutMs ?? configuredAskUserQuestionTimeoutMs;
   const toolAskUserQuestion: Tool = {
     name: ASK_USER_QUESTION_TOOL_NAME,
-    description: ASK_USER_QUESTION_TOOL_DESCRIPTION,
+    description: buildAskUserQuestionToolDescription(timeoutMs),
     parameters: askUserQuestionParameters,
   };
 
@@ -209,7 +222,7 @@ export function createAskUserQuestionTools(params: {
     // 测试注入 timeoutMs 时忽略预置，始终以注入值为准。
     const presetDeadlineAt = presetDeadlineByToolCallId.get(toolCall.id);
     presetDeadlineByToolCallId.delete(toolCall.id);
-    const deadlineAt =
+    const deadlineAt: number =
       params.timeoutMs !== undefined || presetDeadlineAt === undefined
         ? Date.now() + timeoutMs
         : presetDeadlineAt;
@@ -217,13 +230,13 @@ export function createAskUserQuestionTools(params: {
       const settle = (value: AskUserQuestionSettlement) => {
         pendingByToolCallId.delete(toolCall.id);
         signal?.removeEventListener("abort", onAbort);
-        clearTimeout(timeoutId);
+        cancelTimeout();
         resolve(value);
       };
       const onAbort = () => settle({ kind: "cancelled" });
-      const timeoutId = setTimeout(
-        () => settle({ kind: "timeout", answers: buildDefaultAskUserQuestionAnswers(questions) }),
-        Math.max(0, deadlineAt - Date.now()),
+      // 分段续期计时：超长窗口（≈永不超时）不会被 setTimeout 的 32 位延迟上限回绕。
+      const cancelTimeout = scheduleAtDeadline(deadlineAt, () =>
+        settle({ kind: "timeout", answers: buildDefaultAskUserQuestionAnswers(questions) }),
       );
       pendingByToolCallId.set(toolCall.id, {
         conversationId: params.conversationId,
