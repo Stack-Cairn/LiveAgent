@@ -76,7 +76,7 @@ function createIndicatorHarness() {
     },
   });
   const { TaskProgressIndicator } = loader.loadModule(
-    "src/components/chat/TaskProgressIndicator.tsx",
+    "@liveagent/ui/components/chat/TaskProgressIndicator.tsx",
   );
   return {
     hooks,

@@ -6,7 +6,7 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const loader = createWebModuleLoader({ rootDir });
-const { BUILTIN_TOOL_CATALOG } = loader.loadModule("src/lib/tools/builtinToolCatalog.ts");
+const { BUILTIN_TOOL_CATALOG } = loader.loadModule("@liveagent/ui/lib/tools/builtinToolCatalog.ts");
 const { groupRoundBlocks, isBuiltinShareToolName } = loader.loadModule(
   "src/pages/chat/assistant-bubble/assistantBubbleUtils.ts",
 );

@@ -1,7 +1,7 @@
+import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { useEffect, useMemo, useState } from "react";
 import { GatewayTranscript } from "../components/GatewayTranscript";
 import { AlertCircle, Loader2, MessageSquareText } from "../components/icons";
-import { ScrollArea } from "../components/ui/scroll-area";
 import { buildRowsFromEntries, dedupeRowKeys } from "../lib/chat/transcript/rows";
 import type { ChatEntry } from "../lib/chatUi";
 import type { SharedHistoryDetail } from "../lib/gatewayTypes";

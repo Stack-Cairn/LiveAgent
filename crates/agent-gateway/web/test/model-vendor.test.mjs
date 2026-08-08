@@ -6,7 +6,7 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });
-const modelVendor = loader.loadModule("src/lib/providers/modelVendor.ts");
+const modelVendor = loader.loadModule("@liveagent/ui/lib/providers/modelVendor.ts");
 
 test("findNewModelIds detects every model added by one refresh and removes duplicates", () => {
   assert.deepEqual(

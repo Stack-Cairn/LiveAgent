@@ -13,7 +13,7 @@
 import {
   EXTRACTION_CONVERSATION_STATE_LIMIT,
   EXTRACTION_WRITTEN_SLUG_LIMIT,
-} from "../../memory/config";
+} from "@liveagent/ui/lib/memory/config";
 import { extractLatestUserText } from "../../memory/extraction/context";
 import { extractionSkipReason, isConfirmationDeferral } from "../../memory/extraction/gating";
 import {

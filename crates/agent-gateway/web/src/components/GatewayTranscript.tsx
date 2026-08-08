@@ -1,3 +1,31 @@
+import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
+import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import {
+  TranscriptAssistantMessageActions,
+  TranscriptUserMessageActions,
+} from "@liveagent/ui/components/chat/TranscriptMessageActions";
+import { Markdown } from "@liveagent/ui/components/Markdown";
+import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
+import {
+  getUploadedImagePreviewCacheKey,
+  loadUploadedImagePreview,
+  readUploadedImagePreviewCache,
+  type UploadedImagePreviewLoader,
+} from "@liveagent/ui/lib/chat/uploadedImagePreview";
+import type { GitClient } from "@liveagent/ui/lib/git/types";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
+import {
+  buildTranscriptLayoutKey,
+  createTranscriptMeasurementsLru,
+} from "@liveagent/ui/lib/transcript-virtual/measurementsLru";
+import {
+  CHECKPOINT_ROW_ESTIMATE_PX,
+  estimateAssistantRowHeight,
+  estimateUserRowHeight,
+  measureEstimateText,
+} from "@liveagent/ui/lib/transcript-virtual/rowEstimates";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type Dispatch,
@@ -11,9 +39,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { ImagePreview, type ImagePreviewSlide } from "@/components/chat/ImagePreview";
-import { Markdown } from "@/components/Markdown";
-import { useLocale } from "@/i18n/LocaleContext";
 import type { ChatFileLink } from "@/lib/chat/chatFileLinks";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
@@ -24,32 +49,13 @@ import {
   parsePastedTextDisplayReferences,
 } from "@/lib/chat/uploadedFiles";
 import {
-  getUploadedImagePreviewCacheKey,
-  loadUploadedImagePreview,
-  readUploadedImagePreviewCache,
-  type UploadedImagePreviewLoader,
-} from "@/lib/chat/uploadedImagePreview";
-import {
   buildGitHubCommitUrl,
   type CommitDetailsLoader,
   type CommitDisplayReference,
   UserMessageContent,
 } from "@/lib/chat/userMessageContent";
-import type { GitClient } from "@/lib/git/types";
 import { DEFAULT_CHAT_TRANSCRIPT_WIDTH } from "@/lib/settings";
-import { cn } from "@/lib/shared/utils";
 import { extractLiveRange } from "@/lib/transcript-virtual/liveRangeExtractor";
-import { createLiveRowScrollAdjustPolicy } from "@/lib/transcript-virtual/liveScrollAdjustPolicy";
-import {
-  buildTranscriptLayoutKey,
-  createTranscriptMeasurementsLru,
-} from "@/lib/transcript-virtual/measurementsLru";
-import {
-  CHECKPOINT_ROW_ESTIMATE_PX,
-  estimateAssistantRowHeight,
-  estimateUserRowHeight,
-  measureEstimateText,
-} from "@/lib/transcript-virtual/rowEstimates";
 import {
   AssistantAvatar,
   AssistantBubble,
@@ -59,22 +65,8 @@ import {
   VibingText,
 } from "@/pages/chat/AssistantBubble";
 import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
-
 import type { SectionId } from "../pages/settings/types";
-import { ChatEmptyState } from "./chat/ChatEmptyState";
-import { getUploadedFileTypeIcon } from "./chat/fileTypeIcons";
-import {
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  Copy,
-  GitBranch,
-  Loader2,
-  Pencil,
-  RefreshCw,
-  X,
-} from "./icons";
-import { ConfirmActionPopover } from "./ui/confirm-action-popover";
+import { CheckCircle2, ChevronDown, Loader2, X } from "./icons";
 
 type GatewayTranscriptProps = {
   conversationId?: string;
@@ -612,25 +604,6 @@ function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], text: stri
   };
 }
 
-function formatMessageTimestamp(timestamp: number | undefined, now = new Date()): string {
-  if (!timestamp || !Number.isFinite(timestamp) || timestamp <= 0) return "";
-  const date = new Date(timestamp);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  if (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  ) {
-    return time;
-  }
-  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  if (date.getFullYear() === now.getFullYear()) {
-    return `${monthDay} ${time}`;
-  }
-  return `${date.getFullYear()}-${monthDay} ${time}`;
-}
-
 function GatewayUserMessageBubbleBody(props: {
   text: string;
   attachments: PendingUploadedFile[];
@@ -898,45 +871,25 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
         onLoadUploadedImagePreview={onLoadUploadedImagePreview}
         loadCommitDetails={loadCommitDetails}
       />
-      <div className="chat-user-bubble-actions mt-1 flex items-center justify-end gap-1.5">
-        {!readOnly ? (
-          <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100">
-            <button
-              type="button"
-              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              title={t("chat.copy")}
-              aria-label={t("chat.copy")}
-              onClick={() => {
-                void navigator.clipboard.writeText(row.text).then(() => {
-                  setCopiedMessageId(row.key);
-                  window.setTimeout(() => {
-                    setCopiedMessageId((current) => (current === row.key ? null : current));
-                  }, 1500);
-                });
-              }}
-            >
-              {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            </button>
-            <button
-              type="button"
-              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-              title={editTitle}
-              aria-label={editTitle}
-              disabled={editDisabled}
-              onClick={() => {
-                if (effectiveMessageRef) {
-                  setEditingMessageId(row.key);
-                }
-              }}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : null}
-        <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
-          {formatMessageTimestamp(row.timestamp)}
-        </span>
-      </div>
+      <TranscriptUserMessageActions
+        timestamp={row.timestamp}
+        copied={isCopied}
+        onCopy={() => {
+          void navigator.clipboard.writeText(row.text).then(() => {
+            setCopiedMessageId(row.key);
+            window.setTimeout(() => {
+              setCopiedMessageId((current) => (current === row.key ? null : current));
+            }, 1500);
+          });
+        }}
+        editDisabled={editDisabled}
+        editTitle={editTitle}
+        onEdit={() => {
+          if (effectiveMessageRef) setEditingMessageId(row.key);
+        }}
+        readOnly={readOnly}
+        alwaysShowActions
+      />
     </div>
   );
 });
@@ -1003,88 +956,33 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
   const branchTitle = retryMessageRef ? t("chat.branch") : t("chat.branchUnavailable");
 
   return (
-    <div className="assistant-bubble-shell flex w-full max-w-full items-start gap-3">
-      <div className="assistant-bubble-avatar w-7 shrink-0" aria-hidden="true" />
-      <div className="chat-assistant-actions flex min-w-0 flex-1 items-center justify-start gap-1.5">
-        <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
-          {formatMessageTimestamp(row.timestamp)}
-        </span>
-        <div
-          className={`flex gap-0.5 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100 [@media(hover:none)]:opacity-100 ${isRowBranchPending ? "opacity-100" : "opacity-0"}`}
-        >
-          <button
-            type="button"
-            className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            title={t("chat.copy")}
-            aria-label={t("chat.copy")}
-            disabled={!replyText}
-            onClick={() => {
-              void navigator.clipboard.writeText(replyText).then(() => {
-                setCopiedMessageId(row.key);
-                window.setTimeout(() => {
-                  setCopiedMessageId((current) => (current === row.key ? null : current));
-                }, 1500);
-              });
-            }}
-          >
-            {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          </button>
-          <ConfirmActionPopover
-            title={t("chat.retryConfirmTitle")}
-            description={t("chat.retryConfirmDescription")}
-            confirmLabel={t("chat.retry")}
-            align="start"
-            side="top"
-            onConfirm={() => {
-              if (!retryTarget || !retryMessageRef) return;
-              onResendFromEdit?.(retryMessageRef, retryTarget.text, retryTarget.attachments);
-            }}
-          >
-            {(open) => (
-              <button
-                type="button"
-                className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                title={retryTitle}
-                aria-label={retryTitle}
-                disabled={retryDisabled}
-                onClick={open}
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </ConfirmActionPopover>
-          <ConfirmActionPopover
-            title={t("chat.branchConfirmTitle")}
-            description={t("chat.branchConfirmDescription")}
-            confirmLabel={t("chat.branch")}
-            tone="default"
-            align="start"
-            side="top"
-            onConfirm={() => {
-              if (!retryMessageRef) return;
-              onBranchConversation?.(retryMessageRef);
-            }}
-          >
-            {(open) => (
-              <button
-                type="button"
-                className={`chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed ${isRowBranchPending ? "" : "disabled:opacity-40"}`}
-                title={branchTitle}
-                aria-label={branchTitle}
-                disabled={branchDisabled}
-                onClick={open}
-              >
-                {isRowBranchPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <GitBranch className="h-3.5 w-3.5" />
-                )}
-              </button>
-            )}
-          </ConfirmActionPopover>
-        </div>
-      </div>
-    </div>
+    <TranscriptAssistantMessageActions
+      timestamp={row.timestamp}
+      copied={isCopied}
+      copyDisabled={!replyText}
+      onCopy={() => {
+        void navigator.clipboard.writeText(replyText).then(() => {
+          setCopiedMessageId(row.key);
+          window.setTimeout(() => {
+            setCopiedMessageId((current) => (current === row.key ? null : current));
+          }, 1500);
+        });
+      }}
+      retryDisabled={retryDisabled}
+      retryTitle={retryTitle}
+      onRetry={() => {
+        if (!retryTarget || !retryMessageRef) return;
+        onResendFromEdit?.(retryMessageRef, retryTarget.text, retryTarget.attachments);
+      }}
+      branchDisabled={branchDisabled}
+      branchTitle={branchTitle}
+      branchPending={isRowBranchPending}
+      onBranch={() => {
+        if (retryMessageRef) onBranchConversation?.(retryMessageRef);
+      }}
+      withAvatarSpacer
+      alwaysShowActions
+    />
   );
 });
 

@@ -1,7 +1,7 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
 import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
-
 import {
   type McpServerConfig,
   type McpSettings,
@@ -15,7 +15,6 @@ import {
   type McpManagerResultDetails,
 } from "./builtinTypes";
 import { ToolPathResolver } from "./pathUtils";
-import type { SystemToolRuntimeScope } from "./systemToolOptions";
 
 type McpManagerAction =
   | "list"

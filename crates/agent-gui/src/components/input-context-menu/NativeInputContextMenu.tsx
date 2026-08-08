@@ -1,3 +1,5 @@
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
@@ -8,9 +10,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { useLocale } from "../../i18n";
 import { useMenuExitPresence } from "../../lib/shared/menuMotion";
-import { cn } from "../../lib/shared/utils";
 import { readClipboardText } from "../../lib/system/clipboardText";
 import { ClipboardPaste, Copy, ScanText, Scissors } from "../icons";
 import {

@@ -6,10 +6,10 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader({ rootDir: fileURLToPath(new URL("../", import.meta.url)) });
 const { resolveThinkingOverlayPlacement } = loader.loadModule(
-  "src/lib/chat/thinkingOverlayModel.ts",
+  "@liveagent/ui/lib/chat/thinkingOverlayModel.ts",
 );
 const componentSource = fs.readFileSync(
-  new URL("../src/components/chat/ThinkingActivity.tsx", import.meta.url),
+  new URL("../../../agent-ui/src/components/chat/ThinkingActivity.tsx", import.meta.url),
   "utf8",
 );
 

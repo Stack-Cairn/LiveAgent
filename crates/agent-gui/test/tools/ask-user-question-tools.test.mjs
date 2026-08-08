@@ -7,7 +7,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 function loadModules() {
   const loader = createTsModuleLoader({ mocks: { typebox } });
   return {
-    shared: loader.loadModule("src/lib/chat/askUserQuestion.ts"),
+    shared: loader.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts"),
     tools: loader.loadModule("src/lib/tools/askUserQuestionTools.ts"),
   };
 }

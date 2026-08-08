@@ -4,7 +4,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { createConversationOpenController } = loader.loadModule("src/lib/sidebar/openController.ts");
+const { createConversationOpenController } = loader.loadModule("@liveagent/ui/lib/sidebar/openController.ts");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

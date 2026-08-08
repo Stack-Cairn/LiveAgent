@@ -8,7 +8,7 @@ import {
   EXTRACTION_MESSAGE_CHAR_CAP,
   EXTRACTION_TURN_WINDOW,
   EXTRACTION_WINDOW_CHAR_CAP,
-} from "../config";
+} from "@liveagent/ui/lib/memory/config";
 
 function textOfContent(content: unknown): string {
   if (typeof content === "string") return content;

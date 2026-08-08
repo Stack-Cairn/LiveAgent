@@ -14,6 +14,12 @@
 // seconds ceiling are multiplied to ms, everything else passes through.
 // `chat.activity` / `running_conversations` use `UnixMilli()` explicitly.
 
+import type { SidebarBackend, SidebarListPage } from "@liveagent/ui/lib/sidebar/backend";
+import type {
+  SidebarBackendEvent,
+  SidebarConversation,
+  SidebarScope,
+} from "@liveagent/ui/lib/sidebar/types";
 import type { ActivityStore } from "@/lib/chat/stream/activityStore";
 import { formatConversationTitle } from "@/lib/chatUi";
 import type {
@@ -24,8 +30,6 @@ import type {
   HistoryListFilter,
   HistoryWorkdirsResponse,
 } from "@/lib/gatewayTypes";
-import type { SidebarBackend, SidebarListPage } from "./backend";
-import type { SidebarBackendEvent, SidebarConversation, SidebarScope } from "./types";
 
 // Epoch values below this are seconds (up to year 2286); at or above, they
 // are already milliseconds.

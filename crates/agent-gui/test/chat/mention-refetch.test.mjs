@@ -3,8 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const sourceRoots = [
-  new URL("../../src/components/chat/", import.meta.url),
-  new URL("../../../agent-gateway/web/src/components/chat/", import.meta.url),
+  new URL("../../../agent-ui/src/components/chat/", import.meta.url),
 ];
 
 function source(root) {
@@ -27,11 +26,8 @@ function loadCoversQuery(src) {
   return new Function(`${body}; return mentionSnapshotCoversQuery;`)();
 }
 
-test("both composers share the snapshot-coverage decision byte-identically", () => {
-  const bodies = sourceRoots.map((root) =>
-    extractFunction(source(root), "mentionSnapshotCoversQuery"),
-  );
-  assert.equal(bodies[0], bodies[1]);
+test("the shared composer owns the snapshot-coverage decision", () => {
+  assert.match(source(sourceRoots[0]), /function mentionSnapshotCoversQuery\(/);
 });
 
 test("a truncated snapshot never claims to cover an extended query", () => {
@@ -62,7 +58,7 @@ test("a truncated snapshot never claims to cover an extended query", () => {
   }
 });
 
-test("both composers wire truncation tracking and debounced refetches", () => {
+test("the shared composer wires truncation tracking and debounced refetches", () => {
   for (const root of sourceRoots) {
     const composer = source(root);
     // The fetch snapshot starts pessimistic and is corrected by the response.

@@ -1,5 +1,7 @@
-export { ChatComposerBar, type ChatQueueTurnPreview } from "./components/ChatComposerBar";
-export { ChatHeader } from "./components/ChatHeader";
+export {
+  ChatComposerBar,
+  type ChatQueueTurnPreview,
+} from "@liveagent/ui/pages/chat/ChatComposerBar";
 export type {
   ActiveGatewayBridgeRequest,
   EnsureGatewayBridgeConversationReadyOptions,

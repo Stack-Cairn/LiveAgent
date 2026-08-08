@@ -1,4 +1,5 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
 import {
@@ -8,7 +9,6 @@ import {
   runtimePlatformLabel,
 } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
-import { createUuid } from "../shared/id";
 import {
   type BashTimeoutPolicy,
   GLOBAL_BASH_MAX_TIMEOUT_MS,

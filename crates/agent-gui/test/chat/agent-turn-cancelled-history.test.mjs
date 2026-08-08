@@ -295,7 +295,7 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
     messages: [],
   });
   const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
-  const askShared = loader.loadModule("src/lib/chat/askUserQuestion.ts");
+  const askShared = loader.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts");
 
   const visibleToolCalls = () =>
     liveRounds.flatMap((round) =>

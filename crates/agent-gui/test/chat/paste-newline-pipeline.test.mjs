@@ -3,8 +3,8 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const composer = loader.loadModule("src/components/chat/MentionComposer.tsx");
-const composerText = loader.loadModule("src/lib/chat/composerText.ts");
+const composer = loader.loadModule("@liveagent/ui/components/chat/MentionComposer.tsx");
+const composerText = loader.loadModule("@liveagent/ui/lib/chat/composerText.ts");
 const draftText = loader.loadModule("src/pages/chat/composer/composerDraftText.ts");
 const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
 

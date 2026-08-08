@@ -1,10 +1,10 @@
+import { fallbackWorkspaceProjectName } from "@liveagent/ui/lib/workspaceProjects";
 import { listChatHistory } from "../../../lib/chat/history/chatHistory";
 import {
   type AppSettings,
   DEFAULT_WORKSPACE_PROJECT_ID,
   type WorkspaceProject,
 } from "../../../lib/settings";
-import { fallbackWorkspaceProjectName } from "../../../lib/workspaceProjects";
 
 const PROJECT_HISTORY_DELETE_PAGE_SIZE = 200;
 

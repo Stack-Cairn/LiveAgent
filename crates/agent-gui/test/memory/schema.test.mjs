@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const schema = loader.loadModule("src/lib/memory/schema.ts");
+const schema = loader.loadModule("@liveagent/ui/lib/memory/schema.ts");
 
 test("scope/type/confidence enums are complete and closed", () => {
   assert.deepEqual(schema.MEMORY_SCOPES, ["global", "project"]);

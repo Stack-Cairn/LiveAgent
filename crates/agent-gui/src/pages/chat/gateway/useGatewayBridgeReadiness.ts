@@ -1,3 +1,4 @@
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import {
   type ConversationViewState,
@@ -16,7 +17,6 @@ import {
   normalizeSelectedModelForProviders,
   parseSelectedModelJson,
 } from "../../../lib/settings";
-import type { SidebarStore } from "../../../lib/sidebar/store";
 import {
   type ConversationRuntimeEntry,
   createConversationRuntimeEntry,

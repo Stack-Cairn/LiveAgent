@@ -1,8 +1,8 @@
-import { type MutableRefObject, useEffect, useRef } from "react";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
-} from "../../../components/chat/MentionComposer";
+} from "@liveagent/ui/components/chat/MentionComposer";
+import { type MutableRefObject, useEffect, useRef } from "react";
 
 type UseComposerDraftCacheParams = {
   composerRef: MutableRefObject<MentionComposerHandle | null>;

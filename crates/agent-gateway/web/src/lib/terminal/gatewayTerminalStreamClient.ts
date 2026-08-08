@@ -1,10 +1,3 @@
-import type { TerminalWireHeader } from "@/lib/gatewaySocketV2/adapters";
-import {
-  decodeTerminalServerFrame,
-  encodeTerminalHelloFrame,
-  encodeTerminalStreamFrame,
-  GATEWAY_V2_SUBPROTOCOL,
-} from "@/lib/gatewaySocketV2/adapters";
 import type {
   TerminalSession,
   TerminalStreamChunk,
@@ -12,7 +5,14 @@ import type {
   TerminalStreamHandle,
   TerminalStreamInputState,
   TerminalStreamSnapshot,
-} from "./types";
+} from "@liveagent/ui/lib/terminal/types";
+import type { TerminalWireHeader } from "@/lib/gatewaySocketV2/adapters";
+import {
+  decodeTerminalServerFrame,
+  encodeTerminalHelloFrame,
+  encodeTerminalStreamFrame,
+  GATEWAY_V2_SUBPROTOCOL,
+} from "@/lib/gatewaySocketV2/adapters";
 
 const INPUT_FLUSH_BYTES = 4 * 1024;
 const INPUT_FLUSH_MS = 8;

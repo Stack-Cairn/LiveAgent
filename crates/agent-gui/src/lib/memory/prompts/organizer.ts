@@ -7,8 +7,8 @@ import {
   ORGANIZER_GLOBAL_INVENTORY_CHARS,
   ORGANIZER_META_BODY_EXCERPT_CHARS,
   ORGANIZER_TOPIC_CLUSTER_SIZE,
-} from "../config";
-import type { OrganizerMode } from "../schema";
+} from "@liveagent/ui/lib/memory/config";
+import type { OrganizerMode } from "@liveagent/ui/lib/memory/schema";
 
 export const ORGANIZER_PLAN_TOOL_NAME = "SubmitMemoryOrganizePlan";
 export const ORGANIZER_TOPIC_TOOL_NAME = "SubmitMemoryTopicClusters";

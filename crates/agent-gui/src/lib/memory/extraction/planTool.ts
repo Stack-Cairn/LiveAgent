@@ -5,8 +5,10 @@
 // turns.
 
 import type { Tool } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
-import { EXTRACTION_PLAN_ITEM_LIMIT, MEMORY_BODY_LIMIT_BYTES } from "../config";
+import {
+  EXTRACTION_PLAN_ITEM_LIMIT,
+  MEMORY_BODY_LIMIT_BYTES,
+} from "@liveagent/ui/lib/memory/config";
 import type {
   ApplyDecision,
   ExtractionPlanAction,
@@ -18,8 +20,13 @@ import type {
   MemoryUpdateMode,
   PlanItemRejection,
   ValidatedPlanItem,
-} from "../schema";
-import { EXTRACTION_PLAN_ACTIONS, isMemoryScope, isMemoryType } from "../schema";
+} from "@liveagent/ui/lib/memory/schema";
+import {
+  EXTRACTION_PLAN_ACTIONS,
+  isMemoryScope,
+  isMemoryType,
+} from "@liveagent/ui/lib/memory/schema";
+import { Type } from "typebox";
 
 export const SUBMIT_MEMORY_PLAN_TOOL_NAME = "SubmitMemoryPlan";
 

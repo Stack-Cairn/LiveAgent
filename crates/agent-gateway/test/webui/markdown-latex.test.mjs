@@ -5,7 +5,7 @@ import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
 const { normalizeLatexDelimiters } = loader.loadModule(
-  "src/lib/normalizeLatexDelimiters.ts",
+  "@liveagent/ui/lib/normalizeLatexDelimiters.ts",
 );
 
 test("webui normalizes LaTeX delimiters with the mirrored parser", () => {

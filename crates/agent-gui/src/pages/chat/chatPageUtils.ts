@@ -1,4 +1,4 @@
-import { mergeAlwaysEnabledSkillNames } from "../../lib/skills";
+import { mergeAlwaysEnabledSkillNames } from "@liveagent/ui/lib/skills/index";
 
 export function appendManagedSkillSelections(current: readonly string[], names: readonly string[]) {
   const out = mergeAlwaysEnabledSkillNames(current);

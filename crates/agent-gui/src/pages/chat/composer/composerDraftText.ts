@@ -1,11 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
 import type {
   MentionComposerCommitMention,
   MentionComposerDraft,
   MentionComposerGitFileMention,
   MentionComposerLargePaste,
-} from "../../../components/chat/MentionComposer";
-import { normalizeLogicalLineEndings } from "../../../lib/chat/composerText";
+} from "@liveagent/ui/components/chat/MentionComposer";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { invoke } from "@tauri-apps/api/core";
 import {
   escapeMarkdownReferenceLabel,
   formatCodeMentionToken,

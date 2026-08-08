@@ -8,7 +8,7 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });
-const { createConversationOpenController } = loader.loadModule("src/lib/sidebar/openController.ts");
+const { createConversationOpenController } = loader.loadModule("@liveagent/ui/lib/sidebar/openController.ts");
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

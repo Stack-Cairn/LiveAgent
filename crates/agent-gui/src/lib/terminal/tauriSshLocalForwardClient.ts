@@ -1,16 +1,16 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type {
   RawSshLocalForwardAction,
   RawSshLocalForwardEvent,
   RawSshLocalForwardSnapshot,
   SshLocalForwardClient,
-} from "./sshLocalForwardTypes";
+} from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
 import {
   normalizeSshLocalForwardAction,
   normalizeSshLocalForwardEvent,
   normalizeSshLocalForwardSnapshot,
-} from "./sshLocalForwardTypes";
+} from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export const tauriSshLocalForwardClient: SshLocalForwardClient = {
   async list(params) {

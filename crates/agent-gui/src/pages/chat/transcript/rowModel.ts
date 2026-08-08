@@ -1,3 +1,10 @@
+import { isTodoWriteToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
+import {
+  CHECKPOINT_ROW_ESTIMATE_PX,
+  estimateAssistantRowHeight,
+  estimateUserRowHeight,
+  measureEstimateText,
+} from "@liveagent/ui/lib/transcript-virtual/rowEstimates";
 import type {
   RenderSummaryCard,
   RenderTimelineItem,
@@ -5,13 +12,6 @@ import type {
 } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptState } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { getRoundText, type LiveRound, type UiRound } from "../../../lib/chat/messages/uiMessages";
-import { isTodoWriteToolBlock } from "../../../lib/chat/taskProgress";
-import {
-  CHECKPOINT_ROW_ESTIMATE_PX,
-  estimateAssistantRowHeight,
-  estimateUserRowHeight,
-  measureEstimateText,
-} from "../../../lib/transcript-virtual/rowEstimates";
 import {
   type GroupedRoundBlock,
   groupRoundBlocks,

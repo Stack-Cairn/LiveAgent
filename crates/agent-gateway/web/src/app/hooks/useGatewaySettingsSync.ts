@@ -1,27 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-
 import {
   type CronSnapshot,
   feedCronSnapshot,
   feedHooksSnapshot,
   type HooksSnapshot,
   initAutomation,
-} from "@/lib/automation";
+} from "@liveagent/ui/lib/automation/index";
+import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
+import {
+  applyGatewaySettingsSyncPayload,
+  buildGatewaySettingsSyncUpdatePayload,
+  type GatewaySettingsSyncPayload,
+  redactSettingsForWebStorage,
+} from "@liveagent/ui/lib/settings/sync";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { applyFontFamilies } from "@/lib/fontFamily";
 import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
-import { setPreferredMonacoNlsLocale } from "@/lib/monacoNls";
 import {
   type AppSettings,
   normalizeSettings,
   resolveEffectiveTheme,
   subscribeToSystemThemePreference,
 } from "@/lib/settings";
-import {
-  applyGatewaySettingsSyncPayload,
-  buildGatewaySettingsSyncUpdatePayload,
-  type GatewaySettingsSyncPayload,
-  redactSettingsForWebStorage,
-} from "@/lib/settings/sync";
 import { loadToken } from "@/lib/storage";
 import { loadWebSettings, persistWebSettings, type WebSettingsSaveState } from "@/lib/webSettings";
 

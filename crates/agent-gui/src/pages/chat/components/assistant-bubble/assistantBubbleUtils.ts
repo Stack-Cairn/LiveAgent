@@ -1,5 +1,8 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
-
+import type {
+  SubagentCardDetails,
+  SubagentReportDetails,
+} from "@liveagent/ui/lib/subagents/protocol";
 import type { IconComponent } from "../../../../components/icons";
 import {
   Bot,
@@ -27,10 +30,6 @@ import {
   type ToolTraceItem,
   type UiRound,
 } from "../../../../lib/chat/messages/uiMessages";
-import type {
-  SubagentCardDetails,
-  SubagentReportDetails,
-} from "../../../../lib/subagents/protocol";
 
 export function getToolMeta(name: string): {
   Icon: IconComponent;

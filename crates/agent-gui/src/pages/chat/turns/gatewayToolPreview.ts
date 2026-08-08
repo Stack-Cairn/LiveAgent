@@ -3,7 +3,12 @@ import type { ToolCall } from "@earendil-works/pi-ai";
 import {
   ASK_USER_QUESTION_DEADLINE_ARG,
   ASK_USER_QUESTION_TOOL_NAME,
-} from "../../../lib/chat/askUserQuestion";
+} from "@liveagent/ui/lib/chat/askUserQuestion";
+import {
+  TOOL_APPROVAL_DEADLINE_ARG,
+  TOOL_APPROVAL_PENDING_ARG,
+  TOOL_APPROVAL_SUMMARY_ARG,
+} from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import {
   countTextLines,
   FILE_TOOL_TEXT_FIELDS,
@@ -12,11 +17,6 @@ import {
   type StreamPreviewMeta,
 } from "../../../lib/chat/messages/toolPreview";
 import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
-import {
-  TOOL_APPROVAL_DEADLINE_ARG,
-  TOOL_APPROVAL_PENDING_ARG,
-  TOOL_APPROVAL_SUMMARY_ARG,
-} from "../../../lib/chat/toolApprovalArgs";
 import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
 import { getToolApprovalDeadlineAt, hasPendingToolApproval } from "../../../lib/tools/toolApproval";
 

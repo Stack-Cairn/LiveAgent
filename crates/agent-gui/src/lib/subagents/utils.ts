@@ -1,6 +1,6 @@
 import type { Message } from "@earendil-works/pi-ai";
 
-import { createUuid } from "../shared/id";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { MAX_SUMMARY_CHARS } from "./types";
 
 export function asObject(value: unknown): Record<string, unknown> {

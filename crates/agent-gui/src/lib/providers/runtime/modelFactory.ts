@@ -5,7 +5,7 @@ import {
   resolveModelThinking,
   type ThinkingLevelMap,
   toThinkingLevelMap,
-} from "../../models/modelThinking";
+} from "@liveagent/ui/lib/models/modelThinking";
 import {
   type CodexRequestFormat,
   getProviderModelDefaults,

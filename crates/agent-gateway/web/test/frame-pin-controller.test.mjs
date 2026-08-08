@@ -5,7 +5,7 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader({ rootDir: fileURLToPath(new URL("../", import.meta.url)) });
 const { createFramePinController } = loader.loadModule(
-  "src/lib/chat-scroll/framePinController.ts",
+  "@liveagent/ui/lib/chat-scroll/framePinController.ts",
 );
 
 test("coalesces repeated live growth into one pin per frame", () => {

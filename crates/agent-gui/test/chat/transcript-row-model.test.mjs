@@ -9,7 +9,7 @@ const { createLiveTranscriptStore } = loader.loadModule(
   "src/lib/chat/conversation/liveTranscriptStore.ts",
 );
 const { createEntranceRegistry, ENTRANCE_ANIMATION_WINDOW_MS } = loader.loadModule(
-  "src/lib/transcript-virtual/entranceOnce.ts",
+  "@liveagent/ui/lib/transcript-virtual/entranceOnce.ts",
 );
 const { extractRenderUnitRange } = loader.loadModule(
   "src/pages/chat/transcript/renderUnitRangeExtractor.ts",

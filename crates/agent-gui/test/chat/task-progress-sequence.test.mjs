@@ -146,7 +146,7 @@ test("GUI sequencer presents batched real updates one at a time and ignores pers
   const hooks = createHookHarness();
   const { TASK_PROGRESS_SEQUENCE_STEP_MS, useSequencedTaskProgress } = createTsModuleLoader({
     mocks: { react: hooks.react },
-  }).loadModule("src/components/chat/useSequencedTaskProgress.ts");
+  }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts");
   const initial = [update("todo-0", 0)];
   const batch = [...initial, update("todo-1", 1), update("todo-2", 2)];
 
@@ -182,7 +182,7 @@ test("GUI sequencer keeps the initial roster stable through shorter updates and 
   const hooks = createHookHarness();
   const { useSequencedTaskProgress } = createTsModuleLoader({
     mocks: { react: hooks.react },
-  }).loadModule("src/components/chat/useSequencedTaskProgress.ts");
+  }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts");
   const initialTodos = Array.from({ length: 12 }, (_, index) => ({
     content: `Task ${index + 1}`,
     activeForm: `Working ${index + 1}`,
@@ -212,7 +212,7 @@ test("GUI sequencer keeps the initial roster stable through shorter updates and 
     const restoredHooks = createHookHarness();
     const restoredHook = createTsModuleLoader({
       mocks: { react: restoredHooks.react },
-    }).loadModule("src/components/chat/useSequencedTaskProgress.ts").useSequencedTaskProgress;
+    }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts").useSequencedTaskProgress;
     const restored = restoredHooks.render(() => restoredHook(batch, false));
     assert.equal(restored.totalCount, 12);
     assert.equal(restored.completedCount, 5);
@@ -229,7 +229,7 @@ test("GUI sequencer skips restored history replay, applies same-call changes, an
   const hooks = createHookHarness();
   const { useSequencedTaskProgress } = createTsModuleLoader({
     mocks: { react: hooks.react },
-  }).loadModule("src/components/chat/useSequencedTaskProgress.ts");
+  }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts");
   const restored = [update("todo-0", 0), update("todo-1", 1), update("todo-2", 2)];
 
   try {
@@ -239,7 +239,7 @@ test("GUI sequencer skips restored history replay, applies same-call changes, an
     const hydrationHooks = createHookHarness();
     const hydrationHook = createTsModuleLoader({
       mocks: { react: hydrationHooks.react },
-    }).loadModule("src/components/chat/useSequencedTaskProgress.ts").useSequencedTaskProgress;
+    }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts").useSequencedTaskProgress;
     assert.equal(hydrationHooks.render(() => hydrationHook([], false)), null);
     assert.equal(hydrationHooks.render(() => hydrationHook(restored, false)), null);
     assert.equal(hydrationHooks.render(() => hydrationHook(restored, false)).completedCount, 2);
@@ -250,7 +250,7 @@ test("GUI sequencer skips restored history replay, applies same-call changes, an
     const replacementHooks = createHookHarness();
     const replacementHook = createTsModuleLoader({
       mocks: { react: replacementHooks.react },
-    }).loadModule("src/components/chat/useSequencedTaskProgress.ts").useSequencedTaskProgress;
+    }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts").useSequencedTaskProgress;
     assert.equal(replacementHooks.render(() => replacementHook(revised)).completedCount, 1);
     const sameCallUpdated = [{ key: "todo-2", snapshot: snapshot(2) }];
     assert.equal(replacementHooks.render(() => replacementHook(sameCallUpdated)).completedCount, 1);
@@ -272,7 +272,7 @@ test("GUI sequencer clears on a new user-turn boundary and starts the next plan 
   const hooks = createHookHarness();
   const { useSequencedTaskProgress } = createTsModuleLoader({
     mocks: { react: hooks.react },
-  }).loadModule("src/components/chat/useSequencedTaskProgress.ts");
+  }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts");
   const oldPlan = [update("old-todo", 2)];
   const boundary = [{ key: "user-turn:next", snapshot: null }];
   const nextPlan = [...boundary, update("new-todo", 0)];
@@ -295,7 +295,7 @@ test("GUI sequencer keeps partial argument frames hidden until the TodoWrite res
   const hooks = createHookHarness();
   const { TASK_PROGRESS_ARGUMENT_STABLE_MS, useSequencedTaskProgress } = createTsModuleLoader({
     mocks: { react: hooks.react },
-  }).loadModule("src/components/chat/useSequencedTaskProgress.ts");
+  }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts");
   const boundary = [{ key: "user-turn:new", snapshot: null }];
   const draft = (todos) => [
     ...boundary,
@@ -345,7 +345,7 @@ test("GUI sequencer adopts a stable complete-arguments fallback when no result a
   const hooks = createHookHarness();
   const { useSequencedTaskProgress } = createTsModuleLoader({
     mocks: { react: hooks.react },
-  }).loadModule("src/components/chat/useSequencedTaskProgress.ts");
+  }).loadModule("@liveagent/ui/components/chat/useSequencedTaskProgress.ts");
   const boundary = [{ key: "user-turn:fallback", snapshot: null }];
   const todos = Array.from({ length: 12 }, (_, index) => ({
     content: `Fallback ${index + 1}`,

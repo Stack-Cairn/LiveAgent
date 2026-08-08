@@ -1,11 +1,14 @@
+import type { ConfirmDialogOptions } from "@liveagent/ui/components/ui/confirm-dialog";
+import { memoryDeleteProject } from "@liveagent/ui/lib/memory/api";
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
+import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback } from "react";
 import { Terminal } from "../../../components/icons";
-import type { ConfirmDialogOptions } from "../../../components/ui/confirm-dialog";
 import {
   type ConversationPersistenceCursor,
   deleteChatHistory,
 } from "../../../lib/chat/history/chatHistory";
-import { memoryDeleteProject } from "../../../lib/memory/api";
 import {
   type AppSettings,
   DEFAULT_WORKSPACE_PROJECT_ID,
@@ -14,10 +17,7 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../../../lib/settings";
-import type { SidebarStore } from "../../../lib/sidebar/store";
-import { terminalSessionBelongsToProject } from "../../../lib/terminal/sessionStore";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
-import type { TerminalSession } from "../../../lib/terminal/types";
 import { asErrorMessage } from "../chatPageUtils";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 import {

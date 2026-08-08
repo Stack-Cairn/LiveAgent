@@ -1,3 +1,12 @@
+import { sidebarScopeKey } from "@liveagent/ui/lib/sidebar/scope";
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import type { SidebarScope } from "@liveagent/ui/lib/sidebar/types";
+import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
+import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
+import {
+  findWorkspaceProject,
+  mergeWorkspaceProjectsWithHistory,
+} from "@liveagent/ui/lib/workspaceProjects";
 import { invoke } from "@tauri-apps/api/core";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
@@ -18,15 +27,6 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../../../lib/settings";
-import { sidebarScopeKey } from "../../../lib/sidebar/scope";
-import type { SidebarStore } from "../../../lib/sidebar/store";
-import type { SidebarScope } from "../../../lib/sidebar/types";
-import { useSidebarSelector } from "../../../lib/sidebar/useSidebarSelector";
-import { invokeFs } from "../../../lib/tools/fsBackend";
-import {
-  findWorkspaceProject,
-  mergeWorkspaceProjectsWithHistory,
-} from "../../../lib/workspaceProjects";
 import { asErrorMessage } from "../chatPageUtils";
 import { startWorkspaceCloneTask } from "./cloneTasks";
 import {

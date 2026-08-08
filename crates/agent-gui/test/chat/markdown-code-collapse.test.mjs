@@ -27,7 +27,7 @@ function createMarkdownModule(expanded) {
       "@streamdown/code": { code: {} },
       "@streamdown/math": { math: {} },
       "@streamdown/mermaid": { mermaid: {} },
-      "@tauri-apps/plugin-opener": { openUrl() {} },
+      "@liveagent/app/shims/tauriOpener": { openUrl() {} },
       streamdown: {
         Streamdown(props) {
           return { type: "Streamdown", props };
@@ -37,9 +37,9 @@ function createMarkdownModule(expanded) {
       },
       "remark-breaks": {},
       "react-dom": { createPortal(children) { return children; } },
-      "../i18n": { useLocale() { return { t: (key) => key }; } },
+      "@liveagent/ui/i18n/index": { useLocale() { return { t: (key) => key }; } },
       "../lib/shared/utils": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-      "./icons": {
+      "@liveagent/app/components/icons": {
         Check: "Check",
         ChevronDown: "ChevronDown",
         ChevronUp: "ChevronUp",
@@ -50,7 +50,7 @@ function createMarkdownModule(expanded) {
       "./ui/button": { Button: "Button" },
     },
   });
-  return loader.loadModule("src/components/Markdown.tsx");
+  return loader.loadModule("@liveagent/ui/components/Markdown.tsx");
 }
 
 function findNode(root, predicate) {

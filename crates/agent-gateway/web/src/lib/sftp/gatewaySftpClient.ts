@@ -1,5 +1,5 @@
+import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
-import type { SftpClient } from "./types";
 
 export function createGatewaySftpClient(api: GatewayWebSocketClientLike): SftpClient {
   return {

@@ -15,6 +15,9 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "@liveagent/app/*": ["./src/*"],
+      "@liveagent/adapters/*": ["./src/agent-ui-adapters/*"],
+      "@liveagent/ui/*": ["../../agent-ui/src/*"],
       "@tauri-apps/api/core": ["./src/shims/tauriCore.ts"],
       "@tauri-apps/api/event": ["./src/shims/tauriEvent.ts"],
       "@tauri-apps/plugin-opener": ["./src/shims/tauriOpener.ts"]

@@ -1,3 +1,7 @@
+import { Markdown } from "@liveagent/ui/components/Markdown";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
@@ -10,13 +14,9 @@ import {
   Shield,
   Sparkles,
 } from "../../components/icons";
-import { Markdown } from "../../components/Markdown";
-import { Button } from "../../components/ui/button";
-import { useLocale } from "../../i18n";
 import type { AppUpdateCheckResult, AppUpdateController } from "../../lib/appUpdates";
 import { updateUpdateSettings } from "../../lib/settings";
 import { formatReleaseDate } from "./aboutDate";
-import { AgentActivationSwitch } from "./shared";
 import type { SettingsSectionProps } from "./types";
 
 type AboutSectionProps = SettingsSectionProps & {

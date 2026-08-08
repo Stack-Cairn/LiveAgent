@@ -1,8 +1,8 @@
 import type { Context } from "@earendil-works/pi-ai";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type { Locale } from "../../../i18n/config";
 import { type ModelOption, toModelValue } from "../../providers/llm";
 import type { AppSettings } from "../../settings";
-import { createUuid } from "../../shared/id";
 import type { ChatHistorySummary } from "../history/chatHistory";
 import { getMessageText } from "../messages/uiMessages";
 

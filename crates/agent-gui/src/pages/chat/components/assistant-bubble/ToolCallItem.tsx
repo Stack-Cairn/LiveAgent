@@ -1,16 +1,20 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
-import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
-
-import { AskUserQuestionCard } from "../../../../components/chat/AskUserQuestionCard";
-import { FileChangeBadge } from "../../../../components/chat/FileChangeBadge";
-import { ChevronRight, Search } from "../../../../components/icons";
-import { useLocale } from "../../../../i18n";
+import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
+import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
+import { FileChangeBadge } from "@liveagent/ui/components/chat/FileChangeBadge";
+import { FileToolArgsDisplay } from "@liveagent/ui/components/chat/FileToolArgs";
+import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import { sanitizeTodoItems, TodoListView } from "@liveagent/ui/components/chat/TodoListView";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   ASK_USER_QUESTION_TOOL_NAME,
   type AskUserQuestionAnswer,
   parseAskUserQuestionResultDetails,
   sanitizeAskUserQuestionItems,
-} from "../../../../lib/chat/askUserQuestion";
+} from "@liveagent/ui/lib/chat/askUserQuestion";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ChevronRight, Search } from "../../../../components/icons";
 import { deriveFileChangeStats } from "../../../../lib/chat/messages/fileChangeStats";
 import {
   deriveFileToolPreview,
@@ -24,7 +28,6 @@ import {
   toolCallArgsForDisplay,
   toolResultMessageToText,
 } from "../../../../lib/chat/messages/uiMessages";
-import { cn } from "../../../../lib/shared/utils";
 import { isSubagentCardToolCall } from "../../../../lib/subagents/card";
 import {
   answerAskUserQuestion,
@@ -44,10 +47,6 @@ import {
   getToolMeta,
   type MetaTag,
 } from "./assistantBubbleUtils";
-import { FileToolArgsDisplay } from "./FileToolArgs";
-import { LazyCollapse } from "./LazyCollapse";
-import { AssistantStatus } from "./StatusText";
-import { sanitizeTodoItems, TodoListView } from "./TodoListView";
 import {
   MetaTags,
   PathDisplay,

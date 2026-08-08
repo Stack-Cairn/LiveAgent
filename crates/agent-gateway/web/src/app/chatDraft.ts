@@ -3,8 +3,8 @@ import type {
   MentionComposerDraft,
   MentionComposerGitFileMention,
   MentionComposerLargePaste,
-} from "@/components/chat/MentionComposer";
-import { normalizeLogicalLineEndings } from "@/lib/chat/composerText";
+} from "@liveagent/ui/components/chat/MentionComposer";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import { formatCodeMentionToken, formatFileMentionToken } from "@/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import { withPastedTextDisplayMetadata } from "@/lib/chat/uploadedFiles";

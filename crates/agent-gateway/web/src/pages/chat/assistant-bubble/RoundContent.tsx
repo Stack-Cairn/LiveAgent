@@ -1,21 +1,25 @@
+import {
+  AssistantStatus,
+  CompactingText,
+  VibingText,
+} from "@liveagent/ui/components/chat/AssistantStatus";
+import { HostedSearchGroupView } from "@liveagent/ui/components/chat/HostedSearchGroupView";
+import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import { ThinkingActivity } from "@liveagent/ui/components/chat/ThinkingActivity";
+import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
+import { Markdown } from "@liveagent/ui/components/Markdown";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { isTodoWriteToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
 import { memo, useMemo, useState } from "react";
-import { ThinkingActivity } from "../../../components/chat/ThinkingActivity";
 import { ChevronRight, RefreshCw } from "../../../components/icons";
-import { Markdown } from "../../../components/Markdown";
-import { useLocale } from "../../../i18n";
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "../../../lib/chat/chatPageHelpers";
-import { isTodoWriteToolBlock } from "../../../lib/chat/taskProgress";
 import type { RetryAttemptRecord } from "../../../lib/chat/transcript/types";
 import type { UiRound } from "../../../lib/chat/uiMessages";
 import { groupRoundBlocks, isBuiltinShareToolName } from "./assistantBubbleUtils";
-import { HostedSearchGroupView } from "./HostedSearchGroupView";
-import { LazyCollapse } from "./LazyCollapse";
-import { AssistantStatus, CompactingText, VibingText } from "./StatusText";
 import { MemoToolCallItem } from "./ToolCallItem";
 import { getNativeDisplayImagePayload, NativeDisplayImageBlock } from "./ToolImages";
 import { ToolTraceGroup } from "./ToolTraceGroup";
-import { UsagePanel } from "./UsagePanel";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
 

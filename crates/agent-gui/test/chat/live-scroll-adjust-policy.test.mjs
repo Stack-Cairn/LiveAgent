@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const modulePath = path.join(rootDir, "src/lib/transcript-virtual/liveScrollAdjustPolicy.ts");
-const { createLiveRowScrollAdjustPolicy } = createTsModuleLoader({ rootDir }).loadModule(
-  modulePath,
+const { createLiveRowScrollAdjustPolicy } = createTsModuleLoader().loadModule(
+  "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy",
 );
 
 const makeItem = ({ index = 5, start, size }) => ({

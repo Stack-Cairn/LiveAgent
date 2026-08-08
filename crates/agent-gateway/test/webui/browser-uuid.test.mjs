@@ -3,8 +3,8 @@ import test from "node:test";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
-const { createUuid } = loader.loadModule("@/lib/shared/id.ts");
-const { createEmptyRequestDraft } = loader.loadModule("@/pages/settings/httpRequestEditor.tsx");
+const { createUuid } = loader.loadModule("@liveagent/ui/lib/shared/id.ts");
+const { createEmptyRequestDraft } = loader.loadModule("@liveagent/ui/pages/settings/httpRequestEditor.tsx");
 const { normalizeAgentPromptTemplate, normalizeCustomProvider, normalizeSshSettings } =
   loader.loadModule("@/lib/settings/index.ts");
 

@@ -1,7 +1,6 @@
 import type { AssistantMessage, Context, Message } from "@earendil-works/pi-ai";
-
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { assistantMessageToText } from "../../providers/llm";
-import { createUuid } from "../../shared/id";
 import {
   type FileLedger,
   formatFileLedgerBlock,

@@ -1,9 +1,12 @@
 // Injection audience: renders the "# Memory Index" system-prompt section and
 // the "## Memory" tools-suffix rules for the MAIN conversation model.
 
-import type { MemoryOverviewEntry, MemoryOverviewResponse } from "../api";
-import { memoryIndexOverview } from "../api";
-import { INDEX_MAX_ENTRIES_PER_BUCKET, INDEX_MAX_PROMPT_CHARS } from "../config";
+import type { MemoryOverviewEntry, MemoryOverviewResponse } from "@liveagent/ui/lib/memory/api";
+import { memoryIndexOverview } from "@liveagent/ui/lib/memory/api";
+import {
+  INDEX_MAX_ENTRIES_PER_BUCKET,
+  INDEX_MAX_PROMPT_CHARS,
+} from "@liveagent/ui/lib/memory/config";
 import {
   MEMORY_CONFIDENCE_TONE_LINES,
   MEMORY_CONFLICT_ARBITRATION_LINES,

@@ -1,18 +1,19 @@
+import type { WorkspaceCodeEditorOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceCodeEditorOverlay";
+import type { WorkspaceFilePreviewOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay";
+import type { WorkspaceSshTerminalOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceSshTerminalOverlay";
+import { t as translate } from "@liveagent/ui/i18n/index";
+import { lockMonacoNlsLocale, preparePreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
+import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
+import type { TerminalClient, TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { lazy, Suspense } from "react";
-
-import type { WorkspaceCodeEditorOpenRequest } from "@/components/workspace-editor/WorkspaceCodeEditorOverlay";
-import type { WorkspaceFilePreviewOpenRequest } from "@/components/workspace-editor/WorkspaceFilePreviewOverlay";
-import type { WorkspaceSshTerminalOpenRequest } from "@/components/workspace-editor/WorkspaceSshTerminalOverlay";
-import { t as translate } from "@/i18n";
 import type { CodeMentionReference } from "@/lib/chat/mentionReferences";
-import { lockMonacoNlsLocale, preparePreferredMonacoNlsLocale } from "@/lib/monacoNls";
 import type { AppSettings, EffectiveTheme } from "@/lib/settings";
-import type { SftpClient } from "@/lib/sftp/types";
-import type { TerminalClient, TerminalSession } from "@/lib/terminal/types";
 
 const WorkspaceCodeEditorOverlay = lazy(async () => {
   await preparePreferredMonacoNlsLocale();
-  const module = await import("@/components/workspace-editor/WorkspaceCodeEditorOverlay");
+  const module = await import(
+    "@liveagent/ui/components/workspace-editor/WorkspaceCodeEditorOverlay"
+  );
   lockMonacoNlsLocale();
   return {
     default: module.WorkspaceCodeEditorOverlay,
@@ -20,14 +21,18 @@ const WorkspaceCodeEditorOverlay = lazy(async () => {
 });
 
 const WorkspaceFilePreviewOverlay = lazy(async () => {
-  const module = await import("@/components/workspace-editor/WorkspaceFilePreviewOverlay");
+  const module = await import(
+    "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay"
+  );
   return {
     default: module.WorkspaceFilePreviewOverlay,
   };
 });
 
 const WorkspaceSshTerminalOverlay = lazy(async () => {
-  const module = await import("@/components/workspace-editor/WorkspaceSshTerminalOverlay");
+  const module = await import(
+    "@liveagent/ui/components/workspace-editor/WorkspaceSshTerminalOverlay"
+  );
   return {
     default: module.WorkspaceSshTerminalOverlay,
   };

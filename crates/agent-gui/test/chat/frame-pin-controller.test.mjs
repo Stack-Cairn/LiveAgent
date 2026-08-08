@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const { createFramePinController } = createTsModuleLoader().loadModule(
-  "src/lib/chat-scroll/framePinController.ts",
+  "@liveagent/ui/lib/chat-scroll/framePinController.ts",
 );
 
 test("coalesces repeated live growth into one pin per frame", () => {

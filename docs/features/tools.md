@@ -86,7 +86,7 @@
 | 原子校验 | 校验失败时不启动任何 agent，返回结构化错误并附上当前 roster 与已启用模板列表；`AgentPromptTemplate.enabled` 生效，`template` 只能引用已启用模板（按 id 或 name 解析）。 |
 | SendMessage | `to=parent`（父私有）/`to=*`（共享广播）/`to=<agent id>`（直达），收件人按 roster 校验，未知收件人直接拒绝；channel 为 direct/shared/decision/question，消息在下一轮 turn 边界投递。 |
 | 持久化 | run 在每个 turn 边界通过 `subagent_run_save` 增量落盘，中断的 run 可从最后完成的 round 恢复；run status 含 `cancelled`。identity/run/message/worktree 各有 Tauri 命令族（见 architecture/gui.md）。 |
-| UI 协议 | details kind 为 `subagent_batch`/`subagent_card`/`subagent_message`；per-agent 卡片以 `subagent_card: true` 标记的合成 tool call 渲染，被拒绝的 Agent 调用也会可见渲染；`lib/subagents/protocol.ts` 在 GUI/WebUI 间逐字节镜像（scripts/mirror-manifest.json）。 |
+| UI 协议 | details kind 为 `subagent_batch`/`subagent_card`/`subagent_message`；per-agent 卡片以 `subagent_card: true` 标记的合成 tool call 渲染，被拒绝的 Agent 调用也会可见渲染；协议单一真源位于 `crates/agent-ui/src/lib/subagents/protocol.ts`。 |
 
 ## 工具改造检查表
 
@@ -95,5 +95,5 @@
 | 新增 builtin tool | schema、executor、metadata、UI trace details、agent-dev 可观测性。 |
 | 新增 Tauri-backed tool | Rust invoke command、前端 invoke 参数、错误消息、权限边界。 |
 | 修改 MCP 配置 | GUI/WebUI Settings/MCP Hub 两端、Gateway settings sync redaction。工具侧写入必须走 `settings/mcpOps.ts` 的 `McpSettingsOp` id 级合并（`applyMcpOps`），禁止全量替换 `settings.mcp`；读取必须走 `getMcpSettings` 实时 getter（权威 `settingsRef`），禁止 turn 级快照；读改写决策与提交必须在同一同步段内（await 之后重读）。 |
-| 修改 Skills 行为 | services/skills/*、lib/skills 双端复制、Skills Hub installed 状态。所有对 skills 根目录活动目标的落盘必须持 `skills_write_guard()`，安装走 stage-then-swap（`<root>/.staging` 构建 + `fs::rename` 原子入位），禁止直接向活动目录逐文件写。 |
-| 修改 Memory 行为 | MemoryStore、MemoryManager、Settings Memory 双端、Gateway memory.manage。 |
+| 修改 Skills 行为 | services/skills/*、`crates/agent-ui/src/lib/skills`、Skills Hub installed 状态。所有对 skills 根目录活动目标的落盘必须持 `skills_write_guard()`，安装走 stage-then-swap（`<root>/.staging` 构建 + `fs::rename` 原子入位），禁止直接向活动目录逐文件写。 |
+| 修改 Memory 行为 | MemoryStore、MemoryManager、共享 Settings Memory、两端平台适配器、Gateway memory.manage。 |

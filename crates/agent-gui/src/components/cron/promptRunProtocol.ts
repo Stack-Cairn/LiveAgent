@@ -1,4 +1,4 @@
-import type { CompletePromptRunInput } from "../../lib/automation";
+import type { CompletePromptRunInput } from "@liveagent/ui/lib/automation/index";
 
 export const PROMPT_RUN_RECONCILE_INTERVAL_MS = 15_000;
 

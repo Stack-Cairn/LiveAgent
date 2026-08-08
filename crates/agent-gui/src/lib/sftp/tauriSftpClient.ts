@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type {
   SftpActionResponse,
   SftpClient,
@@ -9,7 +7,9 @@ import type {
   SftpTransfer,
   SftpTransferEvent,
   SftpTransferResponse,
-} from "./types";
+} from "@liveagent/ui/lib/sftp/types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 type RawSftpEntry = Partial<SftpEntry> & {
   size_bytes?: number;

@@ -1,4 +1,4 @@
-import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
+import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
 import type {

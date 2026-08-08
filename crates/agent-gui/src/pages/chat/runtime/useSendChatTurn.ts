@@ -1,14 +1,21 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { useCallback } from "react";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
-} from "../../../components/chat/MentionComposer";
-import { getAutomationState } from "../../../lib/automation";
+} from "@liveagent/ui/components/chat/MentionComposer";
+import { getAutomationState } from "@liveagent/ui/lib/automation/index";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import {
+  buildSkillsSystemPrompt,
+  resolveExplicitSkillMentions,
+  type SkillSummary,
+} from "@liveagent/ui/lib/skills/index";
+import { invoke } from "@tauri-apps/api/core";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { useCallback } from "react";
 import { createHookRunScope } from "../../../lib/automation/hookRunner";
-import { normalizeLogicalLineEndings } from "../../../lib/chat/composerText";
 import {
   buildPersistableMessagesFromSnapshot,
   type SuppressedToolTraceSnapshot,
@@ -39,7 +46,6 @@ import {
   getFirstUserMessageText,
   isAbortLikeError,
 } from "../../../lib/chat/page/chatPageHelpers";
-import type { ScrollFollowHandle } from "../../../lib/chat-scroll/useScrollFollow";
 import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { buildMemoryOverviewSection } from "../../../lib/memory/prompts/injection";
 import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
@@ -56,12 +62,6 @@ import {
   updateSkills,
   workspaceProjectPathKey,
 } from "../../../lib/settings";
-import type { SidebarStore } from "../../../lib/sidebar/store";
-import {
-  buildSkillsSystemPrompt,
-  resolveExplicitSkillMentions,
-  type SkillSummary,
-} from "../../../lib/skills";
 import {
   collectRetainedSubagentParentToolCallIds,
   pruneSubagentRunsForConversation,
