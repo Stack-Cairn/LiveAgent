@@ -749,9 +749,7 @@ export const RightDockPanel = memo(function RightDockPanel(props: RightDockPanel
           isOpen
             ? "pointer-events-auto translate-y-0 md:translate-y-0"
             : "pointer-events-none translate-y-full border-transparent md:translate-y-0",
-          effectiveWidthCollapsed
-            ? "md:w-0"
-            : "md:w-[var(--project-tools-panel-width)]",
+          effectiveWidthCollapsed ? "md:w-0" : "md:w-[var(--project-tools-panel-width)]",
         )}
         style={{ ...panelStyle, "--zone-font-scale": fontScale } as CSSProperties}
       >

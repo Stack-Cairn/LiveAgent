@@ -143,9 +143,12 @@ export function useRightDockPanelWidth(options: UseRightDockPanelWidthOptions) {
       setWidthCollapsed(true);
       return;
     }
+    // Collapse track width immediately so CSS can animate width + panel slide
+    // together. Only delay unmounting content until the drawer motion finishes
+    // (must match --project-tools-motion-duration).
+    setWidthCollapsed(true);
     const timer = window.setTimeout(() => {
       setShouldRenderContent(false);
-      setWidthCollapsed(true);
     }, 220);
     return () => window.clearTimeout(timer);
   }, [collapseImmediately, isOpen]);

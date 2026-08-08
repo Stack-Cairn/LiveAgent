@@ -170,7 +170,8 @@ export const ChatHeader = memo(function ChatHeader(props: {
                 disabled={!hasModels}
                 className={cn(
                   "model-selector-trigger h-8 max-w-[min(20rem,calc(100vw-8.5rem))] -translate-y-px justify-between gap-1.5 overflow-hidden rounded-lg px-2.5 py-1 cursor-pointer text-xs font-normal text-foreground transition-[background-color,color,transform,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-muted/60 dark:text-white",
-                  isModelPickerOpen && "bg-muted/70 shadow-[inset_0_0_0_1px_hsl(var(--border)/0.55)]",
+                  isModelPickerOpen &&
+                    "bg-muted/70 shadow-[inset_0_0_0_1px_hsl(var(--border)/0.55)]",
                 )}
               />
             }

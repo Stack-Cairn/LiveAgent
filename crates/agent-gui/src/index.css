@@ -1316,9 +1316,9 @@
   }
 
   .chat-sidebar-row:not(.chat-sidebar-row-active):not([data-selected="true"]):has(
-      > button:active,
-      [data-sidebar-row-select]:active
-    ) {
+    > button:active,
+    [data-sidebar-row-select]:active
+  ) {
     background-color: hsl(var(--foreground) / 0.08);
     color: hsl(var(--foreground));
   }
@@ -1504,7 +1504,9 @@
   @media (prefers-reduced-motion: reduce) {
     .chat-jump-to-bottom {
       animation: none;
-      transition: background-color 120ms ease, color 120ms ease;
+      transition:
+        background-color 120ms ease,
+        color 120ms ease;
     }
     .chat-jump-to-bottom:active {
       transform: translateX(-50%);
