@@ -1043,6 +1043,44 @@ test("GatewayWebSocketClient sends history branch requests with the base message
   resetGatewayWebSocketClient();
 });
 
+test("GatewayWebSocketClient sends history cwd update requests", async () => {
+  installBrowser();
+  const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();
+  resetGatewayWebSocketClient();
+
+  const client = getGatewayWebSocketClient("token");
+  const updatePromise = client.setHistoryCwd("conversation-1", "/tmp/project-b");
+  const socket = await connectAndAuth(codec);
+  await waitFor(() => findAgentRequest(codec, socket, "history_set_cwd"), "history cwd frame");
+  const request = findAgentRequest(codec, socket, "history_set_cwd");
+  assert.deepEqual(request.json.agent_request.history_set_cwd, {
+    conversation_id: "conversation-1",
+    cwd: "/tmp/project-b",
+  });
+  socket.receiveBinary(
+    codec.encodeServerFrame({
+      request_id: request.requestId,
+      agent_response: {
+        history_set_cwd_resp: {
+          conversation: {
+            id: "conversation-1",
+            title: "Moved conversation",
+            cwd: "/tmp/project-b",
+            message_count: 6,
+            created_at: 1700000000100,
+            updated_at: 1700000000200,
+          },
+        },
+      },
+    }),
+  );
+  const updated = await updatePromise;
+  assert.equal(updated.id, "conversation-1");
+  assert.equal(updated.cwd, "/tmp/project-b");
+
+  resetGatewayWebSocketClient();
+});
+
 test("GatewayWebSocketClient reconnects before read requests when an authenticated socket goes stale", async () => {
   installBrowser();
   const { codec, getGatewayWebSocketClient, resetGatewayWebSocketClient } = loadGatewaySocket();

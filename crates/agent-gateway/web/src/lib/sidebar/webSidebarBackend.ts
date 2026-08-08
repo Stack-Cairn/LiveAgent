@@ -130,6 +130,7 @@ type WebSidebarApi = {
   listHistoryWorkdirs(): Promise<HistoryWorkdirsResponse>;
   renameHistory(conversationId: string, title: string): Promise<ConversationSummary>;
   pinHistory(conversationId: string, isPinned: boolean): Promise<ConversationSummary>;
+  setHistoryCwd(conversationId: string, cwd: string): Promise<ConversationSummary>;
   deleteHistory(conversationId: string): Promise<void>;
   subscribeHistory(listener: (event: GatewayHistoryEvent) => void): () => void;
   subscribeConnection(listener: (connected: boolean) => void): () => void;
@@ -181,6 +182,10 @@ export function createWebSidebarBackend(deps: WebSidebarBackendDeps): SidebarBac
 
     async setConversationPinned(id, isPinned) {
       return normalizeGatewayConversationSummary(await api.pinHistory(id, isPinned));
+    },
+
+    async setConversationCwd(id, cwd) {
+      return normalizeGatewayConversationSummary(await api.setHistoryCwd(id, cwd));
     },
 
     async deleteConversation(id) {
@@ -325,6 +330,7 @@ export function createIdleSidebarBackend(): SidebarBackend {
     listWorkdirs: () => Promise.resolve([]),
     renameConversation: notReady,
     setConversationPinned: notReady,
+    setConversationCwd: notReady,
     deleteConversation: notReady,
     subscribeEvents: () => () => {},
     getProtectedConversationIds: () => [],

@@ -63,6 +63,7 @@ export type SidebarWorkdirsRefreshReason =
   | "initial"
   | "reconnect"
   | "delete"
+  | "move"
   | "new-workdir"
   | "fallback";
 
@@ -77,6 +78,7 @@ export type SidebarStore = {
   refreshWorkdirs(reason: SidebarWorkdirsRefreshReason): Promise<void>;
   rename(id: string, title: string): Promise<boolean>;
   setPinned(id: string, isPinned: boolean): Promise<boolean>;
+  setCwd(id: string, cwd: string): Promise<boolean>;
   remove(id: string): Promise<boolean>;
   clearMutationError(id: string): void;
   upsertLocal(conversation: SidebarConversation): void;
@@ -785,6 +787,21 @@ export function createSidebarStore(
         }),
         execute: () => backend.setConversationPinned(id, isPinned),
       }),
+
+    setCwd: async (id, cwd) => {
+      const moved = await runMutation({
+        id,
+        kind: "move",
+        failureCode: "moveFailed",
+        blockedCode: "moveBlockedRunning",
+        optimistic: (current) => ({ ...current, cwd }),
+        execute: () => backend.setConversationCwd(id, cwd),
+      });
+      if (moved) {
+        void refreshWorkdirs("move");
+      }
+      return moved;
+    },
 
     remove: async (id) => {
       const removed = await runMutation({

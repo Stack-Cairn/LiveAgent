@@ -526,6 +526,39 @@ fn set_chat_history_pinned_sync(
 
     get_summary_by_id(conn, chat_id)
 }
+
+fn set_chat_history_cwd_sync(
+    conn: &Connection,
+    id: &str,
+    cwd: &str,
+) -> Result<ChatHistorySummary, String> {
+    let chat_id = id.trim();
+    if chat_id.is_empty() {
+        return Err("历史对话 id 不能为空".to_string());
+    }
+
+    let target = cwd.trim();
+    if target.is_empty() {
+        return Err("目标工作空间不能为空".to_string());
+    }
+
+    let affected = conn
+        .execute(
+            "
+            UPDATE chatHistory
+            SET cwd = ?1
+            WHERE id = ?2
+            ",
+            params![target, chat_id],
+        )
+        .map_err(|e| format!("更新历史对话工作空间失败：{e}"))?;
+
+    if affected == 0 {
+        return Err("未找到对应的历史对话".to_string());
+    }
+
+    get_summary_by_id(conn, chat_id)
+}
 fn rename_chat_history_sync(
     conn: &Connection,
     id: &str,

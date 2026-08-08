@@ -9,6 +9,7 @@ import {
   listChatHistory,
   listChatHistoryWorkdirs,
   renameChatHistory,
+  setChatHistoryCwd,
   setChatHistoryPinned,
 } from "../chat/history/chatHistory";
 import type { SidebarBackend } from "./backend";
@@ -77,6 +78,7 @@ export function createGuiSidebarBackend(): SidebarBackend {
 
     renameConversation: (id, title) => renameChatHistory(id, title),
     setConversationPinned: (id, isPinned) => setChatHistoryPinned(id, isPinned),
+    setConversationCwd: (id, cwd) => setChatHistoryCwd(id, cwd),
     deleteConversation: (id) => deleteChatHistory(id),
 
     subscribeEvents: (listener) => {

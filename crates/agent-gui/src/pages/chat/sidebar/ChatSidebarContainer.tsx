@@ -144,6 +144,27 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     [store],
   );
 
+  const handleMoveToWorkspace = useCallback(
+    (id: string, cwd: string) => {
+      store.clearMutationError(id);
+      void store.setCwd(id, cwd);
+    },
+    [store],
+  );
+
+  const handleMoveConversationsToWorkspace = useCallback(
+    async (ids: readonly string[], cwd: string) => {
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          store.clearMutationError(id);
+          return { id, moved: await store.setCwd(id, cwd) };
+        }),
+      );
+      return results.filter((result) => !result.moved).map((result) => result.id);
+    },
+    [store],
+  );
+
   const handleDeleteConversation = useCallback(
     (id: string) => {
       store.clearMutationError(id);
@@ -244,6 +265,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       onCommitRename={handleCommitRename}
       onCancelRename={handleCancelRename}
       onSetPinned={handleSetPinned}
+      onMoveToWorkspace={handleMoveToWorkspace}
+      onMoveConversationsToWorkspace={handleMoveConversationsToWorkspace}
       canShareConversations={props.canShareConversations}
       sharedConversationCount={props.sharedConversationCount}
       onShareConversation={props.onShareConversation}
