@@ -2862,7 +2862,7 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
         ) : null}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-3">
         <FailoverNumberField
           label={t("settings.failoverMaxSwitches")}
           hint={t("settings.failoverMaxSwitchesHint")}
