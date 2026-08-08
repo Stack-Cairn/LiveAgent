@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -18,13 +17,13 @@ import {
   Trash2,
   Upload,
 } from "../../components/icons";
-
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "../../components/ui/confirm-dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { useLocale } from "../../i18n";
+import { backendInvoke } from "../../lib/backend/transport";
 import {
   removeSshHostFromProjectAssociations,
   type SshAuthType,
@@ -111,7 +110,7 @@ export function sshHostConnectionFieldsChanged(
 }
 
 async function listActiveSshSessions(hostId: string): Promise<TerminalSession[]> {
-  const response = await invoke<RawTerminalListResponse>("terminal_list", {});
+  const response = await backendInvoke<RawTerminalListResponse>("terminal_list", {});
   return (response.sessions ?? []).filter(
     (session) =>
       session.kind === "ssh" &&
@@ -298,6 +297,7 @@ function SshHostModal(props: {
       className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
       data-state={modalState}
     >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 背板点击关闭是便捷路径；键盘用户经 modal 的取消按钮关闭。 */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
       <div className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
         <div className="settings-modal-header flex items-center gap-3 border-b px-6 py-4">
@@ -723,6 +723,7 @@ function SshImportModal(props: {
       className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
       data-state={modalState}
     >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: 背板点击关闭是便捷路径；键盘用户经 modal 的取消按钮关闭。 */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
       <div className="settings-modal-panel relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
         <div className="settings-modal-header flex items-center gap-3 border-b px-6 py-4">
@@ -1076,7 +1077,7 @@ export function SshSection(props: SettingsSectionProps) {
     const otherFailures: string[] = [];
     for (const target of targets) {
       try {
-        await invoke("terminal_ssh_reconnect", {
+        await backendInvoke("terminal_ssh_reconnect", {
           session_id: target.id,
           project_path_key: target.projectPathKey,
         });
@@ -1297,7 +1298,7 @@ export function SshSection(props: SettingsSectionProps) {
     // best-effort — a session that already ended is fine to ignore.
     for (const session of sessions) {
       try {
-        await invoke("terminal_close", {
+        await backendInvoke("terminal_close", {
           session_id: session.id,
           project_path_key: session.projectPathKey,
         });
@@ -1324,10 +1325,13 @@ export function SshSection(props: SettingsSectionProps) {
 
     setKnownHostResettingId(host.id);
     try {
-      const response = await invoke<SshKnownHostResetResponse>("settings_reset_ssh_known_host", {
-        host: targetHost,
-        port: host.port,
-      });
+      const response = await backendInvoke<SshKnownHostResetResponse>(
+        "settings_reset_ssh_known_host",
+        {
+          host: targetHost,
+          port: host.port,
+        },
+      );
       showKnownHostResetStatus({
         hostId: host.id,
         kind: response.deleted > 0 ? "success" : "info",

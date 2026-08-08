@@ -7,8 +7,8 @@ import {
   applyTerminalEventToSessions,
   sortTerminalSessions,
 } from "../../../lib/terminal/sessionStore";
-import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import type { TerminalSession } from "../../../lib/terminal/types";
+import { wsTerminalClient } from "../../../lib/terminal/wsTerminalClient";
 import { asErrorMessage } from "../chatPageUtils";
 
 type UseProjectTerminalsParams = {
@@ -39,7 +39,7 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
       return;
     }
     let cancelled = false;
-    void tauriTerminalClient
+    void wsTerminalClient
       .list()
       .then((sessions) => {
         if (!cancelled) {
@@ -63,7 +63,7 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
 
   useEffect(() => {
     if (!terminalProjectPathKey) return;
-    return tauriTerminalClient.subscribe((event) => {
+    return wsTerminalClient.subscribe((event) => {
       if (event.kind === "output") return;
       setTerminalSessions((current) => applyTerminalEventToSessions(current, event));
     });
@@ -131,7 +131,7 @@ export function useProjectTerminals(params: UseProjectTerminalsParams) {
       cancelled = true;
       unlisten?.();
     };
-  }, [requestConfirmDialog, t]);
+  }, [requestConfirmDialog, setErrorMessage, t]);
 
   return {
     terminalSessions,

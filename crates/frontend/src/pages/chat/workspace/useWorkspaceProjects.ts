@@ -260,7 +260,14 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
         startNewConversationActionRef.current({ workdir: targetProject.path });
       }
     },
-    [setSettings, workspaceProjects, activeWorkspaceProjectId, settings.system],
+    [
+      setSettings,
+      workspaceProjects,
+      activeWorkspaceProjectId,
+      settings.system,
+      startNewConversationActionRef.current,
+      prepareComposerForConversationChangeActionRef.current,
+    ],
   );
 
   const handleSelectWorkspaceProject = useCallback(
@@ -281,7 +288,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
       setActiveView("chat");
       activateWorkspaceProject(project, { startConversation: true });
     },
-    [activateWorkspaceProject, checkWorkspaceProjectDirectory],
+    [activateWorkspaceProject, checkWorkspaceProjectDirectory, setActiveView],
   );
 
   const handleBrowseWorkspaceProjectInFileTree = useCallback(
@@ -299,7 +306,13 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
       activateWorkspaceProject(project);
       setSettings((prev) => openRightDockSingletonTab(prev, pathKey, "fileTree"));
     },
-    [activateWorkspaceProject, checkWorkspaceProjectDirectory, setSettings],
+    [
+      activateWorkspaceProject,
+      checkWorkspaceProjectDirectory,
+      setSettings,
+      setRightDockOpen,
+      setActiveView,
+    ],
   );
 
   const ensureTunnelToolTab = useCallback(

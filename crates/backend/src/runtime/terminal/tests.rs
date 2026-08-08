@@ -125,6 +125,32 @@ fn non_echo_output_stays_visible_to_both_sides() {
 }
 
 #[test]
+fn remote_origin_input_records_remote_pending_echo() {
+    // WS 数据面收的是 dispatch 的 remote 路。输入必须记成 Remote origin，
+    // 否则 echo 走 local 路（EventBus，已无订阅者），remote 路要等行尾才 flush,
+    // 前端表现为「打字不渲染，回车才渲染」。
+    let mut state = TerminalEchoDispatchState::default();
+    state.pending.extend(
+        terminal_input_echo_candidates(b"ls\r", TerminalInputOrigin::Remote)
+            .into_iter()
+            .map(|candidate| PendingEchoByte {
+                byte: candidate.byte,
+                origin: candidate.origin,
+            }),
+    );
+
+    for (offset, byte) in b"ls\r".iter().enumerate() {
+        let dispatch = state.dispatch(test_stream_payload(offset as u64, &[*byte]));
+        assert_eq!(
+            collect_payload_bytes(&dispatch.remote),
+            &[*byte],
+            "remote 路必须逐字符送达，不能等行尾"
+        );
+    }
+    assert!(state.is_empty());
+}
+
+#[test]
 fn input_echo_candidates_skip_escape_sequences() {
     let candidates =
         terminal_input_echo_candidates(b"a\x1b[A\x1b[1;5Cb\r", TerminalInputOrigin::Remote);

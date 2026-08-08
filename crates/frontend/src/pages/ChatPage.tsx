@@ -90,7 +90,7 @@ import { useSidebarSelector } from "../lib/sidebar/useSidebarSelector";
 import { mergeAlwaysEnabledSkillNames } from "../lib/skills";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { terminalSessionBelongsToProject } from "../lib/terminal/sessionStore";
-import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
+import { wsTerminalClient } from "../lib/terminal/wsTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import { disposeTodoToolState } from "../lib/tools/todoTools";
 import {
@@ -1062,7 +1062,12 @@ export function ChatPage(props: ChatPageProps) {
       deleteConversationArtifacts(key);
       setQueuedChatTurnsState((current) => removeQueuedChatTurnsForConversation(current, key));
     },
-    [deleteConversationArtifacts, setPendingUploadsForConversation, setQueuedChatTurnsState],
+    [
+      deleteConversationArtifacts,
+      setPendingUploadsForConversation,
+      setQueuedChatTurnsState,
+      deleteCachedComposerDraftState,
+    ],
   );
 
   const pruneIdleConversationCaches = useCallback(
@@ -1102,6 +1107,7 @@ export function ChatPage(props: ChatPageProps) {
       deleteConversationLocalCaches,
       isConversationRunning,
       conversationPersistenceCursorRef,
+      queuedChatTurnsRef.current,
     ],
   );
 
@@ -1247,6 +1253,9 @@ export function ChatPage(props: ChatPageProps) {
     pendingUploadedFiles.length,
     sidebarStore,
     updateConversationRuntimeEntry,
+    conversationRuntimeCacheRef.current.get,
+    currentConversationIdRef.current.trim,
+    conversationPersistenceCursorRef.current.has,
   ]);
 
   useEffect(() => {
@@ -1299,7 +1308,7 @@ export function ChatPage(props: ChatPageProps) {
     currentConversationIdRef.current = currentConversationId;
     // Per-conversation pending uploads are restored inside usePendingUploads
     // when its conversationId param changes.
-  }, [currentConversationId]);
+  }, [currentConversationId, currentConversationIdRef]);
 
   useEffect(() => {
     const currentItem = historyItems.find((item) => item.id === currentConversationId);
@@ -1356,6 +1365,8 @@ export function ChatPage(props: ChatPageProps) {
     sidebarScope,
     sidebarStore,
     t,
+    isConversationRunning,
+    conversationRuntimeCacheRef.current.get,
   ]);
 
   useEffect(() => {
@@ -1424,6 +1435,7 @@ export function ChatPage(props: ChatPageProps) {
     isSending,
     openController,
     pendingUploadedFiles,
+    isConversationRunning,
   ]);
 
   useEffect(() => {
@@ -1510,7 +1522,7 @@ export function ChatPage(props: ChatPageProps) {
     startNewConversationActionRef.current({
       workdir: activeWorkspaceProjectPath || undefined,
     });
-  }, [activeWorkspaceProjectPath, openController]);
+  }, [activeWorkspaceProjectPath, openController, prepareComposerForConversationChange]);
 
   // 动作总线（Rust `app:action`）里 ChatPage 拥有的动作在下方统一监听
   // （handleSelectConversation 定义之后）；这里先备好 ref 镜像。
@@ -1531,7 +1543,7 @@ export function ChatPage(props: ChatPageProps) {
       openController.open(targetConversationId);
       restoreCachedComposerDraft(targetConversationId);
     },
-    [openController],
+    [openController, restoreCachedComposerDraft, prepareComposerForConversationChange],
   );
 
   // 托盘/快捷键动作参数的 ref 镜像：监听 effect 是 []-dep，闭包内一律
@@ -1757,7 +1769,14 @@ export function ChatPage(props: ChatPageProps) {
       return;
     }
     void sendActionRef.current();
-  }, [enqueueCurrentComposerTurn, isConversationRunning]);
+  }, [
+    enqueueCurrentComposerTurn,
+    isConversationRunning,
+    requestQueuedChatTurnProcessing,
+    queuedChatTurnEditSlotRef.current?.conversationId,
+    currentConversationIdRef.current.trim,
+    conversationRuntimeCacheRef.current.get,
+  ]);
 
   const handleStopSending = useCallback(() => {
     stopSendingActionRef.current();
@@ -2124,7 +2143,7 @@ export function ChatPage(props: ChatPageProps) {
         fileTreeState={rightDockFileTreeState}
         sshHosts={settings.ssh.hosts}
         associatedSshHostIds={associatedSshHostIds}
-        client={tauriTerminalClient}
+        client={wsTerminalClient}
         gitClient={tauriGitClient}
         gitWriteEnabled
         tunnelClient={tauriTunnelClient}

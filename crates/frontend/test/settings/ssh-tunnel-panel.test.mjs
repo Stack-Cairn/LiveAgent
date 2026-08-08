@@ -123,8 +123,8 @@ test("SSH local forwarding port drafts stay editable while typing", () => {
 test("SSH local forwarding normalizes Tauri responses", async () => {
   const clientLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command) {
+      [loader.resolveLocal("src/lib/backend/transport.ts")]: {
+        async backendInvoke(command) {
           assert.equal(command, "terminal_ssh_local_forward_list");
           return {
             forwards: [
@@ -154,10 +154,10 @@ test("SSH local forwarding normalizes Tauri responses", async () => {
     },
   });
   const tauriForwarding = clientLoader.loadModule(
-    "src/lib/terminal/tauriSshLocalForwardClient.ts",
+    "src/lib/terminal/wsSshLocalForwardClient.ts",
   );
 
-  const snapshot = await tauriForwarding.tauriSshLocalForwardClient.list();
+  const snapshot = await tauriForwarding.wsSshLocalForwardClient.list();
 
   assert.equal(snapshot.revision, 3);
   assert.deepEqual(snapshot.forwards[0], {
@@ -219,8 +219,8 @@ test("SSH local forwarding start passes explicit local port and defaults to auto
   const calls = [];
   const clientLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [loader.resolveLocal("src/lib/backend/transport.ts")]: {
+        async backendInvoke(command, args) {
           calls.push({ command, args });
           return {
             forward: {
@@ -248,17 +248,17 @@ test("SSH local forwarding start passes explicit local port and defaults to auto
     },
   });
   const tauriForwarding = clientLoader.loadModule(
-    "src/lib/terminal/tauriSshLocalForwardClient.ts",
+    "src/lib/terminal/wsSshLocalForwardClient.ts",
   );
 
-  await tauriForwarding.tauriSshLocalForwardClient.start({
+  await tauriForwarding.wsSshLocalForwardClient.start({
     sessionId: "ssh-1",
     projectPathKey: "/project",
     remoteHost: "db.internal",
     remotePort: 5432,
     localPort: 15432,
   });
-  await tauriForwarding.tauriSshLocalForwardClient.start({
+  await tauriForwarding.wsSshLocalForwardClient.start({
     sessionId: "ssh-1",
     projectPathKey: "/project",
     remoteHost: "db.internal",
@@ -278,8 +278,8 @@ test("SSH local forwarding checks local port occupancy over the check command", 
   const calls = [];
   const clientLoader = createTsModuleLoader({
     mocks: {
-      "@tauri-apps/api/core": {
-        async invoke(command, args) {
+      [loader.resolveLocal("src/lib/backend/transport.ts")]: {
+        async backendInvoke(command, args) {
           calls.push({ command, args });
           return args.local_port !== 15432;
         },
@@ -292,11 +292,11 @@ test("SSH local forwarding checks local port occupancy over the check command", 
     },
   });
   const tauriForwarding = clientLoader.loadModule(
-    "src/lib/terminal/tauriSshLocalForwardClient.ts",
+    "src/lib/terminal/wsSshLocalForwardClient.ts",
   );
 
-  const occupied = await tauriForwarding.tauriSshLocalForwardClient.checkLocalPort(15432);
-  const free = await tauriForwarding.tauriSshLocalForwardClient.checkLocalPort(15433);
+  const occupied = await tauriForwarding.wsSshLocalForwardClient.checkLocalPort(15432);
+  const free = await tauriForwarding.wsSshLocalForwardClient.checkLocalPort(15433);
 
   assert.equal(calls.length, 2);
   assert.equal(calls[0].command, "terminal_ssh_local_forward_check_port");

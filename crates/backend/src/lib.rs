@@ -86,6 +86,8 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/healthz", get(|| async { "ok" }))
         .nest("/api", protected)
+        // 终端流挂在顶层 `/ws/terminal`（不在 `/api` 下），同样自己用 ?token= 校验。
+        .merge(server::ws_terminal::router())
         // 浏览器前端（vite dev / WebUI）跨源访问：认证是 Bearer token 而非
         // cookie/同源，permissive CORS 不引入新的攻击面。
         .layer(tower_http::cors::CorsLayer::permissive())

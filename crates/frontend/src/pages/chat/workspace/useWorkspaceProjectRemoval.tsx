@@ -16,8 +16,8 @@ import {
 } from "../../../lib/settings";
 import type { SidebarStore } from "../../../lib/sidebar/store";
 import { terminalSessionBelongsToProject } from "../../../lib/terminal/sessionStore";
-import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import type { TerminalSession } from "../../../lib/terminal/types";
+import { wsTerminalClient } from "../../../lib/terminal/wsTerminalClient";
 import { asErrorMessage } from "../chatPageUtils";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
 import {
@@ -158,7 +158,14 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
       setProjectRenamingId((current) => (current === project.id ? null : current));
       setProjectRenameDraft("");
     },
-    [archivedWorkspaceProjectPathKeys, setSettings, workspaceProjects],
+    [
+      archivedWorkspaceProjectPathKeys,
+      setSettings,
+      workspaceProjects,
+      setActiveWorkspaceProjectId,
+      setProjectRenamingId,
+      setProjectRenameDraft,
+    ],
   );
 
   const handleRemoveWorkspaceProject = useCallback(
@@ -188,7 +195,7 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
             return;
           }
 
-          const terminalSessions = pathKey ? await tauriTerminalClient.list(pathKey) : [];
+          const terminalSessions = pathKey ? await wsTerminalClient.list(pathKey) : [];
           const runningTerminalCount = terminalSessions.filter((session) => session.running).length;
           if (runningTerminalCount > 0) {
             const confirmed = await requestConfirmDialog({
@@ -241,7 +248,7 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
             }
           }
           if (terminalSessions.length > 0) {
-            await tauriTerminalClient.closeProject(pathKey);
+            await wsTerminalClient.closeProject(pathKey);
             setTerminalSessions((current) =>
               current.filter((session) => !terminalSessionBelongsToProject(session, pathKey)),
             );
@@ -284,6 +291,18 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
       settings.system,
       sidebarStore,
       terminalProjectPathKey,
+      startNewConversationActionRef.current,
+      setRightDockOpen,
+      t,
+      setTerminalSessions,
+      removeSharedHistoryItems,
+      setErrorMessage,
+      locallySyncedHistoryUpdatedAtRef.current.delete,
+      conversationRuntimeCacheRef.current.delete,
+      requestConfirmDialog,
+      disposeSubagentsForConversation,
+      currentConversationIdRef.current,
+      conversationPersistenceCursorRef.current.delete,
     ],
   );
 

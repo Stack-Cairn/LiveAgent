@@ -5,8 +5,8 @@ import type { CodeMentionReference } from "../../../lib/chat/messages/mentionRef
 import { lockMonacoNlsLocale, preparePreferredMonacoNlsLocale } from "../../../lib/monacoNls";
 import type { EffectiveTheme } from "../../../lib/settings";
 import { tauriSftpClient } from "../../../lib/sftp/tauriSftpClient";
-import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import type { TerminalSession } from "../../../lib/terminal/types";
+import { wsTerminalClient } from "../../../lib/terminal/wsTerminalClient";
 import type { useWorkspaceOverlays } from "../workspace/useWorkspaceOverlays";
 
 const WorkspaceCodeEditorOverlay = lazy(async () => {
@@ -140,7 +140,7 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
             openRequest={workspaceSshTerminalOpenRequest}
             projectPathKey={terminalProjectPathKey}
             sessions={terminalSessions}
-            client={tauriTerminalClient}
+            client={wsTerminalClient}
             sftpClient={tauriSftpClient}
             theme={theme}
             isOpen={workspaceSshTerminalOpen}

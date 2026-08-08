@@ -27,6 +27,7 @@ pub mod json;
 pub mod routes_gen;
 pub mod state;
 pub mod ws;
+pub mod ws_terminal;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};

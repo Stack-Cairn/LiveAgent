@@ -3,8 +3,13 @@
 //! 实现在 backend，本文件只做「Tauri IPC → 普通函数调用」这一件事。
 //! 属性逐命令沿用原状（含 rename_all）——前端现在就在按这些名字传参，
 //! 统一风格等于 177 次破坏前端的机会。
+//!
+//! 终端已改走网络（HTTP 控制面 + /ws/terminal 数据面），不再注册进
+//! generate_handler；本文件保留的唯一职责是作为 generate-routes.mjs 扫描
+//! 的 HTTP 路由契约来源，函数本身在壳内不再被调用。
 
 #![allow(unused_imports)]
+#![allow(dead_code)]
 
 use backend::commands::terminal::*;
 use backend::runtime::sftp::SftpSessionRegistry;

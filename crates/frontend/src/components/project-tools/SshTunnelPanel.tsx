@@ -5,13 +5,13 @@ import { workspaceProjectPathKey } from "../../lib/settings";
 import { cn } from "../../lib/shared/utils";
 import type { SshLocalForwardState } from "../../lib/terminal/sshLocalForwardTypes";
 import { reduceSshLocalForwardState } from "../../lib/terminal/sshLocalForwardTypes";
-import { tauriSshLocalForwardClient } from "../../lib/terminal/tauriSshLocalForwardClient";
 import type {
   TerminalClient,
   TerminalSession,
   TerminalSnapshot,
   TerminalSshPrompt,
 } from "../../lib/terminal/types";
+import { wsSshLocalForwardClient } from "../../lib/terminal/wsSshLocalForwardClient";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -356,7 +356,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
     if (!active) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
-    void tauriSshLocalForwardClient
+    void wsSshLocalForwardClient
       .subscribe((event) => {
         if (cancelled) return;
         setLocalForwards((current) => reduceSshLocalForwardState(current, event));
@@ -371,7 +371,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         if (cancelled) nextUnsubscribe();
         else unsubscribe = nextUnsubscribe;
         if (cancelled) return;
-        return tauriSshLocalForwardClient.list().then((snapshot) => {
+        return wsSshLocalForwardClient.list().then((snapshot) => {
           if (!cancelled) {
             setLocalForwards((current) => reduceSshLocalForwardState(current, snapshot));
           }
@@ -455,7 +455,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
   const handleStopForward = useCallback((forwardId: string, sessionId: string) => {
     setStoppingForwardIds((current) => new Set(current).add(forwardId));
     setForwardErrorsBySessionId((current) => ({ ...current, [sessionId]: "" }));
-    void tauriSshLocalForwardClient
+    void wsSshLocalForwardClient
       .stop({ forwardId, sessionId })
       .then((response) => {
         setLocalForwards((current) => reduceSshLocalForwardState(current, response));
@@ -486,6 +486,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
     });
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: visibleSessionsKey 是刻意的成员变化触发 key，effect 内部经 ref 读列表。
   useEffect(() => {
     // Latency probes only run while the tab is visible. The interval callback
     // reads the latest session list from a ref so reconcile-produced array
@@ -1615,7 +1616,7 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
           sessionId={forwardModalSession.id}
           projectPathKey={forwardModalSession.projectPathKey}
           subtitle={`${sessionTitle(forwardModalSession, t("projectTools.sshTunnelTitle"))} · ${sessionEndpointLabel(forwardModalSession)}`}
-          client={tauriSshLocalForwardClient}
+          client={wsSshLocalForwardClient}
           onClose={() => setForwardModalSessionId(null)}
           onStarted={(action) => {
             setLocalForwards((current) => reduceSshLocalForwardState(current, action));
