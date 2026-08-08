@@ -149,3 +149,148 @@ test("composer serialization preserves newlines around mention chips", () => {
     ],
   );
 });
+
+const reviewerSkill = {
+  name: "reviewer",
+  description: "Review changed code",
+  skillFile: "reviewer/SKILL.md",
+  baseDir: "reviewer",
+};
+
+function structuredClipboardSegments() {
+  return [
+    { type: "text", text: "Inspect " },
+    {
+      type: "fileMention",
+      reference: { path: "src/App.tsx", kind: "file" },
+    },
+    {
+      type: "fileMention",
+      reference: { path: "docs/guides", kind: "dir" },
+    },
+    { type: "skillMention", skill: reviewerSkill },
+    {
+      type: "commitMention",
+      commit: {
+        sha: "abcdef1234567890",
+        shortSha: "abcdef1",
+        subject: "Preserve tags",
+        body: "Full commit body",
+        authorName: "Author",
+        authorEmail: "author@example.com",
+        authorDate: "2026-08-08T00:00:00Z",
+        fileCount: 2,
+        filesChanged: 2,
+        insertions: 12,
+        deletions: 3,
+        stat: "2 files changed",
+        remoteName: "origin",
+        remoteUrl: "https://github.com/example/repo.git",
+        githubUrl: "https://github.com/example/repo/commit/abcdef1234567890",
+      },
+    },
+    {
+      type: "gitFileMention",
+      file: {
+        path: "src/App.tsx",
+        oldPath: "src/OldApp.tsx",
+        status: "M",
+        commitSha: "abcdef1234567890",
+        shortSha: "abcdef1",
+        refName: "main",
+        remoteName: "origin",
+        remoteUrl: "https://github.com/example/repo.git",
+        githubUrl:
+          "https://github.com/example/repo/blob/abcdef1234567890/src/App.tsx",
+      },
+    },
+    {
+      type: "codeMention",
+      reference: { path: "src/App.tsx", startLine: 4, endLine: 9 },
+    },
+    {
+      type: "largePaste",
+      paste: {
+        id: "large-paste-copy",
+        label: "Pasted text 1",
+        text: "large\nclipboard\nbody",
+        charCount: 999,
+        lineCount: 999,
+        preview: "stale preview",
+      },
+    },
+  ];
+}
+
+test("composer clipboard payload round trips every structured tag", () => {
+  const payload = composer.serializeComposerClipboardPayload(structuredClipboardSegments());
+  const restored = composer.parseComposerClipboardPayload(payload, [reviewerSkill]);
+
+  assert.deepEqual(
+    restored.map((segment) => segment.type),
+    [
+      "text",
+      "fileMention",
+      "fileMention",
+      "skillMention",
+      "commitMention",
+      "gitFileMention",
+      "codeMention",
+      "largePaste",
+    ],
+  );
+  assert.equal(restored[1].reference.path, "src/App.tsx");
+  assert.equal(restored[2].reference.kind, "dir");
+  assert.deepEqual(restored[3].skill, reviewerSkill);
+  assert.equal(restored[4].commit.body, "Full commit body");
+  assert.equal(restored[5].file.oldPath, "src/OldApp.tsx");
+  assert.deepEqual(restored[6].reference, {
+    path: "src/App.tsx",
+    startLine: 4,
+    endLine: 9,
+  });
+  assert.equal(restored[7].paste.charCount, "large\nclipboard\nbody".length);
+  assert.equal(restored[7].paste.lineCount, 3);
+});
+
+test("clipboard skill metadata cannot escape the currently enabled skill", () => {
+  const payload = composer.serializeComposerClipboardPayload([
+    {
+      type: "skillMention",
+      skill: { ...reviewerSkill, baseDir: "another-skill" },
+    },
+  ]);
+  assert.deepEqual(composer.parseComposerClipboardPayload(payload, [reviewerSkill]), [
+    { type: "text", text: "/reviewer" },
+  ]);
+});
+
+test("serialized user bubble tokens restore composer tags as a plain-text fallback", () => {
+  const text = [
+    "Inspect",
+    "[App.tsx](src/App.tsx)",
+    "[guides](docs/guides/)",
+    "/reviewer",
+    "[commit abcdef1: Preserve tags](https://github.com/example/repo/commit/abcdef1234567890)",
+    "[git file main: src/App.tsx](https://github.com/example/repo/blob/abcdef1234567890/src/App.tsx)",
+    "[App.tsx:4-9](src/App.tsx#L4-L9)",
+  ].join(" ");
+  const restored = composer.parseSerializedComposerText(text, [reviewerSkill]);
+  assert.deepEqual(
+    restored.filter((segment) => segment.type !== "text").map((segment) => segment.type),
+    [
+      "fileMention",
+      "fileMention",
+      "skillMention",
+      "commitMention",
+      "gitFileMention",
+      "codeMention",
+    ],
+  );
+  assert.equal(composer.parseSerializedComposerText("[OpenAI](https://openai.com)", []), null);
+});
+
+test("outbound skill tokens use the same slash contract as composer and user bubbles", () => {
+  const draft = draftFromSegments([{ type: "skillMention", skill: reviewerSkill }]);
+  assert.equal(draftText.buildTextFromComposerDraft(draft), "/reviewer");
+});

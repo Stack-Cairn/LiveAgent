@@ -33,6 +33,7 @@ import {
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
 } from "../../lib/chat/messages/mentionReferences";
+import { tokenizeUserMessage } from "../../lib/chat/messages/userMessageContent";
 import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
 import { readClipboardText } from "../../lib/system/clipboardText";
@@ -175,6 +176,12 @@ export type MentionComposerDraft = {
   isEmpty: boolean;
 };
 
+type ComposerClipboardSnapshot = {
+  text: string;
+  html: string;
+  payload: string;
+};
+
 export interface MentionComposerProps {
   /** Called when user presses Enter (without Shift). */
   onSend: () => void;
@@ -236,6 +243,9 @@ const CODE_MENTION_PATH_ATTR = "data-code-mention-path";
 const CODE_MENTION_START_ATTR = "data-code-mention-start";
 const CODE_MENTION_END_ATTR = "data-code-mention-end";
 const LARGE_PASTE_TAG_ATTR = "data-large-paste-id";
+export const COMPOSER_CLIPBOARD_MIME = "application/x-liveagent-composer-draft+json";
+const COMPOSER_CLIPBOARD_HTML_ATTR = "data-liveagent-composer-clipboard";
+const COMPOSER_CLIPBOARD_VERSION = 1;
 const LARGE_PASTE_CHAR_THRESHOLD = 8_000;
 const LARGE_PASTE_LINE_THRESHOLD = 200;
 const LARGE_PASTE_PREVIEW_CHARS = 160;
@@ -451,7 +461,11 @@ function serializeChildren(
   parent: Node,
   largePastes: Map<string, MentionComposerLargePaste>,
 ): string {
-  return serializeChildrenToSegments(parent, largePastes)
+  return serializeDraftSegments(serializeChildrenToSegments(parent, largePastes));
+}
+
+function serializeDraftSegments(segments: MentionComposerDraftSegment[]) {
+  return segments
     .map((segment) => {
       if (segment.type === "fileMention") return formatFileMentionToken(segment.reference);
       if (segment.type === "largePaste") return segment.paste.text;
@@ -488,23 +502,37 @@ function editorSelectionRange(root: HTMLElement) {
   return editorRangeIsInsideRoot(root, range) ? range : null;
 }
 
-function resolveComposerSelectionText(
+export function serializeComposerClipboardPayload(segments: MentionComposerDraftSegment[]) {
+  return JSON.stringify({ version: COMPOSER_CLIPBOARD_VERSION, segments });
+}
+
+function resolveComposerSelection(
   root: HTMLElement | null,
   largePastes: Map<string, MentionComposerLargePaste>,
-) {
-  if (!root) return "";
+): ComposerClipboardSnapshot | null {
+  if (!root) return null;
 
   const selection = window.getSelection();
   if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
-    return "";
+    return null;
   }
 
   const range = selection.getRangeAt(0);
   if (!editorRangeIsInsideRoot(root, range)) {
-    return "";
+    return null;
   }
 
-  return normalizeSerializedText(serializeChildren(range.cloneContents(), largePastes));
+  const fragment = range.cloneContents();
+  const segments = serializeChildrenToSegments(fragment, largePastes);
+  const payload = serializeComposerClipboardPayload(segments);
+  const htmlWrapper = document.createElement("div");
+  htmlWrapper.setAttribute(COMPOSER_CLIPBOARD_HTML_ATTR, payload);
+  htmlWrapper.appendChild(fragment);
+  return {
+    text: normalizeSerializedText(serializeDraftSegments(segments)),
+    html: htmlWrapper.outerHTML,
+    payload,
+  };
 }
 
 function selectionContainsPoint(
@@ -587,6 +615,19 @@ function selectComposerContents(root: HTMLElement) {
   selection?.addRange(range);
 }
 
+function pruneLargePastesInRange(
+  range: Range,
+  largePastes: Map<string, MentionComposerLargePaste>,
+) {
+  range
+    .cloneContents()
+    .querySelectorAll<HTMLElement>(`[${LARGE_PASTE_TAG_ATTR}]`)
+    .forEach((chip) => {
+      const largePasteId = chip.getAttribute(LARGE_PASTE_TAG_ATTR);
+      if (largePasteId) largePastes.delete(largePasteId);
+    });
+}
+
 function deleteComposerSelection(
   root: HTMLElement,
   largePastes: Map<string, MentionComposerLargePaste>,
@@ -597,16 +638,7 @@ function deleteComposerSelection(
   const range = selection.getRangeAt(0);
   if (!editorRangeIsInsideRoot(root, range)) return false;
 
-  range
-    .cloneContents()
-    .querySelectorAll<HTMLElement>(`[${LARGE_PASTE_TAG_ATTR}]`)
-    .forEach((chip) => {
-      const largePasteId = chip.getAttribute(LARGE_PASTE_TAG_ATTR);
-      if (largePasteId) {
-        largePastes.delete(largePasteId);
-      }
-    });
-
+  pruneLargePastesInRange(range, largePastes);
   range.deleteContents();
   selection.removeAllRanges();
   selection.addRange(range);
@@ -907,6 +939,259 @@ function codeMentionFromElement(el: HTMLElement): CodeMentionReference | null {
     startLine: Number(el.getAttribute(CODE_MENTION_START_ATTR) ?? "1"),
     endLine: Number(el.getAttribute(CODE_MENTION_END_ATTR) ?? "1"),
   });
+}
+
+function clipboardRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function clipboardString(record: Record<string, unknown>, key: string, fallback = "") {
+  const value = record[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function clipboardNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function normalizeClipboardSkill(
+  rawSkill: Record<string, unknown>,
+  enabledSkills: readonly MentionComposerSkill[],
+): MentionComposerDraftSegment | null {
+  const name = clipboardString(rawSkill, "name").trim();
+  const skillFile = clipboardString(rawSkill, "skillFile").trim().replace(/\\/g, "/");
+  const baseDir = clipboardString(rawSkill, "baseDir").trim().replace(/\\/g, "/");
+  if (!name || !skillFile || !baseDir) return null;
+
+  const enabledSkill = enabledSkills.find(
+    (candidate) =>
+      candidate.name === name &&
+      candidate.skillFile.trim().replace(/\\/g, "/") === skillFile &&
+      candidate.baseDir.trim().replace(/\\/g, "/") === baseDir,
+  );
+  if (!enabledSkill) {
+    return { type: "text", text: `/${name}` };
+  }
+  return { type: "skillMention", skill: enabledSkill };
+}
+
+function normalizeClipboardCommit(
+  rawCommit: Record<string, unknown>,
+): MentionComposerCommitMention | null {
+  const sha = clipboardString(rawCommit, "sha").trim();
+  if (!/^[0-9a-f]{7,64}$/i.test(sha)) return null;
+  return normalizeCommitMention({
+    sha,
+    shortSha: clipboardString(rawCommit, "shortSha", sha.slice(0, 7)),
+    subject: clipboardString(rawCommit, "subject"),
+    body: clipboardString(rawCommit, "body"),
+    authorName: clipboardString(rawCommit, "authorName"),
+    authorEmail: clipboardString(rawCommit, "authorEmail"),
+    authorDate: clipboardString(rawCommit, "authorDate"),
+    fileCount: clipboardNumber(rawCommit, "fileCount"),
+    filesChanged: clipboardNumber(rawCommit, "filesChanged"),
+    insertions: clipboardNumber(rawCommit, "insertions"),
+    deletions: clipboardNumber(rawCommit, "deletions"),
+    stat: clipboardString(rawCommit, "stat"),
+    remoteName: clipboardString(rawCommit, "remoteName"),
+    remoteUrl: clipboardString(rawCommit, "remoteUrl"),
+    githubUrl: clipboardString(rawCommit, "githubUrl") || undefined,
+  });
+}
+
+function normalizeClipboardGitFile(
+  rawFile: Record<string, unknown>,
+): MentionComposerGitFileMention | null {
+  const path = clipboardString(rawFile, "path").trim().replace(/\\/g, "/");
+  const commitSha = clipboardString(rawFile, "commitSha").trim();
+  if (!createFileMentionReference(path, "file") || !commitSha) return null;
+  return normalizeGitFileMention({
+    path,
+    oldPath: clipboardString(rawFile, "oldPath") || undefined,
+    status: clipboardString(rawFile, "status"),
+    commitSha,
+    shortSha: clipboardString(rawFile, "shortSha", commitSha.slice(0, 7)),
+    refName: clipboardString(rawFile, "refName"),
+    remoteName: clipboardString(rawFile, "remoteName"),
+    remoteUrl: clipboardString(rawFile, "remoteUrl"),
+    githubUrl: clipboardString(rawFile, "githubUrl") || undefined,
+  });
+}
+
+function normalizeComposerClipboardSegment(
+  rawSegment: unknown,
+  enabledSkills: readonly MentionComposerSkill[],
+): MentionComposerDraftSegment | null {
+  const segment = clipboardRecord(rawSegment);
+  if (!segment) return null;
+  const type = clipboardString(segment, "type");
+
+  if (type === "text") {
+    return { type, text: normalizeLogicalLineEndings(clipboardString(segment, "text")) };
+  }
+  if (type === "fileMention") {
+    const rawReference = clipboardRecord(segment.reference);
+    if (!rawReference) return null;
+    const kind = clipboardString(rawReference, "kind") === "dir" ? "dir" : "file";
+    const reference = createFileMentionReference(clipboardString(rawReference, "path"), kind);
+    return reference ? { type, reference } : null;
+  }
+  if (type === "largePaste") {
+    const rawPaste = clipboardRecord(segment.paste);
+    if (!rawPaste) return null;
+    const id = clipboardString(rawPaste, "id").trim();
+    const label = clipboardString(rawPaste, "label").trim();
+    const text = normalizeLogicalLineEndings(clipboardString(rawPaste, "text"));
+    if (!id || !label || !text) return null;
+    return {
+      type,
+      paste: {
+        id,
+        label,
+        text,
+        charCount: text.length,
+        lineCount: countLargePasteLines(text),
+        preview: normalizeLargePastePreview(text),
+      },
+    };
+  }
+  if (type === "skillMention") {
+    const rawSkill = clipboardRecord(segment.skill);
+    return rawSkill ? normalizeClipboardSkill(rawSkill, enabledSkills) : null;
+  }
+  if (type === "commitMention") {
+    const rawCommit = clipboardRecord(segment.commit);
+    const commit = rawCommit ? normalizeClipboardCommit(rawCommit) : null;
+    return commit ? { type, commit } : null;
+  }
+  if (type === "gitFileMention") {
+    const rawFile = clipboardRecord(segment.file);
+    const file = rawFile ? normalizeClipboardGitFile(rawFile) : null;
+    return file ? { type, file } : null;
+  }
+  if (type === "codeMention") {
+    const rawReference = clipboardRecord(segment.reference);
+    if (!rawReference) return null;
+    const reference = createCodeMentionReference({
+      path: clipboardString(rawReference, "path"),
+      startLine: clipboardNumber(rawReference, "startLine"),
+      endLine: clipboardNumber(rawReference, "endLine"),
+    });
+    return reference ? { type, reference } : null;
+  }
+  return null;
+}
+
+export function parseComposerClipboardPayload(
+  rawPayload: string,
+  enabledSkills: readonly MentionComposerSkill[] = [],
+): MentionComposerDraftSegment[] | null {
+  if (!rawPayload) return null;
+  try {
+    const payload = clipboardRecord(JSON.parse(rawPayload));
+    if (!payload || payload.version !== COMPOSER_CLIPBOARD_VERSION) return null;
+    if (!Array.isArray(payload.segments) || payload.segments.length > 10_000) return null;
+    const segments: MentionComposerDraftSegment[] = [];
+    for (const rawSegment of payload.segments) {
+      const segment = normalizeComposerClipboardSegment(rawSegment, enabledSkills);
+      if (!segment) return null;
+      if (segment.type !== "text" || segment.text) {
+        segments.push(segment);
+      }
+    }
+    return segments.length > 0 ? segments : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseSerializedComposerText(
+  value: string,
+  enabledSkills: readonly MentionComposerSkill[] = [],
+): MentionComposerDraftSegment[] | null {
+  const segments: MentionComposerDraftSegment[] = [];
+  let matched = false;
+  for (const segment of tokenizeUserMessage(normalizeLogicalLineEndings(value), [])) {
+    if (segment.type === "text") {
+      pushTextSegment(segments, segment.value);
+    } else if (segment.type === "mention") {
+      segments.push({ type: "fileMention", reference: segment.reference });
+      matched = true;
+    } else if (segment.type === "skill") {
+      const enabledSkill = enabledSkills.find((skill) => skill.name === segment.name);
+      if (enabledSkill) {
+        segments.push({ type: "skillMention", skill: enabledSkill });
+        matched = true;
+      } else {
+        pushTextSegment(segments, `/${segment.name}`);
+      }
+    } else if (segment.type === "commit") {
+      segments.push({
+        type: "commitMention",
+        commit: normalizeCommitMention({
+          body: "",
+          authorName: "",
+          authorEmail: "",
+          authorDate: "",
+          fileCount: 0,
+          filesChanged: 0,
+          insertions: 0,
+          deletions: 0,
+          stat: "",
+          remoteName: "",
+          remoteUrl: "",
+          ...segment.commit,
+        }),
+      });
+      matched = true;
+    } else if (segment.type === "gitFile") {
+      segments.push({
+        type: "gitFileMention",
+        file: normalizeGitFileMention({
+          status: "",
+          remoteName: "",
+          remoteUrl: "",
+          ...segment.file,
+        }),
+      });
+      matched = true;
+    } else if (segment.type === "codeRef") {
+      segments.push({ type: "codeMention", reference: segment.reference });
+      matched = true;
+    }
+  }
+  return matched ? segments : null;
+}
+
+function readComposerClipboardSegments(
+  data: DataTransfer,
+  enabledSkills: readonly MentionComposerSkill[],
+) {
+  const privatePayload = data.getData(COMPOSER_CLIPBOARD_MIME);
+  const privateSegments = parseComposerClipboardPayload(privatePayload, enabledSkills);
+  if (privateSegments) return privateSegments;
+
+  const html = data.getData("text/html");
+  if (!html) return null;
+  const wrapper = new DOMParser()
+    .parseFromString(html, "text/html")
+    .querySelector<HTMLElement>(`[${COMPOSER_CLIPBOARD_HTML_ATTR}]`);
+  return parseComposerClipboardPayload(
+    wrapper?.getAttribute(COMPOSER_CLIPBOARD_HTML_ATTR) ?? "",
+    enabledSkills,
+  );
+}
+
+function writeComposerClipboardSnapshot(data: DataTransfer, snapshot: ComposerClipboardSnapshot) {
+  data.clearData();
+  data.setData("text/plain", snapshot.text);
+  data.setData("text/html", snapshot.html);
+  try {
+    data.setData(COMPOSER_CLIPBOARD_MIME, snapshot.payload);
+  } catch {}
 }
 
 function createMentionIcon(svgMarkup: string) {
@@ -1386,6 +1671,89 @@ function createLargePasteChip(paste: MentionComposerLargePaste) {
     ),
   );
   return chip;
+}
+
+function createComposerSegmentNode(
+  segment: MentionComposerDraftSegment,
+  largePastes: Map<string, MentionComposerLargePaste>,
+): Node | null {
+  if (segment.type === "text") {
+    return segment.text ? document.createTextNode(normalizeLogicalLineEndings(segment.text)) : null;
+  }
+  if (segment.type === "fileMention") {
+    return createFileMentionChip(segment.reference.path, segment.reference.kind);
+  }
+  if (segment.type === "largePaste") {
+    largePastes.set(segment.paste.id, segment.paste);
+    return createLargePasteChip(segment.paste);
+  }
+  if (segment.type === "skillMention") {
+    return createSkillMentionChip(segment.skill);
+  }
+  if (segment.type === "commitMention") {
+    return createCommitMentionChip(segment.commit);
+  }
+  if (segment.type === "gitFileMention") {
+    return createGitFileMentionChip(segment.file);
+  }
+  return createCodeMentionChip(segment.reference);
+}
+
+function insertComposerSegmentsAtSelection(
+  root: HTMLElement,
+  segments: MentionComposerDraftSegment[],
+  largePastes: Map<string, MentionComposerLargePaste>,
+) {
+  const nodes = segments
+    .map((segment) => createComposerSegmentNode(segment, largePastes))
+    .filter((node): node is Node => node !== null);
+  if (nodes.length === 0) return false;
+
+  const selection = window.getSelection();
+  let range = editorSelectionRange(root);
+  if (!range) {
+    range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+
+  // A caret parked inside a non-editable chip (WebKit drops clicks there)
+  // must hop after the chip instead of letting the boundary extension below
+  // swallow the chip into the replaced range.
+  if (range.collapsed) {
+    const chip = closestComposerChipFromNode(root, range.startContainer);
+    if (chip) {
+      range.setStartAfter(chip);
+      range.collapse(true);
+    }
+  } else {
+    const startChip = closestComposerChipFromNode(root, range.startContainer);
+    if (startChip) range.setStartBefore(startChip);
+    const endChip = closestComposerChipFromNode(root, range.endContainer);
+    if (endChip) range.setEndAfter(endChip);
+    pruneLargePastesInRange(range, largePastes);
+    range.deleteContents();
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const node of nodes) fragment.appendChild(node);
+  const lastNode = nodes[nodes.length - 1];
+  range.insertNode(fragment);
+
+  if (lastNode.nodeType === Node.TEXT_NODE) {
+    placeCaretInTextNode(lastNode as Text, (lastNode.textContent ?? "").length);
+  } else if (isComposerChipElement(lastNode)) {
+    const anchor = ensureCaretAnchorAfterChip(lastNode);
+    if (anchor) placeCaretInTextNode(anchor.textNode, anchor.offset);
+  } else if (selection) {
+    const caret = document.createRange();
+    caret.setStartAfter(lastNode);
+    caret.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(caret);
+  }
+  ensureTrailingCaretAnchor(root);
+  return true;
 }
 
 function insertNodeAtCursor(root: HTMLElement, node: HTMLElement) {
@@ -3031,6 +3399,20 @@ export const MentionComposer = memo(
         return;
       }
 
+      // Same token-restore fallback as handlePaste: the native clipboard
+      // channel is text-only, so serialized tags must be rebuilt here too.
+      const serializedSegments = parseSerializedComposerText(text, enabledSkills);
+      if (
+        serializedSegments &&
+        insertComposerSegmentsAtSelection(el, serializedSegments, largePastesRef.current)
+      ) {
+        closeMentionSession();
+        refreshEmptyState();
+        refreshMention();
+        closeComposerContextMenu();
+        return;
+      }
+
       document.execCommand("insertText", false, text);
       closeMentionSession();
       refreshEmptyState();
@@ -3040,6 +3422,7 @@ export const MentionComposer = memo(
       closeComposerContextMenu,
       closeMentionSession,
       disabled,
+      enabledSkills,
       insertLargePaste,
       refreshEmptyState,
       refreshMention,
@@ -3073,7 +3456,7 @@ export const MentionComposer = memo(
         let rangeForMenu: Range | null = null;
 
         if (selectionContainsPoint(el, selection, event.clientX, event.clientY)) {
-          selectedText = resolveComposerSelectionText(el, largePastesRef.current);
+          selectedText = resolveComposerSelection(el, largePastesRef.current)?.text ?? "";
           rangeForMenu = editorSelectionRange(el)?.cloneRange() ?? null;
         } else {
           el.focus({ preventScroll: true });
@@ -3497,6 +3880,33 @@ export const MentionComposer = memo(
       ],
     );
 
+    const handleCopy = useCallback((event: ClipboardEvent<HTMLDivElement>) => {
+      const snapshot = resolveComposerSelection(editorRef.current, largePastesRef.current);
+      if (!snapshot) return;
+      event.preventDefault();
+      writeComposerClipboardSnapshot(event.clipboardData, snapshot);
+    }, []);
+
+    const handleCut = useCallback(
+      (event: ClipboardEvent<HTMLDivElement>) => {
+        if (disabled || typewriterRef.current) {
+          event.preventDefault();
+          return;
+        }
+        const editor = editorRef.current;
+        const snapshot = resolveComposerSelection(editor, largePastesRef.current);
+        if (!editor || !snapshot) return;
+        event.preventDefault();
+        writeComposerClipboardSnapshot(event.clipboardData, snapshot);
+        resetPromptHistoryRecall();
+        if (!deleteComposerSelection(editor, largePastesRef.current)) return;
+        closeMentionSession();
+        refreshEmptyState();
+        refreshMention();
+      },
+      [closeMentionSession, disabled, refreshEmptyState, refreshMention, resetPromptHistoryRecall],
+    );
+
     const handlePaste = useCallback(
       (e: ClipboardEvent<HTMLDivElement>) => {
         if (disabled) {
@@ -3510,6 +3920,23 @@ export const MentionComposer = memo(
         // The large-paste chip path mutates the DOM without an input event,
         // so the recall session must reset here as well.
         resetPromptHistoryRecall();
+        const clipboardSegments = readComposerClipboardSegments(e.clipboardData, enabledSkills);
+        if (clipboardSegments) {
+          e.preventDefault();
+          const restoredSegments = clipboardSegments.map((segment) =>
+            segment.type === "largePaste"
+              ? { type: "largePaste" as const, paste: createLargePaste(segment.paste.text) }
+              : segment,
+          );
+          const editor = editorRef.current;
+          if (editor) {
+            insertComposerSegmentsAtSelection(editor, restoredSegments, largePastesRef.current);
+          }
+          closeMentionSession();
+          refreshEmptyState();
+          refreshMention();
+          return;
+        }
         const clipboardFiles = extractClipboardFiles(e.clipboardData);
         if (clipboardFiles.length > 0) {
           e.preventDefault();
@@ -3522,12 +3949,27 @@ export const MentionComposer = memo(
           insertLargePaste(text);
           return;
         }
+        const serializedSegments = parseSerializedComposerText(text, enabledSkills);
+        const editor = editorRef.current;
+        if (
+          serializedSegments &&
+          editor &&
+          insertComposerSegmentsAtSelection(editor, serializedSegments, largePastesRef.current)
+        ) {
+          closeMentionSession();
+          refreshEmptyState();
+          refreshMention();
+          return;
+        }
         insertPlainTextWithUndo(text);
         refreshEmptyState();
         refreshMention();
       },
       [
         disabled,
+        closeMentionSession,
+        createLargePaste,
+        enabledSkills,
         insertLargePaste,
         onPasteFiles,
         refreshEmptyState,
@@ -3705,6 +4147,8 @@ export const MentionComposer = memo(
           onMouseLeave={scheduleCommitTooltipClose}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onCopy={handleCopy}
+          onCut={handleCut}
           onPaste={handlePaste}
           onContextMenu={handleContextMenu}
           onCompositionStart={handleCompositionStart}

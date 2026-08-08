@@ -87,7 +87,7 @@ export function buildQueuedChatTurnPreview(draft: MentionComposerDraft) {
       case "largePaste":
         return segment.paste.label;
       case "skillMention":
-        return `$${segment.skill.name}`;
+        return `/${segment.skill.name}`;
       case "commitMention":
         return segment.commit.subject || segment.commit.shortSha || segment.commit.sha;
       case "gitFileMention":
