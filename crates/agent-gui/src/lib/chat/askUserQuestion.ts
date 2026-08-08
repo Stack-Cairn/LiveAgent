@@ -11,10 +11,7 @@ export const ASK_USER_QUESTION_MAX_OPTIONS = 6;
  *  运行时实际窗口由设置 system.interactiveTimeoutMinutes 驱动（正数分钟；超长≈永不超时），
  *  此常量仅作未注入时的兜底默认，保持历史行为与测试注入口径一致。 */
 export const ASK_USER_QUESTION_TIMEOUT_MS = 3 * 60 * 1000;
-/** 交互式应答超时（分钟）的默认值与上限，与桌面端 Rust 归一化同口径。
- *  上限存在的意义不是规避 setTimeout 溢出（那由分段续期解决），
- *  而是避免手改配置写入荒谬值。 */
-export const INTERACTIVE_TIMEOUT_MIN_MINUTES = 1;
+/** 倒计时可采信的最大窗口，与设置滑块最高档一致。 */
 export const INTERACTIVE_TIMEOUT_MAX_MINUTES = 99_999;
 /** setTimeout 的延迟形参是 IDL long（32 位有符号），超过 2^31-1 会被 ToInt32
  *  回绕：99999 分钟被截成约 19.7 天，而 35792～200000 分钟之间的值回绕成负数后
