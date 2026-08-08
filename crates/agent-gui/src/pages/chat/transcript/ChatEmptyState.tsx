@@ -114,35 +114,35 @@ export function ChatEmptyState({
             <button
               type="button"
               onClick={() => onOpenSettings("providers")}
-              className="chat-hero-cta-enter mt-5 inline-flex h-8 items-center gap-2 rounded-lg bg-foreground/[0.05] px-3 text-sm font-normal text-foreground/85 transition-colors hover:bg-foreground/[0.08] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              className="chat-hero-cta-enter mt-5 inline-flex h-8 items-center gap-2 rounded-full bg-foreground px-3.5 text-sm font-medium text-background transition-[transform,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:opacity-90 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-reduce:active:scale-100"
             >
-              <Settings className="h-4 w-4 text-foreground/65" />
+              <Settings className="h-4 w-4 opacity-80" />
               {t("chat.goToSettings")}
             </button>
           ) : null}
         </>
       ) : (
         <>
-          <div className="chat-hero-title-enter whitespace-nowrap text-center text-[calc(20px*var(--zone-font-scale,1))] font-semibold leading-7 tracking-tight text-foreground">
+          <div className="chat-hero-title-enter whitespace-nowrap text-center text-[calc(22px*var(--zone-font-scale,1))] font-semibold leading-7 tracking-tight text-foreground">
             {t(GREETING_KEYS[period])}，{t("chat.greetingSubtitle")}
           </div>
           {onSuggestionSelect ? (
-            <div className="mt-7 grid w-full max-w-[520px] grid-cols-1 gap-2 px-6 sm:grid-cols-3 sm:px-4">
+            <div className="mt-8 grid w-full max-w-[540px] grid-cols-1 gap-2.5 px-6 sm:grid-cols-3 sm:px-4">
               {SUGGESTION_CARDS.map((card, index) => (
                 <button
                   key={card.key}
                   type="button"
                   disabled={suggestionsDisabled}
                   onClick={() => onSuggestionSelect(t(card.promptKey))}
-                  style={{ "--chat-hero-delay": `${0.26 + index * 0.08}s` } as CSSProperties}
-                  className="chat-hero-card-enter flex h-11 items-center gap-2 rounded-lg bg-foreground/[0.025] px-2.5 text-left text-foreground/85 transition-colors hover:bg-foreground/[0.055] hover:text-foreground focus-visible:bg-foreground/[0.055] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50"
+                  style={{ "--chat-hero-delay": `${0.2 + index * 0.06}s` } as CSSProperties}
+                  className="chat-hero-card-enter chat-suggest-card flex h-12 items-center gap-2.5 rounded-2xl px-3 text-left text-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100"
                 >
                   <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center ${card.chipClassName}`}
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/[0.04] ${card.chipClassName}`}
                   >
                     <card.icon className="h-4 w-4" />
                   </span>
-                  <span className="min-w-0 truncate text-[calc(14px*var(--zone-font-scale,1))] font-medium leading-5 text-foreground/90">
+                  <span className="min-w-0 truncate text-[calc(13.5px*var(--zone-font-scale,1))] font-medium leading-5 tracking-tight text-foreground/90">
                     {t(card.titleKey)}
                   </span>
                 </button>

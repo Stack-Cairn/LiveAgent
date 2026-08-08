@@ -173,6 +173,15 @@
       "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Code", Consolas, "Liberation Mono",
       monospace;
 
+    /* Apple motion vocabulary (shared with desktop GUI mirrored components) */
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
+    --duration-press: 100ms;
+    --duration-ui: 200ms;
+    --duration-sheet: 320ms;
+    --press-scale: 0.97;
+
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
 
@@ -2373,4 +2382,383 @@ body > div:not(#root) [data-streamdown="mermaid"]:has([style*="cursor:grabbing"]
  * it beats the chip's own mx-0.5 utility (unlayered wins in Tailwind v4). */
 .mention-composer .mention-chip {
   margin-inline-end: 0.375rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * Mirrored GUI materials (RightDock / FloorNav / MCP Hub). Keep in sync with
+ * crates/agent-gui/src/index.css so byte-identical TSX components render.
+ * --------------------------------------------------------------------------- */
+
+.chat-sidebar-section-label {
+  font-size: calc(11px * var(--zone-font-scale, 1));
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  color: hsl(var(--muted-foreground) / 0.92);
+}
+
+.floor-nav-panel {
+  border: 1px solid hsl(var(--border) / 0.5);
+  background: hsl(var(--background) / 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.5) inset,
+    0 16px 40px -18px hsl(15 23% 10% / 0.32);
+  transform-origin: top right;
+  animation: floorNavPanelIn 180ms var(--ease-out);
+}
+.dark .floor-nav-panel {
+  border-color: hsl(0 0% 100% / 0.1);
+  background: hsl(0 0% 100% / 0.07);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.06) inset,
+    0 16px 40px -18px hsl(0 0% 0% / 0.65);
+}
+
+@keyframes floorNavPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.96);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.floor-nav-row {
+  transition: background-color 80ms var(--ease-out);
+}
+.floor-nav-row:has(button:active) {
+  background-color: hsl(var(--foreground) / 0.09);
+}
+.floor-nav-row[data-floor-active]:has(button:active) {
+  background-color: hsl(var(--foreground) / 0.12);
+}
+
+.floor-nav-pin {
+  transition:
+    color 120ms var(--ease-out),
+    opacity 120ms var(--ease-out),
+    transform 100ms var(--ease-out),
+    background-color 120ms var(--ease-out);
+}
+.floor-nav-pin:active {
+  transform: scale(var(--press-scale));
+}
+
+.floor-nav-marker {
+  transition:
+    width 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    opacity 150ms var(--ease-out);
+}
+.floor-nav-marker:active {
+  opacity: 1;
+  background-color: hsl(var(--foreground) / 0.7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floor-nav-panel {
+    animation: none;
+  }
+  .floor-nav-pin:active {
+    transform: none;
+  }
+  .floor-nav-marker {
+    transition: background-color 120ms ease;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .floor-nav-panel {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: hsl(var(--background));
+  }
+}
+
+.project-tools-panel {
+  --project-tools-motion-duration: 200ms;
+  --project-tools-motion-ease: var(--ease-apple, cubic-bezier(0.32, 0.72, 0, 1));
+  background: hsl(var(--sidebar-bg));
+  border-color: hsl(var(--sidebar-separator, var(--border)) / 0.85);
+  transition:
+    width var(--project-tools-motion-duration) var(--project-tools-motion-ease),
+    border-color var(--project-tools-motion-duration) var(--project-tools-motion-ease),
+    transform var(--project-tools-motion-duration) var(--project-tools-motion-ease);
+}
+.project-tools-panel-inner {
+  background: hsl(var(--sidebar-bg));
+}
+@media (min-width: 768px) {
+  .project-tools-panel {
+    overflow: hidden;
+  }
+  .project-tools-panel-inner {
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: var(--project-tools-panel-width);
+    min-width: var(--project-tools-panel-width);
+    transform: translate3d(0, 0, 0);
+    transition: transform var(--project-tools-motion-duration) var(--project-tools-motion-ease);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  .project-tools-panel[data-state="closed"] .project-tools-panel-inner {
+    transform: translate3d(100%, 0, 0);
+  }
+  .project-tools-panel[data-state="open"] .project-tools-panel-inner {
+    transform: translate3d(0, 0, 0);
+  }
+  .project-tools-panel[data-project-tools-resizing="true"] {
+    transition: none;
+  }
+  .project-tools-panel[data-project-tools-resizing="true"] .project-tools-panel-inner {
+    transition: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-tools-panel,
+  .project-tools-panel-inner {
+    transition: none;
+  }
+}
+.project-tools-panel-header {
+  position: relative;
+  height: 3.25rem;
+  border-bottom: none;
+  background: hsl(var(--background) / 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+}
+.project-tools-panel-header::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(var(--border) / 0.5) 12%,
+    hsl(var(--border) / 0.5) 88%,
+    transparent 100%
+  );
+  opacity: 0.75;
+}
+.project-tools-panel-tabs {
+  height: 2.5rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+.project-tools-panel-handle {
+  display: none;
+}
+@media (max-width: 767px) {
+  .project-tools-panel-handle {
+    display: block;
+    height: 0.25rem;
+    width: 2.5rem;
+    margin: 0.5rem auto 0;
+    border-radius: 999px;
+    background: hsl(var(--muted-foreground) / 0.35);
+  }
+}
+
+/*
+ * Skills / MCP Hub materials — unlayered so they beat utility glass strings
+ * on cards and banners.
+ */
+.hub-header-icon {
+  border: 1px solid hsl(0 0% 0% / 0.08);
+  background: hsl(240 12% 98% / 0.72);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  backdrop-filter: blur(20px) saturate(170%);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.85) inset,
+    0 4px 14px -10px hsl(220 25% 10% / 0.12);
+}
+.dark .hub-header-icon {
+  border-color: hsl(0 0% 100% / 0.1);
+  background: hsl(0 0% 100% / 0.06);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.06) inset,
+    0 4px 14px -10px hsl(0 0% 0% / 0.45);
+}
+
+.hub-glass-panel {
+  border-radius: 1rem;
+  border: 1px solid hsl(0 0% 0% / 0.08);
+  background: hsl(240 12% 97% / 0.55);
+  padding: 0.875rem 1rem;
+  -webkit-backdrop-filter: blur(24px) saturate(175%);
+  backdrop-filter: blur(24px) saturate(175%);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.75) inset,
+    0 8px 24px -16px hsl(220 25% 10% / 0.14);
+}
+.hub-glass-panel[data-tone="muted"] {
+  background: hsl(240 10% 96% / 0.5);
+  border-color: hsl(0 0% 0% / 0.06);
+}
+.hub-glass-panel[data-tone="error"] {
+  background: hsl(0 72% 96% / 0.7);
+  border-color: hsl(0 72% 51% / 0.28);
+}
+.hub-glass-panel[data-active] {
+  border-color: hsl(0 0% 0% / 0.12);
+  background: hsl(240 14% 98% / 0.7);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.85) inset,
+    0 10px 28px -14px hsl(220 25% 10% / 0.18);
+}
+.dark .hub-glass-panel {
+  border-color: hsl(0 0% 100% / 0.09);
+  background: hsl(0 0% 100% / 0.055);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.06) inset,
+    0 8px 24px -16px hsl(0 0% 0% / 0.55);
+}
+.dark .hub-glass-panel[data-tone="muted"] {
+  background: hsl(0 0% 100% / 0.035);
+  border-color: hsl(0 0% 100% / 0.07);
+}
+.dark .hub-glass-panel[data-tone="error"] {
+  background: hsl(0 55% 18% / 0.35);
+  border-color: hsl(0 62% 45% / 0.35);
+}
+.dark .hub-glass-panel[data-active] {
+  border-color: hsl(0 0% 100% / 0.12);
+  background: hsl(0 0% 100% / 0.08);
+}
+
+.hub-status-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid hsl(0 0% 0% / 0.08);
+  background: hsl(240 12% 97% / 0.52);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.8) inset,
+    0 10px 28px -16px hsl(220 25% 10% / 0.14);
+}
+.hub-status-banner[data-ready] {
+  border-color: hsl(0 0% 0% / 0.1);
+  background: hsl(240 14% 98% / 0.62);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.88) inset,
+    0 12px 32px -16px hsl(220 25% 10% / 0.16);
+}
+.dark .hub-status-banner {
+  border-color: hsl(0 0% 100% / 0.09);
+  background: hsl(0 0% 100% / 0.05);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.06) inset,
+    0 10px 28px -16px hsl(0 0% 0% / 0.55);
+}
+.dark .hub-status-banner[data-ready] {
+  border-color: hsl(0 0% 100% / 0.11);
+  background: hsl(0 0% 100% / 0.07);
+}
+
+.hub-segmented-track {
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 1rem;
+  border: 1px solid hsl(0 0% 0% / 0.08);
+  background: hsl(240 12% 97% / 0.5);
+  padding: 0.25rem;
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: 0 1px 0 hsl(0 0% 100% / 0.75) inset;
+}
+.dark .hub-segmented-track {
+  border-color: hsl(0 0% 100% / 0.08);
+  background: hsl(0 0% 100% / 0.04);
+  box-shadow: 0 1px 0 hsl(0 0% 100% / 0.05) inset;
+}
+
+.hub-segment-button {
+  position: relative;
+  display: inline-flex;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding-inline: 1rem;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: hsl(var(--muted-foreground));
+  transition:
+    background-color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    color 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    box-shadow 150ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+    transform 100ms var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.hub-segment-button:hover {
+  background: hsl(var(--background) / 0.65);
+  color: hsl(var(--foreground));
+}
+.hub-segment-button:active {
+  transform: scale(0.97);
+}
+.hub-segment-button[data-active] {
+  background: hsl(240 14% 99% / 0.92);
+  color: hsl(var(--foreground));
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.9) inset,
+    0 4px 12px -8px hsl(220 25% 10% / 0.16);
+  outline: 1px solid hsl(0 0% 0% / 0.08);
+}
+.dark .hub-segment-button[data-active] {
+  background: hsl(0 0% 100% / 0.09);
+  box-shadow:
+    0 1px 0 hsl(0 0% 100% / 0.08) inset,
+    0 4px 12px -8px hsl(0 0% 0% / 0.5);
+  outline-color: hsl(0 0% 100% / 0.1);
+}
+.hub-segment-count {
+  display: inline-flex;
+  height: 1rem;
+  min-width: 1rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding-inline: 0.25rem;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: hsl(var(--muted) / 0.7);
+  color: hsl(var(--muted-foreground));
+}
+.hub-segment-count[data-active] {
+  background: hsl(var(--foreground) / 0.08);
+  color: hsl(var(--foreground) / 0.85);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-segment-button:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .hub-header-icon,
+  .hub-glass-panel,
+  .hub-status-banner,
+  .hub-segmented-track {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: hsl(var(--background));
+  }
 }

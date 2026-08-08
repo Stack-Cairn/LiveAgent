@@ -119,7 +119,8 @@ export function MacOsTitleBarToggle({
     : trafficLightLeft + trafficLightWidth + MAC_OS_TITLEBAR_TOGGLE_GAP;
   return (
     <div
-      className="fixed z-49 flex items-center gap-0.5 transition-[left] duration-200 ease-out [-webkit-app-region:no-drag]"
+      // Keep in lockstep with .chat-history-sidebar drawer motion (200ms apple ease).
+      className="fixed z-49 flex items-center gap-0.5 transition-[left] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none [-webkit-app-region:no-drag]"
       style={{
         top: toggleTop,
         left: toggleLeft,

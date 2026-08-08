@@ -1984,7 +1984,43 @@ export function ChatPage(props: ChatPageProps) {
             />
           ) : (
             <>
-              <div className="relative z-20">
+              {/* Transcript fills the column; header overlays so content scrolls under. */}
+              <ChangedFilesActionsProvider value={changedFilesActions}>
+                <ChatTranscript
+                  conversationId={currentConversationId}
+                  workspaceRoot={currentConversationWorkspaceRoot}
+                  gitClient={tauriGitClient}
+                  followRef={scrollFollowRef}
+                  hasModels={hasModels}
+                  historyItems={transcriptItems}
+                  hasMoreHistory={conversationState.transcript.hasMoreBefore}
+                  onLoadEarlierHistory={handleLoadEarlierHistory}
+                  isHistorySwitching={conversationOpenState.showOverlay}
+                  isSending={isSending}
+                  isAgentMode={isAgentMode}
+                  showUsage={isAgentDevExecutionMode}
+                  usageContextWindow={currentModelContextWindow}
+                  liveTranscriptStore={liveTranscriptStore}
+                  isCompactionRunning={isCompactionRunning}
+                  bottomReservePx={composerOverlayHeight}
+                  contentWidth={settings.customSettings.chatTranscript.width}
+                  onContentWidthChange={handleChatTranscriptWidthChange}
+                  onOpenFileLink={handleOpenChatFileLink}
+                  onResendFromEdit={handleResendFromEdit}
+                  onBranchConversation={
+                    // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
+                    isConversationHydrating || isConversationHydrationFailed
+                      ? undefined
+                      : handleBranchConversation
+                  }
+                  branchPendingMessageId={branchPendingMessageId}
+                  onOpenSettings={onOpenSettings}
+                  onSuggestionSelect={handleEmptyStateSuggestion}
+                  suggestionsDisabled={isSuggestionTyping}
+                />
+              </ChangedFilesActionsProvider>
+
+              <div className="chat-header-overlay">
                 <ChatHeader
                   settings={settings}
                   onSelectExecutionMode={(mode) =>
@@ -2022,7 +2058,7 @@ export function ChatPage(props: ChatPageProps) {
                           ? "Collapse project tools panel"
                           : (terminalDisabledMessage ?? "Expand project tools panel")
                       }
-                      className={`relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
+                      className={`relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:text-foreground active:scale-[0.97] motion-reduce:active:scale-100 ${
                         rightDockOpen ? "bg-muted text-foreground" : ""
                       }`}
                     >
@@ -2039,43 +2075,10 @@ export function ChatPage(props: ChatPageProps) {
                     </Button>
                   }
                 />
-                <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
+                <div className="relative">
+                  <NotifyToast items={notifyItems} onDismiss={dismissNotify} />
+                </div>
               </div>
-
-              <ChangedFilesActionsProvider value={changedFilesActions}>
-                <ChatTranscript
-                  conversationId={currentConversationId}
-                  workspaceRoot={currentConversationWorkspaceRoot}
-                  gitClient={tauriGitClient}
-                  followRef={scrollFollowRef}
-                  hasModels={hasModels}
-                  historyItems={transcriptItems}
-                  hasMoreHistory={conversationState.transcript.hasMoreBefore}
-                  onLoadEarlierHistory={handleLoadEarlierHistory}
-                  isHistorySwitching={conversationOpenState.showOverlay}
-                  isSending={isSending}
-                  isAgentMode={isAgentMode}
-                  showUsage={isAgentDevExecutionMode}
-                  usageContextWindow={currentModelContextWindow}
-                  liveTranscriptStore={liveTranscriptStore}
-                  isCompactionRunning={isCompactionRunning}
-                  bottomReservePx={composerOverlayHeight}
-                  contentWidth={settings.customSettings.chatTranscript.width}
-                  onContentWidthChange={handleChatTranscriptWidthChange}
-                  onOpenFileLink={handleOpenChatFileLink}
-                  onResendFromEdit={handleResendFromEdit}
-                  onBranchConversation={
-                    // 会话加载中或加载失败时直接不传操作，展示明确的禁用态。
-                    isConversationHydrating || isConversationHydrationFailed
-                      ? undefined
-                      : handleBranchConversation
-                  }
-                  branchPendingMessageId={branchPendingMessageId}
-                  onOpenSettings={onOpenSettings}
-                  onSuggestionSelect={handleEmptyStateSuggestion}
-                  suggestionsDisabled={isSuggestionTyping}
-                />
-              </ChangedFilesActionsProvider>
 
               <ChatComposerBar
                 composerRef={composerRef}

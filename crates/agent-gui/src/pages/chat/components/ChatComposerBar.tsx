@@ -162,8 +162,9 @@ const DEFAULT_QUEUE_SCROLLBAR_STATE: QueueScrollbarState = {
   thumbTop: 0,
 };
 
-const COMPOSER_EXPAND_ANIMATION_MS = 280;
-const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0.22, 1)";
+const COMPOSER_EXPAND_ANIMATION_MS = 300;
+/* Apple sheet curve — critically readable settle without bounce */
+const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
 
 function prefersReducedMotion() {
   return (
@@ -572,13 +573,14 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
       className={cn(
         "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-4 pb-4",
         // 展开态从头部下沿一路铺到底部，把整个聊天区让给输入框。
-        isComposerExpanded && "top-14",
+        // Align expanded top with overlay header height (CSS var, not fixed top-14).
+        isComposerExpanded && "top-[var(--chat-header-height)]",
       )}
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 bg-background"
-        style={{ height: "1rem" }}
+        className="composer-bottom-fade pointer-events-none absolute inset-x-0 bottom-0"
+        style={{ height: "1.75rem" }}
       />
       <div
         className={cn(
@@ -602,7 +604,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
               )}
             >
               <div className="min-h-0 overflow-hidden">
-                <div className="rounded-t-lg border border-b-0 border-black/[0.055] bg-white/70 px-1 pb-1 pt-2 shadow-[0_8px_24px_-18px_rgba(15,23,42,0.24),inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-2xl backdrop-saturate-[165%] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_8px_24px_-18px_rgba(0,0,0,0.72),inset_0_1px_0_rgba(255,255,255,0.08)]">
+                <div className="composer-queue-glass rounded-t-2xl border border-b-0 px-1 pb-1 pt-2">
                   <div className="relative min-h-0">
                     <ul
                       ref={queueListRef}
@@ -618,7 +620,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                         return (
                           <li
                             key={item.id}
-                            className="relative grid h-9 min-h-9 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 rounded-md border border-black/[0.035] bg-white/42 px-2 text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.56)] backdrop-blur-xl backdrop-saturate-[150%] transition-[border-color,background-color] dark:border-white/[0.06] dark:bg-white/[0.04] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                            className="composer-queue-item-glass relative grid h-9 min-h-9 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-1.5 rounded-md border px-2 text-xs transition-[border-color,background-color]"
                           >
                             <div className="flex shrink-0 items-center gap-0.5">
                               {index > 0 ? (
@@ -745,23 +747,23 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
               : undefined
           }
           className={cn(
-            // 过渡只针对 focus-within 的配色/阴影；不能用 transition-all——
-            // 展开态切换 flex-grow 时会被一并动画，导致卡片先跳顶再长满的闪动。
+            // Material (fill/blur/border/shadow) lives in .composer-glass-card CSS —
+            // light mode needs lower opacity + cool tint so glass reads on white.
             // 常驻 flex-col：FLIP 动画把卡片钳在中间高度时，flex-1 的编辑器
             // 区吸收多余空间，工具栏才能始终贴住卡片底边。
-            "composer-glass-card relative z-10 flex flex-col overflow-hidden rounded-[24px] border border-black/[0.055] bg-white/70 shadow-[0_12px_40px_-14px_rgba(15,23,42,0.22),0_2px_6px_-2px_rgba(15,23,42,0.08),inset_0_1px_0_rgba(255,255,255,0.74)] backdrop-blur-2xl backdrop-saturate-[165%] transition-[background-color,border-color,box-shadow] focus-within:border-black/[0.075] focus-within:bg-white/74 focus-within:shadow-[0_16px_46px_-14px_rgba(15,23,42,0.26),0_4px_12px_-4px_rgba(15,23,42,0.10),inset_0_1px_0_rgba(255,255,255,0.78)] dark:border-white/[0.10] dark:bg-white/[0.06] dark:shadow-[0_12px_40px_-14px_rgba(0,0,0,0.72),0_2px_6px_-2px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] dark:focus-within:border-white/[0.15] dark:focus-within:bg-white/[0.08]",
+            "composer-glass-card relative z-10 flex flex-col overflow-hidden rounded-[24px]",
             isComposerExpanded && "min-h-0 flex-1",
           )}
         >
           {/* macOS material rim-light */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-x-5 top-0 h-px rounded-full bg-gradient-to-r from-transparent via-white/85 to-transparent dark:via-white/15"
+            className="pointer-events-none absolute inset-x-5 top-0 z-[1] h-px rounded-full bg-gradient-to-r from-transparent via-white/90 to-transparent dark:via-white/15"
           />
-          {/* subtle inner gloss gradient */}
+          {/* subtle inner gloss — slightly stronger in light so glass still reads over white */}
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-[24px] bg-gradient-to-b from-white/18 to-transparent opacity-70 dark:from-white/[0.04] dark:opacity-100"
+            className="pointer-events-none absolute inset-0 z-[1] rounded-[24px] bg-gradient-to-b from-white/35 via-white/8 to-transparent dark:from-white/[0.05] dark:via-transparent dark:to-transparent"
           />
 
           {pendingUploadedFiles.length > 0 ? (
@@ -790,7 +792,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
             title={toggleComposerExpandTooltip}
             aria-label={toggleComposerExpandTooltip}
             aria-expanded={isComposerExpanded}
-            className="absolute right-3 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/70 outline-hidden transition-[background-color,color,scale] hover:bg-muted/60 hover:text-foreground active:scale-90 focus-visible:bg-muted/60"
+            className="absolute right-3 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground/70 outline-hidden transition-[background-color,color,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-muted/60 hover:text-foreground active:scale-[0.97] focus-visible:bg-muted/60 motion-reduce:active:scale-100"
           >
             {isComposerExpanded ? (
               <Minimize2 className="h-4 w-4" />
@@ -841,7 +843,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                           : t("chat.upload.selectFiles")
                   }
                   className={cn(
-                    "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                    "composer-toolbar-action relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden hover:bg-muted/60 focus-visible:bg-muted/60 motion-reduce:active:scale-100",
                     "disabled:pointer-events-none disabled:opacity-40",
                     pendingUploadedFiles.length > 0
                       ? "text-sky-600 hover:text-sky-700 dark:text-sky-300 dark:hover:text-sky-200"
@@ -879,7 +881,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                       : t("chat.runtime.webSearchOff")
                   }
                   className={cn(
-                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden hover:bg-muted/60 focus-visible:bg-muted/60 motion-reduce:active:scale-100",
                     "disabled:pointer-events-none disabled:opacity-40",
                     chatRuntimeControls.nativeWebSearchEnabled
                       ? "text-emerald-600 hover:text-emerald-700 dark:text-emerald-300 dark:hover:text-emerald-200"
@@ -911,7 +913,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                         : t("chat.runtime.thinkingOff")
                   }
                   className={cn(
-                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden transition-colors hover:bg-muted/60 focus-visible:bg-muted/60",
+                    "composer-toolbar-action inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-hidden hover:bg-muted/60 focus-visible:bg-muted/60 motion-reduce:active:scale-100",
                     "disabled:pointer-events-none disabled:opacity-40",
                     chatRuntimeControls.thinkingEnabled && thinkingSupported
                       ? "text-amber-600 hover:text-amber-700 dark:text-amber-300 dark:hover:text-amber-200"
@@ -1023,12 +1025,12 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: {
                       : undefined
                 }
                 className={cn(
-                  "h-8 w-8 shrink-0 rounded-full border-0 p-0 shadow-none transition-all",
+                  "h-8 w-8 shrink-0 rounded-full border-0 p-0 shadow-none transition-[background-color,color,opacity,transform,filter] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]",
                   canQueueDraftWhileSending
-                    ? "hover:brightness-105 active:scale-95"
+                    ? "hover:brightness-105 active:scale-[0.97]"
                     : isSending
-                      ? "hover:opacity-90 active:scale-95"
-                      : "disabled:opacity-100 [&:not(:disabled)]:bg-foreground [&:not(:disabled)]:text-background [&:not(:disabled)]:hover:bg-foreground/85 [&:not(:disabled)]:active:scale-95 disabled:bg-muted/60 disabled:text-muted-foreground",
+                      ? "hover:opacity-90 active:scale-[0.97]"
+                      : "disabled:opacity-100 [&:not(:disabled)]:bg-foreground [&:not(:disabled)]:text-background [&:not(:disabled)]:hover:bg-foreground/90 [&:not(:disabled)]:active:scale-[0.97] disabled:bg-muted/60 disabled:text-muted-foreground",
                 )}
               >
                 {canQueueDraftWhileSending ? (

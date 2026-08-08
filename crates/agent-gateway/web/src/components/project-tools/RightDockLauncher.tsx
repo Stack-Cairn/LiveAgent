@@ -190,7 +190,7 @@ export function RightDockChooser(props: RightDockChooserProps) {
             onClick={tool.onClick}
             disabled={tool.disabled}
             title={tool.titleAttr}
-            className="group flex items-center gap-3 rounded-lg border border-border/60 bg-background px-3.5 py-3 text-left text-sm text-foreground transition-all hover:border-border hover:bg-muted/60 hover:shadow-sm disabled:pointer-events-none disabled:opacity-50"
+            className="group flex items-center gap-3 rounded-2xl border border-border/50 bg-background/70 px-3.5 py-3 text-left text-sm text-foreground shadow-[0_1px_0_rgba(255,255,255,0.45)_inset] backdrop-blur-md transition-[background-color,border-color,transform,box-shadow] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-border hover:bg-background/90 hover:shadow-sm active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset]"
           >
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted/80 text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground">
               {tool.icon}
