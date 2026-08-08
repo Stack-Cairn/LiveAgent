@@ -1,7 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import iconSimpleUrl from "../../src-tauri/icons/icon-simple.png";
 import { useLocale } from "../i18n";
 import { cn } from "../lib/shared/utils";
 import { Maximize2, Minimize2, Minus, X } from "./icons";
@@ -122,17 +121,18 @@ export function WindowsTitleBar() {
     };
   }, [getAppWindow, isVisible, syncMaximized]);
 
-  const startDragging = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
-      if (event.button !== 0 || event.detail !== 1) {
-        return;
-      }
-      void getAppWindow()
-        .startDragging()
-        .catch((error) => reportWindowChromeError("drag", error));
-    },
-    [getAppWindow],
-  );
+  // 悬浮胶囊会盖住窗口右上角：把预留宽度暴露成全局 CSS 变量，各视图的
+  // 顶右头部（ChatHeader / 右侧面板 / 编辑器覆盖层）据此加内边距让位。
+  useEffect(() => {
+    if (!isVisible || typeof document === "undefined") {
+      return undefined;
+    }
+    const root = document.documentElement;
+    root.style.setProperty("--win-chrome-reserve", "128px");
+    return () => {
+      root.style.removeProperty("--win-chrome-reserve");
+    };
+  }, [isVisible]);
 
   const toggleMaximize = useCallback(() => {
     const appWindow = getAppWindow();
@@ -142,16 +142,6 @@ export function WindowsTitleBar() {
       .then(setIsMaximized)
       .catch((error) => reportWindowChromeError("toggle maximized state for", error));
   }, [getAppWindow]);
-
-  const handleTitleDoubleClick = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
-      if (event.button !== 0) {
-        return;
-      }
-      toggleMaximize();
-    },
-    [toggleMaximize],
-  );
 
   const minimizeWindow = useCallback(() => {
     void getAppWindow()
@@ -172,36 +162,25 @@ export function WindowsTitleBar() {
   const maximizeLabel = isMaximized ? t("window.restore") : t("window.maximize");
 
   return (
-    <header
-      className={cn(
-        "relative z-50 flex h-8 shrink-0 select-none items-center border-b border-black/[0.06] bg-white/65 text-foreground/90 backdrop-blur-2xl backdrop-saturate-150 supports-[backdrop-filter]:bg-white/55 dark:border-white/[0.06] dark:bg-neutral-900/70 dark:supports-[backdrop-filter]:bg-neutral-900/55",
-        "shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]",
-        !isFocused && "text-foreground/55",
-      )}
-    >
-      <div
-        className="flex h-full min-w-0 flex-1 items-center gap-1.5 pl-2.5 pr-3"
-        onDoubleClick={handleTitleDoubleClick}
-        onMouseDown={startDragging}
-      >
-        <img
-          src={iconSimpleUrl}
-          alt=""
-          className="h-[15px] w-[15px] shrink-0 rounded-[3.5px]"
-          draggable={false}
-        />
-        <span className="truncate text-[12px] font-medium leading-[1.45] tracking-[0.01em] text-foreground/80">
-          {t("app.name")}
-        </span>
-      </div>
+    <>
+      {/* 顶缘拖拽热区：内容顶到窗顶后，这 6px 承担拖拽与双击最大化
+          （data-tauri-drag-region 由 Tauri 核心处理，二者内建）。 */}
+      <div data-tauri-drag-region className="absolute inset-x-0 top-0 z-[95] h-1.5" />
 
-      <fieldset
-        className="m-0 flex h-full shrink-0 items-stretch border-0 p-0"
-        aria-label={t("window.controls")}
+      <div
+        className={cn(
+          "absolute z-[100] flex select-none items-stretch overflow-hidden border backdrop-blur-xl transition-all duration-200",
+          "border-border/50 bg-background/70 shadow-[0_1px_0_rgba(255,255,255,0.55)_inset,0_8px_24px_-16px_rgba(15,23,42,0.25)] dark:border-white/[0.08] dark:bg-white/[0.06] dark:shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_8px_24px_-16px_rgba(0,0,0,0.5)]",
+          // 最大化时贴角：让「关闭」命中屏幕右上角（Fitts 法则），只留左下圆角。
+          isMaximized
+            ? "right-0 top-0 rounded-none rounded-bl-xl border-r-0 border-t-0"
+            : "right-2 top-2 rounded-full",
+          !isFocused && "opacity-55",
+        )}
       >
         <button
           type="button"
-          className="group flex h-full w-[38px] items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground/90 focus-visible:outline-hidden focus-visible:bg-black/[0.05] focus-visible:text-foreground/90 dark:hover:bg-white/[0.07] dark:focus-visible:bg-white/[0.07]"
+          className="flex h-8 w-10 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-hidden focus-visible:bg-foreground/[0.06] focus-visible:text-foreground"
           aria-label={t("window.minimize")}
           title={t("window.minimize")}
           onClick={minimizeWindow}
@@ -210,7 +189,7 @@ export function WindowsTitleBar() {
         </button>
         <button
           type="button"
-          className="group flex h-full w-[38px] items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground/90 focus-visible:outline-hidden focus-visible:bg-black/[0.05] focus-visible:text-foreground/90 dark:hover:bg-white/[0.07] dark:focus-visible:bg-white/[0.07]"
+          className="flex h-8 w-10 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-foreground/[0.06] hover:text-foreground focus-visible:outline-hidden focus-visible:bg-foreground/[0.06] focus-visible:text-foreground"
           aria-label={maximizeLabel}
           title={maximizeLabel}
           onClick={toggleMaximize}
@@ -223,14 +202,14 @@ export function WindowsTitleBar() {
         </button>
         <button
           type="button"
-          className="group flex h-full w-[42px] items-center justify-center text-foreground/55 transition-colors duration-150 hover:bg-[#e81123] hover:text-white focus-visible:outline-hidden focus-visible:bg-[#e81123] focus-visible:text-white"
+          className="flex h-8 w-10 items-center justify-center text-muted-foreground transition-colors duration-150 hover:bg-red-500/15 hover:text-red-600 focus-visible:outline-hidden focus-visible:bg-red-500/15 focus-visible:text-red-600 dark:hover:text-red-400 dark:focus-visible:text-red-400"
           aria-label={t("window.close")}
           title={t("window.close")}
           onClick={closeWindow}
         >
           <X className="h-[13px] w-[13px]" strokeWidth={1.5} />
         </button>
-      </fieldset>
-    </header>
+      </div>
+    </>
   );
 }
