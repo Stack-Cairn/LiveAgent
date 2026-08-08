@@ -8,12 +8,14 @@ import {
   Cpu,
   Key,
   MonitorSmartphone,
+  Search,
   Settings2,
   Wrench,
   Zap,
 } from "../components/icons";
 
 import { useLocale } from "../i18n";
+import { cn } from "../lib/shared/utils";
 import { AgentsSection } from "./settings/AgentsSection";
 import { CronSection } from "./settings/CronSection";
 import { DevicesSection } from "./settings/DevicesSection";
@@ -40,8 +42,6 @@ function getSaveIndicator(state: SettingsPageProps["saveState"], t: (key: string
         text: t("settings.saveError"),
         title: state.message,
       };
-    case "saved":
-    case "idle":
     default:
       return {
         dotClass: "bg-emerald-500",
@@ -63,24 +63,17 @@ function NavItem({ icon, label, active, onClick }: NavItemProps) {
     <button
       type="button"
       onClick={onClick}
-      className={`settings-nav-item group relative w-full rounded-lg px-3 py-2 text-left transition-all duration-150 ${
+      className={cn(
+        "settings-nav-item group relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-all duration-150",
         active
-          ? "settings-nav-item-active bg-primary/10 font-medium text-primary"
-          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-      }`}
+          ? "settings-nav-item-active bg-accent font-medium text-foreground"
+          : "text-foreground/75 hover:bg-accent/60 hover:text-foreground",
+      )}
     >
-      <div className="flex items-center gap-3">
-        <div
-          className={`settings-nav-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
-            active
-              ? "bg-primary/15 text-primary"
-              : "bg-muted/60 text-muted-foreground group-hover:bg-accent group-hover:text-foreground"
-          }`}
-        >
-          {icon}
-        </div>
-        <div className="settings-nav-label min-w-0 truncate text-sm leading-none">{label}</div>
-      </div>
+      <span className="settings-nav-icon flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground transition-colors group-hover:text-foreground">
+        {icon}
+      </span>
+      <span className="settings-nav-label min-w-0 truncate leading-tight">{label}</span>
     </button>
   );
 }
@@ -137,19 +130,23 @@ export function SettingsPage(props: SettingsPageProps) {
   const { t } = useLocale();
   const [section, setSection] = useState<SectionId>(initialSection);
   const [pendingProviderId, setPendingProviderId] = useState(initialProviderId);
+  const [navQuery, setNavQuery] = useState("");
 
-  const sectionLabels: Record<SectionId, string> = {
-    system: t("settings.navSystem"),
-    systemTools: t("settings.navSystemTools"),
-    providers: t("settings.navProviders"),
-    agents: t("settings.navAgents"),
-    ssh: t("settings.navSsh"),
-    memory: t("settings.navMemory"),
-    hooks: t("settings.navHooks"),
-    cron: t("settings.navCron"),
-    devices: t("settings.navAgentManagement"),
-    remote: t("settings.navRemote"),
-  };
+  const sectionLabels = useMemo<Record<SectionId, string>>(
+    () => ({
+      system: t("settings.navSystem"),
+      systemTools: t("settings.navSystemTools"),
+      providers: t("settings.navProviders"),
+      agents: t("settings.navAgents"),
+      ssh: t("settings.navSsh"),
+      memory: t("settings.navMemory"),
+      hooks: t("settings.navHooks"),
+      cron: t("settings.navCron"),
+      devices: t("settings.navAgentManagement"),
+      remote: t("settings.navRemote"),
+    }),
+    [t],
+  );
 
   const hiddenSectionSet = useMemo(() => new Set(hiddenSections), [hiddenSections]);
   const navGroups = useMemo(
@@ -163,6 +160,16 @@ export function SettingsPage(props: SettingsPageProps) {
     [hiddenSectionSet, sectionLabels, t],
   );
   const allNavItems = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
+  const visibleNavGroups = useMemo(() => {
+    const query = navQuery.trim().toLocaleLowerCase();
+    if (!query) return navGroups;
+    return navGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.label.toLocaleLowerCase().includes(query)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [navGroups, navQuery]);
 
   useEffect(() => {
     setSection(initialSection);
@@ -221,7 +228,7 @@ export function SettingsPage(props: SettingsPageProps) {
 
   return (
     <div className="settings-page-shell flex h-full bg-background">
-      <aside className="settings-sidebar flex w-60 shrink-0 flex-col border-r border-border/60 bg-muted/20">
+      <aside className="settings-sidebar flex w-64 shrink-0 flex-col border-r border-border/60 bg-muted/30">
         <div className="settings-back-bar">
           <button
             type="button"
@@ -233,7 +240,7 @@ export function SettingsPage(props: SettingsPageProps) {
           </button>
         </div>
 
-        <div className="settings-sidebar-header border-b border-border/60 px-3 pb-3 pt-3">
+        <div className="settings-sidebar-header px-3 pb-2 pt-3">
           <button
             type="button"
             onClick={onBack}
@@ -243,21 +250,23 @@ export function SettingsPage(props: SettingsPageProps) {
             <span>{t("settings.backToChat")}</span>
           </button>
 
-          <div className="mt-3 flex items-center gap-2.5 px-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-              <Settings2 className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold tracking-tight">{t("settings.title")}</div>
-              <div className="text-[11px] text-muted-foreground">LiveAgent</div>
-            </div>
+          <div className="relative mt-2">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/75" />
+            <input
+              type="search"
+              value={navQuery}
+              onChange={(event) => setNavQuery(event.currentTarget.value)}
+              placeholder={t("settings.searchPlaceholder")}
+              aria-label={t("settings.searchPlaceholder")}
+              className="h-9 w-full rounded-xl border border-border/70 bg-background/85 pl-9 pr-3 text-sm shadow-xs outline-none placeholder:text-muted-foreground/70 focus:border-border focus:ring-2 focus:ring-foreground/5"
+            />
           </div>
         </div>
 
         <nav className="settings-nav flex-1 overflow-y-auto px-3 py-3">
-          {navGroups.map((group, gi) => (
-            <div key={group.label} className={`settings-nav-group ${gi > 0 ? "mt-4" : ""}`}>
-              <div className="settings-nav-group-label mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          {visibleNavGroups.map((group, gi) => (
+            <div key={group.label} className={cn("settings-nav-group", gi > 0 && "mt-5")}>
+              <div className="settings-nav-group-label mb-1 px-3 text-xs font-medium text-muted-foreground/65">
                 {group.label}
               </div>
               <div className="space-y-0.5">
@@ -273,13 +282,26 @@ export function SettingsPage(props: SettingsPageProps) {
               </div>
             </div>
           ))}
+          {visibleNavGroups.length === 0 ? (
+            <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+              {t("settings.searchNoResults")}
+            </div>
+          ) : null}
         </nav>
       </aside>
 
       <main className="settings-main flex min-w-0 flex-1 flex-col">
-        <header className="settings-main-header flex items-center justify-between border-b px-6 py-4">
-          <div className="settings-main-title overflow-hidden">
-            <div key={section} className="settings-section-title-enter text-base font-semibold">
+        <header className="settings-main-header flex items-center justify-between px-8 pb-2 pt-8">
+          <div
+            className={cn(
+              "settings-main-title w-full overflow-hidden",
+              section === "system" && "mx-auto max-w-[920px]",
+            )}
+          >
+            <div
+              key={section}
+              className="settings-section-title-enter text-[28px] font-semibold tracking-tight"
+            >
               {sectionLabels[section]}
             </div>
           </div>
@@ -288,7 +310,7 @@ export function SettingsPage(props: SettingsPageProps) {
               className="settings-save-indicator flex items-center gap-1.5 text-xs text-muted-foreground"
               title={saveIndicator.title}
             >
-              <div className={`h-1.5 w-1.5 rounded-full ${saveIndicator.dotClass}`} />
+              <div className={cn("h-1.5 w-1.5 rounded-full", saveIndicator.dotClass)} />
               {saveIndicator.text}
             </div>
           ) : null}
@@ -296,18 +318,23 @@ export function SettingsPage(props: SettingsPageProps) {
 
         <div
           key={section}
-          className={`settings-content settings-content-${section} settings-section-enter flex-1 px-6 py-5 ${
+          className={cn(
+            "settings-content settings-section-enter flex-1 px-8 pb-8 pt-6",
+            `settings-content-${section}`,
             section === "hooks" || section === "providers" || section === "memory"
               ? "flex min-h-0 flex-col overflow-hidden"
-              : "overflow-auto"
-          }`}
+              : "overflow-auto",
+          )}
         >
           <div
-            className={`settings-section-shell settings-section-shell-${section} ${
+            className={cn(
+              "settings-section-shell",
+              `settings-section-shell-${section}`,
+              section === "system" && "mx-auto w-full max-w-[920px]",
               section === "hooks" || section === "providers" || section === "memory"
                 ? "flex min-h-0 flex-1 flex-col"
-                : "min-h-full"
-            }`}
+                : "min-h-full",
+            )}
           >
             {sectionContent}
           </div>

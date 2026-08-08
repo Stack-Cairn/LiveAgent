@@ -935,6 +935,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.groupConnectivity": "连接",
     "settings.backToChat": "返回对话",
     "settings.title": "设置",
+    "settings.searchPlaceholder": "搜索设置…",
+    "settings.searchNoResults": "未找到匹配的设置",
 
     /* ── Settings Devices ── */
     "settings.devicesTitle": "多客户端管理",
@@ -1185,6 +1187,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.systemProxyInvalid":
       "代理已启用，请填写有效的代理地址和端口；配置有效前相关请求将直接报错。",
     "settings.systemProxyEnableHint": "请先填写有效的代理地址和端口后再启用代理。",
+    "settings.systemProxyDisabled": "当前未启用，仅在需要时配置并开启。",
+    "settings.systemProxySettings": "代理设置",
+    "settings.systemProxyDone": "完成",
     "settings.systemProxyType": "代理类型",
     "settings.systemProxyHost": "代理地址",
     "settings.systemProxyPort": "端口",
@@ -3126,6 +3131,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.groupConnectivity": "Connectivity",
     "settings.backToChat": "Back to Chat",
     "settings.title": "Settings",
+    "settings.searchPlaceholder": "Search settings…",
+    "settings.searchNoResults": "No matching settings",
 
     /* ── Settings Devices ── */
     "settings.devicesTitle": "Multi-client Management",
@@ -3391,6 +3398,9 @@ export const translations: Record<Locale, Record<string, string>> = {
       "The proxy is enabled. Enter a valid host and port; affected requests fail until the configuration is valid.",
     "settings.systemProxyEnableHint":
       "Enter a valid proxy host and port before enabling the proxy.",
+    "settings.systemProxyDisabled": "Currently off. Configure and enable it only when needed.",
+    "settings.systemProxySettings": "Proxy settings",
+    "settings.systemProxyDone": "Done",
     "settings.systemProxyType": "Proxy type",
     "settings.systemProxyHost": "Proxy host",
     "settings.systemProxyPort": "Port",
