@@ -159,7 +159,10 @@ test("formatRoster and formatTemplates render bounded description blocks", () =>
   }));
   assert.equal(roster.formatRoster(manyEntries).split("\n").length, 12);
 
-  assert.equal(roster.formatTemplates([]), "No enabled AGENTS templates are available.");
+  assert.equal(
+    roster.formatTemplates([]),
+    "No AGENTS templates are available to subagents.",
+  );
   assert.equal(
     roster.formatTemplates([
       { id: "reviewer", name: "Reviewer", description: "Review code" },

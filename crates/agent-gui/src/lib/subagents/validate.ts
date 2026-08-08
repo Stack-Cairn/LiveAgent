@@ -241,7 +241,7 @@ export function parseSubagentBatch(
         issues.push(
           issue(
             "unknown_template",
-            `Unknown template "${templateRef}". Only enabled AGENTS templates can be referenced.`,
+            `Unknown template "${templateRef}". Only AGENTS templates available to subagents can be referenced.`,
             agentRef,
           ),
         );

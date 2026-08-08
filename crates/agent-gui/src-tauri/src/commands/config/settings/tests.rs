@@ -46,6 +46,61 @@ mod tests {
     }
 
     #[test]
+    fn initialize_schema_creates_and_migrates_subagent_template_availability() {
+        let conn = open_memory_db();
+        assert!(
+            table_columns(&conn, AGENT_PROMPT_TEMPLATES_TABLE)
+                .iter()
+                .any(|column| column == "available_to_subagents")
+        );
+
+        let legacy = Connection::open_in_memory().expect("open legacy sqlite");
+        legacy
+            .execute_batch(
+                "
+                CREATE TABLE agent_prompt_templates (
+                    template_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL,
+                    prompt TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 0,
+                    sort_index INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                INSERT INTO agent_prompt_templates
+                    (template_id, name, description, prompt, enabled, sort_index, updated_at)
+                VALUES
+                    ('active', 'Active', '', 'Prompt A', 1, 0, 1),
+                    ('inactive', 'Inactive', '', 'Prompt B', 0, 1, 1);
+                ",
+            )
+            .expect("seed legacy agent templates");
+
+        initialize_schema(&legacy).expect("migrate legacy agent templates");
+        initialize_schema(&legacy).expect("migration remains idempotent");
+        assert_eq!(
+            legacy
+                .query_row(
+                    "SELECT available_to_subagents FROM agent_prompt_templates WHERE template_id = 'active'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("query active availability"),
+            1
+        );
+        assert_eq!(
+            legacy
+                .query_row(
+                    "SELECT available_to_subagents FROM agent_prompt_templates WHERE template_id = 'inactive'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .expect("query inactive availability"),
+            0
+        );
+    }
+
+    #[test]
     fn initialize_schema_creates_columnar_ssh_settings_table() {
         let conn = open_memory_db();
         let columns = table_columns(&conn, SSH_SETTINGS_TABLE);
@@ -1025,14 +1080,16 @@ mod tests {
                     "name": "代码审查",
                     "description": "用于审查 PR 和补测试缺口",
                     "prompt": "你是一个严格的代码审查助手。",
-                    "enabled": true
+                    "enabled": true,
+                    "availableToSubagents": true
                 },
                 {
                     "id": "planner",
                     "name": "任务规划",
                     "description": "",
                     "prompt": "先拆任务，再执行。",
-                    "enabled": false
+                    "enabled": false,
+                    "availableToSubagents": true
                 }
             ]),
         )
@@ -1050,10 +1107,18 @@ mod tests {
                 |row| row.get::<_, i64>(0),
             )
             .expect("query reviewer enabled");
+        let subagent_available_count = conn
+            .query_row(
+                "SELECT COUNT(*) FROM agent_prompt_templates WHERE available_to_subagents = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("count subagent templates");
         let loaded = load_agents(&conn).expect("load agents");
 
         assert_eq!(row_count, 2);
         assert_eq!(stored_enabled, 1);
+        assert_eq!(subagent_available_count, 2);
         assert_eq!(
             loaded,
             Some(json!([
@@ -1062,17 +1127,58 @@ mod tests {
                     "name": "代码审查",
                     "description": "用于审查 PR 和补测试缺口",
                     "prompt": "你是一个严格的代码审查助手。",
-                    "enabled": true
+                    "enabled": true,
+                    "availableToSubagents": true
                 },
                 {
                     "id": "planner",
                     "name": "任务规划",
                     "description": "",
                     "prompt": "先拆任务，再执行。",
-                    "enabled": false
+                    "enabled": false,
+                    "availableToSubagents": true
                 }
             ]))
         );
+    }
+
+    #[test]
+    fn save_agents_defaults_legacy_availability_and_rejects_invalid_values() {
+        let mut conn = open_memory_db();
+        save_agents(
+            &mut conn,
+            json!([{
+                "id": "legacy",
+                "name": "Legacy",
+                "description": "",
+                "prompt": "Prompt",
+                "enabled": true
+            }]),
+        )
+        .expect("save legacy agent payload");
+        assert_eq!(
+            conn.query_row(
+                "SELECT available_to_subagents FROM agent_prompt_templates WHERE template_id = 'legacy'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("query legacy availability"),
+            1
+        );
+
+        let error = save_agents(
+            &mut conn,
+            json!([{
+                "id": "invalid",
+                "name": "Invalid",
+                "description": "",
+                "prompt": "Prompt",
+                "enabled": false,
+                "availableToSubagents": "yes"
+            }]),
+        )
+        .expect_err("reject invalid subagent availability");
+        assert!(error.contains("availableToSubagents 必须是布尔值"));
     }
 
     /// 归一后的 systemProxy 默认值（save/load 全量断言共用）。

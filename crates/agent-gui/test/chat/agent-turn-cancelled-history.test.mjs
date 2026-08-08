@@ -150,7 +150,7 @@ const loader = createTsModuleLoader({
   },
 });
 
-const { runAgentConversationTurn } = loader.loadModule(
+const { runAgentConversationTurn, availableSubagentTemplates } = loader.loadModule(
   "src/pages/chat/turns/runAgentConversationTurn.ts",
 );
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
@@ -167,6 +167,59 @@ function createHookLifecycle() {
     toolResultReceived: noOp,
   };
 }
+
+test("subagent templates use independent availability instead of main-agent activation", () => {
+  assert.deepEqual(
+    availableSubagentTemplates([
+      {
+        id: "main-only",
+        name: "Main only",
+        description: "",
+        prompt: "Main prompt",
+        enabled: true,
+        availableToSubagents: false,
+      },
+      {
+        id: "child-a",
+        name: "Child A",
+        description: "First child template",
+        prompt: "Child prompt A",
+        enabled: false,
+        availableToSubagents: true,
+      },
+      {
+        id: "child-b",
+        name: "Child B",
+        description: "Second child template",
+        prompt: "Child prompt B",
+        enabled: false,
+        availableToSubagents: true,
+      },
+      {
+        id: "empty",
+        name: "Empty",
+        description: "",
+        prompt: "   ",
+        enabled: false,
+        availableToSubagents: true,
+      },
+    ]),
+    [
+      {
+        id: "child-a",
+        name: "Child A",
+        description: "First child template",
+        prompt: "Child prompt A",
+      },
+      {
+        id: "child-b",
+        name: "Child B",
+        description: "Second child template",
+        prompt: "Child prompt B",
+      },
+    ],
+  );
+});
 
 test("agent turn preserves suppressed parent Agent trace for cancellation persistence", async () => {
   let liveRounds = [];

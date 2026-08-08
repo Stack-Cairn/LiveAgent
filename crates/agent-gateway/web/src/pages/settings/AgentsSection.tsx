@@ -1,6 +1,18 @@
+import { Popover } from "@base-ui/react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, Eye, FileText, Pencil, Plus, Trash2, X } from "../../components/icons";
+import {
+  BookOpen,
+  Bot,
+  Check,
+  ChevronDown,
+  Eye,
+  FileText,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "../../components/icons";
 
 import { Button } from "../../components/ui/button";
 import { useLocale } from "../../i18n";
@@ -33,7 +45,7 @@ export function AgentsSection(props: SettingsSectionProps) {
     setEditingTemplate(null);
   }
 
-  function handleSave(data: Omit<AgentPromptTemplate, "id" | "enabled">) {
+  function handleSave(data: Pick<AgentPromptTemplate, "name" | "description" | "prompt">) {
     setSettings((prev) => {
       if (editingTemplate) {
         return updateAgents(
@@ -48,6 +60,7 @@ export function AgentsSection(props: SettingsSectionProps) {
         id: createUuid(),
         ...data,
         enabled: false,
+        availableToSubagents: false,
       };
       return updateAgents(prev, [...prev.agents, newTemplate]);
     });
@@ -76,8 +89,24 @@ export function AgentsSection(props: SettingsSectionProps) {
     );
   }
 
+  function handleToggleAvailableToSubagents(id: string) {
+    setSettings((prev) =>
+      updateAgents(
+        prev,
+        prev.agents.map((template) =>
+          template.id === id
+            ? { ...template, availableToSubagents: !template.availableToSubagents }
+            : template,
+        ),
+      ),
+    );
+  }
+
   const templates = settings.agents;
   const enabledCount = templates.filter((template) => template.enabled).length;
+  const subagentTemplateCount = templates.filter(
+    (template) => template.availableToSubagents,
+  ).length;
 
   return (
     <>
@@ -111,6 +140,13 @@ export function AgentsSection(props: SettingsSectionProps) {
                   </>
                 ) : null}
               </div>
+            ) : null}
+            {templates.length > 0 ? (
+              <SubagentTemplatePicker
+                templates={templates}
+                selectedCount={subagentTemplateCount}
+                onToggle={handleToggleAvailableToSubagents}
+              />
             ) : null}
             <Button variant="outline" size="sm" className="gap-1.5" onClick={openAdd}>
               <Plus className="h-3.5 w-3.5" />
@@ -242,6 +278,100 @@ export function AgentsSection(props: SettingsSectionProps) {
         <AgentPromptViewModal template={viewingTemplate} onClose={() => setViewingTemplate(null)} />
       ) : null}
     </>
+  );
+}
+
+function SubagentTemplatePicker(props: {
+  templates: AgentPromptTemplate[];
+  selectedCount: number;
+  onToggle: (id: string) => void;
+}) {
+  const { templates, selectedCount, onToggle } = props;
+  const { t } = useLocale();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            aria-label={t("settings.agentsSubagentTemplates")}
+          />
+        }
+      >
+        <Bot className="h-3.5 w-3.5" />
+        <span>{t("settings.agentsSubagentTemplates")}</span>
+        <span className="rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-sky-600 dark:text-sky-400">
+          {selectedCount}
+        </span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Positioner
+          side="bottom"
+          align="end"
+          sideOffset={6}
+          collisionPadding={8}
+          className="z-[9999]"
+        >
+          <Popover.Popup
+            aria-label={t("settings.agentsSubagentTemplates")}
+            className="w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg outline-none"
+          >
+            <div className="border-b border-border/60 px-3 py-2.5">
+              <p className="text-xs font-semibold">{t("settings.agentsSubagentTemplates")}</p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                {t("settings.agentsSubagentTemplatesHint")}
+              </p>
+            </div>
+            <div className="max-h-72 space-y-1 overflow-y-auto p-1.5">
+              {templates.map((template) => {
+                const checked = template.availableToSubagents;
+                return (
+                  <label
+                    key={template.id}
+                    className={`flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/70 focus-within:ring-2 focus-within:ring-ring ${
+                      checked ? "bg-sky-500/[0.07]" : ""
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      className="sr-only"
+                      onChange={() => onToggle(template.id)}
+                    />
+                    <span
+                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors ${
+                        checked
+                          ? "border-sky-500 bg-sky-500 text-white"
+                          : "border-border bg-background"
+                      }`}
+                    >
+                      {checked ? <Check className="h-3 w-3" /> : null}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-medium text-foreground">
+                        {template.name}
+                      </span>
+                      {template.description ? (
+                        <span className="mt-0.5 block line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                          {template.description}
+                        </span>
+                      ) : null}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 

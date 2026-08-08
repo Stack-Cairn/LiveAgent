@@ -73,7 +73,7 @@ const AGENT_PARAMETERS = Type.Object(
           template: Type.Optional(
             Type.String({
               description:
-                "Enabled AGENTS template id or name. Only valid when the id is first created.",
+                "AGENTS template id or name available to subagents. Only valid when the id is first created.",
             }),
           ),
           mode: Type.Optional(
@@ -241,10 +241,10 @@ export function createSubagentTools(params: {
       "Subagents cannot call Agent recursively. Worktree mode must not modify global LiveAgent settings, MCP server configuration, cron tasks, or user-level skills.",
       "Subagents communicate through SendMessage (to=parent is parent-private; to=* is a shared broadcast); do not use workspace files as a message channel.",
       "Include the new user request and any parent-conversation context each subagent needs in that agent's prompt. The parent conversation is not copied automatically.",
-      "Invalid calls start no agents and return a structured error listing the roster and enabled templates — fix every issue and retry with one corrected call.",
+      "Invalid calls start no agents and return a structured error listing the roster and templates available to subagents — fix every issue and retry with one corrected call.",
       "Existing agents that may be resumed by id:",
       formatRoster(rosterEntries),
-      "Enabled AGENTS templates (reference by template=<id>):",
+      "AGENTS templates available to subagents (reference by template=<id>):",
       formatTemplates(templateEntries),
     ].join("\n"),
     parameters: AGENT_PARAMETERS,

@@ -80,14 +80,14 @@ const MCP_SETTINGS_INSERT_SQL: &str = "
 const MCP_SETTINGS_DELETE_SQL: &str = "DELETE FROM mcp_settings";
 
 const AGENT_PROMPT_TEMPLATES_SELECT_SQL: &str = "
-    SELECT template_id, name, description, prompt, enabled
+    SELECT template_id, name, description, prompt, enabled, available_to_subagents
     FROM agent_prompt_templates
     ORDER BY sort_index ASC, template_id ASC
 ";
 const AGENT_PROMPT_TEMPLATES_INSERT_SQL: &str = "
     INSERT INTO agent_prompt_templates
-        (template_id, name, description, prompt, enabled, sort_index, updated_at)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        (template_id, name, description, prompt, enabled, available_to_subagents, sort_index, updated_at)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
 ";
 const AGENT_PROMPT_TEMPLATES_DELETE_SQL: &str = "DELETE FROM agent_prompt_templates";
 

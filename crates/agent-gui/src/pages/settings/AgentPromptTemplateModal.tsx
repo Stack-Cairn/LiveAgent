@@ -10,9 +10,11 @@ import { useLocale } from "../../i18n";
 import type { AgentPromptTemplate } from "../../lib/settings";
 import { useModalMotion } from "../../lib/shared/modalMotion";
 
+type AgentPromptTemplateContent = Pick<AgentPromptTemplate, "name" | "description" | "prompt">;
+
 type AgentPromptTemplateModalProps = {
   initialData?: AgentPromptTemplate;
-  onSave: (data: Omit<AgentPromptTemplate, "id" | "enabled">) => void;
+  onSave: (data: AgentPromptTemplateContent) => void;
   onClose: () => void;
 };
 
