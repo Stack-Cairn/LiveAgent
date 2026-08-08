@@ -60,6 +60,7 @@ import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { setPreferredMonacoNlsLocale } from "../lib/monacoNls";
 import {
   type AppSettings,
+  GLOBAL_NOTES_DOCK_PATH_KEY,
   getRightDockFileTreeState,
   getRightDockProjectState,
   getSshProjectHostIds,
@@ -622,6 +623,7 @@ export function ChatPage(props: ChatPageProps) {
   const terminalProjectPathKey = terminalProjectPath
     ? workspaceProjectPathKey(terminalProjectPath)
     : "";
+  const rightDockStatePathKey = terminalProjectPathKey || GLOBAL_NOTES_DOCK_PATH_KEY;
   const {
     terminalSessions,
     setTerminalSessions,
@@ -647,13 +649,13 @@ export function ChatPage(props: ChatPageProps) {
   // + path key: RightDockPanel is memo'd and these references are props.
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on settings.customSettings.rightDock (the only slice these getters read) so unrelated settings changes keep the reference stable.
   const rightDockProjectState = useMemo(
-    () => getRightDockProjectState(settings.customSettings, terminalProjectPathKey),
-    [settings.customSettings.rightDock, terminalProjectPathKey],
+    () => getRightDockProjectState(settings.customSettings, rightDockStatePathKey),
+    [settings.customSettings.rightDock, rightDockStatePathKey],
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on settings.customSettings.rightDock (the only slice these getters read) so unrelated settings changes keep the reference stable.
   const rightDockFileTreeState = useMemo(
-    () => getRightDockFileTreeState(settings.customSettings, terminalProjectPathKey),
-    [settings.customSettings.rightDock, terminalProjectPathKey],
+    () => getRightDockFileTreeState(settings.customSettings, rightDockStatePathKey),
+    [settings.customSettings.rightDock, rightDockStatePathKey],
   );
   const rightDockFileTreeOpen = isRightDockSingletonTabOpen(
     settings.customSettings,
@@ -689,15 +691,15 @@ export function ChatPage(props: ChatPageProps) {
   );
   const handleRightDockProjectStateChange = useCallback(
     (updater: (current: RightDockProjectState) => RightDockProjectState) => {
-      setSettings((prev) => updateRightDockProjectState(prev, terminalProjectPathKey, updater));
+      setSettings((prev) => updateRightDockProjectState(prev, rightDockStatePathKey, updater));
     },
-    [setSettings, terminalProjectPathKey],
+    [rightDockStatePathKey, setSettings],
   );
   const handleRightDockFileTreeStateChange = useCallback(
     (patch: RightDockFileTreeStatePatch) => {
-      setSettings((prev) => updateRightDockFileTreeState(prev, terminalProjectPathKey, patch));
+      setSettings((prev) => updateRightDockFileTreeState(prev, rightDockStatePathKey, patch));
     },
-    [setSettings, terminalProjectPathKey],
+    [rightDockStatePathKey, setSettings],
   );
   const handleSshProjectHostIdsChange = useCallback(
     (hostIds: string[]) => {
@@ -2015,12 +2017,11 @@ export function ChatPage(props: ChatPageProps) {
                       variant="ghost"
                       size="icon"
                       onClick={() => setRightDockOpen((open) => !open)}
-                      disabled={Boolean(terminalDisabledMessage) && !rightDockOpen}
                       aria-expanded={rightDockOpen}
                       title={
                         rightDockOpen
                           ? "Collapse project tools panel"
-                          : (terminalDisabledMessage ?? "Expand project tools panel")
+                          : "Expand project tools panel"
                       }
                       className={`relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
                         rightDockOpen ? "bg-muted text-foreground" : ""
@@ -2141,7 +2142,7 @@ export function ChatPage(props: ChatPageProps) {
         isOpen={activeView === "chat" && rightDockOpen}
         collapseImmediately={activeView !== "chat"}
         fontScale={settings.customSettings.fontScale.rightDock}
-        projectPathKey={terminalProjectPathKey}
+        projectPathKey={rightDockStatePathKey}
         cwd={terminalProjectPath}
         sessions={terminalSessions}
         sessionsLoaded={terminalSessionsLoaded}

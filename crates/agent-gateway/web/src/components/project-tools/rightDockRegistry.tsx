@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { FolderTree, GitBranch, Globe, Key } from "../icons";
+import { BookOpen, FolderTree, GitBranch, Globe, Key } from "../icons";
 import { FileTreePanel } from "./file-tree";
 import { GitReviewPanel } from "./git-review";
 import { LocalTunnelPanel } from "./LocalTunnelPanel";
+import { NotesPanel } from "./notes";
 import { type RightDockToolContextValue, useRightDockToolContext } from "./RightDockContext";
 import type { RightDockSingletonTabKind } from "./rightDockModel";
 import { SshTunnelPanel } from "./SshTunnelPanel";
@@ -85,6 +86,10 @@ function SshTunnelTool(props: RightDockToolRenderInput) {
   );
 }
 
+function NotesTool(props: RightDockToolRenderInput) {
+  return <NotesPanel active={props.active} />;
+}
+
 function projectToolAvailable(context: RightDockToolContextValue) {
   return context.projectPathKey.trim() !== "";
 }
@@ -137,6 +142,18 @@ export const RIGHT_DOCK_TOOL_DEFINITIONS: readonly RightDockToolDefinition[] = [
     containerActiveClassName: "flex flex-col",
     isAvailable: projectToolAvailable,
     render: (input) => <SshTunnelTool active={input.active} />,
+  },
+  {
+    kind: "notes",
+    titleKey: "projectTools.notesTitle",
+    createTitleKey: "projectTools.newNotes",
+    descriptionKey: "projectTools.notesDescription",
+    closeKey: "projectTools.closeNotes",
+    projectRequired: false,
+    icon: (className) => <BookOpen className={className} />,
+    containerActiveClassName: "flex flex-col",
+    isAvailable: () => true,
+    render: (input) => <NotesTool active={input.active} />,
   },
 ];
 

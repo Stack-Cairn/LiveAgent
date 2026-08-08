@@ -29,6 +29,7 @@ export const FILE_TREE_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.fileTree;
 export const GIT_REVIEW_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.gitReview;
 export const TUNNEL_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.tunnel;
 export const SSH_TUNNEL_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.sshTunnel;
+export const NOTES_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.notes;
 // Derived tab: exists while the managed-process store has records; never
 // persisted into right-dock settings.
 export const BACKGROUND_TASKS_TAB_ID = "background-tasks";
@@ -116,7 +117,7 @@ export function orderRightDockVisibleTabs(
 }
 
 export function rightDockTabRequiresProject(kind: RightDockSingletonTabKind) {
-  return kind !== "tunnel";
+  return kind !== "tunnel" && kind !== "notes";
 }
 
 export function getRightDockVisibleTabs(options: {
