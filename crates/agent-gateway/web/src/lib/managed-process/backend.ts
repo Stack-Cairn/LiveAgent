@@ -4,13 +4,16 @@
 // connect from the gateway cache). This file is the per-platform adapter —
 // the desktop frontend ships its own copy speaking Tauri invoke.
 
+import type {
+  ManagedProcessBackend,
+  ManagedProcessState,
+} from "@liveagent/ui/lib/managed-process/types";
 import {
   getGatewayWebSocketClient,
   type ManagedProcessStatePayload,
   onGatewayWebSocketClientReplaced,
 } from "../gatewaySocket";
 import { loadToken } from "../storage";
-import type { ManagedProcessBackend, ManagedProcessState } from "./types";
 
 function client() {
   return getGatewayWebSocketClient(loadToken().trim());

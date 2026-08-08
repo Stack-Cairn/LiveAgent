@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const reorder = loader.loadModule("src/lib/reorder/reorderModel.ts");
+const reorder = loader.loadModule("@liveagent/ui/lib/reorder/reorderModel.ts");
 
 const slots = [
   { id: "a", start: 0, size: 40 },

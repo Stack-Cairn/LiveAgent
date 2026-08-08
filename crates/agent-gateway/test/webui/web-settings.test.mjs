@@ -5,7 +5,7 @@ import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 const loader = createWebModuleLoader();
 const webSettings = loader.loadModule("src/lib/webSettings.ts");
 const settings = loader.loadModule("@/lib/settings/index.ts");
-const settingsSync = loader.loadModule("@/lib/settings/sync.ts");
+const settingsSync = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
 const chatHelpers = loader.loadModule("@/lib/chat/chatPageHelpers.ts");
 const adminApi = loader.loadModule("@/lib/adminApi.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;

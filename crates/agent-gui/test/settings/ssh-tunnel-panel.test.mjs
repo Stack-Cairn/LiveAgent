@@ -3,8 +3,8 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const panel = loader.loadModule("src/components/project-tools/SshTunnelPanel.tsx");
-const forwarding = loader.loadModule("src/lib/terminal/sshLocalForwardTypes.ts");
+const panel = loader.loadModule("@liveagent/ui/components/project-tools/SshTunnelPanel.tsx");
+const forwarding = loader.loadModule("@liveagent/ui/lib/terminal/sshLocalForwardTypes.ts");
 
 function host(overrides = {}) {
   return {

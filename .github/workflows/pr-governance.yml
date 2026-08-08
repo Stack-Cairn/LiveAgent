@@ -62,6 +62,7 @@ jobs:
 
             // 2) UI 改动必须附截图/预览:改动文件命中前端路径,而正文没有图片即视为缺失。
             const UI_PATHS = [
+              'crates/agent-ui/src/',
               'crates/agent-gui/src/',
               'crates/agent-gateway/web/src/',
             ];

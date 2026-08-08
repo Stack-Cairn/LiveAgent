@@ -6,10 +6,10 @@
 |---|---|---|
 | React app shell | `crates/agent-gui/src/App.tsx` | 设置 hydration/save、主题/i18n、Settings overlay、ChatPage、CronPromptRunner、MemoryOrganizerRunner、全局 toast。 |
 | Chat 页面 | `crates/agent-gui/src/pages/ChatPage.tsx` | 会话状态、消息发送/取消、历史、上传、模型选择、Gateway bridge、Skills/Memory prompt、压缩与运行态编排。 |
-| Chat 子模块 | `crates/agent-gui/src/pages/chat/*` | transcript、composer、header、agent/text turn、history actions、uploads、上下文构造、live transcript store。 |
-| Settings | `crates/agent-gui/src/pages/SettingsPage.tsx`、`src/pages/settings/*` | Providers、System、MCP、Agents、Hooks、Cron、Remote、Memory、Skills 配置。 |
-| Hub 页面 | `src/pages/skills-hub/*`、`src/pages/mcp-hub/*`、`src/components/hub/HubChrome.tsx` | Skills Hub、MCP Hub、store/registry 浏览与本地配置管理。 |
-| UI 组件 | `src/components/*`、`src/components/ui/*` | Sidebar、Markdown、ImagePreview、通用 button/input/select/dropdown/scroll 等。 |
+| Chat 子模块 | `crates/agent-gui/src/pages/chat/*` | transcript 数据控制器、agent/text turn、history actions、uploads、上下文构造和 live transcript store；公共 composer/header/视觉组件来自 `crates/agent-ui`。 |
+| Settings | `crates/agent-ui/src/pages/settings/*`、`crates/agent-gui/src/pages/settings/*` | 公共 Settings 页面位于 `agent-ui`；GUI 目录只保留快捷键、关于页和 Memory 平台适配器等桌面扩展。 |
+| Hub 页面 | `crates/agent-ui/src/pages/skills-hub/*`、`crates/agent-ui/src/pages/mcp-hub/*`、`crates/agent-ui/src/components/hub/*` | Skills Hub、MCP Hub、store/registry 浏览与公共 Hub 外壳。 |
+| UI 组件 | `crates/agent-ui/src/components/*`、`crates/agent-gui/src/components/*` | 公共 Sidebar、Markdown、ImagePreview 和基础组件位于 `agent-ui`；GUI 目录保留桌面独有组件。 |
 | 前端设置库 | `src/lib/settings/*` | 默认值、normalize、storage、Gateway sync snapshot、provider redaction。 |
 | 模型层 | `src/lib/providers/llm.ts` | provider 到具体模型 API 的映射、headers、Responses/Anthropic/Gemini stream、thinking/cache/search。 |
 | 工具层 | `src/lib/tools/*`、`src/lib/subagents/*` | builtin tool registry、FS、Shell、MCP、Skills、Cron、Memory、custom system tools；subagents 域提供 `Agent`/`SendMessage` 委托工具。 |
@@ -30,15 +30,15 @@
 
 | 子系统 | 说明 | 关键路径 |
 |---|---|---|
-| 会话运行态 | 当前 conversation、session、message list、live stream、tool status、running/canceling 状态。 | `ChatPage.tsx`、`pages/chat/useChatPageRuntimeStore.ts`、`lib/chat/conversation/liveTranscriptStore.ts` |
+| 会话运行态 | 当前 conversation、session、message list、live stream、tool status、running/canceling 状态。 | `ChatPage.tsx`、`pages/chat/hooks/useChatPageRuntimeStore.ts`、`lib/chat/conversation/liveTranscriptStore.ts` |
 | 发送入口 | 将用户文本、附件、选中模型、execution mode、workdir、system tools 等合并为 turn request。 | `ChatPage.tsx` |
-| text 模式 | 只做模型文本流式，不注入本地工具。 | `pages/chat/runTextConversationTurn.ts`、`lib/providers/llm.ts` |
-| tools/agent-dev 模式 | 构造 builtin tools，执行模型 tool loop，写工具 trace，并同步 Gateway chat event。 | `pages/chat/runAgentConversationTurn.ts`、`lib/chat/conversation/run/*` |
-| 历史持久化 | V3 segment 写入 Tauri SQLite，支持 append segment、active segment update、rename/delete/pin/share。 | `lib/chat/conversationState.ts`、`src-tauri/src/commands/chat_history.rs` |
-| 上下文压缩 | 在 pre-send、mid-stream、post-tool 等阶段生成 summary checkpoint，避免超上下文。 | `pages/chat/conversationContextBuilders.ts`、`lib/chat/conversation/compaction/*` |
-| 记忆注入 | 每轮根据 workdir 读取 memory overview，并附加到 system prompt。 | `lib/chat/memory/memoryPrompt.ts`、`src-tauri/src/services/memory.rs` |
-| Skills 注入 | 根据 Settings Skills 选择与 always-on builtin skills 生成 skills prompt。 | `lib/skills/index.ts`、`pages/chat/useChatSkills.ts` |
-| 上传 | GUI 直接调用 Tauri import readable files/image preview；工作区外文件复制到 `~/.liveagent/uploads` 暂存区（不污染工作区），工作区内文件原地引用。 | `pages/chat/usePendingUploads.ts`、`src-tauri/src/commands/system.rs` |
+| text 模式 | 只做模型文本流式，不注入本地工具。 | `pages/chat/turns/runTextConversationTurn.ts`、`lib/providers/llm.ts` |
+| tools/agent-dev 模式 | 构造 builtin tools，执行模型 tool loop，写工具 trace，并同步 Gateway chat event。 | `pages/chat/turns/runAgentConversationTurn.ts`、`lib/chat/conversation/run/*` |
+| 历史持久化 | V3 segment 写入 Tauri SQLite，支持 append segment、active segment update、rename/delete/pin/share。 | `lib/chat/conversation/conversationState.ts`、`src-tauri/src/commands/history/chat_history/*` |
+| 上下文压缩 | 在 pre-send、mid-stream、post-tool 等阶段生成 summary checkpoint，避免超上下文。 | `pages/chat/runtime/conversationContextBuilders.ts`、`lib/chat/compaction/*` |
+| 记忆注入 | 每轮根据 workdir 读取 memory overview，并附加到 system prompt。 | `lib/chat/memory/*`、`src-tauri/src/services/memory/*` |
+| Skills 注入 | 根据 Settings Skills 选择与 always-on builtin skills 生成 skills prompt。 | `crates/agent-ui/src/lib/skills/index.ts`、`pages/chat/hooks/useChatSkills.ts` |
+| 上传 | GUI 直接调用 Tauri import readable files/image preview；工作区外文件复制到 `~/.liveagent/uploads` 暂存区（不污染工作区），工作区内文件原地引用。 | `pages/chat/hooks/usePendingUploads.ts`、`src-tauri/src/commands/app/system.rs` |
 | Gateway bridge | 本地运行时接收远程 command，把 token/thinking/tool/done/error 等事件发布给 Gateway；listener 与 worker id 在组件生命周期内保持稳定。 | `pages/chat/gateway/useGatewayBridgeListeners.ts`、`lib/chat/conversation/run/gatewayBridgeEvents.ts` |
 
 ## Tauri Invoke Surface
@@ -66,9 +66,9 @@
 |---|---|
 | `src-tauri/src/services/gateway/*` | GatewayController，维护桌面端到 Gateway 的连接、原生唤醒、inbox、状态同步与重连。 |
 | `src-tauri/src/services/gateway_bridge.rs` | 将 Gateway 请求转成前端/Tauri 能处理的操作，处理 settings/history/chat 等桥接。 |
-| `src-tauri/src/services/memory.rs` | MemoryStore，负责 Markdown 记忆文件、SQLite FTS 索引、quota、daily、organizer。 |
-| `src-tauri/src/services/skills.rs` | Skills root、builtin seed、install/create/validate/package、ClawHub。 |
-| `src-tauri/src/services/cron.rs` | CronManager，调度 bash/http/prompt task，记录日志并暴露 pending prompt run。 |
+| `src-tauri/src/services/memory/*` | MemoryStore，负责 Markdown 记忆文件、SQLite FTS 索引、quota、daily、organizer。 |
+| `src-tauri/src/services/skills/*` | Skills root、builtin seed、install/create/validate/package、ClawHub。 |
+| `src-tauri/src/services/automation/*` | 自动化调度与存储，覆盖 bash/http/prompt task 和运行记录。 |
 | `src-tauri/src/services/proxy.rs` | 本地 proxy server，用于 provider proxy 和上游访问。 |
 | `src-tauri/src/runtime/shell_runner.rs` | Shell 脚本执行抽象。 |
 | `src-tauri/src/runtime/managed_process.rs` | 长任务/后台进程管理。 |
@@ -89,11 +89,11 @@
 
 | 数据域 | Rust 命令/服务 | 表或文件 |
 |---|---|---|
-| Providers/System/MCP/Agents/Hooks/Cron/Remote/Memory settings | `commands/settings.rs` | `~/.liveagent/config.sqlite` 内多张 settings 表 |
-| Chat history | `commands/chat_history.rs` | `~/.liveagent/chat-history.sqlite3` 的 `chatHistory`、`chatHistorySegment`、`chatHistoryShare`、FTS |
-| Memory | `services/memory.rs` | `~/.liveagent/memory/**/*.md` + `memory-index.sqlite3` |
-| Skills | `services/skills.rs` | `~/.liveagent/skills` |
-| Cron logs | `commands/settings.rs`、`services/cron.rs` | `cron_execution_logs` |
+| Providers/System/MCP/Agents/Hooks/Cron/Remote/Memory settings | `commands/config/settings/*` | `~/.liveagent/config.sqlite` 内多张 settings 表 |
+| Chat history | `commands/history/chat_history/*`、`commands/history/history_db.rs` | `~/.liveagent/chat-history.sqlite3` 的 `chatHistory`、`chatHistorySegment`、`chatHistoryShare`、FTS |
+| Memory | `services/memory/*` | `~/.liveagent/memory/**/*.md` + `memory-index.sqlite3` |
+| Skills | `services/skills/*` | `~/.liveagent/skills` |
+| Cron logs | `commands/config/settings/*`、`services/automation/*` | `cron_execution_logs` |
 | Subagent identity/run/message | `commands/history/subagent_store.rs` | chat history 库内 `subagentMeta` 版本标记 + `subagentIdentity`/`subagentRun`/`subagentRunSegment`/`subagentMessage`（schema v2，版本不符即 drop-and-recreate，无 event 表） |
 
 ## GUI 的设计取舍
@@ -102,6 +102,6 @@
 |---|---|
 | ChatPage 仍是总编排层 | 对话运行时跨模型、工具、历史、压缩、记忆、Gateway、上传和 UI 状态，保留一个编排中心能减少跨模块隐式状态。 |
 | 高权限能力放 Rust | 文件系统、Shell、MCP 进程、SQLite、Gateway 连接、Cron 更适合在 Tauri 后端做权限与生命周期控制。 |
-| GUI 与 WebUI 复制部分 UI | 两端运行环境不同，WebUI 不能直接调用 Tauri，但需要维持体验 parity，因此复制 settings/hub/chat 组件并接入 shims。 |
+| GUI 与 WebUI 共享应用 UI | Settings、Hub、聊天侧边栏、输入栏和公共视觉只在 `crates/agent-ui` 保留一份；GUI 通过宿主适配器接入 Tauri 能力。 |
 | Settings 按域保存 | provider secret、remote、cron、memory 等域有不同验证和同步策略，分域保存便于限制泄露与减少误覆盖。 |
 | Gateway 控制面优先 | 远程首条 Chat command 与 Ping/Pong 必须先于大体积状态 reconciliation；后台 snapshot replay 只负责最终一致性，不阻塞 inbound。 |

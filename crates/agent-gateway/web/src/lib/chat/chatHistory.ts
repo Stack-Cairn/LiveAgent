@@ -3,4 +3,4 @@
 // content arrives as messages_json parsed by lib/chatUi. The canonical shape
 // lives in the mirrored sidebar state layer; this alias keeps the historical
 // name for the web components that render summaries.
-export type { SidebarConversation as ChatHistorySummary } from "../sidebar/types";
+export type { SidebarConversation as ChatHistorySummary } from "@liveagent/ui/lib/sidebar/types";

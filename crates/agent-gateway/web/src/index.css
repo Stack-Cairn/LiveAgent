@@ -1,5 +1,7 @@
 @import "tailwindcss";
+@import "../../../agent-ui/src/styles/transcript.css";
 @config "../tailwind.config.js";
+@source "../../../agent-ui/src";
 
 /* shimmer — ejected from shadcn/tailwind.css */
 @property --shimmer-angle {
@@ -111,7 +113,7 @@
 
 @font-face {
   font-family: "OpenAI Sans Semibold";
-  src: url("./assets/font/OpenAISans-Semibold.woff2") format("woff2");
+  src: url("../../../agent-ui/src/assets/font/OpenAISans-Semibold.woff2") format("woff2");
   font-style: normal;
   font-weight: normal;
   font-display: swap;
@@ -789,23 +791,6 @@
   .chat-markdown > *:last-child,
   .chat-markdown > *:last-child > *:last-child {
     margin-bottom: 0;
-  }
-
-  /*
-   * User bubble text wrapping rules.
-   * Width constraints live on the parent wrapper (.chat-user-bubble-wrap)
-   * so that percentage max-width resolves against the flex container
-   * (which has a definite width) instead of creating a circular dependency.
-   */
-  .chat-user-bubble {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
-  /* Browsers do not allocate a final line box for a trailing preserved LF. */
-  .chat-user-trailing-newline-anchor::before {
-    content: "\200b";
   }
 
   /* Settings page section transitions */

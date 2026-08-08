@@ -1,3 +1,4 @@
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import type { MutableRefObject } from "react";
 import type { Locale } from "../../../i18n/config";
 import type { GatewayBridgeEventController } from "../../../lib/chat/conversation/run";
@@ -8,7 +9,6 @@ import {
 } from "../../../lib/chat/page/chatPageHelpers";
 import { assistantMessageToText, streamAssistantMessage } from "../../../lib/providers/llm";
 import type { ProviderId } from "../../../lib/settings";
-import type { SidebarStore } from "../../../lib/sidebar/store";
 
 type TitleJobRefValue = {
   conversationId: string;

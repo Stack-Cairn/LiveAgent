@@ -8,8 +8,8 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });
-const reconcile = loader.loadModule("src/lib/sidebar/reconcile.ts");
-const scope = loader.loadModule("src/lib/sidebar/scope.ts");
+const reconcile = loader.loadModule("@liveagent/ui/lib/sidebar/reconcile.ts");
+const scope = loader.loadModule("@liveagent/ui/lib/sidebar/scope.ts");
 
 function conversation(id, overrides = {}) {
   return {

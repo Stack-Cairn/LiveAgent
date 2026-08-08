@@ -3,22 +3,25 @@
 // service drives these stages and unit tests pin them directly.
 
 import type { Tool } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
-import type { MemoryMeta, MemoryOrganizeRun } from "../api";
+import type { MemoryMeta, MemoryOrganizeRun } from "@liveagent/ui/lib/memory/api";
 import {
   MEMORY_BODY_LIMIT_BYTES,
   ORGANIZER_STRUCTURAL_CLUSTER_SIZE,
   ORGANIZER_TOPIC_CLUSTER_SIZE,
-} from "../config";
-import { ORGANIZER_PLAN_TOOL_NAME, ORGANIZER_TOPIC_TOOL_NAME } from "../prompts/organizer";
+} from "@liveagent/ui/lib/memory/config";
+import type {
+  OrganizerReviewItem,
+  OrganizerSafeDecision,
+} from "@liveagent/ui/lib/memory/organizer/runRecord";
 import type {
   MemoryType,
   OrganizerAction,
   OrganizerMode,
   RejectionBuckets,
   RiskLevel,
-} from "../schema";
-import type { OrganizerReviewItem, OrganizerSafeDecision } from "./runRecord";
+} from "@liveagent/ui/lib/memory/schema";
+import { Type } from "typebox";
+import { ORGANIZER_PLAN_TOOL_NAME, ORGANIZER_TOPIC_TOOL_NAME } from "../prompts/organizer";
 
 export type OrganizerEntry = MemoryMeta & {
   body: string;

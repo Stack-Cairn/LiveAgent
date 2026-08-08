@@ -18,8 +18,8 @@ const loader = createTsModuleLoader({
   },
 });
 
-const proxy = loader.loadModule("src/lib/providers/proxy.ts");
-const hubFetchModule = loader.loadModule("src/lib/hubFetch.ts");
+const proxy = loader.loadModule("@liveagent/ui/lib/providers/proxy.ts");
+const hubFetchModule = loader.loadModule("@liveagent/ui/lib/hubFetch.ts");
 
 test("prepareUpstreamProxyRequest 保留路径与查询串并携带三个反代头", async () => {
   const prepared = await proxy.prepareUpstreamProxyRequest(

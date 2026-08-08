@@ -1,5 +1,5 @@
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { LoaderCircle } from "../../../components/icons";
-import { useLocale } from "../../../i18n";
 
 export function HistorySwitchLoadingOverlay() {
   const { locale } = useLocale();

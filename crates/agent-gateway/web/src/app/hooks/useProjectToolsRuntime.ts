@@ -1,16 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import type { WorkspaceCodeEditorOpenRequest } from "@/components/workspace-editor/WorkspaceCodeEditorOverlay";
-import type { WorkspaceFilePreviewOpenRequest } from "@/components/workspace-editor/WorkspaceFilePreviewOverlay";
-import type { WorkspaceSshTerminalOpenRequest } from "@/components/workspace-editor/WorkspaceSshTerminalOverlay";
-import { isWorkspacePreviewPath } from "@/components/workspace-editor/workspaceImagePreview";
+import type { WorkspaceCodeEditorOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceCodeEditorOverlay";
+import type { WorkspaceFilePreviewOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay";
+import type { WorkspaceSshTerminalOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceSshTerminalOverlay";
+import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import {
   applyTerminalEventToSessions,
   replaceTerminalSessionsForProject,
   sortTerminalSessions,
   terminalSessionBelongsToProject,
-} from "@/lib/terminal/sessionStore";
-import type { TerminalClient, TerminalSession } from "@/lib/terminal/types";
+} from "@liveagent/ui/lib/terminal/sessionStore";
+import type { TerminalClient, TerminalSession } from "@liveagent/ui/lib/terminal/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type UseProjectToolsRuntimeParams = {
   terminalClient: TerminalClient | null;

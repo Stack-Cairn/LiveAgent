@@ -2,7 +2,7 @@
 // the injection prompt, the extraction prompt, and the MemoryManager tool
 // schema all compose from here, so wording can never drift between audiences.
 
-import { CONFIDENCE_CONTRACT } from "../schema";
+import { CONFIDENCE_CONTRACT } from "@liveagent/ui/lib/memory/schema";
 
 export const MEMORY_SLUG_POLICY =
   "Slugs are stable internal IDs. Never include the user's current name, old name, nickname, or persona label in slugs; use semantic IDs like user-name, user-communication-style, user-investment, project-purpose, or reference-api-contract.";

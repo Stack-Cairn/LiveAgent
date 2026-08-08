@@ -4,8 +4,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
-const normalize = loader.loadModule("src/lib/settings/normalize.ts");
-const sync = loader.loadModule("src/lib/settings/sync.ts");
+const normalize = loader.loadModule("@liveagent/ui/lib/settings/normalize.ts");
+const sync = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
 
 test("basic provider field normalizers trim values and remove duplicate models", () => {

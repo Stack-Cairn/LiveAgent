@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const remoteInput = loader.loadModule("src/pages/settings/remoteInput.ts");
+const remoteInput = loader.loadModule("@liveagent/ui/pages/settings/remoteInput.ts");
 
 test("remote integer drafts stay editable while preserving valid values", () => {
   assert.equal(remoteInput.normalizeIntegerDraftInput(":50051"), "50051");

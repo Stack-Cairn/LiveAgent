@@ -1,15 +1,18 @@
+import { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
+import {
+  AssistantStatus,
+  CompactingText,
+  VibingText,
+} from "@liveagent/ui/components/chat/AssistantStatus";
+import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import { memo, type ReactNode } from "react";
-
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { VIBING_STATUS } from "../../../lib/chat/page/chatPageHelpers";
 import type { AssistantUnitRow } from "../transcript/rowModel";
-import { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
 import { RetryDetailsBlock, RoundBlockContent } from "./assistant-bubble/RoundContent";
-import { AssistantStatus, CompactingText, VibingText } from "./assistant-bubble/StatusText";
-import { UsagePanel } from "./assistant-bubble/UsagePanel";
 
-export { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
+export { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 
 export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   row: AssistantUnitRow;

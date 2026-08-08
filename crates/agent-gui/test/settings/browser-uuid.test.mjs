@@ -3,16 +3,16 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { createUuid } = loader.loadModule("src/lib/shared/id.ts");
+const { createUuid } = loader.loadModule("@liveagent/ui/lib/shared/id.ts");
 const { createHookRunScope } = loader.loadModule("src/lib/automation/hookRunner.ts");
-const { createEmptyRequestDraft } = loader.loadModule("src/pages/settings/httpRequestEditor.tsx");
+const { createEmptyRequestDraft } = loader.loadModule("@liveagent/ui/pages/settings/httpRequestEditor.tsx");
 const { normalizeAgentPromptTemplate, normalizeCustomProvider, normalizeSshSettings } =
   loader.loadModule("src/lib/settings/index.ts");
 
 let capturedCronOps = [];
 const cronLoader = createTsModuleLoader({
   mocks: {
-    "../automation": {
+    "@liveagent/ui/lib/automation/index": {
       async applyCronOps(ops) {
         capturedCronOps = ops;
         return {

@@ -8,6 +8,11 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
+    "paths": {
+      "@liveagent/app/*": ["./src/*"],
+      "@liveagent/adapters/*": ["./src/agent-ui-adapters/*"],
+      "@liveagent/ui/*": ["../agent-ui/src/*"]
+    },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,

@@ -1,4 +1,4 @@
-import { type Locale, t as translate } from "../i18n";
+import { type Locale, t as translate } from "@liveagent/ui/i18n/index";
 
 type SettingsSyncLoadingProps = {
   locale: Locale;

@@ -1,5 +1,3 @@
-import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../../i18n/config";
-import { normalizeFontFamily } from "../fontFamily";
 import {
   findCatalogModel,
   getProviderFallbackLimits,
@@ -7,21 +5,27 @@ import {
   repairStaleCrossProviderLimits,
   resolveModelLimits,
   resolveModelLimitsAcrossProviders,
-} from "../models/modelCatalog";
+} from "@liveagent/ui/lib/models/modelCatalog";
 import {
   clampThinkingLevelToList,
   isAnthropicAdaptiveModelId,
   resolveModelThinking,
   type ThinkingLevel,
-} from "../models/modelThinking";
-import { createUuid } from "../shared/id";
-import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
+} from "@liveagent/ui/lib/models/modelThinking";
+import {
+  normalizeApiKey,
+  normalizeBaseUrl,
+  normalizeModels,
+} from "@liveagent/ui/lib/settings/normalize";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
+import { mergeAlwaysEnabledSkillNames } from "@liveagent/ui/lib/skills/builtin";
 import {
   DEFAULT_CHAT_TRANSCRIPT_WIDTH,
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
-} from "../transcript-width/transcriptWidthModel";
-import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
+} from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
+import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../../i18n/config";
+import { normalizeFontFamily } from "../fontFamily";
 
 export { normalizeFontFamily } from "../fontFamily";
 

@@ -1,12 +1,11 @@
 import type { ImageContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { prepareImageProxyUrl } from "@liveagent/ui/lib/providers/proxy";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useMemo, useState } from "react";
-
-import { ImagePreview, type ImagePreviewSlide } from "../../../../components/chat/ImagePreview";
 import { ImageOff, Loader2 } from "../../../../components/icons";
-import { useLocale } from "../../../../i18n";
 import type { ToolTraceItem } from "../../../../lib/chat/messages/uiMessages";
-import { prepareImageProxyUrl } from "../../../../lib/providers/proxy";
-import { cn } from "../../../../lib/shared/utils";
 import type {
   DisplayImageItemDetails,
   DisplayImageResultDetails,

@@ -1,6 +1,5 @@
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-
-import { useLocale } from "../../../i18n";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import { splitUserAttachmentsForDisplay } from "./transcriptUtils";
 import { UserAttachmentCards } from "./UserAttachmentCards";

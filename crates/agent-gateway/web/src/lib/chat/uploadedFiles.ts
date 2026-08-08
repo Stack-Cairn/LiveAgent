@@ -1,6 +1,6 @@
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type { Message, UserMessage } from "../agentTypes";
-import { createUuid } from "../shared/id";
-import { normalizeLogicalLineEndings } from "./composerText";
 
 export type UploadedReadableFileKind =
   | "text"

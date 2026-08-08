@@ -1,3 +1,7 @@
+import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { mentionChipClassName } from "@liveagent/ui/components/chat/mentionChipStyles";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   type FocusEvent,
@@ -11,11 +15,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { getFileTypeIcon } from "../../../components/chat/fileTypeIcons";
-import { mentionChipClassName } from "../../../components/chat/mentionChipStyles";
 import { SkillIcon } from "../../../components/icons";
-import { useLocale } from "../../../i18n";
-import { normalizeLogicalLineEndings } from "../composerText";
 
 import {
   type CodeMentionReference,

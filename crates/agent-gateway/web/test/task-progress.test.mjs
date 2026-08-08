@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
-const taskProgress = createWebModuleLoader({ rootDir }).loadModule("src/lib/chat/taskProgress.ts");
+const taskProgress = createWebModuleLoader({ rootDir }).loadModule("@liveagent/ui/lib/chat/taskProgress.ts");
 const todo = (content, status, activeForm = content) => ({ content, status, activeForm });
 const block = ({
   todos,

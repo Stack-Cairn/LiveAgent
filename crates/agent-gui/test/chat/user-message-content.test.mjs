@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as jsxRuntime from "react/jsx-runtime";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
@@ -9,10 +7,6 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const userMessageContent = loader.loadModule("src/lib/chat/messages/userMessageContent.tsx");
 const mentionReferences = loader.loadModule("src/lib/chat/messages/mentionReferences.ts");
-const fileTypeIconsPath = path.resolve(
-  fileURLToPath(new URL("../..", import.meta.url)),
-  "src/components/chat/fileTypeIcons.tsx",
-);
 const reactRenderLoader = createTsModuleLoader({
   mocks: {
     "react/jsx-runtime": jsxRuntime,
@@ -23,7 +17,7 @@ const reactRenderLoader = createTsModuleLoader({
     },
     // ~icons mocks return plain objects that are not renderable React
     // elements; file-type icons must resolve to a real component here.
-    [fileTypeIconsPath]: {
+    "@liveagent/ui/components/chat/fileTypeIcons": {
       getFileTypeIcon() {
         return () => null;
       },

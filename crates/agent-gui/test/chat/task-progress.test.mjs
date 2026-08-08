@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const taskProgress = createTsModuleLoader().loadModule("src/lib/chat/taskProgress.ts");
+const taskProgress = createTsModuleLoader().loadModule("@liveagent/ui/lib/chat/taskProgress.ts");
 const todo = (content, status, activeForm = content) => ({ content, status, activeForm });
 const row = (blocks) => ({ kind: "assistant", rounds: [{ blocks }] });
 const userRow = (key) => ({ kind: "user", key });

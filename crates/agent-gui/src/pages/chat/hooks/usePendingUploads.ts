@@ -1,8 +1,8 @@
+import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
+import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
+import { invalidateUploadedImagePreviewCache } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import { invoke } from "@tauri-apps/api/core";
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
-
-import type { MentionComposerHandle } from "../../../components/chat/MentionComposer";
-import type { NotifyItem } from "../../../components/chat/NotifyToast";
 import {
   mergePendingUploadedFiles,
   type PendingUploadedFile,
@@ -199,6 +199,9 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         return;
       }
       if (result.files.length > 0) {
+        for (const file of result.files) {
+          invalidateUploadedImagePreviewCache(targetWorkdir, file);
+        }
         const previous = getPendingUploadsForConversation(targetConversationId);
         const merged = mergePendingUploadedFiles(previous, result.files);
         if (merged.length > MAX_UPLOAD_FILES) {

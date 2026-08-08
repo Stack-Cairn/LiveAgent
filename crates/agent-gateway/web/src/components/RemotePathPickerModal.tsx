@@ -1,4 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   IndividualTreeViewState,
@@ -8,8 +12,6 @@ import type {
 } from "react-complex-tree";
 import { ControlledTreeEnvironment, Tree } from "react-complex-tree";
 import { createPortal } from "react-dom";
-import { useLocale } from "../i18n";
-import { useModalMotion } from "../lib/shared/modalMotion";
 import { AlertTriangle, File, FolderOpen, HardDrive, Home, Loader2, Plus, X } from "./icons";
 import type { RemoteFsRoot } from "./remotePathPickerPaths";
 import {
@@ -20,8 +22,6 @@ import {
   normalizePathForCompare,
   stripTrailingPathSeparators,
 } from "./remotePathPickerPaths";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
 
 // WebUI-only global component: browses paths on the paired desktop (GUI)
 // device over the gateway. Directory mode reuses the fs_roots/fs_list_dirs

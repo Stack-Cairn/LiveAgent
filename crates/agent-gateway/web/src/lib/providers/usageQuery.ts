@@ -1,15 +1,16 @@
 // 平台传输适配层:WebUI 端用量查询经 Gateway WebSocket 桥接到桌面端执行(provider.usage.query)。
 // 共享的状态归约/协调器/hook 逻辑在 usageQueryCore.ts(两端字节镜像),本文件只放平台差异。
-import { getGatewayWebSocketClient } from "@/lib/gatewaySocket";
-import { loadToken } from "@/lib/storage";
-import type { UsageQueryConfig } from "../settings";
+
 import {
   type ProviderUsageResult,
   type UsageQueryProvider,
   useProviderUsageWithQuery,
-} from "./usageQueryCore";
+} from "@liveagent/ui/lib/providers/usageQueryCore";
+import { getGatewayWebSocketClient } from "@/lib/gatewaySocket";
+import { loadToken } from "@/lib/storage";
+import type { UsageQueryConfig } from "../settings";
 
-export * from "./usageQueryCore";
+export * from "@liveagent/ui/lib/providers/usageQueryCore";
 
 export async function queryProviderUsage(
   providerId: string,

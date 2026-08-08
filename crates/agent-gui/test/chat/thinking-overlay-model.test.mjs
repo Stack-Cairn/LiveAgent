@@ -4,10 +4,10 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const { resolveThinkingOverlayPlacement } = createTsModuleLoader().loadModule(
-  "src/lib/chat/thinkingOverlayModel.ts",
+  "@liveagent/ui/lib/chat/thinkingOverlayModel.ts",
 );
 const componentSource = fs.readFileSync(
-  new URL("../../src/components/chat/ThinkingActivity.tsx", import.meta.url),
+  new URL("../../../agent-ui/src/components/chat/ThinkingActivity.tsx", import.meta.url),
   "utf8",
 );
 

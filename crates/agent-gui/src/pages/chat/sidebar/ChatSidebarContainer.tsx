@@ -3,25 +3,31 @@
 // ChatPage), the conversation-rename UI state, the delete flow, and the
 // error-code → i18n mapping. NOT mirrored — the web end has its own container.
 
-import { useCallback, useMemo, useState } from "react";
-import { ChatHistorySidebar } from "../../../components/chat/ChatHistorySidebar";
-import { useLocale } from "../../../i18n";
-import type { AppUpdateController } from "../../../lib/appUpdates";
-import { normalizeConversationTitle } from "../../../lib/chat/page/chatPageHelpers";
-import type { WorkspaceProject } from "../../../lib/settings";
-import type { SidebarBatchDeleteOptions } from "../../../lib/sidebar/batchDelete";
-import { deleteSidebarConversations } from "../../../lib/sidebar/batchDelete";
+import { ChatHistorySidebar } from "@liveagent/ui/components/chat/ChatHistorySidebar";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import type { SidebarBatchDeleteOptions } from "@liveagent/ui/lib/sidebar/batchDelete";
+import { deleteSidebarConversations } from "@liveagent/ui/lib/sidebar/batchDelete";
 import {
   selectConversations,
   selectListState,
   selectProjectActivityInputs,
   selectRunningConversationIds,
   sidebarShallowEqual,
-} from "../../../lib/sidebar/selectors";
-import type { SidebarSnapshot, SidebarStore } from "../../../lib/sidebar/store";
-import type { SidebarConversation } from "../../../lib/sidebar/types";
-import { useSidebarSelector } from "../../../lib/sidebar/useSidebarSelector";
-import { sortWorkspaceProjectsByActivity } from "../../../lib/workspaceProjects";
+} from "@liveagent/ui/lib/sidebar/selectors";
+import type { SidebarSnapshot, SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
+import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
+import { sortWorkspaceProjectsByActivity } from "@liveagent/ui/lib/workspaceProjects";
+import { useCallback, useMemo, useState } from "react";
+import {
+  DesktopSidebarBrand,
+  DesktopSidebarTitleBar,
+  DesktopSidebarUpdate,
+  hideDesktopSidebarCloseButton,
+} from "../../../agent-ui-adapters/sidebarChrome";
+import type { AppUpdateController } from "../../../lib/appUpdates";
+import { normalizeConversationTitle } from "../../../lib/chat/page/chatPageHelpers";
+import type { WorkspaceProject } from "../../../lib/settings";
 
 type ChatSidebarContainerProps = {
   store: SidebarStore;
@@ -182,15 +188,14 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
   // list error, so it takes the banner slot when both exist.
   const firstMutationError = mutationErrors.entries().next();
   let errorMessage: string | null = null;
-  let errorDetail: string | null = null;
-  let handleDismissError: (() => void) | undefined;
+  let actionErrorMessage: string | null = null;
+  let handleDismissActionError: (() => void) | undefined;
   if (!firstMutationError.done) {
     const [errorConversationId, errorCode] = firstMutationError.value;
-    errorMessage = t(`chat.history.${errorCode}`);
-    handleDismissError = () => store.clearMutationError(errorConversationId);
+    actionErrorMessage = t(`chat.history.${errorCode}`);
+    handleDismissActionError = () => store.clearMutationError(errorConversationId);
   } else if (listState.error) {
-    errorMessage = t(`chat.history.${listState.error}`);
-    errorDetail = listState.errorDetail;
+    errorMessage = listState.errorDetail?.trim() || t(`chat.history.${listState.error}`);
   }
 
   return (
@@ -205,8 +210,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       hasMore={listState.hasMore}
       isLoadingMore={listState.isLoadingMore}
       errorMessage={errorMessage}
-      errorDetail={errorDetail}
-      onDismissError={handleDismissError}
+      actionErrorMessage={actionErrorMessage}
+      onDismissActionError={handleDismissActionError}
       renamingId={renamingId}
       renameDraft={renameDraft}
       isOpen={props.isOpen}
@@ -253,9 +258,12 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       onLoadMore={handleLoadMore}
       onCloseSidebar={props.onCloseSidebar}
       onOpenSettings={props.onOpenSettings}
-      appUpdate={props.appUpdate}
       onOpenSkillsHub={props.onOpenSkillsHub}
       onOpenMcpHub={props.onOpenMcpHub}
+      headerTop={<DesktopSidebarTitleBar />}
+      brand={<DesktopSidebarBrand />}
+      hideCloseButton={hideDesktopSidebarCloseButton()}
+      footerTrailing={<DesktopSidebarUpdate appUpdate={props.appUpdate} />}
     />
   );
 }

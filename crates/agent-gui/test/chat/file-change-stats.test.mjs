@@ -4,8 +4,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const fileChangeStats = loader.loadModule("src/lib/chat/messages/fileChangeStats.ts");
-const odometer = loader.loadModule("src/components/chat/OdometerNumber.tsx");
-const badge = loader.loadModule("src/components/chat/FileChangeBadge.tsx");
+const odometer = loader.loadModule("@liveagent/ui/components/chat/OdometerNumber.tsx");
+const badge = loader.loadModule("@liveagent/ui/components/chat/FileChangeBadge.tsx");
 
 const PREVIEW_META_KEY = "__liveagent_stream_preview";
 

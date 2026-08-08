@@ -1,14 +1,13 @@
+import { HostedSearchGroupView } from "@liveagent/ui/components/chat/HostedSearchGroupView";
+import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import { ThinkingActivity } from "@liveagent/ui/components/chat/ThinkingActivity";
+import { Markdown } from "@liveagent/ui/components/Markdown";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import { memo, type ReactNode, useState } from "react";
-
-import { ThinkingActivity } from "../../../../components/chat/ThinkingActivity";
 import { ChevronRight, RefreshCw } from "../../../../components/icons";
-import { Markdown } from "../../../../components/Markdown";
-import { useLocale } from "../../../../i18n";
 import type { ChatFileLink } from "../../../../lib/chat/chatFileLinks";
 import type { RetryAttemptRecord } from "../../../../lib/chat/conversation/liveTranscriptStore";
 import type { GroupedRoundBlock } from "./assistantBubbleUtils";
-import { HostedSearchGroupView } from "./HostedSearchGroupView";
-import { LazyCollapse } from "./LazyCollapse";
 import { MemoToolCallItem } from "./ToolCallItem";
 import { getNativeDisplayImagePayload, NativeDisplayImageBlock } from "./ToolImages";
 import { ToolTraceGroup } from "./ToolTraceGroup";

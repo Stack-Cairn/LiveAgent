@@ -1,6 +1,5 @@
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
-
-import { createUuid } from "../shared/id";
 
 const POWER_ACTIVITY_TTL_MS = 15 * 60_000;
 const POWER_ACTIVITY_REFRESH_MS = Math.floor(POWER_ACTIVITY_TTL_MS / 2);

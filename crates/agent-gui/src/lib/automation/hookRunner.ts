@@ -3,10 +3,10 @@
 // conversation run owns a cancellable scope: aborting the run drops its
 // queued hooks and kills its in-flight script via the Rust scope registry.
 
-import { invoke } from "@tauri-apps/api/core";
+import type { HookDef, HookEvent, HookType } from "@liveagent/ui/lib/automation/types";
 
-import { createUuid } from "../shared/id";
-import type { HookDef, HookEvent, HookType } from "./types";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
+import { invoke } from "@tauri-apps/api/core";
 
 export type HookRunWarning = {
   hookName: string;

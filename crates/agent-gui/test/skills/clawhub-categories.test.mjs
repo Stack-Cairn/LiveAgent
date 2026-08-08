@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const categories = loader.loadModule("src/lib/skills/clawHubCategories.ts");
+const categories = loader.loadModule("@liveagent/ui/lib/skills/clawHubCategories.ts");
 
 function classify(card) {
   return categories.classifyClawHubSkill({

@@ -85,8 +85,7 @@ jobs:
           workspaces: crates/agent-gui/src-tauri
 
       - name: Install frontend dependencies
-        working-directory: crates/agent-gui
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter liveagent...
 
       - name: Import Apple signing certificate
         env:
@@ -191,8 +190,7 @@ jobs:
           workspaces: crates/agent-gui/src-tauri
 
       - name: Install frontend dependencies
-        working-directory: crates/agent-gui
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter liveagent...
 
       - name: Build Windows bundles
         working-directory: crates/agent-gui
@@ -282,8 +280,7 @@ jobs:
           workspaces: crates/agent-gui/src-tauri
 
       - name: Install frontend dependencies
-        working-directory: crates/agent-gui
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter liveagent...
 
       - name: Build Linux bundles
         working-directory: crates/agent-gui

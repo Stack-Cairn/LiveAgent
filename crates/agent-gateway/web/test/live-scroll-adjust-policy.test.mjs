@@ -9,7 +9,7 @@ const loader = createWebModuleLoader({
 });
 
 const { createLiveRowScrollAdjustPolicy } = loader.loadModule(
-  "src/lib/transcript-virtual/liveScrollAdjustPolicy.ts",
+  "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy.ts",
 );
 
 

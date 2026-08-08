@@ -4,8 +4,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
-const sync = loader.loadModule("src/lib/settings/sync.ts");
-const rightDockModel = loader.loadModule("src/components/project-tools/rightDockModel.ts");
+const sync = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
+const rightDockModel = loader.loadModule("@liveagent/ui/components/project-tools/rightDockModel.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -531,7 +531,7 @@ test("right dock merge accepts legacy-shaped incoming project state", () => {
 
 
 describe("file tree model", () => {
-  const fileTreeModel = loader.loadModule("src/components/project-tools/file-tree/model.ts");
+  const fileTreeModel = loader.loadModule("@liveagent/ui/components/project-tools/file-tree/model.ts");
 
   const dirNode = (path, children, extra = {}) => ({
     path,

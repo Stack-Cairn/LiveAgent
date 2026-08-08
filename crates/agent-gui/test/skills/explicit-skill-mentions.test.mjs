@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const skills = loader.loadModule("src/lib/skills/index.ts");
+const skills = loader.loadModule("@liveagent/ui/lib/skills/index.ts");
 
 const enabledSkills = [
   {

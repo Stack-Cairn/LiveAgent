@@ -11,15 +11,12 @@ function Loader2(props) {
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
   mocks: {
-    "../../../components/icons": { Loader2 },
-    "../../../i18n": { useLocale: () => ({ t: (key) => key }) },
-    "../../../lib/chat/chatPageHelpers": { VIBING_STATUS: "Vibing" },
+    "@liveagent/app/components/icons": { Loader2 },
+    "@liveagent/ui/i18n/index": { useLocale: () => ({ t: (key) => key }) },
   },
 });
 
-const { AssistantStatus } = loader.loadModule(
-  "src/pages/chat/assistant-bubble/StatusText.tsx",
-);
+const { AssistantStatus } = loader.loadModule("@liveagent/ui/components/chat/AssistantStatus");
 
 test("assistant running status keeps its spinner animated", () => {
   const status = AssistantStatus({ children: "Vibing" });

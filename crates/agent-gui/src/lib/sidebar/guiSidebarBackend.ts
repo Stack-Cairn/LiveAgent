@@ -2,6 +2,8 @@
 // IPC surface and the single CHAT_HISTORY_SYNC_EVENT subscription. This file
 // is NOT mirrored — it is the desktop end's platform boundary.
 
+import type { SidebarBackend } from "@liveagent/ui/lib/sidebar/backend";
+import type { SidebarBackendEvent } from "@liveagent/ui/lib/sidebar/types";
 import { listen } from "@tauri-apps/api/event";
 import type { ChatHistorySummary } from "../chat/history/chatHistory";
 import {
@@ -11,8 +13,6 @@ import {
   renameChatHistory,
   setChatHistoryPinned,
 } from "../chat/history/chatHistory";
-import type { SidebarBackend } from "./backend";
-import type { SidebarBackendEvent } from "./types";
 
 // The desktop history sync wire protocol. The Rust side emits one event per
 // history mutation / run transition; this adapter is the only listener.

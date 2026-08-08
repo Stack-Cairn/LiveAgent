@@ -4,7 +4,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const { createSidebarStore } = loader.loadModule("src/lib/sidebar/store.ts");
+const { createSidebarStore } = loader.loadModule("@liveagent/ui/lib/sidebar/store.ts");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

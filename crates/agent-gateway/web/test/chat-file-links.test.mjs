@@ -29,7 +29,7 @@ const markdownLoader = createWebModuleLoader({
     "./ui/button": { Button: (props) => ({ type: "Button", props }) },
   },
 });
-const markdownModule = markdownLoader.loadModule("src/components/Markdown.tsx");
+const markdownModule = markdownLoader.loadModule("@liveagent/ui/components/Markdown.tsx");
 const {
   decodeChatFileLinkPayload,
   encodeChatFileLink,
@@ -83,7 +83,7 @@ test("Gateway historical and streaming rows keep the explicit file-open prop cha
   const files = [
     "../src/app/GatewayApp.tsx",
     "../src/components/GatewayTranscript.tsx",
-    "../src/components/chat/ThinkingActivity.tsx",
+    "../../../agent-ui/src/components/chat/ThinkingActivity.tsx",
     "../src/pages/chat/AssistantBubble.tsx",
     "../src/pages/chat/assistant-bubble/RoundContent.tsx",
   ];
@@ -101,7 +101,9 @@ test("Gateway historical and streaming rows keep the explicit file-open prop cha
   assert.ok((roundContent.match(/workdir=\{workdir\}/g) ?? []).length >= 2);
 
   const thinkingActivity = fs.readFileSync(
-    fileURLToPath(new URL("../src/components/chat/ThinkingActivity.tsx", import.meta.url)),
+    fileURLToPath(
+      new URL("../../../agent-ui/src/components/chat/ThinkingActivity.tsx", import.meta.url),
+    ),
     "utf8",
   );
   assert.match(thinkingActivity, /<Markdown/);

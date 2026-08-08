@@ -19,7 +19,7 @@ const loader = createTsModuleLoader({
     },
   },
 });
-const providerUtils = loader.loadModule("src/pages/settings/providerUtils.ts");
+const providerUtils = loader.loadModule("@liveagent/ui/pages/settings/providerUtils.ts");
 
 function jsonResponse(status, payload) {
   return {

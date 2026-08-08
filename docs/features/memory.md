@@ -2,21 +2,21 @@
 
 ## 总体模型
 
-LiveAgent 的记忆系统由 Rust `MemoryStore` 作为本地真相源；前端 TypeScript 记忆域集中在 `src/lib/memory/`，提供 Settings 管理、Chat prompt 注入、`MemoryManager` 工具、回合后静默提取与离线组织器。Gateway/WebUI 不拥有独立记忆库，只把 WebUI 的 memory 请求转发到桌面端；共享逻辑文件由 `scripts/mirror-manifest.json` 强制双端逐字节镜像。
+LiveAgent 的记忆系统由 Rust `MemoryStore` 作为本地真相源；前端 TypeScript 记忆域分布在共享包与桌面运行时中，提供 Settings 管理、Chat prompt 注入、`MemoryManager` 工具、回合后静默提取与离线组织器。Gateway/WebUI 不拥有独立记忆库，只把 WebUI 的 memory 请求转发到桌面端。
 
 | 层 | 路径 | 职责 |
 |---|---|---|
 | Rust Store | `src-tauri/src/services/memory/` | Markdown 文件读写、SQLite FTS 索引、搜索、quota、daily、organize run、audit；`mutations/evidence.rs` 是置信度契约与 evidence frontmatter 的唯一实现点。 |
 | Tauri commands | `src-tauri/src/commands/integration/memory.rs` | `memory_list/read/search/write/update/delete/accept/apply_batch/quota_summary/organize_*` 等入口。 |
-| 唯一真源 schema | `src/lib/memory/schema.ts`（镜像） | scope/type/confidence/action 枚举、计划/决策形状、`CONFIDENCE_CONTRACT` 常量。 |
-| 配置常量 | `src/lib/memory/config.ts`（镜像） | 记忆域全部魔数（节流、窗口、簇大小、配额阶梯阈值等）。 |
-| 前端 API | `src/lib/memory/api.ts`（镜像） | Tauri memory commands 的 TypeScript 封装；web 端经 `tauriCore` shim 走 websocket。 |
+| 唯一真源 schema | `crates/agent-ui/src/lib/memory/schema.ts` | scope/type/confidence/action 枚举、计划/决策形状、`CONFIDENCE_CONTRACT` 常量。 |
+| 配置常量 | `crates/agent-ui/src/lib/memory/config.ts` | 记忆域全部魔数（节流、窗口、簇大小、配额阶梯阈值等）。 |
+| 前端 API | `crates/agent-ui/src/lib/memory/api.ts` | memory commands 的 TypeScript 封装；具体传输由宿主适配。 |
 | Prompts | `src/lib/memory/prompts/{shared,injection,extraction,organizer,managerTool}.ts` | 按受众拆分：注入索引、提取指令、组织器提示、工具描述；策略文案单一来源。 |
 | 提取引擎 | `src/lib/chat/memory/extractionEngine.ts` | 回合后隐藏 LLM 轮：紧凑上下文 → `SubmitMemoryPlan` 工具提交 → 单次 `memory_apply_batch`。 |
 | 提取控制器 | `src/lib/chat/memory/extractionController.ts` | 会话级生命周期：同步原子认领、独立 AbortController、coalesce 队列、dispose 清理。 |
 | Tool | `src/lib/tools/memoryTools.ts` | 对模型暴露 `MemoryManager`（ro/rw）；evidence 以结构化字段直传 Rust。 |
 | 组织器 | `src/lib/memory/organizer/{pipeline,runRecord,quota,service}.ts` + `src/components/memory/useMemoryOrganizer.ts` | 纯函数流水线 + 类型化 v4 run 记录 + 配额阶梯 + 平凡 TS 调度服务（React 仅挂载）。 |
-| Settings UI | `src/pages/settings/memory/`（5 个镜像组件 + 各端 `platform.tsx` 适配层） | 记忆管理、organizer 设置/历史/手动应用、配额横幅。 |
+| Settings UI | `crates/agent-ui/src/pages/settings/memory/` + 各端 `platform.tsx` | 记忆管理、organizer 设置/历史/手动应用、配额横幅。 |
 
 ## 存储结构
 
@@ -102,10 +102,10 @@ LiveAgent 的记忆系统由 Rust `MemoryStore` 作为本地真相源；前端 T
 
 | 场景 | 实现 |
 |---|---|
-| 镜像纪律 | `lib/memory/{schema,config,api}.ts`、`organizer/{runRecord,quota}.ts`、`pages/settings/memory/` 5 个组件双端逐字节镜像并登记 manifest；平台差异（Select 实现、chatPageHelpers 路径、poke）只进各端 `pages/settings/memory/platform.tsx`。 |
+| 共享纪律 | schema、config、API、organizer 纯逻辑与 Settings 组件位于 `crates/agent-ui`；平台差异只进各端 `pages/settings/memory/platform.tsx`。 |
 | WebUI MemoryPanel | 通过 `memory.manage` 转发到桌面端；desktop 桥的 `handle_memory_manage_sync` 为显式 match（新增命令需加臂）。 |
 | WebUI organizer | Run Now 创建 pending run（`pokeMemoryOrganizer` 恒 false → QueuedRemote 提示），实际执行依赖桌面端认领。 |
-| 提取/组织执行 | 仅桌面端（`prompts/*`、`extraction/*`、`organizer/{pipeline,service}`、`memoryTools` 不镜像）。 |
+| 提取/组织执行 | 仅桌面端（`prompts/*`、`extraction/*`、`organizer/{pipeline,service}`、`memoryTools` 不进入 WebUI 宿主）。 |
 | Project scope | WebUI 请求必须带 workdir，Gateway bridge 透传到 Rust，避免 project memory 失真。 |
 
 ## 常见排障入口

@@ -3,10 +3,13 @@
 // is the per-platform adapter — the web frontend ships its own copy speaking
 // the gateway process.* protocol.
 
+import type {
+  ManagedProcessBackend,
+  ManagedProcessRecord,
+  ManagedProcessState,
+} from "@liveagent/ui/lib/managed-process/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-
-import type { ManagedProcessBackend, ManagedProcessRecord, ManagedProcessState } from "./types";
 
 const MANAGED_PROCESS_CHANGED_EVENT = "managed-process:changed";
 

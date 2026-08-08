@@ -4,7 +4,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const { estimateAssistantRowHeight, estimateUserRowHeight, measureEstimateText } =
-  loader.loadModule("src/lib/transcript-virtual/rowEstimates.ts");
+  loader.loadModule("@liveagent/ui/lib/transcript-virtual/rowEstimates.ts");
 
 test("measureEstimateText splits prose from fenced code", () => {
   const text = ["intro line", "```ts", "const a = 1;", "const b = 2;", "```", "outro"].join("\n");

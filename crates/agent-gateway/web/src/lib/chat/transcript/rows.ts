@@ -1,3 +1,4 @@
+import type { SubagentBatchDetails } from "@liveagent/ui/lib/subagents/protocol";
 import type { ToolCall, ToolResultMessage } from "@/lib/agentTypes";
 import {
   appendTextDeltaToRound,
@@ -16,7 +17,6 @@ import {
   hashValue,
   stripRecoveredToolCallMarkup,
 } from "@/lib/chatUi";
-import type { SubagentBatchDetails } from "@/lib/subagents/protocol";
 
 import type { TranscriptRow, TranscriptRowOrigin, Turn } from "./types";
 

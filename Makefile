@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := dev
 
 AGENT_GUI_DIR := crates/agent-gui
+AGENT_UI_DIR := crates/agent-ui
 AGENT_GATEWAY_DIR := crates/agent-gateway
 AGENT_GATEWAY_WEB_DIR := $(AGENT_GATEWAY_DIR)/web
 
@@ -28,7 +29,7 @@ DEV_GATEWAY_HTTP_ADDR ?= :50052
 DEV_WEBUI_PROXY_API ?= http://localhost:50052
 GATEWAY_DOCKER_IMAGE ?= liveagent-gateway:local
 RELEASE_TAG ?=
-MODEL_CATALOG_GENERATED_FILES := $(AGENT_GUI_DIR)/src/lib/models/catalog.generated.ts $(AGENT_GATEWAY_WEB_DIR)/src/lib/models/catalog.generated.ts
+MODEL_CATALOG_GENERATED_FILES := $(AGENT_UI_DIR)/src/lib/models/catalog.generated.ts
 
 .PHONY: all dev build desktop-build-macos desktop-build-macos-release desktop-build-macos-intel desktop-build-macos-m desktop-build-windows desktop-build-linux github-release-main check-github-release-tag help
 .PHONY: dev-gateway dev-webui ensure-webui-embed-stub
@@ -98,7 +99,7 @@ github-release-main: check-github-release-tag
 # The catalog refresh must land on main before the tag is cut, and only after
 # test:release has validated the new snapshot (catalog invariant tests).
 	$(MAKE) update-model-catalog
-	pnpm --dir $(AGENT_GUI_DIR) install --frozen-lockfile
+	pnpm install --frozen-lockfile --filter liveagent...
 	pnpm --dir $(AGENT_GUI_DIR) test:release
 	cargo check --manifest-path $(AGENT_GUI_DIR)/src-tauri/Cargo.toml --tests
 	@set -e; \
@@ -153,7 +154,7 @@ proto-check:
 	cd $(AGENT_GATEWAY_DIR) && buf breaking --against '$(BUF_BREAKING_AGAINST)'
 
 webui:
-	pnpm --dir $(AGENT_GATEWAY_WEB_DIR) install --offline
+	pnpm install --offline --filter @liveagent/gateway-webui...
 	pnpm --dir $(AGENT_GATEWAY_WEB_DIR) build
 
 gateway-build: proto webui

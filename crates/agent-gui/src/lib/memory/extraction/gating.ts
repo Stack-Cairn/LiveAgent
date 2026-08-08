@@ -11,7 +11,7 @@ import {
   GATING_MIN_USER_TEXT_GRAPHEMES,
   GATING_SHORT_ACK_GRAPHEME_LIMIT,
   GATING_THANKS_PREFIXES,
-} from "../config";
+} from "@liveagent/ui/lib/memory/config";
 
 export type ExtractionSkipReason =
   | "empty-user-message"

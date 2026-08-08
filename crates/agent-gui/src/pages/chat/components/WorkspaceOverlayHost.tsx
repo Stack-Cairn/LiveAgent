@@ -1,17 +1,19 @@
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { lockMonacoNlsLocale, preparePreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
+import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { lazy, Suspense } from "react";
 import { MacOsTitleBarSpacer } from "../../../components/MacOsTitleBarSpacer";
-import { useLocale } from "../../../i18n";
 import type { CodeMentionReference } from "../../../lib/chat/messages/mentionReferences";
-import { lockMonacoNlsLocale, preparePreferredMonacoNlsLocale } from "../../../lib/monacoNls";
 import type { EffectiveTheme } from "../../../lib/settings";
 import { tauriSftpClient } from "../../../lib/sftp/tauriSftpClient";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
-import type { TerminalSession } from "../../../lib/terminal/types";
 import type { useWorkspaceOverlays } from "../workspace/useWorkspaceOverlays";
 
 const WorkspaceCodeEditorOverlay = lazy(async () => {
   await preparePreferredMonacoNlsLocale();
-  const module = await import("../../../components/workspace-editor/WorkspaceCodeEditorOverlay");
+  const module = await import(
+    "@liveagent/ui/components/workspace-editor/WorkspaceCodeEditorOverlay"
+  );
   lockMonacoNlsLocale();
   return {
     default: module.WorkspaceCodeEditorOverlay,
@@ -19,14 +21,18 @@ const WorkspaceCodeEditorOverlay = lazy(async () => {
 });
 
 const WorkspaceFilePreviewOverlay = lazy(async () => {
-  const module = await import("../../../components/workspace-editor/WorkspaceFilePreviewOverlay");
+  const module = await import(
+    "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay"
+  );
   return {
     default: module.WorkspaceFilePreviewOverlay,
   };
 });
 
 const WorkspaceSshTerminalOverlay = lazy(async () => {
-  const module = await import("../../../components/workspace-editor/WorkspaceSshTerminalOverlay");
+  const module = await import(
+    "@liveagent/ui/components/workspace-editor/WorkspaceSshTerminalOverlay"
+  );
   return {
     default: module.WorkspaceSshTerminalOverlay,
   };

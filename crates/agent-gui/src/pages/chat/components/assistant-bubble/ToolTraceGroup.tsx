@@ -1,9 +1,10 @@
+import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
+import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo, useState } from "react";
-
 import { ChevronRight, Terminal } from "../../../../components/icons";
-import { useLocale } from "../../../../i18n";
 import type { ToolTraceItem } from "../../../../lib/chat/messages/uiMessages";
-import { cn } from "../../../../lib/shared/utils";
 import {
   getDominantToolName,
   getToolGroupComposition,
@@ -11,8 +12,6 @@ import {
   getToolMeta,
   getToolTraceKey,
 } from "./assistantBubbleUtils";
-import { LazyCollapse } from "./LazyCollapse";
-import { AssistantStatus } from "./StatusText";
 import { areToolTraceItemsEqual, MemoToolCallItem } from "./ToolCallItem";
 
 function ToolTraceGroupInner(props: {

@@ -1751,7 +1751,7 @@ mod tests {
 
     #[test]
     fn shared_chat_history_builtin_policy_covers_the_tool_catalog() {
-        let catalog = include_str!("../../../src/lib/tools/builtinToolCatalog.ts");
+        let catalog = include_str!("../../../../agent-ui/src/lib/tools/builtinToolCatalog.ts");
         let tool_names = catalog.lines().filter_map(|line| {
             line.trim()
                 .strip_prefix("toolName: \"")

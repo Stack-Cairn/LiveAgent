@@ -11,7 +11,7 @@
 | Message FTS | `chatHistoryMessageFts` | message 级检索。 |
 | FTS index metadata | `chatHistoryFtsSegmentIndex` | 判断 FTS 是否需要刷新/回填。 |
 
-Rust 实现位于 `src-tauri/src/commands/chat_history.rs`。
+Rust 实现位于 `src-tauri/src/commands/history/chat_history/*`，数据库建表与兼容迁移位于 `src-tauri/src/commands/history/history_db.rs`。
 
 ## V3 Segment 模型
 
@@ -103,7 +103,7 @@ GUI/WebUI 的 sidebar 都依赖 summary 中的 pin/share 字段，因此新增�
 
 ### Schema 兼容约束
 
-- 新增 `chatHistory`、`chatHistorySegment`、`chatHistoryShare`、`chatHistoryFtsSegmentIndex` 列时，必须同步更新 `src-tauri/src/commands/chat_history.rs` 中对应的 `ensure_*_columns` 迁移逻辑。
+- 新增 `chatHistory`、`chatHistorySegment`、`chatHistoryShare`、`chatHistoryFtsSegmentIndex` 列时，必须同步更新 `src-tauri/src/commands/history/history_db.rs` 中对应的 `ensure_*_columns` 迁移逻辑。
 - `CREATE TABLE IF NOT EXISTS` 只覆盖新库，不会补齐已有旧库字段；新增列不能只改建表 SQL。
 - 新增 `NOT NULL` 字段必须提供 `DEFAULT`，并在迁移后回填旧行的空值。
 - 索引创建应放在列迁移之后，避免旧库缺索引依赖列时初始化失败。

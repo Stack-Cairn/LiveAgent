@@ -1,17 +1,7 @@
-import type { HistoryMessageRef } from "@/lib/chat/conversationState";
-import { ConversationStreamClient } from "@/lib/chat/stream/conversationStreamClient";
-import type {
-  ChatCommandAccepted,
-  ChatCommandUpdate,
-  ConversationActivityEvent,
-  ConversationStreamHandlers,
-} from "@/lib/chat/stream/streamTypes";
-import { normalizeActivityEvent, normalizeCommandUpdate } from "@/lib/chat/stream/streamTypes";
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import type {
   GatewaySettingsSyncPayload,
   GatewaySettingsSyncUpdatePayload,
-} from "@/lib/settings/sync";
+} from "@liveagent/ui/lib/settings/sync";
 import type {
   SftpActionResponse,
   SftpEntry,
@@ -20,9 +10,8 @@ import type {
   SftpTransfer,
   SftpTransferEvent,
   SftpTransferResponse,
-} from "@/lib/sftp/types";
-import { createUuid } from "@/lib/shared/id";
-import { BrowserGatewayTerminalStreamClient } from "@/lib/terminal/gatewayTerminalStreamClient";
+} from "@liveagent/ui/lib/sftp/types";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type {
   RawSshLocalForwardAction,
   RawSshLocalForwardEvent,
@@ -30,12 +19,12 @@ import type {
   SshLocalForwardAction,
   SshLocalForwardEvent,
   SshLocalForwardSnapshot,
-} from "@/lib/terminal/sshLocalForwardTypes";
+} from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
 import {
   normalizeSshLocalForwardAction,
   normalizeSshLocalForwardEvent,
   normalizeSshLocalForwardSnapshot,
-} from "@/lib/terminal/sshLocalForwardTypes";
+} from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
 import type {
   SshTerminalTab,
   SshTerminalTabKind,
@@ -49,18 +38,29 @@ import type {
   TerminalSshMetadata,
   TerminalSshPrompt,
   TerminalStreamClient,
-} from "@/lib/terminal/types";
+} from "@liveagent/ui/lib/terminal/types";
 import type {
   TunnelCreateInput,
   TunnelHealth,
   TunnelStateSnapshot,
   TunnelStatus,
   TunnelUpdateInput,
-} from "@/lib/tunnels/constants";
+} from "@liveagent/ui/lib/tunnels/constants";
 import type {
   WorkspaceActivity,
   WorkspaceActivityEventPayload,
-} from "@/lib/workspace-activity/types";
+} from "@liveagent/ui/lib/workspace-activity/types";
+import type { HistoryMessageRef } from "@/lib/chat/conversationState";
+import { ConversationStreamClient } from "@/lib/chat/stream/conversationStreamClient";
+import type {
+  ChatCommandAccepted,
+  ChatCommandUpdate,
+  ConversationActivityEvent,
+  ConversationStreamHandlers,
+} from "@/lib/chat/stream/streamTypes";
+import { normalizeActivityEvent, normalizeCommandUpdate } from "@/lib/chat/stream/streamTypes";
+import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
+import { BrowserGatewayTerminalStreamClient } from "@/lib/terminal/gatewayTerminalStreamClient";
 import type { DecodedServerFrame } from "./gatewaySocketV2/adapters";
 import {
   decodeServerFrame,
@@ -244,7 +244,7 @@ export type {
   TunnelStatus,
   TunnelTtlSeconds,
   TunnelUpdateInput,
-} from "@/lib/tunnels/constants";
+} from "@liveagent/ui/lib/tunnels/constants";
 
 type TunnelStateListener = (snapshot: TunnelStateSnapshot) => void;
 

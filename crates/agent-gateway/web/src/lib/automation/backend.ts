@@ -6,8 +6,6 @@
 // file is the per-platform adapter — the desktop frontend ships its own copy
 // speaking Tauri invoke.
 
-import { getGatewayWebSocketClient } from "../gatewaySocket";
-import { loadToken } from "../storage";
 import type {
   AutomationApplyInput,
   AutomationSnapshot,
@@ -17,7 +15,9 @@ import type {
   CronSnapshot,
   HooksApplyResponse,
   HooksSnapshot,
-} from "./types";
+} from "@liveagent/ui/lib/automation/types";
+import { getGatewayWebSocketClient } from "../gatewaySocket";
+import { loadToken } from "../storage";
 
 export type AutomationBackendHandlers = {
   onCron: (snapshot: CronSnapshot) => void;

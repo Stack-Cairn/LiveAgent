@@ -7,8 +7,22 @@
 | `README.md` | 项目根说明。 |
 | `Makefile` | 桌面、Gateway、WebUI、proto、release 常用命令。 |
 | `Cargo.toml` | Rust workspace。 |
-| `doc/` | 历史专项文档。 |
-| `docs/` | 当前架构总览文档。 |
+| `docs/` | 当前架构、功能、设计、运维文档与历史 worklog。 |
+
+## 共享应用 UI
+
+| 功能 | 路径 |
+|---|---|
+| 包清单 | `crates/agent-ui/package.json` |
+| 应用视图 | `crates/agent-ui/src/application/ApplicationView.tsx` |
+| Settings 页面 | `crates/agent-ui/src/pages/settings/SettingsPage.tsx` |
+| Skills Hub | `crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx` |
+| MCP Hub | `crates/agent-ui/src/pages/mcp-hub/McpHubPage.tsx` |
+| 输入栏/顶部栏 | `crates/agent-ui/src/pages/chat/ChatComposerBar.tsx`、`crates/agent-ui/src/components/chat/ChatHeader.tsx` |
+| 历史侧边栏 | `crates/agent-ui/src/components/chat/ChatHistorySidebar.tsx` |
+| Hub 公共外壳 | `crates/agent-ui/src/components/hub/HubChrome.tsx` |
+| 项目工具 | `crates/agent-ui/src/components/project-tools/*` |
+| 宿主契约 | `crates/agent-ui/src/contracts/*` |
 
 ## GUI Frontend
 
@@ -17,16 +31,12 @@
 | App shell | `crates/agent-gui/src/App.tsx` |
 | React entry | `crates/agent-gui/src/main.tsx` |
 | Chat page | `crates/agent-gui/src/pages/ChatPage.tsx` |
-| Chat turn | `crates/agent-gui/src/pages/chat/runTextConversationTurn.ts`、`runAgentConversationTurn.ts` |
-| Chat transcript | `crates/agent-gui/src/pages/chat/ChatTranscript.tsx`、`AssistantBubble.tsx` |
-| Composer/header | `crates/agent-gui/src/pages/chat/ChatComposerBar.tsx`、`ChatHeader.tsx` |
-| History sidebar | `crates/agent-gui/src/components/chat/ChatHistorySidebar.tsx` |
-| Gateway bridge hooks | `crates/agent-gui/src/pages/chat/useGatewayBridgeListeners.ts`、`useGatewayBridgeBatcher.ts` |
-| Context builders | `crates/agent-gui/src/pages/chat/conversationContextBuilders.ts` |
-| Settings page | `crates/agent-gui/src/pages/SettingsPage.tsx`、`src/pages/settings/*` |
-| Skills Hub | `crates/agent-gui/src/pages/skills-hub/*` |
-| MCP Hub | `crates/agent-gui/src/pages/mcp-hub/*` |
-| Shared hub chrome | `crates/agent-gui/src/components/hub/HubChrome.tsx` |
+| Chat turn | `crates/agent-gui/src/pages/chat/turns/runTextConversationTurn.ts`、`runAgentConversationTurn.ts` |
+| Chat transcript controller | `crates/agent-gui/src/pages/chat/transcript/ChatTranscript.tsx`、`components/AssistantBubble.tsx` |
+| Gateway bridge hooks | `crates/agent-gui/src/pages/chat/gateway/useGatewayBridgeListeners.ts`、`useGatewayBridgeReadiness.ts` |
+| Context builders | `crates/agent-gui/src/pages/chat/runtime/conversationContextBuilders.ts` |
+| GUI Settings 扩展 | `crates/agent-gui/src/pages/settings/*` |
+| 共享 UI 适配器 | `crates/agent-gui/src/agent-ui-adapters/*` |
 | i18n | `crates/agent-gui/src/i18n/*` |
 
 ## GUI Libraries
@@ -34,7 +44,7 @@
 | 功能 | 路径 |
 |---|---|
 | Model provider layer | `crates/agent-gui/src/lib/providers/llm.ts` |
-| Provider proxy helpers | `crates/agent-gui/src/lib/providers/proxy.ts` |
+| Provider proxy helpers | `crates/agent-ui/src/lib/providers/proxy.ts` |
 | Settings defaults/storage/sync | `crates/agent-gui/src/lib/settings/*` |
 | Builtin tool registry | `crates/agent-gui/src/lib/tools/builtinRegistry.ts` |
 | FS tools | `crates/agent-gui/src/lib/tools/fsTools.ts` |
@@ -46,8 +56,8 @@
 | Subagent tools（Agent/SendMessage） | `crates/agent-gui/src/lib/subagents/*` |
 | Conversation state | `crates/agent-gui/src/lib/chat/conversation/*` |
 | Memory prompt/policy | `crates/agent-gui/src/lib/chat/memory/*` |
-| Skills discovery | `crates/agent-gui/src/lib/skills/*` |
-| MCP registry | `crates/agent-gui/src/lib/mcpRegistry/*` |
+| Skills shared logic | `crates/agent-ui/src/lib/skills/*` |
+| MCP registry | `crates/agent-ui/src/lib/mcpRegistry/*` |
 
 ## Tauri Rust
 
@@ -55,20 +65,20 @@
 |---|---|
 | Tauri entry | `crates/agent-gui/src-tauri/src/main.rs` |
 | App builder/invoke handler | `crates/agent-gui/src-tauri/src/lib.rs` |
-| Chat history commands | `crates/agent-gui/src-tauri/src/commands/chat_history.rs` |
-| Settings commands | `crates/agent-gui/src-tauri/src/commands/settings.rs` |
-| Memory commands | `crates/agent-gui/src-tauri/src/commands/memory.rs` |
-| MCP commands/runtime | `crates/agent-gui/src-tauri/src/commands/mcp.rs` |
-| File commands | `crates/agent-gui/src-tauri/src/commands/fs.rs` |
-| Shell/process commands | `crates/agent-gui/src-tauri/src/commands/shell.rs`、`process.rs` |
-| System commands | `crates/agent-gui/src-tauri/src/commands/system.rs`、`system_tools.rs` |
-| Gateway commands | `crates/agent-gui/src-tauri/src/commands/gateway.rs` |
+| Chat history commands | `crates/agent-gui/src-tauri/src/commands/history/chat_history/*` |
+| Settings commands | `crates/agent-gui/src-tauri/src/commands/config/settings/*` |
+| Memory commands | `crates/agent-gui/src-tauri/src/commands/integration/memory.rs` |
+| MCP commands/runtime | `crates/agent-gui/src-tauri/src/commands/integration/mcp.rs` |
+| File commands | `crates/agent-gui/src-tauri/src/commands/workspace/fs.rs` |
+| Shell/process commands | `crates/agent-gui/src-tauri/src/commands/runtime/shell.rs`、`process.rs` |
+| System commands | `crates/agent-gui/src-tauri/src/commands/app/system.rs` |
+| Gateway commands | `crates/agent-gui/src-tauri/src/commands/integration/gateway.rs` |
 | Subagent worktree commands | `crates/agent-gui/src-tauri/src/commands/workspace/subagent_worktree.rs` |
 | Subagent store | `crates/agent-gui/src-tauri/src/commands/history/subagent_store.rs` |
-| MemoryStore | `crates/agent-gui/src-tauri/src/services/memory.rs` |
-| Skills service | `crates/agent-gui/src-tauri/src/services/skills.rs` |
-| Gateway service | `crates/agent-gui/src-tauri/src/services/gateway.rs`、`gateway_bridge.rs` |
-| Cron service | `crates/agent-gui/src-tauri/src/services/cron.rs` |
+| MemoryStore | `crates/agent-gui/src-tauri/src/services/memory/*` |
+| Skills service | `crates/agent-gui/src-tauri/src/services/skills/*` |
+| Gateway service | `crates/agent-gui/src-tauri/src/services/gateway/*`、`gateway_bridge.rs` |
+| Automation service | `crates/agent-gui/src-tauri/src/services/automation/*` |
 | Runtime shell/process | `crates/agent-gui/src-tauri/src/runtime/*` |
 
 ## Gateway
@@ -94,29 +104,26 @@
 | 功能 | 路径 |
 |---|---|
 | WebUI entry | `crates/agent-gateway/web/src/main.tsx` |
-| App shell | `crates/agent-gateway/web/src/App.tsx` |
+| App shell | `crates/agent-gateway/web/src/App.tsx`、`src/app/GatewayApp.tsx` |
 | Gateway socket | `crates/agent-gateway/web/src/lib/gatewaySocket.ts` |
 | Conversation stream client | `crates/agent-gateway/web/src/lib/chat/stream/conversationStreamClient.ts` |
 | Terminal stream client | `crates/agent-gateway/web/src/lib/terminal/gatewayTerminalStreamClient.ts` |
 | Gateway types | `crates/agent-gateway/web/src/lib/gatewayTypes.ts` |
 | Web settings | `crates/agent-gateway/web/src/lib/webSettings.ts`、`web/src/lib/settings/*` |
-| History sync/parser | `crates/agent-gateway/web/src/lib/historySync.ts`、`historyParser.ts` |
+| History sync/parser | `crates/agent-gateway/web/src/lib/sidebar/webSidebarBackend.ts`、`lib/chat/chatHistory.ts`、`lib/historyParser.ts` |
 | Upload | `crates/agent-gateway/web/src/lib/uploadReadableFiles.ts` |
 | Transcript | `crates/agent-gateway/web/src/components/GatewayTranscript.tsx` |
-| Chat UI | `crates/agent-gateway/web/src/pages/chat/*` |
-| Settings | `crates/agent-gateway/web/src/pages/SettingsPage.tsx`、`web/src/pages/settings/*` |
-| Skills Hub | `crates/agent-gateway/web/src/pages/skills-hub/*` |
-| MCP Hub | `crates/agent-gateway/web/src/pages/mcp-hub/*` |
-| Tauri shims | `crates/agent-gateway/web/src/shims/*` |
+| Chat UI controllers | `crates/agent-gateway/web/src/pages/chat/*`、`src/components/GatewayTranscript.tsx` |
+| Web Settings 扩展 | `crates/agent-gateway/web/src/pages/settings/*` |
+| 共享 UI 适配器 | `crates/agent-gateway/web/src/agent-ui-adapters/*` |
+| 兼容层 | `crates/agent-gateway/web/src/shims/*` |
 | WebUI i18n | `crates/agent-gateway/web/src/i18n/*` |
 
 ## 资料与设计
 
 | 路径 | 说明 |
 |---|---|
-| `doc/README.md` | 旧文档入口。 |
-| `doc/webui-gateway-spec.md` | WebUI/Gateway 协议专项资料。 |
-| `doc/memory/README.md` | Memory 设计资料入口。 |
-| `doc/memory/schema.sql` | Memory SQLite index schema 参考。 |
+| `docs/README.md` | 当前文档入口。 |
 | `docs/architecture/*` | 当前总览架构文档。 |
 | `docs/features/*` | 当前功能域架构文档。 |
+| `docs/worklog/*` | 历史专项记录；其中路径和镜像描述按当时状态保留。 |

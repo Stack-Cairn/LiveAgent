@@ -19,7 +19,7 @@ const loader = createTsModuleLoader({
 });
 
 const { createModelFromConfig } = loader.loadModule("src/lib/providers/runtime/modelFactory.ts");
-const { resolveModelThinking } = loader.loadModule("src/lib/models/modelThinking.ts");
+const { resolveModelThinking } = loader.loadModule("@liveagent/ui/lib/models/modelThinking.ts");
 const { streamSimpleByApi } = loader.loadModule("src/lib/providers/runtime/streamByApi.ts");
 
 const RELAY_BASE_URL = "https://relay.example.com/v1";

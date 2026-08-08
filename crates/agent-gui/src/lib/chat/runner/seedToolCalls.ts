@@ -1,5 +1,5 @@
 import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
-import { createUuid } from "../../shared/id";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import {
   hasDsmlToolCallMarkup,
   isOnlyDsmlOrphanCloseTags,

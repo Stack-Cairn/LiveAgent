@@ -1,5 +1,5 @@
+import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { NotifyItem } from "../../../components/chat/NotifyToast";
 import type { CompactionStatus } from "../../../lib/chat/compaction/types";
 
 type UseNotifyToastsParams = {

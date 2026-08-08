@@ -1,6 +1,9 @@
+import {
+  buildGatewaySettingsSyncPayload,
+  buildGatewaySettingsSyncUpdatePayload,
+} from "@liveagent/ui/lib/settings/sync";
 import { invoke } from "@tauri-apps/api/core";
 import { type Locale, normalizeLocale } from "../../i18n/config";
-
 import {
   type AppSettings,
   type ChatRuntimeControls,
@@ -22,7 +25,6 @@ import {
   type SkillsSettings,
   type Theme,
 } from "./index";
-import { buildGatewaySettingsSyncPayload, buildGatewaySettingsSyncUpdatePayload } from "./sync";
 
 const LOCAL_UI_SETTINGS_STORAGE_KEY = "liveagent.ui-settings.v1";
 

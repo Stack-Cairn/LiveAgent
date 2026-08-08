@@ -1,18 +1,19 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
+import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
+import { TodoListView } from "@liveagent/ui/components/chat/TodoListView";
+import { Markdown } from "@liveagent/ui/components/Markdown";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import type {
+  SubagentBatchDetails,
+  SubagentCardDetails,
+  SubagentMessageDetails,
+} from "@liveagent/ui/lib/subagents/protocol";
 import type { ReactNode } from "react";
-
-import { Markdown } from "../../../../components/Markdown";
 import {
   previewText,
   type ToolTraceItem,
   toolResultMessageToText,
 } from "../../../../lib/chat/messages/uiMessages";
-import { cn } from "../../../../lib/shared/utils";
-import type {
-  SubagentBatchDetails,
-  SubagentCardDetails,
-  SubagentMessageDetails,
-} from "../../../../lib/subagents/protocol";
 import type {
   DeleteResultDetails,
   EditResultDetails,
@@ -40,8 +41,6 @@ import {
   shouldShowSubagentWorktreeLocation,
   summarizeShellStream,
 } from "./assistantBubbleUtils";
-import { EditDiffView } from "./EditDiffView";
-import { TodoListView } from "./TodoListView";
 import { getToolResultImages, ToolResultImagePreview } from "./ToolImages";
 
 export function ToolSection(props: { label?: string; trailing?: ReactNode; children: ReactNode }) {

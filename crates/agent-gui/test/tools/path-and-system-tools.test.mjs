@@ -5,7 +5,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const pathUtils = loader.loadModule("src/lib/tools/pathUtils.ts");
-const skillBuiltinHelpers = loader.loadModule("src/lib/skills/builtin.ts");
+const skillBuiltinHelpers = loader.loadModule("@liveagent/ui/lib/skills/builtin.ts");
 
 test("ToolPathResolver accepts broad workspace path inputs", async () => {
   const resolver = new pathUtils.ToolPathResolver({ workdir: "/workspace/project" });

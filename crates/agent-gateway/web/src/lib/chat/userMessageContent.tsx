@@ -1,4 +1,7 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type FocusEvent,
   type MouseEvent,
@@ -11,10 +14,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { getFileTypeIcon } from "../../components/chat/fileTypeIcons";
 import { SkillIcon } from "../../components/icons";
-import { useLocale } from "../../i18n";
-import { normalizeLogicalLineEndings } from "./composerText";
 
 import {
   type CodeMentionReference,

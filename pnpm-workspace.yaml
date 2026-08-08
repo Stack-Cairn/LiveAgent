@@ -1,0 +1,8 @@
+packages:
+  - "crates/agent-ui"
+  - "crates/agent-gui"
+  - "crates/agent-gateway/web"
+
+allowBuilds:
+  "@google/genai": true
+  protobufjs: true

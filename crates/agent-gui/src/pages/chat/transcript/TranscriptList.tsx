@@ -1,3 +1,12 @@
+import { Markdown } from "@liveagent/ui/components/Markdown";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import type { GitClient } from "@liveagent/ui/lib/git/types";
+import { createEntranceRegistry } from "@liveagent/ui/lib/transcript-virtual/entranceOnce";
+import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
+import {
+  buildTranscriptLayoutKey,
+  createTranscriptMeasurementsLru,
+} from "@liveagent/ui/lib/transcript-virtual/measurementsLru";
 import { type Range, useVirtualizer } from "@tanstack/react-virtual";
 import {
   type MutableRefObject,
@@ -11,10 +20,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-
 import { CheckCircle2, ChevronDown } from "../../../components/icons";
-import { Markdown } from "../../../components/Markdown";
-import { useLocale } from "../../../i18n";
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import type {
   HistoryMessageRef,
@@ -29,13 +35,6 @@ import {
   type CommitDisplayReference,
 } from "../../../lib/chat/messages/userMessageContent";
 import { normalizeLiveToolStatus } from "../../../lib/chat/page/chatPageHelpers";
-import type { GitClient } from "../../../lib/git/types";
-import { createEntranceRegistry } from "../../../lib/transcript-virtual/entranceOnce";
-import { createLiveRowScrollAdjustPolicy } from "../../../lib/transcript-virtual/liveScrollAdjustPolicy";
-import {
-  buildTranscriptLayoutKey,
-  createTranscriptMeasurementsLru,
-} from "../../../lib/transcript-virtual/measurementsLru";
 import { AssistantActivityRow } from "./AssistantActivityRow";
 import { AssistantRenderUnit } from "./AssistantRenderUnit";
 import { extractRenderUnitRange } from "./renderUnitRangeExtractor";
