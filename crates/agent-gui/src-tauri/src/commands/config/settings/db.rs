@@ -18,7 +18,7 @@ fn default_project_dir() -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-fn default_project_workdir() -> Result<String, String> {
+pub(crate) fn default_project_workdir() -> Result<String, String> {
     Ok(default_project_dir()?.to_string_lossy().into_owned())
 }
 

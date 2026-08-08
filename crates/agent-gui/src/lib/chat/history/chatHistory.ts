@@ -249,6 +249,54 @@ export async function listChatHistory(
   });
 }
 
+export type ImportPreviewSession = {
+  id: string;
+  sessionId: string;
+  title: string;
+  model: string;
+  cwd?: string;
+  createdAt: number;
+  updatedAt: number;
+  messageCount: number;
+  alreadyImported: boolean;
+};
+
+export type ImportPreview = {
+  sessions: ImportPreviewSession[];
+  scannedCount: number;
+  skippedLines: number;
+};
+
+export type ImportResult = {
+  scannedCount: number;
+  importedCount: number;
+  skippedLines: number;
+};
+
+// Backward-compatible aliases for existing call sites.
+export type ClaudeCodeImportPreviewSession = ImportPreviewSession;
+export type ClaudeCodeImportPreview = ImportPreview;
+export type ClaudeCodeImportResult = ImportResult;
+export type CodexImportPreviewSession = ImportPreviewSession;
+export type CodexImportPreview = ImportPreview;
+export type CodexImportResult = ImportResult;
+
+export async function scanClaudeCodeChatHistory() {
+  return invoke<ImportPreview>("chat_history_scan_claude_code");
+}
+
+export async function importClaudeCodeChatHistory(ids: string[]) {
+  return invoke<ImportResult>("chat_history_import_claude_code", { ids });
+}
+
+export async function scanCodexChatHistory() {
+  return invoke<ImportPreview>("chat_history_scan_codex");
+}
+
+export async function importCodexChatHistory(ids: string[]) {
+  return invoke<ImportResult>("chat_history_import_codex", { ids });
+}
+
 export async function listChatHistoryWorkdirs() {
   return invoke<ChatHistoryWorkdirsResponse>("chat_history_workdirs");
 }
