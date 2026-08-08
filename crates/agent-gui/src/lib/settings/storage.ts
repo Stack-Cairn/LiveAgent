@@ -34,6 +34,7 @@ type PersistedSettingsResponse = {
   ssh?: unknown | null;
   remote?: unknown | null;
   memory?: unknown | null;
+  modelFailover?: unknown | null;
   defaultWorkdir?: unknown | null;
 };
 
@@ -72,10 +73,11 @@ function readLocalUiSettings(): {
   updates: AppSettings["updates"];
   selectedModel?: SelectedModel;
   /**
-   * Raw persisted value. Queue entries are validated against customProviders
-   * (loaded from the backend), so normalization has to happen inside
-   * normalizeSettings — normalizing here with no providers would drop the
-   * whole queue.
+   * Legacy localStorage copy, read only as a migration fallback for installs
+   * that saved failover config before it moved to SQLite. Queue entries are
+   * validated against customProviders (loaded from the backend), so
+   * normalization has to happen inside normalizeSettings — normalizing here
+   * with no providers would drop the whole queue.
    */
   modelFailover: unknown;
   theme: Theme;
@@ -163,7 +165,6 @@ function writeLocalUiSettings(
     | "customSettings"
     | "updates"
     | "selectedModel"
-    | "modelFailover"
     | "theme"
     | "locale"
     | "closeWindowBehavior"
@@ -175,7 +176,6 @@ function writeLocalUiSettings(
     customSettings: settings.customSettings,
     updates: settings.updates,
     selectedModel: settings.selectedModel,
-    modelFailover: settings.modelFailover,
     theme: settings.theme,
     locale: settings.locale,
     closeWindowBehavior: settings.closeWindowBehavior,
@@ -236,7 +236,10 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     customSettings: localUi.customSettings,
     updates: localUi.updates,
     selectedModel: localUi.selectedModel,
-    modelFailover: localUi.modelFailover as AppSettings["modelFailover"],
+    // SQLite is the source of truth (shared with the WebUI via gateway sync);
+    // the localStorage copy only migrates pre-SQLite installs forward.
+    modelFailover: (persisted?.modelFailover ??
+      localUi.modelFailover) as AppSettings["modelFailover"],
     theme: localUi.theme,
     locale: localUi.locale,
     closeWindowBehavior: localUi.closeWindowBehavior,
@@ -331,13 +334,20 @@ export async function persistSettings(
     );
   }
 
+  if (hasChanged(prev.modelFailover, next.modelFailover)) {
+    tasks.push(
+      invoke("settings_save_model_failover", {
+        payload: next.modelFailover,
+      } as any),
+    );
+  }
+
   if (
     hasChanged(prev.skills, next.skills) ||
     hasChanged(prev.chatRuntimeControls, next.chatRuntimeControls) ||
     hasChanged(prev.customSettings, next.customSettings) ||
     hasChanged(prev.updates, next.updates) ||
     hasChanged(prev.selectedModel ?? null, next.selectedModel ?? null) ||
-    hasChanged(prev.modelFailover, next.modelFailover) ||
     hasChanged(prev.theme, next.theme) ||
     hasChanged(prev.locale, next.locale) ||
     hasChanged(prev.closeWindowBehavior, next.closeWindowBehavior)
@@ -348,7 +358,6 @@ export async function persistSettings(
       customSettings: next.customSettings,
       updates: next.updates,
       selectedModel: next.selectedModel,
-      modelFailover: next.modelFailover,
       theme: next.theme,
       locale: next.locale,
       closeWindowBehavior: next.closeWindowBehavior,

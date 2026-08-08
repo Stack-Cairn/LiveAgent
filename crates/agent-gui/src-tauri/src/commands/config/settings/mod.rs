@@ -25,6 +25,7 @@ const SSH_PROJECT_HOST_ASSOCIATIONS_TABLE: &str = "ssh_project_host_associations
 const SSH_KNOWN_HOSTS_TABLE: &str = "ssh_known_hosts";
 const REMOTE_SETTINGS_TABLE: &str = "remote_settings";
 const MEMORY_SETTINGS_TABLE: &str = "memory_settings";
+const MODEL_FAILOVER_SETTINGS_TABLE: &str = "model_failover_settings";
 
 const SYSTEM_EXECUTION_MODE_KEY: &str = "executionMode";
 const SYSTEM_WORKDIR_KEY: &str = "workdir";
@@ -160,6 +161,7 @@ include!("agents.rs");
 include!("system.rs");
 include!("mcp.rs");
 include!("memory_settings.rs");
+include!("model_failover.rs");
 include!("gateway_sync.rs");
 include!("ssh/mod.rs");
 include!("commands.rs");

@@ -11,6 +11,7 @@ pub async fn settings_load_all() -> Result<SettingsLoadResponse, String> {
             ssh: load_ssh(&conn)?,
             remote: load_remote(&conn)?,
             memory: load_memory(&conn)?,
+            model_failover: load_model_failover(&conn)?,
             default_workdir,
         })
     })
@@ -79,6 +80,16 @@ pub async fn settings_save_memory(payload: Value) -> Result<(), String> {
     })
     .await
     .map_err(|e| format!("settings_save_memory join 失败：{e}"))?
+}
+
+#[tauri::command]
+pub async fn settings_save_model_failover(payload: Value) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut conn = open_db()?;
+        save_model_failover(&mut conn, payload)
+    })
+    .await
+    .map_err(|e| format!("settings_save_model_failover join 失败：{e}"))?
 }
 
 #[tauri::command]
