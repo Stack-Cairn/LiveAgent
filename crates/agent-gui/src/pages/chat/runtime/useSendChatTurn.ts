@@ -422,9 +422,10 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       overrides?.runtimeControlsOverride ??
       settings.chatRuntimeControls;
     const providerConfig = createProviderRuntimeConfig(provider, model, runtimeControls);
-    // cc-switch style auto-failover plan for this turn (agent mode only). The
-    // switch callback makes the winning fallback the conversation's selection
-    // so follow-up turns start on the healthy provider directly.
+    // cc-switch style auto-failover plan for this turn (shared by the agent
+    // and text runtimes). The switch callback makes the winning fallback the
+    // conversation's selection so follow-up turns start on the healthy
+    // provider directly.
     const failoverPlan = buildModelFailoverPlan(settings, effectiveSelectedModel, runtimeControls);
     const failoverParams = failoverPlan
       ? {
@@ -1495,6 +1496,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             providerId,
             model,
             runtime: providerConfig,
+            failover: failoverParams,
             runtimeModel,
             selectedModel,
             memoryExtractionModel,
