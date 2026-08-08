@@ -286,6 +286,45 @@ test("an open-breaker primary is skipped up front", async () => {
   assert.equal(switches[0].errorMessage, "circuit breaker open");
 });
 
+test("an open-breaker primary skip consumes one unit of the switch budget", async () => {
+  for (const at of [1_000, 2_000, 3_000]) {
+    recordFailoverTargetResult("primary", false, BREAKER_CONFIG, at);
+  }
+  let secondFallbackStarted = false;
+  const stream = withProviderFailover(
+    [
+      makeCandidate("primary", successEvents("never used")),
+      makeCandidate("fallback-1", uncommittedErrorEvents("502 bad gateway")),
+      makeCandidate("fallback-2", () => {
+        secondFallbackStarted = true;
+        return successEvents();
+      }),
+    ],
+    { config: { ...BREAKER_CONFIG, maxSwitches: 1 }, now: () => 10_000 },
+  );
+  const events = await collectEvents(stream);
+  // maxSwitches=1: skipping the open primary was the one allowed switch, so
+  // fallback-1 is the only attempt and fallback-2 must stay untouched.
+  assert.equal(secondFallbackStarted, false);
+  assert.equal(events.at(-1)?.type, "error");
+});
+
+test("switch budget left after the initial skip still reaches later fallbacks", async () => {
+  for (const at of [1_000, 2_000, 3_000]) {
+    recordFailoverTargetResult("primary", false, BREAKER_CONFIG, at);
+  }
+  const stream = withProviderFailover(
+    [
+      makeCandidate("primary", successEvents("never used")),
+      makeCandidate("fallback-1", uncommittedErrorEvents("502 bad gateway")),
+      makeCandidate("fallback-2", successEvents("second-fallback-answer")),
+    ],
+    { config: { ...BREAKER_CONFIG, maxSwitches: 2 }, now: () => 10_000 },
+  );
+  const result = await stream.result();
+  assert.equal(result.content[0].text, "second-fallback-answer");
+});
+
 test("all breakers open fails open on the primary", async () => {
   for (const key of ["primary", "fallback-1"]) {
     for (const at of [1_000, 2_000, 3_000]) {

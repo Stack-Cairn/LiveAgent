@@ -310,7 +310,14 @@ export function withProviderFailover(
     // Every breaker is open: fail open on the primary instead of dead-ending.
     attemptPlan.push({ candidate: candidates[0], index: 0 });
   }
-  const maxAttempts = Math.max(1, Math.min(attemptPlan.length, config.maxSwitches + 1));
+  // Starting on a fallback because the primary's breaker is open is already a
+  // provider switch, so it consumes one unit of the switch budget: with
+  // maxSwitches=1 and an open primary, exactly one fallback is attempted.
+  const initialSwitches = attemptPlan[0].index === 0 ? 0 : 1;
+  const maxAttempts = Math.max(
+    1,
+    Math.min(attemptPlan.length, config.maxSwitches + 1 - initialSwitches),
+  );
 
   void (async () => {
     let lastTerminal: TerminalEvent | undefined;
