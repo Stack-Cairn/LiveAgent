@@ -64,7 +64,7 @@ export function buildTextFromComposerDraft(
           return formatFileMentionToken(segment.reference);
         }
         if (segment.type === "skillMention") {
-          return `$${segment.skill.name}`;
+          return `/${segment.skill.name}`;
         }
         if (segment.type === "commitMention") {
           return formatComposerCommitMention(segment.commit);
