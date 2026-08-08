@@ -2927,9 +2927,6 @@ function CustomSettingsDrawer(
             >
               {t("settings.customSettings")}
             </div>
-            <div className="mt-1 text-[12px] leading-relaxed text-muted-foreground/90">
-              {t("settings.conversationTitleModelHint")}
-            </div>
           </div>
           <button
             type="button"
@@ -2954,6 +2951,9 @@ function CustomSettingsDrawer(
                 <Label className="text-[12.5px] font-medium text-foreground/85">
                   {t("settings.conversationTitleModel")}
                 </Label>
+                <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+                  {t("settings.conversationTitleModelHint")}
+                </p>
                 <ModelPicker
                   options={titleModelOptions}
                   value={selectedValue}
