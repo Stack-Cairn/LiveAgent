@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Gateway WebUI paste newline pipeline</title>
+  </head>
+  <body>
+    <div id="editor" class="mention-composer whitespace-pre-wrap" contenteditable="true"></div>
+    <div id="bubble" class="chat-user-bubble w-fit px-4 py-2.5 font-chat text-[14.5px] leading-relaxed"></div>
+    <script type="module">
+      import React from "react";
+      import { createRoot } from "react-dom/client";
+      import "/src/index.css";
+      import {
+        insertPlainTextWithUndo,
+        normalizeLogicalLineEndings,
+      } from "/src/lib/chat/composerText.ts";
+      import { serializeChildrenToSegments } from "/src/components/chat/MentionComposer.tsx";
+      import { buildTextFromComposerDraft } from "/src/app/chatDraft.ts";
+      import {
+        createUserMessageWithUploads,
+        getUserMessageDisplayText,
+      } from "/src/lib/chat/uploadedFiles.ts";
+      import { UserMessageContent } from "/src/lib/chat/userMessageContent.tsx";
+
+      const editor = document.querySelector("#editor");
+      const bubble = document.querySelector("#bubble");
+      const bubbleRoot = createRoot(bubble);
+
+      editor.addEventListener("paste", (event) => {
+        event.preventDefault();
+        insertPlainTextWithUndo(event.clipboardData.getData("text/plain"));
+      });
+      editor.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && event.shiftKey) {
+          event.preventDefault();
+          document.execCommand("insertLineBreak");
+        }
+      });
+
+      function resetEditor() {
+        editor.replaceChildren();
+        editor.focus();
+        const selection = getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      function draftFromEditor() {
+        const segments = serializeChildrenToSegments(editor, new Map());
+        const text = normalizeLogicalLineEndings(
+          segments.map((segment) => (segment.type === "text" ? segment.text : "")).join(""),
+        );
+        return {
+          segments,
+          text,
+          textWithoutLargePastes: text,
+          largePastes: [],
+          skillMentions: [],
+          commitMentions: [],
+          gitFileMentions: [],
+          codeMentions: [],
+          isEmpty: text.trim().length === 0,
+        };
+      }
+
+      async function renderBubble(text) {
+        bubbleRoot.render(React.createElement(UserMessageContent, { text }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      }
+
+      async function snapshotPipeline(rawClipboardText, html = "") {
+        const draft = draftFromEditor();
+        const outbound = buildTextFromComposerDraft(draft);
+        const message = createUserMessageWithUploads(outbound, [], 1);
+        const replay = message ? JSON.parse(JSON.stringify(message)) : null;
+        const display = replay ? getUserMessageDisplayText(replay) : "";
+        await renderBubble(display);
+        const style = getComputedStyle(bubble);
+        const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+        const lineHeight = Number.parseFloat(style.lineHeight);
+        const contentHeight = bubble.getBoundingClientRect().height - padding;
+        return {
+          clipboard: JSON.stringify(rawClipboardText),
+          htmlPresent: Boolean(html),
+          editorHtml: editor.innerHTML,
+          composer: JSON.stringify(draft.text),
+          outbound: JSON.stringify(outbound),
+          history: replay ? JSON.stringify(replay.content) : null,
+          bubbleText: JSON.stringify(bubble.textContent),
+          sendable: message !== null,
+          newlineCounts: {
+            clipboard: (rawClipboardText.match(/\r\n|\r|\n/g) || []).length,
+            composer: (draft.text.match(/\n/g) || []).length,
+            outbound: (outbound.match(/\n/g) || []).length,
+            history: replay ? (replay.content.match(/\n/g) || []).length : null,
+            bubble: (bubble.textContent.match(/\n/g) || []).length,
+          },
+          whiteSpace: style.whiteSpace,
+          lineHeight,
+          contentHeight,
+          visualLineCount: lineHeight > 0 ? Math.round(contentHeight / lineHeight) : null,
+        };
+      }
+
+      window.resetEditor = resetEditor;
+      window.runPastePipeline = async (plain, html = "") => {
+        resetEditor();
+        const transfer = new DataTransfer();
+        transfer.setData("text/plain", plain);
+        if (html) transfer.setData("text/html", html);
+        editor.dispatchEvent(
+          new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true }),
+        );
+        return snapshotPipeline(plain, html);
+      };
+      window.snapshotManualPipeline = snapshotPipeline;
+      window.renderReplay = async (content) => {
+        await renderBubble(content);
+        return {
+          text: bubble.textContent,
+          whiteSpace: getComputedStyle(bubble).whiteSpace,
+        };
+      };
+      window.pipelineReady = true;
+    </script>
+  </body>
+</html>

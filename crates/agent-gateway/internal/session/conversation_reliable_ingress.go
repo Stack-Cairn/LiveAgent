@@ -150,9 +150,14 @@ func (m *Manager) ingestChatIngressRecords(
 			return checkpointChatIngressAck(runID, conversationID, state)
 		}
 		if !state.checkpointRequested || !isChatIngressProjectionRecord(records[0]) {
-			noteChatIngressGap(agentID, runID, conversationID, state, expected, "producer_sequence_gap")
-			noteChatIngressReplay(agentID, runID, conversationID, state, expected, "producer_sequence_gap")
-			return replayChatIngressAck(runID, conversationID, state)
+			return recoverChatIngressGap(
+				agentID,
+				runID,
+				conversationID,
+				state,
+				expected,
+				"producer_sequence_gap",
+			)
 		}
 		projection := projectionFromRecord(records[0])
 		if projection == nil || projection.GetCoversThroughSeq() < firstSeq-1 {
@@ -578,10 +583,16 @@ func (m *Manager) ingestChatIngressFragment(agentID string, fragment *gatewayv2.
 			return continueChatIngressAck(runID, conversationID, state)
 		}
 		if fragment.GetSourceSeq() > expected && !state.checkpointRequested {
-			noteChatIngressGap(agentID, runID, conversationID, state, expected, "fragment_sequence_gap")
-			noteChatIngressReplay(agentID, runID, conversationID, state, expected, "fragment_sequence_gap")
+			ack := recoverChatIngressGap(
+				agentID,
+				runID,
+				conversationID,
+				state,
+				expected,
+				"fragment_sequence_gap",
+			)
 			s.mu.Unlock()
-			return replayChatIngressAck(runID, conversationID, state)
+			return ack
 		}
 	}
 	assembly := s.ingressFragments[key]
@@ -677,6 +688,23 @@ func noteChatIngressGap(
 		"seq", expected,
 		"reason", reason,
 	)
+}
+
+func recoverChatIngressGap(
+	agentID string,
+	runID string,
+	conversationID string,
+	state *chatIngressRunState,
+	expected uint64,
+	reason string,
+) *gatewayv2.ChatIngressAck {
+	noteChatIngressGap(agentID, runID, conversationID, state, expected, reason)
+	if state.checkpointRequested || state.replayRequestedAt == expected {
+		requestChatIngressCheckpoint(agentID, runID, conversationID, state, expected, reason)
+		return checkpointChatIngressAck(runID, conversationID, state)
+	}
+	noteChatIngressReplay(agentID, runID, conversationID, state, expected, reason)
+	return replayChatIngressAck(runID, conversationID, state)
 }
 
 func requestChatIngressCheckpoint(

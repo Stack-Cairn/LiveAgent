@@ -8,6 +8,7 @@ import type {
 } from "../../../components/chat/MentionComposer";
 import { getAutomationState } from "../../../lib/automation";
 import { createHookRunScope } from "../../../lib/automation/hookRunner";
+import { normalizeLogicalLineEndings } from "../../../lib/chat/composerText";
 import {
   buildPersistableMessagesFromSnapshot,
   type SuppressedToolTraceSnapshot,
@@ -466,14 +467,15 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     const composerDraft = hasTextOverride
       ? null
       : (overrides?.composerDraftOverride ?? composerRef.current?.getDraft() ?? null);
-    let text = hasTextOverride
-      ? textOverride.trim()
-      : composerDraft
-        ? (effectiveIsAgentMode && composerDraft.largePastes.length > 0
+    let text = normalizeLogicalLineEndings(
+      hasTextOverride
+        ? textOverride
+        : composerDraft
+          ? effectiveIsAgentMode && composerDraft.largePastes.length > 0
             ? composerDraft.textWithoutLargePastes
             : buildTextFromComposerDraft(composerDraft)
-          ).trim()
-        : "";
+          : "",
+    );
     let uploadedFiles = overrides?.uploadedFilesOverride ?? pendingUploadedFiles;
 
     if (
@@ -489,7 +491,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           effectiveWorkdir,
           composerDraft.largePastes,
         );
-        text = buildTextFromComposerDraft(composerDraft, imported.fileByPasteId).trim();
+        text = buildTextFromComposerDraft(composerDraft, imported.fileByPasteId);
         uploadedFiles = mergePendingUploadedFiles(uploadedFiles, imported.files);
       } catch (error) {
         const message = asErrorMessage(error, "大段粘贴内容导入附件失败");

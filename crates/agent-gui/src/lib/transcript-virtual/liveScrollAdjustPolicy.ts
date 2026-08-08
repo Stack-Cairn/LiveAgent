@@ -3,10 +3,9 @@ import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 // Resize-compensation policy for the transcript virtualizer (virtual-core
 // 3.17.x semantics).
 //
-// With `anchorTo: 'end'`, virtual-core handles the bottom-pinned case itself:
-// while the viewport is virtually at the end, `resizeItem` compensates by the
-// total-size delta and this predicate's verdict is ignored. This policy
-// therefore only governs the detached reader.
+// `useScrollFollow` is the sole owner of live bottom pinning. While following,
+// this predicate rejects every virtualizer resize correction so one content
+// growth batch cannot first move by an estimate delta and then pin again.
 //
 // It replicates the upstream default and carves out exactly one case the
 // default gets wrong: the live streaming row grown taller than the viewport.
@@ -21,8 +20,7 @@ import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 //   measurement always compensates (the estimate→actual delta must land
 //   regardless of scroll direction) and a re-measurement is skipped during
 //   backward scroll (the upstream "items jump while scrolling up" fix);
-// - while following, the compensation cooperates with the scroll-follow pin,
-//   so it stays on;
+// - while following, all compensation is delegated to scroll-follow;
 // - live-row shrinks (delta < 0, e.g. a thinking block collapsing near the
 //   row's top) keep compensating so content under the reader stays put.
 export type LiveRowScrollAdjustPolicyArgs = {
@@ -45,6 +43,9 @@ export function createLiveRowScrollAdjustPolicy<
 ) => boolean {
   const { getLiveStartIndex, isFollowing } = args;
   return (item, delta, instance) => {
+    if (isFollowing()) {
+      return false;
+    }
     // Un-echoed scroll writes accumulate in a private field until the next
     // scroll event; the upstream default folds them into the comparison, so
     // mirror that (fall back to 0 if the field ever disappears).
@@ -70,8 +71,7 @@ export function createLiveRowScrollAdjustPolicy<
       liveStartIndex >= 0 &&
       item.index >= liveStartIndex &&
       delta > 0 &&
-      item.end > viewportTop &&
-      !isFollowing()
+      item.end > viewportTop
     ) {
       return false;
     }

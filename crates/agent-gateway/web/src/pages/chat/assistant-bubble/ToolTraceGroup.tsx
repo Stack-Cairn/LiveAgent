@@ -84,6 +84,19 @@ function ToolTraceGroupInner(props: {
   const ToolIcon = allBash ? Terminal : meta.Icon;
   const [open, setOpen] = useState(false);
 
+  if (items.length === 1) {
+    const item = items[0];
+    return item ? (
+      <MemoToolCallItem
+        item={item}
+        isAborted={isAborted}
+        readOnly={readOnly}
+        redactToolContent={redactToolContent}
+        isRunning={Boolean(item.toolCall.id && runningToolCallIds.includes(item.toolCall.id))}
+      />
+    ) : null;
+  }
+
   const statusLabel =
     counts.failed > 0
       ? `${counts.failed} ${t("chat.tool.failed")}`

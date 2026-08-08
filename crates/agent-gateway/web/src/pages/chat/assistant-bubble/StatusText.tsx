@@ -28,7 +28,7 @@ export function AssistantStatus({
     <span
       role="status"
       className={cn(
-        "inline-flex min-h-5 items-center gap-2 text-[calc(13px*var(--zone-font-scale,1))] font-normal text-muted-foreground",
+        "inline-flex min-h-5 min-w-0 max-w-full items-center gap-2 text-[calc(13px*var(--zone-font-scale,1))] font-normal text-muted-foreground",
         className,
       )}
     >
@@ -36,7 +36,9 @@ export function AssistantStatus({
         aria-hidden="true"
         className={cn("h-3.5 w-3.5 shrink-0 animate-spin", iconClassName)}
       />
-      <span className={cn("shimmer", textClassName)}>{children}</span>
+      <span className={cn("shimmer min-w-0 truncate whitespace-nowrap", textClassName)}>
+        {children}
+      </span>
     </span>
   );
 }

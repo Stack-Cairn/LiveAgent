@@ -38,36 +38,13 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
 
   const isVibingStatus = toolStatus === VIBING_STATUS;
   let status: ReactNode = null;
-  if (row.mutable && unit.kind === "placeholder") {
-    if (unit.showFallbackStatus) {
-      status = isCompactionRunning ? (
-        <CompactingText />
-      ) : isVibingStatus || !toolStatus ? (
-        <VibingText />
-      ) : (
-        <AssistantStatus>{toolStatus}</AssistantStatus>
-      );
-    } else if (toolStatus) {
-      status = isCompactionRunning ? (
-        <CompactingText />
-      ) : isVibingStatus ? (
-        <VibingText />
-      ) : (
-        <AssistantStatus>{toolStatus}</AssistantStatus>
-      );
-    }
-  } else if (
-    row.mutable &&
-    unit.kind === "block" &&
-    toolStatus &&
-    (!unit.hasRunningToolCall || isCompactionRunning || isVibingStatus)
-  ) {
+  if (unit.kind === "status") {
     status = isCompactionRunning ? (
-      <CompactingText />
-    ) : isVibingStatus ? (
-      <VibingText />
+      <CompactingText className="w-full" />
+    ) : isVibingStatus || !toolStatus ? (
+      <VibingText className="w-full" />
     ) : (
-      <AssistantStatus>{toolStatus}</AssistantStatus>
+      <AssistantStatus className="w-full">{toolStatus}</AssistantStatus>
     );
   }
 
@@ -80,14 +57,10 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
       )}
       <div
         className={`min-w-0 flex-1 space-y-2 ${
-          unit.kind === "placeholder" && unit.showFallbackStatus && isAgentMode
-            ? "pt-1"
-            : row.showAvatar
-              ? "pt-0.5"
-              : ""
+          unit.kind === "status" && isAgentMode ? "pt-1" : row.showAvatar ? "pt-0.5" : ""
         }`}
       >
-        {status ? <div className="py-1.5">{status}</div> : null}
+        {status ? <div className="min-w-0 max-w-full overflow-hidden py-1.5">{status}</div> : null}
 
         {row.mutable && retryAttempts && retryAttempts.length > 0 ? (
           <RetryDetailsBlock attempts={retryAttempts} />
@@ -97,7 +70,6 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
           <RoundBlockContent
             block={unit.block}
             isLive={row.live}
-            isMutable={row.mutable}
             renderMode={row.renderMode}
             runningToolCallIds={unit.runningToolCallIds}
             thinkingOpen={unit.thinkingOpen}

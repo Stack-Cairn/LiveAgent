@@ -17,7 +17,7 @@ import { useLocale } from "@/i18n/LocaleContext";
 import type { ChatFileLink } from "@/lib/chat/chatFileLinks";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
-import { getRoundText, getRoundToolTrace } from "@/lib/chat/uiMessages";
+import { getRoundText } from "@/lib/chat/uiMessages";
 import {
   formatUploadedFileSize,
   type PendingUploadedFile,
@@ -60,7 +60,6 @@ import {
 } from "@/pages/chat/AssistantBubble";
 import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
 
-import type { GatewayTranscriptRound } from "../lib/chatUi";
 import type { SectionId } from "../pages/settings/types";
 import { ChatEmptyState } from "./chat/ChatEmptyState";
 import { getUploadedFileTypeIcon } from "./chat/fileTypeIcons";
@@ -92,6 +91,7 @@ type GatewayTranscriptProps = {
   // Whether the scroll-follow engine is attached to the bottom; gates the
   // virtualizer's resize-compensation carve-out for live-row growth.
   isViewportFollowing?: () => boolean;
+  viewportFollowing?: boolean;
   // Imperative jump handle for the floor navigation rail.
   navRef?: MutableRefObject<GatewayTranscriptNavHandle | null>;
   // Reports the user row at the viewport's top edge (the "current floor").
@@ -168,48 +168,16 @@ function resolveNearestScrollViewport(element: HTMLElement | null) {
 function LiveStatusFooter(props: { status: string; isCompaction?: boolean }) {
   const { status, isCompaction = false } = props;
   return (
-    <div className="gateway-live-status-footer ml-9 pt-1">
+    <div className="gateway-live-status-footer ml-9 min-w-0 overflow-hidden pt-1">
       {isCompaction ? (
-        <CompactingText />
+        <CompactingText className="w-full" />
       ) : status === VIBING_STATUS ? (
-        <VibingText />
+        <VibingText className="w-full" />
       ) : (
-        <AssistantStatus>{status}</AssistantStatus>
+        <AssistantStatus className="w-full">{status}</AssistantStatus>
       )}
     </div>
   );
-}
-
-function shouldShowLiveStatusForRounds(rounds: GatewayTranscriptRound[]) {
-  const activeRound = rounds[rounds.length - 1];
-  if (!activeRound) {
-    return true;
-  }
-  const visibleToolKeys = new Set(
-    getRoundToolTrace(activeRound).map((item) => `${item.toolCall.id}\u0000${item.toolCall.name}`),
-  );
-
-  for (let index = activeRound.blocks.length - 1; index >= 0; index -= 1) {
-    const block = activeRound.blocks[index];
-    if (!block) {
-      continue;
-    }
-    if (block.kind === "tool") {
-      if (visibleToolKeys.has(`${block.item.toolCall.id}\u0000${block.item.toolCall.name}`)) {
-        return true;
-      }
-      continue;
-    }
-    if (block.kind === "hostedSearch") {
-      return false;
-    }
-    if (block.text.trim() === "") {
-      continue;
-    }
-    return block.kind !== "text";
-  }
-
-  return true;
 }
 
 function HistoryLoadingState(props: { title?: string }) {
@@ -1184,6 +1152,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   contentWidth: number;
   scrollViewport: HTMLDivElement | null;
   isViewportFollowing?: () => boolean;
+  viewportFollowing: boolean;
   navRef?: MutableRefObject<GatewayTranscriptNavHandle | null>;
   onAnchorUserRowChange?: (rowKey: string | null) => void;
   hasMoreHistory?: boolean;
@@ -1218,6 +1187,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     contentWidth,
     scrollViewport,
     isViewportFollowing,
+    viewportFollowing,
     navRef,
     onAnchorUserRowChange,
     hasMoreHistory,
@@ -1294,12 +1264,15 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     if (readOnly || !isStreaming) {
       return false;
     }
+    if (liveAssistantIndex >= 0) {
+      return false;
+    }
     if (displayedToolStatusIsCompaction) {
       return true;
     }
     const lastRowKind = rows[rows.length - 1]?.kind;
     return !lastRowKind || lastRowKind === "user" || lastRowKind === "checkpoint";
-  }, [displayedToolStatusIsCompaction, isStreaming, readOnly, rows]);
+  }, [displayedToolStatusIsCompaction, isStreaming, liveAssistantIndex, readOnly, rows]);
 
   // Row keys are unique by construction (the row builder's single canonical
   // pass) and feed both React reconciliation and the virtualizer's
@@ -1361,16 +1334,10 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     gap: TRANSCRIPT_ROW_GAP,
     overscan: TRANSCRIPT_ROW_OVERSCAN_COUNT,
     enabled: scrollViewport !== null,
-    // End-anchored: prepends (loading earlier history) keep the visible item
-    // stable upstream via keyed anchoring, growth of the last row while the
-    // viewport is virtually at the end compensates by the total-size delta,
-    // and estimate→measure corrections keep the bottom pinned. The threshold
-    // matches scrollFollowCore's BOTTOM_ATTACH_THRESHOLD_PX so both engines
-    // agree on what "at the bottom" means. followOnAppend stays off: its
-    // DOM-distance re-follow would conflict with the follow reducer's
-    // "shrink clamps never re-attach" contract — appends while following are
-    // already pinned by the reducer.
-    anchorTo: "end",
+    // End anchoring is enabled only for a detached reader so keyed prepends
+    // preserve the visible row. While following, start anchoring disables the
+    // virtualizer's bottom correction and leaves live growth to useScrollFollow.
+    anchorTo: viewportFollowing ? "start" : "end",
     scrollEndThreshold: 8,
     initialMeasurementsCache,
     rangeExtractor: (range) => extractLiveRange(range, forceMountStartRef.current),
@@ -1378,8 +1345,8 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
 
   // TanStack exposes the resize-compensation predicate as an instance field,
   // not an option; reassigning per render keeps the closure's inputs current.
-  // It only governs the detached reader — while virtually at the end, the
-  // upstream end-anchor compensation takes priority over this predicate.
+  // While following it rejects every virtualizer correction; while detached
+  // it retains estimate/measurement anchoring for rows above the viewport.
   transcriptVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     createLiveRowScrollAdjustPolicy({
       getLiveStartIndex: () => forceMountStartRef.current,
@@ -1701,16 +1668,11 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
           const rowIndex = virtualRow.index - leadingOffset;
           const isLatestLiveAssistant = rowIndex === liveAssistantIndex;
           const isLatestLiveStreaming = isStreaming && isLatestLiveAssistant;
-          const shouldShowLiveStatus =
-            isLatestLiveStreaming &&
-            Boolean(displayedToolStatus) &&
-            !displayedToolStatusIsCompaction &&
-            shouldShowLiveStatusForRounds(row.rounds);
-          const liveStatusText = shouldShowLiveStatus ? (displayedToolStatus ?? "") : "";
           return (
             <article
               key={virtualRow.key}
               data-index={virtualRow.index}
+              data-row-key={row.key}
               ref={transcriptVirtualizer.measureElement}
               className="gateway-transcript-row absolute left-0 right-0 top-0"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
@@ -1728,7 +1690,12 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                   workdir={workspaceRoot}
                   onOpenFileLink={onOpenFileLink}
                 />
-                {shouldShowLiveStatus ? <LiveStatusFooter status={liveStatusText} /> : null}
+                {isLatestLiveStreaming ? (
+                  <LiveStatusFooter
+                    status={displayedToolStatus ?? VIBING_STATUS}
+                    isCompaction={displayedToolStatusIsCompaction}
+                  />
+                ) : null}
                 {isLatestLiveStreaming &&
                 !shouldShowPendingLiveBubble &&
                 retryAttempts &&
@@ -1796,6 +1763,7 @@ export function GatewayTranscript({
   activeTurnKey = null,
   contentWidth = DEFAULT_CHAT_TRANSCRIPT_WIDTH,
   isViewportFollowing,
+  viewportFollowing = false,
   navRef,
   onAnchorUserRowChange,
   error,
@@ -1884,6 +1852,7 @@ export function GatewayTranscript({
           contentWidth={contentWidth}
           scrollViewport={transcriptScrollViewport}
           isViewportFollowing={isViewportFollowing}
+          viewportFollowing={viewportFollowing}
           navRef={navRef}
           onAnchorUserRowChange={onAnchorUserRowChange}
           hasMoreHistory={hasMoreHistory}

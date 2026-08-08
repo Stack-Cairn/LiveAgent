@@ -52,15 +52,15 @@ function round(key, text) {
 }
 
 function blockRows(snapshot) {
-  return snapshot.rows.filter(
-    (row) => row.kind === "assistant-unit" && row.unit.kind === "block",
-  );
+  return snapshot.rows
+    .flatMap((row) => (row.kind === "assistant-activity" ? row.units : [row]))
+    .filter((row) => row.kind === "assistant-unit" && row.unit.kind === "block");
 }
 
 function footerRows(snapshot) {
-  return snapshot.rows.filter(
-    (row) => row.kind === "assistant-unit" && row.unit.kind === "footer",
-  );
+  return snapshot.rows
+    .flatMap((row) => (row.kind === "assistant-activity" ? row.units : [row]))
+    .filter((row) => row.kind === "assistant-unit" && row.unit.kind === "footer");
 }
 
 const idleLive = {
@@ -89,7 +89,7 @@ test("settling a live turn preserves every block-unit key and adds one footer un
   const settledHistory = [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])];
   const settled = model.build(settledHistory, idleLive);
   assert.equal(settled.liveStartIndex, -1);
-  assert.equal(settled.rows.length, 3);
+  assert.equal(settled.rows.length, 2);
   assert.equal(blockRows(settled)[0].key, liveBlockKey);
   assert.equal(blockRows(settled)[0].renderMode, "streaming");
   assert.equal(footerRows(settled).length, 1);
@@ -112,7 +112,13 @@ test("persist lag: block-unit aliases still land one build later", () => {
   });
   const liveBlockKey = blockRows(streaming)[0].key;
 
-  assert.equal(model.build(history, idleLive).rows.length, 1);
+  const waitingForHistory = model.build(history, idleLive);
+  assert.equal(waitingForHistory.rows.length, 2, "the live activity must not disappear while persistence lags");
+  assert.equal(blockRows(waitingForHistory)[0].key, liveBlockKey);
+  assert.equal(waitingForHistory.rows.at(-1).kind, "assistant-activity");
+  assert.equal(waitingForHistory.rows.at(-1).live, false);
+  assert.equal(waitingForHistory.rows.at(-1).units.at(-1).unit.kind, "status");
+  assert.equal("active" in waitingForHistory.rows.at(-1).units.at(-1).unit, false);
   const settled = model.build(
     [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])],
     idleLive,
@@ -128,15 +134,29 @@ test("a new turn supersedes an unresolved settle so aliases never cross turns", 
     liveRounds: [{ ...round("r1", "x"), runningToolCallIds: [], thinkingOpen: false }],
   };
 
-  model.build([userItem("u1")], sendingLive);
+  const firstStreaming = model.build([userItem("u1")], sendingLive);
+  const firstLiveBlockKey = blockRows(firstStreaming).at(-1).key;
   model.build([userItem("u1")], idleLive);
   const secondStreaming = model.build([userItem("u1"), userItem("u2")], sendingLive);
   const secondLiveBlockKey = blockRows(secondStreaming).at(-1).key;
 
+  const delayedFirstTwin = model.build(
+    [userItem("u1"), assistantItem("a1", [round("r1", "reply 1")]), userItem("u2")],
+    sendingLive,
+  );
+  assert.equal(blockRows(delayedFirstTwin)[0].key, firstLiveBlockKey);
+  assert.equal(blockRows(delayedFirstTwin).at(-1).key, secondLiveBlockKey);
+
   const settled = model.build(
-    [userItem("u1"), userItem("u2"), assistantItem("a2", [round("r1", "reply 2")])],
+    [
+      userItem("u1"),
+      assistantItem("a1", [round("r1", "reply 1")]),
+      userItem("u2"),
+      assistantItem("a2", [round("r1", "reply 2")]),
+    ],
     idleLive,
   );
+  assert.equal(blockRows(settled)[0].key, firstLiveBlockKey);
   assert.equal(blockRows(settled).at(-1).key, secondLiveBlockKey);
 });
 
@@ -235,7 +255,7 @@ test("a committed twin that races persistence is re-keyed at settle", () => {
   assert.equal(blockRows(racing)[0].key, "a1:round:r1:block:text-1");
 
   const settled = model.build(midRun, idleLive);
-  assert.equal(settled.rows.length, 3);
+  assert.equal(settled.rows.length, 2);
   assert.equal(blockRows(settled)[0].key, liveBlockKey);
 });
 
@@ -255,22 +275,23 @@ test("terminal settlement removes the live tail before sending clears", () => {
   const committed = [userItem("u1"), assistantItem("a1", [round("r1", "full reply")])];
   const finalizing = model.build(committed, { ...store.getSnapshot(), isSending: true });
 
-  assert.equal(finalizing.rows.length, 3);
+  assert.equal(finalizing.rows.length, 2);
   assert.equal(finalizing.liveStartIndex, -1);
   assert.equal(blockRows(finalizing)[0].key, liveBlockKey);
   assert.equal(blockRows(finalizing)[0].live, false);
 
   const released = model.build(committed, { ...store.getSnapshot(), isSending: false });
-  assert.equal(released.rows.length, 3);
+  assert.equal(released.rows.length, 2);
 
   store.reset();
   const nextPending = model.build(committed, { ...store.getSnapshot(), isSending: true });
-  assert.equal(nextPending.rows.length, 4);
-  assert.equal(nextPending.liveStartIndex, 3);
-  assert.equal(nextPending.rows[3].mutable, true);
+  assert.equal(nextPending.rows.length, 3);
+  assert.equal(nextPending.liveStartIndex, 2);
+  assert.equal(nextPending.rows[2].kind, "assistant-activity");
+  assert.equal(nextPending.rows[2].units.at(-1).mutable, true);
 });
 
-test("assistant rounds flatten into grouped top-level render units", () => {
+test("assistant rounds hide TodoWrite while preserving grouped top-level render units", () => {
   const model = createTranscriptRowModel();
   const tool = (id, name = "Read") => ({
     kind: "tool",
@@ -283,6 +304,7 @@ test("assistant rounds flatten into grouped top-level render units", () => {
       blocks: [
         { kind: "text", id: "text-1", text: "answer" },
         { kind: "thinking", id: "thinking-1", text: "thought" },
+        tool("todo-1", "TodoWrite"),
         tool("call-1"),
         tool("call-2"),
         { kind: "hostedSearch", item: { id: "search-1" } },
@@ -311,7 +333,7 @@ test("Markdown text blocks stay whole instead of being string-sliced", () => {
   assert.ok(blockRows(snapshot)[0].renderCost > 1);
 });
 
-test("only the mutable live tail is pinned while completed prefix units virtualize", () => {
+test("one live activity is pinned while its completed prefix units keep stable keys", () => {
   const model = createTranscriptRowModel();
   const liveRound = {
     round: 1,
@@ -335,8 +357,131 @@ test("only the mutable live tail is pinned while completed prefix units virtuali
     units.map((row) => row.mutable),
     [false, false, true],
   );
-  assert.equal(snapshot.liveStartIndex, snapshot.rows.indexOf(units[2]));
+  const activity = snapshot.rows.find((row) => row.kind === "assistant-activity");
+  assert.ok(activity);
+  assert.deepEqual(
+    activity.units.filter((unit) => unit.unit.kind === "block").map((unit) => unit.key),
+    units.map((unit) => unit.key),
+  );
+  assert.equal(activity.units.at(-1).unit.kind, "status");
+  assert.equal(snapshot.liveStartIndex, snapshot.rows.indexOf(activity));
   assert.equal(snapshot.liveStartIndex, snapshot.rows.length - 1);
+});
+
+test("the active assistant turn stays one outer activity row through growth and settlement", () => {
+  const model = createTranscriptRowModel();
+  const history = [userItem("u1")];
+  const firstRound = {
+    round: 1,
+    key: "r1",
+    blocks: [{ kind: "thinking", id: "thinking-1", text: "first thought" }],
+    runningToolCallIds: [],
+    thinkingOpen: true,
+  };
+  const first = model.build(history, {
+    ...idleLive,
+    isSending: true,
+    liveRounds: [firstRound],
+  });
+  const firstActivity = first.rows.find((row) => row.kind === "assistant-activity");
+  assert.ok(firstActivity);
+  assert.equal(first.rows.filter((row) => row.kind === "assistant-activity").length, 1);
+  const stableStatusKey = firstActivity.units.at(-1).key;
+  assert.equal(firstActivity.units.at(-1).unit.kind, "status");
+
+  const toolItem = {
+    toolCall: { type: "toolCall", id: "call-1", name: "Bash", arguments: { command: "pwd" } },
+  };
+  const grownRound = {
+    ...firstRound,
+    blocks: [...firstRound.blocks, { kind: "tool", item: toolItem }],
+    runningToolCallIds: ["call-1"],
+    thinkingOpen: false,
+  };
+  const grown = model.build(history, {
+    ...idleLive,
+    isSending: true,
+    liveRounds: [grownRound],
+  });
+  const grownActivity = grown.rows.find((row) => row.kind === "assistant-activity");
+  assert.ok(grownActivity);
+  assert.equal(grownActivity.key, firstActivity.key);
+  assert.equal(grown.liveStartIndex, grown.rows.indexOf(grownActivity));
+  assert.equal(grownActivity.units.at(-1).key, stableStatusKey);
+  assert.equal(grownActivity.units.at(-1).unit.kind, "status");
+  assert.deepEqual(
+    grownActivity.units
+      .filter((unit) => unit.unit.kind !== "status")
+      .slice(0, firstActivity.units.length - 1)
+      .map((unit) => unit.key),
+    firstActivity.units.filter((unit) => unit.unit.kind !== "status").map((unit) => unit.key),
+  );
+
+  const settledHistory = [
+    userItem("u1"),
+    assistantItem("a1", [
+      { round: grownRound.round, key: grownRound.key, blocks: grownRound.blocks },
+    ]),
+  ];
+  const settled = model.build(settledHistory, idleLive);
+  const settledActivity = settled.rows.find((row) => row.kind === "assistant-activity");
+  assert.ok(settledActivity);
+  assert.equal(settledActivity.key, firstActivity.key);
+  assert.equal(settledActivity.units.at(-1).key, stableStatusKey);
+  assert.equal(settledActivity.units.at(-1).unit.kind, "footer");
+  assert.deepEqual(
+    settledActivity.units
+      .filter((unit) => unit.unit.kind === "block")
+      .map((unit) => unit.key),
+    grownActivity.units.filter((unit) => unit.unit.kind === "block").map((unit) => unit.key),
+  );
+});
+
+test("one outer activity row stays stable across one hundred appended tools", () => {
+  const model = createTranscriptRowModel();
+  const history = [userItem("u1")];
+  let outerKey = "";
+  let toolActivityKey = "";
+
+  for (let count = 1; count <= 100; count += 1) {
+    const blocks = Array.from({ length: count }, (_, index) => ({
+      kind: "tool",
+      item: {
+        toolCall: {
+          type: "toolCall",
+          id: `call-${index + 1}`,
+          name: "Bash",
+          arguments: { command: `Write-Output ${index + 1}` },
+        },
+      },
+    }));
+    const snapshot = model.build(history, {
+      ...idleLive,
+      isSending: true,
+      liveRounds: [
+        {
+          round: 1,
+          key: "r1",
+          blocks,
+          runningToolCallIds: [`call-${count}`],
+          thinkingOpen: false,
+        },
+      ],
+    });
+    const activity = snapshot.rows.find((row) => row.kind === "assistant-activity");
+    assert.ok(activity);
+    const groupedTool = activity.units.find(
+      (unit) => unit.unit.kind === "block" && unit.unit.block.kind === "toolGroup",
+    );
+    assert.ok(groupedTool);
+    if (count === 1) {
+      outerKey = activity.key;
+      toolActivityKey = groupedTool.key;
+    } else {
+      assert.equal(activity.key, outerKey);
+      assert.equal(groupedTool.key, toolActivityKey);
+    }
+  }
 });
 
 test("assistant unit keys do not depend on the history-window-relative index", () => {
@@ -438,6 +583,8 @@ test("transcript virtualizer keeps scroll updates off the full React measurement
   assert.match(transcriptListSource, /estimateSize:\s*estimateRowSize/);
   assert.match(transcriptListSource, /getItemKey:\s*getRowKey/);
   assert.match(transcriptListSource, /rangeExtractor:\s*extractVirtualRange/);
+  assert.match(transcriptListSource, /anchorTo:\s*viewportFollowing \? "start" : "end"/);
+  assert.match(transcriptListSource, /data-row-key=\{row\.key\}/);
   assert.match(transcriptListSource, /directDomUpdates:\s*true/);
   assert.match(transcriptListSource, /directDomUpdatesMode:\s*"transform"/);
   assert.match(transcriptListSource, /ref=\{virtualizer\.containerRef\}/);

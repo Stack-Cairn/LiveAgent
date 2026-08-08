@@ -24,8 +24,13 @@ const { AssistantStatus } = loader.loadModule(
 test("assistant running status keeps its spinner animated", () => {
   const status = AssistantStatus({ children: "Vibing" });
   const icon = status.props.children[0];
+  const text = status.props.children[1];
 
   assert.equal(icon.type, Loader2);
   assert.match(icon.props.className, /(?:^|\s)animate-spin(?:\s|$)/);
   assert.doesNotMatch(icon.props.className, /(?:^|\s)motion-reduce:animate-none(?:\s|$)/);
+  assert.match(status.props.className, /(?:^|\s)min-w-0(?:\s|$)/);
+  assert.match(status.props.className, /(?:^|\s)max-w-full(?:\s|$)/);
+  assert.match(text.props.className, /(?:^|\s)truncate(?:\s|$)/);
+  assert.match(text.props.className, /(?:^|\s)whitespace-nowrap(?:\s|$)/);
 });

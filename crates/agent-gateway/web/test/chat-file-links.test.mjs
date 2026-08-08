@@ -83,6 +83,7 @@ test("Gateway historical and streaming rows keep the explicit file-open prop cha
   const files = [
     "../src/app/GatewayApp.tsx",
     "../src/components/GatewayTranscript.tsx",
+    "../src/components/chat/ThinkingActivity.tsx",
     "../src/pages/chat/AssistantBubble.tsx",
     "../src/pages/chat/assistant-bubble/RoundContent.tsx",
   ];
@@ -96,8 +97,16 @@ test("Gateway historical and streaming rows keep the explicit file-open prop cha
     "utf8",
   );
   assert.match(roundContent, /isStreaming \? "streaming" : "static"/);
-  assert.ok((roundContent.match(/onOpenFileLink=\{onOpenFileLink\}/g) ?? []).length >= 3);
-  assert.ok((roundContent.match(/workdir=\{workdir\}/g) ?? []).length >= 3);
+  assert.ok((roundContent.match(/onOpenFileLink=\{onOpenFileLink\}/g) ?? []).length >= 2);
+  assert.ok((roundContent.match(/workdir=\{workdir\}/g) ?? []).length >= 2);
+
+  const thinkingActivity = fs.readFileSync(
+    fileURLToPath(new URL("../src/components/chat/ThinkingActivity.tsx", import.meta.url)),
+    "utf8",
+  );
+  assert.match(thinkingActivity, /<Markdown/);
+  assert.match(thinkingActivity, /onOpenFileLink=\{onOpenFileLink\}/);
+  assert.match(thinkingActivity, /workdir=\{workdir\}/);
 
   const gatewayApp = fs.readFileSync(
     fileURLToPath(new URL("../src/app/GatewayApp.tsx", import.meta.url)),

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
+import { createFramePinController } from "./framePinController";
 import {
   createFollowState,
   DEFAULT_FOLLOW_CONFIG,
@@ -113,6 +113,19 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
   configRef.current = { ...DEFAULT_FOLLOW_CONFIG, ...args.config };
   const [following, setFollowing] = useState(true);
   const jumpRafRef = useRef<number | null>(null);
+  const pinController = useMemo(
+    () =>
+      createFramePinController(
+        () => {
+          const el = boundViewportRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        },
+        (callback) => requestAnimationFrame(callback),
+        (handle) => cancelAnimationFrame(handle),
+        () => stateRef.current.following,
+      ),
+    [],
+  );
 
   const cancelJumpAnimation = useCallback(() => {
     if (jumpRafRef.current !== null) {
@@ -124,25 +137,31 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
   const pinToBottom = useCallback(() => {
     // An instant pin supersedes any in-flight jump animation.
     cancelJumpAnimation();
-    const el = boundViewportRef.current;
-    if (el) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [cancelJumpAnimation]);
+    pinController.flush();
+  }, [cancelJumpAnimation, pinController]);
+
+  const schedulePinToBottom = useCallback(() => {
+    cancelJumpAnimation();
+    pinController.schedule();
+  }, [cancelJumpAnimation, pinController]);
 
   const dispatch = useCallback(
-    (event: FollowEvent) => {
+    (event: FollowEvent, pinMode: "immediate" | "frame" = "immediate") => {
       const wasFollowing = stateRef.current.following;
       const step = reduceFollowEvent(stateRef.current, event, configRef.current);
       stateRef.current = step.state;
+      if (wasFollowing && !step.state.following) {
+        pinController.cancel();
+      }
       if (step.pin) {
-        pinToBottom();
+        if (pinMode === "frame") schedulePinToBottom();
+        else pinToBottom();
       }
       if (step.state.following !== wasFollowing) {
         setFollowing(step.state.following);
       }
     },
-    [pinToBottom],
+    [pinController, pinToBottom, schedulePinToBottom],
   );
 
   const stickToBottom = useCallback(() => {
@@ -350,7 +369,7 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
       typeof ResizeObserver === "undefined"
         ? null
         : new ResizeObserver(() => {
-            dispatch({ type: "contentGrowth", gap: getGap() });
+            dispatch({ type: "contentGrowth", gap: getGap() }, "frame");
           });
     resizeObserver?.observe(viewport);
     if (growthTarget instanceof Element) {
@@ -372,6 +391,7 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       resizeObserver?.disconnect();
+      pinController.cancel();
       cancelJumpAnimation();
       boundViewportRef.current = null;
     };
@@ -382,6 +402,7 @@ export function useScrollFollow(args: UseScrollFollowArgs): {
     enabled,
     listenerRoot,
     pinToBottom,
+    pinController,
     trackKeys,
     viewport,
   ]);

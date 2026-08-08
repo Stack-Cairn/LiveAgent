@@ -17,6 +17,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useLocale } from "../../i18n";
+import { insertPlainTextWithUndo, normalizeLogicalLineEndings } from "../../lib/chat/composerText";
 import {
   type CodeMentionReference,
   codeMentionDisplayName,
@@ -232,7 +233,7 @@ const LARGE_PASTE_LINE_THRESHOLD = 200;
 const LARGE_PASTE_PREVIEW_CHARS = 160;
 const CARET_ANCHOR_TEXT = "\u200B";
 const IME_ENTER_SUPPRESS_WINDOW_MS = 300;
-const IME_COMPOSITION_END_ENTER_TAIL_MS = 80;
+const IME_COMPOSITION_END_ENTER_TAIL_MS = 20;
 // Must match the .composer-typewriter-char animation duration in index.css.
 const TYPEWRITER_CHAR_FADE_MS = 220;
 const GITHUB_ICON_SVG =
@@ -281,7 +282,7 @@ function countCaretAnchors(value: string) {
 }
 
 function normalizeSerializedText(value: string) {
-  return removeCaretAnchors(value).replace(/\u00A0/g, " ");
+  return normalizeLogicalLineEndings(removeCaretAnchors(value).replace(/\u00A0/g, " "));
 }
 
 function isMentionBoundaryChar(value: string) {
@@ -300,7 +301,7 @@ function pushTextSegment(out: MentionComposerDraftSegment[], text: string) {
   out.push({ type: "text", text });
 }
 
-function serializeChildrenToSegments(
+export function serializeChildrenToSegments(
   parent: Node,
   largePastes: Map<string, MentionComposerLargePaste>,
 ): MentionComposerDraftSegment[] {
@@ -337,9 +338,16 @@ function collectDraftSegments(
   largePastes: Map<string, MentionComposerLargePaste>,
 ): MentionComposerDraftSegment[] {
   const parts: MentionComposerDraftSegment[] = [];
+  let hasLogicalChild = false;
+  let previousChildWasBlock = false;
   parent.childNodes.forEach((child) => {
+    const childParts: MentionComposerDraftSegment[] = [];
+    let childIsBlock = false;
+    let childIsLogical = false;
     if (child.nodeType === Node.TEXT_NODE) {
-      pushTextSegment(parts, removeCaretAnchors(child.textContent || ""));
+      const text = removeCaretAnchors(child.textContent || "");
+      pushTextSegment(childParts, text);
+      childIsLogical = text.length > 0;
     } else if (child.nodeType === Node.ELEMENT_NODE) {
       const el = child as HTMLElement;
       const mentionPath = el.getAttribute(MENTION_TAG_ATTR);
@@ -347,29 +355,33 @@ function collectDraftSegments(
         const kind = el.getAttribute(MENTION_KIND_ATTR) === "dir" ? "dir" : "file";
         const reference = createFileMentionReference(mentionPath, kind);
         if (reference) {
-          parts.push({ type: "fileMention", reference });
+          childParts.push({ type: "fileMention", reference });
+          childIsLogical = true;
         }
       } else if (el.hasAttribute(GIT_FILE_MENTION_PATH_ATTR)) {
         const file = gitFileMentionFromElement(el);
         if (file) {
-          parts.push({ type: "gitFileMention", file });
+          childParts.push({ type: "gitFileMention", file });
+          childIsLogical = true;
         }
       } else if (el.hasAttribute(CODE_MENTION_PATH_ATTR)) {
         const reference = codeMentionFromElement(el);
         if (reference) {
-          parts.push({ type: "codeMention", reference });
+          childParts.push({ type: "codeMention", reference });
+          childIsLogical = true;
         }
       } else if (el.hasAttribute(COMMIT_MENTION_SHA_ATTR)) {
         const commit = commitMentionFromElement(el);
         if (commit) {
-          parts.push({ type: "commitMention", commit });
+          childParts.push({ type: "commitMention", commit });
+          childIsLogical = true;
         }
       } else if (el.hasAttribute(SKILL_MENTION_NAME_ATTR)) {
         const name = el.getAttribute(SKILL_MENTION_NAME_ATTR)?.trim() ?? "";
         const skillFile = el.getAttribute(SKILL_MENTION_FILE_ATTR)?.trim() ?? "";
         const baseDir = el.getAttribute(SKILL_MENTION_BASE_DIR_ATTR)?.trim() ?? "";
         if (name && skillFile && baseDir) {
-          parts.push({
+          childParts.push({
             type: "skillMention",
             skill: {
               name,
@@ -378,31 +390,48 @@ function collectDraftSegments(
               description: el.getAttribute(SKILL_MENTION_DESCRIPTION_ATTR)?.trim() ?? "",
             },
           });
+          childIsLogical = true;
         }
       } else {
         const largePasteId = el.getAttribute(LARGE_PASTE_TAG_ATTR);
         const largePaste = largePasteId ? largePastes.get(largePasteId) : undefined;
         if (largePaste) {
-          parts.push({ type: "largePaste", paste: largePaste });
-          return;
-        }
-        if (el.tagName === "BR") {
-          pushTextSegment(parts, "\n");
-        } else {
-          // Block-level wrappers (DIV / P) inserted by the browser on Enter
-          if (el.tagName === "DIV" || el.tagName === "P") {
-            if (parts.length > 0) pushTextSegment(parts, "\n");
+          childParts.push({ type: "largePaste", paste: largePaste });
+          childIsLogical = true;
+        } else if (el.tagName === "BR") {
+          const parentEl = parent.nodeType === Node.ELEMENT_NODE ? (parent as HTMLElement) : null;
+          const isEmptyBlockPlaceholder =
+            parentEl != null &&
+            (parentEl.tagName === "DIV" || parentEl.tagName === "P") &&
+            parent.childNodes.length === 1;
+          if (!isEmptyBlockPlaceholder) {
+            pushTextSegment(childParts, "\n");
+            childIsLogical = true;
           }
+        } else {
+          childIsBlock = el.tagName === "DIV" || el.tagName === "P";
           for (const segment of collectDraftSegments(el, largePastes)) {
             if (segment.type === "text") {
-              pushTextSegment(parts, segment.text);
+              pushTextSegment(childParts, segment.text);
             } else {
-              parts.push(segment);
+              childParts.push(segment);
             }
           }
+          childIsLogical = childIsBlock || childParts.length > 0;
         }
       }
     }
+
+    if (!childIsLogical) return;
+    if (hasLogicalChild && (previousChildWasBlock || childIsBlock)) {
+      pushTextSegment(parts, "\n");
+    }
+    for (const segment of childParts) {
+      if (segment.type === "text") pushTextSegment(parts, segment.text);
+      else parts.push(segment);
+    }
+    hasLogicalChild = true;
+    previousChildWasBlock = childIsBlock;
   });
   return parts;
 }
@@ -2277,15 +2306,16 @@ export const MentionComposer = memo(
     }, []);
 
     const createLargePaste = useCallback((text: string): MentionComposerLargePaste => {
+      const normalizedText = normalizeLogicalLineEndings(text);
       const index = largePasteCounterRef.current + 1;
       largePasteCounterRef.current = index;
       return {
         id: `large-paste-${Date.now()}-${createUuid()}`,
         label: `Pasted text ${index}`,
-        text,
-        charCount: text.length,
-        lineCount: countLargePasteLines(text),
-        preview: normalizeLargePastePreview(text),
+        text: normalizedText,
+        charCount: normalizedText.length,
+        lineCount: countLargePasteLines(normalizedText),
+        preview: normalizeLargePastePreview(normalizedText),
       };
     }, []);
 
@@ -2376,10 +2406,11 @@ export const MentionComposer = memo(
           el.innerHTML = "";
           largePastesRef.current.clear();
           closeCommitTooltip();
-          if (isLargePasteText(text)) {
-            insertLargePaste(text);
+          const normalizedText = normalizeLogicalLineEndings(text);
+          if (isLargePasteText(normalizedText)) {
+            insertLargePaste(normalizedText);
           } else {
-            el.innerText = text;
+            el.textContent = normalizedText;
             closeMentionSession();
             refreshEmptyState();
           }
@@ -2417,7 +2448,7 @@ export const MentionComposer = memo(
                 const chip = createCodeMentionChip(segment.reference);
                 if (chip) el.appendChild(chip);
               } else if (segment.text) {
-                el.appendChild(document.createTextNode(segment.text));
+                el.appendChild(document.createTextNode(normalizeLogicalLineEndings(segment.text)));
               }
             }
             largePasteCounterRef.current = Math.max(
@@ -3028,12 +3059,12 @@ export const MentionComposer = memo(
           return;
         }
         e.preventDefault();
-        const text = e.clipboardData.getData("text/plain");
+        const text = normalizeLogicalLineEndings(e.clipboardData.getData("text/plain"));
         if (isLargePasteText(text)) {
           insertLargePaste(text);
           return;
         }
-        document.execCommand("insertText", false, text);
+        insertPlainTextWithUndo(text);
         refreshEmptyState();
         refreshMention();
       },

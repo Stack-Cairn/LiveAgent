@@ -36,12 +36,13 @@ import {
   buildTranscriptLayoutKey,
   createTranscriptMeasurementsLru,
 } from "../../../lib/transcript-virtual/measurementsLru";
+import { AssistantActivityRow } from "./AssistantActivityRow";
 import { AssistantRenderUnit } from "./AssistantRenderUnit";
 import { extractRenderUnitRange } from "./renderUnitRangeExtractor";
 import { createTranscriptRowModel } from "./rowModel";
 import { UserMessageRow } from "./UserMessageRow";
 
-const TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION = "assistant-units-v1";
+const TRANSCRIPT_MEASUREMENT_LAYOUT_VERSION = "assistant-activity-v2";
 
 function buildVersionedTranscriptLayoutKey(viewportWidth: number, contentWidth: number) {
   const layoutKey = buildTranscriptLayoutKey(viewportWidth, contentWidth);
@@ -111,6 +112,7 @@ export type TranscriptListProps = {
   // Whether the scroll-follow engine is attached to the bottom; gates the
   // virtualizer's resize-compensation carve-out for live-row growth.
   isViewportFollowing?: () => boolean;
+  viewportFollowing: boolean;
   isSending: boolean;
   isAgentMode: boolean;
   isCompactionRunning: boolean;
@@ -137,8 +139,8 @@ export type TranscriptListProps = {
 };
 
 // The whole transcript lives in one virtualized container. Assistant replies
-// are block-level render units, so a long reply no longer becomes one giant
-// row; only its mutable live tail stays force-mounted.
+// are block-level render units. The currently active reply is one stable outer
+// activity row; static history keeps block-level virtualization.
 export const TranscriptList = memo(function TranscriptList(props: TranscriptListProps) {
   const {
     conversationId,
@@ -147,6 +149,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     scrollViewport,
     layoutWidth,
     isViewportFollowing,
+    viewportFollowing,
     isSending,
     isAgentMode,
     isCompactionRunning,
@@ -282,23 +285,18 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     initialMeasurementsCache,
     directDomUpdates: true,
     directDomUpdatesMode: "transform",
-    // End-anchored: while the viewport sits within the threshold of the end,
-    // growth of the last row (streaming) compensates by the total-size delta
-    // upstream, and estimate→measure corrections keep the bottom pinned. The
-    // threshold matches scrollFollowCore's BOTTOM_ATTACH_THRESHOLD_PX so both
-    // engines agree on what "at the bottom" means. followOnAppend stays off:
-    // its DOM-distance re-follow would conflict with the follow reducer's
-    // "shrink clamps never re-attach" contract — appends while following are
-    // already pinned by the reducer.
-    anchorTo: "end",
+    // End anchoring is enabled only for a detached reader so keyed prepends
+    // preserve the visible row. While following, start anchoring disables the
+    // virtualizer's bottom correction and leaves live growth to useScrollFollow.
+    anchorTo: viewportFollowing ? "start" : "end",
     scrollEndThreshold: 8,
     rangeExtractor: extractVirtualRange,
   });
 
   // TanStack exposes the resize-compensation predicate as an instance field,
   // not an option; reassigning per render keeps the closure's inputs current.
-  // It only governs the detached reader — while virtually at the end, the
-  // upstream end-anchor compensation takes priority over this predicate.
+  // While following it rejects every virtualizer correction; while detached
+  // it retains estimate/measurement anchoring for rows above the viewport.
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = createLiveRowScrollAdjustPolicy({
     getLiveStartIndex: () => liveStartIndexRef.current,
     isFollowing: () => isViewportFollowing?.() ?? false,
@@ -514,6 +512,24 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
               />
             </div>
           );
+        } else if (row.kind === "assistant-activity") {
+          body = (
+            <div className="flex justify-start">
+              <AssistantActivityRow
+                row={row}
+                showUsage={showUsage}
+                usageContextWindow={usageContextWindow}
+                isAgentMode={isAgentMode}
+                isCompactionRunning={isCompactionRunning}
+                toolStatus={displayedToolStatus}
+                retryAttempts={liveState.retryAttempts}
+                workdir={workspaceRoot}
+                onOpenFileLink={onOpenFileLink}
+                onResendFromEdit={onResendFromEdit}
+                onBranchConversation={onBranchConversation}
+              />
+            </div>
+          );
         } else {
           body = (
             <div className="flex justify-start">
@@ -537,6 +553,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
         return (
           <div
             key={virtualRow.key}
+            data-row-key={row.key}
             data-index={virtualRow.index}
             ref={virtualizer.measureElement}
             className="absolute left-0 right-0 top-0"
