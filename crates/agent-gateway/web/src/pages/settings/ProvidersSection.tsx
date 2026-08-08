@@ -330,14 +330,27 @@ function itemsByIdOrder<T extends { id: string }>(items: readonly T[], order: re
 function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProps) {
   const { t } = useLocale();
   const isGatewayWebui = isGatewayWebuiRuntime();
-  const initialApiKey = initialData?.apiKey ?? "";
-  const initialUsesRedactedApiKey =
-    isGatewayWebui && initialApiKey.trim() === "" && initialData?.apiKeyConfigured === true;
   const [name, setName] = useState(initialData?.name ?? "");
   const [baseUrl, setBaseUrl] = useState(initialData?.baseUrl ?? "");
-  const [apiKey, setApiKey] = useState(
-    initialUsesRedactedApiKey ? REDACTED_API_KEY_DISPLAY : initialApiKey,
+  const initialApiKeys = Array.isArray(initialData?.apiKeys)
+    ? initialData.apiKeys.map((key) => key)
+    : initialData?.apiKey?.trim()
+      ? [initialData.apiKey]
+      : [];
+  // WebUI 永不下发明文 Key：脱敏快照里 apiKeys 为空、apiKeyConfigured=true，
+  // 用占位行表示"已有 N 个 Key 已配置"；编辑即整体替换（无回归：WebUI 原本单 Key）。
+  const initialUsesRedactedApiKey =
+    isGatewayWebui && initialApiKeys.length === 0 && initialData?.apiKeyConfigured === true;
+  const [apiKeys, setApiKeys] = useState<string[]>(
+    initialUsesRedactedApiKey
+      ? [REDACTED_API_KEY_DISPLAY]
+      : initialApiKeys.length > 0
+        ? initialApiKeys
+        : [""],
   );
+  const configuredApiKeyCount = isGatewayWebui
+    ? initialData?.apiKeyCount ?? 0
+    : initialApiKeys.filter((key) => key.trim()).length;
   const [customHeaders, setCustomHeaders] = useState(() =>
     (initialData?.customHeaders ?? []).map((header) => ({ ...header })),
   );
@@ -419,8 +432,12 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   modelsRef.current = models;
   modelOrderRef.current = modelOrder;
   activeModelsRef.current = activeModels;
-  const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_API_KEY_DISPLAY;
-  const apiKeyForRequest = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
+  const apiKeyIsRedactedDisplay =
+    initialUsesRedactedApiKey && apiKeys.length === 1 && apiKeys[0] === REDACTED_API_KEY_DISPLAY;
+  const realApiKeys = apiKeys
+    .map((key) => (key === REDACTED_API_KEY_DISPLAY ? "" : key.trim()))
+    .filter(Boolean);
+  const apiKeyForRequest = apiKeyIsRedactedDisplay ? "" : (realApiKeys[0] ?? "");
   const canFetchModels = baseUrl.trim().length > 0 && apiKeyForRequest.length > 0;
   const persistedUsageQueryProviderId = getPersistedUsageQueryProviderId(initialData);
   const { confirm: requestUsageQueryConfirm, dialog: usageQueryConfirmDialog } = useConfirmDialog();
@@ -437,7 +454,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   // 变量实际生效值:查询专用覆盖优先,留空回退供应商自身配置(与 Rust
   // prepare_script_query 的解析顺序一致)。
   const usageVariableBaseUrl = usageQuery.baseUrl.trim() || baseUrl.trim();
-  const usageVariableApiKey = usageQuery.apiKey.trim() || apiKey.trim();
+  const usageVariableApiKey = usageQuery.apiKey.trim() || apiKeyForRequest;
   // Token Plan 供应商:显式选择优先,否则按 Base URL 自动检测。
   const activeCodingPlanProvider =
     usageQuery.codingPlanProvider || detectCodingPlanProvider(baseUrl);
@@ -757,6 +774,16 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     setHeaderValidationSubmitted(false);
   }
 
+  function updateApiKey(index: number, value: string) {
+    setApiKeys((prev) => prev.map((key, keyIndex) => (keyIndex === index ? value : key)));
+  }
+  function removeApiKey(index: number) {
+    setApiKeys((prev) => prev.filter((_, keyIndex) => keyIndex !== index));
+  }
+  function addApiKey() {
+    setApiKeys((prev) => [...prev, ""]);
+  }
+
   function openHeaderSuggest(index: number) {
     const input = headerKeyRefs.current[index];
     if (!input) return;
@@ -841,14 +868,26 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       if (!confirmed) return;
       setCustomUsageQueryConfirmed(true);
     }
-    const nextApiKey = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
+    const trimmedApiKeys = apiKeys
+      .map((key) => (key === REDACTED_API_KEY_DISPLAY ? "" : key.trim()))
+      .filter(Boolean);
+    const dedupedApiKeys: string[] = [];
+    const seenApiKeys = new Set<string>();
+    for (const key of trimmedApiKeys) {
+      if (!seenApiKeys.has(key)) {
+        seenApiKeys.add(key);
+        dedupedApiKeys.push(key);
+      }
+    }
+    const nextApiKey = dedupedApiKeys[0] ?? "";
     onSave({
       name: name.trim(),
       type: providerType,
       baseUrl: baseUrl.trim(),
       apiKey: nextApiKey,
+      apiKeys: dedupedApiKeys,
       apiKeyConfigured:
-        nextApiKey.length > 0 ||
+        dedupedApiKeys.length > 0 ||
         apiKeyIsRedactedDisplay ||
         (isGatewayWebui && initialData?.apiKeyConfigured === true),
       customHeaders,
@@ -1157,32 +1196,111 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="modal-apikey">API Key</Label>
-                    <div className="relative">
-                      <Input
-                        id="modal-apikey"
-                        type={showApiKey ? "text" : "password"}
-                        value={apiKey}
-                        className="pr-10"
-                        onChange={(event) => setApiKey(event.currentTarget.value)}
-                        onFocus={(event) => {
-                          if (apiKeyIsRedactedDisplay) event.currentTarget.select();
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-transparent hover:text-foreground"
-                        onClick={() => setShowApiKey((prev) => !prev)}
-                        title={showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
-                        aria-label={
-                          showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")
-                        }
-                      >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
+                    {isGatewayWebui ? (
+                      <>
+                        <Label htmlFor="modal-apikey">API Key</Label>
+                        <div className="relative">
+                          <Input
+                            id="modal-apikey"
+                            type={showApiKey ? "text" : "password"}
+                            value={apiKeys[0] ?? ""}
+                            className="pr-10"
+                            onChange={(event) => setApiKeys([event.currentTarget.value])}
+                            onFocus={(event) => {
+                              if (apiKeyIsRedactedDisplay) event.currentTarget.select();
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-transparent hover:text-foreground"
+                            onClick={() => setShowApiKey((prev) => !prev)}
+                            title={showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
+                            aria-label={
+                              showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")
+                            }
+                          >
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                        {apiKeyIsRedactedDisplay && configuredApiKeyCount > 0 ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            {t("settings.providerApiKeysConfiguredCount").replace(
+                              "{count}",
+                              String(configuredApiKeyCount),
+                            )}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <Label htmlFor="modal-apikey-0">API Key</Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:bg-transparent hover:text-foreground"
+                            onClick={() => setShowApiKey((prev) => !prev)}
+                            title={showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")}
+                            aria-label={
+                              showApiKey ? t("settings.hideApiKey") : t("settings.showApiKey")
+                            }
+                          >
+                            {showApiKey ? (
+                              <EyeOff className="h-3.5 w-3.5" />
+                            ) : (
+                              <Eye className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {apiKeys.map((key, index) => (
+                            <div key={index} className="relative">
+                              <Input
+                                id={index === 0 ? "modal-apikey-0" : undefined}
+                                type={showApiKey ? "text" : "password"}
+                                value={key}
+                                className="pr-10"
+                                onChange={(event) => updateApiKey(index, event.currentTarget.value)}
+                                onFocus={(event) => {
+                                  if (index === 0 && apiKeyIsRedactedDisplay) {
+                                    event.currentTarget.select();
+                                  }
+                                }}
+                              />
+                              {apiKeys.length > 1 ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="absolute right-0 top-0 h-10 w-10 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                  onClick={() => removeApiKey(index)}
+                                  title={t("settings.providerRemoveApiKey")}
+                                  aria-label={t("settings.providerRemoveApiKey")}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              ) : null}
+                            </div>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1.5"
+                            onClick={addApiKey}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            {t("settings.providerAddApiKey")}
+                          </Button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {t("settings.providerApiKeyHint")}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
 

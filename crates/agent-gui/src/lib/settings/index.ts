@@ -28,7 +28,7 @@ import {
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "../transcript-width/transcriptWidthModel";
-import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
+import { normalizeApiKey, normalizeApiKeys, normalizeBaseUrl, normalizeModels } from "./normalize";
 
 export { normalizeFontFamily } from "../system/fontFamily";
 
@@ -368,6 +368,14 @@ export type CustomProvider = {
   baseUrl: string;
   apiKey: string;
   apiKeyConfigured?: boolean;
+  /**
+   * 多 API Key 列表（多 Key 负载均衡/轮询）。归一化后恒为数组；apiKey 始终派生为
+   * apiKeys[0]（兼容仅读单 Key 的存量链路）。旧快照缺省时由 normalizeApiKeys 从
+   * apiKey 迁移成单元素数组，零回归。
+   */
+  apiKeys?: string[];
+  /** 仅脱敏快照携带：已配置（非空）Key 数量，供 WebUI 展示"已配置 N 个 Key"提示。 */
+  apiKeyCount?: number;
   customHeaders?: { key: string; value: string }[];
   models: ProviderModelConfig[];
   modelOrder?: string[];
@@ -1418,7 +1426,8 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
   const models = normalizeProviderModelConfigs(obj.models, type);
   const modelOrder = normalizeProviderModelOrder(obj.modelOrder, models);
   const validModelIds = new Set(models.map((model) => model.id));
-  const apiKey = normalizeApiKey(typeof obj.apiKey === "string" ? obj.apiKey : "");
+  const apiKeys = normalizeApiKeys(obj.apiKeys, obj.apiKey);
+  const apiKey = apiKeys[0] ?? normalizeApiKey(typeof obj.apiKey === "string" ? obj.apiKey : "");
   const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : createUuid();
 
   return {
@@ -1429,7 +1438,8 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
       ? codexRouting.baseUrl
       : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : ""),
     apiKey,
-    apiKeyConfigured: apiKey.length > 0 || obj.apiKeyConfigured === true,
+    apiKeys,
+    apiKeyConfigured: apiKeys.length > 0 || obj.apiKeyConfigured === true,
     customHeaders: normalizeCustomHeaders(obj.customHeaders),
     models,
     ...(modelOrder ? { modelOrder } : {}),

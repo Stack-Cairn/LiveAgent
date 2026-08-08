@@ -789,7 +789,9 @@ test("gateway settings sync payload redacts provider api keys", () => {
 
   const payload = sync.buildGatewaySettingsSyncPayload(appSettings);
   assert.equal(payload.customProviders[0].apiKey, undefined);
+  assert.equal(payload.customProviders[0].apiKeys, undefined);
   assert.equal(payload.customProviders[0].apiKeyConfigured, true);
+  assert.equal(payload.customProviders[0].apiKeyCount, 1);
   assert.equal(payload.customProviders[0].nativeWebSearchEnabled, true);
   assert.deepEqual(payload.customSettings.conversationTitleModel, {
     customProviderId: "provider-1",
@@ -847,8 +849,9 @@ test("gateway settings sync payload redacts provider api keys", () => {
     includeProviderApiKeyUpdates: true,
   });
   assert.equal(updatePayload.customProviders[0].apiKey, undefined);
+  assert.equal(updatePayload.customProviders[0].apiKeyCount, 1);
   assert.deepEqual(updatePayload.providerApiKeyUpdates, {
-    "provider-1": "secret-key",
+    "provider-1": ["secret-key"],
   });
 });
 

@@ -8,7 +8,7 @@ import {
   workspaceProjectPathKey,
 } from "./index";
 
-export type GatewayProviderApiKeyUpdates = Record<string, string>;
+export type GatewayProviderApiKeyUpdates = Record<string, string[]>;
 export type GatewayProviderUsageQuerySecretUpdates = Record<
   string,
   {
@@ -42,8 +42,12 @@ export type GatewaySshSyncPatch = {
     after: string[];
   };
 };
-export type GatewaySettingsSyncProvider = Omit<AppSettings["customProviders"][number], "apiKey"> & {
+export type GatewaySettingsSyncProvider = Omit<
+  AppSettings["customProviders"][number],
+  "apiKey" | "apiKeys"
+> & {
   apiKeyConfigured?: boolean;
+  apiKeyCount?: number;
 };
 export type GatewaySettingsSyncCustomSettings = Partial<AppSettings["customSettings"]>;
 
@@ -97,7 +101,20 @@ function asObject(value: unknown): Record<string, unknown> {
 }
 
 function apiKeyConfiguredForProvider(provider: AppSettings["customProviders"][number]) {
-  return provider.apiKey.trim().length > 0 || provider.apiKeyConfigured === true;
+  return (
+    (Array.isArray(provider.apiKeys) ? provider.apiKeys.some((key) => key.trim().length > 0) : false) ||
+    provider.apiKey.trim().length > 0 ||
+    provider.apiKeyConfigured === true
+  );
+}
+
+/** 已配置（非空）Key 数量：优先数 apiKeys，回退到单 apiKey 旧字段。供脱敏快照展示。 */
+function apiKeyCountForProvider(provider: AppSettings["customProviders"][number]): number {
+  if (Array.isArray(provider.apiKeys)) {
+    const count = provider.apiKeys.filter((key) => key.trim().length > 0).length;
+    if (count > 0) return count;
+  }
+  return provider.apiKey.trim().length > 0 ? 1 : 0;
 }
 
 const DEFAULT_USAGE_QUERY_CONFIG: AppSettings["customProviders"][number]["usageQuery"] = {
@@ -147,11 +164,12 @@ export function redactCustomProvidersForGateway(
   customProviders: AppSettings["customProviders"],
 ): GatewaySettingsSyncProvider[] {
   return customProviders.map((provider) => {
-    const { apiKey: _apiKey, ...rest } = provider;
+    const { apiKey: _apiKey, apiKeys: _apiKeys, ...rest } = provider;
     return {
       ...rest,
       usageQuery: redactUsageQueryConfig(provider.usageQuery),
       apiKeyConfigured: apiKeyConfiguredForProvider(provider),
+      apiKeyCount: apiKeyCountForProvider(provider),
     };
   });
 }
@@ -162,8 +180,10 @@ export function redactCustomProvidersForWebStorage(
   return customProviders.map((provider) => ({
     ...provider,
     apiKey: "",
+    apiKeys: [],
     usageQuery: redactUsageQueryConfig(provider.usageQuery),
     apiKeyConfigured: apiKeyConfiguredForProvider(provider),
+    apiKeyCount: apiKeyCountForProvider(provider),
   }));
 }
 
@@ -227,10 +247,21 @@ function collectProviderApiKeyUpdates(
 ): GatewayProviderApiKeyUpdates | undefined {
   const updates: GatewayProviderApiKeyUpdates = {};
   for (const provider of customProviders) {
-    const apiKey = provider.apiKey.trim();
-    if (provider.id.trim() && apiKey) {
-      updates[provider.id] = apiKey;
+    const id = provider.id.trim();
+    if (!id) continue;
+    const keys = (Array.isArray(provider.apiKeys) ? provider.apiKeys : [])
+      .map((key) => (typeof key === "string" ? key.trim() : ""))
+      .filter(Boolean);
+    // 去重保序：多 Key 列表里同一 Key 不重复发送。
+    const deduped: string[] = [];
+    const seen = new Set<string>();
+    for (const key of keys) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        deduped.push(key);
+      }
     }
+    if (deduped.length > 0) updates[id] = deduped;
   }
   return Object.keys(updates).length > 0 ? updates : undefined;
 }
@@ -625,12 +656,22 @@ function mergeSyncedSystemSettings(
 function normalizeProviderApiKeyUpdates(value: unknown): GatewayProviderApiKeyUpdates {
   const source = asObject(value);
   const updates: GatewayProviderApiKeyUpdates = {};
-  for (const [id, apiKey] of Object.entries(source)) {
+  for (const [id, raw] of Object.entries(source)) {
     const normalizedId = id.trim();
-    const normalizedApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
-    if (normalizedId && normalizedApiKey) {
-      updates[normalizedId] = normalizedApiKey;
+    if (!normalizedId) continue;
+    // 兼容历史单字符串 sidecar：包成单元素数组。
+    const rawKeys = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
+    const keys: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of rawKeys) {
+      if (typeof entry !== "string") continue;
+      const trimmed = entry.trim();
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        keys.push(trimmed);
+      }
     }
+    if (keys.length > 0) updates[normalizedId] = keys;
   }
   return updates;
 }
@@ -757,8 +798,25 @@ function mergeSyncedCustomProviders(
     const id = typeof source.id === "string" ? source.id.trim() : "";
     const currentProvider = id ? currentById.get(id) : undefined;
     const apiKeyUpdate = id ? apiKeyUpdates[id] : undefined;
-    const sourceApiKey = typeof source.apiKey === "string" ? source.apiKey.trim() : "";
-    const apiKey = (apiKeyUpdate ?? sourceApiKey) || currentProvider?.apiKey || "";
+    // current 侧经归一化 apiKeys 恒为数组；兜底未归一化的旧单 apiKey。
+    const currentApiKeys = Array.isArray(currentProvider?.apiKeys)
+      ? currentProvider!.apiKeys
+      : currentProvider?.apiKey?.trim()
+        ? [currentProvider!.apiKey.trim()]
+        : [];
+    // 脱敏快照里 apiKeyConfigured === false 是显式清空信号（对齐 SSH passwordConfiguredCleared）。
+    const cleared = source.apiKeyConfigured === false;
+    let apiKeys: string[];
+    if (apiKeyUpdate && apiKeyUpdate.length > 0) {
+      // sidecar 明文：整体替换（WebUI 编辑即"重置为所填 Key 列表"）。
+      apiKeys = apiKeyUpdate;
+    } else if (cleared) {
+      apiKeys = [];
+    } else {
+      // 未编辑：沿用本端已存 Key 列表。
+      apiKeys = currentApiKeys;
+    }
+    const apiKey = apiKeys[0] ?? "";
     const sourceHasConfiguredFlag = Object.hasOwn(source, "apiKeyConfigured");
     const usageQuery = Object.hasOwn(source, "usageQuery")
       ? mergeSyncedUsageQuery(
@@ -771,8 +829,9 @@ function mergeSyncedCustomProviders(
     return {
       ...source,
       apiKey,
+      apiKeys,
       apiKeyConfigured:
-        apiKey.length > 0 ||
+        apiKeys.length > 0 ||
         source.apiKeyConfigured === true ||
         (!sourceHasConfiguredFlag && currentProvider?.apiKeyConfigured === true),
       ...(usageQuery ? { usageQuery } : {}),

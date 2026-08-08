@@ -32,6 +32,8 @@ export type ProviderRuntimeConfig = {
   readonly [PROVIDER_RUNTIME_CONFIG_BRAND]: true;
   baseUrl: string;
   apiKey: string;
+  /** 故障转移候选 Key 列表（主 Key 在前，即 apiKey）；单 Key 时为 [apiKey]。 */
+  apiKeys: string[];
   customHeaders?: CustomProvider["customHeaders"];
   requestFormat?: CodexRequestFormat;
   reasoning?: ReasoningLevel;
@@ -67,4 +69,11 @@ export type StreamOptionsEx = SimpleStreamOptions & {
   /** Escape hatch for the unified provider stream retry in streamByApi.ts. */
   streamRetry?: StreamRetryConfig;
   recoverMissingFinishReason?: boolean;
+  /**
+   * 多 Key 故障转移的当次尝试凭据（mutable holder）。streamByApi 的 factory 在
+   * 每次 factory() 调用时从这里读 apiKey/headers，withStreamRetry 在重试前通过
+   * streamRetry.apiKeyFailover.rotate 更新它，让重试落到下一个 Key。未配置多 Key
+   * 时缺省，factory 回退到 options.apiKey/options.headers（兼容旧链路）。
+   */
+  attemptAuth?: { apiKey: string; headers: Record<string, string> };
 };

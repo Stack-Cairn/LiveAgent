@@ -22,6 +22,7 @@ import {
   finalizeProviderStreamOptions,
   normalizeErrorMessage,
   type ProviderRuntimeConfig,
+  createProviderApiKeyFailover,
   prepareProviderRequest,
   resolveProviderCacheRetention,
   type StreamOptionsEx,
@@ -1280,9 +1281,17 @@ export async function runAssistantWithTools(params: {
       const hostedSearchProbeId = shouldProbeHostedSearch
         ? createHostedSearchProbeId(params.providerId)
         : undefined;
+      // 多 Key 故障转移：主 Key 优先，失败（429/限额/鉴权）时切下一个 Key 重试。
+      const apiKeyFailover = createProviderApiKeyFailover({
+        providerId: params.providerId,
+        apiKeys: params.runtime.apiKeys,
+        requestFormat: params.runtime.requestFormat,
+        sessionId: params.sessionId,
+      });
       let streamOptions: StreamOptionsEx = {
         ...(options ?? {}),
         apiKey: options?.apiKey ?? params.runtime.apiKey,
+        attemptAuth: apiKeyFailover.attemptAuth,
         headers: withHostedSearchProbeHeader(
           {
             ...(options?.headers ?? {}),
@@ -1314,6 +1323,7 @@ export async function runAssistantWithTools(params: {
           onRetryRecovered: () => {
             params.onToolStatus?.(`第 ${round} 轮：模型生成中...`);
           },
+          ...(apiKeyFailover.failover ? { apiKeyFailover: apiKeyFailover.failover } : {}),
         },
       };
 

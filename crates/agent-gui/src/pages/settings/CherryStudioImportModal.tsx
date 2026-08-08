@@ -24,7 +24,7 @@ export type CherryProviderImportItem = {
   providerType: ProviderId;
   name: string;
   baseUrl: string;
-  apiKey: string;
+  apiKeys: string[];
   apiKeyCount: number;
   requestFormat: CodexRequestFormat;
   enabled: boolean;

@@ -7,7 +7,7 @@ pub struct CherryProviderImportItem {
     pub provider_type: String,
     pub name: String,
     pub base_url: String,
-    pub api_key: String,
+    pub api_keys: Vec<String>,
     pub api_key_count: usize,
     pub request_format: String,
     pub enabled: bool,
@@ -374,7 +374,6 @@ fn cherry_append_v1_provider(
         .and_then(Value::as_bool)
         .unwrap_or(true);
     let api_keys = cherry_split_v1_api_keys(&cherry_value_string(provider, "apiKey"));
-    let api_key = api_keys.first().cloned().unwrap_or_default();
     let auth_type = cherry_value_string(provider, "authType");
     let source_models = provider
         .get("models")
@@ -422,8 +421,6 @@ fn cherry_append_v1_provider(
         .is_some_and(|headers| !headers.is_empty())
     {
         "Cherry Studio 的自定义请求头不会同步".to_string()
-    } else if api_keys.len() > 1 {
-        format!("检测到 {} 个 API Key，将使用第一个", api_keys.len())
     } else {
         String::new()
     };
@@ -432,7 +429,7 @@ fn cherry_append_v1_provider(
         let models_only_unsupported = !source_models.is_empty() && group.models.is_empty();
         let reason = if auth_type == "oauth" {
             "OAuth 登录凭据不支持迁移".to_string()
-        } else if api_key.is_empty() {
+        } else if api_keys.is_empty() {
             "未配置可迁移的 API Key".to_string()
         } else if group.base_url.is_empty() {
             "未配置 Base URL".to_string()
@@ -448,7 +445,7 @@ fn cherry_append_v1_provider(
             provider_type: group.protocol.provider_type().to_string(),
             name: name.clone(),
             base_url: group.base_url,
-            api_key: api_key.clone(),
+            api_keys: api_keys.clone(),
             api_key_count: api_keys.len(),
             request_format: group.protocol.request_format().to_string(),
             enabled,
@@ -513,7 +510,6 @@ fn cherry_read_v2(
     {
         let endpoint_configs = cherry_parse_optional_json(endpoint_configs_text.as_deref());
         let api_keys = cherry_v2_api_keys(api_keys_text.as_deref());
-        let api_key = api_keys.first().cloned().unwrap_or_default();
         let auth_config = cherry_parse_optional_json(auth_config_text.as_deref());
         let auth_type = auth_config
             .get("type")
@@ -597,8 +593,6 @@ fn cherry_read_v2(
             .is_some_and(|headers| !headers.is_empty())
         {
             "Cherry Studio 的自定义请求头不会同步".to_string()
-        } else if api_keys.len() > 1 {
-            format!("检测到 {} 个启用 API Key，将使用第一个", api_keys.len())
         } else {
             String::new()
         };
@@ -607,7 +601,7 @@ fn cherry_read_v2(
             let models_only_unsupported = source_model_count > 0 && group.models.is_empty();
             let reason = if auth_type != "api-key" {
                 format!("{auth_type} 登录凭据不支持迁移")
-            } else if api_key.is_empty() {
+            } else if api_keys.is_empty() {
                 "未配置启用的 API Key".to_string()
             } else if group.base_url.is_empty() {
                 "未配置当前协议的 Base URL".to_string()
@@ -623,7 +617,7 @@ fn cherry_read_v2(
                 provider_type: group.protocol.provider_type().to_string(),
                 name: name.clone(),
                 base_url: group.base_url,
-                api_key: api_key.clone(),
+                api_keys: api_keys.clone(),
                 api_key_count: api_keys.len(),
                 request_format: group.protocol.request_format().to_string(),
                 enabled,

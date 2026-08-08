@@ -70,18 +70,54 @@ function mapToolChoiceToGoogle(
 }
 
 function buildOpenAIBaseOptions(model: Model<any>, options: StreamOptionsEx) {
+  // 多 Key 故障转移：当次尝试的 apiKey/headers 由 attemptAuth holder 提供，
+  // withStreamRetry 在重试前 rotate；缺省时回退到 options.apiKey/options.headers。
+  const auth = options.attemptAuth;
   return {
     temperature: options.temperature,
     maxTokens: resolveMaxTokens(options.maxTokens, model.maxTokens),
     signal: options.signal,
-    apiKey: options.apiKey,
+    apiKey: auth?.apiKey ?? options.apiKey,
     cacheRetention: options.cacheRetention,
     sessionId: options.sessionId,
-    headers: options.headers,
+    headers: auth?.headers ?? options.headers,
     onPayload: options.onPayload,
     maxRetryDelayMs: options.maxRetryDelayMs,
     metadata: options.metadata,
   };
+}
+
+/**
+ * 鉴权头名：与 proxy.ts 的 UPSTREAM_HEADER_OVERRIDE_EXCLUDED_KEYS 同源——这些头
+ * 不进覆盖包、由 SDK/常规通道下发，故障转移时按 Key 重建即可替换。
+ */
+const PROVIDER_AUTH_HEADER_KEYS = new Set([
+  "authorization",
+  "x-api-key",
+  "x-goog-api-key",
+]);
+
+/** 当次尝试的鉴权凭据：优先 attemptAuth holder（故障转移会 rotate），回退 options。 */
+function resolveAttemptApiKey(options: StreamOptionsEx): string | undefined {
+  return options.attemptAuth?.apiKey ?? options.apiKey;
+}
+/**
+ * 当次尝试的 headers：保留 options.headers 里的代理路由/会话/自定义头，
+ * 仅把鉴权头（authorization/x-api-key/x-goog-api-key）替换为 attemptAuth 里的当次 Key 版本。
+ * 未配置 attemptAuth 时回退到 options.headers（兼容单 Key 旧链路）。
+ */
+function resolveAttemptHeaders(options: StreamOptionsEx): Record<string, string> | undefined {
+  const authHeaders = options.attemptAuth?.headers;
+  if (!authHeaders) return options.headers as Record<string, string> | undefined;
+  const base = (options.headers ?? {}) as Record<string, string>;
+  const merged: Record<string, string> = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (!PROVIDER_AUTH_HEADER_KEYS.has(key.toLowerCase())) merged[key] = value;
+  }
+  for (const [key, value] of Object.entries(authHeaders)) {
+    if (PROVIDER_AUTH_HEADER_KEYS.has(key.toLowerCase())) merged[key] = value;
+  }
+  return merged;
 }
 
 export function streamSimpleByApi(model: Model<any>, context: Context, options: StreamOptionsEx) {
@@ -114,10 +150,11 @@ export function streamSimpleByApi(model: Model<any>, context: Context, options: 
             temperature: anthropicOptions.temperature,
             maxTokens: anthropicThinking.maxTokens,
             signal: anthropicOptions.signal,
-            apiKey: anthropicOptions.apiKey,
+            // 故障转移：每次 factory() 调用都重新读取当次 Key/headers。
+            apiKey: resolveAttemptApiKey(anthropicOptions),
             cacheRetention: anthropicOptions.cacheRetention,
             sessionId: anthropicOptions.sessionId,
-            headers: anthropicOptions.headers,
+            headers: resolveAttemptHeaders(anthropicOptions),
             onPayload: anthropicOptions.onPayload,
             maxRetryDelayMs: anthropicOptions.maxRetryDelayMs,
             metadata: anthropicOptions.metadata,
@@ -153,15 +190,16 @@ export function streamSimpleByApi(model: Model<any>, context: Context, options: 
       // tools」的请求直接 400（"A tool_choice was set on the request but no tools
       // were specified"）——compaction 摘要、标题生成等 text-only 请求没有工具，
       // 会踩中。tool_choice 在无工具时本就无意义，只在请求真正携带 tools 时下发。
-      const openAIOptions: OpenAICompletionsOptions = {
-        ...buildOpenAIBaseOptions(model, openAICompletionsOptions),
-        reasoningEffort: clampOpenAIReasoningEffort(model, openAICompletionsOptions.reasoning),
-        toolChoice: openAICompletionsContext.tools?.length
-          ? mapToolChoiceToOpenAI(openAICompletionsOptions.toolChoice)
-          : undefined,
-      };
       return withStreamRetry(
         () => {
+          // 故障转移：每次 factory() 调用都重新构建 options，读取当次 Key/headers。
+          const openAIOptions: OpenAICompletionsOptions = {
+            ...buildOpenAIBaseOptions(model, openAICompletionsOptions),
+            reasoningEffort: clampOpenAIReasoningEffort(model, openAICompletionsOptions.reasoning),
+            toolChoice: openAICompletionsContext.tools?.length
+              ? mapToolChoiceToOpenAI(openAICompletionsOptions.toolChoice)
+              : undefined,
+          };
           const source = streamOpenAICompletions(
             model as any,
             openAICompletionsContext,
@@ -175,32 +213,36 @@ export function streamSimpleByApi(model: Model<any>, context: Context, options: 
       );
     }
     case "openai-responses": {
-      const openAIOptions: OpenAIResponsesOptions = {
-        ...buildOpenAIBaseOptions(model, options),
-        reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
-      };
-      return withStreamRetry(() => streamOpenAIResponses(model as any, context, openAIOptions), {
-        signal: options.signal,
-        ...options.streamRetry,
-      });
+      return withStreamRetry(
+        () => {
+          const openAIOptions: OpenAIResponsesOptions = {
+            ...buildOpenAIBaseOptions(model, options),
+            reasoningEffort: clampOpenAIReasoningEffort(model, options.reasoning),
+          };
+          return streamOpenAIResponses(model as any, context, openAIOptions);
+        },
+        { signal: options.signal, ...options.streamRetry },
+      );
     }
     case "google-generative-ai": {
-      const googleOptions: GoogleOptions = {
-        temperature: options.temperature,
-        maxTokens: resolveMaxTokens(options.maxTokens, model.maxTokens),
-        signal: options.signal,
-        apiKey: options.apiKey,
-        headers: options.headers,
-        onPayload: options.onPayload,
-        maxRetryDelayMs: options.maxRetryDelayMs,
-        metadata: options.metadata,
-        thinking: resolveGeminiThinkingRuntime(model, options.reasoning),
-        toolChoice: mapToolChoiceToGoogle(options.toolChoice) ?? "none",
-      };
-      return withStreamRetry(() => streamGoogle(model as any, context, googleOptions), {
-        signal: options.signal,
-        ...options.streamRetry,
-      });
+      return withStreamRetry(
+        () => {
+          const googleOptions: GoogleOptions = {
+            temperature: options.temperature,
+            maxTokens: resolveMaxTokens(options.maxTokens, model.maxTokens),
+            signal: options.signal,
+            apiKey: resolveAttemptApiKey(options),
+            headers: resolveAttemptHeaders(options),
+            onPayload: options.onPayload,
+            maxRetryDelayMs: options.maxRetryDelayMs,
+            metadata: options.metadata,
+            thinking: resolveGeminiThinkingRuntime(model, options.reasoning),
+            toolChoice: mapToolChoiceToGoogle(options.toolChoice) ?? "none",
+          };
+          return streamGoogle(model as any, context, googleOptions);
+        },
+        { signal: options.signal, ...options.streamRetry },
+      );
     }
     default:
       throw new Error(`Unsupported model API: ${model.api}`);
