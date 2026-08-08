@@ -135,6 +135,7 @@ macro_rules! app_invoke_handler {
             commands::settings::settings_reset_ssh_known_host,
             commands::settings::settings_save_remote,
             commands::settings::settings_save_memory,
+            commands::settings::settings_save_model_failover,
             commands::update::app_update_check,
             commands::update::app_update_install,
             commands::update::app_restart,

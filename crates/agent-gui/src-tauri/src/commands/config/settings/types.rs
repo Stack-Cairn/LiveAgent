@@ -8,6 +8,7 @@ pub struct SettingsLoadResponse {
     pub ssh: Option<Value>,
     pub remote: Option<Value>,
     pub memory: Option<Value>,
+    pub model_failover: Option<Value>,
     pub default_workdir: String,
 }
 

@@ -36,6 +36,10 @@ pub(crate) fn load_gateway_settings_sync_snapshot(conn: &Connection) -> Result<V
         "memory".to_string(),
         load_memory(conn)?.unwrap_or(Value::Object(Map::new())),
     );
+    snapshot.insert(
+        "modelFailover".to_string(),
+        load_model_failover(conn)?.unwrap_or(Value::Object(Map::new())),
+    );
     let remote = load_remote_settings(conn)?;
     snapshot.insert(
         "remote".to_string(),

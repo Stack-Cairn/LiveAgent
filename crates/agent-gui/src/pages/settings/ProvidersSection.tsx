@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronUp,
   ClaudeIcon,
   ClipboardPaste,
   Download,
@@ -87,11 +88,14 @@ import {
   type CodexRequestFormat,
   type CustomProvider,
   getDefaultUsageQueryConfig,
+  MODEL_FAILOVER_QUEUE_LIMIT,
+  type ProviderFailoverSettings,
   type ProviderId,
   type ProviderModelConfig,
   type UsageQueryMode,
   updateCustomProviders,
   updateCustomSettings,
+  updateModelFailover,
 } from "../../lib/settings";
 import { createUuid } from "../../lib/shared/id";
 import { cn } from "../../lib/shared/utils";
@@ -2641,8 +2645,257 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   );
 }
 
-function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => void }) {
-  const { settings, setSettings, onClose } = props;
+function FailoverNumberField(props: {
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (value: number) => void;
+}) {
+  const { label, hint, value, min, max, onCommit } = props;
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  function commitDraft() {
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+    const next = Math.min(max, Math.max(min, Math.round(parsed)));
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-[12.5px] font-medium text-foreground/85">{label}</Label>
+      <Input
+        type="number"
+        min={min}
+        max={max}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") commitDraft();
+        }}
+        className="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+      />
+      <p className="text-[11px] leading-relaxed text-muted-foreground/80">{hint}</p>
+    </div>
+  );
+}
+
+function FailoverSettingsCard(props: SettingsSectionProps & { providerType: ProviderId }) {
+  const { settings, setSettings, providerType } = props;
+  const { t } = useLocale();
+  const failover = settings.modelFailover[providerType];
+  // Same-vendor guard: only providers of this tab's vendor type are offered,
+  // so a Claude queue can never contain a Codex provider (and vice versa).
+  // Failover keeps the conversation's model and only switches which provider
+  // serves it, so the queue holds providers, not models.
+  const vendorProviders = useMemo(
+    () => settings.customProviders.filter((provider) => provider.type === providerType),
+    [settings.customProviders, providerType],
+  );
+
+  const queueValues = useMemo(() => new Set(failover.queue), [failover.queue]);
+  const addableProviders = useMemo(
+    () => vendorProviders.filter((provider) => !queueValues.has(provider.id)),
+    [vendorProviders, queueValues],
+  );
+
+  function patchFailover(patch: Partial<ProviderFailoverSettings>) {
+    setSettings((prev) => updateModelFailover(prev, providerType, patch));
+  }
+
+  function queueEntryLabel(providerId: string) {
+    const provider = settings.customProviders.find((item) => item.id === providerId);
+    return provider?.name ?? providerId;
+  }
+
+  function queueEntryDetail(providerId: string) {
+    const provider = settings.customProviders.find((item) => item.id === providerId);
+    return provider?.baseUrl ?? "";
+  }
+
+  function addQueueEntry(providerId: string) {
+    if (!providerId || queueValues.has(providerId)) return;
+    patchFailover({ queue: [...failover.queue, providerId] });
+  }
+
+  function removeQueueEntry(index: number) {
+    patchFailover({ queue: failover.queue.filter((_, i) => i !== index) });
+  }
+
+  function moveQueueEntry(index: number, delta: -1 | 1) {
+    const target = index + delta;
+    if (target < 0 || target >= failover.queue.length) return;
+    const queue = failover.queue.slice();
+    const [entry] = queue.splice(index, 1);
+    queue.splice(target, 0, entry);
+    patchFailover({ queue });
+  }
+
+  return (
+    <div className="rounded-2xl border border-foreground/[0.06] bg-white/60 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-xl dark:border-foreground/[0.08] dark:bg-foreground/[0.03] dark:shadow-none">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Label className="text-[12.5px] font-medium text-foreground/85">
+              {t("settings.failoverTitle")}
+            </Label>
+            <span className="inline-flex items-center gap-1 rounded-full bg-foreground/[0.05] px-2 py-0.5 text-[10.5px] font-medium text-foreground/60">
+              <ProviderBrandIcon type={providerType} />
+              {getProviderLabel(providerType)}
+            </span>
+            {failover.enabled ? (
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10.5px] font-medium text-emerald-600 dark:text-emerald-400">
+                {t("settings.failoverEnabled")}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground/80">
+            {t("settings.failoverToggleHint").replaceAll(
+              "{vendor}",
+              getProviderLabel(providerType),
+            )}
+          </p>
+        </div>
+        <DialogSwitch
+          checked={failover.enabled}
+          onCheckedChange={(checked) => patchFailover({ enabled: checked })}
+          ariaLabel={t("settings.failoverTitle")}
+        />
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <Label className="text-[12px] font-medium text-foreground/80">
+          {t("settings.failoverQueueTitle")}
+        </Label>
+        <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+          {t("settings.failoverQueueHint").replaceAll("{vendor}", getProviderLabel(providerType))}
+        </p>
+        {failover.queue.length > 0 ? (
+          <div className="space-y-1.5">
+            {failover.queue.map((entry, index) => (
+              <div
+                key={entry}
+                className="flex items-center gap-2 rounded-lg border border-foreground/[0.06] bg-white/70 px-2.5 py-1.5 dark:bg-background/40"
+              >
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-[10.5px] font-semibold text-foreground/70">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground/90">
+                  {queueEntryLabel(entry)}
+                  {queueEntryDetail(entry) ? (
+                    <span className="ml-2 text-[11px] text-muted-foreground/70">
+                      {queueEntryDetail(entry)}
+                    </span>
+                  ) : null}
+                </span>
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:opacity-30"
+                  onClick={() => moveQueueEntry(index, -1)}
+                  disabled={index === 0}
+                  title={t("settings.failoverQueueMoveUp")}
+                  aria-label={t("settings.failoverQueueMoveUp")}
+                >
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:opacity-30"
+                  onClick={() => moveQueueEntry(index, 1)}
+                  disabled={index === failover.queue.length - 1}
+                  title={t("settings.failoverQueueMoveDown")}
+                  aria-label={t("settings.failoverQueueMoveDown")}
+                >
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                  onClick={() => removeQueueEntry(index)}
+                  title={t("settings.failoverQueueRemove")}
+                  aria-label={t("settings.failoverQueueRemove")}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
+            {t("settings.failoverQueueEmpty")}
+          </div>
+        )}
+        {failover.queue.length < MODEL_FAILOVER_QUEUE_LIMIT && addableProviders.length > 0 ? (
+          <Select value="" onValueChange={addQueueEntry}>
+            <SelectTrigger
+              aria-label={t("settings.failoverQueueAdd")}
+              className="h-9 w-full rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+            >
+              <SelectValue>
+                <span className="text-muted-foreground">{t("settings.failoverQueueAdd")}</span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {addableProviders.map((provider) => (
+                <SelectItem key={provider.id} value={provider.id}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{provider.name}</span>
+                    <span className="truncate text-[11px] text-muted-foreground/70">
+                      {provider.baseUrl}
+                    </span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3">
+        <FailoverNumberField
+          label={t("settings.failoverMaxSwitches")}
+          hint={t("settings.failoverMaxSwitchesHint")}
+          value={failover.maxSwitches}
+          min={1}
+          max={10}
+          onCommit={(value) => patchFailover({ maxSwitches: value })}
+        />
+        <FailoverNumberField
+          label={t("settings.failoverFailureThreshold")}
+          hint={t("settings.failoverFailureThresholdHint")}
+          value={failover.failureThreshold}
+          min={1}
+          max={10}
+          onCommit={(value) => patchFailover({ failureThreshold: value })}
+        />
+        <FailoverNumberField
+          label={t("settings.failoverCooldownSeconds")}
+          hint={t("settings.failoverCooldownSecondsHint")}
+          value={failover.cooldownSeconds}
+          min={5}
+          max={3600}
+          onCommit={(value) => patchFailover({ cooldownSeconds: value })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CustomSettingsDrawer(
+  props: SettingsSectionProps & { providerType: ProviderId; onClose: () => void },
+) {
+  const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const [closing, setClosing] = useState(false);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2725,9 +2978,6 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
             >
               {t("settings.customSettings")}
             </div>
-            <div className="mt-1 text-[12px] leading-relaxed text-muted-foreground/90">
-              {t("settings.conversationTitleModelHint")}
-            </div>
           </div>
           <button
             type="button"
@@ -2752,6 +3002,9 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
                 <Label className="text-[12.5px] font-medium text-foreground/85">
                   {t("settings.conversationTitleModel")}
                 </Label>
+                <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+                  {t("settings.conversationTitleModelHint")}
+                </p>
                 <ModelPicker
                   options={titleModelOptions}
                   value={selectedValue}
@@ -2768,6 +3021,14 @@ function CustomSettingsDrawer(props: SettingsSectionProps & { onClose: () => voi
                 ) : null}
               </div>
             </div>
+          </section>
+
+          <section className="mt-4 space-y-3">
+            <FailoverSettingsCard
+              settings={settings}
+              setSettings={setSettings}
+              providerType={providerType}
+            />
           </section>
         </div>
       </aside>
@@ -4141,6 +4402,7 @@ export function ProvidersSection(
         <CustomSettingsDrawer
           settings={settings}
           setSettings={setSettings}
+          providerType={activeTab}
           onClose={() => setCustomSettingsOpen(false)}
         />
       ) : null}
