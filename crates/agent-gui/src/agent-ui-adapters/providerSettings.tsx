@@ -13,7 +13,6 @@ import {
   fetchModelsFromApi,
   mergeFetchedModels,
 } from "@liveagent/ui/pages/settings/providerUtils";
-import { invoke } from "../lib/tauriBridge";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../src-tauri/icons/custom/ccswitch.png";
@@ -36,6 +35,7 @@ import {
   type ProviderId,
   updateCustomProviders,
 } from "../lib/settings";
+import { invoke } from "../lib/tauriBridge";
 import {
   type CherryProviderImportItem,
   type CherryProvidersResponse,

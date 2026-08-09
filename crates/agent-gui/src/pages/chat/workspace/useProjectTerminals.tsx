@@ -4,10 +4,9 @@ import {
   sortTerminalSessions,
 } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
-import { invoke } from "../../../lib/tauriBridge";
-import { listen } from "../../../lib/tauriBridge";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
 import { Terminal } from "../../../components/icons";
+import { invoke, listen } from "../../../lib/tauriBridge";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import { asErrorMessage } from "../chatPageUtils";
 

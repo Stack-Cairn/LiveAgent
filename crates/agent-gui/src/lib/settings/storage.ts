@@ -2,8 +2,8 @@ import {
   buildGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncUpdatePayload,
 } from "@liveagent/ui/lib/settings/sync";
-import { invoke } from "../tauriBridge";
 import { type Locale, normalizeLocale } from "../../i18n/config";
+import { invoke } from "../tauriBridge";
 import {
   type AppSettings,
   type ChatRuntimeControls,

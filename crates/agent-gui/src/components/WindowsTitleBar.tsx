@@ -1,8 +1,8 @@
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { getCurrentWindow } from "../lib/tauriBridge";
 import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import iconSimpleUrl from "../../src-tauri/icons/icon-simple.png";
+import { getCurrentWindow } from "../lib/tauriBridge";
 import { Maximize2, Minimize2, Minus, X } from "./icons";
 
 type TauriRuntimeWindow = Window & {

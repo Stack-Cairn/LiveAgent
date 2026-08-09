@@ -12,11 +12,11 @@
 
 import type { CronTask } from "@liveagent/ui/lib/automation/types";
 import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
-import { invoke } from "../tauriBridge";
 import { type Locale, t } from "../../i18n/config";
 import type { AppSettings, Theme, WorkspaceProject } from "../settings";
 import { workspaceProjectPathKey } from "../settings";
 import { readGlobalShortcutBindings } from "../shortcuts/globalShortcuts";
+import { invoke } from "../tauriBridge";
 import type { TrayPrefs } from "./trayPrefs";
 
 const TRAY_RECENT_LIMIT = 8;

@@ -8,8 +8,7 @@ import type {
   ManagedProcessRecord,
   ManagedProcessState,
 } from "@liveagent/ui/lib/managed-process/types";
-import { invoke } from "../tauriBridge";
-import { listen } from "../tauriBridge";
+import { invoke, listen } from "../tauriBridge";
 
 const MANAGED_PROCESS_CHANGED_EVENT = "managed-process:changed";
 

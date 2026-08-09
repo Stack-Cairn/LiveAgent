@@ -7,8 +7,6 @@ import {
   findWorkspaceProject,
   mergeWorkspaceProjectsWithHistory,
 } from "@liveagent/ui/lib/workspaceProjects";
-import { invoke } from "../../../lib/tauriBridge";
-import { revealItemInDir } from "../../../lib/tauriBridge";
 import {
   type Dispatch,
   type MutableRefObject,
@@ -27,6 +25,7 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../../../lib/settings";
+import { invoke, revealItemInDir } from "../../../lib/tauriBridge";
 import { asErrorMessage } from "../chatPageUtils";
 import { startWorkspaceCloneTask } from "./cloneTasks";
 import {

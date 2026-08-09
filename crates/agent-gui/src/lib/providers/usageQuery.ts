@@ -6,8 +6,8 @@ import {
   type UsageQueryProvider,
   useProviderUsageWithQuery,
 } from "@liveagent/ui/lib/providers/usageQueryCore";
-import { invoke } from "../tauriBridge";
 import type { UsageQueryConfig } from "../settings";
+import { invoke } from "../tauriBridge";
 
 export * from "@liveagent/ui/lib/providers/usageQueryCore";
 

@@ -16,8 +16,7 @@ import type {
   TerminalStreamInputState,
   TerminalStreamSnapshot,
 } from "@liveagent/ui/lib/terminal/types";
-import { invoke } from "../tauriBridge";
-import { listen } from "../tauriBridge";
+import { invoke, listen } from "../tauriBridge";
 
 type TerminalEventListener = (event: TerminalEvent) => void;
 

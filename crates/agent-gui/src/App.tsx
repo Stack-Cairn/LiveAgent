@@ -8,8 +8,6 @@ import {
   type GatewaySettingsSyncPayload,
 } from "@liveagent/ui/lib/settings/sync";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import { invoke } from "./lib/tauriBridge";
-import { listen } from "./lib/tauriBridge";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { Pin } from "./components/icons";
@@ -36,6 +34,7 @@ import {
 } from "./lib/settings/storage";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
 import { applyFontFamilies } from "./lib/system/fontFamily";
+import { invoke, listen } from "./lib/tauriBridge";
 import { ChatPage } from "./pages/ChatPage";
 import type { SectionId } from "./pages/settings/types";
 

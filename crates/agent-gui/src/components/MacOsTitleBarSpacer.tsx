@@ -1,7 +1,7 @@
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { invoke } from "../lib/tauriBridge";
 import { useEffect, useState } from "react";
 import type { AppUpdateController } from "../lib/appUpdates";
+import { invoke } from "../lib/tauriBridge";
 import { AppUpdateButton } from "./AppUpdateButton";
 import { PanelLeft, PanelLeftClose, Settings } from "./icons";
 

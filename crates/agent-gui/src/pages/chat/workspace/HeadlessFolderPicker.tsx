@@ -16,6 +16,8 @@
 // The imperative API mirrors `system_pick_folder`: call openFolderPicker()
 // and await the chosen absolute path (or null when cancelled).
 
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
@@ -33,8 +35,6 @@ import {
   X,
 } from "../../../components/icons";
 import { DEFAULT_LOCALE, type Locale, t as translate } from "../../../i18n/config";
-import { cn } from "@liveagent/ui/lib/shared/utils";
-import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 
 type FsDirEntry = {
   path: string;

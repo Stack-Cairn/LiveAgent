@@ -6,8 +6,8 @@ import {
   type TunnelStatus,
   type TunnelTtlSeconds,
 } from "@liveagent/ui/lib/tunnels/constants";
-import { invoke } from "../tauriBridge";
 import { Type } from "typebox";
+import { invoke } from "../tauriBridge";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
 
 export type TunnelChangeAction = "create" | "close" | "check";

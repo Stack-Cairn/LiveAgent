@@ -1,6 +1,5 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
-import { invoke } from "../tauriBridge";
 import { Type } from "typebox";
 import {
   type McpServerConfig,
@@ -9,6 +8,7 @@ import {
   normalizeMcpServerConfig,
   normalizeMcpSettings,
 } from "../settings";
+import { invoke } from "../tauriBridge";
 import {
   type BuiltinToolBundle,
   createBuiltinMetadataMap,

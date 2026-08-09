@@ -2,7 +2,6 @@ import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { mentionChipClassName } from "@liveagent/ui/components/chat/mentionChipStyles";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
-import { openUrl } from "../../tauriBridge";
 import {
   type FocusEvent,
   type MouseEvent,
@@ -16,6 +15,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { SkillIcon } from "../../../components/icons";
+import { openUrl } from "../../tauriBridge";
 
 import {
   type CodeMentionReference,

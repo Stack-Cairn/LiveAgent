@@ -16,8 +16,7 @@ import type {
   PromptCompletionResponse,
   PromptRunRequest,
 } from "@liveagent/ui/lib/automation/types";
-import { invoke } from "../tauriBridge";
-import { listen } from "../tauriBridge";
+import { invoke, listen } from "../tauriBridge";
 
 const CRON_CHANGED_EVENT = "automation:cron-changed";
 const HOOKS_CHANGED_EVENT = "automation:hooks-changed";

@@ -8,8 +8,7 @@ import type {
   SftpTransferEvent,
   SftpTransferResponse,
 } from "@liveagent/ui/lib/sftp/types";
-import { invoke } from "../tauriBridge";
-import { listen } from "../tauriBridge";
+import { invoke, listen } from "../tauriBridge";
 
 type RawSftpEntry = Partial<SftpEntry> & {
   size_bytes?: number;

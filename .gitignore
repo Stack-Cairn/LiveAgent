@@ -41,3 +41,5 @@ chatroom
 *.sw?
 .pnpm-store
 workspace.zip
+.vision_out.txt
+.vision_final.txt
