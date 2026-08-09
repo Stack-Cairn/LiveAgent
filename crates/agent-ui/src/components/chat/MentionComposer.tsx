@@ -1,4 +1,7 @@
-import { readComposerClipboardText } from "@liveagent/adapters/composerClipboard";
+import {
+  readComposerClipboardText,
+  usesCustomComposerContextMenu,
+} from "@liveagent/adapters/composerClipboard";
 import {
   type CodeMentionReference,
   codeMentionDisplayName,
@@ -61,6 +64,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { mentionChipClassName } from "./mentionChipStyles";
+
+export { usesCustomComposerContextMenu };
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -3446,6 +3451,18 @@ export const MentionComposer = memo(
         return;
       }
 
+      const serializedSegments = parseSerializedComposerText(text, enabledSkills);
+      if (
+        serializedSegments &&
+        insertComposerSegmentsAtSelection(el, serializedSegments, largePastesRef.current)
+      ) {
+        closeMentionSession();
+        refreshEmptyState();
+        refreshMention();
+        closeComposerContextMenu();
+        return;
+      }
+
       document.execCommand("insertText", false, text);
       closeMentionSession();
       refreshEmptyState();
@@ -3455,6 +3472,7 @@ export const MentionComposer = memo(
       closeComposerContextMenu,
       closeMentionSession,
       disabled,
+      enabledSkills,
       insertLargePaste,
       refreshEmptyState,
       refreshMention,
@@ -3475,6 +3493,7 @@ export const MentionComposer = memo(
     // ---- Event handlers ----
     const handleContextMenu = useCallback(
       (event: MouseEvent<HTMLDivElement>) => {
+        if (!usesCustomComposerContextMenu) return;
         event.preventDefault();
 
         const el = editorRef.current;

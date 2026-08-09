@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
@@ -7,6 +8,10 @@ const composer = loader.loadModule("@liveagent/ui/components/chat/MentionCompose
 const composerText = loader.loadModule("@liveagent/ui/lib/chat/composerText.ts");
 const draftText = loader.loadModule("src/app/chatDraft.ts");
 const uploadedFiles = loader.loadModule("src/lib/chat/uploadedFiles.ts");
+const composerSource = readFileSync(
+  new URL("../../../agent-ui/src/components/chat/MentionComposer.tsx", import.meta.url),
+  "utf8",
+);
 
 const originalNode = globalThis.Node;
 globalThis.Node = { TEXT_NODE: 3, ELEMENT_NODE: 1 };
@@ -362,6 +367,19 @@ test("serialized user bubble tokens restore composer tags as a plain-text fallba
     ],
   );
   assert.equal(composer.parseSerializedComposerText("[OpenAI](https://openai.com)", []), null);
+});
+
+test("web composer preserves the browser-native context menu", () => {
+  assert.equal(composer.usesCustomComposerContextMenu, false);
+  const handlerStart = composerSource.indexOf("const handleContextMenu");
+  const handlerEnd = composerSource.indexOf("const pruneDetachedLargePastes", handlerStart);
+  const handlerSource = composerSource.slice(handlerStart, handlerEnd);
+  const policyIndex = handlerSource.indexOf("if (!usesCustomComposerContextMenu) return");
+  const preventDefaultIndex = handlerSource.indexOf("event.preventDefault()");
+
+  assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
+  assert.ok(policyIndex >= 0);
+  assert.ok(preventDefaultIndex > policyIndex);
 });
 
 test("outbound skill tokens use the same slash contract as composer and user bubbles", () => {

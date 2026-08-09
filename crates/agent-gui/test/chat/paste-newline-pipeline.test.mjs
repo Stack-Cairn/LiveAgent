@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -7,6 +8,10 @@ const composer = loader.loadModule("@liveagent/ui/components/chat/MentionCompose
 const composerText = loader.loadModule("@liveagent/ui/lib/chat/composerText.ts");
 const draftText = loader.loadModule("src/pages/chat/composer/composerDraftText.ts");
 const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+const composerSource = readFileSync(
+  new URL("../../../agent-ui/src/components/chat/MentionComposer.tsx", import.meta.url),
+  "utf8",
+);
 
 const originalNode = globalThis.Node;
 globalThis.Node = { TEXT_NODE: 3, ELEMENT_NODE: 1 };
@@ -365,6 +370,21 @@ test("serialized user bubble tokens restore composer tags as a plain-text fallba
     ],
   );
   assert.equal(composer.parseSerializedComposerText("[OpenAI](https://openai.com)", []), null);
+});
+
+test("desktop context-menu paste restores serialized tags before inserting plain text", () => {
+  assert.equal(composer.usesCustomComposerContextMenu, true);
+  const handlerStart = composerSource.indexOf("const handleComposerContextPaste");
+  const handlerEnd = composerSource.indexOf("const handleComposerContextSelectAll", handlerStart);
+  const handlerSource = composerSource.slice(handlerStart, handlerEnd);
+  const parseIndex = handlerSource.indexOf("parseSerializedComposerText(text, enabledSkills)");
+  const insertSegmentsIndex = handlerSource.indexOf("insertComposerSegmentsAtSelection(");
+  const insertTextIndex = handlerSource.indexOf('document.execCommand("insertText"');
+
+  assert.ok(handlerStart >= 0 && handlerEnd > handlerStart);
+  assert.ok(parseIndex >= 0);
+  assert.ok(insertSegmentsIndex > parseIndex);
+  assert.ok(insertTextIndex > insertSegmentsIndex);
 });
 
 test("outbound skill tokens use the same slash contract as composer and user bubbles", () => {
