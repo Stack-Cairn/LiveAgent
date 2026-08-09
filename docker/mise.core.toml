@@ -7,3 +7,8 @@ node = "22.19.0"
 "npm:pnpm" = "10.32.1"
 "npm:bun" = "1.3.14"
 python = "3.12"
+
+# 关闭 python 的 GitHub artifact attestations 验证：
+# 在 GitHub Actions 上构建时会因未认证 API 调用触发 rate limit（403）而失败。
+[settings]
+python.github_attestations = false

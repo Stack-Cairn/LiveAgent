@@ -171,9 +171,13 @@ FROM base AS core
 # 先下载到文件再执行：curl -f 失败会直接中断构建，不会因管道空输入被吞。
 # MISE_NPM_REGISTRY_URL：npm backend（pnpm/bun）统一走 npmmirror，
 # 保证国内网络（NAS/容器）下安装与懒加载补装都不依赖 GitHub。
+# MISE_PYTHON_GITHUB_ATTESTATIONS=false：mise 安装 python 时做 GitHub
+# artifact attestations 验证，在 GitHub Actions 上会因未认证 API 调用
+# 触发 rate limit（403）导致构建失败；构建与运行时均无需该验证。
 ENV MISE_DATA_DIR=/opt/mise \
     MISE_GLOBAL_CONFIG_FILE=/etc/mise/config.toml \
     MISE_NPM_REGISTRY_URL=https://registry.npmmirror.com \
+    MISE_PYTHON_GITHUB_ATTESTATIONS=false \
     MISE_YES=true
 
 RUN curl -fsSL https://mise.run -o /tmp/mise-install.sh && \
