@@ -235,6 +235,57 @@ location / {
 
 </details>
 
+### Headless Dev-Tools Image (`minimal` / `core` / `full`)
+
+A drop-in development sandbox built on the headless runtime. Instead of one ever-growing "kitchen-sink" image, the toolchain is **layered and kept lean** (mirroring the GitHub devcontainers / Gitpod approach):
+
+| Image | Contents | Approx. size |
+|---|---|---|
+| `liveagent-minimal` | base tools (git · build-essential · cmake · ninja · pkg-config · strace · vim · tmux · network tools) **+** liveagent binary, **no language runtimes** — recommended for production | ~0.7 GB |
+| `liveagent-core` | everything in `minimal` **+** go 1.25.12 · node 22.19.0 · pnpm · bun · python 3.12 (all managed by [mise](https://mise.jdx.dev)) | ~1.8 GB |
+| `liveagent-full` | everything in `core` **+** Java (Temurin 17) · Maven 3.9 | ~2.2 GB |
+
+All images are built by GitHub Actions from the same `Dockerfile.headless-tools` (`TARGET_PROFILE=minimal|core|full`), multi-arch amd64/arm64, and share the same base layers — pulling `full` never re-downloads the `core` layers. The headless server itself is a static Rust binary, so `minimal` runs the full service with no runtimes at all.
+
+**Quick start (compose):**
+
+```yaml
+services:
+  liveagent:
+    image: ghcr.io/stack-cairn/liveagent-full:latest
+    restart: unless-stopped
+    ports:
+      - "17890:17890"
+    volumes:
+      - liveagent-data:/var/lib/liveagent
+      # Named volume (not bind mount!) — Docker copies the preinstalled
+      # toolchain into it on first use and persists any lazily-installed
+      # runtimes (e.g. Java 8) across restarts.
+      - mise-data:/opt/mise
+volumes:
+  liveagent-data:
+  mise-data:
+```
+
+**Switch any runtime version via an environment variable.** The image reads `MISE_<TOOL>_VERSION` (e.g. `MISE_JAVA_VERSION`, `MISE_NODE_VERSION`, `MISE_PYTHON_VERSION`); missing versions are auto-installed on first start (needs network once) and persisted on the `mise-data` volume:
+
+```yaml
+services:
+  liveagent:
+    image: ghcr.io/stack-cairn/liveagent-full:latest
+    environment:
+      MISE_JAVA_VERSION: "temurin-8"   # switch to Java 8; auto-installed on first boot
+    volumes:
+      - liveagent-data:/var/lib/liveagent
+      - mise-data:/opt/mise            # persists the lazily-installed JDK
+```
+
+> **Notes**
+> - Use a **named volume** for `/opt/mise`. A bind mount of an empty directory would hide the preinstalled toolchain.
+> - Low-frequency / large tools are intentionally **not** preinstalled (gdb, valgrind, clang, rust, php, ruby…). Install them on demand: `apt-get install -y gdb clang` or `mise use -g rust@latest` — no image rebuild needed.
+> - Every bash session inside the container has the full mise environment (PATH / JAVA_HOME), including **non-interactive login shells** like the app's `bash -lc` execution path: `/etc/profile.d/mise.sh` covers login shells, `/etc/bash.bashrc` covers interactive shells, and `/opt/mise/shims` is on the default PATH as a fallback for non-shell processes.
+> - `pnpm` and `bun` are installed via the npm backend from the npmmirror registry (`MISE_NPM_REGISTRY_URL`), so installing/upgrading them does not depend on GitHub reachability; `go`/`node`/`python` come from their official upstreams (preinstalled in the image).
+
 ### Headless Security Model
 
 The headless server serves the WebUI, the HTTP API and the WebSocket event stream on one port (`LIVEAGENT_HEADLESS_PORT`, default 17890). Access control:

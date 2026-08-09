@@ -1,0 +1,27 @@
+# LiveAgent Gateway — Docker Compose（独立配置，可直接使用）
+# ==========================================================
+# 轻量网关服务，单二进制，无开发工具链（~100 MB）。
+# 镜像由 GitHub Actions 构建推送，此处直接拉取，无需本地构建。
+#
+# 用法（在 LiveAgent 项目根目录）:
+#   docker compose -f docker/docker-compose.gateway.yml up -d
+#   docker compose -f docker/docker-compose.gateway.yml logs -f
+#   docker compose -f docker/docker-compose.gateway.yml down
+#
+# 环境变量（可选，不设置时用默认值）:
+#   GHCR_OWNER=thirsty5034  镜像仓库所有者（fork 后改为自己的用户名）
+#   TAG=main                镜像版本（main 分支 push 自动构建为 main；打 v* tag 后可填 v1.2.3 / latest）
+
+services:
+  gateway:
+    image: ghcr.io/${GHCR_OWNER:-thirsty5034}/liveagent-gateway:${TAG:-main}
+    container_name: liveagent-gateway
+    network_mode: host          # 直接使用宿主机网络，无 NAT 转发
+    environment:
+      TZ: Asia/Shanghai
+      PORT: 8080
+      LIVEAGENT_GATEWAY_DATA_DIR: /var/lib/liveagent
+    volumes:
+      - /vol1/1000/projects:/workspace    # 项目代码统一挂载
+      - ./data:/var/lib/liveagent          # 数据持久化（相对运行 compose 的目录）
+    restart: unless-stopped

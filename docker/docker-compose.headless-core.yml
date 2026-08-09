@@ -1,0 +1,52 @@
+# LiveAgent Headless Core — Docker Compose（独立配置，可直接使用）
+# ===============================================================
+# 核心开发沙箱（~0.9 GB）。
+# 预装: git + 编译链 + go 1.25.12 + node 22.19.0 + python 3.12 + pnpm + bun
+# 镜像由 GitHub Actions 构建推送，此处直接拉取，无需本地构建。
+#
+# 用法（在 LiveAgent 项目根目录）:
+#   docker compose -f docker/docker-compose.headless-core.yml up -d
+#   docker compose -f docker/docker-compose.headless-core.yml logs -f
+#   docker compose -f docker/docker-compose.headless-core.yml down
+#
+# 环境变量（可选，不设置时用默认值）:
+#   GHCR_OWNER=thirsty5034  镜像仓库所有者（fork 后改为自己的用户名）
+#   TAG=main                镜像版本（main 分支 push 自动构建为 main；打 v* tag 后可填 v1.2.3 / latest）
+#
+# 切换运行时版本: 取消注释下方 environment 并改版本号，缺失版本首次启动自动补装
+# （补装内容写入 mise-data 卷，容器重建保留，只付一次下载）。
+#   MISE_NODE_VERSION: 20.18.0
+#   MISE_PYTHON_VERSION: 3.11
+#   MISE_GO_VERSION: 1.24
+#
+# 数据持久化:
+#   ./data:/var/lib/liveagent    → liveagent 用户 home（含 ~/.liveagent 应用数据）
+#   mise-data:/opt/mise          → mise 数据目录（named volume）
+#     注意: 不能用 ./mise-data 这类 bind mount —— 空目录会把镜像内预装工具链
+#     遮蔽掉，导致启动时重新下载全部运行时。named volume 首次挂载时自动从镜像
+#     复制 /opt/mise 内容（含预装版本与属主），之后补装增量写卷，零初始化。
+#     备份: docker run --rm -v liveagent-core-mise-data:/data -v $(pwd):/b \
+#           alpine tar czf /b/data/mise-data-backup.tar.gz -C /data .
+
+services:
+  headless-core:
+    image: ghcr.io/${GHCR_OWNER:-thirsty5034}/liveagent-core:${TAG:-main}
+    container_name: liveagent-core
+    network_mode: host          # 直接使用宿主机网络，无 NAT 转发
+    environment:
+      TZ: Asia/Shanghai
+      LIVEAGENT_HEADLESS_HOST: 0.0.0.0
+      LIVEAGENT_HEADLESS_PORT: 17890
+      LIVEAGENT_DATA_DIR: /var/lib/liveagent
+      LANG: en_US.UTF-8
+    volumes:
+      - /vol1/1000/projects:/workspace    # 项目代码统一挂载
+      - ./data:/var/lib/liveagent          # 数据持久化（相对运行 compose 的目录）
+      - mise-data:/opt/mise                # mise 数据卷（首次自动从镜像复制预装工具链）
+    restart: unless-stopped
+
+volumes:
+  # named volume：首次挂载自动从镜像复制 /opt/mise（含预装版本，属主 liveagent），
+  # 懒加载补装的版本持久化于此。与 full 镜像的卷分开命名，避免预装内容互相污染。
+  mise-data:
+    name: liveagent-core-mise-data
