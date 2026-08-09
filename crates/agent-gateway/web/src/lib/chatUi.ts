@@ -1,14 +1,13 @@
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type { Message, ToolCall, ToolResultMessage, Usage } from "@/lib/agentTypes";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import { type HostedSearchBlock, normalizeHostedSearchBlock } from "@/lib/chat/hostedSearch";
-
 import { summarizeToolCall as summarizeDesktopToolCall, type UiRound } from "@/lib/chat/uiMessages";
 import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
   type PendingUploadedFile,
 } from "@/lib/chat/uploadedFiles";
-import { createUuid } from "@/lib/shared/id";
 
 import type { ChatCheckpointPayload, ChatEvent, ConversationSummary } from "./gatewayTypes";
 

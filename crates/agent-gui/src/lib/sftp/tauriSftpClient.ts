@@ -1,4 +1,3 @@
-import { invoke, listen } from "../../lib/tauriBridge";
 import type {
   SftpActionResponse,
   SftpClient,
@@ -8,7 +7,9 @@ import type {
   SftpTransfer,
   SftpTransferEvent,
   SftpTransferResponse,
-} from "./types";
+} from "@liveagent/ui/lib/sftp/types";
+import { invoke } from "../tauriBridge";
+import { listen } from "../tauriBridge";
 
 type RawSftpEntry = Partial<SftpEntry> & {
   size_bytes?: number;

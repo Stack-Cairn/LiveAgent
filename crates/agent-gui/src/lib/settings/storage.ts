@@ -1,6 +1,9 @@
+import {
+  buildGatewaySettingsSyncPayload,
+  buildGatewaySettingsSyncUpdatePayload,
+} from "@liveagent/ui/lib/settings/sync";
+import { invoke } from "../tauriBridge";
 import { type Locale, normalizeLocale } from "../../i18n/config";
-import { invoke } from "../../lib/tauriBridge";
-
 import {
   type AppSettings,
   type ChatRuntimeControls,
@@ -22,7 +25,6 @@ import {
   type SkillsSettings,
   type Theme,
 } from "./index";
-import { buildGatewaySettingsSyncPayload, buildGatewaySettingsSyncUpdatePayload } from "./sync";
 
 const LOCAL_UI_SETTINGS_STORAGE_KEY = "liveagent.ui-settings.v1";
 
@@ -34,6 +36,7 @@ type PersistedSettingsResponse = {
   ssh?: unknown | null;
   remote?: unknown | null;
   memory?: unknown | null;
+  modelFailover?: unknown | null;
   defaultWorkdir?: unknown | null;
 };
 
@@ -43,6 +46,7 @@ type LocalUiSettings = {
   customSettings?: unknown;
   updates?: unknown;
   selectedModel?: unknown;
+  modelFailover?: unknown;
   theme?: unknown;
   locale?: unknown;
   closeWindowBehavior?: unknown;
@@ -70,6 +74,14 @@ function readLocalUiSettings(): {
   customSettings: AppSettings["customSettings"];
   updates: AppSettings["updates"];
   selectedModel?: SelectedModel;
+  /**
+   * Legacy localStorage copy, read only as a migration fallback for installs
+   * that saved failover config before it moved to SQLite. Queue entries are
+   * validated against customProviders (loaded from the backend), so
+   * normalization has to happen inside normalizeSettings — normalizing here
+   * with no providers would drop the whole queue.
+   */
+  modelFailover: unknown;
   theme: Theme;
   locale: Locale;
   closeWindowBehavior: CloseWindowBehavior;
@@ -107,6 +119,7 @@ function readLocalUiSettings(): {
         customSettings: defaults.customSettings,
         updates: defaults.updates,
         selectedModel: defaults.selectedModel,
+        modelFailover: defaults.modelFailover,
         theme: defaults.theme,
         locale: defaults.locale,
         closeWindowBehavior: defaults.closeWindowBehavior,
@@ -124,6 +137,7 @@ function readLocalUiSettings(): {
       ),
       updates: normalizeUpdateSettings(parsed?.updates ?? defaults.updates),
       selectedModel: normalizeSelectedModel(parsed?.selectedModel),
+      modelFailover: parsed?.modelFailover ?? defaults.modelFailover,
       theme: normalizeTheme(parsed?.theme ?? defaults.theme),
       locale: normalizeLocale(parsed?.locale ?? defaults.locale),
       closeWindowBehavior: normalizeCloseWindowBehavior(
@@ -137,6 +151,7 @@ function readLocalUiSettings(): {
       customSettings: defaults.customSettings,
       updates: defaults.updates,
       selectedModel: defaults.selectedModel,
+      modelFailover: defaults.modelFailover,
       theme: defaults.theme,
       locale: defaults.locale,
       closeWindowBehavior: defaults.closeWindowBehavior,
@@ -223,6 +238,10 @@ export async function loadPersistedSettingsWithDefaults(): Promise<PersistedSett
     customSettings: localUi.customSettings,
     updates: localUi.updates,
     selectedModel: localUi.selectedModel,
+    // SQLite is the source of truth (shared with the WebUI via gateway sync);
+    // the localStorage copy only migrates pre-SQLite installs forward.
+    modelFailover: (persisted?.modelFailover ??
+      localUi.modelFailover) as AppSettings["modelFailover"],
     theme: localUi.theme,
     locale: localUi.locale,
     closeWindowBehavior: localUi.closeWindowBehavior,
@@ -313,6 +332,14 @@ export async function persistSettings(
     tasks.push(
       invoke("settings_save_memory", {
         payload: next.memory,
+      } as any),
+    );
+  }
+
+  if (hasChanged(prev.modelFailover, next.modelFailover)) {
+    tasks.push(
+      invoke("settings_save_model_failover", {
+        payload: next.modelFailover,
       } as any),
     );
   }

@@ -4,7 +4,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
-const workspaceProjects = loader.loadModule("src/lib/workspaceProjects.ts");
+const workspaceProjects = loader.loadModule("@liveagent/ui/lib/workspaceProjects.ts");
 
 function project(id, path, index) {
   return {

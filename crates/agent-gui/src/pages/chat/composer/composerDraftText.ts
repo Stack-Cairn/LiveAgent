@@ -3,8 +3,8 @@ import type {
   MentionComposerDraft,
   MentionComposerGitFileMention,
   MentionComposerLargePaste,
-} from "../../../components/chat/MentionComposer";
-import { normalizeLogicalLineEndings } from "../../../lib/chat/composerText";
+} from "@liveagent/ui/components/chat/MentionComposer";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   escapeMarkdownReferenceLabel,
   formatCodeMentionToken,
@@ -64,7 +64,7 @@ export function buildTextFromComposerDraft(
           return formatFileMentionToken(segment.reference);
         }
         if (segment.type === "skillMention") {
-          return `$${segment.skill.name}`;
+          return `/${segment.skill.name}`;
         }
         if (segment.type === "commitMention") {
           return formatComposerCommitMention(segment.commit);

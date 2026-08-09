@@ -3,7 +3,7 @@ import test from "node:test";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
-const scan = loader.loadModule("@/lib/ssh/scan.ts");
+const scan = loader.loadModule("@liveagent/ui/lib/ssh/scan.ts");
 
 test("expandIdentityPath supports Windows SSH identity paths", () => {
   const home = "C:\\Users\\Alice";

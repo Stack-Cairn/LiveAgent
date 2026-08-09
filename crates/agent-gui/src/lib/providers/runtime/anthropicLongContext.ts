@@ -1,11 +1,11 @@
 import type { Context, Model } from "@earendil-works/pi-ai";
+import { isAnthropicOAuthApiKey } from "@liveagent/ui/lib/providers/customHeaders";
 import type { ProviderId } from "../../settings";
 import {
   ANTHROPIC_STANDARD_CONTEXT_WINDOW,
   getAnthropicCompat,
   shouldSendAnthropicLongContextHeader,
 } from "../anthropicModels";
-import { isAnthropicOAuthApiKey } from "../customHeaders";
 import type { StreamOptionsEx } from "./types";
 
 // ---------------------------------------------------------------------------

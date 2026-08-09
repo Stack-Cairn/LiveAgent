@@ -1,11 +1,11 @@
-import type { AssistantMessage, Message, ToolCall, ToolResultMessage, Usage } from "../agentTypes";
-import { assistantMessageToText } from "../providers/llm";
 import {
   buildSubagentCardToolCallId,
   isSubagentCardArguments,
   type SubagentBatchDetails,
   type SubagentCardDetails,
-} from "../subagents/protocol";
+} from "@liveagent/ui/lib/subagents/protocol";
+import type { AssistantMessage, Message, ToolCall, ToolResultMessage, Usage } from "../agentTypes";
+import { assistantMessageToText } from "../providers/llm";
 import {
   enrichHostedSearchContentWithText,
   type HostedSearchBlock,

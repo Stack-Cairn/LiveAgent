@@ -5,9 +5,9 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const { reconcileSidebarSelection, updateSidebarSelection } = loader.loadModule(
-  "src/lib/sidebar/selection.ts",
+  "@liveagent/ui/lib/sidebar/selection.ts",
 );
-const { deleteSidebarConversations } = loader.loadModule("src/lib/sidebar/batchDelete.ts");
+const { deleteSidebarConversations } = loader.loadModule("@liveagent/ui/lib/sidebar/batchDelete.ts");
 
 const orderedIds = ["one", "two", "three", "four", "five"];
 const selectableIds = new Set(["one", "two", "four", "five"]);

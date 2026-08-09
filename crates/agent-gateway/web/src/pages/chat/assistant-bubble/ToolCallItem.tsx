@@ -1,19 +1,24 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { AskUserQuestionCard } from "../../../components/chat/AskUserQuestionCard";
-import { FileChangeBadge } from "../../../components/chat/FileChangeBadge";
-import { ChevronRight } from "../../../components/icons";
-import { useLocale } from "../../../i18n";
-import type { ToolResultMessage } from "../../../lib/agentTypes";
+import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
+import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
+import { FileChangeBadge } from "@liveagent/ui/components/chat/FileChangeBadge";
+import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import { sanitizeTodoItems } from "@liveagent/ui/components/chat/TodoListView";
+import { ToolScrollablePre, ToolSection } from "@liveagent/ui/components/chat/ToolSurfaces";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   ASK_USER_QUESTION_TOOL_NAME,
   type AskUserQuestionAnswer,
   parseAskUserQuestionResultDetails,
   readAskUserQuestionDeadlineAt,
   sanitizeAskUserQuestionItems,
-} from "../../../lib/chat/askUserQuestion";
+} from "@liveagent/ui/lib/chat/askUserQuestion";
+import { readToolApprovalPending } from "@liveagent/ui/lib/chat/toolApprovalArgs";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronRight } from "../../../components/icons";
+import type { ToolResultMessage } from "../../../lib/agentTypes";
 import { submitAskUserQuestionAnswer } from "../../../lib/chat/askUserQuestionBridge";
 import { deriveFileChangeStats } from "../../../lib/chat/fileChangeStats";
-import { readToolApprovalPending } from "../../../lib/chat/toolApprovalArgs";
 import { FILE_TOOL_TEXT_FIELDS } from "../../../lib/chat/toolPreview";
 import {
   previewText,
@@ -21,9 +26,6 @@ import {
   type ToolTraceItem,
   toolResultMessageToText,
 } from "../../../lib/chat/uiMessages";
-import { cn } from "../../../lib/shared/utils";
-import { sanitizeTodoItems } from "../TodoListView";
-import { ToolScrollablePre, ToolSection } from "../ToolSurfaces";
 import {
   areStableValuesEqual,
   getBuiltinResultKind,
@@ -34,8 +36,6 @@ import {
   isBuiltinShareToolName,
   isSubagentCardToolCall,
 } from "./assistantBubbleUtils";
-import { LazyCollapse } from "./LazyCollapse";
-import { AssistantStatus } from "./StatusText";
 import { ToolArgsDisplay, ToolResultDisplay } from "./ToolResultDisplay";
 
 function ToolCallItem({

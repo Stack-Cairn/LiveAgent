@@ -6,7 +6,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const llmModulePath = path.join(rootDir, "src/lib/providers/llm.ts");
-const proxyModulePath = path.join(rootDir, "src/lib/providers/proxy.ts");
+const proxyModulePath = "@liveagent/ui/lib/providers/proxy";
 const powerActivityModulePath = path.join(rootDir, "src/lib/system/powerActivity.ts");
 
 const streamQueue = [];

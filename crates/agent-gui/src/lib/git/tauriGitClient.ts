@@ -1,4 +1,3 @@
-import { invoke } from "../../lib/tauriBridge";
 import {
   type GitClient,
   normalizeGitBranchesResponse,
@@ -8,7 +7,8 @@ import {
   normalizeGitOperationResponse,
   normalizeGitRepositoryDiscovery,
   normalizeGitRepositoryState,
-} from "./types";
+} from "@liveagent/ui/lib/git/types";
+import { invoke } from "../tauriBridge";
 
 export const tauriGitClient: GitClient = {
   async status(workdir) {

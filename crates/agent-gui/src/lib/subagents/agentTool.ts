@@ -1,6 +1,9 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type {
+  SubagentBatchDetails,
+  SubagentReportDetails,
+} from "@liveagent/ui/lib/subagents/protocol";
 import { Type } from "typebox";
-
 import type { ProviderRuntimeConfig } from "../providers/runtime/types";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
@@ -21,7 +24,6 @@ import {
 } from "./errors";
 import { type SubagentWorktreeIpc, tauriSubagentWorktreeIpc } from "./ipc/worktree";
 import { selectReadOnlyTools } from "./policy";
-import type { SubagentBatchDetails, SubagentReportDetails } from "./protocol";
 import {
   buildRosterEntries,
   buildTemplateEntries,

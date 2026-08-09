@@ -1,24 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const implementations = [
   {
-    label: "GUI",
+    label: "共享 Skills Hub",
     loader: createTsModuleLoader(),
-    page: new URL("../../src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
-  },
-  {
-    label: "WebUI",
-    loader: createTsModuleLoader({
-      rootDir: fileURLToPath(new URL("../../../agent-gateway/web/", import.meta.url)),
-    }),
-    page: new URL(
-      "../../../agent-gateway/web/src/pages/skills-hub/SkillsHubPage.tsx",
-      import.meta.url,
-    ),
+    page: new URL("../../../agent-ui/src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
   },
 ];
 
@@ -33,7 +22,7 @@ function skill(name, installedAt = null) {
 }
 
 for (const { label, loader, page } of implementations) {
-  const sorting = loader.loadModule("src/lib/skills/installedSort.ts");
+  const sorting = loader.loadModule("@liveagent/ui/lib/skills/installedSort.ts");
 
   test(`${label} keeps built-ins ahead of enabled and disabled skills`, () => {
     const items = [

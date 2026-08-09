@@ -33,8 +33,8 @@ import {
   X,
 } from "../../../components/icons";
 import { DEFAULT_LOCALE, type Locale, t as translate } from "../../../i18n/config";
-import { cn } from "../../../lib/shared/utils";
-import { invokeFs } from "../../../lib/tools/fsBackend";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 
 type FsDirEntry = {
   path: string;

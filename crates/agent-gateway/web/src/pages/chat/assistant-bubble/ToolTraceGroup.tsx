@@ -1,11 +1,11 @@
+import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
+import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo, useState } from "react";
 import { ChevronRight, Terminal } from "../../../components/icons";
-import { useLocale } from "../../../i18n";
 import type { ToolTraceItem } from "../../../lib/chat/uiMessages";
-import { cn } from "../../../lib/shared/utils";
 import { getToolDisplayName, getToolMeta, getToolTraceKey } from "./assistantBubbleUtils";
-import { LazyCollapse } from "./LazyCollapse";
-import { AssistantStatus } from "./StatusText";
 import { areToolTraceItemsEqual, MemoToolCallItem } from "./ToolCallItem";
 
 function getToolGroupCounts(items: ToolTraceItem[], runningToolCallIds: string[]) {
@@ -83,6 +83,19 @@ function ToolTraceGroupInner(props: {
   );
   const ToolIcon = allBash ? Terminal : meta.Icon;
   const [open, setOpen] = useState(false);
+
+  if (items.length === 1) {
+    const item = items[0];
+    return item ? (
+      <MemoToolCallItem
+        item={item}
+        isAborted={isAborted}
+        readOnly={readOnly}
+        redactToolContent={redactToolContent}
+        isRunning={Boolean(item.toolCall.id && runningToolCallIds.includes(item.toolCall.id))}
+      />
+    ) : null;
+  }
 
   const statusLabel =
     counts.failed > 0

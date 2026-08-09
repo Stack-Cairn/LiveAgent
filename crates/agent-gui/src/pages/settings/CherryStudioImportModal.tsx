@@ -1,3 +1,7 @@
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
+import { useAnimatedPresence } from "@liveagent/ui/lib/shared/modalMotion";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -11,11 +15,7 @@ import {
   Settings,
   X,
 } from "../../components/icons";
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
 import type { CodexRequestFormat, ProviderId } from "../../lib/settings";
-import { useAnimatedPresence } from "../../lib/shared/modalMotion";
-import { cn } from "../../lib/shared/utils";
 
 export type CherryProviderImportItem = {
   sourceId: string;

@@ -4,7 +4,7 @@ import type {
   SubagentBatchDetails,
   SubagentCardDetails,
   SubagentMessageDetails,
-} from "../subagents/protocol";
+} from "@liveagent/ui/lib/subagents/protocol";
 import type { SubagentScheduler } from "../subagents/scheduler";
 
 export type BuiltinToolGroupId =

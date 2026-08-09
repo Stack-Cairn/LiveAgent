@@ -1,4 +1,5 @@
 import type { Message } from "@earendil-works/pi-ai";
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import { type Dispatch, type MutableRefObject, type SetStateAction, useRef } from "react";
 import {
   type ConversationViewState,
@@ -23,7 +24,6 @@ import {
   waitForTitleLookahead,
 } from "../../../lib/chat/page/chatPageHelpers";
 import { type SelectedModel, serializeSelectedModelJson } from "../../../lib/settings";
-import type { SidebarStore } from "../../../lib/sidebar/store";
 import { disposeTodoToolState } from "../../../lib/tools/todoTools";
 import {
   type ConversationRuntimeEntry,

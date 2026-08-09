@@ -1,3 +1,4 @@
+import { buildGatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
 import { formatConversationTitle } from "@/lib/chatUi";
 import type { ConversationSummary } from "@/lib/gatewayTypes";
 import {
@@ -6,13 +7,12 @@ import {
   resolveWorkspaceProjects,
   type WorkspaceProject,
 } from "@/lib/settings";
-import { buildGatewaySettingsSyncPayload } from "@/lib/settings/sync";
 
 function isLocalDraftConversationId(id: string) {
   return id.trim().startsWith("__local_draft__:");
 }
 
-import { fallbackWorkspaceProjectName } from "@/lib/workspaceProjects";
+import { fallbackWorkspaceProjectName } from "@liveagent/ui/lib/workspaceProjects";
 
 import { MOBILE_SIDEBAR_MEDIA_QUERY } from "./constants";
 

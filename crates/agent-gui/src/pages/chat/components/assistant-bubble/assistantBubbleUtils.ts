@@ -1,5 +1,8 @@
 import type { ToolResultMessage } from "@earendil-works/pi-ai";
-
+import type {
+  SubagentCardDetails,
+  SubagentReportDetails,
+} from "@liveagent/ui/lib/subagents/protocol";
 import type { IconComponent } from "../../../../components/icons";
 import {
   Bot,
@@ -27,10 +30,6 @@ import {
   type ToolTraceItem,
   type UiRound,
 } from "../../../../lib/chat/messages/uiMessages";
-import type {
-  SubagentCardDetails,
-  SubagentReportDetails,
-} from "../../../../lib/subagents/protocol";
 
 export function getToolMeta(name: string): {
   Icon: IconComponent;
@@ -277,23 +276,14 @@ export function groupRoundBlocks(blocks: UiRound["blocks"]): GroupedRoundBlock[]
 
   const flushPendingTools = () => {
     if (pendingTools.length === 0) return;
-    if (pendingTools.length === 1) {
-      const item = pendingTools[0];
-      groupedBlocks.push({
-        kind: "tool",
-        key: `tool-${getToolTraceKey(item, pendingStartIndex)}`,
-        item,
-      });
-    } else {
-      groupedBlocks.push({
-        kind: "toolGroup",
-        // Anchored to the group's start only: appending tools to a streaming
-        // group must keep the key stable, or the remount would wipe the
-        // user's manual expand/collapse state mid-run.
-        key: `tool-group-${pendingStartIndex}-${getToolTraceKey(pendingTools[0], pendingStartIndex)}`,
-        items: pendingTools,
-      });
-    }
+    groupedBlocks.push({
+      kind: "toolGroup",
+      // The wrapper exists from the first ordinary tool onward. Appending a
+      // second tool therefore updates one activity in place instead of
+      // replacing a `tool` row with a differently keyed `toolGroup` row.
+      key: `tool-group-${getToolTraceKey(pendingTools[0], pendingStartIndex)}`,
+      items: pendingTools,
+    });
     pendingTools = [];
   };
 

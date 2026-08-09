@@ -1,3 +1,14 @@
+import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { buildFloorEntries } from "@liveagent/ui/lib/chat-floor-nav/floorModel";
+import { BOTTOM_REATTACH_ZONE_PX } from "@liveagent/ui/lib/chat-scroll/scrollFollowCore";
+import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { FloorNavRail } from "@liveagent/ui/pages/chat/transcript/FloorNavRail";
+import {
+  CHAT_TRANSCRIPT_WIDTH_CSS_VAR,
+  TranscriptWidthControls,
+} from "@liveagent/ui/pages/chat/transcript/TranscriptWidthControls";
 import {
   type CSSProperties,
   memo,
@@ -10,20 +21,11 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-
 import { ChevronDown, Copy } from "../../../components/icons";
-import { useLocale } from "../../../i18n";
-import { buildFloorEntries } from "../../../lib/chat-floor-nav/floorModel";
-import { BOTTOM_REATTACH_ZONE_PX } from "../../../lib/chat-scroll/scrollFollowCore";
-import { useScrollFollow } from "../../../lib/chat-scroll/useScrollFollow";
 import { useMenuExitPresence } from "../../../lib/shared/menuMotion";
-import { cn } from "../../../lib/shared/utils";
-import { ChatEmptyState } from "./ChatEmptyState";
-import { FloorNavRail } from "./FloorNavRail";
 import { RowInteractionProvider, useRowInteractionStore } from "./rowInteraction";
 import { TranscriptList, type TranscriptNavHandle } from "./TranscriptList";
 import { HistorySwitchLoadingOverlay } from "./TranscriptLoadingStates";
-import { CHAT_TRANSCRIPT_WIDTH_CSS_VAR, TranscriptWidthControls } from "./TranscriptWidthControls";
 import type { ChatTranscriptProps } from "./transcriptTypes";
 import {
   clampTranscriptContextMenuPosition,
@@ -317,6 +319,7 @@ export const ChatTranscript = memo(function ChatTranscript(props: ChatTranscript
                 scrollViewport={scrollViewport}
                 layoutWidth={contentWidth}
                 isViewportFollowing={scrollFollowHandle.isFollowing}
+                viewportFollowing={following}
                 isSending={isSending}
                 isAgentMode={isAgentMode}
                 isCompactionRunning={isCompactionRunning}

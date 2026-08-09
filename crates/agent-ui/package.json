@@ -1,0 +1,45 @@
+{
+  "name": "@liveagent/ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "scripts": {
+    "lint": "biome check src/"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.6.0",
+    "@git-diff-view/file": "^0.1.3",
+    "@git-diff-view/react": "^0.1.3",
+    "@streamdown/cjk": "^1.0.3",
+    "@streamdown/code": "^1.1.1",
+    "@streamdown/math": "^1.0.2",
+    "@streamdown/mermaid": "^1.0.2",
+    "@tanstack/react-virtual": "^3.14.6",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "docx-preview": "^0.4.0",
+    "monaco-editor": "^0.55.1",
+    "remark-breaks": "^4.0.0",
+    "streamdown": "^2.5.0",
+    "tailwind-merge": "^3.5.0",
+    "xlsx": "^0.18.5",
+    "yet-another-react-lightbox": "^3.31.0"
+  },
+  "peerDependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "6.0.2"
+  }
+}

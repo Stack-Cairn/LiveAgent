@@ -8,7 +8,7 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });
-const { createSidebarStore } = loader.loadModule("src/lib/sidebar/store.ts");
+const { createSidebarStore } = loader.loadModule("@liveagent/ui/lib/sidebar/store.ts");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

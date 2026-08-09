@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const categories = loader.loadModule("src/lib/skills/clawHubCategories.ts");
+const categories = loader.loadModule("@liveagent/ui/lib/skills/clawHubCategories.ts");
+const localeFiles = [
+  new URL("../../src/i18n/config.ts", import.meta.url),
+  new URL("../../../agent-gateway/web/src/i18n/config.ts", import.meta.url),
+];
 
 function classify(card) {
   return categories.classifyClawHubSkill({
@@ -18,6 +23,23 @@ test("exposes the ClawHub category taxonomy", () => {
   assert.equal(categories.CLAWHUB_CATEGORY_SLUGS.length, 14);
   assert.ok(categories.CLAWHUB_CATEGORY_SLUGS.includes("lifestyle"));
   assert.ok(categories.CLAWHUB_CATEGORY_SLUGS.includes("other"));
+});
+
+test("both hosts localize every Skills Hub category", () => {
+  const categoryValues = ["all", ...categories.CLAWHUB_CATEGORY_SLUGS];
+
+  for (const localeFile of localeFiles) {
+    const translations = readFileSync(localeFile, "utf8");
+    for (const category of categoryValues) {
+      const suffix = `${category.charAt(0).toUpperCase()}${category.slice(1)}`;
+      const key = `settings.skillsStoreCategory${suffix}`;
+      assert.equal(
+        translations.split(`"${key}":`).length - 1,
+        2,
+        `${localeFile.pathname} must define ${key} in both locales`,
+      );
+    }
+  }
 });
 
 test("classifies a communication/integration skill from topics and summary", () => {

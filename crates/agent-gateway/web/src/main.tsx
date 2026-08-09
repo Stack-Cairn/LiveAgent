@@ -1,8 +1,7 @@
+import { GATEWAY_WEBUI_MARKER } from "@liveagent/ui/lib/runtimeEnv";
 import React from "react";
 import ReactDOM from "react-dom/client";
-
 import App from "./App";
-import { GATEWAY_WEBUI_MARKER } from "./lib/runtimeEnv";
 import { DevicesAdminPage } from "./pages/DevicesAdminPage";
 import { StatusDashboardPage } from "./pages/StatusDashboardPage";
 import "./index.css";

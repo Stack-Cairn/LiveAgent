@@ -1,3 +1,4 @@
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import {
   type HostedSearchBlock,
   type HostedSearchSource,
@@ -6,7 +7,6 @@ import {
   normalizeHostedSearchStatus,
 } from "../chat/messages/hostedSearch";
 import type { ProviderId } from "../settings";
-import { createUuid } from "../shared/id";
 
 type HostedSearchUpdate = {
   id?: string;

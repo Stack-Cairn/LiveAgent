@@ -1,10 +1,9 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { SubagentMessageDetails } from "@liveagent/ui/lib/subagents/protocol";
 import { Type } from "typebox";
-
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "../tools/builtinTypes";
 import { displayRecipientLabel } from "./bus";
 import { toolErrorResult } from "./errors";
-import type { SubagentMessageDetails } from "./protocol";
 import type { SubagentConversationStore } from "./store";
 import {
   SEND_MESSAGE_TOOL_NAME,

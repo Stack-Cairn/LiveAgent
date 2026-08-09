@@ -1,3 +1,5 @@
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import {
   type ReactNode,
   useCallback,
@@ -8,7 +10,6 @@ import {
   useState,
 } from "react";
 import { Keyboard, MonitorSmartphone, Pin, SquarePen, X, Zap } from "../../components/icons";
-import { useLocale } from "../../i18n";
 import { inferRuntimePlatform } from "../../lib/runtimePlatform";
 import {
   applyGlobalShortcuts,
@@ -23,7 +24,6 @@ import {
   type ShortcutModifier,
   writeGlobalShortcutBindings,
 } from "../../lib/shortcuts/globalShortcuts";
-import { AgentActivationSwitch } from "./shared";
 
 /* ============================== 键盘布局数据 ============================== */
 

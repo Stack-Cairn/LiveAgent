@@ -7,8 +7,12 @@
 // with reference-counted listener lifecycle, mirroring the tauriTunnelClient
 // pattern in ChatPage.
 
-import { invoke, listen } from "../../lib/tauriBridge";
-import type { WorkspaceActivity, WorkspaceActivityClient } from "./types";
+import type {
+  WorkspaceActivity,
+  WorkspaceActivityClient,
+} from "@liveagent/ui/lib/workspace-activity/types";
+import { invoke } from "../tauriBridge";
+import { listen } from "../tauriBridge";
 
 type WorkspaceActivityListener = Parameters<WorkspaceActivityClient["subscribe"]>[1];
 

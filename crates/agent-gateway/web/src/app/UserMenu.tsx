@@ -1,14 +1,14 @@
-import type { ReactNode } from "react";
-import { ChevronDown, LogOut, User } from "@/components/icons";
-import { Button } from "@/components/ui/button";
+import { Button } from "@liveagent/ui/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useLocale } from "@/i18n";
+} from "@liveagent/ui/components/ui/dropdown-menu";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import type { ReactNode } from "react";
+import { ChevronDown, LogOut, User } from "@/components/icons";
 
 type UserMenuProps = {
   open: boolean;

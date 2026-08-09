@@ -1,6 +1,10 @@
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
+import { Label } from "@liveagent/ui/components/ui/label";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { ConfirmActionPopover } from "@liveagent/ui/pages/settings/shared";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-
 import {
   AlertTriangle,
   Check,
@@ -17,10 +21,6 @@ import {
   WifiOff,
   X,
 } from "../../components/icons";
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
-import { useLocale } from "../../i18n";
 import {
   type AdminAgentEntry,
   type AdminAgentStatus,
@@ -33,7 +33,6 @@ import {
 } from "../../lib/adminApi";
 import { normalizeGatewayAccessToken } from "../../lib/gatewayAuth";
 import { loadToken, saveToken } from "../../lib/storage";
-import { ConfirmActionPopover } from "./shared";
 
 const PAGE_SIZE = 50;
 const MAX_AGENT_NAME_LENGTH = 64;

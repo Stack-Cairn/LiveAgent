@@ -40,7 +40,7 @@ const loader = createWebModuleLoader({
   },
 });
 
-const markdownModule = loader.loadModule("src/components/Markdown.tsx");
+const markdownModule = loader.loadModule("@liveagent/ui/components/Markdown.tsx");
 
 test("webui markdown image syntax also falls back to alt text", () => {
   const node = markdownModule.markdownComponents.img({

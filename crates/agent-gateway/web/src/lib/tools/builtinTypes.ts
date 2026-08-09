@@ -1,9 +1,9 @@
-import type { Tool, ToolCall, ToolResultMessage } from "../agentTypes";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
   SubagentMessageDetails,
-} from "../subagents/protocol";
+} from "@liveagent/ui/lib/subagents/protocol";
+import type { Tool, ToolCall, ToolResultMessage } from "../agentTypes";
 
 export type BuiltinToolGroupId = "fs" | "shell" | "skill" | "system" | "mcp" | "subagent";
 

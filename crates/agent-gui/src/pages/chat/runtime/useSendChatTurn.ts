@@ -1,13 +1,21 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { useCallback } from "react";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
-} from "../../../components/chat/MentionComposer";
-import { getAutomationState } from "../../../lib/automation";
+} from "@liveagent/ui/components/chat/MentionComposer";
+import { getAutomationState } from "@liveagent/ui/lib/automation/index";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import {
+  buildSkillsSystemPrompt,
+  resolveExplicitSkillMentions,
+  type SkillSummary,
+} from "@liveagent/ui/lib/skills/index";
+import { invoke } from "../../../lib/tauriBridge";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { useCallback } from "react";
 import { createHookRunScope } from "../../../lib/automation/hookRunner";
-import { normalizeLogicalLineEndings } from "../../../lib/chat/composerText";
 import {
   buildPersistableMessagesFromSnapshot,
   type SuppressedToolTraceSnapshot,
@@ -38,7 +46,6 @@ import {
   getFirstUserMessageText,
   isAbortLikeError,
 } from "../../../lib/chat/page/chatPageHelpers";
-import type { ScrollFollowHandle } from "../../../lib/chat-scroll/useScrollFollow";
 import { createStreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { buildMemoryOverviewSection } from "../../../lib/memory/prompts/injection";
 import { createModelFromConfig, createProviderRuntimeConfig } from "../../../lib/providers/llm";
@@ -55,18 +62,11 @@ import {
   updateSkills,
   workspaceProjectPathKey,
 } from "../../../lib/settings";
-import type { SidebarStore } from "../../../lib/sidebar/store";
-import {
-  buildSkillsSystemPrompt,
-  resolveExplicitSkillMentions,
-  type SkillSummary,
-} from "../../../lib/skills";
 import {
   collectRetainedSubagentParentToolCallIds,
   pruneSubagentRunsForConversation,
   type SubagentStoreManager,
 } from "../../../lib/subagents";
-import { invoke } from "../../../lib/tauriBridge";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import { appendManagedSkillSelections, asErrorMessage } from "../chatPageUtils";
 import {
@@ -102,6 +102,7 @@ import {
   resolveEffectiveChatModelSelection,
 } from "./modelSelection";
 import {
+  buildModelFailoverPlan,
   resolveConversationTitleModelSelection,
   resolveMemorySummaryModelSelection,
   selectedModelsMatch,
@@ -422,6 +423,31 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       overrides?.runtimeControlsOverride ??
       settings.chatRuntimeControls;
     const providerConfig = createProviderRuntimeConfig(provider, model, runtimeControls);
+    // cc-switch style auto-failover plan for this turn (shared by the agent
+    // and text runtimes). The switch callback makes the winning fallback the
+    // conversation's selection so follow-up turns start on the healthy
+    // provider directly.
+    const failoverPlan = buildModelFailoverPlan(settings, effectiveSelectedModel, runtimeControls);
+    const failoverParams = failoverPlan
+      ? {
+          config: failoverPlan.config,
+          primary: failoverPlan.primary,
+          fallbacks: failoverPlan.fallbacks,
+          onSwitched: (event: {
+            target: { selectedModel: SelectedModel } | null;
+            round: number;
+            errorMessage: string;
+          }) => {
+            const nextSelectedModel =
+              event.target?.selectedModel ?? failoverPlan.primary.selectedModel;
+            updateConversationRuntimeEntry(conversationId, (prev) =>
+              selectedModelsMatch(prev.selectedModel, nextSelectedModel)
+                ? prev
+                : { ...prev, selectedModel: nextSelectedModel },
+            );
+          },
+        }
+      : undefined;
     const memorySummaryModelSelection = resolveMemorySummaryModelSelection(settings);
     const memoryExtractionModel = memorySummaryModelSelection
       ? {
@@ -1400,6 +1426,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             providerId,
             model,
             runtime: providerConfig,
+            failover: failoverParams,
             runtimeModel,
             selectedModel,
             memoryExtractionModel,
@@ -1471,6 +1498,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             providerId,
             model,
             runtime: providerConfig,
+            failover: failoverParams,
             runtimeModel,
             selectedModel,
             memoryExtractionModel,

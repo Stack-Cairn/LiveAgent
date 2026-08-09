@@ -2,6 +2,11 @@
   font-family: var(--chat-font-family);
 }
 
+html[data-liveagent-webui="gateway"] .settings-skills-search,
+html[data-liveagent-webui="gateway"] .git-branch-selector-input {
+  font-size: 0.75rem;
+}
+
 html[data-liveagent-webui="gateway"] .chat-history-new-conversation-button {
   font-size: 14px;
   line-height: 20px;
@@ -972,6 +977,9 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 }
 
 @media (hover: none), (pointer: coarse) {
+  html[data-liveagent-webui="gateway"] .changed-file-row-action {
+    display: none;
+  }
   .chat-user-bubble-actions,
   .chat-assistant-actions {
     opacity: 1 !important;

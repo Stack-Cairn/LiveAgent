@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520">
+  <defs>
+    <filter id="shadow" x="-10%" y="-20%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="520" fill="#f8fafc"/>
+  <text x="64" y="62" fill="#0f172a" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="28" font-weight="700">Skills Hub 分类国际化修复预览</text>
+  <text x="64" y="94" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="16">共享分类筛选逻辑保持不变，仅补齐 GUI / WebUI 中英文翻译资源</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="130" width="1072" height="132" rx="18" fill="#ffffff" stroke="#e2e8f0"/>
+  </g>
+  <rect x="84" y="150" width="72" height="28" rx="14" fill="#fee2e2"/>
+  <text x="120" y="169" text-anchor="middle" fill="#b91c1c" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700">修复前</text>
+  <text x="174" y="169" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13">翻译查找失败后直接回显键名</text>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" fill="#475569">
+    <rect x="84" y="194" width="250" height="38" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="101" y="218">settings.skillsStoreCategoryAll</text>
+    <rect x="346" y="194" width="322" height="38" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="363" y="218">settings.skillsStoreCategoryIntegrations</text>
+    <rect x="680" y="194" width="312" height="38" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="697" y="218">settings.skillsStoreCategoryAutomation</text>
+    <rect x="1004" y="194" width="108" height="38" rx="10" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="1021" y="218">…</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="290" width="1072" height="164" rx="18" fill="#ffffff" stroke="#dbeafe"/>
+  </g>
+  <rect x="84" y="310" width="72" height="28" rx="14" fill="#dcfce7"/>
+  <text x="120" y="329" text-anchor="middle" fill="#15803d" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13" font-weight="700">修复后</text>
+  <text x="174" y="329" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13">按当前语言显示完整分类名称及原有数量</text>
+
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" fill="#334155">
+    <rect x="84" y="354" width="92" height="38" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="102" y="378" font-weight="600">全部</text><text x="145" y="378" fill="#64748b">353</text>
+    <rect x="188" y="354" width="92" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="206" y="378">集成</text><text x="250" y="378" fill="#64748b">70</text>
+    <rect x="292" y="354" width="104" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="310" y="378">自动化</text><text x="366" y="378" fill="#64748b">54</text>
+    <rect x="408" y="354" width="92" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="426" y="378">研究</text><text x="470" y="378" fill="#64748b">46</text>
+    <rect x="512" y="354" width="92" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="530" y="378">开发</text><text x="574" y="378" fill="#64748b">55</text>
+    <rect x="616" y="354" width="92" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="634" y="378">效率</text><text x="678" y="378" fill="#64748b">69</text>
+    <rect x="720" y="354" width="92" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="738" y="378">沟通</text><text x="782" y="378" fill="#64748b">44</text>
+    <rect x="824" y="354" width="92" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="842" y="378">创意</text><text x="886" y="378" fill="#64748b">63</text>
+    <rect x="928" y="354" width="92" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="946" y="378">知识</text><text x="990" y="378" fill="#64748b">19</text>
+    <rect x="1032" y="354" width="80" height="38" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+    <text x="1050" y="378">更多</text>
+  </g>
+
+  <text x="84" y="426" fill="#64748b" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13">中文：全部、集成、自动化、研究、开发、效率、沟通、创意、知识、智能体、运维、安全、金融、生活、其他</text>
+  <text x="64" y="492" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="13">Static preview generated from the repaired translation mapping · No user or environment data included</text>
+</svg>

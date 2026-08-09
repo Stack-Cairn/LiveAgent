@@ -1,5 +1,9 @@
+import { Button } from "@liveagent/ui/components/ui/button";
+import { useAutomation } from "@liveagent/ui/lib/automation/index";
+import type { GatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { useEffect, useMemo, useRef, useState } from "react";
-
 import {
   AlertCircle,
   Bot,
@@ -27,8 +31,6 @@ import {
   Wrench,
   Zap,
 } from "@/components/icons";
-import { Button } from "@/components/ui/button";
-import { useAutomation } from "@/lib/automation";
 import { normalizeGatewayAccessToken, verifyGatewayAccessToken } from "@/lib/gatewayAuth";
 import {
   type GatewayWebSocketClientLike,
@@ -44,10 +46,7 @@ import type {
   HistoryList,
   HistoryWorkdirSummary,
 } from "@/lib/gatewayTypes";
-import type { GatewaySettingsSyncPayload } from "@/lib/settings/sync";
-import { cn } from "@/lib/shared/utils";
 import { clearToken, loadToken, saveToken } from "@/lib/storage";
-import type { TerminalSession } from "@/lib/terminal/types";
 import { LoginPage } from "./LoginPage";
 
 type DashboardTone = "cyan" | "violet" | "rose" | "amber" | "emerald" | "slate";

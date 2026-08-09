@@ -1,15 +1,18 @@
+import { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
+import {
+  AssistantStatus,
+  CompactingText,
+  VibingText,
+} from "@liveagent/ui/components/chat/AssistantStatus";
+import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import { memo, type ReactNode } from "react";
-
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { VIBING_STATUS } from "../../../lib/chat/page/chatPageHelpers";
 import type { AssistantUnitRow } from "../transcript/rowModel";
-import { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
 import { RetryDetailsBlock, RoundBlockContent } from "./assistant-bubble/RoundContent";
-import { AssistantStatus, CompactingText, VibingText } from "./assistant-bubble/StatusText";
-import { UsagePanel } from "./assistant-bubble/UsagePanel";
 
-export { AssistantAvatar } from "./assistant-bubble/AssistantAvatar";
+export { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 
 export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   row: AssistantUnitRow;
@@ -38,36 +41,13 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
 
   const isVibingStatus = toolStatus === VIBING_STATUS;
   let status: ReactNode = null;
-  if (row.mutable && unit.kind === "placeholder") {
-    if (unit.showFallbackStatus) {
-      status = isCompactionRunning ? (
-        <CompactingText />
-      ) : isVibingStatus || !toolStatus ? (
-        <VibingText />
-      ) : (
-        <AssistantStatus>{toolStatus}</AssistantStatus>
-      );
-    } else if (toolStatus) {
-      status = isCompactionRunning ? (
-        <CompactingText />
-      ) : isVibingStatus ? (
-        <VibingText />
-      ) : (
-        <AssistantStatus>{toolStatus}</AssistantStatus>
-      );
-    }
-  } else if (
-    row.mutable &&
-    unit.kind === "block" &&
-    toolStatus &&
-    (!unit.hasRunningToolCall || isCompactionRunning || isVibingStatus)
-  ) {
+  if (unit.kind === "status") {
     status = isCompactionRunning ? (
-      <CompactingText />
-    ) : isVibingStatus ? (
-      <VibingText />
+      <CompactingText className="w-full" />
+    ) : isVibingStatus || !toolStatus ? (
+      <VibingText className="w-full" />
     ) : (
-      <AssistantStatus>{toolStatus}</AssistantStatus>
+      <AssistantStatus className="w-full">{toolStatus}</AssistantStatus>
     );
   }
 
@@ -80,14 +60,10 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
       )}
       <div
         className={`min-w-0 flex-1 space-y-2 ${
-          unit.kind === "placeholder" && unit.showFallbackStatus && isAgentMode
-            ? "pt-1"
-            : row.showAvatar
-              ? "pt-0.5"
-              : ""
+          unit.kind === "status" && isAgentMode ? "pt-1" : row.showAvatar ? "pt-0.5" : ""
         }`}
       >
-        {status ? <div className="py-1.5">{status}</div> : null}
+        {status ? <div className="min-w-0 max-w-full overflow-hidden py-1.5">{status}</div> : null}
 
         {row.mutable && retryAttempts && retryAttempts.length > 0 ? (
           <RetryDetailsBlock attempts={retryAttempts} />
@@ -97,7 +73,6 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
           <RoundBlockContent
             block={unit.block}
             isLive={row.live}
-            isMutable={row.mutable}
             renderMode={row.renderMode}
             runningToolCallIds={unit.runningToolCallIds}
             thinkingOpen={unit.thinkingOpen}

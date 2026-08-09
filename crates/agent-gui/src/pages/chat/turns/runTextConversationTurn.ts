@@ -29,6 +29,7 @@ import {
   upsertHostedSearchToRound,
 } from "../../../lib/chat/messages/uiMessages";
 import { isAbortLikeError } from "../../../lib/chat/page/chatPageHelpers";
+import type { AgentRunnerFailoverParams } from "../../../lib/chat/runner/agentRunner";
 import {
   createDeferredProviderNativeWebSearchStatus,
   resolveProviderNativeWebSearchStatus,
@@ -60,6 +61,7 @@ export type RunTextConversationTurnParams = {
   providerId: ProviderId;
   model: string;
   runtime: ProviderRuntimeConfig;
+  failover?: AgentRunnerFailoverParams;
   runtimeModel: RuntimeModel;
   selectedModel: {
     customProviderId: string;
@@ -107,6 +109,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     providerId,
     model,
     runtime,
+    failover,
     runtimeModel,
     selectedModel,
     sessionId,
@@ -148,6 +151,9 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   let pendingTextContext: Context | null = null;
   let textRound = 1;
   let protectionCompactionDisabled = false;
+  // A failover status stays visible until the winning attempt streams content;
+  // the status channel has no other owner between switch and first delta.
+  let failoverStatusVisible = false;
 
   function commitAssistantRoundMeta(assistant: AssistantMessage, round: number) {
     gatewayBridgeEvents.queueToken("", {
@@ -268,11 +274,31 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
           providerId,
           model,
           runtime,
+          failover: failover
+            ? {
+                config: failover.config,
+                primary: failover.primary,
+                fallbacks: failover.fallbacks,
+                onSwitched: ({ target, errorMessage }) => {
+                  failover.onSwitched?.({ target, round: textRound, errorMessage });
+                },
+                onFailover: ({ fromLabel, toLabel }) => {
+                  failoverStatusVisible = true;
+                  updateGatewayBridgeToolStatus(
+                    `第 ${textRound} 轮：${fromLabel} 不可用，正在切换到 ${toLabel}...`,
+                  );
+                },
+              }
+            : undefined,
           context: contextWithSkills,
           workdir: conversationCwd,
           sessionId,
           nativeWebSearch: nativeWebSearchEnabled,
           onTextDelta: (delta) => {
+            if (failoverStatusVisible) {
+              failoverStatusVisible = false;
+              updateGatewayBridgeToolStatus(null);
+            }
             nativeWebSearchStatusController.noteVisibleActivity();
             gatewayBridgeEvents.queueToken(delta, { round: textRound });
             if (textModeUsesLiveRounds) {

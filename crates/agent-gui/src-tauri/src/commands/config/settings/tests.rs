@@ -31,6 +31,7 @@ mod tests {
             SSH_SETTINGS_TABLE,
             REMOTE_SETTINGS_TABLE,
             MEMORY_SETTINGS_TABLE,
+            MODEL_FAILOVER_SETTINGS_TABLE,
             SSH_PROJECT_HOST_ASSOCIATIONS_TABLE,
             SSH_KNOWN_HOSTS_TABLE,
         ] {

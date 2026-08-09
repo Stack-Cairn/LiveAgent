@@ -3,15 +3,15 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const sourceRoots = [
-  new URL("../../src/components/", import.meta.url),
-  new URL("../../../agent-gateway/web/src/components/", import.meta.url),
+  new URL("../../../agent-ui/src/components/", import.meta.url),
 ];
+const sharedProjectToolsRoot = new URL("../../../agent-ui/src/components/", import.meta.url);
 
 function source(root, relativePath) {
   return readFileSync(new URL(relativePath, root), "utf8");
 }
 
-test("both composers restore the last editor selection before external mention insertion", () => {
+test("the shared composer restores the last editor selection before external mention insertion", () => {
   for (const root of sourceRoots) {
     const composer = source(root, "chat/MentionComposer.tsx");
     assert.match(composer, /lastEditorSelectionRef = useRef<Range \| null>\(null\)/);
@@ -35,8 +35,6 @@ test("insertNodeAtCursor hops chip-inner boundaries and normalizes the caret anc
   const bodies = sourceRoots.map((root) =>
     extractFunction(source(root, "chat/MentionComposer.tsx"), "insertNodeAtCursor"),
   );
-  // Both frontends must keep the hardened implementation byte-identical.
-  assert.equal(bodies[0], bodies[1]);
   const body = bodies[0];
   // A saved selection restored before external insertion can sit inside a
   // non-editable chip; the insert must hop outside instead of nesting.
@@ -50,16 +48,14 @@ test("insertNodeAtCursor hops chip-inner boundaries and normalizes the caret anc
   assert.doesNotMatch(body, /range\.insertNode\(afterNode\)/);
 });
 
-test("right-dock context menus preserve composer selection on both frontends", () => {
-  for (const root of sourceRoots) {
-    for (const relativePath of [
-      "project-tools/file-tree/index.tsx",
-      "project-tools/git-review/StatusView.tsx",
-      "project-tools/git-review/HistoryView.tsx",
-    ]) {
-      const panel = source(root, relativePath);
-      assert.doesNotMatch(panel, /window\.getSelection\(\)\?\.removeAllRanges\(\)/);
-    }
+test("shared right-dock context menus preserve composer selection", () => {
+  for (const relativePath of [
+    "project-tools/file-tree/index.tsx",
+    "project-tools/git-review/StatusView.tsx",
+    "project-tools/git-review/HistoryView.tsx",
+  ]) {
+    const panel = source(sharedProjectToolsRoot, relativePath);
+    assert.doesNotMatch(panel, /window\.getSelection\(\)\?\.removeAllRanges\(\)/);
   }
 });
 
@@ -67,8 +63,6 @@ test("composer caret measurement never splits text nodes and restores the select
   const bodies = sourceRoots.map((root) =>
     extractFunction(source(root, "chat/MentionComposer.tsx"), "measureComposerCaretRect"),
   );
-  // Both frontends must keep the hardened implementation byte-identical.
-  assert.equal(bodies[0], bodies[1]);
   const body = bodies[0];
   // Range.insertNode() splits the text node under a line-boundary caret; the
   // caret then lands inside the degenerate empty text node left by the split
@@ -82,7 +76,6 @@ test("composer caret measurement never splits text nodes and restores the select
   const scrollBodies = sourceRoots.map((root) =>
     extractFunction(source(root, "chat/MentionComposer.tsx"), "scrollSelectionIntoComposerView"),
   );
-  assert.equal(scrollBodies[0], scrollBodies[1]);
   assert.match(scrollBodies[0], /measureComposerCaretRect\(range\)/);
   assert.doesNotMatch(scrollBodies[0], /cloneRange\(\)/);
 });

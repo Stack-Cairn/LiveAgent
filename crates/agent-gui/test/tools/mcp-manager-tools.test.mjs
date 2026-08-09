@@ -185,6 +185,46 @@ test("McpManager create defaults to enabled without separate selection", async (
   ]);
 });
 
+test("McpManager creates, updates, and lists MCP metadata", async () => {
+  const context = createMcpBundle({
+    invokeImpl(command, args) {
+      assert.equal(command, "mcp_stop_server");
+      return { serverId: args.server_id, stopped: true };
+    },
+  });
+
+  const created = await callMcpManager(context.bundle, {
+    action: "create",
+    server: {
+      id: "demo",
+      description: "Search project docs",
+      docsUrl: "https://docs.example.com/mcp",
+      transport: "stdio",
+      command: "demo-mcp",
+    },
+  });
+  assert.equal(created.isError, false);
+  assert.equal(context.settings.servers[0].description, "Search project docs");
+  assert.equal(context.settings.servers[0].docsUrl, "https://docs.example.com/mcp");
+
+  const listed = await callMcpManager(context.bundle, { action: "list" });
+  assert.equal(listed.isError, false);
+  assert.match(listed.content[0].text, /description="Search project docs"/);
+  assert.match(listed.content[0].text, /docsUrl="https:\/\/docs\.example\.com\/mcp"/);
+
+  const updated = await callMcpManager(context.bundle, {
+    action: "update",
+    server_id: "demo",
+    patch: {
+      description: "",
+      docsUrl: "https://example.com/new-docs",
+    },
+  });
+  assert.equal(updated.isError, false);
+  assert.equal(context.settings.servers[0].description, undefined);
+  assert.equal(context.settings.servers[0].docsUrl, "https://example.com/new-docs");
+});
+
 test("McpManager resolves local cwd inputs before persisting or testing servers", async () => {
   const workdir = "/workspace";
   const created = createMcpBundle({ workdir });

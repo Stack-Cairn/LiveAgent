@@ -1,18 +1,18 @@
 import type { CacheRetention, SimpleStreamOptions } from "@earendil-works/pi-ai";
-import type { CodexRequestFormat, ProviderId, ReasoningLevel } from "../../settings";
-import { createUuid } from "../../shared/id";
 import {
   ANTHROPIC_DEFAULT_REQUEST_HEADERS,
   CODEX_CONVERSATION_ID_HEADER,
   CODEX_SESSION_ID_HEADER,
   isAnthropicOAuthApiKey,
   mergeCustomHeaders,
-} from "../customHeaders";
-import { type PreparedProxyRequest, prepareProxyRequest } from "../proxy";
+} from "@liveagent/ui/lib/providers/customHeaders";
+import { type PreparedProxyRequest, prepareProxyRequest } from "@liveagent/ui/lib/providers/proxy";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
+import type { CodexRequestFormat, ProviderId, ReasoningLevel } from "../../settings";
 import { normalizeSessionId } from "./common";
 import type { ProviderRuntimeConfig } from "./types";
 
-export { isValidCustomHeaderKey } from "../customHeaders";
+export { isValidCustomHeaderKey } from "@liveagent/ui/lib/providers/customHeaders";
 
 // 每个供应商只带自家标准的 API Key 请求头，绝不双头齐发。
 export function buildAnthropicAuthHeaders(apiKey: string): Record<string, string> {

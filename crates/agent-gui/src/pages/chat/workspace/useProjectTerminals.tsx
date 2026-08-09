@@ -1,13 +1,14 @@
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
-import { Terminal } from "../../../components/icons";
-import type { ConfirmDialogOptions } from "../../../components/ui/confirm-dialog";
-import { invoke, listen } from "../../../lib/tauriBridge";
+import type { ConfirmDialogOptions } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
   applyTerminalEventToSessions,
   sortTerminalSessions,
-} from "../../../lib/terminal/sessionStore";
+} from "@liveagent/ui/lib/terminal/sessionStore";
+import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
+import { invoke } from "../../../lib/tauriBridge";
+import { listen } from "../../../lib/tauriBridge";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
+import { Terminal } from "../../../components/icons";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
-import type { TerminalSession } from "../../../lib/terminal/types";
 import { asErrorMessage } from "../chatPageUtils";
 
 type UseProjectTerminalsParams = {

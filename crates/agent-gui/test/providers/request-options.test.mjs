@@ -4,9 +4,9 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const providers = loader.loadModule("src/lib/providers/llm.ts");
-const proxy = loader.loadModule("src/lib/providers/proxy.ts");
-const customHeaderHelpers = loader.loadModule("src/lib/providers/customHeaders.ts");
-const providerUtils = loader.loadModule("src/pages/settings/providerUtils.ts");
+const proxy = loader.loadModule("@liveagent/ui/lib/providers/proxy.ts");
+const customHeaderHelpers = loader.loadModule("@liveagent/ui/lib/providers/customHeaders.ts");
+const providerUtils = loader.loadModule("@liveagent/ui/pages/settings/providerUtils.ts");
 
 function createMockAssistantStream() {
   return {

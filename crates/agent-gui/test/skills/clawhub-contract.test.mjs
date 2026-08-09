@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const clawHub = loader.loadModule("src/lib/skills/clawHub.ts");
+const clawHub = loader.loadModule("@liveagent/ui/lib/skills/clawHub.ts");
 
 test("normalizes current ClawHub list and search response shapes", () => {
   const listCard = clawHub.normalizeClawHubSkillCard({

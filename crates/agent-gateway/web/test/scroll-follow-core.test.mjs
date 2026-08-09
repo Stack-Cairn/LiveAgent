@@ -15,7 +15,7 @@ const {
   createFollowState,
   isDominantVerticalWheel,
   reduceFollowEvent,
-} = loader.loadModule("src/lib/chat-scroll/scrollFollowCore.ts");
+} = loader.loadModule("@liveagent/ui/lib/chat-scroll/scrollFollowCore.ts");
 
 function run(events, { state = createFollowState(), config = DEFAULT_FOLLOW_CONFIG } = {}) {
   let pin = false;

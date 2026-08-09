@@ -6,7 +6,7 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });
-const reorder = loader.loadModule("src/lib/reorder/reorderModel.ts");
+const reorder = loader.loadModule("@liveagent/ui/lib/reorder/reorderModel.ts");
 
 const slots = [
   { id: "a", start: 0, size: 40 },

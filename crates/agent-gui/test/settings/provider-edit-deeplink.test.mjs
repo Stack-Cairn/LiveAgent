@@ -10,24 +10,15 @@ const appSources = [
   ),
 ];
 
-const settingsPageSources = [
-  readFileSync(new URL("../../src/pages/SettingsPage.tsx", import.meta.url), "utf8"),
-  readFileSync(
-    new URL("../../../agent-gateway/web/src/pages/SettingsPage.tsx", import.meta.url),
-    "utf8",
-  ),
-];
+const settingsPageSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/SettingsPage.tsx", import.meta.url),
+  "utf8",
+);
 
-const providersSectionSources = [
-  readFileSync(
-    new URL("../../src/pages/settings/ProvidersSection.tsx", import.meta.url),
-    "utf8",
-  ),
-  readFileSync(
-    new URL("../../../agent-gateway/web/src/pages/settings/ProvidersSection.tsx", import.meta.url),
-    "utf8",
-  ),
-];
+const providersSectionSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
+  "utf8",
+);
 
 test("settings overlays carry a requested provider id", () => {
   for (const source of appSources) {
@@ -41,23 +32,22 @@ test("settings overlays carry a requested provider id", () => {
 });
 
 test("settings pages forward and consume provider deep links", () => {
-  for (const source of settingsPageSources) {
-    assert.match(source, /pendingProviderId/);
-    assert.match(source, /initialProviderId=\{pendingProviderId\}/);
-    assert.match(source, /onInitialProviderHandled=\{\(\) => setPendingProviderId\(undefined\)\}/);
-  }
+  assert.match(settingsPageSource, /pendingProviderId/);
+  assert.match(settingsPageSource, /initialProviderId=\{pendingProviderId\}/);
+  assert.match(
+    settingsPageSource,
+    /onInitialProviderHandled=\{\(\) => setPendingProviderId\(undefined\)\}/,
+  );
 });
 
-test("providers sections open the requested provider editor once", () => {
-  for (const source of providersSectionSources) {
-    assert.match(source, /openedInitialProviderIdRef/);
-    assert.match(
-      source,
-      /settings\.customProviders\.find\(\(item\) => item\.id === providerId\)/,
-    );
-    assert.match(source, /setActiveTab\(provider\.type\)/);
-    assert.match(source, /setEditingProvider\(provider\)/);
-    assert.match(source, /setModalOpen\(true\)/);
-    assert.match(source, /onInitialProviderHandled\?\.\(\)/);
-  }
+test("the shared providers section opens the requested provider editor once", () => {
+  assert.match(providersSectionSource, /openedInitialProviderIdRef/);
+  assert.match(
+    providersSectionSource,
+    /settings\.customProviders\.find\(\(item\) => item\.id === providerId\)/,
+  );
+  assert.match(providersSectionSource, /setActiveTab\(provider\.type\)/);
+  assert.match(providersSectionSource, /setEditingProvider\(provider\)/);
+  assert.match(providersSectionSource, /setModalOpen\(true\)/);
+  assert.match(providersSectionSource, /onInitialProviderHandled\?\.\(\)/);
 });

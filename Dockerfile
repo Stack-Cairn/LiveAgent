@@ -2,14 +2,18 @@
 
 FROM --platform=$BUILDPLATFORM node:22.17.1-bookworm-slim AS webui
 
-WORKDIR /src/crates/agent-gateway/web
+WORKDIR /src
 RUN npm install -g pnpm@10.32.1
 
-COPY crates/agent-gateway/web/package.json crates/agent-gateway/web/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY crates/agent-ui/package.json crates/agent-ui/package.json
+COPY crates/agent-gui/package.json crates/agent-gui/package.json
+COPY crates/agent-gateway/web/package.json crates/agent-gateway/web/package.json
+RUN pnpm install --frozen-lockfile --filter @liveagent/gateway-webui...
 
-COPY crates/agent-gateway/web ./
-RUN pnpm build
+COPY crates/agent-ui crates/agent-ui
+COPY crates/agent-gateway/web crates/agent-gateway/web
+RUN pnpm --filter @liveagent/gateway-webui build
 
 FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS gateway-builder
 

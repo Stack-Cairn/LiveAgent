@@ -396,7 +396,12 @@ Expand the Development Guide below for the full set of Make commands.
 
 ```
 LiveAgent/
+├── package.json                  # pnpm workspace commands
+├── pnpm-lock.yaml                # Unified frontend dependency lock
 ├── crates/
+│   ├── agent-ui/                 # Shared GUI/WebUI React source
+│   │   └── src/                  #   Components, domain models, settings shell
+│   │
 │   ├── agent-gui/                # Desktop client
 │   │   ├── src/                  # React frontend
 │   │   │   ├── components/       #   UI components
@@ -466,22 +471,24 @@ Issues and pull requests are welcome! See the [Development Guide](docs/operation
 
 Before submitting a PR, make sure all of the following checks pass (they match the CI gates):
 
-**Desktop client · `crates/agent-gui`**
+Install frontend dependencies once from the repository root with `pnpm install --frozen-lockfile`.
 
-1. Type check & build pass: `pnpm build`
-2. Lint passes: `pnpm lint`
-3. Frontend unit tests pass: `pnpm test:frontend` (also run `pnpm test:release` when touching release scripts)
+**Desktop client**
+
+1. Type check & build pass: `pnpm build:gui`
+2. Lint passes: `pnpm lint:ui && pnpm lint:gui`
+3. Frontend unit tests pass: `pnpm test:gui` (also run `pnpm --filter liveagent test:release` when touching release scripts)
 4. Rust backend check passes: `cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests` (run from the repo root)
 
 **Gateway · `crates/agent-gateway` (if changed)**
 
 1. Go unit tests pass: `go test ./...`
-2. WebUI build / lint / tests pass: `pnpm build && pnpm lint && pnpm test` (run in `web/`)
+2. WebUI build / lint / tests pass: `pnpm build:webui && pnpm lint:webui && pnpm test:webui`
 3. Regenerate and commit artifacts after proto changes: `make proto`
 
-**Cross-frontend consistency**
+**Shared UI boundaries**
 
-- Mirrored files between GUI and WebUI must be byte-identical: `node scripts/check-mirror.mjs`
+- Shared source must not depend directly on either host: `pnpm check:ui-boundaries`
 - Keep the diff clean (no trailing whitespace): `git diff --check`
 
 ---

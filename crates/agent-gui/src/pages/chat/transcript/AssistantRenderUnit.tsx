@@ -1,6 +1,5 @@
+import { ChangedFilesCard } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { memo, useMemo } from "react";
-
-import { ChangedFilesCard } from "../../../components/chat/ChangedFilesCard";
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";

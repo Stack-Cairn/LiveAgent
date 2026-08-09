@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import Icons from "unplugin-icons/vite";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
 const packageJson = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
@@ -15,6 +16,14 @@ const host = env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react(), Icons({ compiler: "jsx", jsx: "react" })],
+  resolve: {
+    dedupe: ["react", "react-dom"],
+    alias: {
+      "@liveagent/app": path.resolve(__dirname, "./src"),
+      "@liveagent/adapters": path.resolve(__dirname, "./src/agent-ui-adapters"),
+      "@liveagent/ui": path.resolve(__dirname, "../agent-ui/src"),
+    },
+  },
   define: {
     __LIVEAGENT_APP_VERSION__: JSON.stringify(appVersion),
   },

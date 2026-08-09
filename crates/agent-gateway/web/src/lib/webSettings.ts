@@ -1,5 +1,5 @@
+import { redactSettingsForWebStorage } from "@liveagent/ui/lib/settings/sync";
 import { type AppSettings, getDefaultSettings, normalizeSettings } from "@/lib/settings";
-import { redactSettingsForWebStorage } from "@/lib/settings/sync";
 
 const WEB_SETTINGS_STORAGE_KEY = "liveagent.gateway.webui.settings.v1";
 

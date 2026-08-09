@@ -17,9 +17,9 @@ const implementations = [
 ];
 
 for (const { label, loader } of implementations) {
-  const triggerHint = loader.loadModule("src/lib/skills/skillTriggerHint.ts");
-  const cardIdentity = loader.loadModule("src/lib/skills/skillCardIdentity.ts");
-  const cardMetadata = loader.loadModule("src/lib/skills/skillCardMetadata.ts");
+  const triggerHint = loader.loadModule("@liveagent/ui/lib/skills/skillTriggerHint.ts");
+  const cardIdentity = loader.loadModule("@liveagent/ui/lib/skills/skillCardIdentity.ts");
+  const cardMetadata = loader.loadModule("@liveagent/ui/lib/skills/skillCardMetadata.ts");
 
   test(`${label} extracts Chinese trigger hints, including full-width punctuation`, () => {
     assert.equal(

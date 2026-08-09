@@ -2,21 +2,21 @@
 
 ## 定位
 
-WebUI 是 Gateway 承载的浏览器端操作台。它复用/复制了大量 GUI 交互形态，但不直接执行 Agent、本地工具或 Tauri 命令。所有需要本地权限的操作都通过 Gateway WebSocket/HTTP 转发到桌面端。
+WebUI 是 Gateway 承载的浏览器端操作台。它与 GUI 共同复用 `crates/agent-ui`，但不直接执行 Agent、本地工具或 Tauri 命令。所有需要本地权限的操作都通过 Gateway WebSocket/HTTP 转发到桌面端。
 
 ## 主要模块
 
 | 模块 | 路径 | 职责 |
 |---|---|---|
-| App shell | `crates/agent-gateway/web/src/App.tsx` | 登录、socket 生命周期、settings/history/chat 状态、页面切换、composer/transcript。 |
+| App shell | `crates/agent-gateway/web/src/App.tsx`、`web/src/app/GatewayApp.tsx` | `App` 负责登录与启动，`GatewayApp` 负责 socket、settings/history/chat 状态和共享 UI 的数据装配。 |
 | Socket client | `web/src/lib/gatewaySocket.ts` | v2 WebSocket（Protobuf 帧）请求/响应、广播监听、连接超时、原生 Chat Runtime 唤醒、Chat command ACK 恢复与错误处理；proto 生成代码位于 `web/src/lib/proto/gen/`。 |
 | Conversation stream | `web/src/lib/chat/stream/conversationStreamClient.ts` | 按会话持久订阅注册表：维护 `after_seq`/`stream_epoch` 游标、重连自动重订阅、gap resync 与有界退避重试。 |
 | Gateway types | `web/src/lib/gatewayTypes.ts` | WebUI 侧协议类型。 |
 | Settings storage | `web/src/lib/webSettings.ts`、`web/src/lib/settings/*` | 浏览器本地设置缓存、脱敏 provider snapshot、settings sync payload。 |
-| History sync | `web/src/lib/historySync.ts`、`web/src/lib/historyParser.ts` | 历史列表/详情同步，大历史 worker 解析。 |
-| Transcript | `web/src/components/GatewayTranscript.tsx`、`web/src/pages/chat/*` | WebUI 对话渲染、checkpoint、tool trace、composer/header。 |
-| Shared UI copy | `web/src/components/*`、`web/src/pages/*`、`web/src/lib/*` 中的镜像实现 | 与 GUI 对齐的 Settings、Hub、chat sidebar、image preview 等实现。 |
-| Tauri shims | `web/src/shims/*` | 将 `@tauri-apps/api/*` 替换为 WebUI 可用的 Gateway/browser 实现。 |
+| History sync | `web/src/lib/sidebar/webSidebarBackend.ts`、`web/src/lib/chat/chatHistory.ts`、`web/src/lib/historyParser.ts` | 历史摘要/事件同步、详情读取和大历史 worker 解析。 |
+| Transcript | `web/src/components/GatewayTranscript.tsx`、`web/src/pages/chat/*` | WebUI 行模型、流式快照和虚拟列表；composer/header/消息操作等公共视觉来自 `agent-ui`。 |
+| Shared UI | `crates/agent-ui/src/*` | GUI/WebUI 共用的 Settings shell、Hub、chat sidebar、project tools 与领域逻辑。 |
+| 宿主能力 | `web/src/agent-ui-adapters/*`、`web/src/shims/*` | 为共享 UI 提供 Gateway/browser 实现，并隔离残留的 Tauri 兼容入口。 |
 
 ## 连接与认证
 
@@ -47,7 +47,8 @@ WebUI 是 Gateway 承载的浏览器端操作台。它复用/复制了大量 GUI
 | 维度 | 说明 |
 |---|---|
 | 视觉/交互 | Settings、Skills Hub、MCP Hub、Chat sidebar、AssistantBubble 等与 GUI 保持 parity。 |
-| 源码组织 | WebUI 保留自己的复制/镜像文件，不直接从 `agent-gui` import 大量源码。右侧边栏（project-tools）与 `lib/workspace-activity` 的镜像文件必须逐字节一致：清单在 `scripts/mirror-manifest.json`，CI 以 `node scripts/check-mirror.mjs` 强制校验；平台差异只允许出现在两端各自的适配文件（ChatPage/GatewayApp、workspace-activity client、SshTunnelPanel）。 |
+| 源码组织 | 公共源码位于 `crates/agent-ui`；WebUI 只保留 Gateway、登录、远程状态和浏览器传输等应用逻辑。`scripts/check-ui-boundaries.mjs` 阻止共享层反向依赖具体应用，并禁止应用保留同路径副本。 |
+| 能力差异 | Settings 通过 `UiExtensionRegistry` 注册页面：WebUI 独有 `devices`，GUI 独有 `shortcuts` 与 `about`。 |
 | Tauri API | WebUI 通过 Vite alias 指向 shims，避免真实 Tauri 依赖进入浏览器运行时。 |
 | 数据通道 | GUI 走 Tauri invoke；WebUI 走 Gateway WebSocket/HTTP。 |
 | 执行权限 | GUI 可以触发本地工具；WebUI 只能请求桌面端代执行。 |
@@ -83,6 +84,6 @@ WebUI 是 Gateway 承载的浏览器端操作台。它复用/复制了大量 GUI
 |---|---|
 | 不直接执行工具 | Shell、FS、MCP、Memory mutation、Cron prompt 都必须回到桌面端。 |
 | 依赖 Gateway 在线 | Gateway 或 Desktop offline 时，Chat/Settings/History 能力受限。 |
-| 复制维护成本 | 列入 `scripts/mirror-manifest.json` 的文件由 CI 逐字节校验，改动必须双端同 PR 落地；未列入清单的镜像组件仍需双端一起检查。 |
+| 共享边界 | 公共交互改动只修改 `crates/agent-ui`；应用差异必须留在 `@liveagent/adapters` 或扩展注册表中。 |
 | 浏览器存储不是权威 | Settings 和 history 的真实来源仍是桌面端 SQLite 与 Gateway sync。 |
 | Gateway relay 不是持久历史 | `chat.subscribe` 的 seq replay 来自 Gateway 进程内的有界事件窗口；Gateway 重启或窗口 reset 时，WebUI 以桌面历史 snapshot 重新 hydrate。 |

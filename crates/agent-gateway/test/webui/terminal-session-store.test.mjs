@@ -7,7 +7,7 @@ const {
   applyTerminalEventToSessions,
   replaceTerminalSessionsForProject,
   terminalSessionBelongsToProject,
-} = loader.loadModule("src/lib/terminal/sessionStore.ts");
+} = loader.loadModule("@liveagent/ui/lib/terminal/sessionStore.ts");
 
 function terminal(id, projectPathKey, createdAt, title = id) {
   return {
@@ -106,7 +106,7 @@ const viewportLoader = createWebModuleLoader({
   },
 });
 const { writeTerminalChunk } = viewportLoader.loadModule(
-  "@/components/project-tools/XTermViewport.tsx",
+  "@liveagent/ui/components/project-tools/XTermViewport.tsx",
 );
 
 function fakeTerm() {

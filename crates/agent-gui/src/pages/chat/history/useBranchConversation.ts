@@ -1,3 +1,4 @@
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import {
   type Dispatch,
   type MutableRefObject,
@@ -8,7 +9,6 @@ import {
 } from "react";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import { branchChatHistory } from "../../../lib/chat/history/chatHistory";
-import type { SidebarStore } from "../../../lib/sidebar/store";
 import { asErrorMessage } from "../chatPageUtils";
 
 type UseBranchConversationParams = {

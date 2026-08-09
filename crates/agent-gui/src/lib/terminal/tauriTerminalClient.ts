@@ -1,4 +1,3 @@
-import { invoke, listen } from "../../lib/tauriBridge";
 import type {
   SshTerminalTab,
   SshTerminalTabsSnapshot,
@@ -16,7 +15,9 @@ import type {
   TerminalStreamHandle,
   TerminalStreamInputState,
   TerminalStreamSnapshot,
-} from "./types";
+} from "@liveagent/ui/lib/terminal/types";
+import { invoke } from "../tauriBridge";
+import { listen } from "../tauriBridge";
 
 type TerminalEventListener = (event: TerminalEvent) => void;
 

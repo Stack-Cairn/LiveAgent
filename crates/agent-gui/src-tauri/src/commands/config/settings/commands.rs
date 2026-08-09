@@ -1,3 +1,4 @@
+
 pub async fn settings_load_all() -> Result<SettingsLoadResponse, String> {
     crate::compat::async_runtime::spawn_blocking(|| {
         let conn = open_db()?;
@@ -10,12 +11,14 @@ pub async fn settings_load_all() -> Result<SettingsLoadResponse, String> {
             ssh: load_ssh(&conn)?,
             remote: load_remote(&conn)?,
             memory: load_memory(&conn)?,
+            model_failover: load_model_failover(&conn)?,
             default_workdir,
         })
     })
     .await
     .map_err(|e| format!("settings_load_all join 失败：{e}"))?
 }
+
 
 pub async fn settings_save_providers(payload: Value) -> Result<(), String> {
     crate::compat::async_runtime::spawn_blocking(move || {
@@ -25,6 +28,7 @@ pub async fn settings_save_providers(payload: Value) -> Result<(), String> {
     .await
     .map_err(|e| format!("settings_save_providers join 失败：{e}"))?
 }
+
 
 pub async fn settings_save_system(
     payload: Value,
@@ -44,6 +48,7 @@ pub async fn settings_save_system(
     Ok(())
 }
 
+
 pub async fn settings_save_mcp(payload: Value) -> Result<(), String> {
     crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
@@ -52,6 +57,7 @@ pub async fn settings_save_mcp(payload: Value) -> Result<(), String> {
     .await
     .map_err(|e| format!("settings_save_mcp join 失败：{e}"))?
 }
+
 
 pub async fn settings_save_remote(
     payload: Value,
@@ -66,6 +72,7 @@ pub async fn settings_save_remote(
     gateway_controller.apply_config(normalized)
 }
 
+
 pub async fn settings_save_memory(payload: Value) -> Result<(), String> {
     crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
@@ -74,6 +81,17 @@ pub async fn settings_save_memory(payload: Value) -> Result<(), String> {
     .await
     .map_err(|e| format!("settings_save_memory join 失败：{e}"))?
 }
+
+
+pub async fn settings_save_model_failover(payload: Value) -> Result<(), String> {
+    crate::compat::async_runtime::spawn_blocking(move || {
+        let mut conn = open_db()?;
+        save_model_failover(&mut conn, payload)
+    })
+    .await
+    .map_err(|e| format!("settings_save_model_failover join 失败：{e}"))?
+}
+
 
 pub async fn settings_save_agents(payload: Value) -> Result<(), String> {
     crate::compat::async_runtime::spawn_blocking(move || {
@@ -84,6 +102,7 @@ pub async fn settings_save_agents(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_agents join 失败：{e}"))?
 }
 
+
 pub async fn settings_save_ssh(payload: Value) -> Result<(), String> {
     crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
@@ -93,6 +112,7 @@ pub async fn settings_save_ssh(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_ssh join 失败：{e}"))?
 }
 
+
 pub async fn settings_apply_ssh_patch(payload: Value) -> Result<SshPatchApplyResponse, String> {
     crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
@@ -101,6 +121,7 @@ pub async fn settings_apply_ssh_patch(payload: Value) -> Result<SshPatchApplyRes
     .await
     .map_err(|e| format!("settings_apply_ssh_patch join 失败：{e}"))?
 }
+
 
 pub async fn settings_reset_ssh_known_host(
     host: String,

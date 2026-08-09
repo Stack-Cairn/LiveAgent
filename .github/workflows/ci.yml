@@ -46,10 +46,9 @@ jobs:
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Build embedded Gateway WebUI
-        working-directory: crates/agent-gateway/web
         run: |
-          pnpm install --frozen-lockfile
-          pnpm build
+          pnpm install --frozen-lockfile --filter @liveagent/gateway-webui...
+          pnpm --filter @liveagent/gateway-webui build
 
       - name: Proto lint and breaking-change check
         run: make proto-check BUF_BREAKING_AGAINST='../../.git#branch=origin/main,subdir=crates/agent-gateway'
@@ -121,8 +120,7 @@ jobs:
         run: npm install -g pnpm@10.32.1
 
       - name: Install dependencies
-        working-directory: crates/agent-gateway/web
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter @liveagent/gateway-webui...
 
       - name: Build WebUI
         working-directory: crates/agent-gateway/web
@@ -150,8 +148,7 @@ jobs:
         run: npm install -g pnpm@10.32.1
 
       - name: Install dependencies
-        working-directory: crates/agent-gui
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --filter liveagent...
 
       - name: Typecheck and build GUI frontend
         working-directory: crates/agent-gui
@@ -273,8 +270,8 @@ jobs:
       - name: Dispatch coverage vs manifest
         run: python3 scripts/verify_headless.py
 
-  mirror:
-    name: GUI/WebUI Mirror Check
+  ui-boundaries:
+    name: Shared UI Boundaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -283,8 +280,8 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Check mirrored files are byte-identical
-        run: node scripts/check-mirror.mjs
+      - name: Check shared UI dependency boundaries
+        run: node scripts/check-ui-boundaries.mjs
 
   whitespace:
     name: Diff Hygiene

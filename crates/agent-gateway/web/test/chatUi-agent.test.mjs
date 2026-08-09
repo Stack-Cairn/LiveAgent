@@ -10,7 +10,9 @@ const uiMessages = uiMessagesLoader.loadModule("src/lib/chat/uiMessages.ts");
 const toolPreview = uiMessagesLoader.loadModule("src/lib/chat/toolPreview.ts");
 const fileChangeStats = uiMessagesLoader.loadModule("src/lib/chat/fileChangeStats.ts");
 const hostedSearch = uiMessagesLoader.loadModule("src/lib/chat/hostedSearch.ts");
-const uploadedImagePreview = uiMessagesLoader.loadModule("src/lib/chat/uploadedImagePreview.ts");
+const uploadedImagePreview = uiMessagesLoader.loadModule(
+  "@liveagent/ui/lib/chat/uploadedImagePreview.ts",
+);
 const loader = createWebModuleLoader({
   rootDir,
   mocks: {
@@ -127,6 +129,40 @@ test("uploaded image previews fall back to files.preview when no local object UR
   assert.equal(
     uploadedImagePreview.readUploadedImagePreviewCache("/workspace", uploadedFile),
     "data:image/png;base64,cmVtb3Rl",
+  );
+});
+
+test("uploaded image preview invalidation reloads the same path and blocks stale writes", async () => {
+  const uploadedFile = {
+    relativePath: "photo.png",
+    absolutePath: "/workspace/photo.png",
+    fileName: "photo.png",
+    kind: "image",
+    sizeBytes: 128_000,
+  };
+  let resolveFirstPreview;
+  const firstPreview = uploadedImagePreview.loadUploadedImagePreview({
+    workspaceRoot: "/workspace",
+    file: uploadedFile,
+    loader: async () =>
+      await new Promise((resolve) => {
+        resolveFirstPreview = resolve;
+      }),
+  });
+
+  uploadedImagePreview.invalidateUploadedImagePreviewCache("/workspace", uploadedFile);
+  const refreshedPreview = await uploadedImagePreview.loadUploadedImagePreview({
+    workspaceRoot: "/workspace",
+    file: { ...uploadedFile, sizeBytes: 256_000 },
+    loader: async () => ({ mimeType: "image/png", data: "bmV3" }),
+  });
+  resolveFirstPreview({ mimeType: "image/png", data: "b2xk" });
+  await firstPreview;
+
+  assert.equal(refreshedPreview, "data:image/png;base64,bmV3");
+  assert.equal(
+    uploadedImagePreview.readUploadedImagePreviewCache("/workspace", uploadedFile),
+    "data:image/png;base64,bmV3",
   );
 });
 

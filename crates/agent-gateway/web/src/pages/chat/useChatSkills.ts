@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { type AppSettings, updateSkills } from "../../lib/settings";
 import {
   discoverSkills,
   isAlwaysEnabledSkillName,
   mergeAlwaysEnabledSkillNames,
   type SkillSummary,
   subscribeSkillsDiscoveryUpdated,
-} from "../../lib/skills";
+} from "@liveagent/ui/lib/skills/index";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { type AppSettings, updateSkills } from "../../lib/settings";
 
 type UseChatSkillsParams = {
   skillsEnabled: boolean;

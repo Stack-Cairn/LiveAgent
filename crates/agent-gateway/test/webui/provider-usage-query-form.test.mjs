@@ -3,7 +3,7 @@ import test from "node:test";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
-const forms = loader.loadModule("src/pages/settings/providerUtils.ts");
+const forms = loader.loadModule("@liveagent/ui/pages/settings/providerUtils.ts");
 
 const usageQuery = {
   enabled: true,

@@ -1,14 +1,13 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
-import { invoke } from "../../lib/tauriBridge";
-
 import {
   composePublicUrl,
   type TunnelHealth,
   type TunnelStateSnapshot,
   type TunnelStatus,
   type TunnelTtlSeconds,
-} from "../tunnels/constants";
+} from "@liveagent/ui/lib/tunnels/constants";
+import { invoke } from "../tauriBridge";
+import { Type } from "typebox";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
 
 export type TunnelChangeAction = "create" | "close" | "check";

@@ -1,5 +1,5 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import { HOOK_EVENT_TRANSLATION_KEYS } from "../../../lib/automation";
+import { HOOK_EVENT_TRANSLATION_KEYS } from "@liveagent/ui/lib/automation/index";
 import type { HookRunWarning } from "../../../lib/automation/hookRunner";
 import type { CompactionStatus } from "../../../lib/chat/compaction/types";
 import type { ConversationViewState } from "../../../lib/chat/conversation/conversationState";

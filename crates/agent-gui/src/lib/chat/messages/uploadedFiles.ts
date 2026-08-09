@@ -1,6 +1,6 @@
 import type { Message, UserMessage } from "@earendil-works/pi-ai";
-import { createUuid } from "../../shared/id";
-import { normalizeLogicalLineEndings } from "../composerText";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 
 export type UploadedReadableFileKind =
   | "text"

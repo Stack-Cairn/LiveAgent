@@ -1,15 +1,16 @@
-import { invoke, listen } from "../../lib/tauriBridge";
 import type {
   RawSshLocalForwardAction,
   RawSshLocalForwardEvent,
   RawSshLocalForwardSnapshot,
   SshLocalForwardClient,
-} from "./sshLocalForwardTypes";
+} from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
 import {
   normalizeSshLocalForwardAction,
   normalizeSshLocalForwardEvent,
   normalizeSshLocalForwardSnapshot,
-} from "./sshLocalForwardTypes";
+} from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
+import { invoke } from "../tauriBridge";
+import { listen } from "../tauriBridge";
 
 export const tauriSshLocalForwardClient: SshLocalForwardClient = {
   async list(params) {

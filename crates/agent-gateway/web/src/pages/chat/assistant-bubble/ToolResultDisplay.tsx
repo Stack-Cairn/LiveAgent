@@ -1,5 +1,22 @@
+import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
+import { FileToolArgsDisplay } from "@liveagent/ui/components/chat/FileToolArgs";
+import { sanitizeTodoItems, TodoListView } from "@liveagent/ui/components/chat/TodoListView";
+import {
+  type MetaTag,
+  MetaTags,
+  PathDisplay,
+  ToolFactGrid,
+  ToolScrollablePre,
+  ToolSurface,
+  ToolSurfaceLabel,
+} from "@liveagent/ui/components/chat/ToolSurfaces";
+import { Markdown } from "@liveagent/ui/components/Markdown";
+import type {
+  SubagentBatchDetails,
+  SubagentCardDetails,
+  SubagentMessageDetails,
+} from "@liveagent/ui/lib/subagents/protocol";
 import { Search } from "../../../components/icons";
-import { Markdown } from "../../../components/Markdown";
 import type { ToolResultMessage } from "../../../lib/agentTypes";
 import { deriveFileToolPreview } from "../../../lib/chat/toolPreview";
 import {
@@ -9,11 +26,6 @@ import {
   toolCallArgsForDisplay,
   toolResultMessageToText,
 } from "../../../lib/chat/uiMessages";
-import type {
-  SubagentBatchDetails,
-  SubagentCardDetails,
-  SubagentMessageDetails,
-} from "../../../lib/subagents/protocol";
 import type {
   DeleteResultDetails,
   EditResultDetails,
@@ -30,18 +42,6 @@ import type {
   TodoWriteResultDetails,
   WriteResultDetails,
 } from "../../../lib/tools/builtinTypes";
-import { EditDiffView } from "../EditDiffView";
-import { FileToolArgsDisplay } from "../FileToolArgs";
-import { sanitizeTodoItems, TodoListView } from "../TodoListView";
-import {
-  type MetaTag,
-  MetaTags,
-  PathDisplay,
-  ToolFactGrid,
-  ToolScrollablePre,
-  ToolSurface,
-  ToolSurfaceLabel,
-} from "../ToolSurfaces";
 import {
   displayString,
   getBuiltinResultKind,

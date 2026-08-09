@@ -1,9 +1,9 @@
+import type { WorkspaceCodeEditorOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceCodeEditorOverlay";
+import type { WorkspaceFilePreviewOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay";
+import type { WorkspaceSshTerminalOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceSshTerminalOverlay";
+import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
+import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { WorkspaceCodeEditorOpenRequest } from "../../../components/workspace-editor/WorkspaceCodeEditorOverlay";
-import type { WorkspaceFilePreviewOpenRequest } from "../../../components/workspace-editor/WorkspaceFilePreviewOverlay";
-import type { WorkspaceSshTerminalOpenRequest } from "../../../components/workspace-editor/WorkspaceSshTerminalOverlay";
-import { isWorkspacePreviewPath } from "../../../components/workspace-editor/workspaceImagePreview";
-import type { TerminalSession } from "../../../lib/terminal/types";
 
 type UseWorkspaceOverlaysParams = {
   terminalProjectPath: string;

@@ -1,5 +1,3 @@
-import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../../i18n/config";
-import { normalizeFontFamily } from "../fontFamily";
 import {
   findCatalogModel,
   getProviderFallbackLimits,
@@ -7,21 +5,27 @@ import {
   repairStaleCrossProviderLimits,
   resolveModelLimits,
   resolveModelLimitsAcrossProviders,
-} from "../models/modelCatalog";
+} from "@liveagent/ui/lib/models/modelCatalog";
 import {
   clampThinkingLevelToList,
   isAnthropicAdaptiveModelId,
   resolveModelThinking,
   type ThinkingLevel,
-} from "../models/modelThinking";
-import { createUuid } from "../shared/id";
-import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
+} from "@liveagent/ui/lib/models/modelThinking";
+import {
+  normalizeApiKey,
+  normalizeBaseUrl,
+  normalizeModels,
+} from "@liveagent/ui/lib/settings/normalize";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
+import { mergeAlwaysEnabledSkillNames } from "@liveagent/ui/lib/skills/builtin";
 import {
   DEFAULT_CHAT_TRANSCRIPT_WIDTH,
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
-} from "../transcript-width/transcriptWidthModel";
-import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
+} from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
+import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../../i18n/config";
+import { normalizeFontFamily } from "../fontFamily";
 
 export { normalizeFontFamily } from "../fontFamily";
 
@@ -37,6 +41,8 @@ export type McpTransport = "stdio" | "http" | "sse";
 
 export type McpServerConfig = {
   id: string;
+  description?: string;
+  docsUrl?: string;
   enabled: boolean;
   transport: McpTransport;
   command: string;
@@ -157,6 +163,62 @@ export type CustomSettings = {
   codeFontFamily: string;
   fontScale: FontScaleSettings;
 };
+
+/**
+ * cc-switch style automatic provider failover: an ordered fallback queue of
+ * same-vendor *providers* tried when the active model's request fails with a
+ * provider-fault-class error, plus circuit breaker knobs mirroring cc-switch's
+ * 失败阈值/冷却时间 settings.
+ *
+ * Failover switches providers, never models (matching cc-switch): the failed
+ * request is re-sent to the next provider in the queue with the *same model
+ * id* the conversation was using. Providers that don't have that model active
+ * are skipped at plan time.
+ *
+ * Failover is scoped per vendor type (mirroring cc-switch's Claude/Codex/
+ * Gemini app tabs): a Claude request only fails over to Claude providers, a
+ * Codex request only to Codex providers, never across vendors.
+ */
+export type ProviderFailoverSettings = {
+  enabled: boolean;
+  /** Ordered fallback provider ids (P1 → P2 → …), same vendor type only. */
+  queue: string[];
+  /** Max provider switches per request (attempts = switches + 1). */
+  maxSwitches: number;
+  /** Consecutive failures before a target's circuit breaker opens. */
+  failureThreshold: number;
+  /** Seconds an open breaker skips its target before a half-open probe. */
+  cooldownSeconds: number;
+};
+
+/** Per-vendor failover settings, keyed by the provider tab type. */
+export type ModelFailoverSettings = Record<ProviderId, ProviderFailoverSettings>;
+
+export const MODEL_FAILOVER_QUEUE_LIMIT = 8;
+
+export const PROVIDER_FAILOVER_TYPES: readonly ProviderId[] = [
+  "claude_code",
+  "codex",
+  "gemini",
+  "xai",
+];
+
+export const DEFAULT_PROVIDER_FAILOVER_SETTINGS: ProviderFailoverSettings = {
+  enabled: false,
+  queue: [],
+  maxSwitches: 3,
+  failureThreshold: 4,
+  cooldownSeconds: 60,
+};
+
+export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
+  return {
+    claude_code: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    codex: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    gemini: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    xai: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+  };
+}
 
 export type SystemProxyType = "socks5" | "http";
 
@@ -393,6 +455,7 @@ export type AppSettings = {
   remote: RemoteSettings;
   memory: MemorySettings;
   customSettings: CustomSettings;
+  modelFailover: ModelFailoverSettings;
   skills: SkillsSettings;
   chatRuntimeControls: ChatRuntimeControls;
   selectedModel?: SelectedModel;
@@ -1700,11 +1763,15 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
 export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const id = typeof obj.id === "string" ? obj.id.trim() : "";
+  const description = typeof obj.description === "string" ? obj.description.trim() : "";
+  const docsUrl = typeof obj.docsUrl === "string" ? obj.docsUrl.trim() : "";
   const cwd = typeof obj.cwd === "string" ? obj.cwd.trim() : "";
   const messageUrl = typeof obj.messageUrl === "string" ? obj.messageUrl.trim() : "";
 
   return {
     id,
+    ...(description ? { description } : {}),
+    ...(docsUrl ? { docsUrl } : {}),
     enabled: Boolean(obj.enabled),
     transport: normalizeMcpTransport(obj.transport),
     command: typeof obj.command === "string" ? obj.command.trim() : "",
@@ -2217,6 +2284,107 @@ export function normalizeCustomSettings(
   };
 }
 
+function clampFailoverInteger(input: unknown, min: number, max: number, fallback: number): number {
+  const value =
+    typeof input === "number" && Number.isFinite(input)
+      ? Math.round(input)
+      : typeof input === "string" && input.trim() !== ""
+        ? Math.round(Number(input))
+        : Number.NaN;
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Normalizes one vendor's failover config. Queue entries must reference an
+ * existing provider of `providerType` — cross-vendor entries (e.g. a Codex
+ * provider inside the Claude queue) are dropped so failover can never mix
+ * vendors.
+ *
+ * Legacy entry migration: the queue used to hold {customProviderId, model}
+ * objects. Those collapse to their provider id (deduped), because failover now
+ * always re-sends the conversation's own model to the fallback provider.
+ */
+export function normalizeProviderFailoverSettings(
+  input: unknown,
+  customProviders: CustomProvider[],
+  providerType: ProviderId,
+): ProviderFailoverSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const defaults = DEFAULT_PROVIDER_FAILOVER_SETTINGS;
+
+  const queue: string[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(obj.queue)) {
+    for (const raw of obj.queue) {
+      const providerId =
+        typeof raw === "string"
+          ? raw
+          : raw &&
+              typeof raw === "object" &&
+              typeof (raw as SelectedModel).customProviderId === "string"
+            ? (raw as SelectedModel).customProviderId
+            : "";
+      if (!providerId) continue;
+      const provider = customProviders.find((item) => item.id === providerId);
+      if (!provider || provider.type !== providerType) continue;
+      if (seen.has(providerId)) continue;
+      seen.add(providerId);
+      queue.push(providerId);
+      if (queue.length >= MODEL_FAILOVER_QUEUE_LIMIT) break;
+    }
+  }
+
+  return {
+    // An enabled toggle with an empty queue is a harmless no-op at runtime;
+    // keep the user's toggle state instead of silently flipping it off.
+    enabled: obj.enabled === true,
+    queue,
+    maxSwitches: clampFailoverInteger(obj.maxSwitches, 1, 10, defaults.maxSwitches),
+    failureThreshold: clampFailoverInteger(obj.failureThreshold, 1, 10, defaults.failureThreshold),
+    cooldownSeconds: clampFailoverInteger(obj.cooldownSeconds, 5, 3600, defaults.cooldownSeconds),
+  };
+}
+
+/** True for the pre-per-vendor persisted shape ({enabled, queue, ...}). */
+function isLegacyFlatModelFailoverShape(obj: Record<string, unknown>): boolean {
+  return (
+    !PROVIDER_FAILOVER_TYPES.some((type) => type in obj) &&
+    ("enabled" in obj || "queue" in obj || "maxSwitches" in obj)
+  );
+}
+
+export function normalizeModelFailoverSettings(
+  input: unknown,
+  customProviders: CustomProvider[],
+): ModelFailoverSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+
+  // Legacy migration: the old single global config becomes each vendor's
+  // config. Cross-vendor queue entries are filtered per tab by the per-vendor
+  // normalizer, so a mixed legacy queue splits cleanly into its vendors.
+  if (isLegacyFlatModelFailoverShape(obj)) {
+    const result = getDefaultModelFailoverSettings();
+    for (const type of PROVIDER_FAILOVER_TYPES) {
+      const migrated = normalizeProviderFailoverSettings(obj, customProviders, type);
+      // Only vendors that actually kept queue entries stay enabled; an empty
+      // migrated queue with enabled=true would surface confusing "on but
+      // empty" warnings on tabs the user never configured.
+      result[type] = {
+        ...migrated,
+        enabled: migrated.enabled && migrated.queue.length > 0,
+      };
+    }
+    return result;
+  }
+
+  const result = getDefaultModelFailoverSettings();
+  for (const type of PROVIDER_FAILOVER_TYPES) {
+    result[type] = normalizeProviderFailoverSettings(obj[type], customProviders, type);
+  }
+  return result;
+}
+
 export function getDefaultSettings(): AppSettings {
   const customProviders = getBuiltinCustomProviders();
   return {
@@ -2255,6 +2423,7 @@ export function getDefaultSettings(): AppSettings {
     },
     memory: normalizeMemorySettings({}, customProviders),
     customSettings: normalizeCustomSettings({}, customProviders),
+    modelFailover: normalizeModelFailoverSettings({}, customProviders),
     skills: {
       enabled: true,
       selected: mergeAlwaysEnabledSkillNames([]),
@@ -2287,6 +2456,10 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
     memory: normalizeMemorySettings(obj.memory ?? defaults.memory, customProviders),
     customSettings: normalizeCustomSettings(
       obj.customSettings ?? defaults.customSettings,
+      customProviders,
+    ),
+    modelFailover: normalizeModelFailoverSettings(
+      obj.modelFailover ?? defaults.modelFailover,
       customProviders,
     ),
     skills: normalizeSkillsSettings(obj.skills ?? defaults.skills),
@@ -2432,6 +2605,23 @@ export function updateCustomSettings(
     customSettings: {
       ...prev.customSettings,
       ...patch,
+    },
+  });
+}
+
+export function updateModelFailover(
+  prev: AppSettings,
+  providerType: ProviderId,
+  patch: Partial<ProviderFailoverSettings>,
+): AppSettings {
+  return normalizeSettings({
+    ...prev,
+    modelFailover: {
+      ...prev.modelFailover,
+      [providerType]: {
+        ...prev.modelFailover[providerType],
+        ...patch,
+      },
     },
   });
 }

@@ -1,5 +1,5 @@
 import type { ToolCall } from "@earendil-works/pi-ai";
-import { createUuid } from "../../shared/id";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 
 const FLATTENED_TOOL_REQUEST_LABELS = [
   "Previous assistant tool request:",

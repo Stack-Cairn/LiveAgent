@@ -5,17 +5,17 @@ import type {
   ToolResultMessage,
   Usage,
 } from "@earendil-works/pi-ai";
+import {
+  buildSubagentCardToolCallId,
+  type SubagentBatchDetails,
+  type SubagentCardDetails,
+} from "@liveagent/ui/lib/subagents/protocol";
 import { assistantMessageToText } from "../../providers/llm";
 import {
   isProviderNativeWebFetchToolName,
   isProviderNativeWebSearchToolName,
 } from "../../providers/nativeWebSearch";
 import { isSubagentCardToolCall } from "../../subagents/card";
-import {
-  buildSubagentCardToolCallId,
-  type SubagentBatchDetails,
-  type SubagentCardDetails,
-} from "../../subagents/protocol";
 import { GLOBAL_BASH_MAX_TIMEOUT_MS, MIN_BASH_TIMEOUT_MS } from "../../tools/bashTimeoutPolicy";
 import {
   enrichHostedSearchContentWithText,

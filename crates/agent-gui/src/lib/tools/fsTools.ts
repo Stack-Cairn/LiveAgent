@@ -5,8 +5,9 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
+import { invokeFs, isFsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
+import { invoke } from "../tauriBridge";
 import { Type } from "typebox";
-import { invoke } from "../../lib/tauriBridge";
 import {
   type BuiltinToolBundle,
   type BuiltinToolResultDetails,
@@ -27,7 +28,6 @@ import {
   type WriteResultDetails,
 } from "./builtinTypes";
 import type { FileToolState } from "./fileToolState";
-import { invokeFs, isFsBackendError } from "./fsBackend";
 import { buildFsErrorText, buildRequiresFullReadText, buildWriteDirectoryText } from "./pathErrors";
 import { formatResolvedTarget, type ResolvedPath, ToolPathResolver } from "./pathUtils";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";

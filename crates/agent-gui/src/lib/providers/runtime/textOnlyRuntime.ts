@@ -21,6 +21,12 @@ import { createStreamingTextReconciler } from "./messageUtils";
 import { createModelFromConfig } from "./modelFactory";
 import { finalizeProviderStreamOptions } from "./payloadPipeline";
 import {
+  failoverBreakerKey,
+  type ModelFailoverRuntimeConfig,
+  type ProviderFailoverCandidate,
+  withProviderFailover,
+} from "./providerFailover";
+import {
   buildProviderRequestMetadata,
   prepareProviderRequest,
   resolveProviderCacheRetention,
@@ -120,6 +126,28 @@ function buildTextOnlyStreamOptions(params: {
   });
 }
 
+export type TextStreamFailoverTarget = {
+  /** Stable identity used for breaker keys and switch callbacks. */
+  selectedModel: { customProviderId: string; model: string };
+  providerId: ProviderId;
+  model: string;
+  /** Display label, e.g. "PackyCode · claude-sonnet-4-5". */
+  label: string;
+  runtime: ProviderRuntimeConfig;
+};
+
+export type TextStreamFailoverParams = {
+  config: ModelFailoverRuntimeConfig;
+  /** Identity of the primary target described by params.providerId/model/runtime. */
+  primary: { selectedModel?: { customProviderId: string; model: string }; label: string };
+  /** Fallback targets in failover-queue order, primary duplicates removed. */
+  fallbacks: TextStreamFailoverTarget[];
+  /** Fired when an attempt commits on a different target than the previous ones. */
+  onSwitched?: (event: { target: TextStreamFailoverTarget | null; errorMessage: string }) => void;
+  /** Fired before each switch, including a skip of an open-breaker primary. */
+  onFailover?: (event: { fromLabel: string; toLabel: string; errorMessage: string }) => void;
+};
+
 export async function streamAssistantMessage(params: {
   providerId: ProviderId;
   model: string;
@@ -136,6 +164,7 @@ export async function streamAssistantMessage(params: {
   onHostedSearch?: (block: HostedSearchBlock) => void;
   onRetryStatus?: (attempt: number, maxAttempts: number, errorMessage: string) => void;
   onRetryRecovered?: () => void;
+  failover?: TextStreamFailoverParams;
 }) {
   const modelId = params.model.trim();
   if (!modelId) throw new Error("No model selected");
@@ -192,6 +221,165 @@ export async function streamAssistantMessage(params: {
     }),
   );
 
+  // ---- Provider auto-failover (text mode) --------------------------------
+  // Mirrors runAssistantWithTools' per-round wiring: target 0 is the primary
+  // (params.providerId/model/runtime), the rest map to failover.fallbacks in
+  // queue order. Fallback proxy/model preparation is lazy so unused fallbacks
+  // never touch the hot path. Sticky winner: recovery turns within this call
+  // start on the target that actually answered.
+  const failover = params.failover;
+  const primaryFailoverKey = failover?.primary.selectedModel
+    ? failoverBreakerKey(
+        failover.primary.selectedModel.customProviderId,
+        failover.primary.selectedModel.model,
+      )
+    : failoverBreakerKey(params.providerId, modelId);
+  const primaryFailoverLabel = failover?.primary.label ?? `${params.providerId} · ${modelId}`;
+
+  type PreparedTextFailoverTarget = {
+    model: ReturnType<typeof createModelFromConfig>;
+    options: StreamOptionsEx;
+  };
+  const preparedFallbackTargets = new Map<number, Promise<PreparedTextFailoverTarget>>();
+  const prepareFallbackTarget = (index: number): Promise<PreparedTextFailoverTarget> => {
+    const existing = preparedFallbackTargets.get(index);
+    if (existing) return existing;
+    const fallback = failover?.fallbacks[index - 1];
+    if (!fallback) {
+      return Promise.reject(new Error(`Unknown failover target index: ${index}`));
+    }
+    const prepared = (async () => {
+      const fallbackProxyRequest = await prepareProviderRequest(
+        fallback.providerId,
+        fallback.runtime,
+        { sessionId: params.sessionId },
+      );
+      const fallbackModel = createModelFromConfig(
+        fallback.providerId,
+        fallback.model,
+        fallbackProxyRequest.baseUrl,
+        fallback.runtime.requestFormat,
+        fallback.runtime.modelConfig,
+        fallback.runtime.baseUrl.trim(),
+      );
+      return {
+        model: fallbackModel,
+        options: buildTextOnlyStreamOptions({
+          providerId: fallback.providerId,
+          runtime: fallback.runtime,
+          model: fallbackModel,
+          context: callContext,
+          workdir: params.workdir,
+          headers: fallbackProxyRequest.headers,
+          hostedSearchProbeId,
+          signal: params.signal,
+          sessionId: params.sessionId,
+          cacheRetention: params.cacheRetention,
+          nativeWebSearch: params.nativeWebSearch,
+          debugLogger: params.debugLogger,
+          onRetryStatus: params.onRetryStatus,
+          onRetryRecovered: params.onRetryRecovered,
+        }),
+      } satisfies PreparedTextFailoverTarget;
+    })();
+    // A failed preparation must not be cached forever; allow later retries.
+    preparedFallbackTargets.set(
+      index,
+      prepared.catch((error) => {
+        preparedFallbackTargets.delete(index);
+        throw error;
+      }),
+    );
+    return preparedFallbackTargets.get(index) as Promise<PreparedTextFailoverTarget>;
+  };
+
+  /** Cheap, IO-free model identity for failover bookkeeping/synthesis. */
+  const fallbackTargetIdentity = (index: number) => {
+    const fallback = failover?.fallbacks[index - 1];
+    if (!fallback) return { api: m.api, provider: m.provider, id: m.id };
+    const identity = createModelFromConfig(
+      fallback.providerId,
+      fallback.model,
+      fallback.runtime.baseUrl.trim(),
+      fallback.runtime.requestFormat,
+      fallback.runtime.modelConfig,
+      fallback.runtime.baseUrl.trim(),
+    );
+    return { api: identity.api, provider: identity.provider, id: identity.id };
+  };
+
+  let activeFailoverTargetIndex = 0;
+  let lastFailoverErrorMessage = "";
+
+  const startAttemptStream = (activeContext: Context) => {
+    if (!failover || failover.fallbacks.length === 0) {
+      return streamSimpleByApi(m, activeContext, options);
+    }
+    // Candidate order: sticky active target first, then the rest in
+    // primary→queue order. Breaker-open targets are skipped inside
+    // withProviderFailover.
+    const totalTargets = failover.fallbacks.length + 1;
+    const targetOrder = [
+      activeFailoverTargetIndex,
+      ...Array.from({ length: totalTargets }, (_, i) => i).filter(
+        (i) => i !== activeFailoverTargetIndex,
+      ),
+    ];
+    const candidates = targetOrder.map((targetIndex) => {
+      const fallback = targetIndex === 0 ? null : failover.fallbacks[targetIndex - 1];
+      return {
+        key:
+          targetIndex === 0
+            ? primaryFailoverKey
+            : failoverBreakerKey(
+                fallback?.selectedModel.customProviderId ?? "",
+                fallback?.selectedModel.model ?? "",
+              ),
+        label: targetIndex === 0 ? primaryFailoverLabel : (fallback?.label ?? ""),
+        model:
+          targetIndex === 0
+            ? { api: m.api, provider: m.provider, id: m.id }
+            : fallbackTargetIdentity(targetIndex),
+        start: async () => {
+          if (targetIndex === 0 || !fallback) {
+            return streamSimpleByApi(m, activeContext, options);
+          }
+          const prepared = await prepareFallbackTarget(targetIndex);
+          params.debugLogger?.logRequest(
+            buildStreamRequestDebugPayload({
+              runtime: fallback.runtime,
+              context: callContext,
+              options: prepared.options,
+            }),
+          );
+          return streamSimpleByApi(prepared.model, activeContext, prepared.options);
+        },
+      } satisfies ProviderFailoverCandidate;
+    });
+    return withProviderFailover(candidates, {
+      config: failover.config,
+      signal: params.signal,
+      onFailover: (event) => {
+        lastFailoverErrorMessage = event.errorMessage;
+        failover.onFailover?.({
+          fromLabel: event.fromLabel,
+          toLabel: event.toLabel,
+          errorMessage: event.errorMessage,
+        });
+      },
+      onCommitted: (candidateIndex) => {
+        const targetIndex = targetOrder[candidateIndex] ?? activeFailoverTargetIndex;
+        if (targetIndex === activeFailoverTargetIndex) return;
+        activeFailoverTargetIndex = targetIndex;
+        failover.onSwitched?.({
+          target: targetIndex === 0 ? null : (failover.fallbacks[targetIndex - 1] ?? null),
+          errorMessage: lastFailoverErrorMessage,
+        });
+      },
+    });
+  };
+  // ------------------------------------------------------------------------
+
   return withPowerActivity("assistant-stream", `${params.providerId}:${modelId}`, async () => {
     const orderedBlocks: HostedSearchOrderedBlock[] = [];
     const appendOrderedText = (delta: string) => {
@@ -239,7 +427,7 @@ export async function streamAssistantMessage(params: {
     try {
       let activeContext = callContext;
       for (let toolRecoveryTurn = 0; toolRecoveryTurn < 4; toolRecoveryTurn += 1) {
-        const s = streamSimpleByApi(m, activeContext, options);
+        const s = startAttemptStream(activeContext);
         const textReconciler = createStreamingTextReconciler();
 
         for await (const event of s) {

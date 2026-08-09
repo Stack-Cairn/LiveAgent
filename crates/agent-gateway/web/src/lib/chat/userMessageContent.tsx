@@ -1,4 +1,7 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type FocusEvent,
   type MouseEvent,
@@ -11,10 +14,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { getFileTypeIcon } from "../../components/chat/fileTypeIcons";
 import { SkillIcon } from "../../components/icons";
-import { useLocale } from "../../i18n";
-import { normalizeLogicalLineEndings } from "./composerText";
 
 import {
   type CodeMentionReference,
@@ -65,7 +65,7 @@ export function isSkillMentionToken(token: string) {
   return Boolean(name) && isSkillMentionName(name) && !isCommonSkillMentionEnvVar(name);
 }
 
-type UserMessageSegment =
+export type UserMessageSegment =
   | { type: "text"; value: string }
   | { type: "mention"; path: string; isDir: boolean }
   | { type: "skill"; name: string }
@@ -163,16 +163,22 @@ function markdownFileReference(label: string, rawDestination: string) {
   if (!reference) return null;
 
   const fileName = reference.path.split("/").pop() || reference.path;
-  const expectedLabel = reference.isDir ? `${fileName}/` : fileName;
-  if (unescapeMarkdown(label.trim()) !== expectedLabel) return null;
+  if (unescapeMarkdown(label.trim()) !== fileName) return null;
 
   return reference;
 }
 
-function extractGitHubCommitSha(value: string) {
+function isGitHubHttpUrl(url: URL) {
+  return (
+    (url.protocol === "https:" || url.protocol === "http:") &&
+    ["github.com", "www.github.com"].includes(url.hostname.toLowerCase())
+  );
+}
+
+export function extractGitHubCommitSha(value: string) {
   try {
     const url = new URL(value);
-    if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) return "";
+    if (!isGitHubHttpUrl(url)) return "";
     const parts = url.pathname.split("/").filter(Boolean);
     const commitIndex = parts.findIndex((part) => part.toLowerCase() === "commit");
     const sha = commitIndex >= 0 ? (parts[commitIndex + 1] ?? "") : "";
@@ -206,10 +212,10 @@ export function buildGitHubCommitUrl(remoteUrl: string, sha: string) {
   }
 }
 
-function extractGitHubFileReference(value: string) {
+export function extractGitHubFileReference(value: string) {
   try {
     const url = new URL(value);
-    if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) return null;
+    if (!isGitHubHttpUrl(url)) return null;
     const parts = url.pathname.split("/").filter(Boolean);
     const blobIndex = parts.findIndex((part) => part.toLowerCase() === "blob");
     const ref = blobIndex >= 0 ? (parts[blobIndex + 1] ?? "") : "";
@@ -479,7 +485,7 @@ function tokenizeMentions(text: string): UserMessageSegment[] {
   return segments.length > 0 ? segments : tokenizeInlineMentions(text);
 }
 
-function tokenizeUserMessage(
+export function tokenizeUserMessage(
   text: string,
   pastedTextFiles: PendingUploadedFile[],
 ): UserMessageSegment[] {

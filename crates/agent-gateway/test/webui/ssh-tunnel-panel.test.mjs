@@ -3,7 +3,7 @@ import test from "node:test";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
-const panel = loader.loadModule("@/components/project-tools/SshTunnelPanel.tsx");
+const panel = loader.loadModule("@liveagent/ui/components/project-tools/SshTunnelPanel.tsx");
 
 function host(overrides = {}) {
   return {
@@ -60,7 +60,7 @@ test("SSH tunnel panel does not disable hosts only because proxy is configured",
   assert.equal(panel.hostStatusMessage(proxyHost, (key) => key), "");
 });
 
-const forwarding = loader.loadModule("@/lib/terminal/sshLocalForwardTypes.ts");
+const forwarding = loader.loadModule("@liveagent/ui/lib/terminal/sshLocalForwardTypes.ts");
 
 test("SSH local forwarding validates remote host and ports", () => {
   assert.deepEqual(forwarding.validateSshLocalForwardTarget(" db.internal ", "5432"), {

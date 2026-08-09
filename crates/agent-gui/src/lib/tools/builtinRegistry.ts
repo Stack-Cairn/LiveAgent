@@ -1,5 +1,6 @@
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { homeDir } from "../../lib/tauriBridge";
+import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
+import { homeDir } from "../tauriBridge";
 import type { RuntimePlatform } from "../runtimePlatform";
 import {
   type McpSettings,
@@ -30,7 +31,6 @@ import { createShellTools } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
 import { createSSHManagerTools, type SshManagerSessionChange } from "./sshManagerTools";
-import type { SystemToolRuntimeScope } from "./systemToolOptions";
 import { createTerminalTools } from "./terminalTools";
 import { createTodoTools, type TodoToolState } from "./todoTools";
 import { createTunnelManagerTools, type TunnelManagerChange } from "./tunnelManagerTools";

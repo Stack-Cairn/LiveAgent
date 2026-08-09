@@ -15,12 +15,11 @@ function createCardModule(rootDir) {
   const requireFromRoot = createRequire(path.join(rootDir, "package.json"));
   const jsxRuntime = requireFromRoot("react/jsx-runtime");
   const { renderToStaticMarkup } = requireFromRoot("react-dom/server");
-  const resolveSource = (relativePath) => path.join(rootDir, "src", relativePath);
   const loader = createTsModuleLoader({
     rootDir,
     mocks: {
       "react/jsx-runtime": jsxRuntime,
-      [resolveSource("i18n/index.ts")]: {
+      "@liveagent/ui/i18n/index": {
         useLocale() {
           return {
             t(key) {
@@ -29,17 +28,17 @@ function createCardModule(rootDir) {
           };
         },
       },
-      [resolveSource("components/icons.tsx")]: {
+      "@liveagent/app/components/icons": {
         FilePenLine: NullIcon,
         FolderTree: NullIcon,
         GitCommitHorizontal: NullIcon,
       },
-      [resolveSource("components/chat/fileTypeIcons.tsx")]: {
+      "@liveagent/ui/components/chat/fileTypeIcons": {
         getFileTypeIcon() {
           return NullIcon;
         },
       },
-      [resolveSource("components/chat/FileChangeBadge.tsx")]: {
+      "@liveagent/ui/components/chat/FileChangeBadge": {
         FileChangeBadge() {
           return null;
         },
@@ -48,7 +47,7 @@ function createCardModule(rootDir) {
   });
 
   return {
-    cardModule: loader.loadModule("src/components/chat/ChangedFilesCard.tsx"),
+    cardModule: loader.loadModule("@liveagent/ui/components/chat/ChangedFilesCard.tsx"),
     jsxRuntime,
     renderToStaticMarkup,
   };

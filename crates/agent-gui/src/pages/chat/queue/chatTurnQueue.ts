@@ -1,4 +1,4 @@
-import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
+import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
 import type {
@@ -87,7 +87,7 @@ export function buildQueuedChatTurnPreview(draft: MentionComposerDraft) {
       case "largePaste":
         return segment.paste.label;
       case "skillMention":
-        return `$${segment.skill.name}`;
+        return `/${segment.skill.name}`;
       case "commitMention":
         return segment.commit.subject || segment.commit.shortSha || segment.commit.sha;
       case "gitFileMention":

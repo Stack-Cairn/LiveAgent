@@ -4,7 +4,7 @@ import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
-const workspaceProjects = loader.loadModule("src/lib/workspaceProjects.ts");
+const workspaceProjects = loader.loadModule("@liveagent/ui/lib/workspaceProjects.ts");
 
 function project(id, path, index) {
   return {

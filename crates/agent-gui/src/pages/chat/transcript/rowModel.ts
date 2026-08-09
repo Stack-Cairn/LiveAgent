@@ -1,3 +1,10 @@
+import { isTodoWriteToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
+import {
+  CHECKPOINT_ROW_ESTIMATE_PX,
+  estimateAssistantRowHeight,
+  estimateUserRowHeight,
+  measureEstimateText,
+} from "@liveagent/ui/lib/transcript-virtual/rowEstimates";
 import type {
   RenderSummaryCard,
   RenderTimelineItem,
@@ -5,13 +12,6 @@ import type {
 } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptState } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { getRoundText, type LiveRound, type UiRound } from "../../../lib/chat/messages/uiMessages";
-import { isTodoWriteToolBlock } from "../../../lib/chat/taskProgress";
-import {
-  CHECKPOINT_ROW_ESTIMATE_PX,
-  estimateAssistantRowHeight,
-  estimateUserRowHeight,
-  measureEstimateText,
-} from "../../../lib/transcript-virtual/rowEstimates";
 import {
   type GroupedRoundBlock,
   groupRoundBlocks,
@@ -65,9 +65,14 @@ export type AssistantFooterRenderUnit = {
   hasChangedFilesCandidate: boolean;
 };
 
+export type AssistantStatusRenderUnit = {
+  kind: "status";
+};
+
 export type AssistantRenderUnit =
   | AssistantBlockRenderUnit
   | AssistantPlaceholderRenderUnit
+  | AssistantStatusRenderUnit
   | AssistantFooterRenderUnit;
 
 export type AssistantUnitRow = {
@@ -87,12 +92,24 @@ export type AssistantUnitRow = {
   unit: AssistantRenderUnit;
 };
 
-export type TranscriptRow = SummaryRow | UserRow | AssistantUnitRow;
+export type AssistantActivityRow = {
+  kind: "assistant-activity";
+  key: string;
+  replyKey: string;
+  estimate: number;
+  renderCost: number;
+  gapAfter: number;
+  anchorUserKey: string | null;
+  live: boolean;
+  units: AssistantUnitRow[];
+};
+
+export type TranscriptRow = SummaryRow | UserRow | AssistantUnitRow | AssistantActivityRow;
 
 export type TranscriptRowsSnapshot = {
   rows: TranscriptRow[];
-  // Exactly one mutable live tail unit is force-mounted. Completed units from
-  // the same streaming reply remain ordinary virtual rows.
+  // Exactly one stable activity row is force-mounted for the active reply.
+  // Its completed and mutable child units reconcile inside that outer row.
   liveStartIndex: number;
 };
 
@@ -248,6 +265,33 @@ function canReuseLiveUnit(previous: AssistantUnitRow, next: AssistantUnitRow) {
   );
 }
 
+function buildAssistantActivityRow(
+  replyKey: string,
+  units: AssistantUnitRow[],
+): AssistantActivityRow {
+  const lastIndex = units.length - 1;
+  return {
+    kind: "assistant-activity",
+    key: `${replyKey}:activity`,
+    replyKey,
+    estimate: units.reduce(
+      (total, unit, index) => total + unit.estimate + (index < lastIndex ? unit.gapAfter : 0),
+      0,
+    ),
+    renderCost: Math.min(
+      32,
+      Math.max(
+        1,
+        units.reduce((total, unit) => total + unit.renderCost, 0),
+      ),
+    ),
+    gapAfter: units.at(-1)?.gapAfter ?? TRANSCRIPT_ROW_GAP_PX,
+    anchorUserKey: units[0]?.anchorUserKey ?? null,
+    live: units.some((unit) => unit.live),
+    units,
+  };
+}
+
 type BuildAssistantUnitsInput = {
   replyKey: string;
   live: boolean;
@@ -277,7 +321,7 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
   const isAborted = rounds.some((round) => round.meta?.stopReason === "aborted");
   const rows: AssistantUnitRow[] = [];
 
-  rounds.forEach((round, roundIndex) => {
+  rounds.forEach((round) => {
     const groupedBlocks = groupRoundBlocks(round.blocks).filter(isVisibleGroupedBlock);
     const runningToolCallIds = "runningToolCallIds" in round ? round.runningToolCallIds : [];
     const roundHasRunningToolCall = hasRunningToolCall(groupedBlocks, runningToolCallIds);
@@ -319,33 +363,23 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
         },
       });
     });
-
-    if (live && roundIndex === rounds.length - 1 && groupedBlocks.length === 0) {
-      rows.push({
-        kind: "assistant-unit",
-        key: `${replyKey}:round:${round.key}:placeholder`,
-        replyKey,
-        estimate: 64,
-        renderCost: 1,
-        gapAfter: TRANSCRIPT_ROW_GAP_PX,
-        anchorUserKey,
-        live: true,
-        mutable: true,
-        renderMode,
-        compacted,
-        showAvatar: rows.length === 0,
-        isAborted,
-        unit: { kind: "placeholder", showFallbackStatus: false },
-      });
-    }
   });
 
-  if (live && rows.length === 0) {
+  if (live) {
+    const contentTailIndex = rows.length - 1;
+    const contentTail = rows[contentTailIndex];
+    if (contentTail) {
+      rows[contentTailIndex] = {
+        ...contentTail,
+        gapAfter: ASSISTANT_UNIT_GAP_PX,
+        mutable: true,
+      };
+    }
     rows.push({
       kind: "assistant-unit",
-      key: `${replyKey}:placeholder`,
+      key: `${replyKey}:footer`,
       replyKey,
-      estimate: 64,
+      estimate: rows.length === 0 ? 64 : 32,
       renderCost: 1,
       gapAfter: TRANSCRIPT_ROW_GAP_PX,
       anchorUserKey,
@@ -353,21 +387,10 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
       mutable: true,
       renderMode,
       compacted,
-      showAvatar: true,
+      showAvatar: rows.length === 0,
       isAborted,
-      unit: { kind: "placeholder", showFallbackStatus: true },
+      unit: { kind: "status" },
     });
-  } else if (live) {
-    const tailIndex = rows.length - 1;
-    const tail = rows[tailIndex];
-    if (tail) {
-      rows[tailIndex] = {
-        ...tail,
-        estimate: tail.estimate + 36,
-        gapAfter: TRANSCRIPT_ROW_GAP_PX,
-        mutable: true,
-      };
-    }
   } else {
     const changedFilesCandidate = hasChangedFilesCandidate(rounds);
     const contentTailIndex = rows.length - 1;
@@ -446,8 +469,11 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     replyKey: string;
     historyLenAtStart: number;
     liveUnitCache: Map<string, AssistantUnitRow>;
+    lastLiveUnits: AssistantUnitRow[];
+    settlingUnits: AssistantUnitRow[] | null;
   } | null = null;
   let pendingSettle: { replyKey: string; historyLenAtStart: number } | null = null;
+  let deferredSettles: { replyKey: string; historyLenAtStart: number }[] = [];
   let draftRoundCache: { text: string; round: LiveRound } | null = null;
 
   const reset = () => {
@@ -459,6 +485,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     turnSeq = 0;
     activeTurn = null;
     pendingSettle = null;
+    deferredSettles = [];
     draftRoundCache = null;
   };
 
@@ -484,7 +511,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
   ) => {
     for (let index = historyItems.length - 1; index >= turn.historyLenAtStart; index -= 1) {
       const item = historyItems[index];
-      if (item?.kind === "assistant") {
+      if (item?.kind === "assistant" && !streamOrigins.has(item.key)) {
         streamOrigins.set(item.key, turn.replyKey);
         if (rowCache.has(item)) {
           rowCache.delete(item);
@@ -533,7 +560,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
       ];
     } else {
       const originKey = streamOrigins.get(item.key);
-      rows = buildAssistantUnits({
+      const assistantUnits = buildAssistantUnits({
         replyKey: originKey ?? item.key,
         live: false,
         renderMode: originKey ? "streaming" : "static",
@@ -544,6 +571,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         retryTarget,
         anchorUserKey,
       });
+      rows = originKey ? [buildAssistantActivityRow(originKey, assistantUnits)] : assistantUnits;
     }
     rowCache.set(item, { anchorUserKey, retryTarget, rows });
     return rows;
@@ -557,23 +585,42 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     const isInitialBuild = !hasBuilt;
     hasBuilt = true;
 
-    if (liveTailVisible && !activeTurn) {
+    if (liveTailVisible && pendingSettle && activeTurn) {
+      if (!adoptSettledTwin(historyItems, pendingSettle)) {
+        deferredSettles.push(pendingSettle);
+      }
       pendingSettle = null;
       activeTurn = {
         replyKey: `live-turn-${++turnSeq}`,
         historyLenAtStart: historyItems.length,
         liveUnitCache: new Map(),
+        lastLiveUnits: [],
+        settlingUnits: null,
+      };
+    } else if (liveTailVisible && !activeTurn) {
+      pendingSettle = null;
+      activeTurn = {
+        replyKey: `live-turn-${++turnSeq}`,
+        historyLenAtStart: historyItems.length,
+        liveUnitCache: new Map(),
+        lastLiveUnits: [],
+        settlingUnits: null,
       };
     } else if (!liveTailVisible && activeTurn) {
-      if (!adoptSettledTwin(historyItems, activeTurn)) {
+      const adopted = adoptSettledTwin(historyItems, activeTurn);
+      if (!adopted) {
         pendingSettle = {
           replyKey: activeTurn.replyKey,
           historyLenAtStart: activeTurn.historyLenAtStart,
         };
       }
-      activeTurn = null;
+      if (adopted) activeTurn = null;
     } else if (!liveTailVisible && pendingSettle) {
       if (adoptSettledTwin(historyItems, pendingSettle)) pendingSettle = null;
+    }
+
+    if (deferredSettles.length > 0) {
+      deferredSettles = deferredSettles.filter((turn) => !adoptSettledTwin(historyItems, turn));
     }
 
     const bornKeys: string[] = [];
@@ -601,27 +648,42 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
 
     let rows = historyRows;
     let liveStartIndex = -1;
-    if (liveTailVisible && activeTurn) {
-      const rounds: (UiRound | LiveRound)[] =
-        live.liveRounds.length > 0
-          ? live.liveRounds
-          : live.draftAssistantText
-            ? [draftRound(live.draftAssistantText)]
-            : [];
-      const liveRows = buildAssistantUnits({
-        replyKey: activeTurn.replyKey,
-        live: true,
-        renderMode: "streaming",
-        rounds,
-        compacted: false,
-        replyText: "",
-        retryTarget: null,
-        anchorUserKey: historyRows.at(-1)?.anchorUserKey ?? null,
-        liveUnitCache: activeTurn.liveUnitCache,
-      });
-      rows = [...historyRows, ...liveRows];
+    if ((liveTailVisible || pendingSettle) && activeTurn) {
+      let liveUnits = activeTurn.lastLiveUnits;
+      if (liveTailVisible) {
+        const rounds: (UiRound | LiveRound)[] =
+          live.liveRounds.length > 0
+            ? live.liveRounds
+            : live.draftAssistantText
+              ? [draftRound(live.draftAssistantText)]
+              : [];
+        liveUnits = buildAssistantUnits({
+          replyKey: activeTurn.replyKey,
+          live: true,
+          renderMode: "streaming",
+          rounds,
+          compacted: false,
+          replyText: "",
+          retryTarget: null,
+          anchorUserKey: historyRows.at(-1)?.anchorUserKey ?? null,
+          liveUnitCache: activeTurn.liveUnitCache,
+        });
+        activeTurn.lastLiveUnits = liveUnits;
+        activeTurn.settlingUnits = null;
+      } else {
+        if (!activeTurn.settlingUnits) {
+          activeTurn.settlingUnits = activeTurn.lastLiveUnits.map((row) => ({
+            ...row,
+            live: false,
+            mutable: false,
+          }));
+        }
+        liveUnits = activeTurn.settlingUnits;
+      }
+      const liveActivity = buildAssistantActivityRow(activeTurn.replyKey, liveUnits);
+      rows = [...historyRows, liveActivity];
       liveStartIndex = rows.length - 1;
-      for (const row of liveRows) trackBirth(row.key);
+      trackBirth(liveActivity.key);
     }
 
     if (bornKeys.length > 0 || isInitialBuild) {

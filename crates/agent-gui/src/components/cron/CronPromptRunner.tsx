@@ -1,6 +1,13 @@
 import type { Context } from "@earendil-works/pi-ai";
+import type { CompletePromptRunInput, PromptRunRequest } from "@liveagent/ui/lib/automation/index";
+import {
+  buildSkillsSystemPrompt,
+  discoverSkills,
+  isAlwaysEnabledSkillName,
+  type SkillSummary,
+} from "@liveagent/ui/lib/skills/index";
+import { listen } from "../../lib/tauriBridge";
 import { useEffect, useRef } from "react";
-import type { CompletePromptRunInput, PromptRunRequest } from "../../lib/automation";
 import { backend } from "../../lib/automation/backend";
 import { runAssistantWithTools } from "../../lib/chat/runner/agentRunner";
 import { createStreamDebugLogger } from "../../lib/debug/agentDebug";
@@ -13,13 +20,6 @@ import {
   isAgentExecutionMode,
   type ReasoningLevel,
 } from "../../lib/settings";
-import {
-  buildSkillsSystemPrompt,
-  discoverSkills,
-  isAlwaysEnabledSkillName,
-  type SkillSummary,
-} from "../../lib/skills";
-import { listen } from "../../lib/tauriBridge";
 import { buildBuiltinToolRegistry } from "../../lib/tools/builtinRegistry";
 import { createFileToolState } from "../../lib/tools/fileToolState";
 import type { SkillAccessPolicy } from "../../lib/tools/skillAccessPolicy";

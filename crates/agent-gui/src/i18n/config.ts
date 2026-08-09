@@ -95,6 +95,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceRemoveConfirm": "移除「{name}」？",
     "chat.workspaceShowAll": "显示全部（{count}）",
     "chat.workspaceShowLess": "收起",
+    "chat.workspaceShowAllProjects": "显示全部（{count}）",
+    "chat.workspaceShowLessProjects": "收起",
     "chat.workspaceRemoveRunning": "后台任务运行中，暂时不能移除。",
     "chat.workspaceRemoveDescription": "会删除此工作空间下的历史对话，不会删除文件夹。",
     "chat.workspaceOpenSystemFileManagerFailed": "打开资源管理器失败",
@@ -1633,14 +1635,35 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.deleteConfirm": "确认删除",
     "settings.deleteConfirmDesc": "此操作不可撤销。",
     "settings.deleteConfirmYes": "确定删除",
-    "settings.customSettings": "自定义设置",
-    "settings.openCustomSettings": "打开自定义设置",
-    "settings.closeCustomSettings": "关闭自定义设置",
+    "settings.customSettings": "高级设置",
+    "settings.openCustomSettings": "打开高级设置",
+    "settings.closeCustomSettings": "关闭高级设置",
     "settings.conversationTitleGeneration": "对话标题生成",
     "settings.conversationTitleModel": "标题生成模型",
     "settings.conversationTitleModelFollowCurrent": "使用当前对话模型",
     "settings.conversationTitleModelHint": "未选择时，标题生成会使用当前对话使用的模型。",
     "settings.customSettingsModelEmpty": "当前 Provider 未配置模型。",
+
+    /* ── Settings Model Failover ── */
+    "settings.failoverTitle": "自动故障转移",
+    "settings.failoverEnabled": "已开启",
+    "settings.failoverToggleHint":
+      "开启后，{vendor} 请求失败时会按队列顺序自动把当前对话的模型切换到下一个 {vendor} 供应商继续请求（模型不变，只换供应商），并在成功后停留在该供应商。仅在同厂商供应商之间转移，不会跨厂商。",
+    "settings.failoverQueueTitle": "故障转移队列",
+    "settings.failoverQueueHint":
+      "按优先级排列的 {vendor} 备用供应商（P1 优先）。当前供应商请求失败时，用同一个模型依次尝试；未激活该模型的供应商会被跳过。",
+    "settings.failoverQueueAdd": "选择供应商加入队列",
+    "settings.failoverQueueEmpty": "队列为空。添加至少一个备用供应商后，自动故障转移才会生效。",
+    "settings.failoverQueueMoveUp": "上移",
+    "settings.failoverQueueMoveDown": "下移",
+    "settings.failoverQueueRemove": "移除",
+    "settings.failoverMaxSwitches": "单次请求最大切换次数",
+    "settings.failoverMaxSwitchesHint": "一次请求失败后最多切换的备用供应商个数（1-10）。",
+    "settings.failoverFailureThreshold": "失败阈值",
+    "settings.failoverFailureThresholdHint": "连续失败多少次后熔断该供应商（建议 3-10）。",
+    "settings.failoverCooldownSeconds": "熔断冷却时间（秒）",
+    "settings.failoverCooldownSecondsHint":
+      "熔断后跳过该供应商的时长，到期后放行探测请求（5-3600 秒）。",
 
     /* ── Settings Prompt ── */
     "settings.agentsTitle": "全局提示词",
@@ -1958,7 +1981,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.noServersHint": "添加一个 MCP 来扩展 AI 的工具能力",
     "mcpHub.serverName": "Server Name",
     "mcpHub.serverNamePlaceholder": "例如：Brave Search",
-    "mcpHub.serverNameHint": "同时用于界面展示和工具命名空间，建议保持简短",
+    "mcpHub.serverNameHint": "用于工具命名空间，建议使用简短 ASCII 名称",
+    "mcpHub.description": "描述（可选）",
+    "mcpHub.descriptionPlaceholder": "简要说明该 MCP 的功能用途",
+    "mcpHub.docsUrl": "文档链接（可选）",
+    "mcpHub.docsUrlPlaceholder": "项目源码或官方文档地址",
     "mcpHub.transport": "Transport",
     "mcpHub.selectTransport": "选择传输方式",
     "mcpHub.stdio": "stdio（子进程）",
@@ -2350,6 +2377,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceRemoveConfirm": 'Remove "{name}"?',
     "chat.workspaceShowAll": "Show all ({count})",
     "chat.workspaceShowLess": "Show less",
+    "chat.workspaceShowAllProjects": "Show all ({count})",
+    "chat.workspaceShowLessProjects": "Show less",
     "chat.workspaceRemoveRunning":
       "A background task is running, so this workspace cannot be removed yet.",
     "chat.workspaceRemoveDescription":
@@ -3955,9 +3984,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.deleteConfirm": "Confirm Delete",
     "settings.deleteConfirmDesc": "This action cannot be undone.",
     "settings.deleteConfirmYes": "Delete",
-    "settings.customSettings": "Custom Settings",
-    "settings.openCustomSettings": "Open custom settings",
-    "settings.closeCustomSettings": "Close custom settings",
+    "settings.customSettings": "Advanced Settings",
+    "settings.openCustomSettings": "Open advanced settings",
+    "settings.closeCustomSettings": "Close advanced settings",
     "settings.conversationTitleGeneration": "Conversation title generation",
     "settings.conversationTitleModel": "Title generation model",
     "settings.conversationTitleModelFollowCurrent": "Use current chat model",
@@ -3965,6 +3994,30 @@ export const translations: Record<Locale, Record<string, string>> = {
       "When unselected, title generation uses the model from the current chat.",
     "settings.customSettingsModelEmpty":
       "No active models are configured for the current providers.",
+
+    /* ── Settings Model Failover ── */
+    "settings.failoverTitle": "Auto Failover",
+    "settings.failoverEnabled": "Enabled",
+    "settings.failoverToggleHint":
+      "When a {vendor} request fails, automatically retry it on the next {vendor} provider in the queue with the same model (provider changes, model does not) and stay on the provider that answered. Failover never crosses vendors.",
+    "settings.failoverQueueTitle": "Failover queue",
+    "settings.failoverQueueHint":
+      "Fallback {vendor} providers in priority order (P1 first), tried with the conversation's current model when the active provider fails. Providers without that model active are skipped.",
+    "settings.failoverQueueAdd": "Add a provider to the queue",
+    "settings.failoverQueueEmpty":
+      "The queue is empty. Auto failover only takes effect after at least one fallback provider is added.",
+    "settings.failoverQueueMoveUp": "Move up",
+    "settings.failoverQueueMoveDown": "Move down",
+    "settings.failoverQueueRemove": "Remove",
+    "settings.failoverMaxSwitches": "Max switches per request",
+    "settings.failoverMaxSwitchesHint":
+      "Maximum number of fallback providers tried after a failed request (1-10).",
+    "settings.failoverFailureThreshold": "Failure threshold",
+    "settings.failoverFailureThresholdHint":
+      "Consecutive failures before a provider's circuit breaker opens (suggested 3-10).",
+    "settings.failoverCooldownSeconds": "Cooldown (seconds)",
+    "settings.failoverCooldownSecondsHint":
+      "How long an open circuit skips the provider before allowing a probe request (5-3600 seconds).",
 
     /* ── Settings Prompt ── */
     "settings.agentsTitle": "Prompt",
@@ -4300,7 +4353,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.noServersHint": "Add an MCP to extend the AI's tool capabilities",
     "mcpHub.serverName": "Server Name",
     "mcpHub.serverNamePlaceholder": "e.g. Brave Search",
-    "mcpHub.serverNameHint": "Used for display and tool namespace; keep it short",
+    "mcpHub.serverNameHint": "Used in tool namespaces; prefer a short ASCII name",
+    "mcpHub.description": "Description (optional)",
+    "mcpHub.descriptionPlaceholder": "Briefly describe what this MCP is used for",
+    "mcpHub.docsUrl": "Docs link (optional)",
+    "mcpHub.docsUrlPlaceholder": "Link to the project source or official docs",
     "mcpHub.transport": "Transport",
     "mcpHub.selectTransport": "Select transport",
     "mcpHub.stdio": "stdio (subprocess)",

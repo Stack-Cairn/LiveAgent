@@ -4,8 +4,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
-const normalize = loader.loadModule("src/lib/settings/normalize.ts");
-const sync = loader.loadModule("src/lib/settings/sync.ts");
+const normalize = loader.loadModule("@liveagent/ui/lib/settings/normalize.ts");
+const sync = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
 
 test("basic provider field normalizers trim values and remove duplicate models", () => {
@@ -2124,16 +2124,20 @@ test("only one agent prompt template remains enabled after normalization", () =>
 test("mcp and remote settings normalize transport, selection, ports, and tokens", () => {
   const mcp = settings.normalizeMcpSettings({
     servers: [
-      { id: "server-a", enabled: true, transport: "http", url: " https://mcp.example.com ", timeoutMs: "-1" },
-      { id: "server-b", enabled: false, transport: "bad", command: " node ", args: [" server.js ", ""] },
+      { id: "server-a", description: " Search project docs ", docsUrl: " https://github.com/acme/docs-mcp ", enabled: true, transport: "http", url: " https://mcp.example.com ", timeoutMs: "-1" },
+      { id: "server-b", description: "   ", docsUrl: "   ", enabled: false, transport: "bad", command: " node ", args: [" server.js ", ""] },
     ],
     selected: ["server-b", "missing", "server-b", "server-a"],
   });
 
   assert.deepEqual(mcp.selected, ["server-b", "server-a"]);
   assert.equal(mcp.servers[0].transport, "http");
+  assert.equal(mcp.servers[0].description, "Search project docs");
+  assert.equal(mcp.servers[0].docsUrl, "https://github.com/acme/docs-mcp");
   assert.equal(mcp.servers[0].timeoutMs, 60_000);
   assert.equal(mcp.servers[1].transport, "stdio");
+  assert.equal(mcp.servers[1].description, undefined);
+  assert.equal(mcp.servers[1].docsUrl, undefined);
   assert.deepEqual(mcp.servers[1].args, ["server.js"]);
 
   const remote = settings.normalizeRemoteSettings({
@@ -2610,4 +2614,67 @@ test("clearing a configured usage query secret emits an explicit empty update", 
   });
   assert.equal(applied.customProviders[0].usageQuery.apiKey, "");
   assert.equal(applied.customProviders[0].usageQuery.apiKeyConfigured, false);
+});
+
+const FAILOVER_SYNC_PROVIDERS = [
+  {
+    id: "provider-primary",
+    name: "Primary",
+    type: "claude_code",
+    baseUrl: "https://primary.example.com",
+    apiKey: "key-primary",
+    models: [{ id: "claude-fable-5", contextWindow: 200000, maxOutputToken: 8192 }],
+    activeModels: ["claude-fable-5"],
+  },
+  {
+    id: "provider-backup",
+    name: "Backup",
+    type: "claude_code",
+    baseUrl: "https://backup.example.com",
+    apiKey: "key-backup",
+    models: [{ id: "claude-fable-5", contextWindow: 200000, maxOutputToken: 8192 }],
+    activeModels: ["claude-fable-5"],
+  },
+];
+
+test("model failover changes appear in the gateway settings update payload", () => {
+  const previous = settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS });
+  const next = settings.updateModelFailover(previous, "claude_code", {
+    enabled: true,
+    queue: ["provider-backup"],
+  });
+
+  const update = sync.buildGatewaySettingsSyncUpdatePayload(previous, next);
+  assert.deepEqual(update.modelFailover?.claude_code.queue, ["provider-backup"]);
+  assert.equal(update.modelFailover?.claude_code.enabled, true);
+
+  // Untouched settings must not produce a modelFailover entry.
+  const noChange = sync.buildGatewaySettingsSyncUpdatePayload(next, next);
+  assert.equal(Object.hasOwn(noChange, "modelFailover"), false);
+});
+
+test("model failover round-trips through gateway settings sync", () => {
+  const source = settings.updateModelFailover(
+    settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS }),
+    "claude_code",
+    {
+      enabled: true,
+      queue: ["provider-backup"],
+      maxSwitches: 2,
+      failureThreshold: 5,
+      cooldownSeconds: 120,
+    },
+  );
+
+  const payload = sync.buildGatewaySettingsSyncPayload(source);
+  const received = sync.applyGatewaySettingsSyncPayload(
+    settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS }),
+    payload,
+  );
+
+  assert.deepEqual(received.modelFailover, source.modelFailover);
+
+  // A payload without the field keeps the receiver's current config.
+  const partial = sync.applyGatewaySettingsSyncPayload(received, { theme: "dark" });
+  assert.deepEqual(partial.modelFailover, received.modelFailover);
 });

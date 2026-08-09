@@ -5,7 +5,10 @@
 // handling (re-subscribe + `{ kind: "reset" }` fan-out) lives in the socket
 // client itself.
 
-import type { WorkspaceActivityClient, WorkspaceActivityEventPayload } from "./types";
+import type {
+  WorkspaceActivityClient,
+  WorkspaceActivityEventPayload,
+} from "@liveagent/ui/lib/workspace-activity/types";
 
 type WorkspaceActivitySource = {
   subscribeWorkspaceActivity(
