@@ -36,19 +36,29 @@ FROM --platform=$BUILDPLATFORM node:22.19.0-bookworm-slim AS frontend
 
 WORKDIR /app
 
-# pnpm 10 requires pnpm-workspace.yaml (allowBuilds). Copy manifests first
-# for layer caching, then the sources needed by `pnpm build` (tsc + vite).
-COPY crates/agent-gui/package.json crates/agent-gui/pnpm-lock.yaml crates/agent-gui/pnpm-workspace.yaml ./
+# pnpm 10 requires pnpm-workspace.yaml (allowBuilds). Workspace layout:
+# the root holds the pnpm workspace (package.json / pnpm-workspace.yaml /
+# pnpm-lock.yaml) with two packages: crates/agent-ui (@liveagent/ui) and
+# crates/agent-gui (liveagent). agent-gui's vite alias / tsconfig paths
+# reference ../agent-ui/src relatively, so the crates/ sibling layout must
+# be preserved. Copy manifests first for layer caching, then the sources
+# needed by `pnpm --filter liveagent build` (tsc + vite).
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY crates/agent-gui/package.json ./crates/agent-gui/
+COPY crates/agent-ui/package.json ./crates/agent-ui/
+COPY crates/agent-gateway/web/package.json ./crates/agent-gateway/web/
 RUN npm install -g pnpm@10.32.1 && pnpm install --frozen-lockfile
 
 COPY crates/agent-gui/index.html crates/agent-gui/vite.config.ts \
      crates/agent-gui/tsconfig.json crates/agent-gui/tsconfig.node.json \
-     crates/agent-gui/postcss.config.js crates/agent-gui/tailwind.config.js ./
-COPY crates/agent-gui/src ./src
-COPY crates/agent-gui/public ./public
-COPY crates/agent-gui/src-tauri/icons ./src-tauri/icons
+     crates/agent-gui/postcss.config.js crates/agent-gui/tailwind.config.js \
+     ./crates/agent-gui/
+COPY crates/agent-gui/src ./crates/agent-gui/src
+COPY crates/agent-gui/public ./crates/agent-gui/public
+COPY crates/agent-gui/src-tauri/icons ./crates/agent-gui/src-tauri/icons
+COPY crates/agent-ui/src ./crates/agent-ui/src
 
-RUN pnpm build
+RUN pnpm --filter liveagent build
 
 # ---- Builder stage: compile the headless binary with embedded WebUI ----
 FROM --platform=$BUILDPLATFORM rust:1.97-bookworm AS builder
@@ -94,7 +104,7 @@ COPY . .
 
 # Copy the WebUI dist built in the frontend stage so build.rs embeds it.
 # (.dockerignore excludes **/dist, so this is the only dist in the image.)
-COPY --from=frontend /app/dist ./crates/agent-gui/dist
+COPY --from=frontend /app/crates/agent-gui/dist ./crates/agent-gui/dist
 
 # Build the headless binary with embedded assets
 RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry-$TARGETARCH \
