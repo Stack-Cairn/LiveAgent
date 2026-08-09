@@ -140,6 +140,19 @@ test("rendered commit mentions do not include native title tooltips", () => {
   assert.doesNotMatch(html, /title=/);
 });
 
+test("trailing newlines render a visual line anchor without changing DOM text", () => {
+  const html = renderToStaticMarkup(
+    jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, {
+      text: "alpha\n",
+    }),
+  );
+  assert.equal(
+    html,
+    'alpha\n<span aria-hidden="true" class="chat-user-trailing-newline-anchor"></span>',
+  );
+  assert.doesNotMatch(html, /\u200b/i);
+});
+
 test("code mention tokens round trip through transcript tokenization", () => {
   const reference = mentionReferences.createCodeMentionReference({
     path: "src/pages/ChatPage.tsx",

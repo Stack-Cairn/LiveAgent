@@ -803,6 +803,11 @@
     word-break: break-word;
   }
 
+  /* Browsers do not allocate a final line box for a trailing preserved LF. */
+  .chat-user-trailing-newline-anchor::before {
+    content: "\200b";
+  }
+
   /* Settings page section transitions */
   .settings-section-enter {
     animation: settingsSectionIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);

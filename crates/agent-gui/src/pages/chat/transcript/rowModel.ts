@@ -5,6 +5,7 @@ import type {
 } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptState } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { getRoundText, type LiveRound, type UiRound } from "../../../lib/chat/messages/uiMessages";
+import { isTodoWriteToolBlock } from "../../../lib/chat/taskProgress";
 import {
   CHECKPOINT_ROW_ESTIMATE_PX,
   estimateAssistantRowHeight,
@@ -106,30 +107,11 @@ function buildReplyText(rounds: (UiRound | LiveRound)[]): string {
     .join("\n\n");
 }
 
-function findLatestTodoItem(rounds: (UiRound | LiveRound)[]) {
-  for (let roundIndex = rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
-    const blocks = rounds[roundIndex]?.blocks ?? [];
-    for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-      const block = blocks[blockIndex];
-      if (block?.kind === "tool" && block.item.toolCall.name === "TodoWrite") {
-        return block.item;
-      }
-    }
-  }
-  return null;
-}
-
-function isVisibleGroupedBlock(
-  block: GroupedRoundBlock,
-  latestTodoItem: ReturnType<typeof findLatestTodoItem>,
-) {
+function isVisibleGroupedBlock(block: GroupedRoundBlock) {
   if (block.kind === "text" || block.kind === "thinking") {
     return block.text.trim().length > 0;
   }
-  if (block.kind === "tool" && block.item.toolCall.name === "TodoWrite") {
-    return block.item === latestTodoItem;
-  }
-  return true;
+  return !isTodoWriteToolBlock(block);
 }
 
 function hasRunningToolCall(blocks: GroupedRoundBlock[], runningToolCallIds: string[]) {
@@ -292,14 +274,11 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
     anchorUserKey,
     liveUnitCache,
   } = input;
-  const latestTodoItem = findLatestTodoItem(rounds);
   const isAborted = rounds.some((round) => round.meta?.stopReason === "aborted");
   const rows: AssistantUnitRow[] = [];
 
   rounds.forEach((round, roundIndex) => {
-    const groupedBlocks = groupRoundBlocks(round.blocks).filter((block) =>
-      isVisibleGroupedBlock(block, latestTodoItem),
-    );
+    const groupedBlocks = groupRoundBlocks(round.blocks).filter(isVisibleGroupedBlock);
     const runningToolCallIds = "runningToolCallIds" in round ? round.runningToolCallIds : [];
     const roundHasRunningToolCall = hasRunningToolCall(groupedBlocks, runningToolCallIds);
     let latestThinkingKey: string | null = null;

@@ -52,18 +52,6 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
     workdir,
     onOpenFileLink,
   } = props;
-  const latestTodoItem = useMemo(() => {
-    for (let roundIndex = rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
-      const blocks = rounds[roundIndex]?.blocks ?? [];
-      for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-        const block = blocks[blockIndex];
-        if (block?.kind === "tool" && block.item.toolCall.name === "TodoWrite") {
-          return block.item;
-        }
-      }
-    }
-    return null;
-  }, [rounds]);
   const isAborted = useMemo(
     () => rounds.some((round) => round.meta?.stopReason === "aborted"),
     [rounds],
@@ -95,7 +83,6 @@ export const AssistantBubble = memo(function AssistantBubble(props: {
             thinkingOpen={round.thinkingOpen}
             readOnly={readOnly}
             redactToolContent={redactToolContent}
-            latestTodoItem={latestTodoItem}
             isAborted={isAborted}
             workdir={workdir}
             onOpenFileLink={onOpenFileLink}

@@ -4,8 +4,9 @@ import { Markdown } from "../../../components/Markdown";
 import { useLocale } from "../../../i18n";
 import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "../../../lib/chat/chatPageHelpers";
+import { isTodoWriteToolBlock } from "../../../lib/chat/taskProgress";
 import type { RetryAttemptRecord } from "../../../lib/chat/transcript/types";
-import type { ToolTraceItem, UiRound } from "../../../lib/chat/uiMessages";
+import type { UiRound } from "../../../lib/chat/uiMessages";
 import { groupRoundBlocks, isBuiltinShareToolName } from "./assistantBubbleUtils";
 import { HostedSearchGroupView } from "./HostedSearchGroupView";
 import { LazyCollapse } from "./LazyCollapse";
@@ -151,7 +152,6 @@ export const RoundContent = memo(function RoundContent(props: {
   renderMode?: "streaming" | "static";
   readOnly?: boolean;
   redactToolContent?: boolean;
-  latestTodoItem?: ToolTraceItem | null;
   isAborted?: boolean;
   workdir?: string;
   onOpenFileLink?: (link: ChatFileLink) => void;
@@ -170,22 +170,14 @@ export const RoundContent = memo(function RoundContent(props: {
     renderMode,
     readOnly = false,
     redactToolContent = false,
-    latestTodoItem,
     isAborted = false,
     workdir,
     onOpenFileLink,
   } = props;
   const groupedBlocks = useMemo(() => groupRoundBlocks(round.blocks), [round.blocks]);
   const visibleGroupedBlocks = useMemo(
-    () =>
-      groupedBlocks.filter(
-        (block) =>
-          !latestTodoItem ||
-          block.kind !== "tool" ||
-          block.item.toolCall.name !== "TodoWrite" ||
-          block.item === latestTodoItem,
-      ),
-    [groupedBlocks, latestTodoItem],
+    () => groupedBlocks.filter((block) => !isTodoWriteToolBlock(block)),
+    [groupedBlocks],
   );
   const hasContent =
     visibleGroupedBlocks.some((block) => {

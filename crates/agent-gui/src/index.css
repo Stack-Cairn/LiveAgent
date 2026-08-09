@@ -985,6 +985,11 @@
     word-break: break-word;
   }
 
+  /* Browsers do not allocate a final line box for a trailing preserved LF. */
+  .chat-user-trailing-newline-anchor::before {
+    content: "\200b";
+  }
+
   @keyframes chatBubbleIn {
     from {
       opacity: 0;

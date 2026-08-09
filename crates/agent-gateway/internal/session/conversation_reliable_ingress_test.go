@@ -149,6 +149,49 @@ func TestChatIngressGapAndInvalidTerminalDoNotAdvanceCursor(t *testing.T) {
 	}
 }
 
+func TestChatIngressRepeatedGapEscalatesToCheckpoint(t *testing.T) {
+	manager := NewManager()
+	first := manager.ingestChatIngressBatch("agent-1", &gatewayv2.ChatIngressBatch{
+		RunId:          "run-gap",
+		ConversationId: "conv-1",
+		FirstSeq:       1,
+		Records:        []*gatewayv2.ChatIngressRecord{reliableIngressDelta(`{"type":"token","text":"a"}`)},
+	})
+	if first.GetAction() != gatewayv2.ChatIngressAck_CONTINUE || first.GetCommittedThrough() != 1 {
+		t.Fatalf("first ack = %#v", first)
+	}
+
+	late := &gatewayv2.ChatIngressBatch{
+		RunId:          "run-gap",
+		ConversationId: "conv-1",
+		FirstSeq:       3,
+		Records:        []*gatewayv2.ChatIngressRecord{reliableIngressDelta(`{"type":"token","text":"late"}`)},
+	}
+	firstGap := manager.ingestChatIngressBatch("agent-1", late)
+	if firstGap.GetAction() != gatewayv2.ChatIngressAck_REPLAY_FROM_EXPECTED || firstGap.GetExpectedNext() != 2 {
+		t.Fatalf("first gap ack = %#v", firstGap)
+	}
+	secondGap := manager.ingestChatIngressBatch("agent-1", late)
+	if secondGap.GetAction() != gatewayv2.ChatIngressAck_SEND_CHECKPOINT || secondGap.GetExpectedNext() != 2 {
+		t.Fatalf("repeated gap ack = %#v", secondGap)
+	}
+	stillMissing := manager.ingestChatIngressBatch("agent-1", late)
+	if stillMissing.GetAction() != gatewayv2.ChatIngressAck_SEND_CHECKPOINT || stillMissing.GetExpectedNext() != 2 {
+		t.Fatalf("post-request gap ack = %#v", stillMissing)
+	}
+
+	projection := reliableIngressProjection(t, `[]`)
+	recovered := manager.ingestChatIngressBatch("agent-1", &gatewayv2.ChatIngressBatch{
+		RunId:          "run-gap",
+		ConversationId: "conv-1",
+		FirstSeq:       4,
+		Records:        []*gatewayv2.ChatIngressRecord{reliableIngressCheckpoint(projection, 3, 1)},
+	})
+	if recovered.GetAction() != gatewayv2.ChatIngressAck_CONTINUE || recovered.GetCommittedThrough() != 4 || recovered.GetExpectedNext() != 5 {
+		t.Fatalf("checkpoint recovery ack = %#v", recovered)
+	}
+}
+
 func TestChatIngressResumeRequestsAndAcceptsCheckpointBaseline(t *testing.T) {
 	manager := NewManager()
 	acks := manager.ingestChatIngressResume("agent-1", &gatewayv2.ChatIngressResume{
@@ -291,6 +334,46 @@ func TestChatIngressFragmentReassemblesOneLogicalRecord(t *testing.T) {
 	defer subscription.Cleanup()
 	if got := eventTypes(subscription.Events); strings.Join(got, ",") != "run_started,token" {
 		t.Fatalf("fragment events = %v", got)
+	}
+}
+
+func TestChatIngressRepeatedFragmentGapEscalatesToCheckpoint(t *testing.T) {
+	manager := NewManager()
+	first := manager.ingestChatIngressBatch("agent-1", &gatewayv2.ChatIngressBatch{
+		RunId:          "run-fragment-gap",
+		ConversationId: "conv-1",
+		FirstSeq:       1,
+		Records:        []*gatewayv2.ChatIngressRecord{reliableIngressDelta(`{"type":"token","text":"a"}`)},
+	})
+	if first.GetAction() != gatewayv2.ChatIngressAck_CONTINUE || first.GetCommittedThrough() != 1 {
+		t.Fatalf("first ack = %#v", first)
+	}
+
+	late := reliableIngressFragment(t, "run-fragment-gap", "conv-1", 3, reliableIngressDelta(`{"type":"token","text":"late"}`))
+	firstGap := manager.ingestChatIngressFragment("agent-1", late)
+	if firstGap.GetAction() != gatewayv2.ChatIngressAck_REPLAY_FROM_EXPECTED || firstGap.GetExpectedNext() != 2 {
+		t.Fatalf("first fragment gap ack = %#v", firstGap)
+	}
+	secondGap := manager.ingestChatIngressFragment("agent-1", late)
+	if secondGap.GetAction() != gatewayv2.ChatIngressAck_SEND_CHECKPOINT || secondGap.GetExpectedNext() != 2 {
+		t.Fatalf("repeated fragment gap ack = %#v", secondGap)
+	}
+
+	projection := reliableIngressProjection(t, `[]`)
+	checkpointFragments := reliableIngressFragments(
+		t,
+		"run-fragment-gap",
+		"conv-1",
+		4,
+		reliableIngressCheckpoint(projection, 3, 1),
+		2,
+	)
+	if incomplete := manager.ingestChatIngressFragment("agent-1", checkpointFragments[1]); incomplete != nil {
+		t.Fatalf("incomplete checkpoint fragment ack = %#v", incomplete)
+	}
+	recovered := manager.ingestChatIngressFragment("agent-1", checkpointFragments[0])
+	if recovered.GetAction() != gatewayv2.ChatIngressAck_CONTINUE || recovered.GetCommittedThrough() != 4 || recovered.GetExpectedNext() != 5 {
+		t.Fatalf("fragment checkpoint recovery ack = %#v", recovered)
 	}
 }
 
@@ -596,8 +679,8 @@ func TestReliableIngressObservabilityCountsStateTransitionsOnce(t *testing.T) {
 	if got := observability.Usage.ChatIngressReplayRequestsTotal.Load() - replayBefore; got != 1 {
 		t.Fatalf("replay metric delta = %d, want 1", got)
 	}
-	if got := observability.Usage.ChatIngressCheckpointRequestsTotal.Load() - checkpointRequestBefore; got != 1 {
-		t.Fatalf("checkpoint request metric delta = %d, want 1", got)
+	if got := observability.Usage.ChatIngressCheckpointRequestsTotal.Load() - checkpointRequestBefore; got != 2 {
+		t.Fatalf("checkpoint request metric delta = %d, want 2", got)
 	}
 	if got := observability.Usage.ChatIngressCheckpointsCommittedTotal.Load() - checkpointCommittedBefore; got != 1 {
 		t.Fatalf("checkpoint committed metric delta = %d, want 1", got)
@@ -639,6 +722,52 @@ func reliableIngressDelta(eventJSON string) *gatewayv2.ChatIngressRecord {
 			Delta: &gatewayv2.ChatIngressDelta{EventJson: eventJSON},
 		},
 	}
+}
+
+func reliableIngressFragment(
+	t *testing.T,
+	runID string,
+	conversationID string,
+	sourceSeq uint64,
+	record *gatewayv2.ChatIngressRecord,
+) *gatewayv2.ChatIngressFragment {
+	t.Helper()
+	return reliableIngressFragments(t, runID, conversationID, sourceSeq, record, 1)[0]
+}
+
+func reliableIngressFragments(
+	t *testing.T,
+	runID string,
+	conversationID string,
+	sourceSeq uint64,
+	record *gatewayv2.ChatIngressRecord,
+	fragmentCount int,
+) []*gatewayv2.ChatIngressFragment {
+	t.Helper()
+	encoded, err := proto.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fragmentCount <= 0 || fragmentCount > len(encoded) {
+		t.Fatalf("invalid fragment count %d for %d encoded bytes", fragmentCount, len(encoded))
+	}
+	hash := sha256.Sum256(encoded)
+	fragments := make([]*gatewayv2.ChatIngressFragment, 0, fragmentCount)
+	for index := 0; index < fragmentCount; index++ {
+		start := len(encoded) * index / fragmentCount
+		end := len(encoded) * (index + 1) / fragmentCount
+		fragments = append(fragments, &gatewayv2.ChatIngressFragment{
+			RunId:              runID,
+			ConversationId:     conversationID,
+			SourceSeq:          sourceSeq,
+			FragmentIndex:      uint32(index),
+			FragmentCount:      uint32(fragmentCount),
+			EncodedRecordChunk: encoded[start:end],
+			EncodedRecordBytes: uint64(len(encoded)),
+			Sha256:             hex.EncodeToString(hash[:]),
+		})
+	}
+	return fragments
 }
 
 func reliableIngressTerminal(projection reliableIngressProjectionData, coversThrough uint64, state string) *gatewayv2.ChatIngressRecord {
