@@ -21,6 +21,55 @@ export type ConversationRuntimeEntry = {
   selectedModel?: SelectedModel;
 };
 
+export function resolveEffectiveConversationWorkdir(params: {
+  isAgentMode: boolean;
+  workdirOverride?: string;
+  gatewayWorkdirOverride?: string;
+  persistedWorkdir?: string;
+  runtimeWorkdir?: string;
+  globalWorkdir: string;
+}) {
+  const explicitWorkdir = params.workdirOverride ?? params.gatewayWorkdirOverride;
+  if (explicitWorkdir !== undefined) {
+    return explicitWorkdir.trim();
+  }
+  if (!params.isAgentMode) {
+    return "";
+  }
+  return (
+    params.persistedWorkdir?.trim() || params.runtimeWorkdir?.trim() || params.globalWorkdir.trim()
+  );
+}
+
+export function syncMovedConversationRuntimeWorkdir(params: {
+  conversationId: string;
+  cwd: string;
+  runtimeCache: ReadonlyMap<string, ConversationRuntimeEntry>;
+  isConversationRunning: (conversationId: string) => boolean;
+  updateConversationRuntimeEntry: (
+    conversationId: string,
+    updater: (prev: ConversationRuntimeEntry) => ConversationRuntimeEntry,
+  ) => unknown;
+}) {
+  const conversationId = params.conversationId.trim();
+  const cwd = params.cwd.trim();
+  const runtimeEntry = params.runtimeCache.get(conversationId);
+  if (
+    !conversationId ||
+    !cwd ||
+    !runtimeEntry ||
+    runtimeEntry.isSending ||
+    params.isConversationRunning(conversationId)
+  ) {
+    return false;
+  }
+  params.updateConversationRuntimeEntry(conversationId, (prev) => ({
+    ...prev,
+    workdir: cwd,
+  }));
+  return true;
+}
+
 export function createConversationRuntimeEntry(params: {
   state: ConversationViewState;
   sessionId: string;

@@ -151,6 +151,7 @@ import {
   removeQueuedChatTurnsForConversation,
 } from "./chat/queue/chatTurnQueue";
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
+import { syncMovedConversationRuntimeWorkdir } from "./chat/runtime/chatPageRuntime";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
@@ -1228,6 +1229,19 @@ export function ChatPage(props: ChatPageProps) {
     updateConversationRuntimeEntry,
   ]);
 
+  const handleConversationCwdChanged = useCallback(
+    (conversationId: string, cwd: string) => {
+      syncMovedConversationRuntimeWorkdir({
+        conversationId,
+        cwd,
+        runtimeCache: conversationRuntimeCacheRef.current,
+        isConversationRunning,
+        updateConversationRuntimeEntry,
+      });
+    },
+    [conversationRuntimeCacheRef, isConversationRunning, updateConversationRuntimeEntry],
+  );
+
   useEffect(() => {
     const previous = previousSubagentRuntimeConversationRef.current;
     if (previous && previous !== currentConversationId) {
@@ -1894,6 +1908,7 @@ export function ChatPage(props: ChatPageProps) {
             handleSelectConversation(id);
           }}
           onConversationDeleted={handleConversationDeleted}
+          onConversationCwdChanged={handleConversationCwdChanged}
           canShareConversations={canShareHistory}
           sharedConversationCount={sharedHistoryItems.length}
           onShareConversation={handleOpenShareModal}

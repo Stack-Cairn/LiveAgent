@@ -88,7 +88,11 @@ import type { PersistConversationParams } from "../history/useConversationHistor
 import type { useChatPageRuntimeStore } from "../hooks/useChatPageRuntimeStore";
 import type { useLiveTranscriptController } from "../hooks/useLiveTranscriptController";
 import type { createChatRuntimeHost } from "./ChatRuntimeHost";
-import { buildErrorAssistantMessage, formatHookWarningMessage } from "./chatPageRuntime";
+import {
+  buildErrorAssistantMessage,
+  formatHookWarningMessage,
+  resolveEffectiveConversationWorkdir,
+} from "./chatPageRuntime";
 import {
   finalizeChatRunInOrder,
   releaseChatRunUi,
@@ -318,11 +322,14 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       gatewayBridgeRequest?.executionModeOverride ??
       settings.system.executionMode;
     const effectiveIsAgentMode = isAgentExecutionMode(effectiveExecutionMode);
-    const effectiveWorkdir = (
-      overrides?.workdirOverride ??
-      gatewayBridgeRequest?.workdirOverride ??
-      (effectiveIsAgentMode ? (runtimeEntry?.workdir ?? settings.system.workdir) : "")
-    ).trim();
+    const effectiveWorkdir = resolveEffectiveConversationWorkdir({
+      isAgentMode: effectiveIsAgentMode,
+      workdirOverride: overrides?.workdirOverride,
+      gatewayWorkdirOverride: gatewayBridgeRequest?.workdirOverride,
+      persistedWorkdir: sidebarStore.peek(conversationId)?.cwd,
+      runtimeWorkdir: runtimeEntry?.workdir,
+      globalWorkdir: settings.system.workdir,
+    });
     const effectiveProjectPathKey = workspaceProjectPathKey(effectiveWorkdir);
     const effectiveAssociatedSshHostIds = getSshProjectHostIds(
       settings.ssh,
