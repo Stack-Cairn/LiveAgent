@@ -1,0 +1,44 @@
+name: Update Model Catalog
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: update-model-catalog
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 22.19.0
+  MODEL_CATALOG_PATH: crates/agent-ui/src/lib/models/catalog.generated.ts
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Refresh model catalog
+        run: node scripts/generate-model-catalog.mjs
+
+      - name: Create or update model catalog PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: main
+          branch: automation/model-catalog-refresh
+          delete-branch: true
+          add-paths: ${{ env.MODEL_CATALOG_PATH }}
+          commit-message: "chore(models): refresh model catalog"
+          title: "chore(models): refresh model catalog"
+          labels: governance-exempt

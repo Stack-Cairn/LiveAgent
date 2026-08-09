@@ -7,8 +7,23 @@
 | 入口 | Workflow | 动作 |
 |---|---|---|
 | PR / `main` push | `.github/workflows/ci.yml` | 跑 Gateway、WebUI、GUI、Tauri Rust 测试和 proto 一致性检查。 |
+| 每日定时 | `.github/workflows/update-model-catalog.yml` | 刷新模型能力目录；仅在数据变化时由 GitHub Actions 创建或更新待审核 PR。 |
 | `v*` tag / 手动指定 tag | `.github/workflows/gateway-docker.yml` | 构建并推送 `vX.Y.Z` 与 `latest` Gateway 镜像。 |
 | `v*` tag / 手动指定 tag | `.github/workflows/desktop-release.yml` | 并行构建 macOS Intel、macOS Apple Silicon、Windows x64 和 Linux x64 桌面包，并上传到 GitHub Release。 |
+
+## 模型目录同步
+
+`update-model-catalog.yml` 每天 03:17 UTC（北京时间 11:17）运行。任务直接运行 `node scripts/generate-model-catalog.mjs`，从 OpenAI Codex `models.json` 和 `models.dev/api.json` 生成 `crates/agent-ui/src/lib/models/catalog.generated.ts`。
+
+- 上游没有实际数据变化时任务直接结束，不创建 PR；快照日期本身不触发更新。
+- 有变化时固定更新 `automation/model-catalog-refresh` 分支和同一个 PR，避免产生重复 PR。
+- PR 通过 `add-paths` 只提交模型目录生成文件；上游请求失败、数据截断或关键模型缺失时生成任务失败。
+- PR 使用默认 `GITHUB_TOKEN` 创建，不会自动触发 `pull_request` CI 或 PR 治理工作流，由维护者审核后自行触发所需检查并合并。
+- 模型目录是编译期静态快照；已安装版本不会动态同步，合并后的数据只进入后续构建和 Release。
+
+工作流不需要额外 Secret，但仓库需要在 Actions 设置中允许 GitHub Actions 创建 Pull Request。`governance-exempt` 标签用于避免自动 PR 被 stale 任务关闭。
+
+`github-release-main` 只从已经审核的 `main` 创建并推送 Tag，不再在发布过程中联网刷新、提交或直接推送模型目录，避免外部数据变化和网络故障影响发布可复现性。
 
 ## Gateway 镜像
 
