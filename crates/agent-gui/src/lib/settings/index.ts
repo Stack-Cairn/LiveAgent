@@ -55,6 +55,8 @@ export type McpTransport = "stdio" | "http" | "sse";
 
 export type McpServerConfig = {
   id: string;
+  description?: string;
+  docsUrl?: string;
   enabled: boolean;
   transport: McpTransport;
   command: string;
@@ -1725,11 +1727,15 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
 export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const id = typeof obj.id === "string" ? obj.id.trim() : "";
+  const description = typeof obj.description === "string" ? obj.description.trim() : "";
+  const docsUrl = typeof obj.docsUrl === "string" ? obj.docsUrl.trim() : "";
   const cwd = typeof obj.cwd === "string" ? obj.cwd.trim() : "";
   const messageUrl = typeof obj.messageUrl === "string" ? obj.messageUrl.trim() : "";
 
   return {
     id,
+    ...(description ? { description } : {}),
+    ...(docsUrl ? { docsUrl } : {}),
     enabled: Boolean(obj.enabled),
     transport: normalizeMcpTransport(obj.transport),
     command: typeof obj.command === "string" ? obj.command.trim() : "",

@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ExternalLink,
   Globe2,
   Pencil,
   Plug,
@@ -32,6 +33,7 @@ import {
 } from "@liveagent/ui/components/ui/select";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { resolveMcpDocsHref } from "@liveagent/ui/lib/mcpServerMetadata";
 import { type FormEvent, memo, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -57,6 +59,8 @@ type McpServersFormProps = {
 
 type ServerDraft = {
   id: string;
+  description: string;
+  docsUrl: string;
   transport: McpServerConfig["transport"];
   timeoutMs: string;
   command: string;
@@ -116,6 +120,8 @@ function suggestServerName(existing: string[]): string {
 function blankDraft(existingIds: string[]): ServerDraft {
   return {
     id: suggestServerName(existingIds),
+    description: "",
+    docsUrl: "",
     transport: "stdio",
     timeoutMs: "60000",
     command: "",
@@ -132,6 +138,8 @@ function draftFromServer(server: McpServerConfig): ServerDraft {
   const transport: McpServerConfig["transport"] = server.transport ?? "stdio";
   return {
     id: server.id,
+    description: server.description ?? "",
+    docsUrl: server.docsUrl ?? "",
     transport,
     timeoutMs: String(server.timeoutMs ?? 60_000),
     command: server.command ?? "",
@@ -170,6 +178,8 @@ function buildServerFromDraft(
     return {
       ...(base ?? {}),
       id,
+      description: draft.description.trim() || undefined,
+      docsUrl: draft.docsUrl.trim() || undefined,
       enabled: base?.enabled ?? true,
       transport: "stdio",
       command,
@@ -190,6 +200,8 @@ function buildServerFromDraft(
   return {
     ...(base ?? {}),
     id,
+    description: draft.description.trim() || undefined,
+    docsUrl: draft.docsUrl.trim() || undefined,
     enabled: base?.enabled ?? true,
     transport: draft.transport,
     command: "",
@@ -273,6 +285,7 @@ const McpServerCard = memo(function McpServerCard(props: {
     : isHttp
       ? t("mcpHub.urlHttp")
       : t("mcpHub.urlSse");
+  const docsLink = resolveMcpDocsHref(serverConfig.docsUrl);
 
   return (
     <div
@@ -341,6 +354,14 @@ const McpServerCard = memo(function McpServerCard(props: {
                 {meta.label}
               </span>
             </div>
+            {serverConfig.description ? (
+              <div
+                className="truncate text-[11px] text-foreground/70"
+                title={serverConfig.description}
+              >
+                {serverConfig.description}
+              </div>
+            ) : null}
             {previewLine ? (
               <div className="truncate text-[11px] text-muted-foreground/85" title={previewLine}>
                 <span className="text-muted-foreground/55">{previewLabel}:</span>{" "}
@@ -375,6 +396,17 @@ const McpServerCard = memo(function McpServerCard(props: {
             onChange={onPolicyChange}
             size="sm"
           />
+          {docsLink ? (
+            <a
+              href={docsLink}
+              target="_blank"
+              rel="noreferrer"
+              title={serverConfig.docsUrl}
+              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          ) : null}
           <button
             type="button"
             onClick={onEdit}
@@ -650,6 +682,32 @@ export function McpServerEditModal(props: {
               </div>
             )}
 
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-edit-description" className="text-xs text-muted-foreground">
+                {t("mcpHub.description")}
+              </Label>
+              <Textarea
+                id="mcp-edit-description"
+                value={draft.description}
+                placeholder={t("mcpHub.descriptionPlaceholder")}
+                className="min-h-[72px] text-[12.5px]"
+                onChange={(event) => updateDraft({ description: event.currentTarget.value })}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="mcp-edit-docs-url" className="text-xs text-muted-foreground">
+                {t("mcpHub.docsUrl")}
+              </Label>
+              <Input
+                id="mcp-edit-docs-url"
+                value={draft.docsUrl}
+                placeholder={t("mcpHub.docsUrlPlaceholder")}
+                className="font-mono text-[12.5px]"
+                onChange={(event) => updateDraft({ docsUrl: event.currentTarget.value })}
+              />
+            </div>
+
             {formError ? (
               <div className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3 py-2.5 text-xs text-destructive">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -688,7 +746,14 @@ export function McpServersForm(props: McpServersFormProps) {
     return servers
       .map((server, idx) => ({ server, idx }))
       .filter(({ server }) => {
-        const haystack = [server.id, server.command, server.url, server.transport ?? ""]
+        const haystack = [
+          server.id,
+          server.description,
+          server.docsUrl,
+          server.command,
+          server.url,
+          server.transport ?? "",
+        ]
           .join("\n")
           .toLowerCase();
         return haystack.includes(text);

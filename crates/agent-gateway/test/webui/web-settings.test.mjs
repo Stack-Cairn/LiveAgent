@@ -194,6 +194,34 @@ test("getWebDefaultSettings enables remote settings from the gateway token", () 
   assert.equal(settings.remote.token, "token");
 });
 
+test("web settings preserve normalized MCP additional information", () => {
+  const normalized = settings.normalizeMcpSettings({
+    servers: [
+      {
+        id: "docs",
+        description: " Search project docs ",
+        docsUrl: " https://github.com/acme/docs-mcp ",
+        enabled: true,
+        transport: "stdio",
+        command: "docs-mcp",
+      },
+      {
+        id: "empty-description",
+        description: "   ",
+        docsUrl: "   ",
+        enabled: false,
+        transport: "stdio",
+        command: "noop",
+      },
+    ],
+  });
+
+  assert.equal(normalized.servers[0].description, "Search project docs");
+  assert.equal(normalized.servers[0].docsUrl, "https://github.com/acme/docs-mcp");
+  assert.equal(normalized.servers[1].description, undefined);
+  assert.equal(normalized.servers[1].docsUrl, undefined);
+});
+
 test("web settings normalize independent font families and migrate the retired interface field", () => {
   const migrated = settings.normalizeSettings({ customSettings: { fontFamily: "Inter" } });
   assert.equal(migrated.customSettings.interfaceFontFamily, "Inter");

@@ -4,6 +4,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const registry = loader.loadModule("@liveagent/ui/lib/mcpRegistry/index.ts");
+const metadata = loader.loadModule("@liveagent/ui/lib/mcpServerMetadata.ts");
 
 function mockFetch(handler) {
   return async (url, init) => {
@@ -17,6 +18,67 @@ function mockFetch(handler) {
     };
   };
 }
+
+test("MCP docs links only resolve to validated HTTP(S) URLs", () => {
+  const accepted = new Map([
+    ["https://docs.example.com/mcp", "https://docs.example.com/mcp"],
+    ["HTTP://docs.example.com/mcp", "HTTP://docs.example.com/mcp"],
+    ["docs.example.com/mcp", "https://docs.example.com/mcp"],
+    ["localhost:3000/docs", "https://localhost:3000/docs"],
+    ["example.com:8080/docs", "https://example.com:8080/docs"],
+    ["//docs.example.com/mcp", "https://docs.example.com/mcp"],
+  ]);
+  for (const [input, expected] of accepted) {
+    assert.equal(metadata.resolveMcpDocsHref(input), expected);
+  }
+
+  for (const input of [
+    undefined,
+    "",
+    "javascript:alert(1)",
+    "JaVaScRiPt:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "file:///tmp/docs",
+    "ftp://example.com/docs",
+    "https://docs.example.com/with space",
+    "java\u0001script:alert(1)",
+  ]) {
+    assert.equal(metadata.resolveMcpDocsHref(input), null);
+  }
+});
+
+test("registry installs inherit card description and preferred docs URL", () => {
+  const server = {
+    id: "demo",
+    enabled: true,
+    transport: "stdio",
+    command: "demo-mcp",
+    args: [],
+    url: "",
+    timeoutMs: 60_000,
+  };
+  const card = {
+    source: "official",
+    id: "official:demo",
+    sourceId: "demo",
+    name: "demo",
+    displayName: "Demo",
+    description: "  Search project docs  ",
+    detailUrl: " https://registry.example.com/demo ",
+    homepageUrl: "https://example.com/demo",
+    repositoryUrl: "https://github.com/example/demo",
+    verified: true,
+    remote: false,
+    tags: [],
+    transportHints: ["stdio"],
+  };
+
+  assert.deepEqual(metadata.enrichMcpServerWithRegistryMetadata(server, card), {
+    ...server,
+    description: "Search project docs",
+    docsUrl: "https://registry.example.com/demo",
+  });
+});
 
 test("official registry npm stdio packages become LiveAgent MCP drafts", async () => {
   const result = await registry.searchMcpRegistry({

@@ -2124,16 +2124,20 @@ test("only one agent prompt template remains enabled after normalization", () =>
 test("mcp and remote settings normalize transport, selection, ports, and tokens", () => {
   const mcp = settings.normalizeMcpSettings({
     servers: [
-      { id: "server-a", enabled: true, transport: "http", url: " https://mcp.example.com ", timeoutMs: "-1" },
-      { id: "server-b", enabled: false, transport: "bad", command: " node ", args: [" server.js ", ""] },
+      { id: "server-a", description: " Search project docs ", docsUrl: " https://github.com/acme/docs-mcp ", enabled: true, transport: "http", url: " https://mcp.example.com ", timeoutMs: "-1" },
+      { id: "server-b", description: "   ", docsUrl: "   ", enabled: false, transport: "bad", command: " node ", args: [" server.js ", ""] },
     ],
     selected: ["server-b", "missing", "server-b", "server-a"],
   });
 
   assert.deepEqual(mcp.selected, ["server-b", "server-a"]);
   assert.equal(mcp.servers[0].transport, "http");
+  assert.equal(mcp.servers[0].description, "Search project docs");
+  assert.equal(mcp.servers[0].docsUrl, "https://github.com/acme/docs-mcp");
   assert.equal(mcp.servers[0].timeoutMs, 60_000);
   assert.equal(mcp.servers[1].transport, "stdio");
+  assert.equal(mcp.servers[1].description, undefined);
+  assert.equal(mcp.servers[1].docsUrl, undefined);
   assert.deepEqual(mcp.servers[1].args, ["server.js"]);
 
   const remote = settings.normalizeRemoteSettings({

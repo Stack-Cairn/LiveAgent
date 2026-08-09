@@ -105,6 +105,12 @@ const MCP_STRING_MAP_SCHEMA = Type.Record(Type.String(), Type.String());
 const MCP_SERVER_PARAMETERS = Type.Object(
   {
     id: Type.Optional(Type.String()),
+    description: Type.Optional(
+      Type.String({ description: "Optional operator-facing description of this MCP server." }),
+    ),
+    docsUrl: Type.Optional(
+      Type.String({ description: "Optional project or documentation URL for this MCP server." }),
+    ),
     enabled: Type.Optional(Type.Boolean()),
     transport: Type.Optional(
       Type.Union([Type.Literal("stdio"), Type.Literal("http"), Type.Literal("sse")]),
@@ -128,6 +134,12 @@ const MCP_SERVER_PARAMETERS = Type.Object(
 
 const MCP_SERVER_PATCH_PARAMETERS = Type.Object(
   {
+    description: Type.Optional(
+      Type.String({ description: "Optional operator-facing description of this MCP server." }),
+    ),
+    docsUrl: Type.Optional(
+      Type.String({ description: "Optional project or documentation URL for this MCP server." }),
+    ),
     enabled: Type.Optional(Type.Boolean()),
     transport: Type.Optional(
       Type.Union([Type.Literal("stdio"), Type.Literal("http"), Type.Literal("sse")]),
@@ -297,9 +309,13 @@ function normalizePatch(input: unknown): Partial<McpServerConfig> {
       case "url":
       case "cwd":
       case "messageUrl":
+      case "description":
+      case "docsUrl":
         if (typeof value !== "string") throw new Error(`McpManager.patch.${key} must be a string.`);
         (patch as Record<string, unknown>)[key] =
-          key === "cwd" || key === "messageUrl" ? value.trim() || undefined : value.trim();
+          key === "cwd" || key === "messageUrl" || key === "description" || key === "docsUrl"
+            ? value.trim() || undefined
+            : value.trim();
         break;
       case "args":
         if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
@@ -503,7 +519,12 @@ function buildSuggestions(result: {
 }
 
 function formatServerLine(server: McpServerConfig) {
-  return `- ${server.id} | transport=${server.transport} | enabled=${server.enabled ? "true" : "false"}`;
+  const metadata = [
+    server.description ? `description=${JSON.stringify(server.description)}` : null,
+    server.docsUrl ? `docsUrl=${JSON.stringify(server.docsUrl)}` : null,
+  ].filter(Boolean);
+  const suffix = metadata.length > 0 ? ` | ${metadata.join(" | ")}` : "";
+  return `- ${server.id} | transport=${server.transport} | enabled=${server.enabled ? "true" : "false"}${suffix}`;
 }
 
 function formatJson(value: unknown) {
