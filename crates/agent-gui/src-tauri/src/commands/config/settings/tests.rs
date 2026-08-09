@@ -1121,7 +1121,7 @@ mod tests {
         };
         let loaded = load_system(&conn).expect("load system");
 
-        assert_eq!(row_count, 9);
+        assert_eq!(row_count, 10);
         assert_eq!(
             keys,
             vec![
@@ -1134,6 +1134,7 @@ mod tests {
                 SYSTEM_TOOL_POLICIES_KEY.to_string(),
                 SYSTEM_WORKDIR_KEY.to_string(),
                 SYSTEM_WORKSPACE_PROJECTS_KEY.to_string(),
+                SYSTEM_WORKSPACE_RESOURCE_SETTINGS_KEY.to_string(),
             ]
         );
         assert_eq!(
