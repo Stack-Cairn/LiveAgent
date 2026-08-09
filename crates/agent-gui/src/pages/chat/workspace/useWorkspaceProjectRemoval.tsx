@@ -13,6 +13,7 @@ import {
   type AppSettings,
   DEFAULT_WORKSPACE_PROJECT_ID,
   removeRightDockProjectState,
+  resetWorkspaceResourceSettings,
   resolveWorkspaceProjects,
   type WorkspaceProject,
   workspaceProjectPathKey,
@@ -153,7 +154,10 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
             getDefaultWorkspaceProjectPath(prev.system),
           ),
         };
-        return removeRightDockProjectState(nextSettings, pathKey);
+        return removeRightDockProjectState(
+          resetWorkspaceResourceSettings(nextSettings, pathKey),
+          pathKey,
+        );
       });
       setProjectRenamingId((current) => (current === project.id ? null : current));
       setProjectRenameDraft("");

@@ -53,9 +53,14 @@ import {
   X,
   Zap,
 } from "@liveagent/app/components/icons";
-import { type AppSettings, updateSkills } from "@liveagent/app/lib/settings";
+import {
+  type AppSettings,
+  removeWorkspaceResourceReferences,
+  updateSkills,
+} from "@liveagent/app/lib/settings";
 import { GlassPanel, HubBackdrop, HubHeader } from "@liveagent/ui/components/hub/HubChrome";
 import { Markdown } from "@liveagent/ui/components/Markdown";
+import { ResourceActivationSwitch } from "@liveagent/ui/components/resources/ResourceActivationSwitch";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   ConfirmActionPopover,
@@ -1002,33 +1007,13 @@ const InstalledSkillCard = memo(function InstalledSkillCard(props: InstalledSkil
             >
               <span className="h-2 w-2 rounded-full border border-current opacity-40" />
             </button>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={checked}
-              aria-label={`${t("skills.select")}: ${skill.name}`}
-              title={
-                checked ? t("settings.skillsHubToggleDisable") : t("settings.skillsHubToggleEnable")
-              }
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggle(skill.name, !checked);
-              }}
-              onKeyDown={(event) => event.stopPropagation()}
-              className={cn(
-                "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full ring-1 transition-all",
-                checked
-                  ? "bg-emerald-500 ring-emerald-400/45"
-                  : "bg-muted-foreground/25 ring-border/40",
-              )}
-            >
-              <span
-                className={cn(
-                  "pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
-                  checked ? "translate-x-[1.05rem]" : "translate-x-[0.15rem]",
-                )}
-              />
-            </button>
+            <ResourceActivationSwitch
+              checked={checked}
+              compact
+              stopPropagation
+              label={`${t("skills.select")}: ${skill.name}`}
+              onCheckedChange={(next) => onToggle(skill.name, next)}
+            />
           </div>
         )}
       </div>
@@ -1931,9 +1916,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
     try {
       await manageSkill({ action: "delete", name: skillName });
       setSettings((prev) =>
-        updateSkills(prev, {
-          selected: prev.skills.selected.filter((name) => name !== skillName),
-        }),
+        removeWorkspaceResourceReferences(
+          updateSkills(prev, {
+            selected: prev.skills.selected.filter((name) => name !== skillName),
+          }),
+          { skillNames: [skillName] },
+        ),
       );
       setSkills((prev) => prev.filter((item) => item.name !== skillName));
       setPreviewInstalledSkill((current) => (current?.name === skillName ? null : current));
@@ -2145,9 +2133,12 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
       try {
         await manageSkill({ action: "delete", name: skill.name });
         setSettings((prev) =>
-          updateSkills(prev, {
-            selected: prev.skills.selected.filter((name) => name !== skill.name),
-          }),
+          removeWorkspaceResourceReferences(
+            updateSkills(prev, {
+              selected: prev.skills.selected.filter((name) => name !== skill.name),
+            }),
+            { skillNames: [skill.name] },
+          ),
         );
         setSkills((prev) => prev.filter((item) => item.name !== skill.name));
         setPreviewInstalledSkill((current) => (current?.name === skill.name ? null : current));

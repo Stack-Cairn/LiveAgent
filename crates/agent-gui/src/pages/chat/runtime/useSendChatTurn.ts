@@ -54,9 +54,12 @@ import {
   applyMcpOpsToAppSettings,
   type ChatRuntimeControls,
   type ExecutionMode,
+  filterMcpSettingsForWorkspace,
   getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
+  removeWorkspaceResourceReferences,
+  resolveWorkspaceResources,
   type SelectedModel,
   updateMemorySettings,
   updateSkills,
@@ -172,7 +175,6 @@ type UseSendChatTurnParams = {
   availableSkills: SkillSummary[];
   skillsRootDir: string;
   refreshSkills: () => Promise<{ skills: SkillSummary[]; rootDir: string } | null>;
-  selectedSkillNames: string[];
   activeAgentPrompt: string;
   ensureTunnelToolTab: (projectPathKey?: string) => void;
   ensureSshTunnelToolTab: (projectPathKey?: string) => void;
@@ -247,7 +249,6 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     availableSkills,
     skillsRootDir,
     refreshSkills,
-    selectedSkillNames,
     activeAgentPrompt,
     ensureTunnelToolTab,
     ensureSshTunnelToolTab,
@@ -328,7 +329,11 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       effectiveProjectPathKey,
     );
     const effectiveIsAgentDevExecutionMode = isAgentDevMode(effectiveExecutionMode);
-    const effectiveSkillsEnabled = settings.skills.enabled && effectiveIsAgentMode;
+    const workspaceResources = resolveWorkspaceResources(settings, effectiveWorkdir);
+    const effectiveSkillsEnabled = workspaceResources.skillsEnabled && effectiveIsAgentMode;
+    const selectedSkillNames = effectiveSkillsEnabled ? workspaceResources.skillNames : [];
+    const getEffectiveMcpSettings = () =>
+      filterMcpSettingsForWorkspace(getMcpSettings(), workspaceResources);
     const hasRemoteGatewayTarget =
       settings.remote.enabled &&
       settings.remote.gatewayUrl.trim() !== "" &&
@@ -1234,7 +1239,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       let rootDir = skillsRootDir;
       let byName = new Map(skillsList.map((s) => [s.name, s]));
       let missing = selectedSkillNames.filter((n) => !byName.has(n));
-      if (missing.length > 0) {
+      if (missing.length > 0 && workspaceResources.mode !== "custom") {
         const fresh = await refreshSkills();
         if (await finishRequestedStopBeforeRuntime()) {
           return true;
@@ -1260,7 +1265,9 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         return true;
       }
 
-      const selectedSkills = selectedSkillNames.map((n) => byName.get(n)!).filter(Boolean);
+      const selectedSkills = selectedSkillNames
+        .map((name) => byName.get(name))
+        .filter((skill): skill is SkillSummary => Boolean(skill));
       const allowBuiltinSkillManagement = selectedSkills.some(
         (skill) => skill.name === "skills-creator" || skill.name === "skills-installer",
       );
@@ -1438,13 +1445,29 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             skillsRootDir: skillsRootDirForTools,
             skillAccessPolicy: skillAccessPolicyForTools,
             onManagedSkillsChanged: (change) => {
-              enableManagedSkills(change.names);
+              if (change.action !== "delete") {
+                enableManagedSkills(change.names);
+                return;
+              }
+              setSettings((prev) =>
+                removeWorkspaceResourceReferences(
+                  updateSkills(prev, {
+                    selected: prev.skills.selected.filter((name) => !change.names.includes(name)),
+                  }),
+                  { skillNames: change.names },
+                ),
+              );
             },
             agentTemplates: settings.agents,
-            getMcpSettings,
+            getMcpSettings: getEffectiveMcpSettings,
             getToolPolicies,
             applyMcpOps: (ops) => {
-              setSettings((prev) => applyMcpOpsToAppSettings(prev, ops));
+              const removedIds = ops.filter((op) => op.kind === "remove").map((op) => op.serverId);
+              setSettings((prev) =>
+                removeWorkspaceResourceReferences(applyMcpOpsToAppSettings(prev, ops), {
+                  mcpServerIds: removedIds,
+                }),
+              );
             },
             remoteWebTunnelsEnabled: settings.remote.enableWebTunnels,
             tunnelPublicBaseUrl: settings.remote.gatewayUrl.trim(),

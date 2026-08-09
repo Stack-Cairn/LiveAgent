@@ -65,6 +65,17 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceCloneWebDisabled": "请先在远程设置中启用网页 Git 操作。",
     "chat.workspaceNewConversation": "新对话",
     "chat.workspaceMore": "更多",
+    "chat.workspaceResources": "配置 Skills 与 MCP",
+    "chat.workspaceResourcesTitle": "工作空间资源设置",
+    "chat.workspaceResourcesModeInherit": "跟随全局",
+    "chat.workspaceResourcesModeCustom": "自定义",
+    "chat.workspaceResourcesModeOff": "全部关闭",
+    "chat.workspaceResourcesInheritHint": "使用 Skill Hub 与 MCP Hub 中的默认启用设置。",
+    "chat.workspaceResourcesCustomHint": "选择仅向此工作空间中的 Agent 暴露的 Skills 与 MCP。",
+    "chat.workspaceResourcesOffHint": "此工作空间不会向 Agent 暴露 Skills 或 MCP。",
+    "chat.workspaceResourcesSearch": "搜索名称或描述",
+    "chat.workspaceResourcesSelected": "已选择 {skills} 个 Skills、{mcp} 个 MCP",
+    "chat.workspaceResourcesMissingSkill": "此 Skill 尚未安装在当前设备上。",
     "chat.workspacePin": "置顶工作空间",
     "chat.workspaceUnpin": "取消置顶",
     "chat.workspaceRename": "修改标题",
@@ -943,6 +954,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.groupConnectivity": "连接",
     "settings.backToChat": "返回对话",
     "settings.title": "设置",
+    "settings.searchPlaceholder": "搜索设置…",
+    "settings.searchNoResults": "未找到匹配的设置",
 
     /* ── Settings Devices ── */
     "settings.devicesTitle": "多客户端管理",
@@ -1193,6 +1206,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.systemProxyInvalid":
       "代理已启用，请填写有效的代理地址和端口；配置有效前相关请求将直接报错。",
     "settings.systemProxyEnableHint": "请先填写有效的代理地址和端口后再启用代理。",
+    "settings.systemProxyDisabled": "当前未启用，仅在需要时配置并开启。",
+    "settings.systemProxySettings": "代理设置",
+    "settings.systemProxyDone": "完成",
     "settings.systemProxyType": "代理类型",
     "settings.systemProxyHost": "代理地址",
     "settings.systemProxyPort": "端口",
@@ -2275,6 +2291,20 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceCloneWebDisabled": "Enable Web Git in Remote settings before cloning.",
     "chat.workspaceNewConversation": "New conversation",
     "chat.workspaceMore": "More",
+    "chat.workspaceResources": "Configure Skills & MCP",
+    "chat.workspaceResourcesTitle": "Workspace resources",
+    "chat.workspaceResourcesModeInherit": "Use defaults",
+    "chat.workspaceResourcesModeCustom": "Custom",
+    "chat.workspaceResourcesModeOff": "Disable all",
+    "chat.workspaceResourcesInheritHint":
+      "Uses the default enabled resources from Skill Hub and MCP Hub.",
+    "chat.workspaceResourcesCustomHint":
+      "Choose the Skills and MCP servers exposed to agents in this workspace.",
+    "chat.workspaceResourcesOffHint":
+      "No Skills or MCP servers are exposed to agents in this workspace.",
+    "chat.workspaceResourcesSearch": "Search names or descriptions",
+    "chat.workspaceResourcesSelected": "{skills} Skills and {mcp} MCP servers selected",
+    "chat.workspaceResourcesMissingSkill": "This Skill is not installed on this device.",
     "chat.workspacePin": "Pin workspace",
     "chat.workspaceUnpin": "Unpin",
     "chat.workspaceRename": "Rename",
@@ -3186,6 +3216,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.groupConnectivity": "Connectivity",
     "settings.backToChat": "Back to Chat",
     "settings.title": "Settings",
+    "settings.searchPlaceholder": "Search settings…",
+    "settings.searchNoResults": "No matching settings",
 
     /* ── Settings Devices ── */
     "settings.devicesTitle": "Multi-client Management",
@@ -3451,6 +3483,9 @@ export const translations: Record<Locale, Record<string, string>> = {
       "The proxy is enabled. Enter a valid host and port; affected requests fail until the configuration is valid.",
     "settings.systemProxyEnableHint":
       "Enter a valid proxy host and port before enabling the proxy.",
+    "settings.systemProxyDisabled": "Currently off. Configure and enable it only when needed.",
+    "settings.systemProxySettings": "Proxy settings",
+    "settings.systemProxyDone": "Done",
     "settings.systemProxyType": "Proxy type",
     "settings.systemProxyHost": "Proxy host",
     "settings.systemProxyPort": "Port",

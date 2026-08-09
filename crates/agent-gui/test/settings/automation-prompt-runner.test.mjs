@@ -165,6 +165,11 @@ test("Auto Prompt run prefers the queue-time workdir with a global fallback", ()
     runnerSource,
     /const workdir = \(request\.workdir \?\? ""\)\.trim\(\) \|\| settings\.system\.workdir\.trim\(\)/,
   );
+  assert.match(runnerSource, /resolveWorkspaceResources\(settings, workdir\)/);
+  assert.match(
+    runnerSource,
+    /filterMcpSettingsForWorkspace\(settings\.mcp, workspaceResources\)/,
+  );
 });
 
 test("Cron workspace pin stays wired in shared UI", () => {

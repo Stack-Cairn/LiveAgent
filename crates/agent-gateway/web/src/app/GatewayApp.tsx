@@ -9,6 +9,7 @@ import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedH
 import { TaskProgressIndicator } from "@liveagent/ui/components/chat/TaskProgressIndicator";
 import { ToolApprovalBar } from "@liveagent/ui/components/chat/ToolApprovalBar";
 import { useSequencedTaskProgress } from "@liveagent/ui/components/chat/useSequencedTaskProgress";
+import { WorkspaceResourceSettingsDrawer } from "@liveagent/ui/components/chat/WorkspaceResourceSettingsDrawer";
 import type {
   GitCommitContextPayload,
   GitFileContextPayload,
@@ -123,8 +124,10 @@ import {
   type RightDockFileTreeStatePatch,
   type RightDockProjectState,
   removeRightDockProjectState,
+  resetWorkspaceResourceSettings,
   resolveEffectiveTheme,
   resolveWorkspaceProjects,
+  resolveWorkspaceResources,
   type SelectedModel,
   setSelectedModel,
   updateChatRuntimeControlsForProvider,
@@ -136,6 +139,7 @@ import {
   updateSkills,
   updateSshProjectHostIds,
   updateSystem,
+  updateWorkspaceResourceSettings,
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "@/lib/settings";
@@ -395,6 +399,9 @@ export default function GatewayApp() {
   const [sharedHistoryItems, setSharedHistoryItems] = useState<ChatHistorySummary[]>([]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<"chat" | "skills-hub" | "mcp-hub">("chat");
+  const [resourceSettingsProject, setResourceSettingsProject] = useState<WorkspaceProject | null>(
+    null,
+  );
   const [rightDockOpen, setRightDockOpen] = useState(false);
   const { confirm: requestConfirmDialog, dialog: confirmDialog } = useConfirmDialog();
   // Both elements arrive via callback refs → state so the scroll-follow hook
@@ -2812,7 +2819,10 @@ export default function GatewayApp() {
             getDefaultWorkspaceProjectPath(prev.system),
           ),
         };
-        return removeRightDockProjectState(nextSettings, pathKey);
+        return removeRightDockProjectState(
+          resetWorkspaceResourceSettings(nextSettings, pathKey),
+          pathKey,
+        );
       });
       setProjectRenamingId((current) => (current === project.id ? null : current));
       setProjectRenameDraft("");
@@ -3955,14 +3965,22 @@ export default function GatewayApp() {
     [displayedConversationId, setSettings],
   );
 
-  const skillsEnabled = settings.skills.enabled && isAgentMode;
+  const resourceWorkdir =
+    sidebarConversationsById.get(displayedConversationId)?.cwd?.trim() ||
+    conversationWorkdirsRef.current.get(displayedConversationId)?.trim() ||
+    (isAgentMode ? activeWorkspaceProjectPath || settings.system.workdir.trim() : "");
+  const workspaceResources = useMemo(
+    () => resolveWorkspaceResources(settings, resourceWorkdir),
+    [resourceWorkdir, settings],
+  );
+  const skillsEnabled = workspaceResources.skillsEnabled && isAgentMode;
   const selectedSkillNames = useMemo(
-    () => (skillsEnabled ? mergeAlwaysEnabledSkillNames(settings.skills.selected) : []),
-    [skillsEnabled, settings.skills.selected],
+    () => (skillsEnabled ? workspaceResources.skillNames : []),
+    [skillsEnabled, workspaceResources.skillNames],
   );
   const { availableSkills, skillsRootDir } = useChatSkills({
-    skillsEnabled,
-    selectedSkillNames,
+    skillsEnabled: settings.skills.enabled && isAgentMode,
+    selectedSkillNames: settings.skills.selected,
     setSettings,
   });
   const enabledComposerSkills = useMemo(() => {
@@ -4721,6 +4739,7 @@ export default function GatewayApp() {
               onSelectProject={handleSelectWorkspaceProject}
               onNewConversationForProject={handleNewConversationForProject}
               onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
+              onConfigureProjectResources={setResourceSettingsProject}
               onStartRenamingProject={handleStartRenamingWorkspaceProject}
               onProjectRenameDraftChange={setProjectRenameDraft}
               onCommitProjectRename={handleCommitWorkspaceProjectRename}
@@ -5250,6 +5269,21 @@ export default function GatewayApp() {
               onInsertCommitMention={handleRightDockInsertCommitMention}
               onInsertGitFileMention={handleRightDockInsertGitFileMention}
               onClose={handleRightDockClose}
+            />
+          ) : null}
+
+          {resourceSettingsProject ? (
+            <WorkspaceResourceSettingsDrawer
+              project={resourceSettingsProject}
+              settings={settings}
+              skills={availableSkills}
+              onClose={() => setResourceSettingsProject(null)}
+              onSave={(draft) => {
+                setSettings((prev) =>
+                  updateWorkspaceResourceSettings(prev, resourceSettingsProject.path, draft),
+                );
+                setResourceSettingsProject(null);
+              }}
             />
           ) : null}
 

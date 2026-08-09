@@ -183,6 +183,121 @@ fn normalize_archived_workspace_project_paths(raw: Option<&Value>) -> Value {
     Value::Array(out)
 }
 
+fn normalize_workspace_resource_ids(raw: Option<&Value>) -> Value {
+    let mut out = Vec::new();
+    let mut seen = HashSet::new();
+    if let Some(Value::Array(items)) = raw {
+        for item in items {
+            let Some(id) = item.as_str().map(str::trim).filter(|id| !id.is_empty()) else {
+                continue;
+            };
+            if seen.insert(id.to_string()) {
+                out.push(Value::String(id.to_string()));
+            }
+            if out.len() >= 256 {
+                break;
+            }
+        }
+    }
+    Value::Array(out)
+}
+
+const WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS: u64 = 90 * 24 * 60 * 60 * 1000;
+const MAX_WORKSPACE_RESOURCE_SETTINGS: usize = 256;
+
+fn normalize_workspace_resource_settings(raw: Option<&Value>) -> Value {
+    let Some(Value::Object(items)) = raw else {
+        return Value::Object(Map::new());
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+    let mut normalized_by_path = Map::new();
+    for (raw_path_key, raw_entry) in items {
+        let path_key = normalize_project_path_key(raw_path_key);
+        if path_key.is_empty() {
+            continue;
+        }
+        let Some(entry) = raw_entry.as_object() else {
+            continue;
+        };
+        let mode = match entry.get("mode").and_then(Value::as_str) {
+            Some("custom") => "custom",
+            Some("off") => "off",
+            _ => "inherit",
+        };
+        let state_version = entry
+            .get("stateVersion")
+            .and_then(Value::as_u64)
+            .filter(|value| *value > 0)
+            .unwrap_or(1);
+        let writer_id = entry
+            .get("writerId")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or_default()
+            .chars()
+            .take(64)
+            .collect::<String>();
+        let updated_at = entry
+            .get("updatedAt")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        if mode == "inherit"
+            && updated_at > 0
+            && now.saturating_sub(updated_at) > WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS
+        {
+            continue;
+        }
+        normalized_by_path.insert(
+            path_key,
+            json!({
+                "mode": mode,
+                "skillNames": if mode == "custom" {
+                    normalize_workspace_resource_ids(entry.get("skillNames"))
+                } else {
+                    Value::Array(Vec::new())
+                },
+                "mcpServerIds": if mode == "custom" {
+                    normalize_workspace_resource_ids(entry.get("mcpServerIds"))
+                } else {
+                    Value::Array(Vec::new())
+                },
+                "stateVersion": state_version,
+                "writerId": writer_id,
+                "updatedAt": updated_at,
+            }),
+        );
+    }
+    let mut normalized_entries = normalized_by_path.into_iter().collect::<Vec<_>>();
+    normalized_entries.sort_by(|(path_a, entry_a), (path_b, entry_b)| {
+        let active_a = entry_a["mode"] != "inherit";
+        let active_b = entry_b["mode"] != "inherit";
+        active_b
+            .cmp(&active_a)
+            .then_with(|| {
+                entry_b["updatedAt"]
+                    .as_u64()
+                    .unwrap_or(0)
+                    .cmp(&entry_a["updatedAt"].as_u64().unwrap_or(0))
+            })
+            .then_with(|| {
+                entry_b["stateVersion"]
+                    .as_u64()
+                    .unwrap_or(0)
+                    .cmp(&entry_a["stateVersion"].as_u64().unwrap_or(0))
+            })
+            .then_with(|| path_a.chars().cmp(path_b.chars()))
+    });
+    normalized_entries.truncate(MAX_WORKSPACE_RESOURCE_SETTINGS);
+    let mut out = Map::new();
+    for (path_key, entry) in normalized_entries {
+        out.insert(path_key, entry);
+    }
+    Value::Object(out)
+}
+
 fn normalize_system_proxy_value(raw: Option<&Value>) -> Value {
     let obj = match raw {
         Some(Value::Object(map)) => map.clone(),
@@ -337,6 +452,10 @@ fn system_value_with_defaults(raw: Option<Value>, default_workdir: &str) -> Valu
         ),
     );
     system.insert(
+        SYSTEM_WORKSPACE_RESOURCE_SETTINGS_KEY.to_string(),
+        normalize_workspace_resource_settings(system.get(SYSTEM_WORKSPACE_RESOURCE_SETTINGS_KEY)),
+    );
+    system.insert(
         SYSTEM_SYSTEM_PROXY_KEY.to_string(),
         normalize_system_proxy_value(system.get(SYSTEM_SYSTEM_PROXY_KEY)),
     );
@@ -386,6 +505,7 @@ fn save_system_with_default_workdir(
         SYSTEM_HIDDEN_WORKSPACE_PROJECT_PATHS_KEY,
         SYSTEM_MISSING_WORKSPACE_PROJECT_PATHS_KEY,
         SYSTEM_ARCHIVED_WORKSPACE_PROJECT_PATHS_KEY,
+        SYSTEM_WORKSPACE_RESOURCE_SETTINGS_KEY,
         SYSTEM_SYSTEM_PROXY_KEY,
     ] {
         let value = system.get(key).cloned().unwrap_or(Value::Null);

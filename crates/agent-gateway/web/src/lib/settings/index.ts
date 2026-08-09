@@ -252,7 +252,27 @@ export type SystemSettings = {
   // Archived workspaces (path-keyed, like hidden/missing). Archived rows stay
   // in the merged list but render disabled and can never be active.
   archivedWorkspaceProjectPaths: string[];
+  workspaceResourceSettings: Record<string, WorkspaceResourceSettings>;
   systemProxy: SystemProxyConfig;
+};
+
+export type WorkspaceResourceSettingsMode = "inherit" | "custom" | "off";
+
+export type WorkspaceResourceSettings = {
+  mode: WorkspaceResourceSettingsMode;
+  skillNames: string[];
+  mcpServerIds: string[];
+  stateVersion: number;
+  writerId: string;
+  updatedAt: number;
+};
+
+export type EffectiveWorkspaceResources = {
+  mode: WorkspaceResourceSettingsMode;
+  skillsEnabled: boolean;
+  skillNames: string[];
+  mcpServerIds: string[];
+  mcpServers: McpServerConfig[];
 };
 
 export type WorkspaceProjectKind = "managed" | "folder" | "history";
@@ -660,6 +680,86 @@ export function workspaceProjectPathKey(path: unknown): string {
   return isWindowsProjectPathLike(normalizedPath)
     ? normalizeWindowsProjectPathKey(normalizedPath)
     : normalizePosixProjectPathKey(normalizedPath);
+}
+
+function normalizeWorkspaceResourceSettingsMode(input: unknown): WorkspaceResourceSettingsMode {
+  return input === "custom" || input === "off" ? input : "inherit";
+}
+
+function normalizeWorkspaceResourceSettingsEntry(input: unknown): WorkspaceResourceSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const mode = normalizeWorkspaceResourceSettingsMode(obj.mode);
+  const stateVersion = Number(obj.stateVersion);
+  const updatedAt = Number(obj.updatedAt);
+  return {
+    mode,
+    skillNames: mode === "custom" ? normalizeStringArray(obj.skillNames) : [],
+    mcpServerIds: mode === "custom" ? normalizeStringArray(obj.mcpServerIds) : [],
+    stateVersion: Number.isSafeInteger(stateVersion) && stateVersion > 0 ? stateVersion : 1,
+    writerId: typeof obj.writerId === "string" ? obj.writerId.trim().slice(0, 64) : "",
+    updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0,
+  };
+}
+
+const WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const MAX_WORKSPACE_RESOURCE_SETTINGS = 256;
+
+export function normalizeWorkspaceResourceSettings(
+  input: unknown,
+): Record<string, WorkspaceResourceSettings> {
+  const source = (
+    input && typeof input === "object" && !Array.isArray(input) ? input : {}
+  ) as Record<string, unknown>;
+  const entries: Record<string, WorkspaceResourceSettings> = {};
+  const canonicalKeys = new Set<string>();
+  for (const [rawPathKey, rawEntry] of Object.entries(source)) {
+    const pathKey = workspaceProjectPathKey(rawPathKey);
+    if (!pathKey) continue;
+    assignNormalizedProjectKeyValue(
+      entries,
+      canonicalKeys,
+      rawPathKey,
+      normalizeWorkspaceResourceSettingsEntry(rawEntry),
+    );
+  }
+  const now = Date.now();
+  for (const [pathKey, entry] of Object.entries(entries)) {
+    if (
+      entry.mode === "inherit" &&
+      entry.updatedAt > 0 &&
+      now - entry.updatedAt > WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS
+    ) {
+      delete entries[pathKey];
+    }
+  }
+  const pathKeys = Object.keys(entries);
+  if (pathKeys.length > MAX_WORKSPACE_RESOURCE_SETTINGS) {
+    pathKeys.sort((a, b) => {
+      const aEntry = entries[a];
+      const bEntry = entries[b];
+      const byActiveMode = Number(bEntry.mode !== "inherit") - Number(aEntry.mode !== "inherit");
+      if (byActiveMode !== 0) return byActiveMode;
+      const byUpdatedAt = bEntry.updatedAt - aEntry.updatedAt;
+      if (byUpdatedAt !== 0) return byUpdatedAt;
+      const byVersion = bEntry.stateVersion - aEntry.stateVersion;
+      return byVersion !== 0 ? byVersion : compareWorkspaceResourcePathKeys(a, b);
+    });
+    for (const pathKey of pathKeys.slice(MAX_WORKSPACE_RESOURCE_SETTINGS)) {
+      delete entries[pathKey];
+    }
+  }
+  return entries;
+}
+
+function compareWorkspaceResourcePathKeys(a: string, b: string): number {
+  const aCodePoints = Array.from(a, (value) => value.codePointAt(0) ?? 0);
+  const bCodePoints = Array.from(b, (value) => value.codePointAt(0) ?? 0);
+  const length = Math.min(aCodePoints.length, bCodePoints.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = aCodePoints[index] - bCodePoints[index];
+    if (difference !== 0) return difference;
+  }
+  return aCodePoints.length - bCodePoints.length;
 }
 
 function assignNormalizedProjectKeyValue<T>(
@@ -1756,6 +1856,7 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     archivedWorkspaceProjectPaths: normalizeArchivedWorkspaceProjectPaths(
       obj.archivedWorkspaceProjectPaths,
     ),
+    workspaceResourceSettings: normalizeWorkspaceResourceSettings(obj.workspaceResourceSettings),
     systemProxy: normalizeSystemProxyConfig(obj.systemProxy),
   };
 }
@@ -2396,6 +2497,7 @@ export function getDefaultSettings(): AppSettings {
       hiddenWorkspaceProjectPaths: [],
       missingWorkspaceProjectPaths: [],
       archivedWorkspaceProjectPaths: [],
+      workspaceResourceSettings: {},
       systemProxy: getDefaultSystemProxyConfig(),
     },
     customProviders,
@@ -2580,6 +2682,121 @@ export function updateSkills(prev: AppSettings, patch: Partial<SkillsSettings>):
       ...prev.skills,
       ...patch,
     },
+  });
+}
+
+export function resolveWorkspaceResources(
+  settings: AppSettings,
+  workdir: string,
+): EffectiveWorkspaceResources {
+  const pathKey = workspaceProjectPathKey(workdir);
+  const entry = pathKey ? settings.system.workspaceResourceSettings[pathKey] : undefined;
+  const mode = entry?.mode ?? "inherit";
+  if (mode === "off") {
+    return { mode, skillsEnabled: false, skillNames: [], mcpServerIds: [], mcpServers: [] };
+  }
+
+  const skillNames =
+    mode === "custom"
+      ? mergeAlwaysEnabledSkillNames(entry?.skillNames ?? [])
+      : mergeAlwaysEnabledSkillNames(settings.skills.selected);
+  const mcpServerIds =
+    mode === "custom"
+      ? [...(entry?.mcpServerIds ?? [])]
+      : settings.mcp.servers.map((server) => server.id).filter(Boolean);
+  const selectedMcpIds = mode === "custom" ? new Set(mcpServerIds) : null;
+  const mcpServers = settings.mcp.servers.filter(
+    (server) =>
+      server.enabled && server.id.trim() && (!selectedMcpIds || selectedMcpIds.has(server.id)),
+  );
+  return {
+    mode,
+    skillsEnabled: settings.skills.enabled,
+    skillNames: settings.skills.enabled ? skillNames : [],
+    mcpServerIds,
+    mcpServers,
+  };
+}
+
+export function filterMcpSettingsForWorkspace(
+  mcp: McpSettings,
+  resources: Pick<EffectiveWorkspaceResources, "mode" | "mcpServerIds">,
+): McpSettings {
+  if (resources.mode === "inherit") return mcp;
+  if (resources.mode === "off") return { ...mcp, servers: [] };
+  const allowedIds = new Set(resources.mcpServerIds);
+  return { ...mcp, servers: mcp.servers.filter((server) => allowedIds.has(server.id)) };
+}
+
+export function updateWorkspaceResourceSettings(
+  prev: AppSettings,
+  workdir: string,
+  patch: Pick<WorkspaceResourceSettings, "mode" | "skillNames" | "mcpServerIds">,
+): AppSettings {
+  const pathKey = workspaceProjectPathKey(workdir);
+  if (!pathKey) return prev;
+  const entries = { ...prev.system.workspaceResourceSettings };
+  const current = entries[pathKey];
+  entries[pathKey] = normalizeWorkspaceResourceSettingsEntry({
+    ...patch,
+    stateVersion: (current?.stateVersion ?? 0) + 1,
+    writerId: getRightDockWriterId(),
+    updatedAt: Date.now(),
+  });
+  return normalizeSettings({
+    ...prev,
+    system: { ...prev.system, workspaceResourceSettings: entries },
+  });
+}
+
+export function resetWorkspaceResourceSettings(prev: AppSettings, workdir: string): AppSettings {
+  return updateWorkspaceResourceSettings(prev, workdir, {
+    mode: "inherit",
+    skillNames: [],
+    mcpServerIds: [],
+  });
+}
+
+export function removeWorkspaceResourceReferences(
+  prev: AppSettings,
+  references: { skillNames?: readonly string[]; mcpServerIds?: readonly string[] },
+): AppSettings {
+  const removedSkillNames = new Set(
+    references.skillNames?.map((name) => name.trim()).filter(Boolean),
+  );
+  const removedMcpServerIds = new Set(
+    references.mcpServerIds?.map((id) => id.trim()).filter(Boolean),
+  );
+  if (removedSkillNames.size === 0 && removedMcpServerIds.size === 0) return prev;
+
+  let changed = false;
+  const entries = { ...prev.system.workspaceResourceSettings };
+  const writerId = getRightDockWriterId();
+  const updatedAt = Date.now();
+  for (const [pathKey, entry] of Object.entries(entries)) {
+    if (entry.mode !== "custom") continue;
+    const skillNames = entry.skillNames.filter((name) => !removedSkillNames.has(name));
+    const mcpServerIds = entry.mcpServerIds.filter((id) => !removedMcpServerIds.has(id));
+    if (
+      skillNames.length === entry.skillNames.length &&
+      mcpServerIds.length === entry.mcpServerIds.length
+    ) {
+      continue;
+    }
+    changed = true;
+    entries[pathKey] = normalizeWorkspaceResourceSettingsEntry({
+      ...entry,
+      skillNames,
+      mcpServerIds,
+      stateVersion: entry.stateVersion + 1,
+      writerId,
+      updatedAt,
+    });
+  }
+  if (!changed) return prev;
+  return normalizeSettings({
+    ...prev,
+    system: { ...prev.system, workspaceResourceSettings: entries },
   });
 }
 

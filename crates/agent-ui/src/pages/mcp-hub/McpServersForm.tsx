@@ -15,11 +15,13 @@ import {
 import {
   type AppSettings,
   type McpServerConfig,
+  removeWorkspaceResourceReferences,
   type ToolPolicy,
   updateMcp,
   updateSystem,
 } from "@liveagent/app/lib/settings/index";
 import { ToolPolicyToggle } from "@liveagent/ui/components/hub/ToolPolicyToggle";
+import { ResourceActivationSwitch } from "@liveagent/ui/components/resources/ResourceActivationSwitch";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { ConfirmDeletePopover } from "@liveagent/ui/components/ui/confirm-action-popover";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -298,24 +300,12 @@ const McpServerCard = memo(function McpServerCard(props: {
     >
       <div className="flex items-center gap-3 px-4 py-3">
         {/* Toggle */}
-        <button
-          type="button"
-          title={enabled ? t("settings.disable") : t("settings.enable")}
-          onClick={() => patchServer({ enabled: !enabled })}
-          className={cn(
-            "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full ring-1 transition-colors",
-            enabled
-              ? "bg-foreground/80 ring-foreground/30 shadow-[0_2px_8px_-3px_rgba(15,23,42,0.4)] dark:shadow-[0_2px_8px_-3px_rgba(0,0,0,0.6)]"
-              : "bg-muted-foreground/25 ring-border/40",
-          )}
-        >
-          <span
-            className={cn(
-              "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
-              enabled ? "translate-x-[1.05rem]" : "translate-x-[0.125rem]",
-            )}
-          />
-        </button>
+        <ResourceActivationSwitch
+          checked={enabled}
+          compact
+          label={enabled ? t("settings.disable") : t("settings.enable")}
+          onCheckedChange={(next) => patchServer({ enabled: next })}
+        />
 
         {/* Clickable body */}
         <button
@@ -419,9 +409,12 @@ const McpServerCard = memo(function McpServerCard(props: {
             name={serverConfig.id || `Server ${idx + 1}`}
             onConfirm={() =>
               setSettings((prev) =>
-                updateMcp(prev, {
-                  servers: prev.mcp.servers.filter((_, index) => index !== idx),
-                }),
+                removeWorkspaceResourceReferences(
+                  updateMcp(prev, {
+                    servers: prev.mcp.servers.filter((_, index) => index !== idx),
+                  }),
+                  { mcpServerIds: [serverConfig.id] },
+                ),
               )
             }
           >

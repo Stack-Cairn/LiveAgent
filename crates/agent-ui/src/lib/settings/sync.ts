@@ -5,6 +5,7 @@ import {
   normalizeChatRuntimeControls,
   normalizeRightDockSettings,
   normalizeSettings,
+  normalizeWorkspaceResourceSettings,
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings/index";
 
@@ -572,6 +573,29 @@ function mergeSyncedSystemProxy(
   };
 }
 
+function mergeSyncedWorkspaceResourceSettings(
+  current: AppSettings["system"]["workspaceResourceSettings"],
+  incoming: unknown,
+): AppSettings["system"]["workspaceResourceSettings"] {
+  const incomingSettings = normalizeWorkspaceResourceSettings(incoming);
+  const merged = { ...current };
+  for (const [pathKey, candidate] of Object.entries(incomingSettings)) {
+    const existing = merged[pathKey];
+    if (
+      !existing ||
+      candidate.stateVersion > existing.stateVersion ||
+      (candidate.stateVersion === existing.stateVersion &&
+        candidate.writerId > existing.writerId) ||
+      (candidate.stateVersion === existing.stateVersion &&
+        candidate.writerId === existing.writerId &&
+        candidate.updatedAt > existing.updatedAt)
+    ) {
+      merged[pathKey] = candidate;
+    }
+  }
+  return normalizeWorkspaceResourceSettings(merged);
+}
+
 function mergeSyncedSystemSettings(
   current: AppSettings["system"],
   incoming: unknown,
@@ -582,6 +606,12 @@ function mergeSyncedSystemSettings(
   }
 
   const incomingSystem = incoming as AppSettings["system"];
+  const workspaceResourceSettings = Object.hasOwn(incomingSystem, "workspaceResourceSettings")
+    ? mergeSyncedWorkspaceResourceSettings(
+        current.workspaceResourceSettings,
+        incomingSystem.workspaceResourceSettings,
+      )
+    : current.workspaceResourceSettings;
   const activeWorkspaceProjectId = resolveSyncedActiveWorkspaceProjectId(current, incomingSystem);
   const systemProxy = mergeSyncedSystemProxy(
     current.systemProxy,
@@ -592,6 +622,7 @@ function mergeSyncedSystemSettings(
     return {
       ...incomingSystem,
       activeWorkspaceProjectId,
+      workspaceResourceSettings,
       systemProxy,
     };
   }
@@ -608,6 +639,7 @@ function mergeSyncedSystemSettings(
   return {
     ...incomingSystem,
     activeWorkspaceProjectId,
+    workspaceResourceSettings,
     systemProxy,
     workspaceProjects: incomingSystem.workspaceProjects.map((project) => {
       const lastConversationAt = Math.max(
