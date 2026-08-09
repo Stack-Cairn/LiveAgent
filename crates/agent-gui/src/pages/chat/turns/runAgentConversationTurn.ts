@@ -45,7 +45,10 @@ import {
   upsertHostedSearchToRound,
   upsertToolCallToRound,
 } from "../../../lib/chat/messages/uiMessages";
-import { runAssistantWithTools } from "../../../lib/chat/runner/agentRunner";
+import {
+  type AgentRunnerFailoverParams,
+  runAssistantWithTools,
+} from "../../../lib/chat/runner/agentRunner";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText } from "../../../lib/providers/llm";
 import { resolveRuntimePlatform } from "../../../lib/runtimePlatform";
@@ -206,6 +209,7 @@ export type RunAgentConversationTurnParams = {
   providerId: ProviderId;
   model: string;
   runtime: ProviderRuntimeConfig;
+  failover?: AgentRunnerFailoverParams;
   runtimeModel: RuntimeModel;
   selectedModel: {
     customProviderId: string;
@@ -740,6 +744,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         providerId,
         model,
         runtime,
+        failover: params.failover,
         runtimePlatform,
         context: agentContext,
         workdir: effectiveWorkdir,

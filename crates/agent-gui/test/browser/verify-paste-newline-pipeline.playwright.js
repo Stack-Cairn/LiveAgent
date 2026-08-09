@@ -104,6 +104,44 @@ async (page) => {
       );
     }
 
+    const tagClipboard = await page.evaluate(() => window.runTagClipboardRoundTrip());
+    expectEqual(tagClipboard.copyPrevented, true, `${targetName}/tag copy handled`);
+    expectEqual(tagClipboard.pastePrevented, true, `${targetName}/tag paste handled`);
+    expectEqual(tagClipboard.hasHtmlPayload, true, `${targetName}/tag HTML payload`);
+    expectEqual(tagClipboard.hasPrivatePayload, true, `${targetName}/tag private payload`);
+    expectEqual(
+      JSON.stringify(tagClipboard.restoredTypes),
+      JSON.stringify([
+        "fileMention",
+        "fileMention",
+        "skillMention",
+        "commitMention",
+        "gitFileMention",
+        "codeMention",
+        "largePaste",
+      ]),
+      `${targetName}/structured tag round trip`,
+    );
+    expectEqual(
+      JSON.stringify(tagClipboard.plainRestoredTypes),
+      JSON.stringify([
+        "fileMention",
+        "fileMention",
+        "skillMention",
+        "commitMention",
+        "gitFileMention",
+        "codeMention",
+      ]),
+      `${targetName}/user bubble token fallback`,
+    );
+    if (!tagClipboard.plainText.includes("/reviewer")) {
+      throw new Error(`${targetName}/tag plain text: missing slash skill token`);
+    }
+    if (!tagClipboard.plainText.includes("[guides](docs/guides/)")) {
+      throw new Error(`${targetName}/tag plain text: missing directory token`);
+    }
+    targetEvidence.push({ caseName: "structured tag clipboard", ...tagClipboard });
+
     const replayText = "reload\n\nreconnect";
     const beforeReload = await page.evaluate((text) => window.runPastePipeline(text), replayText);
     await page.reload();

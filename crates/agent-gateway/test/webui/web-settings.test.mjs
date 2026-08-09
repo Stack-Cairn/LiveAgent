@@ -1663,3 +1663,45 @@ test("gateway sync keeps all web font families local", () => {
     current.customSettings,
   );
 });
+
+test("webui model failover round-trips through gateway settings sync", () => {
+  const providers = [
+    {
+      id: "provider-primary",
+      name: "Primary",
+      type: "claude_code",
+      baseUrl: "https://primary.example.com",
+      apiKey: "key-primary",
+      models: [{ id: "claude-fable-5", contextWindow: 200000, maxOutputToken: 8192 }],
+      activeModels: ["claude-fable-5"],
+    },
+    {
+      id: "provider-backup",
+      name: "Backup",
+      type: "claude_code",
+      baseUrl: "https://backup.example.com",
+      apiKey: "key-backup",
+      models: [{ id: "claude-fable-5", contextWindow: 200000, maxOutputToken: 8192 }],
+      activeModels: ["claude-fable-5"],
+    },
+  ];
+  const edited = settings.updateModelFailover(
+    settings.normalizeSettings({ customProviders: providers }),
+    "claude_code",
+    { enabled: true, queue: ["provider-backup"], cooldownSeconds: 120 },
+  );
+
+  // The changed field must be part of the outgoing update...
+  const update = settingsSync.buildGatewaySettingsSyncUpdatePayload(
+    settings.normalizeSettings({ customProviders: providers }),
+    edited,
+  );
+  assert.equal(update.modelFailover?.claude_code.enabled, true);
+
+  // ...and a receiver applying the full payload converges on the same config.
+  const received = settingsSync.applyGatewaySettingsSyncPayload(
+    settings.normalizeSettings({ customProviders: providers }),
+    settingsSync.buildGatewaySettingsSyncPayload(edited),
+  );
+  assert.deepEqual(received.modelFailover, edited.modelFailover);
+});
