@@ -17,6 +17,10 @@ const validCases = [
   [String.raw`C:\work\src\a.ts`, { path: "C:/work/src/a.ts", source: "absolute" }],
   [String.raw`C:\\project\\file.ts`, { path: "C:/project/file.ts", source: "absolute" }],
   ["D:/other/a.ts", { path: "D:/other/a.ts", source: "absolute" }],
+  ["/D:/workspace/release/a.zip", { path: "D:/workspace/release/a.zip", source: "absolute" }],
+  ["/d:/workspace/release/a.zip", { path: "d:/workspace/release/a.zip", source: "absolute" }],
+  ["~/release/a.zip", { path: "~/release/a.zip", source: "absolute" }],
+  ["~/work/a.ts:12", { path: "~/work/a.ts", line: 12, source: "absolute" }],
   ["C:/work/src/a.ts:12", { path: "C:/work/src/a.ts", line: 12, source: "absolute" }],
   [
     "C:/work/src/a.ts:12:4",
