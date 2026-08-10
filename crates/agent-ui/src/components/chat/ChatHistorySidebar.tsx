@@ -331,11 +331,14 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
   // Enter/Escape mark the blur as handled so onBlur commits exactly once —
   // symmetric with ProjectRow's skipNextBlurCommitRef.
   const skipNextBlurCommitRef = useRef(false);
-  // The row swaps the dropdown for the rename input, so Base UI hands focus
-  // back to the now-unmounted trigger right after the menu closes. That focus
-  // handoff blurred the freshly focused input and committed the untouched
-  // title, which read as "Rename does nothing" on Windows.
-  const ignoreMenuCloseBlurRef = useRef(false);
+  // Renaming from the menu unmounts the whole dropdown in the commit that
+  // mounts the rename input, and Base UI resolves its return-focus target
+  // synchronously during that unmount — before the input's ref attaches — so
+  // the deferred focus() landed on a fallback element, blurring the input and
+  // committing the untouched title ("rename does nothing" on Windows). The
+  // menu's finalFocus callback consumes this one-shot flag to skip that
+  // return-focus entirely; the isRenaming effect owns focus placement instead.
+  const suppressMenuReturnFocusRef = useRef(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const longPressTriggeredRef = useRef(false);
@@ -381,7 +384,7 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     if (isInteractionDisabled) {
       return;
     }
-    ignoreMenuCloseBlurRef.current = true;
+    suppressMenuReturnFocusRef.current = true;
     onStartRenaming(item);
   }, [isInteractionDisabled, item, onStartRenaming]);
 
@@ -597,10 +600,7 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
   const shouldShowMobilePressFeedback = isMobileMenuLayout && (isLongPressActive || menuOpen);
 
   useEffect(() => {
-    if (!isRenaming) {
-      ignoreMenuCloseBlurRef.current = false;
-      return;
-    }
+    if (!isRenaming) return;
     skipNextBlurCommitRef.current = false;
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -672,12 +672,6 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
             onBlur={() => {
               if (skipNextBlurCommitRef.current) {
                 skipNextBlurCommitRef.current = false;
-                return;
-              }
-              if (ignoreMenuCloseBlurRef.current) {
-                ignoreMenuCloseBlurRef.current = false;
-                inputRef.current?.focus();
-                inputRef.current?.select();
                 return;
               }
               onCommitRename();
@@ -875,6 +869,13 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 align="start"
                 sideOffset={8}
                 collisionPadding={12}
+                finalFocus={() => {
+                  if (suppressMenuReturnFocusRef.current) {
+                    suppressMenuReturnFocusRef.current = false;
+                    return false;
+                  }
+                  return true;
+                }}
                 className="sidebar-context-menu min-w-[10rem] rounded-xl border-border/60 bg-background/95 backdrop-blur-xl"
               >
                 {isMobileMenuLayout && !item.isPending ? (
@@ -1024,18 +1025,15 @@ const ProjectRow = memo(function ProjectRow(props: {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const skipNextBlurCommitRef = useRef(false);
-  // Same menu-close focus handoff as HistoryRow: the trigger unmounts when the
-  // row swaps to the rename input, so the first blur must not commit.
-  const ignoreMenuCloseBlurRef = useRef(false);
+  // Same menu-unmount return-focus hazard as HistoryRow: the menu's finalFocus
+  // callback consumes this one-shot flag so the rename input keeps focus.
+  const suppressMenuReturnFocusRef = useRef(false);
   const isDefaultProject = project.id === DEFAULT_WORKSPACE_PROJECT_ID;
   const isPinned = project.isPinned === true;
   const ProjectFolderIcon = isActive ? FolderOpen : FolderClosed;
 
   useEffect(() => {
-    if (!isRenaming) {
-      ignoreMenuCloseBlurRef.current = false;
-      return;
-    }
+    if (!isRenaming) return;
     skipNextBlurCommitRef.current = false;
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -1045,7 +1043,7 @@ const ProjectRow = memo(function ProjectRow(props: {
     if (isInteractionDisabled) {
       return;
     }
-    ignoreMenuCloseBlurRef.current = true;
+    suppressMenuReturnFocusRef.current = true;
     onStartRenamingProject(project);
   }, [isInteractionDisabled, onStartRenamingProject, project]);
 
@@ -1182,12 +1180,6 @@ const ProjectRow = memo(function ProjectRow(props: {
             onBlur={() => {
               if (skipNextBlurCommitRef.current) {
                 skipNextBlurCommitRef.current = false;
-                return;
-              }
-              if (ignoreMenuCloseBlurRef.current) {
-                ignoreMenuCloseBlurRef.current = false;
-                inputRef.current?.focus();
-                inputRef.current?.select();
                 return;
               }
               onCommitProjectRename();
@@ -1391,6 +1383,13 @@ const ProjectRow = memo(function ProjectRow(props: {
                     side="right"
                     align="start"
                     sideOffset={6}
+                    finalFocus={() => {
+                      if (suppressMenuReturnFocusRef.current) {
+                        suppressMenuReturnFocusRef.current = false;
+                        return false;
+                      }
+                      return true;
+                    }}
                     className="sidebar-context-menu"
                   >
                     <DropdownMenuItem

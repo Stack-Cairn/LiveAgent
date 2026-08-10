@@ -128,17 +128,24 @@ test("a stop request halts the batch and reports the rest as skipped", async () 
   assert.deepEqual(result.skippedIds, ["two", "three"]);
 });
 
-test("rename menu guards the menu-close blur without changing double-click rename", () => {
+test("menu rename suppresses the menu's return-focus without changing double-click rename", () => {
   const source = readFileSync(
     new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
     "utf8",
   );
 
-  assert.match(
-    source,
-    /const handleStartRenamingFromMenu = useCallback\(\(\) => \{[\s\S]*?ignoreMenuCloseBlurRef\.current = true;[\s\S]*?onStartRenaming\(item\);/,
+  // Both menu entries (HistoryRow + ProjectRow) arm the one-shot flag.
+  assert.equal((source.match(/suppressMenuReturnFocusRef\.current = true;/g) ?? []).length, 2);
+  assert.equal((source.match(/onSelect=\{handleStartRenamingFromMenu\}/g) ?? []).length, 2);
+  // Both dropdowns consume it declaratively via Base UI's finalFocus, keeping
+  // the default trigger return-focus for every other menu close.
+  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 2);
+  assert.equal(
+    (source.match(/suppressMenuReturnFocusRef\.current = false;\s*return false;/g) ?? []).length,
+    2,
   );
+  // Double-click rename keeps the plain path, and the retired blur-swallowing
+  // guard must not come back — blur either skips once (Enter/Escape) or commits.
   assert.match(source, /onDoubleClick=\{\(event\) => \{[\s\S]*?handleStartRenaming\(\);/);
-  assert.match(source, /onSelect=\{handleStartRenamingFromMenu\}/);
-  assert.equal((source.match(/if \(ignoreMenuCloseBlurRef\.current\)/g) ?? []).length, 2);
+  assert.doesNotMatch(source, /ignoreMenuCloseBlurRef/);
 });
