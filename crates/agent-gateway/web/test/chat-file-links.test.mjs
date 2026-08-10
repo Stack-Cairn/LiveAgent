@@ -34,7 +34,7 @@ const {
   decodeChatFileLinkPayload,
   encodeChatFileLink,
   parseChatFileLink,
-} = loader.loadModule("src/lib/chat/chatFileLinks.ts");
+} = loader.loadModule("@liveagent/ui/lib/chat/chatFileLinks.ts");
 
 const validCases = [
   ["C:/work/src/a.ts", { path: "C:/work/src/a.ts", source: "absolute" }],

@@ -11,7 +11,7 @@ import {
   decodeChatFileLinkPayload,
   encodeChatFileLink,
   parseChatFileLink,
-} from "@liveagent/app/lib/chat/chatFileLinks";
+} from "../lib/chat/chatFileLinks";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cjk } from "@streamdown/cjk";

@@ -21,7 +21,7 @@ import {
   useSyncExternalStore,
 } from "react";
 import { CheckCircle2, ChevronDown } from "../../../components/icons";
-import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type {
   HistoryMessageRef,
   RenderSummaryCard,

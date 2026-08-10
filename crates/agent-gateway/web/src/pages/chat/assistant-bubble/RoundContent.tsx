@@ -12,7 +12,7 @@ import { useLocale } from "@liveagent/ui/i18n/index";
 import { isTaskToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
 import { memo, useMemo, useState } from "react";
 import { ChevronRight, RefreshCw } from "../../../components/icons";
-import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "../../../lib/chat/chatPageHelpers";
 import type { RetryAttemptRecord } from "../../../lib/chat/transcript/types";
 import type { UiRound } from "../../../lib/chat/uiMessages";

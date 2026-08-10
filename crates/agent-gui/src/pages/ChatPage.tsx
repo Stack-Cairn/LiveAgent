@@ -56,7 +56,7 @@ import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspace
 import { PanelRightClose, PanelRightOpen } from "../components/icons";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type { AppUpdateController } from "../lib/appUpdates";
-import type { ChatFileLink } from "../lib/chat/chatFileLinks";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
   buildRequestContext,

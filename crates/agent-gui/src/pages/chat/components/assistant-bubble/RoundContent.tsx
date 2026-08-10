@@ -5,7 +5,7 @@ import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { memo, type ReactNode, useState } from "react";
 import { ChevronRight, RefreshCw } from "../../../../components/icons";
-import type { ChatFileLink } from "../../../../lib/chat/chatFileLinks";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { RetryAttemptRecord } from "../../../../lib/chat/conversation/liveTranscriptStore";
 import type { GroupedRoundBlock } from "./assistantBubbleUtils";
 import { MemoToolCallItem } from "./ToolCallItem";

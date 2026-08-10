@@ -48,7 +48,7 @@ import {
 } from "react";
 import { ChevronDown, PanelRightClose, PanelRightOpen, Terminal } from "@/components/icons";
 import { registerAskUserQuestionAnswerHandler } from "@/lib/chat/askUserQuestionBridge";
-import type { ChatFileLink } from "@/lib/chat/chatFileLinks";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
 import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";

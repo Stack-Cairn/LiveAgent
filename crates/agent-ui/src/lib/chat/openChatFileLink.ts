@@ -1,4 +1,4 @@
-import type { ChatFileLink } from "@liveagent/app/lib/chat/chatFileLinks";
+import type { ChatFileLink } from "./chatFileLinks";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 
 export type OpenChatFileLinkParams = ChatFileLink & {

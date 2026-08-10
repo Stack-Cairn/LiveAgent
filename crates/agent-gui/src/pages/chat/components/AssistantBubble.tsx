@@ -6,7 +6,7 @@ import {
 } from "@liveagent/ui/components/chat/AssistantStatus";
 import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import { memo, type ReactNode } from "react";
-import type { ChatFileLink } from "../../../lib/chat/chatFileLinks";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { VIBING_STATUS } from "../../../lib/chat/page/chatPageHelpers";
 import type { AssistantUnitRow } from "../transcript/rowModel";

@@ -1,5 +1,5 @@
 import { ChevronRight, Lightbulb } from "@liveagent/app/components/icons";
-import type { ChatFileLink } from "@liveagent/app/lib/chat/chatFileLinks";
+import type { ChatFileLink } from "../../lib/chat/chatFileLinks";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "../Markdown";

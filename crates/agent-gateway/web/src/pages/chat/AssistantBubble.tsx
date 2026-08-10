@@ -2,7 +2,7 @@ import { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 import { ChangedFilesCard } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { memo, useMemo } from "react";
 import { collectChangedFiles } from "../../lib/chat/changedFiles";
-import type { ChatFileLink } from "../../lib/chat/chatFileLinks";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { UiRound } from "../../lib/chat/uiMessages";
 import { RoundContent } from "./assistant-bubble/RoundContent";
 
