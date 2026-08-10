@@ -14,6 +14,7 @@ import {
 } from "@liveagent/app/components/icons";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -45,6 +46,7 @@ type SharedHistoryManagerModalProps<Conversation extends SharedHistorySummary> =
   errors: Readonly<Record<string, string | undefined>>;
   listError?: string | null;
   shareOrigin?: string;
+  shareOriginPort?: number;
   shareOriginLoading?: boolean;
   onRefresh: () => void;
   onLoadStatus: (conversation: Conversation) => void;
@@ -52,56 +54,6 @@ type SharedHistoryManagerModalProps<Conversation extends SharedHistorySummary> =
   onSetRedactToolContent: (conversation: Conversation, redactToolContent: boolean) => void;
   onClose: () => void;
 };
-
-function getBrowserOrigin() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return window.location.origin;
-}
-
-function resolveShareOrigin(explicitOrigin?: string) {
-  const rawOrigin = explicitOrigin === undefined ? getBrowserOrigin() : explicitOrigin;
-  const trimmed = rawOrigin.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const schemeMatch = /^(https?|wss?):(.*)$/i.exec(trimmed);
-  const withScheme = schemeMatch
-    ? [
-        schemeMatch[1].toLowerCase(),
-        ":",
-        schemeMatch[2].startsWith("//")
-          ? schemeMatch[2]
-          : `//${schemeMatch[2].replace(/^\/+/, "")}`,
-      ].join("")
-    : `https://${trimmed}`;
-  const httpUrl = withScheme.replace(/^wss:\/\//i, "https://").replace(/^ws:\/\//i, "http://");
-
-  try {
-    const url = new URL(httpUrl);
-    if (
-      (url.protocol !== "http:" && url.protocol !== "https:") ||
-      !url.hostname ||
-      url.hostname === "http" ||
-      url.hostname === "https"
-    ) {
-      return "";
-    }
-    return url.origin.replace(/\/$/, "");
-  } catch {
-    return "";
-  }
-}
-
-function buildShareUrl(token: string, origin: string) {
-  const normalizedToken = token.trim();
-  if (!normalizedToken || !origin) {
-    return "";
-  }
-  return `${origin}/share/${encodeURIComponent(normalizedToken)}`;
-}
 
 function formatConversationTime(timestamp: number | undefined, locale: string, fallback: string) {
   if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp <= 0) {
@@ -214,6 +166,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
   errors,
   listError,
   shareOrigin,
+  shareOriginPort,
   shareOriginLoading = false,
   onRefresh,
   onLoadStatus,
@@ -224,7 +177,7 @@ export function SharedHistoryManagerModal<Conversation extends SharedHistorySumm
   const { locale, t } = useLocale();
   const [query, setQuery] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const publicOrigin = resolveShareOrigin(shareOrigin);
+  const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort);
   const normalizedQuery = query.trim().toLowerCase();
   const filteredConversations = useMemo(
     () =>

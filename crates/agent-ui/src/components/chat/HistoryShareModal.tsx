@@ -10,6 +10,7 @@ import {
   X,
 } from "@liveagent/app/components/icons";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -34,61 +35,12 @@ type HistoryShareModalProps = {
   isUpdating: boolean;
   errorMessage: string | null;
   shareOrigin?: string;
+  shareOriginPort?: number;
   shareOriginLoading?: boolean;
   onToggle: (enabled: boolean, options?: { redactToolContent?: boolean }) => void;
   onRedactToolContentChange: (redactToolContent: boolean) => void;
   onClose: () => void;
 };
-
-function getBrowserOrigin() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return window.location.origin;
-}
-
-function resolveShareOrigin(explicitOrigin?: string) {
-  const rawOrigin = explicitOrigin === undefined ? getBrowserOrigin() : explicitOrigin;
-  const trimmed = rawOrigin.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const schemeMatch = /^(https?|wss?):(.*)$/i.exec(trimmed);
-  const withScheme = schemeMatch
-    ? [
-        schemeMatch[1].toLowerCase(),
-        ":",
-        schemeMatch[2].startsWith("//")
-          ? schemeMatch[2]
-          : `//${schemeMatch[2].replace(/^\/+/, "")}`,
-      ].join("")
-    : `https://${trimmed}`;
-  const httpUrl = withScheme.replace(/^wss:\/\//i, "https://").replace(/^ws:\/\//i, "http://");
-
-  try {
-    const url = new URL(httpUrl);
-    if (
-      (url.protocol !== "http:" && url.protocol !== "https:") ||
-      !url.hostname ||
-      url.hostname === "http" ||
-      url.hostname === "https"
-    ) {
-      return "";
-    }
-    return url.origin.replace(/\/$/, "");
-  } catch {
-    return "";
-  }
-}
-
-function buildShareUrl(token: string, origin: string) {
-  const normalizedToken = token.trim();
-  if (!normalizedToken || !origin) {
-    return "";
-  }
-  return `${origin}/share/${encodeURIComponent(normalizedToken)}`;
-}
 
 function RedactionPicker(props: {
   value: boolean;
@@ -183,6 +135,7 @@ export function HistoryShareModal({
   isUpdating,
   errorMessage,
   shareOrigin,
+  shareOriginPort,
   shareOriginLoading = false,
   onToggle,
   onRedactToolContentChange,
@@ -190,7 +143,7 @@ export function HistoryShareModal({
 }: HistoryShareModalProps) {
   const [copied, setCopied] = useState(false);
   const [redactToolContent, setRedactToolContent] = useState(false);
-  const publicOrigin = resolveShareOrigin(shareOrigin);
+  const publicOrigin = resolveShareOrigin(shareOrigin, shareOriginPort);
   const token = share?.enabled === true ? (share.token?.trim() ?? "") : "";
   const shareUrl = useMemo(() => buildShareUrl(token, publicOrigin), [publicOrigin, token]);
   const isEnabled = share?.enabled === true;

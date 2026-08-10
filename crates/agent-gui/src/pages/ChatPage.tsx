@@ -350,6 +350,7 @@ export function ChatPage(props: ChatPageProps) {
     sharedManagerErrors,
     sharedManagerGatewayUrlLoading,
     sharedManagerShareOrigin,
+    sharedManagerShareOriginPort,
     sharedHistoryItems,
     removeSharedHistoryItems,
     handleLoadSharedHistoryStatus,
@@ -1919,6 +1920,7 @@ export function ChatPage(props: ChatPageProps) {
             isUpdating={shareUpdating}
             errorMessage={shareError}
             shareOrigin={sharedManagerShareOrigin}
+            shareOriginPort={sharedManagerShareOriginPort}
             shareOriginLoading={sharedManagerGatewayUrlLoading}
             onToggle={handleToggleHistoryShare}
             onRedactToolContentChange={handleSetShareRedactToolContent}
@@ -1934,6 +1936,7 @@ export function ChatPage(props: ChatPageProps) {
             updatingIds={sharedManagerUpdatingIds}
             errors={sharedManagerErrors}
             shareOrigin={sharedManagerShareOrigin}
+            shareOriginPort={sharedManagerShareOriginPort}
             shareOriginLoading={sharedManagerGatewayUrlLoading}
             onRefresh={handleRefreshSharedHistoryStatuses}
             onLoadStatus={handleLoadSharedHistoryStatus}

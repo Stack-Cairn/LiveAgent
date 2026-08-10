@@ -73,6 +73,9 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
     const runtimeGatewayUrl = sharedManagerGatewayUrl.trim();
     return statusGatewayUrl || runtimeGatewayUrl || remoteSettings.gatewayUrl;
   }, [remoteRuntimeStatus.gatewayUrl, remoteSettings.gatewayUrl, sharedManagerGatewayUrl]);
+  // 网关基址(gatewayUrl)不含端口，公开访问端口一直存在 remote.gatewayPort；
+  // 分享链接必须带上它，否则非 80/443 部署复制出的链接打不开。
+  const sharedManagerShareOriginPort = remoteSettings.gatewayPort;
   const canShareHistory =
     remoteRuntimeStatus.online === true &&
     remoteRuntimeStatus.enabled === true &&
@@ -450,6 +453,7 @@ export function useSharedHistory(params: UseSharedHistoryParams) {
     sharedManagerErrors,
     sharedManagerGatewayUrlLoading,
     sharedManagerShareOrigin,
+    sharedManagerShareOriginPort,
     sharedHistoryItems,
     removeSharedHistoryItems,
     markSharedConversation,
