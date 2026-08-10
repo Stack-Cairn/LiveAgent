@@ -1,5 +1,6 @@
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
+import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
@@ -17,9 +18,11 @@ import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDock
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
+import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import { openChatFileLink } from "@liveagent/ui/lib/chat/openChatFileLink";
+import { queuedChatTurnHasContent } from "@liveagent/ui/lib/chat/queuedChatTurn";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import {
   readToolApprovalDeadlineAt,
@@ -29,6 +32,7 @@ import {
 import { memoryDeleteProject } from "@liveagent/ui/lib/memory/api";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { mergeAlwaysEnabledSkillNames } from "@liveagent/ui/lib/skills/index";
+import { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import {
@@ -140,8 +144,6 @@ import {
   workspaceProjectPathKey,
 } from "@/lib/settings";
 import { createGatewayWorkspaceActivityClient } from "@/lib/workspace-activity/gatewayWorkspaceActivityClient";
-import { queuedChatTurnHasContent } from "@/pages/chat/queue/chatTurnQueue";
-import { useChatSkills } from "@/pages/chat/useChatSkills";
 import type { SectionId } from "@/pages/settings/types";
 
 const LOCAL_DRAFT_PREFIX = "__local_draft__:";
@@ -225,7 +227,6 @@ import {
   SHARED_HISTORY_LIST_PAGE_SIZE,
   SKILLS_HUB_BROWSER_TITLE,
 } from "./constants";
-import { FileDropOverlay } from "./FileDropOverlay";
 import { HistorySwitchLoadingOverlay } from "./HistorySwitchLoadingOverlay";
 import {
   createWorkspaceProjectFromPath,
@@ -249,7 +250,6 @@ import {
 } from "./sidebar/gatewaySidebarAvailability";
 import type { ModelProviderSource, OverlayState, SendChatFn, SendChatOptions } from "./types";
 import { UserMenu } from "./UserMenu";
-import { WorkspaceOverlayHost } from "./WorkspaceOverlayHost";
 
 const STALE_HISTORY_RETRY_INITIAL_DELAY_MS = 1_000;
 const STALE_HISTORY_RETRY_MAX_DELAY_MS = 30_000;

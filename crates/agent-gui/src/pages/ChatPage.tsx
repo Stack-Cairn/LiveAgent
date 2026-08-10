@@ -4,6 +4,7 @@ import {
   type ChangedFilesActions,
   ChangedFilesActionsProvider,
 } from "@liveagent/ui/components/chat/ChangedFilesCard";
+import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
@@ -21,6 +22,7 @@ import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDock
 import { expandedPathsForFileTreePath } from "@liveagent/ui/components/project-tools/rightDockModel";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import { openChatFileLink } from "@liveagent/ui/lib/chat/openChatFileLink";
@@ -102,6 +104,7 @@ import {
   type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../lib/settings";
+import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import { createSubagentStoreManager } from "../lib/subagents";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
@@ -134,8 +137,6 @@ import {
   usePendingUploads,
 } from "./chat";
 import { appendManagedSkillSelections } from "./chat/chatPageUtils";
-import { ChatFileDropOverlay } from "./chat/components/ChatFileDropOverlay";
-import { WorkspaceOverlayHost } from "./chat/components/WorkspaceOverlayHost";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
 import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
@@ -2093,7 +2094,7 @@ export function ChatPage(props: ChatPageProps) {
                   approvalBar={approvalBar}
                 />
                 {isFileDropActive ? (
-                  <ChatFileDropOverlay
+                  <FileDropOverlay
                     canDropUpload={canDropUpload}
                     title={fileDropTitle}
                     description={fileDropDescription}
@@ -2105,11 +2106,41 @@ export function ChatPage(props: ChatPageProps) {
           }}
           workspaceOverlays={
             <WorkspaceOverlayHost
-              overlays={workspaceOverlays}
+              locale={settings.locale}
               theme={effectiveTheme}
+              workspaceEditorMounted={workspaceOverlays.workspaceEditorMounted}
+              workspaceEditorOpenRequest={workspaceOverlays.workspaceEditorOpenRequest}
+              workspaceEditorCloseRequestId={workspaceOverlays.workspaceEditorCloseRequestId}
+              workspaceEditorOpen={workspaceOverlays.workspaceEditorOpen}
+              workspaceEditorCleanupPending={workspaceOverlays.workspaceEditorCleanupPending}
+              onWorkspaceEditorPreviewFile={workspaceOverlays.openWorkspaceFilePreview}
+              onWorkspaceEditorInsertCodeMention={handleInsertCodeMention}
+              onWorkspaceEditorHide={() => workspaceOverlays.setWorkspaceEditorOpen(false)}
+              onWorkspaceEditorClose={() => {
+                workspaceOverlays.setWorkspaceEditorOpen(false);
+                workspaceOverlays.setWorkspaceEditorMounted(false);
+                workspaceOverlays.setWorkspaceEditorCleanupPending(false);
+                workspaceOverlays.setWorkspaceEditorOpenRequest(null);
+                workspaceOverlays.setWorkspaceEditorCloseRequestId(0);
+              }}
+              workspaceFilePreviewMounted={workspaceOverlays.workspaceFilePreviewMounted}
+              workspaceFilePreviewOpenRequest={workspaceOverlays.workspaceFilePreviewOpenRequest}
+              workspaceFilePreviewOpen={workspaceOverlays.workspaceFilePreviewOpen}
+              onWorkspaceFilePreviewOpenEditor={workspaceOverlays.openWorkspaceEditorFile}
+              onWorkspaceFilePreviewRequestClose={
+                workspaceOverlays.requestWorkspaceFilePreviewClose
+              }
+              onWorkspaceFilePreviewClose={workspaceOverlays.handleWorkspaceFilePreviewClosed}
+              workspaceSshTerminalMounted={workspaceOverlays.workspaceSshTerminalMounted}
+              workspaceSshTerminalOpenRequest={workspaceOverlays.workspaceSshTerminalOpenRequest}
+              workspaceSshTerminalOpen={workspaceOverlays.workspaceSshTerminalOpen}
               terminalProjectPathKey={terminalProjectPathKey}
+              terminalClient={tauriTerminalClient}
+              sftpClient={tauriSftpClient}
               terminalSessions={terminalSessions}
-              onInsertCodeMention={handleInsertCodeMention}
+              onWorkspaceSshTerminalHide={() =>
+                workspaceOverlays.setWorkspaceSshTerminalOpen(false)
+              }
             />
           }
         />

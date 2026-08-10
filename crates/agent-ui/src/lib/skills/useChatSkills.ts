@@ -1,3 +1,4 @@
+import { type AppSettings, updateSkills } from "@liveagent/app/lib/settings";
 import {
   discoverSkills,
   isAlwaysEnabledSkillName,
@@ -6,7 +7,6 @@ import {
   subscribeSkillsDiscoveryUpdated,
 } from "@liveagent/ui/lib/skills/index";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type AppSettings, updateSkills } from "../../lib/settings";
 
 type UseChatSkillsParams = {
   skillsEnabled: boolean;
@@ -79,7 +79,9 @@ export function useChatSkills(params: UseChatSkillsParams) {
       }
 
       try {
-        const discovery = await discoverSkills({ force: options?.force });
+        const discovery = await discoverSkills({
+          force: options?.force,
+        });
         if (!mountedRef.current || requestSequenceRef.current !== requestId) {
           return null;
         }

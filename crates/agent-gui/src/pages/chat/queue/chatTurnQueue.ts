@@ -6,6 +6,8 @@ import type {
   GatewaySelectedModelEvent,
 } from "../gateway/gatewayBridgeTypes";
 
+export { queuedChatTurnHasContent } from "@liveagent/ui/lib/chat/queuedChatTurn";
+
 export type QueuedGatewayChatRequest = {
   requestId: string;
   clientRequestId?: string;
@@ -72,13 +74,6 @@ export function createQueuedChatTurn(input: QueuedChatTurnInput): QueuedChatTurn
     createdAt,
     gatewayRequest: input.gatewayRequest ? { ...input.gatewayRequest } : undefined,
   };
-}
-
-export function queuedChatTurnHasContent(
-  draft: MentionComposerDraft | null | undefined,
-  uploadedFiles: readonly PendingUploadedFile[],
-): draft is MentionComposerDraft {
-  return Boolean(draft && (!draft.isEmpty || draft.text.trim() || uploadedFiles.length > 0));
 }
 
 export function buildQueuedChatTurnPreview(draft: MentionComposerDraft) {

@@ -794,7 +794,7 @@ test("GatewayTranscript renders folded and live rows in one virtualized list", (
           return { type: "ImagePreview", props };
         },
       },
-      "@/pages/chat/AssistantBubble": {
+      "@liveagent/ui/components/chat/AssistantBubble": {
         AssistantAvatar() {
           return { type: "AssistantAvatar", props: {} };
         },

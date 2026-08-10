@@ -1,9 +1,8 @@
-import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
+import type { MentionComposerDraft } from "../../components/chat/MentionComposer";
 
 export function queuedChatTurnHasContent(
   draft: MentionComposerDraft | null | undefined,
-  uploadedFiles: readonly PendingUploadedFile[],
+  uploadedFiles: readonly unknown[],
 ): draft is MentionComposerDraft {
   return Boolean(draft && (!draft.isEmpty || draft.text.trim() || uploadedFiles.length > 0));
 }

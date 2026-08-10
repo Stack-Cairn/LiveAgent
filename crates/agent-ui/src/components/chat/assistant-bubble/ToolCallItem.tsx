@@ -1,3 +1,18 @@
+import {
+  readAskUserQuestionDeadline,
+  retainRunningToolContent,
+  submitAskUserQuestionAnswers,
+  usePendingToolApproval,
+} from "@liveagent/adapters/assistantBubble";
+import {
+  deriveFileChangeStats,
+  FILE_TOOL_TEXT_FIELDS,
+  previewText,
+  summarizeToolCall,
+  type ToolResultMessage,
+  type ToolTraceItem,
+  toolResultMessageToText,
+} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { FileChangeBadge } from "@liveagent/ui/components/chat/FileChangeBadge";
@@ -8,23 +23,11 @@ import {
   ASK_USER_QUESTION_TOOL_NAME,
   type AskUserQuestionAnswer,
   parseAskUserQuestionResultDetails,
-  readAskUserQuestionDeadlineAt,
   sanitizeAskUserQuestionItems,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
-import { readToolApprovalPending } from "@liveagent/ui/lib/chat/toolApprovalArgs";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight } from "../../../components/icons";
-import type { ToolResultMessage } from "../../../lib/agentTypes";
-import { submitAskUserQuestionAnswer } from "../../../lib/chat/askUserQuestionBridge";
-import { deriveFileChangeStats } from "../../../lib/chat/fileChangeStats";
-import { FILE_TOOL_TEXT_FIELDS } from "../../../lib/chat/toolPreview";
-import {
-  previewText,
-  summarizeToolCall,
-  type ToolTraceItem,
-  toolResultMessageToText,
-} from "../../../lib/chat/uiMessages";
+import { ChevronRight } from "../../IconSet";
 import {
   areStableValuesEqual,
   getBuiltinResultKind,
@@ -66,27 +69,18 @@ function ToolCallItem({
   // 提问卡运行期强制展开等待作答；应答落定后自动收起。
   const shouldKeepAskOpen = !readOnly && isAskUser && (Boolean(isRunning) || !result);
   const shouldCloseAnsweredAsk = isAskUser && Boolean(result);
-  // 权威应答截止时间：桌面端在网关上报的工具参数上盖章，倒计时与桌面计时
-  // 同源；重连/迟开页面也显示真实剩余时间。
+  // 截止时间和提交动作由宿主适配器提供，确保两端都使用各自的权威服务。
   const askDeadlineAt =
     isAskUser && isRunning && !result
-      ? (readAskUserQuestionDeadlineAt(item.toolCall.arguments) ?? undefined)
+      ? readAskUserQuestionDeadline(item.toolCall.id, item.toolCall.arguments)
       : undefined;
   const submitAskAnswers = useCallback(
-    (answers: AskUserQuestionAnswer[]) => submitAskUserQuestionAnswer(item.toolCall.id, answers),
+    (answers: AskUserQuestionAnswer[]) => submitAskUserQuestionAnswers(item.toolCall.id, answers),
     [item.toolCall.id],
   );
-  // 工具审批:桌面端在待审批时把 __toolApprovalPending 标记盖到同步的工具参数上
-  // (见 gatewayToolPreview 的重发)。带标记且尚无结果
-  // → 渲染审批卡片;审批消解后重发的快照不再带标记,卡片隐藏。
-  // 注意:审批在 beforeToolCall 处挂起,此时工具尚未开始执行、并不处于 isRunning
-  // 状态(不同于 AskUserQuestion 是工具自身执行时挂起),故不能用 isRunning 作门,
-  // 标记本身即权威的"待审批"信号。
-  const isApprovalPending =
-    !readOnly &&
-    !isRedactedToolContent &&
-    !result &&
-    readToolApprovalPending(item.toolCall.arguments);
+  // 工具审批由宿主适配器读取。审批发生在工具执行前，不能用 isRunning 作门。
+  const pendingApproval = usePendingToolApproval(item.toolCall.id, item.toolCall.arguments);
+  const isApprovalPending = !readOnly && !isRedactedToolContent && !result && pendingApproval;
   const shouldAutoOpen =
     !isRedactedToolContent &&
     (item.toolCall.name === "Image" || builtinResultKind === "display_image" || shouldKeepAskOpen);
@@ -233,7 +227,10 @@ function ToolCallItem({
     </>
   );
   const body = (
-    <LazyCollapse open={effectiveOpen}>
+    <LazyCollapse
+      open={effectiveOpen}
+      retainWhileClosed={retainRunningToolContent && Boolean(isRunning)}
+    >
       {() => (
         <div className="space-y-3 pb-2 pl-[22px] pt-1">
           {shouldShowArgs ? (

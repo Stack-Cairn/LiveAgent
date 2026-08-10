@@ -1,4 +1,4 @@
-import { Ban, Upload } from "@/components/icons";
+import { Ban, Upload } from "../IconSet";
 
 type FileDropOverlayProps = {
   canDropUpload: boolean;
@@ -7,12 +7,8 @@ type FileDropOverlayProps = {
   limitHint: string;
 };
 
-export function FileDropOverlay({
-  canDropUpload,
-  title,
-  description,
-  limitHint,
-}: FileDropOverlayProps) {
+export function FileDropOverlay(props: FileDropOverlayProps) {
+  const { canDropUpload, title, description, limitHint } = props;
   return (
     <div
       className="file-drop-overlay pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6 bg-white/30 backdrop-blur-md dark:bg-black/30"

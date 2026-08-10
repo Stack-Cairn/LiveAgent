@@ -13,7 +13,10 @@ const componentSource = fs.readFileSync(
   "utf8",
 );
 const roundContentSource = fs.readFileSync(
-  new URL("../src/pages/chat/assistant-bubble/RoundContent.tsx", import.meta.url),
+  new URL(
+    "../../../agent-ui/src/components/chat/assistant-bubble/RoundContent.tsx",
+    import.meta.url,
+  ),
   "utf8",
 );
 

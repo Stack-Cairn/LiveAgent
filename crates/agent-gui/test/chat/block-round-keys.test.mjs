@@ -6,7 +6,7 @@ const loader = createTsModuleLoader();
 const uiMessages = loader.loadModule("src/lib/chat/messages/uiMessages.ts");
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
 const bubbleUtils = loader.loadModule(
-  "src/pages/chat/components/assistant-bubble/assistantBubbleUtils.ts",
+  "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts",
 );
 
 function user(content, timestamp) {

@@ -1,92 +1,87 @@
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
+import {
+  type DeleteResultDetails,
+  deriveFileToolPreview,
+  type EditResultDetails,
+  type GlobResultDetails,
+  type GrepResultDetails,
+  type ListResultDetails,
+  type McpManagerResultDetails,
+  previewText,
+  type ReadDocumentResultDetails,
+  type ReadImageResultDetails,
+  type ReadNotebookResultDetails,
+  type ReadPdfResultDetails,
+  type ReadTextResultDetails,
+  type SkillsManagerResultDetails,
+  safeStringify,
+  type ToolResultMessage,
+  type ToolTraceItem,
+  toolCallArgsForDisplay,
+  toolResultMessageToText,
+  type WriteResultDetails,
+} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
+import { FileToolArgsDisplay } from "@liveagent/ui/components/chat/FileToolArgs";
+import {
+  type MetaTag,
+  MetaTags,
+  PathDisplay,
+  ToolFactGrid,
+  ToolScrollablePre,
+  ToolSurface,
+  ToolSurfaceLabel,
+} from "@liveagent/ui/components/chat/ToolSurfaces";
 import { Markdown } from "@liveagent/ui/components/Markdown";
-import { cn } from "@liveagent/ui/lib/shared/utils";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
   SubagentMessageDetails,
 } from "@liveagent/ui/lib/subagents/protocol";
-import type { ReactNode } from "react";
+import { Search } from "../../IconSet";
 import {
-  previewText,
-  type ToolTraceItem,
-  toolResultMessageToText,
-} from "../../../../lib/chat/messages/uiMessages";
-import type {
-  DeleteResultDetails,
-  EditResultDetails,
-  GlobResultDetails,
-  GrepResultDetails,
-  ListResultDetails,
-  McpManagerResultDetails,
-  ReadDocumentResultDetails,
-  ReadImageResultDetails,
-  ReadNotebookResultDetails,
-  ReadPdfResultDetails,
-  ReadTextResultDetails,
-  SkillsManagerResultDetails,
-  WriteResultDetails,
-} from "../../../../lib/tools/builtinTypes";
-import {
+  displayString,
   getBuiltinResultKind,
   getStableValueSignature,
   getSubagentTask,
-  isShellResultDetails,
-  type MetaTag,
+  isSubagentCardToolCall,
   shouldShowSubagentApplyStatus,
   shouldShowSubagentCleanupStatus,
   shouldShowSubagentWorktreeLocation,
-  summarizeShellStream,
 } from "./assistantBubbleUtils";
 import { getToolResultImages, ToolResultImagePreview } from "./ToolImages";
 
-export function ToolSection(props: { label?: string; trailing?: ReactNode; children: ReactNode }) {
-  const { label, trailing, children } = props;
+type ShellResultDetails = {
+  exit_code: number;
+  shell: string;
+  stdout: string;
+  stderr: string;
+  stdout_truncated: boolean;
+  stderr_truncated: boolean;
+  timed_out: boolean;
+  cancelled?: boolean;
+  effective_timeout_ms?: number;
+  duration_ms: number;
+};
+
+function isShellResultDetails(value: unknown): value is ShellResultDetails {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
   return (
-    <section className="space-y-1.5">
-      {label || trailing ? (
-        <div className="flex min-h-5 items-center gap-2">
-          {label ? (
-            <span className="shrink-0 text-[calc(11px*var(--zone-font-scale,1))] font-medium text-muted-foreground/65">
-              {label}
-            </span>
-          ) : null}
-          {trailing}
-        </div>
-      ) : null}
-      {children}
-    </section>
+    typeof candidate.exit_code === "number" &&
+    typeof candidate.shell === "string" &&
+    typeof candidate.stdout === "string" &&
+    typeof candidate.stderr === "string" &&
+    typeof candidate.stdout_truncated === "boolean" &&
+    typeof candidate.stderr_truncated === "boolean" &&
+    typeof candidate.timed_out === "boolean" &&
+    typeof candidate.duration_ms === "number"
   );
 }
 
-export function ToolSurface(props: { children: ReactNode; className?: string }) {
-  const { children, className } = props;
-  return <div className={cn("min-w-0 py-0.5", className)}>{children}</div>;
-}
-
-export function ToolSurfaceLabel({ label }: { label: string }) {
-  return (
-    <div className="mb-0.5 text-[calc(10.5px*var(--zone-font-scale,1))] font-medium text-muted-foreground/55">
-      {label}
-    </div>
-  );
-}
-
-export function ToolFactGrid({ tags }: { tags: MetaTag[] }) {
-  if (tags.length === 0) return null;
-  return (
-    <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
-      {tags.map((tag) => (
-        <ToolSurface key={`${tag.label}-${tag.value}`}>
-          <ToolSurfaceLabel label={tag.label} />
-          <div className="break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
-            {tag.value}
-          </div>
-        </ToolSurface>
-      ))}
-    </div>
-  );
+function summarizeShellStream(text: string, truncated: boolean) {
+  const length = text.length;
+  if (length === 0) return "empty";
+  return truncated ? `${length} chars, truncated` : `${length} chars`;
 }
 
 function buildPagedResultTags(params: {
@@ -104,75 +99,267 @@ function buildPagedResultTags(params: {
   ];
 }
 
-function filePathTags(details: {
-  scope?: string;
-  displayPath?: string;
-  absolutePath?: string;
-}): MetaTag[] {
-  return [
-    ...(details.scope && details.scope !== "workspace"
-      ? [{ label: "scope", value: details.scope }]
-      : []),
-  ];
+/** Extract tool-specific display info */
+function getToolDisplay(toolCall: { name: string; arguments?: Record<string, unknown> }) {
+  const args = toolCall.arguments || {};
+  const name = toolCall.name;
+  const path = typeof args.path === "string" ? (args.path as string) : null;
+  const pattern = typeof args.pattern === "string" ? (args.pattern as string) : null;
+  const tags: MetaTag[] = [];
+
+  switch (name) {
+    case "Read":
+      if (typeof args.start_line === "number")
+        tags.push({ label: "start", value: String(args.start_line) });
+      if (typeof args.limit === "number") tags.push({ label: "limit", value: String(args.limit) });
+      if (typeof args.page_start === "number")
+        tags.push({ label: "page", value: String(args.page_start) });
+      if (typeof args.page_limit === "number")
+        tags.push({ label: "pages", value: String(args.page_limit) });
+      if (typeof args.cell_start === "number")
+        tags.push({ label: "cell", value: String(args.cell_start) });
+      if (typeof args.cell_limit === "number")
+        tags.push({ label: "cells", value: String(args.cell_limit) });
+      return { type: "file" as const, path, tags };
+    case "SkillsManager":
+      if (typeof args.offset === "number")
+        tags.push({ label: "start", value: String(args.offset + 1) });
+      if (typeof args.length === "number")
+        tags.push({ label: "limit", value: String(args.length) });
+      return { type: "file" as const, path, tags };
+    case "MemoryManager":
+      if (typeof args.action === "string")
+        tags.push({ label: "action", value: args.action as string });
+      if (typeof args.slug === "string") tags.push({ label: "slug", value: args.slug as string });
+      if (typeof args.scope === "string")
+        tags.push({ label: "scope", value: args.scope as string });
+      if (typeof args.type === "string") tags.push({ label: "type", value: args.type as string });
+      return { type: "generic" as const, path: null, pattern: null, tags };
+    case "McpManager":
+      if (typeof args.action === "string")
+        tags.push({ label: "action", value: args.action as string });
+      if (typeof args.server_id === "string")
+        tags.push({ label: "server", value: args.server_id as string });
+      if (Array.isArray(args.server_ids))
+        tags.push({ label: "servers", value: String(args.server_ids.length) });
+      if (typeof args.conflict === "string")
+        tags.push({ label: "conflict", value: args.conflict as string });
+      if (args.include_schema === true) tags.push({ label: "schema", value: "true" });
+      return { type: "generic" as const, path: null, pattern: null, tags };
+    case "SendMessage":
+      if (typeof args.to === "string") tags.push({ label: "to", value: args.to as string });
+      if (typeof args.channel === "string")
+        tags.push({ label: "channel", value: args.channel as string });
+      if (typeof args.subject === "string")
+        tags.push({ label: "subject", value: args.subject as string });
+      if (typeof args.summary === "string" && typeof args.subject !== "string")
+        tags.push({ label: "subject", value: args.summary as string });
+      if (typeof args.message === "string")
+        tags.push({ label: "message", value: `${(args.message as string).length} chars` });
+      return { type: "generic" as const, path: null, pattern: null, tags };
+    case "Delete":
+      return { type: "file" as const, path, tags };
+    case "List":
+      if (typeof args.depth === "number") tags.push({ label: "depth", value: String(args.depth) });
+      if (typeof args.offset === "number")
+        tags.push({ label: "offset", value: String(args.offset) });
+      if (typeof args.max_results === "number")
+        tags.push({ label: "max", value: String(args.max_results) });
+      return { type: "file" as const, path: path || "/", tags };
+    case "Glob":
+      if (typeof args.offset === "number")
+        tags.push({ label: "offset", value: String(args.offset) });
+      if (typeof args.max_results === "number")
+        tags.push({ label: "max", value: String(args.max_results) });
+      return { type: "search" as const, path, pattern, tags };
+    case "Grep":
+      if (typeof args.file_pattern === "string")
+        tags.push({ label: "filter", value: args.file_pattern as string });
+      if (typeof args.output_mode === "string")
+        tags.push({ label: "mode", value: args.output_mode as string });
+      if (typeof args.ignore_case === "boolean" && args.ignore_case)
+        tags.push({ label: "flag", value: "-i" });
+      if (typeof args.context === "number" && args.context > 0)
+        tags.push({ label: "ctx", value: String(args.context) });
+      if (typeof args.head_limit === "number")
+        tags.push({ label: "head", value: String(args.head_limit) });
+      if (args.multiline === true) tags.push({ label: "multi", value: "true" });
+      return { type: "search" as const, path, pattern, tags };
+    case "Bash":
+      return { type: "bash" as const, path: null, pattern: null, tags };
+    case "ManagedProcess": {
+      if (typeof args.action === "string") tags.push({ label: "action", value: args.action });
+      if (typeof args.process_id === "string")
+        tags.push({ label: "process", value: args.process_id as string });
+      if (typeof args.label === "string")
+        tags.push({ label: "label", value: args.label as string });
+      if (typeof args.cwd === "string") tags.push({ label: "cwd", value: args.cwd as string });
+      if (args.isolated === true) tags.push({ label: "isolated", value: "true" });
+      if (typeof args.max_bytes === "number")
+        tags.push({ label: "max_bytes", value: String(args.max_bytes) });
+      const command = typeof args.command === "string" ? (args.command as string).trim() : "";
+      return command
+        ? { type: "bash" as const, path: null, pattern: null, tags }
+        : { type: "generic" as const, path: null, pattern: null, tags };
+    }
+    default: {
+      // Generic: collect all string/number/boolean args
+      const entries: MetaTag[] = [];
+      for (const [k, v] of Object.entries(args)) {
+        if (typeof v === "string")
+          entries.push({ label: k, value: v.length > 60 ? `${v.slice(0, 60)}…` : v });
+        else if (typeof v === "number" || typeof v === "boolean")
+          entries.push({ label: k, value: String(v) });
+      }
+      return { type: "generic" as const, path: null, pattern: null, tags: entries };
+    }
+  }
 }
 
-export function PathDisplay({ path, className }: { path: string; className?: string }) {
-  const lastSlash = path.lastIndexOf("/");
-  if (lastSlash < 0) {
+/** Expanded args display — tool-aware layout */
+export function ToolArgsDisplay({ item }: { item: ToolTraceItem }) {
+  const toolCall = item.toolCall;
+
+  const filePreview = deriveFileToolPreview(toolCall);
+  if (filePreview) {
+    return <FileToolArgsDisplay preview={filePreview} />;
+  }
+
+  const display = getToolDisplay(toolCall);
+
+  if (isSubagentCardToolCall(toolCall)) {
+    const args = toolCall.arguments || {};
+    const name = displayString(args.name) || displayString(args.id);
+    const role = displayString(args.role);
+    const task = displayString(args.prompt);
+
     return (
-      <span
-        className={cn(
-          className,
-          "block max-w-full overflow-hidden text-ellipsis whitespace-nowrap break-normal",
-        )}
-        title={path}
-      >
-        {path}
-      </span>
+      <div className="tool-expand flex flex-col gap-2">
+        {name ? (
+          <ToolSurface>
+            <ToolSurfaceLabel label="agent" />
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] font-semibold leading-[1.55] text-foreground/86">
+              {name}
+            </div>
+          </ToolSurface>
+        ) : null}
+        {role ? (
+          <ToolSurface>
+            <ToolSurfaceLabel label="role" />
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.55] text-foreground/78">
+              {role}
+            </div>
+          </ToolSurface>
+        ) : null}
+        {task ? (
+          <ToolSurface>
+            <ToolSurfaceLabel label="task" />
+            <div className="break-words text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-foreground/82">
+              {task}
+            </div>
+          </ToolSurface>
+        ) : null}
+      </div>
     );
   }
-  const dir = path.slice(0, lastSlash + 1);
-  const file = path.slice(lastSlash + 1);
+
+  // Bash / ManagedProcess(start): terminal block
+  if (display.type === "bash") {
+    const cmd =
+      typeof toolCall.arguments?.command === "string"
+        ? (toolCall.arguments.command as string).trim()
+        : "";
+    if (!cmd) return null;
+    return (
+      <div className="tool-expand flex flex-col gap-2">
+        <ToolScrollablePre className="max-h-44 bg-zinc-950/90 text-emerald-300/90 dark:bg-zinc-950/90">
+          <span className="mr-1 select-none text-emerald-500/30">$</span>
+          {cmd}
+        </ToolScrollablePre>
+        {display.tags.length > 0 ? <MetaTags tags={display.tags} /> : null}
+      </div>
+    );
+  }
+
+  // File tools: target path + compact request facts
+  if (display.type === "file" && (display.path || display.tags.length > 0)) {
+    return (
+      <div className="tool-expand flex flex-col gap-2">
+        {display.path ? (
+          <ToolSurface>
+            <ToolSurfaceLabel label="path" />
+            <PathDisplay
+              path={display.path}
+              className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
+            />
+          </ToolSurface>
+        ) : null}
+        {display.tags.length > 0 ? <MetaTags tags={display.tags} /> : null}
+      </div>
+    );
+  }
+
+  // Search tools: query, scope, and request facts
+  if (display.type === "search" && (display.pattern || display.path || display.tags.length > 0)) {
+    return (
+      <div className="tool-expand flex flex-col gap-2">
+        {display.pattern ? (
+          <ToolSurface>
+            <ToolSurfaceLabel label="query" />
+            <div className="flex items-start gap-2">
+              <Search className="mt-[2px] h-3.5 w-3.5 shrink-0 text-muted-foreground/35" />
+              <span className="min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] text-foreground/82">
+                {display.pattern}
+              </span>
+            </div>
+          </ToolSurface>
+        ) : null}
+        {display.path ? (
+          <ToolSurface>
+            <ToolSurfaceLabel label="scope" />
+            <PathDisplay
+              path={display.path}
+              className="block min-w-0 break-all font-mono text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]"
+            />
+          </ToolSurface>
+        ) : null}
+        {display.tags.length > 0 ? <MetaTags tags={display.tags} /> : null}
+      </div>
+    );
+  }
+
+  // Generic: key-value grid
+  if (display.type === "generic" && display.tags.length > 0) {
+    return <ToolFactGrid tags={display.tags} />;
+  }
+
+  // Fallback: raw JSON, cached by argument identity — settled tool args are
+  // immutable, so virtualizer remounts reuse the stringified form.
   return (
-    <span
-      className={cn(
-        className,
-        "inline-flex max-w-full min-w-0 items-baseline overflow-hidden whitespace-nowrap break-normal",
-      )}
-      title={path}
-    >
-      <span className="min-w-0 flex-1 truncate text-muted-foreground/40">
-        {dir.length > 50 ? `…${dir.slice(-50)}` : dir}
-      </span>
-      <span className="max-w-[70%] truncate text-foreground/85">{file}</span>
-    </span>
+    <ToolSurface className="overflow-hidden px-0 py-0">
+      <ToolScrollablePre className="max-h-44 rounded-none">
+        {getRawArgsDisplayText(toolCall)}
+      </ToolScrollablePre>
+    </ToolSurface>
   );
 }
 
-/** Inline meta tags */
-export function MetaTags({ tags }: { tags: MetaTag[] }) {
-  if (tags.length === 0) return null;
-  const labelCounts = new Map<string, number>();
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1">
-      {tags.map((tag) => {
-        const seenCount = labelCounts.get(tag.label) ?? 0;
-        labelCounts.set(tag.label, seenCount + 1);
-        const stableKey = seenCount === 0 ? tag.label : `${tag.label}-${seenCount}`;
-        return (
-          <span
-            key={stableKey}
-            className="inline-flex min-h-5 items-baseline gap-1 text-[calc(11px*var(--zone-font-scale,1))] leading-5"
-          >
-            <span className="font-medium text-muted-foreground/55">{tag.label}</span>
-            <span className="min-w-0 break-all font-mono tabular-nums text-foreground/75">
-              {tag.value}
-            </span>
-          </span>
-        );
-      })}
-    </div>
-  );
+const rawArgsDisplayCache = new WeakMap<object, string>();
+
+function getRawArgsDisplayText(toolCall: ToolTraceItem["toolCall"]) {
+  const cacheKey = toolCall.arguments;
+  if (!cacheKey || typeof cacheKey !== "object") {
+    return safeStringify(toolCallArgsForDisplay(toolCall));
+  }
+  const cached = rawArgsDisplayCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const text = safeStringify(toolCallArgsForDisplay(toolCall));
+  rawArgsDisplayCache.set(cacheKey, text);
+  return text;
+}
+
+function extractResultText(result?: ToolResultMessage) {
+  return result ? toolResultMessageToText(result) : "";
 }
 
 function extractReadBody(text: string) {
@@ -180,21 +367,7 @@ function extractReadBody(text: string) {
   return marker >= 0 ? text.slice(marker + 2) : text;
 }
 
-export function ToolScrollablePre(props: { children: ReactNode; className?: string }) {
-  const { children, className } = props;
-  return (
-    <pre
-      className={cn(
-        "tool-text-scroll overflow-x-auto overflow-y-auto whitespace-pre break-normal rounded-[8px] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6]",
-        className,
-      )}
-    >
-      {children}
-    </pre>
-  );
-}
-
-export function CodePreview(props: { text: string; maxChars?: number }) {
+function CodePreview(props: { text: string; maxChars?: number }) {
   const { text, maxChars = 4000 } = props;
   if (!/\S/.test(text)) return null;
   return (
@@ -204,16 +377,35 @@ export function CodePreview(props: { text: string; maxChars?: number }) {
   );
 }
 
-function extractResultText(result?: ToolResultMessage) {
-  return result ? toolResultMessageToText(result) : "";
+// Render-layer tolerance for historical messages: current details carry
+// `scope` ("workspace" | "skill" | "external"), while old sessions may still
+// carry the legacy `root` ("workspace" | "skills") or unknown scope values
+// such as "temp"/"artifact". Degrade at the read site — unknown values are
+// displayed verbatim; "workspace" (the default) is hidden.
+function resolveFileToolScope(details: unknown): string | undefined {
+  if (!details || typeof details !== "object") return undefined;
+  const record = details as Record<string, unknown>;
+  const scope =
+    typeof record.scope === "string" && record.scope.trim() ? record.scope.trim() : undefined;
+  const legacyRoot =
+    typeof record.root === "string" && record.root.trim() ? record.root.trim() : undefined;
+  const resolved = scope ?? (legacyRoot === "skills" ? "skill" : legacyRoot);
+  return resolved && resolved !== "workspace" ? resolved : undefined;
+}
+
+function fileScopeTags(details: unknown): MetaTag[] {
+  const scope = resolveFileToolScope(details);
+  return scope ? [{ label: "scope", value: scope }] : [];
 }
 
 export function ToolResultDisplay({
   item,
   result,
+  readOnly = false,
 }: {
   item: ToolTraceItem;
   result: ToolResultMessage;
+  readOnly?: boolean;
 }) {
   const kind = getBuiltinResultKind(result);
   const text = extractResultText(result);
@@ -256,7 +448,7 @@ export function ToolResultDisplay({
         <ToolSurface>
           <MetaTags
             tags={[
-              ...filePathTags(details),
+              ...fileScopeTags(details),
               {
                 label: "lines",
                 value:
@@ -386,7 +578,7 @@ export function ToolResultDisplay({
         <ToolSurface>
           <MetaTags
             tags={[
-              ...filePathTags(details),
+              ...fileScopeTags(details),
               { label: "mime", value: details.mimeType },
               { label: "size", value: `${details.sizeBytes} bytes` },
               ...(details.reusedExisting ? [{ label: "cache", value: "unchanged" }] : []),
@@ -402,6 +594,7 @@ export function ToolResultDisplay({
                 image={image}
                 alt={details.path}
                 sizeBytes={details.sizeBytes}
+                readOnly={readOnly}
               />
             ))}
           </div>
@@ -417,7 +610,7 @@ export function ToolResultDisplay({
         <ToolSurface>
           <MetaTags
             tags={[
-              ...filePathTags(details),
+              ...fileScopeTags(details),
               {
                 label: "pages",
                 value:
@@ -444,7 +637,7 @@ export function ToolResultDisplay({
         <ToolSurface>
           <MetaTags
             tags={[
-              ...filePathTags(details),
+              ...fileScopeTags(details),
               {
                 label: "cells",
                 value:
@@ -471,7 +664,7 @@ export function ToolResultDisplay({
         <ToolSurface>
           <MetaTags
             tags={[
-              ...filePathTags(details),
+              ...fileScopeTags(details),
               ...(details.mimeType ? [{ label: "mime", value: details.mimeType }] : []),
               ...(typeof details.sizeBytes === "number"
                 ? [{ label: "size", value: `${details.sizeBytes} bytes` }]
@@ -495,7 +688,7 @@ export function ToolResultDisplay({
         <ToolSurface>
           <MetaTags
             tags={[
-              ...filePathTags(details),
+              ...fileScopeTags(details),
               { label: "target", value: details.existedBefore ? "existing" : "new" },
               { label: "bytes", value: String(details.bytesWritten) },
               { label: "lines", value: String(details.totalLines) },
@@ -513,7 +706,10 @@ export function ToolResultDisplay({
       <EditDiffView
         beforeText={details.oldPreview}
         afterText={details.newPreview}
-        filePath={details.displayPath || details.path}
+        filePath={
+          details.displayPath ||
+          (resolveFileToolScope(details) === "skill" ? `skills:${details.path}` : details.path)
+        }
       />
     );
   }
@@ -522,7 +718,9 @@ export function ToolResultDisplay({
     const details = result.details as DeleteResultDetails;
     return (
       <ToolSurface>
-        <MetaTags tags={[...filePathTags(details), { label: "kind", value: details.targetKind }]} />
+        <MetaTags
+          tags={[...fileScopeTags(details), { label: "kind", value: details.targetKind }]}
+        />
       </ToolSurface>
     );
   }
@@ -539,7 +737,7 @@ export function ToolResultDisplay({
               total: details.total,
               offset: details.offset,
               hasMore: details.hasMore,
-            }).concat(filePathTags(details))}
+            }).concat(fileScopeTags(details))}
           />
         </ToolSurface>
         <ToolSurface className="max-h-56 overflow-auto">
@@ -576,7 +774,7 @@ export function ToolResultDisplay({
               total: details.total,
               offset: details.offset,
               hasMore: details.hasMore,
-            }).concat(filePathTags(details))}
+            }).concat(fileScopeTags(details))}
           />
         </ToolSurface>
         <ToolSurface className="max-h-56 overflow-auto">
@@ -601,7 +799,7 @@ export function ToolResultDisplay({
         <ToolSurface>
           <MetaTags
             tags={[
-              ...filePathTags(details),
+              ...fileScopeTags(details),
               { label: "mode", value: details.outputMode },
               { label: "matches", value: String(details.matchCount) },
               { label: "files", value: String(details.fileCount) },
@@ -863,6 +1061,7 @@ export function ToolResultDisplay({
               id={`${item.toolCall.id}-${index}`}
               image={image}
               alt={item.toolCall.name}
+              readOnly={readOnly}
             />
           ))}
         </div>

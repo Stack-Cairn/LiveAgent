@@ -1,15 +1,17 @@
-import type { ImageContent, ToolResultMessage } from "@earendil-works/pi-ai";
+import { deferLargeToolImages } from "@liveagent/adapters/assistantBubble";
+import type {
+  DisplayImageItemDetails,
+  DisplayImageResultDetails,
+  ImageContent,
+  ToolResultMessage,
+  ToolTraceItem,
+} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { prepareImageProxyUrl } from "@liveagent/ui/lib/providers/proxy";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useEffect, useMemo, useState } from "react";
-import { ImageOff, Loader2 } from "../../../../components/icons";
-import type { ToolTraceItem } from "../../../../lib/chat/messages/uiMessages";
-import type {
-  DisplayImageItemDetails,
-  DisplayImageResultDetails,
-} from "../../../../lib/tools/builtinTypes";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Eye, ImageOff, Loader2 } from "../../IconSet";
 import { getBuiltinResultKind } from "./assistantBubbleUtils";
 
 export function getToolResultImages(result?: ToolResultMessage) {
@@ -181,6 +183,8 @@ function useNativeDisplayImageSources(entries: NativeDisplayImageEntry[]) {
   });
 }
 
+const LARGE_TOOL_IMAGE_INLINE_THRESHOLD_BYTES = 2 * 1024 * 1024;
+
 function estimateBase64Bytes(data: string) {
   return Math.ceil((data.length * 3) / 4);
 }
@@ -199,6 +203,11 @@ function getInitialImageLoadState(source: NativeDisplayImageSourceState): ToolIm
   if (source.status === "error") return "error";
   if (source.status === "ready" && !source.src) return "error";
   return "loading";
+}
+
+function getCompletedImageLoadState(image: HTMLImageElement | null): ToolImageLoadState | null {
+  if (!image?.complete) return null;
+  return image.naturalWidth > 0 || image.naturalHeight > 0 ? "loaded" : "error";
 }
 
 function formatDisplayImageLabel(t: (key: string) => string, imageCount: number, index: number) {
@@ -270,13 +279,18 @@ export function ToolResultImagePreview(props: {
   alt: string;
   id: string;
   sizeBytes?: number;
+  readOnly?: boolean;
 }) {
-  const { image, alt, id, sizeBytes } = props;
+  const { image, alt, id, sizeBytes, readOnly = false } = props;
   const { t } = useLocale();
+  const estimatedBytes = sizeBytes ?? estimateBase64Bytes(image.data);
+  const shouldDeferImage =
+    deferLargeToolImages && estimatedBytes > LARGE_TOOL_IMAGE_INLINE_THRESHOLD_BYTES;
+  const [shouldLoad, setShouldLoad] = useState(readOnly ? true : !shouldDeferImage);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [imageStatus, setImageStatus] = useState<ToolImageLoadState>("loading");
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const src = getImageDataUrl(image);
-  const estimatedBytes = sizeBytes ?? estimateBase64Bytes(image.data);
   const imageDetail = `${alt} · ${formatToolResultBytes(estimatedBytes)}`;
   const slides = useMemo<ImagePreviewSlide[]>(
     () => [
@@ -290,11 +304,77 @@ export function ToolResultImagePreview(props: {
   );
 
   useEffect(() => {
+    setShouldLoad(readOnly ? true : !shouldDeferImage);
     setImageStatus(src ? "loading" : "error");
     setPreviewOpen(false);
-  }, [src]);
+  }, [readOnly, shouldDeferImage, src]);
+
+  useEffect(() => {
+    if (!shouldLoad || !src) return;
+    const completedState = getCompletedImageLoadState(imageRef.current);
+    if (completedState) {
+      setImageStatus(completedState);
+    }
+  }, [shouldLoad, src]);
+
+  if (!shouldLoad) {
+    return (
+      <button
+        type="button"
+        className="group flex min-h-28 w-full flex-col items-center justify-center gap-2 rounded-[8px] border border-dashed border-black/[0.12] bg-black/[0.025] px-4 py-5 text-center text-muted-foreground transition-colors hover:border-black/[0.2] hover:bg-black/[0.04] hover:text-foreground dark:border-white/[0.14] dark:bg-white/[0.035] dark:hover:border-white/[0.22] dark:hover:bg-white/[0.055]"
+        onClick={() => setShouldLoad(true)}
+        title={alt}
+        aria-label={`${t("chat.image.load")} ${alt}`}
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-black/[0.06] bg-white/80 shadow-sm transition-colors group-hover:border-black/[0.12] dark:border-white/[0.08] dark:bg-black/20 dark:group-hover:border-white/[0.16]">
+          <Eye className="h-4 w-4" />
+        </div>
+        <div className="max-w-full space-y-1">
+          <div className="text-[calc(12px*var(--zone-font-scale,1))] font-medium">
+            {t("chat.image.clickToLoad")}
+          </div>
+          <div
+            className="max-w-full truncate text-[calc(11px*var(--zone-font-scale,1))]"
+            title={imageDetail}
+          >
+            {imageDetail}
+          </div>
+        </div>
+      </button>
+    );
+  }
 
   const canPreview = imageStatus === "loaded";
+  const imageFrame = (
+    <div className={cn("relative w-full", imageStatus !== "loaded" && "min-h-32")}>
+      {imageStatus !== "loaded" ? (
+        <ToolImageStatusCard
+          status={imageStatus === "error" ? "error" : "loading"}
+          title={imageStatus === "error" ? t("chat.image.unavailable") : t("chat.image.loading")}
+          detail={imageStatus === "error" ? t("chat.image.checkGenerated") : imageDetail}
+          className="absolute inset-0 min-h-32"
+        />
+      ) : null}
+      {imageStatus !== "error" ? (
+        <img
+          ref={imageRef}
+          key={id}
+          src={src}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className={cn(
+            "max-h-[32rem] w-full rounded-[8px] object-contain transition-opacity duration-200",
+            imageStatus === "loaded"
+              ? "opacity-100"
+              : "pointer-events-none absolute inset-0 h-full max-h-none opacity-0",
+          )}
+          onLoad={() => setImageStatus("loaded")}
+          onError={() => setImageStatus("error")}
+        />
+      ) : null}
+    </div>
+  );
 
   return (
     <>
@@ -313,35 +393,7 @@ export function ToolResultImagePreview(props: {
           canPreview ? `${t("chat.image.preview")} ${alt}` : `${t("chat.image.loading")} ${alt}`
         }
       >
-        <div className={cn("relative w-full", imageStatus !== "loaded" && "min-h-32")}>
-          {imageStatus !== "loaded" ? (
-            <ToolImageStatusCard
-              status={imageStatus === "error" ? "error" : "loading"}
-              title={
-                imageStatus === "error" ? t("chat.image.unavailable") : t("chat.image.loading")
-              }
-              detail={imageStatus === "error" ? t("chat.image.checkGenerated") : imageDetail}
-              className="absolute inset-0 min-h-32"
-            />
-          ) : null}
-          {imageStatus !== "error" ? (
-            <img
-              key={id}
-              src={src}
-              alt={alt}
-              loading="lazy"
-              decoding="async"
-              className={cn(
-                "max-h-72 w-full rounded-[8px] object-contain transition-opacity duration-200",
-                imageStatus === "loaded"
-                  ? "opacity-100"
-                  : "pointer-events-none absolute inset-0 h-full max-h-none opacity-0",
-              )}
-              onLoad={() => setImageStatus("loaded")}
-              onError={() => setImageStatus("error")}
-            />
-          ) : null}
-        </div>
+        {imageFrame}
       </button>
       {previewOpen ? (
         <ImagePreview open={previewOpen} slides={slides} onClose={() => setPreviewOpen(false)} />
@@ -398,47 +450,49 @@ function NativeDisplayImageTile(props: {
   isSvgImage: boolean;
   loading: "lazy" | "eager";
   onPreview: () => void;
+  readOnly?: boolean;
 }) {
   const { source, alt, isGallery, isSvgImage, loading, onPreview } = props;
-  const { src, status } = source;
   const { t } = useLocale();
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const [imageStatus, setImageStatus] = useState<ToolImageLoadState>(() =>
-    getInitialImageLoadState({ src, status }),
+    getInitialImageLoadState(source),
   );
 
   useEffect(() => {
-    setImageStatus(getInitialImageLoadState({ src, status }));
-  }, [src, status]);
+    setImageStatus(getInitialImageLoadState(source));
+  }, [source.src, source.status]);
 
-  const canPreview = status === "ready" && imageStatus === "loaded";
+  useEffect(() => {
+    if (source.status !== "ready" || !source.src) return;
+    const completedState = getCompletedImageLoadState(imageRef.current);
+    if (completedState) {
+      setImageStatus(completedState);
+    }
+  }, [source.src, source.status]);
+
+  const canPreview = source.status === "ready" && imageStatus === "loaded";
   const isWaiting = !canPreview;
   const statusTitle =
     imageStatus === "error"
       ? t("chat.image.unavailable")
-      : status === "loading"
+      : source.status === "loading"
         ? t("chat.image.preparing")
         : t("chat.image.loading");
 
-  return (
-    <button
-      type="button"
-      className={cn(
-        "relative flex max-w-full items-center justify-center overflow-hidden rounded-[10px] text-left shadow-sm transition-[filter,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
-        canPreview
-          ? "cursor-zoom-in hover:brightness-[0.98]"
-          : "cursor-default hover:brightness-100",
-        isGallery && "aspect-square w-full bg-muted/30",
-        !isGallery && (isSvgImage || isWaiting) && "min-h-28 w-full max-w-3xl bg-muted/30",
-        imageStatus === "error" && "shadow-none",
-      )}
-      disabled={!canPreview}
-      aria-label={canPreview ? `${t("chat.image.preview")} ${alt}` : statusTitle}
-      onClick={() => {
-        if (canPreview) onPreview();
-      }}
-    >
+  const className = cn(
+    "relative flex max-w-full items-center justify-center overflow-hidden rounded-[10px] text-left shadow-sm transition-[filter,transform]",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45 disabled:opacity-100",
+    canPreview ? "cursor-zoom-in hover:brightness-[0.98]" : "cursor-default hover:brightness-100",
+    isGallery && "aspect-square w-full bg-muted/30",
+    !isGallery && (isSvgImage || isWaiting) && "min-h-28 w-full max-w-3xl bg-muted/30",
+    imageStatus === "error" && "shadow-none",
+  );
+  const content = (
+    <>
       {source.status === "ready" && source.src && imageStatus !== "error" ? (
         <img
+          ref={imageRef}
           src={source.src}
           alt={alt}
           loading={loading}
@@ -469,14 +523,29 @@ function NativeDisplayImageTile(props: {
           )}
         />
       ) : null}
+    </>
+  );
+
+  return (
+    <button
+      type="button"
+      className={cn(className)}
+      disabled={!canPreview}
+      aria-label={canPreview ? `${t("chat.image.preview")} ${alt}` : statusTitle}
+      onClick={() => {
+        if (canPreview) onPreview();
+      }}
+    >
+      {content}
     </button>
   );
 }
 
 export function NativeDisplayImageBlock(props: {
   payload: NonNullable<ReturnType<typeof getNativeDisplayImagePayload>>;
+  readOnly?: boolean;
 }) {
-  const { payload } = props;
+  const { payload, readOnly = false } = props;
   const { t } = useLocale();
   const isGallery = payload.entries.length > 1;
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -510,6 +579,7 @@ export function NativeDisplayImageBlock(props: {
               isSvgImage={isSvgImage}
               loading={isGallery ? "eager" : "lazy"}
               onPreview={() => setPreviewIndex(index)}
+              readOnly={readOnly}
             />
           );
         })}

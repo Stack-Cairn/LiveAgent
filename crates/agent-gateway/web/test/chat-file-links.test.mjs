@@ -88,8 +88,8 @@ test("Gateway historical and streaming rows keep the explicit file-open prop cha
     "../src/app/GatewayApp.tsx",
     "../src/components/GatewayTranscript.tsx",
     "../../../agent-ui/src/components/chat/ThinkingActivity.tsx",
-    "../src/pages/chat/AssistantBubble.tsx",
-    "../src/pages/chat/assistant-bubble/RoundContent.tsx",
+    "../../../agent-ui/src/components/chat/AssistantBubble.tsx",
+    "../../../agent-ui/src/components/chat/assistant-bubble/RoundContent.tsx",
   ];
   for (const relativePath of files) {
     const source = fs.readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
@@ -97,7 +97,12 @@ test("Gateway historical and streaming rows keep the explicit file-open prop cha
   }
 
   const roundContent = fs.readFileSync(
-    fileURLToPath(new URL("../src/pages/chat/assistant-bubble/RoundContent.tsx", import.meta.url)),
+    fileURLToPath(
+      new URL(
+        "../../../agent-ui/src/components/chat/assistant-bubble/RoundContent.tsx",
+        import.meta.url,
+      ),
+    ),
     "utf8",
   );
   assert.match(roundContent, /isStreaming \? "streaming" : "static"/);

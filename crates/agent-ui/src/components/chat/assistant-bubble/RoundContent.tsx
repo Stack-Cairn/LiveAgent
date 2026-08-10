@@ -1,4 +1,11 @@
 import {
+  normalizeLiveToolStatus,
+  type RetryAttemptRecord,
+  type UiRound,
+  VIBING_STATUS,
+} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import {
   AssistantStatus,
   CompactingText,
   VibingText,
@@ -10,21 +17,20 @@ import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { isTaskToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
-import { memo, useMemo, useState } from "react";
-import { ChevronRight, RefreshCw } from "../../../components/icons";
-import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
-import { normalizeLiveToolStatus, VIBING_STATUS } from "../../../lib/chat/chatPageHelpers";
-import type { RetryAttemptRecord } from "../../../lib/chat/transcript/types";
-import type { UiRound } from "../../../lib/chat/uiMessages";
-import { groupRoundBlocks, isBuiltinShareToolName } from "./assistantBubbleUtils";
+import { memo, type ReactNode, useMemo, useState } from "react";
+import { ChevronRight, RefreshCw } from "../../IconSet";
+import {
+  type GroupedRoundBlock,
+  groupRoundBlocks,
+  isBuiltinShareToolName,
+} from "./assistantBubbleUtils";
 import { MemoToolCallItem } from "./ToolCallItem";
 import { getNativeDisplayImagePayload, NativeDisplayImageBlock } from "./ToolImages";
 import { ToolTraceGroup } from "./ToolTraceGroup";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
 
-// Expandable per-attempt stream-retry history for the live run, mirrored
-// from the desktop app's RetryDetailsBlock (agent-gui RoundContent.tsx).
+// Expandable per-attempt stream-retry history for the live run.
 export const RetryDetailsBlock = memo(function RetryDetailsBlock({
   attempts,
 }: {
@@ -74,6 +80,86 @@ export const RetryDetailsBlock = memo(function RetryDetailsBlock({
       </LazyCollapse>
     </div>
   );
+});
+
+export const RoundBlockContent = memo(function RoundBlockContent(props: {
+  block: GroupedRoundBlock;
+  isLive: boolean;
+  renderMode: "streaming" | "static";
+  runningToolCallIds: string[];
+  thinkingOpen: boolean;
+  isLatestThinking: boolean;
+  workdir?: string;
+  onOpenFileLink?: (link: ChatFileLink) => void;
+}) {
+  const {
+    block,
+    isLive,
+    renderMode,
+    runningToolCallIds,
+    thinkingOpen,
+    isLatestThinking,
+    workdir,
+    onOpenFileLink,
+  } = props;
+
+  let content: ReactNode;
+  if (block.kind === "thinking") {
+    const isRunning = isLive && thinkingOpen && isLatestThinking;
+    content = (
+      <ThinkingActivity
+        text={block.text}
+        open={isRunning}
+        isRunning={isRunning}
+        renderMode={renderMode}
+        workdir={workdir}
+        onOpenFileLink={onOpenFileLink}
+      />
+    );
+  } else if (block.kind === "tool") {
+    const displayImagePayload = getNativeDisplayImagePayload(block.item);
+    if (displayImagePayload) {
+      content = <NativeDisplayImageBlock payload={displayImagePayload} />;
+    } else if (block.item.toolCall.name === "Image" && !block.item.toolResult?.isError) {
+      content = null;
+    } else {
+      content = (
+        <MemoToolCallItem
+          item={block.item}
+          isRunning={Boolean(
+            isLive && block.item.toolCall.id && runningToolCallIds.includes(block.item.toolCall.id),
+          )}
+        />
+      );
+    }
+  } else if (block.kind === "toolGroup") {
+    content = (
+      <ToolTraceGroup items={block.items} runningToolCallIds={isLive ? runningToolCallIds : []} />
+    );
+  } else if (block.kind === "hostedSearch" || block.kind === "hostedSearchGroup") {
+    content = (
+      <HostedSearchGroupView
+        items={block.kind === "hostedSearch" ? [block.item] : block.items}
+        isLive={isLive}
+      />
+    );
+  } else if (block.text.trim()) {
+    content = (
+      <Markdown
+        content={block.text}
+        className="font-chat"
+        renderMode={renderMode}
+        workdir={workdir}
+        onOpenFileLink={onOpenFileLink}
+      />
+    );
+  } else {
+    content = null;
+  }
+
+  if (!content) return null;
+
+  return <div className={isLive ? undefined : "w-full"}>{content}</div>;
 });
 
 export const RoundContent = memo(function RoundContent(props: {

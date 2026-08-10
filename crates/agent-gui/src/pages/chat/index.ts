@@ -1,3 +1,4 @@
+export { useChatSkills } from "@liveagent/ui/lib/skills/useChatSkills";
 export {
   ChatComposerBar,
   type ChatQueueTurnPreview,
@@ -10,7 +11,6 @@ export type {
 export { useGatewayBridgeListeners } from "./gateway/useGatewayBridgeListeners";
 export { useConversationHistoryActions } from "./history/useConversationHistoryActions";
 export { useChatPageRuntimeStore } from "./hooks/useChatPageRuntimeStore";
-export { useChatSkills } from "./hooks/useChatSkills";
 export { useEditResend } from "./hooks/useEditResend";
 export { useLiveTranscriptController } from "./hooks/useLiveTranscriptController";
 export { MAX_UPLOAD_FILES, usePendingUploads } from "./hooks/usePendingUploads";

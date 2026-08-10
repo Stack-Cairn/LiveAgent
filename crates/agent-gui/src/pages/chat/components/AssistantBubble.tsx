@@ -4,13 +4,16 @@ import {
   CompactingText,
   VibingText,
 } from "@liveagent/ui/components/chat/AssistantStatus";
+import {
+  RetryDetailsBlock,
+  RoundBlockContent,
+} from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
 import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import { memo, type ReactNode } from "react";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { VIBING_STATUS } from "../../../lib/chat/page/chatPageHelpers";
 import type { AssistantUnitRow } from "../transcript/rowModel";
-import { RetryDetailsBlock, RoundBlockContent } from "./assistant-bubble/RoundContent";
 
 export { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
 

@@ -44,6 +44,16 @@ const checks = [
           /(?:from\s+|import\s*\(\s*|import\s+)["']@liveagent\/ui\/(?:components\/chat\/ChatHeader|pages\/(?:skills-hub\/SkillsHubPage|mcp-hub\/McpHubPage))["']/,
         reason: "公共页面与聊天顶部栏必须由共享 ApplicationView 统一组装",
       },
+      {
+        pattern:
+          /(?:from\s+|import\s*\(\s*|import\s+)["']@\/pages\/chat\/(?:AssistantBubble|useChatSkills|queue\/chatTurnQueue|assistant-bubble\/[^"']+)["']/,
+        reason: "聊天渲染、Skill 与队列公共逻辑必须使用 agent-ui 共享实现",
+      },
+      {
+        pattern:
+          /(?:from\s+|import\s*\(\s*|import\s+)["']\.\/(?:FileDropOverlay|WorkspaceOverlayHost)["']/,
+        reason: "聊天 Overlay 必须使用 agent-ui 共享实现",
+      },
     ],
   },
   {
@@ -62,6 +72,11 @@ const checks = [
         pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["']@liveagent\/ui\/(?:components\/chat\/ChatHeader|pages\/(?:skills-hub\/SkillsHubPage|mcp-hub\/McpHubPage))["']/,
         reason: "公共页面与聊天顶部栏必须由共享 ApplicationView 统一组装",
+      },
+      {
+        pattern:
+          /(?:from\s+|import\s*\(\s*|import\s+)["']\.{1,2}\/(?:components\/(?:ChatFileDropOverlay|WorkspaceOverlayHost|assistant-bubble\/[^"']+)|hooks\/useChatSkills)["']/,
+        reason: "聊天渲染、Overlay 与 Skill 公共逻辑必须使用 agent-ui 共享实现",
       },
     ],
   },
@@ -93,6 +108,34 @@ for (const sharedFile of listSourceFiles(sharedRoot)) {
       `${relative(repoRoot, appRoot)}/${sharedRelativePath}: 共享源码不能在应用目录保留同路径副本`,
     );
   }
+}
+
+const retiredSharedCopies = [
+  "crates/agent-gui/src/pages/chat/components/ChatFileDropOverlay.tsx",
+  "crates/agent-gui/src/pages/chat/components/WorkspaceOverlayHost.tsx",
+  "crates/agent-gui/src/pages/chat/components/assistant-bubble/RoundContent.tsx",
+  "crates/agent-gui/src/pages/chat/components/assistant-bubble/ToolCallItem.tsx",
+  "crates/agent-gui/src/pages/chat/components/assistant-bubble/ToolImages.tsx",
+  "crates/agent-gui/src/pages/chat/components/assistant-bubble/ToolResultDisplay.tsx",
+  "crates/agent-gui/src/pages/chat/components/assistant-bubble/ToolTraceGroup.tsx",
+  "crates/agent-gui/src/pages/chat/components/assistant-bubble/assistantBubbleUtils.ts",
+  "crates/agent-gui/src/pages/chat/hooks/useChatSkills.ts",
+  "crates/agent-gateway/web/src/app/FileDropOverlay.tsx",
+  "crates/agent-gateway/web/src/app/WorkspaceOverlayHost.tsx",
+  "crates/agent-gateway/web/src/pages/chat/AssistantBubble.tsx",
+  "crates/agent-gateway/web/src/pages/chat/assistant-bubble/RoundContent.tsx",
+  "crates/agent-gateway/web/src/pages/chat/assistant-bubble/ToolCallItem.tsx",
+  "crates/agent-gateway/web/src/pages/chat/assistant-bubble/ToolImages.tsx",
+  "crates/agent-gateway/web/src/pages/chat/assistant-bubble/ToolResultDisplay.tsx",
+  "crates/agent-gateway/web/src/pages/chat/assistant-bubble/ToolTraceGroup.tsx",
+  "crates/agent-gateway/web/src/pages/chat/assistant-bubble/assistantBubbleUtils.ts",
+  "crates/agent-gateway/web/src/pages/chat/queue/chatTurnQueue.ts",
+  "crates/agent-gateway/web/src/pages/chat/useChatSkills.ts",
+];
+for (const retiredPath of retiredSharedCopies) {
+  if (!existsSync(join(repoRoot, retiredPath))) continue;
+  failures += 1;
+  console.error(`${retiredPath}: 已迁移到 agent-ui 的共享源码不能在宿主目录重新创建`);
 }
 
 const applicationEntries = [

@@ -3,7 +3,10 @@ import fs from "node:fs";
 import test from "node:test";
 
 const roundContentSource = fs.readFileSync(
-  new URL("../../src/pages/chat/components/assistant-bubble/RoundContent.tsx", import.meta.url),
+  new URL(
+    "../../../agent-ui/src/components/chat/assistant-bubble/RoundContent.tsx",
+    import.meta.url,
+  ),
   "utf8",
 );
 

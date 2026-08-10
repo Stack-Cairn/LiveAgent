@@ -8,7 +8,7 @@ const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const loader = createWebModuleLoader({ rootDir });
 const { BUILTIN_TOOL_CATALOG } = loader.loadModule("@liveagent/ui/lib/tools/builtinToolCatalog.ts");
 const { groupRoundBlocks, isBuiltinShareToolName } = loader.loadModule(
-  "src/pages/chat/assistant-bubble/assistantBubbleUtils.ts",
+  "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils.ts",
 );
 
 test("shared history recognizes every catalog tool as builtin", () => {

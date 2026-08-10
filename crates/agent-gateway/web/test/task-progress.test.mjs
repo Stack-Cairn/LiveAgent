@@ -88,7 +88,12 @@ test("WebUI hides all task tool blocks while preserving ordinary tools", () => {
     false,
   );
   const source = readFileSync(
-    fileURLToPath(new URL("../src/pages/chat/assistant-bubble/RoundContent.tsx", import.meta.url)),
+    fileURLToPath(
+      new URL(
+        "../../../agent-ui/src/components/chat/assistant-bubble/RoundContent.tsx",
+        import.meta.url,
+      ),
+    ),
     "utf8",
   );
   assert.match(source, /groupedBlocks\.filter\(\(block\) => !isTaskToolBlock\(block\)\)/);

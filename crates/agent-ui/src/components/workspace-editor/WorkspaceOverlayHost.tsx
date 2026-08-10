@@ -1,13 +1,18 @@
+import type { CodeMentionReference } from "@liveagent/adapters/mentionReferences";
+import {
+  WorkspaceOverlayTitleBar,
+  workspaceOverlayStackClassName,
+} from "@liveagent/adapters/workspacePreview";
+import type { AppSettings, EffectiveTheme } from "@liveagent/app/lib/settings";
 import type { WorkspaceCodeEditorOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceCodeEditorOverlay";
 import type { WorkspaceFilePreviewOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay";
 import type { WorkspaceSshTerminalOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceSshTerminalOverlay";
 import { t as translate } from "@liveagent/ui/i18n/index";
 import { lockMonacoNlsLocale, preparePreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { TerminalClient, TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { lazy, Suspense } from "react";
-import type { CodeMentionReference } from "@/lib/chat/mentionReferences";
-import type { AppSettings, EffectiveTheme } from "@/lib/settings";
 
 const WorkspaceCodeEditorOverlay = lazy(async () => {
   await preparePreferredMonacoNlsLocale();
@@ -66,10 +71,25 @@ type WorkspaceOverlayHostProps = {
   onWorkspaceSshTerminalHide: () => void;
 };
 
+function WorkspaceOverlayLoading(props: { className: string; label: string }) {
+  const { className, label } = props;
+  return (
+    <div
+      className={cn(
+        className,
+        "absolute inset-0 flex min-h-0 flex-col border-r border-border bg-background text-sm text-muted-foreground shadow-2xl",
+        workspaceOverlayStackClassName,
+      )}
+    >
+      <WorkspaceOverlayTitleBar />
+      <div className="flex min-h-0 flex-1 items-center justify-center">{label}</div>
+    </div>
+  );
+}
+
 /**
- * Lazy mount host for workspace overlays. Must live inside `.gateway-main-shell`
- * (not the outer editor host) so absolute inset-0 only covers the main column
- * and leaves the chat sidebar usable.
+ * Lazy mount host for workspace overlays. It stays inside the main chat column
+ * so absolute positioning leaves the sidebar usable in both hosts.
  */
 export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
   const {
@@ -105,9 +125,10 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
       {workspaceEditorMounted ? (
         <Suspense
           fallback={
-            <div className="workspace-code-editor-overlay absolute inset-0 z-40 flex items-center justify-center border-r border-border bg-background text-sm text-muted-foreground shadow-2xl">
-              {translate("workspaceEditor.loading", locale)}
-            </div>
+            <WorkspaceOverlayLoading
+              className="workspace-code-editor-overlay"
+              label={translate("workspaceEditor.loading", locale)}
+            />
           }
         >
           <WorkspaceCodeEditorOverlay
@@ -126,9 +147,10 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
       {workspaceFilePreviewMounted ? (
         <Suspense
           fallback={
-            <div className="workspace-file-preview-overlay absolute inset-0 z-40 flex items-center justify-center border-r border-border bg-background text-sm text-muted-foreground shadow-2xl">
-              {translate("workspaceFilePreview.loading", locale)}
-            </div>
+            <WorkspaceOverlayLoading
+              className="workspace-file-preview-overlay"
+              label={translate("workspaceFilePreview.loading", locale)}
+            />
           }
         >
           <WorkspaceFilePreviewOverlay
@@ -143,9 +165,10 @@ export function WorkspaceOverlayHost(props: WorkspaceOverlayHostProps) {
       {workspaceSshTerminalMounted && terminalClient && sftpClient ? (
         <Suspense
           fallback={
-            <div className="workspace-ssh-terminal-overlay absolute inset-0 z-40 flex items-center justify-center border-r border-border bg-background text-sm text-muted-foreground shadow-2xl">
-              {translate("workspaceSshTerminal.loading", locale)}
-            </div>
+            <WorkspaceOverlayLoading
+              className="workspace-ssh-terminal-overlay"
+              label={translate("workspaceSshTerminal.loading", locale)}
+            />
           }
         >
           <WorkspaceSshTerminalOverlay

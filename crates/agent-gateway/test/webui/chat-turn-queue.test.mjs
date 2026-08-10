@@ -5,7 +5,9 @@ import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 // The chat turn queue itself lives in the desktop GUI (the gateway relays
 // snapshots); the web module keeps only the composer-side content check.
 const loader = createWebModuleLoader();
-const { queuedChatTurnHasContent } = loader.loadModule("src/pages/chat/queue/chatTurnQueue.ts");
+const { queuedChatTurnHasContent } = loader.loadModule(
+  "@liveagent/ui/lib/chat/queuedChatTurn.ts",
+);
 
 function draft(overrides = {}) {
   return {

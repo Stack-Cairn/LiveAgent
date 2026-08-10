@@ -1,9 +1,18 @@
+import type {
+  HostedSearchBlock,
+  ToolResultMessage,
+  ToolTraceItem,
+  UiRound,
+} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
+import {
+  safeStringify,
+  shouldDisplayToolTraceItem,
+} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import { isTaskToolName } from "@liveagent/ui/contracts/task";
 import type {
   SubagentCardDetails,
   SubagentReportDetails,
 } from "@liveagent/ui/lib/subagents/protocol";
-import type { IconComponent } from "../../../components/icons";
 import {
   Bot,
   Brain,
@@ -13,6 +22,7 @@ import {
   FilePenLine,
   FileText,
   FolderTree,
+  type IconComponent,
   ImageIcon,
   Link2,
   ListChecks,
@@ -22,15 +32,7 @@ import {
   Terminal,
   Trash2,
   Wrench,
-} from "../../../components/icons";
-import type { ToolResultMessage } from "../../../lib/agentTypes";
-import type { HostedSearchBlock } from "../../../lib/chat/hostedSearch";
-import {
-  safeStringify,
-  shouldDisplayToolTraceItem,
-  type ToolTraceItem,
-  type UiRound,
-} from "../../../lib/chat/uiMessages";
+} from "../../IconSet";
 
 export function getToolMeta(name: string): {
   Icon: IconComponent;

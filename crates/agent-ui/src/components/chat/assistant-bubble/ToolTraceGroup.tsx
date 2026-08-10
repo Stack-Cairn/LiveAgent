@@ -1,10 +1,11 @@
+import { retainRunningToolContent } from "@liveagent/adapters/assistantBubble";
+import type { ToolTraceItem } from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo, useState } from "react";
-import { ChevronRight, Terminal } from "../../../components/icons";
-import type { ToolTraceItem } from "../../../lib/chat/uiMessages";
+import { ChevronRight, Terminal } from "../../IconSet";
 import { getToolDisplayName, getToolMeta, getToolTraceKey } from "./assistantBubbleUtils";
 import { areToolTraceItemsEqual, MemoToolCallItem } from "./ToolCallItem";
 
@@ -145,7 +146,7 @@ function ToolTraceGroupInner(props: {
         </div>
       </button>
 
-      <LazyCollapse open={open}>
+      <LazyCollapse open={open} retainWhileClosed={retainRunningToolContent && counts.running > 0}>
         {() => (
           <div className="space-y-0.5 pb-2 pl-[22px] pt-1">
             {items.map((item, index) => (

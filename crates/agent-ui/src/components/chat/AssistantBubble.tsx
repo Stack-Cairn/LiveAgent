@@ -1,17 +1,17 @@
-import { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
-import { ChangedFilesCard } from "@liveagent/ui/components/chat/ChangedFilesCard";
-import { memo, useMemo } from "react";
-import { collectChangedFiles } from "../../lib/chat/changedFiles";
+import type { UiRound } from "@liveagent/app/lib/chat/assistantBubbleAdapter";
+import { collectChangedFiles } from "@liveagent/app/lib/chat/changedFilesAdapter";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
-import type { UiRound } from "../../lib/chat/uiMessages";
+import { memo, useMemo } from "react";
+import { AssistantAvatar } from "./AssistantAvatar";
 import { RoundContent } from "./assistant-bubble/RoundContent";
+import { ChangedFilesCard } from "./ChangedFilesCard";
 
-export { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
+export { AssistantAvatar } from "./AssistantAvatar";
 export {
   AssistantStatus,
   CompactingText,
   VibingText,
-} from "@liveagent/ui/components/chat/AssistantStatus";
+} from "./AssistantStatus";
 export { RetryDetailsBlock } from "./assistant-bubble/RoundContent";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
