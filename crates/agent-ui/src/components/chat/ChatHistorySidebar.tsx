@@ -331,6 +331,11 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
   // Enter/Escape mark the blur as handled so onBlur commits exactly once —
   // symmetric with ProjectRow's skipNextBlurCommitRef.
   const skipNextBlurCommitRef = useRef(false);
+  // The row swaps the dropdown for the rename input, so Base UI hands focus
+  // back to the now-unmounted trigger right after the menu closes. That focus
+  // handoff blurred the freshly focused input and committed the untouched
+  // title, which read as "Rename does nothing" on Windows.
+  const ignoreMenuCloseBlurRef = useRef(false);
   const longPressTimerRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
   const longPressTriggeredRef = useRef(false);
@@ -369,6 +374,14 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
     if (isInteractionDisabled) {
       return;
     }
+    onStartRenaming(item);
+  }, [isInteractionDisabled, item, onStartRenaming]);
+
+  const handleStartRenamingFromMenu = useCallback(() => {
+    if (isInteractionDisabled) {
+      return;
+    }
+    ignoreMenuCloseBlurRef.current = true;
     onStartRenaming(item);
   }, [isInteractionDisabled, item, onStartRenaming]);
 
@@ -584,7 +597,10 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
   const shouldShowMobilePressFeedback = isMobileMenuLayout && (isLongPressActive || menuOpen);
 
   useEffect(() => {
-    if (!isRenaming) return;
+    if (!isRenaming) {
+      ignoreMenuCloseBlurRef.current = false;
+      return;
+    }
     skipNextBlurCommitRef.current = false;
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -656,6 +672,12 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
             onBlur={() => {
               if (skipNextBlurCommitRef.current) {
                 skipNextBlurCommitRef.current = false;
+                return;
+              }
+              if (ignoreMenuCloseBlurRef.current) {
+                ignoreMenuCloseBlurRef.current = false;
+                inputRef.current?.focus();
+                inputRef.current?.select();
                 return;
               }
               onCommitRename();
@@ -879,7 +901,7 @@ const HistoryRow = memo(function HistoryRow(props: HistoryRowProps) {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={isInteractionDisabled}
-                  onSelect={handleStartRenaming}
+                  onSelect={handleStartRenamingFromMenu}
                   className="gap-2"
                 >
                   <Edit3 className="h-3.5 w-3.5" />
@@ -1002,16 +1024,30 @@ const ProjectRow = memo(function ProjectRow(props: {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const skipNextBlurCommitRef = useRef(false);
+  // Same menu-close focus handoff as HistoryRow: the trigger unmounts when the
+  // row swaps to the rename input, so the first blur must not commit.
+  const ignoreMenuCloseBlurRef = useRef(false);
   const isDefaultProject = project.id === DEFAULT_WORKSPACE_PROJECT_ID;
   const isPinned = project.isPinned === true;
   const ProjectFolderIcon = isActive ? FolderOpen : FolderClosed;
 
   useEffect(() => {
-    if (!isRenaming) return;
+    if (!isRenaming) {
+      ignoreMenuCloseBlurRef.current = false;
+      return;
+    }
     skipNextBlurCommitRef.current = false;
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [isRenaming]);
+
+  const handleStartRenamingFromMenu = useCallback(() => {
+    if (isInteractionDisabled) {
+      return;
+    }
+    ignoreMenuCloseBlurRef.current = true;
+    onStartRenamingProject(project);
+  }, [isInteractionDisabled, onStartRenamingProject, project]);
 
   const handleRequestRemove = useCallback(() => {
     if (isInteractionDisabled) {
@@ -1146,6 +1182,12 @@ const ProjectRow = memo(function ProjectRow(props: {
             onBlur={() => {
               if (skipNextBlurCommitRef.current) {
                 skipNextBlurCommitRef.current = false;
+                return;
+              }
+              if (ignoreMenuCloseBlurRef.current) {
+                ignoreMenuCloseBlurRef.current = false;
+                inputRef.current?.focus();
+                inputRef.current?.select();
                 return;
               }
               onCommitProjectRename();
@@ -1363,7 +1405,7 @@ const ProjectRow = memo(function ProjectRow(props: {
                       <>
                         <DropdownMenuItem
                           disabled={isInteractionDisabled}
-                          onSelect={() => onStartRenamingProject(project)}
+                          onSelect={handleStartRenamingFromMenu}
                           className="gap-2"
                         >
                           <Edit3 className="h-3.5 w-3.5" />

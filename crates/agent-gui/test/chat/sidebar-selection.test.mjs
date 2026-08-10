@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
@@ -125,4 +126,19 @@ test("a stop request halts the batch and reports the rest as skipped", async () 
   assert.deepEqual(result.deletedIds, ["one"]);
   assert.deepEqual(result.failedIds, []);
   assert.deepEqual(result.skippedIds, ["two", "three"]);
+});
+
+test("rename menu guards the menu-close blur without changing double-click rename", () => {
+  const source = readFileSync(
+    new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /const handleStartRenamingFromMenu = useCallback\(\(\) => \{[\s\S]*?ignoreMenuCloseBlurRef\.current = true;[\s\S]*?onStartRenaming\(item\);/,
+  );
+  assert.match(source, /onDoubleClick=\{\(event\) => \{[\s\S]*?handleStartRenaming\(\);/);
+  assert.match(source, /onSelect=\{handleStartRenamingFromMenu\}/);
+  assert.equal((source.match(/if \(ignoreMenuCloseBlurRef\.current\)/g) ?? []).length, 2);
 });
