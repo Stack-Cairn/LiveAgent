@@ -22,15 +22,13 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-07-27";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-10";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
     { id: "claude-fable-5", contextWindow: 1000000, maxOutputToken: 128000, thinking: { levels: ["low", "medium", "high", "xhigh", "max"], off: false } },
     { id: "claude-haiku-4-5", contextWindow: 200000, maxOutputToken: 64000, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "claude-haiku-4-5-20251001", contextWindow: 200000, maxOutputToken: 64000, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
-    { id: "claude-opus-4-1", contextWindow: 200000, maxOutputToken: 32000, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
-    { id: "claude-opus-4-1-20250805", contextWindow: 200000, maxOutputToken: 32000, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "claude-opus-4-5", contextWindow: 200000, maxOutputToken: 64000, thinking: { levels: ["low", "medium", "high"], off: true } },
     { id: "claude-opus-4-5-20251101", contextWindow: 200000, maxOutputToken: 64000, thinking: { levels: ["low", "medium", "high"], off: true } },
     { id: "claude-opus-4-6", contextWindow: 1000000, maxOutputToken: 128000, thinking: { levels: ["low", "medium", "high", "max"], off: true } },
@@ -133,7 +131,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
   deepseek: [
     { id: "deepseek-chat", contextWindow: 1000000, maxOutputToken: 384000 },
     { id: "deepseek-reasoner", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: [], off: false } },
-    { id: "deepseek-v4-flash", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: ["high", "max"], off: true } },
+    { id: "deepseek-v4-flash", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: ["low", "high", "max"], off: true } },
     { id: "deepseek-v4-pro", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: ["high", "max"], off: true } },
   ],
   zhipuai: [
@@ -203,6 +201,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "deepseek-v3", contextWindow: 65536, maxOutputToken: 8192 },
     { id: "deepseek-v3-1", contextWindow: 131072, maxOutputToken: 65536 },
     { id: "deepseek-v3-2-exp", contextWindow: 131072, maxOutputToken: 65536 },
+    { id: "deepseek-v4-flash-0731", contextWindow: 1000000, maxOutputToken: 384000, thinking: { levels: ["high", "max"], off: true } },
     { id: "moonshot-kimi-k2-instruct", contextWindow: 131072, maxOutputToken: 8192 },
     { id: "qvq-max", contextWindow: 131072, maxOutputToken: 8192, thinking: { levels: [], off: false } },
     { id: "qwen-deep-research", contextWindow: 1000000, maxOutputToken: 32768 },
@@ -263,8 +262,10 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "qwen3.6-flash", contextWindow: 1000000, maxOutputToken: 65536, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.6-max-preview", contextWindow: 245800, maxOutputToken: 65536, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.6-plus", contextWindow: 1000000, maxOutputToken: 65536, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
+    { id: "qwen3.7-flash", contextWindow: 1000000, maxOutputToken: 65536, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.7-max", contextWindow: 1000000, maxOutputToken: 65536, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
     { id: "qwen3.7-plus", contextWindow: 1000000, maxOutputToken: 64000, thinking: { levels: ["minimal", "low", "medium", "high"], off: true } },
+    { id: "qwen3.8-max", contextWindow: 1000000, maxOutputToken: 131072, thinking: { levels: ["low", "medium", "xhigh"], off: true } },
     { id: "qwq-32b", contextWindow: 131072, maxOutputToken: 8192, thinking: { levels: [], off: false } },
     { id: "qwq-plus", contextWindow: 131072, maxOutputToken: 8192, thinking: { levels: [], off: false } },
     { id: "tongyi-intent-detect-v3", contextWindow: 8192, maxOutputToken: 1024 },
