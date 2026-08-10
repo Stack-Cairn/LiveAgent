@@ -1,7 +1,7 @@
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import type { MutableRefObject } from "react";
-import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type {
   HistoryMessageRef,
   RenderTimelineItem,

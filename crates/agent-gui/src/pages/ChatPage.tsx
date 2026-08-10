@@ -25,6 +25,7 @@ import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { openChatFileLink } from "@liveagent/ui/lib/chat/openChatFileLink";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
@@ -58,7 +59,6 @@ import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspace
 import { PanelRightClose, PanelRightOpen } from "../components/icons";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type { AppUpdateController } from "../lib/appUpdates";
-import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
   buildRequestContext,

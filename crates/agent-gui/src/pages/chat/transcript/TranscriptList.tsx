@@ -1,5 +1,6 @@
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import { createEntranceRegistry } from "@liveagent/ui/lib/transcript-virtual/entranceOnce";
 import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
@@ -21,7 +22,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import { CheckCircle2, ChevronDown } from "../../../components/icons";
-import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type {
   HistoryMessageRef,
   RenderSummaryCard,

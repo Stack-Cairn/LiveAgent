@@ -15,6 +15,7 @@ import {
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
 import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import {
   getUploadedImagePreviewCacheKey,
   loadUploadedImagePreview,
@@ -47,7 +48,6 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import { getRoundText } from "@/lib/chat/uiMessages";

@@ -20,6 +20,7 @@ import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { ScrollArea } from "@liveagent/ui/components/ui/scroll-area";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import { openChatFileLink } from "@liveagent/ui/lib/chat/openChatFileLink";
 import { queuedChatTurnHasContent } from "@liveagent/ui/lib/chat/queuedChatTurn";
@@ -52,7 +53,6 @@ import {
 } from "react";
 import { ChevronDown, PanelRightClose, PanelRightOpen, Terminal } from "@/components/icons";
 import { registerAskUserQuestionAnswerHandler } from "@/lib/chat/askUserQuestionBridge";
-import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import type { ChatHistorySummary } from "@/lib/chat/chatHistory";
 import { buildModelOptions } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
