@@ -601,14 +601,23 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         settlingUnits: null,
       };
     } else if (!liveTailVisible && activeTurn) {
-      const adopted = adoptSettledTwin(historyItems, activeTurn);
-      if (!adopted) {
-        pendingSettle = {
-          replyKey: activeTurn.replyKey,
-          historyLenAtStart: activeTurn.historyLenAtStart,
-        };
+      // A live tail that never produced content (only the status/footer row —
+      // e.g. an idle manual compaction, or a run cancelled before any output)
+      // has no history twin to adopt; keeping it in the settle handoff would
+      // strand a frozen status row at the bottom of the transcript.
+      const producedContent = activeTurn.lastLiveUnits.some((row) => row.unit.kind === "block");
+      if (!producedContent) {
+        activeTurn = null;
+      } else {
+        const adopted = adoptSettledTwin(historyItems, activeTurn);
+        if (!adopted) {
+          pendingSettle = {
+            replyKey: activeTurn.replyKey,
+            historyLenAtStart: activeTurn.historyLenAtStart,
+          };
+        }
+        if (adopted) activeTurn = null;
       }
-      if (adopted) activeTurn = null;
     } else if (!liveTailVisible && pendingSettle) {
       if (adoptSettledTwin(historyItems, pendingSettle)) pendingSettle = null;
     }

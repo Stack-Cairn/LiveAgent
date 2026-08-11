@@ -25,6 +25,10 @@ import {
   normalizeGatewayWorkdir,
 } from "../gateway/gatewayBridgeTypes";
 import type { ConversationRuntimeEntry } from "../runtime/chatPageRuntime";
+import type {
+  ManualCompactionRequest,
+  ManualCompactionResult,
+} from "../runtime/useManualCompaction";
 import {
   appendQueuedChatTurn,
   buildQueuedChatTurnPreview,
@@ -75,7 +79,9 @@ type UseChatTurnQueueParams = {
   displayedConversationWorkdir: string;
   sendActionRef: MutableRefObject<SendChatAction>;
   /** WebUI compact_now 中继：调 ChatPage 的手动压缩入口（与本地用量环同一代码）。 */
-  manualCompactActionRef: MutableRefObject<() => Promise<boolean>>;
+  manualCompactActionRef: MutableRefObject<
+    (request?: ManualCompactionRequest) => Promise<ManualCompactionResult>
+  >;
 };
 
 /**
@@ -878,16 +884,13 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
         return;
       }
 
-      // WebUI 用量环触发的手动压缩：仅当目标就是桌面当前会话且完全空闲时受理。
-      // 受理即回包（Rust relay 30s 超时 < 压缩耗时），压缩本身 fire-and-forget，
-      // 进度/完成经既有 tool_status_is_compaction 通道告知 WebUI。本 effect 闭包
+      // WebUI 用量环触发的手动压缩：按目标 conversationId 装载独立 runtime，
+      // 不要求桌面当前正显示该会话；运行中与单飞校验仍按目标会话隔离。
+      // 受理即回包（Rust relay 30s 超时 < 压缩耗时），压缩本身 fire-and-forget；
+      // 进度走 tool_status_is_compaction，终态走 operationId 关联事件。本 effect 闭包
       // 是 []-dep，校验只读恒新的 ref；压缩中等细校验由 manualCompactActionRef
       // 指向的最新闭包自行复核。
       if (action === "compact_now") {
-        if (conversationId !== currentConversationIdRef.current.trim()) {
-          fail("conversation is not active on desktop", "not_active");
-          return;
-        }
         if (isConversationRunning(conversationId)) {
           fail("conversation is running", "busy");
           return;
@@ -899,8 +902,20 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           fail("compaction already in progress", "compacting");
           return;
         }
+        let operationId = requestId;
+        if (request.requestJson?.trim()) {
+          try {
+            const payload = JSON.parse(request.requestJson) as { operationId?: unknown };
+            if (typeof payload.operationId === "string" && payload.operationId.trim()) {
+              operationId = payload.operationId.trim();
+            }
+          } catch {
+            fail("invalid manual compaction payload", "invalid_payload");
+            return;
+          }
+        }
         respond(requestId, { accepted: true });
-        void manualCompactActionRef.current().catch((error) => {
+        void manualCompactActionRef.current({ conversationId, operationId }).catch((error) => {
           console.warn("manual compaction relayed from WebUI failed", error);
         });
         return;

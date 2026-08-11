@@ -57,6 +57,7 @@ export type ChatCheckpointPayload = {
     model?: string;
     promptVersion?: string;
   };
+  contextUsageTokens?: number;
 };
 
 export type ChatUserMessageEvent = {
@@ -92,6 +93,8 @@ export type ChatEvent = (
       api?: string;
       stopReason?: string;
       usage?: unknown;
+      contextUsageTokens?: number;
+      contextRelevant?: boolean;
       checkpoint?: ChatCheckpointPayload;
       conversation_id?: string;
     }
@@ -147,6 +150,13 @@ export type ChatEvent = (
       // array (possibly empty) replaces the current list.
       retryAttempts?: { attempt: number; maxAttempts: number; errorMessage: string }[] | null;
       round?: number;
+      conversation_id?: string;
+    }
+  | {
+      type: "manual_compaction_result";
+      operationId: string;
+      status: "compacted" | "failed" | "busy" | "skipped";
+      message?: string;
       conversation_id?: string;
     }
   | { type: "error"; message: string; round?: number; conversation_id?: string }

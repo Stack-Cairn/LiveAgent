@@ -54,6 +54,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   getUploadedImagePreviewCacheKey,
@@ -212,6 +213,40 @@ const DEFAULT_QUEUE_SCROLLBAR_STATE: QueueScrollbarState = {
 const COMPOSER_EXPAND_ANIMATION_MS = 280;
 const COMPOSER_EXPAND_EASING = "cubic-bezier(0.32, 0.72, 0.22, 1)";
 
+/** 用量环实时读数订阅源（getContextUsageTokens 必须对同一底层状态返回稳定值）。 */
+export type ContextUsageTokensSource = {
+  subscribe: (listener: () => void) => () => void;
+  getContextUsageTokens: () => number | undefined;
+};
+
+const noopSubscribe = () => () => {};
+
+// 环的实时读数在独立小组件里订阅：流式期间每帧的读数变化只重渲染这枚
+// SVG 环，不触发 ChatComposerBar/整页回流。
+function ComposerContextUsageRing(props: {
+  source?: ContextUsageTokensSource;
+  totalTokens?: number;
+  contextWindow?: number;
+  disabled?: boolean;
+  onConfirm?: (() => void) | (() => Promise<unknown>);
+}) {
+  const { source, totalTokens, contextWindow, disabled, onConfirm } = props;
+  const readStatic = useCallback(() => totalTokens, [totalTokens]);
+  const liveTokens = useSyncExternalStore(
+    source?.subscribe ?? noopSubscribe,
+    source?.getContextUsageTokens ?? readStatic,
+    source?.getContextUsageTokens ?? readStatic,
+  );
+  return (
+    <ContextUsageRing
+      totalTokens={source ? liveTokens : totalTokens}
+      contextWindow={contextWindow}
+      disabled={disabled}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
 function prefersReducedMotion() {
   return (
     typeof window.matchMedia === "function" &&
@@ -235,8 +270,14 @@ export type ChatComposerBarProps = {
   gitClient?: GitClient | null;
   gitWriteEnabled?: boolean;
   gitDisabledMessage?: string;
-  /** 当前会话上下文占用 token（deriveContextUsageTokens 口径）；与 contextWindow 齐备时显示用量环。 */
+  /** 当前会话上下文占用 token；与 contextWindow 齐备时显示用量环。 */
   contextUsageTokens?: number;
+  /**
+   * 可选的用量环实时订阅源：流式期间读数每帧都在变，经此订阅只重渲染环
+   * 本身而不回流整页（GUI 用；WebUI 传静态 contextUsageTokens 即可）。
+   * 提供时优先于 contextUsageTokens。
+   */
+  contextUsageTokensSource?: ContextUsageTokensSource;
   contextWindow?: number;
   /** 用量环确认后触发手动压缩；缺省时环为纯展示。 */
   onManualCompactConfirm?: (() => void) | (() => Promise<unknown>);
@@ -285,6 +326,7 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     gitWriteEnabled = true,
     gitDisabledMessage,
     contextUsageTokens,
+    contextUsageTokensSource,
     contextWindow,
     onManualCompactConfirm,
     manualCompactBlocked,
@@ -906,10 +948,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
             )}
           </button>
 
-          {/* 用量环钉在卡片右缘、底部工具栏(约 44px)正上方——即发送按钮上方、
-              expand 按钮下侧的纵列位；锚底让附件列表/展开态下位置不动。 */}
-          <div className="absolute bottom-11 right-3 z-20">
-            <ContextUsageRing
+          {/* 用量环位于卡片右侧控制列的垂直中心，保持在展开与发送按钮之间。 */}
+          <div className="absolute right-3 top-1/2 z-20 -translate-y-1/2">
+            <ComposerContextUsageRing
+              source={contextUsageTokensSource}
               totalTokens={contextUsageTokens}
               contextWindow={contextWindow}
               disabled={controlsDisabled || isSending || manualCompactBlocked}

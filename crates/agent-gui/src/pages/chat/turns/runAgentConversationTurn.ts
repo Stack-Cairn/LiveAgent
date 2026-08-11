@@ -611,7 +611,15 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     });
   }
 
-  function commitAssistantRoundMeta(assistant: AssistantMessage, round: number) {
+  function commitAssistantRoundMeta(
+    assistant: AssistantMessage,
+    round: number,
+    options?: { contextRelevant?: boolean },
+  ) {
+    const contextRelevant = options?.contextRelevant !== false;
+    const contextUsageTokens = contextRelevant
+      ? compaction.observeContextMessages([assistant])
+      : undefined;
     gatewayBridgeEvents.queueToken("", {
       round,
       provider: assistant.provider,
@@ -619,6 +627,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       api: assistant.api,
       stopReason: assistant.stopReason,
       usage: assistant.usage,
+      ...(contextUsageTokens ? { contextUsageTokens } : {}),
+      ...(contextRelevant ? {} : { contextRelevant: false }),
     });
     batchLiveRoundsUpdate(
       (prev) =>
@@ -631,6 +641,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             stopReason: String(assistant.stopReason ?? ""),
             usage: assistant.usage,
             usageTotalTokens: assistant.usage?.totalTokens,
+            contextUsageTokens,
+            contextRelevant,
           },
         })),
       transcriptStore,
@@ -772,6 +784,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           protectionCheckChars = 0;
           sawToolCallInRound = false;
           hookLifecycle.startTurn(round);
+          const contextUsageTokens = compaction.contextUsageTokens;
+          gatewayBridgeEvents.queueToken("", {
+            round,
+            ...(contextUsageTokens ? { contextUsageTokens } : {}),
+          });
           batchLiveRoundsUpdate(
             (prev) => [
               ...prev,
@@ -779,6 +796,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
                 key: `r${round}`,
                 round,
                 blocks: [],
+                meta: contextUsageTokens ? { contextUsageTokens } : undefined,
                 runningToolCallIds: [],
                 thinkingOpen: false,
               },
@@ -890,6 +908,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         },
         onToolResult: (toolCall, toolResult, round) => {
           if (toolResult.role !== "toolResult") return;
+          compaction.observeContextMessages([toolResult]);
           discardPendingToolCallDelta(toolCall, round);
           if (!isSubagentCardToolCall(toolCall)) {
             hookLifecycle.toolResultReceived(round);
@@ -1096,6 +1115,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     const extraction = await runPostTurnMemoryExtraction({
       roundOffset: memoryRoundOffset,
       onTurnStart: (round) => {
+        gatewayBridgeEvents.queueToken("", { round, contextRelevant: false });
         batchLiveRoundsUpdate(
           (prev) => [
             ...prev,
@@ -1103,6 +1123,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
               key: `r${round}`,
               round,
               blocks: [],
+              meta: { contextRelevant: false },
               runningToolCallIds: [],
               thinkingOpen: false,
             },
@@ -1206,7 +1227,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           transcriptStore,
         );
       },
-      onAssistantMessage: commitAssistantRoundMeta,
+      onAssistantMessage: (assistant, round) =>
+        commitAssistantRoundMeta(assistant, round, { contextRelevant: false }),
       onToolStatus: (s) => {
         gatewayBridgeEvents.queueToolStatus(s, false);
         updateToolStatus(s, transcriptStore);

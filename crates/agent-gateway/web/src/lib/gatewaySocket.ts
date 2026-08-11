@@ -1757,12 +1757,16 @@ export class GatewayWebSocketClient {
     );
   }
 
-  // 用量环触发的手动压缩：中继到桌面端执行（受理即回包，压缩进度经
-  // tool_status_is_compaction 通道回流）。
-  async chatQueueCompactNow(conversationId: string): Promise<ChatQueueResponse> {
+  // 用量环触发的手动压缩：中继到桌面端执行（受理即回包，进度与带
+  // operationId 的终态分别经聊天流回传）。
+  async chatQueueCompactNow(
+    conversationId: string,
+    operationId: string,
+  ): Promise<ChatQueueResponse> {
     return normalizeChatQueueResponse(
       await this.requestWithRecovery<RawChatQueueResponse>("chat_queue.compact_now", {
         conversation_id: conversationId,
+        request_json: JSON.stringify({ operationId }),
       }),
     );
   }
@@ -3677,7 +3681,7 @@ export type GatewayWebSocketClientLike = {
   chatQueueGet(conversationId: string): Promise<ChatQueueResponse>;
   chatQueueGetItem(conversationId: string, itemId: string): Promise<ChatQueueResponse>;
   chatQueueRunNow(conversationId: string, itemId: string): Promise<ChatQueueResponse>;
-  chatQueueCompactNow(conversationId: string): Promise<ChatQueueResponse>;
+  chatQueueCompactNow(conversationId: string, operationId: string): Promise<ChatQueueResponse>;
   chatQueueMove(
     conversationId: string,
     itemId: string,

@@ -47,6 +47,7 @@ export type StoredSummaryMessage = {
       sourceMessageCount: number;
       estimatedInputTokens?: number;
       outputTokens?: number;
+      contextTokensAfter?: number;
       summarizer?: {
         inputTokens?: number;
         outputTokens?: number;
@@ -110,6 +111,9 @@ export type RenderSummaryCard = {
     model: string;
     promptVersion?: string;
   };
+  // 压缩落定时的权威上下文占用快照（stats.contextTokensAfter）；用量环
+  // 扫描优先读它，避免退回摘要正文估算（与 WebUI checkpoint 行同口径）。
+  contextUsageTokens?: number;
   timestamp: number;
   collapsed: boolean;
 };
@@ -646,6 +650,7 @@ function buildTimelineItemsForSlice(
   const items: RenderTimelineItem[] = [];
 
   if (options?.includeSummary !== false && slice.startMessageIndex === 0 && slice.summary) {
+    const contextTokensAfter = slice.summary.summaryMeta.stats?.contextTokensAfter;
     items.push({
       kind: "summary",
       key: `summary-${slice.segmentId}-${slice.summary.id}`,
@@ -655,6 +660,11 @@ function buildTimelineItemsForSlice(
       coveredMessageCount: slice.summary.summaryMeta.coveredMessageCount,
       coversThroughMessageId: slice.summary.summaryMeta.coversThroughMessageId,
       generatedBy: slice.summary.summaryMeta.generatedBy,
+      ...(typeof contextTokensAfter === "number" &&
+      Number.isFinite(contextTokensAfter) &&
+      contextTokensAfter > 0
+        ? { contextUsageTokens: Math.floor(contextTokensAfter) }
+        : {}),
       timestamp: slice.summary.timestamp,
       collapsed: true,
     });
@@ -1177,6 +1187,13 @@ function shiftUiRounds(rounds: UiRound[], offset: number): UiRound[] {
   });
 }
 
+function markRenderOnlyRounds(rounds: UiRound[], offset: number): UiRound[] {
+  return shiftUiRounds(rounds, offset).map((round) => ({
+    ...round,
+    meta: { ...(round.meta ?? {}), contextRelevant: false },
+  }));
+}
+
 function getLastRoundNumber(rounds: UiRound[]) {
   return rounds.reduce((max, round) => Math.max(max, round.round), 0);
 }
@@ -1210,7 +1227,7 @@ export function appendRenderOnlyMessagesToConversation(
       const roundOffset = getLastRoundNumber(lastItem.rounds);
       transcriptItems[lastIndex] = {
         ...lastItem,
-        rounds: [...lastItem.rounds, ...shiftUiRounds(sourceRounds, roundOffset)],
+        rounds: [...lastItem.rounds, ...markRenderOnlyRounds(sourceRounds, roundOffset)],
         timestamp,
       };
       continue;
@@ -1220,7 +1237,7 @@ export function appendRenderOnlyMessagesToConversation(
       kind: "assistant",
       key: `render-only-${getActiveSegment(state)?.segmentId ?? state.activeSegmentIndex}-${transcriptItems.length}-${timestamp}`,
       segmentIndex: activeSegmentIndex,
-      rounds: sourceRounds,
+      rounds: markRenderOnlyRounds(sourceRounds, 0),
       timestamp,
       isFromCompactedSegment: false,
     });

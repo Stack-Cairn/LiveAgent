@@ -115,6 +115,25 @@ test("buildTurnRows emits the user bubble before any assistant content, tagged w
   assert.equal(rows[1].turnKey, "req:c1");
 });
 
+test("stream token metadata preserves authoritative context usage and render-only markers", () => {
+  let turn = createTurn({ key: "run:usage", runId: "run-usage" });
+  turn = applyEventToTurn(turn, {
+    type: "token",
+    text: "memory status",
+    round: 2,
+    usage: { totalTokens: 10_000 },
+    contextUsageTokens: 150_000,
+    contextRelevant: false,
+  });
+  const rows = buildTurnRows(turn);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].kind, "assistant");
+  assert.equal(rows[0].rounds[0].meta.usageTotalTokens, 10_000);
+  assert.equal(rows[0].rounds[0].meta.contextUsageTokens, 150_000);
+  assert.equal(rows[0].rounds[0].meta.contextRelevant, false);
+});
+
 test("interleaved thinking and tool results keep one assistant row and stable block identities", () => {
   const prefixEntries = [
     { id: "think-1", kind: "thinking", text: "reasoning", round: 1 },
@@ -283,6 +302,48 @@ test("parseHistoryMessagesJson yields identical ids across reparses", () => {
   assert.ok(first[1].id.startsWith("ht:hu:m1>"), "turn-anchored block id");
   const dupIds = first.filter((entry) => entry.kind === "user" && entry.text === "继续");
   assert.equal(new Set(dupIds.map((entry) => entry.id)).size, 2, "identical prompts get distinct ids");
+});
+
+test("persisted checkpoints retain the post-compaction context token snapshot", () => {
+  const entries = parseHistoryMessagesJson(
+    JSON.stringify([
+      {
+        role: "summary",
+        id: "summary-1",
+        content: "compacted facts",
+        summaryMeta: {
+          coveredMessageCount: 12,
+          generatedBy: { providerId: "codex", model: "gpt-test" },
+          stats: { sourceMessageCount: 12, contextTokensAfter: 43_210 },
+        },
+      },
+    ]),
+  );
+  assert.equal(entries[0].contextUsageTokens, 43_210);
+  const rows = buildRowsFromEntries(entries, "history");
+  assert.equal(rows[0].contextUsageTokens, 43_210);
+});
+
+test("persisted assistant messages retain the desktop context usage snapshot", () => {
+  const entries = parseHistoryMessagesJson(
+    JSON.stringify([
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+        provider: "openai",
+        model: "gpt-test",
+        api: "openai-responses",
+        stopReason: "stop",
+        usage: { totalTokens: 10_000 },
+        liveAgentContextUsage: { totalTokens: 150_000, fixedTokens: 25_000 },
+        timestamp: 1,
+      },
+    ]),
+  );
+  const rows = buildRowsFromEntries(entries, "history");
+
+  assert.equal(rows[0].kind, "assistant");
+  assert.equal(rows[0].rounds[0].meta.contextUsageTokens, 150_000);
 });
 
 test("thinking-first persisted replies emit a meta carrier that rows suppress", () => {

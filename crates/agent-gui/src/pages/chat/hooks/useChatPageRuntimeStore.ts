@@ -287,12 +287,8 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     [],
   );
 
-  const setConversationSendingState = useCallback(
+  const setConversationRunningState = useCallback(
     (conversationId: string, value: boolean) => {
-      updateConversationRuntimeEntry(conversationId, (prev) => ({
-        ...prev,
-        isSending: value,
-      }));
       const key = conversationId.trim();
       if (!key) return;
       if (value) {
@@ -313,7 +309,18 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
         return next;
       });
     },
-    [setRunningConversationIds, updateConversationRuntimeEntry],
+    [setRunningConversationIds],
+  );
+
+  const setConversationSendingState = useCallback(
+    (conversationId: string, value: boolean) => {
+      updateConversationRuntimeEntry(conversationId, (prev) => ({
+        ...prev,
+        isSending: value,
+      }));
+      setConversationRunningState(conversationId, value);
+    },
+    [setConversationRunningState, updateConversationRuntimeEntry],
   );
 
   useEffect(() => {
@@ -376,6 +383,7 @@ export function useChatPageRuntimeStore(params: UseChatPageRuntimeStoreParams) {
     setConversationStopHandler,
     clearConversationStopHandler,
     requestActiveConversationStop,
+    setConversationRunningState,
     setConversationSendingState,
   };
 }

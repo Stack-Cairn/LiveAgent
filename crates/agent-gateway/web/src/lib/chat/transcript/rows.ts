@@ -219,6 +219,7 @@ export function buildRowsFromEntries(
           summaryId: entry.summaryId,
           coveredMessageCount: entry.coveredMessageCount,
           generatedBy: entry.generatedBy,
+          contextUsageTokens: entry.contextUsageTokens,
           timestamp: entry.timestamp,
         });
       } else {

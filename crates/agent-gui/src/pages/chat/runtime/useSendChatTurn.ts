@@ -1205,7 +1205,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             compactionStatus: status,
           })),
         setBridgeToolStatus: updateGatewayBridgeToolStatus,
-        queueCheckpoint: (state) => gatewayBridgeEvents.queueCheckpoint(state),
+        queueCheckpoint: (state, contextUsageTokens) =>
+          gatewayBridgeEvents.queueCheckpoint(state, contextUsageTokens),
         persist: (state) =>
           persistConversation({
             conversationId,

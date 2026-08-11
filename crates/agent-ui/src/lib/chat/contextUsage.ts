@@ -1,6 +1,6 @@
-// 上下文用量的两端单一真源：颜色分档阈值、手动压缩门槛、以及从 transcript
-// 倒扫得出"当前上下文占用 token"的口径。GUI 与 WebUI 的用量环都从这里取数，
-// 保证读数与可压缩判定不因宿主而漂移。
+// 上下文用量的两端单一真源：颜色分档阈值、手动压缩门槛，以及 WebUI 从
+// transcript 倒扫补算 trailing 消息的口径。GUI 直接使用运行时 TokenLedger，
+// WebUI 使用这里的同源估算与桌面同步的 checkpoint 权威快照。
 //
 // CJK 感知的文本 token 估算也定义在此（原 agent-gui compaction/tokenLedger.ts，
 // 迁入共享层供压缩检查点估值复用；tokenLedger 从这里 re-export 保持旧调用方不动）。
@@ -82,31 +82,147 @@ export function estimateTextTokens(text: string): number {
 // 与 WebUI TranscriptRow（检查点 kind:"checkpoint"）经结构化类型直接传入。
 export type ContextUsageScanItem = {
   kind: string;
-  rounds?: readonly { meta?: { usageTotalTokens?: number } }[];
+  text?: string;
+  rounds?: readonly {
+    meta?: {
+      usageTotalTokens?: number;
+      contextUsageTokens?: number;
+      contextRelevant?: boolean;
+    };
+    blocks?: readonly {
+      kind?: string;
+      text?: string;
+      item?: unknown;
+    }[];
+  }[];
   content?: string;
+  contextUsageTokens?: number;
 };
+
+export type ContextUsageLiveTail = {
+  liveRounds: NonNullable<ContextUsageScanItem["rounds"]>;
+  draftAssistantText: string;
+};
+
+export function buildContextUsageScanItems(
+  historyItems: readonly ContextUsageScanItem[],
+  live: ContextUsageLiveTail | null,
+): readonly ContextUsageScanItem[] {
+  if (!live) return historyItems;
+  if (live.liveRounds.length > 0) {
+    return [...historyItems, { kind: "assistant", rounds: live.liveRounds }];
+  }
+  if (live.draftAssistantText) {
+    return [
+      ...historyItems,
+      {
+        kind: "assistant",
+        rounds: [{ blocks: [{ kind: "text", text: live.draftAssistantText }] }],
+      },
+    ];
+  }
+  return historyItems;
+}
+
+const MESSAGE_ENVELOPE_TOKENS = 8;
+
+function unknownTokenUnits(value: unknown): number {
+  if (typeof value === "string") return estimateTextTokenUnits(value);
+  if (value == null) return 0;
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized ? estimateTextTokenUnits(serialized) : 0;
+  } catch {
+    return estimateTextTokenUnits(String(value));
+  }
+}
+
+function messageTokensFromUnits(units: number): number {
+  return Math.ceil(Math.max(0, units)) + MESSAGE_ENVELOPE_TOKENS;
+}
+
+function estimateToolResultTokens(result: { content?: unknown; details?: unknown }): number {
+  return messageTokensFromUnits(
+    unknownTokenUnits(result.content) + unknownTokenUnits(result.details),
+  );
+}
+
+function estimateRoundTokens(
+  round: NonNullable<ContextUsageScanItem["rounds"]>[number],
+  onlyToolResults: boolean,
+): number {
+  let assistantUnits = 0;
+  let toolResultTokens = 0;
+  for (const block of round.blocks ?? []) {
+    if (block.kind === "tool") {
+      const item =
+        block.item && typeof block.item === "object"
+          ? (block.item as {
+              toolCall?: { name?: string; arguments?: unknown };
+              toolResult?: { content?: unknown; details?: unknown };
+            })
+          : undefined;
+      const toolCall = item?.toolCall;
+      if (!onlyToolResults && toolCall) {
+        assistantUnits += unknownTokenUnits(toolCall.name) + unknownTokenUnits(toolCall.arguments);
+      }
+      const toolResult = item?.toolResult;
+      if (toolResult) toolResultTokens += estimateToolResultTokens(toolResult);
+      continue;
+    }
+    if (!onlyToolResults) {
+      assistantUnits +=
+        typeof block.text === "string"
+          ? estimateTextTokenUnits(block.text)
+          : unknownTokenUnits(block);
+    }
+  }
+  if (onlyToolResults) return toolResultTokens;
+  return (assistantUnits > 0 ? messageTokensFromUnits(assistantUnits) : 0) + toolResultTokens;
+}
+
+function positiveTokenCount(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : undefined;
+}
 
 /**
  * 倒扫 transcript 求当前上下文占用：最近一个 assistant 轮次的真实 API usage
- * 即读数（usage.totalTokens 已含 system/tools/全部历史）。若先遇到压缩检查点，
- * 说明检查点之后尚无新回复——用检查点摘要正文的估算值兜底（方向正确不误导，
- * 下一轮真实 usage 到来后自动校准），而不是让环归零/消失。
+ * 是锚点（usage.totalTokens 已含该 assistant 输出及其之前的 system/tools/历史），
+ * 再累加锚点之后的用户消息、后续 assistant 内容与工具结果。压缩检查点优先使用
+ * 桌面端同步的权威 contextUsageTokens；旧历史没有该字段时才退回摘要正文估算。
  */
 export function deriveContextUsageTokens(
   items: readonly ContextUsageScanItem[],
 ): number | undefined {
+  let trailingTokens = 0;
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
     if (item.kind === "summary" || item.kind === "checkpoint") {
-      return typeof item.content === "string" ? estimateTextTokens(item.content) : undefined;
+      const checkpointTokens =
+        positiveTokenCount(item.contextUsageTokens) ??
+        (typeof item.content === "string" ? estimateTextTokens(item.content) : undefined);
+      return checkpointTokens === undefined ? undefined : checkpointTokens + trailingTokens;
+    }
+    if (item.kind === "user") {
+      if (typeof item.text === "string" && item.text.trim()) {
+        trailingTokens += estimateTextTokens(item.text) + MESSAGE_ENVELOPE_TOKENS;
+      }
+      continue;
     }
     if (item.kind !== "assistant" || !item.rounds) continue;
     for (let roundIndex = item.rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
-      const totalTokens = item.rounds[roundIndex]?.meta?.usageTotalTokens;
-      if (typeof totalTokens === "number" && Number.isFinite(totalTokens) && totalTokens > 0) {
-        return totalTokens;
+      const round = item.rounds[roundIndex];
+      if (round?.meta?.contextRelevant === false) continue;
+      const totalTokens =
+        positiveTokenCount(round?.meta?.contextUsageTokens) ??
+        positiveTokenCount(round?.meta?.usageTotalTokens);
+      if (totalTokens !== undefined) {
+        return totalTokens + trailingTokens + estimateRoundTokens(round, true);
       }
+      trailingTokens += estimateRoundTokens(round, false);
     }
   }
-  return undefined;
+  return trailingTokens > 0 ? trailingTokens : undefined;
 }

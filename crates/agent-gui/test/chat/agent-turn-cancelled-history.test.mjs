@@ -211,6 +211,7 @@ test("agent turn preserves suppressed parent Agent trace for cancellation persis
     compaction: {
       async maybeCompactPreSend() {},
       beginRequest: noOp,
+      observeContextMessages: () => 0,
       shouldProtectMidStream: () => false,
       async compactDuringRun() {
         return { context: null, shouldDisableProtection: false };
@@ -382,6 +383,7 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
       compaction: {
         async maybeCompactPreSend() {},
         beginRequest: noOp,
+        observeContextMessages: () => 0,
         shouldProtectMidStream() {
           protectionChecks += 1;
           return false;

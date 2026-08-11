@@ -195,6 +195,25 @@ test("gateway bridge retry attempts ride tool_status with the current status and
   );
 });
 
+test("gateway bridge emits correlated manual compaction terminal results", () => {
+  const { controller, sent } = createController();
+
+  controller.queueManualCompactionResult(" operation-1 ", "failed", " summary failed ");
+
+  assert.deepEqual(sent, [
+    {
+      requestId: "request-1",
+      event: {
+        type: "manual_compaction_result",
+        operationId: "operation-1",
+        status: "failed",
+        message: "summary failed",
+        conversation_id: "conversation-1",
+      },
+    },
+  ]);
+});
+
 test("gateway bridge close blocks normal events but allows forced title updates", () => {
   const { controller, sent } = createController();
 
@@ -312,7 +331,7 @@ test("gateway bridge checkpoint emits compaction summary payload", () => {
     },
   };
 
-  controller.queueCheckpoint(state);
+  controller.queueCheckpoint(state, 12_345);
 
   assert.deepEqual(sent, [
     {
@@ -335,6 +354,7 @@ test("gateway bridge checkpoint emits compaction summary payload", () => {
             model: "gpt-test",
             promptVersion: "summary-v2",
           },
+          contextUsageTokens: 12_345,
         },
       },
     },

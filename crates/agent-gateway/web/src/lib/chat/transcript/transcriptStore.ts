@@ -24,6 +24,7 @@ import {
 } from "./turnReducer";
 import type {
   HistoryApplyMode,
+  ManualCompactionResult,
   RetryAttemptRecord,
   TranscriptRow,
   TranscriptSnapshot,
@@ -95,6 +96,7 @@ const EMPTY_SNAPSHOT: TranscriptSnapshot = {
   toolStatus: null,
   toolStatusIsCompaction: false,
   retryAttempts: EMPTY_RETRY_ATTEMPTS,
+  manualCompactionResult: null,
   needsHistoryRefresh: false,
   foldRevision: 0,
   revision: 0,
@@ -192,6 +194,7 @@ export function createTranscriptStore(options?: {
   let toolStatus: string | null = null;
   let toolStatusIsCompaction = false;
   let retryAttempts: readonly RetryAttemptRecord[] = EMPTY_RETRY_ATTEMPTS;
+  let manualCompactionResult: ManualCompactionResult | null = null;
   let foldRevision = 0;
   let localTurnSeq = 0;
   // Idempotency cursor: the highest log seq already applied. Re-subscribe
@@ -357,6 +360,7 @@ export function createTranscriptStore(options?: {
       toolStatus,
       toolStatusIsCompaction,
       retryAttempts,
+      manualCompactionResult,
       needsHistoryRefresh: rebaseDivergent || turns.some((turn) => turn.contentStale === true),
       foldRevision,
       revision: snapshot.revision + 1,
@@ -1017,6 +1021,17 @@ export function createTranscriptStore(options?: {
         if (activeRun && activeRun.runId === runId) {
           activeRun = { ...activeRun, toolStatus, toolStatusIsCompaction };
         }
+        return;
+      }
+      case "manual_compaction_result": {
+        const operationId = event.operationId.trim();
+        if (!operationId) return;
+        manualCompactionResult = {
+          operationId,
+          status: event.status,
+          message: event.message?.trim() ?? "",
+        };
+        schedule(true);
         return;
       }
       default: {

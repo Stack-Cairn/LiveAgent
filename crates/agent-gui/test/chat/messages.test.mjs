@@ -374,6 +374,7 @@ test("UI message builder groups assistant rounds and attaches matching tool resu
       api: "openai-responses",
       stopReason: "stop",
       usage: { totalTokens: 42 },
+      liveAgentContextUsage: { totalTokens: 84, fixedTokens: 20 },
       timestamp: 4,
     },
   ];
@@ -387,6 +388,7 @@ test("UI message builder groups assistant rounds and attaches matching tool resu
   assert.equal(uiMessages.getRoundThinkingText(ui[1].rounds[0]), "checking");
   assert.equal(uiMessages.getRoundToolTrace(ui[1].rounds[0])[0].toolResult.content[0].text, "file contents");
   assert.equal(ui[1].rounds[1].meta.usageTotalTokens, 42);
+  assert.equal(ui[1].rounds[1].meta.contextUsageTokens, 84);
 });
 
 test("UI message builder preserves provider hosted search blocks", () => {

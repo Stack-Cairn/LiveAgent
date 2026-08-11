@@ -36,6 +36,8 @@ function buildGatewayMessageRefPayload(ref: HistoryMessageRef): Record<string, u
 
 type GatewayBridgeSendResult = Promise<void> | void;
 
+export type ManualCompactionTerminalStatus = "compacted" | "failed" | "busy" | "skipped";
+
 type GatewayBridgeEventControllerParams = {
   conversationId: string;
   requestId: string;
@@ -64,7 +66,12 @@ export type GatewayBridgeEventController = {
   queueTitle: (nextTitle: string, allowAfterClose?: boolean) => void;
   queueToolStatus: (status: string | null, isCompaction?: boolean) => void;
   queueRetryAttempts: (attempts: readonly RetryAttemptRecord[]) => void;
-  queueCheckpoint: (state: ConversationViewState) => void;
+  queueCheckpoint: (state: ConversationViewState, contextUsageTokens?: number) => void;
+  queueManualCompactionResult: (
+    operationId: string,
+    status: ManualCompactionTerminalStatus,
+    message?: string,
+  ) => void;
   emitError: (message: string, conversationIdOverride?: string) => void;
   close: () => Promise<void>;
   hasForwardedText: () => boolean;
@@ -176,7 +183,7 @@ export function createGatewayBridgeEventController(
     },
     queueToolStatus,
     queueRetryAttempts,
-    queueCheckpoint(state: ConversationViewState) {
+    queueCheckpoint(state: ConversationViewState, contextUsageTokens?: number) {
       const activeSegment = state.segments[state.activeSegmentIndex];
       const summary = activeSegment?.summary;
       if (!summary?.content.trim()) return;
@@ -199,7 +206,19 @@ export function createGatewayBridgeEventController(
             model: summary.summaryMeta.generatedBy.model,
             promptVersion: summary.summaryMeta.generatedBy.promptVersion,
           },
+          ...(typeof contextUsageTokens === "number" && contextUsageTokens > 0
+            ? { contextUsageTokens: Math.floor(contextUsageTokens) }
+            : {}),
         },
+      });
+    },
+    queueManualCompactionResult(operationId, status, message) {
+      queueEvent({
+        type: "manual_compaction_result",
+        operationId: operationId.trim(),
+        status,
+        ...(message?.trim() ? { message: message.trim() } : {}),
+        conversation_id: params.conversationId,
       });
     },
     emitError(message: string, conversationIdOverride?: string) {

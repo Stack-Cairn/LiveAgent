@@ -157,6 +157,57 @@ test("rebase anchors on the latest real usage and estimates the trailing message
   assert.equal(snapshot.totalTokens, snapshot.observedTokens + snapshot.trailingTokens);
 });
 
+test("persisted usage anchors adjust when current system and tools fixed tokens change", () => {
+  const ledger = new TokenLedger();
+  const observed = assistant("answer", usage(5_000));
+  const originalContext = {
+    systemPrompt: "s".repeat(400),
+    tools: [],
+    messages: [user("question")],
+  };
+  ledger.rebase(originalContext);
+  ledger.addMessages([observed]);
+  assert.equal(ledger.total(), 5_000);
+
+  const changedContext = {
+    systemPrompt: "s".repeat(4_000),
+    tools: [{ name: "LargeTool", description: "d".repeat(4_000), parameters: {} }],
+    messages: [...originalContext.messages, observed],
+  };
+  const originalFixed = estimateTextTokens(originalContext.systemPrompt);
+  const changedFixed =
+    estimateTextTokens(changedContext.systemPrompt) + ledgerModule.estimateToolsTokens(changedContext.tools);
+  ledger.rebase(changedContext);
+
+  assert.equal(ledger.total(), 5_000 + changedFixed - originalFixed);
+  assert.equal(ledger.snapshot().hasFixedTokenAnchor, true);
+});
+
+test("legacy usage without fixed metadata conservatively includes the current full estimate", () => {
+  const ledger = new TokenLedger();
+  const legacyObserved = assistant("answer", usage(1_000));
+  ledger.rebase({
+    systemPrompt: "s".repeat(400_000),
+    tools: [{ name: "LargeTool", description: "d".repeat(400_000), parameters: {} }],
+    messages: [legacyObserved],
+  });
+
+  assert.ok(ledger.total() > 100_000);
+  assert.equal(ledger.snapshot().hasObservedUsage, true);
+  assert.equal(ledger.snapshot().hasFixedTokenAnchor, false);
+});
+
+test("assistant messages without provider usage receive a persisted context snapshot", () => {
+  const ledger = new TokenLedger();
+  const noUsage = assistant("answer", usage(0));
+  ledger.rebase({ systemPrompt: "s".repeat(400), messages: [user("question")] });
+  ledger.addMessages([noUsage]);
+
+  assert.equal(getMessageObservedTokens(noUsage), ledger.total());
+  assert.ok(noUsage.liveAgentContextUsage.totalTokens > 0);
+  assert.equal(noUsage.liveAgentContextUsage.fixedTokens, 100);
+});
+
 test("rebase without any usage falls back to fixed + estimates", () => {
   const ledger = new TokenLedger();
   const message = user("a".repeat(400));

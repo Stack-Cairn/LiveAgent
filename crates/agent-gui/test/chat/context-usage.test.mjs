@@ -1,14 +1,28 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const contextUsage = loader.loadModule("@liveagent/ui/lib/chat/contextUsage.ts");
 const tokenLedger = loader.loadModule("src/lib/chat/compaction/tokenLedger.ts");
+const chatComposerBarSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/chat/ChatComposerBar.tsx", import.meta.url),
+  "utf8",
+);
+const chatTurnQueueSource = readFileSync(
+  new URL("../../src/pages/chat/queue/useChatTurnQueue.ts", import.meta.url),
+  "utf8",
+);
+const gatewayAppSource = readFileSync(
+  new URL("../../../agent-gateway/web/src/app/GatewayApp.tsx", import.meta.url),
+  "utf8",
+);
 
 const {
   CONTEXT_USAGE_WARN_RATIO,
   CONTEXT_USAGE_DANGER_RATIO,
+  buildContextUsageScanItems,
   contextUsageLevel,
   canManualCompact,
   contextUsageRatio,
@@ -31,6 +45,28 @@ test("manual compaction unlocks exactly at the warn ratio", () => {
   assert.equal(canManualCompact(0.49), false);
   assert.equal(canManualCompact(0.5), true);
   assert.equal(canManualCompact(0.99), true);
+});
+
+test("WebUI manual compaction targets the requested conversation instead of the desktop view", () => {
+  assert.doesNotMatch(chatTurnQueueSource, /conversation is not active on desktop/);
+  assert.match(
+    chatTurnQueueSource,
+    /manualCompactActionRef\.current\(\{ conversationId, operationId \}\)/,
+  );
+});
+
+test("WebUI manual compaction converges from the transcript store and a bounded timeout", () => {
+  assert.match(gatewayAppSource, /store\.getSnapshot\(\)\.manualCompactionResult/);
+  assert.match(gatewayAppSource, /MANUAL_COMPACTION_TIMEOUT_MS/);
+  assert.match(gatewayAppSource, /chat\.manualCompactTimedOut/);
+});
+
+test("context usage ring stays vertically centered in the shared composer", () => {
+  assert.match(
+    chatComposerBarSource,
+    /className="absolute right-3 top-1\/2 z-20 -translate-y-1\/2"/,
+  );
+  assert.doesNotMatch(chatComposerBarSource, /className="absolute bottom-11 right-3 z-20"/);
 });
 
 test("contextUsageRatio guards degenerate inputs", () => {
@@ -58,6 +94,68 @@ test("deriveContextUsageTokens reads the newest assistant round usage", () => {
   assert.equal(deriveContextUsageTokens(items), 34_000);
 });
 
+test("deriveContextUsageTokens prefers the runtime context snapshot over provider usage", () => {
+  assert.equal(
+    deriveContextUsageTokens([
+      {
+        kind: "assistant",
+        rounds: [
+          { meta: { usageTotalTokens: 10_000, contextUsageTokens: 150_000 }, blocks: [] },
+        ],
+      },
+    ]),
+    150_000,
+  );
+});
+
+test("deriveContextUsageTokens ignores render-only assistant rounds", () => {
+  const items = [
+    { kind: "assistant", rounds: [{ meta: { contextUsageTokens: 150_000 }, blocks: [] }] },
+    {
+      kind: "assistant",
+      rounds: [
+        {
+          meta: {
+            contextRelevant: false,
+            usageTotalTokens: 10_000,
+            contextUsageTokens: 10_000,
+          },
+          blocks: [{ kind: "text", text: "memory extraction status" }],
+        },
+      ],
+    },
+  ];
+  assert.equal(deriveContextUsageTokens(items), 150_000);
+});
+
+test("deriveContextUsageTokens adds messages and tool results after the newest usage", () => {
+  const trailingUser = "x".repeat(80_000);
+  const toolResultContent = [{ type: "text", text: "y".repeat(4_000) }];
+  const items = [
+    {
+      kind: "assistant",
+      rounds: [
+        {
+          meta: { usageTotalTokens: 100_000 },
+          blocks: [
+            {
+              kind: "tool",
+              item: {
+                toolCall: { name: "Read", arguments: { path: "src/app.ts" } },
+                toolResult: { content: toolResultContent },
+              },
+            },
+          ],
+        },
+      ],
+    },
+    { kind: "user", text: trailingUser },
+  ];
+  const toolResultTokens =
+    Math.ceil(contextUsage.estimateTextTokenUnits(JSON.stringify(toolResultContent))) + 8;
+  assert.equal(deriveContextUsageTokens(items), 120_008 + toolResultTokens);
+});
+
 test("deriveContextUsageTokens falls back to checkpoint estimate after compaction", () => {
   const summaryText = "摘要正文 summary body".repeat(50);
   // GUI 检查点（kind:"summary"）与 WebUI 检查点（kind:"checkpoint"）同口径。
@@ -71,6 +169,14 @@ test("deriveContextUsageTokens falls back to checkpoint estimate after compactio
     assert.ok(derived > 0, "checkpoint estimate must keep the ring alive");
     assert.ok(derived < 190_000, "estimate must reflect the freed context");
   }
+});
+
+test("deriveContextUsageTokens prefers checkpoint fixed overhead and adds its trailing messages", () => {
+  const items = [
+    { kind: "checkpoint", content: "short summary", contextUsageTokens: 40_000 },
+    { kind: "user", text: "x".repeat(4_000) },
+  ];
+  assert.equal(deriveContextUsageTokens(items), 41_008);
 });
 
 test("deriveContextUsageTokens returns undefined without any usage", () => {
@@ -98,5 +204,53 @@ test("estimateTextTokens keeps the CJK-aware estimate after the move to shared",
       contextUsage.estimateTextTokenUnits(west) + contextUsage.estimateTextTokenUnits(cjk),
     ),
     estimateTextTokens(west + cjk),
+  );
+});
+
+test("deriveContextTokens includes system, tools, and messages without an observed usage", () => {
+  const context = {
+    systemPrompt: "system instructions",
+    tools: [{ name: "Read", description: "read a file", parameters: { type: "object" } }],
+    messages: [{ role: "user", content: "continue", timestamp: 1 }],
+  };
+  assert.equal(
+    tokenLedger.deriveContextTokens(context),
+    estimateTextTokens(context.systemPrompt) +
+      tokenLedger.estimateToolsTokens(context.tools) +
+      tokenLedger.estimateMessageTokens(context.messages[0]),
+  );
+});
+
+test("buildContextUsageScanItems appends live rounds so streaming anchors the ring in real time", () => {
+  const history = [{ kind: "user", text: "hi" }];
+  const liveRounds = [
+    {
+      round: 1,
+      key: "r1",
+      blocks: [],
+      meta: { usageTotalTokens: 120_000 },
+      runningToolCallIds: [],
+      thinkingOpen: false,
+    },
+  ];
+  const items = buildContextUsageScanItems(history, {
+    liveRounds,
+    draftAssistantText: "",
+  });
+  assert.equal(items.length, 2);
+  assert.equal(deriveContextUsageTokens(items), 120_000);
+  // 空闲（无 live）时原样透传历史项。
+  assert.equal(buildContextUsageScanItems(history, null), history);
+});
+
+test("buildContextUsageScanItems counts the streaming draft as a trailing round", () => {
+  const draft = "x".repeat(4_000);
+  const items = buildContextUsageScanItems(
+    [{ kind: "assistant", rounds: [{ meta: { usageTotalTokens: 50_000 } }] }],
+    { liveRounds: [], draftAssistantText: draft },
+  );
+  assert.equal(
+    deriveContextUsageTokens(items),
+    50_000 + Math.ceil(contextUsage.estimateTextTokenUnits(draft)) + 8,
   );
 });

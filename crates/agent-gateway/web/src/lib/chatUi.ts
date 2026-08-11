@@ -40,6 +40,7 @@ export type ChatEntry =
         model: string;
         promptVersion?: string;
       };
+      contextUsageTokens?: number;
       timestamp?: number;
     }
   | {
@@ -91,6 +92,7 @@ type StoredMessage = {
   timestamp?: unknown;
   summaryMeta?: unknown;
   liveAgentHistoryRef?: unknown;
+  liveAgentContextUsage?: unknown;
 };
 
 function readMessageTimestamp(value: unknown): number | undefined {
@@ -397,6 +399,8 @@ export function buildAssistantMeta(params: {
   api?: unknown;
   stopReason?: unknown;
   usage?: unknown;
+  contextUsageTokens?: unknown;
+  contextRelevant?: unknown;
 }) {
   const usage =
     params.usage && typeof params.usage === "object" ? (params.usage as Usage) : undefined;
@@ -408,6 +412,14 @@ export function buildAssistantMeta(params: {
     stopReason: readString(params.stopReason) || undefined,
     usage,
     usageTotalTokens: getUsageTotalTokens(params.usage),
+    contextUsageTokens:
+      typeof params.contextUsageTokens === "number" &&
+      Number.isFinite(params.contextUsageTokens) &&
+      params.contextUsageTokens > 0
+        ? Math.floor(params.contextUsageTokens)
+        : undefined,
+    contextRelevant:
+      typeof params.contextRelevant === "boolean" ? params.contextRelevant : undefined,
   };
 
   return Object.values(meta).some((value) => value !== undefined) ? meta : undefined;
@@ -450,6 +462,15 @@ export function normalizeCheckpointEntry(params: {
   const promptVersion = readString(generatedByRecord.promptVersion).trim() || undefined;
   const timestamp =
     readNumber(params.checkpoint?.timestamp) ?? readNumber(params.timestamp) ?? Date.now();
+  const summaryStatsRecord = asRecord(summaryMetaRecord.stats);
+  const contextUsageTokensCandidate =
+    params.checkpoint?.contextUsageTokens ?? summaryStatsRecord.contextTokensAfter;
+  const contextUsageTokens =
+    typeof contextUsageTokensCandidate === "number" &&
+    Number.isFinite(contextUsageTokensCandidate) &&
+    contextUsageTokensCandidate > 0
+      ? Math.floor(contextUsageTokensCandidate)
+      : undefined;
 
   return {
     id: `checkpoint-${summaryId}`,
@@ -462,6 +483,7 @@ export function normalizeCheckpointEntry(params: {
       model,
       promptVersion,
     },
+    contextUsageTokens,
     timestamp,
   };
 }
@@ -775,6 +797,7 @@ export function parseHistoryMessagesJson(raw: string): ChatEntry[] {
         api: message.api,
         stopReason: message.stopReason,
         usage: message.usage,
+        contextUsageTokens: asRecord(message.liveAgentContextUsage).totalTokens,
       });
       let textBuffer = "";
       let metaEmitted = false;

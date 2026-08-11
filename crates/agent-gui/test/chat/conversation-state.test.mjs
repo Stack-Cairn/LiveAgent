@@ -689,3 +689,44 @@ test("model context sanitizer preserves user image content", () => {
   const requestContext = conversationState.buildRequestContext(state);
   assert.deepEqual(requestContext.messages[0].content, userImageMessage.content);
 });
+
+test("timeline summary cards expose the persisted contextTokensAfter for the usage ring", () => {
+  const base = conversationState.createConversationStateFromContext({
+    systemPrompt: "Base prompt",
+    messages: [user("hello", 1, { id: "u-1" }), assistant("world", 2, { id: "a-1" })],
+  });
+  const compacted = conversationState.applyCompactionCheckpoint(
+    base,
+    checkpoint("checkpoint body", 3, "summary-usage"),
+  );
+  // 压缩控制器在落定时把权威快照写进 stats.contextTokensAfter；投影必须原样
+  // 暴露成 contextUsageTokens，两端用量环才共享同一检查点锚点。
+  const withStats = {
+    ...compacted,
+    segments: compacted.segments.map((segment) =>
+      segment.summary
+        ? {
+            ...segment,
+            summary: {
+              ...segment.summary,
+              summaryMeta: {
+                ...segment.summary.summaryMeta,
+                stats: {
+                  ...(segment.summary.summaryMeta.stats ?? { sourceMessageCount: 2 }),
+                  contextTokensAfter: 43_210,
+                },
+              },
+            },
+          }
+        : segment,
+    ),
+  };
+  const items = fullRuntimeTimeline(withStats);
+  const summaryItem = items.find((item) => item.kind === "summary");
+  assert.equal(summaryItem.contextUsageTokens, 43_210);
+
+  // 旧检查点没有该字段：不虚构读数，交由扫描器退回正文估算。
+  const legacyItems = fullRuntimeTimeline(compacted);
+  const legacySummary = legacyItems.find((item) => item.kind === "summary");
+  assert.equal("contextUsageTokens" in legacySummary, false);
+});

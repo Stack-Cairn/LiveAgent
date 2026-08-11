@@ -26,7 +26,10 @@ import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
-import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
+import {
+  buildContextUsageScanItems,
+  deriveContextUsageTokens,
+} from "@liveagent/ui/lib/chat/contextUsage";
 import { openChatFileLink } from "@liveagent/ui/lib/chat/openChatFileLink";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
@@ -153,7 +156,11 @@ import {
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
 import { syncMovedConversationRuntimeWorkdir } from "./chat/runtime/chatPageRuntime";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
-import { useManualCompaction } from "./chat/runtime/useManualCompaction";
+import {
+  type ManualCompactionRequest,
+  type ManualCompactionResult,
+  useManualCompaction,
+} from "./chat/runtime/useManualCompaction";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
@@ -381,11 +388,6 @@ export function ChatPage(props: ChatPageProps) {
     () => conversationState.transcript.items,
     [conversationState],
   );
-  // 用量环读数：最近 assistant 轮次的真实 usage；压缩后回退检查点估算。
-  const contextUsageTokens = useMemo(
-    () => deriveContextUsageTokens(transcriptItems),
-    [transcriptItems],
-  );
   // Sent-prompt history for the composer's ↑/↓ recall. Read lazily through a
   // ref so the memoized composer bar never re-renders on transcript growth.
   const transcriptItemsRef = useRef<RenderTimelineItem[]>(transcriptItems);
@@ -436,7 +438,9 @@ export function ChatPage(props: ChatPageProps) {
   );
   const sendActionRef = useRef<SendChatAction>(async () => false);
   // WebUI 经 chat_queue compact_now 中继的手动压缩入口(useChatTurnQueue 消费)。
-  const manualCompactActionRef = useRef<() => Promise<boolean>>(async () => false);
+  const manualCompactActionRef = useRef<
+    (request?: ManualCompactionRequest) => Promise<ManualCompactionResult>
+  >(async () => ({ status: "skipped" }));
   const ensureGatewayBridgeConversationReadyRef = useRef<
     (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
   >(async (id) => id.trim());
@@ -478,6 +482,50 @@ export function ChatPage(props: ChatPageProps) {
     registerGatewayRunMirror,
     finishGatewayRunMirror,
   } = useGatewayRunMirrorCoordinator();
+
+  // 用量环读数：与 WebUI 同一把共享扫描器（deriveContextUsageTokens），
+  // 历史项 + 流式实时轮次（live store 每帧批量提交）联合倒扫。经订阅源
+  // 直达环组件，流式读数逐帧更新而不回流 ChatPage。
+  const contextUsageTokensSource = useMemo(() => {
+    let cache: {
+      rounds: unknown;
+      draft: string;
+      runtimeValue: number | undefined;
+      value: number | undefined;
+    } | null = null;
+    return {
+      subscribe: liveTranscriptStore.subscribe,
+      getContextUsageTokens: () => {
+        const live = liveTranscriptStore.getSnapshot();
+        // 与 TranscriptList 的 live tail 同一门槛：只有当前会话在跑时才把
+        // 流式尾部计入（后台会话的 live store 内容不属于本会话）。
+        const includeLive = isSending && !live.isSettled;
+        const rounds = includeLive ? live.liveRounds : null;
+        const draft = includeLive ? live.draftAssistantText : "";
+        const runtimeValue = getCompactionController(currentConversationId).contextUsageTokens;
+        if (
+          cache &&
+          cache.rounds === rounds &&
+          cache.draft === draft &&
+          cache.runtimeValue === runtimeValue
+        ) {
+          return cache.value;
+        }
+        const transcriptValue = deriveContextUsageTokens(
+          buildContextUsageScanItems(transcriptItems, includeLive ? live : null),
+        );
+        const value = runtimeValue ?? transcriptValue;
+        cache = { rounds, draft, runtimeValue, value };
+        return value;
+      },
+    };
+  }, [
+    currentConversationId,
+    getCompactionController,
+    isSending,
+    liveTranscriptStore,
+    transcriptItems,
+  ]);
   const {
     currentConversationIdRef,
     conversationRuntimeCacheRef,
@@ -492,6 +540,7 @@ export function ChatPage(props: ChatPageProps) {
     getConversationStopRequestVersion,
     isConversationStopRequested,
     consumeConversationStop,
+    setConversationRunningState,
     setConversationStopHandler,
     clearConversationStopHandler,
     requestActiveConversationStop,
@@ -1497,16 +1546,19 @@ export function ChatPage(props: ChatPageProps) {
     t,
     currentConversationIdRef,
     isConversationRunning,
+    setConversationRunningState,
     buildRuntimeEntryFromVisibleState,
+    conversationRuntimeCacheRef,
+    ensureConversationReady: ensureGatewayBridgeConversationReady,
     getCompactionController,
+    getConversationLiveTranscriptStore,
     updateConversationRuntimeEntry,
-    liveTranscriptStore,
     resetLiveTranscript,
     updateToolStatus,
     queueGatewayBridgeEventForRequest,
     flushGatewayBridgeEventsForRequest,
+    finishGatewayRunMirror,
     persistConversation,
-    displayedConversationWorkdir,
     setErrorMessage,
   });
   manualCompactActionRef.current = handleManualCompact;
@@ -2092,7 +2144,7 @@ export function ChatPage(props: ChatPageProps) {
                   chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                   reasoningOptions={chatRuntimeReasoningOptions}
                   thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
-                  contextUsageTokens={contextUsageTokens}
+                  contextUsageTokensSource={contextUsageTokensSource}
                   contextWindow={currentModelContextWindow}
                   onManualCompactConfirm={handleManualCompact}
                   manualCompactBlocked={isCompactionRunning}

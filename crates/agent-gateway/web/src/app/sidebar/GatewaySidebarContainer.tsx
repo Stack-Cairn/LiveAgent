@@ -15,6 +15,7 @@ import {
   sidebarShallowEqual,
 } from "@liveagent/ui/lib/sidebar/selectors";
 import type { SidebarSnapshot, SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import { mergeTransientSidebarRunningActivity } from "@liveagent/ui/lib/sidebar/transientActivity";
 import type { SidebarErrorCode } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
 import { sortWorkspaceProjectsByActivity } from "@liveagent/ui/lib/workspaceProjects";
@@ -73,6 +74,7 @@ function useStableCallback<Args extends unknown[], Return>(
 
 export type GatewaySidebarContainerProps = {
   store: SidebarStore;
+  transientRunningConversation?: { conversationId: string; workdir: string } | null;
   currentConversationId: string;
   isOpen: boolean;
   fontScale?: number;
@@ -155,6 +157,19 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
     sidebarShallowEqual,
   );
   const conversationIndex = useSidebarSelector(store, selectConversationIndex);
+  const effectiveRunningActivity = useMemo(
+    () =>
+      mergeTransientSidebarRunningActivity(
+        runningConversationIds,
+        projectActivityInputs.runningWorkdirPathKeys,
+        props.transientRunningConversation,
+      ),
+    [
+      projectActivityInputs.runningWorkdirPathKeys,
+      props.transientRunningConversation,
+      runningConversationIds,
+    ],
+  );
 
   // --- Rename UI state (moved out of GatewayApp) ---------------------------
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -336,9 +351,13 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
     () =>
       sortWorkspaceProjectsByActivity(projects, {
         projectActivityUpdatedAts: projectActivityInputs.workdirActivity,
-        runningProjectPathKeys: projectActivityInputs.runningWorkdirPathKeys,
+        runningProjectPathKeys: effectiveRunningActivity.runningProjectPathKeys,
       }),
-    [projectActivityInputs.runningWorkdirPathKeys, projectActivityInputs.workdirActivity, projects],
+    [
+      effectiveRunningActivity.runningProjectPathKeys,
+      projectActivityInputs.workdirActivity,
+      projects,
+    ],
   );
 
   return (
@@ -346,7 +365,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       items={items}
       currentConversationId={props.currentConversationId}
       busyConversationIds={mutations}
-      runningConversationIds={runningConversationIds}
+      runningConversationIds={effectiveRunningActivity.runningConversationIds}
       listStatus={listState.status}
       scopeKey={scopeKey}
       totalItems={listState.totalCount}
@@ -364,7 +383,7 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       projects={sortedProjects}
       activeProjectId={props.activeProjectId}
       missingProjectPathKeys={props.missingProjectPathKeys}
-      runningProjectPathKeys={projectActivityInputs.runningWorkdirPathKeys}
+      runningProjectPathKeys={effectiveRunningActivity.runningProjectPathKeys}
       projectRenamingId={props.projectRenamingId}
       projectRenameDraft={props.projectRenameDraft}
       projectsCollapsed={props.projectsCollapsed}

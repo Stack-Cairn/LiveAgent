@@ -61,6 +61,12 @@ export type Turn = {
 
 export type TranscriptRowOrigin = "history" | "stream";
 
+export type ManualCompactionResult = {
+  operationId: string;
+  status: "compacted" | "failed" | "busy" | "skipped";
+  message: string;
+};
+
 // One rendered transcript row of the single virtualized row list; keys are
 // unique by construction so an entry can never render twice.
 export type TranscriptRow =
@@ -93,6 +99,7 @@ export type TranscriptRow =
         model: string;
         promptVersion?: string;
       };
+      contextUsageTokens?: number;
       timestamp?: number;
     }
   | { key: string; origin: TranscriptRowOrigin; kind: "error"; text: string };
@@ -122,6 +129,7 @@ export type TranscriptSnapshot = {
   // Live run's stream-retry history (cleared at run boundaries and whenever
   // the desktop starts a fresh network attempt).
   retryAttempts: readonly RetryAttemptRecord[];
+  manualCompactionResult: ManualCompactionResult | null;
   // At least one settled streamed turn may be incomplete and should keep
   // retrying the quiet history enrich while the conversation is idle.
   needsHistoryRefresh: boolean;

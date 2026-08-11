@@ -1,4 +1,5 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
+import { canManualCompact, contextUsageRatio } from "@liveagent/ui/lib/chat/contextUsage";
 
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { ProviderId } from "../../settings";
@@ -22,9 +23,10 @@ import {
   PRUNE_FALLBACK_NOTICE,
 } from "./statusText";
 import { type CompleteAssistantFn, createCompactionAbortError } from "./summarizer";
-import { TokenLedger } from "./tokenLedger";
+import { deriveContextTokens, TokenLedger } from "./tokenLedger";
 import type {
   CompactionDecision,
+  CompactionDecisionReason,
   CompactionIntent,
   CompactionStatus,
   CompactionTrigger,
@@ -44,7 +46,7 @@ export type CompactionSinks = {
   applyStateMidRun?: (state: ConversationViewState) => void;
   publishStatus?: (status: CompactionStatus) => void;
   setBridgeToolStatus?: (status: string | null, isCompaction?: boolean) => void;
-  queueCheckpoint?: (state: ConversationViewState) => void;
+  queueCheckpoint?: (state: ConversationViewState, contextUsageTokens: number) => void;
   persist?: (state: ConversationViewState) => Promise<boolean | undefined>;
   restoreComposer?: (
     composerText: string | undefined,
@@ -89,6 +91,42 @@ export type CompactionDuringRunResult = {
   context: Context | null;
   shouldDisableProtection: boolean;
 };
+
+export type ManualCompactionOutcome =
+  | { status: "compacted" | "failed" | "busy" }
+  | { status: "skipped"; reason: CompactionDecisionReason };
+
+export type ManualContextUsageSnapshot = {
+  totalTokens?: number;
+  fixedTokens?: number;
+};
+
+function withActiveSummaryContextTokens(
+  state: ConversationViewState,
+  contextUsageTokens: number,
+): ConversationViewState {
+  const segmentIndex = state.activeSegmentIndex;
+  const segment = state.segments[segmentIndex];
+  if (!segment?.summary) return state;
+  const nextSegment = {
+    ...segment,
+    summary: {
+      ...segment.summary,
+      summaryMeta: {
+        ...segment.summary.summaryMeta,
+        stats: {
+          ...(segment.summary.summaryMeta.stats ?? {
+            sourceMessageCount: segment.summary.summaryMeta.coveredMessageCount,
+          }),
+          contextTokensAfter: contextUsageTokens,
+        },
+      },
+    },
+  };
+  const segments = state.segments.slice();
+  segments[segmentIndex] = nextSegment;
+  return { ...state, segments };
+}
 
 type RollbackSnapshot = {
   state: ConversationViewState;
@@ -137,6 +175,24 @@ export class CompactionController {
   beginRequest(context: Context, state: ConversationViewState) {
     this.ledger.rebase(context);
     this.updateTurnMeta(state);
+    return this.ledger.total();
+  }
+
+  observeContextMessages(messages: readonly Context["messages"][number][]) {
+    this.ledger.addMessages(messages);
+    return this.ledger.total();
+  }
+
+  get contextUsageTokens() {
+    const totalTokens = this.ledger.total();
+    return totalTokens > 0 ? totalTokens : undefined;
+  }
+
+  get contextUsageSnapshot(): ManualContextUsageSnapshot | undefined {
+    const snapshot = this.ledger.snapshot();
+    return snapshot.totalTokens > 0
+      ? { totalTokens: snapshot.totalTokens, fixedTokens: snapshot.fixedTokens }
+      : undefined;
   }
 
   // O(1)：账本读数 + 流式增量估算 + 纯决策，无状态构建、无序列化。
@@ -213,12 +269,19 @@ export class CompactionController {
         complete: binding.complete,
       });
 
-      await this.persistCheckpoint(binding, outcome.state);
+      const checkpointContext = binding.buildPreparedContext(
+        outcome.state,
+        params.tools,
+        buildOptions,
+      );
+      const checkpointTokens = deriveContextTokens(checkpointContext);
+      const checkpointState = withActiveSummaryContextTokens(outcome.state, checkpointTokens);
+      await this.persistCheckpoint(binding, checkpointState);
       this.rollbackSnapshot = null;
-      const appliedState = presend.composeAppliedState(outcome.state);
+      const appliedState = presend.composeAppliedState(checkpointState);
       binding.sinks.applyState?.(appliedState);
       this.settleCompleted("pre-send", outcome.newSegmentIndex);
-      binding.sinks.queueCheckpoint?.(outcome.state);
+      binding.sinks.queueCheckpoint?.(checkpointState, checkpointTokens);
       this.notePostCompactionPressure(
         binding.buildPreparedContext(appliedState, params.tools, buildOptions),
         appliedState,
@@ -257,6 +320,7 @@ export class CompactionController {
     includeUploadedFilesMetadata?: boolean;
     // manual 触发透传给决策：跳过阈值/冷却，硬守卫不受影响。
     bypassThresholdAndCooldown?: boolean;
+    manualContextUsage?: ManualContextUsageSnapshot;
   }): Promise<CompactionDuringRunResult> {
     const binding = this.binding;
     if (!binding) {
@@ -299,16 +363,25 @@ export class CompactionController {
       !pruned && params.budgetContext
         ? params.budgetContext
         : binding.buildPreparedContext(workingState, params.tools, buildOptions);
-    this.ledger.rebase(budgetContext);
+    const manualFixedTokens = params.manualContextUsage?.fixedTokens;
+    this.ledger.rebase(
+      budgetContext,
+      typeof manualFixedTokens === "number" ? { fixedTokens: manualFixedTokens } : undefined,
+    );
     this.updateTurnMeta(workingState);
     // manual 是空闲时的从容压缩，走 optimization 口径；运行中触发保持 protection。
     const intent: CompactionIntent = params.trigger === "manual" ? "optimization" : "protection";
-    const decision = this.decide(
-      intent,
-      this.ledger.total(),
-      now,
-      params.bypassThresholdAndCooldown,
-    );
+    const snapshotTotalTokens = params.manualContextUsage?.totalTokens;
+    const totalTokens =
+      typeof snapshotTotalTokens === "number" &&
+      Number.isFinite(snapshotTotalTokens) &&
+      snapshotTotalTokens > 0
+        ? Math.floor(snapshotTotalTokens)
+        : this.ledger.total();
+    const decision =
+      params.trigger === "manual"
+        ? this.decideManual(totalTokens, now)
+        : this.decide(intent, totalTokens, now, params.bypassThresholdAndCooldown);
     this.logDecision(decision);
 
     if (!decision.shouldCompact) {
@@ -346,19 +419,39 @@ export class CompactionController {
         complete: binding.complete,
       });
 
-      await this.persistCheckpoint(binding, outcome.state);
+      const checkpointContext = binding.buildPreparedContext(
+        outcome.state,
+        params.tools,
+        buildOptions,
+      );
+      const checkpointTokens = deriveContextTokens(
+        checkpointContext,
+        typeof manualFixedTokens === "number" ? { fixedTokens: manualFixedTokens } : undefined,
+      );
+      const checkpointState = withActiveSummaryContextTokens(outcome.state, checkpointTokens);
+      await this.persistCheckpoint(binding, checkpointState);
       this.rollbackSnapshot = null;
-      binding.sinks.applyStateMidRun?.(outcome.state);
+      binding.sinks.applyStateMidRun?.(checkpointState);
       this.settleCompleted(params.trigger, outcome.newSegmentIndex);
-      binding.sinks.queueCheckpoint?.(outcome.state);
+      binding.sinks.queueCheckpoint?.(checkpointState, checkpointTokens);
 
       const resumeMessage = createSyntheticContinueUserMessage(
         (outcome.checkpointMessage.timestamp ?? now) + 1,
       );
-      const resumeContext = binding.buildResumeContext(outcome.state, resumeMessage, params.tools, {
-        includeUploadedFilesMetadata: params.includeUploadedFilesMetadata,
-      });
-      this.notePostCompactionPressure(resumeContext, outcome.state, decision.threshold);
+      const resumeContext = binding.buildResumeContext(
+        checkpointState,
+        resumeMessage,
+        params.tools,
+        {
+          includeUploadedFilesMetadata: params.includeUploadedFilesMetadata,
+        },
+      );
+      this.notePostCompactionPressure(
+        resumeContext,
+        checkpointState,
+        decision.threshold,
+        manualFixedTokens,
+      );
       return { context: resumeContext, shouldDisableProtection: false };
     } catch (error) {
       if (this.isAbortOutcome(scope.controller.signal, error)) {
@@ -395,47 +488,72 @@ export class CompactionController {
 
   /**
    * 用户手动触发的压缩（用量环 → 确认）。仅限空闲：已有轮次绑定或压缩在飞
-   * 返回 "busy"。临时绑定一轮复用 compactDuringRun 主流程；决策跳过阈值与
-   * 冷却（用户明确要压），但 disabled / no-active-messages 硬守卫仍生效
-   * （守卫不过返回 "skipped"）。
+   * 返回 "busy"。临时绑定一轮复用 compactDuringRun 主流程；决策跳过自动阈值
+   * 与冷却，但仍强制执行共享的 50% 手动门槛以及 disabled / no-active-messages
+   * 等硬守卫（守卫不过返回 "skipped"）。
    */
   async compactManually(
     binding: Omit<CompactionTurnBinding, "presend">,
     state: ConversationViewState,
-  ): Promise<"compacted" | "failed" | "busy" | "skipped"> {
-    if (this.binding || this.inFlight) return "busy";
+    contextUsage?: ManualContextUsageSnapshot,
+  ): Promise<ManualCompactionOutcome> {
+    if (this.binding || this.inFlight) return { status: "busy" };
     this.bindTurn(binding);
     try {
-      const probe = this.probeManualDecision(binding, state);
+      const probe = this.probeManualDecision(binding, state, contextUsage);
       if (!probe.shouldCompact) {
-        return probe.reason === "in-flight" ? "busy" : "skipped";
+        return probe.reason === "in-flight"
+          ? { status: "busy" }
+          : { status: "skipped", reason: probe.reason };
       }
       await this.compactDuringRun({
         trigger: "manual",
         state,
-        bypassThresholdAndCooldown: true,
+        manualContextUsage: contextUsage,
       });
       // settle* 是 compactDuringRun 的必经终态：completed 才算真正生成了
       // checkpoint（prune 降级路径 status 为 failed，UI 文案已说明降级详情）。
-      return this.statusPhase === "completed" ? "compacted" : "failed";
+      return { status: this.statusPhase === "completed" ? "compacted" : "failed" };
     } catch {
       // 中止或意外异常：走统一善后（回滚快照 / running 态复位 idle）。
       await this.handleTurnAbort();
-      return "failed";
+      return { status: "failed" };
     } finally {
       this.unbindTurn();
     }
   }
 
-  // 手动压缩的前置探针：不产生副作用地跑一次决策，把 disabled 等硬守卫
-  // 挡在 publishRunning 之前（compactDuringRun 的 bypass 只越过阈值/冷却）。
+  // 手动压缩的前置探针：不产生副作用地跑一次与执行路径相同的决策，把手动
+  // 50% 门槛及 disabled 等硬守卫挡在 publishRunning 之前。
   private probeManualDecision(
     binding: Omit<CompactionTurnBinding, "presend">,
     state: ConversationViewState,
+    contextUsage?: ManualContextUsageSnapshot,
   ) {
-    this.ledger.rebase(binding.buildPreparedContext(state));
+    const fixedTokens = contextUsage?.fixedTokens;
+    this.ledger.rebase(
+      binding.buildPreparedContext(state),
+      typeof fixedTokens === "number" ? { fixedTokens } : undefined,
+    );
     this.updateTurnMeta(state);
-    return this.decide("optimization", this.ledger.total(), Date.now(), true);
+    const snapshotTotalTokens = contextUsage?.totalTokens;
+    return this.decideManual(
+      typeof snapshotTotalTokens === "number" &&
+        Number.isFinite(snapshotTotalTokens) &&
+        snapshotTotalTokens > 0
+        ? Math.floor(snapshotTotalTokens)
+        : this.ledger.total(),
+      Date.now(),
+    );
+  }
+
+  private decideManual(totalTokens: number, now: number): CompactionDecision {
+    const decision = this.decide("optimization", totalTokens, now, true);
+    if (!decision.shouldCompact) return decision;
+    if (canManualCompact(contextUsageRatio(decision.totalTokens, decision.contextWindow))) {
+      return decision;
+    }
+    return { ...decision, shouldCompact: false, reason: "below-manual-threshold" };
   }
 
   // 用户中止后的统一善后：有快照则回滚（恢复状态/输入框/可选持久化）并返回 true。
@@ -507,8 +625,9 @@ export class CompactionController {
     contextAfter: Context,
     stateAfter: ConversationViewState,
     threshold: number,
+    fixedTokens?: number,
   ) {
-    this.ledger.rebase(contextAfter);
+    this.ledger.rebase(contextAfter, typeof fixedTokens === "number" ? { fixedTokens } : undefined);
     this.updateTurnMeta(stateAfter);
     this.pressure = notePressureAfterCompaction(this.pressure, {
       totalTokensAfter: this.ledger.total(),

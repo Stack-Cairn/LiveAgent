@@ -2,6 +2,7 @@ import type { Context, Message, Usage } from "@earendil-works/pi-ai";
 
 import { estimateTextTokens, estimateTextTokenUnits } from "@liveagent/ui/lib/chat/contextUsage";
 import { isCompactionAssistantMessage } from "../conversation/conversationState";
+import { readMessageContextUsage, writeAssistantContextUsage } from "./contextUsageMetadata";
 
 // CJK 感知的文本估算已迁入共享层（用量环的检查点估值复用同一口径）；
 // 这里 re-export 保持既有调用方与测试不动。
@@ -92,6 +93,12 @@ export function estimateToolsTokens(tools: Context["tools"]): number {
   return tokens;
 }
 
+export function deriveContextTokens(context: Context, options?: { fixedTokens?: number }): number {
+  const ledger = new TokenLedger();
+  ledger.rebase(context, options);
+  return ledger.total();
+}
+
 export function getUsageTotalTokens(usage: Usage | undefined): number | undefined {
   if (!usage) return undefined;
 
@@ -115,14 +122,16 @@ export function getMessageObservedTokens(message: Message): number | undefined {
   // （布尔化避免类型谓词在 else 分支把 AssistantMessage 收窄成 never。）
   const isCheckpoint: boolean = isCompactionAssistantMessage(message);
   if (isCheckpoint) return undefined;
-  return getUsageTotalTokens(message.usage);
+  return readMessageContextUsage(message)?.totalTokens ?? getUsageTotalTokens(message.usage);
 }
 
 export type TokenLedgerSnapshot = {
   fixedTokens: number;
   observedTokens: number;
   trailingTokens: number;
+  estimatedTotalTokens: number;
   hasObservedUsage: boolean;
+  hasFixedTokenAnchor: boolean;
   totalTokens: number;
 };
 
@@ -135,22 +144,40 @@ export class TokenLedger {
   private fixedTokens = 0;
   private observedTokens = 0;
   private trailingTokens = 0;
+  private estimatedTotalTokens = 0;
   private hasObservedUsage = false;
+  private hasFixedTokenAnchor = false;
 
-  rebase(context: Context): void {
-    this.fixedTokens =
+  rebase(context: Context, options?: { fixedTokens?: number }): void {
+    const estimatedFixedTokens =
       estimateTextTokens(context.systemPrompt ?? "") + estimateToolsTokens(context.tools);
+    this.fixedTokens =
+      typeof options?.fixedTokens === "number" &&
+      Number.isFinite(options.fixedTokens) &&
+      options.fixedTokens >= 0
+        ? Math.floor(options.fixedTokens)
+        : estimatedFixedTokens;
     this.observedTokens = 0;
     this.trailingTokens = 0;
+    this.estimatedTotalTokens = this.fixedTokens;
     this.hasObservedUsage = false;
+    this.hasFixedTokenAnchor = false;
 
     const messages = context.messages;
+    for (const message of messages) {
+      this.estimatedTotalTokens += estimateMessageTokens(message);
+    }
     let anchorIndex = -1;
     for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const observed = getMessageObservedTokens(messages[index]);
+      const message = messages[index];
+      const observed = getMessageObservedTokens(message);
       if (typeof observed === "number") {
-        this.observedTokens = observed;
+        const anchored = readMessageContextUsage(message);
+        this.observedTokens = anchored
+          ? Math.max(0, observed + this.fixedTokens - anchored.fixedTokens)
+          : observed;
         this.hasObservedUsage = true;
+        this.hasFixedTokenAnchor = anchored !== undefined;
         anchorIndex = index;
         break;
       }
@@ -162,11 +189,26 @@ export class TokenLedger {
 
   addMessages(messages: readonly Message[]): void {
     for (const message of messages) {
-      const observed = getMessageObservedTokens(message);
+      const estimated = estimateMessageTokens(message);
+      const totalBeforeMessage = this.total();
+      this.estimatedTotalTokens += estimated;
+      let observed = getMessageObservedTokens(message);
+      if (
+        message.role === "assistant" &&
+        !isCompactionAssistantMessage(message) &&
+        readMessageContextUsage(message) === undefined
+      ) {
+        observed ??= totalBeforeMessage + estimated;
+        writeAssistantContextUsage(message, {
+          totalTokens: observed,
+          fixedTokens: this.fixedTokens,
+        });
+      }
       if (typeof observed === "number") {
         // 新 usage 已覆盖它之前的全部上下文，trailing 归零重新累计。
         this.observedTokens = observed;
         this.hasObservedUsage = true;
+        this.hasFixedTokenAnchor = readMessageContextUsage(message) !== undefined;
         this.trailingTokens = 0;
         continue;
       }
@@ -175,8 +217,11 @@ export class TokenLedger {
   }
 
   total(): number {
-    const base = this.hasObservedUsage ? this.observedTokens : this.fixedTokens;
-    return base + this.trailingTokens;
+    if (!this.hasObservedUsage) return this.estimatedTotalTokens;
+    const observedTotal = this.observedTokens + this.trailingTokens;
+    return this.hasFixedTokenAnchor
+      ? observedTotal
+      : Math.max(observedTotal, this.estimatedTotalTokens);
   }
 
   /**
@@ -193,7 +238,9 @@ export class TokenLedger {
       fixedTokens: this.fixedTokens,
       observedTokens: this.observedTokens,
       trailingTokens: this.trailingTokens,
+      estimatedTotalTokens: this.estimatedTotalTokens,
       hasObservedUsage: this.hasObservedUsage,
+      hasFixedTokenAnchor: this.hasFixedTokenAnchor,
       totalTokens: this.total(),
     };
   }

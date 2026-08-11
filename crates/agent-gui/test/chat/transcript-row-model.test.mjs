@@ -592,3 +592,44 @@ test("transcript virtualizer keeps scroll updates off the full React measurement
   assert.doesNotMatch(transcriptListSource, /height:\s*virtualizer\.getTotalSize\(\)/);
   assert.doesNotMatch(transcriptListSource, /transform:\s*`translateY\(/);
 });
+
+test("a status-only live tail (idle manual compaction) closes without a stranded settling row", () => {
+  const model = createTranscriptRowModel();
+  const history = [userItem("u1"), assistantItem("a1", [round("r1", "reply")])];
+
+  // 手动压缩：TranscriptList 以 isCompactionRunning 激活 live tail，但 live
+  // store 只有 toolStatus——live 行是纯状态行（CompactingText），没有内容块。
+  const compacting = model.build(history, {
+    ...idleLive,
+    isSending: true,
+    toolStatus: "正在压缩上下文…",
+  });
+  const compactingTail = compacting.rows.at(-1);
+  assert.equal(compactingTail.kind, "assistant-activity");
+  assert.equal(compactingTail.units.length, 1);
+  assert.equal(compactingTail.units[0].unit.kind, "status");
+
+  // 压缩落定：历史被重排成检查点卡片（没有可收养的 assistant 孪生项）。
+  // 无内容的 live 轮必须直接收尾，不能留下冻结的 settling 状态行。
+  const compactedHistory = [
+    {
+      kind: "summary",
+      key: "summary-seg-1",
+      segmentIndex: 1,
+      summaryId: "s1",
+      content: "checkpoint body",
+      coveredMessageCount: 2,
+      coversThroughMessageId: "m2",
+      generatedBy: { providerId: "openai", model: "gpt-test" },
+      timestamp: 3,
+      collapsed: true,
+    },
+  ];
+  const closed = model.build(compactedHistory, idleLive);
+  assert.equal(closed.liveStartIndex, -1);
+  assert.equal(closed.rows.length, 1);
+  assert.equal(closed.rows[0].kind, "summary");
+
+  const stable = model.build(compactedHistory, idleLive);
+  assert.equal(stable.rows.length, 1);
+});

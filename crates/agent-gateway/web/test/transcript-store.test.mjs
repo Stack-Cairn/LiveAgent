@@ -87,6 +87,31 @@ function messageRef(messageId, messageIndex = 0) {
   };
 }
 
+test("manual compaction terminal events retain status and stay conversation-scoped", () => {
+  const targetStore = createTranscriptStore();
+  const otherStore = createTranscriptStore();
+  const statuses = ["compacted", "failed", "busy", "skipped"];
+
+  for (const [index, status] of statuses.entries()) {
+    targetStore.applyEvent({
+      type: "manual_compaction_result",
+      conversation_id: "conv-1",
+      seq: index + 1,
+      operationId: `operation-${index}`,
+      status,
+      message: status === "compacted" ? undefined : `message-${status}`,
+    });
+    targetStore.flush();
+    assert.deepEqual(targetStore.getSnapshot().manualCompactionResult, {
+      operationId: `operation-${index}`,
+      status,
+      message: status === "compacted" ? "" : `message-${status}`,
+    });
+  }
+
+  assert.equal(otherStore.getSnapshot().manualCompactionResult, null);
+});
+
 test("run lifecycle: reply renders in the live flow and folds at the next run_started", () => {
   const store = createTranscriptStore();
   store.applyEvent(userMessage("run-1", 1, "hello"));
@@ -914,7 +939,13 @@ test("reset sync rebuilds the active turn from a runtime snapshot", () => {
       runId: "run-2",
       revision: 5,
       entriesJson: JSON.stringify([
-        { id: "snap-1", kind: "assistant", text: "rebuilt from snapshot", round: 0 },
+        {
+          id: "snap-1",
+          kind: "assistant",
+          text: "rebuilt from snapshot",
+          round: 0,
+          meta: { contextUsageTokens: 150_000, contextRelevant: false },
+        },
       ]),
       toolStatus: "Vibing",
       toolStatusIsCompaction: false,
@@ -930,6 +961,9 @@ test("reset sync rebuilds the active turn from a runtime snapshot", () => {
   const text = allRows(snapshot).map((row) => rowText(row)).join("");
   assert.match(text, /rebuilt from snapshot/);
   assert.doesNotMatch(text, /will be lost/);
+  const assistantRow = allRows(snapshot).find((row) => row.kind === "assistant");
+  assert.equal(assistantRow.rounds[0].meta.contextUsageTokens, 150_000);
+  assert.equal(assistantRow.rounds[0].meta.contextRelevant, false);
 });
 
 test("active sync trims a history-first copy of the running exchange", () => {

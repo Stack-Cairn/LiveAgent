@@ -313,6 +313,10 @@ export function createDefaultCompactionMock(compactionCalls) {
 
     beginRequest() {}
 
+    observeContextMessages() {
+      return 0;
+    }
+
     shouldProtectMidStream() {
       return false;
     }
