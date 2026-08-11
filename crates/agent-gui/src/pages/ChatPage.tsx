@@ -26,6 +26,7 @@ import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
 import { openChatFileLink } from "@liveagent/ui/lib/chat/openChatFileLink";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
@@ -152,6 +153,7 @@ import {
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
 import { syncMovedConversationRuntimeWorkdir } from "./chat/runtime/chatPageRuntime";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
+import { useManualCompaction } from "./chat/runtime/useManualCompaction";
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
@@ -379,6 +381,11 @@ export function ChatPage(props: ChatPageProps) {
     () => conversationState.transcript.items,
     [conversationState],
   );
+  // 用量环读数：最近 assistant 轮次的真实 usage；压缩后回退检查点估算。
+  const contextUsageTokens = useMemo(
+    () => deriveContextUsageTokens(transcriptItems),
+    [transcriptItems],
+  );
   // Sent-prompt history for the composer's ↑/↓ recall. Read lazily through a
   // ref so the memoized composer bar never re-renders on transcript growth.
   const transcriptItemsRef = useRef<RenderTimelineItem[]>(transcriptItems);
@@ -428,6 +435,8 @@ export function ChatPage(props: ChatPageProps) {
     [],
   );
   const sendActionRef = useRef<SendChatAction>(async () => false);
+  // WebUI 经 chat_queue compact_now 中继的手动压缩入口(useChatTurnQueue 消费)。
+  const manualCompactActionRef = useRef<() => Promise<boolean>>(async () => false);
   const ensureGatewayBridgeConversationReadyRef = useRef<
     (id: string, options?: EnsureGatewayBridgeConversationReadyOptions) => Promise<string>
   >(async (id) => id.trim());
@@ -994,6 +1003,7 @@ export function ChatPage(props: ChatPageProps) {
     clearCachedComposerDraft,
     displayedConversationWorkdir,
     sendActionRef,
+    manualCompactActionRef,
   });
 
   // Queue snapshots publish on queue mutation only; after a gateway
@@ -1481,6 +1491,25 @@ export function ChatPage(props: ChatPageProps) {
 
   sendActionRef.current = send;
   stopSendingActionRef.current = stopSending;
+
+  const handleManualCompact = useManualCompaction({
+    settings,
+    t,
+    currentConversationIdRef,
+    isConversationRunning,
+    buildRuntimeEntryFromVisibleState,
+    getCompactionController,
+    updateConversationRuntimeEntry,
+    liveTranscriptStore,
+    resetLiveTranscript,
+    updateToolStatus,
+    queueGatewayBridgeEventForRequest,
+    flushGatewayBridgeEventsForRequest,
+    persistConversation,
+    displayedConversationWorkdir,
+    setErrorMessage,
+  });
+  manualCompactActionRef.current = handleManualCompact;
 
   const handleOpenSidebar = useCallback(() => {
     setSidebarOpen(true);
@@ -2063,6 +2092,10 @@ export function ChatPage(props: ChatPageProps) {
                   chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                   reasoningOptions={chatRuntimeReasoningOptions}
                   thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
+                  contextUsageTokens={contextUsageTokens}
+                  contextWindow={currentModelContextWindow}
+                  onManualCompactConfirm={handleManualCompact}
+                  manualCompactBlocked={isCompactionRunning}
                   gitClient={tauriGitClient}
                   workspaceActivityClient={tauriWorkspaceActivityClient}
                   onSend={handleSend}

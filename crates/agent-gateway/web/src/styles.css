@@ -4894,3 +4894,36 @@ html[data-liveagent-webui="gateway"]
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* Confirm-action popover (context usage ring's manual-compact confirm):
+ * mirror of the GUI's enter/exit animation — grow out of the anchor, keyed
+ * off Base UI's data-starting-style / data-ending-style. */
+.confirm-action-popover-popup {
+  --confirm-popover-slide-y: -6px;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.confirm-action-popover-popup[data-side="top"] {
+  --confirm-popover-slide-y: 6px;
+}
+
+.confirm-action-popover-popup[data-starting-style],
+.confirm-action-popover-popup[data-ending-style] {
+  opacity: 0;
+  transform: translateY(var(--confirm-popover-slide-y)) scale(0.96);
+}
+
+.confirm-action-popover-popup[data-ending-style] {
+  transition-duration: 0.12s;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  transform: translateY(calc(var(--confirm-popover-slide-y) / 2)) scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-action-popover-popup {
+    transition: none;
+  }
+}

@@ -24,6 +24,7 @@ import {
   type ReasoningLevel,
 } from "@liveagent/app/lib/settings";
 import { ComposerAttachmentCard } from "@liveagent/ui/components/chat/ComposerAttachmentCard";
+import { ContextUsageRing } from "@liveagent/ui/components/chat/ContextUsageRing";
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
   MentionComposer,
@@ -234,6 +235,13 @@ export type ChatComposerBarProps = {
   gitClient?: GitClient | null;
   gitWriteEnabled?: boolean;
   gitDisabledMessage?: string;
+  /** 当前会话上下文占用 token（deriveContextUsageTokens 口径）；与 contextWindow 齐备时显示用量环。 */
+  contextUsageTokens?: number;
+  contextWindow?: number;
+  /** 用量环确认后触发手动压缩；缺省时环为纯展示。 */
+  onManualCompactConfirm?: (() => void) | (() => Promise<unknown>);
+  /** 压缩进行中/请求在途时禁点用量环。 */
+  manualCompactBlocked?: boolean;
   workspaceActivityClient?: WorkspaceActivityClient | null;
   onSend: () => void;
   onStop: () => void;
@@ -276,6 +284,10 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     gitClient,
     gitWriteEnabled = true,
     gitDisabledMessage,
+    contextUsageTokens,
+    contextWindow,
+    onManualCompactConfirm,
+    manualCompactBlocked,
     workspaceActivityClient,
     onSend,
     onStop,
@@ -893,6 +905,17 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               <Maximize2 className="h-4 w-4" />
             )}
           </button>
+
+          {/* 用量环钉在卡片右缘、底部工具栏(约 44px)正上方——即发送按钮上方、
+              expand 按钮下侧的纵列位；锚底让附件列表/展开态下位置不动。 */}
+          <div className="absolute bottom-11 right-3 z-20">
+            <ContextUsageRing
+              totalTokens={contextUsageTokens}
+              contextWindow={contextWindow}
+              disabled={controlsDisabled || isSending || manualCompactBlocked}
+              onConfirm={onManualCompactConfirm}
+            />
+          </div>
 
           {/* 常驻 flex-1：动画把卡片钳在中间高度时由本区吸收伸缩，工具栏才能
               全程贴住卡片底边。min-h-0 只在展开态加——折叠态靠自动最小高度

@@ -1,12 +1,12 @@
 import type { Context, Message, Usage } from "@earendil-works/pi-ai";
 
+import { estimateTextTokens, estimateTextTokenUnits } from "@liveagent/ui/lib/chat/contextUsage";
 import { isCompactionAssistantMessage } from "../conversation/conversationState";
 
-const CHARS_PER_TOKEN = 4;
-// CJK 文字的 token 密度远高于西文：主流 tokenizer（o200k/cl100k/Claude）大约
-// 每 1.4~1.7 个汉字 1 token。按 chars/4 估会低估约 2.5~3 倍，导致压缩触发
-// 严重偏晚甚至撞上下文上限。取 0.7 token/字作为偏保守（宁早勿晚）的估计。
-const CJK_TOKENS_PER_CHAR = 0.7;
+// CJK 感知的文本估算已迁入共享层（用量环的检查点估值复用同一口径）；
+// 这里 re-export 保持既有调用方与测试不动。
+export { estimateTextTokens, estimateTextTokenUnits };
+
 // 逐消息估算只统计正文字符，补一个小常量近似 JSON 包裹（role/键名/引号）的开销。
 const MESSAGE_ENVELOPE_TOKENS = 8;
 
@@ -14,39 +14,6 @@ const MESSAGE_ENVELOPE_TOKENS = 8;
 // state/segment/临时 state 按对象身份缓存，热路径不再重复序列化。
 const messageTokenCache = new WeakMap<object, number>();
 const toolsTokenCache = new WeakMap<object, number>();
-
-// CJK 统一表意文字（含扩展 A）、假名、谚文、兼容表意/形式与全角标点。
-// 这些区段全部落在 BMP，按 UTF-16 code unit 判断即可；增补平面字符
-// （emoji 等）按两个西文字符计入 chars/4 路径。
-function isCjkCodeUnit(code: number): boolean {
-  return (
-    (code >= 0x2e80 && code <= 0x9fff) ||
-    (code >= 0xac00 && code <= 0xd7af) ||
-    (code >= 0x1100 && code <= 0x11ff) ||
-    (code >= 0xf900 && code <= 0xfaff) ||
-    (code >= 0xfe30 && code <= 0xfe4f) ||
-    (code >= 0xff00 && code <= 0xffef)
-  );
-}
-
-/**
- * 文本的分数 token 估算（不 trim、不取整）。按字符类别累加：CJK 字符按
- * CJK_TOKENS_PER_CHAR，其余按 1/CHARS_PER_TOKEN。可加性成立：对任意切分，
- * 分段估算之和恒等于整体估算，因此流式增量可按 delta 累加。
- */
-export function estimateTextTokenUnits(text: string): number {
-  let cjkChars = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    if (isCjkCodeUnit(text.charCodeAt(index))) cjkChars += 1;
-  }
-  return (text.length - cjkChars) / CHARS_PER_TOKEN + cjkChars * CJK_TOKENS_PER_CHAR;
-}
-
-export function estimateTextTokens(text: string): number {
-  const normalized = text.trim();
-  if (!normalized) return 0;
-  return Math.ceil(estimateTextTokenUnits(normalized));
-}
 
 function stringifiedTokenUnits(value: unknown): number {
   if (typeof value === "string") return estimateTextTokenUnits(value);

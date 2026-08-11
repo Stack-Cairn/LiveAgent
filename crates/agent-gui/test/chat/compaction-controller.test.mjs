@@ -529,3 +529,88 @@ test("registry hands out one controller per conversation and disposes cleanly", 
   registry.dispose("conv-a");
   assert.notEqual(registry.get("conv-a"), a);
 });
+
+// —— 手动压缩（用量环入口）——
+
+function manualBinding(overrides = {}) {
+  const cancellation = cancellationModule.createTurnCancellation();
+  const recorder = createSinksRecorder();
+  return {
+    recorder,
+    binding: {
+      providerId: "anthropic",
+      model: "claude-x",
+      runtime: {
+        baseUrl: "https://example",
+        apiKey: "k",
+        modelConfig: { contextWindow: 200_000, maxOutputToken: 32_000 },
+      },
+      cancellation,
+      sinks: recorder.sinks,
+      complete: async () => summaryResponse(),
+      buildPreparedContext: (state, _tools, options) =>
+        conversationState.buildRequestContext(state, options),
+      buildResumeContext: (state, resumeMessage, _tools, options) => {
+        const context = conversationState.buildRequestContext(state, options);
+        return resumeMessage
+          ? { ...context, messages: [...context.messages, resumeMessage] }
+          : context;
+      },
+      ...overrides,
+    },
+  };
+}
+
+test("compactManually compacts while idle, below threshold, and unbinds after", async () => {
+  const controller = new CompactionController();
+  // 55K/200K ≈ 27%：远低于自动阈值，bypass 必须让手动压缩仍然执行。
+  const state = conversationState.createConversationStateFromContext({
+    systemPrompt: "sys",
+    messages: [
+      user("please fix src/app.ts", 1),
+      assistantWithUsage("working on src/app.ts", 55_000, 2),
+    ],
+  });
+  const { binding, recorder } = manualBinding();
+
+  const result = await controller.compactManually(binding, state);
+
+  assert.equal(result, "compacted");
+  const statuses = recorder.byKind("publishStatus").map(([, status]) => status.phase);
+  assert.deepEqual(statuses, ["running", "completed"]);
+  assert.equal(recorder.byKind("persist").length, 1);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 1);
+  const [, appliedState] = recorder.byKind("applyStateMidRun")[0];
+  assert.equal(appliedState.segments.length, 2);
+  // running 时 bridge isCompaction=true，结束后清 null。
+  const bridgeEvents = recorder.byKind("bridge");
+  assert.equal(bridgeEvents[0][2], true);
+  assert.equal(bridgeEvents.at(-1)[1], null);
+  // 解绑后可再次手动压缩（不被残留 binding 卡成 busy）。
+  assert.notEqual(await controller.compactManually(manualBinding().binding, bigState()), "busy");
+});
+
+test("compactManually refuses while a turn is bound or a compaction is in flight", async () => {
+  const controller = new CompactionController();
+  bindController(controller);
+  const { binding } = manualBinding();
+  assert.equal(await controller.compactManually(binding, bigState()), "busy");
+});
+
+test("compactManually keeps the disabled hard guard (zero context window)", async () => {
+  const controller = new CompactionController();
+  let completeCalls = 0;
+  const { binding, recorder } = manualBinding({
+    runtime: { baseUrl: "https://example", apiKey: "k", modelConfig: undefined },
+    complete: async () => {
+      completeCalls += 1;
+      return summaryResponse();
+    },
+  });
+
+  const result = await controller.compactManually(binding, bigState());
+
+  assert.equal(result, "skipped");
+  assert.equal(completeCalls, 0);
+  assert.equal(recorder.byKind("publishStatus").length, 0);
+});

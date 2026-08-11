@@ -22,6 +22,7 @@ import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/
 import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { deriveContextUsageTokens } from "@liveagent/ui/lib/chat/contextUsage";
 import { openChatFileLink } from "@liveagent/ui/lib/chat/openChatFileLink";
 import { queuedChatTurnHasContent } from "@liveagent/ui/lib/chat/queuedChatTurn";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
@@ -287,6 +288,8 @@ export default function GatewayApp() {
     ReadonlyMap<string, SelectedModel>
   >(new Map());
   const [chatError, setChatError] = useState<string | null>(null);
+  // 用量环手动压缩：请求在途禁点；压缩开始后由 tool_status_is_compaction 接管。
+  const [manualCompactPending, setManualCompactPending] = useState(false);
   // Top-right toast stack for upload/attachment feedback — mirrors the GUI's
   // NotifyToast usage so upload failures never render as conversation output.
   const [notifyItems, setNotifyItems] = useState<NotifyItem[]>([]);
@@ -4434,6 +4437,11 @@ export default function GatewayApp() {
     () => selectLatestTaskProgress(transcriptRows),
     [transcriptRows],
   );
+  // 用量环读数：最近 assistant 轮次的真实 usage；压缩后回退检查点估算。
+  const contextUsageTokens = useMemo(
+    () => deriveContextUsageTokens(transcriptRows),
+    [transcriptRows],
+  );
   // 当前会话的待审批工具:遍历渲染中的 transcript,筛出带 __toolApprovalPending 标记
   // 且尚无结果的 tool call(与 ToolCallItem 判定同源)。用于输入框上方的集中审批栏,
   // 取代埋在各折叠项里的分散卡片。快照 revision 变化时经 useConversationChat 重渲染,
@@ -4514,6 +4522,25 @@ export default function GatewayApp() {
   const composerIsSending = transcriptBusy;
   const transcriptError = displayedTranscriptRowCount === 0 ? null : chatError;
   const composerCompactionBlocked = transcriptToolStatusIsCompaction;
+  // 手动压缩：经 gateway chat_queue.compact_now 中继到桌面端执行(受理即回包)。
+  // 压缩进行状态复用 tool_status_is_compaction 通道,无需额外轮询。
+  const handleManualCompact = useCallback(async () => {
+    const conversationIdValue = getDisplayedConversationId();
+    if (!api || !conversationIdValue || manualCompactPending) {
+      return;
+    }
+    setManualCompactPending(true);
+    try {
+      const response = await api.chatQueueCompactNow(conversationIdValue);
+      if (!response.accepted) {
+        setChatError(response.message || translate("chat.manualCompactRejected", settings.locale));
+      }
+    } catch (error) {
+      setChatError(asErrorMessage(error, translate("chat.manualCompactRejected", settings.locale)));
+    } finally {
+      setManualCompactPending(false);
+    }
+  }, [api, manualCompactPending, settings.locale]);
   const chatProtocolIncompatible = isChatRuntimeProtocolIncompatible(status);
   const chatProtocolIncompatibleMessage = chatProtocolIncompatible
     ? translate("chat.runtime.protocolIncompatible", settings.locale)
@@ -5008,6 +5035,10 @@ export default function GatewayApp() {
                           chatRuntimeControls={chatRuntimeControlsForCurrentProvider}
                           reasoningOptions={chatRuntimeReasoningOptions}
                           thinkingAlwaysOn={chatRuntimeThinkingAlwaysOn}
+                          contextUsageTokens={contextUsageTokens}
+                          contextWindow={currentModelContextWindow}
+                          onManualCompactConfirm={handleManualCompact}
+                          manualCompactBlocked={manualCompactPending || composerCompactionBlocked}
                           gitClient={gitClient}
                           gitWriteEnabled={settings.remote.enableWebGit}
                           gitDisabledMessage={gitDisabledMessage}

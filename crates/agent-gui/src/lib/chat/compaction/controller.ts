@@ -255,6 +255,8 @@ export class CompactionController {
     tools?: Context["tools"];
     includeAbortedMessages?: boolean;
     includeUploadedFilesMetadata?: boolean;
+    // manual 触发透传给决策：跳过阈值/冷却，硬守卫不受影响。
+    bypassThresholdAndCooldown?: boolean;
   }): Promise<CompactionDuringRunResult> {
     const binding = this.binding;
     if (!binding) {
@@ -299,7 +301,14 @@ export class CompactionController {
         : binding.buildPreparedContext(workingState, params.tools, buildOptions);
     this.ledger.rebase(budgetContext);
     this.updateTurnMeta(workingState);
-    const decision = this.decide("protection", this.ledger.total(), now);
+    // manual 是空闲时的从容压缩，走 optimization 口径；运行中触发保持 protection。
+    const intent: CompactionIntent = params.trigger === "manual" ? "optimization" : "protection";
+    const decision = this.decide(
+      intent,
+      this.ledger.total(),
+      now,
+      params.bypassThresholdAndCooldown,
+    );
     this.logDecision(decision);
 
     if (!decision.shouldCompact) {
@@ -326,7 +335,7 @@ export class CompactionController {
     try {
       const outcome = await runCompaction({
         state: workingState,
-        intent: "protection",
+        intent,
         contextTokens: decision.totalTokens,
         threshold: decision.threshold,
         providerId: binding.providerId,
@@ -384,6 +393,51 @@ export class CompactionController {
     }
   }
 
+  /**
+   * 用户手动触发的压缩（用量环 → 确认）。仅限空闲：已有轮次绑定或压缩在飞
+   * 返回 "busy"。临时绑定一轮复用 compactDuringRun 主流程；决策跳过阈值与
+   * 冷却（用户明确要压），但 disabled / no-active-messages 硬守卫仍生效
+   * （守卫不过返回 "skipped"）。
+   */
+  async compactManually(
+    binding: Omit<CompactionTurnBinding, "presend">,
+    state: ConversationViewState,
+  ): Promise<"compacted" | "failed" | "busy" | "skipped"> {
+    if (this.binding || this.inFlight) return "busy";
+    this.bindTurn(binding);
+    try {
+      const probe = this.probeManualDecision(binding, state);
+      if (!probe.shouldCompact) {
+        return probe.reason === "in-flight" ? "busy" : "skipped";
+      }
+      await this.compactDuringRun({
+        trigger: "manual",
+        state,
+        bypassThresholdAndCooldown: true,
+      });
+      // settle* 是 compactDuringRun 的必经终态：completed 才算真正生成了
+      // checkpoint（prune 降级路径 status 为 failed，UI 文案已说明降级详情）。
+      return this.statusPhase === "completed" ? "compacted" : "failed";
+    } catch {
+      // 中止或意外异常：走统一善后（回滚快照 / running 态复位 idle）。
+      await this.handleTurnAbort();
+      return "failed";
+    } finally {
+      this.unbindTurn();
+    }
+  }
+
+  // 手动压缩的前置探针：不产生副作用地跑一次决策，把 disabled 等硬守卫
+  // 挡在 publishRunning 之前（compactDuringRun 的 bypass 只越过阈值/冷却）。
+  private probeManualDecision(
+    binding: Omit<CompactionTurnBinding, "presend">,
+    state: ConversationViewState,
+  ) {
+    this.ledger.rebase(binding.buildPreparedContext(state));
+    this.updateTurnMeta(state);
+    return this.decide("optimization", this.ledger.total(), Date.now(), true);
+  }
+
   // 用户中止后的统一善后：有快照则回滚（恢复状态/输入框/可选持久化）并返回 true。
   async handleTurnAbort(): Promise<boolean> {
     const binding = this.binding;
@@ -423,7 +477,12 @@ export class CompactionController {
     };
   }
 
-  private decide(intent: CompactionIntent, totalTokens: number, now = Date.now()) {
+  private decide(
+    intent: CompactionIntent,
+    totalTokens: number,
+    now = Date.now(),
+    bypassThresholdAndCooldown?: boolean,
+  ) {
     const binding = this.binding;
     if (!binding) {
       throw new Error("compaction decision requested without an active turn binding");
@@ -440,6 +499,7 @@ export class CompactionController {
       pressure: this.pressure,
       inFlight: this.inFlight,
       now,
+      bypassThresholdAndCooldown,
     });
   }
 
