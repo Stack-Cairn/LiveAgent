@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const catalog = loader.loadModule("src/lib/models/modelCatalog.ts");
+const catalog = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 
 // 与 scripts/generate-model-catalog.mjs 的 SECTIONS 同值（键、序、质量门）：
 // 上游被截断时刷新会硬错，这里锁住已入库快照的完整性。前四家是应用供应商

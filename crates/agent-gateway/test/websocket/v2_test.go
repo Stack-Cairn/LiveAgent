@@ -4,6 +4,8 @@ package websocket_test
 // 直通转发（白名单/限额/关联 id 命名空间化）、chat 订阅与事件推送。
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/klauspost/compress/zstd"
 	"google.golang.org/protobuf/proto"
 
 	gatewayv2 "github.com/liveagent/agent-gateway/internal/proto/v2"
@@ -327,6 +330,122 @@ func TestV2EndToEndBinaryPath(t *testing.T) {
 	}
 }
 
+func TestV2ChatIngressRepeatedGapEscalatesToCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	sm := session.NewManager()
+	store := newAgentTokenStore(t)
+	agentToken, err := store.Issue("desktop-agent", "")
+	if err != nil {
+		t.Fatalf("issue desktop agent token: %v", err)
+	}
+	srv := pbws.NewServer(newV2TestConfig(), sm, store)
+
+	mux := http.NewServeMux()
+	mux.Handle("/ws/v2/agent", srv.AgentHandler())
+	agentConn, agentCleanup := dialV2Path(t, mux, "/ws/v2/agent")
+	defer agentCleanup()
+	sendProtoFrame(t, agentConn, &gatewayv2.AgentClientFrame{
+		Payload: &gatewayv2.AgentClientFrame_Hello{
+			Hello: &gatewayv2.ClientHello{
+				ProtocolVersion: pbws.ProtocolVersion,
+				Role:            gatewayv2.ClientRole_CLIENT_ROLE_AGENT,
+				Token:           agentToken,
+				AgentId:         "desktop-agent",
+				AgentVersion:    "1.0.0",
+			},
+		},
+	})
+	agentHello := receiveAgentServerFrame(t, agentConn).GetHello()
+	if agentHello == nil || !agentHello.GetOk() {
+		t.Fatalf("agent hello reply = %#v, want ok", agentHello)
+	}
+
+	sendBatch := func(requestID string, firstSeq uint64, text string) {
+		t.Helper()
+		sendProtoFrame(t, agentConn, &gatewayv2.AgentClientFrame{
+			Payload: &gatewayv2.AgentClientFrame_Envelope{
+				Envelope: &gatewayv2.AgentEnvelope{
+					RequestId: requestID,
+					Payload: &gatewayv2.AgentEnvelope_ChatIngressBatch{
+						ChatIngressBatch: &gatewayv2.ChatIngressBatch{
+							RunId:          "run-gap",
+							ConversationId: "conv-gap",
+							FirstSeq:       firstSeq,
+							Records: []*gatewayv2.ChatIngressRecord{{
+								Payload: &gatewayv2.ChatIngressRecord_Delta{
+									Delta: &gatewayv2.ChatIngressDelta{EventJson: `{"type":"token","text":"` + text + `"}`},
+								},
+							}},
+						},
+					},
+				},
+			},
+		})
+	}
+
+	sendBatch("ingress-1", 1, "one")
+	first := receiveAgentChatIngressAck(t, agentConn, "ingress-1")
+	if first.GetAction() != gatewayv2.ChatIngressAck_CONTINUE || first.GetExpectedNext() != 2 {
+		t.Fatalf("first ack = %#v, want CONTINUE expected_next=2", first)
+	}
+
+	sendBatch("ingress-gap-1", 3, "three")
+	firstGap := receiveAgentChatIngressAck(t, agentConn, "ingress-gap-1")
+	if firstGap.GetAction() != gatewayv2.ChatIngressAck_REPLAY_FROM_EXPECTED || firstGap.GetExpectedNext() != 2 {
+		t.Fatalf("first gap ack = %#v, want REPLAY_FROM_EXPECTED expected_next=2", firstGap)
+	}
+
+	sendBatch("ingress-gap-2", 3, "three")
+	secondGap := receiveAgentChatIngressAck(t, agentConn, "ingress-gap-2")
+	if secondGap.GetAction() != gatewayv2.ChatIngressAck_SEND_CHECKPOINT || secondGap.GetExpectedNext() != 2 {
+		t.Fatalf("repeated gap ack = %#v, want SEND_CHECKPOINT expected_next=2", secondGap)
+	}
+
+	projectionJSON := []byte(`[]`)
+	encoder, err := zstd.NewWriter(nil)
+	if err != nil {
+		t.Fatalf("create projection encoder: %v", err)
+	}
+	defer encoder.Close()
+	projectionHash := sha256.Sum256(projectionJSON)
+	sendProtoFrame(t, agentConn, &gatewayv2.AgentClientFrame{
+		Payload: &gatewayv2.AgentClientFrame_Envelope{
+			Envelope: &gatewayv2.AgentEnvelope{
+				RequestId: "ingress-checkpoint",
+				Payload: &gatewayv2.AgentEnvelope_ChatIngressBatch{
+					ChatIngressBatch: &gatewayv2.ChatIngressBatch{
+						RunId:          "run-gap",
+						ConversationId: "conv-gap",
+						FirstSeq:       4,
+						Records: []*gatewayv2.ChatIngressRecord{{
+							Payload: &gatewayv2.ChatIngressRecord_Checkpoint{
+								Checkpoint: &gatewayv2.ChatIngressCheckpoint{
+									CoversThroughSeq:     3,
+									Revision:             1,
+									CompressedProjection: encoder.EncodeAll(projectionJSON, nil),
+									UncompressedBytes:    uint64(len(projectionJSON)),
+									Sha256:               hex.EncodeToString(projectionHash[:]),
+								},
+							},
+						}},
+					},
+				},
+			},
+		},
+	})
+	checkpoint := receiveAgentChatIngressAck(t, agentConn, "ingress-checkpoint")
+	if checkpoint.GetAction() != gatewayv2.ChatIngressAck_CONTINUE || checkpoint.GetCommittedThrough() != 4 || checkpoint.GetExpectedNext() != 5 {
+		t.Fatalf("checkpoint ack = %#v, want CONTINUE committed_through=4 expected_next=5", checkpoint)
+	}
+
+	sendBatch("ingress-after-checkpoint", 5, "five")
+	afterCheckpoint := receiveAgentChatIngressAck(t, agentConn, "ingress-after-checkpoint")
+	if afterCheckpoint.GetAction() != gatewayv2.ChatIngressAck_CONTINUE || afterCheckpoint.GetCommittedThrough() != 5 || afterCheckpoint.GetExpectedNext() != 6 {
+		t.Fatalf("post-checkpoint ack = %#v, want CONTINUE committed_through=5 expected_next=6", afterCheckpoint)
+	}
+}
+
 // dialV2Path 对多路由 mux 的指定路径拨号。
 func dialV2Path(t *testing.T, handler http.Handler, path string) (*websocket.Conn, func()) {
 	t.Helper()
@@ -353,4 +472,23 @@ func receiveAgentServerFrame(t *testing.T, conn *websocket.Conn) *gatewayv2.Agen
 		t.Fatalf("unmarshal agent frame: %v", err)
 	}
 	return &frame
+}
+
+func receiveAgentChatIngressAck(t *testing.T, conn *websocket.Conn, requestID string) *gatewayv2.ChatIngressAck {
+	t.Helper()
+	for attempt := 0; attempt < 8; attempt++ {
+		envelope := receiveAgentServerFrame(t, conn).GetEnvelope()
+		if envelope == nil || envelope.GetPing() != nil {
+			continue
+		}
+		if envelope.GetRequestId() != requestID {
+			t.Fatalf("agent envelope request_id = %q, want %q", envelope.GetRequestId(), requestID)
+		}
+		if ack := envelope.GetChatIngressAck(); ack != nil {
+			return ack
+		}
+		t.Fatalf("agent envelope = %#v, want chat_ingress_ack", envelope)
+	}
+	t.Fatalf("timed out waiting for chat_ingress_ack request_id=%q", requestID)
+	return nil
 }

@@ -1,5 +1,5 @@
+import type { TerminalClient } from "@liveagent/ui/lib/terminal/types";
 import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
-import type { TerminalClient } from "./types";
 
 export function createGatewayTerminalClient(api: GatewayWebSocketClientLike): TerminalClient {
   return {

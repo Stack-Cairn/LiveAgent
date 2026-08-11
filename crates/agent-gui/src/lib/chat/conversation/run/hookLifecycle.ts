@@ -1,4 +1,4 @@
-import type { HookEvent } from "../../../automation";
+import type { HookEvent } from "@liveagent/ui/lib/automation/index";
 
 export type ConversationHookLifecycle = {
   startAgent: () => void;

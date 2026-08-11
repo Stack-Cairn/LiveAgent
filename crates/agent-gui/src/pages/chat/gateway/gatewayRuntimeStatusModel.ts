@@ -1,5 +1,5 @@
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type { AppSettings } from "../../../lib/settings";
-import { createUuid } from "../../../lib/shared/id";
 
 export type GatewayRuntimeStatus = {
   online: boolean;

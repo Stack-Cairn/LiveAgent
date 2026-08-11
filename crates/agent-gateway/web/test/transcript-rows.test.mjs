@@ -115,6 +115,116 @@ test("buildTurnRows emits the user bubble before any assistant content, tagged w
   assert.equal(rows[1].turnKey, "req:c1");
 });
 
+test("interleaved thinking and tool results keep one assistant row and stable block identities", () => {
+  const prefixEntries = [
+    { id: "think-1", kind: "thinking", text: "reasoning", round: 1 },
+    {
+      id: "tool-call-1",
+      kind: "tool_call",
+      round: 1,
+      toolCall: { type: "toolCall", id: "call-1", name: "Bash", arguments: {} },
+    },
+  ];
+  const prefix = buildRowsFromEntries(prefixEntries, "stream");
+  const complete = buildRowsFromEntries(
+    [
+      ...prefixEntries,
+      {
+        id: "tool-result-1",
+        kind: "tool_result",
+        round: 1,
+        toolResult: {
+          role: "toolResult",
+          toolCallId: "call-1",
+          content: [],
+          isError: false,
+        },
+      },
+      { id: "think-2", kind: "thinking", text: "next reasoning", round: 1 },
+    ],
+    "stream",
+  );
+
+  assert.equal(prefix.length, 1);
+  assert.equal(complete.length, 1);
+  assert.equal(complete[0].key, prefix[0].key);
+  const blockIdentity = (row) =>
+    row.rounds[0].blocks.map((block) =>
+      block.kind === "tool" ? `tool:${block.item.toolCall.id}` : `${block.kind}:${block.id}`,
+    );
+  assert.deepEqual(blockIdentity(complete[0]).slice(0, 2), blockIdentity(prefix[0]));
+  assert.equal(complete[0].rounds[0].blocks.at(-1).id, "thinking-2");
+});
+
+test("out-of-order and duplicate tool results update their first-seen tools in place", () => {
+  let turn = createTurn({ key: "req:out-of-order", runId: "run-out-of-order" });
+  turn = applyEventToTurn(turn, { type: "thinking", text: "before tools", round: 1 });
+  turn = applyEventToTurn(turn, {
+    type: "tool_call",
+    id: "call-a",
+    name: "Bash",
+    arguments: { command: "A" },
+    round: 1,
+  });
+  turn = applyEventToTurn(turn, {
+    type: "tool_call",
+    id: "call-b",
+    name: "Read",
+    arguments: { path: "B" },
+    round: 1,
+  });
+  const prefix = buildTurnRows(turn).find((row) => row.kind === "assistant");
+  assert.ok(prefix);
+  const prefixBlocks = prefix.rounds[0].blocks.map((block) =>
+    block.kind === "tool" ? `tool:${block.item.toolCall.id}` : `${block.kind}:${block.id}`,
+  );
+
+  const resultB = {
+    type: "tool_result",
+    id: "call-b",
+    name: "Read",
+    content: [{ type: "text", text: "B complete" }],
+    isError: false,
+    round: 1,
+  };
+  turn = applyEventToTurn(turn, resultB);
+  const afterFirstB = turn;
+  turn = applyEventToTurn(turn, resultB);
+  assert.deepEqual(turn.entries, afterFirstB.entries, "duplicate result is idempotent");
+  turn = applyEventToTurn(turn, {
+    type: "tool_result",
+    id: "call-a",
+    name: "Bash",
+    content: [{ type: "text", text: "A failed" }],
+    isError: true,
+    round: 1,
+  });
+  turn = applyEventToTurn(turn, { type: "thinking", text: "after tools", round: 1 });
+
+  const complete = buildTurnRows(turn).find((row) => row.kind === "assistant");
+  assert.ok(complete);
+  assert.equal(complete.key, prefix.key);
+  const completeBlocks = complete.rounds[0].blocks;
+  assert.deepEqual(
+    completeBlocks.slice(0, prefixBlocks.length).map((block) =>
+      block.kind === "tool" ? `tool:${block.item.toolCall.id}` : `${block.kind}:${block.id}`,
+    ),
+    prefixBlocks,
+  );
+  const trace = completeBlocks
+    .filter((block) => block.kind === "tool")
+    .map((block) => ({
+      id: block.item.toolCall.id,
+      result: block.item.toolResult?.content?.[0]?.text,
+      isError: block.item.toolResult?.isError,
+    }));
+  assert.deepEqual(trace, [
+    { id: "call-a", result: "A failed", isError: true },
+    { id: "call-b", result: "B complete", isError: false },
+  ]);
+  assert.equal(completeBlocks.at(-1).kind, "thinking");
+});
+
 test("dedupeRowKeys suffixes collisions deterministically without touching unique keys", () => {
   const rows = [
     { key: "a", origin: "history", kind: "error", text: "1" },

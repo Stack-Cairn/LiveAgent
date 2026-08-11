@@ -1,11 +1,19 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 
+import type { TaskListResultDetails } from "@liveagent/ui/contracts/task";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
   SubagentMessageDetails,
-} from "../subagents/protocol";
+} from "@liveagent/ui/lib/subagents/protocol";
 import type { SubagentScheduler } from "../subagents/scheduler";
+
+export type {
+  TaskItem,
+  TaskListResultDetails,
+  TaskListState,
+  TaskStatus,
+} from "@liveagent/ui/contracts/task";
 
 export type BuiltinToolGroupId =
   | "fs"
@@ -366,17 +374,6 @@ export type GrepResultDetails = {
   files: GrepResultFileSummary[];
 };
 
-export type TodoItem = {
-  content: string;
-  status: "pending" | "in_progress" | "completed";
-  activeForm: string;
-};
-
-export type TodoWriteResultDetails = {
-  kind: "todo_write";
-  todos: TodoItem[];
-};
-
 export type BuiltinToolResultDetails =
   | ReadTextResultDetails
   | ReadImageResultDetails
@@ -395,5 +392,5 @@ export type BuiltinToolResultDetails =
   | ListResultDetails
   | GlobResultDetails
   | GrepResultDetails
-  | TodoWriteResultDetails
+  | TaskListResultDetails
   | Record<string, unknown>;

@@ -13,19 +13,20 @@ import type {
   ToolResultMessage,
   UserMessage,
 } from "@earendil-works/pi-ai";
-import type { StreamDebugLogger } from "../../debug/agentDebug";
 import {
   type MemoryMeta,
   memoryApplyBatch,
   memoryList,
   memoryRecentRejections,
   memoryTodayLocalDate,
-} from "../../memory/api";
+} from "@liveagent/ui/lib/memory/api";
 import {
   EXTRACTION_CANDIDATE_LIMIT,
   EXTRACTION_REJECTION_DAYS,
   EXTRACTION_TIMEOUT_MS,
-} from "../../memory/config";
+} from "@liveagent/ui/lib/memory/config";
+import type { MemoryReviewerMode, ValidatedPlanItem } from "@liveagent/ui/lib/memory/schema";
+import type { StreamDebugLogger } from "../../debug/agentDebug";
 import {
   buildConversationWindowBlock,
   deriveWorkspaceMutations,
@@ -50,7 +51,6 @@ import {
   type ExtractionCandidateEntry,
   type ExtractionRejectionEntry,
 } from "../../memory/prompts/extraction";
-import type { MemoryReviewerMode, ValidatedPlanItem } from "../../memory/schema";
 import type { ProviderRuntimeConfig } from "../../providers/runtime/types";
 import type { ProviderId, SelectedModel } from "../../settings";
 import { createMemoryTools } from "../../tools/memoryTools";

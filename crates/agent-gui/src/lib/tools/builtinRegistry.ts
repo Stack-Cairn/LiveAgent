@@ -1,4 +1,5 @@
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
 import { homeDir } from "@tauri-apps/api/path";
 import type { RuntimePlatform } from "../runtimePlatform";
 import {
@@ -30,9 +31,8 @@ import { createShellTools } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
 import { createSSHManagerTools, type SshManagerSessionChange } from "./sshManagerTools";
-import type { SystemToolRuntimeScope } from "./systemToolOptions";
+import { createTaskTools, type TaskStateStore } from "./taskTools";
 import { createTerminalTools } from "./terminalTools";
-import { createTodoTools, type TodoToolState } from "./todoTools";
 import { createTunnelManagerTools, type TunnelManagerChange } from "./tunnelManagerTools";
 
 export type BuiltinToolRegistry = {
@@ -150,7 +150,7 @@ type BuildBuiltinBaseToolRegistryParams = {
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
   onManagedSkillsChanged?: (change: {
-    action: "install" | "create";
+    action: "install" | "create" | "delete";
     names: string[];
     baseDirs: string[];
   }) => void | Promise<void>;
@@ -268,21 +268,21 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
 export async function buildBuiltinToolRegistry(
   params: BuildBuiltinBaseToolRegistryParams & {
     subagentRuntime?: SubagentRuntimeConfig;
-    todoState?: TodoToolState;
+    taskStateStore?: TaskStateStore;
     /** chat 场景注入交互式提问工具；子代理/自动化场景无人值守，不注册。 */
     askUserQuestionConversationId?: string;
   },
 ) {
   const baseBundles = await buildBaseBuiltinToolBundles(params);
-  const todoBundles =
-    params.runtimeScope === "chat" && params.todoState
-      ? [createTodoTools({ state: params.todoState })]
+  const taskBundles =
+    params.runtimeScope === "chat" && params.taskStateStore
+      ? [createTaskTools(params.taskStateStore)]
       : [];
   const askUserQuestionBundles =
     params.runtimeScope === "chat" && params.askUserQuestionConversationId
       ? [createAskUserQuestionTools({ conversationId: params.askUserQuestionConversationId })]
       : [];
-  const chatBundles = [...todoBundles, ...askUserQuestionBundles];
+  const chatBundles = [...taskBundles, ...askUserQuestionBundles];
 
   const subagentRuntime = params.subagentRuntime;
   if (!subagentRuntime) {

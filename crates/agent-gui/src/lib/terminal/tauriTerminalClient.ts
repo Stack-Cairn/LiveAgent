@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type {
   SshTerminalTab,
   SshTerminalTabsSnapshot,
@@ -17,7 +15,9 @@ import type {
   TerminalStreamHandle,
   TerminalStreamInputState,
   TerminalStreamSnapshot,
-} from "./types";
+} from "@liveagent/ui/lib/terminal/types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 type TerminalEventListener = (event: TerminalEvent) => void;
 

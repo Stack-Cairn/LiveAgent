@@ -1,13 +1,12 @@
-// Platform adapter for the memory settings panel — gateway web end.
-// This file is NOT mirrored: it is the ONLY module in pages/settings/memory
-// that may import platform-specific dependencies (@base-ui/react,
-// lib/chat, shared UI chrome). Every sibling file is byte-identical with
-// crates/agent-gui/src/pages/settings/memory and may only reach
-// platform-specific code through the exports below.
+// Memory 设置面板的 Web 宿主适配器。共享组件只能通过这里访问平台依赖。
 
 import { Select as SelectPrimitive } from "@base-ui/react";
 import { Check, ChevronDown } from "../../../components/icons";
 
+export { Button } from "@liveagent/ui/components/ui/button";
+export { Input } from "@liveagent/ui/components/ui/input";
+export { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
+export { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 export {
   AlertTriangle,
   BookOpen,
@@ -25,12 +24,8 @@ export {
   Trash2,
   X,
 } from "../../../components/icons";
-export { Button } from "../../../components/ui/button";
-export { Input } from "../../../components/ui/input";
 export { buildModelOptions } from "../../../lib/chat/chatPageHelpers";
 export { parseModelValue, toModelValue } from "../../../lib/providers/llm";
-export { ModelPicker } from "../modelPicker";
-export { AgentActivationSwitch } from "../shared";
 
 /** The web UI has no in-process organizer runner; runs are picked up by the
  *  connected desktop agent, so Run Now always reports the queued-remote path. */

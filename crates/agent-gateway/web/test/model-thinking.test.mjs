@@ -1,25 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });
-const thinking = loader.loadModule("src/lib/models/modelThinking.ts");
+const thinking = loader.loadModule("@liveagent/ui/lib/models/modelThinking.ts");
 const settings = loader.loadModule("src/lib/settings/index.ts");
 
-// 镜像强制：与 GUI 端字节一致（mirror manifest 也管，但这里在测试层再锁一次，
-// 防止只跑单端测试时漂移漏检）。
-test("modelThinking.ts is byte-identical across both frontends", () => {
+test("modelThinking.ts 仅保留共享实现", () => {
   const webPath = fileURLToPath(new URL("../src/lib/models/modelThinking.ts", import.meta.url));
   const guiPath = fileURLToPath(
     new URL("../../../agent-gui/src/lib/models/modelThinking.ts", import.meta.url),
   );
-  const digest = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
-  assert.equal(digest(webPath), digest(guiPath));
+  const sharedPath = fileURLToPath(
+    new URL("../../../agent-ui/src/lib/models/modelThinking.ts", import.meta.url),
+  );
+  assert.equal(existsSync(webPath), false);
+  assert.equal(existsSync(guiPath), false);
+  assert.equal(existsSync(sharedPath), true);
 });
 
 test("web thinking wrappers delegate to the shared resolver", () => {

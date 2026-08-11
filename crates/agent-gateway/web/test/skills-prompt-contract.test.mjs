@@ -7,7 +7,7 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });
-const skills = loader.loadModule("src/lib/skills/index.ts");
+const skills = loader.loadModule("@liveagent/ui/lib/skills/index.ts");
 
 const enabledSkills = [
   {

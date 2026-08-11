@@ -4,8 +4,8 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const settings = loader.loadModule("src/lib/settings/index.ts");
-const normalize = loader.loadModule("src/lib/settings/normalize.ts");
-const sync = loader.loadModule("src/lib/settings/sync.ts");
+const normalize = loader.loadModule("@liveagent/ui/lib/settings/normalize.ts");
+const sync = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
 
 test("basic provider field normalizers trim values and remove duplicate models", () => {
@@ -2124,16 +2124,20 @@ test("only one agent prompt template remains enabled after normalization", () =>
 test("mcp and remote settings normalize transport, selection, ports, and tokens", () => {
   const mcp = settings.normalizeMcpSettings({
     servers: [
-      { id: "server-a", enabled: true, transport: "http", url: " https://mcp.example.com ", timeoutMs: "-1" },
-      { id: "server-b", enabled: false, transport: "bad", command: " node ", args: [" server.js ", ""] },
+      { id: "server-a", description: " Search project docs ", docsUrl: " https://github.com/acme/docs-mcp ", enabled: true, transport: "http", url: " https://mcp.example.com ", timeoutMs: "-1" },
+      { id: "server-b", description: "   ", docsUrl: "   ", enabled: false, transport: "bad", command: " node ", args: [" server.js ", ""] },
     ],
     selected: ["server-b", "missing", "server-b", "server-a"],
   });
 
   assert.deepEqual(mcp.selected, ["server-b", "server-a"]);
   assert.equal(mcp.servers[0].transport, "http");
+  assert.equal(mcp.servers[0].description, "Search project docs");
+  assert.equal(mcp.servers[0].docsUrl, "https://github.com/acme/docs-mcp");
   assert.equal(mcp.servers[0].timeoutMs, 60_000);
   assert.equal(mcp.servers[1].transport, "stdio");
+  assert.equal(mcp.servers[1].description, undefined);
+  assert.equal(mcp.servers[1].docsUrl, undefined);
   assert.deepEqual(mcp.servers[1].args, ["server.js"]);
 
   const remote = settings.normalizeRemoteSettings({
@@ -2625,4 +2629,384 @@ test("clearing a configured usage query secret emits an explicit empty update", 
   });
   assert.equal(applied.customProviders[0].usageQuery.apiKey, "");
   assert.equal(applied.customProviders[0].usageQuery.apiKeyConfigured, false);
+});
+
+const FAILOVER_SYNC_PROVIDERS = [
+  {
+    id: "provider-primary",
+    name: "Primary",
+    type: "claude_code",
+    baseUrl: "https://primary.example.com",
+    apiKey: "key-primary",
+    models: [{ id: "claude-fable-5", contextWindow: 200000, maxOutputToken: 8192 }],
+    activeModels: ["claude-fable-5"],
+  },
+  {
+    id: "provider-backup",
+    name: "Backup",
+    type: "claude_code",
+    baseUrl: "https://backup.example.com",
+    apiKey: "key-backup",
+    models: [{ id: "claude-fable-5", contextWindow: 200000, maxOutputToken: 8192 }],
+    activeModels: ["claude-fable-5"],
+  },
+];
+
+test("model failover changes appear in the gateway settings update payload", () => {
+  const previous = settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS });
+  const next = settings.updateModelFailover(previous, "claude_code", {
+    enabled: true,
+    queue: ["provider-backup"],
+  });
+
+  const update = sync.buildGatewaySettingsSyncUpdatePayload(previous, next);
+  assert.deepEqual(update.modelFailover?.claude_code.queue, ["provider-backup"]);
+  assert.equal(update.modelFailover?.claude_code.enabled, true);
+
+  // Untouched settings must not produce a modelFailover entry.
+  const noChange = sync.buildGatewaySettingsSyncUpdatePayload(next, next);
+  assert.equal(Object.hasOwn(noChange, "modelFailover"), false);
+});
+
+test("model failover round-trips through gateway settings sync", () => {
+  const source = settings.updateModelFailover(
+    settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS }),
+    "claude_code",
+    {
+      enabled: true,
+      queue: ["provider-backup"],
+      maxSwitches: 2,
+      failureThreshold: 5,
+      cooldownSeconds: 120,
+    },
+  );
+
+  const payload = sync.buildGatewaySettingsSyncPayload(source);
+  const received = sync.applyGatewaySettingsSyncPayload(
+    settings.normalizeSettings({ customProviders: FAILOVER_SYNC_PROVIDERS }),
+    payload,
+  );
+
+  assert.deepEqual(received.modelFailover, source.modelFailover);
+
+  // A payload without the field keeps the receiver's current config.
+  const partial = sync.applyGatewaySettingsSyncPayload(received, { theme: "dark" });
+  assert.deepEqual(partial.modelFailover, received.modelFailover);
+});
+
+test("workspace resources inherit Skill Hub and MCP Hub defaults when no settings exist", () => {
+  const appSettings = settings.normalizeSettings({
+    system: { workdir: "/repo" },
+    skills: { enabled: true, selected: ["review", "docs"] },
+    mcp: {
+      servers: [
+        { id: "github", enabled: true },
+        { id: "disabled", enabled: false },
+      ],
+    },
+  });
+
+  const effective = settings.resolveWorkspaceResources(appSettings, "/repo");
+  assert.equal(effective.mode, "inherit");
+  assert.equal(effective.skillsEnabled, true);
+  assert.ok(effective.skillNames.includes("review"));
+  assert.ok(effective.skillNames.includes("docs"));
+  assert.deepEqual(effective.mcpServers.map((server) => server.id), ["github"]);
+});
+
+test("workspace custom and off settings apply to Skills and MCP together", () => {
+  const base = settings.normalizeSettings({
+    skills: { enabled: true, selected: ["global-skill"] },
+    mcp: {
+      servers: [
+        { id: "github", enabled: true },
+        { id: "filesystem", enabled: true },
+        { id: "disabled", enabled: false },
+      ],
+    },
+    system: {
+      workspaceResourceSettings: {
+        "/repo/custom/": {
+          mode: "custom",
+          skillNames: ["workspace-skill", "workspace-skill", ""],
+          mcpServerIds: ["filesystem", "disabled", "missing"],
+          stateVersion: 2,
+          writerId: "client-a",
+          updatedAt: 10,
+        },
+        "/repo/off": {
+          mode: "off",
+          skillNames: ["ignored"],
+          mcpServerIds: ["github"],
+          stateVersion: 1,
+          writerId: "client-a",
+          updatedAt: 11,
+        },
+      },
+    },
+  });
+
+  const custom = settings.resolveWorkspaceResources(base, "/repo/custom");
+  assert.equal(custom.mode, "custom");
+  assert.ok(custom.skillNames.includes("workspace-skill"));
+  assert.ok(!custom.skillNames.includes("global-skill"));
+  assert.deepEqual(custom.mcpServers.map((server) => server.id), ["filesystem"]);
+
+  const off = settings.resolveWorkspaceResources(base, "/repo/off");
+  assert.deepEqual(off, {
+    mode: "off",
+    skillsEnabled: false,
+    skillNames: [],
+    mcpServerIds: [],
+    mcpServers: [],
+  });
+});
+
+test("workspace MCP views keep manager settings live while filtering custom exposure", () => {
+  const appSettings = settings.normalizeSettings({
+    mcp: {
+      servers: [
+        { id: "enabled", enabled: true },
+        { id: "disabled", enabled: false },
+        { id: "other", enabled: true },
+      ],
+    },
+    system: {
+      workspaceResourceSettings: {
+        "/repo/custom": {
+          mode: "custom",
+          mcpServerIds: ["enabled", "disabled"],
+          stateVersion: 1,
+        },
+      },
+    },
+  });
+  const inherited = settings.resolveWorkspaceResources(appSettings, "/repo/inherit");
+  assert.strictEqual(settings.filterMcpSettingsForWorkspace(appSettings.mcp, inherited), appSettings.mcp);
+  assert.deepEqual(inherited.mcpServerIds, ["enabled", "disabled", "other"]);
+
+  const custom = settings.resolveWorkspaceResources(appSettings, "/repo/custom");
+  assert.deepEqual(custom.mcpServers.map((server) => server.id), ["enabled"]);
+  assert.deepEqual(custom.mcpServerIds, ["enabled", "disabled"]);
+  assert.deepEqual(
+    settings.filterMcpSettingsForWorkspace(appSettings.mcp, custom).servers.map((server) => ({
+      id: server.id,
+      enabled: server.enabled,
+    })),
+    [
+      { id: "enabled", enabled: true },
+      { id: "disabled", enabled: false },
+    ],
+  );
+});
+
+test("workspace resource sync merges per path and keeps the deterministic newer writer", () => {
+  const current = settings.normalizeSettings({
+    system: {
+      workspaceResourceSettings: {
+        "/repo/a": {
+          mode: "custom",
+          skillNames: ["a-old"],
+          mcpServerIds: [],
+          stateVersion: 2,
+          writerId: "client-a",
+          updatedAt: 10,
+        },
+      },
+    },
+  });
+  const incoming = settings.normalizeSettings({
+    system: {
+      workspaceResourceSettings: {
+        "/repo/a": {
+          mode: "inherit",
+          stateVersion: 2,
+          writerId: "client-z",
+          updatedAt: Date.now(),
+        },
+        "/repo/b": {
+          mode: "custom",
+          skillNames: ["b"],
+          mcpServerIds: ["mcp-b"],
+          stateVersion: 1,
+          writerId: "client-b",
+          updatedAt: 12,
+        },
+      },
+    },
+  });
+
+  const applied = sync.applyGatewaySettingsSyncPayload(current, { system: incoming.system });
+  assert.equal(applied.system.workspaceResourceSettings["/repo/a"].mode, "inherit");
+  assert.deepEqual(applied.system.workspaceResourceSettings["/repo/b"].skillNames, ["b"]);
+});
+
+test("resetting a removed workspace leaves an inherit tombstone for the same path", () => {
+  const base = settings.normalizeSettings({
+    skills: { enabled: true, selected: ["global-skill"] },
+    mcp: { servers: [{ id: "global-mcp", enabled: true }] },
+    system: {
+      workspaceResourceSettings: {
+        "/repo/removed": {
+          mode: "custom",
+          skillNames: ["workspace-skill"],
+          mcpServerIds: ["workspace-mcp"],
+          stateVersion: 4,
+          writerId: "old-writer",
+          updatedAt: 10,
+        },
+      },
+    },
+  });
+
+  const reset = settings.resetWorkspaceResourceSettings(base, "/repo/removed/");
+  const tombstone = reset.system.workspaceResourceSettings["/repo/removed"];
+  assert.equal(tombstone.mode, "inherit");
+  assert.equal(tombstone.stateVersion, 5);
+  assert.deepEqual(tombstone.skillNames, []);
+  assert.deepEqual(tombstone.mcpServerIds, []);
+  const readded = settings.resolveWorkspaceResources(reset, "/repo/removed");
+  assert.ok(readded.skillNames.includes("global-skill"));
+  assert.deepEqual(readded.mcpServers.map((server) => server.id), ["global-mcp"]);
+});
+
+test("deleted Skill and MCP references cannot reactivate after same-name reinstall", () => {
+  const base = settings.normalizeSettings({
+    skills: { enabled: true, selected: [] },
+    mcp: {
+      servers: [
+        { id: "deleted-mcp", enabled: true },
+        { id: "kept-mcp", enabled: true },
+      ],
+    },
+    system: {
+      workspaceResourceSettings: {
+        "/repo/custom": {
+          mode: "custom",
+          skillNames: ["deleted-skill", "kept-skill"],
+          mcpServerIds: ["deleted-mcp", "kept-mcp"],
+          stateVersion: 7,
+          writerId: "old-writer",
+          updatedAt: 10,
+        },
+      },
+    },
+  });
+
+  const cleaned = settings.removeWorkspaceResourceReferences(base, {
+    skillNames: ["deleted-skill"],
+    mcpServerIds: ["deleted-mcp"],
+  });
+  const entry = cleaned.system.workspaceResourceSettings["/repo/custom"];
+  assert.deepEqual(entry.skillNames, ["kept-skill"]);
+  assert.deepEqual(entry.mcpServerIds, ["kept-mcp"]);
+  assert.equal(entry.stateVersion, 8);
+  const afterReinstall = settings.resolveWorkspaceResources(cleaned, "/repo/custom");
+  assert.ok(!afterReinstall.skillNames.includes("deleted-skill"));
+  assert.ok(afterReinstall.skillNames.includes("kept-skill"));
+  assert.deepEqual(afterReinstall.mcpServers.map((server) => server.id), ["kept-mcp"]);
+});
+
+test("workspace resource normalization preserves active entries up to its bounded limit", () => {
+  const workspaceResourceSettings = Object.fromEntries(
+    Array.from({ length: 150 }, (_, index) => [
+      `/repo/${index}`,
+      {
+        mode: "custom",
+        skillNames: [`skill-${index}`],
+        mcpServerIds: [],
+        stateVersion: 1,
+        writerId: "test",
+        updatedAt: index + 1,
+      },
+    ]),
+  );
+  const normalized = settings.normalizeWorkspaceResourceSettings(workspaceResourceSettings);
+  assert.equal(Object.keys(normalized).length, 150);
+  assert.deepEqual(normalized["/repo/149"].skillNames, ["skill-149"]);
+});
+
+test("workspace resource normalization expires only old inherit tombstones", () => {
+  const now = Date.now();
+  const old = now - 91 * 24 * 60 * 60 * 1000;
+  const normalized = settings.normalizeWorkspaceResourceSettings({
+    "/repo/old-tombstone": {
+      mode: "inherit",
+      stateVersion: 2,
+      writerId: "test",
+      updatedAt: old,
+    },
+    "/repo/custom": {
+      mode: "custom",
+      skillNames: ["kept"],
+      stateVersion: 2,
+      writerId: "test",
+      updatedAt: old,
+    },
+    "/repo/off": {
+      mode: "off",
+      stateVersion: 2,
+      writerId: "test",
+      updatedAt: old,
+    },
+    "/repo/recent-tombstone": {
+      mode: "inherit",
+      stateVersion: 2,
+      writerId: "test",
+      updatedAt: now,
+    },
+  });
+  assert.equal(normalized["/repo/old-tombstone"], undefined);
+  assert.equal(normalized["/repo/custom"].mode, "custom");
+  assert.equal(normalized["/repo/off"].mode, "off");
+  assert.equal(normalized["/repo/recent-tombstone"].mode, "inherit");
+});
+
+test("workspace resource overflow prefers active entries and newest tombstones deterministically", () => {
+  const now = Date.now();
+  const workspaceResourceSettings = {};
+  for (let index = 0; index < 250; index += 1) {
+    workspaceResourceSettings[`/repo/tombstone-${String(index).padStart(3, "0")}`] = {
+      mode: "inherit",
+      stateVersion: 1,
+      writerId: "test",
+      updatedAt: now - index,
+    };
+  }
+  for (let index = 0; index < 20; index += 1) {
+    workspaceResourceSettings[`/repo/custom-${String(index).padStart(2, "0")}`] = {
+      mode: index % 2 === 0 ? "custom" : "off",
+      skillNames: [`skill-${index}`],
+      stateVersion: 1,
+      writerId: "test",
+      updatedAt: now - 1_000_000 - index,
+    };
+  }
+  const normalized = settings.normalizeWorkspaceResourceSettings(workspaceResourceSettings);
+  assert.equal(Object.keys(normalized).length, 256);
+  for (let index = 0; index < 20; index += 1) {
+    assert.ok(normalized[`/repo/custom-${String(index).padStart(2, "0")}`]);
+  }
+  assert.ok(normalized["/repo/tombstone-235"]);
+  assert.equal(normalized["/repo/tombstone-236"], undefined);
+});
+
+test("workspace resource overflow uses locale-independent Unicode code-point ordering", () => {
+  const entries = {};
+  for (let index = 0; index < 253; index += 1) {
+    entries[`/repo/${String(index).padStart(3, "0")}`] = {
+      mode: "off",
+      stateVersion: 1,
+      updatedAt: 1,
+    };
+  }
+  for (const suffix of ["A", "_", "a", "ä"]) {
+    entries[`/repo/${suffix}`] = { mode: "off", stateVersion: 1, updatedAt: 1 };
+  }
+  const normalized = settings.normalizeWorkspaceResourceSettings(entries);
+  assert.equal(Object.keys(normalized).length, 256);
+  assert.ok(normalized["/repo/A"]);
+  assert.ok(normalized["/repo/_"]);
+  assert.ok(normalized["/repo/a"]);
+  assert.equal(normalized["/repo/ä"], undefined);
 });

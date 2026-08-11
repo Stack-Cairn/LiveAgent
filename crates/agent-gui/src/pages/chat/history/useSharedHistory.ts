@@ -1,3 +1,5 @@
+import { sortSidebarConversations } from "@liveagent/ui/lib/sidebar/reconcile";
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type Dispatch,
@@ -16,8 +18,6 @@ import {
   setChatHistoryShare,
 } from "../../../lib/chat/history/chatHistory";
 import type { AppSettings } from "../../../lib/settings";
-import { sortSidebarConversations } from "../../../lib/sidebar/reconcile";
-import type { SidebarStore } from "../../../lib/sidebar/store";
 import { asErrorMessage } from "../chatPageUtils";
 import type { GatewayRuntimeStatus } from "../gateway/gatewayRuntimeStatusModel";
 

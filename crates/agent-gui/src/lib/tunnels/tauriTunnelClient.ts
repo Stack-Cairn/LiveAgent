@@ -1,11 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import type {
   LocalTunnelClient,
   TunnelCreateInput,
   TunnelStateSnapshot,
   TunnelUpdateInput,
-} from "./constants";
+} from "@liveagent/ui/lib/tunnels/constants";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export function createTauriTunnelClient(): LocalTunnelClient {
   const listeners = new Set<(snapshot: TunnelStateSnapshot) => void>();

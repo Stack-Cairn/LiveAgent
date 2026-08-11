@@ -212,6 +212,8 @@ export function createTsModuleLoader(options = {}) {
   const rootDir = options.rootDir
     ? path.resolve(options.rootDir)
     : path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
+  const hostSourceDir = path.join(rootDir, "src");
+  const sharedSourceDir = fileURLToPath(new URL("../../../agent-ui/src", import.meta.url));
   const requireFromRoot = createRequire(path.join(rootDir, "package.json"));
   const cache = new Map();
   const defaultMocks = createDefaultMocks();
@@ -235,6 +237,22 @@ export function createTsModuleLoader(options = {}) {
   }
 
   function resolveLocal(specifier, parentDir = rootDir) {
+    if (specifier.startsWith("@liveagent/ui/")) {
+      return resolveAsFileOrDirectory(
+        path.join(sharedSourceDir, specifier.slice("@liveagent/ui/".length)),
+      );
+    }
+    if (specifier.startsWith("@liveagent/app/")) {
+      return resolveAsFileOrDirectory(
+        path.join(hostSourceDir, specifier.slice("@liveagent/app/".length)),
+      );
+    }
+    if (specifier.startsWith("@liveagent/adapters/")) {
+      return resolveAsFileOrDirectory(
+        path.join(hostSourceDir, "agent-ui-adapters", specifier.slice("@liveagent/adapters/".length)),
+      );
+    }
+
     const candidate = path.isAbsolute(specifier)
       ? specifier
       : path.resolve(parentDir, specifier);
@@ -244,7 +262,13 @@ export function createTsModuleLoader(options = {}) {
   function resolveMock(specifier, parentDir) {
     if (specifier.startsWith("~icons/")) return createIconModuleMock(specifier);
     if (mocks.has(specifier)) return mocks.get(specifier);
-    if (specifier.startsWith(".") || path.isAbsolute(specifier)) {
+    if (
+      specifier.startsWith(".") ||
+      path.isAbsolute(specifier) ||
+      specifier.startsWith("@liveagent/ui/") ||
+      specifier.startsWith("@liveagent/app/") ||
+      specifier.startsWith("@liveagent/adapters/")
+    ) {
       const resolved = resolveLocal(specifier, parentDir);
       if (mocks.has(resolved)) return mocks.get(resolved);
     }
@@ -254,6 +278,7 @@ export function createTsModuleLoader(options = {}) {
   function loadModule(specifier, parentDir = rootDir) {
     const mock = resolveMock(specifier, parentDir);
     if (mock !== undefined) return mock;
+    if (specifier.endsWith(".css")) return {};
 
     if (specifier === "@earendil-works/pi-agent-core") {
       const packageJson = requireFromRoot.resolve("@earendil-works/pi-agent-core/package.json");
@@ -263,7 +288,10 @@ export function createTsModuleLoader(options = {}) {
     const isRootRelative =
       specifier.startsWith("src/") ||
       specifier.startsWith("test/") ||
-      specifier.startsWith("src-tauri/");
+      specifier.startsWith("src-tauri/") ||
+      specifier.startsWith("@liveagent/ui/") ||
+      specifier.startsWith("@liveagent/app/") ||
+      specifier.startsWith("@liveagent/adapters/");
 
     if (!isRootRelative && !specifier.startsWith(".") && !path.isAbsolute(specifier)) {
       return requireFromRoot(specifier);
@@ -311,7 +339,11 @@ export function createTsModuleLoader(options = {}) {
     const dirname = path.dirname(filePath);
     const localRequire = (nextSpecifier) => loadModule(nextSpecifier, dirname);
     localRequire.resolve = (nextSpecifier) =>
-      nextSpecifier.startsWith(".") || path.isAbsolute(nextSpecifier)
+      nextSpecifier.startsWith(".") ||
+      path.isAbsolute(nextSpecifier) ||
+      nextSpecifier.startsWith("@liveagent/ui/") ||
+      nextSpecifier.startsWith("@liveagent/app/") ||
+      nextSpecifier.startsWith("@liveagent/adapters/")
         ? resolveLocal(nextSpecifier, dirname)
         : requireFromRoot.resolve(nextSpecifier);
 

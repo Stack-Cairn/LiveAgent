@@ -829,7 +829,7 @@ mod tests {
         headers.insert(
             HeaderName::from_static(UPSTREAM_HEADERS_HEADER),
             encoded_overrides(serde_json::json!({
-                "User-Agent": "codex_cli_rs/0.72.0",
+                "User-Agent": "custom-agent/1.0",
                 "Content-Type": "application/custom+json",
                 "X-Request-Id": "trace-1",
             })),
@@ -839,7 +839,7 @@ mod tests {
 
         assert_eq!(
             header_str(&upstream_headers, "user-agent"),
-            Some("codex_cli_rs/0.72.0")
+            Some("custom-agent/1.0")
         );
         assert_eq!(
             header_str(&upstream_headers, CONTENT_TYPE),

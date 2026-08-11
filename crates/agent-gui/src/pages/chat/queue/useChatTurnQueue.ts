@@ -1,10 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   MentionComposerDraft,
   MentionComposerHandle,
-} from "../../../components/chat/MentionComposer";
+} from "@liveagent/ui/components/chat/MentionComposer";
+import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import {
@@ -16,7 +17,6 @@ import {
 } from "../../../lib/settings";
 import { answerAskUserQuestion } from "../../../lib/tools/askUserQuestionTools";
 import { answerToolApproval } from "../../../lib/tools/toolApproval";
-import type { ChatQueueTurnPreview } from "../components/ChatComposerBar";
 import { createTextComposerDraft } from "../composer/composerDraftText";
 import type { ActiveGatewayBridgeRequest, SendChatAction } from "../gateway/gatewayBridgeTypes";
 import {

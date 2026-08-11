@@ -3,8 +3,8 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const floorModel = loader.loadModule("src/lib/chat-floor-nav/floorModel.ts");
-const floorBookmarks = loader.loadModule("src/lib/chat-floor-nav/floorBookmarks.ts");
+const floorModel = loader.loadModule("@liveagent/ui/lib/chat-floor-nav/floorModel.ts");
+const floorBookmarks = loader.loadModule("@liveagent/ui/lib/chat-floor-nav/floorBookmarks.ts");
 
 function userItem(key, text, messageId) {
   return {

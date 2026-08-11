@@ -22,4 +22,4 @@ export {
   resolveCodeFontFamily,
   resolveFontFamily,
   toFontFamilySelectValue,
-} from "../shared/fontFamily";
+} from "@liveagent/ui/lib/shared/fontFamily";

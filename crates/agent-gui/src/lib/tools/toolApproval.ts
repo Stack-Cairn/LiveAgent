@@ -7,7 +7,10 @@
 // 远端(WebUI)应答经 gateway chat_queue.tool_approval 转发到桌面后走同一入口
 // answerToolApproval(第 3 步接线)。
 
-import { ASK_USER_QUESTION_TIMEOUT_MS, scheduleAtDeadline } from "../chat/askUserQuestion";
+import {
+  ASK_USER_QUESTION_TIMEOUT_MS,
+  scheduleAtDeadline,
+} from "@liveagent/ui/lib/chat/askUserQuestion";
 
 /** 审批窗口毫秒数:复用 AskUserQuestion 的时长常量,行为口径一致。 */
 export const TOOL_APPROVAL_TIMEOUT_MS = ASK_USER_QUESTION_TIMEOUT_MS;

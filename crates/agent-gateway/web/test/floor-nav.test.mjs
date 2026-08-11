@@ -8,8 +8,8 @@ const loader = createWebModuleLoader({
   rootDir: fileURLToPath(new URL("../", import.meta.url)),
 });
 
-const floorModel = loader.loadModule("src/lib/chat-floor-nav/floorModel.ts");
-const floorBookmarks = loader.loadModule("src/lib/chat-floor-nav/floorBookmarks.ts");
+const floorModel = loader.loadModule("@liveagent/ui/lib/chat-floor-nav/floorModel.ts");
+const floorBookmarks = loader.loadModule("@liveagent/ui/lib/chat-floor-nav/floorBookmarks.ts");
 
 // WebUI 的楼层来源是 TranscriptRow（kind/key/text/messageRef 结构子集与桌面端
 // RenderTimelineItem 兼容，floorModel 因此可字节镜像）。

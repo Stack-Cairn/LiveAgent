@@ -208,7 +208,7 @@ test("uploaded file helpers preserve display text and strip model-hidden metadat
   assert.ok(message);
   assert.equal(message.role, "user");
   assert.equal(message.timestamp, 1234);
-  assert.equal(uploadedFiles.getUserMessageDisplayText(message), "Please review");
+  assert.equal(uploadedFiles.getUserMessageDisplayText(message), " Please review ");
   assert.deepEqual(uploadedFiles.getUserMessageAttachments(message), [fileA]);
   assert.match(message.content, /The user attached the files below/);
   assert.match(message.content, /Use Read with these exact paths/);

@@ -3,25 +3,35 @@
 // ChatPage), the conversation-rename UI state, the delete flow, and the
 // error-code → i18n mapping. NOT mirrored — the web end has its own container.
 
-import { useCallback, useMemo, useState } from "react";
-import { ChatHistorySidebar } from "../../../components/chat/ChatHistorySidebar";
-import { useLocale } from "../../../i18n";
-import type { AppUpdateController } from "../../../lib/appUpdates";
-import { normalizeConversationTitle } from "../../../lib/chat/page/chatPageHelpers";
-import type { WorkspaceProject } from "../../../lib/settings";
-import type { SidebarBatchDeleteOptions } from "../../../lib/sidebar/batchDelete";
-import { deleteSidebarConversations } from "../../../lib/sidebar/batchDelete";
+import { ChatHistorySidebar } from "@liveagent/ui/components/chat/ChatHistorySidebar";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import type { SidebarBatchDeleteOptions } from "@liveagent/ui/lib/sidebar/batchDelete";
+import { deleteSidebarConversations } from "@liveagent/ui/lib/sidebar/batchDelete";
 import {
   selectConversations,
   selectListState,
   selectProjectActivityInputs,
   selectRunningConversationIds,
   sidebarShallowEqual,
-} from "../../../lib/sidebar/selectors";
-import type { SidebarSnapshot, SidebarStore } from "../../../lib/sidebar/store";
-import type { SidebarConversation } from "../../../lib/sidebar/types";
-import { useSidebarSelector } from "../../../lib/sidebar/useSidebarSelector";
-import { sortWorkspaceProjectsByActivity } from "../../../lib/workspaceProjects";
+} from "@liveagent/ui/lib/sidebar/selectors";
+import type { SidebarSnapshot, SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
+import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
+import { sortWorkspaceProjectsByActivity } from "@liveagent/ui/lib/workspaceProjects";
+import { useCallback, useMemo, useState } from "react";
+import {
+  DesktopSidebarBrand,
+  DesktopSidebarTitleBar,
+  DesktopSidebarUpdate,
+  hideDesktopSidebarCloseButton,
+} from "../../../agent-ui-adapters/sidebarChrome";
+import type { AppUpdateController } from "../../../lib/appUpdates";
+import { normalizeConversationTitle } from "../../../lib/chat/page/chatPageHelpers";
+import type { WorkspaceProject } from "../../../lib/settings";
+import {
+  moveConversationsToWorkspace,
+  moveConversationToWorkspace,
+} from "./conversationWorkspaceMove";
 
 type ChatSidebarContainerProps = {
   store: SidebarStore;
@@ -46,6 +56,7 @@ type ChatSidebarContainerProps = {
   onNewConversationForProject: (project: WorkspaceProject) => void;
   onBrowseProjectInFileTree: (project: WorkspaceProject) => void;
   onBrowseProjectInSystemFileManager: (project: WorkspaceProject) => void;
+  onConfigureProjectResources: (project: WorkspaceProject) => void;
   onStartRenamingProject: (project: WorkspaceProject) => void;
   onProjectRenameDraftChange: (value: string) => void;
   onCommitProjectRename: () => void;
@@ -60,6 +71,7 @@ type ChatSidebarContainerProps = {
   // Invoked after the store confirmed a deletion; ChatPage cleans artifacts
   // and replaces the current conversation when needed.
   onConversationDeleted: (id: string) => void;
+  onConversationCwdChanged: (id: string, cwd: string) => void;
   canShareConversations: boolean;
   sharedConversationCount: number;
   onShareConversation: (item: SidebarConversation) => void;
@@ -80,7 +92,7 @@ function selectMutationErrors(snapshot: SidebarSnapshot) {
 }
 
 export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
-  const { store, projects, onConversationDeleted } = props;
+  const { store, projects, onConversationDeleted, onConversationCwdChanged } = props;
   const { t } = useLocale();
 
   const items = useSidebarSelector(store, selectConversations);
@@ -144,6 +156,20 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
     [store],
   );
 
+  const handleMoveToWorkspace = useCallback(
+    (id: string, cwd: string) => {
+      void moveConversationToWorkspace(store, id, cwd, onConversationCwdChanged);
+    },
+    [onConversationCwdChanged, store],
+  );
+
+  const handleMoveConversationsToWorkspace = useCallback(
+    async (ids: readonly string[], cwd: string) => {
+      return moveConversationsToWorkspace(store, ids, cwd, onConversationCwdChanged);
+    },
+    [onConversationCwdChanged, store],
+  );
+
   const handleDeleteConversation = useCallback(
     (id: string) => {
       store.clearMutationError(id);
@@ -182,15 +208,14 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
   // list error, so it takes the banner slot when both exist.
   const firstMutationError = mutationErrors.entries().next();
   let errorMessage: string | null = null;
-  let errorDetail: string | null = null;
-  let handleDismissError: (() => void) | undefined;
+  let actionErrorMessage: string | null = null;
+  let handleDismissActionError: (() => void) | undefined;
   if (!firstMutationError.done) {
     const [errorConversationId, errorCode] = firstMutationError.value;
-    errorMessage = t(`chat.history.${errorCode}`);
-    handleDismissError = () => store.clearMutationError(errorConversationId);
+    actionErrorMessage = t(`chat.history.${errorCode}`);
+    handleDismissActionError = () => store.clearMutationError(errorConversationId);
   } else if (listState.error) {
-    errorMessage = t(`chat.history.${listState.error}`);
-    errorDetail = listState.errorDetail;
+    errorMessage = listState.errorDetail?.trim() || t(`chat.history.${listState.error}`);
   }
 
   return (
@@ -205,8 +230,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       hasMore={listState.hasMore}
       isLoadingMore={listState.isLoadingMore}
       errorMessage={errorMessage}
-      errorDetail={errorDetail}
-      onDismissError={handleDismissError}
+      actionErrorMessage={actionErrorMessage}
+      onDismissActionError={handleDismissActionError}
       renamingId={renamingId}
       renameDraft={renameDraft}
       isOpen={props.isOpen}
@@ -228,6 +253,7 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       onNewConversationForProject={props.onNewConversationForProject}
       onBrowseProjectInFileTree={props.onBrowseProjectInFileTree}
       onBrowseProjectInSystemFileManager={props.onBrowseProjectInSystemFileManager}
+      onConfigureProjectResources={props.onConfigureProjectResources}
       onStartRenamingProject={props.onStartRenamingProject}
       onProjectRenameDraftChange={props.onProjectRenameDraftChange}
       onCommitProjectRename={props.onCommitProjectRename}
@@ -244,6 +270,8 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       onCommitRename={handleCommitRename}
       onCancelRename={handleCancelRename}
       onSetPinned={handleSetPinned}
+      onMoveToWorkspace={handleMoveToWorkspace}
+      onMoveConversationsToWorkspace={handleMoveConversationsToWorkspace}
       canShareConversations={props.canShareConversations}
       sharedConversationCount={props.sharedConversationCount}
       onShareConversation={props.onShareConversation}
@@ -253,9 +281,12 @@ export function ChatSidebarContainer(props: ChatSidebarContainerProps) {
       onLoadMore={handleLoadMore}
       onCloseSidebar={props.onCloseSidebar}
       onOpenSettings={props.onOpenSettings}
-      appUpdate={props.appUpdate}
       onOpenSkillsHub={props.onOpenSkillsHub}
       onOpenMcpHub={props.onOpenMcpHub}
+      headerTop={<DesktopSidebarTitleBar />}
+      brand={<DesktopSidebarBrand />}
+      hideCloseButton={hideDesktopSidebarCloseButton()}
+      footerTrailing={<DesktopSidebarUpdate appUpdate={props.appUpdate} />}
     />
   );
 }

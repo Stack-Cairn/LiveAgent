@@ -1,3 +1,5 @@
+import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { type MutableRefObject, useCallback, useEffect, useMemo } from "react";
 import { setChatHistoryModel } from "../../../lib/chat/history/chatHistory";
 import { buildModelOptions } from "../../../lib/chat/page/chatPageHelpers";
@@ -16,8 +18,6 @@ import {
   setSelectedModel,
   updateChatRuntimeControlsForProvider,
 } from "../../../lib/settings";
-import type { SidebarStore } from "../../../lib/sidebar/store";
-import type { SidebarConversation } from "../../../lib/sidebar/types";
 import { asErrorMessage } from "../chatPageUtils";
 import type { ConversationRuntimeEntry } from "./chatPageRuntime";
 import { resolveActiveModelSelection } from "./modelSelection";

@@ -303,6 +303,17 @@ pub async fn handle_history_pin(
     })
 }
 
+pub async fn handle_history_set_cwd(
+    request: proto::HistorySetCwdRequest,
+) -> Result<proto::HistorySetCwdResponse, String> {
+    let summary =
+        chat_history::chat_history_set_cwd_inner(request.conversation_id, request.cwd).await?;
+
+    Ok(proto::HistorySetCwdResponse {
+        conversation: Some(build_proto_conversation_summary(summary)),
+    })
+}
+
 pub async fn handle_history_share_get(
     request: proto::HistoryShareGetRequest,
 ) -> Result<proto::HistoryShareGetResponse, String> {
@@ -1052,7 +1063,9 @@ fn is_builtin_share_tool_name(name: &str) -> bool {
             | "SkillsManager"
             | "SSHManager"
             | "SshManager"
-            | "TodoWrite"
+            | "TaskCreate"
+            | "TaskUpdate"
+            | "TaskList"
             | "TunnelManager"
             | "Write"
     )
@@ -1751,7 +1764,7 @@ mod tests {
 
     #[test]
     fn shared_chat_history_builtin_policy_covers_the_tool_catalog() {
-        let catalog = include_str!("../../../src/lib/tools/builtinToolCatalog.ts");
+        let catalog = include_str!("../../../../agent-ui/src/lib/tools/builtinToolCatalog.ts");
         let tool_names = catalog.lines().filter_map(|line| {
             line.trim()
                 .strip_prefix("toolName: \"")

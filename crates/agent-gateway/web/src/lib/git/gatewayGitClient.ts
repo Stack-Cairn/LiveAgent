@@ -1,4 +1,3 @@
-import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
 import {
   type GitClient,
   normalizeGitBranchesResponse,
@@ -8,7 +7,8 @@ import {
   normalizeGitOperationResponse,
   normalizeGitRepositoryDiscovery,
   normalizeGitRepositoryState,
-} from "./types";
+} from "@liveagent/ui/lib/git/types";
+import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
 
 export function createGatewayGitClient(api: GatewayWebSocketClientLike): GitClient {
   return {

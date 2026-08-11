@@ -3,8 +3,8 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const thinking = loader.loadModule("src/lib/models/modelThinking.ts");
-const catalog = loader.loadModule("src/lib/models/modelCatalog.ts");
+const thinking = loader.loadModule("@liveagent/ui/lib/models/modelThinking.ts");
+const catalog = loader.loadModule("@liveagent/ui/lib/models/modelCatalog.ts");
 
 const { resolveModelThinking, toThinkingLevelMap, clampThinkingLevelToList } = thinking;
 

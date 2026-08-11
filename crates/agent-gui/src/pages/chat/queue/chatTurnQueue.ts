@@ -1,10 +1,12 @@
-import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
+import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
 import type {
   GatewayChatRuntimeControlsEvent,
   GatewaySelectedModelEvent,
 } from "../gateway/gatewayBridgeTypes";
+
+export { queuedChatTurnHasContent } from "@liveagent/ui/lib/chat/queuedChatTurn";
 
 export type QueuedGatewayChatRequest = {
   requestId: string;
@@ -74,20 +76,13 @@ export function createQueuedChatTurn(input: QueuedChatTurnInput): QueuedChatTurn
   };
 }
 
-export function queuedChatTurnHasContent(
-  draft: MentionComposerDraft | null | undefined,
-  uploadedFiles: readonly PendingUploadedFile[],
-): draft is MentionComposerDraft {
-  return Boolean(draft && (!draft.isEmpty || draft.text.trim() || uploadedFiles.length > 0));
-}
-
 export function buildQueuedChatTurnPreview(draft: MentionComposerDraft) {
   const parts = draft.segments.map((segment) => {
     switch (segment.type) {
       case "largePaste":
         return segment.paste.label;
       case "skillMention":
-        return `$${segment.skill.name}`;
+        return `/${segment.skill.name}`;
       case "commitMention":
         return segment.commit.subject || segment.commit.shortSha || segment.commit.sha;
       case "gitFileMention":

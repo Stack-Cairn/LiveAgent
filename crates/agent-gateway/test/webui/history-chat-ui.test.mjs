@@ -784,17 +784,17 @@ test("GatewayTranscript renders folded and live rows in one virtualized list", (
           };
         },
       },
-      "@/components/Markdown": {
+      "@liveagent/ui/components/Markdown": {
         Markdown(props) {
           return { type: "Markdown", props };
         },
       },
-      "@/components/chat/ImagePreview": {
+      "@liveagent/ui/components/chat/ImagePreview": {
         ImagePreview(props) {
           return { type: "ImagePreview", props };
         },
       },
-      "@/pages/chat/AssistantBubble": {
+      "@liveagent/ui/components/chat/AssistantBubble": {
         AssistantAvatar() {
           return { type: "AssistantAvatar", props: {} };
         },

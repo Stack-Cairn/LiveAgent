@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const customHeaders = loader.loadModule("src/lib/providers/customHeaders.ts");
+const customHeaders = loader.loadModule("@liveagent/ui/lib/providers/customHeaders.ts");
 
 function errorHasCode(code) {
   return (error) => error?.code === code;

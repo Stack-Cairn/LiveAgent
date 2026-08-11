@@ -3,8 +3,11 @@
 // one forced SubmitMemoryPlan tool call. No fenced-block output, no sentinel
 // status strings — status text is rendered by the caller through i18n.
 
-import type { MemoryConfidence, MemoryReviewerMode } from "../schema";
-import { DEFAULT_MEMORY_REVIEWER_MODE, EXTRACTION_PLAN_ACTIONS } from "../schema";
+import type { MemoryConfidence, MemoryReviewerMode } from "@liveagent/ui/lib/memory/schema";
+import {
+  DEFAULT_MEMORY_REVIEWER_MODE,
+  EXTRACTION_PLAN_ACTIONS,
+} from "@liveagent/ui/lib/memory/schema";
 import {
   MEMORY_CONFIDENCE_CONTRACT_LINE,
   MEMORY_CONFIDENCE_RUBRIC,

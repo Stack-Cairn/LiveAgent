@@ -1,3 +1,7 @@
+import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { mentionChipClassName } from "@liveagent/ui/components/chat/mentionChipStyles";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   type FocusEvent,
@@ -11,10 +15,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { getFileTypeIcon } from "../../../components/chat/fileTypeIcons";
-import { mentionChipClassName } from "../../../components/chat/mentionChipStyles";
 import { SkillIcon } from "../../../components/icons";
-import { useLocale } from "../../../i18n";
 
 import {
   type CodeMentionReference,
@@ -140,10 +141,17 @@ function normalizeReferencePath(value: string) {
   return normalizeMentionPath(value);
 }
 
-function extractGitHubCommitSha(value: string) {
+function isGitHubHttpUrl(url: URL) {
+  return (
+    (url.protocol === "https:" || url.protocol === "http:") &&
+    ["github.com", "www.github.com"].includes(url.hostname.toLowerCase())
+  );
+}
+
+export function extractGitHubCommitSha(value: string) {
   try {
     const url = new URL(value);
-    if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) return "";
+    if (!isGitHubHttpUrl(url)) return "";
     const parts = url.pathname.split("/").filter(Boolean);
     const commitIndex = parts.findIndex((part) => part.toLowerCase() === "commit");
     const sha = commitIndex >= 0 ? (parts[commitIndex + 1] ?? "") : "";
@@ -177,10 +185,10 @@ export function buildGitHubCommitUrl(remoteUrl: string, sha: string) {
   }
 }
 
-function extractGitHubFileReference(value: string) {
+export function extractGitHubFileReference(value: string) {
   try {
     const url = new URL(value);
-    if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) return null;
+    if (!isGitHubHttpUrl(url)) return null;
     const parts = url.pathname.split("/").filter(Boolean);
     const blobIndex = parts.findIndex((part) => part.toLowerCase() === "blob");
     const ref = blobIndex >= 0 ? (parts[blobIndex + 1] ?? "") : "";
@@ -898,7 +906,11 @@ export const UserMessageContent = memo(function UserMessageContent({
   pastedTextFiles?: PendingUploadedFile[];
   loadCommitDetails?: CommitDetailsLoader;
 }) {
-  const parts = useMemo(() => tokenizeUserMessage(text, pastedTextFiles), [text, pastedTextFiles]);
+  const normalizedText = useMemo(() => normalizeLogicalLineEndings(text), [text]);
+  const parts = useMemo(
+    () => tokenizeUserMessage(normalizedText, pastedTextFiles),
+    [normalizedText, pastedTextFiles],
+  );
   const hasChip = parts.some(
     (part) =>
       part.type === "mention" ||
@@ -908,7 +920,17 @@ export const UserMessageContent = memo(function UserMessageContent({
       part.type === "codeRef" ||
       part.type === "pastedText",
   );
-  if (!hasChip) return <>{text}</>;
+  const trailingNewlineAnchor = normalizedText.endsWith("\n") ? (
+    <span aria-hidden="true" className="chat-user-trailing-newline-anchor" />
+  ) : null;
+  if (!hasChip) {
+    return (
+      <>
+        {normalizedText}
+        {trailingNewlineAnchor}
+      </>
+    );
+  }
 
   return (
     <>
@@ -940,6 +962,7 @@ export const UserMessageContent = memo(function UserMessageContent({
         }
         return <span key={key}>{part.value}</span>;
       })}
+      {trailingNewlineAnchor}
     </>
   );
 });

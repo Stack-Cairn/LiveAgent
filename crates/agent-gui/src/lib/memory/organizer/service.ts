@@ -5,16 +5,6 @@
 // there is no mount-time forced claim: Run Now (poke) is the only entry then.
 
 import type { Context, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { runAssistantWithTools } from "../../chat/runner/agentRunner";
-import { createStreamDebugLogger } from "../../debug/agentDebug";
-import { assistantMessageToText, createProviderRuntimeConfig } from "../../providers/llm";
-import {
-  type AppSettings,
-  computeNextMemoryOrganizerRunAt,
-  DEFAULT_CHAT_RUNTIME_CONTROLS,
-  isAgentDevMode,
-} from "../../settings";
-import { createMemoryTools } from "../../tools/memoryTools";
 import {
   type MemoryBatchResponse,
   type MemoryOrganizeRun,
@@ -25,8 +15,27 @@ import {
   memoryOrganizeRunUpdate,
   memoryQuotaSummary,
   memoryRead,
-} from "../api";
-import { ORGANIZER_MAX_WAKE_DELAY_MS, ORGANIZER_RAW_PROTOCOL_CHARS } from "../config";
+} from "@liveagent/ui/lib/memory/api";
+import {
+  ORGANIZER_MAX_WAKE_DELAY_MS,
+  ORGANIZER_RAW_PROTOCOL_CHARS,
+} from "@liveagent/ui/lib/memory/config";
+import { deriveQuotaLadder } from "@liveagent/ui/lib/memory/organizer/quota";
+import {
+  appliedBatchCount,
+  createEmptyRunReport,
+  type OrganizeRunReportV4,
+} from "@liveagent/ui/lib/memory/organizer/runRecord";
+import { runAssistantWithTools } from "../../chat/runner/agentRunner";
+import { createStreamDebugLogger } from "../../debug/agentDebug";
+import { assistantMessageToText, createProviderRuntimeConfig } from "../../providers/llm";
+import {
+  type AppSettings,
+  computeNextMemoryOrganizerRunAt,
+  DEFAULT_CHAT_RUNTIME_CONTROLS,
+  isAgentDevMode,
+} from "../../settings";
+import { createMemoryTools } from "../../tools/memoryTools";
 import {
   buildClusterPrompt,
   buildGlobalInventory,
@@ -51,8 +60,6 @@ import {
   type ParsedClusterResult,
   scopeMatchesRun,
 } from "./pipeline";
-import { deriveQuotaLadder } from "./quota";
-import { appliedBatchCount, createEmptyRunReport, type OrganizeRunReportV4 } from "./runRecord";
 
 type SetSettings = (updater: (prev: AppSettings) => AppSettings) => void;
 
@@ -242,12 +249,7 @@ async function runOrganizerModelPrompt(params: {
     providerId: provider.type,
     model,
     runtime: {
-      ...createProviderRuntimeConfig(
-        provider,
-        model,
-        DEFAULT_CHAT_RUNTIME_CONTROLS,
-        params.settings.customSettings.providerIdentities,
-      ),
+      ...createProviderRuntimeConfig(provider, model, DEFAULT_CHAT_RUNTIME_CONTROLS),
       // 后台整理恒开提示词缓存：多轮 prompt 共享同一前缀，命中率远高于按供应商
       // 开关逐个判断。
       promptCachingEnabled: true,

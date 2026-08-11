@@ -50,8 +50,8 @@
 <td valign="middle">PackyCode is a reliable, efficient, and professional API relay service provider, offering relay services for Claude Code, Codex, Gemini, Chinese domestic models, and more — a long-established, top-tier relay. <b>The vast majority of the model resources used to develop this software were provided by PackyCode — thank you, Laonong!</b> Register <a href="https://www.packyapi.com/register">here</a> to get started!</td>
 </tr>
 <tr>
-<td width="200" align="center" valign="middle"><a href="https://www.right.codes/register"><img src="docs/images/partners/rightcode.jpg" alt="RightCode" width="160"></a></td>
-<td valign="middle">Right Code provides stable relay services for Claude Code, Codex, Gemini, Chinese domestic models, and more. Invoices are available upon top-up, and enterprise and team users receive dedicated one-on-one support. <b>The remaining model resources used to develop this software were provided by RightCode — thanks to the RC site owner and the support team!</b> Register <a href="https://www.right.codes/register">here</a> to get started!</td>
+<td width="200" align="center" valign="middle"><a href="https://rightapi.ai/register"><img src="docs/images/partners/rightcode.jpg" alt="RightCode" width="160"></a></td>
+<td valign="middle">Right Code provides stable relay services for Claude Code, Codex, Gemini, Chinese domestic models, and more. Invoices are available upon top-up, and enterprise and team users receive dedicated one-on-one support. <b>The remaining model resources used to develop this software were provided by RightCode — thanks to the RC site owner and the support team!</b> Register <a href="https://rightapi.ai/register">here</a> to get started!</td>
 </tr>
 <tr>
 <td width="200" align="center" valign="middle"><a href="https://cubence.com/signup"><img src="docs/images/partners/cubence.png" alt="Cubence" width="160"></a></td>
@@ -279,7 +279,7 @@ Expand the Development Guide below for the full set of Make commands.
 | **Agent GUI** · Styling | Tailwind CSS 4 + Radix UI |
 | **Agent GUI** · Rendering | streamdown + KaTeX + Mermaid + Monaco Editor |
 | **Agent GUI** · Backend | Rust + Tokio + SQLite (rusqlite) + WebSocket (tokio-tungstenite) |
-| **Agent GUI** · LLM | @earendil-works/pi-ai · @openai/codex-sdk · claude-agent-sdk |
+| **Agent GUI** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
 | **Gateway** · Language | Go 1.25 |
 | **Gateway** · Protocols | WebSocket + Protobuf + HTTP |
 | **Gateway** · Web UI | React + Vite + Tailwind CSS (embedded) |
@@ -312,7 +312,12 @@ Expand the Development Guide below for the full set of Make commands.
 
 ```
 LiveAgent/
+├── package.json                  # pnpm workspace commands
+├── pnpm-lock.yaml                # Unified frontend dependency lock
 ├── crates/
+│   ├── agent-ui/                 # Shared GUI/WebUI React source
+│   │   └── src/                  #   Components, domain models, settings shell
+│   │
 │   ├── agent-gui/                # Desktop client
 │   │   ├── src/                  # React frontend
 │   │   │   ├── components/       #   UI components
@@ -382,22 +387,24 @@ Issues and pull requests are welcome! See the [Development Guide](docs/operation
 
 Before submitting a PR, make sure all of the following checks pass (they match the CI gates):
 
-**Desktop client · `crates/agent-gui`**
+Install frontend dependencies once from the repository root with `pnpm install --frozen-lockfile`.
 
-1. Type check & build pass: `pnpm build`
-2. Lint passes: `pnpm lint`
-3. Frontend unit tests pass: `pnpm test:frontend` (also run `pnpm test:release` when touching release scripts)
+**Desktop client**
+
+1. Type check & build pass: `pnpm build:gui`
+2. Lint passes: `pnpm lint:ui && pnpm lint:gui`
+3. Frontend unit tests pass: `pnpm test:gui` (also run `pnpm --filter liveagent test:release` when touching release scripts)
 4. Rust backend check passes: `cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests` (run from the repo root)
 
 **Gateway · `crates/agent-gateway` (if changed)**
 
 1. Go unit tests pass: `go test ./...`
-2. WebUI build / lint / tests pass: `pnpm build && pnpm lint && pnpm test` (run in `web/`)
+2. WebUI build / lint / tests pass: `pnpm build:webui && pnpm lint:webui && pnpm test:webui`
 3. Regenerate and commit artifacts after proto changes: `make proto`
 
-**Cross-frontend consistency**
+**Shared UI boundaries**
 
-- Mirrored files between GUI and WebUI must be byte-identical: `node scripts/check-mirror.mjs`
+- Shared source must not depend directly on either host: `pnpm check:ui-boundaries`
 - Keep the diff clean (no trailing whitespace): `git diff --check`
 
 ---
@@ -407,7 +414,7 @@ Before submitting a PR, make sure all of the following checks pass (they match t
 Thanks to everyone who has contributed to LiveAgent!
 
 <a href="https://github.com/Stack-Cairn/LiveAgent/graphs/contributors">
-  <img src="docs/images/contributors.svg" alt="Contributors" />
+  <img src="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/contributors.svg" alt="Contributors" />
 </a>
 
 ---
@@ -417,9 +424,9 @@ Thanks to everyone who has contributed to LiveAgent!
 <a href="https://www.star-history.com/?repos=Stack-Cairn%2FLiveAgent&type=date&legend=top-left">
 
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="docs/images/star-history-dark.svg" />
-   <source media="(prefers-color-scheme: light)" srcset="docs/images/star-history-light.svg" />
-   <img alt="Star History Chart" src="docs/images/star-history-light.svg" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-light.svg" />
+   <img alt="Star History Chart" src="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-light.svg" />
  </picture>
 </a>
 

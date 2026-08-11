@@ -13,15 +13,13 @@ const loader = createTsModuleLoader({
         return [mountedState, (value) => stateWrites.push(value)];
       },
     },
-    "../../../../lib/shared/utils": {
+    "@liveagent/ui/lib/shared/utils": {
       cn: (...parts) => parts.filter(Boolean).join(" "),
     },
   },
 });
 
-const { LazyCollapse } = loader.loadModule(
-  "src/pages/chat/components/assistant-bubble/LazyCollapse.tsx",
-);
+const { LazyCollapse } = loader.loadModule("@liveagent/ui/components/chat/LazyCollapse");
 
 function renderCollapse({ open, retainWhileClosed, mounted }) {
   mountedState = mounted;

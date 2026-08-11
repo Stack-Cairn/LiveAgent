@@ -10,13 +10,13 @@
  * - 非 Tauri 环境（vite dev / WebUI 无此模块）invoke 失败静默。
  */
 
+import type { CronTask } from "@liveagent/ui/lib/automation/types";
+import type { SidebarConversation } from "@liveagent/ui/lib/sidebar/types";
 import { invoke } from "@tauri-apps/api/core";
 import { type Locale, t } from "../../i18n/config";
-import type { CronTask } from "../automation/types";
 import type { AppSettings, Theme, WorkspaceProject } from "../settings";
 import { workspaceProjectPathKey } from "../settings";
 import { readGlobalShortcutBindings } from "../shortcuts/globalShortcuts";
-import type { SidebarConversation } from "../sidebar/types";
 import type { TrayPrefs } from "./trayPrefs";
 
 const TRAY_RECENT_LIMIT = 8;

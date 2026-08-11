@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const rootDir = path.resolve(fileURLToPath(new URL("../..", import.meta.url)));
-const modulePath = path.join(rootDir, "src/lib/transcript-virtual/liveScrollAdjustPolicy.ts");
-const { createLiveRowScrollAdjustPolicy } = createTsModuleLoader({ rootDir }).loadModule(
-  modulePath,
+const { createLiveRowScrollAdjustPolicy } = createTsModuleLoader().loadModule(
+  "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy",
 );
 
 const makeItem = ({ index = 5, start, size }) => ({
@@ -75,10 +71,11 @@ test("detached reader inside the growing live row is left alone (streaming creep
   assert.equal(policy(item, 60, makeInstance({ scrollOffset: 3000, measuredKeys: [5] })), false);
 });
 
-test("the same live-row growth while following keeps compensating (pin assist)", () => {
+test("following delegates every resize correction to the scroll-follow owner", () => {
   const policy = makePolicy({ liveStartIndex: 5, following: true });
   const item = makeItem({ index: 5, start: 400, size: 5000 });
-  assert.equal(policy(item, 60, makeInstance({ scrollOffset: 3000, measuredKeys: [5] })), true);
+  assert.equal(policy(item, 60, makeInstance({ scrollOffset: 3000, measuredKeys: [5] })), false);
+  assert.equal(policy(item, -80, makeInstance({ scrollOffset: 3000, measuredKeys: [5] })), false);
 });
 
 test("live-row shrink keeps compensating so content under the reader stays put", () => {

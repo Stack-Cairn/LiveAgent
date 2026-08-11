@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { renderToStaticMarkup } from "react-dom/server";
 import * as jsxRuntime from "react/jsx-runtime";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
@@ -9,10 +7,6 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 const loader = createTsModuleLoader();
 const userMessageContent = loader.loadModule("src/lib/chat/messages/userMessageContent.tsx");
 const mentionReferences = loader.loadModule("src/lib/chat/messages/mentionReferences.ts");
-const fileTypeIconsPath = path.resolve(
-  fileURLToPath(new URL("../..", import.meta.url)),
-  "src/components/chat/fileTypeIcons.tsx",
-);
 const reactRenderLoader = createTsModuleLoader({
   mocks: {
     "react/jsx-runtime": jsxRuntime,
@@ -23,7 +17,7 @@ const reactRenderLoader = createTsModuleLoader({
     },
     // ~icons mocks return plain objects that are not renderable React
     // elements; file-type icons must resolve to a real component here.
-    [fileTypeIconsPath]: {
+    "@liveagent/ui/components/chat/fileTypeIcons": {
       getFileTypeIcon() {
         return () => null;
       },
@@ -138,6 +132,19 @@ test("rendered commit mentions do not include native title tooltips", () => {
 
   assert.match(html, /0e1a4fc/);
   assert.doesNotMatch(html, /title=/);
+});
+
+test("trailing newlines render a visual line anchor without changing DOM text", () => {
+  const html = renderToStaticMarkup(
+    jsxRuntime.jsx(renderedUserMessageContent.UserMessageContent, {
+      text: "alpha\n",
+    }),
+  );
+  assert.equal(
+    html,
+    'alpha\n<span aria-hidden="true" class="chat-user-trailing-newline-anchor"></span>',
+  );
+  assert.doesNotMatch(html, /\u200b/i);
 });
 
 test("code mention tokens round trip through transcript tokenization", () => {

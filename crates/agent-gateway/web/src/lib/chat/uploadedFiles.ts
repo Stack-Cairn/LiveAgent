@@ -1,5 +1,6 @@
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type { Message, UserMessage } from "../agentTypes";
-import { createUuid } from "../shared/id";
 
 export type UploadedReadableFileKind =
   | "text"
@@ -125,12 +126,12 @@ export function buildUploadedFilesInstruction(files: PendingUploadedFile[]) {
 }
 
 export function buildUserMessageContentWithUploads(userText: string, files: PendingUploadedFile[]) {
-  const normalizedText = userText.trim();
+  const normalizedText = normalizeLogicalLineEndings(userText);
   if (files.length === 0) return normalizedText;
 
   const instruction = buildUploadedFilesInstruction(files);
   if (!instruction) return normalizedText;
-  if (!normalizedText) {
+  if (!normalizedText.trim()) {
     return `Please inspect the selected files first.\n\n${instruction}`;
   }
   return `${normalizedText}\n\n${instruction}`;
@@ -151,7 +152,7 @@ export function createUserMessageWithUploads(
     timestamp,
   };
   if (files.length > 0) {
-    message[DISPLAY_CONTENT_FIELD] = userText.trim();
+    message[DISPLAY_CONTENT_FIELD] = normalizeLogicalLineEndings(userText);
     message[ATTACHMENTS_FIELD] = clonePendingUploadedFiles(files);
   }
   return message;

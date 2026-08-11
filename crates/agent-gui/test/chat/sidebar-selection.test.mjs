@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const { reconcileSidebarSelection, updateSidebarSelection } = loader.loadModule(
-  "src/lib/sidebar/selection.ts",
+  "@liveagent/ui/lib/sidebar/selection.ts",
 );
-const { deleteSidebarConversations } = loader.loadModule("src/lib/sidebar/batchDelete.ts");
+const { deleteSidebarConversations } = loader.loadModule("@liveagent/ui/lib/sidebar/batchDelete.ts");
 
 const orderedIds = ["one", "two", "three", "four", "five"];
 const selectableIds = new Set(["one", "two", "four", "five"]);
@@ -125,4 +126,26 @@ test("a stop request halts the batch and reports the rest as skipped", async () 
   assert.deepEqual(result.deletedIds, ["one"]);
   assert.deepEqual(result.failedIds, []);
   assert.deepEqual(result.skippedIds, ["two", "three"]);
+});
+
+test("menu rename suppresses the menu's return-focus without changing double-click rename", () => {
+  const source = readFileSync(
+    new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
+    "utf8",
+  );
+
+  // Both menu entries (HistoryRow + ProjectRow) arm the one-shot flag.
+  assert.equal((source.match(/suppressMenuReturnFocusRef\.current = true;/g) ?? []).length, 2);
+  assert.equal((source.match(/onSelect=\{handleStartRenamingFromMenu\}/g) ?? []).length, 2);
+  // Both dropdowns consume it declaratively via Base UI's finalFocus, keeping
+  // the default trigger return-focus for every other menu close.
+  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 2);
+  assert.equal(
+    (source.match(/suppressMenuReturnFocusRef\.current = false;\s*return false;/g) ?? []).length,
+    2,
+  );
+  // Double-click rename keeps the plain path, and the retired blur-swallowing
+  // guard must not come back — blur either skips once (Enter/Escape) or commits.
+  assert.match(source, /onDoubleClick=\{\(event\) => \{[\s\S]*?handleStartRenaming\(\);/);
+  assert.doesNotMatch(source, /ignoreMenuCloseBlurRef/);
 });

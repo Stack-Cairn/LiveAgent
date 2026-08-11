@@ -1,0 +1,11 @@
+/* 用户气泡宽度由外层控制，正文只负责保留换行并安全断开长路径。 */
+.chat-user-bubble {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 浏览器不会为结尾的保留换行分配最后一行，用零宽字符保留该行。 */
+.chat-user-trailing-newline-anchor::before {
+  content: "\200b";
+}

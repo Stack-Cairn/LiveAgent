@@ -6,7 +6,7 @@ import {
   type SubagentCardArguments,
   type SubagentCardDetails,
   type SubagentReportDetails,
-} from "./protocol";
+} from "@liveagent/ui/lib/subagents/protocol";
 import { AGENT_TOOL_NAME, type SubagentIdentity, type SubagentSpec } from "./types";
 
 /**

@@ -75,8 +75,8 @@ const memoryExtractionPath = fileURLToPath(
 const fileToolStatePath = fileURLToPath(
   new URL("../../src/lib/tools/fileToolState.ts", import.meta.url),
 );
-const todoToolsPath = fileURLToPath(
-  new URL("../../src/lib/tools/todoTools.ts", import.meta.url),
+const taskToolsPath = fileURLToPath(
+  new URL("../../src/lib/tools/taskTools.ts", import.meta.url),
 );
 
 async function replayCancelledHistoryScenario(params) {
@@ -142,9 +142,9 @@ const loader = createTsModuleLoader({
         return {};
       },
     },
-    [todoToolsPath]: {
-      getOrCreateTodoToolState() {
-        return {};
+    [taskToolsPath]: {
+      formatTaskListRuntimeContext() {
+        return "";
       },
     },
   },
@@ -295,7 +295,7 @@ test("AskUserQuestion becomes visible only when execution starts while ordinary 
     messages: [],
   });
   const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
-  const askShared = loader.loadModule("src/lib/chat/askUserQuestion.ts");
+  const askShared = loader.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts");
 
   const visibleToolCalls = () =>
     liveRounds.flatMap((round) =>

@@ -33,7 +33,7 @@ const {
   isManualCronRunFinished,
   MANUAL_CRON_RUN_POLL_INTERVAL_MS,
   MANUAL_CRON_RUN_TIMEOUT_MS,
-} = loader.loadModule("src/lib/automation/types.ts");
+} = loader.loadModule("@liveagent/ui/lib/automation/types.ts");
 const { createCompletePromptRunInput, PROMPT_RUN_RECONCILE_INTERVAL_MS } = loader.loadModule(
   "src/components/cron/promptRunProtocol.ts",
 );
@@ -41,30 +41,16 @@ const runnerSource = readFileSync(
   new URL("../../src/components/cron/CronPromptRunner.tsx", import.meta.url),
   "utf8",
 );
-const guiCronViewSource = readFileSync(
-  new URL("../../src/pages/settings/CronTaskViewModal.tsx", import.meta.url),
-  "utf8",
-);
-const webCronViewSource = readFileSync(
-  new URL(
-    "../../../agent-gateway/web/src/pages/settings/CronTaskViewModal.tsx",
-    import.meta.url,
-  ),
+const cronViewSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/CronTaskViewModal.tsx", import.meta.url),
   "utf8",
 );
 const webAutomationBackendSource = readFileSync(
   new URL("../../../agent-gateway/web/src/lib/automation/backend.ts", import.meta.url),
   "utf8",
 );
-const guiCronModalSource = readFileSync(
-  new URL("../../src/pages/settings/CronTaskModal.tsx", import.meta.url),
-  "utf8",
-);
-const webCronModalSource = readFileSync(
-  new URL(
-    "../../../agent-gateway/web/src/pages/settings/CronTaskModal.tsx",
-    import.meta.url,
-  ),
+const cronModalSource = readFileSync(
+  new URL("../../../agent-ui/src/pages/settings/CronTaskModal.tsx", import.meta.url),
   "utf8",
 );
 const cronToolsSource = readFileSync(
@@ -124,16 +110,14 @@ test("Cron manual run uses the task-scoped run-now command", async () => {
   ]);
 });
 
-test("Cron manual run stays wired across GUI and WebUI", () => {
-  for (const source of [guiCronViewSource, webCronViewSource]) {
-    assert.match(source, /const response = await runCronNow\(selectedTaskId\)/);
-    assert.match(source, /disabled=\{isRunningNow\}/);
-    assert.match(source, /if \(runNowLockRef\.current\) return/);
-    assert.match(source, /setManualRunStartedAt\(response\.startedAt\)/);
-    assert.match(source, /listCronRuns\(taskId, 500\)/);
-    assert.match(source, /settings\.cronViewRunNow/);
-    assert.match(source, /<Play className="h-3\.5 w-3\.5" \/>/);
-  }
+test("Cron manual run stays wired in shared UI", () => {
+  assert.match(cronViewSource, /const response = await runCronNow\(selectedTaskId\)/);
+  assert.match(cronViewSource, /disabled=\{isRunningNow\}/);
+  assert.match(cronViewSource, /if \(runNowLockRef\.current\) return/);
+  assert.match(cronViewSource, /setManualRunStartedAt\(response\.startedAt\)/);
+  assert.match(cronViewSource, /listCronRuns\(taskId, 500\)/);
+  assert.match(cronViewSource, /settings\.cronViewRunNow/);
+  assert.match(cronViewSource, /<Play className="h-3\.5 w-3\.5" \/>/);
   assert.match(
     webAutomationBackendSource,
     /return cronManage<CronRunNowResponse>\("run_now", taskId\)/,
@@ -181,10 +165,15 @@ test("Auto Prompt run prefers the queue-time workdir with a global fallback", ()
     runnerSource,
     /const workdir = \(request\.workdir \?\? ""\)\.trim\(\) \|\| settings\.system\.workdir\.trim\(\)/,
   );
+  assert.match(runnerSource, /resolveWorkspaceResources\(settings, workdir\)/);
+  assert.match(
+    runnerSource,
+    /filterMcpSettingsForWorkspace\(settings\.mcp, workspaceResources\)/,
+  );
 });
 
-test("Cron workspace pin stays wired across GUI and WebUI", () => {
-  for (const source of [guiCronModalSource, webCronModalSource]) {
+test("Cron workspace pin stays wired in shared UI", () => {
+  for (const source of [cronModalSource]) {
     // Radix SelectItem rejects empty-string values, so "follow active" must
     // go through the sentinel and map back to "" on save; the custom-path
     // mode keeps arbitrary (tool-pinned) paths visible and editable.
@@ -216,9 +205,7 @@ test("Cron workspace pin stays wired across GUI and WebUI", () => {
     );
     assert.match(source, /: findWorkspaceOptionByPath\(workspaceOptions, workdir\)/);
   }
-  for (const source of [guiCronViewSource, webCronViewSource]) {
-    assert.match(source, /\{task\.workdir \? \(/);
-  }
+  assert.match(cronViewSource, /\{task\.workdir \? \(/);
 });
 
 test("CronTaskManager create pins the agent's current workspace by default", () => {
@@ -240,8 +227,8 @@ test("CronTaskManager create pins the agent's current workspace by default", () 
   );
 });
 
-test("Cron reasoning levels follow the selected model across GUI and WebUI", () => {
-  for (const source of [guiCronModalSource, webCronModalSource]) {
+test("Cron reasoning levels follow the selected model in shared UI", () => {
+  for (const source of [cronModalSource]) {
     assert.match(source, /providers: CustomProvider\[\]/);
     assert.match(source, /const selectedModel = parseModelValue\(selectedModelValue\)/);
     assert.match(source, /getChatRuntimeReasoningLevelsForProvider\(\{/);

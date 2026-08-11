@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>GUI paste newline pipeline</title>
+  </head>
+  <body>
+    <div id="editor" class="mention-composer whitespace-pre-wrap" contenteditable="true"></div>
+    <div id="tag-composer"></div>
+    <div id="bubble" class="chat-user-bubble w-fit px-4 py-2.5 font-chat text-[14.5px] leading-relaxed"></div>
+    <script type="module">
+      import React from "react";
+      import { createRoot } from "react-dom/client";
+      import "/src/index.css";
+      import {
+        insertPlainTextWithUndo,
+        normalizeLogicalLineEndings,
+      } from "/src/lib/chat/composerText.ts";
+      import {
+        COMPOSER_CLIPBOARD_MIME,
+        MentionComposer,
+        serializeChildrenToSegments,
+      } from "@liveagent/ui/components/chat/MentionComposer.tsx";
+      import { buildTextFromComposerDraft } from "/src/pages/chat/composer/composerDraftText.ts";
+      import {
+        createUserMessageWithUploads,
+        getUserMessageDisplayText,
+      } from "/src/lib/chat/messages/uploadedFiles.ts";
+      import { UserMessageContent } from "/src/lib/chat/messages/userMessageContent.tsx";
+
+      const editor = document.querySelector("#editor");
+      const tagComposerHost = document.querySelector("#tag-composer");
+      const bubble = document.querySelector("#bubble");
+      const tagComposerRef = React.createRef();
+      const tagComposerRoot = createRoot(tagComposerHost);
+      const bubbleRoot = createRoot(bubble);
+      const reviewerSkill = {
+        name: "reviewer",
+        description: "Review changed code",
+        skillFile: "reviewer/SKILL.md",
+        baseDir: "reviewer",
+      };
+
+      tagComposerRoot.render(
+        React.createElement(MentionComposer, {
+          ref: tagComposerRef,
+          onSend() {},
+          workdir: "",
+          enabledSkills: [reviewerSkill],
+        }),
+      );
+
+      editor.addEventListener("paste", (event) => {
+        event.preventDefault();
+        insertPlainTextWithUndo(event.clipboardData.getData("text/plain"));
+      });
+      editor.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && event.shiftKey) {
+          event.preventDefault();
+          document.execCommand("insertLineBreak");
+        }
+      });
+
+      function resetEditor() {
+        editor.replaceChildren();
+        editor.focus();
+        const selection = getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      function draftFromEditor() {
+        const segments = serializeChildrenToSegments(editor, new Map());
+        const text = normalizeLogicalLineEndings(
+          segments.map((segment) => (segment.type === "text" ? segment.text : "")).join(""),
+        );
+        return {
+          segments,
+          text,
+          textWithoutLargePastes: text,
+          largePastes: [],
+          skillMentions: [],
+          commitMentions: [],
+          gitFileMentions: [],
+          codeMentions: [],
+          isEmpty: text.trim().length === 0,
+        };
+      }
+
+      async function renderBubble(text) {
+        bubbleRoot.render(React.createElement(UserMessageContent, { text }));
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      }
+
+      async function snapshotPipeline(rawClipboardText, html = "") {
+        const draft = draftFromEditor();
+        const outbound = buildTextFromComposerDraft(draft);
+        const message = createUserMessageWithUploads(outbound, [], 1);
+        const replay = message ? JSON.parse(JSON.stringify(message)) : null;
+        const display = replay ? getUserMessageDisplayText(replay) : "";
+        await renderBubble(display);
+        const style = getComputedStyle(bubble);
+        const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+        const lineHeight = Number.parseFloat(style.lineHeight);
+        const contentHeight = bubble.getBoundingClientRect().height - padding;
+        return {
+          clipboard: JSON.stringify(rawClipboardText),
+          htmlPresent: Boolean(html),
+          editorHtml: editor.innerHTML,
+          composer: JSON.stringify(draft.text),
+          outbound: JSON.stringify(outbound),
+          history: replay ? JSON.stringify(replay.content) : null,
+          bubbleText: JSON.stringify(bubble.textContent),
+          sendable: message !== null,
+          newlineCounts: {
+            clipboard: (rawClipboardText.match(/\r\n|\r|\n/g) || []).length,
+            composer: (draft.text.match(/\n/g) || []).length,
+            outbound: (outbound.match(/\n/g) || []).length,
+            history: replay ? (replay.content.match(/\n/g) || []).length : null,
+            bubble: (bubble.textContent.match(/\n/g) || []).length,
+          },
+          whiteSpace: style.whiteSpace,
+          lineHeight,
+          contentHeight,
+          visualLineCount: lineHeight > 0 ? Math.round(contentHeight / lineHeight) : null,
+        };
+      }
+
+      window.resetEditor = resetEditor;
+      window.runPastePipeline = async (plain, html = "") => {
+        resetEditor();
+        const transfer = new DataTransfer();
+        transfer.setData("text/plain", plain);
+        if (html) transfer.setData("text/html", html);
+        editor.dispatchEvent(
+          new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true }),
+        );
+        return snapshotPipeline(plain, html);
+      };
+      window.snapshotManualPipeline = snapshotPipeline;
+      window.renderReplay = async (content) => {
+        await renderBubble(content);
+        return {
+          text: bubble.textContent,
+          whiteSpace: getComputedStyle(bubble).whiteSpace,
+        };
+      };
+      window.runTagClipboardRoundTrip = () => {
+        const segments = [
+          { type: "text", text: "Inspect " },
+          { type: "fileMention", reference: { path: "src/App.tsx", kind: "file" } },
+          { type: "fileMention", reference: { path: "docs/guides", kind: "dir" } },
+          { type: "skillMention", skill: reviewerSkill },
+          {
+            type: "commitMention",
+            commit: {
+              sha: "abcdef1234567890",
+              shortSha: "abcdef1",
+              subject: "Preserve tags",
+              body: "Full commit body",
+              authorName: "Author",
+              authorEmail: "author@example.com",
+              authorDate: "2026-08-08T00:00:00Z",
+              fileCount: 2,
+              filesChanged: 2,
+              insertions: 12,
+              deletions: 3,
+              stat: "2 files changed",
+              remoteName: "origin",
+              remoteUrl: "https://github.com/example/repo.git",
+              githubUrl: "https://github.com/example/repo/commit/abcdef1234567890",
+            },
+          },
+          {
+            type: "gitFileMention",
+            file: {
+              path: "src/App.tsx",
+              status: "M",
+              commitSha: "abcdef1234567890",
+              shortSha: "abcdef1",
+              refName: "main",
+              remoteName: "origin",
+              remoteUrl: "https://github.com/example/repo.git",
+              githubUrl:
+                "https://github.com/example/repo/blob/abcdef1234567890/src/App.tsx",
+            },
+          },
+          {
+            type: "codeMention",
+            reference: { path: "src/App.tsx", startLine: 4, endLine: 9 },
+          },
+          {
+            type: "largePaste",
+            paste: {
+              id: "browser-large-paste",
+              label: "Pasted text 1",
+              text: "large\nbody",
+              charCount: 10,
+              lineCount: 2,
+              preview: "large body",
+            },
+          },
+        ];
+        tagComposerRef.current.setDraft({
+          segments,
+          text: "",
+          textWithoutLargePastes: "",
+          largePastes: [],
+          skillMentions: [],
+          commitMentions: [],
+          gitFileMentions: [],
+          codeMentions: [],
+          isEmpty: false,
+        });
+
+        const tagEditor = tagComposerHost.querySelector(".mention-composer");
+        const selection = getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(tagEditor);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        const transfer = new DataTransfer();
+        const copyEvent = new ClipboardEvent("copy", {
+          clipboardData: transfer,
+          bubbles: true,
+          cancelable: true,
+        });
+        tagEditor.dispatchEvent(copyEvent);
+
+        tagComposerRef.current.setText("");
+        tagEditor.focus();
+        const pasteRange = document.createRange();
+        pasteRange.selectNodeContents(tagEditor);
+        pasteRange.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(pasteRange);
+        const pasteEvent = new ClipboardEvent("paste", {
+          clipboardData: transfer,
+          bubbles: true,
+          cancelable: true,
+        });
+        tagEditor.dispatchEvent(pasteEvent);
+        const restoredDraft = tagComposerRef.current.getDraft();
+
+        const plainTransfer = new DataTransfer();
+        plainTransfer.setData("text/plain", transfer.getData("text/plain"));
+        tagComposerRef.current.setText("");
+        tagEditor.focus();
+        const plainRange = document.createRange();
+        plainRange.selectNodeContents(tagEditor);
+        plainRange.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(plainRange);
+        tagEditor.dispatchEvent(
+          new ClipboardEvent("paste", {
+            clipboardData: plainTransfer,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+        const plainRestoredDraft = tagComposerRef.current.getDraft();
+
+        return {
+          copyPrevented: copyEvent.defaultPrevented,
+          pastePrevented: pasteEvent.defaultPrevented,
+          plainText: transfer.getData("text/plain"),
+          hasHtmlPayload: transfer
+            .getData("text/html")
+            .includes("data-liveagent-composer-clipboard"),
+          hasPrivatePayload: transfer.getData(COMPOSER_CLIPBOARD_MIME).length > 0,
+          restoredTypes: restoredDraft.segments
+            .filter((segment) => segment.type !== "text")
+            .map((segment) => segment.type),
+          plainRestoredTypes: plainRestoredDraft.segments
+            .filter((segment) => segment.type !== "text")
+            .map((segment) => segment.type),
+        };
+      };
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      window.pipelineReady = true;
+    </script>
+  </body>
+</html>

@@ -3,7 +3,8 @@ import type {
   MentionComposerDraft,
   MentionComposerGitFileMention,
   MentionComposerLargePaste,
-} from "@/components/chat/MentionComposer";
+} from "@liveagent/ui/components/chat/MentionComposer";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import { formatCodeMentionToken, formatFileMentionToken } from "@/lib/chat/mentionReferences";
 import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import { withPastedTextDisplayMetadata } from "@/lib/chat/uploadedFiles";
@@ -53,31 +54,33 @@ export function buildTextFromComposerDraft(
   draft: MentionComposerDraft,
   pastedFileById?: Map<string, PendingUploadedFile>,
 ) {
-  return draft.segments
-    .map((segment) => {
-      if (segment.type === "text") {
-        return segment.text;
-      }
-      if (segment.type === "fileMention") {
-        return formatFileMentionToken(segment.reference);
-      }
-      if (segment.type === "skillMention") {
-        return `$${segment.skill.name}`;
-      }
-      if (segment.type === "commitMention") {
-        return formatComposerCommitMention(segment.commit);
-      }
-      if (segment.type === "gitFileMention") {
-        return formatComposerGitFileMention(segment.file);
-      }
-      if (segment.type === "codeMention") {
-        return formatCodeMentionToken(segment.reference);
-      }
-      const file = pastedFileById?.get(segment.paste.id);
-      return file ? `[${segment.paste.label}: ${file.relativePath}]` : segment.paste.text;
-    })
-    .join("")
-    .replace(/\u00A0/g, " ");
+  return normalizeLogicalLineEndings(
+    draft.segments
+      .map((segment) => {
+        if (segment.type === "text") {
+          return segment.text;
+        }
+        if (segment.type === "fileMention") {
+          return formatFileMentionToken(segment.reference);
+        }
+        if (segment.type === "skillMention") {
+          return `/${segment.skill.name}`;
+        }
+        if (segment.type === "commitMention") {
+          return formatComposerCommitMention(segment.commit);
+        }
+        if (segment.type === "gitFileMention") {
+          return formatComposerGitFileMention(segment.file);
+        }
+        if (segment.type === "codeMention") {
+          return formatCodeMentionToken(segment.reference);
+        }
+        const file = pastedFileById?.get(segment.paste.id);
+        return file ? `[${segment.paste.label}: ${file.relativePath}]` : segment.paste.text;
+      })
+      .join("")
+      .replace(/\u00A0/g, " "),
+  );
 }
 
 export async function importPastedTextsAsFiles(params: {

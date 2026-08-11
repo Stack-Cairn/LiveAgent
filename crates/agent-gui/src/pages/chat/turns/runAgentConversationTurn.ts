@@ -5,7 +5,7 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
-import { ASK_USER_QUESTION_TOOL_NAME } from "../../../lib/chat/askUserQuestion";
+import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
@@ -45,7 +45,10 @@ import {
   upsertHostedSearchToRound,
   upsertToolCallToRound,
 } from "../../../lib/chat/messages/uiMessages";
-import { runAssistantWithTools } from "../../../lib/chat/runner/agentRunner";
+import {
+  type AgentRunnerFailoverParams,
+  runAssistantWithTools,
+} from "../../../lib/chat/runner/agentRunner";
 import type { StreamDebugLogger } from "../../../lib/debug/agentDebug";
 import { assistantMessageToText } from "../../../lib/providers/llm";
 import { resolveRuntimePlatform } from "../../../lib/runtimePlatform";
@@ -72,7 +75,7 @@ import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinType
 import { createFileToolState } from "../../../lib/tools/fileToolState";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
-import { getOrCreateTodoToolState } from "../../../lib/tools/todoTools";
+import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/tools/taskTools";
 import { isSessionApproved, requestToolApproval } from "../../../lib/tools/toolApproval";
 import { resolveToolPolicy } from "../../../lib/tools/toolPolicy";
 import type { TunnelManagerChange } from "../../../lib/tools/tunnelManagerTools";
@@ -206,6 +209,7 @@ export type RunAgentConversationTurnParams = {
   providerId: ProviderId;
   model: string;
   runtime: ProviderRuntimeConfig;
+  failover?: AgentRunnerFailoverParams;
   runtimeModel: RuntimeModel;
   selectedModel: {
     customProviderId: string;
@@ -217,7 +221,7 @@ export type RunAgentConversationTurnParams = {
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
   onManagedSkillsChanged?: (change: {
-    action: "install" | "create";
+    action: "install" | "create" | "delete";
     names: string[];
     baseDirs: string[];
   }) => void | Promise<void>;
@@ -234,6 +238,8 @@ export type RunAgentConversationTurnParams = {
   sshManagerRemoteAllowed?: boolean;
   onSshSessionsChanged?: (change: SshManagerSessionChange) => void;
   sessionId: string;
+  /** Run 级任务状态存储：由 send 管线构建，提交走非终态持久化。 */
+  taskStateStore: TaskStateStore;
   conversationId: string;
   conversationCwd?: string;
   fallbackTitle: string;
@@ -298,6 +304,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     sshManagerRemoteAllowed,
     onSshSessionsChanged,
     sessionId,
+    taskStateStore,
     conversationId,
     conversationCwd,
     fallbackTitle,
@@ -376,13 +383,22 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     parentMessageBusSnapshot = await loadParentBusSnapshot();
     return parentMessageBusSnapshot;
   };
-  const withSubagentRuntimeContext = (context: Context): Context => {
+  const withAgentRuntimeContext = (context: Context): Context => {
     let systemPrompt = context.systemPrompt;
     if (subagentReminder) {
       systemPrompt = appendSystemPrompt(systemPrompt, subagentReminder);
     }
     if (parentMessageBusSnapshot) {
       systemPrompt = appendSystemPrompt(systemPrompt, parentMessageBusSnapshot);
+    }
+    // 只注入本 Run 的权威任务状态：edit-resend 等路径可能把上一 Run 持久化的
+    // taskList 带回 meta，工具层按 runId 视其为不存在，注入必须同口径。
+    const taskList = getNextConversationState().meta.taskList;
+    if (taskList && taskList.runId === taskStateStore.runId) {
+      const taskListContext = formatTaskListRuntimeContext(taskList);
+      if (taskListContext) {
+        systemPrompt = appendSystemPrompt(systemPrompt, taskListContext);
+      }
     }
     return systemPrompt !== context.systemPrompt
       ? {
@@ -392,7 +408,6 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       : context;
   };
   const fileState = createFileToolState();
-  const todoState = getOrCreateTodoToolState(conversationId);
   const subagentScheduler = createSubagentScheduler();
   const runtimePlatform = await resolveRuntimePlatform();
   const buildRegistryStartedAt = perfNowMs();
@@ -401,7 +416,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     providerId,
     runtimePlatform,
     fileState,
-    todoState,
+    taskStateStore,
     askUserQuestionConversationId: conversationId,
     skillsEnabled: effectiveSkillsEnabled,
     skillsRootDir,
@@ -454,7 +469,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
 
   const preCompactionStartedAt = perfNowMs();
   await compaction.maybeCompactPreSend({
-    budgetContext: withSubagentRuntimeContext(
+    budgetContext: withAgentRuntimeContext(
       buildPreparedContext(getNextConversationState(), combinedTools, {
         includeUploadedFilesMetadata: true,
       }),
@@ -722,7 +737,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     let midStreamCompactionRequested = false;
     let sawToolCallInRound = false;
     const nativeWebSearchEnabled = runtime.nativeWebSearchEnabled !== false;
-    const agentContext = withSubagentRuntimeContext(
+    const agentContext = withAgentRuntimeContext(
       pendingAgentContext ??
         buildPreparedContext(getNextConversationState(), combinedTools, {
           includeUploadedFilesMetadata: true,
@@ -740,6 +755,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         providerId,
         model,
         runtime,
+        failover: params.failover,
         runtimePlatform,
         context: agentContext,
         workdir: effectiveWorkdir,
@@ -934,7 +950,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             getNextConversationState(),
             emittedMessages,
           );
-          const tempContext = withSubagentRuntimeContext(
+          const tempContext = withAgentRuntimeContext(
             buildPreparedContext(tempState, combinedTools, {
               includeUploadedFilesMetadata: true,
             }),
@@ -957,7 +973,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           latestAgentEmittedMessages = [];
           clearPersistableAgentProgress();
           return {
-            context: withSubagentRuntimeContext(compactedContext),
+            context: withAgentRuntimeContext(compactedContext),
             emittedMessages: [],
           };
         },
@@ -1000,7 +1016,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       const compactionResult = await compaction.compactDuringRun({
         trigger: "mid-stream",
         state: tempState,
-        budgetContext: withSubagentRuntimeContext(
+        budgetContext: withAgentRuntimeContext(
           buildPreparedContext(tempState, combinedTools, {
             includeAbortedMessages: true,
             includeUploadedFilesMetadata: true,

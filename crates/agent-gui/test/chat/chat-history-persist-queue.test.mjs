@@ -168,6 +168,8 @@ test("queued persists read the latest persistence cursor inside the conversation
 
   assert.equal(recorder.calls.length, 1);
   assert.equal(recorder.calls[0].cmd, "chat_history_append_segment");
+  assert.equal(recorder.calls[0].args.input.previousSegment.segmentId, "seg-0");
+  assert.equal(recorder.calls[0].args.input.previousSegment.messageCount, 2);
   assert.deepEqual(cursorReads, [persistenceCursor(seg0)]);
 
   await resolveCall(recorder.calls[0], "conv-1", 10);
@@ -274,6 +276,8 @@ test("persistence cursor selects explicit initial active and append transitions"
   );
   await flush();
   assert.equal(recorder.calls[2].cmd, "chat_history_append_segment");
+  assert.equal(recorder.calls[2].args.input.previousSegment.segmentId, "seg-0");
+  assert.equal(recorder.calls[2].args.input.previousSegment.messageCount, 2);
   assert.equal(recorder.calls[2].args.input.segment.segmentId, "seg-1");
   await resolveCall(recorder.calls[2], conversationId, 22);
   await append;
@@ -383,4 +387,130 @@ test("edit-resend uses one atomic replace command that returns the refreshed tai
   assert.equal(result.revision, "conv-1:after");
   assert.equal(result.activeSegment.segmentId, "seg-0");
   assert.equal(result.meta.totalMessageCount, 3);
+});
+
+test("history window restores the exact persisted task list state", async () => {
+  const recorder = createInvokeRecorder();
+  const chatHistory = loadChatHistory(recorder.invoke);
+  const taskList = {
+    runId: "run-history",
+    revision: 4,
+    nextTaskId: 3,
+    tasks: [
+      {
+        id: "1",
+        subject: "Inspect",
+        description: "Inspect the history path",
+        activeForm: "Inspecting history",
+        status: "completed",
+      },
+      {
+        id: "2",
+        subject: "Restore",
+        description: "Restore the same task identities",
+        activeForm: "Restoring tasks",
+        status: "in_progress",
+      },
+    ],
+  };
+  const pending = chatHistory.getChatHistoryWindow({
+    id: "conv-task-state",
+    maxMessages: 360,
+    includeActiveSegment: true,
+  });
+  await flush();
+
+  recorder.calls[0].deferred.resolve({
+    conversation: summaryFor("conv-task-state", 600),
+    contextMetaJson: JSON.stringify({ systemPrompt: "prompt", taskList }),
+    activeSegmentIndex: 0,
+    totalSegmentCount: 1,
+    totalMessageCount: 0,
+    returnedMessageCount: 0,
+    oldestOffset: 0,
+    hasMoreBefore: false,
+    revision: "conv-task-state:600:0:1:0",
+    updatedAt: 600,
+    activeSegment: {
+      segmentIndex: 0,
+      segmentId: "seg-task",
+      messagesJson: "[]",
+      messageCount: 0,
+      createdAt: 600,
+      updatedAt: 600,
+    },
+    segments: [
+      {
+        segmentIndex: 0,
+        segmentId: "seg-task",
+        messagesJson: "[]",
+        startMessageIndex: 0,
+        messageCount: 0,
+        createdAt: 600,
+        updatedAt: 600,
+      },
+    ],
+  });
+
+  const window = await pending;
+  assert.deepEqual(window.meta.taskList, taskList);
+  assert.deepEqual(chatHistory.buildConversationStateFromWindow(window).meta.taskList, taskList);
+});
+
+test("a corrupt persisted task list is dropped instead of failing the window open", async () => {
+  const recorder = createInvokeRecorder();
+  const chatHistory = loadChatHistory(recorder.invoke);
+  const pending = chatHistory.getChatHistoryWindow({
+    id: "conv-task-corrupt",
+    maxMessages: 360,
+    includeActiveSegment: true,
+  });
+  await flush();
+
+  recorder.calls[0].deferred.resolve({
+    conversation: summaryFor("conv-task-corrupt", 700),
+    // duplicate task ids violate the strict task-state parser
+    contextMetaJson: JSON.stringify({
+      systemPrompt: "prompt",
+      taskList: {
+        runId: "run-corrupt",
+        revision: 1,
+        nextTaskId: 2,
+        tasks: [
+          { id: "1", subject: "A", description: "A", activeForm: "A", status: "pending" },
+          { id: "1", subject: "B", description: "B", activeForm: "B", status: "pending" },
+        ],
+      },
+    }),
+    activeSegmentIndex: 0,
+    totalSegmentCount: 1,
+    totalMessageCount: 0,
+    returnedMessageCount: 0,
+    oldestOffset: 0,
+    hasMoreBefore: false,
+    revision: "conv-task-corrupt:700:0:1:0",
+    updatedAt: 700,
+    activeSegment: {
+      segmentIndex: 0,
+      segmentId: "seg-corrupt",
+      messagesJson: "[]",
+      messageCount: 0,
+      createdAt: 700,
+      updatedAt: 700,
+    },
+    segments: [
+      {
+        segmentIndex: 0,
+        segmentId: "seg-corrupt",
+        messagesJson: "[]",
+        startMessageIndex: 0,
+        messageCount: 0,
+        createdAt: 700,
+        updatedAt: 700,
+      },
+    ],
+  });
+
+  const window = await pending;
+  assert.equal(window.meta.taskList, undefined);
 });

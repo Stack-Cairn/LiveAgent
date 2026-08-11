@@ -442,6 +442,85 @@ test("escalation ladder: consecutive ineffective compactions advise but never ha
   assert.match(runningTexts[2], /建议适时开启新会话/);
 });
 
+test("two consecutive compaction checkpoints preserve the exact authoritative task state", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+  });
+  const taskList = {
+    runId: "run-through-two-compactions",
+    revision: 5,
+    nextTaskId: 3,
+    tasks: [
+      {
+        id: "1",
+        subject: "Inspect compaction",
+        description: "Verify task state survives every checkpoint",
+        activeForm: "Inspecting compaction",
+        status: "completed",
+      },
+      {
+        id: "2",
+        subject: "Finish implementation",
+        description: "Keep working on the same stable task",
+        activeForm: "Finishing implementation",
+        status: "in_progress",
+      },
+    ],
+  };
+  const initialState = conversationState.setTaskListState(bigState(), taskList);
+
+  const first = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: initialState,
+  });
+  assert.ok(first.context);
+  const firstCheckpointState = recorder.byKind("applyStateMidRun").at(-1)[1];
+  assert.deepEqual(firstCheckpointState.meta.taskList, taskList);
+
+  const secondInput = conversationState.appendMessagesToConversation(firstCheckpointState, [
+    user("continue task 2", 20),
+    user("keep the same task ids", 21),
+    user("verify state again", 22),
+    assistantWithUsage("continuing the same task", 190_000, 23),
+  ]);
+  const second = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: secondInput,
+  });
+  assert.ok(second.context);
+  const secondCheckpointState = recorder.byKind("applyStateMidRun").at(-1)[1];
+
+  assert.deepEqual(secondCheckpointState.meta.taskList, taskList);
+  assert.deepEqual(secondCheckpointState.meta.taskList, firstCheckpointState.meta.taskList);
+});
+
+test("a rejected checkpoint persist never switches runtime state to the unpersisted segment", async () => {
+  const controller = new CompactionController();
+  const { recorder } = bindController(controller, {
+    complete: async () => summaryResponse(),
+  });
+  recorder.sinks.persist = async (state) => {
+    recorder.events.push(["persist", state]);
+    return false;
+  };
+
+  const result = await controller.compactDuringRun({
+    trigger: "post-tool",
+    state: bigState(),
+  });
+
+  assert.equal(result.context, null);
+  assert.equal(result.shouldDisableProtection, false);
+  assert.equal(recorder.byKind("persist").length, 1);
+  assert.equal(recorder.byKind("queueCheckpoint").length, 0);
+  assert.ok(
+    recorder
+      .byKind("applyStateMidRun")
+      .every(([, state]) => state.meta.activeSegmentIndex === 0),
+  );
+});
+
 test("registry hands out one controller per conversation and disposes cleanly", () => {
   const registry = createCompactionControllerRegistry();
   const a = registry.get("conv-a");

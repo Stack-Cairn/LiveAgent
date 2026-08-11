@@ -1,16 +1,28 @@
-import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../../i18n/config";
 import {
   getProviderFallbackLimits,
   normalizeModelLimits,
   repairStaleCrossProviderLimits,
   resolveModelLimits,
   resolveModelLimitsAcrossProviders,
-} from "../models/modelCatalog";
+} from "@liveagent/ui/lib/models/modelCatalog";
 import {
   clampThinkingLevelToList,
   resolveModelThinking,
   type ThinkingLevel,
-} from "../models/modelThinking";
+} from "@liveagent/ui/lib/models/modelThinking";
+import {
+  normalizeApiKey,
+  normalizeBaseUrl,
+  normalizeModels,
+} from "@liveagent/ui/lib/settings/normalize";
+import { createUuid } from "@liveagent/ui/lib/shared/id";
+import { mergeAlwaysEnabledSkillNames } from "@liveagent/ui/lib/skills/builtin";
+import {
+  DEFAULT_CHAT_TRANSCRIPT_WIDTH,
+  MAX_CHAT_TRANSCRIPT_WIDTH,
+  MIN_CHAT_TRANSCRIPT_WIDTH,
+} from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
+import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "../../i18n/config";
 import {
   ANTHROPIC_LONG_CONTEXT_WINDOW,
   ANTHROPIC_STANDARD_CONTEXT_WINDOW,
@@ -20,19 +32,7 @@ import {
   resolveAnthropicKnownModelLimits,
   shouldSendAnthropicLongContextHeader,
 } from "../providers/anthropicModels";
-import {
-  type CliIdentitySettings,
-  normalizeCliIdentitySettings,
-} from "../providers/cliIdentityCore";
-import { createUuid } from "../shared/id";
-import { mergeAlwaysEnabledSkillNames } from "../skills/builtin";
 import { normalizeFontFamily } from "../system/fontFamily";
-import {
-  DEFAULT_CHAT_TRANSCRIPT_WIDTH,
-  MAX_CHAT_TRANSCRIPT_WIDTH,
-  MIN_CHAT_TRANSCRIPT_WIDTH,
-} from "../transcript-width/transcriptWidthModel";
-import { normalizeApiKey, normalizeBaseUrl, normalizeModels } from "./normalize";
 
 export { normalizeFontFamily } from "../system/fontFamily";
 
@@ -55,6 +55,8 @@ export type McpTransport = "stdio" | "http" | "sse";
 
 export type McpServerConfig = {
   id: string;
+  description?: string;
+  docsUrl?: string;
   enabled: boolean;
   transport: McpTransport;
   command: string;
@@ -166,7 +168,6 @@ export type ChatTranscriptSettings = {
 
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
-  providerIdentities: CliIdentitySettings;
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
@@ -180,6 +181,62 @@ export type CustomSettings = {
 export type UpdateSettings = {
   includePrereleases: boolean;
 };
+
+/**
+ * cc-switch style automatic provider failover: an ordered fallback queue of
+ * same-vendor *providers* tried when the active model's request fails with a
+ * provider-fault-class error, plus circuit breaker knobs mirroring cc-switch's
+ * 失败阈值/冷却时间 settings.
+ *
+ * Failover switches providers, never models (matching cc-switch): the failed
+ * request is re-sent to the next provider in the queue with the *same model
+ * id* the conversation was using. Providers that don't have that model active
+ * are skipped at plan time.
+ *
+ * Failover is scoped per vendor type (mirroring cc-switch's Claude/Codex/
+ * Gemini app tabs): a Claude request only fails over to Claude providers, a
+ * Codex request only to Codex providers, never across vendors.
+ */
+export type ProviderFailoverSettings = {
+  enabled: boolean;
+  /** Ordered fallback provider ids (P1 → P2 → …), same vendor type only. */
+  queue: string[];
+  /** Max provider switches per request (attempts = switches + 1). */
+  maxSwitches: number;
+  /** Consecutive failures before a target's circuit breaker opens. */
+  failureThreshold: number;
+  /** Seconds an open breaker skips its target before a half-open probe. */
+  cooldownSeconds: number;
+};
+
+/** Per-vendor failover settings, keyed by the provider tab type. */
+export type ModelFailoverSettings = Record<ProviderId, ProviderFailoverSettings>;
+
+export const MODEL_FAILOVER_QUEUE_LIMIT = 8;
+
+export const PROVIDER_FAILOVER_TYPES: readonly ProviderId[] = [
+  "claude_code",
+  "codex",
+  "gemini",
+  "xai",
+];
+
+export const DEFAULT_PROVIDER_FAILOVER_SETTINGS: ProviderFailoverSettings = {
+  enabled: false,
+  queue: [],
+  maxSwitches: 3,
+  failureThreshold: 4,
+  cooldownSeconds: 60,
+};
+
+export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
+  return {
+    claude_code: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    codex: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    gemini: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+    xai: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
+  };
+}
 
 export type SystemProxyType = "socks5" | "http";
 
@@ -221,7 +278,27 @@ export type SystemSettings = {
   // Archived workspaces (path-keyed, like hidden/missing). Archived rows stay
   // in the merged list but render disabled and can never be active.
   archivedWorkspaceProjectPaths: string[];
+  workspaceResourceSettings: Record<string, WorkspaceResourceSettings>;
   systemProxy: SystemProxyConfig;
+};
+
+export type WorkspaceResourceSettingsMode = "inherit" | "custom" | "off";
+
+export type WorkspaceResourceSettings = {
+  mode: WorkspaceResourceSettingsMode;
+  skillNames: string[];
+  mcpServerIds: string[];
+  stateVersion: number;
+  writerId: string;
+  updatedAt: number;
+};
+
+export type EffectiveWorkspaceResources = {
+  mode: WorkspaceResourceSettingsMode;
+  skillsEnabled: boolean;
+  skillNames: string[];
+  mcpServerIds: string[];
+  mcpServers: McpServerConfig[];
 };
 
 export type WorkspaceProjectKind = "managed" | "folder" | "history";
@@ -429,6 +506,7 @@ export type AppSettings = {
   remote: RemoteSettings;
   memory: MemorySettings;
   customSettings: CustomSettings;
+  modelFailover: ModelFailoverSettings;
   updates: UpdateSettings;
   skills: SkillsSettings;
   chatRuntimeControls: ChatRuntimeControls;
@@ -636,6 +714,86 @@ export function workspaceProjectPathKey(path: unknown): string {
   return isWindowsProjectPathLike(normalizedPath)
     ? normalizeWindowsProjectPathKey(normalizedPath)
     : normalizePosixProjectPathKey(normalizedPath);
+}
+
+function normalizeWorkspaceResourceSettingsMode(input: unknown): WorkspaceResourceSettingsMode {
+  return input === "custom" || input === "off" ? input : "inherit";
+}
+
+function normalizeWorkspaceResourceSettingsEntry(input: unknown): WorkspaceResourceSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const mode = normalizeWorkspaceResourceSettingsMode(obj.mode);
+  const stateVersion = Number(obj.stateVersion);
+  const updatedAt = Number(obj.updatedAt);
+  return {
+    mode,
+    skillNames: mode === "custom" ? normalizeStringArray(obj.skillNames) : [],
+    mcpServerIds: mode === "custom" ? normalizeStringArray(obj.mcpServerIds) : [],
+    stateVersion: Number.isSafeInteger(stateVersion) && stateVersion > 0 ? stateVersion : 1,
+    writerId: typeof obj.writerId === "string" ? obj.writerId.trim().slice(0, 64) : "",
+    updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0,
+  };
+}
+
+const WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const MAX_WORKSPACE_RESOURCE_SETTINGS = 256;
+
+export function normalizeWorkspaceResourceSettings(
+  input: unknown,
+): Record<string, WorkspaceResourceSettings> {
+  const source = (
+    input && typeof input === "object" && !Array.isArray(input) ? input : {}
+  ) as Record<string, unknown>;
+  const entries: Record<string, WorkspaceResourceSettings> = {};
+  const canonicalKeys = new Set<string>();
+  for (const [rawPathKey, rawEntry] of Object.entries(source)) {
+    const pathKey = workspaceProjectPathKey(rawPathKey);
+    if (!pathKey) continue;
+    assignNormalizedProjectKeyValue(
+      entries,
+      canonicalKeys,
+      rawPathKey,
+      normalizeWorkspaceResourceSettingsEntry(rawEntry),
+    );
+  }
+  const now = Date.now();
+  for (const [pathKey, entry] of Object.entries(entries)) {
+    if (
+      entry.mode === "inherit" &&
+      entry.updatedAt > 0 &&
+      now - entry.updatedAt > WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS
+    ) {
+      delete entries[pathKey];
+    }
+  }
+  const pathKeys = Object.keys(entries);
+  if (pathKeys.length > MAX_WORKSPACE_RESOURCE_SETTINGS) {
+    pathKeys.sort((a, b) => {
+      const aEntry = entries[a];
+      const bEntry = entries[b];
+      const byActiveMode = Number(bEntry.mode !== "inherit") - Number(aEntry.mode !== "inherit");
+      if (byActiveMode !== 0) return byActiveMode;
+      const byUpdatedAt = bEntry.updatedAt - aEntry.updatedAt;
+      if (byUpdatedAt !== 0) return byUpdatedAt;
+      const byVersion = bEntry.stateVersion - aEntry.stateVersion;
+      return byVersion !== 0 ? byVersion : compareWorkspaceResourcePathKeys(a, b);
+    });
+    for (const pathKey of pathKeys.slice(MAX_WORKSPACE_RESOURCE_SETTINGS)) {
+      delete entries[pathKey];
+    }
+  }
+  return entries;
+}
+
+function compareWorkspaceResourcePathKeys(a: string, b: string): number {
+  const aCodePoints = Array.from(a, (value) => value.codePointAt(0) ?? 0);
+  const bCodePoints = Array.from(b, (value) => value.codePointAt(0) ?? 0);
+  const length = Math.min(aCodePoints.length, bCodePoints.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = aCodePoints[index] - bCodePoints[index];
+    if (difference !== 0) return difference;
+  }
+  return aCodePoints.length - bCodePoints.length;
 }
 
 function assignNormalizedProjectKeyValue<T>(
@@ -1677,6 +1835,7 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
     archivedWorkspaceProjectPaths: normalizeArchivedWorkspaceProjectPaths(
       obj.archivedWorkspaceProjectPaths,
     ),
+    workspaceResourceSettings: normalizeWorkspaceResourceSettings(obj.workspaceResourceSettings),
     systemProxy: normalizeSystemProxyConfig(obj.systemProxy),
   };
 }
@@ -1684,11 +1843,15 @@ export function normalizeSystemSettings(input: unknown): SystemSettings {
 export function normalizeMcpServerConfig(input: unknown): McpServerConfig {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const id = typeof obj.id === "string" ? obj.id.trim() : "";
+  const description = typeof obj.description === "string" ? obj.description.trim() : "";
+  const docsUrl = typeof obj.docsUrl === "string" ? obj.docsUrl.trim() : "";
   const cwd = typeof obj.cwd === "string" ? obj.cwd.trim() : "";
   const messageUrl = typeof obj.messageUrl === "string" ? obj.messageUrl.trim() : "";
 
   return {
     id,
+    ...(description ? { description } : {}),
+    ...(docsUrl ? { docsUrl } : {}),
     enabled: Boolean(obj.enabled),
     transport: normalizeMcpTransport(obj.transport),
     command: typeof obj.command === "string" ? obj.command.trim() : "",
@@ -2189,7 +2352,6 @@ export function normalizeCustomSettings(
       normalizeSelectedModel(obj.conversationTitleModel),
       customProviders,
     ),
-    providerIdentities: normalizeCliIdentitySettings(obj.providerIdentities),
     chatSidebar: {
       projectsCollapsed: chatSidebar.projectsCollapsed === true,
       recentCollapsed: chatSidebar.recentCollapsed === true,
@@ -2212,6 +2374,107 @@ export function normalizeUpdateSettings(input: unknown): UpdateSettings {
   };
 }
 
+function clampFailoverInteger(input: unknown, min: number, max: number, fallback: number): number {
+  const value =
+    typeof input === "number" && Number.isFinite(input)
+      ? Math.round(input)
+      : typeof input === "string" && input.trim() !== ""
+        ? Math.round(Number(input))
+        : Number.NaN;
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * Normalizes one vendor's failover config. Queue entries must reference an
+ * existing provider of `providerType` — cross-vendor entries (e.g. a Codex
+ * provider inside the Claude queue) are dropped so failover can never mix
+ * vendors.
+ *
+ * Legacy entry migration: the queue used to hold {customProviderId, model}
+ * objects. Those collapse to their provider id (deduped), because failover now
+ * always re-sends the conversation's own model to the fallback provider.
+ */
+export function normalizeProviderFailoverSettings(
+  input: unknown,
+  customProviders: CustomProvider[],
+  providerType: ProviderId,
+): ProviderFailoverSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const defaults = DEFAULT_PROVIDER_FAILOVER_SETTINGS;
+
+  const queue: string[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(obj.queue)) {
+    for (const raw of obj.queue) {
+      const providerId =
+        typeof raw === "string"
+          ? raw
+          : raw &&
+              typeof raw === "object" &&
+              typeof (raw as SelectedModel).customProviderId === "string"
+            ? (raw as SelectedModel).customProviderId
+            : "";
+      if (!providerId) continue;
+      const provider = customProviders.find((item) => item.id === providerId);
+      if (!provider || provider.type !== providerType) continue;
+      if (seen.has(providerId)) continue;
+      seen.add(providerId);
+      queue.push(providerId);
+      if (queue.length >= MODEL_FAILOVER_QUEUE_LIMIT) break;
+    }
+  }
+
+  return {
+    // An enabled toggle with an empty queue is a harmless no-op at runtime;
+    // keep the user's toggle state instead of silently flipping it off.
+    enabled: obj.enabled === true,
+    queue,
+    maxSwitches: clampFailoverInteger(obj.maxSwitches, 1, 10, defaults.maxSwitches),
+    failureThreshold: clampFailoverInteger(obj.failureThreshold, 1, 10, defaults.failureThreshold),
+    cooldownSeconds: clampFailoverInteger(obj.cooldownSeconds, 5, 3600, defaults.cooldownSeconds),
+  };
+}
+
+/** True for the pre-per-vendor persisted shape ({enabled, queue, ...}). */
+function isLegacyFlatModelFailoverShape(obj: Record<string, unknown>): boolean {
+  return (
+    !PROVIDER_FAILOVER_TYPES.some((type) => type in obj) &&
+    ("enabled" in obj || "queue" in obj || "maxSwitches" in obj)
+  );
+}
+
+export function normalizeModelFailoverSettings(
+  input: unknown,
+  customProviders: CustomProvider[],
+): ModelFailoverSettings {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+
+  // Legacy migration: the old single global config becomes each vendor's
+  // config. Cross-vendor queue entries are filtered per tab by the per-vendor
+  // normalizer, so a mixed legacy queue splits cleanly into its vendors.
+  if (isLegacyFlatModelFailoverShape(obj)) {
+    const result = getDefaultModelFailoverSettings();
+    for (const type of PROVIDER_FAILOVER_TYPES) {
+      const migrated = normalizeProviderFailoverSettings(obj, customProviders, type);
+      // Only vendors that actually kept queue entries stay enabled; an empty
+      // migrated queue with enabled=true would surface confusing "on but
+      // empty" warnings on tabs the user never configured.
+      result[type] = {
+        ...migrated,
+        enabled: migrated.enabled && migrated.queue.length > 0,
+      };
+    }
+    return result;
+  }
+
+  const result = getDefaultModelFailoverSettings();
+  for (const type of PROVIDER_FAILOVER_TYPES) {
+    result[type] = normalizeProviderFailoverSettings(obj[type], customProviders, type);
+  }
+  return result;
+}
+
 export function getDefaultSettings(): AppSettings {
   const customProviders = getBuiltinCustomProviders();
   return {
@@ -2223,6 +2486,7 @@ export function getDefaultSettings(): AppSettings {
       hiddenWorkspaceProjectPaths: [],
       missingWorkspaceProjectPaths: [],
       archivedWorkspaceProjectPaths: [],
+      workspaceResourceSettings: {},
       systemProxy: getDefaultSystemProxyConfig(),
       interactiveTimeoutMinutes: INTERACTIVE_TIMEOUT_DEFAULT_MINUTES,
     },
@@ -2251,6 +2515,7 @@ export function getDefaultSettings(): AppSettings {
     },
     memory: normalizeMemorySettings({}, customProviders),
     customSettings: normalizeCustomSettings({}, customProviders),
+    modelFailover: normalizeModelFailoverSettings({}, customProviders),
     updates: normalizeUpdateSettings({}),
     skills: {
       enabled: true,
@@ -2285,6 +2550,10 @@ export function normalizeSettings(input?: Partial<AppSettings> | null): AppSetti
     memory: normalizeMemorySettings(obj.memory ?? defaults.memory, customProviders),
     customSettings: normalizeCustomSettings(
       obj.customSettings ?? defaults.customSettings,
+      customProviders,
+    ),
+    modelFailover: normalizeModelFailoverSettings(
+      obj.modelFailover ?? defaults.modelFailover,
       customProviders,
     ),
     updates: normalizeUpdateSettings(obj.updates ?? defaults.updates),
@@ -2410,6 +2679,121 @@ export function updateSkills(prev: AppSettings, patch: Partial<SkillsSettings>):
   });
 }
 
+export function resolveWorkspaceResources(
+  settings: AppSettings,
+  workdir: string,
+): EffectiveWorkspaceResources {
+  const pathKey = workspaceProjectPathKey(workdir);
+  const entry = pathKey ? settings.system.workspaceResourceSettings[pathKey] : undefined;
+  const mode = entry?.mode ?? "inherit";
+  if (mode === "off") {
+    return { mode, skillsEnabled: false, skillNames: [], mcpServerIds: [], mcpServers: [] };
+  }
+
+  const skillNames =
+    mode === "custom"
+      ? mergeAlwaysEnabledSkillNames(entry?.skillNames ?? [])
+      : mergeAlwaysEnabledSkillNames(settings.skills.selected);
+  const mcpServerIds =
+    mode === "custom"
+      ? [...(entry?.mcpServerIds ?? [])]
+      : settings.mcp.servers.map((server) => server.id).filter(Boolean);
+  const selectedMcpIds = mode === "custom" ? new Set(mcpServerIds) : null;
+  const mcpServers = settings.mcp.servers.filter(
+    (server) =>
+      server.enabled && server.id.trim() && (!selectedMcpIds || selectedMcpIds.has(server.id)),
+  );
+  return {
+    mode,
+    skillsEnabled: settings.skills.enabled,
+    skillNames: settings.skills.enabled ? skillNames : [],
+    mcpServerIds,
+    mcpServers,
+  };
+}
+
+export function filterMcpSettingsForWorkspace(
+  mcp: McpSettings,
+  resources: Pick<EffectiveWorkspaceResources, "mode" | "mcpServerIds">,
+): McpSettings {
+  if (resources.mode === "inherit") return mcp;
+  if (resources.mode === "off") return { ...mcp, servers: [] };
+  const allowedIds = new Set(resources.mcpServerIds);
+  return { ...mcp, servers: mcp.servers.filter((server) => allowedIds.has(server.id)) };
+}
+
+export function updateWorkspaceResourceSettings(
+  prev: AppSettings,
+  workdir: string,
+  patch: Pick<WorkspaceResourceSettings, "mode" | "skillNames" | "mcpServerIds">,
+): AppSettings {
+  const pathKey = workspaceProjectPathKey(workdir);
+  if (!pathKey) return prev;
+  const entries = { ...prev.system.workspaceResourceSettings };
+  const current = entries[pathKey];
+  entries[pathKey] = normalizeWorkspaceResourceSettingsEntry({
+    ...patch,
+    stateVersion: (current?.stateVersion ?? 0) + 1,
+    writerId: getRightDockWriterId(),
+    updatedAt: Date.now(),
+  });
+  return normalizeSettings({
+    ...prev,
+    system: { ...prev.system, workspaceResourceSettings: entries },
+  });
+}
+
+export function resetWorkspaceResourceSettings(prev: AppSettings, workdir: string): AppSettings {
+  return updateWorkspaceResourceSettings(prev, workdir, {
+    mode: "inherit",
+    skillNames: [],
+    mcpServerIds: [],
+  });
+}
+
+export function removeWorkspaceResourceReferences(
+  prev: AppSettings,
+  references: { skillNames?: readonly string[]; mcpServerIds?: readonly string[] },
+): AppSettings {
+  const removedSkillNames = new Set(
+    references.skillNames?.map((name) => name.trim()).filter(Boolean),
+  );
+  const removedMcpServerIds = new Set(
+    references.mcpServerIds?.map((id) => id.trim()).filter(Boolean),
+  );
+  if (removedSkillNames.size === 0 && removedMcpServerIds.size === 0) return prev;
+
+  let changed = false;
+  const entries = { ...prev.system.workspaceResourceSettings };
+  const writerId = getRightDockWriterId();
+  const updatedAt = Date.now();
+  for (const [pathKey, entry] of Object.entries(entries)) {
+    if (entry.mode !== "custom") continue;
+    const skillNames = entry.skillNames.filter((name) => !removedSkillNames.has(name));
+    const mcpServerIds = entry.mcpServerIds.filter((id) => !removedMcpServerIds.has(id));
+    if (
+      skillNames.length === entry.skillNames.length &&
+      mcpServerIds.length === entry.mcpServerIds.length
+    ) {
+      continue;
+    }
+    changed = true;
+    entries[pathKey] = normalizeWorkspaceResourceSettingsEntry({
+      ...entry,
+      skillNames,
+      mcpServerIds,
+      stateVersion: entry.stateVersion + 1,
+      writerId,
+      updatedAt,
+    });
+  }
+  if (!changed) return prev;
+  return normalizeSettings({
+    ...prev,
+    system: { ...prev.system, workspaceResourceSettings: entries },
+  });
+}
+
 export function updateMemorySettings(
   prev: AppSettings,
   patch: Partial<MemorySettings>,
@@ -2432,6 +2816,23 @@ export function updateCustomSettings(
     customSettings: {
       ...prev.customSettings,
       ...patch,
+    },
+  });
+}
+
+export function updateModelFailover(
+  prev: AppSettings,
+  providerType: ProviderId,
+  patch: Partial<ProviderFailoverSettings>,
+): AppSettings {
+  return normalizeSettings({
+    ...prev,
+    modelFailover: {
+      ...prev.modelFailover,
+      [providerType]: {
+        ...prev.modelFailover[providerType],
+        ...patch,
+      },
     },
   });
 }

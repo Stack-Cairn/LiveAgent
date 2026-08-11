@@ -12,7 +12,7 @@
 
 | 步骤 | 说明 | 关键模块 |
 |---:|---|---|
-| 1 | 收集用户输入、附件、选中模型、execution mode、workdir、system tools。 | `ChatPage.tsx`、`ChatComposerBar.tsx` |
+| 1 | 收集用户输入、附件、选中模型、execution mode、workdir、system tools。 | `ChatPage.tsx`、`agent-ui/src/pages/chat/ChatComposerBar.tsx` |
 | 2 | 加载 Skills prompt、Memory overview、hooks、历史上下文和当前 active segment。 | `useChatSkills.ts`、`memoryPrompt.ts`、`conversationState.ts` |
 | 3 | 构造模型 request context，必要时先触发 pre-send compaction。 | `conversationContextBuilders.ts`、`compaction/*` |
 | 4 | text 模式直接 stream assistant；tools/agent-dev 构造工具 registry 并进入 tool loop。 | `llm.ts`、`builtinRegistry.ts`、`runAgentConversationTurn.ts` |
@@ -66,7 +66,7 @@
 | `message_start` / `message_update` / `message_end` | assistant message 流式生成阶段。 |
 | `tool_execution_start` / `tool_execution_update` / `tool_execution_end` | 工具实际执行阶段。 |
 
-Hooks 支持 shell script 和 HTTP requests，设置由 GUI/WebUI 同步维护，执行在桌面端。
+Hooks 支持 shell script 和 HTTP requests；公共设置 UI 位于 `agent-ui`，配置通过 Gateway 在两端同步，实际执行在桌面端。
 
 ## 上传与重发
 
@@ -83,7 +83,7 @@ Hooks 支持 shell script 和 HTTP requests，设置由 GUI/WebUI 同步维护�
 |---|---|
 | 工具形态 | chat-only 内置工具；模型一次最多提 4 个问题，每题 2-6 个选项且**同轮各题选项数一致**，至多一个"推荐"项且**固定排在首位**。 |
 | 挂起语义 | `execute` 在工具挂起表（toolCallId 键）上等待；用户提交后 resolve，停止按钮经 AbortSignal 以"未应答"落定（`details.cancelled`）；**应答窗口由设置 `system.interactiveTimeoutMinutes` 配置（正数分钟，默认 3，与工具审批栏共用同一窗口；填很大的数如 99999 ≈ 永不超时）；超时后按推荐项（缺省第一项）自动落定**（`details.timedOut`），卡片展示倒计时。**倒计时双端同源**：桌面端在网关上报的工具参数上盖 `__askUserQuestionDeadlineAt` 权威截止时间戳（`gatewayToolPreview` 统一盖章，execute 复用同一预置值），WebUI/重连场景按真实剩余时间倒数。 |
-| 卡片 UI | `components/chat/AskUserQuestionCard.tsx`（双端镜像）：多问题以顶部 tabs 切换，单选 + 推荐标记，全部作答后提交；应答落定后只读回显。**问题与选项全部生成完毕后整卡出现**（`runAgentConversationTurn` 跳过 AskUserQuestion 的 tool_call_delta，双端不做流式渐显）。 |
+| 卡片 UI | `crates/agent-ui/src/components/chat/AskUserQuestionCard.tsx`（共享实现）：多问题以顶部 tabs 切换，单选 + 推荐标记，全部作答后提交；应答落定后只读回显。**问题与选项全部生成完毕后整卡出现**（`runAgentConversationTurn` 跳过 AskUserQuestion 的 tool_call_delta，两端不做流式渐显）。 |
 | 双端应答 | GUI 直接调用 `answerAskUserQuestion`；WebUI 走 `chat_queue.tool_answer`（item_id=toolCallId，request_json=选择数组）由桌面端落到同一挂起表，协议零改动；远端应答**校验 conversation_id 与挂起提问所属会话一致**，防串会话应答。 |
 | 结果回模型 | 标准 `ToolResultMessage`：content 列出每题的最终选择，`details.kind = "ask_user_question"` 驱动历史回放渲染。 |
 

@@ -1,11 +1,10 @@
 import type { AssistantMessage, Message, ToolResultMessage } from "@earendil-works/pi-ai";
-
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import {
   appendMessagesToConversation,
   normalizeConversationState,
 } from "../chat/conversation/conversationState";
 import { persistConversationRuntime } from "../chat/history/chatHistory";
-import { createUuid } from "../shared/id";
 
 // Dev-only transcript stress fixture: builds a large conversation with the
 // content shapes that dominate real rendering cost (long prose, big code

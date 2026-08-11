@@ -1,3 +1,40 @@
+import {
+  AssistantAvatar,
+  AssistantBubble,
+  AssistantStatus,
+  CompactingText,
+  RetryDetailsBlock,
+  VibingText,
+} from "@liveagent/ui/components/chat/AssistantBubble";
+import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
+import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import {
+  TranscriptAssistantMessageActions,
+  TranscriptUserMessageActions,
+} from "@liveagent/ui/components/chat/TranscriptMessageActions";
+import { Markdown } from "@liveagent/ui/components/Markdown";
+import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
+import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import {
+  getUploadedImagePreviewCacheKey,
+  loadUploadedImagePreview,
+  readUploadedImagePreviewCache,
+  type UploadedImagePreviewLoader,
+} from "@liveagent/ui/lib/chat/uploadedImagePreview";
+import type { GitClient } from "@liveagent/ui/lib/git/types";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
+import {
+  buildTranscriptLayoutKey,
+  createTranscriptMeasurementsLru,
+} from "@liveagent/ui/lib/transcript-virtual/measurementsLru";
+import {
+  CHECKPOINT_ROW_ESTIMATE_PX,
+  estimateAssistantRowHeight,
+  estimateUserRowHeight,
+  measureEstimateText,
+} from "@liveagent/ui/lib/transcript-virtual/rowEstimates";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type Dispatch,
@@ -11,71 +48,25 @@ import {
   useRef,
   useState,
 } from "react";
-import { ImagePreview, type ImagePreviewSlide } from "@/components/chat/ImagePreview";
-import { Markdown } from "@/components/Markdown";
-import { useLocale } from "@/i18n/LocaleContext";
-import type { ChatFileLink } from "@/lib/chat/chatFileLinks";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
-import { getRoundText, getRoundToolTrace } from "@/lib/chat/uiMessages";
+import { getRoundText } from "@/lib/chat/uiMessages";
 import {
   formatUploadedFileSize,
   type PendingUploadedFile,
   parsePastedTextDisplayReferences,
 } from "@/lib/chat/uploadedFiles";
 import {
-  getUploadedImagePreviewCacheKey,
-  loadUploadedImagePreview,
-  readUploadedImagePreviewCache,
-  type UploadedImagePreviewLoader,
-} from "@/lib/chat/uploadedImagePreview";
-import {
   buildGitHubCommitUrl,
   type CommitDetailsLoader,
   type CommitDisplayReference,
   UserMessageContent,
 } from "@/lib/chat/userMessageContent";
-import type { GitClient } from "@/lib/git/types";
 import { DEFAULT_CHAT_TRANSCRIPT_WIDTH } from "@/lib/settings";
-import { cn } from "@/lib/shared/utils";
 import { extractLiveRange } from "@/lib/transcript-virtual/liveRangeExtractor";
-import { createLiveRowScrollAdjustPolicy } from "@/lib/transcript-virtual/liveScrollAdjustPolicy";
-import {
-  buildTranscriptLayoutKey,
-  createTranscriptMeasurementsLru,
-} from "@/lib/transcript-virtual/measurementsLru";
-import {
-  CHECKPOINT_ROW_ESTIMATE_PX,
-  estimateAssistantRowHeight,
-  estimateUserRowHeight,
-  measureEstimateText,
-} from "@/lib/transcript-virtual/rowEstimates";
-import {
-  AssistantAvatar,
-  AssistantBubble,
-  AssistantStatus,
-  CompactingText,
-  RetryDetailsBlock,
-  VibingText,
-} from "@/pages/chat/AssistantBubble";
 import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
-
-import type { GatewayTranscriptRound } from "../lib/chatUi";
 import type { SectionId } from "../pages/settings/types";
-import { ChatEmptyState } from "./chat/ChatEmptyState";
-import { getUploadedFileTypeIcon } from "./chat/fileTypeIcons";
-import {
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  Copy,
-  GitBranch,
-  Loader2,
-  Pencil,
-  RefreshCw,
-  X,
-} from "./icons";
-import { ConfirmActionPopover } from "./ui/confirm-action-popover";
+import { CheckCircle2, ChevronDown, Loader2, X } from "./icons";
 
 type GatewayTranscriptProps = {
   conversationId?: string;
@@ -92,6 +83,7 @@ type GatewayTranscriptProps = {
   // Whether the scroll-follow engine is attached to the bottom; gates the
   // virtualizer's resize-compensation carve-out for live-row growth.
   isViewportFollowing?: () => boolean;
+  viewportFollowing?: boolean;
   // Imperative jump handle for the floor navigation rail.
   navRef?: MutableRefObject<GatewayTranscriptNavHandle | null>;
   // Reports the user row at the viewport's top edge (the "current floor").
@@ -168,48 +160,16 @@ function resolveNearestScrollViewport(element: HTMLElement | null) {
 function LiveStatusFooter(props: { status: string; isCompaction?: boolean }) {
   const { status, isCompaction = false } = props;
   return (
-    <div className="gateway-live-status-footer ml-9 pt-1">
+    <div className="gateway-live-status-footer ml-9 min-w-0 overflow-hidden pt-1">
       {isCompaction ? (
-        <CompactingText />
+        <CompactingText className="w-full" />
       ) : status === VIBING_STATUS ? (
-        <VibingText />
+        <VibingText className="w-full" />
       ) : (
-        <AssistantStatus>{status}</AssistantStatus>
+        <AssistantStatus className="w-full">{status}</AssistantStatus>
       )}
     </div>
   );
-}
-
-function shouldShowLiveStatusForRounds(rounds: GatewayTranscriptRound[]) {
-  const activeRound = rounds[rounds.length - 1];
-  if (!activeRound) {
-    return true;
-  }
-  const visibleToolKeys = new Set(
-    getRoundToolTrace(activeRound).map((item) => `${item.toolCall.id}\u0000${item.toolCall.name}`),
-  );
-
-  for (let index = activeRound.blocks.length - 1; index >= 0; index -= 1) {
-    const block = activeRound.blocks[index];
-    if (!block) {
-      continue;
-    }
-    if (block.kind === "tool") {
-      if (visibleToolKeys.has(`${block.item.toolCall.id}\u0000${block.item.toolCall.name}`)) {
-        return true;
-      }
-      continue;
-    }
-    if (block.kind === "hostedSearch") {
-      return false;
-    }
-    if (block.text.trim() === "") {
-      continue;
-    }
-    return block.kind !== "text";
-  }
-
-  return true;
 }
 
 function HistoryLoadingState(props: { title?: string }) {
@@ -644,25 +604,6 @@ function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], text: stri
   };
 }
 
-function formatMessageTimestamp(timestamp: number | undefined, now = new Date()): string {
-  if (!timestamp || !Number.isFinite(timestamp) || timestamp <= 0) return "";
-  const date = new Date(timestamp);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  if (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  ) {
-    return time;
-  }
-  const monthDay = `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  if (date.getFullYear() === now.getFullYear()) {
-    return `${monthDay} ${time}`;
-  }
-  return `${date.getFullYear()}-${monthDay} ${time}`;
-}
-
 function GatewayUserMessageBubbleBody(props: {
   text: string;
   attachments: PendingUploadedFile[];
@@ -930,45 +871,25 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
         onLoadUploadedImagePreview={onLoadUploadedImagePreview}
         loadCommitDetails={loadCommitDetails}
       />
-      <div className="chat-user-bubble-actions mt-1 flex items-center justify-end gap-1.5">
-        {!readOnly ? (
-          <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100">
-            <button
-              type="button"
-              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-              title={t("chat.copy")}
-              aria-label={t("chat.copy")}
-              onClick={() => {
-                void navigator.clipboard.writeText(row.text).then(() => {
-                  setCopiedMessageId(row.key);
-                  window.setTimeout(() => {
-                    setCopiedMessageId((current) => (current === row.key ? null : current));
-                  }, 1500);
-                });
-              }}
-            >
-              {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            </button>
-            <button
-              type="button"
-              className="chat-user-bubble-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-              title={editTitle}
-              aria-label={editTitle}
-              disabled={editDisabled}
-              onClick={() => {
-                if (effectiveMessageRef) {
-                  setEditingMessageId(row.key);
-                }
-              }}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : null}
-        <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
-          {formatMessageTimestamp(row.timestamp)}
-        </span>
-      </div>
+      <TranscriptUserMessageActions
+        timestamp={row.timestamp}
+        copied={isCopied}
+        onCopy={() => {
+          void navigator.clipboard.writeText(row.text).then(() => {
+            setCopiedMessageId(row.key);
+            window.setTimeout(() => {
+              setCopiedMessageId((current) => (current === row.key ? null : current));
+            }, 1500);
+          });
+        }}
+        editDisabled={editDisabled}
+        editTitle={editTitle}
+        onEdit={() => {
+          if (effectiveMessageRef) setEditingMessageId(row.key);
+        }}
+        readOnly={readOnly}
+        alwaysShowActions
+      />
     </div>
   );
 });
@@ -1035,88 +956,33 @@ const GatewayAssistantMessageActions = memo(function GatewayAssistantMessageActi
   const branchTitle = retryMessageRef ? t("chat.branch") : t("chat.branchUnavailable");
 
   return (
-    <div className="assistant-bubble-shell flex w-full max-w-full items-start gap-3">
-      <div className="assistant-bubble-avatar w-7 shrink-0" aria-hidden="true" />
-      <div className="chat-assistant-actions flex min-w-0 flex-1 items-center justify-start gap-1.5">
-        <span className="select-none text-[calc(11px*var(--zone-font-scale,1))] tabular-nums text-muted-foreground/70">
-          {formatMessageTimestamp(row.timestamp)}
-        </span>
-        <div
-          className={`flex gap-0.5 transition-opacity group-focus-within/assistant:opacity-100 group-hover/assistant:opacity-100 [@media(hover:none)]:opacity-100 ${isRowBranchPending ? "opacity-100" : "opacity-0"}`}
-        >
-          <button
-            type="button"
-            className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-            title={t("chat.copy")}
-            aria-label={t("chat.copy")}
-            disabled={!replyText}
-            onClick={() => {
-              void navigator.clipboard.writeText(replyText).then(() => {
-                setCopiedMessageId(row.key);
-                window.setTimeout(() => {
-                  setCopiedMessageId((current) => (current === row.key ? null : current));
-                }, 1500);
-              });
-            }}
-          >
-            {isCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          </button>
-          <ConfirmActionPopover
-            title={t("chat.retryConfirmTitle")}
-            description={t("chat.retryConfirmDescription")}
-            confirmLabel={t("chat.retry")}
-            align="start"
-            side="top"
-            onConfirm={() => {
-              if (!retryTarget || !retryMessageRef) return;
-              onResendFromEdit?.(retryMessageRef, retryTarget.text, retryTarget.attachments);
-            }}
-          >
-            {(open) => (
-              <button
-                type="button"
-                className="chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-                title={retryTitle}
-                aria-label={retryTitle}
-                disabled={retryDisabled}
-                onClick={open}
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </ConfirmActionPopover>
-          <ConfirmActionPopover
-            title={t("chat.branchConfirmTitle")}
-            description={t("chat.branchConfirmDescription")}
-            confirmLabel={t("chat.branch")}
-            tone="default"
-            align="start"
-            side="top"
-            onConfirm={() => {
-              if (!retryMessageRef) return;
-              onBranchConversation?.(retryMessageRef);
-            }}
-          >
-            {(open) => (
-              <button
-                type="button"
-                className={`chat-assistant-action rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground disabled:cursor-not-allowed ${isRowBranchPending ? "" : "disabled:opacity-40"}`}
-                title={branchTitle}
-                aria-label={branchTitle}
-                disabled={branchDisabled}
-                onClick={open}
-              >
-                {isRowBranchPending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <GitBranch className="h-3.5 w-3.5" />
-                )}
-              </button>
-            )}
-          </ConfirmActionPopover>
-        </div>
-      </div>
-    </div>
+    <TranscriptAssistantMessageActions
+      timestamp={row.timestamp}
+      copied={isCopied}
+      copyDisabled={!replyText}
+      onCopy={() => {
+        void navigator.clipboard.writeText(replyText).then(() => {
+          setCopiedMessageId(row.key);
+          window.setTimeout(() => {
+            setCopiedMessageId((current) => (current === row.key ? null : current));
+          }, 1500);
+        });
+      }}
+      retryDisabled={retryDisabled}
+      retryTitle={retryTitle}
+      onRetry={() => {
+        if (!retryTarget || !retryMessageRef) return;
+        onResendFromEdit?.(retryMessageRef, retryTarget.text, retryTarget.attachments);
+      }}
+      branchDisabled={branchDisabled}
+      branchTitle={branchTitle}
+      branchPending={isRowBranchPending}
+      onBranch={() => {
+        if (retryMessageRef) onBranchConversation?.(retryMessageRef);
+      }}
+      withAvatarSpacer
+      alwaysShowActions
+    />
   );
 });
 
@@ -1184,6 +1050,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   contentWidth: number;
   scrollViewport: HTMLDivElement | null;
   isViewportFollowing?: () => boolean;
+  viewportFollowing: boolean;
   navRef?: MutableRefObject<GatewayTranscriptNavHandle | null>;
   onAnchorUserRowChange?: (rowKey: string | null) => void;
   hasMoreHistory?: boolean;
@@ -1218,6 +1085,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     contentWidth,
     scrollViewport,
     isViewportFollowing,
+    viewportFollowing,
     navRef,
     onAnchorUserRowChange,
     hasMoreHistory,
@@ -1294,12 +1162,15 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     if (readOnly || !isStreaming) {
       return false;
     }
+    if (liveAssistantIndex >= 0) {
+      return false;
+    }
     if (displayedToolStatusIsCompaction) {
       return true;
     }
     const lastRowKind = rows[rows.length - 1]?.kind;
     return !lastRowKind || lastRowKind === "user" || lastRowKind === "checkpoint";
-  }, [displayedToolStatusIsCompaction, isStreaming, readOnly, rows]);
+  }, [displayedToolStatusIsCompaction, isStreaming, liveAssistantIndex, readOnly, rows]);
 
   // Row keys are unique by construction (the row builder's single canonical
   // pass) and feed both React reconciliation and the virtualizer's
@@ -1361,16 +1232,10 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     gap: TRANSCRIPT_ROW_GAP,
     overscan: TRANSCRIPT_ROW_OVERSCAN_COUNT,
     enabled: scrollViewport !== null,
-    // End-anchored: prepends (loading earlier history) keep the visible item
-    // stable upstream via keyed anchoring, growth of the last row while the
-    // viewport is virtually at the end compensates by the total-size delta,
-    // and estimate→measure corrections keep the bottom pinned. The threshold
-    // matches scrollFollowCore's BOTTOM_ATTACH_THRESHOLD_PX so both engines
-    // agree on what "at the bottom" means. followOnAppend stays off: its
-    // DOM-distance re-follow would conflict with the follow reducer's
-    // "shrink clamps never re-attach" contract — appends while following are
-    // already pinned by the reducer.
-    anchorTo: "end",
+    // End anchoring is enabled only for a detached reader so keyed prepends
+    // preserve the visible row. While following, start anchoring disables the
+    // virtualizer's bottom correction and leaves live growth to useScrollFollow.
+    anchorTo: viewportFollowing ? "start" : "end",
     scrollEndThreshold: 8,
     initialMeasurementsCache,
     rangeExtractor: (range) => extractLiveRange(range, forceMountStartRef.current),
@@ -1378,8 +1243,8 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
 
   // TanStack exposes the resize-compensation predicate as an instance field,
   // not an option; reassigning per render keeps the closure's inputs current.
-  // It only governs the detached reader — while virtually at the end, the
-  // upstream end-anchor compensation takes priority over this predicate.
+  // While following it rejects every virtualizer correction; while detached
+  // it retains estimate/measurement anchoring for rows above the viewport.
   transcriptVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     createLiveRowScrollAdjustPolicy({
       getLiveStartIndex: () => forceMountStartRef.current,
@@ -1701,16 +1566,11 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
           const rowIndex = virtualRow.index - leadingOffset;
           const isLatestLiveAssistant = rowIndex === liveAssistantIndex;
           const isLatestLiveStreaming = isStreaming && isLatestLiveAssistant;
-          const shouldShowLiveStatus =
-            isLatestLiveStreaming &&
-            Boolean(displayedToolStatus) &&
-            !displayedToolStatusIsCompaction &&
-            shouldShowLiveStatusForRounds(row.rounds);
-          const liveStatusText = shouldShowLiveStatus ? (displayedToolStatus ?? "") : "";
           return (
             <article
               key={virtualRow.key}
               data-index={virtualRow.index}
+              data-row-key={row.key}
               ref={transcriptVirtualizer.measureElement}
               className="gateway-transcript-row absolute left-0 right-0 top-0"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
@@ -1728,7 +1588,12 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
                   workdir={workspaceRoot}
                   onOpenFileLink={onOpenFileLink}
                 />
-                {shouldShowLiveStatus ? <LiveStatusFooter status={liveStatusText} /> : null}
+                {isLatestLiveStreaming ? (
+                  <LiveStatusFooter
+                    status={displayedToolStatus ?? VIBING_STATUS}
+                    isCompaction={displayedToolStatusIsCompaction}
+                  />
+                ) : null}
                 {isLatestLiveStreaming &&
                 !shouldShowPendingLiveBubble &&
                 retryAttempts &&
@@ -1796,6 +1661,7 @@ export function GatewayTranscript({
   activeTurnKey = null,
   contentWidth = DEFAULT_CHAT_TRANSCRIPT_WIDTH,
   isViewportFollowing,
+  viewportFollowing = false,
   navRef,
   onAnchorUserRowChange,
   error,
@@ -1884,6 +1750,7 @@ export function GatewayTranscript({
           contentWidth={contentWidth}
           scrollViewport={transcriptScrollViewport}
           isViewportFollowing={isViewportFollowing}
+          viewportFollowing={viewportFollowing}
           navRef={navRef}
           onAnchorUserRowChange={onAnchorUserRowChange}
           hasMoreHistory={hasMoreHistory}

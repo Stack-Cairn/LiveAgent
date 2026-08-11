@@ -279,7 +279,7 @@ location / {
 | **Agent GUI** · 样式 | Tailwind CSS 4 + Radix UI |
 | **Agent GUI** · 渲染 | streamdown + KaTeX + Mermaid + Monaco Editor |
 | **Agent GUI** · 后端 | Rust + Tokio + SQLite (rusqlite) + WebSocket (tokio-tungstenite) |
-| **Agent GUI** · LLM | @earendil-works/pi-ai · @openai/codex-sdk · claude-agent-sdk |
+| **Agent GUI** · LLM | @earendil-works/pi-ai · @earendil-works/pi-agent-core |
 | **Gateway** · 语言 | Go 1.25 |
 | **Gateway** · 协议 | WebSocket + Protobuf + HTTP |
 | **Gateway** · Web UI | React + Vite + Tailwind CSS(嵌入式) |
@@ -312,7 +312,12 @@ location / {
 
 ```
 LiveAgent/
+├── package.json                  # pnpm workspace 命令
+├── pnpm-lock.yaml                # 统一前端依赖锁文件
 ├── crates/
+│   ├── agent-ui/                 # GUI/WebUI 共享 React 源码
+│   │   └── src/                  #   组件、领域模型、设置壳层
+│   │
 │   ├── agent-gui/                # 桌面客户端
 │   │   ├── src/                  # React 前端
 │   │   │   ├── components/       #   UI 组件
@@ -382,22 +387,24 @@ LiveAgent/
 
 提交 PR 前,请确保以下检查全部通过(与 CI 门禁一致):
 
-**桌面客户端 · `crates/agent-gui`**
+先在仓库根目录执行一次 `pnpm install --frozen-lockfile` 安装前端依赖。
 
-1. 类型检查与构建通过:`pnpm build`
-2. 代码规范检查通过:`pnpm lint`
-3. 前端单元测试通过:`pnpm test:frontend`(改动发布脚本时另跑 `pnpm test:release`)
+**桌面客户端**
+
+1. 类型检查与构建通过:`pnpm build:gui`
+2. 代码规范检查通过:`pnpm lint:ui && pnpm lint:gui`
+3. 前端单元测试通过:`pnpm test:gui`(改动发布脚本时另跑 `pnpm --filter liveagent test:release`)
 4. Rust 后端检查通过:`cargo check --manifest-path crates/agent-gui/src-tauri/Cargo.toml --tests`(仓库根目录执行)
 
 **Gateway · `crates/agent-gateway`(如有改动)**
 
 1. Go 单元测试通过:`go test ./...`
-2. WebUI 构建 / Lint / 测试通过:`pnpm build && pnpm lint && pnpm test`(在 `web/` 目录执行)
+2. WebUI 构建 / Lint / 测试通过:`pnpm build:webui && pnpm lint:webui && pnpm test:webui`
 3. Proto 变更后重新生成并提交产物:`make proto`
 
-**跨端一致性**
+**共享 UI 边界**
 
-- GUI 与 WebUI 的镜像文件必须逐字节一致:`node scripts/check-mirror.mjs`
+- 共享源码不得直接依赖任一宿主:`pnpm check:ui-boundaries`
 - 保持 diff 干净 (无行尾空白):`git diff --check`
 
 ---
@@ -407,7 +414,7 @@ LiveAgent/
 感谢所有为 LiveAgent 做出贡献的朋友们！
 
 <a href="https://github.com/Stack-Cairn/LiveAgent/graphs/contributors">
-  <img src="docs/images/contributors.svg" alt="Contributors" />
+  <img src="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/contributors.svg" alt="Contributors" />
 </a>
 
 ---
@@ -417,9 +424,9 @@ LiveAgent/
 <a href="https://www.star-history.com/?repos=Stack-Cairn%2FLiveAgent&type=date&legend=top-left">
 
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="docs/images/star-history-dark.svg" />
-   <source media="(prefers-color-scheme: light)" srcset="docs/images/star-history-light.svg" />
-   <img alt="Star History Chart" src="docs/images/star-history-light.svg" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-dark.svg" />
+   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-light.svg" />
+   <img alt="Star History Chart" src="https://raw.githubusercontent.com/Stack-Cairn/LiveAgent/chart-assets/star-history-light.svg" />
  </picture>
 </a>
 

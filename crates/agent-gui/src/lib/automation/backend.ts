@@ -3,9 +3,6 @@
 // is the per-platform adapter — the web frontend ships its own copy speaking
 // the gateway cron.manage protocol.
 
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-
 import type {
   AutomationApplyInput,
   AutomationSnapshot,
@@ -18,7 +15,9 @@ import type {
   HooksSnapshot,
   PromptCompletionResponse,
   PromptRunRequest,
-} from "./types";
+} from "@liveagent/ui/lib/automation/types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 const CRON_CHANGED_EVENT = "automation:cron-changed";
 const HOOKS_CHANGED_EVENT = "automation:hooks-changed";

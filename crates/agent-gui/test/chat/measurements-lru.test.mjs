@@ -5,14 +5,14 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const { buildTranscriptLayoutKey, createTranscriptMeasurementsLru } = loader.loadModule(
-  "src/lib/transcript-virtual/measurementsLru.ts",
+  "@liveagent/ui/lib/transcript-virtual/measurementsLru.ts",
 );
 const { SCROLL_FOLLOW_IGNORE_KEYS_ATTRIBUTE } = loader.loadModule(
-  "src/lib/chat-scroll/scrollFollowCore.ts",
+  "@liveagent/ui/lib/chat-scroll/scrollFollowCore.ts",
 );
-const width = loader.loadModule("src/lib/transcript-width/transcriptWidthModel.ts");
+const width = loader.loadModule("@liveagent/ui/lib/transcript-width/transcriptWidthModel.ts");
 const transcriptWidthControlsSource = readFileSync(
-  new URL("../../src/pages/chat/transcript/TranscriptWidthControls.tsx", import.meta.url),
+  new URL("../../../agent-ui/src/pages/chat/transcript/TranscriptWidthControls.tsx", import.meta.url),
   "utf8",
 );
 

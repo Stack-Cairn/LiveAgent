@@ -45,7 +45,7 @@ export type CompactionSinks = {
   publishStatus?: (status: CompactionStatus) => void;
   setBridgeToolStatus?: (status: string | null, isCompaction?: boolean) => void;
   queueCheckpoint?: (state: ConversationViewState) => void;
-  persist?: (state: ConversationViewState) => Promise<unknown>;
+  persist?: (state: ConversationViewState) => Promise<boolean | undefined>;
   restoreComposer?: (
     composerText: string | undefined,
     uploadedFiles: PendingUploadedFile[],
@@ -127,6 +127,13 @@ export class CompactionController {
     return { compactionsApplied: this.pressure.compactionsApplied };
   }
 
+  private async persistCheckpoint(binding: CompactionTurnBinding, state: ConversationViewState) {
+    const persisted = await binding.sinks.persist?.(state);
+    if (persisted === false) {
+      throw new Error("compaction checkpoint persistence failed");
+    }
+  }
+
   beginRequest(context: Context, state: ConversationViewState) {
     this.ledger.rebase(context);
     this.updateTurnMeta(state);
@@ -206,7 +213,7 @@ export class CompactionController {
         complete: binding.complete,
       });
 
-      await binding.sinks.persist?.(outcome.state);
+      await this.persistCheckpoint(binding, outcome.state);
       this.rollbackSnapshot = null;
       const appliedState = presend.composeAppliedState(outcome.state);
       binding.sinks.applyState?.(appliedState);
@@ -330,7 +337,7 @@ export class CompactionController {
         complete: binding.complete,
       });
 
-      await binding.sinks.persist?.(outcome.state);
+      await this.persistCheckpoint(binding, outcome.state);
       this.rollbackSnapshot = null;
       binding.sinks.applyStateMidRun?.(outcome.state);
       this.settleCompleted(params.trigger, outcome.newSegmentIndex);

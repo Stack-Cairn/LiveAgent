@@ -5,7 +5,6 @@
 // here.
 
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
 import {
   formatMemoryError,
   type MemoryHistoryTimeMode,
@@ -21,19 +20,20 @@ import {
   memorySearch,
   memoryUpdate,
   memoryWrite,
-} from "../memory/api";
+} from "@liveagent/ui/lib/memory/api";
+import type {
+  MemoryEvidenceFields,
+  MemoryScopeFilter,
+  MemorySearchType,
+  MemoryType,
+} from "@liveagent/ui/lib/memory/schema";
+import { Type } from "typebox";
 import {
   MEMORY_MANAGER_ACTION_DESCRIPTION_RO,
   MEMORY_MANAGER_ACTION_DESCRIPTION_RW,
   MEMORY_MANAGER_FIELD_DESCRIPTIONS,
   MEMORY_MANAGER_TOOL_DESCRIPTION,
 } from "../memory/prompts/managerTool";
-import type {
-  MemoryEvidenceFields,
-  MemoryScopeFilter,
-  MemorySearchType,
-  MemoryType,
-} from "../memory/schema";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
 
 type MemoryToolMode = "rw" | "ro";

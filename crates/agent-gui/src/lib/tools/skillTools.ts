@@ -1,8 +1,8 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
+import { isAlwaysEnabledSkillName } from "@liveagent/ui/lib/skills/builtin";
 
-import { manageSkill, notifySkillsDiscoveryUpdated } from "../skills";
-import { isAlwaysEnabledSkillName } from "../skills/builtin";
+import { manageSkill, notifySkillsDiscoveryUpdated } from "@liveagent/ui/lib/skills/index";
+import { Type } from "typebox";
 import {
   type BuiltinToolBundle,
   createBuiltinMetadataMap,
@@ -597,7 +597,7 @@ export function createSkillTools(
     workdir?: string;
     skillAccessPolicy?: SkillAccessPolicy;
     onManagedSkillsChanged?: (change: {
-      action: "install" | "create";
+      action: "install" | "create" | "delete";
       names: string[];
       baseDirs: string[];
     }) => void | Promise<void>;
@@ -670,6 +670,18 @@ export function createSkillTools(
         notifySkillsDiscoveryUpdated();
       }
       if (result.action === "delete") {
+        const deletedName = typeof payload.name === "string" ? payload.name.trim() : "";
+        if (deletedName) {
+          try {
+            await params.onManagedSkillsChanged?.({
+              action: "delete",
+              names: [deletedName],
+              baseDirs: [],
+            });
+          } catch (error) {
+            console.warn("Failed to remove deleted Skill from settings", error);
+          }
+        }
         notifySkillsDiscoveryUpdated();
       }
 

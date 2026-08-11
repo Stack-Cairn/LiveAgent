@@ -92,8 +92,9 @@ test("edit-resend reports a rejected send without mutating history itself", asyn
 });
 
 test("send preflight atomically persists the replacement before starting the runtime", () => {
+  // 替换结果在 Run 边界清除上一 Run 的 taskList 后落入 nextConversationState。
   const replaceIndex = sendSource.indexOf(
-    "nextConversationState = await replaceConversationAtMessage(",
+    "nextConversationState = clearTaskListState(\n          await replaceConversationAtMessage(",
   );
   const runtimeStartIndex = sendSource.indexOf(
     "setConversationStopHandler(conversationId, handleConversationStop);",

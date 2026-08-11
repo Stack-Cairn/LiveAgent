@@ -9,7 +9,7 @@ const loader = createWebModuleLoader({
 });
 
 const { estimateAssistantRowHeight, estimateUserRowHeight, measureEstimateText } =
-  loader.loadModule("src/lib/transcript-virtual/rowEstimates.ts");
+  loader.loadModule("@liveagent/ui/lib/transcript-virtual/rowEstimates.ts");
 
 test("measureEstimateText splits prose from fenced code", () => {
   const text = ["intro line", "```ts", "const a = 1;", "const b = 2;", "```", "outro"].join("\n");

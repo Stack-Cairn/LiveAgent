@@ -1,14 +1,13 @@
+import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
-
-import { getUploadedFileTypeIcon } from "../../../components/chat/fileTypeIcons";
-import { ImagePreview, type ImagePreviewSlide } from "../../../components/chat/ImagePreview";
 import { X } from "../../../components/icons";
-import { useLocale } from "../../../i18n";
 import {
   formatUploadedFileSize,
   type PendingUploadedFile,
 } from "../../../lib/chat/messages/uploadedFiles";
-import { cn } from "../../../lib/shared/utils";
 import { useUploadedImagePreview } from "./uploadedImagePreview";
 
 function UserImageAttachmentCard({

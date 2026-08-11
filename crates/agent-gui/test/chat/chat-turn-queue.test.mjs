@@ -137,7 +137,7 @@ test("queued chat turn preview keeps structured draft hints compact", () => {
     },
   ]);
 
-  assert.equal(queue.buildQueuedChatTurnPreview(richDraft), "hello pasted.txt$reviewer");
+  assert.equal(queue.buildQueuedChatTurnPreview(richDraft), "hello pasted.txt/reviewer");
   assert.equal(queue.queuedChatTurnHasContent(richDraft, []), true);
   assert.equal(queue.queuedChatTurnHasContent(draft(""), [{ fileName: "a.txt" }]), true);
 });

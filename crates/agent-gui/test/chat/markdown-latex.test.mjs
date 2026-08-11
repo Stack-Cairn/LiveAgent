@@ -5,7 +5,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const { normalizeLatexDelimiters } = loader.loadModule(
-  "src/lib/normalizeLatexDelimiters.ts",
+  "@liveagent/ui/lib/normalizeLatexDelimiters.ts",
 );
 
 test("normalizes LaTeX display and inline delimiters for Streamdown math", () => {

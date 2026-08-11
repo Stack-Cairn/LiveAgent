@@ -192,6 +192,14 @@ pub struct ChatHistorySegmentMutationInput {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatHistoryAppendSegmentInput {
+    pub conversation: ChatHistoryConversationInput,
+    pub previous_segment: ChatHistorySegmentInput,
+    pub segment: ChatHistorySegmentInput,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatHistorySearchArgs {
     pub query: String,
     pub limit: Option<usize>,

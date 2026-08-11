@@ -1,5 +1,5 @@
-//! 扫描本机其他 CLI 工具（Claude Code / Codex / CodeBuddy）已安装的 Skills，
-//! 供 UI 展示后由用户勾选导入（导入本身复用既有 install 动作，source = 技能目录）。
+//! 扫描本机其他 CLI 工具（Claude Code / Codex / CodeBuddy）与 AGENTS 规范
+//! 已安装的 Skills，供 UI 展示后由用户勾选导入（导入本身复用既有 install 动作，source = 技能目录）。
 
 use super::library::discover_skill_dirs;
 use super::metadata::{read_skill_metadata_from_dir, standard_metadata_file_for};
@@ -11,6 +11,8 @@ const EXTERNAL_TOOL_ROOTS: &[(&str, &str)] = &[
     ("codex", "~/.codex/skills"),
     // CodeBuddy 的技能市场缓存目录：可能包含未安装的技能，由 UI 提示用户。
     ("codebuddy", "~/.codebuddy/skills-marketplace/skills"),
+    // AGENTS 规范定义的通用全局技能目录，不绑定单一编码工具。
+    ("agents", "~/.agents/skills"),
 ];
 
 pub(crate) fn scan_external_skills() -> Vec<SystemExternalToolScan> {

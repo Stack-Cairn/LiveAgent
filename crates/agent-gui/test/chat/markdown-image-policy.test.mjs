@@ -122,7 +122,7 @@ const loader = createTsModuleLoader({
   },
 });
 
-const markdownModule = loader.loadModule("src/components/Markdown.tsx");
+const markdownModule = loader.loadModule("@liveagent/ui/components/Markdown.tsx");
 const agentRunnerModule = loader.loadModule("src/lib/chat/runner/agentRunner.ts");
 
 test("markdown image syntax falls back to alt text instead of rendering a real image", () => {
@@ -276,18 +276,20 @@ test("escaped Markdown file links stay literal while a following link remains cl
   ]);
 });
 
-test("linked editor locations are applied once per request and tab in both frontends", () => {
-  const files = [
-    "../../src/components/workspace-editor/WorkspaceCodeEditorOverlay.tsx",
-    "../../../agent-gateway/web/src/components/workspace-editor/WorkspaceCodeEditorOverlay.tsx",
-  ];
-  for (const relativePath of files) {
-    const source = fs.readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
-    assert.match(source, /linkedLocationKeyRef/);
-    assert.match(source, /const locationKey = `\$\{openRequest\.id\}\\u0000\$\{activeTabKey\}`/);
-    assert.match(source, /if \(linkedLocationKeyRef\.current === locationKey\) return/);
-    assert.doesNotMatch(source, /\}, \[activeTab, openRequest\]\);/);
-  }
+test("the shared editor applies linked locations once per request and tab", () => {
+  const source = fs.readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../../agent-ui/src/components/workspace-editor/WorkspaceCodeEditorOverlay.tsx",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+  assert.match(source, /linkedLocationKeyRef/);
+  assert.match(source, /const locationKey = `\$\{openRequest\.id\}\\u0000\$\{activeTabKey\}`/);
+  assert.match(source, /if \(linkedLocationKeyRef\.current === locationKey\) return/);
+  assert.doesNotMatch(source, /\}, \[activeTab, openRequest\]\);/);
 });
 
 test("the reported ps1 link renders as one accessible click target and never executes itself", () => {
@@ -332,7 +334,7 @@ test("historical and streaming assistant rows share the explicit file-open prop 
     "../../src/pages/chat/transcript/TranscriptList.tsx",
     "../../src/pages/chat/transcript/AssistantRenderUnit.tsx",
     "../../src/pages/chat/components/AssistantBubble.tsx",
-    "../../src/pages/chat/components/assistant-bubble/RoundContent.tsx",
+    "../../../agent-ui/src/components/chat/assistant-bubble/RoundContent.tsx",
   ];
   for (const relativePath of files) {
     const source = fs.readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
@@ -342,7 +344,7 @@ test("historical and streaming assistant rows share the explicit file-open prop 
   const roundContent = fs.readFileSync(
     fileURLToPath(
       new URL(
-        "../../src/pages/chat/components/assistant-bubble/RoundContent.tsx",
+        "../../../agent-ui/src/components/chat/assistant-bubble/RoundContent.tsx",
         import.meta.url,
       ),
     ),

@@ -1,5 +1,4 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
 import {
   ASK_USER_QUESTION_MAX_OPTIONS,
   ASK_USER_QUESTION_MAX_QUESTIONS,
@@ -14,7 +13,8 @@ import {
   parseAskUserQuestionItems,
   resolveAskUserQuestionAnswers,
   scheduleAtDeadline,
-} from "../chat/askUserQuestion";
+} from "@liveagent/ui/lib/chat/askUserQuestion";
+import { Type } from "typebox";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";
 
 type AskUserQuestionSettlement =

@@ -13,7 +13,7 @@ const { buildGatewayToolCallPreviewArguments } = loader.loadModule(
 );
 const toolPreview = loader.loadModule("src/lib/chat/messages/toolPreview.ts");
 const askTools = loader.loadModule("src/lib/tools/askUserQuestionTools.ts");
-const askShared = loader.loadModule("src/lib/chat/askUserQuestion.ts");
+const askShared = loader.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts");
 
 test("gateway runtime snapshot projects live rounds into chat entries", () => {
   const entries = buildGatewayRuntimeSnapshotEntries({

@@ -1,10 +1,9 @@
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
-
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import { normalizeChatRuntimeControls } from "../../../lib/settings";
-import { createUuid } from "../../../lib/shared/id";
 import {
   type ActiveGatewayBridgeRequest,
   type GatewayBridgeRuntimeRefs,

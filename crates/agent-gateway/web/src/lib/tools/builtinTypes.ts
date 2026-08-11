@@ -1,9 +1,17 @@
-import type { Tool, ToolCall, ToolResultMessage } from "../agentTypes";
+import type { TaskListResultDetails } from "@liveagent/ui/contracts/task";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,
   SubagentMessageDetails,
-} from "../subagents/protocol";
+} from "@liveagent/ui/lib/subagents/protocol";
+import type { Tool, ToolCall, ToolResultMessage } from "../agentTypes";
+
+export type {
+  TaskItem,
+  TaskListResultDetails,
+  TaskListState,
+  TaskStatus,
+} from "@liveagent/ui/contracts/task";
 
 export type BuiltinToolGroupId = "fs" | "shell" | "skill" | "system" | "mcp" | "subagent";
 
@@ -345,17 +353,6 @@ export type GrepResultDetails = {
   files: GrepResultFileSummary[];
 };
 
-export type TodoItem = {
-  content: string;
-  status: "pending" | "in_progress" | "completed";
-  activeForm: string;
-};
-
-export type TodoWriteResultDetails = {
-  kind: "todo_write";
-  todos: TodoItem[];
-};
-
 export type BuiltinToolResultDetails =
   | ReadTextResultDetails
   | ReadImageResultDetails
@@ -374,5 +371,5 @@ export type BuiltinToolResultDetails =
   | ListResultDetails
   | GlobResultDetails
   | GrepResultDetails
-  | TodoWriteResultDetails
+  | TaskListResultDetails
   | Record<string, unknown>;

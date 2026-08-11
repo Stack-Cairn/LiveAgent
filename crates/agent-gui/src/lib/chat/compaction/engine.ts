@@ -1,8 +1,7 @@
 import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
-
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { ProviderId } from "../../settings";
-import { createUuid } from "../../shared/id";
 import {
   applyCompactionCheckpoint,
   type CompactionCheckpointStats,

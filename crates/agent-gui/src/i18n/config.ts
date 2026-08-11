@@ -1,3 +1,5 @@
+import { TASK_TRANSLATIONS } from "@liveagent/ui/i18n/taskTranslations";
+
 /**
  * Simple i18n translation layer
  * Maps keys to localized strings for zh-CN and en-US
@@ -11,6 +13,7 @@ export const SUPPORTED_LOCALES = ["zh-CN", "en-US"] as const satisfies readonly 
 
 export const translations: Record<Locale, Record<string, string>> = {
   "zh-CN": {
+    ...TASK_TRANSLATIONS["zh-CN"],
     /* ── App / Global ── */
     "app.errorBoundaryCopy": "复制错误信息",
     "app.errorBoundaryDesc": "界面渲染发生错误，正在进行的任务不受影响。请重新加载页面。",
@@ -83,6 +86,17 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceCloneWebDisabled": "请先在远程设置中启用网页 Git 操作。",
     "chat.workspaceNewConversation": "新对话",
     "chat.workspaceMore": "更多",
+    "chat.workspaceResources": "配置 Skills 与 MCP",
+    "chat.workspaceResourcesTitle": "工作空间资源设置",
+    "chat.workspaceResourcesModeInherit": "跟随全局",
+    "chat.workspaceResourcesModeCustom": "自定义",
+    "chat.workspaceResourcesModeOff": "全部关闭",
+    "chat.workspaceResourcesInheritHint": "使用 Skill Hub 与 MCP Hub 中的默认启用设置。",
+    "chat.workspaceResourcesCustomHint": "选择仅向此工作空间中的 Agent 暴露的 Skills 与 MCP。",
+    "chat.workspaceResourcesOffHint": "此工作空间不会向 Agent 暴露 Skills 或 MCP。",
+    "chat.workspaceResourcesSearch": "搜索名称或描述",
+    "chat.workspaceResourcesSelected": "已选择 {skills} 个 Skills、{mcp} 个 MCP",
+    "chat.workspaceResourcesMissingSkill": "此 Skill 尚未安装在当前设备上。",
     "chat.workspacePin": "置顶工作空间",
     "chat.workspaceUnpin": "取消置顶",
     "chat.workspaceRename": "修改标题",
@@ -95,6 +109,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceRemoveConfirm": "移除「{name}」？",
     "chat.workspaceShowAll": "显示全部（{count}）",
     "chat.workspaceShowLess": "收起",
+    "chat.workspaceShowAllProjects": "显示全部（{count}）",
+    "chat.workspaceShowLessProjects": "收起",
     "chat.workspaceRemoveRunning": "后台任务运行中，暂时不能移除。",
     "chat.workspaceRemoveDescription": "会删除此工作空间下的历史对话，不会删除文件夹。",
     "chat.workspaceOpenSystemFileManagerFailed": "打开资源管理器失败",
@@ -112,6 +128,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.conversationPin": "置顶对话",
     "chat.conversationUnpin": "取消置顶",
     "chat.conversationRename": "修改标题",
+    "chat.conversationMoveToWorkspace": "移动到工作空间",
     "chat.conversationShare": "分享",
     "chat.conversationDelete": "删除对话",
     "chat.conversationDeleteConfirm": "删除「{title}」？",
@@ -135,6 +152,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.renameFailed": "修改历史对话标题失败",
     "chat.history.renameBlockedRunning": "后台任务仍在运行，暂时不能修改该对话标题。",
     "chat.history.pinFailed": "更新历史对话置顶状态失败",
+    "chat.history.moveFailed": "移动历史对话工作空间失败",
+    "chat.history.moveBlockedRunning": "后台任务仍在运行，暂时不能移动该对话。",
     "chat.history.deleteFailed": "删除历史对话失败",
     "chat.history.deleteBlockedRunning": "后台任务仍在运行，暂时不能删除该对话。",
     "chat.history.openFailed": "读取历史对话失败",
@@ -288,15 +307,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.tool.running": "运行中",
     "chat.tool.failed": "失败",
     "chat.tool.success": "已完成",
-    "chat.tool.aborted": "已中止",
     "chat.tool.waiting": "等待",
     "chat.tool.command": "命令",
     "chat.tool.args": "参数",
     "chat.tool.return": "返回",
     "chat.tool.error": "(错误)",
     "chat.tool.viewReturn": "查看返回内容",
-    "chat.tool.todoTitle": "任务清单",
-    "chat.tool.todoEmpty": "暂无任务",
     "chat.tool.askUserTitle": "向你提问",
     "chat.askUser.preparing": "正在准备问题",
     "chat.askUser.waiting": "等待你的选择",
@@ -956,6 +972,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.groupOther": "其他",
     "settings.backToChat": "返回对话",
     "settings.title": "设置",
+    "settings.searchPlaceholder": "搜索设置…",
+    "settings.searchNoResults": "未找到匹配的设置",
 
     /* ── Settings Memory ── */
     "settings.memoryTitle": "记忆",
@@ -1196,6 +1214,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.systemProxyInvalid":
       "代理已启用，请填写有效的代理地址和端口；配置有效前相关请求将直接报错。",
     "settings.systemProxyEnableHint": "请先填写有效的代理地址和端口后再启用代理。",
+    "settings.systemProxyDisabled": "当前未启用，仅在需要时配置并开启。",
+    "settings.systemProxySettings": "代理设置",
+    "settings.systemProxyDone": "完成",
     "settings.systemProxyType": "代理类型",
     "settings.systemProxyHost": "代理地址",
     "settings.systemProxyPort": "端口",
@@ -1381,10 +1402,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.builtinTool.send_message.desc": "与子代理之间收发消息",
     "settings.builtinTool.send_message.detail":
       "在主对话与子代理之间传递消息，用于协调多代理协作。需要子代理运行时；仅在对话场景注册。",
-    "settings.builtinTool.todo_write.name": "任务清单",
-    "settings.builtinTool.todo_write.desc": "创建与更新当前会话的任务清单",
-    "settings.builtinTool.todo_write.detail":
-      "让模型在处理多步骤任务时列出任务清单并逐项推进状态，进度以清单卡片实时展示在对话中。清单仅保存在当前对话内，不跨对话保留；仅在对话场景注册。",
     "settings.builtinTool.ask_user_question.name": "用户提问",
     "settings.builtinTool.ask_user_question.desc": "以选项卡片向你提问并等待选择",
     "settings.builtinTool.ask_user_question.detail":
@@ -1427,28 +1444,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.baseUrl": "Base URL",
     "settings.apiKey": "API Key",
     "settings.customHeaders": "自定义请求头",
-    "settings.cliIdentityTitle": "CLI 身份",
-    "settings.cliIdentityDescription": "统一管理供应商请求使用的 CLI 版本标识。",
-    "settings.cliIdentityOpen": "管理 CLI 身份",
-    "settings.cliIdentityClose": "关闭 CLI 身份管理",
-    "settings.cliIdentityCheck": "检查更新",
-    "settings.cliIdentityCurrent": "当前生效",
-    "settings.cliIdentityLatest": "官方稳定版",
-    "settings.cliIdentityEffectiveUserAgent": "实际 User-Agent",
-    "settings.cliIdentityUpToDate": "已是最新",
-    "settings.cliIdentityRollback": "回滚到上一版本",
-    "settings.cliIdentityLastChecked": "上次检查：{time}",
-    "settings.cliIdentityCheckFailed": "检查失败，请稍后重试",
-    "settings.cliIdentityImpact":
-      "应用全局 {count} 个，自定义覆盖 {overrides} 个，协议不注入 {disabled} 个",
-    "settings.cliIdentitySafetyNote":
-      "只读取官方版本号，完整 UA 在本地生成；更新后新请求立即生效。",
-    "settings.cliIdentityMode.builtin": "内置兼容",
-    "settings.cliIdentityMode.auto": "自动跟随",
-    "settings.cliIdentityEffective": "CLI 身份",
-    "settings.cliIdentitySourceGlobal": "全局身份",
-    "settings.cliIdentitySourceCustom": "自定义覆盖",
-    "settings.cliIdentitySourceDisabled": "当前协议不注入",
     "settings.providerDialogNavigation": "供应商配置导航",
     "settings.providerDialogGeneral": "普通配置",
     "settings.providerDialogRequest": "请求配置",
@@ -1638,14 +1633,35 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.deleteConfirm": "确认删除",
     "settings.deleteConfirmDesc": "此操作不可撤销。",
     "settings.deleteConfirmYes": "确定删除",
-    "settings.customSettings": "自定义设置",
-    "settings.openCustomSettings": "打开自定义设置",
-    "settings.closeCustomSettings": "关闭自定义设置",
+    "settings.customSettings": "高级设置",
+    "settings.openCustomSettings": "打开高级设置",
+    "settings.closeCustomSettings": "关闭高级设置",
     "settings.conversationTitleGeneration": "对话标题生成",
     "settings.conversationTitleModel": "标题生成模型",
     "settings.conversationTitleModelFollowCurrent": "使用当前对话模型",
     "settings.conversationTitleModelHint": "未选择时，标题生成会使用当前对话使用的模型。",
     "settings.customSettingsModelEmpty": "当前 Provider 未配置模型。",
+
+    /* ── Settings Model Failover ── */
+    "settings.failoverTitle": "自动故障转移",
+    "settings.failoverEnabled": "已开启",
+    "settings.failoverToggleHint":
+      "开启后，{vendor} 请求失败时会按队列顺序自动把当前对话的模型切换到下一个 {vendor} 供应商继续请求（模型不变，只换供应商），并在成功后停留在该供应商。仅在同厂商供应商之间转移，不会跨厂商。",
+    "settings.failoverQueueTitle": "故障转移队列",
+    "settings.failoverQueueHint":
+      "按优先级排列的 {vendor} 备用供应商（P1 优先）。当前供应商请求失败时，用同一个模型依次尝试；未激活该模型的供应商会被跳过。",
+    "settings.failoverQueueAdd": "选择供应商加入队列",
+    "settings.failoverQueueEmpty": "队列为空。添加至少一个备用供应商后，自动故障转移才会生效。",
+    "settings.failoverQueueMoveUp": "上移",
+    "settings.failoverQueueMoveDown": "下移",
+    "settings.failoverQueueRemove": "移除",
+    "settings.failoverMaxSwitches": "单次请求最大切换次数",
+    "settings.failoverMaxSwitchesHint": "一次请求失败后最多切换的备用供应商个数（1-10）。",
+    "settings.failoverFailureThreshold": "失败阈值",
+    "settings.failoverFailureThresholdHint": "连续失败多少次后熔断该供应商（建议 3-10）。",
+    "settings.failoverCooldownSeconds": "熔断冷却时间（秒）",
+    "settings.failoverCooldownSecondsHint":
+      "熔断后跳过该供应商的时长，到期后放行探测请求（5-3600 秒）。",
 
     /* ── Settings Prompt ── */
     "settings.agentsTitle": "全局提示词",
@@ -1963,7 +1979,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.noServersHint": "添加一个 MCP 来扩展 AI 的工具能力",
     "mcpHub.serverName": "Server Name",
     "mcpHub.serverNamePlaceholder": "例如：Brave Search",
-    "mcpHub.serverNameHint": "同时用于界面展示和工具命名空间，建议保持简短",
+    "mcpHub.serverNameHint": "用于工具命名空间，建议使用简短 ASCII 名称",
+    "mcpHub.description": "描述（可选）",
+    "mcpHub.descriptionPlaceholder": "简要说明该 MCP 的功能用途",
+    "mcpHub.docsUrl": "文档链接（可选）",
+    "mcpHub.docsUrlPlaceholder": "项目源码或官方文档地址",
     "mcpHub.transport": "Transport",
     "mcpHub.selectTransport": "选择传输方式",
     "mcpHub.stdio": "stdio（子进程）",
@@ -2048,7 +2068,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsHubStoreTab": "技能商店",
     "settings.skillsHubImportTab": "本地导入",
     "settings.skillsImportDesc":
-      "扫描本机 Claude Code、Codex、CodeBuddy 的技能目录，勾选后导入到 LiveAgent。",
+      "扫描本机 Claude Code、Codex、CodeBuddy 与 AGENTS 的技能目录，勾选后导入到 LiveAgent。",
     "settings.skillsImportOverwriteHint": "同名技能将自动备份后覆盖。",
     "settings.skillsImportScanning": "正在扫描本地技能...",
     "settings.skillsImportRescan": "重新扫描",
@@ -2267,6 +2287,7 @@ export const translations: Record<Locale, Record<string, string>> = {
   },
 
   "en-US": {
+    ...TASK_TRANSLATIONS["en-US"],
     /* ── App / Global ── */
     "app.errorBoundaryCopy": "Copy error details",
     "app.errorBoundaryDesc":
@@ -2343,6 +2364,20 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceCloneWebDisabled": "Enable Web Git in Remote settings before cloning.",
     "chat.workspaceNewConversation": "New conversation",
     "chat.workspaceMore": "More",
+    "chat.workspaceResources": "Configure Skills & MCP",
+    "chat.workspaceResourcesTitle": "Workspace resources",
+    "chat.workspaceResourcesModeInherit": "Use defaults",
+    "chat.workspaceResourcesModeCustom": "Custom",
+    "chat.workspaceResourcesModeOff": "Disable all",
+    "chat.workspaceResourcesInheritHint":
+      "Uses the default enabled resources from Skill Hub and MCP Hub.",
+    "chat.workspaceResourcesCustomHint":
+      "Choose the Skills and MCP servers exposed to agents in this workspace.",
+    "chat.workspaceResourcesOffHint":
+      "No Skills or MCP servers are exposed to agents in this workspace.",
+    "chat.workspaceResourcesSearch": "Search names or descriptions",
+    "chat.workspaceResourcesSelected": "{skills} Skills and {mcp} MCP servers selected",
+    "chat.workspaceResourcesMissingSkill": "This Skill is not installed on this device.",
     "chat.workspacePin": "Pin workspace",
     "chat.workspaceUnpin": "Unpin",
     "chat.workspaceRename": "Rename",
@@ -2355,6 +2390,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.workspaceRemoveConfirm": 'Remove "{name}"?',
     "chat.workspaceShowAll": "Show all ({count})",
     "chat.workspaceShowLess": "Show less",
+    "chat.workspaceShowAllProjects": "Show all ({count})",
+    "chat.workspaceShowLessProjects": "Show less",
     "chat.workspaceRemoveRunning":
       "A background task is running, so this workspace cannot be removed yet.",
     "chat.workspaceRemoveDescription":
@@ -2377,6 +2414,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.conversationPin": "Pin conversation",
     "chat.conversationUnpin": "Unpin",
     "chat.conversationRename": "Rename",
+    "chat.conversationMoveToWorkspace": "Move to workspace",
     "chat.conversationShare": "Share",
     "chat.conversationDelete": "Delete conversation",
     "chat.conversationDeleteConfirm": 'Delete "{title}"?',
@@ -2403,6 +2441,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.history.renameBlockedRunning":
       "A background task is still running; the title cannot be changed yet.",
     "chat.history.pinFailed": "Failed to update pin state",
+    "chat.history.moveFailed": "Failed to move conversation to workspace",
+    "chat.history.moveBlockedRunning":
+      "A background task is still running; the conversation cannot be moved yet.",
     "chat.history.deleteFailed": "Failed to delete conversation",
     "chat.history.deleteBlockedRunning":
       "A background task is still running; the conversation cannot be deleted yet.",
@@ -2561,15 +2602,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.tool.running": "Running",
     "chat.tool.failed": "Failed",
     "chat.tool.success": "Completed",
-    "chat.tool.aborted": "Aborted",
     "chat.tool.waiting": "Waiting",
     "chat.tool.command": "Command",
     "chat.tool.args": "Args",
     "chat.tool.return": "Return",
     "chat.tool.error": "(Error)",
     "chat.tool.viewReturn": "View Return",
-    "chat.tool.todoTitle": "Task list",
-    "chat.tool.todoEmpty": "No tasks yet",
     "chat.tool.askUserTitle": "Question for you",
     "chat.askUser.preparing": "Preparing questions",
     "chat.askUser.waiting": "Waiting for your choice",
@@ -3251,6 +3289,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.groupOther": "Other",
     "settings.backToChat": "Back to Chat",
     "settings.title": "Settings",
+    "settings.searchPlaceholder": "Search settings…",
+    "settings.searchNoResults": "No matching settings",
 
     /* ── Settings Memory ── */
     "settings.memoryTitle": "Memory",
@@ -3508,6 +3548,9 @@ export const translations: Record<Locale, Record<string, string>> = {
       "The proxy is enabled. Enter a valid host and port; affected requests fail until the configuration is valid.",
     "settings.systemProxyEnableHint":
       "Enter a valid proxy host and port before enabling the proxy.",
+    "settings.systemProxyDisabled": "Currently off. Configure and enable it only when needed.",
+    "settings.systemProxySettings": "Proxy settings",
+    "settings.systemProxyDone": "Done",
     "settings.systemProxyType": "Proxy type",
     "settings.systemProxyHost": "Proxy host",
     "settings.systemProxyPort": "Port",
@@ -3699,10 +3742,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.builtinTool.send_message.desc": "Exchange messages with subagents",
     "settings.builtinTool.send_message.detail":
       "Relays messages between the main conversation and subagents to coordinate multi-agent work. Requires the subagent runtime; chat sessions only.",
-    "settings.builtinTool.todo_write.name": "Task List",
-    "settings.builtinTool.todo_write.desc": "Create and update a task list for the current session",
-    "settings.builtinTool.todo_write.detail":
-      "Lets the model plan multi-step work as a task list and advance each item's status as it goes, shown as a live checklist card in the conversation. The list lives only in the current conversation and is not carried across conversations; chat sessions only.",
     "settings.builtinTool.ask_user_question.name": "Ask User",
     "settings.builtinTool.ask_user_question.desc":
       "Ask you multiple-choice questions in a card and wait for your selections",
@@ -3746,28 +3785,6 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.baseUrl": "Base URL",
     "settings.apiKey": "API Key",
     "settings.customHeaders": "Custom request headers",
-    "settings.cliIdentityTitle": "CLI identity",
-    "settings.cliIdentityDescription": "Manage the CLI version identity used by provider requests.",
-    "settings.cliIdentityOpen": "Manage CLI identity",
-    "settings.cliIdentityClose": "Close CLI identity manager",
-    "settings.cliIdentityCheck": "Check for updates",
-    "settings.cliIdentityCurrent": "Current",
-    "settings.cliIdentityLatest": "Official stable",
-    "settings.cliIdentityEffectiveUserAgent": "Effective User-Agent",
-    "settings.cliIdentityUpToDate": "Up to date",
-    "settings.cliIdentityRollback": "Roll back to previous version",
-    "settings.cliIdentityLastChecked": "Last checked: {time}",
-    "settings.cliIdentityCheckFailed": "Check failed. Please try again later.",
-    "settings.cliIdentityImpact":
-      "{count} use global, {overrides} custom, {disabled} disabled by protocol",
-    "settings.cliIdentitySafetyNote":
-      "Only official version numbers are fetched; complete UAs are generated locally and new requests use updates immediately.",
-    "settings.cliIdentityMode.builtin": "Compatible",
-    "settings.cliIdentityMode.auto": "Auto-follow",
-    "settings.cliIdentityEffective": "CLI identity",
-    "settings.cliIdentitySourceGlobal": "Global identity",
-    "settings.cliIdentitySourceCustom": "Custom override",
-    "settings.cliIdentitySourceDisabled": "Not injected for this protocol",
     "settings.providerDialogNavigation": "Provider configuration",
     "settings.providerDialogGeneral": "Basic",
     "settings.providerDialogRequest": "Request",
@@ -3965,9 +3982,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.deleteConfirm": "Confirm Delete",
     "settings.deleteConfirmDesc": "This action cannot be undone.",
     "settings.deleteConfirmYes": "Delete",
-    "settings.customSettings": "Custom Settings",
-    "settings.openCustomSettings": "Open custom settings",
-    "settings.closeCustomSettings": "Close custom settings",
+    "settings.customSettings": "Advanced Settings",
+    "settings.openCustomSettings": "Open advanced settings",
+    "settings.closeCustomSettings": "Close advanced settings",
     "settings.conversationTitleGeneration": "Conversation title generation",
     "settings.conversationTitleModel": "Title generation model",
     "settings.conversationTitleModelFollowCurrent": "Use current chat model",
@@ -3975,6 +3992,30 @@ export const translations: Record<Locale, Record<string, string>> = {
       "When unselected, title generation uses the model from the current chat.",
     "settings.customSettingsModelEmpty":
       "No active models are configured for the current providers.",
+
+    /* ── Settings Model Failover ── */
+    "settings.failoverTitle": "Auto Failover",
+    "settings.failoverEnabled": "Enabled",
+    "settings.failoverToggleHint":
+      "When a {vendor} request fails, automatically retry it on the next {vendor} provider in the queue with the same model (provider changes, model does not) and stay on the provider that answered. Failover never crosses vendors.",
+    "settings.failoverQueueTitle": "Failover queue",
+    "settings.failoverQueueHint":
+      "Fallback {vendor} providers in priority order (P1 first), tried with the conversation's current model when the active provider fails. Providers without that model active are skipped.",
+    "settings.failoverQueueAdd": "Add a provider to the queue",
+    "settings.failoverQueueEmpty":
+      "The queue is empty. Auto failover only takes effect after at least one fallback provider is added.",
+    "settings.failoverQueueMoveUp": "Move up",
+    "settings.failoverQueueMoveDown": "Move down",
+    "settings.failoverQueueRemove": "Remove",
+    "settings.failoverMaxSwitches": "Max switches per request",
+    "settings.failoverMaxSwitchesHint":
+      "Maximum number of fallback providers tried after a failed request (1-10).",
+    "settings.failoverFailureThreshold": "Failure threshold",
+    "settings.failoverFailureThresholdHint":
+      "Consecutive failures before a provider's circuit breaker opens (suggested 3-10).",
+    "settings.failoverCooldownSeconds": "Cooldown (seconds)",
+    "settings.failoverCooldownSecondsHint":
+      "How long an open circuit skips the provider before allowing a probe request (5-3600 seconds).",
 
     /* ── Settings Prompt ── */
     "settings.agentsTitle": "Prompt",
@@ -4310,7 +4351,11 @@ export const translations: Record<Locale, Record<string, string>> = {
     "mcpHub.noServersHint": "Add an MCP to extend the AI's tool capabilities",
     "mcpHub.serverName": "Server Name",
     "mcpHub.serverNamePlaceholder": "e.g. Brave Search",
-    "mcpHub.serverNameHint": "Used for display and tool namespace; keep it short",
+    "mcpHub.serverNameHint": "Used in tool namespaces; prefer a short ASCII name",
+    "mcpHub.description": "Description (optional)",
+    "mcpHub.descriptionPlaceholder": "Briefly describe what this MCP is used for",
+    "mcpHub.docsUrl": "Docs link (optional)",
+    "mcpHub.docsUrlPlaceholder": "Link to the project source or official docs",
     "mcpHub.transport": "Transport",
     "mcpHub.selectTransport": "Select transport",
     "mcpHub.stdio": "stdio (subprocess)",
@@ -4397,7 +4442,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.skillsHubStoreTab": "Skills Store",
     "settings.skillsHubImportTab": "Local Import",
     "settings.skillsImportDesc":
-      "Scan local Claude Code, Codex, and CodeBuddy skill directories, then pick skills to import into LiveAgent.",
+      "Scan local Claude Code, Codex, CodeBuddy, and AGENTS skill directories, then pick skills to import into LiveAgent.",
     "settings.skillsImportOverwriteHint":
       "Skills with the same name are backed up, then overwritten.",
     "settings.skillsImportScanning": "Scanning local skills...",

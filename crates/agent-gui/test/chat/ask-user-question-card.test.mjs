@@ -1,15 +1,10 @@
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-const i18nPath = fileURLToPath(new URL("../../src/i18n/index.ts", import.meta.url));
-const iconsPath = fileURLToPath(new URL("../../src/components/icons/index.ts", import.meta.url));
-const utilsPath = fileURLToPath(new URL("../../src/lib/shared/utils.ts", import.meta.url));
-
 const { ASK_USER_QUESTION_TIMEOUT_MS, INTERACTIVE_TIMEOUT_MAX_MINUTES } =
-  createTsModuleLoader().loadModule("src/lib/chat/askUserQuestion.ts");
+  createTsModuleLoader().loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts");
 
 const questions = [
   {
@@ -76,16 +71,16 @@ function createCardHarness(initialState = {}) {
   const loader = createTsModuleLoader({
     mocks: {
       react: hooks.react,
-      [i18nPath]: {
+      "@liveagent/ui/i18n/index": {
         useLocale() {
           return { t: (key) => key };
         },
       },
-      [iconsPath]: {
+      "@liveagent/app/components/icons": {
         Check: (props) => ({ type: "Check", props }),
         Sparkles: (props) => ({ type: "Sparkles", props }),
       },
-      [utilsPath]: {
+      "@liveagent/ui/lib/shared/utils": {
         cn(...values) {
           return values.filter(Boolean).join(" ");
         },
@@ -93,7 +88,7 @@ function createCardHarness(initialState = {}) {
     },
   });
   const { AskUserQuestionCard } = loader.loadModule(
-    "src/components/chat/AskUserQuestionCard.tsx",
+    "@liveagent/ui/components/chat/AskUserQuestionCard.tsx",
   );
   return {
     hooks,

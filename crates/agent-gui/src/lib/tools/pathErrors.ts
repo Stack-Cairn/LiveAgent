@@ -1,4 +1,4 @@
-import type { FsBackendError } from "./fsBackend";
+import type { FsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
 import { formatResolvedTarget, type ResolvedPath } from "./pathUtils";
 
 function displayCandidate(resolved: ResolvedPath, candidate: string) {

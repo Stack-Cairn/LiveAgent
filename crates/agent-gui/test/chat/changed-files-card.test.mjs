@@ -15,12 +15,11 @@ function createCardModule(rootDir) {
   const requireFromRoot = createRequire(path.join(rootDir, "package.json"));
   const jsxRuntime = requireFromRoot("react/jsx-runtime");
   const { renderToStaticMarkup } = requireFromRoot("react-dom/server");
-  const resolveSource = (relativePath) => path.join(rootDir, "src", relativePath);
   const loader = createTsModuleLoader({
     rootDir,
     mocks: {
       "react/jsx-runtime": jsxRuntime,
-      [resolveSource("i18n/index.ts")]: {
+      "@liveagent/ui/i18n/index": {
         useLocale() {
           return {
             t(key) {
@@ -29,17 +28,17 @@ function createCardModule(rootDir) {
           };
         },
       },
-      [resolveSource("components/icons.tsx")]: {
+      "@liveagent/app/components/icons": {
         FilePenLine: NullIcon,
         FolderTree: NullIcon,
         GitCommitHorizontal: NullIcon,
       },
-      [resolveSource("components/chat/fileTypeIcons.tsx")]: {
+      "@liveagent/ui/components/chat/fileTypeIcons": {
         getFileTypeIcon() {
           return NullIcon;
         },
       },
-      [resolveSource("components/chat/FileChangeBadge.tsx")]: {
+      "@liveagent/ui/components/chat/FileChangeBadge": {
         FileChangeBadge() {
           return null;
         },
@@ -48,7 +47,7 @@ function createCardModule(rootDir) {
   });
 
   return {
-    cardModule: loader.loadModule("src/components/chat/ChangedFilesCard.tsx"),
+    cardModule: loader.loadModule("@liveagent/ui/components/chat/ChangedFilesCard.tsx"),
     jsxRuntime,
     renderToStaticMarkup,
   };
@@ -56,9 +55,9 @@ function createCardModule(rootDir) {
 
 function renderCard(
   { cardModule, jsxRuntime, renderToStaticMarkup },
-  { withActions = false, fileCount = 4 } = {},
+  { withActions = false, fileCount = 4, files } = {},
 ) {
-  const paths = [
+  const paths = files ?? [
     { path: "src/components/ChangedFilesCard.tsx", deleted: false },
     { path: "README.md", deleted: false },
     { path: "src\\pages\\Settings.tsx", deleted: false },
@@ -152,4 +151,40 @@ test("GUI changed-files actions include the localized action and canonical path"
     !html.includes('aria-label="chat.changedFiles.open: tmp/removed.ts"'),
     "deleted files must not expose the open-file action",
   );
+});
+
+test("GUI changed-files actions hide workspace-only controls for Skill paths", () => {
+  const modules = createCardModule(rootDir);
+  const skillPath = "skill://demo/SKILL.md";
+  const deletedSkillPath = "skill://demo/removed.md";
+  const skillOnlyHtml = renderCard(modules, {
+    withActions: true,
+    fileCount: 2,
+    files: [
+      { path: skillPath, deleted: false },
+      { path: deletedSkillPath, deleted: true },
+    ],
+  });
+
+  assert.ok(skillOnlyHtml.includes(`aria-label="chat.changedFiles.open: ${skillPath}"`));
+  for (const path of [skillPath, deletedSkillPath]) {
+    assert.ok(!skillOnlyHtml.includes(`aria-label="chat.changedFiles.reveal: ${path}"`));
+    assert.ok(!skillOnlyHtml.includes(`aria-label="chat.changedFiles.diff: ${path}"`));
+  }
+  assert.ok(!skillOnlyHtml.includes(`aria-label="chat.changedFiles.open: ${deletedSkillPath}"`));
+  assert.ok(!skillOnlyHtml.includes(">chat.changedFiles.review</button>"));
+
+  const workspacePath = "src/app.ts";
+  const mixedHtml = renderCard(modules, {
+    withActions: true,
+    fileCount: 2,
+    files: [
+      { path: skillPath, deleted: false },
+      { path: workspacePath, deleted: false },
+    ],
+  });
+  assert.ok(mixedHtml.includes(`aria-label="chat.changedFiles.open: ${skillPath}"`));
+  assert.ok(!mixedHtml.includes(`aria-label="chat.changedFiles.diff: ${skillPath}"`));
+  assert.ok(mixedHtml.includes(`aria-label="chat.changedFiles.diff: ${workspacePath}"`));
+  assert.ok(mixedHtml.includes(">chat.changedFiles.review</button>"));
 });

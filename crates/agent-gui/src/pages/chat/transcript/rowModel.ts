@@ -1,3 +1,14 @@
+import {
+  type GroupedRoundBlock,
+  groupRoundBlocks,
+} from "@liveagent/ui/components/chat/assistant-bubble/assistantBubbleUtils";
+import { isTaskToolBlock } from "@liveagent/ui/lib/chat/taskProgress";
+import {
+  CHECKPOINT_ROW_ESTIMATE_PX,
+  estimateAssistantRowHeight,
+  estimateUserRowHeight,
+  measureEstimateText,
+} from "@liveagent/ui/lib/transcript-virtual/rowEstimates";
 import type {
   RenderSummaryCard,
   RenderTimelineItem,
@@ -5,16 +16,6 @@ import type {
 } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptState } from "../../../lib/chat/conversation/liveTranscriptStore";
 import { getRoundText, type LiveRound, type UiRound } from "../../../lib/chat/messages/uiMessages";
-import {
-  CHECKPOINT_ROW_ESTIMATE_PX,
-  estimateAssistantRowHeight,
-  estimateUserRowHeight,
-  measureEstimateText,
-} from "../../../lib/transcript-virtual/rowEstimates";
-import {
-  type GroupedRoundBlock,
-  groupRoundBlocks,
-} from "../components/assistant-bubble/assistantBubbleUtils";
 
 const TRANSCRIPT_ROW_GAP_PX = 24;
 const ASSISTANT_UNIT_GAP_PX = 8;
@@ -64,9 +65,14 @@ export type AssistantFooterRenderUnit = {
   hasChangedFilesCandidate: boolean;
 };
 
+export type AssistantStatusRenderUnit = {
+  kind: "status";
+};
+
 export type AssistantRenderUnit =
   | AssistantBlockRenderUnit
   | AssistantPlaceholderRenderUnit
+  | AssistantStatusRenderUnit
   | AssistantFooterRenderUnit;
 
 export type AssistantUnitRow = {
@@ -82,16 +88,27 @@ export type AssistantUnitRow = {
   renderMode: "streaming" | "static";
   compacted: boolean;
   showAvatar: boolean;
-  isAborted: boolean;
   unit: AssistantRenderUnit;
 };
 
-export type TranscriptRow = SummaryRow | UserRow | AssistantUnitRow;
+export type AssistantActivityRow = {
+  kind: "assistant-activity";
+  key: string;
+  replyKey: string;
+  estimate: number;
+  renderCost: number;
+  gapAfter: number;
+  anchorUserKey: string | null;
+  live: boolean;
+  units: AssistantUnitRow[];
+};
+
+export type TranscriptRow = SummaryRow | UserRow | AssistantUnitRow | AssistantActivityRow;
 
 export type TranscriptRowsSnapshot = {
   rows: TranscriptRow[];
-  // Exactly one mutable live tail unit is force-mounted. Completed units from
-  // the same streaming reply remain ordinary virtual rows.
+  // Exactly one stable activity row is force-mounted for the active reply.
+  // Its completed and mutable child units reconcile inside that outer row.
   liveStartIndex: number;
 };
 
@@ -106,30 +123,11 @@ function buildReplyText(rounds: (UiRound | LiveRound)[]): string {
     .join("\n\n");
 }
 
-function findLatestTodoItem(rounds: (UiRound | LiveRound)[]) {
-  for (let roundIndex = rounds.length - 1; roundIndex >= 0; roundIndex -= 1) {
-    const blocks = rounds[roundIndex]?.blocks ?? [];
-    for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-      const block = blocks[blockIndex];
-      if (block?.kind === "tool" && block.item.toolCall.name === "TodoWrite") {
-        return block.item;
-      }
-    }
-  }
-  return null;
-}
-
-function isVisibleGroupedBlock(
-  block: GroupedRoundBlock,
-  latestTodoItem: ReturnType<typeof findLatestTodoItem>,
-) {
+function isVisibleGroupedBlock(block: GroupedRoundBlock) {
   if (block.kind === "text" || block.kind === "thinking") {
     return block.text.trim().length > 0;
   }
-  if (block.kind === "tool" && block.item.toolCall.name === "TodoWrite") {
-    return block.item === latestTodoItem;
-  }
-  return true;
+  return !isTaskToolBlock(block);
 }
 
 function hasRunningToolCall(blocks: GroupedRoundBlock[], runningToolCallIds: string[]) {
@@ -249,7 +247,6 @@ function canReuseLiveUnit(previous: AssistantUnitRow, next: AssistantUnitRow) {
     previous.renderMode !== next.renderMode ||
     previous.compacted !== next.compacted ||
     previous.showAvatar !== next.showAvatar ||
-    previous.isAborted !== next.isAborted ||
     previous.unit.kind !== "block" ||
     next.unit.kind !== "block"
   ) {
@@ -264,6 +261,33 @@ function canReuseLiveUnit(previous: AssistantUnitRow, next: AssistantUnitRow) {
     previous.unit.isRoundTail === next.unit.isRoundTail &&
     previous.unit.hasRunningToolCall === next.unit.hasRunningToolCall
   );
+}
+
+function buildAssistantActivityRow(
+  replyKey: string,
+  units: AssistantUnitRow[],
+): AssistantActivityRow {
+  const lastIndex = units.length - 1;
+  return {
+    kind: "assistant-activity",
+    key: `${replyKey}:activity`,
+    replyKey,
+    estimate: units.reduce(
+      (total, unit, index) => total + unit.estimate + (index < lastIndex ? unit.gapAfter : 0),
+      0,
+    ),
+    renderCost: Math.min(
+      32,
+      Math.max(
+        1,
+        units.reduce((total, unit) => total + unit.renderCost, 0),
+      ),
+    ),
+    gapAfter: units.at(-1)?.gapAfter ?? TRANSCRIPT_ROW_GAP_PX,
+    anchorUserKey: units[0]?.anchorUserKey ?? null,
+    live: units.some((unit) => unit.live),
+    units,
+  };
 }
 
 type BuildAssistantUnitsInput = {
@@ -292,14 +316,10 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
     anchorUserKey,
     liveUnitCache,
   } = input;
-  const latestTodoItem = findLatestTodoItem(rounds);
-  const isAborted = rounds.some((round) => round.meta?.stopReason === "aborted");
   const rows: AssistantUnitRow[] = [];
 
-  rounds.forEach((round, roundIndex) => {
-    const groupedBlocks = groupRoundBlocks(round.blocks).filter((block) =>
-      isVisibleGroupedBlock(block, latestTodoItem),
-    );
+  rounds.forEach((round) => {
+    const groupedBlocks = groupRoundBlocks(round.blocks).filter(isVisibleGroupedBlock);
     const runningToolCallIds = "runningToolCallIds" in round ? round.runningToolCallIds : [];
     const roundHasRunningToolCall = hasRunningToolCall(groupedBlocks, runningToolCallIds);
     let latestThinkingKey: string | null = null;
@@ -327,7 +347,6 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
         renderMode,
         compacted,
         showAvatar: rows.length === 0,
-        isAborted,
         unit: {
           kind: "block",
           block,
@@ -340,33 +359,23 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
         },
       });
     });
-
-    if (live && roundIndex === rounds.length - 1 && groupedBlocks.length === 0) {
-      rows.push({
-        kind: "assistant-unit",
-        key: `${replyKey}:round:${round.key}:placeholder`,
-        replyKey,
-        estimate: 64,
-        renderCost: 1,
-        gapAfter: TRANSCRIPT_ROW_GAP_PX,
-        anchorUserKey,
-        live: true,
-        mutable: true,
-        renderMode,
-        compacted,
-        showAvatar: rows.length === 0,
-        isAborted,
-        unit: { kind: "placeholder", showFallbackStatus: false },
-      });
-    }
   });
 
-  if (live && rows.length === 0) {
+  if (live) {
+    const contentTailIndex = rows.length - 1;
+    const contentTail = rows[contentTailIndex];
+    if (contentTail) {
+      rows[contentTailIndex] = {
+        ...contentTail,
+        gapAfter: ASSISTANT_UNIT_GAP_PX,
+        mutable: true,
+      };
+    }
     rows.push({
       kind: "assistant-unit",
-      key: `${replyKey}:placeholder`,
+      key: `${replyKey}:footer`,
       replyKey,
-      estimate: 64,
+      estimate: rows.length === 0 ? 64 : 32,
       renderCost: 1,
       gapAfter: TRANSCRIPT_ROW_GAP_PX,
       anchorUserKey,
@@ -374,21 +383,9 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
       mutable: true,
       renderMode,
       compacted,
-      showAvatar: true,
-      isAborted,
-      unit: { kind: "placeholder", showFallbackStatus: true },
+      showAvatar: rows.length === 0,
+      unit: { kind: "status" },
     });
-  } else if (live) {
-    const tailIndex = rows.length - 1;
-    const tail = rows[tailIndex];
-    if (tail) {
-      rows[tailIndex] = {
-        ...tail,
-        estimate: tail.estimate + 36,
-        gapAfter: TRANSCRIPT_ROW_GAP_PX,
-        mutable: true,
-      };
-    }
   } else {
     const changedFilesCandidate = hasChangedFilesCandidate(rounds);
     const contentTailIndex = rows.length - 1;
@@ -412,7 +409,6 @@ function buildAssistantUnits(input: BuildAssistantUnitsInput): AssistantUnitRow[
       renderMode,
       compacted,
       showAvatar: rows.length === 0 && rounds.length > 0,
-      isAborted,
       unit: {
         kind: "footer",
         timestamp,
@@ -467,8 +463,11 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     replyKey: string;
     historyLenAtStart: number;
     liveUnitCache: Map<string, AssistantUnitRow>;
+    lastLiveUnits: AssistantUnitRow[];
+    settlingUnits: AssistantUnitRow[] | null;
   } | null = null;
   let pendingSettle: { replyKey: string; historyLenAtStart: number } | null = null;
+  let deferredSettles: { replyKey: string; historyLenAtStart: number }[] = [];
   let draftRoundCache: { text: string; round: LiveRound } | null = null;
 
   const reset = () => {
@@ -480,6 +479,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     turnSeq = 0;
     activeTurn = null;
     pendingSettle = null;
+    deferredSettles = [];
     draftRoundCache = null;
   };
 
@@ -505,7 +505,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
   ) => {
     for (let index = historyItems.length - 1; index >= turn.historyLenAtStart; index -= 1) {
       const item = historyItems[index];
-      if (item?.kind === "assistant") {
+      if (item?.kind === "assistant" && !streamOrigins.has(item.key)) {
         streamOrigins.set(item.key, turn.replyKey);
         if (rowCache.has(item)) {
           rowCache.delete(item);
@@ -554,7 +554,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
       ];
     } else {
       const originKey = streamOrigins.get(item.key);
-      rows = buildAssistantUnits({
+      const assistantUnits = buildAssistantUnits({
         replyKey: originKey ?? item.key,
         live: false,
         renderMode: originKey ? "streaming" : "static",
@@ -565,6 +565,7 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         retryTarget,
         anchorUserKey,
       });
+      rows = originKey ? [buildAssistantActivityRow(originKey, assistantUnits)] : assistantUnits;
     }
     rowCache.set(item, { anchorUserKey, retryTarget, rows });
     return rows;
@@ -578,23 +579,42 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     const isInitialBuild = !hasBuilt;
     hasBuilt = true;
 
-    if (liveTailVisible && !activeTurn) {
+    if (liveTailVisible && pendingSettle && activeTurn) {
+      if (!adoptSettledTwin(historyItems, pendingSettle)) {
+        deferredSettles.push(pendingSettle);
+      }
       pendingSettle = null;
       activeTurn = {
         replyKey: `live-turn-${++turnSeq}`,
         historyLenAtStart: historyItems.length,
         liveUnitCache: new Map(),
+        lastLiveUnits: [],
+        settlingUnits: null,
+      };
+    } else if (liveTailVisible && !activeTurn) {
+      pendingSettle = null;
+      activeTurn = {
+        replyKey: `live-turn-${++turnSeq}`,
+        historyLenAtStart: historyItems.length,
+        liveUnitCache: new Map(),
+        lastLiveUnits: [],
+        settlingUnits: null,
       };
     } else if (!liveTailVisible && activeTurn) {
-      if (!adoptSettledTwin(historyItems, activeTurn)) {
+      const adopted = adoptSettledTwin(historyItems, activeTurn);
+      if (!adopted) {
         pendingSettle = {
           replyKey: activeTurn.replyKey,
           historyLenAtStart: activeTurn.historyLenAtStart,
         };
       }
-      activeTurn = null;
+      if (adopted) activeTurn = null;
     } else if (!liveTailVisible && pendingSettle) {
       if (adoptSettledTwin(historyItems, pendingSettle)) pendingSettle = null;
+    }
+
+    if (deferredSettles.length > 0) {
+      deferredSettles = deferredSettles.filter((turn) => !adoptSettledTwin(historyItems, turn));
     }
 
     const bornKeys: string[] = [];
@@ -622,27 +642,42 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
 
     let rows = historyRows;
     let liveStartIndex = -1;
-    if (liveTailVisible && activeTurn) {
-      const rounds: (UiRound | LiveRound)[] =
-        live.liveRounds.length > 0
-          ? live.liveRounds
-          : live.draftAssistantText
-            ? [draftRound(live.draftAssistantText)]
-            : [];
-      const liveRows = buildAssistantUnits({
-        replyKey: activeTurn.replyKey,
-        live: true,
-        renderMode: "streaming",
-        rounds,
-        compacted: false,
-        replyText: "",
-        retryTarget: null,
-        anchorUserKey: historyRows.at(-1)?.anchorUserKey ?? null,
-        liveUnitCache: activeTurn.liveUnitCache,
-      });
-      rows = [...historyRows, ...liveRows];
+    if ((liveTailVisible || pendingSettle) && activeTurn) {
+      let liveUnits = activeTurn.lastLiveUnits;
+      if (liveTailVisible) {
+        const rounds: (UiRound | LiveRound)[] =
+          live.liveRounds.length > 0
+            ? live.liveRounds
+            : live.draftAssistantText
+              ? [draftRound(live.draftAssistantText)]
+              : [];
+        liveUnits = buildAssistantUnits({
+          replyKey: activeTurn.replyKey,
+          live: true,
+          renderMode: "streaming",
+          rounds,
+          compacted: false,
+          replyText: "",
+          retryTarget: null,
+          anchorUserKey: historyRows.at(-1)?.anchorUserKey ?? null,
+          liveUnitCache: activeTurn.liveUnitCache,
+        });
+        activeTurn.lastLiveUnits = liveUnits;
+        activeTurn.settlingUnits = null;
+      } else {
+        if (!activeTurn.settlingUnits) {
+          activeTurn.settlingUnits = activeTurn.lastLiveUnits.map((row) => ({
+            ...row,
+            live: false,
+            mutable: false,
+          }));
+        }
+        liveUnits = activeTurn.settlingUnits;
+      }
+      const liveActivity = buildAssistantActivityRow(activeTurn.replyKey, liveUnits);
+      rows = [...historyRows, liveActivity];
       liveStartIndex = rows.length - 1;
-      for (const row of liveRows) trackBirth(row.key);
+      trackBirth(liveActivity.key);
     }
 
     if (bornKeys.length > 0 || isInitialBuild) {

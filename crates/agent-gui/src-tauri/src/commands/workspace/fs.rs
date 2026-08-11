@@ -18,6 +18,7 @@ use zip::ZipArchive;
 
 use super::edit_match::{apply_edit_replacements, find_edit_matches};
 use crate::runtime::platform::expand_tilde_path;
+use crate::services::skills::skills_root_dir;
 
 const READ_MAX_TEXT_BYTES: usize = 200 * 1024; // 200KB
 const EDITABLE_TEXT_MAX_BYTES: usize = 3 * 1024 * 1024; // 3MB
@@ -38,6 +39,7 @@ const HARD_LIST_DIRS_MAX_RESULTS: usize = 10000;
 
 const DEFAULT_GREP_HEAD_LIMIT: usize = 200;
 const MAX_GREP_LINE_CHARS: usize = 400;
+const SKILL_PATH_SCHEME: &str = "skill://";
 
 async fn run_blocking<R: Send + 'static>(
     label: &'static str,
@@ -398,6 +400,93 @@ fn canonicalize_workdir(workdir: &str) -> Result<PathBuf, FsError> {
     }
 
     Ok(fs::canonicalize(&p)?)
+}
+
+/// A resolved fs-command target: workspace paths resolve against the
+/// canonicalized workdir, `skill://` paths against the Skills root. The
+/// logical path (and every relative path echoed in errors) keeps the caller's
+/// scheme prefix so skill:// targets round-trip through responses.
+#[derive(Debug)]
+struct ScopedFsPath {
+    root: PathBuf,
+    relative_path: PathBuf,
+    logical_path: String,
+    /// `""` for workspace scope, `SKILL_PATH_SCHEME` for Skill scope.
+    scheme: &'static str,
+}
+
+fn skill_path_remainder(input: &str) -> Option<&str> {
+    let trimmed = input.trim();
+    trimmed
+        .get(..SKILL_PATH_SCHEME.len())
+        .filter(|prefix| prefix.eq_ignore_ascii_case(SKILL_PATH_SCHEME))
+        .map(|_| &trimmed[SKILL_PATH_SCHEME.len()..])
+}
+
+fn resolve_scoped_fs_path_with(
+    workdir: &str,
+    path: &str,
+    resolve_skills_root: impl FnOnce() -> Result<PathBuf, FsError>,
+) -> Result<ScopedFsPath, FsError> {
+    let (root, relative_path, scheme) = if let Some(skill_path) = skill_path_remainder(path) {
+        // Report the caller's own skill:// form, not the bare remainder.
+        let relative_path = sanitize_rel_path(skill_path).map_err(|error| match error {
+            FsError::InvalidRelPath(_) => {
+                FsError::InvalidRelPath(format!("{SKILL_PATH_SCHEME}{skill_path}"))
+            }
+            other => other,
+        })?;
+        let root = fs::canonicalize(resolve_skills_root()?)?;
+        (root, relative_path, SKILL_PATH_SCHEME)
+    } else {
+        let root = canonicalize_workdir(workdir)?;
+        (root, sanitize_rel_path(path)?, "")
+    };
+    let logical_path = format!("{scheme}{}", logical_rel_path(&relative_path));
+    Ok(ScopedFsPath {
+        root,
+        relative_path,
+        logical_path,
+        scheme,
+    })
+}
+
+fn resolve_scoped_fs_path(workdir: &str, path: &str) -> Result<ScopedFsPath, FsError> {
+    resolve_scoped_fs_path_with(workdir, path, || skills_root_dir().map_err(FsError::Other))
+}
+
+fn scoped_relative_logical_path(path: &ScopedFsPath, relative_path: String) -> String {
+    format!("{}{relative_path}", path.scheme)
+}
+
+fn remap_scoped_path_error(path: &ScopedFsPath, error: FsError) -> FsError {
+    match error {
+        FsError::NotFound {
+            path: relative_path,
+            did_you_mean,
+        } => FsError::NotFound {
+            path: scoped_relative_logical_path(path, relative_path),
+            did_you_mean: did_you_mean
+                .into_iter()
+                .map(|candidate| scoped_relative_logical_path(path, candidate))
+                .collect(),
+        },
+        FsError::NotADirectory {
+            path: relative_path,
+            entry_kind,
+        } => FsError::NotADirectory {
+            path: scoped_relative_logical_path(path, relative_path),
+            entry_kind,
+        },
+        FsError::NotAFile {
+            path: relative_path,
+            entry_kind,
+        } => FsError::NotAFile {
+            path: scoped_relative_logical_path(path, relative_path),
+            entry_kind,
+        },
+        other => other,
+    }
 }
 
 fn normalize_rel_path_input(input: &str) -> String {
@@ -2504,15 +2593,15 @@ pub(crate) fn fs_read_workspace_image_sync(
     workdir: String,
     path: String,
 ) -> Result<ReadResponse, FsCommandError> {
-    let wd = canonicalize_workdir(&workdir)?;
-    fs_read_workspace_image_impl(&wd, &path).map_err(|e| FsCommandError::from(e).with_workdir(&wd))
+    let target = resolve_scoped_fs_path(&workdir, &path)?;
+    fs_read_workspace_image_impl(&target)
+        .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
 
-fn fs_read_workspace_image_impl(wd: &Path, path: &str) -> Result<ReadResponse, FsError> {
-    let rel = sanitize_rel_path(path)?;
-    let logical_path = logical_rel_path(&rel);
-    let target = resolve_existing_file_target(wd, &rel)?;
-    read_local_preview_file(target, logical_path)
+fn fs_read_workspace_image_impl(path: &ScopedFsPath) -> Result<ReadResponse, FsError> {
+    let target = resolve_existing_file_target(&path.root, &path.relative_path)
+        .map_err(|error| remap_scoped_path_error(path, error))?;
+    read_local_preview_file(target, path.logical_path.clone())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -2783,14 +2872,15 @@ pub(crate) fn fs_read_editable_text_sync(
     workdir: String,
     path: String,
 ) -> Result<ReadEditableTextResponse, FsCommandError> {
-    let wd = canonicalize_workdir(&workdir)?;
-    fs_read_editable_text_impl(&wd, &path).map_err(|e| FsCommandError::from(e).with_workdir(&wd))
+    let target = resolve_scoped_fs_path(&workdir, &path)?;
+    fs_read_editable_text_impl(&target)
+        .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
 
-fn fs_read_editable_text_impl(wd: &Path, path: &str) -> Result<ReadEditableTextResponse, FsError> {
-    let rel = sanitize_rel_path(path)?;
-    let logical_path = logical_rel_path(&rel);
-    let target = resolve_existing_file_target(wd, &rel)?;
+fn fs_read_editable_text_impl(path: &ScopedFsPath) -> Result<ReadEditableTextResponse, FsError> {
+    let logical_path = path.logical_path.clone();
+    let target = resolve_existing_file_target(&path.root, &path.relative_path)
+        .map_err(|error| remap_scoped_path_error(path, error))?;
     if let Some(reason) = editable_text_unsupported_reason(&target) {
         return Err(FsError::UnsupportedTarget {
             path: logical_path,
@@ -2939,29 +3029,26 @@ pub(crate) fn fs_write_text_sync(
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
 ) -> Result<WriteTextResponse, FsCommandError> {
-    let wd = canonicalize_workdir(&workdir)?;
+    let target = resolve_scoped_fs_path(&workdir, &path)?;
     fs_write_text_impl(
-        &wd,
-        &path,
+        &target,
         content,
         mode,
         expected_mtime_ms,
         expected_content_hash,
     )
-    .map_err(|e| FsCommandError::from(e).with_workdir(&wd))
+    .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
 
 fn fs_write_text_impl(
-    wd: &Path,
-    path: &str,
+    path: &ScopedFsPath,
     content: String,
     mode: String,
     expected_mtime_ms: Option<u64>,
     expected_content_hash: Option<String>,
 ) -> Result<WriteTextResponse, FsError> {
-    let rel = sanitize_rel_path(path)?;
-    let logical_path = logical_rel_path(&rel);
-    let raw_target = wd.join(&rel);
+    let logical_path = path.logical_path.clone();
+    let raw_target = path.root.join(&path.relative_path);
     let expected = parse_expected_version(expected_mtime_ms, expected_content_hash)?;
 
     if mode != "rewrite" {
@@ -2978,10 +3065,14 @@ fn fs_write_text_impl(
                     entry_kind: "dir".to_string(),
                 });
             }
-            (resolve_existing_file_target(wd, &rel)?, true)
+            (
+                resolve_existing_file_target(&path.root, &path.relative_path)
+                    .map_err(|error| remap_scoped_path_error(path, error))?,
+                true,
+            )
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            ensure_parent_dir(wd, &raw_target)?;
+            ensure_parent_dir(&path.root, &raw_target)?;
             (raw_target.clone(), false)
         }
         Err(err) => return Err(FsError::Io(err)),
@@ -3310,19 +3401,18 @@ pub(crate) fn fs_open_workspace_path_sync(
     path: String,
     mode: Option<String>,
 ) -> Result<OpenWorkspacePathResponse, FsCommandError> {
-    let wd = canonicalize_workdir(&workdir)?;
-    fs_open_workspace_path_impl(&wd, &path, mode)
-        .map_err(|e| FsCommandError::from(e).with_workdir(&wd))
+    let target = resolve_scoped_fs_path(&workdir, &path)?;
+    fs_open_workspace_path_impl(&target, mode)
+        .map_err(|e| FsCommandError::from(e).with_workdir(&target.root))
 }
 
 fn fs_open_workspace_path_impl(
-    wd: &Path,
-    path: &str,
+    path: &ScopedFsPath,
     mode: Option<String>,
 ) -> Result<OpenWorkspacePathResponse, FsError> {
-    let rel = sanitize_rel_path(path)?;
-    let logical_path = logical_rel_path(&rel);
-    let target = resolve_target(wd, &rel)?;
+    let logical_path = path.logical_path.clone();
+    let target = resolve_target(&path.root, &path.relative_path)
+        .map_err(|error| remap_scoped_path_error(path, error))?;
     let meta = fs::metadata(&target)?;
     let kind = if meta.is_file() {
         "file"
@@ -4614,6 +4704,13 @@ mod tests {
         writer.finish().expect("finish zip").into_inner()
     }
 
+    fn resolve_test_scoped_path(workdir: &Path, skills_root: &Path, path: &str) -> ScopedFsPath {
+        resolve_scoped_fs_path_with(&workdir.display().to_string(), path, || {
+            Ok(skills_root.to_path_buf())
+        })
+        .expect("scoped path should resolve")
+    }
+
     #[test]
     fn detects_windows_reserved_path_components() {
         assert!(is_windows_reserved_path_component("CON"));
@@ -5164,6 +5261,116 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(workdir);
+    }
+
+    #[test]
+    fn skill_scoped_editor_and_preview_preserve_skill_paths() {
+        let workdir = unique_test_workdir("skill-scoped-workspace");
+        let skills_root = unique_test_workdir("skill-scoped-root");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        fs::create_dir_all(skills_root.join("demo/assets")).expect("create skill directories");
+        fs::write(skills_root.join("demo/SKILL.md"), "# Demo\n").expect("write skill file");
+        let image_bytes = png_like_bytes();
+        fs::write(skills_root.join("demo/assets/preview.png"), &image_bytes)
+            .expect("write skill image");
+
+        let skill_text = resolve_test_scoped_path(&workdir, &skills_root, "skill://demo/SKILL.md");
+        let read = fs_read_editable_text_impl(&skill_text).expect("skill text should read");
+        assert_eq!(read.path, "skill://demo/SKILL.md");
+        assert_eq!(read.content, "# Demo\n");
+
+        let write = fs_write_text_impl(
+            &skill_text,
+            "# Updated\n".to_string(),
+            "rewrite".to_string(),
+            Some(read.mtime_ms),
+            Some(read.content_hash),
+        )
+        .expect("skill text should save");
+        assert_eq!(write.path, "skill://demo/SKILL.md");
+        assert_eq!(
+            fs::read_to_string(skills_root.join("demo/SKILL.md")).expect("read saved skill"),
+            "# Updated\n"
+        );
+
+        let skill_image =
+            resolve_test_scoped_path(&workdir, &skills_root, "skill://demo/assets/preview.png");
+        let preview =
+            fs_read_workspace_image_impl(&skill_image).expect("skill image should preview");
+        assert_eq!(preview.path, "skill://demo/assets/preview.png");
+        assert_eq!(preview.mime_type.as_deref(), Some("image/png"));
+        assert_eq!(
+            preview.data.as_deref(),
+            Some(BASE64_STANDARD.encode(&image_bytes).as_str())
+        );
+
+        let missing = resolve_test_scoped_path(&workdir, &skills_root, "skill://demo/missing.md");
+        let error = fs_read_editable_text_impl(&missing).expect_err("missing skill should fail");
+        match error {
+            FsError::NotFound { path, .. } => assert_eq!(path, "skill://demo/missing.md"),
+            other => panic!("unexpected error: {other}"),
+        }
+
+        let _ = fs::remove_dir_all(workdir);
+        let _ = fs::remove_dir_all(skills_root);
+    }
+
+    #[test]
+    fn skill_scoped_paths_reject_invalid_segments() {
+        let workdir = unique_test_workdir("skill-invalid-workspace");
+        let skills_root = unique_test_workdir("skill-invalid-root");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        fs::create_dir_all(&skills_root).expect("create skills root");
+
+        for path in [
+            "skill://",
+            "skill://../outside.md",
+            "skill://demo/../../outside.md",
+            "skill:///absolute.md",
+            "skill://C:/drive.md",
+            "skill://demo/a:b.md",
+        ] {
+            let error = resolve_scoped_fs_path_with(&workdir.display().to_string(), path, || {
+                Ok(skills_root.clone())
+            })
+            .expect_err("invalid Skill path should fail");
+            match error {
+                // The rejected path must be echoed in the caller's own
+                // skill:// form so the message names what the user clicked.
+                FsError::InvalidRelPath(reported) => assert_eq!(reported, path),
+                other => panic!("unexpected error for {path}: {other}"),
+            }
+        }
+
+        let _ = fs::remove_dir_all(workdir);
+        let _ = fs::remove_dir_all(skills_root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn skill_scoped_paths_reject_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let workdir = unique_test_workdir("skill-symlink-workspace");
+        let skills_root = unique_test_workdir("skill-symlink-root");
+        let outside_root = unique_test_workdir("skill-symlink-outside");
+        fs::create_dir_all(&workdir).expect("create workdir");
+        fs::create_dir_all(skills_root.join("demo")).expect("create skill directory");
+        fs::create_dir_all(&outside_root).expect("create outside directory");
+        fs::write(outside_root.join("secret.md"), "outside\n").expect("write outside file");
+        symlink(
+            outside_root.join("secret.md"),
+            skills_root.join("demo/linked.md"),
+        )
+        .expect("create escaping symlink");
+
+        let linked = resolve_test_scoped_path(&workdir, &skills_root, "skill://demo/linked.md");
+        let error = fs_read_editable_text_impl(&linked).expect_err("symlink escape should fail");
+        assert!(matches!(error, FsError::OutOfBounds(_)));
+
+        let _ = fs::remove_dir_all(workdir);
+        let _ = fs::remove_dir_all(skills_root);
+        let _ = fs::remove_dir_all(outside_root);
     }
 
     #[test]

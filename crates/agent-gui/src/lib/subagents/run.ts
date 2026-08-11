@@ -1,5 +1,5 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-
+import type { SubagentReportDetails } from "@liveagent/ui/lib/subagents/protocol";
 import { CompactionController } from "../chat/compaction/controller";
 import {
   appendMessagesToConversation,
@@ -22,7 +22,6 @@ import {
   buildSubagentContinuationMessage,
   buildSubagentSystemPrompt,
 } from "./prompts";
-import type { SubagentReportDetails } from "./protocol";
 import { createSubagentIdentity } from "./roster";
 import type { SubagentScheduler } from "./scheduler";
 import type { SubagentConversationStore } from "./store";
@@ -491,6 +490,7 @@ export async function executeSubagentRun(
           },
           persist: async (state) => {
             schedulePersist("running", state);
+            return undefined;
           },
         },
         buildPreparedContext: (state) => buildRequestContext(state),

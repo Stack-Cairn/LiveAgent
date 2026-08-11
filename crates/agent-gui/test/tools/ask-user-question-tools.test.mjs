@@ -7,7 +7,7 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 function loadModules() {
   const loader = createTsModuleLoader({ mocks: { typebox } });
   return {
-    shared: loader.loadModule("src/lib/chat/askUserQuestion.ts"),
+    shared: loader.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts"),
     tools: loader.loadModule("src/lib/tools/askUserQuestionTools.ts"),
   };
 }
@@ -496,7 +496,7 @@ test("result details round-trip through the transcript parser", () => {
   assert.equal(parsed.answers.length, 2);
   assert.equal(parsed.cancelled, false);
 
-  assert.equal(shared.parseAskUserQuestionResultDetails({ kind: "todo_write" }), null);
+  assert.equal(shared.parseAskUserQuestionResultDetails({ kind: "task_list" }), null);
   assert.equal(shared.parseAskUserQuestionResultDetails(null), null);
 });
 

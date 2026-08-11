@@ -1,4 +1,4 @@
-import { type Locale, t as translate } from "../i18n";
+import { type Locale, t as translate } from "@liveagent/ui/i18n/index";
 
 type SettingsSyncLoadingProps = {
   locale: Locale;
@@ -13,7 +13,7 @@ export function SettingsSyncLoading({ locale }: SettingsSyncLoadingProps) {
       <div className="sync-loading-stage">
         <div className="sync-loading-icon">
           <img
-            src="/favicon.svg"
+            src="/icon-simple.png"
             alt=""
             width={60}
             height={60}

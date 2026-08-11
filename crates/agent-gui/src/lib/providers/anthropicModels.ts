@@ -1,7 +1,13 @@
 import type { Model } from "@earendil-works/pi-ai";
 import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
-import { findCatalogModel, normalizeModelIdCandidates } from "../models/modelCatalog";
-import { anthropicModelSupportsXHigh, isAnthropicAdaptiveModelId } from "../models/modelThinking";
+import {
+  findCatalogModel,
+  normalizeModelIdCandidates,
+} from "@liveagent/ui/lib/models/modelCatalog";
+import {
+  anthropicModelSupportsXHigh,
+  isAnthropicAdaptiveModelId,
+} from "@liveagent/ui/lib/models/modelThinking";
 
 // ---------------------------------------------------------------------------
 // Anthropic 1M 长上下文窗口策略（请求行为，单一真源）
@@ -14,7 +20,7 @@ import { anthropicModelSupportsXHigh, isAnthropicAdaptiveModelId } from "../mode
 // 判定共用，预算与信号永不漂移。限额/单价数据本身来自 lib/models/modelCatalog；
 // 本文件对 pi-ai 目录的回查（findBuiltinAnthropicModel）只服务 compat 等请求
 // 路径元数据。
-export { normalizeModelIdCandidates as normalizeAnthropicModelIdCandidates } from "../models/modelCatalog";
+export { normalizeModelIdCandidates as normalizeAnthropicModelIdCandidates } from "@liveagent/ui/lib/models/modelCatalog";
 
 export const ANTHROPIC_STANDARD_CONTEXT_WINDOW = 200_000;
 export const ANTHROPIC_LONG_CONTEXT_WINDOW = 1_000_000;

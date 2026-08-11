@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const promptHistory = loader.loadModule("src/components/chat/promptHistory.ts");
+const promptHistory = loader.loadModule("@liveagent/ui/components/chat/promptHistory.ts");
 
 const { normalizePromptHistoryEntries, stepPromptHistory, collectPromptLineText } = promptHistory;
 

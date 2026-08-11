@@ -7,9 +7,9 @@
 | builtin source | `crates/agent-gui/src-tauri/prompt/skills/<skill-name>` | 内置 skills 源文件。 |
 | runtime root | `~/.liveagent/skills` | 用户运行时 skills 根目录。 |
 | Rust service | `src-tauri/src/services/skills/*` | seed builtin、list/read/manage/install/create/validate/package/ClawHub。写侧由进程级 `skills_write_guard()` 串行化（agent 调用、gateway 转发、UI 后台安装线程、builtin seeding 四路写者）；安装走 stage-then-swap：内容（含 `_meta.json`）先在 `<root>/.staging/` 完整构建，再原子 rename 入位，读者永远看不到半成品。 |
-| Frontend lib | `src/lib/skills/*`、WebUI copy | discover skills（仅 managed list，经 `SkillsManager list`）、build prompt、ClawHub client、install status。 |
+| Frontend lib | `crates/agent-ui/src/lib/skills/*` | discover skills（仅 managed list，经 `SkillsManager list`）、build prompt、ClawHub client、install status。 |
 | Tool | `src/lib/tools/skillTools.ts` | `SkillsManager`。 |
-| Hub UI | `src/pages/skills-hub/SkillsHubPage.tsx`、WebUI mirror | Installed/Store 两个视图，选择、扫描、预览、安装。 |
+| Hub UI | `crates/agent-ui/src/pages/skills-hub/SkillsHubPage.tsx` | Installed/Store 两个视图，选择、扫描、预览、安装；宿主只提供能力适配器。 |
 
 ## Builtin Skills
 
@@ -59,9 +59,9 @@
 | 层 | 路径 | 职责 |
 |---|---|---|
 | MCP settings | `settings.mcp.servers`、`settings.mcp.selected` | server 配置与启用选择。 |
-| MCP Hub UI | `src/pages/mcp-hub/*`、WebUI mirror | server form、registry browser、preview drawer、install draft。 |
-| Registry client | `src/lib/mcpRegistry/index.ts`、WebUI copy | official registry、Smithery、Glama 等 registry 归一化。 |
-| Rust runtime | `src-tauri/src/commands/mcp.rs` | stdio/http/sse server lifecycle、tools/list、call_tool、test/restart/stop/status。 |
+| MCP Hub UI | `crates/agent-ui/src/pages/mcp-hub/*` | server form、registry browser、preview drawer、install draft。 |
+| Registry client | `crates/agent-ui/src/lib/mcpRegistry/index.ts` | official registry、Smithery、Glama 等 registry 归一化。 |
+| Rust runtime | `src-tauri/src/commands/integration/mcp.rs` | stdio/http/sse server lifecycle、tools/list、call_tool、test/restart/stop/status。 |
 | Dynamic tools | `src/lib/tools/mcpTools.ts` | 把 enabled MCP server 的工具暴露给模型。 |
 | Manager tool | `src/lib/tools/mcpManagerTools.ts` | MCP 配置 CRUD、诊断与生命周期控制。 |
 | Write path | `src/lib/settings/mcpOps.ts` | 唯一的 MCP 配置写路径：`McpSettingsOp`（upsert/patch/remove/setEnabled）+ 纯 reducer `applyMcpOps`，按 id 合并进 `setSettings(prev => ...)`；工具读取走 `getMcpSettings` 实时 getter（权威 `settingsRef`），不做 turn 级快照，读改写决策与提交在同一同步段内完成，从根上消除多写者覆盖。 |
@@ -92,8 +92,8 @@ Registry card 会被归一化为统一的 `McpRegistryCard`，其中 `installDra
 
 | 区域 | 注意事项 |
 |---|---|
-| Skills Hub | GUI/WebUI 都有 installed/store、preview drawer、install job 状态，并以 `ownerHandle + slug` 推导 ClawHub 安装身份。 |
-| MCP Hub | GUI/WebUI 都有 server form、registry browser、preview drawer、install draft。 |
+| Skills Hub | 公共页面提供 installed/store、preview drawer、install job 状态，并以 `ownerHandle + slug` 推导 ClawHub 安装身份；两端注入各自能力。 |
+| MCP Hub | 公共页面提供 server form、registry browser、preview drawer、install draft；两端注入各自运行时能力。 |
 | i18n | 双端有各自 `i18n/config.ts`，新增文案要同步。 |
 | settings sync | Skills/MCP settings 从 GUI 经 Gateway 同步到 WebUI，WebUI 修改再回写 GUI。 |
 | shims | WebUI 的 Tauri invoke 实际走 Gateway，不应假设浏览器有本地权限。 |

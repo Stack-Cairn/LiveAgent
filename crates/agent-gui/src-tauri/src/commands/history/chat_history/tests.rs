@@ -527,6 +527,43 @@ mod tests {
     }
 
     #[test]
+    fn set_cwd_moves_conversation_between_workspaces() {
+        let conn = open_test_db().expect("open test db");
+        let mut conversation = sample_conversation();
+        conversation.cwd = Some("/tmp/project-a".to_string());
+        upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+
+        let summary = set_chat_history_cwd_sync(&conn, "conv-1", "/tmp/project-b")
+            .expect("move conversation to another workspace");
+        assert_eq!(summary.cwd.as_deref(), Some("/tmp/project-b"));
+
+        let reloaded = get_summary_by_id(&conn, "conv-1").expect("reload summary");
+        assert_eq!(reloaded.cwd.as_deref(), Some("/tmp/project-b"));
+
+        // Deletes the conversation from the workdirs grouping of the old cwd.
+        let workdirs = list_chat_history_workdirs_sync(&conn).expect("list workdirs");
+        assert_eq!(workdirs.workdirs.len(), 1);
+        assert_eq!(workdirs.workdirs[0].path, "/tmp/project-b");
+    }
+
+    #[test]
+    fn set_cwd_rejects_empty_target_or_missing_conversation() {
+        let conn = open_test_db().expect("open test db");
+        let mut conversation = sample_conversation();
+        conversation.cwd = Some("/tmp/project-a".to_string());
+        upsert_chat_history_header(&conn, &conversation).expect("upsert header");
+
+        let empty_target =
+            set_chat_history_cwd_sync(&conn, "conv-1", "  ").expect_err("reject empty target");
+        assert!(empty_target.contains("工作空间"));
+
+        let missing =
+            set_chat_history_cwd_sync(&conn, "does-not-exist", "/tmp/project-b")
+                .expect_err("reject missing conversation");
+        assert!(missing.contains("未找到"));
+    }
+
+    #[test]
     fn v1_database_gains_selected_model_column_via_v2_migration() {
         // 复现存量库场景：完整的 v1 schema（无 selected_model_json）且
         // user_version 已到 1——版本门禁必须由 v2 迁移补齐新列。
@@ -1042,6 +1079,81 @@ mod tests {
             "time-filtered search should remove early match: {:?}",
             matches
         );
+    }
+
+    #[test]
+    fn append_checkpoint_atomically_flushes_finalized_segment_before_adding_next_segment() {
+        let mut conn = open_test_db().expect("open test db");
+        let initial_conversation = sample_conversation();
+        upsert_chat_history_header(&conn, &initial_conversation).expect("upsert initial header");
+        upsert_single_segment(
+            &conn,
+            "conv-1",
+            &ChatHistorySegmentInput {
+                segment_index: 0,
+                segment_id: "segment-0".to_string(),
+                summary_json: None,
+                messages_json:
+                    r#"[{"id":"m-user","role":"user","content":"start","timestamp":1}]"#
+                        .to_string(),
+                message_count: 1,
+                start_message_id: Some("m-user".to_string()),
+                end_message_id: Some("m-user".to_string()),
+                created_at: 1,
+                updated_at: 1,
+            },
+        )
+        .expect("seed active segment");
+
+        let mut checkpoint_conversation = initial_conversation;
+        checkpoint_conversation.context_meta_json = r#"{"activeSegmentIndex":1,"totalSegmentCount":2,"totalMessageCount":2}"#.to_string();
+        checkpoint_conversation.active_segment_index = 1;
+        checkpoint_conversation.total_segment_count = 2;
+        checkpoint_conversation.total_message_count = 2;
+        checkpoint_conversation.updated_at = 3;
+        append_chat_history_segment_sync(
+            &mut conn,
+            &ChatHistoryAppendSegmentInput {
+                conversation: checkpoint_conversation,
+                previous_segment: ChatHistorySegmentInput {
+                    segment_index: 0,
+                    segment_id: "segment-0".to_string(),
+                    summary_json: None,
+                    messages_json: r#"[
+                      {"id":"m-user","role":"user","content":"start","timestamp":1},
+                      {"id":"m-tool","role":"toolResult","toolName":"Read","toolCallId":"call-1","content":"result","timestamp":2}
+                    ]"#
+                    .to_string(),
+                    message_count: 2,
+                    start_message_id: Some("m-user".to_string()),
+                    end_message_id: Some("m-tool".to_string()),
+                    created_at: 1,
+                    updated_at: 2,
+                },
+                segment: ChatHistorySegmentInput {
+                    segment_index: 1,
+                    segment_id: "segment-1".to_string(),
+                    summary_json: Some(r#"{"role":"summary","content":"checkpoint"}"#.to_string()),
+                    messages_json: "[]".to_string(),
+                    message_count: 0,
+                    start_message_id: None,
+                    end_message_id: None,
+                    created_at: 3,
+                    updated_at: 3,
+                },
+            },
+        )
+        .expect("append checkpoint");
+
+        let record = get_record_by_id(&conn, "conv-1").expect("load checkpointed history");
+        assert_eq!(record.active_segment_index, 1);
+        assert_eq!(record.total_segment_count, 2);
+        assert_eq!(record.total_message_count, 2);
+        let segments = load_segments(&conn, "conv-1").expect("load checkpointed segments");
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].message_count, 2);
+        assert_eq!(segments[1].message_count, 0);
+        assert!(segments[1].summary_json.is_some());
     }
 
     #[test]

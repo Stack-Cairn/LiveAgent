@@ -1,4 +1,7 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
 import {
   type FocusEvent,
   type MouseEvent,
@@ -11,9 +14,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { getFileTypeIcon } from "../../components/chat/fileTypeIcons";
 import { SkillIcon } from "../../components/icons";
-import { useLocale } from "../../i18n";
 
 import {
   type CodeMentionReference,
@@ -64,7 +65,7 @@ export function isSkillMentionToken(token: string) {
   return Boolean(name) && isSkillMentionName(name) && !isCommonSkillMentionEnvVar(name);
 }
 
-type UserMessageSegment =
+export type UserMessageSegment =
   | { type: "text"; value: string }
   | { type: "mention"; path: string; isDir: boolean }
   | { type: "skill"; name: string }
@@ -162,16 +163,22 @@ function markdownFileReference(label: string, rawDestination: string) {
   if (!reference) return null;
 
   const fileName = reference.path.split("/").pop() || reference.path;
-  const expectedLabel = reference.isDir ? `${fileName}/` : fileName;
-  if (unescapeMarkdown(label.trim()) !== expectedLabel) return null;
+  if (unescapeMarkdown(label.trim()) !== fileName) return null;
 
   return reference;
 }
 
-function extractGitHubCommitSha(value: string) {
+function isGitHubHttpUrl(url: URL) {
+  return (
+    (url.protocol === "https:" || url.protocol === "http:") &&
+    ["github.com", "www.github.com"].includes(url.hostname.toLowerCase())
+  );
+}
+
+export function extractGitHubCommitSha(value: string) {
   try {
     const url = new URL(value);
-    if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) return "";
+    if (!isGitHubHttpUrl(url)) return "";
     const parts = url.pathname.split("/").filter(Boolean);
     const commitIndex = parts.findIndex((part) => part.toLowerCase() === "commit");
     const sha = commitIndex >= 0 ? (parts[commitIndex + 1] ?? "") : "";
@@ -205,10 +212,10 @@ export function buildGitHubCommitUrl(remoteUrl: string, sha: string) {
   }
 }
 
-function extractGitHubFileReference(value: string) {
+export function extractGitHubFileReference(value: string) {
   try {
     const url = new URL(value);
-    if (!["github.com", "www.github.com"].includes(url.hostname.toLowerCase())) return null;
+    if (!isGitHubHttpUrl(url)) return null;
     const parts = url.pathname.split("/").filter(Boolean);
     const blobIndex = parts.findIndex((part) => part.toLowerCase() === "blob");
     const ref = blobIndex >= 0 ? (parts[blobIndex + 1] ?? "") : "";
@@ -478,7 +485,7 @@ function tokenizeMentions(text: string): UserMessageSegment[] {
   return segments.length > 0 ? segments : tokenizeInlineMentions(text);
 }
 
-function tokenizeUserMessage(
+export function tokenizeUserMessage(
   text: string,
   pastedTextFiles: PendingUploadedFile[],
 ): UserMessageSegment[] {
@@ -947,7 +954,11 @@ export const UserMessageContent = memo(function UserMessageContent({
   pastedTextFiles?: PendingUploadedFile[];
   loadCommitDetails?: CommitDetailsLoader;
 }) {
-  const parts = useMemo(() => tokenizeUserMessage(text, pastedTextFiles), [text, pastedTextFiles]);
+  const normalizedText = useMemo(() => normalizeLogicalLineEndings(text), [text]);
+  const parts = useMemo(
+    () => tokenizeUserMessage(normalizedText, pastedTextFiles),
+    [normalizedText, pastedTextFiles],
+  );
   const hasChip = parts.some(
     (part) =>
       part.type === "mention" ||
@@ -957,7 +968,17 @@ export const UserMessageContent = memo(function UserMessageContent({
       part.type === "codeRef" ||
       part.type === "pastedText",
   );
-  if (!hasChip) return <>{text}</>;
+  const trailingNewlineAnchor = normalizedText.endsWith("\n") ? (
+    <span aria-hidden="true" className="chat-user-trailing-newline-anchor" />
+  ) : null;
+  if (!hasChip) {
+    return (
+      <>
+        {normalizedText}
+        {trailingNewlineAnchor}
+      </>
+    );
+  }
 
   return (
     <>
@@ -988,6 +1009,7 @@ export const UserMessageContent = memo(function UserMessageContent({
         }
         return <span key={idx}>{part.value}</span>;
       })}
+      {trailingNewlineAnchor}
     </>
   );
 });

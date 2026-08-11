@@ -3,7 +3,7 @@ import test from "node:test";
 import { createWebModuleLoader } from "../helpers/load-web-module.mjs";
 
 const loader = createWebModuleLoader();
-const fontFamily = loader.loadModule("src/lib/shared/fontFamily.ts");
+const fontFamily = loader.loadModule("@liveagent/ui/lib/shared/fontFamily.ts");
 
 async function withNavigator(value, task) {
   const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");

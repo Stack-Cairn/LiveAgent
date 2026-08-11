@@ -13,6 +13,9 @@ concurrency:
   group: update-star-history
   cancel-in-progress: true
 
+env:
+  ASSETS_BRANCH: chart-assets
+
 jobs:
   update:
     if: github.repository == 'Stack-Cairn/LiveAgent'
@@ -26,14 +29,15 @@ jobs:
           GH_TOKEN: ${{ secrets.STARGAZER_GH_TOKEN }}
         run: |
           set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/charts"
           gh api --paginate --slurp \
             --header "Accept: application/vnd.github.star+json" \
             "repos/${GITHUB_REPOSITORY}/stargazers?per_page=100" \
             > "$RUNNER_TEMP/stargazers.json"
           python3 scripts/update-star-history.py \
             "$RUNNER_TEMP/stargazers.json" \
-            docs/images/star-history-light.svg \
-            docs/images/star-history-dark.svg
+            "$RUNNER_TEMP/charts/star-history-light.svg" \
+            "$RUNNER_TEMP/charts/star-history-dark.svg"
 
       - name: Collect contributors
         env:
@@ -45,24 +49,22 @@ jobs:
             > "$RUNNER_TEMP/contributors.json"
           python3 scripts/update-contributors.py \
             "$RUNNER_TEMP/contributors.json" \
-            docs/images/contributors.svg
+            "$RUNNER_TEMP/charts/contributors.svg"
 
       - name: Check chart files
         run: |
           set -euo pipefail
-          test -s docs/images/star-history-light.svg
-          test -s docs/images/star-history-dark.svg
-          test -s docs/images/contributors.svg
+          test -s "$RUNNER_TEMP/charts/star-history-light.svg"
+          test -s "$RUNNER_TEMP/charts/star-history-dark.svg"
+          test -s "$RUNNER_TEMP/charts/contributors.svg"
 
-      - name: Commit and push changes
+      - name: Push charts to assets branch
         run: |
           set -euo pipefail
-          git add README.md README.zh-CN.md docs/images/star-history-light.svg docs/images/star-history-dark.svg docs/images/contributors.svg
-          if git diff --cached --quiet; then
-            echo "README charts are unchanged."
-            exit 0
-          fi
+          git switch --orphan "$ASSETS_BRANCH"
+          cp "$RUNNER_TEMP"/charts/*.svg .
+          git add star-history-light.svg star-history-dark.svg contributors.svg
           git config user.name "coder-hhx"
           git config user.email "houhaixu_email@163.com"
           git commit -m "docs: refresh star history and contributors charts"
-          git push
+          git push --force origin "$ASSETS_BRANCH"

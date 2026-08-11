@@ -194,15 +194,15 @@ Git 面板与文件树不再轮询：桌面端 `workspace_watch` 服务（notify
 | Desktop→Gateway | `AgentEnvelope.workspace_activity`（`WorkspaceActivityEvent`，字段 90）。Gateway→Desktop 用 `GatewayEnvelope.workspace_watch`（`WorkspaceWatchRequest`，声明式全量 workdir 集合；订阅计数变化与 agent 重连时重发）。 |
 | Browser-Gateway | `/ws/v2` 帧 `workspace_subscribe/workspace_unsubscribe {workdir}`，事件臂 `workspace_activity`。 |
 | 语义 | best-effort 失效信号，不保证不丢事件：客户端在（重）订阅、通道重建、revision 回退时必须自标脏并 refetch。revision 为 per-workdir 单调计数（agent 进程内）。 |
-| 消费端 | 两端镜像的 `lib/workspace-activity/useWorkspaceInvalidation`：面板隐藏时只置脏、激活时冲刷；数据本体仍走既有 fs/git 拉取命令（invalidate-push + fetch-on-demand）。 |
+| 消费端 | `crates/agent-ui/src/lib/workspace-activity/useWorkspaceInvalidation.ts` 为共享实现，两端分别提供 `WorkspaceActivityClient`：面板隐藏时只置脏、激活时冲刷；数据本体仍走既有 fs/git 拉取命令（invalidate-push + fetch-on-demand）。 |
 
 ## Skills 与 Memory 管理协议
 
 | 能力 | 直通请求臂 | Desktop 落点 |
 |---|---|---|
-| Skills 列表和管理 | `SkillFilesListRequest`、`SkillManageRequest`、`SkillMetadataReadRequest`、`SkillTextReadRequest` | `system_ensure_builtin_skills`、`system_manage_skill`、`system_read_skill_*`、`services/skills.rs` |
-| Memory 管理 | `MemoryManageRequest` | `commands/memory.rs`、`services/memory.rs` |
-| Cron 管理 | `CronManageRequest` | `commands/cron.rs`、`services/cron.rs`、settings cron 表 |
+| Skills 列表和管理 | `SkillFilesListRequest`、`SkillManageRequest`、`SkillMetadataReadRequest`、`SkillTextReadRequest` | `system_ensure_builtin_skills`、`system_manage_skill`、`system_read_skill_*`、`commands/app/system.rs`、`services/skills/*` |
+| Memory 管理 | `MemoryManageRequest` | `commands/integration/memory.rs`、`services/memory/*` |
+| Cron 管理 | `CronManageRequest` | `commands/automation/cron.rs`、`services/automation/*`、settings cron 表 |
 
 ## 恢复与去重机制
 

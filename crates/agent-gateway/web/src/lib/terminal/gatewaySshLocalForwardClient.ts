@@ -5,12 +5,12 @@
 // desktop frontend ships its own copy speaking Tauri invoke
 // (tauriSshLocalForwardClient.ts).
 
-import { getGatewayWebSocketClient, onGatewayWebSocketClientReplaced } from "@/lib/gatewaySocket";
-import { loadToken } from "@/lib/storage";
 import type {
   SshLocalForwardClient,
   SshLocalForwardEvent,
-} from "@/lib/terminal/sshLocalForwardTypes";
+} from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
+import { getGatewayWebSocketClient, onGatewayWebSocketClientReplaced } from "@/lib/gatewaySocket";
+import { loadToken } from "@/lib/storage";
 
 function client() {
   return getGatewayWebSocketClient(loadToken().trim());

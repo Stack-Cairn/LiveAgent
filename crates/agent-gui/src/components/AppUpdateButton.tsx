@@ -1,8 +1,8 @@
-import { useLocale } from "../i18n";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type AppUpdateController, getAppUpdateDisplayVersion } from "../lib/appUpdates";
-import { cn } from "../lib/shared/utils";
 import { Download, Loader2 } from "./icons";
-import { Button } from "./ui/button";
 
 type AppUpdateButtonProps = {
   appUpdate: AppUpdateController;

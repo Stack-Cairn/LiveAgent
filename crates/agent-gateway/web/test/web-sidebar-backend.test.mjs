@@ -43,7 +43,7 @@ function createFakeApi() {
     historyListeners: new Set(),
     connectionListeners: new Set(),
     statusListeners: new Set(),
-    calls: { list: [], workdirs: 0, rename: [], pin: [], delete: [] },
+    calls: { list: [], workdirs: 0, rename: [], pin: [], move: [], delete: [] },
   };
   const api = {
     listHistory: async (page, pageSize, filter) => {
@@ -61,6 +61,10 @@ function createFakeApi() {
     pinHistory: async (id, isPinned) => {
       state.calls.pin.push({ id, isPinned });
       return summary(id, { is_pinned: isPinned, pinned_at: isPinned ? SECONDS : 0 });
+    },
+    setHistoryCwd: async (id, cwd) => {
+      state.calls.move.push({ id, cwd });
+      return summary(id, { cwd });
     },
     deleteHistory: async (id) => {
       state.calls.delete.push(id);
@@ -338,6 +342,10 @@ test("mutations delegate to the gateway api and normalize returned summaries", a
   const pinned = await backend.setConversationPinned("c1", true);
   assert.equal(pinned.isPinned, true);
   assert.equal(pinned.pinnedAt, MILLIS);
+
+  const moved = await backend.setConversationCwd("c1", "/tmp/b");
+  assert.deepEqual(state.calls.move, [{ id: "c1", cwd: "/tmp/b" }]);
+  assert.equal(moved.cwd, "/tmp/b");
 
   await backend.deleteConversation("c1");
   assert.deepEqual(state.calls.delete, ["c1"]);

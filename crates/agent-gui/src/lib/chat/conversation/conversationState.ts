@@ -1,7 +1,7 @@
 import type { AssistantMessage, Context, Message } from "@earendil-works/pi-ai";
-
+import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { assistantMessageToText } from "../../providers/llm";
-import { createUuid } from "../../shared/id";
+import type { TaskListState } from "../../tools/builtinTypes";
 import {
   type FileLedger,
   formatFileLedgerBlock,
@@ -73,6 +73,7 @@ export type StoredChatContextMeta = {
   activeSegmentIndex: number;
   totalSegmentCount: number;
   totalMessageCount: number;
+  taskList?: TaskListState;
 };
 
 export type StoredContextSegment = {
@@ -382,6 +383,7 @@ function buildConversationMeta(params: {
   activeSegmentIndex?: number;
   totalSegmentCount?: number;
   totalMessageCount?: number;
+  taskList?: TaskListState;
 }): StoredChatContextMeta {
   const activeSegmentArrayIndex =
     typeof params.activeSegmentIndex === "number"
@@ -398,6 +400,7 @@ function buildConversationMeta(params: {
       params.totalSegmentCount ??
       Math.max(params.segments.length, activeSegmentIndex + (params.segments.length > 0 ? 1 : 0)),
     totalMessageCount: params.totalMessageCount ?? countMessages(params.segments),
+    taskList: params.taskList,
   };
 }
 
@@ -986,6 +989,7 @@ export function normalizeConversationState(input: {
       input.meta.totalMessageCount !== undefined
         ? Math.max(0, input.meta.totalMessageCount - droppedMessageCount)
         : countMessages(segments),
+    taskList: input.meta.taskList,
   });
   const transcript =
     input.transcript ??
@@ -1124,6 +1128,7 @@ export function appendMessagesToConversation(
       (normalizedSegments[activeSegmentIndex]?.segmentIndex ?? 0) + 1,
     ),
     totalMessageCount: state.meta.totalMessageCount + appendedMessageCount,
+    taskList: state.meta.taskList,
   });
   const items = updateTimelineForAppend({
     previousItems: state.transcript.items,
@@ -1260,6 +1265,7 @@ export function replaceActiveSegmentMessages(
     activeSegmentIndex: state.activeSegmentIndex,
     totalSegmentCount: state.meta.totalSegmentCount,
     totalMessageCount: state.meta.totalMessageCount - previousMessageCount + messages.length,
+    taskList: state.meta.taskList,
   });
   const activeStartMessageIndex = getTranscriptSegmentStart(state.transcript, activeSegment);
   const items = rebuildTimelineForActiveSegment({
@@ -1285,5 +1291,27 @@ export function replaceActiveSegmentMessages(
       segmentWindows,
       revision: null,
     },
+  };
+}
+
+export function setTaskListState(
+  state: ConversationViewState,
+  taskList: TaskListState,
+): ConversationViewState {
+  return {
+    ...state,
+    meta: {
+      ...state.meta,
+      taskList,
+    },
+  };
+}
+
+export function clearTaskListState(state: ConversationViewState): ConversationViewState {
+  if (!state.meta.taskList) return state;
+  const { taskList: _taskList, ...meta } = state.meta;
+  return {
+    ...state,
+    meta,
   };
 }

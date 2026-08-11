@@ -1,5 +1,5 @@
+import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
 import type { MutableRefObject } from "react";
-import type { MentionComposerDraft } from "../../../components/chat/MentionComposer";
 import type { HistoryMessageRef } from "../../../lib/chat/conversation/conversationState";
 import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode, ProviderId } from "../../../lib/settings";

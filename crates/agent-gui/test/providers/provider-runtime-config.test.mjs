@@ -7,9 +7,6 @@ const { createProviderRuntimeConfig } = loader.loadModule(
   "src/lib/providers/runtime/providerRuntimeConfig.ts",
 );
 const settings = loader.loadModule("src/lib/settings/index.ts");
-const { getDefaultCliIdentitySettings } = loader.loadModule(
-  "src/lib/providers/cliIdentityCore.ts",
-);
 
 function createProvider(overrides = {}) {
   return {
@@ -35,16 +32,12 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
     createProvider(),
     "claude-sonnet-4-6",
     settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
-    getDefaultCliIdentitySettings(),
   );
 
   assert.equal(runtime.baseUrl, "https://relay.example/v1");
   assert.equal(runtime.apiKey, "test-key");
-  // 全局身份补出的 User-Agent 排在自定义头之前，原有自定义头一并保留。
-  assert.deepEqual(runtime.customHeaders, [
-    { key: "User-Agent", value: "claude-cli/2.1.71 (external, cli)" },
-    { key: "X-Trace-Id", value: "abc" },
-  ]);
+  // 用户自定义头原样透传，工厂不再注入任何内置身份头。
+  assert.deepEqual(runtime.customHeaders, [{ key: "X-Trace-Id", value: "abc" }]);
   assert.equal(runtime.promptCachingEnabled, true);
   assert.equal(runtime.promptCacheRetention, "long");
   assert.equal(runtime.useSystemProxy, true);
@@ -74,7 +67,6 @@ test("createProviderRuntimeConfig gates reasoning on model support", () => {
       ...settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
       thinkingEnabled: false,
     },
-    getDefaultCliIdentitySettings(),
   );
   assert.equal(thinkingOff.reasoning, "off");
 
@@ -84,7 +76,6 @@ test("createProviderRuntimeConfig gates reasoning on model support", () => {
     createProvider({ type: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta" }),
     "gemini-embedding-001",
     settings.DEFAULT_CHAT_RUNTIME_CONTROLS,
-    getDefaultCliIdentitySettings(),
   );
   assert.equal(unsupported.reasoning, undefined);
 });

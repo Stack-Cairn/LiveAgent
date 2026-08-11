@@ -4,11 +4,7 @@ import test from "node:test";
 
 const headerSources = [
   readFileSync(
-    new URL("../../src/pages/chat/components/ChatHeader.tsx", import.meta.url),
-    "utf8",
-  ),
-  readFileSync(
-    new URL("../../../agent-gateway/web/src/pages/chat/ChatHeader.tsx", import.meta.url),
+    new URL("../../../agent-ui/src/components/chat/ChatHeader.tsx", import.meta.url),
     "utf8",
   ),
 ];

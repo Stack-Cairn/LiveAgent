@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const forms = loader.loadModule("src/pages/settings/providerUtils.ts");
+const forms = loader.loadModule("@liveagent/ui/pages/settings/providerUtils.ts");
 
 const usageQuery = {
   enabled: true,

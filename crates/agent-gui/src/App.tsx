@@ -1,17 +1,22 @@
 import type { Context } from "@earendil-works/pi-ai";
+import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
+import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
+import { initAutomation } from "@liveagent/ui/lib/automation/index";
+import {
+  applyGatewaySettingsSyncPayload,
+  buildGatewaySettingsSyncPayload,
+  type GatewaySettingsSyncPayload,
+} from "@liveagent/ui/lib/settings/sync";
+import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppErrorBoundary } from "./components/AppErrorBoundary";
-import { CliIdentityUpdateHost } from "./components/CliIdentityUpdateHost";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { Pin } from "./components/icons";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
 import { MemoryOrganizerHost } from "./components/memory/useMemoryOrganizer";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
-import { LocaleContext, t as translate } from "./i18n";
 import { useAppUpdateController } from "./lib/appUpdates";
-import { initAutomation } from "./lib/automation";
 import {
   type AppSettings,
   getDefaultSettings,
@@ -29,17 +34,11 @@ import {
   publishGatewaySettingsSync,
   type SettingsSaveState,
 } from "./lib/settings/storage";
-import {
-  applyGatewaySettingsSyncPayload,
-  buildGatewaySettingsSyncPayload,
-  type GatewaySettingsSyncPayload,
-} from "./lib/settings/sync";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
 import { applyFontFamilies } from "./lib/system/fontFamily";
 import { setAskUserQuestionTimeoutMs } from "./lib/tools/askUserQuestionTools";
 import { setToolApprovalTimeoutMs } from "./lib/tools/toolApproval";
 import { ChatPage } from "./pages/ChatPage";
-import { SettingsPage } from "./pages/SettingsPage";
 import type { SectionId } from "./pages/settings/types";
 
 function getDefaultContext(): Context {
@@ -601,7 +600,6 @@ export default function App() {
   return (
     <LocaleContext.Provider value={localeContextValue}>
       <AppChrome>
-        <CliIdentityUpdateHost settings={settings} setSettings={setSettings} />
         <CronPromptRunner settings={settings} />
         <MemoryOrganizerHost settings={settings} setSettings={setSettings} />
         <AppErrorBoundary>

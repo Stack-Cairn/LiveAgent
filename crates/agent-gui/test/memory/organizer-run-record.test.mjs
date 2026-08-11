@@ -3,8 +3,8 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const runRecord = loader.loadModule("src/lib/memory/organizer/runRecord.ts");
-const quota = loader.loadModule("src/lib/memory/organizer/quota.ts");
+const runRecord = loader.loadModule("@liveagent/ui/lib/memory/organizer/runRecord.ts");
+const quota = loader.loadModule("@liveagent/ui/lib/memory/organizer/quota.ts");
 const {
   createEmptyRunReport,
   readRunReport,

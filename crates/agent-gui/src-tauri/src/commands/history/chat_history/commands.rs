@@ -325,32 +325,44 @@ pub async fn chat_history_upsert_active_segment(
 }
 
 pub(crate) async fn chat_history_append_segment_inner(
-    input: ChatHistorySegmentMutationInput,
+    input: ChatHistoryAppendSegmentInput,
 ) -> Result<ChatHistorySummary, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        validate_segment_mutation_input(&input)?;
         let mut conn = open_db()?;
-        let tx = conn
-            .transaction()
-            .map_err(|e| format!("开启 append segment 事务失败：{e}"))?;
-
-        validate_append_segment_preconditions(&tx, &input)?;
-        upsert_chat_history_header(&tx, &input.conversation)?;
-        insert_single_segment(&tx, input.conversation.id.trim(), &input.segment)?;
-        verify_chat_history_consistency(&tx, input.conversation.id.trim())?;
-
-        tx.commit()
-            .map_err(|e| format!("提交 append segment 事务失败：{e}"))?;
-
+        append_chat_history_segment_sync(&mut conn, &input)?;
         get_summary_by_id(&conn, input.conversation.id.trim())
     })
     .await
     .map_err(|e| format!("chat_history_append_segment join 失败：{e}"))?
 }
 
+fn append_chat_history_segment_sync(
+    conn: &mut Connection,
+    input: &ChatHistoryAppendSegmentInput,
+) -> Result<(), String> {
+    validate_append_segment_input(input)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("开启 append segment 事务失败：{e}"))?;
+
+    validate_append_segment_preconditions(&tx, input)?;
+    upsert_chat_history_header(&tx, &input.conversation)?;
+    upsert_single_segment(
+        &tx,
+        input.conversation.id.trim(),
+        &input.previous_segment,
+    )?;
+    insert_single_segment(&tx, input.conversation.id.trim(), &input.segment)?;
+    verify_chat_history_consistency(&tx, input.conversation.id.trim())?;
+
+    tx.commit()
+        .map_err(|e| format!("提交 append segment 事务失败：{e}"))?;
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn chat_history_append_segment(
-    input: ChatHistorySegmentMutationInput,
+    input: ChatHistoryAppendSegmentInput,
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_append_segment_inner(input).await?;
@@ -404,6 +416,31 @@ pub async fn chat_history_set_pinned(
     gateway_controller: tauri::State<'_, Arc<GatewayController>>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_set_pinned_inner(id, is_pinned).await?;
+    gateway_controller
+        .publish_history_sync(build_history_sync_upsert(&summary))
+        .await;
+    Ok(summary)
+}
+
+pub(crate) async fn chat_history_set_cwd_inner(
+    id: String,
+    cwd: String,
+) -> Result<ChatHistorySummary, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = open_db()?;
+        set_chat_history_cwd_sync(&conn, &id, &cwd)
+    })
+    .await
+    .map_err(|e| format!("chat_history_set_cwd join 失败：{e}"))?
+}
+
+#[tauri::command]
+pub async fn chat_history_set_cwd(
+    id: String,
+    cwd: String,
+    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+) -> Result<ChatHistorySummary, String> {
+    let summary = chat_history_set_cwd_inner(id, cwd).await?;
     gateway_controller
         .publish_history_sync(build_history_sync_upsert(&summary))
         .await;
