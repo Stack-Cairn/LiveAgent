@@ -1830,18 +1830,17 @@ export function SkillsHubPage(props: SkillsHubPageProps) {
           </div>
         </div>
       </div>
-      {previewInstalledSkill ? (
-        <InstalledSkillPreviewDrawer
-          skill={previewInstalledSkill}
-          preview={installedPreviewState}
-          checked={
-            isAlwaysEnabledSkillName(previewInstalledSkill.name) ||
-            selected.has(previewInstalledSkill.name)
-          }
-          skillsEnabled={skillsEnabled}
-          onClose={() => setPreviewInstalledSkill(null)}
-        />
-      ) : null}
+      <InstalledSkillPreviewDrawer
+        skill={previewInstalledSkill}
+        preview={installedPreviewState}
+        checked={
+          previewInstalledSkill !== null &&
+          (isAlwaysEnabledSkillName(previewInstalledSkill.name) ||
+            selected.has(previewInstalledSkill.name))
+        }
+        skillsEnabled={skillsEnabled}
+        onClose={() => setPreviewInstalledSkill(null)}
+      />
 
       {bulkMode &&
       view === "installed" &&

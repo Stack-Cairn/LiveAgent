@@ -48,6 +48,7 @@ import {
   loadSkillStoreDetail,
   readSkillStoreDetail,
 } from "./skillStoreCache";
+import { useDrawerPresence } from "./useDrawerPresence";
 
 export const TERMINAL_INSTALL_PHASES = new Set(["done", "error", "cancelled"]);
 const STORE_CATEGORY_FILL_TARGET = 12;
@@ -563,31 +564,76 @@ export function SkillsStoreView(props: {
           ) : null}
         </div>
       </div>
-      {previewSkill ? (
-        <SkillsStorePreviewDrawer
-          skill={previewDetail ?? previewSkill}
-          detail={previewDetail}
-          loading={previewLoading}
-          error={previewError}
-          installState={getInstallState(previewDetail ?? previewSkill)}
-          onClose={() => setPreviewSkill(null)}
-          onInstall={() => onInstall(previewDetail ?? previewSkill)}
-        />
-      ) : null}
+      <SkillsStorePreviewDrawer
+        skill={previewSkill ? (previewDetail ?? previewSkill) : null}
+        detail={previewDetail}
+        loading={previewLoading}
+        error={previewError}
+        installState={previewSkill ? getInstallState(previewDetail ?? previewSkill) : null}
+        onClose={() => setPreviewSkill(null)}
+        onInstall={() => {
+          const target = previewDetail ?? previewSkill;
+          if (target) onInstall(target);
+        }}
+      />
     </div>
   );
 }
 
 function SkillsStorePreviewDrawer(props: {
+  skill: ClawHubSkillCard | null;
+  detail: ClawHubSkillDetail | null;
+  loading: boolean;
+  error: string | null;
+  installState: StoreSkillInstallState | null;
+  onClose: () => void;
+  onInstall: () => void;
+}) {
+  const { onClose, onInstall } = props;
+  const presence = useDrawerPresence(
+    props.skill && props.installState
+      ? {
+          skill: props.skill,
+          detail: props.detail,
+          loading: props.loading,
+          error: props.error,
+          installState: props.installState,
+        }
+      : null,
+  );
+  const snapshot = presence.snapshot;
+
+  return (
+    <Sheet
+      open={presence.open}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      onOpenChangeComplete={presence.handleOpenChangeComplete}
+    >
+      {snapshot ? (
+        <SkillsStorePreviewPopup
+          skill={snapshot.skill}
+          detail={snapshot.detail}
+          loading={snapshot.loading || !presence.entered}
+          error={snapshot.error}
+          installState={snapshot.installState}
+          onInstall={onInstall}
+        />
+      ) : null}
+    </Sheet>
+  );
+}
+
+function SkillsStorePreviewPopup(props: {
   skill: ClawHubSkillCard;
   detail: ClawHubSkillDetail | null;
   loading: boolean;
   error: string | null;
   installState: StoreSkillInstallState;
-  onClose: () => void;
   onInstall: () => void;
 }) {
-  const { skill, detail, loading, error, installState, onClose, onInstall } = props;
+  const { skill, detail, loading, error, installState, onInstall } = props;
   const { t } = useLocale();
   const data = detail ?? skill;
   const link = data.webUrl ?? buildClawHubSkillUrl(data);
@@ -602,223 +648,213 @@ function SkillsStorePreviewDrawer(props: {
       : t("settings.skillsStoreInstall");
 
   return (
-    <Sheet
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
+    <SheetPopup
+      side="right"
+      variant="inset"
+      closeLabel={t("settings.cronViewClose")}
+      className="w-full sm:max-w-[34rem]"
     >
-      <SheetPopup
-        side="right"
-        variant="inset"
-        closeLabel={t("settings.cronViewClose")}
-        className="w-full sm:max-w-[34rem]"
-      >
-        <SheetHeader className="flex-row items-start gap-3 border-b border-border px-5 py-4 pr-14">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted text-foreground">
-            {detail?.ownerImage ? (
-              <img
-                src={detail.ownerImage}
-                alt=""
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <SkillIcon className="h-7 w-7" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              {t("settings.skillsStorePreviewTitle")}
-            </div>
-            <SheetTitle className="mt-1 truncate">{data.displayName}</SheetTitle>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-              {owner ? <span className="truncate">@{owner}</span> : null}
-              <span>v{version}</span>
-              {data.updatedAt ? <span>{formatStoreDate(data.updatedAt)}</span> : null}
-            </div>
-          </div>
-        </SheetHeader>
-
-        <SheetPanel className="px-5 py-5">
-          <div className="flex flex-col gap-5">
-            {data.summary ? (
-              <p className="text-[13px] leading-6 text-muted-foreground">{data.summary}</p>
-            ) : null}
-
-            <div className="grid grid-cols-3 gap-2">
-              <StorePreviewMetric
-                label={t("settings.skillsStorePreviewDownloads")}
-                value={formatCompactNumber(data.downloads)}
-              />
-              <StorePreviewMetric
-                label={t("settings.skillsStorePreviewStars")}
-                value={formatCompactNumber(data.stars)}
-              />
-              <StorePreviewMetric
-                label={t("settings.skillsStorePreviewInstalls")}
-                value={formatCompactNumber(data.installsCurrent)}
-              />
-            </div>
-
-            {installState.installing && !installState.done ? (
-              <div className="rounded-lg border border-border bg-muted p-3">
-                <div className="flex items-center justify-between gap-3 text-[11px] text-foreground">
-                  <span>
-                    {installPhaseLabel(installState.pending ? undefined : installState.job, t)}
-                  </span>
-                  {installState.job && !installState.pending ? (
-                    <span>{formatInstallProgress(installState.job)}</span>
-                  ) : null}
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background">
-                  {installState.progress === null ? (
-                    <div className="hub-loading-progress h-full rounded-full bg-foreground/55" />
-                  ) : (
-                    <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-300"
-                      style={{ width: `${installState.progress}%` }}
-                    />
-                  )}
-                </div>
-              </div>
-            ) : null}
-
-            {installState.job?.phase === "error" &&
-            installState.job.error &&
-            !installState.done &&
-            !installState.pending ? (
-              <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-xs text-destructive">
-                {installState.job.error}
-              </div>
-            ) : null}
-
-            {error ? (
-              <div className="rounded-lg border border-border bg-muted p-3">
-                <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" />
-                  <span>{t("settings.skillsStorePreviewDetailUnavailable")}</span>
-                </div>
-              </div>
-            ) : null}
-
-            {loading ? (
-              <StorePreviewSkeleton />
-            ) : (
-              <>
-                <Separator />
-                <section aria-labelledby="store-skill-metadata">
-                  <h3
-                    id="store-skill-metadata"
-                    className="mb-1 text-xs font-semibold text-foreground"
-                  >
-                    {t("settings.skillsStorePreviewMetadata")}
-                  </h3>
-                  <div className="divide-y divide-border">
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewSlug")}
-                      value={data.slug}
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewOwner")}
-                      value={owner}
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewVersion")}
-                      value={version}
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewUpdated")}
-                      value={data.updatedAt ? formatFullStoreDate(data.updatedAt) : null}
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewCreated")}
-                      value={detail?.createdAt ? formatFullStoreDate(detail.createdAt) : null}
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewPublished")}
-                      value={
-                        detail?.latestVersionCreatedAt
-                          ? formatFullStoreDate(detail.latestVersionCreatedAt)
-                          : null
-                      }
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewLicense")}
-                      value={detail?.license}
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewOs")}
-                      value={supportedOs.length > 0 ? supportedOs.join(", ") : null}
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewSystems")}
-                      value={supportedSystems.length > 0 ? supportedSystems.join(", ") : null}
-                    />
-                    <StorePreviewField
-                      label={t("settings.skillsStorePreviewModeration")}
-                      value={detail?.moderationStatus}
-                    />
-                  </div>
-                </section>
-
-                {detail?.latestVersionChangelog ? (
-                  <>
-                    <Separator />
-                    <section aria-labelledby="store-skill-changelog">
-                      <h3
-                        id="store-skill-changelog"
-                        className="mb-2 text-xs font-semibold text-foreground"
-                      >
-                        {t("settings.skillsStorePreviewChangelog")}
-                      </h3>
-                      <p className="whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
-                        {detail.latestVersionChangelog}
-                      </p>
-                    </section>
-                  </>
-                ) : null}
-              </>
-            )}
-          </div>
-        </SheetPanel>
-
-        <SheetFooter className="shrink-0 border-t border-border px-5 py-4">
-          {link ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 flex-1 gap-1.5"
-              render={
-                <a href={link} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {t("settings.skillsStoreOpenInClawHub")}
-                </a>
-              }
+      <SheetHeader className="flex-row items-start gap-3 border-b border-border px-5 py-4 pr-14">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-muted text-foreground">
+          {detail?.ownerImage ? (
+            <img
+              src={detail.ownerImage}
+              alt=""
+              className="h-full w-full object-cover"
+              loading="lazy"
             />
+          ) : (
+            <SkillIcon className="h-7 w-7" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            {t("settings.skillsStorePreviewTitle")}
+          </div>
+          <SheetTitle className="mt-1 truncate">{data.displayName}</SheetTitle>
+          <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+            {owner ? <span className="truncate">@{owner}</span> : null}
+            <span>v{version}</span>
+            {data.updatedAt ? <span>{formatStoreDate(data.updatedAt)}</span> : null}
+          </div>
+        </div>
+      </SheetHeader>
+
+      <SheetPanel className="px-5 py-5">
+        <div className="flex flex-col gap-5">
+          {data.summary ? (
+            <p className="text-[13px] leading-6 text-muted-foreground">{data.summary}</p>
           ) : null}
+
+          <div className="grid grid-cols-3 gap-2">
+            <StorePreviewMetric
+              label={t("settings.skillsStorePreviewDownloads")}
+              value={formatCompactNumber(data.downloads)}
+            />
+            <StorePreviewMetric
+              label={t("settings.skillsStorePreviewStars")}
+              value={formatCompactNumber(data.stars)}
+            />
+            <StorePreviewMetric
+              label={t("settings.skillsStorePreviewInstalls")}
+              value={formatCompactNumber(data.installsCurrent)}
+            />
+          </div>
+
+          {installState.installing && !installState.done ? (
+            <div className="rounded-lg border border-border bg-muted p-3">
+              <div className="flex items-center justify-between gap-3 text-[11px] text-foreground">
+                <span>
+                  {installPhaseLabel(installState.pending ? undefined : installState.job, t)}
+                </span>
+                {installState.job && !installState.pending ? (
+                  <span>{formatInstallProgress(installState.job)}</span>
+                ) : null}
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-background">
+                {installState.progress === null ? (
+                  <div className="hub-loading-progress h-full rounded-full bg-foreground/55" />
+                ) : (
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-300"
+                    style={{ width: `${installState.progress}%` }}
+                  />
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {installState.job?.phase === "error" &&
+          installState.job.error &&
+          !installState.done &&
+          !installState.pending ? (
+            <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-xs text-destructive">
+              {installState.job.error}
+            </div>
+          ) : null}
+
+          {error ? (
+            <div className="rounded-lg border border-border bg-muted p-3">
+              <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" />
+                <span>{t("settings.skillsStorePreviewDetailUnavailable")}</span>
+              </div>
+            </div>
+          ) : null}
+
+          {loading ? (
+            <StorePreviewSkeleton />
+          ) : (
+            <>
+              <Separator />
+              <section aria-labelledby="store-skill-metadata">
+                <h3
+                  id="store-skill-metadata"
+                  className="mb-1 text-xs font-semibold text-foreground"
+                >
+                  {t("settings.skillsStorePreviewMetadata")}
+                </h3>
+                <div className="divide-y divide-border">
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewSlug")}
+                    value={data.slug}
+                  />
+                  <StorePreviewField label={t("settings.skillsStorePreviewOwner")} value={owner} />
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewVersion")}
+                    value={version}
+                  />
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewUpdated")}
+                    value={data.updatedAt ? formatFullStoreDate(data.updatedAt) : null}
+                  />
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewCreated")}
+                    value={detail?.createdAt ? formatFullStoreDate(detail.createdAt) : null}
+                  />
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewPublished")}
+                    value={
+                      detail?.latestVersionCreatedAt
+                        ? formatFullStoreDate(detail.latestVersionCreatedAt)
+                        : null
+                    }
+                  />
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewLicense")}
+                    value={detail?.license}
+                  />
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewOs")}
+                    value={supportedOs.length > 0 ? supportedOs.join(", ") : null}
+                  />
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewSystems")}
+                    value={supportedSystems.length > 0 ? supportedSystems.join(", ") : null}
+                  />
+                  <StorePreviewField
+                    label={t("settings.skillsStorePreviewModeration")}
+                    value={detail?.moderationStatus}
+                  />
+                </div>
+              </section>
+
+              {detail?.latestVersionChangelog ? (
+                <>
+                  <Separator />
+                  <section aria-labelledby="store-skill-changelog">
+                    <h3
+                      id="store-skill-changelog"
+                      className="mb-2 text-xs font-semibold text-foreground"
+                    >
+                      {t("settings.skillsStorePreviewChangelog")}
+                    </h3>
+                    <p className="whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                      {detail.latestVersionChangelog}
+                    </p>
+                  </section>
+                </>
+              ) : null}
+            </>
+          )}
+        </div>
+      </SheetPanel>
+
+      <SheetFooter className="shrink-0 border-t border-border px-5 py-4">
+        {link ? (
           <Button
             type="button"
-            variant={installState.done ? "outline" : "default"}
+            variant="outline"
             size="sm"
             className="h-9 flex-1 gap-1.5"
-            disabled={installState.done || installState.installing}
-            aria-busy={installState.installing}
-            onClick={onInstall}
-          >
-            {installState.installing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : installState.done ? (
-              <Check className="h-3.5 w-3.5" />
-            ) : (
-              <Cloud className="h-3.5 w-3.5" />
-            )}
-            {actionLabel}
-          </Button>
-        </SheetFooter>
-      </SheetPopup>
-    </Sheet>
+            render={
+              <a href={link} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" />
+                {t("settings.skillsStoreOpenInClawHub")}
+              </a>
+            }
+          />
+        ) : null}
+        <Button
+          type="button"
+          variant={installState.done ? "outline" : "default"}
+          size="sm"
+          className="h-9 flex-1 gap-1.5"
+          disabled={installState.done || installState.installing}
+          aria-busy={installState.installing}
+          onClick={onInstall}
+        >
+          {installState.installing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : installState.done ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Cloud className="h-3.5 w-3.5" />
+          )}
+          {actionLabel}
+        </Button>
+      </SheetFooter>
+    </SheetPopup>
   );
 }
 

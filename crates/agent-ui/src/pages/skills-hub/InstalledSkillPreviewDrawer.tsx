@@ -11,6 +11,9 @@ import {
 } from "@liveagent/ui/components/ui/sheet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
+import { useMemo } from "react";
+
+import { useDrawerPresence } from "./useDrawerPresence";
 
 export const INSTALLED_SKILL_PREVIEW_LINES = 10_000;
 
@@ -189,19 +192,60 @@ function stripInstalledSkillPreviewMetadata(content: string, skill: SkillSummary
 }
 
 export function InstalledSkillPreviewDrawer(props: {
-  skill: SkillSummary;
+  skill: SkillSummary | null;
   preview: InstalledSkillPreviewState;
   checked: boolean;
   skillsEnabled: boolean;
   onClose: () => void;
 }) {
-  const { skill, preview, checked, skillsEnabled, onClose } = props;
+  const { onClose, skillsEnabled } = props;
+  const presence = useDrawerPresence(
+    props.skill ? { skill: props.skill, preview: props.preview, checked: props.checked } : null,
+  );
+  const snapshot = presence.snapshot;
+  const snapshotSkill = snapshot?.skill ?? null;
+  const snapshotContent = snapshot?.preview.content ?? "";
+  const previewContent = useMemo(
+    () => (snapshotSkill ? stripInstalledSkillPreviewMetadata(snapshotContent, snapshotSkill) : ""),
+    [snapshotContent, snapshotSkill],
+  );
+
+  return (
+    <Sheet
+      open={presence.open}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      onOpenChangeComplete={presence.handleOpenChangeComplete}
+    >
+      {snapshot ? (
+        <InstalledSkillPreviewPopup
+          skill={snapshot.skill}
+          preview={snapshot.preview}
+          previewContent={previewContent}
+          checked={snapshot.checked}
+          skillsEnabled={skillsEnabled}
+          contentReady={presence.entered && !snapshot.preview.loading}
+        />
+      ) : null}
+    </Sheet>
+  );
+}
+
+function InstalledSkillPreviewPopup(props: {
+  skill: SkillSummary;
+  preview: InstalledSkillPreviewState;
+  previewContent: string;
+  checked: boolean;
+  skillsEnabled: boolean;
+  contentReady: boolean;
+}) {
+  const { skill, preview, previewContent, checked, skillsEnabled, contentReady } = props;
   const { t } = useLocale();
   const alwaysEnabled = isAlwaysEnabledSkillName(skill.name);
   const source = skill.source;
   const description = skill.description.trim();
   const previewIsMarkdown = /\.(md|mdx|markdown)$/i.test(skill.skillFile);
-  const previewContent = stripInstalledSkillPreviewMetadata(preview.content, skill);
   const statusLabel = alwaysEnabled
     ? t("settings.skillsInstalledPreviewBuiltIn")
     : checked
@@ -209,168 +253,156 @@ export function InstalledSkillPreviewDrawer(props: {
       : t("settings.skillsInstalledPreviewUnselected");
 
   return (
-    <Sheet
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
+    <SheetPopup
+      side="right"
+      variant="inset"
+      closeLabel={t("settings.cronViewClose")}
+      className="w-full sm:max-w-xl"
     >
-      <SheetPopup
-        side="right"
-        variant="inset"
-        closeLabel={t("settings.cronViewClose")}
-        className="w-full sm:max-w-xl"
-      >
-        <SheetHeader className="flex-row items-start gap-3 px-5 py-4 pr-14">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
-            {alwaysEnabled ? <Lock className="h-5 w-5" /> : <SkillIcon className="h-7 w-7" />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-medium text-muted-foreground">
-              {t("settings.skillsInstalledPreviewTitle")}
-            </div>
-            <SheetTitle className="mt-1 truncate">{skill.name}</SheetTitle>
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+      <SheetHeader className="flex-row items-center gap-3 px-5 py-4 pr-14">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted text-foreground">
+          {alwaysEnabled ? <Lock className="h-5 w-5" /> : <SkillIcon className="h-7 w-7" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <SheetTitle className="truncate">{skill.name}</SheetTitle>
+          <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span>{t("settings.skillsInstalledPreviewStatusLabel")}</span>
               <Badge variant={alwaysEnabled ? "muted" : checked ? "success" : "outline"}>
                 {statusLabel}
               </Badge>
-              {source?.version ? <span>v{source.version}</span> : null}
-            </div>
+            </span>
+            {source?.version ? <span>v{source.version}</span> : null}
           </div>
-        </SheetHeader>
+        </div>
+      </SheetHeader>
 
-        <SheetPanel className="px-5 py-5">
-          <div className="flex flex-col gap-5">
-            <section aria-labelledby="installed-skill-description">
-              <div className="flex items-center justify-between gap-3">
+      <SheetPanel className="px-5 py-5">
+        <div className="flex flex-col gap-5">
+          <section aria-labelledby="installed-skill-description">
+            <div className="flex items-center justify-between gap-3">
+              <h3
+                id="installed-skill-description"
+                className="text-xs font-semibold text-foreground"
+              >
+                {t("settings.skillsInstalledPreviewDescription")}
+              </h3>
+              <CopyButton
+                value={description}
+                label={t("settings.skillsInstalledPreviewCopyDescription")}
+                copiedLabel={t("settings.skillsInstalledPreviewCopied")}
+              />
+            </div>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {description || t("settings.skillsInstalledPreviewNoDescription")}
+            </p>
+          </section>
+
+          {!skillsEnabled ? (
+            <div className="rounded-lg border border-border bg-muted p-3">
+              <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" />
+                <span>{t("settings.skillsDisabledHint")}</span>
+              </div>
+            </div>
+          ) : null}
+
+          <section aria-labelledby="installed-skill-details">
+            <h3 id="installed-skill-details" className="mb-1 text-xs font-semibold text-foreground">
+              {t("settings.skillsInstalledPreviewDetails")}
+            </h3>
+            <div className="divide-y divide-border">
+              <InstalledPreviewField
+                label={t("settings.skillsInstalledPreviewBaseDir")}
+                value={skill.baseDir}
+              />
+              <InstalledPreviewField
+                label={t("settings.skillsInstalledPreviewSkillFile")}
+                value={skill.skillFile}
+              />
+              <InstalledPreviewField
+                label={t("settings.skillsInstalledPreviewSource")}
+                value={source?.registry}
+              />
+              <InstalledPreviewField
+                label={t("settings.skillsStorePreviewSlug")}
+                value={source?.slug}
+              />
+              <InstalledPreviewField
+                label={t("settings.skillsStorePreviewVersion")}
+                value={source?.version}
+              />
+              <InstalledPreviewField
+                label={t("settings.skillsInstalledPreviewPublished")}
+                value={source?.publishedAt ? formatInstalledPreviewDate(source.publishedAt) : null}
+              />
+            </div>
+          </section>
+
+          <section aria-labelledby="installed-skill-file-preview">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
                 <h3
-                  id="installed-skill-description"
+                  id="installed-skill-file-preview"
                   className="text-xs font-semibold text-foreground"
                 >
-                  {t("settings.skillsInstalledPreviewDescription")}
+                  {t("settings.skillsInstalledPreviewFilePreview")}
                 </h3>
-                <CopyButton
-                  value={description}
-                  label={t("settings.skillsInstalledPreviewCopyDescription")}
-                  copiedLabel={t("settings.skillsInstalledPreviewCopied")}
-                />
-              </div>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {description || t("settings.skillsInstalledPreviewNoDescription")}
-              </p>
-            </section>
-
-            {!skillsEnabled ? (
-              <div className="rounded-lg border border-border bg-muted p-3">
-                <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" />
-                  <span>{t("settings.skillsDisabledHint")}</span>
+                <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                  {preview.skillFile || skill.skillFile}
                 </div>
               </div>
-            ) : null}
+              <CopyButton
+                value={previewContent}
+                label={t("settings.skillsInstalledPreviewCopyFile")}
+                copiedLabel={t("settings.skillsInstalledPreviewCopied")}
+              />
+            </div>
 
-            <section aria-labelledby="installed-skill-details">
-              <h3
-                id="installed-skill-details"
-                className="mb-1 text-xs font-semibold text-foreground"
-              >
-                {t("settings.skillsInstalledPreviewDetails")}
-              </h3>
-              <div className="divide-y divide-border">
-                <InstalledPreviewField
-                  label={t("settings.skillsInstalledPreviewBaseDir")}
-                  value={skill.baseDir}
-                />
-                <InstalledPreviewField
-                  label={t("settings.skillsInstalledPreviewSkillFile")}
-                  value={skill.skillFile}
-                />
-                <InstalledPreviewField
-                  label={t("settings.skillsInstalledPreviewSource")}
-                  value={source?.registry}
-                />
-                <InstalledPreviewField
-                  label={t("settings.skillsStorePreviewSlug")}
-                  value={source?.slug}
-                />
-                <InstalledPreviewField
-                  label={t("settings.skillsStorePreviewVersion")}
-                  value={source?.version}
-                />
-                <InstalledPreviewField
-                  label={t("settings.skillsInstalledPreviewPublished")}
-                  value={
-                    source?.publishedAt ? formatInstalledPreviewDate(source.publishedAt) : null
-                  }
-                />
-              </div>
-            </section>
-
-            <section aria-labelledby="installed-skill-file-preview">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h3
-                    id="installed-skill-file-preview"
-                    className="text-xs font-semibold text-foreground"
-                  >
-                    {t("settings.skillsInstalledPreviewFilePreview")}
-                  </h3>
-                  <div className="mt-1 truncate text-[11px] text-muted-foreground">
-                    {preview.skillFile || skill.skillFile}
-                  </div>
-                </div>
-                <CopyButton
-                  value={previewContent}
-                  label={t("settings.skillsInstalledPreviewCopyFile")}
-                  copiedLabel={t("settings.skillsInstalledPreviewCopied")}
-                />
-              </div>
-
-              {preview.loading ? (
-                <InstalledPreviewSkeleton />
-              ) : (
-                <>
-                  {preview.error ? (
-                    <div className="rounded-lg border border-border bg-muted p-3">
-                      <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" />
-                        <div className="min-w-0">
-                          <div>{t("settings.skillsInstalledPreviewUnavailable")}</div>
-                          <div className="mt-1 break-words text-[11px]">{preview.error}</div>
-                        </div>
+            {!contentReady ? (
+              <InstalledPreviewSkeleton />
+            ) : (
+              <>
+                {preview.error ? (
+                  <div className="rounded-lg border border-border bg-muted p-3">
+                    <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground" />
+                      <div className="min-w-0">
+                        <div>{t("settings.skillsInstalledPreviewUnavailable")}</div>
+                        <div className="mt-1 break-words text-[11px]">{preview.error}</div>
                       </div>
                     </div>
-                  ) : null}
+                  </div>
+                ) : null}
 
-                  {previewContent ? (
-                    previewIsMarkdown ? (
-                      <DocumentMarkdown content={previewContent} />
-                    ) : (
-                      <pre className="max-h-[24rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-3 font-mono text-[11px] leading-5 text-foreground">
-                        {previewContent}
-                      </pre>
-                    )
-                  ) : preview.error ? null : (
-                    <div className="rounded-lg border border-border bg-muted p-3 text-xs text-muted-foreground">
-                      {t("settings.skillsInstalledPreviewEmpty")}
-                    </div>
-                  )}
+                {previewContent ? (
+                  previewIsMarkdown ? (
+                    <DocumentMarkdown content={previewContent} />
+                  ) : (
+                    <pre className="max-h-[24rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted p-3 font-mono text-[11px] leading-5 text-foreground">
+                      {previewContent}
+                    </pre>
+                  )
+                ) : preview.error ? null : (
+                  <div className="rounded-lg border border-border bg-muted p-3 text-xs text-muted-foreground">
+                    {t("settings.skillsInstalledPreviewEmpty")}
+                  </div>
+                )}
 
-                  {preview.truncated ? (
-                    <div className="mt-2 rounded-lg border border-border bg-muted px-3 py-2 text-[11px] text-muted-foreground">
-                      {t("settings.skillsInstalledPreviewTruncated").replace(
-                        "{count}",
-                        String(INSTALLED_SKILL_PREVIEW_LINES),
-                      )}
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </section>
-          </div>
-        </SheetPanel>
-      </SheetPopup>
-    </Sheet>
+                {preview.truncated ? (
+                  <div className="mt-2 rounded-lg border border-border bg-muted px-3 py-2 text-[11px] text-muted-foreground">
+                    {t("settings.skillsInstalledPreviewTruncated").replace(
+                      "{count}",
+                      String(INSTALLED_SKILL_PREVIEW_LINES),
+                    )}
+                  </div>
+                ) : null}
+              </>
+            )}
+          </section>
+        </div>
+      </SheetPanel>
+    </SheetPopup>
   );
 }
 
