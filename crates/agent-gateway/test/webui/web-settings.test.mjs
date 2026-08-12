@@ -598,6 +598,57 @@ test("Anthropic settings keep 1M context parity for adaptive and explicit relay 
     ).contextWindow,
     200_000,
   );
+  assert.equal(
+    settings.findProviderModelConfig(
+      {
+        models: [
+          {
+            id: "custom-context-model[1m]",
+            contextWindow: 2_000_000,
+            maxOutputToken: 64_000,
+          },
+        ],
+        type: "claude_code",
+      },
+      "custom-context-model[1m]",
+    ).contextWindow,
+    2_000_000,
+  );
+});
+
+test("desktop model context-window edits replace stale WebUI provider values", () => {
+  const current = settings.normalizeSettings({
+    customProviders: [
+      {
+        id: "context-provider",
+        name: "Context Provider",
+        type: "codex",
+        models: [
+          {
+            id: "context-model",
+            contextWindow: 128_000,
+            maxOutputToken: 16_000,
+          },
+        ],
+        activeModels: ["context-model"],
+      },
+    ],
+  });
+  const desktop = settings.normalizeSettings({
+    ...current,
+    customProviders: current.customProviders.map((provider) => ({
+      ...provider,
+      models: provider.models.map((model) => ({ ...model, contextWindow: 512_000 })),
+    })),
+  });
+  const synced = settingsSync.applyGatewaySettingsSyncPayload(
+    current,
+    settingsSync.buildGatewaySettingsSyncPayload(desktop),
+  );
+  const provider = synced.customProviders.find((item) => item.id === "context-provider");
+
+  assert.ok(provider);
+  assert.equal(settings.findProviderModelConfig(provider, "context-model").contextWindow, 512_000);
 });
 
 test("loadWebSettings forces current gateway URL/token over stale persisted remote settings", () => {

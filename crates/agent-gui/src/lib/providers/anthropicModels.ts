@@ -1,14 +1,20 @@
 import type { Model } from "@earendil-works/pi-ai";
 import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import {
-  findCatalogModel,
-  normalizeModelIdCandidates,
-} from "@liveagent/ui/lib/models/modelCatalog";
-import {
-  anthropicModelSupportsXHigh,
-  isAnthropicAdaptiveModelId,
-} from "@liveagent/ui/lib/models/modelThinking";
+  hasAnthropicLongContextSuffix,
+  shouldSendAnthropicLongContextHeader,
+} from "@liveagent/ui/lib/models/anthropicContext";
+import { normalizeModelIdCandidates } from "@liveagent/ui/lib/models/modelCatalog";
+import { anthropicModelSupportsXHigh } from "@liveagent/ui/lib/models/modelThinking";
 
+export {
+  ANTHROPIC_LONG_CONTEXT_WINDOW,
+  ANTHROPIC_STANDARD_CONTEXT_WINDOW,
+  hasAnthropicLongContextSuffix,
+  resolveAnthropicContextWindow,
+  resolveAnthropicKnownModelLimits,
+  shouldSendAnthropicLongContextHeader,
+} from "@liveagent/ui/lib/models/anthropicContext";
 // ---------------------------------------------------------------------------
 // Anthropic 1M 长上下文窗口策略（请求行为，单一真源）
 // ---------------------------------------------------------------------------
@@ -21,9 +27,7 @@ import {
 // 本文件对 pi-ai 目录的回查（findBuiltinAnthropicModel）只服务 compat 等请求
 // 路径元数据。
 export { normalizeModelIdCandidates as normalizeAnthropicModelIdCandidates } from "@liveagent/ui/lib/models/modelCatalog";
-
-export const ANTHROPIC_STANDARD_CONTEXT_WINDOW = 200_000;
-export const ANTHROPIC_LONG_CONTEXT_WINDOW = 1_000_000;
+export { isAnthropicAdaptiveModelId } from "@liveagent/ui/lib/models/modelThinking";
 
 // 中转/网关常给官方 Anthropic 模型 id 加装饰，逐字匹配会漏检 pi-ai 目录；
 // 漏检后模型丢失 compat.forceAdaptiveThinking 等请求路径元数据，思考档位失效。
@@ -45,42 +49,9 @@ export function getAnthropicCompat(
   return model.compat;
 }
 
-export function hasAnthropicLongContextSuffix(modelId: string): boolean {
-  return /\[1m\]$/i.test(modelId.trim());
-}
-
 // 世代启发式的唯一实现在镜像模块 lib/models/modelThinking（web 端同源）；
 // 此处 re-export 供限额/1M 路径的既有消费者使用。
-export { anthropicModelSupportsXHigh, isAnthropicAdaptiveModelId };
-
-function getAnthropicEndpointHost(baseUrl: string | undefined): string | undefined {
-  if (!baseUrl?.trim()) return undefined;
-  try {
-    return new URL(baseUrl).hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
-}
-
-export function shouldSendAnthropicLongContextHeader(baseUrl: string | undefined): boolean {
-  const host = getAnthropicEndpointHost(baseUrl);
-  if (!host) return false;
-
-  // These endpoints either have 1M GA semantics already or require a
-  // provider-specific body/auth contract instead of an HTTP beta header.
-  if (
-    host === "api.anthropic.com" ||
-    host.includes("aiplatform.googleapis.com") ||
-    host.includes("vertexai.googleapis.com") ||
-    host.endsWith(".deepseek.com") ||
-    host === "deepseek.com" ||
-    host.endsWith(".amazonaws.com")
-  ) {
-    return false;
-  }
-
-  return true;
-}
+export { anthropicModelSupportsXHigh };
 
 export function resolveAnthropicWireModelId(modelId: string, baseUrl: string | undefined): string {
   if (hasAnthropicLongContextSuffix(modelId) && !shouldSendAnthropicLongContextHeader(baseUrl)) {
@@ -89,63 +60,5 @@ export function resolveAnthropicWireModelId(modelId: string, baseUrl: string | u
   return modelId;
 }
 
-function effectiveAnthropicContextWindow(
-  knownContextWindow: number,
-  modelId: string,
-  baseUrl?: string,
-): number {
-  if (isAnthropicAdaptiveModelId(modelId)) return knownContextWindow;
-  if (
-    hasAnthropicLongContextSuffix(modelId) &&
-    (baseUrl === undefined || shouldSendAnthropicLongContextHeader(baseUrl))
-  ) {
-    return ANTHROPIC_LONG_CONTEXT_WINDOW;
-  }
-  return Math.min(knownContextWindow, ANTHROPIC_STANDARD_CONTEXT_WINDOW);
-}
-
-export function resolveAnthropicContextWindow(
-  modelId: string,
-  configuredContextWindow: number,
-  baseUrl?: string,
-): number {
-  const known = findCatalogModel("claude_code", modelId);
-  if (isAnthropicAdaptiveModelId(modelId)) {
-    return Math.max(configuredContextWindow, known?.contextWindow ?? ANTHROPIC_LONG_CONTEXT_WINDOW);
-  }
-  if (hasAnthropicLongContextSuffix(modelId)) {
-    if (baseUrl === undefined || shouldSendAnthropicLongContextHeader(baseUrl)) {
-      return Math.max(configuredContextWindow, ANTHROPIC_LONG_CONTEXT_WINDOW);
-    }
-    return known
-      ? effectiveAnthropicContextWindow(known.contextWindow, modelId, baseUrl)
-      : Math.min(configuredContextWindow, ANTHROPIC_STANDARD_CONTEXT_WINDOW);
-  }
-  if (
-    known &&
-    baseUrl !== undefined &&
-    shouldSendAnthropicLongContextHeader(baseUrl) &&
-    configuredContextWindow > ANTHROPIC_STANDARD_CONTEXT_WINDOW
-  ) {
-    return configuredContextWindow;
-  }
-  return known
-    ? effectiveAnthropicContextWindow(known.contextWindow, modelId, baseUrl)
-    : configuredContextWindow;
-}
-
 // adaptive 世代即 1M GA 世代；旧世代目录里的 1M 是退役前的历史数值，按 200K
 // 报有效窗口。
-export function resolveAnthropicKnownModelLimits(
-  modelId: string | undefined,
-  baseUrl?: string,
-): { contextWindow: number; maxOutputToken: number } | undefined {
-  const trimmedId = modelId?.trim();
-  if (!trimmedId) return undefined;
-  const known = findCatalogModel("claude_code", trimmedId);
-  if (!known) return undefined;
-  return {
-    contextWindow: resolveAnthropicContextWindow(trimmedId, known.contextWindow, baseUrl),
-    maxOutputToken: known.maxOutputToken,
-  };
-}

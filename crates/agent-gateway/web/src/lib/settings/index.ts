@@ -1,5 +1,13 @@
 import {
-  findCatalogModel,
+  ANTHROPIC_LONG_CONTEXT_WINDOW,
+  ANTHROPIC_STANDARD_CONTEXT_WINDOW,
+  hasAnthropicLongContextSuffix,
+  isAnthropicAdaptiveModelId,
+  resolveAnthropicContextWindow,
+  resolveAnthropicKnownModelLimits,
+  shouldSendAnthropicLongContextHeader,
+} from "@liveagent/ui/lib/models/anthropicContext";
+import {
   getProviderFallbackLimits,
   normalizeModelLimits,
   repairStaleCrossProviderLimits,
@@ -8,7 +16,6 @@ import {
 } from "@liveagent/ui/lib/models/modelCatalog";
 import {
   clampThinkingLevelToList,
-  isAnthropicAdaptiveModelId,
   resolveModelThinking,
   type ThinkingLevel,
 } from "@liveagent/ui/lib/models/modelThinking";
@@ -1268,29 +1275,6 @@ export function normalizeRemoteSettings(input: unknown): RemoteSettings {
   };
 }
 
-// 旧世代默认按 200K 处理；显式 [1m] 变体表示中转端能力，adaptive 世代
-// （isAnthropicAdaptiveModelId，来自镜像模块 lib/models/modelThinking）则是
-// 1M GA 世代。与桌面端 anthropicModels.ts 的有效窗口规则手动保持同步。
-const ANTHROPIC_STANDARD_CONTEXT_WINDOW = 200_000;
-const ANTHROPIC_LONG_CONTEXT_WINDOW = 1_000_000;
-
-function shouldSendAnthropicLongContextHeader(baseUrl: string | undefined): boolean {
-  if (!baseUrl?.trim()) return false;
-  try {
-    const host = new URL(baseUrl).hostname.toLowerCase();
-    return !(
-      host === "api.anthropic.com" ||
-      host.includes("aiplatform.googleapis.com") ||
-      host.includes("vertexai.googleapis.com") ||
-      host.endsWith(".deepseek.com") ||
-      host === "deepseek.com" ||
-      host.endsWith(".amazonaws.com")
-    );
-  } catch {
-    return false;
-  }
-}
-
 function getKnownModelLimits(
   providerId: ProviderId,
   modelId: string | undefined,
@@ -1298,19 +1282,8 @@ function getKnownModelLimits(
 ): Pick<ProviderModelConfig, "contextWindow" | "maxOutputToken"> | undefined {
   const trimmedId = modelId?.trim();
   if (!trimmedId) return undefined;
-  // Anthropic 的有效窗口叠加 1M beta/adaptive 世代策略（与桌面端
-  // anthropicModels.ts 手动同步）；其余供应商直接读生成目录（数据已在
-  // 生成期过统一语义规则）。
   if (providerId === "claude_code") {
-    const known = findCatalogModel("claude_code", trimmedId);
-    if (!known) return undefined;
-    const contextWindow = isAnthropicAdaptiveModelId(trimmedId)
-      ? known.contextWindow
-      : /\[1m\]$/i.test(trimmedId) &&
-          (baseUrl === undefined || shouldSendAnthropicLongContextHeader(baseUrl))
-        ? Math.max(known.contextWindow, ANTHROPIC_LONG_CONTEXT_WINDOW)
-        : Math.min(known.contextWindow, ANTHROPIC_STANDARD_CONTEXT_WINDOW);
-    return { contextWindow, maxOutputToken: known.maxOutputToken };
+    return resolveAnthropicKnownModelLimits(trimmedId, baseUrl);
   }
   return resolveModelLimits(providerId, trimmedId);
 }
@@ -1346,11 +1319,13 @@ export function getProviderModelDefaults(
   if (
     providerId === "claude_code" &&
     modelId &&
-    (/\[1m\]$/i.test(modelId.trim()) || isAnthropicAdaptiveModelId(modelId))
+    (hasAnthropicLongContextSuffix(modelId) || isAnthropicAdaptiveModelId(modelId))
   ) {
     return {
       contextWindow:
-        /\[1m\]$/i.test(modelId.trim()) && baseUrl && !shouldSendAnthropicLongContextHeader(baseUrl)
+        hasAnthropicLongContextSuffix(modelId) &&
+        baseUrl &&
+        !shouldSendAnthropicLongContextHeader(baseUrl)
           ? ANTHROPIC_STANDARD_CONTEXT_WINDOW
           : ANTHROPIC_LONG_CONTEXT_WINDOW,
       maxOutputToken: getProviderFallbackLimits(providerId).maxOutputToken,
@@ -1454,26 +1429,13 @@ export function findProviderModelConfig(
     };
   }
   if (provider.type !== "claude_code") return matched;
-  const defaults = getProviderModelDefaults(provider.type, normalizedId, provider.baseUrl);
-  const known = findCatalogModel("claude_code", normalizedId);
-  const isAdaptive = isAnthropicAdaptiveModelId(normalizedId);
-  const hasLongContextSuffix = /\[1m\]$/i.test(normalizedId);
-  const contextWindow = isAdaptive
-    ? Math.max(matched.contextWindow, defaults.contextWindow)
-    : hasLongContextSuffix
-      ? shouldSendAnthropicLongContextHeader(provider.baseUrl)
-        ? Math.max(matched.contextWindow, defaults.contextWindow)
-        : defaults.contextWindow
-      : known &&
-          !shouldSendAnthropicLongContextHeader(provider.baseUrl) &&
-          known.contextWindow > ANTHROPIC_STANDARD_CONTEXT_WINDOW
-        ? defaults.contextWindow
-        : matched.contextWindow === ANTHROPIC_STANDARD_CONTEXT_WINDOW
-          ? defaults.contextWindow
-          : matched.contextWindow;
   return {
     ...matched,
-    contextWindow,
+    contextWindow: resolveAnthropicContextWindow(
+      normalizedId,
+      matched.contextWindow,
+      provider.baseUrl,
+    ),
   };
 }
 
