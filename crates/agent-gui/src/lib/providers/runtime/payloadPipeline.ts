@@ -99,6 +99,7 @@ const finalizePayloadMiddlewares = composePayloadMiddlewares([
       params.providerId,
       params.baseUrl,
       params.promptCacheHintMode,
+      params.model?.api,
       options,
     ),
   (options, params) =>

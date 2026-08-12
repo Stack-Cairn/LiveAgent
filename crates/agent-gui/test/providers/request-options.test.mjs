@@ -533,6 +533,58 @@ test("Codex Chat Completions streams forward reasoning effort", async () => {
   assert.equal(captured.options.toolChoice, "auto");
 });
 
+test("third-party Codex Responses auto sends the session prompt cache key on the wire", async () => {
+  const realOpenAIResponses = await import(
+    new URL(
+      "../../node_modules/@earendil-works/pi-ai/dist/api/openai-responses.js",
+      import.meta.url,
+    ).href
+  );
+  const localLoader = createTsModuleLoader({
+    mocks: {
+      "@earendil-works/pi-ai/api/openai-responses": {
+        stream: realOpenAIResponses.stream,
+      },
+    },
+  });
+  const localProviders = localLoader.loadModule("src/lib/providers/llm.ts");
+  const baseUrl = "https://relay.example.test/v1";
+  const model = localProviders.createModelFromConfig(
+    "codex",
+    "gpt-5",
+    baseUrl,
+    "openai-responses",
+  );
+  let capturedPayload;
+  const options = localProviders.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl,
+    model,
+    promptCacheHintMode: "auto",
+    options: {
+      apiKey: "sk-test",
+      sessionId: "conversation-1234",
+      cacheRetention: "short",
+    },
+    debugLogger: {
+      logRequest(entry) {
+        capturedPayload = entry.payload;
+        throw new Error("__capture_stop__");
+      },
+    },
+  });
+
+  const stream = localProviders.streamSimpleByApi(
+    model,
+    { messages: [{ role: "user", content: "hello", timestamp: 1 }] },
+    options,
+  );
+  await stream.result();
+
+  assert.ok(capturedPayload);
+  assert.equal(capturedPayload.prompt_cache_key, "conversation-1234");
+});
+
 test("DeepSeek OpenAI payload adapter maps reasoning=max to reasoning_effort=max (regression)", async () => {
   let captured;
   const localLoader = createTsModuleLoader({
@@ -1412,13 +1464,24 @@ test("resolveProviderCacheRetention maps provider settings and per-request overr
   assert.equal(resolve("gemini", true), undefined);
 });
 
-test("codex automatic cache hint resolution is conservative for compatible endpoints", () => {
+test("codex automatic cache hint resolution follows request format before endpoint hints", () => {
   const resolve = providers.resolvePromptCacheHintMode;
-  assert.equal(resolve("auto", "https://api.openai.com/v1"), "openai-key");
-  assert.equal(resolve(undefined, "https://openrouter.ai/api/v1"), "openrouter-session");
-  assert.equal(resolve("auto", "https://relay.example/v1"), "none");
-  assert.equal(resolve("auto", "not-a-url"), "none");
-  assert.equal(resolve("openai-key", "https://relay.example/v1"), "openai-key");
+  assert.equal(resolve("auto", "https://api.openai.com/v1", "openai-completions"), "openai-key");
+  assert.equal(
+    resolve(undefined, "https://openrouter.ai/api/v1", "openai-completions"),
+    "openrouter-session",
+  );
+  assert.equal(resolve("auto", "https://relay.example/v1", "openai-completions"), "none");
+  assert.equal(resolve("auto", "https://relay.example/v1", "openai-responses"), "openai-key");
+  assert.equal(
+    resolve("auto", "https://openrouter.ai/api/v1", "openai-responses"),
+    "openai-key",
+  );
+  assert.equal(resolve("auto", "not-a-url", "openai-completions"), "none");
+  assert.equal(
+    resolve("openrouter-session", "https://relay.example/v1", "openai-responses"),
+    "openrouter-session",
+  );
 });
 
 test("codex automatic cache hints follow the endpoint capability matrix", async () => {
@@ -1427,6 +1490,7 @@ test("codex automatic cache hints follow the endpoint capability matrix", async 
       providerId: "codex",
       baseUrl: "https://api.openai.com/v1",
       promptCacheHintMode: "auto",
+      model: { api, provider: "openai", id: "gpt-5" },
       options: { sessionId: "conv-1234", cacheRetention: "short" },
     });
     const payload = await official.onPayload(
@@ -1443,10 +1507,33 @@ test("codex automatic cache hints follow the endpoint capability matrix", async 
     "https://api.groq.com/openai/v1",
     "https://api.moonshot.cn/v1",
   ]) {
+    const responses = providers.finalizeProviderStreamOptions({
+      providerId: "codex",
+      baseUrl,
+      promptCacheHintMode: "auto",
+      model: { api: "openai-responses", provider: "openai", id: "compatible-model" },
+      options: { sessionId: "conv-1234", cacheRetention: "short" },
+    });
+    const payload = await responses.onPayload(
+      { input: "hello" },
+      { api: "openai-responses", provider: "openai", id: "compatible-model" },
+    );
+    assert.equal(responses.cacheRetention, "short", baseUrl);
+    assert.equal(payload.prompt_cache_key, "conv-1234", baseUrl);
+  }
+
+  for (const baseUrl of [
+    "https://relay.example/v1",
+    "https://integrate.api.nvidia.com/v1",
+    "https://api.deepseek.com/v1",
+    "https://api.groq.com/openai/v1",
+    "https://api.moonshot.cn/v1",
+  ]) {
     const compatible = providers.finalizeProviderStreamOptions({
       providerId: "codex",
       baseUrl,
       promptCacheHintMode: "auto",
+      model: { api: "openai-completions", provider: "openai", id: "compatible-model" },
       options: {
         sessionId: "conv-1234",
         onPayload: async (payload) => ({
@@ -1470,6 +1557,7 @@ test("codex automatic cache hints follow the endpoint capability matrix", async 
     providerId: "codex",
     baseUrl: "https://openrouter.ai/api/v1",
     promptCacheHintMode: "auto",
+    model: { api: "openai-completions", provider: "openai", id: "openrouter-model" },
     options: { sessionId: "conv-1234" },
   });
   const openRouterPayload = await openRouter.onPayload(
@@ -1508,11 +1596,19 @@ test("codex explicit cache hints respect overrides, user values, and limits", as
   );
   assert.equal(presetPayload.prompt_cache_key, "explicit-key");
 
-  for (const promptCacheHintMode of ["openai-key", "none"]) {
+  for (const { promptCacheHintMode, model } of [
+    { promptCacheHintMode: "openai-key" },
+    { promptCacheHintMode: "none" },
+    {
+      promptCacheHintMode: "auto",
+      model: { api: "openai-responses", provider: "openai", id: "gpt-5" },
+    },
+  ]) {
     const disabled = providers.finalizeProviderStreamOptions({
       providerId: "codex",
       baseUrl: "https://api.openai.com/v1",
       promptCacheHintMode,
+      model,
       options: { sessionId: "conv-1234", cacheRetention: "none" },
     });
     const payload = await disabled.onPayload(

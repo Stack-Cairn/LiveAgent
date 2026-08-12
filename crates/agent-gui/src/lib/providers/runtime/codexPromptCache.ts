@@ -1,4 +1,4 @@
-import type { PromptCacheHintMode, ProviderId } from "../../settings";
+import type { CodexRequestFormat, PromptCacheHintMode, ProviderId } from "../../settings";
 import { isRecord, normalizeSessionId } from "./common";
 import type { StreamOptionsEx } from "./types";
 
@@ -35,8 +35,10 @@ function parseHostname(baseUrl: string): string | undefined {
 export function resolvePromptCacheHintMode(
   configuredMode: PromptCacheHintMode | undefined,
   baseUrl: string,
+  modelApi?: CodexRequestFormat,
 ): Exclude<PromptCacheHintMode, "auto"> {
   if (configuredMode && configuredMode !== "auto") return configuredMode;
+  if (modelApi === "openai-responses") return "openai-key";
   const hostname = parseHostname(baseUrl);
   if (hostname === "api.openai.com" || hostname?.endsWith(".api.openai.com")) {
     return "openai-key";
@@ -65,13 +67,14 @@ export function attachCodexPromptCacheHint(
   providerId: ProviderId,
   baseUrl: string,
   configuredMode: PromptCacheHintMode | undefined,
+  modelApi: CodexRequestFormat | undefined,
   options: StreamOptionsEx,
 ): StreamOptionsEx {
   if (providerId !== "codex") return options;
   const mode =
     options.cacheRetention === "none"
       ? "none"
-      : resolvePromptCacheHintMode(configuredMode, baseUrl);
+      : resolvePromptCacheHintMode(configuredMode, baseUrl, modelApi);
   const sessionId = normalizeSessionId(options.sessionId);
 
   const previousOnPayload = options.onPayload;
