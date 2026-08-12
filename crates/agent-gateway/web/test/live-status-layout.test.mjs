@@ -6,6 +6,10 @@ const transcriptSource = fs.readFileSync(
   new URL("../src/components/GatewayTranscript.tsx", import.meta.url),
   "utf8",
 );
+const sharedAssistantStatusSource = fs.readFileSync(
+  new URL("../../../agent-ui/src/components/chat/AssistantStatus.tsx", import.meta.url),
+  "utf8",
+);
 
 test("the streaming assistant always owns one stable live-status footer", () => {
   assert.doesNotMatch(transcriptSource, /function shouldShowLiveStatusForRounds/);
@@ -15,8 +19,11 @@ test("the streaming assistant always owns one stable live-status footer", () => 
   );
   assert.match(transcriptSource, /data-row-key=\{row\.key\}/);
   assert.match(transcriptSource, /gateway-live-status-footer ml-9 min-w-0 overflow-hidden pt-1/);
-  assert.match(transcriptSource, /<VibingText className="w-full"/);
-  assert.match(transcriptSource, /<AssistantStatus className="w-full"/);
+  assert.match(transcriptSource, /<LiveAssistantStatus status=\{status\}/);
+  assert.match(sharedAssistantStatusSource, /export function LiveAssistantStatus/);
+  assert.match(sharedAssistantStatusSource, /if \(isCompaction\) return <CompactingText/);
+  assert.match(sharedAssistantStatusSource, /return <VibingText/);
+  assert.match(sharedAssistantStatusSource, /return <AssistantStatus/);
 });
 
 test("compaction does not add a second pending bubble after assistant output", () => {

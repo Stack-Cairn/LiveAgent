@@ -5,14 +5,10 @@ import {
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
 
+export type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
+
 /** 6 total attempts = 5 retries after the initial try — matches codex's stream_max_retries=5. */
 export const DEFAULT_STREAM_RETRY_MAX_ATTEMPTS = 6;
-
-export type RetryAttemptRecord = {
-  attempt: number;
-  maxAttempts: number;
-  errorMessage: string;
-};
 
 const STREAM_RETRY_BASE_DELAY_MS = 200;
 const STREAM_RETRY_BACKOFF_FACTOR = 2;

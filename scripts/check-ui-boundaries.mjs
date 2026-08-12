@@ -41,6 +41,15 @@ const checks = [
       },
       {
         pattern:
+          /(?:function|const)\s+(?:ContextCheckpointCard|RetryDetailsBlock)\b|checkpoint-card|retry-details-toggle/,
+        reason: "上下文检查点与重试详情必须使用 @liveagent/ui 共享组件",
+      },
+      {
+        pattern: /(?:function\s+normalizeLiveToolStatus|const\s+VIBING_STATUS\s*=|function\s+buildContextUsageScanItems)\b/,
+        reason: "聊天实时状态与上下文用量投影必须使用 @liveagent/ui 共享逻辑",
+      },
+      {
+        pattern:
           /(?:from\s+|import\s*\(\s*|import\s+)["']@liveagent\/ui\/(?:components\/chat\/ChatHeader|pages\/(?:skills-hub\/SkillsHubPage|mcp-hub\/McpHubPage))["']/,
         reason: "公共页面与聊天顶部栏必须由共享 ApplicationView 统一组装",
       },
@@ -67,6 +76,15 @@ const checks = [
       {
         pattern: /chat-(?:user-bubble|assistant)-action/,
         reason: "消息操作栏必须使用 @liveagent/ui/components/chat/TranscriptMessageActions",
+      },
+      {
+        pattern:
+          /(?:function|const)\s+(?:ContextCheckpointCard|RetryDetailsBlock)\b|checkpoint-card|retry-details-toggle/,
+        reason: "上下文检查点与重试详情必须使用 @liveagent/ui 共享组件",
+      },
+      {
+        pattern: /(?:function\s+normalizeLiveToolStatus|const\s+VIBING_STATUS\s*=|function\s+buildContextUsageScanItems)\b/,
+        reason: "聊天实时状态与上下文用量投影必须使用 @liveagent/ui 共享逻辑",
       },
       {
         pattern:

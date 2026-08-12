@@ -115,7 +115,6 @@ export function SharedHistoryPage({ token }: SharedHistoryPageProps) {
                   rows={transcriptRows}
                   readOnly
                   redactToolContent={state.detail.redact_tool_content === true}
-                  isAgentMode
                 />
               </ScrollArea>
             )}

@@ -1,3 +1,4 @@
+import type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type { StreamRunActivity } from "@/lib/chat/stream/streamTypes";
 import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
@@ -8,11 +9,8 @@ export type UserChatEntry = Extract<ChatEntry, { kind: "user" }>;
 // One failed-and-retried network attempt of the live run's model request,
 // mirrored from the desktop's stream-retry layer over the tool_status event.
 // attempt/maxAttempts are retry ordinals (1..5 of 5), not total attempts.
-export type RetryAttemptRecord = {
-  attempt: number;
-  maxAttempts: number;
-  errorMessage: string;
-};
+// 类型真源在共享包 lib/chat/retryAttempts；此处 re-export 供既有导入路径。
+export type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
 
 // A turn is one prompt/response exchange of the live stream: the user bubble
 // (a single slot — a second user_message for the same run can only upsert it,

@@ -39,7 +39,7 @@ GUI 与 WebUI 应用只负责：
 - GUI：全局快捷键、关于页、桌面标题栏、原生剪贴板；
 - WebUI：设备管理、浏览器文件能力、网关连接状态。
 
-供应商设置、聊天侧栏、聊天顶部栏、空会话页、工具参数、待办列表、助手状态、用量、联网搜索组和 Diff 视图等公共 UI 同样只在 `agent-ui` 保留一份；GUI 的 CC Switch/Cherry Studio 导入由
+供应商设置、聊天侧栏、聊天顶部栏、空会话页、工具参数、待办列表、助手状态、上下文检查点、重试详情、上下文用量、联网搜索组和 Diff 视图等公共 UI 同样只在 `agent-ui` 保留一份；GUI 的 CC Switch/Cherry Studio 导入由
 `src/agent-ui-adapters/providerSettings.tsx` 注入，WebUI 使用同名空适配器。聊天侧栏的桌面标题栏、
 应用更新按钮和系统文件管理器入口由 GUI 的 `src/agent-ui-adapters/sidebarChrome.tsx` 注入。
 助手头像资源由两端的 `src/agent-ui-adapters/assistantAvatar.ts` 提供，共享组件不感知 Tauri 资源路径或 Web 公共目录。

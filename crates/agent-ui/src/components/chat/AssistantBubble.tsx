@@ -10,9 +10,10 @@ export { AssistantAvatar } from "./AssistantAvatar";
 export {
   AssistantStatus,
   CompactingText,
+  LiveAssistantStatus,
   VibingText,
 } from "./AssistantStatus";
-export { RetryDetailsBlock } from "./assistant-bubble/RoundContent";
+export { RetryDetailsBlock } from "./RetryDetailsBlock";
 
 const EMPTY_RUNNING_TOOL_CALL_IDS: string[] = [];
 

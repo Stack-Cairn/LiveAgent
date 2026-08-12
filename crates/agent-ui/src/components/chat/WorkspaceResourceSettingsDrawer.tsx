@@ -1,5 +1,3 @@
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { Blend, Cable, Search, X } from "@liveagent/app/components/icons";
 import {
   type AppSettings,
@@ -9,12 +7,14 @@ import {
 } from "@liveagent/app/lib/settings";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import {
   CLAWHUB_CATEGORY_SLUGS,
   type ClawHubCategorySlug,
   classifyClawHubSkill,
 } from "@liveagent/ui/lib/skills/clawHubCategories";
+import { isAlwaysEnabledSkillName, type SkillSummary } from "@liveagent/ui/lib/skills/index";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { ResourceActivationSwitch } from "../resources/ResourceActivationSwitch";
 import { Button } from "../ui/button";
 

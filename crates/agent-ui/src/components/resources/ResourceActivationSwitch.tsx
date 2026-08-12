@@ -1,5 +1,5 @@
-import type { MouseEvent } from "react";
 import { cn } from "@liveagent/ui/lib/shared/utils";
+import type { MouseEvent } from "react";
 
 export function ResourceActivationSwitch(props: {
   checked: boolean;

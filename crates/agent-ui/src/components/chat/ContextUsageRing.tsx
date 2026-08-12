@@ -29,7 +29,7 @@ function getTokenFormatter(locale: string): Intl.NumberFormat {
 
 /**
  * 上下文用量环：composer 内展示当前会话上下文占用百分比，占用 ≥ 50%（黄档）
- * 起可点击弹出确认后触发手动压缩。数据口径见 lib/chat/contextUsage.ts。
+ * 起可点击弹出确认后触发手动压缩。阈值与 WebUI 补算口径见 lib/chat/contextUsage.ts。
  * 语义用 Meter（静态量度）而非 Progress（任务进度）。
  */
 export function ContextUsageRing(props: {

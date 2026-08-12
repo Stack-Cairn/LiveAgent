@@ -1,5 +1,4 @@
 export type { ImageContent, ToolResultMessage } from "@earendil-works/pi-ai";
-export type { RetryAttemptRecord } from "../providers/runtime/streamRetry";
 export type {
   DeleteResultDetails,
   DisplayImageItemDetails,
@@ -33,4 +32,3 @@ export {
   toolResultMessageToText,
   type UiRound,
 } from "./messages/uiMessages";
-export { normalizeLiveToolStatus, VIBING_STATUS } from "./page/chatPageHelpers";

@@ -1,18 +1,11 @@
 import { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
-import {
-  AssistantStatus,
-  CompactingText,
-  VibingText,
-} from "@liveagent/ui/components/chat/AssistantStatus";
-import {
-  RetryDetailsBlock,
-  RoundBlockContent,
-} from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
+import { LiveAssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
+import { RoundBlockContent } from "@liveagent/ui/components/chat/assistant-bubble/RoundContent";
+import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import { UsagePanel } from "@liveagent/ui/components/chat/UsagePanel";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
-import { memo, type ReactNode } from "react";
+import { memo } from "react";
 import type { RetryAttemptRecord } from "../../../lib/chat/conversation/liveTranscriptStore";
-import { VIBING_STATUS } from "../../../lib/chat/page/chatPageHelpers";
 import type { AssistantUnitRow } from "../transcript/rowModel";
 
 export { AssistantAvatar } from "@liveagent/ui/components/chat/AssistantAvatar";
@@ -42,17 +35,14 @@ export const AssistantBubbleUnit = memo(function AssistantBubbleUnit(props: {
   const { unit } = row;
   if (unit.kind === "footer") return null;
 
-  const isVibingStatus = toolStatus === VIBING_STATUS;
-  let status: ReactNode = null;
-  if (unit.kind === "status") {
-    status = isCompactionRunning ? (
-      <CompactingText className="w-full" />
-    ) : isVibingStatus || !toolStatus ? (
-      <VibingText className="w-full" />
-    ) : (
-      <AssistantStatus className="w-full">{toolStatus}</AssistantStatus>
-    );
-  }
+  const status =
+    unit.kind === "status" ? (
+      <LiveAssistantStatus
+        status={toolStatus}
+        isCompaction={isCompactionRunning}
+        className="w-full"
+      />
+    ) : null;
 
   return (
     <div className="flex w-full max-w-full items-start gap-3">

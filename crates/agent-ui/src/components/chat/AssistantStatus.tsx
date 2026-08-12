@@ -2,9 +2,10 @@ import { assistantStatusSpinnerClassName } from "@liveagent/adapters/assistantSt
 import { Loader2 } from "@liveagent/app/components/icons";
 import type { ReactNode } from "react";
 import { useLocale } from "../../i18n/index";
+import { normalizeLiveToolStatus, VIBING_STATUS } from "../../lib/chat/assistantStatus";
 import { cn } from "../../lib/shared/utils";
 
-export const VIBING_STATUS = "Vibing...";
+export { VIBING_STATUS } from "../../lib/chat/assistantStatus";
 
 export function VibingText({ className }: { className?: string }) {
   return <AssistantStatus className={className}>{VIBING_STATUS}</AssistantStatus>;
@@ -13,6 +14,20 @@ export function VibingText({ className }: { className?: string }) {
 export function CompactingText({ className }: { className?: string }) {
   const { t } = useLocale();
   return <AssistantStatus className={className}>{t("chat.compactingContext")}</AssistantStatus>;
+}
+
+export function LiveAssistantStatus(props: {
+  status: string | null;
+  isCompaction?: boolean;
+  className?: string;
+}) {
+  const { status, isCompaction = false, className } = props;
+  const normalizedStatus = normalizeLiveToolStatus(status);
+  if (isCompaction) return <CompactingText className={className} />;
+  if (!normalizedStatus || normalizedStatus === VIBING_STATUS) {
+    return <VibingText className={className} />;
+  }
+  return <AssistantStatus className={className}>{normalizedStatus}</AssistantStatus>;
 }
 
 export function AssistantStatus({

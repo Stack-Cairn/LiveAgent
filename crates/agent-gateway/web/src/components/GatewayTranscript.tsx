@@ -1,20 +1,19 @@
 import {
   AssistantAvatar,
   AssistantBubble,
-  AssistantStatus,
-  CompactingText,
-  RetryDetailsBlock,
-  VibingText,
+  LiveAssistantStatus,
 } from "@liveagent/ui/components/chat/AssistantBubble";
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
+import { ContextCheckpointCard } from "@liveagent/ui/components/chat/ContextCheckpointCard";
 import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import {
   TranscriptAssistantMessageActions,
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
-import { Markdown } from "@liveagent/ui/components/Markdown";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
+import { normalizeLiveToolStatus, VIBING_STATUS } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import {
   getUploadedImagePreviewCacheKey,
@@ -48,7 +47,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { normalizeLiveToolStatus, VIBING_STATUS } from "@/lib/chat/chatPageHelpers";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import { getRoundText } from "@/lib/chat/uiMessages";
 import {
@@ -66,7 +64,7 @@ import { DEFAULT_CHAT_TRANSCRIPT_WIDTH } from "@/lib/settings";
 import { extractLiveRange } from "@/lib/transcript-virtual/liveRangeExtractor";
 import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
 import type { SectionId } from "../pages/settings/types";
-import { CheckCircle2, ChevronDown, Loader2, X } from "./icons";
+import { Loader2, X } from "./icons";
 
 type GatewayTranscriptProps = {
   conversationId?: string;
@@ -102,7 +100,6 @@ type GatewayTranscriptProps = {
   hasMoreHistory?: boolean;
   isLoadingMoreHistory?: boolean;
   onLoadEarlierHistory?: () => void;
-  isAgentMode?: boolean;
   showUsage?: boolean;
   usageContextWindow?: number;
   workspaceRoot?: string;
@@ -161,13 +158,7 @@ function LiveStatusFooter(props: { status: string; isCompaction?: boolean }) {
   const { status, isCompaction = false } = props;
   return (
     <div className="gateway-live-status-footer ml-9 min-w-0 overflow-hidden pt-1">
-      {isCompaction ? (
-        <CompactingText className="w-full" />
-      ) : status === VIBING_STATUS ? (
-        <VibingText className="w-full" />
-      ) : (
-        <AssistantStatus className="w-full">{status}</AssistantStatus>
-      )}
+      <LiveAssistantStatus status={status} isCompaction={isCompaction} className="w-full" />
     </div>
   );
 }
@@ -200,62 +191,17 @@ function CheckpointCard(props: {
   readOnly?: boolean;
 }) {
   const { item, readOnly = false } = props;
-  const { t } = useLocale();
-  const [expanded, setExpanded] = useState(false);
-  const isExpanded = expanded;
-  const messageCountLabel =
-    item.coveredMessageCount > 0
-      ? t("chat.contextCheckpoint.messageCount").replace(
-          "{count}",
-          String(item.coveredMessageCount),
-        )
-      : t("chat.contextCheckpoint.compressed");
-  const headerContent = (
-    <>
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-black/[0.04] dark:bg-white/[0.08]">
-        <CheckCircle2 size={16} strokeWidth={1.8} className="text-muted-foreground" />
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[calc(13px*var(--zone-font-scale,1))] font-medium text-foreground/90">
-            {t("chat.contextCheckpoint.title")}
-          </span>
-          <span className="inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-[1px] text-[calc(11px*var(--zone-font-scale,1))] font-normal tabular-nums text-muted-foreground dark:bg-white/[0.08]">
-            {messageCountLabel}
-          </span>
-        </div>
-        <div className="mt-[2px] text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/70">
-          {item.generatedBy.providerId} · {item.generatedBy.model}
-        </div>
-      </div>
-
-      <ChevronDown
-        className={`h-3.5 w-3.5 shrink-0 text-muted-foreground/50 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"}`}
-      />
-    </>
-  );
 
   return (
     <div className="checkpoint-row flex w-full max-w-full items-start gap-3">
       <div className="checkpoint-row-spacer mt-0.5 h-6 w-6 shrink-0" aria-hidden="true" />
       <div className="checkpoint-row-body min-w-0 flex-1">
-        <div className="checkpoint-card w-full overflow-hidden rounded-[14px] border border-black/[0.06] bg-white/[0.85] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] dark:border-white/[0.1] dark:bg-white/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_4px_12px_rgba(0,0,0,0.15)]">
-          <button
-            type="button"
-            aria-expanded={isExpanded}
-            onClick={() => setExpanded((prev) => !prev)}
-            className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors duration-150 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
-          >
-            {headerContent}
-          </button>
-
-          {isExpanded ? (
-            <div className="checkpoint-expand border-t border-black/[0.05] px-3.5 py-3 dark:border-white/[0.06]">
-              <Markdown content={item.content} className="font-chat text-sm" readOnly={readOnly} />
-            </div>
-          ) : null}
-        </div>
+        <ContextCheckpointCard
+          content={item.content}
+          coveredMessageCount={item.coveredMessageCount}
+          generatedBy={item.generatedBy}
+          readOnly={readOnly}
+        />
       </div>
     </div>
   );
@@ -1063,7 +1009,6 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   isLoadingMoreHistory?: boolean;
   onLoadEarlierHistory?: () => void;
   isStreaming: boolean;
-  isAgentMode: boolean;
   showUsage: boolean;
   usageContextWindow?: number;
   workspaceRoot?: string;
@@ -1098,7 +1043,6 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
     isLoadingMoreHistory,
     onLoadEarlierHistory,
     isStreaming,
-    isAgentMode,
     showUsage,
     usageContextWindow,
     workspaceRoot,
@@ -1501,37 +1445,12 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
               <div className="flex w-full max-w-full items-start gap-3">
                 <AssistantAvatar />
                 <div className="min-w-0 flex-1 space-y-2 pt-1">
-                  {displayedToolStatusIsCompaction ? (
-                    <div className="flex items-center py-1">
-                      <CompactingText />
-                    </div>
-                  ) : isAgentMode ? (
-                    displayedToolStatus === VIBING_STATUS ? (
-                      <div className="flex items-center py-1">
-                        <VibingText />
-                      </div>
-                    ) : displayedToolStatus ? (
-                      <div className="py-1">
-                        <AssistantStatus>{displayedToolStatus}</AssistantStatus>
-                      </div>
-                    ) : (
-                      <div className="py-1">
-                        <VibingText />
-                      </div>
-                    )
-                  ) : displayedToolStatus === VIBING_STATUS ? (
-                    <div className="flex items-center py-1">
-                      <VibingText />
-                    </div>
-                  ) : displayedToolStatus ? (
-                    <div className="py-1">
-                      <AssistantStatus>{displayedToolStatus}</AssistantStatus>
-                    </div>
-                  ) : (
-                    <div className="py-1">
-                      <VibingText />
-                    </div>
-                  )}
+                  <div className="flex items-center py-1">
+                    <LiveAssistantStatus
+                      status={displayedToolStatus}
+                      isCompaction={displayedToolStatusIsCompaction}
+                    />
+                  </div>
                   {retryAttempts && retryAttempts.length > 0 ? (
                     <RetryDetailsBlock attempts={retryAttempts} />
                   ) : null}
@@ -1682,7 +1601,6 @@ export function GatewayTranscript({
   hasMoreHistory = false,
   isLoadingMoreHistory = false,
   onLoadEarlierHistory,
-  isAgentMode = true,
   showUsage = false,
   usageContextWindow,
   workspaceRoot,
@@ -1763,7 +1681,6 @@ export function GatewayTranscript({
           isLoadingMoreHistory={isLoadingMoreHistory}
           onLoadEarlierHistory={onLoadEarlierHistory}
           isStreaming={isStreaming}
-          isAgentMode={isAgentMode}
           showUsage={showUsage}
           usageContextWindow={usageContextWindow}
           workspaceRoot={workspaceRoot}
