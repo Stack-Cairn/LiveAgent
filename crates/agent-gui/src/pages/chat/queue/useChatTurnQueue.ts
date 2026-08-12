@@ -931,11 +931,12 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           responded = true;
           respond(requestId, { accepted: true });
         };
-        void manualCompactActionRef.current({
-          conversationId,
-          operationId,
-          onAccepted: respondAccepted,
-        })
+        void manualCompactActionRef
+          .current({
+            conversationId,
+            operationId,
+            onAccepted: respondAccepted,
+          })
           .then((result) => {
             // 已受理即真正开始压缩，终态改经 operationId 事件；未受理说明探针
             // 拒绝，此处据返回值同步回包。

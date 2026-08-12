@@ -100,10 +100,7 @@ export function useManualCompaction(params: {
     conversationId: string,
     handler: ConversationStopHandler | null,
   ) => void;
-  clearConversationStopHandler: (
-    conversationId: string,
-    handler: ConversationStopHandler,
-  ) => void;
+  clearConversationStopHandler: (conversationId: string, handler: ConversationStopHandler) => void;
   consumeConversationStop: (conversationId: string, expectedVersion?: number) => boolean;
   buildRuntimeEntryFromVisibleState: () => ConversationRuntimeEntry;
   conversationRuntimeCacheRef: MutableRefObject<Map<string, ConversationRuntimeEntry>>;
@@ -289,7 +286,10 @@ export function useManualCompaction(params: {
             conversationSelectedModel: runtimeEntry.selectedModel,
           });
         } catch (error) {
-          return { status: "failed", message: error instanceof Error ? error.message : String(error) };
+          return {
+            status: "failed",
+            message: error instanceof Error ? error.message : String(error),
+          };
         }
         const { provider, providerId, model, selectedModel } = effective;
         const runtime = createProviderRuntimeConfig(provider, model, settings.chatRuntimeControls);

@@ -55,7 +55,7 @@ test("WebUI manual compaction targets the requested conversation and only accept
   // 受理只在探针通过、真正开始压缩时经 onAccepted 同步回包。
   assert.match(
     chatTurnQueueSource,
-    /manualCompactActionRef\.current\(\{\s*conversationId,\s*operationId,\s*onAccepted: respondAccepted,?\s*\}\)/,
+    /manualCompactActionRef\s*\.current\(\{\s*conversationId,\s*operationId,\s*onAccepted: respondAccepted,?\s*\}\)/,
   );
   // 探针拒绝据返回值同步回 accepted:false + message（不再受理即回包）。
   assert.match(
