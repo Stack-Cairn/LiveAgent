@@ -1481,6 +1481,8 @@ export async function runAssistantWithTools(params: {
           model: targetModel,
           workdir: params.workdir,
           nativeWebSearch: params.nativeWebSearch,
+          promptCacheHintMode:
+            target.runtime.modelConfig?.promptCacheHintMode ?? target.runtime.promptCacheHintMode,
           debugLogger: params.debugLogger,
           extra: {
             round,

@@ -83,6 +83,7 @@ test("llm facade preserves provider runtime exports", () => {
     "parseModelValue",
     "providerSupportsNativeWebSearch",
     "resolveProviderCacheRetention",
+    "resolvePromptCacheHintMode",
     "streamAssistantMessage",
     "streamSimpleByApi",
     "toModelValue",
@@ -1404,70 +1405,158 @@ test("resolveProviderCacheRetention maps provider settings and per-request overr
   // 请求级 override（压缩/标题等辅助请求）永远优先于供应商偏好。
   assert.equal(resolve("claude_code", true, "none", "long"), "none");
   assert.equal(resolve("codex", undefined), "short");
-  assert.equal(resolve("codex", false), "none");
+  assert.equal(resolve("codex", false), "short");
   assert.equal(resolve("codex", true, "none"), "none");
   // long 档位仅对 Anthropic 生效。
   assert.equal(resolve("codex", true, undefined, "long"), "short");
   assert.equal(resolve("gemini", true), undefined);
 });
 
-test("codex payloads get a stable prompt_cache_key on relay hosts", async () => {
-  const options = providers.finalizeProviderStreamOptions({
-    providerId: "codex",
-    baseUrl: "https://relay.example/v1",
-    options: { sessionId: "conv-1234", cacheRetention: "short" },
-  });
-
-  const completionsPayload = await options.onPayload(
-    { messages: [] },
-    { api: "openai-completions", provider: "openai", id: "relay-model" },
-  );
-  assert.equal(completionsPayload.prompt_cache_key, "conv-1234");
-
-  const responsesPayload = await options.onPayload(
-    { input: "hello" },
-    { api: "openai-responses", provider: "openai", id: "relay-model" },
-  );
-  assert.equal(responsesPayload.prompt_cache_key, "conv-1234");
+test("codex automatic cache hint resolution is conservative for compatible endpoints", () => {
+  const resolve = providers.resolvePromptCacheHintMode;
+  assert.equal(resolve("auto", "https://api.openai.com/v1"), "openai-key");
+  assert.equal(resolve(undefined, "https://openrouter.ai/api/v1"), "openrouter-session");
+  assert.equal(resolve("auto", "https://relay.example/v1"), "none");
+  assert.equal(resolve("auto", "not-a-url"), "none");
+  assert.equal(resolve("openai-key", "https://relay.example/v1"), "openai-key");
 });
 
-test("codex prompt_cache_key injection respects retention, existing keys, and length", async () => {
-  const disabled = providers.finalizeProviderStreamOptions({
+test("codex automatic cache hints follow the endpoint capability matrix", async () => {
+  for (const api of ["openai-completions", "openai-responses"]) {
+    const official = providers.finalizeProviderStreamOptions({
+      providerId: "codex",
+      baseUrl: "https://api.openai.com/v1",
+      promptCacheHintMode: "auto",
+      options: { sessionId: "conv-1234", cacheRetention: "short" },
+    });
+    const payload = await official.onPayload(
+      api === "openai-completions" ? { messages: [] } : { input: "hello" },
+      { api, provider: "openai", id: "gpt-5" },
+    );
+    assert.equal(payload.prompt_cache_key, "conv-1234");
+  }
+
+  for (const baseUrl of [
+    "https://relay.example/v1",
+    "https://integrate.api.nvidia.com/v1",
+    "https://api.deepseek.com/v1",
+    "https://api.groq.com/openai/v1",
+    "https://api.moonshot.cn/v1",
+  ]) {
+    const compatible = providers.finalizeProviderStreamOptions({
+      providerId: "codex",
+      baseUrl,
+      promptCacheHintMode: "auto",
+      options: {
+        sessionId: "conv-1234",
+        onPayload: async (payload) => ({
+          ...payload,
+          prompt_cache_key: "library-key",
+          prompt_cache_retention: "24h",
+          prompt_cache_options: { enabled: true },
+        }),
+      },
+    });
+    const payload = await compatible.onPayload(
+      { messages: [] },
+      { api: "openai-completions", provider: "openai", id: "compatible-model" },
+    );
+    assert.equal(Object.hasOwn(payload, "prompt_cache_key"), false, baseUrl);
+    assert.equal(Object.hasOwn(payload, "prompt_cache_retention"), false, baseUrl);
+    assert.equal(Object.hasOwn(payload, "prompt_cache_options"), false, baseUrl);
+  }
+
+  const openRouter = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://openrouter.ai/api/v1",
+    promptCacheHintMode: "auto",
+    options: { sessionId: "conv-1234" },
+  });
+  const openRouterPayload = await openRouter.onPayload(
+    { messages: [], prompt_cache_key: "library-key" },
+    { api: "openai-completions", provider: "openai", id: "openrouter-model" },
+  );
+  assert.equal(openRouter.headers["x-session-id"], "conv-1234");
+  assert.equal(Object.hasOwn(openRouterPayload, "prompt_cache_key"), false);
+});
+
+test("codex explicit cache hints respect overrides, user values, and limits", async () => {
+  const explicitOpenAI = providers.finalizeProviderStreamOptions({
     providerId: "codex",
     baseUrl: "https://relay.example/v1",
-    options: { sessionId: "conv-1234", cacheRetention: "none" },
+    promptCacheHintMode: "openai-key",
+    options: { sessionId: "k".repeat(80), cacheRetention: "short" },
   });
-  const disabledPayload = await disabled.onPayload(
+  const clampedPayload = await explicitOpenAI.onPayload(
     { messages: [] },
     { api: "openai-completions", provider: "openai", id: "relay-model" },
   );
-  assert.equal(disabledPayload.prompt_cache_key, undefined);
+  assert.equal(clampedPayload.prompt_cache_key, "k".repeat(64));
 
   const preset = providers.finalizeProviderStreamOptions({
     providerId: "codex",
-    baseUrl: "https://relay.example/v1",
+    baseUrl: "https://api.openai.com/v1",
+    promptCacheHintMode: "auto",
     options: {
       sessionId: "conv-1234",
-      cacheRetention: "short",
       onPayload: async (payload) => ({ ...payload, prompt_cache_key: "explicit-key" }),
     },
   });
   const presetPayload = await preset.onPayload(
     { messages: [] },
-    { api: "openai-completions", provider: "openai", id: "relay-model" },
+    { api: "openai-completions", provider: "openai", id: "gpt-5" },
   );
   assert.equal(presetPayload.prompt_cache_key, "explicit-key");
 
-  const clamped = providers.finalizeProviderStreamOptions({
+  for (const promptCacheHintMode of ["openai-key", "none"]) {
+    const disabled = providers.finalizeProviderStreamOptions({
+      providerId: "codex",
+      baseUrl: "https://api.openai.com/v1",
+      promptCacheHintMode,
+      options: { sessionId: "conv-1234", cacheRetention: "none" },
+    });
+    const payload = await disabled.onPayload(
+      { messages: [], prompt_cache_key: "library-key" },
+      { api: "openai-completions", provider: "openai", id: "gpt-5" },
+    );
+    assert.equal(Object.hasOwn(payload, "prompt_cache_key"), false);
+  }
+
+  // mode=none 必须把 retention 一并压成 none：pi-ai 会按 retention 生成缓存
+  // 提示（如 OpenRouter anthropic/* 的 cache_control 断点），剥 payload 拦不住。
+  const explicitNone = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://openrouter.ai/api/v1",
+    promptCacheHintMode: "none",
+    options: { sessionId: "conv-1234", cacheRetention: "short" },
+  });
+  assert.equal(explicitNone.cacheRetention, "none");
+  assert.equal(explicitNone.headers?.["x-session-id"], undefined);
+
+  // pi-ai 恒显式写 prompt_cache_key: undefined；值为 undefined 时无须拷贝剥离。
+  const undefinedKeyPayload = { messages: [], prompt_cache_key: undefined };
+  const passthrough = await explicitNone.onPayload(undefinedKeyPayload, {
+    api: "openai-completions",
+    provider: "openai",
+    id: "openrouter-model",
+  });
+  assert.equal(passthrough, undefinedKeyPayload);
+
+  const explicitOpenRouter = providers.finalizeProviderStreamOptions({
     providerId: "codex",
     baseUrl: "https://relay.example/v1",
-    options: { sessionId: "k".repeat(80), cacheRetention: "short" },
+    promptCacheHintMode: "openrouter-session",
+    options: { sessionId: "s".repeat(300) },
   });
-  const clampedPayload = await clamped.onPayload(
-    { messages: [] },
-    { api: "openai-completions", provider: "openai", id: "relay-model" },
-  );
-  assert.equal(clampedPayload.prompt_cache_key, "k".repeat(64));
+  assert.equal(explicitOpenRouter.headers["x-session-id"], "s".repeat(256));
+
+  const customHeader = providers.finalizeProviderStreamOptions({
+    providerId: "codex",
+    baseUrl: "https://openrouter.ai/api/v1",
+    promptCacheHintMode: "auto",
+    options: { headers: { "X-Session-ID": "user-session" }, sessionId: "conv-1234" },
+  });
+  assert.deepEqual(customHeader.headers, { "X-Session-ID": "user-session" });
 });
 
 test("runtime models always carry zero pricing (billing removed)", () => {

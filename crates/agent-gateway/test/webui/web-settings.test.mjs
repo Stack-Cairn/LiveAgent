@@ -1580,6 +1580,40 @@ test("web provider normalization keeps native web search toggle", () => {
   assert.equal(disabled.nativeWebSearchEnabled, false);
 });
 
+test("web provider normalization preserves codex cache hint policy", () => {
+  const defaults = settings.normalizeCustomProvider({ id: "codex-default", type: "codex" });
+  assert.equal(defaults.promptCacheHintMode, "auto");
+  assert.equal(defaults.promptCachingEnabled, true);
+
+  const legacyDisabled = settings.normalizeCustomProvider({
+    id: "codex-legacy-disabled",
+    type: "codex",
+    promptCachingEnabled: false,
+  });
+  assert.equal(legacyDisabled.promptCacheHintMode, "none");
+  assert.equal(legacyDisabled.promptCachingEnabled, false);
+
+  const overridden = settings.normalizeCustomProvider({
+    id: "codex-overridden",
+    type: "codex",
+    promptCacheHintMode: "openrouter-session",
+    models: [
+      { id: "openai-model", promptCacheHintMode: "openai-key" },
+      { id: "invalid-model", promptCacheHintMode: "invalid" },
+    ],
+  });
+  assert.equal(overridden.promptCacheHintMode, "openrouter-session");
+  assert.equal(overridden.models[0].promptCacheHintMode, "openai-key");
+  assert.equal(overridden.models[1].promptCacheHintMode, undefined);
+
+  const invalid = settings.normalizeCustomProvider({
+    id: "codex-invalid",
+    type: "codex",
+    promptCacheHintMode: "invalid",
+  });
+  assert.equal(invalid.promptCacheHintMode, "auto");
+});
+
 test("web right dock normalize keeps unknown session ids and unresolved active tab", () => {
   const project = settings.normalizeRightDockProjectState({
     activeTabId: "sess-active",

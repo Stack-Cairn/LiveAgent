@@ -733,6 +733,22 @@ mod tests {
     }
 
     #[test]
+    fn forwards_openrouter_session_header() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("x-session-id"),
+            HeaderValue::from_static("session-123"),
+        );
+
+        let upstream_headers =
+            build_upstream_request_headers(&headers).expect("build upstream headers");
+        assert_eq!(
+            upstream_headers.get("x-session-id"),
+            Some(&HeaderValue::from_static("session-123"))
+        );
+    }
+
+    #[test]
     fn validates_image_proxy_urls() {
         assert!(validate_image_proxy_url("https://example.com/photo.png").is_ok());
         assert!(validate_image_proxy_url("http://example.com/photo.png").is_ok());

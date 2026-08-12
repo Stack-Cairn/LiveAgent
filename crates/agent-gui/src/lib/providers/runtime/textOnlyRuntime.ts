@@ -121,6 +121,8 @@ function buildTextOnlyStreamOptions(params: {
     model: params.model,
     workdir: params.workdir,
     nativeWebSearch: params.nativeWebSearch,
+    promptCacheHintMode:
+      params.runtime.modelConfig?.promptCacheHintMode ?? params.runtime.promptCacheHintMode,
     debugLogger: params.debugLogger,
     extra: { sessionId },
   });

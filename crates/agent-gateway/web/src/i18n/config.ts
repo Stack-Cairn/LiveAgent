@@ -1443,7 +1443,15 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.promptCaching": "Prompt 缓存",
     "settings.promptCachingDescClaude":
       "在请求上标注 ephemeral 缓存断点，长会话可显著降低输入费用。",
-    "settings.promptCachingDescCodex": "为请求携带稳定的 prompt_cache_key，提升前缀缓存命中率。",
+    "settings.promptCachingDescCodex":
+      "自动选择兼容的缓存提示；未知端点默认只使用服务端自动前缀缓存。",
+    "settings.promptCacheHintMode": "缓存提示协议",
+    "settings.promptCacheHintMode.auto": "自动（推荐）",
+    "settings.promptCacheHintMode.openaiKey": "OpenAI 缓存键",
+    "settings.promptCacheHintMode.openrouterSession": "OpenRouter 会话粘性",
+    "settings.promptCacheHintMode.none": "不发送缓存提示",
+    "settings.promptCacheHintMode.inherit": "继承供应商设置",
+    "settings.promptCacheHintModelOverride": "缓存提示协议",
     "settings.promptCacheRetention": "缓存保留",
     "settings.promptCacheRetentionShort": "5 分钟（默认）",
     "settings.promptCacheRetentionLong": "1 小时（仅官方 API）",
@@ -3732,7 +3740,14 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.promptCachingDescClaude":
       "Mark ephemeral cache breakpoints on requests; long sessions get much cheaper input.",
     "settings.promptCachingDescCodex":
-      "Send a stable prompt_cache_key so prefix-cache hits survive across turns.",
+      "Select a compatible cache hint automatically; unknown endpoints use server-side prefix caching only.",
+    "settings.promptCacheHintMode": "Cache hint protocol",
+    "settings.promptCacheHintMode.auto": "Automatic (recommended)",
+    "settings.promptCacheHintMode.openaiKey": "OpenAI cache key",
+    "settings.promptCacheHintMode.openrouterSession": "OpenRouter session affinity",
+    "settings.promptCacheHintMode.none": "Send no cache hint",
+    "settings.promptCacheHintMode.inherit": "Inherit provider setting",
+    "settings.promptCacheHintModelOverride": "Cache hint protocol",
     "settings.promptCacheRetention": "Cache retention",
     "settings.promptCacheRetentionShort": "5 minutes (default)",
     "settings.promptCacheRetentionLong": "1 hour (official API only)",

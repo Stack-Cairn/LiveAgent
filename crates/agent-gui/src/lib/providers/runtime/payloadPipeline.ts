@@ -1,6 +1,6 @@
 import type { Context, Model } from "@earendil-works/pi-ai";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
-import type { ProviderId } from "../../settings";
+import type { PromptCacheHintMode, ProviderId } from "../../settings";
 import { attachDeepSeekProviderPayloadAdapter } from "../deepSeekProviderAdapter";
 import {
   attachAnthropicMessagesNativeAttachments,
@@ -10,7 +10,7 @@ import {
 } from "../nativeResponsesAttachments";
 import { attachAnthropicAutomaticCaching } from "./anthropicCache";
 import { attachAnthropicLongContextBeta } from "./anthropicLongContext";
-import { attachCodexPromptCacheKey } from "./codexPromptCache";
+import { attachCodexPromptCacheHint } from "./codexPromptCache";
 import { attachCodexResponsesStorage } from "./codexStorage";
 import { attachGeminiThoughtSignatureGuard } from "./geminiToolPayload";
 import { attachProviderNativeWebSearch } from "./nativeSearchPayload";
@@ -31,6 +31,7 @@ export type FinalizeProviderStreamOptionsParams = {
   model?: Model<any>;
   workdir?: string;
   nativeWebSearch?: boolean;
+  promptCacheHintMode?: PromptCacheHintMode;
   debugLogger?: StreamDebugLogger;
   extra?: {
     phase?: string;
@@ -93,7 +94,13 @@ const finalizePayloadMiddlewares = composePayloadMiddlewares([
       context: params.context,
     }),
   (options, params) => attachCodexResponsesStorage(params.providerId, options),
-  (options, params) => attachCodexPromptCacheKey(params.providerId, options),
+  (options, params) =>
+    attachCodexPromptCacheHint(
+      params.providerId,
+      params.baseUrl,
+      params.promptCacheHintMode,
+      options,
+    ),
   (options, params) =>
     attachOpenAICompletionsFinishReasonCompatibility(options, {
       providerId: params.providerId,

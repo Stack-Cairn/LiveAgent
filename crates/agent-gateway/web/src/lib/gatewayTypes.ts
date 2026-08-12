@@ -1,6 +1,7 @@
 import type {
   ChatRuntimeControls,
   CodexRequestFormat,
+  PromptCacheHintMode,
   ProviderId,
   ProviderModelConfig,
   ReasoningLevel,
@@ -43,6 +44,7 @@ export type GatewayProviderSummary = {
   requestFormat?: CodexRequestFormat;
   reasoning: ReasoningLevel;
   promptCachingEnabled: boolean;
+  promptCacheHintMode?: PromptCacheHintMode;
   nativeWebSearchEnabled: boolean;
 };
 

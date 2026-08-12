@@ -43,6 +43,8 @@ import {
   type CustomProvider,
   getDefaultUsageQueryConfig,
   MODEL_FAILOVER_QUEUE_LIMIT,
+  PROMPT_CACHE_HINT_MODES,
+  type PromptCacheHintMode,
   type ProviderFailoverSettings,
   type ProviderId,
   type ProviderModelConfig,
@@ -234,6 +236,13 @@ const PROVIDER_LABELS: Record<ProviderId, string> = {
   xai: "Grok",
 };
 
+const PROMPT_CACHE_HINT_LABEL_KEYS: Record<PromptCacheHintMode, string> = {
+  auto: "settings.promptCacheHintMode.auto",
+  "openai-key": "settings.promptCacheHintMode.openaiKey",
+  "openrouter-session": "settings.promptCacheHintMode.openrouterSession",
+  none: "settings.promptCacheHintMode.none",
+};
+
 function getProviderLabel(type: ProviderId) {
   return PROVIDER_LABELS[type];
 }
@@ -371,6 +380,10 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   const [useSystemProxy, setUseSystemProxy] = useState(initialData?.useSystemProxy ?? false);
   const [promptCachingEnabled, setPromptCachingEnabled] = useState(
     initialData?.promptCachingEnabled ?? (providerType !== "gemini" && providerType !== "xai"),
+  );
+  const [promptCacheHintMode, setPromptCacheHintMode] = useState<PromptCacheHintMode>(
+    initialData?.promptCacheHintMode ??
+      (initialData?.promptCachingEnabled === false ? "none" : "auto"),
   );
   const [promptCacheRetention, setPromptCacheRetention] = useState<"short" | "long">(
     initialData?.promptCacheRetention === "long" ? "long" : "short",
@@ -871,7 +884,12 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
           ? "high"
           : (initialData?.reasoning ?? "off"),
       promptCachingEnabled:
-        providerType === "gemini" || providerType === "xai" ? false : promptCachingEnabled,
+        providerType === "codex"
+          ? promptCacheHintMode !== "none"
+          : providerType === "gemini" || providerType === "xai"
+            ? false
+            : promptCachingEnabled,
+      promptCacheHintMode: providerType === "codex" ? promptCacheHintMode : undefined,
       promptCacheRetention:
         providerType === "claude_code" && promptCachingEnabled && promptCacheRetention === "long"
           ? "long"
@@ -1524,6 +1542,53 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                                       }}
                                     />
                                   </div>
+                                  {providerType === "codex" ? (
+                                    <div className="col-span-2 space-y-1.5 max-[720px]:col-span-1">
+                                      <Label>{t("settings.promptCacheHintModelOverride")}</Label>
+                                      <Select
+                                        value={editingModel.model.promptCacheHintMode ?? "inherit"}
+                                        onValueChange={(value) =>
+                                          setEditingModel((prev) =>
+                                            prev
+                                              ? {
+                                                  ...prev,
+                                                  model: {
+                                                    ...prev.model,
+                                                    promptCacheHintMode:
+                                                      value === "inherit"
+                                                        ? undefined
+                                                        : (value as PromptCacheHintMode),
+                                                  },
+                                                }
+                                              : prev,
+                                          )
+                                        }
+                                      >
+                                        <SelectTrigger>
+                                          {/* value≠label：闭合态必须显式渲染本地化标签。 */}
+                                          <SelectValue>
+                                            {t(
+                                              editingModel.model.promptCacheHintMode
+                                                ? PROMPT_CACHE_HINT_LABEL_KEYS[
+                                                    editingModel.model.promptCacheHintMode
+                                                  ]
+                                                : "settings.promptCacheHintMode.inherit",
+                                            )}
+                                          </SelectValue>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="inherit">
+                                            {t("settings.promptCacheHintMode.inherit")}
+                                          </SelectItem>
+                                          {PROMPT_CACHE_HINT_MODES.map((mode) => (
+                                            <SelectItem key={mode} value={mode}>
+                                              {t(PROMPT_CACHE_HINT_LABEL_KEYS[mode])}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  ) : null}
                                 </div>
 
                                 {!canSaveEditingModel ? (
@@ -1591,14 +1656,18 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                   <div
                     className={cn(
                       "mt-3 rounded-xl border bg-card px-4 py-3 transition-colors",
-                      promptCachingEnabled && "border-primary/35 bg-primary/[0.04]",
+                      (providerType === "codex"
+                        ? promptCacheHintMode !== "none"
+                        : promptCachingEnabled) && "border-primary/35 bg-primary/[0.04]",
                     )}
                   >
                     <div className="flex items-center gap-3">
                       <span
                         className={cn(
                           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors",
-                          promptCachingEnabled && "bg-primary/15 text-primary",
+                          (providerType === "codex"
+                            ? promptCacheHintMode !== "none"
+                            : promptCachingEnabled) && "bg-primary/15 text-primary",
                         )}
                       >
                         <Zap className="h-4 w-4" />
@@ -1611,12 +1680,38 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                             : t("settings.promptCachingDescCodex")}
                         </div>
                       </div>
-                      <DialogSwitch
-                        checked={promptCachingEnabled}
-                        onCheckedChange={setPromptCachingEnabled}
-                        ariaLabel={t("settings.promptCaching")}
-                      />
+                      {providerType === "claude_code" ? (
+                        <DialogSwitch
+                          checked={promptCachingEnabled}
+                          onCheckedChange={setPromptCachingEnabled}
+                          ariaLabel={t("settings.promptCaching")}
+                        />
+                      ) : null}
                     </div>
+                    {providerType === "codex" ? (
+                      <div className="mt-3 border-t pt-3">
+                        <Select
+                          value={promptCacheHintMode}
+                          onValueChange={(value) =>
+                            setPromptCacheHintMode(value as PromptCacheHintMode)
+                          }
+                        >
+                          <SelectTrigger aria-label={t("settings.promptCacheHintMode")}>
+                            {/* value≠label：闭合态必须显式渲染本地化标签。 */}
+                            <SelectValue>
+                              {t(PROMPT_CACHE_HINT_LABEL_KEYS[promptCacheHintMode])}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PROMPT_CACHE_HINT_MODES.map((mode) => (
+                              <SelectItem key={mode} value={mode}>
+                                {t(PROMPT_CACHE_HINT_LABEL_KEYS[mode])}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null}
                     {providerType === "claude_code" && promptCachingEnabled ? (
                       <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3">
                         <span className="text-xs text-muted-foreground">

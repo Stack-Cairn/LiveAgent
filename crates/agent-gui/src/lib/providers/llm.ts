@@ -1,5 +1,6 @@
 export { providerSupportsNativeWebSearch } from "./nativeWebSearch";
 export { attachAnthropicAutomaticCaching } from "./runtime/anthropicCache";
+export { resolvePromptCacheHintMode } from "./runtime/codexPromptCache";
 export { attachCodexResponsesStorage } from "./runtime/codexStorage";
 export { normalizeErrorMessage } from "./runtime/errors";
 export {

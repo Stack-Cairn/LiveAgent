@@ -313,12 +313,16 @@ export type SelectedModel = {
   model: string;
 };
 
+export type PromptCacheHintMode = "auto" | "openai-key" | "openrouter-session" | "none";
+
 export type ProviderModelConfig = {
   id: string;
   /** /models 元数据；缺失时保持旧设置格式兼容。 */
   ownedBy?: string;
   contextWindow: number;
   maxOutputToken: number;
+  /** OpenAI 兼容端点的缓存提示协议；缺失时继承供应商设置。 */
+  promptCacheHintMode?: PromptCacheHintMode;
 };
 
 export type ChatRuntimeControls = {
@@ -457,6 +461,8 @@ export type CustomProvider = {
   requestFormat?: CodexRequestFormat;
   reasoning: ReasoningLevel;
   promptCachingEnabled: boolean;
+  /** OpenAI 兼容端点的缓存提示协议；旧配置由 promptCachingEnabled 迁移。 */
+  promptCacheHintMode?: PromptCacheHintMode;
   /** 仅 Anthropic：ephemeral 缓存保留档位；long 在官方 API 上映射为 1h TTL。 */
   promptCacheRetention?: "short" | "long";
   nativeWebSearchEnabled: boolean;
@@ -515,6 +521,13 @@ export const CODEX_REQUEST_FORMAT_LABELS: Record<CodexRequestFormat, string> = {
   "openai-responses": "Responses API",
 };
 
+export const PROMPT_CACHE_HINT_MODES = [
+  "auto",
+  "openai-key",
+  "openrouter-session",
+  "none",
+] as const satisfies readonly PromptCacheHintMode[];
+
 const CODEX_RESPONSES_SUFFIX = "/responses";
 const CODEX_RESPONSE_SUFFIX = "/response";
 const CODEX_CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
@@ -543,6 +556,10 @@ function normalizeCodexRequestFormat(input: unknown): CodexRequestFormat | undef
     default:
       return undefined;
   }
+}
+
+function normalizePromptCacheHintMode(input: unknown): PromptCacheHintMode | undefined {
+  return PROMPT_CACHE_HINT_MODES.find((mode) => mode === input);
 }
 
 function normalizeCodexRouting(
@@ -602,6 +619,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       requestFormat: "openai-responses",
       reasoning: "off",
       promptCachingEnabled: true,
+      promptCacheHintMode: "auto",
       nativeWebSearchEnabled: true,
       useSystemProxy: false,
       usageQuery: getDefaultUsageQueryConfig(),
@@ -1386,11 +1404,14 @@ export function normalizeProviderModelConfig(
   // 跨供应商回查上线前落库的别家模型吃过本供应商兜底值，同样读侧修复，
   // 不需要用户删除重加（识别与替换规则见 repairStaleCrossProviderLimits）。
   const limits = repairStaleCrossProviderLimits(providerId, id, normalizeModelLimits(storedLimits));
+  const promptCacheHintMode =
+    providerId === "codex" ? normalizePromptCacheHintMode(obj.promptCacheHintMode) : undefined;
   return {
     id,
     ...(ownedBy ? { ownedBy } : {}),
     contextWindow: limits.contextWindow,
     maxOutputToken: limits.maxOutputToken,
+    ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
   };
 }
 export function normalizeProviderModelConfigs(
@@ -1583,6 +1604,11 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
   const validModelIds = new Set(models.map((model) => model.id));
   const apiKey = normalizeApiKey(typeof obj.apiKey === "string" ? obj.apiKey : "");
   const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : createUuid();
+  const promptCacheHintMode =
+    type === "codex"
+      ? (normalizePromptCacheHintMode(obj.promptCacheHintMode) ??
+        (obj.promptCachingEnabled === false ? "none" : "auto"))
+      : undefined;
 
   return {
     id,
@@ -1601,10 +1627,15 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     ),
     requestFormat: type === "xai" ? "openai-responses" : codexRouting?.requestFormat,
     reasoning: normalizeReasoningLevel(obj.reasoning),
-    // Anthropic/OpenAI 默认开启提示词缓存（OpenAI 侧体现为稳定的
-    // prompt_cache_key 路由提示）；Gemini / xAI 不使用 OpenAI 风格 prompt cache。
+    // Anthropic 默认开启显式缓存；Codex 的布尔值仅保留旧设置兼容，实际 wire
+    // 行为由 promptCacheHintMode 决定。Gemini / xAI 不使用这里的缓存控制。
     promptCachingEnabled:
-      type === "gemini" || type === "xai" ? false : obj.promptCachingEnabled !== false,
+      type === "codex"
+        ? promptCacheHintMode !== "none"
+        : type === "gemini" || type === "xai"
+          ? false
+          : obj.promptCachingEnabled !== false,
+    ...(promptCacheHintMode ? { promptCacheHintMode } : {}),
     ...(type === "claude_code" && obj.promptCacheRetention === "long"
       ? { promptCacheRetention: "long" as const }
       : {}),
