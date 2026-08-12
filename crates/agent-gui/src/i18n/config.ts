@@ -1187,6 +1187,8 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.aboutCurrentVersion": "当前版本",
     "settings.aboutOpenRelease": "发布页",
     "settings.aboutCheckUpdate": "检查更新",
+    "settings.aboutRestartBeforeCheck": "请先重启应用",
+    "settings.aboutRestartBeforeCheckDesc": "更新已安装，请重启应用后再检查。",
     "settings.aboutInstallUpdate": "安装更新",
     "settings.aboutRestartApp": "重启应用",
     "settings.aboutChecking": "正在检查更新",
@@ -3535,6 +3537,9 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.aboutCurrentVersion": "Current Version",
     "settings.aboutOpenRelease": "Release",
     "settings.aboutCheckUpdate": "Check",
+    "settings.aboutRestartBeforeCheck": "Restart the app first",
+    "settings.aboutRestartBeforeCheckDesc":
+      "The update is installed. Restart the app before checking again.",
     "settings.aboutInstallUpdate": "Install Update",
     "settings.aboutRestartApp": "Restart App",
     "settings.aboutChecking": "Checking for updates",

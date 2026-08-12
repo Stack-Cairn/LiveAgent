@@ -43,6 +43,11 @@ export type AppUpdateMessages = {
   restartFailed: string;
 };
 
+export type AppUpdateNotice = {
+  id: number;
+  kind: "restart-required";
+};
+
 export type BeforeAppRestart = () => boolean | Promise<boolean>;
 
 export type AppUpdateController = {
@@ -57,6 +62,7 @@ export type AppUpdateController = {
   busy: boolean;
   canInstall: boolean;
   showUpdateButton: boolean;
+  notice?: AppUpdateNotice;
   runCheck: () => Promise<AppUpdateCheckResult | undefined>;
   installOnly: () => Promise<AppUpdateCheckResult | undefined>;
   installAndRestart: () => Promise<AppUpdateCheckResult | undefined>;
@@ -119,6 +125,10 @@ export function shouldShowAppUpdateButton(state: AppUpdateState) {
   );
 }
 
+export function shouldShowRestartRequiredNotice(state: AppUpdateState, notice?: AppUpdateNotice) {
+  return state.status === "installed" && notice?.kind === "restart-required";
+}
+
 export async function requestAppRestart(options: {
   beforeRestart?: BeforeAppRestart;
   restart: () => Promise<unknown>;
@@ -147,6 +157,7 @@ export function useAppUpdateController({
   beforeRestart,
 }: UseAppUpdateControllerOptions): AppUpdateController {
   const [state, setState] = useState<AppUpdateState>({ status: "idle" });
+  const [notice, setNotice] = useState<AppUpdateNotice>();
   const stateRef = useRef<AppUpdateState>(state);
   const checkSeqRef = useRef(0);
   const restartRequestRef = useRef<Promise<void> | null>(null);
@@ -161,6 +172,9 @@ export function useAppUpdateController({
 
   const setUpdateState = useCallback((next: AppUpdateState) => {
     stateRef.current = next;
+    if (next.status !== "installed") {
+      setNotice(undefined);
+    }
     setState(next);
   }, []);
 
@@ -171,7 +185,14 @@ export function useAppUpdateController({
 
     const current = stateRef.current;
     if (current.status === "installed") {
+      setNotice((previous) => ({
+        id: (previous?.id ?? 0) + 1,
+        kind: "restart-required",
+      }));
       return current.result;
+    }
+    if (isAppUpdateBusy(current)) {
+      return getAppUpdateStateResult(current);
     }
 
     const requestId = ++checkSeqRef.current;
@@ -203,6 +224,12 @@ export function useAppUpdateController({
   }, [enabled, includePrereleases, setUpdateState]);
 
   useEffect(() => {
+    if (!notice) return undefined;
+    const timeoutId = window.setTimeout(() => setNotice(undefined), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
+
+  useEffect(() => {
     if (!enabled) {
       setUpdateState({ status: "idle" });
       return undefined;
@@ -224,7 +251,7 @@ export function useAppUpdateController({
   const installOnly = useCallback(async () => {
     const current = stateRef.current;
     const result = getAppUpdateStateResult(current);
-    if (!result?.configured || !result.available || current.status === "installing") {
+    if (!canInstallAppUpdate(current) || !result) {
       return undefined;
     }
 
@@ -320,6 +347,7 @@ export function useAppUpdateController({
       busy,
       canInstall,
       showUpdateButton,
+      notice,
       runCheck,
       installOnly,
       installAndRestart,
@@ -336,6 +364,7 @@ export function useAppUpdateController({
       busy,
       canInstall,
       showUpdateButton,
+      notice,
       runCheck,
       installOnly,
       installAndRestart,

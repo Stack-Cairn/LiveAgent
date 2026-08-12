@@ -15,9 +15,10 @@ const {
   requestAppRestart,
   shouldRunAutomaticAppUpdateCheck,
   shouldShowAppUpdateButton,
+  shouldShowRestartRequiredNotice,
 } = loader.loadModule("src/lib/appUpdates.ts");
 
-function createAppUpdateControllerHarness() {
+function createAppUpdateControllerHarness(options = {}) {
   const states = [];
   const refs = [];
   let stateIndex = 0;
@@ -32,6 +33,18 @@ function createAppUpdateControllerHarness() {
     repository: "Stack-Cairn/LiveAgent",
   };
   const installedResult = { ...checkResult, available: false };
+  let resolveCheck;
+  const pendingCheck = options.deferCheckAfterFirst
+    ? new Promise((resolve) => {
+        resolveCheck = () => resolve(checkResult);
+      })
+    : null;
+  let resolveInstall;
+  const pendingInstall = options.deferInstall
+    ? new Promise((resolve) => {
+        resolveInstall = () => resolve(installedResult);
+      })
+    : null;
   const react = {
     useState(initialValue) {
       const index = stateIndex++;
@@ -64,8 +77,12 @@ function createAppUpdateControllerHarness() {
       "@tauri-apps/api/core": {
         async invoke(command) {
           invokeCalls.push(command);
-          if (command === "app_update_check") return checkResult;
-          if (command === "app_update_install") return installedResult;
+          if (command === "app_update_check") {
+            const checkCount = invokeCalls.filter((call) => call === "app_update_check").length;
+            return pendingCheck && checkCount > 1 ? pendingCheck : checkResult;
+          }
+          if (command === "app_update_install") return pendingInstall || installedResult;
+          if (command === "app_restart") return undefined;
           throw new Error(`Unexpected invoke: ${command}`);
         },
       },
@@ -74,8 +91,11 @@ function createAppUpdateControllerHarness() {
   const { useAppUpdateController } = controllerLoader.loadModule("src/lib/appUpdates.ts");
 
   return {
+    checkResult,
     invokeCalls,
     installedResult,
+    resolveCheck,
+    resolveInstall,
     render() {
       stateIndex = 0;
       refIndex = 0;
@@ -86,6 +106,79 @@ function createAppUpdateControllerHarness() {
 
 test("checks for application updates every 20 minutes", () => {
   assert.equal(APP_UPDATE_CHECK_INTERVAL_MS, 20 * 60 * 1000);
+});
+
+test("tray checks cannot interrupt an update installation", async () => {
+  const harness = createAppUpdateControllerHarness({ deferInstall: true });
+  let controller = harness.render();
+
+  await controller.runCheck();
+  controller = harness.render();
+  const installPromise = controller.installOnly();
+  controller = harness.render();
+  assert.equal(controller.status, "installing");
+
+  const result = await controller.runCheck();
+  controller = harness.render();
+  assert.equal(result, harness.checkResult);
+  assert.equal(controller.status, "installing");
+  assert.deepEqual(harness.invokeCalls, ["app_update_check", "app_update_install"]);
+
+  harness.resolveInstall();
+  await installPromise;
+  controller = harness.render();
+  assert.equal(controller.status, "installed");
+  assert.equal(controller.result, harness.installedResult);
+});
+
+test("install requests cannot interrupt an update check", async () => {
+  const harness = createAppUpdateControllerHarness({ deferCheckAfterFirst: true });
+  let controller = harness.render();
+
+  await controller.runCheck();
+  controller = harness.render();
+  const checkingResult = controller.runCheck();
+  controller = harness.render();
+  assert.equal(controller.status, "checking");
+
+  const installResult = await controller.installOnly();
+  controller = harness.render();
+  assert.equal(installResult, undefined);
+  assert.equal(controller.status, "checking");
+  assert.deepEqual(harness.invokeCalls, ["app_update_check", "app_update_check"]);
+
+  harness.resolveCheck();
+  await checkingResult;
+  controller = harness.render();
+  assert.equal(controller.status, "ready");
+});
+
+test("restart-required feedback is visible only while an update is installed", () => {
+  const notice = { id: 1, kind: "restart-required" };
+  assert.equal(shouldShowRestartRequiredNotice({ status: "installed", result: {} }, notice), true);
+  assert.equal(shouldShowRestartRequiredNotice({ status: "restarting", result: {} }, notice), false);
+  assert.equal(
+    shouldShowRestartRequiredNotice({ status: "error", message: "failed" }, notice),
+    false,
+  );
+});
+
+test("restart-required feedback is cleared when the app leaves the installed state", async () => {
+  const harness = createAppUpdateControllerHarness();
+  let controller = harness.render();
+
+  await controller.runCheck();
+  controller = harness.render();
+  await controller.installOnly();
+  controller = harness.render();
+  await controller.runCheck();
+  controller = harness.render();
+  assert.equal(controller.notice?.kind, "restart-required");
+
+  await controller.restart();
+  controller = harness.render();
+  assert.equal(controller.status, "restarting");
+  assert.equal(controller.notice, undefined);
 });
 
 test("automatic checks do not interrupt active update states", () => {
@@ -126,6 +219,7 @@ test("manual checks preserve the pending restart after an update is installed", 
   assert.equal(result, harness.installedResult);
   assert.equal(controller.status, "installed");
   assert.equal(controller.result, harness.installedResult);
+  assert.deepEqual(controller.notice, { id: 1, kind: "restart-required" });
   assert.deepEqual(harness.invokeCalls, ["app_update_check", "app_update_install"]);
 });
 
