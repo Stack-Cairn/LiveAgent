@@ -1,5 +1,6 @@
 import type { Context } from "@earendil-works/pi-ai";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
+import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
 import { initAutomation } from "@liveagent/ui/lib/automation/index";
 import {
@@ -49,6 +50,13 @@ function asErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message.trim();
   const text = String(error ?? "").trim();
   return text || fallback;
+}
+
+function interpolateMessage(template: string, values: Record<string, string>) {
+  return Object.entries(values).reduce(
+    (text, [key, value]) => text.replaceAll(`{${key}}`, value),
+    template,
+  );
 }
 
 const GATEWAY_SETTINGS_SYNC_EVENT = "gateway:settings-sync";
@@ -176,6 +184,8 @@ export default function App() {
   });
   const [context, setContext] = useState<Context>(() => getDefaultContext());
   const [overlay, setOverlay] = useState<"closed" | "entering" | "open" | "leaving">("closed");
+  const runningConversationCountRef = useRef(0);
+  const { confirm: requestRestartConfirm, dialog: restartConfirmDialog } = useConfirmDialog();
 
   const saveSequenceRef = useRef(0);
   const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -519,10 +529,33 @@ export default function App() {
     [settings.locale],
   );
 
+  const beforeAppRestart = useCallback(async () => {
+    const count = runningConversationCountRef.current;
+    if (count === 0) return true;
+
+    return requestRestartConfirm({
+      title: translate("appUpdate.runningTasksTitle", settings.locale),
+      description: interpolateMessage(
+        translate("appUpdate.runningTasksDescription", settings.locale),
+        { count: String(count) },
+      ),
+      cancelLabel: translate("appUpdate.restartLater", settings.locale),
+      confirmLabel: translate("appUpdate.restartAnyway", settings.locale),
+      closeLabel: translate("appUpdate.restartLater", settings.locale),
+      tone: "warning",
+      preferCancel: true,
+    });
+  }, [requestRestartConfirm, settings.locale]);
+
+  const handleRunningConversationCountChange = useCallback((count: number) => {
+    runningConversationCountRef.current = count;
+  }, []);
+
   const appUpdate = useAppUpdateController({
     enabled: settingsReady,
     includePrereleases: settings.updates.includePrereleases,
     messages: appUpdateMessages,
+    beforeRestart: beforeAppRestart,
   });
   // 托盘「检查更新」动作：controller 在监听 effect 之后创建，经 ref 回填。
   runUpdateCheckRef.current = () => {
@@ -601,6 +634,7 @@ export default function App() {
             onOpenSettings={openSettings}
             onToggleTheme={toggleTheme}
             appUpdate={appUpdate}
+            onRunningConversationCountChange={handleRunningConversationCountChange}
           />
         </AppErrorBoundary>
         {visible && (
@@ -636,6 +670,7 @@ export default function App() {
             {translate("app.windowPinned", settings.locale)}
           </button>
         )}
+        {restartConfirmDialog}
       </AppChrome>
     </LocaleContext.Provider>
   );

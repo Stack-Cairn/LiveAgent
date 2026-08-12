@@ -183,6 +183,7 @@ type ChatPageProps = {
   onOpenSettings: (section?: SectionId, providerId?: string) => void;
   onToggleTheme: () => void;
   appUpdate?: AppUpdateController;
+  onRunningConversationCountChange?: (count: number) => void;
 };
 
 function CurrentTaskProgress(props: {
@@ -218,6 +219,7 @@ export function ChatPage(props: ChatPageProps) {
     onOpenSettings,
     onToggleTheme,
     appUpdate,
+    onRunningConversationCountChange,
   } = props;
   // Monaco reads NLS globals while the lazy editor module imports monaco-editor.
   setPreferredMonacoNlsLocale(settings.locale);
@@ -1668,6 +1670,15 @@ export function ChatPage(props: ChatPageProps) {
   const sidebarRunningConversationIds = useSidebarSelector(
     sidebarStore,
     selectRunningConversationIds,
+  );
+  useEffect(() => {
+    onRunningConversationCountChange?.(sidebarRunningConversationIds.size);
+  }, [onRunningConversationCountChange, sidebarRunningConversationIds.size]);
+  useEffect(
+    () => () => {
+      onRunningConversationCountChange?.(0);
+    },
+    [onRunningConversationCountChange],
   );
   const appActionParamsRef = useRef({
     handleSelectConversation,

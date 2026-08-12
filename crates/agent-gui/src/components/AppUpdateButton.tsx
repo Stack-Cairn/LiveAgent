@@ -2,7 +2,7 @@ import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type AppUpdateController, getAppUpdateDisplayVersion } from "../lib/appUpdates";
-import { Download, Loader2 } from "./icons";
+import { Download, Loader2, RefreshCw } from "./icons";
 
 type AppUpdateButtonProps = {
   appUpdate: AppUpdateController;
@@ -31,12 +31,16 @@ export function AppUpdateButton({
 
   const version = getAppUpdateDisplayVersion(appUpdate.result);
   const busy = appUpdate.installing || appUpdate.restarting;
+  const installed = appUpdate.installed;
+  const actionLabel = installed ? t("appUpdate.restart") : t("appUpdate.update");
   const title =
     appUpdate.status === "error" && appUpdate.message
       ? interpolate(t("appUpdate.failedRetry"), { message: appUpdate.message })
-      : version
-        ? interpolate(t("appUpdate.updateTo"), { version })
-        : t("appUpdate.update");
+      : installed
+        ? t("appUpdate.restartToComplete")
+        : version
+          ? interpolate(t("appUpdate.updateTo"), { version })
+          : t("appUpdate.update");
 
   return (
     <Button
@@ -52,11 +56,24 @@ export function AppUpdateButton({
       disabled={busy}
       title={title}
       aria-label={title}
-      onClick={() => void appUpdate.installAndRestart().catch(() => undefined)}
+      onClick={() =>
+        void (installed ? appUpdate.restart() : appUpdate.installAndRestart()).catch(
+          () => undefined,
+        )
+      }
     >
       {busy ? (
         <Loader2
           className={cn(iconOnly ? "h-3 w-3" : "h-[13px] w-[13px]", iconClassName, "animate-spin")}
+        />
+      ) : installed ? (
+        <RefreshCw
+          className={cn(
+            iconOnly
+              ? "h-3 w-3 transition-opacity duration-150 group-hover/update:opacity-0"
+              : "h-[13px] w-[13px]",
+            iconClassName,
+          )}
         />
       ) : (
         <Download
@@ -71,11 +88,11 @@ export function AppUpdateButton({
       {iconOnly ? (
         busy ? null : (
           <span className="pointer-events-none absolute whitespace-nowrap opacity-0 transition-opacity duration-150 group-hover/update:opacity-100">
-            {t("appUpdate.update")}
+            {actionLabel}
           </span>
         )
       ) : (
-        t("appUpdate.update")
+        actionLabel
       )}
     </Button>
   );

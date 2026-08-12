@@ -45,6 +45,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     "appUpdate.update": "更新",
     "appUpdate.updateTo": "更新到 v{version}",
     "appUpdate.failedRetry": "更新失败：{message}。点击重试。",
+    "appUpdate.restart": "重启",
+    "appUpdate.restartToComplete": "更新已安装，重启以完成更新",
+    "appUpdate.runningTasksTitle": "有任务正在运行",
+    "appUpdate.runningTasksDescription":
+      "当前有 {count} 个会话仍在执行。重启会终止回复和工具调用，未完成的进度可能丢失。",
+    "appUpdate.restartLater": "稍后重启",
+    "appUpdate.restartAnyway": "仍然重启",
 
     /* ── Chat Page ── */
     "chat.newConversation": "新对话",
@@ -2331,6 +2338,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     "appUpdate.update": "Update",
     "appUpdate.updateTo": "Update to v{version}",
     "appUpdate.failedRetry": "Update failed: {message}. Click to retry.",
+    "appUpdate.restart": "Restart",
+    "appUpdate.restartToComplete": "Update installed. Restart to finish updating.",
+    "appUpdate.runningTasksTitle": "Tasks are still running",
+    "appUpdate.runningTasksDescription":
+      "{count} conversations are still running. Restarting will stop replies and tool calls, and unfinished progress may be lost.",
+    "appUpdate.restartLater": "Restart later",
+    "appUpdate.restartAnyway": "Restart anyway",
 
     /* ── Chat Page ── */
     "chat.newConversation": "New Conversation",
