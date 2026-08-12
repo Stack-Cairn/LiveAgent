@@ -4922,8 +4922,36 @@ html[data-liveagent-webui="gateway"]
   transform: translateY(calc(var(--confirm-popover-slide-y) / 2)) scale(0.98);
 }
 
+/* Label tooltip (context usage ring's usage readout): mirror of the GUI's
+ * fade + grow enter/exit, keyed off Base UI's data-starting-style /
+ * data-ending-style. */
+.label-tooltip-popup {
+  --label-tooltip-slide-y: -4px;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.label-tooltip-popup[data-side="top"] {
+  --label-tooltip-slide-y: 4px;
+}
+
+.label-tooltip-popup[data-starting-style],
+.label-tooltip-popup[data-ending-style] {
+  opacity: 0;
+  transform: translateY(var(--label-tooltip-slide-y)) scale(0.96);
+}
+
+.label-tooltip-popup[data-ending-style] {
+  transition-duration: 0.1s;
+  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  transform: translateY(calc(var(--label-tooltip-slide-y) / 2)) scale(0.98);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .confirm-action-popover-popup {
+  .confirm-action-popover-popup,
+  .label-tooltip-popup {
     transition: none;
   }
 }

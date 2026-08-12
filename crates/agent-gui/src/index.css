@@ -1401,6 +1401,34 @@
     transform: translateY(calc(var(--confirm-popover-slide-y) / 2)) scale(0.98);
   }
 
+  /* Label tooltip (composer runtime controls, context usage ring): fade +
+   * grow out of the anchor. Base UI keeps the popup mounted until the exit
+   * transition ends, so enter/exit key off data-starting-style /
+   * data-ending-style. */
+  .label-tooltip-popup {
+    --label-tooltip-slide-y: -4px;
+    transform-origin: var(--transform-origin);
+    transition:
+      opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .label-tooltip-popup[data-side="top"] {
+    --label-tooltip-slide-y: 4px;
+  }
+
+  .label-tooltip-popup[data-starting-style],
+  .label-tooltip-popup[data-ending-style] {
+    opacity: 0;
+    transform: translateY(var(--label-tooltip-slide-y)) scale(0.96);
+  }
+
+  .label-tooltip-popup[data-ending-style] {
+    transition-duration: 0.1s;
+    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+    transform: translateY(calc(var(--label-tooltip-slide-y) / 2)) scale(0.98);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .settings-section-enter,
     .settings-section-title-enter,
@@ -1424,6 +1452,11 @@
     }
 
     .confirm-action-popover-popup {
+      animation: none !important;
+      transition: none !important;
+    }
+
+    .label-tooltip-popup {
       animation: none !important;
       transition: none !important;
     }

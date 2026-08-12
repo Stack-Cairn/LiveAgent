@@ -17,6 +17,10 @@ export function ConfirmActionPopover(props: {
   // Visual intent: "destructive" (default) for irreversible actions,
   // "default" for non-destructive confirmations (e.g. branching).
   tone?: "destructive" | "default";
+  // Controlled mode (both or neither): callers that gate opening on extra
+  // state (e.g. the usage ring's two-tap touch flow) own the open state.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: (open: () => void) => ReactNode;
 }) {
   const {
@@ -27,12 +31,17 @@ export function ConfirmActionPopover(props: {
     align = "end",
     side = "bottom",
     tone = "destructive",
+    open,
+    onOpenChange,
     children,
   } = props;
   const { t } = useLocale();
 
   return (
-    <Popover.Root>
+    <Popover.Root
+      open={open}
+      onOpenChange={onOpenChange ? (nextOpen) => onOpenChange(nextOpen) : undefined}
+    >
       {/* Pass no-op — Popover.Trigger merges its own click handler via render prop */}
       <Popover.Trigger render={children(() => {}) as React.ReactElement} />
       <Popover.Portal>
