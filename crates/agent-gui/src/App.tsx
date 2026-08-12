@@ -36,6 +36,8 @@ import {
 } from "./lib/settings/storage";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
 import { applyFontFamilies } from "./lib/system/fontFamily";
+import { setAskUserQuestionTimeoutMs } from "./lib/tools/askUserQuestionTools";
+import { setToolApprovalTimeoutMs } from "./lib/tools/toolApproval";
 import { ChatPage } from "./pages/ChatPage";
 import type { SectionId } from "./pages/settings/types";
 
@@ -378,6 +380,16 @@ export default function App() {
   // one synchronous segment can never observe a stale snapshot.
   const getMcpSettings = useCallback(() => settingsRef.current.mcp, []);
   const getToolPolicies = useCallback(() => settingsRef.current.system.toolPolicies, []);
+
+  // 把交互式应答超时设置（分钟）注入工具运行时窗口（毫秒）：AskUserQuestion 与
+  // 工具审批共用同一窗口；永不超时用很大的分钟数表达。设置变更后新挂起的提问/
+  // 审批生效，已挂起的沿用旧窗口。模块级配置由工具侧 ensureAskUserQuestionDeadlineAt /
+  // requestToolApproval 读取，避免在 6+ 处工具预览调用点逐个传参。
+  useEffect(() => {
+    const ms = settings.system.interactiveTimeoutMinutes * 60_000;
+    setAskUserQuestionTimeoutMs(ms);
+    setToolApprovalTimeoutMs(ms);
+  }, [settings.system.interactiveTimeoutMinutes]);
 
   const reloadPersistedSettings = useCallback(async () => {
     await saveChainRef.current.catch(() => undefined);

@@ -2210,6 +2210,21 @@ test("close window behavior defaults to minimize and only accepts exit", () => {
   );
 });
 
+test("interactive timeout minutes normalize to positive with default 3", () => {
+  // 默认 3 分钟，保持历史行为。
+  assert.equal(settings.getDefaultSettings().system.interactiveTimeoutMinutes, 3);
+  assert.equal(settings.normalizeSystemSettings({}).interactiveTimeoutMinutes, 3);
+
+  // 正数原样保留（无上限，超长≈永不超时）；0/负数/非法回默认 3。
+  assert.equal(settings.normalizeInteractiveTimeoutMinutes(5), 5);
+  assert.equal(settings.normalizeInteractiveTimeoutMinutes(60), 60);
+  assert.equal(settings.normalizeInteractiveTimeoutMinutes(99999), 99999);
+  assert.equal(settings.normalizeInteractiveTimeoutMinutes(0), 3);
+  assert.equal(settings.normalizeInteractiveTimeoutMinutes(-5), 3);
+  assert.equal(settings.normalizeInteractiveTimeoutMinutes(NaN), 3);
+  assert.equal(settings.normalizeInteractiveTimeoutMinutes("12"), 3);
+});
+
 test("system proxy config normalizes defaults, ports, and password flags", () => {
   const defaults = settings.getDefaultSettings().system.systemProxy;
   assert.deepEqual(defaults, {

@@ -64,6 +64,47 @@ test("超时落定为 timeout", async () => {
   assert.equal(hasPendingToolApproval("c4"), false);
 });
 
+test("很长的超时窗口 ≈ 永不:挂起等待用户决定,不在测试窗口内自动落定", async () => {
+  const promise = requestToolApproval({
+    toolCallId: "c-long-window",
+    toolName: "Bash",
+    conversationId: "conv-long-window",
+    timeoutMs: 60 * 60 * 1000, // 1 小时
+  });
+  assert.equal(hasPendingToolApproval("c-long-window"), true);
+  const pending = getPendingToolApproval("c-long-window");
+  assert.ok(pending && pending.deadlineAt > Date.now() + 60 * 60 * 1000 - 60_000);
+  // 等一拍，确认不会自动 timeout。
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(hasPendingToolApproval("c-long-window"), true);
+  // 用户决定后才落定。
+  answerToolApproval("c-long-window", "approve");
+  assert.deepEqual(await promise, { kind: "decided", decision: "approve" });
+  assert.equal(hasPendingToolApproval("c-long-window"), false);
+});
+
+// 回归:最大档 99999 分钟换算成毫秒后远超 setTimeout 的 32 位延迟上限,
+// 直接传入会被 ToInt32 回绕(35792~200000 分钟区间甚至回绕成负数→立即触发),
+// 「永不超时」会瞬间变成秒拒。分段续期后不得在测试窗口内落定。
+test("最大档窗口不被 setTimeout 32 位延迟上限回绕成立即超时", async () => {
+  const promise = requestToolApproval({
+    toolCallId: "c-max-window",
+    toolName: "Bash",
+    conversationId: "conv-max-window",
+    timeoutMs: 99_999 * 60_000,
+  });
+  assert.equal(hasPendingToolApproval("c-max-window"), true);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.equal(
+    hasPendingToolApproval("c-max-window"),
+    true,
+    "最大档窗口不得因延迟回绕而立即落定为 timeout",
+  );
+  answerToolApproval("c-max-window", "approve");
+  assert.deepEqual(await promise, { kind: "decided", decision: "approve" });
+  assert.equal(hasPendingToolApproval("c-max-window"), false);
+});
+
 test("AbortSignal 触发 → cancelled;已 aborted 的信号立即 cancelled", async () => {
   const controller = new AbortController();
   const promise = requestToolApproval({

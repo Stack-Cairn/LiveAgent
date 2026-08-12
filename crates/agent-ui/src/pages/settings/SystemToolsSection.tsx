@@ -14,6 +14,9 @@ import { useMemo } from "react";
 import { ToolPolicyToggle } from "../../components/hub/ToolPolicyToggle";
 import { BUILTIN_TOOL_CATALOG, BUILTIN_TOOL_CATEGORIES } from "../../lib/tools/builtinToolCatalog";
 
+// 档位表：60 分钟内细调，超过 1 小时直跳最大档 99999。
+const TIMEOUT_STOPS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 99999];
+
 export function SystemToolsSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
   const { t } = useLocale();
@@ -52,6 +55,19 @@ export function SystemToolsSection(props: SettingsSectionProps) {
 
   const overriddenCount = Object.keys(policies).length;
 
+  const timeoutMinutes = settings.system.interactiveTimeoutMinutes;
+  const timeoutStopIndex = TIMEOUT_STOPS.reduce(
+    (best, stop, i) =>
+      Math.abs(stop - timeoutMinutes) < Math.abs(TIMEOUT_STOPS[best] - timeoutMinutes) ? i : best,
+    0,
+  );
+  const onTimeoutStopChange = (index: number) => {
+    const next = TIMEOUT_STOPS[index];
+    if (next !== timeoutMinutes) {
+      setSettings((prev) => updateSystem(prev, { interactiveTimeoutMinutes: next }));
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3">
@@ -81,7 +97,7 @@ export function SystemToolsSection(props: SettingsSectionProps) {
               {entries.map((entry) => {
                 const policy = effectivePolicy(entry.toolName, entry.isReadOnly);
                 return (
-                  <div key={entry.id} className="flex items-center gap-3 px-3 py-2.5">
+                  <div key={entry.id} className="flex items-start gap-3 px-3 py-2.5">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span className="text-sm font-medium">
@@ -100,7 +116,26 @@ export function SystemToolsSection(props: SettingsSectionProps) {
                         {t(`settings.builtinTool.${entry.id}.desc`)}
                       </div>
                     </div>
-                    {entry.isReadOnly ? (
+                    {entry.isReadOnly && entry.id === "ask_user_question" ? (
+                      <div className="w-52 shrink-0">
+                        <input
+                          type="range"
+                          min={0}
+                          max={TIMEOUT_STOPS.length - 1}
+                          step={1}
+                          value={timeoutStopIndex}
+                          aria-label={t("settings.interactiveTimeout.title")}
+                          onChange={(event) =>
+                            onTimeoutStopChange(Number(event.currentTarget.value))
+                          }
+                          className="w-full accent-primary"
+                        />
+                        <div className="mt-1 text-right text-xs text-muted-foreground">
+                          <span className="font-medium tabular-nums">{timeoutMinutes}</span>{" "}
+                          {t("settings.interactiveTimeout.unit")}
+                        </div>
+                      </div>
+                    ) : entry.isReadOnly ? (
                       <span className="shrink-0 text-[11px] text-muted-foreground/60">
                         {t("settings.toolPolicy.allow")}
                       </span>
