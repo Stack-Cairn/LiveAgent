@@ -39,10 +39,11 @@ const TRAILER: &str = "trailer";
 const TRANSFER_ENCODING: &str = "transfer-encoding";
 const UPGRADE: &str = "upgrade";
 const UPSTREAM_ORIGIN_HEADER: &str = "x-liveagent-upstream-origin";
+const UPSTREAM_URL_HEADER: &str = "x-liveagent-upstream-url";
 const UPSTREAM_HEADERS_HEADER: &str = "x-liveagent-upstream-headers";
 const UPSTREAM_HEADERS_MAX_BYTES: usize = 8 * 1024;
 const USE_SYSTEM_PROXY_HEADER: &str = "x-liveagent-use-system-proxy";
-const DEFAULT_ALLOW_HEADERS: &str = "authorization,content-type,x-api-key,x-goog-api-key,anthropic-version,x-liveagent-upstream-origin,x-liveagent-upstream-headers,x-liveagent-proxy-token,x-liveagent-use-system-proxy";
+const DEFAULT_ALLOW_HEADERS: &str = "authorization,content-type,x-api-key,x-goog-api-key,anthropic-version,x-liveagent-upstream-origin,x-liveagent-upstream-url,x-liveagent-upstream-headers,x-liveagent-proxy-token,x-liveagent-use-system-proxy";
 const ALLOW_METHODS_VALUE: &str = "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD";
 const VARY_VALUE: &str = "Origin, Access-Control-Request-Method, Access-Control-Request-Headers";
 const IMAGE_PROXY_MAX_BYTES: usize = 25 * 1024 * 1024;
@@ -348,7 +349,26 @@ async fn handle_proxy(
         .path_and_query()
         .map(axum::http::uri::PathAndQuery::as_str)
         .unwrap_or("/");
-    let target_url = match build_target_url(&provider, original_path_and_query, upstream_origin) {
+    let upstream_url = match headers.get(UPSTREAM_URL_HEADER) {
+        Some(value) => match value.to_str() {
+            Ok(value) => Some(value),
+            Err(_) => {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    &format!("Request header is not valid UTF-8: {UPSTREAM_URL_HEADER}"),
+                    &headers,
+                )
+            }
+        },
+        None => None,
+    };
+    let target_result = match upstream_url {
+        Some(upstream_url) => {
+            build_full_target_url(upstream_url, upstream_origin, original_uri.query())
+        }
+        None => build_target_url(&provider, original_path_and_query, upstream_origin),
+    };
+    let target_url = match target_result {
         Ok(url) => url,
         Err(message) => return error_response(StatusCode::BAD_REQUEST, &message, &headers),
     };
@@ -458,6 +478,71 @@ fn build_target_url(
     origin
         .join(resolved)
         .map_err(|err| format!("Failed to construct the upstream request URL: {err}"))
+}
+
+fn build_full_target_url(
+    upstream_url: &str,
+    upstream_origin: &str,
+    passthrough_query: Option<&str>,
+) -> Result<Url, String> {
+    let origin =
+        Url::parse(upstream_origin).map_err(|err| format!("Invalid upstream Origin: {err}"))?;
+    if !origin.has_host() || !origin.username().is_empty() || origin.password().is_some() {
+        return Err("Upstream Origin must be a valid absolute URL".to_string());
+    }
+    if origin.path() != "/" || origin.query().is_some() || origin.fragment().is_some() {
+        return Err("Upstream Origin may contain only the scheme, host, and port".to_string());
+    }
+
+    let mut target =
+        Url::parse(upstream_url.trim()).map_err(|err| format!("Invalid upstream URL: {err}"))?;
+    if !matches!(target.scheme(), "http" | "https")
+        || !target.has_host()
+        || !target.username().is_empty()
+        || target.password().is_some()
+    {
+        return Err(
+            "Upstream URL must be a valid HTTP(S) absolute URL without credentials".to_string(),
+        );
+    }
+    if target.fragment().is_some() {
+        return Err("Upstream URL cannot include a fragment".to_string());
+    }
+    if target.origin() != origin.origin() {
+        return Err("Upstream URL must use the configured upstream Origin".to_string());
+    }
+
+    append_missing_query_pairs(&mut target, passthrough_query);
+    Ok(target)
+}
+
+fn append_missing_query_pairs(target: &mut Url, passthrough_query: Option<&str>) {
+    let Some(passthrough_query) = passthrough_query.filter(|query| !query.is_empty()) else {
+        return;
+    };
+    let existing = target.query().unwrap_or_default();
+    let existing_keys = existing
+        .split('&')
+        .filter(|part| !part.is_empty())
+        .map(|part| part.split_once('=').map_or(part, |(key, _)| key))
+        .collect::<Vec<_>>();
+    let additions = passthrough_query
+        .split('&')
+        .filter(|part| !part.is_empty())
+        .filter(|part| {
+            let key = part.split_once('=').map_or(*part, |(key, _)| key);
+            !existing_keys.contains(&key)
+        })
+        .collect::<Vec<_>>();
+    if additions.is_empty() {
+        return;
+    }
+    let next = if existing.is_empty() {
+        additions.join("&")
+    } else {
+        format!("{existing}&{}", additions.join("&"))
+    };
+    target.set_query(Some(&next));
 }
 
 fn required_header<'a>(headers: &'a HeaderMap, name: &'static str) -> Result<&'a str, Response> {
@@ -688,6 +773,33 @@ mod tests {
             target.as_str(),
             "https://ark.cn-beijing.volces.com/api/coding/v1/messages?stream=true"
         );
+    }
+
+    #[test]
+    fn full_url_ignores_sdk_path_and_preserves_required_query() {
+        let target = build_full_target_url(
+            "https://relay.example.com/custom/final?region=cn",
+            "https://relay.example.com",
+            Some("alt=sse&region=ignored"),
+        )
+        .expect("full target url should be built");
+
+        assert_eq!(
+            target.as_str(),
+            "https://relay.example.com/custom/final?region=cn&alt=sse"
+        );
+    }
+
+    #[test]
+    fn full_url_must_match_the_configured_origin() {
+        let error = build_full_target_url(
+            "https://other.example.com/v1/responses",
+            "https://relay.example.com",
+            None,
+        )
+        .expect_err("mismatched full URL origin must be rejected");
+
+        assert!(error.contains("configured upstream Origin"));
     }
 
     #[test]

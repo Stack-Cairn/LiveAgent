@@ -49,6 +49,8 @@ type CcsProviderImportItem = {
   providerType: ProviderId;
   name: string;
   baseUrl: string;
+  isFullUrl: boolean;
+  modelsUrl?: string;
   apiKey: string;
   requestFormat: CodexRequestFormat;
   models?: string[];
@@ -121,6 +123,10 @@ function providerFromCcs(item: CcsProviderImportItem, existingIds: Set<string>):
     name: `${item.name.replace(/[（(]ccswitch[）)]/i, "").trim()}（ccswitch）`,
     type: item.providerType,
     baseUrl: item.baseUrl,
+    isFullUrl: item.isFullUrl,
+    ...(item.providerType !== "gemini" && item.modelsUrl?.trim()
+      ? { modelsUrl: item.modelsUrl.trim() }
+      : {}),
     apiKey: item.apiKey,
     apiKeyConfigured: item.apiKey.trim().length > 0,
     models,
@@ -175,6 +181,8 @@ function providerFromCherry(
     name: existing?.name ?? cherryProviderName(item, allItems),
     type: item.providerType,
     baseUrl: item.baseUrl,
+    isFullUrl: existing?.isFullUrl ?? false,
+    ...(existing?.modelsUrl ? { modelsUrl: existing.modelsUrl } : {}),
     apiKey,
     apiKeyConfigured: apiKey.trim().length > 0,
     models: existing?.models ?? [],
@@ -392,6 +400,8 @@ export function ProviderSettingsExtension(props: {
             provider.apiKey,
             {
               useSystemProxy: provider.useSystemProxy,
+              isFullUrl: provider.isFullUrl,
+              modelsUrl: provider.modelsUrl,
             },
           );
           return { id: provider.id, models, ok: true };

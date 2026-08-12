@@ -70,6 +70,30 @@ test("codex provider normalization strips route suffixes and keeps only configur
   assert.equal(provider.models[1].maxOutputToken, 4_096);
 });
 
+test("full URL provider normalization preserves the final endpoint", () => {
+  const provider = settings.normalizeCustomProvider({
+    id: "codex-full-url",
+    type: "codex",
+    baseUrl: " https://relay.example.com/custom/v1/chat/completions?region=cn ",
+    isFullUrl: true,
+    modelsUrl: " https://models.example.com/catalog?api-version=2026-01 ",
+  });
+
+  assert.equal(provider.baseUrl, "https://relay.example.com/custom/v1/chat/completions?region=cn");
+  assert.equal(provider.isFullUrl, true);
+  assert.equal(provider.modelsUrl, "https://models.example.com/catalog?api-version=2026-01");
+  assert.equal(provider.requestFormat, "openai-completions");
+  assert.equal(settings.normalizeCustomProvider({ id: "legacy" }).isFullUrl, false);
+  assert.equal(
+    settings.normalizeCustomProvider({
+      id: "gemini-models-url",
+      type: "gemini",
+      modelsUrl: "https://ignored.example.com/models",
+    }).modelsUrl,
+    undefined,
+  );
+});
+
 test("claude provider normalization defaults routing, caching, and model limits", () => {
   const provider = settings.normalizeCustomProvider({
     id: "claude-1",

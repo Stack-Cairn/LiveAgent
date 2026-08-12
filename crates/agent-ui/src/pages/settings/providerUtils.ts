@@ -277,7 +277,33 @@ export function formatTokenCount(value: number): string {
   return `${Number.isInteger(millions) ? String(millions) : millions.toFixed(1)}M`;
 }
 
-function normalizeModelBaseUrl(type: ProviderId, baseUrl: string) {
+function deriveModelsBaseUrlFromFullUrl(baseUrl: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl.trim());
+  } catch {
+    return normalizeBaseUrl(baseUrl);
+  }
+  parsed.search = "";
+  parsed.hash = "";
+
+  const path = parsed.pathname.replace(/\/+$/, "");
+  const versionIndex = path.toLowerCase().indexOf("/v1/");
+  if (versionIndex >= 0) {
+    parsed.pathname = path.slice(0, versionIndex + "/v1".length);
+  } else {
+    const separatorIndex = path.lastIndexOf("/");
+    parsed.pathname = separatorIndex > 0 ? path.slice(0, separatorIndex) : "/";
+  }
+  return normalizeBaseUrl(parsed.toString());
+}
+
+export function normalizeProviderModelsBaseUrl(
+  type: ProviderId,
+  baseUrl: string,
+  isFullUrl = false,
+) {
+  if (isFullUrl) return deriveModelsBaseUrlFromFullUrl(baseUrl);
   let normalizedUrl = normalizeBaseUrl(baseUrl);
 
   if (type !== "codex" && type !== "xai" && type !== "gemini") {
@@ -429,6 +455,7 @@ async function fetchModelsThroughGateway(
   baseUrl: string,
   apiKey: string,
   useSystemProxy: boolean,
+  modelsUrl: string,
 ): Promise<ProviderModelConfig[]> {
   const token =
     typeof window !== "undefined"
@@ -443,6 +470,7 @@ async function fetchModelsThroughGateway(
     base_url: baseUrl,
     api_key: apiKey,
     use_system_proxy: useSystemProxy,
+    models_url: modelsUrl,
   });
 
   const items = extractModelListItems(data);
@@ -608,17 +636,22 @@ export function buildProviderModelsFetchKey(
   baseUrl: string,
   apiKey: string,
   useSystemProxy: boolean,
+  isFullUrl = false,
+  modelsUrl = "",
 ): string {
-  return `${baseUrl.trim()}||${apiKey.trim()}||${useSystemProxy ? "proxy" : "direct"}`;
+  const routing = useSystemProxy ? "proxy" : "direct";
+  const override = modelsUrl.trim();
+  return `${baseUrl.trim()}||${apiKey.trim()}||${routing}${isFullUrl ? "||full-url" : ""}${override ? `||models:${override}` : ""}`;
 }
 
 export async function fetchModelsFromApi(
   type: ProviderId,
   baseUrl: string,
   apiKey: string,
-  options?: { useSystemProxy?: boolean },
+  options?: { useSystemProxy?: boolean; isFullUrl?: boolean; modelsUrl?: string },
 ): Promise<ProviderModelConfig[]> {
-  const normalizedUrl = normalizeModelBaseUrl(type, baseUrl);
+  const modelsUrlOverride = type === "gemini" ? "" : (options?.modelsUrl?.trim() ?? "");
+  const normalizedUrl = normalizeProviderModelsBaseUrl(type, baseUrl, options?.isFullUrl === true);
   const normalizedApiKey = apiKey.trim();
   if (isGatewayWebuiRuntime()) {
     return fetchModelsThroughGateway(
@@ -626,6 +659,7 @@ export async function fetchModelsFromApi(
       normalizedUrl,
       normalizedApiKey,
       options?.useSystemProxy === true,
+      modelsUrlOverride,
     );
   }
 
@@ -634,14 +668,22 @@ export async function fetchModelsFromApi(
   let emptyResult: ProviderModelConfig[] | null = null;
 
   for (const attempt of attempts) {
-    const proxyRequest = await prepareProxyRequest(type, normalizedUrl, attempt.headers, {
-      useSystemProxy: options?.useSystemProxy === true,
-    });
-    const modelsUrl = buildProviderModelsUrl(type, proxyRequest.baseUrl, attempt.kind);
+    const proxyRequest = await prepareProxyRequest(
+      type,
+      modelsUrlOverride || normalizedUrl,
+      attempt.headers,
+      {
+        useSystemProxy: options?.useSystemProxy === true,
+        isFullUrl: modelsUrlOverride.length > 0,
+      },
+    );
+    const requestUrl = modelsUrlOverride
+      ? proxyRequest.baseUrl
+      : buildProviderModelsUrl(type, proxyRequest.baseUrl, attempt.kind);
 
     let response: Response;
     try {
-      response = await fetch(modelsUrl, { headers: proxyRequest.headers });
+      response = await fetch(requestUrl, { headers: proxyRequest.headers });
     } catch (error) {
       failures.push({
         status: null,

@@ -25,6 +25,7 @@ export function createProviderRuntimeConfig(
   const reasoningSupported = getChatRuntimeReasoningLevelsForProvider(reasoningParams).length > 0;
   return {
     baseUrl: provider.baseUrl,
+    isFullUrl: provider.isFullUrl,
     apiKey: provider.apiKey,
     customHeaders: provider.customHeaders,
     requestFormat: provider.requestFormat,

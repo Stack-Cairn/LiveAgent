@@ -1162,6 +1162,8 @@ message ProviderModelsRequest {
   string base_url = 2;
   string api_key = 3;
   bool use_system_proxy = 4;
+  // 可选的模型列表完整地址；非空时跳过基于 base_url 的端点推导。
+  string models_url = 5;
 }
 
 message ProviderModelsResponse {

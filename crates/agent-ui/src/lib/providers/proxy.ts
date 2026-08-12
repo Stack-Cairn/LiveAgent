@@ -3,6 +3,9 @@ import { invoke } from "@liveagent/app/shims/tauriCore";
 
 export const LIVEAGENT_PROXY_TOKEN_HEADER = "x-liveagent-proxy-token";
 export const LIVEAGENT_UPSTREAM_ORIGIN_HEADER = "x-liveagent-upstream-origin";
+// 完整 URL 模式下携带最终上游地址。本地反代会忽略 SDK 自动追加的路径，
+// 但仍保留 SDK 请求所需的查询参数（例如 Gemini 的 alt=sse）。
+export const LIVEAGENT_UPSTREAM_URL_HEADER = "x-liveagent-upstream-url";
 // 上游头覆盖包：base64(utf8(JSON))。WebView 的 fetch 会静默丢弃 User-Agent /
 // Cookie / Referer 等 forbidden header names，SDK 也可能自行注入同名头，所以最终
 // 头集经这一条通道下发，由本地反代在转发前作为最后一步覆盖写入上游请求——
@@ -112,7 +115,8 @@ export function buildProxyBaseUrl(
   providerId: ProviderId,
   upstreamBaseUrl: string,
   proxyServerBaseUrl: string,
-): { baseUrl: string; upstreamOrigin: string } {
+  options?: { isFullUrl?: boolean },
+): { baseUrl: string; upstreamOrigin: string; upstreamUrl?: string } {
   const normalizedUpstream = upstreamBaseUrl.trim();
   if (!normalizedUpstream) {
     throw new Error("Base URL cannot be empty");
@@ -130,11 +134,21 @@ export function buildProxyBaseUrl(
   if (parsed.username || parsed.password) {
     throw new Error("Base URL cannot include embedded username or password");
   }
-  if (parsed.search || parsed.hash) {
+  if (parsed.hash) {
+    throw new Error("Base URL cannot include a fragment");
+  }
+  if (!options?.isFullUrl && parsed.search) {
     throw new Error("Base URL cannot include query parameters or fragments");
   }
 
   const normalizedProxyServerBaseUrl = proxyServerBaseUrl.trim().replace(/\/+$/, "");
+  if (options?.isFullUrl) {
+    return {
+      baseUrl: `${normalizedProxyServerBaseUrl}/proxy/${providerId}`,
+      upstreamOrigin: parsed.origin,
+      upstreamUrl: parsed.toString(),
+    };
+  }
   const pathname = parsed.pathname.replace(/\/+$/, "");
 
   return {
@@ -204,13 +218,14 @@ export async function prepareProxyRequest(
   providerId: ProviderId,
   upstreamBaseUrl: string,
   headers: Record<string, string>,
-  options?: { useSystemProxy?: boolean },
+  options?: { useSystemProxy?: boolean; isFullUrl?: boolean },
 ): Promise<PreparedProxyRequest> {
   const proxyServerInfo = await getProxyServerInfo();
-  const { baseUrl, upstreamOrigin } = buildProxyBaseUrl(
+  const { baseUrl, upstreamOrigin, upstreamUrl } = buildProxyBaseUrl(
     providerId,
     upstreamBaseUrl,
     proxyServerInfo.baseUrl,
+    { isFullUrl: options?.isFullUrl },
   );
   const upstreamHeaderOverrides = encodeUpstreamHeaderOverrides(headers);
 
@@ -222,6 +237,7 @@ export async function prepareProxyRequest(
         ? { [LIVEAGENT_UPSTREAM_HEADERS_HEADER]: upstreamHeaderOverrides }
         : {}),
       [LIVEAGENT_UPSTREAM_ORIGIN_HEADER]: upstreamOrigin,
+      ...(upstreamUrl ? { [LIVEAGENT_UPSTREAM_URL_HEADER]: upstreamUrl } : {}),
       [LIVEAGENT_PROXY_TOKEN_HEADER]: proxyServerInfo.token,
       ...(options?.useSystemProxy ? { [LIVEAGENT_USE_SYSTEM_PROXY_HEADER]: "1" } : {}),
     },

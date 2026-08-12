@@ -429,6 +429,10 @@ export type CustomProvider = {
   name: string;
   type: ProviderId;
   baseUrl: string;
+  /** 将 baseUrl 作为最终请求地址，本地反代不再追加协议端点路径。 */
+  isFullUrl: boolean;
+  /** 可选的模型列表完整地址；Gemini 始终使用自动端点发现。 */
+  modelsUrl?: string;
   apiKey: string;
   apiKeyConfigured?: boolean;
   customHeaders?: { key: string; value: string }[];
@@ -521,6 +525,7 @@ function normalizeCodexRequestFormat(input: unknown): CodexRequestFormat | undef
 function normalizeCodexRouting(
   baseUrlInput: unknown,
   requestFormatInput: unknown,
+  isFullUrl = false,
 ): {
   baseUrl: string;
   requestFormat: CodexRequestFormat;
@@ -528,15 +533,23 @@ function normalizeCodexRouting(
   let baseUrl = normalizeBaseUrl(typeof baseUrlInput === "string" ? baseUrlInput : "");
   let requestFormat = normalizeCodexRequestFormat(requestFormatInput);
   const lower = baseUrl.toLowerCase();
+  let routePath = lower;
+  if (isFullUrl) {
+    try {
+      routePath = new URL(baseUrl).pathname.replace(/\/+$/, "").toLowerCase();
+    } catch {
+      // URL validation is handled by the desktop request proxy.
+    }
+  }
 
-  if (lower.endsWith(CODEX_CHAT_COMPLETIONS_SUFFIX)) {
-    baseUrl = baseUrl.slice(0, -CODEX_CHAT_COMPLETIONS_SUFFIX.length);
+  if (routePath.endsWith(CODEX_CHAT_COMPLETIONS_SUFFIX)) {
+    if (!isFullUrl) baseUrl = baseUrl.slice(0, -CODEX_CHAT_COMPLETIONS_SUFFIX.length);
     requestFormat ??= "openai-completions";
-  } else if (lower.endsWith(CODEX_RESPONSES_SUFFIX)) {
-    baseUrl = baseUrl.slice(0, -CODEX_RESPONSES_SUFFIX.length);
+  } else if (routePath.endsWith(CODEX_RESPONSES_SUFFIX)) {
+    if (!isFullUrl) baseUrl = baseUrl.slice(0, -CODEX_RESPONSES_SUFFIX.length);
     requestFormat ??= "openai-responses";
-  } else if (lower.endsWith(CODEX_RESPONSE_SUFFIX)) {
-    baseUrl = baseUrl.slice(0, -CODEX_RESPONSE_SUFFIX.length);
+  } else if (routePath.endsWith(CODEX_RESPONSE_SUFFIX)) {
+    if (!isFullUrl) baseUrl = baseUrl.slice(0, -CODEX_RESPONSE_SUFFIX.length);
     requestFormat ??= "openai-responses";
   }
 
@@ -553,6 +566,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       name: "Anthropic",
       type: "claude_code",
       baseUrl: "https://api.anthropic.com/v1",
+      isFullUrl: false,
       apiKey: "",
       customHeaders: [],
       models: [],
@@ -568,6 +582,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       name: "OpenAI",
       type: "codex",
       baseUrl: "https://api.openai.com/v1",
+      isFullUrl: false,
       apiKey: "",
       customHeaders: [],
       models: [],
@@ -584,6 +599,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       name: "Gemini",
       type: "gemini",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      isFullUrl: false,
       apiKey: "",
       customHeaders: [],
       models: [],
@@ -599,6 +615,7 @@ export function getBuiltinCustomProviders(): CustomProvider[] {
       name: "Grok",
       type: "xai",
       baseUrl: "https://api.x.ai/v1",
+      isFullUrl: false,
       apiKey: "",
       customHeaders: [],
       models: [],
@@ -1610,9 +1627,14 @@ function normalizeUsageQueryConfig(input: unknown): UsageQueryConfig {
 export function normalizeCustomProvider(input: unknown): CustomProvider {
   const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const type = normalizeProviderId(obj.type);
+  const isFullUrl = obj.isFullUrl === true;
   const codexRouting =
     type === "codex" || type === "xai"
-      ? normalizeCodexRouting(obj.baseUrl, type === "xai" ? "openai-responses" : obj.requestFormat)
+      ? normalizeCodexRouting(
+          obj.baseUrl,
+          type === "xai" ? "openai-responses" : obj.requestFormat,
+          isFullUrl,
+        )
       : undefined;
   const models = normalizeProviderModelConfigs(obj.models, type);
   const modelOrder = normalizeProviderModelOrder(obj.modelOrder, models);
@@ -1627,6 +1649,10 @@ export function normalizeCustomProvider(input: unknown): CustomProvider {
     baseUrl: codexRouting
       ? codexRouting.baseUrl
       : normalizeBaseUrl(typeof obj.baseUrl === "string" ? obj.baseUrl : ""),
+    isFullUrl,
+    ...(type !== "gemini" && typeof obj.modelsUrl === "string" && obj.modelsUrl.trim()
+      ? { modelsUrl: obj.modelsUrl.trim() }
+      : {}),
     apiKey,
     apiKeyConfigured: apiKey.length > 0 || obj.apiKeyConfigured === true,
     customHeaders: normalizeCustomHeaders(obj.customHeaders),

@@ -6,6 +6,8 @@ pub struct CcsProviderImportItem {
     pub provider_type: String,
     pub name: String,
     pub base_url: String,
+    pub is_full_url: bool,
+    pub models_url: String,
     pub api_key: String,
     pub request_format: String,
     pub models: Vec<String>,
@@ -187,6 +189,19 @@ fn ccs_provider_from_value(
         provider_type: provider_type.to_string(),
         name: strip_ccswitch_suffix(name).to_string(),
         base_url,
+        is_full_url: config
+            .get("meta")
+            .and_then(|meta| meta.get("isFullUrl").or_else(|| meta.get("is_full_url")))
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        models_url: config
+            .get("meta")
+            .and_then(|meta| meta.get("modelsUrl").or_else(|| meta.get("models_url")))
+            .or_else(|| config.get("modelsUrl").or_else(|| config.get("models_url")))
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
         api_key,
         request_format: if provider_type == "xai" {
             // Grok / xAI 在 LiveAgent 固定 Responses。

@@ -12,6 +12,7 @@ import {
   Globe,
   GrokIcon,
   Key,
+  Link2,
   List,
   OpenaiChatgptIcon,
   Pencil,
@@ -63,6 +64,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
+import { Switch } from "@liveagent/ui/components/ui/switch";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -340,6 +342,10 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     isGatewayWebui && initialApiKey.trim() === "" && initialData?.apiKeyConfigured === true;
   const [name, setName] = useState(initialData?.name ?? "");
   const [baseUrl, setBaseUrl] = useState(initialData?.baseUrl ?? "");
+  const [isFullUrl, setIsFullUrl] = useState(initialData?.isFullUrl ?? false);
+  const [modelsUrl, setModelsUrl] = useState(
+    providerType === "gemini" ? "" : (initialData?.modelsUrl ?? ""),
+  );
   const [apiKey, setApiKey] = useState(
     initialUsesRedactedApiKey ? REDACTED_API_KEY_DISPLAY : initialApiKey,
   );
@@ -426,7 +432,8 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   activeModelsRef.current = activeModels;
   const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_API_KEY_DISPLAY;
   const apiKeyForRequest = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
-  const canFetchModels = baseUrl.trim().length > 0 && apiKeyForRequest.length > 0;
+  const canFetchModels =
+    (modelsUrl.trim().length > 0 || baseUrl.trim().length > 0) && apiKeyForRequest.length > 0;
   const persistedUsageQueryProviderId = getPersistedUsageQueryProviderId(initialData);
   const { confirm: requestUsageQueryConfirm, dialog: usageQueryConfirmDialog } = useConfirmDialog();
   const [usageQueryTest, setUsageQueryTest] = useState<{
@@ -460,7 +467,11 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       setFetchingModels(true);
       setFetchError(null);
       try {
-        const list = await fetchModelsFromApi(providerType, url, key, { useSystemProxy });
+        const list = await fetchModelsFromApi(providerType, url, key, {
+          useSystemProxy,
+          isFullUrl,
+          modelsUrl,
+        });
         const mergedModels = mergeFetchedModels(list, modelsRef.current);
         commitModelsWithNewRowsRef.current(mergedModels);
       } catch (err) {
@@ -469,14 +480,21 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         setFetchingModels(false);
       }
     },
-    [providerType, useSystemProxy],
+    [isFullUrl, modelsUrl, providerType, useSystemProxy],
   );
 
   useEffect(() => {
     const trimUrl = baseUrl.trim();
+    const trimModelsUrl = modelsUrl.trim();
     const trimKey = apiKeyForRequest;
-    const key = buildProviderModelsFetchKey(trimUrl, trimKey, useSystemProxy);
-    if (!trimUrl || !trimKey) return;
+    const key = buildProviderModelsFetchKey(
+      trimUrl,
+      trimKey,
+      useSystemProxy,
+      isFullUrl,
+      trimModelsUrl,
+    );
+    if ((!trimUrl && !trimModelsUrl) || !trimKey) return;
     if (key === prevFetchKey.current) return;
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -488,7 +506,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [apiKeyForRequest, baseUrl, doFetch, useSystemProxy]);
+  }, [apiKeyForRequest, baseUrl, doFetch, isFullUrl, modelsUrl, useSystemProxy]);
 
   useEffect(() => {
     if (!modelOrder) return;
@@ -851,6 +869,8 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       name: name.trim(),
       type: providerType,
       baseUrl: baseUrl.trim(),
+      isFullUrl,
+      modelsUrl: providerType === "gemini" ? undefined : modelsUrl.trim() || undefined,
       apiKey: nextApiKey,
       apiKeyConfigured:
         nextApiKey.length > 0 ||
@@ -1153,12 +1173,41 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
 
                 <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                   <div className="space-y-1.5">
-                    <Label htmlFor="modal-baseurl">Base URL</Label>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <Label htmlFor="modal-baseurl">{t("settings.baseUrl")}</Label>
+                      <div className="flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5">
+                        <Link2
+                          className={cn(
+                            "h-3.5 w-3.5",
+                            isFullUrl ? "text-sky-500" : "text-muted-foreground",
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-xs font-medium",
+                            isFullUrl ? "text-foreground" : "text-muted-foreground",
+                          )}
+                        >
+                          {t("settings.providerFullUrl")}
+                        </span>
+                        <Switch
+                          checked={isFullUrl}
+                          onCheckedChange={setIsFullUrl}
+                          aria-label={t("settings.providerFullUrl")}
+                          title={t("settings.providerFullUrl")}
+                        />
+                      </div>
+                    </div>
                     <Input
                       id="modal-baseurl"
                       value={baseUrl}
                       onChange={(event) => setBaseUrl(event.currentTarget.value)}
                     />
+                    {isFullUrl ? (
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        {t("settings.providerFullUrlHint")}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="space-y-1.5">
@@ -1190,6 +1239,21 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                     </div>
                   </div>
                 </div>
+
+                {providerType !== "gemini" ? (
+                  <div className="mt-3 space-y-1.5">
+                    <Label htmlFor="modal-models-url">{t("settings.providerModelsUrl")}</Label>
+                    <Input
+                      id="modal-models-url"
+                      value={modelsUrl}
+                      placeholder={t("settings.providerModelsUrlPlaceholder")}
+                      onChange={(event) => setModelsUrl(event.currentTarget.value)}
+                    />
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {t("settings.providerModelsUrlHint")}
+                    </p>
+                  </div>
+                ) : null}
 
                 {providerType === "codex" ? (
                   <div className="mt-4 space-y-1.5">

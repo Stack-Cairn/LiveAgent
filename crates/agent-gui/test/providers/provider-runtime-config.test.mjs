@@ -14,6 +14,7 @@ function createProvider(overrides = {}) {
     name: "Relay",
     type: "claude_code",
     baseUrl: "https://relay.example/v1",
+    isFullUrl: true,
     apiKey: "test-key",
     customHeaders: [{ key: "X-Trace-Id", value: "abc" }],
     models: [],
@@ -35,6 +36,7 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
   );
 
   assert.equal(runtime.baseUrl, "https://relay.example/v1");
+  assert.equal(runtime.isFullUrl, true);
   assert.equal(runtime.apiKey, "test-key");
   // 用户自定义头原样透传，工厂不再注入任何内置身份头。
   assert.deepEqual(runtime.customHeaders, [{ key: "X-Trace-Id", value: "abc" }]);
@@ -45,6 +47,7 @@ test("createProviderRuntimeConfig carries every provider transport field", () =>
 
   for (const field of [
     "baseUrl",
+    "isFullUrl",
     "apiKey",
     "customHeaders",
     "requestFormat",

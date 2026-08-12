@@ -1388,6 +1388,12 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.compatible": "兼容",
     "settings.providerName": "分组名称",
     "settings.baseUrl": "Base URL",
+    "settings.providerFullUrl": "完整 URL",
+    "settings.providerFullUrlHint": "开启后，此地址将作为最终请求地址使用，不再自动拼接接口路径。",
+    "settings.providerModelsUrl": "模型列表 URL（可选）",
+    "settings.providerModelsUrlPlaceholder": "例如：https://api.example.com/v1/models",
+    "settings.providerModelsUrlHint":
+      "留空时根据 Base URL 自动推导；填写后仅用此地址刷新模型，不影响聊天请求。",
     "settings.apiKey": "API Key",
     "settings.customHeaders": "自定义请求头",
     "settings.providerDialogNavigation": "供应商配置导航",
@@ -3673,6 +3679,13 @@ export const translations: Record<Locale, Record<string, string>> = {
     "settings.compatible": "Compatible",
     "settings.providerName": "Name",
     "settings.baseUrl": "Base URL",
+    "settings.providerFullUrl": "Full URL",
+    "settings.providerFullUrlHint":
+      "When enabled, this address is used as the final request URL without appending an API path.",
+    "settings.providerModelsUrl": "Models URL (optional)",
+    "settings.providerModelsUrlPlaceholder": "For example: https://api.example.com/v1/models",
+    "settings.providerModelsUrlHint":
+      "Leave blank to derive it from the Base URL. This address is only used to refresh models and does not affect chat requests.",
     "settings.apiKey": "API Key",
     "settings.customHeaders": "Custom request headers",
     "settings.providerDialogNavigation": "Provider configuration",

@@ -2760,12 +2760,14 @@ export class GatewayWebSocketClient {
     baseUrl: string,
     apiKey: string,
     useSystemProxy = false,
+    modelsUrl = "",
   ): Promise<unknown> {
     return this.requestWithRecovery("provider.models", {
       type,
       base_url: baseUrl,
       api_key: apiKey,
       use_system_proxy: useSystemProxy,
+      models_url: modelsUrl,
     });
   }
 
@@ -3903,6 +3905,7 @@ export type GatewayWebSocketClientLike = {
     baseUrl: string,
     apiKey: string,
     useSystemProxy?: boolean,
+    modelsUrl?: string,
   ): Promise<unknown>;
   providerUsageQuery<T = unknown>(providerId: string, refresh: boolean): Promise<T>;
   providerUsageTest<T = unknown>(providerId: string, configJson: string): Promise<T>;

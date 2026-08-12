@@ -27,6 +27,7 @@ pub async fn fetch_provider_models(
     base_url: &str,
     api_key: &str,
     use_system_proxy: bool,
+    models_url: Option<&str>,
 ) -> Result<String, String> {
     // 与本地反代的 x-liveagent-use-system-proxy 语义一致：勾选时代理配置异常
     // fail fast，绝不静默降级；未勾选一律直连（忽略环境代理）。
@@ -38,7 +39,7 @@ pub async fn fetch_provider_models(
     };
     with_provider_models_timeout(
         PROVIDER_MODELS_REQUEST_TIMEOUT,
-        fetch_provider_models_with_client(&client, provider_type, base_url, api_key),
+        fetch_provider_models_with_client(&client, provider_type, base_url, api_key, models_url),
     )
     .await
 }
@@ -60,8 +61,10 @@ async fn fetch_provider_models_with_client(
     provider_type: &str,
     base_url: &str,
     api_key: &str,
+    models_url: Option<&str>,
 ) -> Result<String, String> {
-    let attempts = build_provider_models_attempts(provider_type, base_url, api_key)?;
+    let attempts =
+        build_provider_models_attempts_with_override(provider_type, base_url, api_key, models_url)?;
     let mut failures = Vec::new();
     let mut empty_result = None;
 
@@ -151,9 +154,7 @@ async fn read_limited_response(response: reqwest::Response) -> Result<Vec<u8>, S
 }
 
 fn normalize_provider_base_url(provider_type: &str, raw: &str) -> Result<Url, String> {
-    if !matches!(provider_type, "claude_code" | "codex" | "gemini" | "xai") {
-        return Err("不支持的供应商类型".to_string());
-    }
+    validate_provider_type(provider_type)?;
     let mut url = Url::parse(raw.trim()).map_err(|_| "Base URL 必须是绝对 URL".to_string())?;
     if !matches!(url.scheme(), "http" | "https")
         || !url.has_host()
@@ -194,6 +195,29 @@ fn normalize_provider_base_url(provider_type: &str, raw: &str) -> Result<Url, St
     Ok(url)
 }
 
+fn validate_provider_type(provider_type: &str) -> Result<(), String> {
+    if matches!(provider_type, "claude_code" | "codex" | "gemini" | "xai") {
+        Ok(())
+    } else {
+        Err("不支持的供应商类型".to_string())
+    }
+}
+
+fn normalize_provider_models_url(raw: &str) -> Result<Url, String> {
+    let url = Url::parse(raw.trim()).map_err(|_| "模型列表 URL 必须是绝对 URL".to_string())?;
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.has_host()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err("模型列表 URL 必须是有效的 HTTP(S) 绝对 URL".to_string());
+    }
+    if url.fragment().is_some() {
+        return Err("模型列表 URL 不能包含片段".to_string());
+    }
+    Ok(url)
+}
+
 fn build_provider_models_url(provider_type: &str, base_url: &Url, official: bool) -> Url {
     let mut url = base_url.clone();
     let mut api_root = url.path().trim_end_matches('/').to_string();
@@ -226,14 +250,40 @@ fn is_api_version_path(path: &str) -> bool {
     !digits.is_empty() && digits.chars().all(|character| character.is_ascii_digit())
 }
 
+#[cfg(test)]
 fn build_provider_models_attempts(
     provider_type: &str,
     base_url: &str,
     api_key: &str,
 ) -> Result<Vec<ProviderModelsAttempt>, String> {
-    let base_url = normalize_provider_base_url(provider_type, base_url)?;
+    build_provider_models_attempts_with_override(provider_type, base_url, api_key, None)
+}
+
+fn build_provider_models_attempts_with_override(
+    provider_type: &str,
+    base_url: &str,
+    api_key: &str,
+    models_url: Option<&str>,
+) -> Result<Vec<ProviderModelsAttempt>, String> {
+    validate_provider_type(provider_type)?;
+    let explicit_url = if provider_type == "gemini" {
+        None
+    } else {
+        models_url
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(normalize_provider_models_url)
+            .transpose()?
+    };
+    let base_url = match explicit_url.as_ref() {
+        Some(url) => url.clone(),
+        None => normalize_provider_base_url(provider_type, base_url)?,
+    };
     let [default_attempt, official_attempt] = [false, true].map(|official| ProviderModelsAttempt {
-        url: build_provider_models_url(provider_type, &base_url, official),
+        url: explicit_url
+            .as_ref()
+            .cloned()
+            .unwrap_or_else(|| build_provider_models_url(provider_type, &base_url, official)),
         headers: build_provider_models_headers(provider_type, api_key, official),
     });
     // codex/xai 的官方形式与统一首次尝试完全一致，重复请求同一端点没有意义，收敛为一次。
@@ -377,6 +427,41 @@ mod tests {
     }
 
     #[test]
+    fn provider_models_url_override_is_exact_and_allows_query_auth() {
+        let attempts = build_provider_models_attempts_with_override(
+            "claude_code",
+            "https://unused.example.com/v1beta",
+            "key",
+            Some("https://models.example.com/catalog?api-version=2026-01"),
+        )
+        .expect("models URL override attempts");
+
+        assert_eq!(attempts.len(), 2);
+        assert!(attempts.iter().all(|attempt| {
+            attempt.url.as_str() == "https://models.example.com/catalog?api-version=2026-01"
+        }));
+        assert!(build_provider_models_attempts_with_override(
+            "codex",
+            "",
+            "key",
+            Some("https://user:pass@example.com/models"),
+        )
+        .is_err());
+
+        let gemini = build_provider_models_attempts_with_override(
+            "gemini",
+            "https://generativelanguage.googleapis.com/v1beta",
+            "key",
+            Some("https://ignored.example.com/custom/models"),
+        )
+        .expect("gemini keeps automatic model discovery");
+        assert_eq!(
+            gemini[0].url.as_str(),
+            "https://generativelanguage.googleapis.com/v1/models"
+        );
+    }
+
+    #[test]
     fn provider_model_headers_exclude_inference_identity() {
         for provider_type in ["claude_code", "codex", "gemini", "xai"] {
             for official in [false, true] {
@@ -466,6 +551,7 @@ mod tests {
             "codex",
             "http://provider.invalid",
             "test-key",
+            None,
         )
         .await
         .expect("fetch provider models");

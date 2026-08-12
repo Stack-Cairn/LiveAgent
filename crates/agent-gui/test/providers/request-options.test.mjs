@@ -117,6 +117,22 @@ test("proxy base URL builder validates upstream URLs and carries origin separate
   );
 });
 
+test("proxy base URL builder carries an exact upstream URL in full URL mode", () => {
+  assert.deepEqual(
+    proxy.buildProxyBaseUrl(
+      "codex",
+      "https://relay.example.com/custom/complete?region=cn",
+      "http://127.0.0.1:18080/",
+      { isFullUrl: true },
+    ),
+    {
+      baseUrl: "http://127.0.0.1:18080/proxy/codex",
+      upstreamOrigin: "https://relay.example.com",
+      upstreamUrl: "https://relay.example.com/custom/complete?region=cn",
+    },
+  );
+});
+
 test("image proxy URL builder encodes the source URL", () => {
   assert.equal(
     proxy.buildImageProxyUrl("https://example.com/path/photo.png?size=large#view", "http://127.0.0.1:18080/"),

@@ -151,6 +151,44 @@ test("provider model fetch identity changes when system proxy routing changes", 
   assert.equal(direct, "https://relay.example.com/v1||test-key||direct");
   assert.equal(proxied, "https://relay.example.com/v1||test-key||proxy");
   assert.notEqual(direct, proxied);
+  assert.equal(
+    providerUtils.buildProviderModelsFetchKey(
+      "https://relay.example.com/v1/chat/completions",
+      "test-key",
+      false,
+      true,
+    ),
+    "https://relay.example.com/v1/chat/completions||test-key||direct||full-url",
+  );
+  assert.equal(
+    providerUtils.buildProviderModelsFetchKey(
+      "https://relay.example.com/v1/chat/completions",
+      "test-key",
+      false,
+      true,
+      " https://models.example.com/catalog ",
+    ),
+    "https://relay.example.com/v1/chat/completions||test-key||direct||full-url||models:https://models.example.com/catalog",
+  );
+});
+
+test("full URL model discovery derives the models API instead of appending to the endpoint", () => {
+  assert.equal(
+    providerUtils.normalizeProviderModelsBaseUrl(
+      "codex",
+      "https://relay.example.com/custom/v1/chat/completions?region=cn",
+      true,
+    ),
+    "https://relay.example.com/custom/v1",
+  );
+  assert.equal(
+    providerUtils.normalizeProviderModelsBaseUrl(
+      "claude_code",
+      "https://relay.example.com/messages",
+      true,
+    ),
+    "https://relay.example.com",
+  );
 });
 
 test("pickProviderModelsFailure prefers informative errors over missing-endpoint noise", () => {
@@ -220,6 +258,46 @@ test("fetchModelsFromApi returns the default /v1/models result without falling b
         models.map((model) => model.id),
         ["gpt-5"],
       );
+    },
+  );
+});
+
+test("fetchModelsFromApi uses the exact models URL override without changing chat routing", async () => {
+  await withFetchStub(
+    () => jsonResponse(200, { data: [{ id: "gpt-custom" }] }),
+    async (calls) => {
+      const models = await providerUtils.fetchModelsFromApi(
+        "codex",
+        "https://relay.example.com/v1/responses",
+        "test-key",
+        { modelsUrl: "https://catalog.example.com/models?api-version=2026-01" },
+      );
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].url, "http://proxy.local:9999/proxy/codex");
+      assert.equal(
+        calls[0].options.headers["x-liveagent-upstream-url"],
+        "https://catalog.example.com/models?api-version=2026-01",
+      );
+      assert.deepEqual(
+        models.map((model) => model.id),
+        ["gpt-custom"],
+      );
+    },
+  );
+});
+
+test("gemini ignores the models URL override and keeps native endpoint fallback", async () => {
+  await withFetchStub(
+    () => jsonResponse(200, { models: [{ name: "models/gemini-2.5-pro" }] }),
+    async (calls) => {
+      await providerUtils.fetchModelsFromApi(
+        "gemini",
+        "https://generativelanguage.googleapis.com/v1beta",
+        "test-key",
+        { modelsUrl: "https://ignored.example.com/custom/models" },
+      );
+      assert.ok(calls[0].url.endsWith("/proxy/gemini/v1/models"));
+      assert.equal(calls[0].options.headers["x-liveagent-upstream-url"], undefined);
     },
   );
 });
@@ -328,7 +406,7 @@ test("fetchModelsFromApi canonicalizes a known 1M Claude model before display", 
   );
 });
 
-test("gateway WebUI forwards the system proxy choice to desktop model fetching", async () => {
+test("gateway WebUI forwards proxy and models URL choices to desktop model fetching", async () => {
   const previousDocument = globalThis.document;
   const previousWindow = globalThis.window;
   globalThis.document = { documentElement: { dataset: { liveagentWebui: "gateway" } } };
@@ -345,7 +423,10 @@ test("gateway WebUI forwards the system proxy choice to desktop model fetching",
       "codex",
       "https://relay.example.com/v1",
       "test-key",
-      { useSystemProxy: true },
+      {
+        useSystemProxy: true,
+        modelsUrl: "https://catalog.example.com/models?api-version=2026-01",
+      },
     );
     assert.deepEqual(
       models.map((model) => model.id),
@@ -357,6 +438,7 @@ test("gateway WebUI forwards the system proxy choice to desktop model fetching",
         base_url: "https://relay.example.com/v1",
         api_key: "test-key",
         use_system_proxy: true,
+        models_url: "https://catalog.example.com/models?api-version=2026-01",
       },
     ]);
   } finally {

@@ -90,7 +90,10 @@ export async function prepareProviderRequest(
       ),
       runtime.customHeaders,
     ),
-    { useSystemProxy: runtime.useSystemProxy === true },
+    {
+      useSystemProxy: runtime.useSystemProxy === true,
+      isFullUrl: runtime.isFullUrl === true,
+    },
   );
 }
 
