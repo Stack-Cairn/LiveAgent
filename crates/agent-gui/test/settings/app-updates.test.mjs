@@ -17,6 +17,73 @@ const {
   shouldShowAppUpdateButton,
 } = loader.loadModule("src/lib/appUpdates.ts");
 
+function createAppUpdateControllerHarness() {
+  const states = [];
+  const refs = [];
+  let stateIndex = 0;
+  let refIndex = 0;
+  const invokeCalls = [];
+  const checkResult = {
+    configured: true,
+    available: true,
+    currentVersion: "1.3.0",
+    version: "1.3.1",
+    channel: "stable",
+    repository: "Stack-Cairn/LiveAgent",
+  };
+  const installedResult = { ...checkResult, available: false };
+  const react = {
+    useState(initialValue) {
+      const index = stateIndex++;
+      if (!(index in states)) {
+        states[index] = typeof initialValue === "function" ? initialValue() : initialValue;
+      }
+      return [
+        states[index],
+        (next) => {
+          states[index] = typeof next === "function" ? next(states[index]) : next;
+        },
+      ];
+    },
+    useRef(initialValue) {
+      const index = refIndex++;
+      refs[index] ??= { current: initialValue };
+      return refs[index];
+    },
+    useCallback(callback) {
+      return callback;
+    },
+    useEffect() {},
+    useMemo(factory) {
+      return factory();
+    },
+  };
+  const controllerLoader = createTsModuleLoader({
+    mocks: {
+      react,
+      "@tauri-apps/api/core": {
+        async invoke(command) {
+          invokeCalls.push(command);
+          if (command === "app_update_check") return checkResult;
+          if (command === "app_update_install") return installedResult;
+          throw new Error(`Unexpected invoke: ${command}`);
+        },
+      },
+    },
+  });
+  const { useAppUpdateController } = controllerLoader.loadModule("src/lib/appUpdates.ts");
+
+  return {
+    invokeCalls,
+    installedResult,
+    render() {
+      stateIndex = 0;
+      refIndex = 0;
+      return useAppUpdateController({ enabled: true, includePrereleases: false });
+    },
+  };
+}
+
 test("checks for application updates every 20 minutes", () => {
   assert.equal(APP_UPDATE_CHECK_INTERVAL_MS, 20 * 60 * 1000);
 });
@@ -41,6 +108,25 @@ test("the update button remains available after an update is installed", () => {
     false,
   );
   assert.equal(shouldShowAppUpdateButton({ status: "installed", result: {} }), true);
+});
+
+test("manual checks preserve the pending restart after an update is installed", async () => {
+  const harness = createAppUpdateControllerHarness();
+  let controller = harness.render();
+
+  await controller.runCheck();
+  controller = harness.render();
+  await controller.installOnly();
+  controller = harness.render();
+  assert.equal(controller.status, "installed");
+
+  const result = await controller.runCheck();
+  controller = harness.render();
+
+  assert.equal(result, harness.installedResult);
+  assert.equal(controller.status, "installed");
+  assert.equal(controller.result, harness.installedResult);
+  assert.deepEqual(harness.invokeCalls, ["app_update_check", "app_update_install"]);
 });
 
 test("restart is skipped when the pre-restart guard declines", async () => {

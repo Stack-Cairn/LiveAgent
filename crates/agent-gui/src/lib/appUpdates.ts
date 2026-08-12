@@ -169,8 +169,12 @@ export function useAppUpdateController({
       return undefined;
     }
 
-    const requestId = ++checkSeqRef.current;
     const current = stateRef.current;
+    if (current.status === "installed") {
+      return current.result;
+    }
+
+    const requestId = ++checkSeqRef.current;
     setUpdateState({
       status: "checking",
       result: getAppUpdateStateResult(current),
