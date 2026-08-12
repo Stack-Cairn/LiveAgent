@@ -78,6 +78,14 @@ test("context usage ring stays vertically centered in the shared composer", () =
   assert.doesNotMatch(chatComposerBarSource, /className="absolute bottom-11 right-3 z-20"/);
 });
 
+test("composer editor row reserves the right control rail so the scrollbar clears the ring", () => {
+  // 让位必须做在编辑器外层容器上：padding 不移动滚动条，编辑器自带 pr-8 时
+  // 那条 6px 滚动轨会压在用量环/展开图标上（right-3 + w-8 的 44px 轨道）。
+  assert.match(chatComposerBarSource, /"relative flex flex-1 pl-4 pr-12"/);
+  assert.doesNotMatch(chatComposerBarSource, /"relative flex flex-1 px-4"/);
+  assert.doesNotMatch(chatComposerBarSource, /"px-0 py-0 pr-8"/);
+});
+
 test("contextUsageRatio guards degenerate inputs", () => {
   assert.equal(contextUsageRatio(100_000, 200_000), 0.5);
   assert.equal(contextUsageRatio(undefined, 200_000), 0);

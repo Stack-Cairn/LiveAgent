@@ -949,10 +949,17 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
 
           {/* 常驻 flex-1：动画把卡片钳在中间高度时由本区吸收伸缩，工具栏才能
               全程贴住卡片底边。min-h-0 只在展开态加——折叠态靠自动最小高度
-              (= 编辑器钳制高) 撑起卡片的固有高度，加了会塌缩。 */}
+              (= 编辑器钳制高) 撑起卡片的固有高度，加了会塌缩。
+
+              pr-12 让出右侧控制列：展开/用量环/发送都是 right-3 + w-8，占据卡片
+              右缘 44px 宽的竖直轨道。让位必须做在本容器上，**不能只给编辑器加
+              pr-8**——padding 不改变滚动条位置（滚动条恒贴 border box 右缘），
+              只挡文字不挡滚动条，溢出时那条 6px 轨会直接压在环与展开图标上。
+              收窄编辑器 border box 才能把滚动条一并推到轨道左侧；48px = 44 轨道
+              + 4px 间隙，文本可用宽度与原先 px-4 + 编辑器 pr-8 完全一致。 */}
           <div
             className={cn(
-              "relative flex flex-1 px-4",
+              "relative flex flex-1 pl-4 pr-12",
               pendingUploadedFiles.length > 0 ? "pt-1.5" : "pt-3.5",
               isComposerExpanded && "min-h-0",
             )}
@@ -970,7 +977,9 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
               workdir={workdir}
               enabledSkills={enabledSkills}
               className={cn(
-                "px-0 py-0 pr-8",
+                // 右让位由外层容器 pr-12 统一承担（见上），此处不再补 pr——
+                // 编辑器自身的右内距只会把文字推开、留下滚动条压在控制列上。
+                "px-0 py-0",
                 isComposerExpanded &&
                   (surface === "desktop" ? "h-full max-h-none" : "h-full! max-h-none!"),
               )}
