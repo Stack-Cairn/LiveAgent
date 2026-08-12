@@ -421,11 +421,11 @@ test("chat runtime controls default and follow provider model reasoning support"
     }),
     ["minimal", "low", "medium", "high"],
   );
-  // gemini-3-pro-preview：目录只有两档 low/high。
+  // gemini-3-pro-image：目录只有两档 low/high。
   assert.deepEqual(
     settings.getChatRuntimeReasoningLevelsForProvider({
       providerId: "gemini",
-      modelId: "gemini-3-pro-preview",
+      modelId: "gemini-3-pro-image",
     }),
     ["low", "high"],
   );
