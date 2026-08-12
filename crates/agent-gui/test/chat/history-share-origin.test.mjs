@@ -44,6 +44,20 @@ test("resolveShareOrigin keeps existing behavior without a port", () => {
   assert.equal(resolveShareOrigin("http:"), "");
 });
 
+test("resolveShareOrigin does not apply a gateway port to the browser origin", () => {
+  const previousWindow = globalThis.window;
+  globalThis.window = { location: { origin: "http://localhost:5173" } };
+  try {
+    assert.equal(resolveShareOrigin(undefined, 443), "http://localhost:5173");
+  } finally {
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+  }
+});
+
 test("resolveShareOrigin ignores invalid ports", () => {
   assert.equal(resolveShareOrigin("http://localhost:8080", 0), "http://localhost:8080");
   assert.equal(resolveShareOrigin("http://localhost", 65_536), "http://localhost");
