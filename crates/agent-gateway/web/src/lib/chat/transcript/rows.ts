@@ -392,24 +392,36 @@ export function buildTurnRows(turn: Turn): TranscriptRow[] {
 // construction, but this single canonical pass makes the guarantee local to
 // the builder instead of distributed across every producer. Pass `seen` to
 // dedupe one region against keys already taken by another.
+//
+// Checkpoint rows are the exception to rename-on-collision: their id is a
+// content identity (`checkpoint-<summaryId>`), so a colliding checkpoint is
+// the SAME logical card seen from two sources — the history region and the
+// (user-less) manual-compaction turn that streamed it. Renaming would render
+// the card twice; the later copy is dropped instead (region order puts the
+// history copy first, and the shared key keeps React/measurement identity
+// stable when the rendering source flips).
 export function dedupeRowKeys(rows: TranscriptRow[], seen = new Set<string>()): TranscriptRow[] {
   let next: TranscriptRow[] | null = null;
   for (let index = 0; index < rows.length; index += 1) {
     const row = rows[index];
     if (!row) continue;
-    let key = row.key;
-    if (seen.has(key)) {
+    if (seen.has(row.key)) {
+      if (row.kind === "checkpoint") {
+        next ??= rows.slice(0, index);
+        continue;
+      }
       let suffix = 2;
-      while (seen.has(`${key}#${suffix}`)) {
+      while (seen.has(`${row.key}#${suffix}`)) {
         suffix += 1;
       }
-      key = `${key}#${suffix}`;
-      if (!next) {
-        next = rows.slice();
-      }
-      next[index] = { ...row, key };
+      const key = `${row.key}#${suffix}`;
+      next ??= rows.slice(0, index);
+      next.push({ ...row, key });
+      seen.add(key);
+      continue;
     }
-    seen.add(key);
+    seen.add(row.key);
+    next?.push(row);
   }
   return next ?? rows;
 }

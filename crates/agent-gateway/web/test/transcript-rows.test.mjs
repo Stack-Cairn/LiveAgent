@@ -262,6 +262,33 @@ test("dedupeRowKeys suffixes collisions deterministically without touching uniqu
   assert.equal(dedupeRowKeys(untouched), untouched, "no copy when keys are already unique");
 });
 
+test("dedupeRowKeys drops colliding checkpoint rows instead of renaming them", () => {
+  // 检查点 id 是内容身份（checkpoint-<summaryId>）：history 区与手动压缩 turn
+  // 各持一份时是同一张逻辑卡片，改名保留会渲染出重复检查点。
+  const checkpoint = (origin) => ({
+    key: "checkpoint-sum-1",
+    origin,
+    kind: "checkpoint",
+    content: "summary",
+    summaryId: "sum-1",
+    coveredMessageCount: 4,
+    generatedBy: { providerId: "p", model: "m" },
+    timestamp: 1,
+  });
+  const rows = [
+    checkpoint("history"),
+    { key: "a", origin: "history", kind: "error", text: "1" },
+    checkpoint("stream"),
+    { key: "a", origin: "stream", kind: "error", text: "2" },
+  ];
+  const deduped = dedupeRowKeys(rows);
+  assert.deepEqual(
+    deduped.map((row) => `${row.kind}:${row.key}`),
+    ["checkpoint:checkpoint-sum-1", "error:a", "error:a#2"],
+    "checkpoint duplicate dropped (first copy wins), non-checkpoint still renamed",
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Deterministic history parse ids
 
