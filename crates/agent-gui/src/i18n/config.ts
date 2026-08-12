@@ -228,6 +228,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.manualCompactEmpty": "当前会话没有可压缩的上下文",
     "chat.manualCompactUnavailable": "当前模型缺少上下文配置，无法压缩",
     "chat.manualCompactFailed": "上下文压缩失败，请稍后重试",
+    "chat.manualCompactCancelled": "已取消压缩",
     "chat.manualCompactTimedOut": "上下文压缩未返回结果，请确认桌面端在线后重试",
     "chat.editMessage": "编辑消息",
     "chat.cancel": "取消",
@@ -2532,6 +2533,7 @@ export const translations: Record<Locale, Record<string, string>> = {
     "chat.manualCompactEmpty": "This conversation has no context to compact",
     "chat.manualCompactUnavailable": "Context compaction is unavailable for the current model",
     "chat.manualCompactFailed": "Context compaction failed. Please try again",
+    "chat.manualCompactCancelled": "Compaction cancelled",
     "chat.manualCompactTimedOut":
       "Context compaction did not return a result. Check the desktop connection and try again",
     "chat.editMessage": "Edit Message",

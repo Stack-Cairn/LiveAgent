@@ -55,9 +55,8 @@ const transcriptMeasurementsLru = createTranscriptMeasurementsLru();
 
 const SummaryCard = memo(function SummaryCard(props: { item: RenderSummaryCard }) {
   const { item } = props;
-  const { locale } = useLocale();
+  const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
-  const isEn = locale === "en-US";
 
   return (
     <div className="flex justify-center px-2">
@@ -73,10 +72,13 @@ const SummaryCard = memo(function SummaryCard(props: { item: RenderSummaryCard }
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-[calc(13px*var(--zone-font-scale,1))] font-medium text-foreground/90">
-                {isEn ? "Context Checkpoint" : "上下文检查点"}
+                {t("chat.contextCheckpoint.title")}
               </span>
               <span className="inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-[1px] text-[calc(11px*var(--zone-font-scale,1))] font-normal tabular-nums text-muted-foreground dark:bg-white/[0.08]">
-                {item.coveredMessageCount} {isEn ? "msgs" : "条消息"}
+                {t("chat.contextCheckpoint.messageCount").replace(
+                  "{count}",
+                  String(item.coveredMessageCount),
+                )}
               </span>
             </div>
             <div className="mt-[2px] text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground/70">
@@ -179,9 +181,12 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     }),
   );
 
+  // 手动压缩空闲态只置 isCompactionRunning、不置 isSending，仍要显示「正在
+  // 压缩」live tail：把它并入可见性 gate（只影响 live tail 是否显示，不改动
+  // 其他 isSending 语义）。
   const { rows, liveStartIndex } = useMemo(
-    () => rowModel.build(historyItems, { ...liveState, isSending }),
-    [rowModel, historyItems, liveState, isSending],
+    () => rowModel.build(historyItems, { ...liveState, isSending, isCompactionRunning }),
+    [rowModel, historyItems, liveState, isSending, isCompactionRunning],
   );
 
   const rowsRef = useRef(rows);

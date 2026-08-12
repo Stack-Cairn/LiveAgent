@@ -1,13 +1,13 @@
-import { Meter, Tooltip } from "@base-ui/react";
+import { Meter } from "@base-ui/react";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import type { ReactNode } from "react";
 import {
   canManualCompact,
   contextUsageLevel,
   contextUsageRatio,
 } from "../../lib/chat/contextUsage";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";
+import { LabelTooltip } from "../ui/label-tooltip";
 
 const RING_STROKE_BY_LEVEL = {
   ok: "stroke-emerald-500 dark:stroke-emerald-400",
@@ -15,31 +15,16 @@ const RING_STROKE_BY_LEVEL = {
   danger: "stroke-red-500 dark:stroke-red-400",
 } as const;
 
-// 与 ChatComposerBar 的 RuntimeControlTooltip 同款视觉；组件自带 tooltip
-// 以保持自包含（该封装未导出，且 label 依赖内部计算的用量数字）。
-function UsageTooltip(props: { label: string; children: ReactNode }) {
-  return (
-    <Tooltip.Root>
-      <Tooltip.Trigger
-        delay={0}
-        closeOnClick
-        render={<span className="inline-flex shrink-0">{props.children}</span>}
-      />
-      <Tooltip.Portal>
-        <Tooltip.Positioner
-          side="top"
-          align="center"
-          sideOffset={6}
-          collisionPadding={8}
-          className="z-[9999]"
-        >
-          <Tooltip.Popup className="max-w-64 rounded-xl border border-border/60 bg-popover px-3 py-2 text-xs font-medium leading-4 text-popover-foreground shadow-lg outline-hidden data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95">
-            {props.label}
-          </Tooltip.Popup>
-        </Tooltip.Positioner>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  );
+// Intl.NumberFormat 构造含 locale 数据解析，环随流式读数逐帧重渲染，
+// 必须按 locale 复用实例。
+const tokenFormatterByLocale = new Map<string, Intl.NumberFormat>();
+
+function getTokenFormatter(locale: string): Intl.NumberFormat {
+  const cached = tokenFormatterByLocale.get(locale);
+  if (cached) return cached;
+  const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
+  tokenFormatterByLocale.set(locale, formatter);
+  return formatter;
 }
 
 /**
@@ -61,10 +46,11 @@ export function ContextUsageRing(props: {
   }
 
   const ratio = contextUsageRatio(totalTokens, contextWindow);
-  const percentage = Math.round(ratio * 100);
-  const displayedPercentage = Math.min(999, percentage);
-  const ringPercentage = Math.min(100, Math.max(0, ratio * 100));
-  const formatTokens = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
+  // 只保留两个口径：展示值（取整、封顶 999）与画环/量度值（0-100 钳制，
+  // 二者共用避免 a11y 量度与弧线漂移）。contextUsageRatio 不会返回负数。
+  const displayedPercentage = Math.min(999, Math.round(ratio * 100));
+  const clampedPercentage = Math.min(100, ratio * 100);
+  const formatTokens = getTokenFormatter(locale);
   const usageLabel = `${displayedPercentage}% · ${t("chat.usageTotal")} ${formatTokens.format(
     Math.max(0, Math.floor(totalTokens ?? 0)),
   )} · ${t("chat.contextWindow")} ${formatTokens.format(contextWindow)}`;
@@ -72,7 +58,7 @@ export function ContextUsageRing(props: {
 
   const ring = (
     <Meter.Root
-      value={Math.min(100, percentage)}
+      value={clampedPercentage}
       aria-valuetext={usageLabel}
       className="relative flex h-8 w-8 items-center justify-center text-[8px] font-semibold leading-none tabular-nums text-foreground/75"
     >
@@ -94,7 +80,7 @@ export function ContextUsageRing(props: {
           strokeWidth="2.25"
           strokeLinecap="round"
           strokeDasharray="100"
-          strokeDashoffset={100 - ringPercentage}
+          strokeDashoffset={100 - clampedPercentage}
           className={cn(
             "transition-[stroke-dashoffset,stroke] duration-300",
             RING_STROKE_BY_LEVEL[contextUsageLevel(ratio)],
@@ -107,16 +93,16 @@ export function ContextUsageRing(props: {
 
   if (!compactAvailable) {
     return (
-      <UsageTooltip label={usageLabel}>
+      <LabelTooltip label={usageLabel}>
         <span className={cn("inline-flex h-8 w-8 shrink-0 cursor-default opacity-90", className)}>
           {ring}
         </span>
-      </UsageTooltip>
+      </LabelTooltip>
     );
   }
 
   return (
-    <UsageTooltip label={usageLabel}>
+    <LabelTooltip label={usageLabel}>
       <ConfirmActionPopover
         title={t("chat.manualCompactTitle")}
         description={t("chat.manualCompactDescription")}
@@ -139,6 +125,6 @@ export function ContextUsageRing(props: {
           </button>
         )}
       </ConfirmActionPopover>
-    </UsageTooltip>
+    </LabelTooltip>
   );
 }

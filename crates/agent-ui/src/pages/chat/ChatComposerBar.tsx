@@ -1,4 +1,3 @@
-import { Tooltip } from "@base-ui/react";
 import {
   ChevronDown,
   ChevronUp,
@@ -33,6 +32,7 @@ import {
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { GitBranchSelector } from "@liveagent/ui/components/git/GitBranchSelector";
 import { Button } from "@liveagent/ui/components/ui/button";
+import { LabelTooltip as RuntimeControlTooltip } from "@liveagent/ui/components/ui/label-tooltip";
 import {
   Select,
   SelectContent,
@@ -76,31 +76,6 @@ const REASONING_I18N_KEYS: Record<ReasoningLevel, string> = {
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
   return typeof value === "string" && Object.hasOwn(REASONING_I18N_KEYS, value);
-}
-
-function RuntimeControlTooltip(props: { label: string; children: ReactNode }) {
-  return (
-    <Tooltip.Root>
-      <Tooltip.Trigger
-        delay={0}
-        closeOnClick
-        render={<span className="inline-flex shrink-0">{props.children}</span>}
-      />
-      <Tooltip.Portal>
-        <Tooltip.Positioner
-          side="top"
-          align="center"
-          sideOffset={6}
-          collisionPadding={8}
-          className="z-[9999]"
-        >
-          <Tooltip.Popup className="max-w-64 rounded-xl border border-border/60 bg-popover px-3 py-2 text-xs font-medium leading-4 text-popover-foreground shadow-lg outline-hidden data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95">
-            {props.label}
-          </Tooltip.Popup>
-        </Tooltip.Positioner>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  );
 }
 
 function useComposerUploadedImagePreview(

@@ -597,11 +597,14 @@ test("a status-only live tail (idle manual compaction) closes without a stranded
   const model = createTranscriptRowModel();
   const history = [userItem("u1"), assistantItem("a1", [round("r1", "reply")])];
 
-  // 手动压缩：TranscriptList 以 isCompactionRunning 激活 live tail，但 live
-  // store 只有 toolStatus——live 行是纯状态行（CompactingText），没有内容块。
+  // 手动压缩空闲态：TranscriptList 以 isCompactionRunning 激活 live tail（不置
+  // isSending，这正是发布出去的真实状态形状），经 LiveTailInput.isCompactionRunning
+  // 走可见性 gate；live store 只有 toolStatus——live 行是纯状态行（CompactingText），
+  // 没有内容块。
   const compacting = model.build(history, {
     ...idleLive,
-    isSending: true,
+    isSending: false,
+    isCompactionRunning: true,
     toolStatus: "正在压缩上下文…",
   });
   const compactingTail = compacting.rows.at(-1);
@@ -633,3 +636,72 @@ test("a status-only live tail (idle manual compaction) closes without a stranded
   const stable = model.build(compactedHistory, idleLive);
   assert.equal(stable.rows.length, 1);
 });
+
+test("a cancelled run's abort-notice twin is adopted by the live turn (no remount)", () => {
+  const model = createTranscriptRowModel();
+  const history = [userItem("u1")];
+
+  // 被取消的 run：内容在取消瞬间尚未成块（这里以纯状态 live tail 模拟），
+  // live tail 没有任何可见 block 单元——producedContent 为 false。
+  const streaming = model.build(history, {
+    ...idleLive,
+    isSending: true,
+    toolStatus: "…",
+  });
+  assert.equal(blockRows(streaming).length, 0);
+  const liveActivity = streaming.rows.at(-1);
+  assert.equal(liveActivity.kind, "assistant-activity");
+  const liveTurnKey = liveActivity.replyKey;
+  assert.match(liveTurnKey, /^live-turn-/);
+
+  // 取消落定：中止提示 assistant 项持久化为孪生行（有真实文本内容）。
+  const settledHistory = [userItem("u1"), assistantItem("a1", [round("r1", "partial final")])];
+  const settled = model.build(settledHistory, idleLive);
+
+  // 孪生行必须被同一 live turn 领养：以 streaming renderMode 渲染、包在一个
+  // activity 行里、key 沿用 live turn 的 replyKey（零 remount），而不是以新的
+  // static key 重挂载。
+  assert.equal(settled.liveStartIndex, -1);
+  const settledActivity = settled.rows.find((row) => row.kind === "assistant-activity");
+  assert.ok(settledActivity, "the abort-notice twin must be adopted into a streaming activity row");
+  assert.equal(settledActivity.replyKey, liveTurnKey);
+  const twinBlocks = blockRows(settled);
+  assert.equal(twinBlocks.length, 1);
+  assert.equal(twinBlocks[0].renderMode, "streaming");
+  assert.ok(twinBlocks[0].key.startsWith(liveTurnKey));
+});
+
+test("a Task-only run's twin (all blocks filtered) is adopted by the live turn (no remount)", () => {
+  const model = createTranscriptRowModel();
+  const taskTool = {
+    kind: "tool",
+    item: { toolCall: { type: "toolCall", id: "task-1", name: "TaskCreate", arguments: {} } },
+  };
+  const history = [userItem("u1")];
+
+  // 仅输出 Task 工具的 run：块被 isVisibleGroupedBlock 全部过滤，live tail 没有
+  // 任何可见 block 单元（只剩状态行）——producedContent 为 false。
+  const streaming = model.build(history, {
+    ...idleLive,
+    isSending: true,
+    liveRounds: [{ round: 1, key: "r1", blocks: [taskTool], runningToolCallIds: [], thinkingOpen: false }],
+  });
+  assert.equal(blockRows(streaming).length, 0);
+  const liveTurnKey = streaming.rows.at(-1).replyKey;
+  assert.match(liveTurnKey, /^live-turn-/);
+
+  // 落定：任务列表更新的 assistant 项持久化为孪生行（块同样被过滤）。孪生行必须
+  // 被 live turn 领养 → 渲染成一个 streaming activity 行、replyKey 沿用 live turn，
+  // 而不是以新的 static key 重挂载。
+  const settledHistory = [
+    userItem("u1"),
+    assistantItem("a1", [{ round: 1, key: "r1", blocks: [taskTool] }]),
+  ];
+  const settled = model.build(settledHistory, idleLive);
+  assert.equal(settled.liveStartIndex, -1);
+  const settledActivity = settled.rows.find((row) => row.kind === "assistant-activity");
+  assert.ok(settledActivity, "the Task-only twin must be adopted into a streaming activity row");
+  assert.equal(settledActivity.replyKey, liveTurnKey);
+  assert.ok(settledActivity.units.every((unit) => unit.renderMode === "streaming"));
+});
+

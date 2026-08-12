@@ -886,10 +886,13 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
 
       // WebUI 用量环触发的手动压缩：按目标 conversationId 装载独立 runtime，
       // 不要求桌面当前正显示该会话；运行中与单飞校验仍按目标会话隔离。
-      // 受理即回包（Rust relay 30s 超时 < 压缩耗时），压缩本身 fire-and-forget；
-      // 进度走 tool_status_is_compaction，终态走 operationId 关联事件。本 effect 闭包
-      // 是 []-dep，校验只读恒新的 ref；压缩中等细校验由 manualCompactActionRef
-      // 指向的最新闭包自行复核。
+      // 回包时序：不再"受理即回包"。手动压缩探针（无副作用）通过、真正开始
+      // 压缩时经 onAccepted 同步回 accepted:true；探针拒绝/前置抛错则据返回值
+      // 同步回 accepted:false + message（WebUI 已在 !accepted 时展示 message）。
+      // 只有真正开始压缩才会后续经 operationId 关联终态事件。Rust relay 30s
+      // 超时 >> 探针耗时（纯 token 计数，无 LLM 调用），安全。本 effect 闭包是
+      // []-dep，校验只读恒新的 ref；细校验由 manualCompactActionRef 指向的最新
+      // 闭包自行复核。
       if (action === "compact_now") {
         if (isConversationRunning(conversationId)) {
           fail("conversation is running", "busy");
@@ -902,7 +905,9 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
           fail("compaction already in progress", "compacting");
           return;
         }
-        let operationId = requestId;
+        // operationId 严格化：缺失或非空字符串解析失败直接拒绝。回退到 requestId
+        // 会产生 WebUI 从未登记的 operationId，终态永不匹配、挂满 5 分钟超时。
+        let operationId = "";
         if (request.requestJson?.trim()) {
           try {
             const payload = JSON.parse(request.requestJson) as { operationId?: unknown };
@@ -914,10 +919,37 @@ export function useChatTurnQueue(params: UseChatTurnQueueParams) {
             return;
           }
         }
-        respond(requestId, { accepted: true });
-        void manualCompactActionRef.current({ conversationId, operationId }).catch((error) => {
-          console.warn("manual compaction relayed from WebUI failed", error);
-        });
+        if (!operationId) {
+          fail("manual compaction requires operationId", "invalid_payload");
+          return;
+        }
+        const codeFor = (status: ManualCompactionResult["status"]) =>
+          status === "busy" ? "busy" : status === "skipped" ? "skipped" : "failed";
+        let responded = false;
+        const respondAccepted = () => {
+          if (responded) return;
+          responded = true;
+          respond(requestId, { accepted: true });
+        };
+        void manualCompactActionRef.current({
+          conversationId,
+          operationId,
+          onAccepted: respondAccepted,
+        })
+          .then((result) => {
+            // 已受理即真正开始压缩，终态改经 operationId 事件；未受理说明探针
+            // 拒绝，此处据返回值同步回包。
+            if (responded) return;
+            responded = true;
+            fail(result.message || "manual compaction declined", codeFor(result.status));
+          })
+          .catch((error) => {
+            if (!responded) {
+              responded = true;
+              fail(String(error), "failed");
+            }
+            console.warn("manual compaction relayed from WebUI failed", error);
+          });
         return;
       }
 

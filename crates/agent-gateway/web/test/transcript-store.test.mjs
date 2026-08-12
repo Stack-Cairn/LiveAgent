@@ -112,6 +112,94 @@ test("manual compaction terminal events retain status and stay conversation-scop
   assert.equal(otherStore.getSnapshot().manualCompactionResult, null);
 });
 
+test("manual compaction terminal frames tolerate malformed payloads (defect #1)", () => {
+  const store = createTranscriptStore();
+  // 唯一直读载荷形状的分支必须防御式解构：可靠 ingress journal 会重放本帧，缺
+  // 字段/畸形帧一旦抛错会在每次重订阅时复现。以下畸形帧全部丢弃且绝不抛错。
+  assert.doesNotThrow(() => {
+    // 无 operationId。
+    store.applyEvent({ type: "manual_compaction_result", conversation_id: "conv-1", seq: 1 });
+    // operationId 非字符串。
+    store.applyEvent({
+      type: "manual_compaction_result",
+      conversation_id: "conv-1",
+      seq: 2,
+      operationId: 123,
+      status: "failed",
+    });
+    // status 不在白名单。
+    store.applyEvent({
+      type: "manual_compaction_result",
+      conversation_id: "conv-1",
+      seq: 3,
+      operationId: "op-bogus-status",
+      status: "bogus",
+    });
+    // operationId 仅空白。
+    store.applyEvent({
+      type: "manual_compaction_result",
+      conversation_id: "conv-1",
+      seq: 4,
+      operationId: "   ",
+      status: "failed",
+    });
+    store.flush();
+  });
+  assert.equal(store.getSnapshot().manualCompactionResult, null);
+
+  // 合法帧仍正常受理；message 非字符串降级为空串。
+  store.applyEvent({
+    type: "manual_compaction_result",
+    conversation_id: "conv-1",
+    seq: 5,
+    operationId: "op-ok",
+    status: "failed",
+    message: 42,
+  });
+  store.flush();
+  assert.deepEqual(store.getSnapshot().manualCompactionResult, {
+    operationId: "op-ok",
+    status: "failed",
+    message: "",
+  });
+});
+
+test("assistant meta merge never wipes an existing anchor with a later own-undefined key (defect #2)", () => {
+  const store = createTranscriptStore();
+  store.applyEvent(userMessage("run-1", 1, "hello"));
+  store.applyEvent(runStarted("run-1", 2));
+  // 首帧携带 contextUsageTokens 锚点。
+  store.applyEvent({
+    type: "token",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 3,
+    round: 0,
+    text: "answer ",
+    contextUsageTokens: 150_000,
+  });
+  store.flush();
+
+  // 同轮后续帧带其他 meta 字段但不带 contextUsageTokens：旧代码会用 own-undefined
+  // 键把锚点抹掉；修复后锚点保留，新字段并入。
+  store.applyEvent({
+    type: "token",
+    conversation_id: "conv-1",
+    run_id: "run-1",
+    seq: 4,
+    round: 0,
+    text: "more",
+    model: "claude-sonnet",
+  });
+  store.flush();
+
+  const snapshot = store.getSnapshot();
+  const assistantRow = allRows(snapshot).find((row) => row.kind === "assistant");
+  assert.ok(assistantRow, "expected an assistant row");
+  assert.equal(assistantRow.rounds[0].meta.contextUsageTokens, 150_000);
+  assert.equal(assistantRow.rounds[0].meta.model, "claude-sonnet");
+});
+
 test("run lifecycle: reply renders in the live flow and folds at the next run_started", () => {
   const store = createTranscriptStore();
   store.applyEvent(userMessage("run-1", 1, "hello"));

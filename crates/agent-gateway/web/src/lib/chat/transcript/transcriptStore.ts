@@ -1024,12 +1024,27 @@ export function createTranscriptStore(options?: {
         return;
       }
       case "manual_compaction_result": {
-        const operationId = event.operationId.trim();
+        // 本分支是 switch 里唯一直读载荷形状的地方，必须与相邻 case 一样防御式
+        // 解构：可靠 ingress journal 会重放本帧，缺字段的畸形帧若抛 TypeError 会
+        // 在每次重订阅时复现并打断整条应用链。operationId 非字符串/空、status 不在
+        // 白名单内、message 非字符串——一律降级（丢帧或空串），永不抛错。
+        const rawOperationId = (event as { operationId?: unknown }).operationId;
+        const operationId = typeof rawOperationId === "string" ? rawOperationId.trim() : "";
         if (!operationId) return;
+        const rawStatus = (event as { status?: unknown }).status;
+        if (
+          rawStatus !== "compacted" &&
+          rawStatus !== "failed" &&
+          rawStatus !== "busy" &&
+          rawStatus !== "skipped"
+        ) {
+          return;
+        }
+        const rawMessage = (event as { message?: unknown }).message;
         manualCompactionResult = {
           operationId,
-          status: event.status,
-          message: event.message?.trim() ?? "",
+          status: rawStatus,
+          message: typeof rawMessage === "string" ? rawMessage.trim() : "",
         };
         schedule(true);
         return;

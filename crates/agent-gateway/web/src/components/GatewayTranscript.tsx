@@ -200,10 +200,16 @@ function CheckpointCard(props: {
   readOnly?: boolean;
 }) {
   const { item, readOnly = false } = props;
+  const { t } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const isExpanded = expanded;
   const messageCountLabel =
-    item.coveredMessageCount > 0 ? `${item.coveredMessageCount} 条消息` : "已压缩";
+    item.coveredMessageCount > 0
+      ? t("chat.contextCheckpoint.messageCount").replace(
+          "{count}",
+          String(item.coveredMessageCount),
+        )
+      : t("chat.contextCheckpoint.compressed");
   const headerContent = (
     <>
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-black/[0.04] dark:bg-white/[0.08]">
@@ -213,7 +219,7 @@ function CheckpointCard(props: {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[calc(13px*var(--zone-font-scale,1))] font-medium text-foreground/90">
-            上下文检查点
+            {t("chat.contextCheckpoint.title")}
           </span>
           <span className="inline-flex items-center rounded-md bg-black/[0.05] px-1.5 py-[1px] text-[calc(11px*var(--zone-font-scale,1))] font-normal tabular-nums text-muted-foreground dark:bg-white/[0.08]">
             {messageCountLabel}

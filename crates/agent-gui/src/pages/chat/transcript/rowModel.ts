@@ -114,6 +114,9 @@ export type TranscriptRowsSnapshot = {
 
 export type LiveTailInput = LiveTranscriptState & {
   isSending: boolean;
+  // 手动压缩空闲态：live store 只置 running、不置 isSending，但仍要显示「正在
+  // 压缩」状态行。该标记只并入 live tail 可见性 gate，不改变其他 isSending 语义。
+  isCompactionRunning?: boolean;
 };
 
 function buildReplyText(rounds: (UiRound | LiveRound)[]): string {
@@ -575,7 +578,8 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
     historyItems: RenderTimelineItem[],
     live: LiveTailInput,
   ): TranscriptRowsSnapshot => {
-    const liveTailVisible = live.isSending && !live.isSettled;
+    const liveTailVisible =
+      (live.isSending || live.isCompactionRunning === true) && !live.isSettled;
     const isInitialBuild = !hasBuilt;
     hasBuilt = true;
 
@@ -601,22 +605,28 @@ export function createTranscriptRowModel(options?: TranscriptRowModelOptions): T
         settlingUnits: null,
       };
     } else if (!liveTailVisible && activeTurn) {
-      // A live tail that never produced content (only the status/footer row —
-      // e.g. an idle manual compaction, or a run cancelled before any output)
-      // has no history twin to adopt; keeping it in the settle handoff would
-      // strand a frozen status row at the bottom of the transcript.
-      const producedContent = activeTurn.lastLiveUnits.some((row) => row.unit.kind === "block");
-      if (!producedContent) {
+      // 落定交接：丢弃 activeTurn 的判据是「历史自 historyLenAtStart 起有没有
+      // 新增的、尚未被认领的 assistant 孪生项」——adoptSettledTwin 的返回值正是
+      // 这个判据（认领成功 ⇔ 窗口内有可领养孪生项）。不能改用「live 单元里有没有
+      // 可见 block」：存在零可见 block 却有真实孪生行的 turn——被取消的 run 会
+      // 持久化中止提示 assistant 项；仅输出 Task 工具的 run 其块被
+      // isVisibleGroupedBlock 全部过滤。这类 turn 若被误判丢弃，孪生行永不被领养
+      // → 以全新 key 重挂载（违反零 remount），persist 滞后时更会漏进下一个 run 的
+      // historyLenAtStart 窗口被错位认领。
+      const adopted = adoptSettledTwin(historyItems, activeTurn);
+      if (adopted) {
         activeTurn = null;
+      } else if (activeTurn.lastLiveUnits.some((row) => row.unit.kind === "block")) {
+        // 产出过内容 ⟹ 真实回复必将持久化：孪生行尚未落库（persist 滞后）时
+        // 登记 pendingSettle，待其落库后按同一 replyKey 认领（零 remount）。
+        pendingSettle = {
+          replyKey: activeTurn.replyKey,
+          historyLenAtStart: activeTurn.historyLenAtStart,
+        };
       } else {
-        const adopted = adoptSettledTwin(historyItems, activeTurn);
-        if (!adopted) {
-          pendingSettle = {
-            replyKey: activeTurn.replyKey,
-            historyLenAtStart: activeTurn.historyLenAtStart,
-          };
-        }
-        if (adopted) activeTurn = null;
+        // 既没产出内容、历史也没有可领养孪生项（空闲手动压缩落定成检查点卡片、
+        // 或产出前即被取消的 run）→ 直接清掉，避免底部留下冻结的 settling 状态行。
+        activeTurn = null;
       }
     } else if (!liveTailVisible && pendingSettle) {
       if (adoptSettledTwin(historyItems, pendingSettle)) pendingSettle = null;

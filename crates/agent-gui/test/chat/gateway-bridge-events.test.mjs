@@ -214,6 +214,31 @@ test("gateway bridge emits correlated manual compaction terminal results", () =>
   ]);
 });
 
+test("gateway bridge manual compaction result swallows a rejected transport promise", async () => {
+  const rejection = new Error("ingress rejected");
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    warnings.push(args);
+  };
+  try {
+    const controller = createGatewayBridgeEventController({
+      conversationId: "conversation-1",
+      requestId: "request-1",
+      enabled: true,
+      sendEvent: () => Promise.reject(rejection),
+    });
+    // The terminal result must not surface the transport failure synchronously,
+    // and the discarded delivery promise must be caught (no unhandled rejection).
+    controller.queueManualCompactionResult("operation-1", "compacted");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0][1], rejection);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test("gateway bridge close blocks normal events but allows forced title updates", () => {
   const { controller, sent } = createController();
 

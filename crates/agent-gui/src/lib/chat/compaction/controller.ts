@@ -1,5 +1,9 @@
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
-import { canManualCompact, contextUsageRatio } from "@liveagent/ui/lib/chat/contextUsage";
+import {
+  canManualCompact,
+  contextUsageRatio,
+  positiveTokenCount,
+} from "@liveagent/ui/lib/chat/contextUsage";
 
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { ProviderId } from "../../settings";
@@ -90,10 +94,16 @@ export type CompactionTurnBinding = {
 export type CompactionDuringRunResult = {
   context: Context | null;
   shouldDisableProtection: boolean;
+  // 本次调用的显式结果通道。statusPhase 是控制器生命周期字段（跨操作残留、
+  // 决策拒绝时不 publish），任何调用方都不得用它反推单次调用的结果。
+  outcome: "compacted" | "skipped" | "failed";
+  // skipped 时携带决策拒绝原因；无 binding 的空跑没有决策、不带 reason。
+  reason?: CompactionDecisionReason;
 };
 
 export type ManualCompactionOutcome =
-  | { status: "compacted" | "failed" | "busy" }
+  | { status: "compacted" | "busy" }
+  | { status: "failed"; aborted?: boolean }
   | { status: "skipped"; reason: CompactionDecisionReason };
 
 export type ManualContextUsageSnapshot = {
@@ -170,6 +180,39 @@ export class CompactionController {
     if (persisted === false) {
       throw new Error("compaction checkpoint persistence failed");
     }
+  }
+
+  // 压缩成功后的统一收尾（pre-send 与 during-run 共用同一顺序不变量）：
+  // checkpoint 上下文估值 → 写回 summary stats → 持久化屏障 → 回滚快照失效 →
+  // apply 落地 → completed 终态 → checkpoint 入队。tools 必须与真实请求同参，
+  // 否则 contextTokensAfter 系统性少算工具重量；fixedTokens 用持久化的动态
+  // 开销校准估值（undefined 时 deriveContextTokens 内部回退 system+tools 估算）。
+  private async finalizeCheckpoint(params: {
+    binding: CompactionTurnBinding;
+    trigger: CompactionTrigger;
+    state: ConversationViewState;
+    newSegmentIndex: number;
+    tools?: Context["tools"];
+    buildOptions: ContextBuildOptions;
+    fixedTokens?: number;
+    // 在 persist 屏障之后、completed 终态之前同步执行的状态落地钩子。
+    apply: (checkpointState: ConversationViewState) => void;
+  }): Promise<{ checkpointState: ConversationViewState; checkpointTokens: number }> {
+    const checkpointContext = params.binding.buildPreparedContext(
+      params.state,
+      params.tools,
+      params.buildOptions,
+    );
+    const checkpointTokens = deriveContextTokens(checkpointContext, {
+      fixedTokens: params.fixedTokens,
+    });
+    const checkpointState = withActiveSummaryContextTokens(params.state, checkpointTokens);
+    await this.persistCheckpoint(params.binding, checkpointState);
+    this.rollbackSnapshot = null;
+    params.apply(checkpointState);
+    this.settleCompleted(params.trigger, params.newSegmentIndex);
+    params.binding.sinks.queueCheckpoint?.(checkpointState, checkpointTokens);
+    return { checkpointState, checkpointTokens };
   }
 
   beginRequest(context: Context, state: ConversationViewState) {
@@ -269,19 +312,20 @@ export class CompactionController {
         complete: binding.complete,
       });
 
-      const checkpointContext = binding.buildPreparedContext(
-        outcome.state,
-        params.tools,
+      // apply 在 finalizeCheckpoint 内同步执行，appliedState 在其返回前必已赋值。
+      let appliedState!: ConversationViewState;
+      await this.finalizeCheckpoint({
+        binding,
+        trigger: "pre-send",
+        state: outcome.state,
+        newSegmentIndex: outcome.newSegmentIndex,
+        tools: params.tools,
         buildOptions,
-      );
-      const checkpointTokens = deriveContextTokens(checkpointContext);
-      const checkpointState = withActiveSummaryContextTokens(outcome.state, checkpointTokens);
-      await this.persistCheckpoint(binding, checkpointState);
-      this.rollbackSnapshot = null;
-      const appliedState = presend.composeAppliedState(checkpointState);
-      binding.sinks.applyState?.(appliedState);
-      this.settleCompleted("pre-send", outcome.newSegmentIndex);
-      binding.sinks.queueCheckpoint?.(checkpointState, checkpointTokens);
+        apply: (checkpointState) => {
+          appliedState = presend.composeAppliedState(checkpointState);
+          binding.sinks.applyState?.(appliedState);
+        },
+      });
       this.notePostCompactionPressure(
         binding.buildPreparedContext(appliedState, params.tools, buildOptions),
         appliedState,
@@ -324,7 +368,7 @@ export class CompactionController {
   }): Promise<CompactionDuringRunResult> {
     const binding = this.binding;
     if (!binding) {
-      return { context: null, shouldDisableProtection: false };
+      return { context: null, shouldDisableProtection: false, outcome: "skipped" };
     }
     // 覆盖"mid-stream abort 后、summarizer 启动前"用户恰好点停止的间隙。
     if (binding.cancellation.userStop.signal.aborted) {
@@ -351,7 +395,10 @@ export class CompactionController {
 
     let workingState = params.state;
     let pruned: PruneConversationResult | null = null;
-    if (shouldPruneBeforeCompaction(this.pressure, now)) {
+    // manual（空闲触发）不做前置 prune：prune 是运行中泄压手段，空闲路径没有
+    // 后续 persist 兜底，落地未持久化的剪枝状态会造成内存/磁盘分叉；同时保证
+    // 执行路径与探针（同样不 prune）对同一状态做决策，消除两者分歧。
+    if (params.trigger !== "manual" && shouldPruneBeforeCompaction(this.pressure, now)) {
       const attempt = pruneConversationState(workingState, resolvePruneOptions(this.pressure));
       if (attempt.applied) {
         pruned = attempt;
@@ -364,20 +411,13 @@ export class CompactionController {
         ? params.budgetContext
         : binding.buildPreparedContext(workingState, params.tools, buildOptions);
     const manualFixedTokens = params.manualContextUsage?.fixedTokens;
-    this.ledger.rebase(
-      budgetContext,
-      typeof manualFixedTokens === "number" ? { fixedTokens: manualFixedTokens } : undefined,
-    );
+    // rebase 内部校验 fixedTokens（非法/undefined 回退估算），无需在调用点分叉。
+    this.ledger.rebase(budgetContext, { fixedTokens: manualFixedTokens });
     this.updateTurnMeta(workingState);
     // manual 是空闲时的从容压缩，走 optimization 口径；运行中触发保持 protection。
     const intent: CompactionIntent = params.trigger === "manual" ? "optimization" : "protection";
-    const snapshotTotalTokens = params.manualContextUsage?.totalTokens;
     const totalTokens =
-      typeof snapshotTotalTokens === "number" &&
-      Number.isFinite(snapshotTotalTokens) &&
-      snapshotTotalTokens > 0
-        ? Math.floor(snapshotTotalTokens)
-        : this.ledger.total();
+      positiveTokenCount(params.manualContextUsage?.totalTokens) ?? this.ledger.total();
     const decision =
       params.trigger === "manual"
         ? this.decideManual(totalTokens, now)
@@ -390,14 +430,23 @@ export class CompactionController {
         return {
           context: buildFallbackContext(pruned.state),
           shouldDisableProtection: false,
+          outcome: "skipped",
+          reason: decision.reason,
         };
       }
       return params.trigger === "mid-stream"
         ? {
             context: buildFallbackContext(workingState),
             shouldDisableProtection: true,
+            outcome: "skipped",
+            reason: decision.reason,
           }
-        : { context: null, shouldDisableProtection: false };
+        : {
+            context: null,
+            shouldDisableProtection: false,
+            outcome: "skipped",
+            reason: decision.reason,
+          };
     }
 
     this.rollbackSnapshot = { state: params.state, persistOnRollback: true };
@@ -419,21 +468,16 @@ export class CompactionController {
         complete: binding.complete,
       });
 
-      const checkpointContext = binding.buildPreparedContext(
-        outcome.state,
-        params.tools,
+      const { checkpointState } = await this.finalizeCheckpoint({
+        binding,
+        trigger: params.trigger,
+        state: outcome.state,
+        newSegmentIndex: outcome.newSegmentIndex,
+        tools: params.tools,
         buildOptions,
-      );
-      const checkpointTokens = deriveContextTokens(
-        checkpointContext,
-        typeof manualFixedTokens === "number" ? { fixedTokens: manualFixedTokens } : undefined,
-      );
-      const checkpointState = withActiveSummaryContextTokens(outcome.state, checkpointTokens);
-      await this.persistCheckpoint(binding, checkpointState);
-      this.rollbackSnapshot = null;
-      binding.sinks.applyStateMidRun?.(checkpointState);
-      this.settleCompleted(params.trigger, outcome.newSegmentIndex);
-      binding.sinks.queueCheckpoint?.(checkpointState, checkpointTokens);
+        fixedTokens: manualFixedTokens,
+        apply: (state) => binding.sinks.applyStateMidRun?.(state),
+      });
 
       const resumeMessage = createSyntheticContinueUserMessage(
         (outcome.checkpointMessage.timestamp ?? now) + 1,
@@ -452,22 +496,29 @@ export class CompactionController {
         decision.threshold,
         manualFixedTokens,
       );
-      return { context: resumeContext, shouldDisableProtection: false };
+      return { context: resumeContext, shouldDisableProtection: false, outcome: "compacted" };
     } catch (error) {
       if (this.isAbortOutcome(scope.controller.signal, error)) {
         throw error;
       }
       this.rollbackSnapshot = null;
-      const fallback =
-        pruned ?? pruneConversationState(workingState, resolvePruneOptions(this.pressure));
-      if (fallback.applied) {
-        binding.sinks.applyStateMidRun?.(fallback.state);
-        this.settleFailed(params.trigger, PRUNE_FALLBACK_NOTICE);
-        binding.sinks.setBridgeToolStatus?.(buildPruneFallbackStatus(fallback.prunedMessageCount));
-        return {
-          context: buildFallbackContext(fallback.state),
-          shouldDisableProtection: false,
-        };
+      // manual 面向空闲会话：没有后续轮次消费 fallback context，prune 结果也
+      // 不会被持久化（一旦 apply 即内存与磁盘分叉），失败时必须原样保留会话。
+      if (params.trigger !== "manual") {
+        const fallback =
+          pruned ?? pruneConversationState(workingState, resolvePruneOptions(this.pressure));
+        if (fallback.applied) {
+          binding.sinks.applyStateMidRun?.(fallback.state);
+          this.settleFailed(params.trigger, PRUNE_FALLBACK_NOTICE);
+          binding.sinks.setBridgeToolStatus?.(
+            buildPruneFallbackStatus(fallback.prunedMessageCount),
+          );
+          return {
+            context: buildFallbackContext(fallback.state),
+            shouldDisableProtection: false,
+            outcome: "failed",
+          };
+        }
       }
       this.settleFailed(
         params.trigger,
@@ -477,8 +528,9 @@ export class CompactionController {
         ? {
             context: buildFallbackContext(workingState),
             shouldDisableProtection: true,
+            outcome: "failed",
           }
-        : { context: null, shouldDisableProtection: false };
+        : { context: null, shouldDisableProtection: false, outcome: "failed" };
     } finally {
       scope.release();
       this.inFlight = false;
@@ -496,53 +548,68 @@ export class CompactionController {
     binding: Omit<CompactionTurnBinding, "presend">,
     state: ConversationViewState,
     contextUsage?: ManualContextUsageSnapshot,
+    options?: {
+      // 与真实请求同参的工具集：checkpoint 估值缺了工具重量会系统性偏低。
+      tools?: Context["tools"];
+      // 探针通过、真正开始压缩前同步调用恰好一次（skip / busy 不触发）。
+      onProceed?: () => void;
+    },
   ): Promise<ManualCompactionOutcome> {
     if (this.binding || this.inFlight) return { status: "busy" };
     this.bindTurn(binding);
     try {
-      const probe = this.probeManualDecision(binding, state, contextUsage);
+      const probe = this.probeManualDecision(binding, state, contextUsage, options?.tools);
       if (!probe.shouldCompact) {
-        return probe.reason === "in-flight"
-          ? { status: "busy" }
-          : { status: "skipped", reason: probe.reason };
+        // in-flight 已被入口 busy 检查排除（bindTurn 刚复位 inFlight），探针
+        // 拒绝只剩 disabled / no-active-messages / below-manual-threshold 等硬守卫。
+        return { status: "skipped", reason: probe.reason };
       }
-      await this.compactDuringRun({
+      options?.onProceed?.();
+      const result = await this.compactDuringRun({
         trigger: "manual",
         state,
+        tools: options?.tools,
         manualContextUsage: contextUsage,
       });
-      // settle* 是 compactDuringRun 的必经终态：completed 才算真正生成了
-      // checkpoint（prune 降级路径 status 为 failed，UI 文案已说明降级详情）。
-      return { status: this.statusPhase === "completed" ? "compacted" : "failed" };
+      // 只信本次调用的显式 outcome：statusPhase 可能残留上一次压缩的终态，
+      // 而内层二次裁决 skip 时不 publish 任何状态。
+      switch (result.outcome) {
+        case "compacted":
+          return { status: "compacted" };
+        case "skipped":
+          // binding 恒存在，内层 skip 必带决策 reason；回退仅为类型完备。
+          return { status: "skipped", reason: result.reason ?? "disabled" };
+        default:
+          return { status: "failed" };
+      }
     } catch {
       // 中止或意外异常：走统一善后（回滚快照 / running 态复位 idle）。
       await this.handleTurnAbort();
-      return { status: "failed" };
+      return binding.cancellation.userStop.signal.aborted
+        ? { status: "failed", aborted: true }
+        : { status: "failed" };
     } finally {
       this.unbindTurn();
     }
   }
 
-  // 手动压缩的前置探针：不产生副作用地跑一次与执行路径相同的决策，把手动
-  // 50% 门槛及 disabled 等硬守卫挡在 publishRunning 之前。
+  // 手动压缩的前置探针：跑一次与执行路径同口径的决策，把手动 50% 门槛及
+  // disabled 等硬守卫挡在 publishRunning 之前。读数用局部临时账本计算——
+  // 共享账本是用量环的读数真源，被拒的探测不得在其上留下任何残留。
   private probeManualDecision(
     binding: Omit<CompactionTurnBinding, "presend">,
     state: ConversationViewState,
     contextUsage?: ManualContextUsageSnapshot,
+    tools?: Context["tools"],
   ) {
-    const fixedTokens = contextUsage?.fixedTokens;
-    this.ledger.rebase(
-      binding.buildPreparedContext(state),
-      typeof fixedTokens === "number" ? { fixedTokens } : undefined,
-    );
+    const probeLedger = new TokenLedger();
+    probeLedger.rebase(binding.buildPreparedContext(state, tools), {
+      fixedTokens: contextUsage?.fixedTokens,
+    });
+    // turnMeta 是按 state 的幂等派生（decide 的硬守卫需要），更新无残留风险。
     this.updateTurnMeta(state);
-    const snapshotTotalTokens = contextUsage?.totalTokens;
     return this.decideManual(
-      typeof snapshotTotalTokens === "number" &&
-        Number.isFinite(snapshotTotalTokens) &&
-        snapshotTotalTokens > 0
-        ? Math.floor(snapshotTotalTokens)
-        : this.ledger.total(),
+      positiveTokenCount(contextUsage?.totalTokens) ?? probeLedger.total(),
       Date.now(),
     );
   }
@@ -627,7 +694,7 @@ export class CompactionController {
     threshold: number,
     fixedTokens?: number,
   ) {
-    this.ledger.rebase(contextAfter, typeof fixedTokens === "number" ? { fixedTokens } : undefined);
+    this.ledger.rebase(contextAfter, { fixedTokens });
     this.updateTurnMeta(stateAfter);
     this.pressure = notePressureAfterCompaction(this.pressure, {
       totalTokensAfter: this.ledger.total(),

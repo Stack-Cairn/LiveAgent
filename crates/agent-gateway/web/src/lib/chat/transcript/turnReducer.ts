@@ -8,6 +8,7 @@ import {
 import { toolArgsProgress } from "@/lib/chat/toolPreview";
 import { summarizeToolCall } from "@/lib/chat/uiMessages";
 import {
+  type AssistantMeta,
   buildAssistantMeta,
   buildHostedSearchEntry,
   buildToolCallEntry,
@@ -28,6 +29,20 @@ import {
 import type { ChatEvent } from "@/lib/gatewayTypes";
 
 import type { Turn, TurnPhase } from "./types";
+
+// 合并 assistant meta：只用已定义字段覆盖，值为 undefined 的键一律跳过。
+// buildAssistantMeta 现已增量构建（不再物化 own-undefined 键），这里再加一道
+// 防御，保证未来任何生产者送来的 meta 都不会用 undefined 抹掉此前事件送达的
+// contextUsageTokens/usageTotalTokens 等锚点（issue #359 缺陷 #2）。
+function mergeAssistantMeta(base: AssistantMeta | undefined, patch: AssistantMeta): AssistantMeta {
+  const merged: AssistantMeta = { ...(base ?? {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
+  }
+  return merged;
+}
 
 // Applies one assistant-side stream event to a turn. Every merge/dedup scan
 // is bounded by the turn (and, within it, the segment since the last
@@ -359,7 +374,7 @@ function applyTokenEvent(turn: Turn, event: Extract<ChatEvent, { type: "token" }
       ...target,
       text: target.text + text,
       round: round ?? target.round,
-      meta: meta ? { ...(target.meta ?? {}), ...meta } : target.meta,
+      meta: meta ? mergeAssistantMeta(target.meta, meta) : target.meta,
     };
     return withEntries(turn, enrichSegmentHostedSearches(next));
   }

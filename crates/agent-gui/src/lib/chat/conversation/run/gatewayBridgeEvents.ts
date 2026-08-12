@@ -213,13 +213,21 @@ export function createGatewayBridgeEventController(
       });
     },
     queueManualCompactionResult(operationId, status, message) {
-      queueEvent({
+      // 终态结果事件经可靠 ingress 送达；queueEvent 可能返回投递 Promise，
+      // 丢弃它会让 ingress 失败无人捕获。对 Promise 显式 catch，同步返回值
+      // （enabled=false 或同步 sink）自然跳过。
+      const sendResult = queueEvent({
         type: "manual_compaction_result",
         operationId: operationId.trim(),
         status,
         ...(message?.trim() ? { message: message.trim() } : {}),
         conversation_id: params.conversationId,
       });
+      if (sendResult && typeof (sendResult as Promise<void>).then === "function") {
+        (sendResult as Promise<void>).catch((error) => {
+          console.warn("manual compaction result event failed", error);
+        });
+      }
     },
     emitError(message: string, conversationIdOverride?: string) {
       queueEvent({

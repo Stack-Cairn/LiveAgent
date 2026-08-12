@@ -183,29 +183,58 @@ test("persisted usage anchors adjust when current system and tools fixed tokens 
   assert.equal(ledger.snapshot().hasFixedTokenAnchor, true);
 });
 
-test("legacy usage without fixed metadata conservatively includes the current full estimate", () => {
+test("legacy usage without fixed metadata trusts the observed total over estimates", () => {
   const ledger = new TokenLedger();
   const legacyObserved = assistant("answer", usage(1_000));
+  // PR 之前持久化的会话：有真实 usage 但无 liveAgentContextUsage 印章。
+  // 估算口径有意高估（序列化字符 / CJK 密度），绝不允许覆盖真实读数——
+  // 否则环读数会超 100% 并触发自动压缩循环。
   ledger.rebase({
     systemPrompt: "s".repeat(400_000),
     tools: [{ name: "LargeTool", description: "d".repeat(400_000), parameters: {} }],
     messages: [legacyObserved],
   });
 
-  assert.ok(ledger.total() > 100_000);
+  assert.equal(ledger.total(), 1_000);
   assert.equal(ledger.snapshot().hasObservedUsage, true);
   assert.equal(ledger.snapshot().hasFixedTokenAnchor, false);
 });
 
-test("assistant messages without provider usage receive a persisted context snapshot", () => {
+test("real usage anchors are never overridden by the full-history estimate", () => {
+  const ledger = new TokenLedger();
+  // 100 万字符的工具输出估算约 25 万 token，真实 usage 只有 5000：读数恒信 usage。
+  ledger.rebase({
+    systemPrompt: "sys",
+    messages: [toolResult("x".repeat(1_000_000)), assistant("done", usage(5_000))],
+  });
+
+  assert.equal(ledger.total(), 5_000);
+});
+
+test("assistant messages without provider usage are never stamped with estimates", () => {
   const ledger = new TokenLedger();
   const noUsage = assistant("answer", usage(0));
   ledger.rebase({ systemPrompt: "s".repeat(400), messages: [user("question")] });
+  const totalBefore = ledger.total();
   ledger.addMessages([noUsage]);
 
-  assert.equal(getMessageObservedTokens(noUsage), ledger.total());
-  assert.ok(noUsage.liveAgentContextUsage.totalTokens > 0);
-  assert.equal(noUsage.liveAgentContextUsage.fixedTokens, 100);
+  // 印章随会话持久化且读取侧优先于 usage：估算一旦盖章会永久遮蔽后到的
+  // 真实读数。无 usage 的消息只走 trailing 估算，不产生印章。
+  assert.equal(noUsage.liveAgentContextUsage, undefined);
+  assert.equal(getMessageObservedTokens(noUsage), undefined);
+  assert.equal(ledger.total(), totalBefore + estimateMessageTokens(noUsage));
+});
+
+test("assistant messages with real usage are stamped as fixed-token anchors", () => {
+  const ledger = new TokenLedger();
+  ledger.rebase({ systemPrompt: "s".repeat(400), messages: [user("question")] });
+  const observed = assistant("answer", usage(5_000));
+  ledger.addMessages([observed]);
+
+  // 印章只记录 usage 派生的权威值 + 当时的 fixed 开销（供跨端 rebase 补偿）。
+  assert.deepEqual(observed.liveAgentContextUsage, { totalTokens: 5_000, fixedTokens: 100 });
+  assert.equal(ledger.total(), 5_000);
+  assert.equal(ledger.snapshot().hasFixedTokenAnchor, true);
 });
 
 test("rebase without any usage falls back to fixed + estimates", () => {

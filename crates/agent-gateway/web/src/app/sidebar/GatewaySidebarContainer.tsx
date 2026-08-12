@@ -15,6 +15,7 @@ import {
   sidebarShallowEqual,
 } from "@liveagent/ui/lib/sidebar/selectors";
 import type { SidebarSnapshot, SidebarStore } from "@liveagent/ui/lib/sidebar/store";
+import type { TransientSidebarRunningConversation } from "@liveagent/ui/lib/sidebar/transientActivity";
 import { mergeTransientSidebarRunningActivity } from "@liveagent/ui/lib/sidebar/transientActivity";
 import type { SidebarErrorCode } from "@liveagent/ui/lib/sidebar/types";
 import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector";
@@ -74,7 +75,8 @@ function useStableCallback<Args extends unknown[], Return>(
 
 export type GatewaySidebarContainerProps = {
   store: SidebarStore;
-  transientRunningConversation?: { conversationId: string; workdir: string } | null;
+  // 手动压缩 pending 已按会话 id 键化，多个会话可同时“转圈”（issue #359 缺陷 #3）。
+  transientRunningConversations?: readonly TransientSidebarRunningConversation[];
   currentConversationId: string;
   isOpen: boolean;
   fontScale?: number;
@@ -162,11 +164,11 @@ export function GatewaySidebarContainer(props: GatewaySidebarContainerProps) {
       mergeTransientSidebarRunningActivity(
         runningConversationIds,
         projectActivityInputs.runningWorkdirPathKeys,
-        props.transientRunningConversation,
+        props.transientRunningConversations,
       ),
     [
       projectActivityInputs.runningWorkdirPathKeys,
-      props.transientRunningConversation,
+      props.transientRunningConversations,
       runningConversationIds,
     ],
   );

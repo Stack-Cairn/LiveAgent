@@ -124,9 +124,13 @@ export function buildContextUsageScanItems(
   return historyItems;
 }
 
-const MESSAGE_ENVELOPE_TOKENS = 8;
+// 逐消息估算只统计正文字符，补一个小常量近似 JSON 包裹（role/键名/引号）的
+// 开销。两端（GUI TokenLedger 与 WebUI 倒扫）共用此口径，调参只改这里。
+export const MESSAGE_ENVELOPE_TOKENS = 8;
 
-function unknownTokenUnits(value: unknown): number {
+// 非文本值的估算口径（字符串直估，其余 JSON 序列化后估）。GUI TokenLedger
+// 与 WebUI 倒扫共用，保证两端对同一负载的估算一致。
+export function stringifiedTokenUnits(value: unknown): number {
   if (typeof value === "string") return estimateTextTokenUnits(value);
   if (value == null) return 0;
   try {
@@ -141,10 +145,18 @@ function messageTokensFromUnits(units: number): number {
   return Math.ceil(Math.max(0, units)) + MESSAGE_ENVELOPE_TOKENS;
 }
 
+// 两端 store 都按不可变更新替换工具结果对象，估算结果可按对象身份缓存；
+// 流式期间倒扫逐帧执行，没有这层缓存会对大工具结果每帧重复 JSON.stringify。
+const toolResultTokenCache = new WeakMap<object, number>();
+
 function estimateToolResultTokens(result: { content?: unknown; details?: unknown }): number {
-  return messageTokensFromUnits(
-    unknownTokenUnits(result.content) + unknownTokenUnits(result.details),
+  const cached = toolResultTokenCache.get(result);
+  if (cached !== undefined) return cached;
+  const tokens = messageTokensFromUnits(
+    stringifiedTokenUnits(result.content) + stringifiedTokenUnits(result.details),
   );
+  toolResultTokenCache.set(result, tokens);
+  return tokens;
 }
 
 function estimateRoundTokens(
@@ -164,7 +176,8 @@ function estimateRoundTokens(
           : undefined;
       const toolCall = item?.toolCall;
       if (!onlyToolResults && toolCall) {
-        assistantUnits += unknownTokenUnits(toolCall.name) + unknownTokenUnits(toolCall.arguments);
+        assistantUnits +=
+          stringifiedTokenUnits(toolCall.name) + stringifiedTokenUnits(toolCall.arguments);
       }
       const toolResult = item?.toolResult;
       if (toolResult) toolResultTokens += estimateToolResultTokens(toolResult);
@@ -174,14 +187,15 @@ function estimateRoundTokens(
       assistantUnits +=
         typeof block.text === "string"
           ? estimateTextTokenUnits(block.text)
-          : unknownTokenUnits(block);
+          : stringifiedTokenUnits(block);
     }
   }
   if (onlyToolResults) return toolResultTokens;
   return (assistantUnits > 0 ? messageTokensFromUnits(assistantUnits) : 0) + toolResultTokens;
 }
 
-function positiveTokenCount(value: unknown): number | undefined {
+// "有效 token 计数"的两端单一校验口径（floor 且必须是有限正数）。
+export function positiveTokenCount(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value > 0
     ? Math.floor(value)
     : undefined;

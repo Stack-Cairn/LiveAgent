@@ -1,31 +1,28 @@
 import type { Context, Message, Usage } from "@earendil-works/pi-ai";
 
-import { estimateTextTokens, estimateTextTokenUnits } from "@liveagent/ui/lib/chat/contextUsage";
+import {
+  estimateTextTokens,
+  estimateTextTokenUnits,
+  MESSAGE_ENVELOPE_TOKENS,
+  stringifiedTokenUnits,
+} from "@liveagent/ui/lib/chat/contextUsage";
 import { isCompactionAssistantMessage } from "../conversation/conversationState";
 import { readMessageContextUsage, writeAssistantContextUsage } from "./contextUsageMetadata";
 
-// CJK 感知的文本估算已迁入共享层（用量环的检查点估值复用同一口径）；
-// 这里 re-export 保持既有调用方与测试不动。
+// CJK 感知的文本估算、消息包裹常量与非文本值序列化估算全部取自共享层
+//（用量环的检查点估值与 WebUI 倒扫复用同一口径，调参只改共享层）；
+// 这里 re-export 文本估算保持既有调用方与测试不动。
 export { estimateTextTokens, estimateTextTokenUnits };
 
-// 逐消息估算只统计正文字符，补一个小常量近似 JSON 包裹（role/键名/引号）的开销。
-const MESSAGE_ENVELOPE_TOKENS = 8;
+// liveAgentContextUsage 印章的不变量：totalTokens 只记录 usage 派生的权威值
+//（fixedTokens 随印章携带，供跨端 rebase 补偿 system/tools 开销变化），绝不写
+// 估算——印章随会话持久化且读取侧优先于 usage，一旦写入估算便永久遮蔽后到的
+// 真实读数，且没有任何纠正路径。
 
 // 消息在本代码库中是不可变值对象（状态变更只新建数组），因此估算结果可跨
 // state/segment/临时 state 按对象身份缓存，热路径不再重复序列化。
 const messageTokenCache = new WeakMap<object, number>();
 const toolsTokenCache = new WeakMap<object, number>();
-
-function stringifiedTokenUnits(value: unknown): number {
-  if (typeof value === "string") return estimateTextTokenUnits(value);
-  if (value == null) return 0;
-  try {
-    const serialized = JSON.stringify(value);
-    return serialized ? estimateTextTokenUnits(serialized) : 0;
-  } catch {
-    return estimateTextTokenUnits(String(value));
-  }
-}
 
 function estimateMessageTokenUnits(message: Message): number {
   let units = 0;
@@ -129,6 +126,7 @@ export type TokenLedgerSnapshot = {
   fixedTokens: number;
   observedTokens: number;
   trailingTokens: number;
+  // 仅在无 usage 锚点时维护（total() 也只在该情形读取）；有锚点时恒为 fixedTokens。
   estimatedTotalTokens: number;
   hasObservedUsage: boolean;
   hasFixedTokenAnchor: boolean;
@@ -137,8 +135,10 @@ export type TokenLedgerSnapshot = {
 
 /**
  * 每会话上下文规模账本：observed（最近一次真实 usage，已含 system/tools/全部历史）
- * + trailing（其后消息的估算增量）。无 usage 锚点时退回 fixed（system+tools 估算）
- * + trailing。所有读数 O(1)，重建仅在每次请求开始时 O(n) 一次。
+ * + trailing（其后消息的估算增量）。有 usage 锚点时读数恒为 observed + trailing——
+ * 估算口径有意偏保守（高估），绝不允许覆盖真实读数；仅在完全没有 usage 锚点时
+ * 退回 fixed（system+tools 估算）+ 逐消息估算。所有读数 O(1)，重建仅在每次请求
+ * 开始时执行一次。
  */
 export class TokenLedger {
   private fixedTokens = 0;
@@ -164,9 +164,6 @@ export class TokenLedger {
     this.hasFixedTokenAnchor = false;
 
     const messages = context.messages;
-    for (const message of messages) {
-      this.estimatedTotalTokens += estimateMessageTokens(message);
-    }
     let anchorIndex = -1;
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
@@ -182,6 +179,13 @@ export class TokenLedger {
         break;
       }
     }
+    // estimatedTotalTokens 仅在无锚点时维护：有锚点时 total() 不读它，跳过
+    // 全量估算循环让重建成本随锚点后的消息数而非全历史增长。
+    if (anchorIndex < 0) {
+      for (const message of messages) {
+        this.estimatedTotalTokens += estimateMessageTokens(message);
+      }
+    }
     for (let index = anchorIndex + 1; index < messages.length; index += 1) {
       this.trailingTokens += estimateMessageTokens(messages[index]);
     }
@@ -189,22 +193,23 @@ export class TokenLedger {
 
   addMessages(messages: readonly Message[]): void {
     for (const message of messages) {
-      const estimated = estimateMessageTokens(message);
-      const totalBeforeMessage = this.total();
-      this.estimatedTotalTokens += estimated;
-      let observed = getMessageObservedTokens(message);
-      if (
-        message.role === "assistant" &&
-        !isCompactionAssistantMessage(message) &&
-        readMessageContextUsage(message) === undefined
-      ) {
-        observed ??= totalBeforeMessage + estimated;
-        writeAssistantContextUsage(message, {
-          totalTokens: observed,
-          fixedTokens: this.fixedTokens,
-        });
+      if (!this.hasObservedUsage) {
+        this.estimatedTotalTokens += estimateMessageTokens(message);
       }
+      const observed = getMessageObservedTokens(message);
       if (typeof observed === "number") {
+        if (
+          message.role === "assistant" &&
+          !isCompactionAssistantMessage(message) &&
+          readMessageContextUsage(message) === undefined
+        ) {
+          // 印章只盖 usage 派生的权威值（见文件头部不变量）；无 usage 的
+          // assistant 消息不盖章，走下方 trailing 估算路径。
+          writeAssistantContextUsage(message, {
+            totalTokens: observed,
+            fixedTokens: this.fixedTokens,
+          });
+        }
         // 新 usage 已覆盖它之前的全部上下文，trailing 归零重新累计。
         this.observedTokens = observed;
         this.hasObservedUsage = true;
@@ -217,11 +222,11 @@ export class TokenLedger {
   }
 
   total(): number {
+    // 有 usage 锚点时恒信 observed + trailing：估算（尤其 base64 图片按序列化
+    // 字符数、CJK 按 0.7 tok/char）有意高估，与真实读数取 max 会让环读数与
+    // 自动压缩被估算劫持。估算只在完全没有 usage 锚点时兜底。
     if (!this.hasObservedUsage) return this.estimatedTotalTokens;
-    const observedTotal = this.observedTokens + this.trailingTokens;
-    return this.hasFixedTokenAnchor
-      ? observedTotal
-      : Math.max(observedTotal, this.estimatedTotalTokens);
+    return this.observedTokens + this.trailingTokens;
   }
 
   /**
