@@ -281,8 +281,9 @@ export const WorkspaceMarkdownPreview = memo(function WorkspaceMarkdownPreview(
     () => ({ workdir, markdownPath, onOpenWorkspacePath }),
     [markdownPath, onOpenWorkspacePath, workdir],
   );
+  // select-text 覆盖宿主全局的 user-select: none，允许在预览中选中复制文本。
   return (
-    <div data-workspace-markdown-preview="">
+    <div data-workspace-markdown-preview="" className="select-text">
       <WorkspaceMarkdownPreviewContext.Provider value={contextValue}>
         <Markdown
           content={content}
