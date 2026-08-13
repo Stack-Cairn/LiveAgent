@@ -22,7 +22,7 @@ export type CatalogModelEntry = {
 
 export type CatalogProviderId = "anthropic" | "google" | "openai" | "xai" | "deepseek" | "zhipuai" | "moonshotai" | "minimax" | "stepfun" | "xiaomi" | "longcat" | "alibaba" | "tencent";
 
-export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-11";
+export const MODEL_CATALOG_SNAPSHOT_DATE = "2026-08-13";
 
 export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry[]> = {
   anthropic: [
@@ -123,6 +123,7 @@ export const MODEL_CATALOG: Record<CatalogProviderId, readonly CatalogModelEntry
     { id: "grok-4.20-multi-agent-0309", contextWindow: 1000000, maxOutputToken: 30000, thinking: { levels: ["low", "medium", "high", "xhigh"], off: false } },
     { id: "grok-4.3", contextWindow: 1000000, maxOutputToken: 30000, thinking: { levels: ["low", "medium", "high"], off: true } },
     { id: "grok-4.5", contextWindow: 500000, maxOutputToken: 32000, thinking: { levels: ["low", "medium", "high"], off: false } },
+    { id: "grok-4.6", contextWindow: 500000, maxOutputToken: 32000, thinking: { levels: ["low", "medium", "high", "xhigh"], off: false } },
     { id: "grok-build-0.1", contextWindow: 256000, maxOutputToken: 32000, thinking: { levels: [], off: false } },
   ],
   deepseek: [
