@@ -166,6 +166,11 @@
     user-select: none;
   }
 
+  /* Keep Base UI portals above page-local stacking contexts without z-index escalation. */
+  #root {
+    isolation: isolate;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--app-font-family);
