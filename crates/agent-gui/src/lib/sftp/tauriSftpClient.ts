@@ -11,8 +11,7 @@ import {
   type RawSftpTransferResponse,
 } from "@liveagent/ui/lib/sftp/normalization";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke, listen } from "../tauriBridge";
 
 export const tauriSftpClient: SftpClient = {
   async list(params) {

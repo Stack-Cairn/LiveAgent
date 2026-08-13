@@ -8,6 +8,31 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+# `desktop` is the default build mode: full Tauri runtime (window, tray,
+# global shortcuts, updater, file dialogs).
+# `--no-default-features` builds the headless runtime (P1.2): same business
+# code, no Tauri (axum server + WebSocket bridge, landed in PR-E). Optional
+# dependencies are only compiled when the `desktop` feature pulls them in.
+default = ["desktop"]
+desktop = [
+  "dep:tauri",
+  "dep:tauri-build",
+  "dep:tauri-plugin-opener",
+  "dep:tauri-plugin-updater",
+  "dep:tauri-plugin-mcp-bridge",
+  "dep:tauri-plugin-global-shortcut",
+  "dep:tauri-plugin-window-state",
+  "dep:rfd",
+  "dep:arboard",
+  "tauri/tray-icon",
+  "tauri/image-png",
+]
+# Headless mode with runtime file fallback (for development).
+# Production headless builds should compile with `--no-default-features` and
+# embed assets at compile time via build.rs.
+runtime-fallback = []
+
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
@@ -17,19 +42,20 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 serde_json = "1.0.150"
-tauri-build = { version = "2.6.3", features = [] }
+tauri-build = { version = "2.6.3", features = [], optional = true }
 prost-build = "0.14.4"
 
 [dependencies]
-tauri = { version = "2.11.5", features = ["tray-icon", "image-png"] }
-tauri-plugin-opener = "2.5.4"
+tauri = { version = "2.11.5", optional = true }
+tauri-plugin-opener = { version = "2.5.4", optional = true }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 reqwest = { version = "0.13.4", features = ["blocking", "json", "stream", "socks"] }
 rquickjs = { version = "0.8", features = ["array-buffer", "classes", "bindgen"] }
 percent-encoding = "2.3.2"
-axum = "0.8.9"
-tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util"] }
+axum = { version = "0.8.9", features = ["ws", "multipart"] }
+tower-http = { version = "0.6.4", features = ["fs", "cors"] }
+tokio = { version = "1.52.3", features = ["macros", "net", "sync", "time", "io-util", "rt-multi-thread"] }
 tokio-stream = "0.1.18"
 tokio-tungstenite = { version = "0.29.0", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3.32"
@@ -41,10 +67,10 @@ regex = "1.12.4"
 thiserror = "2.0.18"
 walkdir = "2.5.0"
 notify = "8.2.0"
-rfd = "0.17.2"
+rfd = { version = "0.17.2", optional = true }
 # Text-only clipboard reads (image-data default feature intentionally off).
-arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }
-tauri-plugin-mcp-bridge = "0.12.0"
+arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"], optional = true }
+tauri-plugin-mcp-bridge = { version = "0.12.0", optional = true }
 dirs = "6.0.0"
 toml = "0.9.11"
 ignore = "0.4.27"
@@ -58,9 +84,9 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 sha2 = "0.11.0"
 zstd = "0.13.3"
 tempfile = "3.27.0"
-tauri-plugin-updater = "2.10.1"
-tauri-plugin-global-shortcut = "2.3.2"
-tauri-plugin-window-state = "2.4.1"
+tauri-plugin-updater = { version = "2.10.1", optional = true }
+tauri-plugin-global-shortcut = { version = "2.3.2", optional = true }
+tauri-plugin-window-state = { version = "2.4.1", optional = true }
 semver = "1.0.28"
 quick-xml = "0.41.0"
 portable-pty = "0.9.0"

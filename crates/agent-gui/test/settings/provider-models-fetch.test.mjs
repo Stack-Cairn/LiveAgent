@@ -411,6 +411,7 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
   const previousWindow = globalThis.window;
   globalThis.document = { documentElement: { dataset: { liveagentWebui: "gateway" } } };
   globalThis.window = {
+    __TAURI__: {},
     localStorage: {
       getItem(key) {
         return key === "liveagent.gateway.token" ? "gateway-token" : null;

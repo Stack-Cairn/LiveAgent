@@ -6,8 +6,8 @@ import type {
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
 import { invokeFs, isFsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
-import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
+import { invoke } from "../tauriBridge";
 import {
   type BuiltinToolBundle,
   type BuiltinToolResultDetails,

@@ -179,7 +179,7 @@ impl GatewayController {
     pub(crate) fn start_tunnel_store(self: &Arc<Self>) {
         let controller = Arc::clone(self);
         self.tunnel_store_once.call_once(move || {
-            tauri::async_runtime::spawn(async move {
+            crate::compat::async_runtime::spawn(async move {
                 if let Err(error) = controller.tunnel_store().initialize().await {
                     eprintln!("initialize gateway tunnel store failed: {error}");
                 }
@@ -225,7 +225,7 @@ impl GatewayController {
     /// follows a desired-state publish within the timeout.
     fn watch_tunnel_gateway_support(self: &Arc<Self>, epoch: u64) {
         let controller = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             tokio::time::sleep(TUNNEL_GATEWAY_SUPPORT_TIMEOUT).await;
             match controller
                 .tunnel_store()
@@ -243,7 +243,7 @@ impl GatewayController {
         snapshot: proto::TunnelStateSnapshot,
     ) {
         let controller = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             match controller.tunnel_store().record_snapshot(&snapshot) {
                 Ok(changed_specs) => {
                     for spec in changed_specs {
@@ -263,7 +263,7 @@ impl GatewayController {
         mutation: proto::TunnelMutation,
     ) {
         let controller = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             let action = mutation.action.trim().to_ascii_lowercase();
             let requested_tunnel_id = mutation.tunnel_id.trim().to_string();
             let result = match action.as_str() {
@@ -464,7 +464,7 @@ impl GatewayController {
         bypass_throttle: bool,
     ) {
         let controller = Arc::clone(self);
-        tauri::async_runtime::spawn(async move {
+        crate::compat::async_runtime::spawn(async move {
             controller
                 .run_tunnel_probes(tunnel_ids, bypass_throttle)
                 .await;

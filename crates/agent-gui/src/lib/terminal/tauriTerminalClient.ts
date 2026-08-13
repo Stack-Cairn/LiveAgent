@@ -25,8 +25,7 @@ import type {
   TerminalStreamChunk,
   TerminalStreamSnapshot,
 } from "@liveagent/ui/lib/terminal/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke, listen } from "../tauriBridge";
 
 type TerminalEventListener = (event: TerminalEvent) => void;
 

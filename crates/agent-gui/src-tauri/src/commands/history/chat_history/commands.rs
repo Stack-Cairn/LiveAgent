@@ -1,11 +1,10 @@
-#[tauri::command]
 pub async fn chat_history_list(
     page: i64,
     page_size: i64,
     cwd: Option<String>,
     cwd_empty: Option<bool>,
 ) -> Result<ChatHistoryListResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         list_chat_history_sync_with_filter(
             &conn,
@@ -21,9 +20,8 @@ pub async fn chat_history_list(
     .map_err(|e| format!("chat_history_list join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_workdirs() -> Result<ChatHistoryWorkdirsResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         list_chat_history_workdirs_sync(&conn)
     })
@@ -31,23 +29,21 @@ pub async fn chat_history_workdirs() -> Result<ChatHistoryWorkdirsResponse, Stri
     .map_err(|e| format!("chat_history_workdirs join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_shared_list(
     page: i64,
     page_size: i64,
 ) -> Result<ChatHistoryListResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         list_shared_chat_history_page_sync(page, page_size)
     })
     .await
     .map_err(|e| format!("chat_history_shared_list join failed: {e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_search(
     args: ChatHistorySearchArgs,
 ) -> Result<ChatHistorySearchResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || search_chat_history_sync(args))
+    crate::compat::async_runtime::spawn_blocking(move || search_chat_history_sync(args))
         .await
         .map_err(|e| format!("chat_history_search join 失败：{e}"))?
 }
@@ -55,7 +51,7 @@ pub async fn chat_history_search(
 pub(crate) async fn chat_history_get_summary_inner(
     id: String,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         get_summary_by_id(&conn, &id)
     })
@@ -66,7 +62,7 @@ pub(crate) async fn chat_history_get_summary_inner(
 // 桌面前端已迁移到窗口化的 chat_history_get_window；全量读取仅剩
 // gateway_bridge 的服务端投影在用，因此不再作为 webview command 暴露。
 pub async fn chat_history_get(id: String) -> Result<ChatHistoryRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let chat_id = id.trim().to_string();
         if chat_id.is_empty() {
             return Err("历史对话 id 不能为空".to_string());
@@ -89,7 +85,7 @@ pub(crate) async fn chat_history_get_tail(
     id: String,
     max_messages: i64,
 ) -> Result<ChatHistoryRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let chat_id = id.trim().to_string();
         if chat_id.is_empty() {
             return Err("历史对话 id 不能为空".to_string());
@@ -210,7 +206,6 @@ pub(crate) fn chat_history_get_window_sync(
     Ok(result)
 }
 
-#[tauri::command]
 pub async fn chat_history_get_window(
     id: String,
     max_messages: i64,
@@ -218,7 +213,7 @@ pub async fn chat_history_get_window(
     expected_revision: Option<String>,
     include_active_segment: bool,
 ) -> Result<ChatHistoryWindowRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         chat_history_get_window_sync(
             &mut conn,
@@ -236,7 +231,7 @@ pub async fn chat_history_get_window(
 pub(crate) async fn chat_history_upsert_inner(
     input: ChatHistoryUpsertInput,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         validate_upsert_input(&input)?;
         let conversation = ChatHistoryConversationInput {
             id: input.id.clone(),
@@ -277,10 +272,9 @@ pub(crate) async fn chat_history_upsert_inner(
     .map_err(|e| format!("chat_history_upsert join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_upsert(
     input: ChatHistoryUpsertInput,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_upsert_inner(input).await?;
     gateway_controller
@@ -292,7 +286,7 @@ pub async fn chat_history_upsert(
 pub(crate) async fn chat_history_upsert_active_segment_inner(
     input: ChatHistorySegmentMutationInput,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         validate_segment_mutation_input(&input)?;
         let mut conn = open_db()?;
         let tx = conn
@@ -312,10 +306,9 @@ pub(crate) async fn chat_history_upsert_active_segment_inner(
     .map_err(|e| format!("chat_history_upsert_active_segment join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_upsert_active_segment(
     input: ChatHistorySegmentMutationInput,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_upsert_active_segment_inner(input).await?;
     gateway_controller
@@ -327,7 +320,7 @@ pub async fn chat_history_upsert_active_segment(
 pub(crate) async fn chat_history_append_segment_inner(
     input: ChatHistoryAppendSegmentInput,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         append_chat_history_segment_sync(&mut conn, &input)?;
         get_summary_by_id(&conn, input.conversation.id.trim())
@@ -360,10 +353,9 @@ fn append_chat_history_segment_sync(
     Ok(())
 }
 
-#[tauri::command]
 pub async fn chat_history_append_segment(
     input: ChatHistoryAppendSegmentInput,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_append_segment_inner(input).await?;
     gateway_controller
@@ -376,7 +368,7 @@ pub(crate) async fn chat_history_rename_inner(
     id: String,
     title: String,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         rename_chat_history_sync(&conn, &id, &title)
     })
@@ -384,11 +376,10 @@ pub(crate) async fn chat_history_rename_inner(
     .map_err(|e| format!("chat_history_rename join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_rename(
     id: String,
     title: String,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_rename_inner(id, title).await?;
     gateway_controller
@@ -401,7 +392,7 @@ pub(crate) async fn chat_history_set_pinned_inner(
     id: String,
     is_pinned: bool,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         set_chat_history_pinned_sync(&conn, &id, is_pinned)
     })
@@ -409,11 +400,10 @@ pub(crate) async fn chat_history_set_pinned_inner(
     .map_err(|e| format!("chat_history_set_pinned join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_set_pinned(
     id: String,
     is_pinned: bool,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_set_pinned_inner(id, is_pinned).await?;
     gateway_controller
@@ -426,7 +416,7 @@ pub(crate) async fn chat_history_set_cwd_inner(
     id: String,
     cwd: String,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         set_chat_history_cwd_sync(&conn, &id, &cwd)
     })
@@ -434,11 +424,10 @@ pub(crate) async fn chat_history_set_cwd_inner(
     .map_err(|e| format!("chat_history_set_cwd join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_set_cwd(
     id: String,
     cwd: String,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_set_cwd_inner(id, cwd).await?;
     gateway_controller
@@ -451,7 +440,7 @@ pub(crate) async fn chat_history_set_model_inner(
     id: String,
     selected_model_json: String,
 ) -> Result<ChatHistorySummary, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         set_chat_history_model_sync(&conn, &id, &selected_model_json)
     })
@@ -459,11 +448,10 @@ pub(crate) async fn chat_history_set_model_inner(
     .map_err(|e| format!("chat_history_set_model join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_set_model(
     id: String,
     selected_model_json: String,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistorySummary, String> {
     let summary = chat_history_set_model_inner(id, selected_model_json).await?;
     gateway_controller
@@ -475,7 +463,7 @@ pub async fn chat_history_set_model(
 pub(crate) async fn chat_history_share_get_inner(
     id: String,
 ) -> Result<ChatHistoryShareStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         get_chat_history_share_status_sync(&conn, &id)
     })
@@ -483,7 +471,6 @@ pub(crate) async fn chat_history_share_get_inner(
     .map_err(|e| format!("chat_history_share_get join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_share_get(id: String) -> Result<ChatHistoryShareStatus, String> {
     chat_history_share_get_inner(id).await
 }
@@ -493,7 +480,7 @@ pub(crate) async fn chat_history_share_set_inner(
     enabled: bool,
     redact_tool_content: Option<bool>,
 ) -> Result<ChatHistoryShareStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         set_chat_history_share_enabled_sync(&conn, &id, enabled, redact_tool_content)
     })
@@ -501,12 +488,11 @@ pub(crate) async fn chat_history_share_set_inner(
     .map_err(|e| format!("chat_history_share_set join 失败：{e}"))?
 }
 
-#[tauri::command]
 pub async fn chat_history_share_set(
     id: String,
     enabled: bool,
     redact_tool_content: Option<bool>,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<ChatHistoryShareStatus, String> {
     let status = chat_history_share_set_inner(id, enabled, redact_tool_content).await?;
     match chat_history_get_summary_inner(status.conversation_id.clone()).await {
@@ -523,7 +509,7 @@ pub async fn chat_history_share_set(
 pub(crate) async fn chat_history_share_resolve_inner(
     token: String,
 ) -> Result<ChatHistoryRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         resolve_chat_history_share_sync(&conn, &token)
     })

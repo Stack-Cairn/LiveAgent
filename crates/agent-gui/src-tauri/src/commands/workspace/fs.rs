@@ -45,7 +45,7 @@ async fn run_blocking<R: Send + 'static>(
     label: &'static str,
     f: impl FnOnce() -> Result<R, String> + Send + 'static,
 ) -> Result<R, String> {
-    tauri::async_runtime::spawn_blocking(f)
+    crate::compat::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| format!("{label} join failed: {e}"))?
 }
@@ -239,7 +239,7 @@ async fn run_blocking_fs<R: Send + 'static>(
     label: &'static str,
     f: impl FnOnce() -> Result<R, FsCommandError> + Send + 'static,
 ) -> Result<R, FsCommandError> {
-    tauri::async_runtime::spawn_blocking(f)
+    crate::compat::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| FsCommandError::other(format!("{label} join failed: {e}")))?
 }
@@ -2576,7 +2576,6 @@ fn fs_read_image_source_impl(
     }
 }
 
-#[tauri::command]
 pub async fn fs_read_image_source(
     workdir: String,
     source: String,
@@ -2604,7 +2603,6 @@ fn fs_read_workspace_image_impl(path: &ScopedFsPath) -> Result<ReadResponse, FsE
     read_local_preview_file(target, path.logical_path.clone())
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_read_workspace_image(
     workdir: String,
     path: String,
@@ -2837,7 +2835,6 @@ fn fs_read_text_impl(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_read_text(
     workdir: String,
     path: String,
@@ -2929,7 +2926,6 @@ fn fs_read_editable_text_impl(path: &ScopedFsPath) -> Result<ReadEditableTextRes
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_read_editable_text(
     workdir: String,
     path: String,
@@ -3000,7 +2996,6 @@ fn fs_path_status_impl(wd: &Path, path: &str) -> Result<PathStatusResponse, FsEr
     }
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_path_status(
     workdir: String,
     path: String,
@@ -3101,7 +3096,6 @@ fn fs_write_text_impl(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_write_text(
     workdir: String,
     path: String,
@@ -3242,7 +3236,6 @@ fn fs_edit_text_impl(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_edit_text(
     workdir: String,
     path: String,
@@ -3325,7 +3318,6 @@ fn fs_delete_impl(wd: &Path, path: &str) -> Result<DeleteResponse, FsError> {
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_delete(workdir: String, path: String) -> Result<DeleteResponse, FsCommandError> {
     run_blocking_fs("fs_delete", move || fs_delete_sync(workdir, path)).await
 }
@@ -3448,7 +3440,6 @@ fn fs_open_workspace_path_impl(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_open_workspace_path(
     workdir: String,
     path: String,
@@ -3500,7 +3491,6 @@ fn fs_create_dir_impl(wd: &Path, path: &str) -> Result<CreateDirResponse, FsErro
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_create_dir(
     workdir: String,
     path: String,
@@ -3578,7 +3568,6 @@ fn fs_rename_impl(wd: &Path, from_path: &str, to_path: &str) -> Result<RenameRes
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_rename(
     workdir: String,
     from_path: String,
@@ -3700,7 +3689,6 @@ pub(crate) fn fs_roots_sync() -> Result<FsRootsResponse, String> {
     Ok(FsRootsResponse { roots })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_roots() -> Result<FsRootsResponse, String> {
     run_blocking("fs_roots", fs_roots_sync).await
 }
@@ -3765,7 +3753,6 @@ pub(crate) fn fs_list_dirs_sync(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_list_dirs(
     path: String,
     max_results: Option<usize>,
@@ -3955,7 +3942,6 @@ fn fs_list_impl(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_list(
     workdir: String,
     path: Option<String>,
@@ -4095,7 +4081,6 @@ fn fs_glob_impl(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_glob(
     workdir: String,
     path: Option<String>,
@@ -4415,7 +4400,6 @@ fn fs_grep_impl(
     })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_grep(
     workdir: String,
     path: Option<String>,
@@ -4635,7 +4619,6 @@ pub fn fs_mention_list_sync(
     Ok(MentionListResponse { entries, truncated })
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn fs_mention_list(
     workdir: String,
     max_results: Option<usize>,

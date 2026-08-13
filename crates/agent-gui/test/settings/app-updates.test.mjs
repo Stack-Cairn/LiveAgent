@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
@@ -9,6 +11,10 @@ const appSource = readFileSync(new URL("../../src/App.tsx", import.meta.url), "u
 const confirmDialogSource = readFileSync(
   new URL("../../../agent-ui/src/components/ui/confirm-dialog.tsx", import.meta.url),
   "utf8",
+);
+const tauriBridgeModulePath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../src/lib/tauriBridge.ts",
 );
 const {
   APP_UPDATE_CHECK_INTERVAL_MS,
@@ -71,10 +77,13 @@ function createAppUpdateControllerHarness(options = {}) {
       return factory();
     },
   };
+  // appUpdates imports invoke from tauriBridge (not @tauri-apps/api/core).
+  // Mock the resolved bridge module so deferred install/check promises stay
+  // synchronous with the harness call log under the CommonJS test loader.
   const controllerLoader = createTsModuleLoader({
     mocks: {
       react,
-      "@tauri-apps/api/core": {
+      [tauriBridgeModulePath]: {
         async invoke(command) {
           invokeCalls.push(command);
           if (command === "app_update_check") {

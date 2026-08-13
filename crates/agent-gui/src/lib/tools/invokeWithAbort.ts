@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 
 type InvokeWithAbortOptions<T> = {
   onAbort?: () => Promise<void> | void;

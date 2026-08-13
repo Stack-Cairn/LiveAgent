@@ -6,7 +6,6 @@ import {
   isAlwaysEnabledSkillName,
   type SkillSummary,
 } from "@liveagent/ui/lib/skills/index";
-import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef } from "react";
 import { backend } from "../../lib/automation/backend";
 import { runAssistantWithTools } from "../../lib/chat/runner/agentRunner";
@@ -22,6 +21,7 @@ import {
   type ReasoningLevel,
   resolveWorkspaceResources,
 } from "../../lib/settings";
+import { listen } from "../../lib/tauriBridge";
 import { buildBuiltinToolRegistry } from "../../lib/tools/builtinRegistry";
 import { createFileToolState } from "../../lib/tools/fileToolState";
 import type { SkillAccessPolicy } from "../../lib/tools/skillAccessPolicy";

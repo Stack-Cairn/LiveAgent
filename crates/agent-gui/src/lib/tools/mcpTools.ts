@@ -5,7 +5,7 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 
 import type { McpServerConfig } from "../settings";
 import { type BuiltinToolBundle, createBuiltinMetadataMap } from "./builtinTypes";

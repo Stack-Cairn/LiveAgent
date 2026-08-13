@@ -13,13 +13,13 @@ import { Markdown } from "@liveagent/ui/components/Markdown";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   type AppUpdateCheckResult,
   type AppUpdateController,
   shouldShowRestartRequiredNotice,
 } from "../../lib/appUpdates";
 import { updateUpdateSettings } from "../../lib/settings";
+import { openUrl } from "../../lib/tauriBridge";
 import { formatReleaseDate } from "./aboutDate";
 import type { SettingsSectionProps } from "./types";
 

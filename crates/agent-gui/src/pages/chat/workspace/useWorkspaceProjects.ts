@@ -13,8 +13,6 @@ import {
   getDefaultWorkspaceProjectPath,
   mergeWorkspaceProjectsWithHistory,
 } from "@liveagent/ui/lib/workspaceProjects";
-import { invoke } from "@tauri-apps/api/core";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   type Dispatch,
   type MutableRefObject,
@@ -34,6 +32,7 @@ import {
   type WorkspaceProjectGroup,
   workspaceProjectPathKey,
 } from "../../../lib/settings";
+import { invoke, revealItemInDir } from "../../../lib/tauriBridge";
 import { asErrorMessage } from "../chatPageUtils";
 import { startWorkspaceCloneTask } from "./cloneTasks";
 

@@ -3,18 +3,20 @@
 //! `TunnelDesiredState`.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+
 use uuid::Uuid;
 
 use crate::commands::settings::open_db;
 use crate::runtime::project_path::project_path_key as normalize_project_path_key;
 use crate::services::gateway::{now_unix_seconds, proto};
+use crate::events::EventEmitter;
+use crate::events::EventEmitterExt;
 
 use super::{
     tunnel_health_payload_from_proto, validate_tunnel_target_url, GatewayTunnelCreateInput,
@@ -63,14 +65,14 @@ struct TunnelStoreState {
 }
 
 pub struct TunnelStore {
-    app_handle: tauri::AppHandle,
+    event_emitter: Arc<dyn EventEmitter>,
     state: Mutex<TunnelStoreState>,
 }
 
 impl TunnelStore {
-    pub fn new(app_handle: tauri::AppHandle) -> Self {
+    pub fn new(event_emitter: Arc<dyn EventEmitter>) -> Self {
         Self {
-            app_handle,
+            event_emitter,
             state: Mutex::new(TunnelStoreState::default()),
         }
     }
@@ -249,7 +251,7 @@ impl TunnelStore {
 
     fn emit_state(&self, payload: &TunnelStatePayload) {
         if let Err(error) = self
-            .app_handle
+            .event_emitter
             .emit(GATEWAY_TUNNEL_STATE_EVENT, payload.clone())
         {
             eprintln!("emit gateway tunnel state failed: {error}");
@@ -532,7 +534,7 @@ fn now_ms() -> i64 {
 }
 
 async fn load_tunnel_specs() -> Result<Vec<StoredTunnelSpec>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         load_tunnel_specs_sync(&conn)
     })
@@ -541,7 +543,7 @@ async fn load_tunnel_specs() -> Result<Vec<StoredTunnelSpec>, String> {
 }
 
 pub(super) async fn persist_tunnel_spec(spec: StoredTunnelSpec) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         persist_tunnel_spec_sync(&conn, &spec)
     })
@@ -553,7 +555,7 @@ pub(super) async fn delete_tunnel_specs(tunnel_ids: Vec<String>) -> Result<(), S
     if tunnel_ids.is_empty() {
         return Ok(());
     }
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let conn = open_db()?;
         for tunnel_id in &tunnel_ids {
             delete_tunnel_spec_sync(&conn, tunnel_id)?;

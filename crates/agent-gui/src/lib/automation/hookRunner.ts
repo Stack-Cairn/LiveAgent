@@ -7,7 +7,7 @@ import type { HookDef, HookEvent, HookType } from "@liveagent/ui/lib/automation/
 
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../tauriBridge";
 
 export type HookRunWarning = {
   hookName: string;

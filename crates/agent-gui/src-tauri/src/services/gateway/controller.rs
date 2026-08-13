@@ -3,10 +3,11 @@ use std::sync::{Arc, Mutex, Once};
 use std::thread;
 
 use serde_json::{json, Value};
-use tauri::Emitter;
 use tokio::sync::watch;
 
 use crate::commands::git::GitCloneTaskRegistry;
+use crate::events::EventEmitter;
+use crate::events::EventEmitterExt;
 use crate::commands::settings::{
     load_remote_settings, normalize_remote_settings_payload, open_db, RemoteSettingsPayload,
 };
@@ -24,7 +25,7 @@ use super::*;
 
 impl GatewayController {
     pub fn new(
-        app_handle: tauri::AppHandle,
+        event_emitter: Arc<dyn EventEmitter>,
         automation_store: Arc<AutomationStore>,
         memory_store: Arc<MemoryStore>,
         provider_usage_service: Arc<ProviderUsageService>,
@@ -35,11 +36,11 @@ impl GatewayController {
     ) -> Self {
         let initial_config = RemoteSettingsPayload::default();
         let (config_tx, _) = watch::channel(initial_config);
-        let tunnel_store = TunnelStore::new(app_handle.clone());
-        let workspace_watch = Arc::new(WorkspaceWatchService::new(app_handle.clone()));
-        let chat_ingress = ChatIngressMirror::spawn(app_handle.clone());
+        let tunnel_store = TunnelStore::new(Arc::clone(&event_emitter));
+        let workspace_watch = Arc::new(WorkspaceWatchService::new(Arc::clone(&event_emitter)));
+        let chat_ingress = ChatIngressMirror::spawn(Arc::clone(&event_emitter));
         Self {
-            app_handle,
+            event_emitter,
             automation_store,
             memory_store,
             provider_usage_service,
@@ -155,7 +156,7 @@ impl GatewayController {
     pub(crate) fn start_remote_chat_inbox_sweeper(self: &Arc<Self>) {
         let controller = Arc::clone(self);
         self.remote_chat_inbox_sweeper_once.call_once(move || {
-            tauri::async_runtime::spawn(async move {
+            crate::compat::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(GATEWAY_CHAT_LEASE_SWEEP_INTERVAL).await;
                     if let Err(error) = controller.expire_remote_chat_leases().await {
@@ -175,7 +176,7 @@ impl GatewayController {
     pub(crate) fn start_runtime_status_republisher(self: &Arc<Self>) {
         let controller = Arc::clone(self);
         self.runtime_status_republisher_once.call_once(move || {
-            tauri::async_runtime::spawn(async move {
+            crate::compat::async_runtime::spawn(async move {
                 loop {
                     tokio::time::sleep(GATEWAY_RUNTIME_STATUS_REPUBLISH_INTERVAL).await;
                     let Some((worker_id, state, visible, active_run_count)) =
@@ -201,11 +202,11 @@ impl GatewayController {
 
     pub(crate) fn spawn_runner(
         self: &Arc<Self>,
-        runner_task: &mut Option<tauri::async_runtime::JoinHandle<()>>,
+        runner_task: &mut Option<crate::compat::async_runtime::JoinHandle<()>>,
     ) {
         let receiver = self.config_tx.subscribe();
         let controller = Arc::clone(self);
-        *runner_task = Some(tauri::async_runtime::spawn(async move {
+        *runner_task = Some(crate::compat::async_runtime::spawn(async move {
             controller.run(receiver).await;
         }));
     }
@@ -217,7 +218,7 @@ impl GatewayController {
             .map_err(|_| "gateway runner task lock poisoned".to_string())?;
         let should_spawn = runner_task
             .as_ref()
-            .map(|task| task.inner().is_finished())
+            .map(|task| task.is_finished())
             .unwrap_or(true);
         if !should_spawn {
             return Ok(());
@@ -243,7 +244,7 @@ impl GatewayController {
     }
 
     pub fn wake_chat_runtime(&self, reason: &str) -> Result<(), String> {
-        self.app_handle
+        self.event_emitter
             .emit(
                 GATEWAY_CHAT_RUNTIME_WAKE_EVENT,
                 json!({ "reason": reason.trim() }),
@@ -294,7 +295,7 @@ impl GatewayController {
     }
 
     pub async fn reload_from_db(self: &Arc<Self>) -> Result<(), String> {
-        let config = tauri::async_runtime::spawn_blocking(move || {
+        let config = crate::compat::async_runtime::spawn_blocking(move || {
             let conn = open_db()?;
             load_remote_settings(&conn)
         })
@@ -353,7 +354,7 @@ impl GatewayController {
     }
 
     pub async fn publish_history_sync(&self, event: GatewayHistorySyncEvent) {
-        if let Err(error) = self.app_handle.emit(CHAT_HISTORY_SYNC_EVENT, event.clone()) {
+        if let Err(error) = self.event_emitter.emit(CHAT_HISTORY_SYNC_EVENT, event.clone()) {
             eprintln!("emit chat history sync failed: {error}");
         }
 

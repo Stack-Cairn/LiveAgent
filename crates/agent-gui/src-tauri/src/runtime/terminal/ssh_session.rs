@@ -249,7 +249,7 @@ impl TerminalSessionRegistry {
         self.broadcast("created", &entry, None, None, None);
 
         let registry = Arc::clone(self);
-        tauri::async_runtime::spawn(run_ssh_session_io(
+        crate::compat::async_runtime::spawn(run_ssh_session_io(
             registry,
             id.clone(),
             Arc::clone(&runtime),
@@ -366,7 +366,7 @@ impl TerminalSessionRegistry {
         self.broadcast("reconnected", &entry, None, None, None);
 
         let registry = Arc::clone(self);
-        tauri::async_runtime::spawn(run_ssh_session_io(
+        crate::compat::async_runtime::spawn(run_ssh_session_io(
             registry,
             record.id,
             Arc::clone(runtime),

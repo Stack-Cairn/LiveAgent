@@ -26,7 +26,7 @@ async fn run_blocking<R: Send + 'static>(
     label: &'static str,
     f: impl FnOnce() -> Result<R, String> + Send + 'static,
 ) -> Result<R, String> {
-    tauri::async_runtime::spawn_blocking(f)
+    crate::compat::async_runtime::spawn_blocking(f)
         .await
         .map_err(|e| format!("{label} join failed: {e}"))?
 }
@@ -1641,13 +1641,12 @@ impl McpRuntimeManager {
     }
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn mcp_list_tools(
-    state: tauri::State<'_, Arc<McpRuntimeManager>>,
+    state: &Arc<McpRuntimeManager>,
     servers: Vec<McpServerConfig>,
 ) -> Result<Vec<McpToolInfo>, String> {
     // IMPORTANT: tool listing can block (process spawn / network / pipes). Offload.
-    let manager = state.inner().clone();
+    let manager = state.clone();
     run_blocking("mcp_list_tools", move || {
         let mut out: Vec<McpToolInfo> = Vec::new();
 
@@ -1692,17 +1691,16 @@ pub async fn mcp_list_tools(
     .await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn mcp_call_tool(
-    state: tauri::State<'_, Arc<McpRuntimeManager>>,
-    run_registry: tauri::State<'_, Arc<ShellRunRegistry>>,
+    state: &Arc<McpRuntimeManager>,
+    run_registry: &Arc<ShellRunRegistry>,
     server_id: String,
     tool_name: String,
     arguments: Value,
     run_id: Option<String>,
 ) -> Result<McpCallToolResponse, String> {
     // IMPORTANT: tool call can block (network / pipes / SSE). Offload.
-    let manager = state.inner().clone();
+    let manager = state.clone();
     let normalized_run_id = run_id
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -1710,7 +1708,7 @@ pub async fn mcp_call_tool(
         .as_deref()
         .map(|id| run_registry.register(id));
     let registered_token = cancel_token.clone();
-    let mut task = tauri::async_runtime::spawn_blocking(move || {
+    let mut task = crate::compat::async_runtime::spawn_blocking(move || {
         let id = server_id.trim().to_string();
         if id.is_empty() {
             return Err("server_id cannot be empty".to_string());
@@ -1750,24 +1748,22 @@ pub async fn mcp_call_tool(
     result
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn mcp_runtime_status(
-    state: tauri::State<'_, Arc<McpRuntimeManager>>,
+    state: &Arc<McpRuntimeManager>,
     server_id: String,
 ) -> Result<McpRuntimeStatus, String> {
-    let manager = state.inner().clone();
+    let manager = state.clone();
     run_blocking("mcp_runtime_status", move || {
         manager.runtime_status(&server_id)
     })
     .await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn mcp_stop_server(
-    state: tauri::State<'_, Arc<McpRuntimeManager>>,
+    state: &Arc<McpRuntimeManager>,
     server_id: String,
 ) -> Result<McpStopServerResponse, String> {
-    let manager = state.inner().clone();
+    let manager = state.clone();
     run_blocking("mcp_stop_server", move || {
         let id = server_id.trim().to_string();
         let stopped = manager.stop_client(&id)?;
@@ -1779,14 +1775,13 @@ pub async fn mcp_stop_server(
     .await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn mcp_test_server(
-    state: tauri::State<'_, Arc<McpRuntimeManager>>,
+    state: &Arc<McpRuntimeManager>,
     server: McpServerConfig,
     include_schema: Option<bool>,
     persist: Option<bool>,
 ) -> Result<McpRuntimeTestResponse, String> {
-    let manager = state.inner().clone();
+    let manager = state.clone();
     run_blocking("mcp_test_server", move || {
         manager.test_client(
             server,
@@ -1798,14 +1793,13 @@ pub async fn mcp_test_server(
     .await
 }
 
-#[tauri::command(rename_all = "snake_case")]
 pub async fn mcp_restart_server(
-    state: tauri::State<'_, Arc<McpRuntimeManager>>,
+    state: &Arc<McpRuntimeManager>,
     server: McpServerConfig,
     include_schema: Option<bool>,
     persist: Option<bool>,
 ) -> Result<McpRuntimeTestResponse, String> {
-    let manager = state.inner().clone();
+    let manager = state.clone();
     run_blocking("mcp_restart_server", move || {
         manager.test_client(
             server,

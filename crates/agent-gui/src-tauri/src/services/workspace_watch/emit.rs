@@ -4,8 +4,8 @@
 //! thread — a dropped event is healed by the next change).
 
 use serde::Serialize;
-use tauri::Emitter;
 
+use crate::events::EventEmitterExt;
 use crate::services::gateway::{now_unix_seconds, proto};
 
 use super::{WorkspaceWatchService, WORKSPACE_ACTIVITY_EVENT};
@@ -43,7 +43,7 @@ impl WorkspaceWatchService {
         };
 
         if let Err(error) = self
-            .app_handle
+            .event_emitter
             .emit(WORKSPACE_ACTIVITY_EVENT, payload.clone())
         {
             eprintln!("emit workspace activity failed: {error}");

@@ -12,8 +12,6 @@ import {
 import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
 import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
@@ -38,6 +36,7 @@ import {
   type SettingsSaveState,
 } from "./lib/settings/storage";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
+import { invoke, listen } from "./lib/tauriBridge";
 import { ChatPage } from "./pages/ChatPage";
 import type { SectionId } from "./pages/settings/types";
 
