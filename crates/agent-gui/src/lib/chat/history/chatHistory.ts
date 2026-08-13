@@ -429,23 +429,11 @@ function buildChatHistoryConversationInput(params: {
     state,
   } = params;
 
-  const derivedTotalMessageCount = state.segments.reduce(
-    (sum, segment) => sum + resolveSegmentMessageCount(segment),
-    0,
-  );
-  const derivedTotalSegmentCount = Math.max(
-    state.meta.totalSegmentCount,
-    state.segments.length,
-    (getActiveSegment(state)?.segmentIndex ?? -1) + 1,
-  );
-  // Keep the header counts aligned with the segment payloads we are about to
-  // write. A stale meta.totalMessageCount is a common way to trip
-  // "segment/message 统计不匹配" on the final persist.
-  const metaForPersist = {
-    ...state.meta,
-    totalSegmentCount: derivedTotalSegmentCount,
-    totalMessageCount: derivedTotalMessageCount,
-  };
+  // Header totals must stay anchored on state.meta. After a conversation is
+  // reopened from history, state.segments only holds the active segment while
+  // meta.totalMessageCount still counts every sealed row in SQLite — summing
+  // the in-memory segments would undercount and trip the backend segment-sum
+  // consistency check on every persist.
   return {
     id: conversationId,
     title,
@@ -454,10 +442,10 @@ function buildChatHistoryConversationInput(params: {
     sessionId,
     cwd,
     selectedModelJson,
-    contextMetaJson: JSON.stringify(metaForPersist),
+    contextMetaJson: JSON.stringify(state.meta),
     activeSegmentIndex: state.meta.activeSegmentIndex,
-    totalSegmentCount: derivedTotalSegmentCount,
-    totalMessageCount: derivedTotalMessageCount,
+    totalSegmentCount: state.meta.totalSegmentCount,
+    totalMessageCount: state.meta.totalMessageCount,
     createdAt,
     updatedAt,
   };
@@ -581,16 +569,20 @@ function conversationInputForCursor(
   state: ConversationViewState,
   activeSegmentIndex: number,
 ): ChatHistoryConversationInput {
-  // Each intermediate append must advertise the totals that will exist after
-  // that step lands, otherwise backend consistency checks reject the write.
-  const sealedThrough = state.segments.filter(
-    (segment) => segment.segmentIndex <= activeSegmentIndex,
-  );
-  const totalSegmentCount = Math.max(conversation.totalSegmentCount, activeSegmentIndex + 1);
-  const totalMessageCount = sealedThrough.reduce(
-    (sum, segment) => sum + resolveSegmentMessageCount(segment),
-    0,
-  );
+  // Each intermediate append must advertise exactly the totals that exist
+  // after that step lands: the backend append precondition requires
+  // totalSegmentCount == stored count + 1, and the consistency check compares
+  // the header against COUNT/SUM over all rows inside the same transaction.
+  //
+  // Subtract the not-yet-appended in-memory segments from the final header
+  // total instead of re-summing in-memory segments from zero: after a
+  // conversation is reopened from history, the sealed rows before the loaded
+  // active segment exist only in SQLite.
+  const pendingBeyondStep = state.segments
+    .filter((segment) => segment.segmentIndex > activeSegmentIndex)
+    .reduce((sum, segment) => sum + resolveSegmentMessageCount(segment), 0);
+  const totalSegmentCount = activeSegmentIndex + 1;
+  const totalMessageCount = Math.max(0, conversation.totalMessageCount - pendingBeyondStep);
   let contextMetaJson = conversation.contextMetaJson;
   try {
     const meta = JSON.parse(conversation.contextMetaJson) as Record<string, unknown>;

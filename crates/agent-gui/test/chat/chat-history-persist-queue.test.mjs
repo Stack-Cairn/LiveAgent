@@ -73,7 +73,7 @@ function segment(index, overrides = {}) {
   };
 }
 
-function buildState(segments, activeSegmentIndex) {
+function buildState(segments, activeSegmentIndex, metaOverrides = {}) {
   return {
     meta: {
       schemaVersion: 3,
@@ -81,6 +81,7 @@ function buildState(segments, activeSegmentIndex) {
       activeSegmentIndex: segments[activeSegmentIndex].segmentIndex,
       totalSegmentCount: segments.length,
       totalMessageCount: segments.reduce((sum, item) => sum + item.messageCount, 0),
+      ...metaOverrides,
     },
     segments,
     transcript: {
@@ -268,7 +269,9 @@ test("final persist catches up multiple segment jumps one append at a time", asy
   assert.equal(recorder.calls[0].args.input.previousSegment.segmentId, "seg-0");
   assert.equal(recorder.calls[0].args.input.segment.segmentId, "seg-1");
   assert.equal(recorder.calls[0].args.input.conversation.activeSegmentIndex, 1);
-  assert.equal(recorder.calls[0].args.input.conversation.totalSegmentCount, 3);
+  // 中间步必须是"该步落库后"的精确值：后端 append 前置校验要求
+  // totalSegmentCount == 现有值 + 1，一致性校验按全表 COUNT/SUM 比对。
+  assert.equal(recorder.calls[0].args.input.conversation.totalSegmentCount, 2);
   assert.equal(recorder.calls[0].args.input.conversation.totalMessageCount, 3);
 
   await resolveCall(recorder.calls[0], "conv-multi-jump", 40);
@@ -280,6 +283,7 @@ test("final persist catches up multiple segment jumps one append at a time", asy
   assert.equal(recorder.calls[1].args.input.previousSegment.segmentId, "seg-1");
   assert.equal(recorder.calls[1].args.input.segment.segmentId, "seg-2");
   assert.equal(recorder.calls[1].args.input.conversation.activeSegmentIndex, 2);
+  assert.equal(recorder.calls[1].args.input.conversation.totalSegmentCount, 3);
   assert.equal(recorder.calls[1].args.input.conversation.totalMessageCount, 6);
 
   await resolveCall(recorder.calls[1], "conv-multi-jump", 41);
@@ -331,6 +335,72 @@ test("partial multi-segment catch-up resumes from the durable cursor frontier", 
   await resolveCall(recorder.calls[2], "conv-resume", 51);
   await second;
   assert.deepEqual(cursorRef.current, persistenceCursor(segC));
+});
+
+// 从历史重开的会话（openInitial → buildConversationStateFromWindow）内存里
+// 只有活跃段，meta 计数仍覆盖 SQLite 中全部封存行。header 若改为对内存段
+// 求和会少算封存段，被后端全表 SUM 一致性校验拒绝。
+test("reopened conversation keeps full header totals on active-segment persist", async () => {
+  const recorder = createInvokeRecorder();
+  const chatHistory = loadChatHistory(recorder.invoke);
+  // SQLite: seg0-2 共 270 条已封存；内存只载入活跃段 seg3(22 条)。
+  const segActive = segment(3, { messageCount: 22, endMessageId: "seg3-22" });
+  const cursorRef = { current: persistenceCursor(segActive) };
+  const state = buildState([segActive], 0, {
+    totalSegmentCount: 4,
+    totalMessageCount: 292,
+  });
+
+  const task = chatHistory.persistConversationRuntime(
+    persistParams({ conversationId: "conv-reopened", cursorRef, state }),
+  );
+  await flush();
+
+  assert.equal(recorder.calls.length, 1);
+  assert.equal(recorder.calls[0].cmd, "chat_history_upsert_active_segment");
+  const conversation = recorder.calls[0].args.input.conversation;
+  assert.equal(conversation.activeSegmentIndex, 3);
+  assert.equal(conversation.totalSegmentCount, 4);
+  assert.equal(conversation.totalMessageCount, 292);
+  assert.equal(recorder.calls[0].args.input.segment.messageCount, 22);
+
+  await resolveCall(recorder.calls[0], "conv-reopened", 60);
+  await task;
+  assert.deepEqual(cursorRef.current, persistenceCursor(segActive));
+});
+
+test("reopened conversation catch-up append anchors totals on the full history", async () => {
+  const recorder = createInvokeRecorder();
+  const chatHistory = loadChatHistory(recorder.invoke);
+  // 重开后 run 中发生一次压缩：内存 = [seg3(24), seg4(1)]，SQLite 另有
+  // seg0-2 共 270 条。追赶 append 的 header 必须含全部封存行。
+  const segLoaded = segment(3, { messageCount: 24, endMessageId: "seg3-24" });
+  const segNew = segment(4, { messageCount: 1, endMessageId: "seg4-1" });
+  const cursorRef = { current: persistenceCursor(segLoaded) };
+  const cursorCommits = [];
+  const state = buildState([segLoaded, segNew], 1, {
+    totalSegmentCount: 5,
+    totalMessageCount: 295,
+  });
+
+  const task = chatHistory.persistConversationRuntime(
+    persistParams({ conversationId: "conv-reopened-jump", cursorRef, cursorCommits, state }),
+  );
+  await flush();
+
+  assert.equal(recorder.calls.length, 1);
+  assert.equal(recorder.calls[0].cmd, "chat_history_append_segment");
+  assert.equal(recorder.calls[0].args.input.previousSegment.segmentId, "seg-3");
+  assert.equal(recorder.calls[0].args.input.segment.segmentId, "seg-4");
+  const conversation = recorder.calls[0].args.input.conversation;
+  assert.equal(conversation.activeSegmentIndex, 4);
+  assert.equal(conversation.totalSegmentCount, 5);
+  assert.equal(conversation.totalMessageCount, 295);
+
+  await resolveCall(recorder.calls[0], "conv-reopened-jump", 61);
+  await task;
+  assert.deepEqual(cursorRef.current, persistenceCursor(segNew));
+  assert.deepEqual(cursorCommits, [persistenceCursor(segNew)]);
 });
 
 test("persistence cursor selects explicit initial active and append transitions", async () => {
