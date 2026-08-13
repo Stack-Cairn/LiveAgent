@@ -50,13 +50,34 @@ pub(crate) fn terminate_process_tree_best_effort(pid: Option<u32>) {
 
     #[cfg(unix)]
     {
+        // Send SIGTERM to the process group identified by `-{pid}`.
+        // NOTE: the leading `--` argument separator is REQUIRED. Without it,
+        // procps-ng's `kill` mis-parses a large negative pid (e.g. -146676)
+        // as `kill(-1, SIGTERM)`, flooding SIGTERM to every process on the
+        // system and taking down the host server along with the terminal.
+        // The argument list is kept in a separate helper so tests can assert
+        // the `--` separator is preserved (a regression guard for the bug
+        // above). See `kill_sigterm_args` tests below.
         let _ = std::process::Command::new("kill")
-            .args(["-TERM", &format!("-{pid}")])
+            .args(kill_sigterm_args(pid))
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
     }
+}
+
+/// Build the argument vector sent to the system `kill`(1pg) for signalling the
+/// process group whose leader has the given pid.
+///
+/// The target is spelled as `-{pid}` so `kill` signals an entire process group
+/// (`PGID`). **The trailing `--` argument separator MUST be present**: procps-ng
+/// mis-parses a large negative pid (e.g. `-146676`) without it into
+/// `kill(-1, SIGTERM)`, which floods SIGTERM to every process the caller may
+/// signal — including the headless host server that spawned the terminal.
+#[cfg(unix)]
+pub(crate) fn kill_sigterm_args(pid: u32) -> Vec<String> {
+    vec!["-TERM".to_string(), "--".to_string(), format!("-{pid}")]
 }
 
 pub(crate) fn now_ms() -> u128 {

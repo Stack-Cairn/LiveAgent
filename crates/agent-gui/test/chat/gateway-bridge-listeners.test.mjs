@@ -76,6 +76,7 @@ test("gateway bridge listener keeps one worker across renders and handles native
   const previousDocument = globalThis.document;
   globalThis.window = {
     ...windowEvents,
+    __TAURI__: {},
     setInterval(callback) {
       const id = nextTimerId++;
       timers.set(id, callback);
@@ -170,6 +171,7 @@ test("gateway bridge listener keeps one worker across renders and handles native
 
     hookHarness.render(() => useGatewayBridgeListeners(baseParams));
 
+    await flushPromises();
     assert.ok(
       invokeCalls.some((call) => call.command === "gateway_chat_claim_next"),
       "the inbox must drain before async listen registration resolves",
@@ -261,6 +263,7 @@ test("gateway bridge listener keeps one worker across renders and handles native
     assert.ok(runtimeWorkerIds.every((candidate) => candidate === workerId));
 
     hookHarness.cleanup();
+    await flushPromises();
     const finalHeartbeat = invokeCalls
       .filter((call) => call.command === "gateway_chat_runtime_heartbeat")
       .at(-1);

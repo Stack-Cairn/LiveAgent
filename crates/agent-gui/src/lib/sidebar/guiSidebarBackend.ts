@@ -4,7 +4,6 @@
 
 import type { SidebarBackend } from "@liveagent/ui/lib/sidebar/backend";
 import type { SidebarBackendEvent } from "@liveagent/ui/lib/sidebar/types";
-import { listen } from "@tauri-apps/api/event";
 import type { ChatHistorySummary } from "../chat/history/chatHistory";
 import {
   deleteChatHistory,
@@ -14,6 +13,7 @@ import {
   setChatHistoryCwd,
   setChatHistoryPinned,
 } from "../chat/history/chatHistory";
+import { listen } from "../tauriBridge";
 
 // The desktop history sync wire protocol. The Rust side emits one event per
 // history mutation / run transition; this adapter is the only listener.

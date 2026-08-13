@@ -9,8 +9,7 @@ import {
   normalizeSshLocalForwardEvent,
   normalizeSshLocalForwardSnapshot,
 } from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke, listen } from "../tauriBridge";
 
 export const tauriSshLocalForwardClient: SshLocalForwardClient = {
   async list(params) {

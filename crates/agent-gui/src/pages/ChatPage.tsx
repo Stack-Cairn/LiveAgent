@@ -47,7 +47,6 @@ import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector
 import { buildSkillsSystemPrompt, type SkillSummary } from "@liveagent/ui/lib/skills/index";
 import { terminalSessionBelongsToProject } from "@liveagent/ui/lib/terminal/sessionStore";
 import type { LocalTunnelClient } from "@liveagent/ui/lib/tunnels/constants";
-import { listen } from "@tauri-apps/api/event";
 import {
   type CSSProperties,
   type SetStateAction,
@@ -97,6 +96,7 @@ import {
 import { tauriSftpClient } from "../lib/sftp/tauriSftpClient";
 import { createGuiSidebarBackend } from "../lib/sidebar/guiSidebarBackend";
 import { createSubagentStoreManager } from "../lib/subagents";
+import { listen } from "../lib/tauriBridge";
 import { tauriTerminalClient } from "../lib/terminal/tauriTerminalClient";
 import { cancelPendingAskUserQuestionsForConversation } from "../lib/tools/askUserQuestionTools";
 import {

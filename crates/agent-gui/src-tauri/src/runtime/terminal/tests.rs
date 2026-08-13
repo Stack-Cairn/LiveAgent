@@ -1096,3 +1096,229 @@ fn private_key_decode_error_explains_missing_passphrase() {
         "wrong-passphrase message should hint at the passphrase: {message}"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn kill_sigterm_args_always_include_argument_separator() {
+    // Regression guard for the SIGTERM broadcast bug: procps-ng mis-parses a
+    // large negative pid (e.g. -146676) without a trailing `--` into
+    // `kill(-1, SIGTERM)`, flooding SIGTERM to every process on the system and
+    // taking down the headless host along with the terminal being closed.
+    for pid in [1u32, 42u32, 6000u32, 146_676u32, u32::MAX] {
+        let args = kill_sigterm_args(pid);
+        assert_eq!(
+            args,
+            vec!["-TERM".to_string(), "--".to_string(), format!("-{pid}")],
+            "kill args must signal the literal process group -{} and keep the `--` separator",
+            pid,
+        );
+        // The group must be addressed as its literal negative pid; a large
+        // value must never be flattened to `-1` (which would mean kill all).
+        let group_token = &args[2];
+        assert!(group_token.starts_with('-'), "group token must be negative");
+        let parsed: i64 = group_token.parse().expect("negative pid parses");
+        assert_eq!(
+            parsed,
+            -(pid as i64),
+            "kill group token must be exactly -{pid} (no collapse to -1)"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn terminate_process_tree_kills_only_target_group() {
+    use std::process::{Command, Stdio};
+    use std::thread::sleep;
+    use std::time::{Duration, Instant};
+
+    /// Process state char from /proc/<pid>/stat, or None when the process is
+    /// gone. Zombies (Z/X) count as terminated — the bug we guard against is
+    /// processes that stay *runnable* (S/R) after the group kill.
+    fn proc_state(pid: u32) -> Option<char> {
+        let raw = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        let body = raw.split(')').last()?.trim_start();
+        body.chars().next()
+    }
+
+    fn terminated(pid: u32) -> bool {
+        matches!(proc_state(pid), None | Some('Z') | Some('X'))
+    }
+
+    // A "host" sentinel in a separate, unrelated process group. The bug's
+    // regression signature is SIGTERM leaking beyond the target group onto
+    // processes like this one (and the test runner itself); it must survive.
+    let mut host_guard = match Command::new("/bin/sh")
+        .arg("-c")
+        .arg("sleep 30")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(_) => return,
+    };
+    let host_pid = host_guard.id();
+
+    // Spawn a detached session in its OWN process group (PGID == leader pid).
+    // The leader demotes itself off the test's process group and publishes its
+    // new group's leader pid, then holds two (`sleep 30`) children in-group.
+    // NOTE: the TempDir must stay alive for the whole test — dropping it would
+    // delete the pid file path the spawned session writes into.
+    let pid_dir = tempfile::tempdir().expect("tempdir");
+    let pid_file_path = pid_dir
+        .path()
+        .join("leader.pid")
+        .to_string_lossy()
+        .to_string();
+    let group_script =
+        format!("setsid sh -c 'echo $$ > {pid_file_path}; (sleep 30) & sleep 30'");
+
+    let Ok(mut target_child) = Command::new("/bin/sh")
+        .arg("-c")
+        .arg(&group_script)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        let _ = host_guard.kill();
+        return; // setsid unavailable on this host; skip the live-process portion
+    };
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let group_leader = loop {
+        if let Ok(contents) = std::fs::read_to_string(&pid_file_path) {
+            if let Ok(pid) = contents.trim().parse::<u32>() {
+                if pid != 0 {
+                    break pid;
+                }
+            }
+        }
+        if Instant::now() > deadline {
+            let _ = target_child.kill();
+            let _ = host_guard.kill();
+            panic!("group leader did not publish its pid within 5s");
+        }
+        sleep(Duration::from_millis(20));
+    };
+
+    // Collect group members via /proc (PGID == group_leader) so we can assert
+    // on every process the kill must terminate.
+    let mut members = vec![group_leader];
+    for entry in std::fs::read_dir("/proc").expect("read /proc") {
+        let name = entry
+            .expect("proc entry")
+            .file_name()
+            .to_string_lossy()
+            .to_string();
+        let Ok(pid) = name.parse::<u32>() else {
+            continue;
+        };
+        if pid == group_leader {
+            continue;
+        }
+        let raw = std::fs::read_to_string(format!("/proc/{pid}/stat")).unwrap_or_default();
+        if let Some(rest) = raw.split(')').last() {
+            let parts: Vec<&str> = rest.trim_start().split_whitespace().collect();
+            if parts.len() > 2 && parts[2].parse::<u32>().ok() == Some(group_leader) {
+                members.push(pid);
+            }
+        }
+    }
+    // Sanity: the fully populated group is alive before we kill it.
+    sleep(Duration::from_millis(200));
+    assert!(
+        members.iter().all(|pid| !terminated(*pid)),
+        "target group should be alive before kill (members={members:?})"
+    );
+
+    // Kill ONLY the target process group (PGID == group_leader).
+    terminate_process_tree_best_effort(Some(group_leader));
+
+    // Every member of the target group must be terminated shortly after.
+    let wait_until = Instant::now() + Duration::from_secs(5);
+    loop {
+        if members.iter().all(|pid| terminated(*pid)) {
+            break;
+        }
+        assert!(
+            Instant::now() < wait_until,
+            "target process group was not terminated within 5s: {members:?}"
+        );
+        sleep(Duration::from_millis(20));
+    }
+
+    // The unrelated "host" guard process must survive untouched.
+    let host_alive = !terminated(host_pid);
+    let _ = target_child.kill();
+    let _ = host_guard.kill();
+    assert!(
+        host_alive,
+        "host process must be left untouched by group kill"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn registry_local_session_close_reaps_process_group() {
+    use std::time::Duration;
+
+    // End-to-end: a real local terminal is spawned and commands spawn children
+    // into the same process group; closing the session must reap the group
+    // without killing the current process (the "host").
+    let registry = Arc::new(TerminalSessionRegistry::default());
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let cwd = tempdir.path().display().to_string();
+
+    let session = registry
+        .create(
+            cwd.clone(),
+            Some(cwd.clone()),
+            None,
+            Some("GroupReap".to_string()),
+            Some(80),
+            Some(24),
+        )
+        .expect("create terminal session");
+    let session_id = session.session.id.clone();
+    let pid = session.session.pid.expect("local session has a leader pid");
+
+    let host_before = std::process::id();
+
+    registry.close(session_id).expect("close terminal session");
+
+    let reap_ok = (0..200).any(|_| {
+        std::thread::sleep(Duration::from_millis(20));
+        proc_is_terminated(pid)
+    });
+    assert!(
+        reap_ok,
+        "local terminal session process group should be reaped after close"
+    );
+    assert_eq!(
+        host_before,
+        std::process::id(),
+        "closing a local terminal must not terminate the host process"
+    );
+}
+
+#[cfg(unix)]
+fn proc_is_terminated(pid: u32) -> bool {
+    if pid == 0 {
+        return true;
+    }
+    let raw = match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(raw) => raw,
+        Err(_) => return true, // /proc entry gone = terminated
+    };
+    let Some(body) = raw.split(')').last() else {
+        return true;
+    };
+    let Some(state) = body.trim_start().chars().next() else {
+        return true;
+    };
+    // Zombies / dead states count as terminated.
+    matches!(state, 'Z' | 'X' | 'D' | 'T')
+}

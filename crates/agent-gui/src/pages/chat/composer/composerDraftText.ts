@@ -4,7 +4,7 @@ import {
   validateImportedPastedTextFiles,
 } from "@liveagent/ui/lib/chat/composerDraft";
 import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../../lib/tauriBridge";
 
 export {
   buildTextFromComposerDraft,

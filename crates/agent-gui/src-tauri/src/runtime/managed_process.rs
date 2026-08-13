@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use tauri::Emitter;
+
 
 use crate::runtime::managed_process_journal as journal;
 use crate::runtime::platform::{expand_tilde_path, strip_windows_verbatim_prefix};
@@ -20,6 +20,8 @@ use crate::runtime::process::{
 };
 use crate::runtime::shell_runner::spawn_platform_shell_command;
 use crate::services::gateway::GatewayController;
+use crate::events::EventEmitter;
+use crate::events::EventEmitterExt;
 
 const PROCESS_LOG_DIR: &str = "process-logs";
 const DEFAULT_LOG_BYTES: u64 = 64 * 1024;
@@ -38,21 +40,21 @@ pub const MANAGED_PROCESS_CHANGED_EVENT: &str = "managed-process:changed";
 /// Fan-out target for registry mutations: every change emits the same full
 /// snapshot to the local webview and (when connected) to the gateway.
 pub struct ManagedProcessNotifier {
-    pub app_handle: tauri::AppHandle,
+    pub event_emitter: Arc<dyn EventEmitter>,
     pub gateway: Weak<GatewayController>,
 }
 
 impl ManagedProcessNotifier {
     fn changed(&self, snapshot: &ManagedProcessSnapshot) {
         if let Err(error) = self
-            .app_handle
+            .event_emitter
             .emit(MANAGED_PROCESS_CHANGED_EVENT, snapshot)
         {
             eprintln!("emit {MANAGED_PROCESS_CHANGED_EVENT} failed: {error}");
         }
         if let Some(gateway) = self.gateway.upgrade() {
             let snapshot = snapshot.clone();
-            tauri::async_runtime::spawn(async move {
+            crate::compat::async_runtime::spawn(async move {
                 if let Err(error) = gateway.publish_managed_process_snapshot(snapshot).await {
                     eprintln!("publish managed process snapshot failed: {error}");
                 }
@@ -891,19 +893,38 @@ mod tests {
     }
 
     /// True while ANY member of the process group is alive, even after the
-    /// leader exited.
+    /// leader exited. Probes /proc states instead of `kill -0 -<pgid>`:
+    /// kill(2) treats zombies as alive, and orphaned zombies are reaped by
+    /// PID 1 — which not every host does (minimal container images), leaving
+    /// `kill -0` to report a terminated group as alive forever.
     #[cfg(unix)]
     fn process_group_exists(pgid: u32) -> bool {
-        std::process::Command::new("kill")
-            .arg("-0")
-            .arg("--")
-            .arg(format!("-{pgid}"))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return false;
+        };
+        for entry in entries.flatten() {
+            let Ok(name) = entry.file_name().into_string() else {
+                continue;
+            };
+            let Ok(pid) = name.parse::<u32>() else {
+                continue;
+            };
+            let Ok(raw) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
+                continue;
+            };
+            let Some(rest) = raw.split(')').last() else {
+                continue;
+            };
+            let parts: Vec<&str> = rest.trim_start().split_whitespace().collect();
+            // parts: [state, ppid, pgrp, ...]
+            if parts.len() > 2
+                && parts[2].parse::<u32>().ok() == Some(pgid)
+                && !matches!(parts[0], "Z" | "X")
+            {
+                return true;
+            }
+        }
+        false
     }
 
     #[cfg(unix)]

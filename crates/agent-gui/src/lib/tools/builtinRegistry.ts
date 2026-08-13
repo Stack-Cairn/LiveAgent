@@ -1,6 +1,5 @@
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import type { SystemToolRuntimeScope } from "@liveagent/ui/lib/tools/systemToolOptions";
-import { homeDir } from "@tauri-apps/api/path";
 import type { RuntimePlatform } from "../runtimePlatform";
 import {
   type McpSettings,
@@ -15,6 +14,7 @@ import {
   SUBAGENT_PARENT_ID,
   type SubagentRuntimeConfig,
 } from "../subagents";
+import { homeDir } from "../tauriBridge";
 import { createAskUserQuestionTools } from "./askUserQuestionTools";
 import type {
   BuiltinToolBundle,

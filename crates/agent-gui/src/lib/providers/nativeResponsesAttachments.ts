@@ -3,7 +3,7 @@ import {
   getUserMessageAttachments,
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../../lib/tauriBridge";
 
 type PayloadHook = (payload: unknown, model: Model<any>) => unknown | Promise<unknown>;
 

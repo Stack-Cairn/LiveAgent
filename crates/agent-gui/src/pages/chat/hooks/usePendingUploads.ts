@@ -5,8 +5,9 @@ import {
   type PendingUploadedFile,
 } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { invalidateUploadedImagePreviewCache } from "@liveagent/ui/lib/chat/uploadedImagePreview";
-import { invoke } from "@tauri-apps/api/core";
 import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
+import { invoke, isTauri } from "../../../lib/tauriBridge";
+import { importReadableFilesViaMultipart } from "../../../lib/uploadReadableFiles";
 
 type SystemPickReadableFilesResponse = {
   files: PendingUploadedFile[];
@@ -54,6 +55,25 @@ async function fileToUploadInput(file: File): Promise<SystemUploadedReadableFile
     mimeType: file.type || undefined,
     contentBase64: arrayBufferToBase64(await file.arrayBuffer()),
   };
+}
+
+/**
+ * Headless (non-Tauri) fallback for the "pick files" button: there is no
+ * native file dialog, so open the browser's file picker and hand the chosen
+ * files back for the multipart upload path (same as drag & drop / paste).
+ */
+function pickBrowserFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.onchange = () => {
+      resolve(Array.from(input.files ?? []));
+    };
+    // Cancel / Escape dismisses the picker without selecting anything.
+    input.oncancel = () => resolve([]);
+    input.click();
+  });
 }
 
 export function usePendingUploads(params: UsePendingUploadsParams) {
@@ -293,11 +313,23 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       runUploadTask({
         emptySelectionMessage: "所选文件均不受当前 Read 支持",
         errorFallback: "导入文件失败",
-        importer: ({ targetWorkdir, remainingFileSlots }) =>
-          invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
+        importer: async ({ targetWorkdir, remainingFileSlots }) => {
+          if (!isTauri()) {
+            // Headless: no native dialog — use the browser file picker and
+            // upload via the same multipart endpoint as drag & drop/paste
+            // (POST /api/files/import, agent-gateway-compatible protocol).
+            const picked = await pickBrowserFiles();
+            if (picked.length === 0) return { files: [], skipped: [] };
+            return importReadableFilesViaMultipart(
+              targetWorkdir,
+              picked.slice(0, remainingFileSlots),
+            );
+          }
+          return invoke<SystemPickReadableFilesResponse>("system_pick_readable_files", {
             workdir: targetWorkdir,
             maxFiles: remainingFileSlots,
-          }),
+          });
+        },
       }),
     [runUploadTask],
   );
@@ -333,6 +365,11 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
               "warning",
               `最多上传 ${MAX_UPLOAD_FILES} 个文件，已忽略 ${ignoredForLimit} 个额外文件`,
             );
+          }
+          if (!isTauri()) {
+            // Headless: multipart upload (POST /api/files/import), same
+            // protocol as the agent-gateway WebUI — no base64 expansion.
+            return importReadableFilesViaMultipart(targetWorkdir, importBatch);
           }
           const uploadFiles = await Promise.all(importBatch.map(fileToUploadInput));
           return invoke<SystemPickReadableFilesResponse>("system_import_uploaded_readable_files", {

@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useSyncExternalStore } from "react";
+import { invoke } from "../../../lib/tauriBridge";
 
 export type WorkspaceCloneTask = {
   id: string;

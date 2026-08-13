@@ -1,8 +1,8 @@
 import { PanelLeft, PanelLeftClose, Settings } from "@liveagent/ui/components/IconSet";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import type { AppUpdateController } from "../lib/appUpdates";
+import { invoke } from "../lib/tauriBridge";
 import { AppUpdateButton } from "./AppUpdateButton";
 
 type TauriWindow = Window & { __TAURI_INTERNALS__?: unknown };

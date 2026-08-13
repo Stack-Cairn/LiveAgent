@@ -79,20 +79,18 @@ struct CherryImportScan {
     providers: Vec<CherryProviderImportItem>,
 }
 
-#[tauri::command]
 pub async fn settings_list_cherry_studio_providers() -> Result<CherryProvidersResponse, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+    crate::compat::async_runtime::spawn_blocking(|| {
         cherry_scan_candidates(&cherry_user_data_candidates(), false)
     })
     .await
     .map_err(|error| format!("settings_list_cherry_studio_providers join 失败：{error}"))?
 }
 
-#[tauri::command]
 pub async fn settings_list_cherry_studio_providers_from_path(
     data_path: String,
 ) -> Result<CherryProvidersResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let selected = PathBuf::from(data_path.trim());
         if selected.as_os_str().is_empty() {
             return Err("未选择 Cherry Studio 数据目录".to_string());

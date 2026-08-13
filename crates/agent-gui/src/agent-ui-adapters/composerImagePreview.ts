@@ -2,7 +2,7 @@ import type {
   UploadedImagePreviewLoader,
   UploadedImagePreviewResult,
 } from "@liveagent/ui/lib/chat/uploadedImagePreview";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../lib/tauriBridge";
 
 export const loadComposerUploadedImagePreview: UploadedImagePreviewLoader = (
   workspaceRoot,

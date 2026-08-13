@@ -20,6 +20,7 @@ use serde_json::Value;
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::commands::git::GitCloneTaskRegistry;
+use crate::events::EventEmitter;
 use crate::commands::settings::RemoteSettingsPayload;
 use crate::runtime::managed_process::ManagedProcessRegistry;
 use crate::runtime::sftp::SftpSessionRegistry;
@@ -44,7 +45,7 @@ pub use gateway_proto::v2 as proto;
 
 mod chat;
 mod chat_inbox;
-mod chat_ingress;
+pub(crate) mod chat_ingress;
 mod chat_ingress_transport;
 mod connection;
 mod controller;
@@ -119,7 +120,7 @@ pub(crate) const GATEWAY_CHAT_CHECKPOINT_REQUESTED_EVENT: &str =
     "gateway:chat-checkpoint-requested";
 
 pub struct GatewayController {
-    app_handle: tauri::AppHandle,
+    event_emitter: Arc<dyn EventEmitter>,
     automation_store: Arc<AutomationStore>,
     memory_store: Arc<MemoryStore>,
     provider_usage_service: Arc<ProviderUsageService>,
@@ -128,7 +129,7 @@ pub struct GatewayController {
     managed_process_registry: Arc<ManagedProcessRegistry>,
     pub(crate) git_clone_task_registry: Arc<GitCloneTaskRegistry>,
     config_tx: watch::Sender<RemoteSettingsPayload>,
-    runner_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    runner_task: Mutex<Option<crate::compat::async_runtime::JoinHandle<()>>>,
     status: Mutex<GatewayStatusSnapshot>,
     outbound_tx: Mutex<Option<GatewayOutboundSender>>,
     outbound_control_tx: Mutex<Option<GatewayOutboundSender>>,

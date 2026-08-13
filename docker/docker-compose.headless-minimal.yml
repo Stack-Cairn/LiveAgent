@@ -1,0 +1,36 @@
+# LiveAgent Headless Minimal — Docker Compose（独立配置，可直接使用）
+# ===============================================================
+# 最小生产镜像（~0.7 GB）：仅基础工具 + liveagent 二进制，无任何语言运行时。
+# 镜像由 GitHub Actions 构建推送，此处直接拉取，无需本地构建。
+#
+# 用法（在 LiveAgent 项目根目录）:
+#   docker compose -f docker/docker-compose.headless-minimal.yml up -d
+#   docker compose -f docker/docker-compose.headless-minimal.yml logs -f
+#   docker compose -f docker/docker-compose.headless-minimal.yml down
+#
+# 环境变量（可选，不设置时用默认值）:
+#   GHCR_OWNER=thirsty5034  镜像仓库所有者（fork 后改为自己的用户名）
+#   TAG=main                镜像版本（main 分支 push 自动构建为 main；打 v* tag 后可填 v1.2.3 / latest）
+#
+# 数据持久化:
+#   ./data:/var/lib/liveagent    → liveagent 用户 home（含 ~/.liveagent 应用数据）
+#   （minimal 无 mise，不需要 /opt/mise 数据卷）
+#
+# 需要语言运行时？换用 headless-core / headless-full 镜像：
+#   docker compose -f docker/docker-compose.headless-core.yml up -d
+
+services:
+  headless-minimal:
+    image: ghcr.io/${GHCR_OWNER:-thirsty5034}/liveagent-minimal:${TAG:-main}
+    container_name: liveagent-minimal
+    network_mode: host          # 直接使用宿主机网络，无 NAT 转发
+    environment:
+      TZ: Asia/Shanghai
+      LIVEAGENT_HEADLESS_HOST: 0.0.0.0
+      LIVEAGENT_HEADLESS_PORT: 17890
+      LIVEAGENT_DATA_DIR: /var/lib/liveagent
+      LANG: en_US.UTF-8
+    volumes:
+      - /vol1/1000/projects:/workspace    # 项目代码统一挂载
+      - ./data:/var/lib/liveagent          # 数据持久化（相对运行 compose 的目录）
+    restart: unless-stopped

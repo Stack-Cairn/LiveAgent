@@ -368,6 +368,8 @@ test("running checkpoint is an ordered barrier and cannot cross terminal", async
     harness.render(() => {
       mirror = useGatewayRunMirrorCoordinator();
     });
+    await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
     mirror.registerGatewayRunMirror({
       runId: "run-barrier",
       conversationId: "conv-barrier",

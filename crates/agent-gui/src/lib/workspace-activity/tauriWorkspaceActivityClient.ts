@@ -11,8 +11,7 @@ import type {
   WorkspaceActivity,
   WorkspaceActivityClient,
 } from "@liveagent/ui/lib/workspace-activity/types";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { invoke, listen } from "../tauriBridge";
 
 type WorkspaceActivityListener = Parameters<WorkspaceActivityClient["subscribe"]>[1];
 

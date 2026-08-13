@@ -451,6 +451,7 @@ test("gateway tool_answer forwards validated JSON with conversation isolation", 
     }),
   );
 
+  await flushPromises();
   const listener = listeners.get("gateway:chat-queue-request");
   assert.ok(listener);
   const answers = [{ questionId: "choice", selectedLabel: "Second" }];

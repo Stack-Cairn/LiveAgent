@@ -65,19 +65,18 @@ pub struct ProxyServerState {
 }
 
 #[derive(Deserialize)]
-struct ProxyRoutePath {
+pub(crate) struct ProxyRoutePath {
     provider: String,
     #[serde(rename = "rest")]
     _rest: Option<String>,
 }
 
 #[derive(Deserialize)]
-struct ImageProxyQuery {
+pub(crate) struct ImageProxyQuery {
     url: String,
 }
 
-#[tauri::command]
-pub fn proxy_get_server_info(state: tauri::State<'_, Arc<ProxyServerState>>) -> ProxyServerInfo {
+pub fn proxy_get_server_info(state: &Arc<ProxyServerState>) -> ProxyServerInfo {
     state.info.clone()
 }
 
@@ -105,10 +104,11 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
     let app = Router::new()
         .route("/image-proxy", get(handle_image_proxy))
         .route("/proxy/{provider}", any(handle_proxy))
+        .route("/proxy/{provider}/", any(handle_proxy))
         .route("/proxy/{provider}/{*rest}", any(handle_proxy))
         .with_state(state.clone());
 
-    tauri::async_runtime::spawn(async move {
+    crate::compat::async_runtime::spawn(async move {
         let listener = match TokioTcpListener::from_std(listener) {
             Ok(listener) => listener,
             Err(err) => {
@@ -124,7 +124,7 @@ pub fn start_proxy_server() -> Result<Arc<ProxyServerState>, String> {
     Ok(state)
 }
 
-async fn handle_image_proxy(Query(query): Query<ImageProxyQuery>, headers: HeaderMap) -> Response {
+pub async fn handle_image_proxy(Query(query): Query<ImageProxyQuery>, headers: HeaderMap) -> Response {
     let target_url = match validate_image_proxy_url(&query.url) {
         Ok(url) => url,
         Err(message) => return error_response(StatusCode::BAD_REQUEST, &message, &headers),
@@ -322,7 +322,7 @@ fn resolve_image_proxy_mime(
     Err("Image proxy upstream response is not a supported image".to_string())
 }
 
-async fn handle_proxy(
+pub async fn handle_proxy(
     State(state): State<Arc<ProxyServerState>>,
     Path(ProxyRoutePath { provider, .. }): Path<ProxyRoutePath>,
     method: Method,

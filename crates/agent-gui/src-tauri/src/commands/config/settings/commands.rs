@@ -1,6 +1,6 @@
-#[tauri::command]
+
 pub async fn settings_load_all() -> Result<SettingsLoadResponse, String> {
-    tauri::async_runtime::spawn_blocking(|| {
+    crate::compat::async_runtime::spawn_blocking(|| {
         let conn = open_db()?;
         let default_workdir = default_project_workdir()?;
         Ok(SettingsLoadResponse {
@@ -19,9 +19,9 @@ pub async fn settings_load_all() -> Result<SettingsLoadResponse, String> {
     .map_err(|e| format!("settings_load_all join 失败：{e}"))?
 }
 
-#[tauri::command]
+
 pub async fn settings_save_providers(payload: Value) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_providers(&mut conn, payload)
     })
@@ -29,12 +29,12 @@ pub async fn settings_save_providers(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_providers join 失败：{e}"))?
 }
 
-#[tauri::command]
+
 pub async fn settings_save_system(
     payload: Value,
-    automation_scheduler: tauri::State<'_, Arc<AutomationScheduler>>,
+    automation_scheduler: &Arc<AutomationScheduler>,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_system(&mut conn, payload)?;
         // 保存成功后刷新全局代理状态，让 shell env 注入与出网代理即时生效。
@@ -48,9 +48,9 @@ pub async fn settings_save_system(
     Ok(())
 }
 
-#[tauri::command]
+
 pub async fn settings_save_mcp(payload: Value) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_mcp(&mut conn, payload)
     })
@@ -58,12 +58,12 @@ pub async fn settings_save_mcp(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_mcp join 失败：{e}"))?
 }
 
-#[tauri::command]
+
 pub async fn settings_save_remote(
     payload: Value,
-    gateway_controller: tauri::State<'_, Arc<GatewayController>>,
+    gateway_controller: &Arc<GatewayController>,
 ) -> Result<(), String> {
-    let normalized = tauri::async_runtime::spawn_blocking(move || {
+    let normalized = crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_remote(&mut conn, payload)
     })
@@ -72,9 +72,9 @@ pub async fn settings_save_remote(
     gateway_controller.apply_config(normalized)
 }
 
-#[tauri::command]
+
 pub async fn settings_save_memory(payload: Value) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_memory(&mut conn, payload)
     })
@@ -82,9 +82,9 @@ pub async fn settings_save_memory(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_memory join 失败：{e}"))?
 }
 
-#[tauri::command]
+
 pub async fn settings_save_model_failover(payload: Value) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_model_failover(&mut conn, payload)
     })
@@ -92,9 +92,9 @@ pub async fn settings_save_model_failover(payload: Value) -> Result<(), String> 
     .map_err(|e| format!("settings_save_model_failover join 失败：{e}"))?
 }
 
-#[tauri::command]
+
 pub async fn settings_save_agents(payload: Value) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_agents(&mut conn, payload)
     })
@@ -102,9 +102,9 @@ pub async fn settings_save_agents(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_agents join 失败：{e}"))?
 }
 
-#[tauri::command]
+
 pub async fn settings_save_ssh(payload: Value) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         save_ssh(&mut conn, payload)
     })
@@ -112,9 +112,9 @@ pub async fn settings_save_ssh(payload: Value) -> Result<(), String> {
     .map_err(|e| format!("settings_save_ssh join 失败：{e}"))?
 }
 
-#[tauri::command]
+
 pub async fn settings_apply_ssh_patch(payload: Value) -> Result<SshPatchApplyResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let mut conn = open_db()?;
         apply_ssh_patch_with_conn(&mut conn, payload)
     })
@@ -122,12 +122,12 @@ pub async fn settings_apply_ssh_patch(payload: Value) -> Result<SshPatchApplyRes
     .map_err(|e| format!("settings_apply_ssh_patch join 失败：{e}"))?
 }
 
-#[tauri::command]
+
 pub async fn settings_reset_ssh_known_host(
     host: String,
     port: u16,
 ) -> Result<SshKnownHostResetResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    crate::compat::async_runtime::spawn_blocking(move || {
         let deleted = reset_runtime_ssh_known_host(&host, port)?;
         Ok(SshKnownHostResetResponse { deleted })
     })

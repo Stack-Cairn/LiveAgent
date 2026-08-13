@@ -1,0 +1,54 @@
+# LiveAgent Headless Full — Docker Compose（独立配置，可直接使用）
+# ===============================================================
+# 全栈开发沙箱（~1.2 GB）。
+# 预装: core 全部工具 + java temurin-17 + maven 3.9
+#       （Java 8 未预装，首次使用时自动补装）
+# 镜像由 GitHub Actions 构建推送，此处直接拉取，无需本地构建。
+#
+# 用法（在 LiveAgent 项目根目录）:
+#   docker compose -f docker/docker-compose.headless-full.yml up -d
+#   docker compose -f docker/docker-compose.headless-full.yml logs -f
+#   docker compose -f docker/docker-compose.headless-full.yml down
+#
+# 环境变量（可选，不设置时用默认值）:
+#   GHCR_OWNER=thirsty5034  镜像仓库所有者（fork 后改为自己的用户名）
+#   TAG=main                镜像版本（main 分支 push 自动构建为 main；打 v* tag 后可填 v1.2.3 / latest）
+#
+# 切换运行时版本: 取消注释下方 environment 并改版本号，缺失版本首次启动自动补装
+# （补装内容写入 mise-data 卷，容器重建保留，只付一次下载）。
+#   MISE_NODE_VERSION: 20.18.0
+#   MISE_PYTHON_VERSION: 3.11
+#   MISE_GO_VERSION: 1.24
+#   MISE_JAVA_VERSION: temurin-8
+#
+# 数据持久化:
+#   ./data:/var/lib/liveagent    → liveagent 用户 home（含 ~/.liveagent 应用数据）
+#   mise-data:/opt/mise          → mise 数据目录（named volume）
+#     注意: 不能用 ./mise-data 这类 bind mount —— 空目录会把镜像内预装工具链
+#     遮蔽掉，导致启动时重新下载全部运行时。named volume 首次挂载时自动从镜像
+#     复制 /opt/mise 内容（含预装版本与属主），之后补装增量写卷，零初始化。
+#     备份: docker run --rm -v liveagent-full-mise-data:/data -v $(pwd):/b \
+#           alpine tar czf /b/data/mise-data-backup.tar.gz -C /data .
+
+services:
+  headless-full:
+    image: ghcr.io/${GHCR_OWNER:-thirsty5034}/liveagent-full:${TAG:-main}
+    container_name: liveagent-full
+    network_mode: host          # 直接使用宿主机网络，无 NAT 转发
+    environment:
+      TZ: Asia/Shanghai
+      LIVEAGENT_HEADLESS_HOST: 0.0.0.0
+      LIVEAGENT_HEADLESS_PORT: 17890
+      LIVEAGENT_DATA_DIR: /var/lib/liveagent
+      LANG: en_US.UTF-8
+    volumes:
+      - /vol1/1000/projects:/workspace    # 项目代码统一挂载
+      - ./data:/var/lib/liveagent          # 数据持久化（相对运行 compose 的目录）
+      - mise-data:/opt/mise                # mise 数据卷（首次自动从镜像复制预装工具链）
+    restart: unless-stopped
+
+volumes:
+  # named volume：首次挂载自动从镜像复制 /opt/mise（含预装版本，属主 liveagent），
+  # 懒加载补装的版本持久化于此。与 core 镜像的卷分开命名，避免预装内容互相污染。
+  mise-data:
+    name: liveagent-full-mise-data
