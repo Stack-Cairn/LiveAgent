@@ -9,6 +9,8 @@ const rootDir = fileURLToPath(new URL("../..", import.meta.url));
 const baseLoader = createTsModuleLoader({ rootDir });
 const uiMessages = baseLoader.loadModule("@liveagent/ui/lib/chat/uiMessages.ts");
 const toolPreview = baseLoader.loadModule("@liveagent/ui/lib/chat/toolPreview.ts");
+const toolApprovalArgs = baseLoader.loadModule("@liveagent/ui/lib/chat/toolApprovalArgs.ts");
+const askUserQuestion = baseLoader.loadModule("@liveagent/ui/lib/chat/askUserQuestion.ts");
 
 function createReactRenderer() {
   const requireFromRoot = createRequire(path.join(rootDir, "package.json"));
@@ -260,6 +262,7 @@ test("display args keep long values intact and strip synthetic keys", () => {
     arguments: {
       cmdString,
       options,
+      __custom: "legitimate-mcp-value",
       __toolApprovalPending: true,
       __toolApprovalSummary: "secret-approval-summary",
       [toolPreview.LIVE_TOOL_PREVIEW_META_KEY]: { v: 2, progress: 1, fields: {} },
@@ -268,8 +271,32 @@ test("display args keep long values intact and strip synthetic keys", () => {
 
   assert.equal(display.cmdString, cmdString);
   assert.deepEqual(display.options, options);
+  assert.equal(display.__custom, "legitimate-mcp-value");
   assert.equal(Object.hasOwn(display, "__toolApprovalPending"), false);
   assert.equal(Object.hasOwn(display, "__toolApprovalSummary"), false);
+  assert.equal(Object.hasOwn(display, toolPreview.LIVE_TOOL_PREVIEW_META_KEY), false);
+});
+
+test("display args filter only known synthetic keys and preserve unknown double-underscore keys", () => {
+  const display = uiMessages.toolCallArgsForDisplay({
+    type: "toolCall",
+    id: "mcp-synthetic-args",
+    name: "mcp_custom_tool",
+    arguments: {
+      __custom: "business-value",
+      [toolApprovalArgs.TOOL_APPROVAL_PENDING_ARG]: true,
+      [toolApprovalArgs.TOOL_APPROVAL_DEADLINE_ARG]: Date.now(),
+      [toolApprovalArgs.TOOL_APPROVAL_SUMMARY_ARG]: "approval-summary",
+      [askUserQuestion.ASK_USER_QUESTION_DEADLINE_ARG]: Date.now(),
+      [toolPreview.LIVE_TOOL_PREVIEW_META_KEY]: { v: 2, progress: 1, fields: {} },
+    },
+  });
+
+  assert.equal(display.__custom, "business-value");
+  assert.equal(Object.hasOwn(display, toolApprovalArgs.TOOL_APPROVAL_PENDING_ARG), false);
+  assert.equal(Object.hasOwn(display, toolApprovalArgs.TOOL_APPROVAL_DEADLINE_ARG), false);
+  assert.equal(Object.hasOwn(display, toolApprovalArgs.TOOL_APPROVAL_SUMMARY_ARG), false);
+  assert.equal(Object.hasOwn(display, askUserQuestion.ASK_USER_QUESTION_DEADLINE_ARG), false);
   assert.equal(Object.hasOwn(display, toolPreview.LIVE_TOOL_PREVIEW_META_KEY), false);
 });
 
@@ -289,6 +316,22 @@ test("display args cap pathological strings, including nested ones, with an expl
   assert.ok(display.content.length < 121_000);
   assert.ok(display.options.inner.startsWith("y".repeat(20_000)));
   assert.ok(display.options.inner.endsWith("（已截断，len=30000）"));
+});
+
+test("display args enforce a cumulative budget across medium-sized fields", () => {
+  const argumentsForDisplay = Object.fromEntries(
+    Array.from({ length: 4 }, (_, index) => [`field_${index}`, "x".repeat(19_999)]),
+  );
+  const display = uiMessages.toolCallArgsForDisplay({
+    type: "toolCall",
+    id: "mcp-cumulative-budget",
+    name: "mcp_batch_write",
+    arguments: argumentsForDisplay,
+  });
+  const text = uiMessages.safeStringify(display);
+
+  assert.ok(text.length < 60_000);
+  assert.match(text, /展示已截断/);
 });
 
 test("expanded MCP arguments render complete long and nested values as wrapped scrollable JSON", () => {
