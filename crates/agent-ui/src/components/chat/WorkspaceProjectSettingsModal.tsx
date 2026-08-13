@@ -264,9 +264,6 @@ export function WorkspaceProjectSettingsModal(props: {
     try {
       if (suspendSettingsModal) {
         setDirectoryPickerActive(true);
-        await new Promise<void>((resolve) => {
-          window.requestAnimationFrame(() => resolve());
-        });
       }
       const path = await pickDirectory(project.path);
       if (!path) return;
@@ -357,11 +354,15 @@ export function WorkspaceProjectSettingsModal(props: {
     { id: "resources" as const, icon: Blend, label: t("chat.workspaceSettingsResources") },
   ];
 
+  if (directoryPickerActive) {
+    return <>{directoryPickerElement}</>;
+  }
+
   return (
     <Dialog.Root
-      open={!isClosing && !directoryPickerActive}
+      open={!isClosing}
       onOpenChange={(open) => {
-        if (!open && !saving && !directoryPickerActive) requestClose();
+        if (!open && !saving) requestClose();
       }}
     >
       <Dialog.Portal>
