@@ -112,6 +112,8 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(sharedProjectSettings, /window\.requestAnimationFrame/);
   assert.match(webRemotePathPicker, /selectedPathRef\.current = path/);
   assert.match(webRemotePathPicker, /pending\.resolve\(selectedPathRef\.current\)/);
+  assert.match(webRemotePathPicker, /h-\[650px\]/);
+  assert.match(webRemotePathPicker, /max-w-\[940px\]/);
   assert.ok(
     webRemotePathPicker.indexOf("selectedPathRef.current = path") <
       webRemotePathPicker.indexOf("pending.resolve(selectedPathRef.current)"),
