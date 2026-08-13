@@ -10,7 +10,10 @@ import { type NotifyItem, NotifyToast } from "@liveagent/ui/components/chat/Noti
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
 import { ToolApprovalBar } from "@liveagent/ui/components/chat/ToolApprovalBar";
-import { WorkspaceResourceSettingsDrawer } from "@liveagent/ui/components/chat/WorkspaceResourceSettingsDrawer";
+import {
+  type WorkspaceProjectRootClient,
+  WorkspaceProjectSettingsModal,
+} from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ChevronDown } from "@liveagent/ui/components/IconSet";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
@@ -358,6 +361,41 @@ export default function GatewayApp() {
   const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const { settings, setSettings, settingsSyncReady, settingsSyncError, settingsSaveState } =
     useGatewaySettingsSync({ token, api, activeAgentId: activeAgentScope });
+  const workspaceProjectRootClient = useMemo<WorkspaceProjectRootClient | undefined>(
+    () =>
+      api
+        ? {
+            list: async (project) =>
+              (await api.listWorkspaceRootGrants(project.id, project.path)).map((grant) => ({
+                id: grant.id,
+                alias: grant.alias,
+                displayPath: grant.displayPath,
+                access: grant.access,
+                state: grant.state,
+              })),
+            save: async (project, roots) =>
+              (
+                await api.applyWorkspaceRootGrants(
+                  project.id,
+                  project.path,
+                  roots.map((root) => ({
+                    ...(root.id.startsWith("draft-") ? {} : { id: root.id }),
+                    alias: root.alias,
+                    displayPath: root.displayPath,
+                    access: root.access,
+                  })),
+                )
+              ).map((grant) => ({
+                id: grant.id,
+                alias: grant.alias,
+                displayPath: grant.displayPath,
+                access: grant.access,
+                state: grant.state,
+              })),
+          }
+        : undefined,
+    [api],
+  );
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
   const isAgentMode = settings.system.executionMode !== "text";
   const [activeWorkspaceProjectId, setActiveWorkspaceProjectId] = useState<string>(
@@ -368,8 +406,6 @@ export default function GatewayApp() {
     [settings.system.missingWorkspaceProjectPaths],
   );
   const [sidebarOpen, setSidebarOpen] = useState(shouldOpenSidebarByDefault);
-  const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
-  const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [shareConversation, setShareConversation] = useState<ChatHistorySummary | null>(null);
   const [shareStatus, setShareStatus] = useState<HistoryShareStatus | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -394,8 +430,8 @@ export default function GatewayApp() {
   const {
     activeView,
     setActiveView,
-    resourceSettingsProject,
-    setResourceSettingsProject,
+    projectSettingsProject,
+    setProjectSettingsProject,
     rightDockOpen,
     setRightDockOpen,
   } = useApplicationViewState<WorkspaceProject>();
@@ -1637,29 +1673,6 @@ export default function GatewayApp() {
     },
     [setSettings],
   );
-
-  const handleStartRenamingWorkspaceProject = useCallback((project: WorkspaceProject) => {
-    if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
-    setProjectRenamingId(project.id);
-    setProjectRenameDraft(project.name);
-  }, []);
-
-  const handleCommitWorkspaceProjectRename = useCallback(() => {
-    if (!projectRenamingId) {
-      return;
-    }
-    const project = workspaceProjects.find((item) => item.id === projectRenamingId);
-    if (project) {
-      commitWorkspaceProjectRename(project, projectRenameDraft);
-    }
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, [commitWorkspaceProjectRename, projectRenameDraft, projectRenamingId, workspaceProjects]);
-
-  const handleCancelWorkspaceProjectRename = useCallback(() => {
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, []);
 
   const handleSetWorkspaceProjectPinned = useCallback(
     (project: WorkspaceProject, isPinned: boolean) => {
@@ -3017,8 +3030,6 @@ export default function GatewayApp() {
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
-    setProjectRenamingId,
-    setProjectRenameDraft,
   });
 
   const isWorkspaceProjectRunning = useCallback(
@@ -3787,6 +3798,7 @@ export default function GatewayApp() {
       setSharedManagerUpdatingIds(new Set());
       setSharedManagerErrors({});
       setProjectPickerOpen(false);
+      setProjectSettingsProject(null);
       resetSettingsOverlay();
       setActiveView("chat");
       setRightDockOpen(false);
@@ -4564,8 +4576,6 @@ export default function GatewayApp() {
               workspaceProjectGroups={settings.system.workspaceProjectGroups}
               activeProjectId={activeWorkspaceProject?.id}
               missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-              projectRenamingId={projectRenamingId}
-              projectRenameDraft={projectRenameDraft}
               projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
               recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
               canShareConversations={canShareHistory}
@@ -4585,11 +4595,7 @@ export default function GatewayApp() {
               onSelectProject={handleSelectWorkspaceProject}
               onNewConversationForProject={handleNewConversationForProject}
               onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
-              onConfigureProjectResources={setResourceSettingsProject}
-              onStartRenamingProject={handleStartRenamingWorkspaceProject}
-              onProjectRenameDraftChange={setProjectRenameDraft}
-              onCommitProjectRename={handleCommitWorkspaceProjectRename}
-              onCancelProjectRename={handleCancelWorkspaceProjectRename}
+              onConfigureProject={setProjectSettingsProject}
               onSetProjectPinned={handleSetWorkspaceProjectPinned}
               onRemoveProject={handleRemoveWorkspaceProject}
               onArchiveProject={handleArchiveWorkspaceProject}
@@ -5091,17 +5097,28 @@ export default function GatewayApp() {
             />
           ) : null}
 
-          {resourceSettingsProject ? (
-            <WorkspaceResourceSettingsDrawer
-              project={resourceSettingsProject}
+          {projectSettingsProject ? (
+            <WorkspaceProjectSettingsModal
+              project={projectSettingsProject}
               settings={settings}
               skills={availableSkills}
-              onClose={() => setResourceSettingsProject(null)}
+              rootClient={workspaceProjectRootClient}
+              rootClientUnavailableDescription={
+                workspaceProjectRootClient
+                  ? undefined
+                  : translate(
+                      "chat.workspaceSettingsDirectoriesGatewayDescription",
+                      settings.locale,
+                    )
+              }
+              onClose={() => setProjectSettingsProject(null)}
+              onRenameProject={(name) => {
+                commitWorkspaceProjectRename(projectSettingsProject, name);
+              }}
               onSave={(draft) => {
                 setSettings((prev) =>
-                  updateWorkspaceResourceSettings(prev, resourceSettingsProject.path, draft),
+                  updateWorkspaceResourceSettings(prev, projectSettingsProject.path, draft),
                 );
-                setResourceSettingsProject(null);
               }}
             />
           ) : null}

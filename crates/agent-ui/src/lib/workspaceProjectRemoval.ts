@@ -20,8 +20,6 @@ type WorkspaceProjectSettingsActionsParams = {
   activeWorkspaceProject: WorkspaceProject | undefined;
   activateWorkspaceProject: (project: WorkspaceProject) => void;
   setActiveWorkspaceProjectId: (updater: (current: string) => string) => void;
-  setProjectRenamingId: (updater: (current: string | null) => string | null) => void;
-  setProjectRenameDraft: (value: string) => void;
 };
 
 export function workspaceProjectsMatch(
@@ -116,8 +114,6 @@ export function useWorkspaceProjectSettingsActions(params: WorkspaceProjectSetti
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
-    setProjectRenamingId,
-    setProjectRenameDraft,
   } = params;
 
   const handleRemoveWorkspaceProjectFromSettings = useCallback(
@@ -134,17 +130,8 @@ export function useWorkspaceProjectSettingsActions(params: WorkspaceProjectSetti
           archivedWorkspaceProjectPathKeys,
         ),
       );
-      setProjectRenamingId((current) => (current === project.id ? null : current));
-      setProjectRenameDraft("");
     },
-    [
-      archivedWorkspaceProjectPathKeys,
-      setActiveWorkspaceProjectId,
-      setProjectRenameDraft,
-      setProjectRenamingId,
-      setSettings,
-      workspaceProjects,
-    ],
+    [archivedWorkspaceProjectPathKeys, setActiveWorkspaceProjectId, setSettings, workspaceProjects],
   );
 
   const handleArchiveWorkspaceProject = useCallback(

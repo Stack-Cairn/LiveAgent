@@ -10,7 +10,10 @@ import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedH
 import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
 import { ToolApprovalBar } from "@liveagent/ui/components/chat/ToolApprovalBar";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
-import { WorkspaceResourceSettingsDrawer } from "@liveagent/ui/components/chat/WorkspaceResourceSettingsDrawer";
+import {
+  type WorkspaceProjectRootClient,
+  WorkspaceProjectSettingsModal,
+} from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
@@ -116,6 +119,7 @@ import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
+import { applyWorkspaceRootGrants, listWorkspaceRootGrants } from "../lib/workspaceRootGrants";
 import {
   ChatComposerBar,
   ChatTranscript,
@@ -280,11 +284,42 @@ export function ChatPage(props: ChatPageProps) {
   const {
     activeView,
     setActiveView,
-    resourceSettingsProject,
-    setResourceSettingsProject,
+    projectSettingsProject,
+    setProjectSettingsProject,
     rightDockOpen,
     setRightDockOpen,
   } = useApplicationViewState<WorkspaceProject>();
+  const workspaceProjectRootClient = useMemo<WorkspaceProjectRootClient>(
+    () => ({
+      list: async (project) =>
+        (await listWorkspaceRootGrants(project)).map((grant) => ({
+          id: grant.id,
+          alias: grant.alias,
+          displayPath: grant.displayPath,
+          access: grant.access,
+          state: grant.state,
+        })),
+      save: async (project, roots) =>
+        (
+          await applyWorkspaceRootGrants(
+            project,
+            roots.map((root) => ({
+              id: root.id.startsWith("draft-") ? undefined : root.id,
+              alias: root.alias,
+              displayPath: root.displayPath,
+              access: root.access,
+            })),
+          )
+        ).map((grant) => ({
+          id: grant.id,
+          alias: grant.alias,
+          displayPath: grant.displayPath,
+          access: grant.access,
+          state: grant.state,
+        })),
+    }),
+    [],
+  );
   const {
     workspaceProjects,
     setActiveWorkspaceProjectId,
@@ -294,10 +329,6 @@ export function ChatPage(props: ChatPageProps) {
     activeWorkspaceProjectPath,
     sidebarScope,
     historyScopeKey,
-    projectRenamingId,
-    setProjectRenamingId,
-    projectRenameDraft,
-    setProjectRenameDraft,
     activateWorkspaceProject,
     handleSelectWorkspaceProject,
     handleNewConversationForProject,
@@ -319,9 +350,7 @@ export function ChatPage(props: ChatPageProps) {
     handleMoveWorkspaceProjectToGroup,
     handleToggleWorkspaceGroupCollapsed,
     handleLoadWorkspaceRemoteBranches,
-    handleStartRenamingWorkspaceProject,
-    handleCommitWorkspaceProjectRename,
-    handleCancelWorkspaceProjectRename,
+    commitWorkspaceProjectRename,
     handleSetWorkspaceProjectPinned,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
@@ -1087,8 +1116,6 @@ export function ChatPage(props: ChatPageProps) {
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
-    setProjectRenamingId,
-    setProjectRenameDraft,
     terminalProjectPathKey,
     setTerminalSessions,
     setRightDockOpen,
@@ -1354,6 +1381,7 @@ export function ChatPage(props: ChatPageProps) {
 
   const { send } = useSendChatTurn({
     settings,
+    workspaceProjects,
     setSettings,
     getMcpSettings,
     getToolPolicies,
@@ -1858,8 +1886,6 @@ export function ChatPage(props: ChatPageProps) {
           workspaceProjectGroups={workspaceProjectGroups}
           activeProjectId={activeWorkspaceProject?.id}
           missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-          projectRenamingId={projectRenamingId}
-          projectRenameDraft={projectRenameDraft}
           projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
           recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
           onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
@@ -1874,11 +1900,7 @@ export function ChatPage(props: ChatPageProps) {
           onNewConversationForProject={handleNewConversationForProject}
           onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
           onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
-          onConfigureProjectResources={setResourceSettingsProject}
-          onStartRenamingProject={handleStartRenamingWorkspaceProject}
-          onProjectRenameDraftChange={setProjectRenameDraft}
-          onCommitProjectRename={handleCommitWorkspaceProjectRename}
-          onCancelProjectRename={handleCancelWorkspaceProjectRename}
+          onConfigureProject={setProjectSettingsProject}
           onSetProjectPinned={handleSetWorkspaceProjectPinned}
           onRemoveProject={handleRemoveWorkspaceProject}
           onArchiveProject={handleArchiveWorkspaceProject}
@@ -2180,17 +2202,20 @@ export function ChatPage(props: ChatPageProps) {
         onInsertCommitMention={handleRightDockInsertCommitMention}
         onInsertGitFileMention={handleRightDockInsertGitFileMention}
       />
-      {resourceSettingsProject ? (
-        <WorkspaceResourceSettingsDrawer
-          project={resourceSettingsProject}
+      {projectSettingsProject ? (
+        <WorkspaceProjectSettingsModal
+          project={projectSettingsProject}
           settings={settings}
           skills={availableSkills}
-          onClose={() => setResourceSettingsProject(null)}
+          rootClient={workspaceProjectRootClient}
+          onClose={() => setProjectSettingsProject(null)}
+          onRenameProject={(name) => {
+            commitWorkspaceProjectRename(projectSettingsProject, name);
+          }}
           onSave={(draft) => {
             setSettings((prev) =>
-              updateWorkspaceResourceSettings(prev, resourceSettingsProject.path, draft),
+              updateWorkspaceResourceSettings(prev, projectSettingsProject.path, draft),
             );
-            setResourceSettingsProject(null);
           }}
         />
       ) : null}
