@@ -119,6 +119,19 @@ export type RightDockToolTab = {
   uiState?: Record<string, unknown>;
 };
 
+// Stable id of the derived background-tasks tab (not a RightDockToolKind:
+// its existence also derives from the managed-process store at render time).
+export const RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID = "background-tasks";
+
+// Cross-client visibility intent for the background-tasks tab. `opened`
+// keeps the tab visible with no processes; `dismissedIds` snapshots the
+// process ids visible at close time — a process id outside the snapshot
+// re-derives the tab on every client.
+export type RightDockBackgroundTasksState = {
+  opened: boolean;
+  dismissedIds: string[];
+};
+
 // Persisted dock state is user intent only: terminal tab existence is derived
 // from live sessions at render time, so tabOrder may contain session ids that
 // are dead or not yet loaded — they are preserved here and lazily collected on
@@ -127,6 +140,7 @@ export type RightDockProjectState = {
   activeTabId?: string;
   tabOrder: string[];
   tools: Partial<Record<RightDockToolKind, RightDockToolTab>>;
+  backgroundTasks: RightDockBackgroundTasksState;
   openVersion: number;
   stateVersion: number;
   writerId: string;
@@ -170,6 +184,10 @@ export type ChatTranscriptSettings = {
 
 export type CustomSettings = {
   conversationTitleModel?: SelectedModel;
+  // AI commit-message generation in the Git review dock. Unset means "follow
+  // the current conversation model"; a stored selection whose provider/model
+  // is no longer active normalizes back to unset, restoring that fallback.
+  commitMessageModel?: SelectedModel;
   chatSidebar: ChatSidebarSettings;
   chatTranscript: ChatTranscriptSettings;
   rightDock: RightDockSettings;
@@ -2384,10 +2402,33 @@ export function normalizeRightDockProjectState(input: unknown): RightDockProject
     ...(activeTabId ? { activeTabId } : {}),
     tabOrder,
     tools,
+    backgroundTasks: normalizeRightDockBackgroundTasksState(obj.backgroundTasks),
     openVersion: normalizeIntegerInRange(obj.openVersion, 0, Number.MAX_SAFE_INTEGER, 0),
     stateVersion: normalizeIntegerInRange(obj.stateVersion, 0, Number.MAX_SAFE_INTEGER, 0),
     writerId: typeof obj.writerId === "string" ? obj.writerId.trim().slice(0, 32) : "",
     lastUsedAt: normalizeIntegerInRange(obj.lastUsedAt, 0, Number.MAX_SAFE_INTEGER, 0),
+  };
+}
+
+export function normalizeRightDockBackgroundTasksState(
+  input: unknown,
+): RightDockBackgroundTasksState {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const dismissedIds: string[] = [];
+  if (Array.isArray(obj.dismissedIds)) {
+    const seen = new Set<string>();
+    for (const item of obj.dismissedIds) {
+      if (typeof item !== "string") continue;
+      const id = item.trim();
+      if (!id || id.length > 160 || seen.has(id)) continue;
+      seen.add(id);
+      dismissedIds.push(id);
+      if (dismissedIds.length >= 200) break;
+    }
+  }
+  return {
+    opened: obj.opened === true,
+    dismissedIds,
   };
 }
 
@@ -2404,7 +2445,13 @@ export function normalizeRightDockSettings(input: unknown): RightDockSettings {
     const normalizedPathKey = workspaceProjectPathKey(pathKey);
     if (!normalizedPathKey || projects[normalizedPathKey]) continue;
     const project = normalizeRightDockProjectState(projectState);
-    const isEmpty = Object.keys(project.tools).length === 0;
+    // A bucket holding only background-tasks intent (manually opened tab, or
+    // dismissal snapshot that must keep suppressing derived tabs) is live
+    // state, not a tombstone.
+    const isEmpty =
+      Object.keys(project.tools).length === 0 &&
+      !project.backgroundTasks.opened &&
+      project.backgroundTasks.dismissedIds.length === 0;
     if (isEmpty && project.openVersion === 0 && project.stateVersion === 0) continue;
     if (isEmpty) {
       // Tombstone: start (or continue) the expiry clock, drop once elapsed.
@@ -2469,6 +2516,10 @@ export function normalizeCustomSettings(
   return {
     conversationTitleModel: normalizeSelectedModelForProviders(
       normalizeSelectedModel(obj.conversationTitleModel),
+      customProviders,
+    ),
+    commitMessageModel: normalizeSelectedModelForProviders(
+      normalizeSelectedModel(obj.commitMessageModel),
       customProviders,
     ),
     chatSidebar: {
@@ -3009,6 +3060,7 @@ function rightDockProjectContentKey(state: RightDockProjectState): string {
     activeTabId: state.activeTabId ?? "",
     tabOrder: state.tabOrder,
     tools: RIGHT_DOCK_TOOL_KINDS.map((kind) => [kind, state.tools[kind] ?? null]),
+    backgroundTasks: state.backgroundTasks,
     openVersion: state.openVersion,
   });
 }
@@ -3127,6 +3179,34 @@ export function isRightDockSingletonTabOpen(
   return Boolean(state.tools[kind]);
 }
 
+// Open gesture for the background-tasks tab: pin it visible everywhere and
+// clear any dismissal snapshot so previously hidden records reappear.
+export function openRightDockBackgroundTasksTabState(
+  current: RightDockProjectState,
+): RightDockProjectState {
+  const tabId = RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID;
+  return {
+    ...current,
+    activeTabId: tabId,
+    tabOrder: current.tabOrder.includes(tabId) ? current.tabOrder : [...current.tabOrder, tabId],
+    backgroundTasks: { opened: true, dismissedIds: [] },
+  };
+}
+
+// Close gesture: hide-only. The visible process ids are snapshotted so a
+// process outside the snapshot (a newly started one) re-derives the tab on
+// every client. The persisted activeTabId stays put — render-time resolution
+// falls back while the tab is hidden.
+export function closeRightDockBackgroundTasksTabState(
+  current: RightDockProjectState,
+  visibleProcessIds: readonly string[],
+): RightDockProjectState {
+  return {
+    ...current,
+    backgroundTasks: { opened: false, dismissedIds: [...visibleProcessIds] },
+  };
+}
+
 export function removeRightDockProjectState(
   prev: AppSettings,
   projectPathKey: string,
@@ -3143,7 +3223,10 @@ export function removeRightDockProjectState(
   );
   if (!hasRightDockProject && !hasSshProjectAssociation) return prev;
   const currentRightDockProject = getRightDockProjectState(prev.customSettings, normalizedPathKey);
-  const hasRightDockTools = Object.keys(currentRightDockProject.tools).length > 0;
+  const hasRightDockTools =
+    Object.keys(currentRightDockProject.tools).length > 0 ||
+    currentRightDockProject.backgroundTasks.opened ||
+    currentRightDockProject.backgroundTasks.dismissedIds.length > 0;
   if (hasRightDockProject && !hasRightDockTools && !hasSshProjectAssociation) return prev;
 
   const projects = hasRightDockProject
@@ -3153,6 +3236,7 @@ export function removeRightDockProjectState(
     projects[normalizedPathKey] = {
       tabOrder: [],
       tools: {},
+      backgroundTasks: { opened: false, dismissedIds: [] },
       openVersion: currentRightDockProject.openVersion + 1,
       stateVersion: currentRightDockProject.stateVersion + 1,
       writerId: getRightDockWriterId(),

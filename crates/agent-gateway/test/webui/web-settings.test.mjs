@@ -360,6 +360,7 @@ test("web settings normalization canonicalizes project keyed maps with Windows p
         openedAt: 2,
       },
     },
+    backgroundTasks: { opened: false, dismissedIds: [] },
     openVersion: 0,
     stateVersion: 0,
     writerId: "",

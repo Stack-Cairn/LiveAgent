@@ -376,6 +376,7 @@ test("settings normalization canonicalizes project keyed maps with Windows path 
         openedAt: 2,
       },
     },
+    backgroundTasks: { opened: false, dismissedIds: [] },
     openVersion: 0,
     stateVersion: 0,
     writerId: "",
@@ -419,6 +420,46 @@ test("custom settings conversation title model only keeps enabled provider model
     conversationTitleModel: undefined,
   });
   assert.equal(cleared.customSettings.conversationTitleModel, undefined);
+});
+
+test("custom settings commit message model only keeps enabled provider models", () => {
+  const customProviders = [
+    {
+      id: "provider-1",
+      name: "Provider",
+      type: "codex",
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "key",
+      models: ["gpt-5", "gpt-5-mini"],
+      activeModels: ["gpt-5-mini"],
+    },
+  ];
+
+  const normalized = settings.normalizeSettings({
+    customProviders,
+    customSettings: {
+      commitMessageModel: { customProviderId: "provider-1", model: "gpt-5-mini" },
+    },
+  });
+  assert.deepEqual(normalized.customSettings.commitMessageModel, {
+    customProviderId: "provider-1",
+    model: "gpt-5-mini",
+  });
+
+  // A model that is no longer active normalizes back to unset, which is the
+  // "follow the current conversation model" fallback.
+  const stale = settings.normalizeSettings({
+    customProviders,
+    customSettings: {
+      commitMessageModel: { customProviderId: "provider-1", model: "gpt-5" },
+    },
+  });
+  assert.equal(stale.customSettings.commitMessageModel, undefined);
+
+  const cleared = settings.updateCustomSettings(normalized, {
+    commitMessageModel: undefined,
+  });
+  assert.equal(cleared.customSettings.commitMessageModel, undefined);
 });
 
 test("chat runtime controls default and follow provider model reasoning support", () => {
@@ -890,6 +931,7 @@ test("gateway settings sync payload redacts provider api keys", () => {
             openedAt: 2,
           },
         },
+        backgroundTasks: { opened: false, dismissedIds: [] },
         openVersion: 3,
         stateVersion: 4,
         writerId: "",
@@ -903,6 +945,7 @@ test("gateway settings sync payload redacts provider api keys", () => {
             openedAt: 3,
           },
         },
+        backgroundTasks: { opened: false, dismissedIds: [] },
         openVersion: 2,
         stateVersion: 2,
         writerId: "",
@@ -1241,6 +1284,7 @@ test("normalizes right dock from current settings", () => {
         },
       },
     },
+    backgroundTasks: { opened: false, dismissedIds: [] },
     openVersion: 6,
     stateVersion: 7,
     writerId: "",

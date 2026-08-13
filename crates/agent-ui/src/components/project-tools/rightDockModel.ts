@@ -1,4 +1,5 @@
 import {
+  RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
   RIGHT_DOCK_SINGLETON_TAB_IDS,
   RIGHT_DOCK_TOOL_KINDS,
   type RightDockProjectState,
@@ -29,9 +30,10 @@ export const FILE_TREE_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.fileTree;
 export const GIT_REVIEW_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.gitReview;
 export const TUNNEL_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.tunnel;
 export const SSH_TUNNEL_TAB_ID = RIGHT_DOCK_SINGLETON_TAB_IDS.sshTunnel;
-// Derived tab: exists while the managed-process store has records; never
-// persisted into right-dock settings.
-export const BACKGROUND_TASKS_TAB_ID = "background-tasks";
+// Derived tab: exists while the managed-process store has undismissed
+// records, or while projectState.backgroundTasks pins it open (that intent
+// syncs across clients through right-dock settings).
+export const BACKGROUND_TASKS_TAB_ID = RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID;
 export const PROJECT_TOOLS_RESIZE_END_EVENT = "liveagent:project-tools-resize-end";
 
 export type RightDockSingletonTabKind = RightDockToolKind;
@@ -297,6 +299,7 @@ export function closeRightDockToolTabState(
     ...(activeTabId ? { activeTabId } : {}),
     tabOrder: state.tabOrder.filter((id) => id !== tabId),
     tools,
+    backgroundTasks: state.backgroundTasks,
     openVersion: state.openVersion,
     stateVersion: state.stateVersion,
     writerId: state.writerId,

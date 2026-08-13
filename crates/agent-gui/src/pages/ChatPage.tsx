@@ -17,6 +17,7 @@ import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { ProjectToolTextGenerationClient } from "@liveagent/ui/lib/ai/projectToolTextGeneration";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
 import {
   buildContextUsageScanItems,
@@ -81,6 +82,11 @@ import {
 import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import {
+  assistantMessageToText,
+  completeAssistantMessage,
+  createProviderRuntimeConfig,
+} from "../lib/providers/llm";
+import {
   type AppSettings,
   isAgentDevMode,
   isAgentExecutionMode,
@@ -140,6 +146,8 @@ import {
 } from "./chat/queue/chatTurnQueue";
 import { useChatTurnQueue } from "./chat/queue/useChatTurnQueue";
 import { syncMovedConversationRuntimeWorkdir } from "./chat/runtime/chatPageRuntime";
+import { resolveEffectiveChatModelSelection } from "./chat/runtime/modelSelection";
+import { resolveCommitMessageModelSelection } from "./chat/runtime/providerRuntimeConfig";
 import { useChatModelSelection } from "./chat/runtime/useChatModelSelection";
 import {
   type ManualCompactionRequest,
@@ -603,6 +611,68 @@ export function ChatPage(props: ChatPageProps) {
     conversationRuntimeCacheRef,
     updateConversationRuntimeEntry,
   });
+
+  const projectToolTextGenerationClient = useMemo<ProjectToolTextGenerationClient>(() => {
+    // The only consumer today is the Git review commit composer: prefer the
+    // configured commit-message model; when unset or no longer valid, follow
+    // the current conversation model (which throws when unconfigured).
+    const resolveGenerationSelection = () =>
+      resolveCommitMessageModelSelection(settings) ??
+      resolveEffectiveChatModelSelection({
+        settings,
+        conversationSelectedModel: conversationRuntimeCacheRef.current.get(
+          currentConversationIdRef.current,
+        )?.selectedModel,
+      });
+    return {
+      status: () => {
+        try {
+          resolveGenerationSelection();
+          return "ready";
+        } catch {
+          return "unconfigured";
+        }
+      },
+      generate: async (request) => {
+        const selected = resolveGenerationSelection();
+        const runtime = {
+          ...createProviderRuntimeConfig(
+            selected.provider,
+            selected.model,
+            settings.chatRuntimeControls,
+          ),
+          reasoning: "off" as const,
+          promptCachingEnabled: false,
+          nativeWebSearchEnabled: false,
+        };
+        const assistant = await completeAssistantMessage({
+          providerId: selected.providerId,
+          model: selected.model,
+          runtime,
+          context: {
+            systemPrompt: request.systemPrompt,
+            messages: [
+              {
+                role: "user",
+                content: request.userPrompt,
+                timestamp: Date.now(),
+              },
+            ],
+          },
+          sessionId: currentConversationSessionId,
+          cacheRetention: "none",
+          signal: request.signal,
+          allowJsonOutput: request.output === "json",
+        });
+        return assistantMessageToText(assistant);
+      },
+    };
+  }, [
+    conversationRuntimeCacheRef,
+    currentConversationIdRef,
+    currentConversationSessionId,
+    settings,
+  ]);
 
   function cancelConversationLoad() {
     conversationLoadSequenceRef.current += 1;
@@ -2090,6 +2160,7 @@ export function ChatPage(props: ChatPageProps) {
         client={tauriTerminalClient}
         gitClient={tauriGitClient}
         gitWriteEnabled
+        textGenerationClient={projectToolTextGenerationClient}
         tunnelClient={isAgentMode ? tauriTunnelClient : null}
         tunnelEnabled={tunnelEnabled}
         tunnelDisabledMessage={tunnelDisabledMessage}

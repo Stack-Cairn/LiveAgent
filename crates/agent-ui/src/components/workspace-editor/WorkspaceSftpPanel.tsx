@@ -1455,7 +1455,7 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
       ) : null}
       <div
         className={cn(
-          "flex min-h-0 flex-1 overflow-y-hidden",
+          "sftp-panes-scroll flex min-h-0 flex-1 overflow-y-hidden",
           isMobileLayout ? "overflow-x-hidden" : "overflow-x-auto",
         )}
       >

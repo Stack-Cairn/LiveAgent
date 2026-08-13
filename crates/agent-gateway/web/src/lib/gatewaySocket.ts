@@ -2568,6 +2568,7 @@ export class GatewayWebSocketClient {
         this.sftpTransferListeners.size > 0 ||
         this.chatActivityListeners.size > 0 ||
         this.tunnelStateListeners.size > 0 ||
+        this.processStateListeners.size > 0 ||
         this.workspaceActivityListeners.size > 0 ||
         this.conversationStreams.size > 0)
     );
@@ -3569,6 +3570,11 @@ export type GatewayWebSocketClientLike = {
 
 let activeClient: GatewayWebSocketClient | null = null;
 let activeToken = "";
+// True once any client has existed this page lifetime. reset* nulls
+// activeClient without notifying, so "activeClient !== null" alone would
+// miss the reset→create sequence and leave module-scoped stores subscribed
+// to the disposed instance forever.
+let everHadClient = false;
 const clientReplacedListeners = new Set<() => void>();
 
 /**
@@ -3588,10 +3594,11 @@ export function getGatewayWebSocketClient(token: string): GatewayWebSocketClient
   if (activeClient && activeToken === normalizedToken) {
     return activeClient;
   }
-  const replaced = activeClient !== null;
+  const replaced = everHadClient;
   activeClient?.dispose();
   activeToken = normalizedToken;
   activeClient = new GatewayWebSocketClient(normalizedToken);
+  everHadClient = true;
   if (replaced) {
     // The new instance is already installed, so re-entrant
     // getGatewayWebSocketClient calls from listeners hit the fast path.

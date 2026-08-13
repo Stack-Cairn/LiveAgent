@@ -427,7 +427,7 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
   settleLiveTranscript(transcriptStore);
   hookLifecycle.ensureMessageEnded();
   hookLifecycle.endAgent();
-  await persistConversationWithHistorySync({
+  const historyPersisted = await persistConversationWithHistorySync({
     conversationId,
     sessionId,
     providerId,
@@ -438,7 +438,10 @@ export async function runTextConversationTurn(params: RunTextConversationTurnPar
     createdAt,
     titlePromise,
   });
-  if (shouldRunMemoryExtraction) {
+  // Only extract memory after durable history lands; otherwise memory can
+  // retain the answer while a failed final persist leaves chat history on the
+  // user-only snapshot.
+  if (historyPersisted && shouldRunMemoryExtraction) {
     const currentMemoryExtractionModel: MemoryExtractionModelConfig = {
       providerId,
       model,

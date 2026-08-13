@@ -21,6 +21,7 @@ import {
   type ProviderFailoverSettings,
   type ProviderId,
   type ProviderModelConfig,
+  type SelectedModel,
   type UsageQueryMode,
   updateCustomProviders,
   updateCustomSettings,
@@ -65,8 +66,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
-import { Switch } from "@liveagent/ui/components/ui/switch";
 import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
+import { Switch } from "@liveagent/ui/components/ui/switch";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -90,7 +91,7 @@ import {
 } from "@liveagent/ui/lib/providers/modelVendor";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
+import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import {
   applyModelBulkActiveState,
   applyUsageQueryModePreset,
@@ -2997,35 +2998,62 @@ function FailoverSettingsCard(props: SettingsSectionProps & { providerType: Prov
   );
 }
 
+function CustomSettingsModelField(props: {
+  label: string;
+  hint: string;
+  followCurrentLabel: string;
+  selected: SelectedModel | undefined;
+  modelOptions: ModelPickerOption[];
+  onChange: (value: string) => void;
+}) {
+  const { label, hint, followCurrentLabel, selected, modelOptions, onChange } = props;
+  const selectedValue = selected ? toModelValue(selected.customProviderId, selected.model) : "";
+  // A stored model that is no longer among the active options still shows as
+  // selected (same fallback-entry approach as the cron prompt form).
+  const options =
+    selected && !modelOptions.some((option) => option.value === selectedValue)
+      ? [
+          ...modelOptions,
+          {
+            value: selectedValue,
+            label: selected.model,
+            providerName: selected.customProviderId,
+          },
+        ]
+      : modelOptions;
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-[12.5px] font-medium text-foreground/85">{label}</Label>
+      <p className="text-[11px] leading-relaxed text-muted-foreground/80">{hint}</p>
+      <ModelPicker
+        options={options}
+        value={selectedValue}
+        onChange={onChange}
+        placeholder={followCurrentLabel}
+        noneLabel={followCurrentLabel}
+        ariaLabel={label}
+        triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
+      />
+    </div>
+  );
+}
+
 function CustomSettingsDrawer(
   props: SettingsSectionProps & { providerType: ProviderId; onClose: () => void },
 ) {
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
   const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
-  const conversationTitleModel = settings.customSettings.conversationTitleModel;
-  const selectedValue = conversationTitleModel
-    ? toModelValue(conversationTitleModel.customProviderId, conversationTitleModel.model)
-    : "";
-  // A stored model that is no longer among the active options still shows as
-  // selected (same fallback-entry approach as the cron prompt form).
-  const titleModelOptions =
-    conversationTitleModel && !modelOptions.some((option) => option.value === selectedValue)
-      ? [
-          ...modelOptions,
-          {
-            value: selectedValue,
-            label: conversationTitleModel.model,
-            providerName: conversationTitleModel.customProviderId,
-          },
-        ]
-      : modelOptions;
 
-  function handleTitleModelChange(value: string) {
+  function handleModelSettingChange(
+    key: "conversationTitleModel" | "commitMessageModel",
+    value: string,
+  ) {
     // "" comes from the picker's follow-current entry and parses to undefined.
     setSettings((prev) =>
       updateCustomSettings(prev, {
-        conversationTitleModel: parseModelValue(value) ?? undefined,
+        [key]: parseModelValue(value) ?? undefined,
       }),
     );
   }
@@ -3072,28 +3100,31 @@ function CustomSettingsDrawer(
         <div className="relative min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <section className="space-y-3">
             <div className="rounded-2xl border border-foreground/[0.06] bg-white/60 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-xl dark:border-foreground/[0.08] dark:bg-foreground/[0.03] dark:shadow-none">
-              <div className="space-y-2">
-                <Label className="text-[12.5px] font-medium text-foreground/85">
-                  {t("settings.conversationTitleModel")}
-                </Label>
-                <p className="text-[11px] leading-relaxed text-muted-foreground/80">
-                  {t("settings.conversationTitleModelHint")}
-                </p>
-                <ModelPicker
-                  options={titleModelOptions}
-                  value={selectedValue}
-                  onChange={handleTitleModelChange}
-                  placeholder={t("settings.conversationTitleModelFollowCurrent")}
-                  noneLabel={t("settings.conversationTitleModelFollowCurrent")}
-                  ariaLabel={t("settings.conversationTitleModel")}
-                  triggerClassName="h-9 rounded-lg border-foreground/10 bg-white/70 text-[13px] shadow-sm dark:bg-background/40"
-                />
-                {modelOptions.length === 0 ? (
-                  <div className="mt-1 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
-                    {t("settings.customSettingsModelEmpty")}
-                  </div>
-                ) : null}
-              </div>
+              <CustomSettingsModelField
+                label={t("settings.conversationTitleModel")}
+                hint={t("settings.conversationTitleModelHint")}
+                followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
+                selected={settings.customSettings.conversationTitleModel}
+                modelOptions={modelOptions}
+                onChange={(value) => handleModelSettingChange("conversationTitleModel", value)}
+              />
+              <div
+                aria-hidden="true"
+                className="my-4 h-px bg-gradient-to-r from-transparent via-foreground/[0.08] to-transparent"
+              />
+              <CustomSettingsModelField
+                label={t("settings.commitMessageModel")}
+                hint={t("settings.commitMessageModelHint")}
+                followCurrentLabel={t("settings.conversationTitleModelFollowCurrent")}
+                selected={settings.customSettings.commitMessageModel}
+                modelOptions={modelOptions}
+                onChange={(value) => handleModelSettingChange("commitMessageModel", value)}
+              />
+              {modelOptions.length === 0 ? (
+                <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[11.5px] leading-relaxed text-amber-700 dark:text-amber-300">
+                  {t("settings.customSettingsModelEmpty")}
+                </div>
+              ) : null}
             </div>
           </section>
 

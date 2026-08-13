@@ -213,7 +213,11 @@ export type GitClient = {
   init(workdir: string, options?: GitInitOptions): Promise<GitOperationResponse>;
   switchBranch(workdir: string, branch: string, kind?: string): Promise<GitOperationResponse>;
   createBranch(workdir: string, branch: string, startPoint?: string): Promise<GitOperationResponse>;
-  diff(workdir: string, mode: "branch" | "working_tree", path?: string): Promise<GitDiffResponse>;
+  diff(
+    workdir: string,
+    mode: "branch" | "working_tree" | "staged",
+    path?: string,
+  ): Promise<GitDiffResponse>;
   log(workdir: string, options?: GitLogOptions): Promise<GitLogResponse>;
   commitDetails(workdir: string, commit: string): Promise<GitCommitDetailsResponse>;
   compareCommitWithRemote(workdir: string, commit: string): Promise<GitDiffResponse>;

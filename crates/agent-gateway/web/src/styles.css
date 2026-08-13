@@ -223,6 +223,18 @@ html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-corner {
   background: transparent;
 }
 
+/* SFTP 双栏 <860px 时靠这条横向滚动条露出被裁切的右栏，但全局
+   scrollbar-width: thin 会让 Chromium 121+/Safari 18.2+ 忽略上面的
+   *::-webkit-scrollbar 自绘样式，macOS 上退化成"滚动中才短暂浮现"的悬浮
+   滚动条——静止时底部看不到任何滚动条。恢复 auto 让自绘样式重新生效，
+   与 GUI 端的常驻滚动条对齐。必须排在全局 *:hover / *:focus-within 的
+   scrollbar-color 规则之后：两者同优先级，靠源码顺序覆盖，否则悬停一瞬间
+   scrollbar-color 变回非 auto，滚动条会当场消失。 */
+html[data-liveagent-webui="gateway"] .sftp-panes-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
 html[data-liveagent-webui="gateway"] .project-tools-panel-tabs {
   scrollbar-width: none;
   -ms-overflow-style: none;

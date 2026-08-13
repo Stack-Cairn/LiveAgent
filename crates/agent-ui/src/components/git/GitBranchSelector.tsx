@@ -173,7 +173,11 @@ function GitInitModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <DialogContent className="max-w-md p-0">
+      <DialogContent
+        className="max-w-md p-0"
+        overlayClassName="z-[110]"
+        viewportClassName="z-[110]"
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -345,7 +349,11 @@ function WorktreeCreateModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <DialogContent className="max-w-md p-0">
+      <DialogContent
+        className="max-w-md p-0"
+        overlayClassName="z-[110]"
+        viewportClassName="z-[110]"
+      >
         <form
           onSubmit={(event) => {
             event.preventDefault();

@@ -13,6 +13,7 @@ import type {
 } from "@liveagent/ui/components/project-tools/git-review/index";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import { createContext, useContext } from "react";
+import type { ProjectToolTextGenerationClient } from "../../lib/ai/projectToolTextGeneration";
 import type { TerminalClient, TerminalSession, TerminalSnapshot } from "../../lib/terminal/types";
 import type { WorkspaceActivityClient } from "../../lib/workspace-activity/types";
 import type { LocalTunnelClient } from "./LocalTunnelPanel";
@@ -20,6 +21,7 @@ import type { LocalTunnelClient } from "./LocalTunnelPanel";
 export type RightDockToolClients = {
   terminal: TerminalClient;
   git?: GitClient | null;
+  textGeneration?: ProjectToolTextGenerationClient | null;
   tunnel?: LocalTunnelClient | null;
   workspaceActivity?: WorkspaceActivityClient | null;
 };

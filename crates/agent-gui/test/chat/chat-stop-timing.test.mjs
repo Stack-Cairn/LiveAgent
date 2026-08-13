@@ -607,6 +607,7 @@ test("terminal history persistence marks both false results and thrown errors", 
     "src/pages/chat/runtime/chatRunFinalization.ts",
   );
   let failures = 0;
+  const noRetry = { maxAttempts: 1, retryDelayMs: 0 };
 
   assert.equal(
     await trackTerminalHistoryPersist(
@@ -614,6 +615,7 @@ test("terminal history persistence marks both false results and thrown errors", 
       () => {
         failures += 1;
       },
+      noRetry,
     ),
     false,
   );
@@ -625,8 +627,88 @@ test("terminal history persistence marks both false results and thrown errors", 
       () => {
         failures += 1;
       },
+      noRetry,
     ),
     /history database unavailable/,
   );
   assert.equal(failures, 2);
+});
+
+test("terminal history persistence retries transient failures before succeeding", async () => {
+  const loader = createTsModuleLoader();
+  const { persistTerminalHistoryWithRetry, trackTerminalHistoryPersist } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  const attempts = [];
+  const sleeps = [];
+
+  const persisted = await persistTerminalHistoryWithRetry(
+    async () => {
+      attempts.push("try");
+      if (attempts.length < 3) {
+        throw new Error(`transient-${attempts.length}`);
+      }
+      return true;
+    },
+    {
+      maxAttempts: 3,
+      retryDelayMs: 5,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    },
+  );
+
+  assert.equal(persisted, true);
+  assert.equal(attempts.length, 3);
+  assert.deepEqual(sleeps, [5, 10]);
+
+  let failures = 0;
+  let tries = 0;
+  assert.equal(
+    await trackTerminalHistoryPersist(
+      async () => {
+        tries += 1;
+        return tries >= 2;
+      },
+      () => {
+        failures += 1;
+      },
+      {
+        maxAttempts: 3,
+        retryDelayMs: 0,
+      },
+    ),
+    true,
+  );
+  assert.equal(tries, 2);
+  assert.equal(failures, 0);
+});
+
+test("terminal history persistence exhausts retries then marks failure", async () => {
+  const loader = createTsModuleLoader();
+  const { trackTerminalHistoryPersist } = loader.loadModule(
+    "src/pages/chat/runtime/chatRunFinalization.ts",
+  );
+  let failures = 0;
+  let tries = 0;
+
+  await assert.rejects(
+    trackTerminalHistoryPersist(
+      async () => {
+        tries += 1;
+        throw new Error("still busy");
+      },
+      () => {
+        failures += 1;
+      },
+      {
+        maxAttempts: 3,
+        retryDelayMs: 0,
+      },
+    ),
+    /still busy/,
+  );
+  assert.equal(tries, 3);
+  assert.equal(failures, 1);
 });

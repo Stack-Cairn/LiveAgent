@@ -153,6 +153,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const didExpandInitialPathRef = useRef(false);
+  const [open, setOpen] = useState(true);
 
   const modalTitle =
     title ?? (mode === "file" ? t("settings.filePickerTitle") : t("settings.workdirPickerTitle"));
@@ -517,15 +518,16 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
 
   return (
     <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
+      open={open}
+      onOpenChange={setOpen}
+      onOpenChangeComplete={(nextOpen) => {
+        if (!nextOpen) onClose();
       }}
     >
       <DialogContent
         className="flex max-h-[92dvh] max-w-4xl flex-col border-border/60 p-0 max-sm:max-h-[calc(100dvh-1rem)] max-sm:max-w-[calc(100vw-1rem)]"
-        overlayClassName="bg-black/60"
-        viewportClassName="items-stretch px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(8px,env(safe-area-inset-top))] sm:items-center sm:p-4"
+        overlayClassName="z-[120] bg-black/60"
+        viewportClassName="z-[120] items-stretch px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(8px,env(safe-area-inset-top))] sm:items-center sm:p-4"
       >
         <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
