@@ -524,7 +524,13 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop className="modal-dialog-backdrop fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm" />
+        {/* Base UI omits backdrops for nested dialogs by default. The settings
+            flow suspends its parent, so this picker still needs the same
+            full-screen backdrop as the top-level workspace picker. */}
+        <Dialog.Backdrop
+          forceRender
+          className="modal-dialog-backdrop fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm"
+        />
         <Dialog.Viewport className="settings-modal-overlay modal-dialog-viewport fixed inset-0 z-[120] flex items-center justify-center p-4">
           <Dialog.Popup className="settings-modal-panel modal-dialog-popup remote-path-picker-panel relative flex h-[min(650px,92vh)] max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl outline-none">
             <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">

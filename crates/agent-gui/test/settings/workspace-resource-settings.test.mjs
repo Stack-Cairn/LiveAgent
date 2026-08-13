@@ -116,6 +116,7 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(webRemotePathPicker, /h-\[min\(650px,92vh\)\]/);
   assert.match(webRemotePathPicker, /max-h-\[92vh\]/);
   assert.match(webRemotePathPicker, /max-w-4xl/);
+  assert.match(webRemotePathPicker, /<Dialog\.Backdrop\s+forceRender/);
   assert.match(webRemotePathPicker, /bg-black\/60 backdrop-blur-sm/);
   assert.ok(
     webRemotePathPicker.indexOf("selectedPathRef.current = path") <
