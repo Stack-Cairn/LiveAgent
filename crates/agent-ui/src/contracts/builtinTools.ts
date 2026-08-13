@@ -51,7 +51,7 @@ export type BuiltinToolBundleShape<TTool, TExecutor, TExtra extends object = obj
 };
 
 export type FsEntryKind = "file" | "dir";
-export type PathScope = "workspace" | "skill" | "external" | "uploads";
+export type PathScope = "workspace" | "project-root" | "skill" | "external" | "uploads";
 
 export type ResolvedPathResultDetails = {
   scope?: PathScope;

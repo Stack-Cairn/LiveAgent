@@ -27,6 +27,7 @@ import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
+import type { AdditionalProjectRoot } from "./pathUtils";
 import { createShellTools } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";
@@ -143,6 +144,8 @@ function createBuiltinToolRegistry(bundles: BuiltinToolBundle[]): BuiltinToolReg
 
 type BuildBuiltinBaseToolRegistryParams = {
   workdir: string;
+  /** Structured file-tool roots only; never forwarded to shell/process tools. */
+  additionalRoots?: readonly AdditionalProjectRoot[];
   providerId: ProviderId;
   runtimePlatform?: RuntimePlatform;
   fileState: FileToolState;
@@ -182,6 +185,7 @@ async function buildBaseBuiltinToolBundles(params: BuildBuiltinBaseToolRegistryP
   const baseBundles: BuiltinToolBundle[] = [
     createFsTools({
       workdir: params.workdir,
+      additionalRoots: params.additionalRoots,
       fileState: params.fileState,
       skillsRootEnabled: params.skillsEnabled,
       skillsRootDir: params.skillsRootDir,
@@ -288,6 +292,12 @@ export async function buildBuiltinToolRegistry(
   if (!subagentRuntime) {
     return createBuiltinToolRegistry([...baseBundles, ...chatBundles]);
   }
+  const subagentAdditionalRoots = params.additionalRoots?.map((root) => ({
+    ...root,
+    // Delegated agents can inspect parent-granted roots, but they never
+    // inherit mutation capability for shared directories implicitly.
+    access: "read" as const,
+  }));
 
   const baseRegistry = createBuiltinToolRegistry(baseBundles);
   // The Agent tool description embeds the roster, so the store must be
@@ -323,11 +333,13 @@ export async function buildBuiltinToolRegistry(
       baseTools: baseRegistry.tools,
       executeToolCall: baseRegistry.executeToolCall,
       metadataByName: baseRegistry.metadataByName,
+      additionalRoots: subagentAdditionalRoots,
       createSubagentToolRegistry: async (workdir) =>
         createBuiltinToolRegistry(
           await buildBaseBuiltinToolBundles({
             ...params,
             workdir,
+            additionalRoots: subagentAdditionalRoots,
             fileState: createFileToolState(),
             skillsEnabled: false,
             applyMcpOps: undefined,

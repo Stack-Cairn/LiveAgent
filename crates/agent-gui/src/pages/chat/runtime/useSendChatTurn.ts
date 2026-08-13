@@ -66,6 +66,7 @@ import {
   type SelectedModel,
   updateMemorySettings,
   updateSkills,
+  type WorkspaceProject,
   workspaceProjectPathKey,
 } from "../../../lib/settings";
 import {
@@ -73,8 +74,10 @@ import {
   pruneSubagentRunsForConversation,
   type SubagentStoreManager,
 } from "../../../lib/subagents";
+import type { AdditionalProjectRoot } from "../../../lib/tools/pathUtils";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { TaskStateStore } from "../../../lib/tools/taskTools";
+import { listWorkspaceRootGrants } from "../../../lib/workspaceRootGrants";
 import { asErrorMessage } from "../chatPageUtils";
 import {
   buildTextFromComposerDraft,
@@ -130,6 +133,7 @@ type TitleJobRefValue = {
 
 type UseSendChatTurnParams = {
   settings: AppSettings;
+  workspaceProjects: readonly WorkspaceProject[];
   setSettings: (updater: (prev: AppSettings) => AppSettings) => void;
   getMcpSettings: () => AppSettings["mcp"];
   getToolPolicies: () => AppSettings["system"]["toolPolicies"];
@@ -207,6 +211,7 @@ type UseSendChatTurnParams = {
 export function useSendChatTurn(params: UseSendChatTurnParams) {
   const {
     settings,
+    workspaceProjects,
     setSettings,
     getMcpSettings,
     getToolPolicies,
@@ -335,6 +340,26 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       globalWorkdir: settings.system.workdir,
     });
     const effectiveProjectPathKey = workspaceProjectPathKey(effectiveWorkdir);
+    const effectiveProject = workspaceProjects.find(
+      (project) => workspaceProjectPathKey(project.path) === effectiveProjectPathKey,
+    );
+    let additionalRoots: AdditionalProjectRoot[] = [];
+    if (effectiveIsAgentMode && effectiveProject) {
+      try {
+        additionalRoots = (await listWorkspaceRootGrants(effectiveProject))
+          .filter((grant) => grant.state === "active")
+          .map((grant) => ({
+            id: grant.id,
+            alias: grant.alias,
+            path: grant.canonicalPath,
+            access: grant.access,
+          }));
+      } catch (error) {
+        // Fail closed: unavailable or stale grants must not widen this turn's
+        // structured file-tool capability.
+        console.warn("Failed to load workspace root grants", error);
+      }
+    }
     const effectiveAssociatedSshHostIds = getSshProjectHostIds(
       settings.ssh,
       effectiveProjectPathKey,
@@ -1483,6 +1508,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
             onMemoryExtractionModelFailure: handleMemoryExtractionModelFailure,
             memoryExtractionStatusText,
             effectiveWorkdir,
+            additionalRoots,
             effectiveSkillsEnabled,
             showSilentMemoryExtraction: effectiveIsAgentDevExecutionMode,
             skillsRootDir: skillsRootDirForTools,

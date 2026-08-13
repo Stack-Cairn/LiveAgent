@@ -59,6 +59,7 @@ import {
 import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
+import type { AdditionalProjectRoot } from "../../tools/pathUtils";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
 import { summarizeToolCall } from "../messages/uiMessages";
 import {
@@ -142,6 +143,7 @@ export function buildToolsSuffix(
   workdir: string,
   availableToolNames?: readonly string[],
   runtimePlatformInput?: RuntimePlatform,
+  additionalRoots?: readonly AdditionalProjectRoot[],
 ) {
   const runtimePlatform = normalizeRuntimePlatform(runtimePlatformInput) ?? inferRuntimePlatform();
   const platformLabel = runtimePlatformLabel(runtimePlatform);
@@ -189,14 +191,26 @@ export function buildToolsSuffix(
   );
 
   if (hasFileTool || hasAny("Bash", "ManagedProcess", "SSHManager", "McpManager", "Agent")) {
+    const additionalRootLines =
+      hasFileTool && (additionalRoots?.length ?? 0) > 0
+        ? [
+            "- Additional project roots available to structured file tools:",
+            ...(additionalRoots ?? []).map(
+              (root) =>
+                `  - \`root://${root.alias}/\` (${root.access === "write" ? "read/write" : "read-only"})`,
+            ),
+            "- `root://` aliases extend only Read/Image/List/Glob/Grep and, for read/write roots, Write/Edit/Delete. They do not grant Bash or ManagedProcess access and are not accepted as their `cwd`.",
+          ]
+        : [];
     sections.push(
       [
         "## Workspace & Paths",
         `- Workspace root (sandbox): \`${workdir}\``,
         "- Preferred form: workspace-relative paths exactly as tools return them, e.g. `src/App.tsx`. To target the root itself, omit the optional `path` / `cwd` argument.",
+        ...additionalRootLines,
         "- Files inside an enabled Skill: use `skill://<skill>/...` exactly as returned by SkillsManager or file tools.",
         "- Absolute paths, `~/...`, and `file://` URLs are also accepted and auto-normalized; never construct one when a returned path is available.",
-        "- Write, Edit, and Delete operate only inside the workspace or enabled Skills. Bash `cwd` may point outside the workspace when the task requires it.",
+        "- Write, Edit, and Delete operate only inside the workspace, writable configured root:// project roots, or enabled writable Skills. Bash `cwd` may point outside the workspace under its existing policy, but additional project roots do not expand that policy.",
         "- Use `/` as the separator everywhere, including Glob and Grep patterns; Windows `\\` is auto-normalized.",
         '- On a path error, follow its guidance: reuse a "Did you mean" candidate verbatim, or locate the file with Glob/Grep first, then retry with the returned path.',
       ].join("\n"),
@@ -240,7 +254,7 @@ export function buildToolsSuffix(
     }
     if (has("Delete")) {
       lines.push(
-        "- Every intentional deletion of a file or directory inside the workspace or an enabled Skill MUST use Delete with the exact path, preferably workspace-relative or skill://. Use one Delete call per target; deleting a directory is recursive.",
+        "- Every intentional deletion of a file or directory inside the workspace, a writable root:// project root, or an enabled writable Skill MUST use Delete with the exact path, preferably workspace-relative, root://, or skill://. Use one Delete call per target; deleting a directory is recursive.",
         "- NEVER perform such a deletion through Bash, ManagedProcess, a shell script, or a deletion-oriented CLI, including `rm`, `rmdir`, `unlink`, `find -delete`, `git rm`, `git clean`, PowerShell `Remove-Item`, or cmd `del` / `erase` / `rd`. Structured Delete calls are required so LiveAgent can record the path in Edited Files and the file ledger.",
         "- If a deleted workspace path is tracked by Git and staging is required, call Delete first, then stage only that path with `git add -u -- <exact-workspace-relative-path>`.",
       );
@@ -265,12 +279,12 @@ export function buildToolsSuffix(
       }
       if (alts.length > 0) {
         lines.push(
-          `- Do NOT use Bash to ${alts.join(" or ")} workspace or Skill files — use the corresponding file tool above.`,
+          `- Do NOT use Bash to ${alts.join(" or ")} for workspace, configured project-root, or Skill files — use the corresponding file tool above.`,
         );
       }
       if (hasReadFamily) {
         lines.push(
-          "- Do not run Bash cat/ls/find/grep to read, list, or search workspace or Skill files.",
+          "- Do not run Bash cat/ls/find/grep to read, list, or search workspace, configured root://, or Skill files.",
         );
       }
     }
@@ -681,6 +695,8 @@ export async function runAssistantWithTools(params: {
   runtimePlatform?: RuntimePlatform;
   context: Context;
   workdir: string;
+  /** Structured file-tool roots, also documented in the generated tool prompt. */
+  additionalRoots?: readonly AdditionalProjectRoot[];
   sessionId?: string;
   nativeWebSearch?: boolean;
   tools: Context["tools"];
@@ -1091,6 +1107,7 @@ export async function runAssistantWithTools(params: {
       params.workdir,
       llmTools.map((tool) => tool.name),
       params.runtimePlatform,
+      params.additionalRoots,
     );
     let currentSystemPrompt = params.context.systemPrompt;
     let pendingTurnOverridePromise: Promise<TurnContextOverride> | null = null;

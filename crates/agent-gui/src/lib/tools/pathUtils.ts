@@ -7,10 +7,26 @@ import {
 } from "./skillAccessPolicy";
 
 // Encoding contract: `file://` inputs are URLs and are always percent-decoded.
-// `workspace:` / `skill:` / `skill://` references are literal tool-produced
+// `workspace:` / `skill:` / `skill://` / `root://` references are literal tool-produced
 // strings and are never encoded or decoded.
 
-export type PathScope = "workspace" | "skill" | "external" | "uploads";
+export type PathScope = "workspace" | "project-root" | "skill" | "external" | "uploads";
+
+export type AdditionalProjectRootAccess = "read" | "write";
+
+/**
+ * A turn-level capability granted by the native project settings layer.
+ *
+ * This deliberately contains no command/execute capability: additional roots
+ * only extend the structured file tools. Bash and ManagedProcess keep their
+ * existing cwd policy and never receive this configuration.
+ */
+export type AdditionalProjectRoot = {
+  id: string;
+  alias: string;
+  path: string;
+  access: AdditionalProjectRootAccess;
+};
 
 export type PathIntent = "read" | "write" | "edit" | "delete" | "list" | "search" | "cwd" | "image";
 
@@ -25,6 +41,9 @@ export type ResolvedPath = {
   displayPath: string;
   intent: PathIntent;
   skillBaseDir?: string;
+  projectRootId?: string;
+  projectRootAlias?: string;
+  projectRootAccess?: AdditionalProjectRootAccess;
 };
 
 type ResolveOptions = {
@@ -43,6 +62,12 @@ type ResolverOptions = {
   skillsRootDir?: string;
   skillAccessPolicy?: SkillAccessPolicy;
   resolveSkillsRootDir?: () => Promise<string>;
+  additionalRoots?: readonly AdditionalProjectRoot[];
+};
+
+type NormalizedAdditionalProjectRoot = AdditionalProjectRoot & {
+  normalizedPath: string;
+  aliasLookupKey: string;
 };
 
 function normalizeUnicode(value: string) {
@@ -181,10 +206,27 @@ function firstPathSegment(path: string | undefined) {
   return path?.split("/").find(Boolean) ?? "";
 }
 
-function displayPathFor(scope: PathScope, relativePath: string | undefined, absolutePath: string) {
+function displayPathFor(
+  scope: PathScope,
+  relativePath: string | undefined,
+  absolutePath: string,
+  projectRootAlias?: string,
+) {
   if (scope === "workspace") return relativePath || ".";
   if (scope === "skill") return `skill://${relativePath || ""}`;
+  if (scope === "project-root") {
+    return `root://${projectRootAlias || ""}${relativePath ? `/${relativePath}` : ""}`;
+  }
   return absolutePath;
+}
+
+export function formatPathWithinResolvedRoot(resolved: ResolvedPath, relativePath: string) {
+  const normalized = normalizeComparablePath(relativePath).replace(/^\/+/, "");
+  if (resolved.scope === "skill") return `skill://${normalized}`;
+  if (resolved.scope === "project-root") {
+    return `root://${resolved.projectRootAlias || ""}${normalized ? `/${normalized}` : ""}`;
+  }
+  return normalized;
 }
 
 function parseScopedPathRef(value: string) {
@@ -199,6 +241,70 @@ function parseScopedPathRef(value: string) {
 function parseSkillUrl(value: string) {
   if (!/^skill:\/\//i.test(value)) return null;
   return value.replace(/^skill:\/\//i, "").replace(/^\/+/, "");
+}
+
+function parseProjectRootUrl(value: string) {
+  if (!/^root:\/\//i.test(value)) return null;
+  const remainder = value.replace(/^root:\/\//i, "").replace(/^\/+/, "");
+  const separatorIndex = remainder.indexOf("/");
+  return {
+    alias: separatorIndex < 0 ? remainder : remainder.slice(0, separatorIndex),
+    relativePath: separatorIndex < 0 ? "" : remainder.slice(separatorIndex + 1),
+  };
+}
+
+const PROJECT_ROOT_READ_INTENTS = new Set<PathIntent>(["read", "list", "search", "image"]);
+const PROJECT_ROOT_MUTATION_INTENTS = new Set<PathIntent>(["write", "edit", "delete"]);
+
+function normalizeAdditionalRoots(
+  roots: readonly AdditionalProjectRoot[] | undefined,
+): NormalizedAdditionalProjectRoot[] {
+  const normalized: NormalizedAdditionalProjectRoot[] = [];
+  const seenIds = new Set<string>();
+  const seenAliases = new Set<string>();
+  const seenPaths = new Set<string>();
+
+  for (const root of roots ?? []) {
+    const id = String(root?.id || "").trim();
+    const alias = String(root?.alias || "").trim();
+    const aliasLookupKey = alias.toLowerCase();
+    if (!id) throw new Error("Additional project root id cannot be empty");
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(alias)) {
+      throw new Error(
+        `Additional project root alias must match [a-z][a-z0-9_-]{0,31}: ${alias || "<empty>"}`,
+      );
+    }
+    if (["workspace", "skill", "uploads", "external"].includes(alias)) {
+      throw new Error(`Additional project root alias is reserved: ${alias}`);
+    }
+    if (root.access !== "read" && root.access !== "write") {
+      throw new Error(`Additional project root ${alias} has an unsupported access mode`);
+    }
+    const normalizedPath = normalizeRootPath(root.path);
+    const pathLookupKey = isWindowsDrivePath(normalizedPath)
+      ? normalizedPath.toLowerCase()
+      : normalizedPath;
+    if (seenIds.has(id)) throw new Error(`Duplicate additional project root id: ${id}`);
+    if (seenAliases.has(aliasLookupKey)) {
+      throw new Error(`Duplicate additional project root alias: ${alias}`);
+    }
+    if (seenPaths.has(pathLookupKey)) {
+      throw new Error(`Duplicate additional project root path: ${normalizedPath}`);
+    }
+    seenIds.add(id);
+    seenAliases.add(aliasLookupKey);
+    seenPaths.add(pathLookupKey);
+    normalized.push({
+      id,
+      alias,
+      path: root.path,
+      access: root.access,
+      normalizedPath,
+      aliasLookupKey,
+    });
+  }
+
+  return normalized;
 }
 
 function fixedSkillsRelativePathFromAbsolute(value: string) {
@@ -270,6 +376,7 @@ export class ToolPathResolver {
   private readonly skillsRootEnabled: boolean;
   private readonly skillAccessPolicy?: SkillAccessPolicy;
   private readonly resolveSkillsRootDir?: () => Promise<string>;
+  private readonly additionalRoots: readonly NormalizedAdditionalProjectRoot[];
   private homeDir: string;
   private homeDirResolved: boolean;
   private skillsRootDir: string;
@@ -287,6 +394,7 @@ export class ToolPathResolver {
         : "";
     this.skillAccessPolicy = options.skillAccessPolicy;
     this.resolveSkillsRootDir = options.resolveSkillsRootDir;
+    this.additionalRoots = normalizeAdditionalRoots(options.additionalRoots);
   }
 
   setSkillsRootDir(rootDir: string | undefined) {
@@ -387,6 +495,92 @@ export class ToolPathResolver {
     };
   }
 
+  private async resolveAdditionalRootRelativePath(
+    root: NormalizedAdditionalProjectRoot,
+    relativePath: string | undefined,
+    options: ResolveOptions,
+  ): Promise<ResolvedPath> {
+    if (options.intent === "cwd") {
+      throw new Error(
+        `${options.label} cannot use root://${root.alias}: additional project roots only grant structured file-tool access and do not grant Bash or ManagedProcess access`,
+      );
+    }
+    const sanitized = sanitizeRelativePath(
+      relativePath ?? "",
+      options.label,
+      options.required === true,
+    );
+    const absolutePath = joinNormalizedPath(root.normalizedPath, sanitized);
+
+    // A broad project-root grant must not weaken the more-specific policies for
+    // installed Skills or uploaded attachments nested beneath it. This check is
+    // required for both absolute paths and explicit root:// references.
+    const skillsRootDir = await this.getSkillsRootDir();
+    const skillRel = skillsRootDir ? relativePathFromAbsolute(absolutePath, skillsRootDir) : null;
+    if (skillRel !== null) {
+      return this.resolveSkillRelativePath(skillRel, options);
+    }
+    const fixedSkillRel = fixedSkillsRelativePathFromAbsolute(absolutePath);
+    if (fixedSkillRel !== null) {
+      if (!this.skillsRootEnabled) {
+        throw new Error(
+          `${options.label} points to installed Skill files, but Skills are not enabled for this conversation. Enable the Skill, then retry with skill://${fixedSkillRel}`,
+        );
+      }
+      return this.resolveSkillRelativePath(fixedSkillRel, options);
+    }
+    const uploadSplit = uploadStagingSplitFromAbsolute(absolutePath);
+    if (uploadSplit !== null) {
+      return this.resolveUploadStagingPath(uploadSplit, options);
+    }
+
+    // A broad reference root may intentionally contain the primary project.
+    // Paths returned from List/Glob/Grep under that alias must still regain the
+    // primary root's more-specific write capability when the model reuses them.
+    const workspaceRel = relativePathFromAbsolute(absolutePath, this.workdir);
+    if (workspaceRel !== null && this.workdir.length > root.normalizedPath.length) {
+      return this.resolveWorkspaceRelativePath(workspaceRel, options);
+    }
+
+    const canRead = PROJECT_ROOT_READ_INTENTS.has(options.intent);
+    const canMutate = PROJECT_ROOT_MUTATION_INTENTS.has(options.intent) && root.access === "write";
+    if (!canRead && !canMutate) {
+      throw new Error(
+        `${options.label} targets read-only project root root://${root.alias}. Read-only roots support Read/List/Glob/Grep/Image but not Write/Edit/Delete.`,
+      );
+    }
+    return {
+      scope: "project-root",
+      input: relativePath ?? "",
+      root: root.normalizedPath,
+      absolutePath,
+      relativePath: sanitized,
+      displayPath: displayPathFor("project-root", sanitized, absolutePath, root.alias),
+      intent: options.intent,
+      projectRootId: root.id,
+      projectRootAlias: root.alias,
+      projectRootAccess: root.access,
+    };
+  }
+
+  private resolveAdditionalRootUrl(alias: string, relativePath: string, options: ResolveOptions) {
+    if (!alias) {
+      throw new Error(
+        `${options.label} must include an additional root alias after root://, for example root://shared/src/index.ts`,
+      );
+    }
+    const root = this.additionalRoots.find(
+      (candidate) => candidate.aliasLookupKey === alias.toLowerCase(),
+    );
+    if (!root) {
+      const available = this.additionalRoots.map((candidate) => candidate.alias).join(", ");
+      throw new Error(
+        `${options.label} references unknown project root root://${alias}.${available ? ` Available roots: ${available}.` : " No additional project roots are configured."}`,
+      );
+    }
+    return this.resolveAdditionalRootRelativePath(root, relativePath, options);
+  }
+
   private resolveUploadStagingPath(
     split: { root: string; relativePath: string },
     options: ResolveOptions,
@@ -435,19 +629,36 @@ export class ToolPathResolver {
     const skillsRootDir = await this.getSkillsRootDir();
     const skillRel = skillsRootDir ? relativePathFromAbsolute(absolutePath, skillsRootDir) : null;
 
-    // When both roots contain the path (nested roots), the longer root is the
-    // more specific owner and its scope policy must win.
-    if (workspaceRel !== null && skillRel !== null) {
-      return skillsRootDir.length >= this.workdir.length
-        ? this.resolveSkillRelativePath(skillRel, options)
-        : this.resolveWorkspaceRelativePath(workspaceRel, options);
+    // When roots overlap, the longest matching root owns the path and its
+    // permission policy wins. This keeps a nested workspace writable inside a
+    // broader read-only reference root, while also respecting a more-specific
+    // configured root nested under the workspace.
+    const candidates: Array<{
+      rootLength: number;
+      resolve: () => ResolvedPath | Promise<ResolvedPath>;
+    }> = [];
+    if (workspaceRel !== null) {
+      candidates.push({
+        rootLength: this.workdir.length,
+        resolve: () => this.resolveWorkspaceRelativePath(workspaceRel, options),
+      });
     }
     if (skillRel !== null) {
-      return this.resolveSkillRelativePath(skillRel, options);
+      candidates.push({
+        rootLength: skillsRootDir.length,
+        resolve: () => this.resolveSkillRelativePath(skillRel, options),
+      });
     }
-    if (workspaceRel !== null) {
-      return this.resolveWorkspaceRelativePath(workspaceRel, options);
+    for (const root of this.additionalRoots) {
+      const relativePath = relativePathFromAbsolute(absolutePath, root.normalizedPath);
+      if (relativePath === null) continue;
+      candidates.push({
+        rootLength: root.normalizedPath.length,
+        resolve: () => this.resolveAdditionalRootRelativePath(root, relativePath, options),
+      });
     }
+    candidates.sort((left, right) => right.rootLength - left.rootLength);
+    if (candidates[0]) return candidates[0].resolve();
 
     const fixedSkillRel = fixedSkillsRelativePathFromAbsolute(absolutePath);
     if (fixedSkillRel !== null) {
@@ -487,6 +698,15 @@ export class ToolPathResolver {
     const skillUrlPath = parseSkillUrl(raw);
     if (skillUrlPath !== null) {
       return this.resolveSkillRelativePath(skillUrlPath, options);
+    }
+
+    const projectRootUrl = parseProjectRootUrl(raw);
+    if (projectRootUrl !== null) {
+      return this.resolveAdditionalRootUrl(
+        projectRootUrl.alias,
+        projectRootUrl.relativePath,
+        options,
+      );
     }
 
     const fileUrlPath = parseFileUrl(raw);

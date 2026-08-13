@@ -73,6 +73,7 @@ import {
 import { buildBuiltinToolRegistry } from "../../../lib/tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinTypes";
 import { createFileToolState } from "../../../lib/tools/fileToolState";
+import type { AdditionalProjectRoot } from "../../../lib/tools/pathUtils";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
 import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/tools/taskTools";
@@ -216,6 +217,7 @@ export type RunAgentConversationTurnParams = {
     model: string;
   };
   effectiveWorkdir: string;
+  additionalRoots?: readonly AdditionalProjectRoot[];
   effectiveSkillsEnabled: boolean;
   showSilentMemoryExtraction: boolean;
   skillsRootDir?: string;
@@ -287,6 +289,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     runtimeModel,
     selectedModel,
     effectiveWorkdir,
+    additionalRoots,
     effectiveSkillsEnabled,
     showSilentMemoryExtraction,
     skillsRootDir,
@@ -413,6 +416,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   const buildRegistryStartedAt = perfNowMs();
   const builtinRegistry = await buildBuiltinToolRegistry({
     workdir: effectiveWorkdir,
+    additionalRoots,
     providerId,
     runtimePlatform,
     fileState,
@@ -771,6 +775,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         runtimePlatform,
         context: agentContext,
         workdir: effectiveWorkdir,
+        additionalRoots,
         sessionId,
         nativeWebSearch: nativeWebSearchEnabled,
         tools: combinedTools,
