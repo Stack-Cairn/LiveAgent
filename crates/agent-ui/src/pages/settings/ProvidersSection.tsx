@@ -1199,7 +1199,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
 
                 <div className="mt-4 grid grid-cols-2 gap-3 max-[720px]:grid-cols-1">
                   <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="flex min-h-7 flex-wrap items-center gap-2.5">
                       <Label htmlFor="modal-baseurl">{t("settings.baseUrl")}</Label>
                       <div className="flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/30 px-2 py-0.5">
                         <Link2
@@ -1237,7 +1237,9 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label htmlFor="modal-apikey">API Key</Label>
+                    <div className="flex min-h-7 items-center">
+                      <Label htmlFor="modal-apikey">API Key</Label>
+                    </div>
                     <div className="relative">
                       <Input
                         id="modal-apikey"
