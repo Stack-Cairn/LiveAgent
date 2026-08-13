@@ -141,6 +141,80 @@ test("chat file open requests remain agent-scoped and preserve source locations"
   });
 });
 
+test("workspace root grants round-trip through the agent-scoped gateway protocol", () => {
+  const encoded = encodeRequestFrame(
+    "workspace-roots-1",
+    "workspace_root_grants.apply",
+    {
+      project_id: "project-1",
+      project_path: "C:/work/project",
+      grants: [
+        {
+          id: "grant-1",
+          alias: "shared",
+          display_path: "C:/work/shared",
+          access: "read",
+        },
+        {
+          alias: "generated",
+          display_path: "C:/work/generated",
+          access: "write",
+        },
+      ],
+    },
+    "agent-1",
+  );
+  const frame = decodeClientFrame(encoded);
+  assert.equal(frame.agentId, "agent-1");
+  assert.equal(frame.payload.value.payload.case, "workspaceRootGrants");
+  assert.equal(frame.payload.value.payload.value.action, "apply");
+  assert.equal(frame.payload.value.payload.value.grants[0].id, "grant-1");
+  assert.equal(frame.payload.value.payload.value.grants[1].id, undefined);
+  assert.equal(frame.payload.value.payload.value.grants[1].access, "write");
+
+  const decoded = decodeServerFrame(
+    roundtrip(
+      serverFrame({
+        request_id: "workspace-roots-1",
+        agent_id: "agent-1",
+        agent_response: {
+          request_id: "workspace-roots-1",
+          workspace_root_grants_resp: {
+            grants: [
+              {
+                id: "grant-1",
+                project_id: "project-1",
+                project_path_key: "c:/work/project",
+                alias: "shared",
+                display_path: "C:/work/shared",
+                canonical_path: "C:/work/shared",
+                access: "read",
+                state: "active",
+                created_at: 1700000000000,
+                updated_at: 1700000001000,
+              },
+            ],
+          },
+        },
+      }),
+    ),
+    { agentOnline: true },
+  );
+  assert.equal(decoded.kind, "response");
+  assert.deepEqual(decoded.payload.grants[0], {
+    id: "grant-1",
+    projectId: "project-1",
+    projectPathKey: "c:/work/project",
+    alias: "shared",
+    displayPath: "C:/work/shared",
+    canonicalPath: "C:/work/shared",
+    access: "read",
+    state: "active",
+    createdAt: 1700000000000,
+    updatedAt: 1700000001000,
+  });
+});
+
 test("adapters convert int64/uint64 fields to Number at realistic maxima", () => {
   // 毫秒时间戳（2100 年）与 MAX_SAFE_INTEGER 边界都必须无损转换。
   const year2100Ms = 4102444800000;

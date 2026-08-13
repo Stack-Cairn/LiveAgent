@@ -184,6 +184,28 @@ type FsRootsResponse = {
   roots: FsRoot[];
 };
 
+export type GatewayWorkspaceRootGrant = {
+  id: string;
+  projectId: string;
+  projectPathKey: string;
+  alias: string;
+  displayPath: string;
+  canonicalPath: string;
+  access: "read" | "write";
+  state: "active" | "missing" | "changed";
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GatewayWorkspaceRootGrantDraft = Pick<
+  GatewayWorkspaceRootGrant,
+  "alias" | "displayPath" | "access"
+> & { id?: string };
+
+type GatewayWorkspaceRootGrantsResponse = {
+  grants: GatewayWorkspaceRootGrant[];
+};
+
 type FsListDirsResponse = {
   path: string;
   entries: Array<{ path: string; name: string }>;
@@ -2280,6 +2302,38 @@ export class GatewayWebSocketClient {
     return this.requestWithRecovery<FsRootsResponse>("fs.roots", {});
   }
 
+  async listWorkspaceRootGrants(
+    projectId: string,
+    projectPath: string,
+  ): Promise<GatewayWorkspaceRootGrant[]> {
+    const response = await this.requestWithRecovery<GatewayWorkspaceRootGrantsResponse>(
+      "workspace_root_grants.list",
+      { project_id: projectId, project_path: projectPath },
+    );
+    return response.grants;
+  }
+
+  async applyWorkspaceRootGrants(
+    projectId: string,
+    projectPath: string,
+    grants: readonly GatewayWorkspaceRootGrantDraft[],
+  ): Promise<GatewayWorkspaceRootGrant[]> {
+    const response = await this.request<GatewayWorkspaceRootGrantsResponse>(
+      "workspace_root_grants.apply",
+      {
+        project_id: projectId,
+        project_path: projectPath,
+        grants: grants.map((grant) => ({
+          ...(grant.id ? { id: grant.id } : {}),
+          alias: grant.alias,
+          display_path: grant.displayPath,
+          access: grant.access,
+        })),
+      },
+    );
+    return response.grants;
+  }
+
   async listDirs(path: string, maxResults?: number): Promise<FsListDirsResponse> {
     return this.requestWithRecovery<FsListDirsResponse>("fs.list_dirs", {
       path,
@@ -3521,6 +3575,15 @@ export type GatewayWebSocketClientLike = {
     showHidden?: boolean,
   ): Promise<MentionListResponse>;
   listFsRoots(): Promise<FsRootsResponse>;
+  listWorkspaceRootGrants(
+    projectId: string,
+    projectPath: string,
+  ): Promise<GatewayWorkspaceRootGrant[]>;
+  applyWorkspaceRootGrants(
+    projectId: string,
+    projectPath: string,
+    grants: readonly GatewayWorkspaceRootGrantDraft[],
+  ): Promise<GatewayWorkspaceRootGrant[]>;
   listDirs(path: string, maxResults?: number): Promise<FsListDirsResponse>;
   createProjectFolder(parent: string, name: string): Promise<CreateProjectFolderResponse>;
   listFiles(

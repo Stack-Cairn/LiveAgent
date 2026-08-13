@@ -16,6 +16,7 @@ const (
 	maxHistoryListLimit        = 200
 	defaultHistoryListPage     = 1
 	defaultHistoryListPageSize = 80
+	maxWorkspaceRootGrants     = 64
 )
 
 // vetAgentRequest 校验并（必要时）原地修正一条直通请求；返回错误则拒绝转发，错误信息面向客户端。
@@ -67,6 +68,8 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		return nil
 	case *gatewayv2.GatewayEnvelope_ChatFileOpen:
 		return vetChatFileOpen(payload.ChatFileOpen)
+	case *gatewayv2.GatewayEnvelope_WorkspaceRootGrants:
+		return vetWorkspaceRootGrants(payload.WorkspaceRootGrants)
 
 	// ---- 带功能门控 / 限额的直通臂 ----
 	case *gatewayv2.GatewayEnvelope_GitRequest:
@@ -106,6 +109,50 @@ func vetAgentRequest(sm session.AgentView, env *gatewayv2.GatewayEnvelope) error
 		// （走 HTTP 上传）、history_share_resolve（公共分享端点专用）及网关内部推送臂。
 		return errors.New("unsupported agent_request payload")
 	}
+}
+
+func vetWorkspaceRootGrants(req *gatewayv2.WorkspaceRootGrantsRequest) error {
+	if req == nil {
+		return errors.New("workspace root grants request is required")
+	}
+	if strings.TrimSpace(req.GetProjectId()) == "" || len(req.GetProjectId()) > 256 {
+		return errors.New("workspace root grants project_id is invalid")
+	}
+	if strings.TrimSpace(req.GetProjectPath()) == "" || len(req.GetProjectPath()) > 32768 {
+		return errors.New("workspace root grants project_path is invalid")
+	}
+
+	switch strings.TrimSpace(req.GetAction()) {
+	case "list":
+		if len(req.GetGrants()) != 0 {
+			return errors.New("workspace root grants list cannot include drafts")
+		}
+		return nil
+	case "apply":
+		if len(req.GetGrants()) > maxWorkspaceRootGrants {
+			return errors.New("too many workspace root grants")
+		}
+	default:
+		return errors.New("workspace root grants action is invalid")
+	}
+
+	for _, grant := range req.GetGrants() {
+		if grant == nil || strings.TrimSpace(grant.GetAlias()) == "" || len(grant.GetAlias()) > 32 {
+			return errors.New("workspace root grant alias is invalid")
+		}
+		if strings.TrimSpace(grant.GetDisplayPath()) == "" || len(grant.GetDisplayPath()) > 32768 {
+			return errors.New("workspace root grant display_path is invalid")
+		}
+		if grant.Id != nil && (strings.TrimSpace(grant.GetId()) == "" || len(grant.GetId()) > 256) {
+			return errors.New("workspace root grant id is invalid")
+		}
+		switch strings.TrimSpace(grant.GetAccess()) {
+		case "read", "write":
+		default:
+			return errors.New("workspace root grant access is invalid")
+		}
+	}
+	return nil
 }
 
 func vetChatFileOpen(req *gatewayv2.ChatFileOpenRequest) error {

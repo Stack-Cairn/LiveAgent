@@ -81,6 +81,8 @@ import {
   TerminalStreamFrameSchema,
   TunnelMutationSchema,
   UploadedImagePreviewRequestSchema,
+  WorkspaceRootGrantDraftSchema,
+  WorkspaceRootGrantsRequestSchema,
 } from "@/lib/proto/gen/proto/v2/gateway_pb";
 import type {
   ChatActivityEvent,
@@ -671,6 +673,35 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
       };
     case "fs.roots":
       return { case: "fsRoots", value: create(FsRootsRequestSchema, {}) };
+    case "workspace_root_grants.list":
+      return {
+        case: "workspaceRootGrants",
+        value: create(WorkspaceRootGrantsRequestSchema, {
+          action: "list",
+          projectId: trimStr(body.project_id),
+          projectPath: trimStr(body.project_path),
+        }),
+      };
+    case "workspace_root_grants.apply": {
+      const drafts = Array.isArray(body.grants) ? body.grants : [];
+      return {
+        case: "workspaceRootGrants",
+        value: create(WorkspaceRootGrantsRequestSchema, {
+          action: "apply",
+          projectId: trimStr(body.project_id),
+          projectPath: trimStr(body.project_path),
+          grants: drafts.map((value) => {
+            const grant = rec(value);
+            return create(WorkspaceRootGrantDraftSchema, {
+              id: typeof grant.id === "string" ? grant.id.trim() : undefined,
+              alias: trimStr(grant.alias),
+              displayPath: trimStr(grant.display_path),
+              access: trimStr(grant.access),
+            });
+          }),
+        }),
+      };
+    }
     case "fs.list_dirs":
       return {
         case: "fsListDirs",
@@ -1127,6 +1158,21 @@ function decodeAgentResponse(envelope: AgentEnvelope, options: { agentOnline: bo
           path: root.path,
           kind: root.kind,
           label: root.label,
+        })),
+      };
+    case "workspaceRootGrantsResp":
+      return {
+        grants: payload.value.grants.map((grant) => ({
+          id: grant.id,
+          projectId: grant.projectId,
+          projectPathKey: grant.projectPathKey,
+          alias: grant.alias,
+          displayPath: grant.displayPath,
+          canonicalPath: grant.canonicalPath,
+          access: grant.access,
+          state: grant.state,
+          createdAt: num(grant.createdAt),
+          updatedAt: num(grant.updatedAt),
         })),
       };
     case "fsListDirsResp":

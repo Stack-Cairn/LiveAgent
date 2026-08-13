@@ -62,6 +62,7 @@ message GatewayEnvelope {
     ProviderUsageRequest provider_usage = 93;
     ChatFileOpenRequest chat_file_open = 94;
     HistorySetCwdRequest history_set_cwd = 95;
+    WorkspaceRootGrantsRequest workspace_root_grants = 96;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -137,6 +138,7 @@ message AgentEnvelope {
     ChatFileOpenResponse chat_file_open_resp = 98;
     ErrorResponse error = 99;
     HistorySetCwdResponse history_set_cwd_resp = 100;
+    WorkspaceRootGrantsResponse workspace_root_grants_resp = 101;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -1296,4 +1298,35 @@ message HistorySetCwdRequest {
 
 message HistorySetCwdResponse {
   ConversationSummary conversation = 1;
+}
+
+message WorkspaceRootGrantDraft {
+  optional string id = 1;
+  string alias = 2;
+  string display_path = 3;
+  string access = 4;
+}
+
+message WorkspaceRootGrant {
+  string id = 1;
+  string project_id = 2;
+  string project_path_key = 3;
+  string alias = 4;
+  string display_path = 5;
+  string canonical_path = 6;
+  string access = 7;
+  string state = 8;
+  int64 created_at = 9;
+  int64 updated_at = 10;
+}
+
+message WorkspaceRootGrantsRequest {
+  string action = 1;
+  string project_id = 2;
+  string project_path = 3;
+  repeated WorkspaceRootGrantDraft grants = 4;
+}
+
+message WorkspaceRootGrantsResponse {
+  repeated WorkspaceRootGrant grants = 1;
 }
