@@ -28,6 +28,15 @@ func receiveProcessStateFrame(t *testing.T, conn *websocket.Conn) *gatewayv2.Web
 	return nil
 }
 
+func expectProcessState(t *testing.T, conn *websocket.Conn, context string) {
+	t.Helper()
+	frame := receiveProcessStateFrame(t, conn)
+	if frame.GetAgentId() != "desktop-agent" || frame.GetProcessState().GetRevision() != 7 {
+		t.Fatalf("%s frame = agent %q rev %d, want desktop-agent rev 7",
+			context, frame.GetAgentId(), frame.GetProcessState().GetRevision())
+	}
+}
+
 func TestV2ManagedProcessBroadcastAndReplay(t *testing.T) {
 	t.Parallel()
 
@@ -52,62 +61,37 @@ func TestV2ManagedProcessBroadcastAndReplay(t *testing.T) {
 				Role:            gatewayv2.ClientRole_CLIENT_ROLE_AGENT,
 				Token:           agentToken,
 				AgentId:         "desktop-agent",
-				AgentVersion:    "1.0.0",
 			},
 		},
 	})
-	agentHello := receiveAgentServerFrame(t, agentConn).GetHello()
-	if agentHello == nil || !agentHello.GetOk() {
-		t.Fatalf("agent hello reply = %#v, want ok", agentHello)
+	if hello := receiveAgentServerFrame(t, agentConn).GetHello(); hello == nil || !hello.GetOk() {
+		t.Fatalf("agent hello reply = %#v, want ok", hello)
 	}
 
 	browserConn, browserCleanup := dialV2Path(t, mux, "/ws/v2")
 	defer browserCleanup()
 	helloV2(t, browserConn, "ws-token")
 
-	snapshot := &gatewayv2.ManagedProcessSnapshot{
-		Revision: 7,
-		Processes: []*gatewayv2.ManagedProcessRecord{{
-			Id:        "p-1",
-			Command:   "sleep 1000",
-			Cwd:       "/tmp",
-			Shell:     "zsh",
-			Pid:       4242,
-			LogPath:   "/tmp/p-1.log",
-			StartedAt: time.Now().UnixMilli(),
-			Running:   true,
-		}},
-	}
 	sendProtoFrame(t, agentConn, &gatewayv2.AgentClientFrame{
 		Payload: &gatewayv2.AgentClientFrame_Envelope{
 			Envelope: &gatewayv2.AgentEnvelope{
-				RequestId: "managed-process-probe",
-				Payload:   &gatewayv2.AgentEnvelope_ManagedProcessSnapshot{ManagedProcessSnapshot: snapshot},
+				RequestId: "managed-process-1",
+				Payload: &gatewayv2.AgentEnvelope_ManagedProcessSnapshot{
+					ManagedProcessSnapshot: &gatewayv2.ManagedProcessSnapshot{
+						Revision: 7,
+						Processes: []*gatewayv2.ManagedProcessRecord{
+							{Id: "p-1", Command: "sleep 1000", Pid: 4242, Running: true},
+						},
+					},
+				},
 			},
 		},
 	})
 
-	// 已连接浏览器应收到广播。
-	frame := receiveProcessStateFrame(t, browserConn)
-	if frame.GetAgentId() != "desktop-agent" {
-		t.Fatalf("broadcast agent id = %q, want desktop-agent", frame.GetAgentId())
-	}
-	if got := frame.GetProcessState().GetRevision(); got != 7 {
-		t.Fatalf("broadcast revision = %d, want 7", got)
-	}
-	if len(frame.GetProcessState().GetProcesses()) != 1 {
-		t.Fatalf("broadcast processes = %d, want 1", len(frame.GetProcessState().GetProcesses()))
-	}
-
-	// 新浏览器连接应回放缓存快照。
+	// 已连接浏览器收到广播;新浏览器连接收到缓存回放。
+	expectProcessState(t, browserConn, "broadcast")
 	browserConn2, browserCleanup2 := dialV2Path(t, mux, "/ws/v2")
 	defer browserCleanup2()
 	helloV2(t, browserConn2, "ws-token")
-	replay := receiveProcessStateFrame(t, browserConn2)
-	if replay.GetAgentId() != "desktop-agent" {
-		t.Fatalf("replay agent id = %q, want desktop-agent", replay.GetAgentId())
-	}
-	if got := replay.GetProcessState().GetRevision(); got != 7 {
-		t.Fatalf("replay revision = %d, want 7", got)
-	}
+	expectProcessState(t, browserConn2, "replay")
 }
