@@ -583,7 +583,9 @@ function conversationInputForCursor(
 ): ChatHistoryConversationInput {
   // Each intermediate append must advertise the totals that will exist after
   // that step lands, otherwise backend consistency checks reject the write.
-  const sealedThrough = state.segments.filter((segment) => segment.segmentIndex <= activeSegmentIndex);
+  const sealedThrough = state.segments.filter(
+    (segment) => segment.segmentIndex <= activeSegmentIndex,
+  );
   const totalSegmentCount = Math.max(conversation.totalSegmentCount, activeSegmentIndex + 1);
   const totalMessageCount = sealedThrough.reduce(
     (sum, segment) => sum + resolveSegmentMessageCount(segment),
@@ -671,20 +673,14 @@ async function writeConversationRuntime(
       throw new Error("追加历史分段时缺少待封存的上一活跃分段");
     }
     if (!nextSegment) {
-      throw new Error(
-        `追加历史分段时缺少目标分段：${workingCursor.activeSegmentIndex + 1}`,
-      );
+      throw new Error(`追加历史分段时缺少目标分段：${workingCursor.activeSegmentIndex + 1}`);
     }
     if (previousSegment.segmentId !== workingCursor.activeSegmentId) {
       throw new Error("待封存历史分段身份与持久化游标不一致");
     }
 
     summary = await appendChatHistorySegmentRaw({
-      conversation: conversationInputForCursor(
-        conversation,
-        state,
-        nextSegment.segmentIndex,
-      ),
+      conversation: conversationInputForCursor(conversation, state, nextSegment.segmentIndex),
       previousSegment: buildChatHistorySegmentInput(previousSegment),
       segment: buildChatHistorySegmentInput(nextSegment),
     });

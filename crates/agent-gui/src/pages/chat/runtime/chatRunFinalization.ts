@@ -35,7 +35,10 @@ export async function persistTerminalHistoryWithRetry(
   },
 ): Promise<boolean> {
   const maxAttempts = Math.max(1, options?.maxAttempts ?? TERMINAL_HISTORY_PERSIST_MAX_ATTEMPTS);
-  const retryDelayMs = Math.max(0, options?.retryDelayMs ?? TERMINAL_HISTORY_PERSIST_RETRY_DELAY_MS);
+  const retryDelayMs = Math.max(
+    0,
+    options?.retryDelayMs ?? TERMINAL_HISTORY_PERSIST_RETRY_DELAY_MS,
+  );
   const sleep = options?.sleep ?? delay;
   let lastError: unknown = null;
   // null = no terminal outcome yet; true = last attempt returned false; false = threw
