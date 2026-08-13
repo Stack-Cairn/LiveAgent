@@ -1252,7 +1252,7 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   applyConversationState(completedState);
   freezeGatewayFinalProjection(completedState, true);
   settleLiveTranscript(transcriptStore);
-  await persistConversationWithHistorySync({
+  const historyPersisted = await persistConversationWithHistorySync({
     conversationId,
     sessionId,
     providerId,
@@ -1263,7 +1263,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     createdAt,
     titlePromise,
   });
-  if (!showSilentMemoryExtraction && shouldRunMemoryExtraction) {
+  // Memory extraction reads the in-memory final state. Only run it after the
+  // durable history write succeeds so we never keep "memory has the answer,
+  // chat history only has the user prompt" after a failed final persist.
+  if (historyPersisted && !showSilentMemoryExtraction && shouldRunMemoryExtraction) {
     void runPostTurnMemoryExtraction();
   }
 }

@@ -1,5 +1,9 @@
 export const CHAT_RUN_FINALIZATION_TIMEOUT_MS = 2_000;
 
+/** Terminal history writes get a few short retries before the run is marked failed. */
+export const TERMINAL_HISTORY_PERSIST_MAX_ATTEMPTS = 3;
+export const TERMINAL_HISTORY_PERSIST_RETRY_DELAY_MS = 150;
+
 export function releaseChatRunUi(params: {
   clearAbortController: () => void;
   clearSendingState: () => void;
@@ -8,6 +12,69 @@ export function releaseChatRunUi(params: {
   params.clearAbortController();
   params.clearSendingState();
   params.clearToolStatus();
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, ms));
+  });
+}
+
+/**
+ * Retry a terminal history write a few times. Transient SQLite / IPC failures
+ * during the final persist otherwise leave the DB stuck on the user-only
+ * snapshot while memory extraction still runs from in-memory state.
+ */
+export async function persistTerminalHistoryWithRetry(
+  persist: () => Promise<boolean>,
+  options?: {
+    maxAttempts?: number;
+    retryDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    onRetry?: (error: unknown, attempt: number, maxAttempts: number) => void;
+  },
+): Promise<boolean> {
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? TERMINAL_HISTORY_PERSIST_MAX_ATTEMPTS);
+  const retryDelayMs = Math.max(0, options?.retryDelayMs ?? TERMINAL_HISTORY_PERSIST_RETRY_DELAY_MS);
+  const sleep = options?.sleep ?? delay;
+  let lastError: unknown = null;
+  // null = no terminal outcome yet; true = last attempt returned false; false = threw
+  let lastAttemptWasSoftFalse: boolean | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const persisted = await persist();
+      if (persisted) {
+        return true;
+      }
+      lastAttemptWasSoftFalse = true;
+      lastError = new Error("history persist returned false");
+    } catch (error) {
+      lastAttemptWasSoftFalse = false;
+      lastError = error;
+    }
+
+    if (attempt >= maxAttempts) {
+      break;
+    }
+    options?.onRetry?.(lastError, attempt, maxAttempts);
+    if (retryDelayMs > 0) {
+      await sleep(retryDelayMs * attempt);
+    }
+  }
+
+  // Preserve the historical contract: a soft `false` from persist stays a
+  // boolean failure, while thrown errors remain exceptional.
+  if (lastAttemptWasSoftFalse) {
+    return false;
+  }
+  if (lastError instanceof Error) {
+    throw lastError;
+  }
+  if (lastError != null) {
+    throw new Error(String(lastError));
+  }
+  return false;
 }
 
 export async function settleChatRunFinalization(
@@ -35,9 +102,15 @@ export async function settleChatRunFinalization(
 export async function trackTerminalHistoryPersist(
   persist: () => Promise<boolean>,
   markFailed: () => void,
+  options?: {
+    maxAttempts?: number;
+    retryDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    onRetry?: (error: unknown, attempt: number, maxAttempts: number) => void;
+  },
 ): Promise<boolean> {
   try {
-    const persisted = await persist();
+    const persisted = await persistTerminalHistoryWithRetry(persist, options);
     if (!persisted) {
       markFailed();
     }
