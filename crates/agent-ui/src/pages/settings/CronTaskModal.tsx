@@ -30,8 +30,8 @@ import {
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "../../components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import {
@@ -42,7 +42,6 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
-import { useModalMotion } from "../../lib/shared/modalMotion";
 import {
   createEmptyRequestDraft,
   type HttpRequestDraft,
@@ -231,7 +230,6 @@ export function CronTaskModal({
   const [formError, setFormError] = useState<string | null>(null);
   const [expandedRequest, setExpandedRequest] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const { isClosing, modalState, requestClose } = useModalMotion(onClose);
 
   const promptModelOptions =
     selectedModelValue &&
@@ -332,7 +330,7 @@ export function CronTaskModal({
       };
 
       await onSave(data);
-      requestClose();
+      onClose();
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -344,28 +342,23 @@ export function CronTaskModal({
 
   const modalTitle = mode === "add" ? t("settings.cronModalAdd") : t("settings.cronModalEdit");
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
-      <div className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
+      <DialogContent className="settings-modal-panel flex max-h-[92vh] max-w-3xl flex-col p-0">
         {/* Header */}
         <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
             <Clock3 className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">{modalTitle}</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <DialogTitle>{modalTitle}</DialogTitle>
+            <DialogDescription className="mt-0.5 text-xs">
               {t("settings.cronExpressionHint")}
-            </p>
+            </DialogDescription>
           </div>
           <button
             type="button"
-            onClick={requestClose}
+            onClick={onClose}
             title={t("settings.cancel")}
             aria-label={t("settings.cancel")}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
@@ -897,19 +890,18 @@ export function CronTaskModal({
             ) : null}
           </div>
           <div className="settings-modal-actions flex items-center gap-2">
-            <Button variant="outline" onClick={requestClose}>
+            <Button variant="outline" onClick={onClose} disabled={isSaving}>
               {t("settings.cancel")}
             </Button>
             <Button
               onClick={() => void handleSave()}
-              disabled={!name.trim() || !cron.trim() || isSaving || isClosing}
+              disabled={!name.trim() || !cron.trim() || isSaving}
             >
               {t("settings.save")}
             </Button>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

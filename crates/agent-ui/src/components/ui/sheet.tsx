@@ -24,7 +24,7 @@ export const SheetBackdrop = React.forwardRef<
     ref={ref}
     data-slot="sheet-backdrop"
     className={cn(
-      "fixed inset-0 z-[100] bg-black/35 backdrop-blur-[2px] transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+      "fixed inset-0 z-[100] bg-black/35 backdrop-blur-[2px] transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}
     {...props}
@@ -46,7 +46,7 @@ export const SheetViewport = React.forwardRef<HTMLDivElement, SheetViewportProps
       ref={ref}
       data-slot="sheet-viewport"
       className={cn(
-        "fixed inset-0 z-[101] grid",
+        "fixed inset-0 z-[100] grid",
         side === "bottom" && "grid-rows-[1fr_auto] pt-12",
         side === "top" && "grid-rows-[auto_1fr] pb-12",
         side === "left" && "flex justify-start",
@@ -61,6 +61,7 @@ export const SheetViewport = React.forwardRef<HTMLDivElement, SheetViewportProps
 SheetViewport.displayName = "SheetViewport";
 
 type SheetPopupProps = React.ComponentPropsWithoutRef<typeof SheetPrimitive.Popup> & {
+  backdropClassName?: string;
   closeLabel?: string;
   closeProps?: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Close>;
   portalProps?: React.ComponentPropsWithoutRef<typeof SheetPrimitive.Portal>;
@@ -74,6 +75,7 @@ export const SheetPopup = React.forwardRef<HTMLDivElement, SheetPopupProps>(
     {
       side = "right",
       variant = "default",
+      backdropClassName,
       className,
       children,
       closeLabel = "Close",
@@ -85,7 +87,7 @@ export const SheetPopup = React.forwardRef<HTMLDivElement, SheetPopupProps>(
     ref,
   ) => (
     <SheetPortal {...portalProps}>
-      <SheetBackdrop />
+      <SheetBackdrop className={backdropClassName} />
       <SheetViewport side={side} variant={variant}>
         <SheetPrimitive.Popup
           ref={ref}

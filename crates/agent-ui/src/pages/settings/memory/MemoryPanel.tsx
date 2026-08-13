@@ -20,11 +20,16 @@ import {
   Trash2,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@liveagent/ui/components/ui/alert-dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import type { MemoryMeta } from "../../../lib/memory/api";
 import { MEMORY_TYPES, type MemoryType } from "../../../lib/memory/schema";
 import { MemorySettingsDrawer } from "./MemorySettingsDrawer";
@@ -605,45 +610,33 @@ export function MemoryPanel(props: {
         />
       ) : null}
 
-      {wipeConfirmOpen
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="memory-wipe-confirm-title"
-            >
-              <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                onClick={() => setWipeConfirmOpen(false)}
-              />
-              <div className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border bg-background shadow-2xl">
-                <div className="flex items-start gap-3 border-b px-5 py-4">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div id="memory-wipe-confirm-title" className="text-sm font-semibold">
-                      {t("settings.memoryWipeConfirmTitle")}
-                    </div>
-                    <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {t("settings.memoryWipeConfirmDescription")}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 px-5 py-4">
-                  <Button variant="outline" size="sm" onClick={() => setWipeConfirmOpen(false)}>
-                    {t("settings.memoryCancel")}
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={handleWipeAll} disabled={saving}>
-                    {t("settings.memoryWipeAll")}
-                  </Button>
-                </div>
+      {wipeConfirmOpen ? (
+        <AlertDialog open onOpenChange={setWipeConfirmOpen}>
+          <AlertDialogContent className="max-w-md rounded-xl p-0">
+            <div className="flex items-start gap-3 border-b px-5 py-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
               </div>
-            </div>,
-            document.body,
-          )
-        : null}
+              <div className="min-w-0 flex-1">
+                <AlertDialogTitle className="text-sm">
+                  {t("settings.memoryWipeConfirmTitle")}
+                </AlertDialogTitle>
+                <AlertDialogDescription className="mt-1 text-xs leading-relaxed">
+                  {t("settings.memoryWipeConfirmDescription")}
+                </AlertDialogDescription>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4">
+              <Button variant="outline" size="sm" onClick={() => setWipeConfirmOpen(false)}>
+                {t("settings.memoryCancel")}
+              </Button>
+              <Button variant="destructive" size="sm" onClick={handleWipeAll} disabled={saving}>
+                {t("settings.memoryWipeAll")}
+              </Button>
+            </div>
+          </AlertDialogContent>
+        </AlertDialog>
+      ) : null}
     </>
   );
 }

@@ -10,10 +10,15 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useId, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 
 type ShareConversation = {
   title: string;
@@ -182,29 +187,22 @@ export function HistoryShareModal({
       });
   }
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="分享会话"
-    >
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg p-0">
         <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-sky-500/20 bg-sky-500/10 text-sky-500">
               <Share2 className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-foreground">分享会话</div>
-              <div
+              <DialogTitle className="text-sm leading-normal">分享会话</DialogTitle>
+              <DialogDescription
                 className="mt-1 truncate text-xs text-muted-foreground"
                 title={conversation.title}
               >
                 {conversation.title}
-              </div>
+              </DialogDescription>
             </div>
           </div>
           <Button
@@ -359,8 +357,7 @@ export function HistoryShareModal({
             </div>
           )}
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

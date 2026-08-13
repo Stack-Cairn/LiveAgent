@@ -16,12 +16,11 @@ import {
   type HookType,
 } from "@liveagent/ui/lib/automation/index";
 import { useState } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "../../components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
-import { useModalMotion } from "../../lib/shared/modalMotion";
 import {
   createEmptyRequestDraft,
   type HttpRequestDraft,
@@ -57,8 +56,6 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
   const [formError, setFormError] = useState<string | null>(null);
   const [expandedRequest, setExpandedRequest] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const { isClosing, modalState, requestClose } = useModalMotion(onClose);
-
   const isEditing = Boolean(initialData);
 
   async function handleSave() {
@@ -94,7 +91,7 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
             ? parsedTimeoutSeconds * 1000
             : undefined,
       });
-      requestClose();
+      onClose();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -104,34 +101,29 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
 
   const scriptLineCount = scriptText.split(/\r?\n/).filter((line) => line.trim()).length;
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
-      <div className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && !isSaving && onClose()}>
+      <DialogContent className="settings-modal-panel flex max-h-[92vh] max-w-3xl flex-col p-0">
         <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500">
             <Zap className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">
+            <DialogTitle>
               {isEditing ? t("settings.hooksEdit") : t("settings.hooksAdd")}
-            </h2>
-            <div className="mt-0.5 flex items-center gap-2">
+            </DialogTitle>
+            <DialogDescription className="mt-0.5 flex items-center gap-2 text-xs">
               <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
                 {event}
               </span>
               <span className="text-xs text-muted-foreground">
                 {t(HOOK_EVENT_TRANSLATION_KEYS[event])}
               </span>
-            </div>
+            </DialogDescription>
           </div>
           <button
             type="button"
-            onClick={requestClose}
+            onClick={onClose}
             title={t("settings.cancel")}
             aria-label={t("settings.cancel")}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
@@ -395,19 +387,15 @@ export function HookModal({ event, initialData, onSave, onClose }: HookModalProp
             ) : null}
           </div>
           <div className="settings-modal-actions flex items-center gap-2">
-            <Button variant="outline" onClick={requestClose}>
+            <Button variant="outline" onClick={onClose} disabled={isSaving}>
               {t("settings.cancel")}
             </Button>
-            <Button
-              onClick={() => void handleSave()}
-              disabled={!name.trim() || isSaving || isClosing}
-            >
+            <Button onClick={() => void handleSave()} disabled={!name.trim() || isSaving}>
               {t("settings.save")}
             </Button>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

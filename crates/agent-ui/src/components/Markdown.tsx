@@ -15,7 +15,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import remarkBreaks from "remark-breaks";
 import {
   type Components,
@@ -40,6 +39,7 @@ import { normalizeLatexDelimiters } from "../lib/normalizeLatexDelimiters";
 import { cn } from "../lib/shared/utils";
 import { Button } from "./ui/button";
 import { CopyButton } from "./ui/copy-button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 
 const CHAT_FILE_NODE_DATA_KEY = "liveagentChatFileLink";
 const LIVEAGENT_FILE_PROTOCOL = "liveagent-file:";
@@ -558,32 +558,23 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
     }
   };
 
-  const modal = (
-    <div
-      className="external-link-modal-overlay fixed inset-0 z-[100] flex items-center justify-center px-4 py-6"
-      data-state="open"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 cursor-default bg-black/25 backdrop-blur-[2px]"
-        onClick={onClose}
-        aria-label={streamdownTranslations.close}
-      />
-      <div
-        className="external-link-modal-panel relative w-full max-w-[28rem] overflow-hidden rounded-2xl border border-border/60 bg-background shadow-[0_20px_60px_-28px_rgba(0,0,0,0.45)]"
-        role="dialog"
-        aria-modal="true"
-        aria-label={streamdownTranslations.openExternalLink}
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="external-link-modal-panel max-w-[28rem] border-border/60 p-0 shadow-[0_20px_60px_-28px_rgba(0,0,0,0.45)]"
+        overlayClassName="bg-black/25 backdrop-blur-[2px]"
       >
         <div className="flex items-start justify-between gap-4 px-5 pb-3 pt-5">
           <div className="min-w-0 space-y-1.5">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
               <ExternalLink className="size-4 text-muted-foreground" />
-              <span>{streamdownTranslations.openExternalLink}</span>
+              <DialogTitle className="text-sm">
+                {streamdownTranslations.openExternalLink}
+              </DialogTitle>
             </div>
-            <p className="text-xs leading-5 text-muted-foreground">
+            <DialogDescription className="text-xs leading-5">
               {streamdownTranslations.externalLinkWarning}
-            </p>
+            </DialogDescription>
           </div>
           <button
             type="button"
@@ -625,11 +616,9 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
-
-  return createPortal(modal, document.body);
 }
 
 const MARKDOWN_EMBED_CLASSNAME = cn(

@@ -28,6 +28,12 @@ import { SshPortForwardDialog } from "@liveagent/ui/components/project-tools/Ssh
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -1549,98 +1555,104 @@ export function SshTunnelPanel(props: SshTunnelPanelProps) {
         </div>
       </div>
 
-      {prompt ? (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/70 px-4 backdrop-blur-sm">
-          <form
-            className="w-full max-w-md rounded-lg border border-border bg-card p-4 shadow-xl"
-            onSubmit={(event) => {
-              event.preventDefault();
-              handleSubmitPrompt();
-            }}
-          >
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                <Shield className="h-4.5 w-4.5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-foreground">
-                  {hostKeyPrompt
-                    ? t("projectTools.sshTunnelPromptTitle")
-                    : t("projectTools.sshTunnelAuthPromptTitle")}
+      <Dialog
+        open={prompt !== null}
+        onOpenChange={(open) => {
+          if (!open) handleCancelPrompt();
+        }}
+      >
+        <DialogContent className="max-w-md rounded-lg p-4">
+          {prompt ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleSubmitPrompt();
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <Shield className="h-4.5 w-4.5" />
                 </div>
-                <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                  {prompt.message}
+                <div className="min-w-0 flex-1">
+                  <DialogTitle className="text-sm">
+                    {hostKeyPrompt
+                      ? t("projectTools.sshTunnelPromptTitle")
+                      : t("projectTools.sshTunnelAuthPromptTitle")}
+                  </DialogTitle>
+                  <DialogDescription className="mt-1 text-xs leading-relaxed">
+                    {prompt.message}
+                  </DialogDescription>
                 </div>
               </div>
-            </div>
-            <div className="mt-3 space-y-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
-              <div className="flex gap-2">
-                <span className="shrink-0 text-muted-foreground">
-                  {t("projectTools.sshTunnelHost")}
-                </span>
-                <span className="min-w-0 flex-1 truncate font-mono text-foreground">
-                  {prompt.host}:{prompt.port}
-                </span>
-              </div>
-              {prompt.keyType ? (
+              <div className="mt-3 space-y-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
                 <div className="flex gap-2">
                   <span className="shrink-0 text-muted-foreground">
-                    {t("projectTools.sshTunnelKeyType")}
+                    {t("projectTools.sshTunnelHost")}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-mono text-foreground">
-                    {prompt.keyType}
+                    {prompt.host}:{prompt.port}
                   </span>
                 </div>
+                {prompt.keyType ? (
+                  <div className="flex gap-2">
+                    <span className="shrink-0 text-muted-foreground">
+                      {t("projectTools.sshTunnelKeyType")}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-foreground">
+                      {prompt.keyType}
+                    </span>
+                  </div>
+                ) : null}
+                {prompt.fingerprintSha256 ? (
+                  <div className="flex gap-2">
+                    <span className="shrink-0 text-muted-foreground">
+                      {t("projectTools.sshTunnelFingerprint")}
+                    </span>
+                    <span className="min-w-0 flex-1 break-all font-mono text-foreground">
+                      {prompt.fingerprintSha256}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+              {!hostKeyPrompt ? (
+                <input
+                  value={promptAnswer}
+                  onChange={(event) => setPromptAnswer(event.currentTarget.value)}
+                  className="mt-3 h-10 w-full rounded-lg border border-border/70 bg-background/80 px-3 text-[calc(11px*var(--zone-font-scale,1))] text-foreground outline-none transition-colors placeholder:text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-muted-foreground/70 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20"
+                  type={prompt.answerEcho ? "text" : "password"}
+                  aria-label={t("projectTools.sshTunnelAuthPromptTitle")}
+                  autoFocus
+                />
               ) : null}
-              {prompt.fingerprintSha256 ? (
-                <div className="flex gap-2">
-                  <span className="shrink-0 text-muted-foreground">
-                    {t("projectTools.sshTunnelFingerprint")}
-                  </span>
-                  <span className="min-w-0 flex-1 break-all font-mono text-foreground">
-                    {prompt.fingerprintSha256}
-                  </span>
-                </div>
-              ) : null}
-            </div>
-            {!hostKeyPrompt ? (
-              <input
-                value={promptAnswer}
-                onChange={(event) => setPromptAnswer(event.currentTarget.value)}
-                className="mt-3 h-10 w-full rounded-lg border border-border/70 bg-background/80 px-3 text-[calc(11px*var(--zone-font-scale,1))] text-foreground outline-none transition-colors placeholder:text-[calc(11px*var(--zone-font-scale,1))] placeholder:text-muted-foreground/70 focus-visible:border-emerald-500/50 focus-visible:ring-1 focus-visible:ring-emerald-500/20"
-                type={prompt.answerEcho ? "text" : "password"}
-                aria-label={t("projectTools.sshTunnelAuthPromptTitle")}
-                autoFocus
-              />
-            ) : null}
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 rounded-lg px-3 text-xs"
-                onClick={handleCancelPrompt}
-                disabled={answeringPrompt}
-              >
-                {hostKeyPrompt
-                  ? t("projectTools.sshTunnelRejectHost")
-                  : t("projectTools.sshTunnelPromptCancel")}
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                className="h-8 rounded-lg px-3 text-xs"
-                disabled={promptSubmitDisabled}
-              >
-                {answeringPrompt ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
-                {hostKeyPrompt
-                  ? t("projectTools.sshTunnelTrustHost")
-                  : t("projectTools.sshTunnelPromptSubmit")}
-              </Button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+              <div className="mt-4 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 rounded-lg px-3 text-xs"
+                  onClick={handleCancelPrompt}
+                  disabled={answeringPrompt}
+                >
+                  {hostKeyPrompt
+                    ? t("projectTools.sshTunnelRejectHost")
+                    : t("projectTools.sshTunnelPromptCancel")}
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="h-8 rounded-lg px-3 text-xs"
+                  disabled={promptSubmitDisabled}
+                >
+                  {answeringPrompt ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                  {hostKeyPrompt
+                    ? t("projectTools.sshTunnelTrustHost")
+                    : t("projectTools.sshTunnelPromptSubmit")}
+                </Button>
+              </div>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
       {closeSessionConfirmDialog}
       {forwardModalSession ? (
         <SshPortForwardDialog

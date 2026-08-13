@@ -9,6 +9,12 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -24,7 +30,6 @@ import {
 } from "@liveagent/ui/pages/settings/providerUtils";
 import { invoke } from "@tauri-apps/api/core";
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../src-tauri/icons/custom/ccswitch.png";
 import cherryStudioLogoUrl from "../../src-tauri/icons/custom/cherrystudio.png";
 import type { ProviderModelConfig } from "../lib/settings";
@@ -251,22 +256,16 @@ function CcsImportModal(props: {
     });
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label="关闭 CC Switch 导入"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={importing ? undefined : onClose}
-      />
-      <div className="relative z-10 flex h-[min(34rem,85vh)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && !importing && onClose()}>
+      <DialogContent className="flex h-[min(34rem,85vh)] max-w-xl flex-col p-0">
         <div className="flex items-center gap-3 border-b px-6 py-4">
           {sourceLogo("ccswitch", "h-9 w-9")}
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">从 CC Switch 导入</div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <DialogTitle className="text-sm leading-normal">从 CC Switch 导入</DialogTitle>
+            <DialogDescription className="mt-0.5 text-xs">
               导入当前供应商类型的配置，并在后台获取模型列表
-            </div>
+            </DialogDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose} disabled={importing}>
             <X className="h-4 w-4" />
@@ -338,9 +337,8 @@ function CcsImportModal(props: {
             导入 {selectedItems.length} 项
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }
 

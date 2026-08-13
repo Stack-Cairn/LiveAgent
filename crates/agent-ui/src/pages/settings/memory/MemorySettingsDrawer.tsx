@@ -14,12 +14,23 @@ import {
   updateMemorySettings,
 } from "@liveagent/app/lib/settings";
 import { AlertTriangle, History, RefreshCw, Trash2, X } from "@liveagent/ui/components/IconSet";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from "@liveagent/ui/components/ui/alert-dialog";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@liveagent/ui/components/ui/sheet";
 import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   formatMemoryError,
   type MemoryQuotaSummaryResponse,
@@ -270,34 +281,26 @@ export function MemorySettingsDrawer(props: {
     }
   }
 
-  return createPortal(
-    <div
-      className="skills-drawer-backdrop fixed inset-0 z-50 flex justify-end bg-foreground/[0.04] backdrop-blur-md dark:bg-background/30"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="memory-settings-drawer-title"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <aside className="skills-drawer-panel relative flex h-full w-full flex-col overflow-hidden border-l border-foreground/[0.06] bg-background/65 shadow-[-30px_0_70px_-32px_rgba(15,23,42,0.28)] backdrop-blur-2xl sm:max-w-[420px] dark:border-foreground/[0.08] dark:bg-background/55">
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        className="max-w-none border-foreground/[0.06] bg-background/65 shadow-[-30px_0_70px_-32px_rgba(15,23,42,0.28)] backdrop-blur-2xl sm:max-w-[420px] dark:border-foreground/[0.08] dark:bg-background/55"
+        backdropClassName="bg-foreground/[0.04] backdrop-blur-md dark:bg-background/30"
+        closeLabel={t("settings.memorySettingsClose")}
+        showCloseButton={false}
+      >
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/55 to-transparent dark:via-white/10"
         />
         <div className="relative flex items-center gap-3 border-b border-foreground/[0.06] px-6 py-[18px]">
           <div className="min-w-0 flex-1">
-            <div
-              id="memory-settings-drawer-title"
-              className="text-[15px] font-semibold leading-tight tracking-tight text-foreground/95"
-            >
+            <SheetTitle className="text-[15px] leading-tight tracking-tight text-foreground/95">
               {t("settings.memorySettingsTitle")}
-            </div>
-            <div className="mt-1 text-[11.5px] leading-snug text-muted-foreground/80">
+            </SheetTitle>
+            <SheetDescription className="mt-1 text-[11.5px] leading-snug text-muted-foreground/80">
               {t("settings.memorySettingsLocalOnly")}
-            </div>
+            </SheetDescription>
           </div>
           <button
             type="button"
@@ -546,7 +549,7 @@ export function MemorySettingsDrawer(props: {
             </section>
           </div>
         </div>
-      </aside>
+      </SheetContent>
       {historyOpen ? (
         <OrganizerHistoryModal
           t={t}
@@ -556,28 +559,19 @@ export function MemorySettingsDrawer(props: {
         />
       ) : null}
       {drawerWipeConfirmOpen ? (
-        <div
-          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="memory-drawer-wipe-confirm-title"
-        >
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setDrawerWipeConfirmOpen(false)}
-          />
-          <div className="relative z-10 w-full max-w-md overflow-hidden rounded-xl border bg-background shadow-2xl">
+        <AlertDialog open onOpenChange={setDrawerWipeConfirmOpen}>
+          <AlertDialogContent className="max-w-md rounded-xl p-0">
             <div className="flex items-start gap-3 border-b px-5 py-4">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive/10">
                 <AlertTriangle className="h-4 w-4 text-destructive" />
               </div>
               <div className="min-w-0 flex-1">
-                <div id="memory-drawer-wipe-confirm-title" className="text-sm font-semibold">
+                <AlertDialogTitle className="text-sm">
                   {t("settings.memoryWipeConfirmTitle")}
-                </div>
-                <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                </AlertDialogTitle>
+                <AlertDialogDescription className="mt-1 text-xs leading-relaxed">
                   {t("settings.memoryWipeConfirmDescription")}
-                </div>
+                </AlertDialogDescription>
               </div>
             </div>
             <div className="flex justify-end gap-2 px-5 py-4">
@@ -601,10 +595,9 @@ export function MemorySettingsDrawer(props: {
                 {t("settings.memoryWipeAll")}
               </Button>
             </div>
-          </div>
-        </div>
+          </AlertDialogContent>
+        </AlertDialog>
       ) : null}
-    </div>,
-    document.body,
+    </Sheet>
   );
 }

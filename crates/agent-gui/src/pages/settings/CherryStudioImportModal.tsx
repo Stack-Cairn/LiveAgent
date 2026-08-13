@@ -10,11 +10,15 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
-import { useAnimatedPresence } from "@liveagent/ui/lib/shared/modalMotion";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import type { CodexRequestFormat, ProviderId } from "../../lib/settings";
 
 export type CherryProviderImportItem = {
@@ -99,7 +103,6 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
   const candidates = response.providers;
   const resolvedDataPath = dataPath ?? response.dataPath ?? "";
   const [pathDialogOpen, setPathDialogOpen] = useState(false);
-  const pathDialog = useAnimatedPresence(pathDialogOpen);
   const hasSyncableItems = useMemo(
     () => candidates.some((item) => item.enabled && item.importable),
     [candidates],
@@ -154,21 +157,15 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
     });
   }
 
-  return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label="关闭 Cherry Studio 同步"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={importing ? undefined : onClose}
-      />
-      <div className="relative z-10 flex h-[min(35rem,88vh)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && !importing && onClose()}>
+      <DialogContent className="flex h-[min(35rem,88vh)] max-w-2xl flex-col p-0">
         <div className="flex shrink-0 items-start justify-between gap-4 border-b px-6 py-4">
           <div>
-            <div className="text-base font-semibold">从 Cherry Studio 同步</div>
-            <div className="mt-1 text-xs text-muted-foreground">
+            <DialogTitle className="text-base leading-normal">从 Cherry Studio 同步</DialogTitle>
+            <DialogDescription className="mt-1 text-xs">
               仅同步 Base URL 和 API Key，模型由 LiveAgent 获取并激活；左侧切换供应商类型
-            </div>
+            </DialogDescription>
           </div>
           <div className="flex items-center gap-1">
             <Button
@@ -367,28 +364,16 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
             </Button>
           </div>
         </div>
-      </div>
-
-      {pathDialog.shouldRender ? (
-        <div
-          className="settings-modal-overlay absolute inset-0 z-20 flex items-center justify-center p-4"
-          data-state={pathDialog.motionState}
-        >
-          <button
-            type="button"
-            aria-label="关闭数据目录设置"
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-            onClick={() => setPathDialogOpen(false)}
-          />
-          <div className="settings-modal-panel relative z-10 w-full max-w-md rounded-2xl border bg-background p-5 shadow-2xl">
+        <Dialog open={pathDialogOpen} onOpenChange={setPathDialogOpen}>
+          <DialogContent className="max-w-md p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-sm font-semibold">Cherry Studio 数据目录</div>
-                <div className="mt-1 text-xs text-muted-foreground">
+                <DialogTitle className="text-sm leading-normal">Cherry Studio 数据目录</DialogTitle>
+                <DialogDescription className="mt-1 text-xs">
                   {dataPath
                     ? "正在使用手动指定的目录"
                     : "LiveAgent 会自动读取 Cherry Studio 的数据目录设置"}
-                </div>
+                </DialogDescription>
               </div>
               <Button
                 type="button"
@@ -440,10 +425,9 @@ export function CherryStudioImportModal(props: CherryStudioImportModalProps) {
                 </Button>
               </div>
             ) : null}
-          </div>
-        </div>
-      ) : null}
-    </div>,
-    document.body,
+          </DialogContent>
+        </Dialog>
+      </DialogContent>
+    </Dialog>
   );
 }

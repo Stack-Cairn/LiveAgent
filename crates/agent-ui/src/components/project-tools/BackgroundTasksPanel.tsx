@@ -19,7 +19,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   clearManagedProcesses,
   readManagedProcessLog,
@@ -29,6 +28,7 @@ import {
 import type { ManagedProcessLog, ManagedProcessRecord } from "../../lib/managed-process/types";
 import { cn } from "../../lib/shared/utils";
 import { Button } from "../ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
 
 type BackgroundTasksPanelProps = {
   // Visibility contract from the right dock: gates the per-second uptime
@@ -76,8 +76,6 @@ function processCopyText(process: ManagedProcessRecord) {
   ].join("\n");
 }
 
-// Portal modal following the mirrored confirm-dialog shell: bottom sheet on
-// small (touch) viewports, centered card from `sm:` up.
 function BackgroundTaskLogDialog(props: {
   process: ManagedProcessRecord;
   actionsDisabled: boolean;
@@ -112,19 +110,6 @@ function BackgroundTaskLogDialog(props: {
   useEffect(() => {
     refresh();
   }, [refresh]);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      if (contextMenu) {
-        setContextMenu(null);
-      } else {
-        onClose();
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [contextMenu, onClose]);
 
   const handleLogContextMenu = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     // Replace the native menu with our own; stopPropagation also keeps the
@@ -170,34 +155,29 @@ function BackgroundTaskLogDialog(props: {
     if (log?.content) copyToClipboard(log.content);
   }, [copyToClipboard, log?.content]);
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-end justify-center sm:items-center sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={processDisplayName(process)}
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (open) return;
+        if (contextMenu) setContextMenu(null);
+        else onClose();
+      }}
     >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      <div className="relative z-10 flex h-[85dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-border/70 bg-background shadow-2xl sm:h-[min(80dvh,36rem)] sm:max-w-2xl sm:rounded-2xl">
+      <DialogContent
+        className="flex h-[85dvh] max-w-none flex-col rounded-t-2xl rounded-b-none p-0 sm:h-[min(80dvh,36rem)] sm:max-w-2xl sm:rounded-2xl"
+        viewportClassName="items-end p-0 sm:items-center sm:p-4"
+      >
         <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium text-foreground">
-              {processDisplayName(process)}
-            </div>
-            <div
+            <DialogTitle className="truncate text-sm">{processDisplayName(process)}</DialogTitle>
+            <DialogDescription
               className="mt-0.5 truncate text-[calc(11px*var(--zone-font-scale,1))] text-muted-foreground"
               title={log?.logPath ?? process.logPath}
             >
               {log?.logPath ?? process.logPath}
               {log?.truncated ? ` ${t("projectTools.bgTaskLogTruncated")}` : ""}
-            </div>
+            </DialogDescription>
           </div>
           <Button
             type="button"
@@ -263,73 +243,71 @@ function BackgroundTaskLogDialog(props: {
             ))
           )}
         </div>
-      </div>
-
-      {contextMenu ? (
-        <div className="fixed inset-0 z-[130]">
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-hidden="true"
-            className="absolute inset-0 cursor-default"
-            onClick={() => setContextMenu(null)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              setContextMenu(null);
-            }}
-          />
-          <div
-            role="menu"
-            aria-label={t("projectTools.bgTaskViewLog")}
-            className="absolute z-10 min-w-36 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
-            onContextMenu={(event) => {
-              event.preventDefault();
-            }}
-          >
+        {contextMenu ? (
+          <div className="fixed inset-0 z-[130]">
             <button
               type="button"
-              role="menuitem"
-              disabled={!contextMenu.hasSelection}
-              className={LOG_MENU_ITEM_CLASS}
-              // preventDefault keeps mousedown from collapsing the text
-              // selection before the click handler reads it.
-              onMouseDown={(event) => {
+              tabIndex={-1}
+              aria-hidden="true"
+              className="absolute inset-0 cursor-default"
+              onClick={() => setContextMenu(null)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setContextMenu(null);
+              }}
+            />
+            <div
+              role="menu"
+              aria-label={t("projectTools.bgTaskViewLog")}
+              className="absolute z-10 min-w-36 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+              onContextMenu={(event) => {
                 event.preventDefault();
               }}
-              onClick={handleCopySelection}
             >
-              {t("projectTools.bgTaskLogCopy")}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={lines.length === 0}
-              className={LOG_MENU_ITEM_CLASS}
-              onMouseDown={(event) => {
-                event.preventDefault();
-              }}
-              onClick={handleSelectAll}
-            >
-              {t("projectTools.bgTaskLogSelectAll")}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={lines.length === 0}
-              className={LOG_MENU_ITEM_CLASS}
-              onMouseDown={(event) => {
-                event.preventDefault();
-              }}
-              onClick={handleCopyAll}
-            >
-              {t("projectTools.bgTaskLogCopyAll")}
-            </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!contextMenu.hasSelection}
+                className={LOG_MENU_ITEM_CLASS}
+                // preventDefault keeps mousedown from collapsing the text
+                // selection before the click handler reads it.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={handleCopySelection}
+              >
+                {t("projectTools.bgTaskLogCopy")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={lines.length === 0}
+                className={LOG_MENU_ITEM_CLASS}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={handleSelectAll}
+              >
+                {t("projectTools.bgTaskLogSelectAll")}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={lines.length === 0}
+                className={LOG_MENU_ITEM_CLASS}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={handleCopyAll}
+              >
+                {t("projectTools.bgTaskLogCopyAll")}
+              </button>
+            </div>
           </div>
-        </div>
-      ) : null}
-    </div>,
-    document.body,
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 

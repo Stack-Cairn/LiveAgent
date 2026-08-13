@@ -14,12 +14,17 @@ import {
   Upload,
 } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient, SftpEntry, SftpSide, SftpTransfer } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 type WorkspaceSftpPanelProps = {
   session: TerminalSession;
@@ -1982,83 +1987,62 @@ function CreateFolderDialog(props: {
   } = props;
   const canSubmit = value.trim().length > 0 && !submitting;
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onCancel}
-        aria-hidden="true"
-      />
-      <form
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (canSubmit) {
-            onSubmit();
-          }
-        }}
-      >
-        <div className="border-b border-border/60 px-5 py-4">
-          <div className="text-base font-semibold text-foreground">{title}</div>
-          {path ? (
-            <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{path}</div>
-          ) : null}
-        </div>
-        <div className="space-y-2 px-5 py-5">
-          <label
-            className="block text-xs font-medium text-muted-foreground"
-            htmlFor="workspace-sftp-new-folder-name"
-          >
-            {prompt}
-          </label>
-          <input
-            id="workspace-sftp-new-folder-name"
-            value={value}
-            autoFocus
-            disabled={submitting}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-            onChange={(event) => onChange(event.currentTarget.value)}
-          />
-        </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-            disabled={submitting}
-            onClick={onCancel}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="submit"
-            className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-            disabled={!canSubmit}
-          >
-            {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            {confirmLabel}
-          </button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+  return (
+    <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
+      <DialogContent className="max-w-md p-0">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSubmit) {
+              onSubmit();
+            }
+          }}
+        >
+          <div className="border-b border-border/60 px-5 py-4">
+            <DialogTitle>{title}</DialogTitle>
+            {path ? (
+              <DialogDescription className="mt-1 truncate font-mono text-[11px]">
+                {path}
+              </DialogDescription>
+            ) : null}
+          </div>
+          <div className="space-y-2 px-5 py-5">
+            <label
+              className="block text-xs font-medium text-muted-foreground"
+              htmlFor="workspace-sftp-new-folder-name"
+            >
+              {prompt}
+            </label>
+            <input
+              id="workspace-sftp-new-folder-name"
+              value={value}
+              autoFocus
+              disabled={submitting}
+              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+              onChange={(event) => onChange(event.currentTarget.value)}
+            />
+          </div>
+          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+              disabled={submitting}
+              onClick={onCancel}
+            >
+              {cancelLabel}
+            </button>
+            <button
+              type="submit"
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+              disabled={!canSubmit}
+            >
+              {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+              {confirmLabel}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2071,35 +2055,12 @@ function CopyPathDialog(props: {
 }) {
   const { title, prompt, closeLabel, text, onClose } = props;
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md p-0">
         <div className="border-b border-border/60 px-5 py-4">
-          <div className="text-base font-semibold text-foreground">{title}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{prompt}</div>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="mt-1 text-xs">{prompt}</DialogDescription>
         </div>
         <div className="px-5 py-5">
           <textarea
@@ -2119,9 +2080,8 @@ function CopyPathDialog(props: {
             {closeLabel}
           </button>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2165,83 +2125,62 @@ function RenameEntryDialog(props: {
   const trimmedValue = value.trim();
   const canSubmit = trimmedValue.length > 0 && trimmedValue !== originalName && !submitting;
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onCancel}
-        aria-hidden="true"
-      />
-      <form
-        className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (canSubmit) {
-            onSubmit();
-          }
-        }}
-      >
-        <div className="border-b border-border/60 px-5 py-4">
-          <div className="text-base font-semibold text-foreground">{title}</div>
-          {path ? (
-            <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{path}</div>
-          ) : null}
-        </div>
-        <div className="space-y-2 px-5 py-5">
-          <label
-            className="block text-xs font-medium text-muted-foreground"
-            htmlFor="workspace-sftp-rename-entry-name"
-          >
-            {prompt}
-          </label>
-          <input
-            id="workspace-sftp-rename-entry-name"
-            value={value}
-            autoFocus
-            disabled={submitting}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
-            onChange={(event) => onChange(event.currentTarget.value)}
-          />
-        </div>
-        <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-            disabled={submitting}
-            onClick={onCancel}
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="submit"
-            className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
-            disabled={!canSubmit}
-          >
-            {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            {confirmLabel}
-          </button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+  return (
+    <Dialog open onOpenChange={(open) => !open && !submitting && onCancel()}>
+      <DialogContent className="max-w-md p-0">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (canSubmit) {
+              onSubmit();
+            }
+          }}
+        >
+          <div className="border-b border-border/60 px-5 py-4">
+            <DialogTitle>{title}</DialogTitle>
+            {path ? (
+              <DialogDescription className="mt-1 truncate font-mono text-[11px]">
+                {path}
+              </DialogDescription>
+            ) : null}
+          </div>
+          <div className="space-y-2 px-5 py-5">
+            <label
+              className="block text-xs font-medium text-muted-foreground"
+              htmlFor="workspace-sftp-rename-entry-name"
+            >
+              {prompt}
+            </label>
+            <input
+              id="workspace-sftp-rename-entry-name"
+              value={value}
+              autoFocus
+              disabled={submitting}
+              className="h-10 w-full rounded-lg border border-input bg-background px-3 text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-60"
+              onChange={(event) => onChange(event.currentTarget.value)}
+            />
+          </div>
+          <div className="flex flex-col-reverse gap-2 border-t border-border/60 bg-muted/20 px-5 py-4 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              className="inline-flex h-9 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+              disabled={submitting}
+              onClick={onCancel}
+            >
+              {cancelLabel}
+            </button>
+            <button
+              type="submit"
+              className="inline-flex h-9 items-center justify-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+              disabled={!canSubmit}
+            >
+              {submitting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+              {confirmLabel}
+            </button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

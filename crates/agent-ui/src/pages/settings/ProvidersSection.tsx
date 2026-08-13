@@ -55,6 +55,7 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { Dialog, DialogContent, DialogTitle } from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {
@@ -65,6 +66,7 @@ import {
   SelectValue,
 } from "@liveagent/ui/components/ui/select";
 import { Switch } from "@liveagent/ui/components/ui/switch";
+import { Sheet, SheetContent, SheetTitle } from "@liveagent/ui/components/ui/sheet";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -87,7 +89,6 @@ import {
   findNewModelIds,
 } from "@liveagent/ui/lib/providers/modelVendor";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { ModelPicker } from "@liveagent/ui/pages/settings/modelPicker";
 import {
@@ -423,7 +424,6 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     rect: { left: number; top: number; width: number };
   } | null>(null);
   const [headerSuggestActive, setHeaderSuggestActive] = useState(0);
-  const { isClosing, modalState, requestClose } = useModalMotion(onClose);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevFetchKey = useRef("");
@@ -918,7 +918,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
       useSystemProxy,
       usageQuery: serializeUsageQueryDraft(usageQuery, isGatewayWebui),
     });
-    requestClose();
+    onClose();
   }
 
   async function handleTestUsageQuery() {
@@ -1075,23 +1075,21 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
     ? customHeaderIssueMessage(firstHeaderIssue, t)
     : null;
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 max-[720px]:p-0"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
-      <div className="settings-modal-panel relative z-10 flex h-[600px] max-h-[calc(100dvh-2rem)] w-full max-w-[860px] flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="settings-modal-panel flex h-[600px] max-h-[calc(100dvh-2rem)] max-w-[860px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0"
+        viewportClassName="max-[720px]:p-0"
+      >
         <div className="settings-modal-header flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4 max-[720px]:px-3.5 max-[720px]:py-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center text-xl text-foreground">
               <ProviderBrandIcon type={providerType} />
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <div className="text-sm font-semibold">
+              <DialogTitle className="text-sm">
                 {isEditing ? t("settings.editProvider") : t("settings.addProvider")}
-              </div>
+              </DialogTitle>
               <span className="rounded-full border bg-muted/60 px-2.5 py-0.5 text-[11px] text-muted-foreground">
                 {typeLabel} {t("settings.compatible")}
               </span>
@@ -1102,7 +1100,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
             variant="ghost"
             size="icon"
             className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={requestClose}
+            onClick={onClose}
             title={t("settings.close")}
             aria-label={t("settings.close")}
           >
@@ -2733,23 +2731,22 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         <div className="settings-modal-footer flex shrink-0 items-center justify-end gap-2 border-t bg-muted/20 px-5 py-3.5 max-[720px]:px-3.5 max-[720px]:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[720px]:pt-3">
           <Button
             variant="outline"
-            onClick={requestClose}
+            onClick={onClose}
             className="max-[720px]:h-10 max-[720px]:flex-1"
           >
             {t("settings.cancel")}
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!name.trim() || isClosing}
+            disabled={!name.trim()}
             className="max-[720px]:h-10 max-[720px]:flex-1"
           >
             {t("settings.save")}
           </Button>
         </div>
         {usageQueryConfirmDialog}
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -3005,8 +3002,6 @@ function CustomSettingsDrawer(
 ) {
   const { settings, setSettings, providerType, onClose } = props;
   const { t } = useLocale();
-  const [closing, setClosing] = useState(false);
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modelOptions = useMemo(() => buildModelOptions(settings), [settings]);
   const conversationTitleModel = settings.customSettings.conversationTitleModel;
   const selectedValue = conversationTitleModel
@@ -3026,23 +3021,6 @@ function CustomSettingsDrawer(
         ]
       : modelOptions;
 
-  useEffect(
-    () => () => {
-      if (closeTimerRef.current !== null) {
-        clearTimeout(closeTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  function requestClose() {
-    if (closing) return;
-    setClosing(true);
-    closeTimerRef.current = setTimeout(() => {
-      onClose();
-    }, 220);
-  }
-
   function handleTitleModelChange(value: string) {
     // "" comes from the picker's follow-current entry and parses to undefined.
     setSettings((prev) =>
@@ -3052,22 +3030,13 @@ function CustomSettingsDrawer(
     );
   }
 
-  return createPortal(
-    <div
-      className={`${
-        closing ? "skills-drawer-backdrop-closing" : "skills-drawer-backdrop"
-      } fixed inset-0 z-50 flex justify-end bg-foreground/[0.06] backdrop-blur-md dark:bg-background/40`}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="provider-custom-settings-title"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) requestClose();
-      }}
-    >
-      <aside
-        className={`${
-          closing ? "skills-drawer-panel-closing" : "skills-drawer-panel"
-        } relative flex h-full w-full flex-col overflow-hidden border-l border-white/50 bg-white/70 shadow-[-32px_0_80px_-28px_rgba(15,23,42,0.22)] backdrop-blur-[28px] backdrop-saturate-150 sm:max-w-[440px] dark:border-foreground/[0.08] dark:bg-background/60`}
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        className="max-w-none border-white/50 bg-white/70 shadow-[-32px_0_80px_-28px_rgba(15,23,42,0.22)] backdrop-blur-[28px] backdrop-saturate-150 sm:max-w-[440px] dark:border-foreground/[0.08] dark:bg-background/60"
+        backdropClassName="bg-foreground/[0.06] backdrop-blur-md dark:bg-background/40"
+        closeLabel={t("settings.closeCustomSettings")}
+        showCloseButton={false}
       >
         <div
           aria-hidden="true"
@@ -3080,16 +3049,13 @@ function CustomSettingsDrawer(
 
         <div className="relative flex items-start gap-3 px-6 pb-4 pt-[22px]">
           <div className="min-w-0 flex-1 max-[720px]:basis-[calc(100%-3rem)]">
-            <div
-              id="provider-custom-settings-title"
-              className="text-[17px] font-semibold leading-tight tracking-tight text-foreground/95"
-            >
+            <SheetTitle className="text-[17px] leading-tight tracking-tight text-foreground/95">
               {t("settings.customSettings")}
-            </div>
+            </SheetTitle>
           </div>
           <button
             type="button"
-            onClick={requestClose}
+            onClick={onClose}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground/[0.06] text-muted-foreground/80 transition-colors hover:bg-foreground/[0.12] hover:text-foreground"
             title={t("settings.closeCustomSettings")}
             aria-label={t("settings.closeCustomSettings")}
@@ -3139,9 +3105,8 @@ function CustomSettingsDrawer(
             />
           </section>
         </div>
-      </aside>
-    </div>,
-    document.body,
+      </SheetContent>
+    </Sheet>
   );
 }
 

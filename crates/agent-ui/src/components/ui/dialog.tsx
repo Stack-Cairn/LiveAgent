@@ -24,7 +24,7 @@ export const DialogOverlay = React.forwardRef<
     ref={ref}
     data-slot="dialog-overlay"
     className={cn(
-      "fixed inset-0 z-50 bg-black/55 backdrop-blur-sm transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0",
+      "fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}
     {...props}
@@ -45,7 +45,7 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
       <DialogPrimitive.Viewport
         data-slot="dialog-viewport"
         className={cn(
-          "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4",
+          "fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4",
           viewportClassName,
         )}
       >
@@ -53,7 +53,7 @@ export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps
           ref={ref}
           data-slot="dialog-content"
           className={cn(
-            "relative w-full max-w-lg overflow-hidden rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-200 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
+            "relative w-full max-w-lg overflow-hidden rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-200 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
             className,
           )}
           {...props}

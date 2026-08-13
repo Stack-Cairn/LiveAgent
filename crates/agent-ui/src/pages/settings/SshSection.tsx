@@ -26,14 +26,13 @@ import {
 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "../../components/ui/button";
 import { useConfirmDialog } from "../../components/ui/confirm-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { createUuid } from "../../lib/shared/id";
-import { useModalMotion } from "../../lib/shared/modalMotion";
 import {
   type SshImportCandidate,
   type SshScanResult,
@@ -210,7 +209,6 @@ function SshHostModal(props: {
   );
   const [proxyUsername, setProxyUsername] = useState(initialData?.proxy.username ?? "");
   const [proxyPassword, setProxyPassword] = useState(initialData?.proxy.password ?? "");
-  const { isClosing, modalState, requestClose } = useModalMotion(onClose);
   const isEditing = Boolean(initialData);
   const isPasswordAuth = authType === "password";
   const isPrivateKeyAuth = authType === "privateKey";
@@ -241,7 +239,6 @@ function SshHostModal(props: {
   }
 
   function handleSave() {
-    if (isClosing) return;
     const trimmedName = name.trim();
     const trimmedHost = host.trim();
     if (!trimmedName || !trimmedHost) return;
@@ -289,25 +286,21 @@ function SshHostModal(props: {
           trimmedProxyPassword.length > 0 || initialData?.proxy.passwordConfigured === true,
       },
     });
-    requestClose();
+    onClose();
   }
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-      <div className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="settings-modal-panel flex max-h-[92vh] max-w-3xl flex-col p-0">
         <div className="settings-modal-header flex items-center gap-3 border-b px-6 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
             <Key className="h-5 w-5" />
           </div>
           <div className="flex-1">
-            <div className="text-sm font-semibold">
+            <DialogTitle className="text-sm">
               {isEditing ? t("settings.sshEdit") : t("settings.sshAdd")}
-            </div>
-            <div className="text-xs text-muted-foreground">{t("settings.sshDesc")}</div>
+            </DialogTitle>
+            <DialogDescription className="text-xs">{t("settings.sshDesc")}</DialogDescription>
           </div>
         </div>
 
@@ -658,17 +651,16 @@ function SshHostModal(props: {
 
         <div className="settings-modal-footer flex items-center justify-end border-t px-6 py-4">
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={requestClose}>
+            <Button variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>
-            <Button onClick={handleSave} disabled={!name.trim() || !host.trim() || isClosing}>
+            <Button onClick={handleSave} disabled={!name.trim() || !host.trim()}>
               {t("settings.save")}
             </Button>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -682,7 +674,6 @@ function SshImportModal(props: {
   const [result, setResult] = useState<SshScanResult | null>(null);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const { isClosing, modalState, requestClose } = useModalMotion(onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -717,20 +708,16 @@ function SshImportModal(props: {
     });
   }
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-      <div className="settings-modal-panel relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="settings-modal-panel flex max-h-[90vh] max-w-3xl flex-col p-0">
         <div className="settings-modal-header flex items-center gap-3 border-b px-6 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
             <Upload className="h-5 w-5" />
           </div>
           <div className="flex-1">
-            <div className="text-sm font-semibold">{t("settings.sshImport")}</div>
-            <div className="text-xs text-muted-foreground">{t("settings.sshImportDesc")}</div>
+            <DialogTitle className="text-sm">{t("settings.sshImport")}</DialogTitle>
+            <DialogDescription className="text-xs">{t("settings.sshImportDesc")}</DialogDescription>
           </div>
         </div>
 
@@ -821,23 +808,22 @@ function SshImportModal(props: {
             {t("settings.sshImportSelected").replace("{count}", String(selected.length))}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={requestClose}>
+            <Button variant="outline" onClick={onClose}>
               {t("settings.cancel")}
             </Button>
             <Button
-              disabled={selected.length === 0 || isClosing}
+              disabled={selected.length === 0}
               onClick={() => {
                 onImport(selected);
-                requestClose();
+                onClose();
               }}
             >
               {t("settings.sshImport")}
             </Button>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }
 

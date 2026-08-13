@@ -30,8 +30,7 @@ import {
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { useModalMotion } from "../../lib/shared/modalMotion";
+import { Dialog, DialogContent, DialogTitle } from "../../components/ui/dialog";
 import { ConfirmActionPopover } from "./shared";
 
 type CronTaskViewModalProps = {
@@ -695,7 +694,6 @@ function RightPanel({
 
 export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
   const { t } = useLocale();
-  const { modalState, requestClose } = useModalMotion(onClose);
   // Live subscription: enable/disable toggles, executor decrements and
   // scheduler errors show up while the modal is open.
   const { cron } = useAutomation();
@@ -713,9 +711,9 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
 
   useEffect(() => {
     if (!task) {
-      requestClose();
+      onClose();
     }
-  }, [task, requestClose]);
+  }, [task, onClose]);
 
   useEffect(() => {
     if (manualRunStartedAt == null) return;
@@ -783,15 +781,11 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
     }
   }
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       {/* Use explicit h-[80vh] so children can compute flex/overflow correctly */}
-      <div className="settings-modal-panel settings-cron-view-panel relative z-10 flex h-[80vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+      <DialogContent className="settings-modal-panel settings-cron-view-panel flex h-[80vh] max-w-4xl p-0">
+        <DialogTitle className="sr-only">{task.name}</DialogTitle>
         {/* ── Left: task detail ── */}
         <div className="settings-cron-view-left flex w-[380px] shrink-0 flex-col border-r border-border/40 bg-background">
           <LeftPanel
@@ -803,16 +797,15 @@ export function CronTaskViewModal({ taskId, onClose }: CronTaskViewModalProps) {
             onRunNow={() => {
               void handleRunNow(task.id);
             }}
-            onClose={requestClose}
+            onClose={onClose}
           />
         </div>
 
         {/* ── Right: logs ── */}
         <div className="settings-cron-view-right flex min-w-0 flex-1 flex-col bg-muted/5">
-          <RightPanel task={task} t={t} onClose={requestClose} />
+          <RightPanel task={task} t={t} onClose={onClose} />
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -3,13 +3,17 @@ import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import { BookOpen, Eye, FileText, Pencil, Plus, Trash2, X } from "@liveagent/ui/components/IconSet";
 
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import { AgentPromptTemplateModal } from "@liveagent/ui/pages/settings/AgentPromptTemplateModal";
 import { AgentActivationSwitch, ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";
 import { useState } from "react";
-import { createPortal } from "react-dom";
 
 export function AgentsSection(props: SettingsSectionProps) {
   const { settings, setSettings } = props;
@@ -252,35 +256,22 @@ type AgentPromptViewModalProps = {
 
 function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) {
   const { t } = useLocale();
-  const { modalState, requestClose } = useModalMotion(onClose);
 
-  return createPortal(
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="agent-prompt-view-title"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 cursor-default bg-black/25 backdrop-blur-md dark:bg-black/50"
-        onClick={requestClose}
-        aria-label={t("settings.cancel")}
-      />
-
-      <div className="settings-modal-panel relative z-10 flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-black/[0.07] bg-white/[0.93] shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_32px_80px_-24px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-background/[0.93] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_32px_80px_-24px_rgba(0,0,0,0.7)]">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        className="settings-modal-panel flex max-h-[90vh] max-w-4xl flex-col rounded-[28px] border-black/[0.07] bg-white/[0.93] p-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_32px_80px_-24px_rgba(0,0,0,0.35)] backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-background/[0.93] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_32px_80px_-24px_rgba(0,0,0,0.7)]"
+        overlayClassName="bg-black/25 backdrop-blur-md dark:bg-black/50"
+      >
         <div className="settings-modal-header relative flex items-center gap-3.5 border-b border-black/[0.06] px-6 py-5 dark:border-white/[0.08]">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-foreground/70 shadow-sm dark:border-white/10 dark:bg-white/[0.07] dark:text-foreground/80">
             <Eye className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <div id="agent-prompt-view-title" className="truncate text-base font-semibold">
-              {template.name}
-            </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <DialogTitle className="truncate">{template.name}</DialogTitle>
+            <DialogDescription className="mt-0.5 text-xs">
               {t("settings.agentsShowPrompt")}
-            </div>
+            </DialogDescription>
           </div>
           <span
             className={`hidden shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium sm:inline-flex ${
@@ -298,7 +289,7 @@ function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) 
             variant="ghost"
             size="icon"
             className="h-9 w-9 shrink-0 rounded-full border border-black/[0.06] bg-black/[0.04] text-muted-foreground hover:bg-black/[0.08] hover:text-foreground dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.12]"
-            onClick={requestClose}
+            onClick={onClose}
             aria-label={t("settings.cancel")}
           >
             <X className="h-4 w-4" />
@@ -366,8 +357,7 @@ function AgentPromptViewModal({ template, onClose }: AgentPromptViewModalProps) 
             </section>
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

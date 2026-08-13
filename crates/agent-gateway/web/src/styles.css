@@ -1143,60 +1143,6 @@ html[data-liveagent-webui="gateway"] .settings-confirm-popover {
   max-width: calc(100vw - 24px);
 }
 
-html[data-liveagent-webui="gateway"] .history-share-modal-overlay,
-html[data-liveagent-webui="gateway"] .external-link-modal-overlay {
-  opacity: 0;
-  transition: opacity 180ms ease;
-  will-change: opacity;
-}
-
-html[data-liveagent-webui="gateway"] .history-share-modal-overlay[data-state="open"],
-html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="open"] {
-  opacity: 1;
-}
-
-html[data-liveagent-webui="gateway"] .history-share-modal-overlay[data-state="closed"],
-html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="closed"] {
-  pointer-events: none;
-}
-
-html[data-liveagent-webui="gateway"] .history-share-modal-panel,
-html[data-liveagent-webui="gateway"] .external-link-modal-panel {
-  opacity: 0;
-  transform: translateY(12px) scale(0.985);
-  transition:
-    opacity 180ms ease,
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
-}
-
-html[data-liveagent-webui="gateway"]
-  .history-share-modal-overlay[data-state="open"]
-  .history-share-modal-panel,
-html[data-liveagent-webui="gateway"]
-  .external-link-modal-overlay[data-state="open"]
-  .external-link-modal-panel {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-html[data-liveagent-webui="gateway"]
-  .history-share-modal-overlay[data-state="closed"]
-  .history-share-modal-panel,
-html[data-liveagent-webui="gateway"]
-  .external-link-modal-overlay[data-state="closed"]
-  .external-link-modal-panel {
-  opacity: 0;
-  transform: translateY(8px) scale(0.985);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html[data-liveagent-webui="gateway"] .external-link-modal-overlay,
-  html[data-liveagent-webui="gateway"] .external-link-modal-panel {
-    transition-duration: 1ms;
-  }
-}
-
 /* ─── Login Page — macOS Frosted Glass ──────────────────────────── */
 
 .login-shell {
@@ -2481,11 +2427,6 @@ html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollabl
   html[data-liveagent-webui="gateway"] .settings-remote-gateway-row > input:last-of-type {
     width: 100%;
     flex: 1 1 8rem;
-  }
-
-  html[data-liveagent-webui="gateway"] .settings-modal-overlay {
-    align-items: stretch;
-    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
   }
 
   html[data-liveagent-webui="gateway"] .settings-modal-panel {

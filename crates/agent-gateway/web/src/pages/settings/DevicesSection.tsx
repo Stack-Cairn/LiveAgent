@@ -15,12 +15,17 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { ConfirmActionPopover } from "@liveagent/ui/pages/settings/shared";
 import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   type AdminAgentEntry,
   type AdminAgentStatus,
@@ -387,116 +392,92 @@ function AddClientDialog({
 }) {
   const { t } = useLocale();
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !loading) onClose();
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [loading, onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("settings.devicesAddTitle")}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={() => {
-          if (!loading) onClose();
-        }}
-        aria-hidden="true"
-      />
-      <form
-        className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!loading) onSubmit();
-        }}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
-          <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400">
-              <Plus className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-base font-semibold text-foreground">
-                {t("settings.devicesAddTitle")}
+  return (
+    <Dialog open onOpenChange={(open) => !open && !loading && onClose()}>
+      <DialogContent className="max-w-lg p-0">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!loading) onSubmit();
+          }}
+        >
+          <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                <Plus className="h-5 w-5" />
               </div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                {t("settings.devicesAddDesc")}
+              <div className="min-w-0">
+                <DialogTitle>{t("settings.devicesAddTitle")}</DialogTitle>
+                <DialogDescription className="mt-1 text-xs leading-5">
+                  {t("settings.devicesAddDesc")}
+                </DialogDescription>
               </div>
             </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              disabled={loading}
+              className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+              title={t("settings.close")}
+              aria-label={t("settings.close")}
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            disabled={loading}
-            className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-            title={t("settings.close")}
-            aria-label={t("settings.close")}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
 
-        <div className="space-y-4 px-5 py-5">
-          {error ? (
-            <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{error}</span>
+          <div className="space-y-4 px-5 py-5">
+            {error ? (
+              <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              <Label htmlFor="admin-agent-name-dialog" className="text-xs text-muted-foreground">
+                {t("settings.devicesName")}
+              </Label>
+              <Input
+                id="admin-agent-name-dialog"
+                autoFocus
+                placeholder={t("settings.devicesNamePlaceholder")}
+                value={name}
+                maxLength={MAX_AGENT_NAME_LENGTH}
+                onChange={(event) => onNameChange(event.currentTarget.value)}
+              />
             </div>
-          ) : null}
-          <div className="space-y-1.5">
-            <Label htmlFor="admin-agent-name-dialog" className="text-xs text-muted-foreground">
-              {t("settings.devicesName")}
-            </Label>
-            <Input
-              id="admin-agent-name-dialog"
-              autoFocus
-              placeholder={t("settings.devicesNamePlaceholder")}
-              value={name}
-              maxLength={MAX_AGENT_NAME_LENGTH}
-              onChange={(event) => onNameChange(event.currentTarget.value)}
-            />
+            <div className="space-y-1.5">
+              <Label htmlFor="admin-agent-id-dialog" className="text-xs text-muted-foreground">
+                {t("settings.devicesAgentId")}
+                <span className="ml-0.5 text-red-500">*</span>
+              </Label>
+              <Input
+                id="admin-agent-id-dialog"
+                className="font-mono"
+                placeholder={t("settings.devicesAgentIdPlaceholder")}
+                value={agentId}
+                onChange={(event) => onAgentIdChange(event.currentTarget.value)}
+              />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="admin-agent-id-dialog" className="text-xs text-muted-foreground">
-              {t("settings.devicesAgentId")}
-              <span className="ml-0.5 text-red-500">*</span>
-            </Label>
-            <Input
-              id="admin-agent-id-dialog"
-              className="font-mono"
-              placeholder={t("settings.devicesAgentIdPlaceholder")}
-              value={agentId}
-              onChange={(event) => onAgentIdChange(event.currentTarget.value)}
-            />
-          </div>
-        </div>
 
-        <div className="flex justify-end gap-2 border-t border-border/60 bg-muted/20 px-5 py-4">
-          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-            {t("settings.close")}
-          </Button>
-          <Button type="submit" className="gap-1.5" disabled={loading}>
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Key className="h-3.5 w-3.5" />
-            )}
-            {t("settings.devicesIssueShort")}
-          </Button>
-        </div>
-      </form>
-    </div>,
-    document.body,
+          <div className="flex justify-end gap-2 border-t border-border/60 bg-muted/20 px-5 py-4">
+            <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+              {t("settings.close")}
+            </Button>
+            <Button type="submit" className="gap-1.5" disabled={loading}>
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Key className="h-3.5 w-3.5" />
+              )}
+              {t("settings.devicesIssueShort")}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -510,14 +491,6 @@ function IssuedTokenDialog({
   const { t } = useLocale();
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   async function handleCopy() {
     if (!navigator.clipboard?.writeText) return;
     await navigator.clipboard.writeText(issuedToken.token);
@@ -525,33 +498,19 @@ function IssuedTokenDialog({
     window.setTimeout(() => setCopied(false), 1800);
   }
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[120] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("settings.devicesIssuedTitle")}
-    >
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute inset-0 cursor-default bg-black/55 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl">
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg p-0">
         <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <Key className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <div className="text-base font-semibold text-foreground">
-                {t("settings.devicesIssuedTitle")}
-              </div>
-              <div className="mt-1 text-xs leading-5 text-muted-foreground">
+              <DialogTitle>{t("settings.devicesIssuedTitle")}</DialogTitle>
+              <DialogDescription className="mt-1 text-xs leading-5">
                 {issuedToken.agentId}
-              </div>
+              </DialogDescription>
             </div>
           </div>
           <Button
@@ -599,9 +558,8 @@ function IssuedTokenDialog({
             {t("settings.close")}
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }
 
