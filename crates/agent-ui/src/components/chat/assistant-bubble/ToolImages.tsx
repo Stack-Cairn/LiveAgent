@@ -1,13 +1,13 @@
 import { deferLargeToolImages } from "@liveagent/adapters/assistantBubble";
+import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import { useLocale } from "@liveagent/ui/i18n/index";
 import type {
   DisplayImageItemDetails,
   DisplayImageResultDetails,
   ImageContent,
   ToolResultMessage,
   ToolTraceItem,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
-import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
-import { useLocale } from "@liveagent/ui/i18n/index";
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { prepareImageProxyUrl } from "@liveagent/ui/lib/providers/proxy";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { useEffect, useMemo, useRef, useState } from "react";

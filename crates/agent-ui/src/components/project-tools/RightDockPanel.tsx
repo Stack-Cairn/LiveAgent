@@ -1,4 +1,3 @@
-import { X } from "@liveagent/app/components/icons";
 import type {
   RightDockFileTreeState,
   RightDockFileTreeStatePatch,
@@ -6,6 +5,7 @@ import type {
   SshHostConfig,
 } from "@liveagent/app/lib/settings";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { X } from "@liveagent/ui/components/IconSet";
 import type {
   GitCommitContextPayload,
   GitFileContextPayload,

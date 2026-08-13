@@ -1,3 +1,4 @@
+import { GlassPanel } from "@liveagent/ui/components/hub/HubChrome";
 import {
   AlertTriangle,
   Check,
@@ -7,8 +8,7 @@ import {
   RefreshCw,
   SkillIcon,
   X,
-} from "@liveagent/app/components/icons";
-import { GlassPanel } from "@liveagent/ui/components/hub/HubChrome";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";
 import { Separator } from "@liveagent/ui/components/ui/separator";

@@ -1,3 +1,4 @@
+import { asRecord, errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import type { ChatEvent, GatewaySelectedModel } from "@/lib/gatewayTypes";
 import {
   type AppSettings,
@@ -5,14 +6,9 @@ import {
   parseSelectedModelJson,
   type SelectedModel,
 } from "@/lib/settings";
-
 import type { ModelProviderSource, TunnelManagerToolChange } from "./types";
 
-export function asErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.trim()) return error.message.trim();
-  const text = String(error ?? "").trim();
-  return text || fallback;
-}
+export { errorMessageWithFallback as asErrorMessage };
 
 export function isAbortError(error: unknown) {
   if (
@@ -41,12 +37,6 @@ export function readChatEventTitle(event: ChatEvent): string {
 
 export function isChatEventTitleFinal(event: ChatEvent) {
   return event.type === "done" || ("titleFinal" in event && event.titleFinal === true);
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 export function readTunnelManagerToolChange(event: ChatEvent): TunnelManagerToolChange | null {

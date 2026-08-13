@@ -1,9 +1,3 @@
-import { Button } from "@liveagent/ui/components/ui/button";
-import { useAutomation } from "@liveagent/ui/lib/automation/index";
-import type { GatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
-import { cn } from "@liveagent/ui/lib/shared/utils";
-import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
-import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   Bot,
@@ -30,7 +24,13 @@ import {
   WifiOff,
   Wrench,
   Zap,
-} from "@/components/icons";
+} from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { useAutomation } from "@liveagent/ui/lib/automation/index";
+import type { GatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeGatewayAccessToken, verifyGatewayAccessToken } from "@/lib/gatewayAuth";
 import {
   type GatewayWebSocketClientLike,

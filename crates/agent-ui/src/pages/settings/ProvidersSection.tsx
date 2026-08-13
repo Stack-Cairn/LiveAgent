@@ -1,33 +1,5 @@
 import { ProviderSettingsExtension } from "@liveagent/adapters/providerSettings";
 import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  ClaudeIcon,
-  ClipboardPaste,
-  ExternalLink,
-  Eye,
-  EyeOff,
-  GeminiIcon,
-  Globe,
-  GrokIcon,
-  Key,
-  Link2,
-  List,
-  OpenaiChatgptIcon,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Search,
-  Settings,
-  Trash2,
-  Waypoints,
-  X,
-  Zap,
-} from "@liveagent/app/components/icons";
-import { buildModelOptions } from "@liveagent/app/lib/chat/chatPageHelpers";
-import { parseModelValue, toModelValue } from "@liveagent/app/lib/providers/llm";
-import {
   getProviderUsageCardDisplay,
   getUsagePlanDisplay,
   type ProviderUsageState,
@@ -55,6 +27,32 @@ import {
   updateModelFailover,
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  ClaudeIcon,
+  ClipboardPaste,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  GeminiIcon,
+  Globe,
+  GrokIcon,
+  Key,
+  Link2,
+  List,
+  OpenaiChatgptIcon,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings,
+  Trash2,
+  Waypoints,
+  X,
+  Zap,
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
@@ -70,6 +68,8 @@ import { Switch } from "@liveagent/ui/components/ui/switch";
 import { Textarea } from "@liveagent/ui/components/ui/textarea";
 import { useVerticalListReorder } from "@liveagent/ui/components/ui/useVerticalListReorder";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
+import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import {
   CustomHeaderImportError,
   type CustomHeaderImportErrorCode,

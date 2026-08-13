@@ -1,11 +1,11 @@
-import type { ToolCall } from "@/lib/agentTypes";
-import { isAbortLikeError } from "@/lib/chat/chatPageHelpers";
 import {
   enrichHostedSearchBlockWithText,
   mergeHostedSearchBlocks,
   normalizeHostedSearchBlock,
-} from "@/lib/chat/hostedSearch";
-import { toolArgsProgress } from "@/lib/chat/toolPreview";
+} from "@liveagent/ui/lib/chat/hostedSearch";
+import { toolArgsProgress } from "@liveagent/ui/lib/chat/toolPreview";
+import type { ToolCall } from "@/lib/agentTypes";
+import { isAbortLikeError } from "@/lib/chat/chatPageHelpers";
 import { summarizeToolCall } from "@/lib/chat/uiMessages";
 import {
   type AssistantMeta,

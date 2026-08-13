@@ -1,5 +1,12 @@
 import type { MentionComposerDraft } from "@liveagent/ui/components/chat/MentionComposer";
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
+
+export type {
+  ChatQueueItemDetail,
+  ChatQueueItemSummary,
+  ChatQueueSnapshot,
+} from "@liveagent/ui/contracts/chatQueue";
+
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { ChatRuntimeControls, ExecutionMode } from "../../../lib/settings";
 import type {
   GatewayChatRuntimeControlsEvent,
@@ -27,26 +34,6 @@ export type QueuedChatTurn = {
   runtimeControls: ChatRuntimeControls;
   createdAt: number;
   gatewayRequest?: QueuedGatewayChatRequest;
-};
-
-export type ChatQueueItemSummary = {
-  id: string;
-  previewText: string;
-  fileCount: number;
-  createdAt: number;
-  source: "gui" | "webui";
-  editable: boolean;
-};
-
-export type ChatQueueSnapshot = {
-  conversationId: string;
-  revision: number;
-  items: ChatQueueItemSummary[];
-};
-
-export type ChatQueueItemDetail = ChatQueueItemSummary & {
-  draftJson: string;
-  uploadedFilesJson: string;
 };
 
 export type QueuedChatTurnInput = Omit<QueuedChatTurn, "createdAt" | "id"> & {

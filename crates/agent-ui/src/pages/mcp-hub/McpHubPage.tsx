@@ -1,5 +1,5 @@
-import { Cloud, Download, Plus, Search, Server } from "@liveagent/app/components/icons";
 import { type AppSettings, type McpServerConfig, updateMcp } from "@liveagent/app/lib/settings";
+import { Cloud, Download, Plus, Search, Server } from "@liveagent/ui/components/IconSet";
 import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { useLocale } from "@liveagent/ui/i18n/index";

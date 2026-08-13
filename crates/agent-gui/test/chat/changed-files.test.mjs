@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const changedFiles = loader.loadModule("src/lib/chat/messages/changedFiles.ts");
+const changedFiles = loader.loadModule("@liveagent/ui/lib/chat/changedFiles.ts");
 
 let toolCallSeq = 0;
 

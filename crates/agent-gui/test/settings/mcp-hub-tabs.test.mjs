@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const pageSource = readFileSync(
   new URL("../../../agent-ui/src/pages/mcp-hub/McpHubPage.tsx", import.meta.url),
@@ -41,11 +43,11 @@ const resourceTabsSource = readFileSync(
   new URL("../../../agent-ui/src/components/resources/ResourceTabsList.tsx", import.meta.url),
   "utf8",
 );
-const guiI18nSource = readFileSync(new URL("../../src/i18n/config.ts", import.meta.url), "utf8");
-const webI18nSource = readFileSync(
-  new URL("../../../agent-gateway/web/src/i18n/config.ts", import.meta.url),
-  "utf8",
-);
+const guiTranslations = createTsModuleLoader().loadModule("src/i18n/config.ts").translations;
+const webRoot = fileURLToPath(new URL("../../../agent-gateway/web/", import.meta.url));
+const webTranslations = createTsModuleLoader({ rootDir: webRoot }).loadModule(
+  "src/i18n/config.ts",
+).translations;
 
 test("MCP navigation uses the same standard segmented and quiet Tabs as Skills Hub", () => {
   for (const source of [toolbarSource, importPickerSource]) {
@@ -158,9 +160,9 @@ test("MCP Store cards center connection previews and use working external and ad
 
 test("MCP Hub description follows the active Chinese locale", () => {
   assert.match(pageSource, /subtitle=\{t\("mcpHub\.subtitle"\)\}/);
-  for (const source of [guiI18nSource, webI18nSource]) {
-    assert.match(source, /"mcpHub\.subtitle": "管理模型上下文协议（MCP）服务器"/);
-    assert.match(source, /"mcpHub\.storeSearchPlaceholder": "搜索 MCP 服务器"/);
+  for (const translations of [guiTranslations, webTranslations]) {
+    assert.equal(translations["zh-CN"]["mcpHub.subtitle"], "管理模型上下文协议（MCP）服务器");
+    assert.equal(translations["zh-CN"]["mcpHub.storeSearchPlaceholder"], "搜索 MCP 服务器");
   }
 });
 

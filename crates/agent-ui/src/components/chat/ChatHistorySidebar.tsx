@@ -1,5 +1,10 @@
 import { Tooltip } from "@base-ui/react";
 import {
+  DEFAULT_WORKSPACE_PROJECT_ID,
+  type WorkspaceProject,
+  workspaceProjectPathKey,
+} from "@liveagent/app/lib/settings";
+import {
   AlertCircle,
   Archive,
   ArchiveRestore,
@@ -24,12 +29,7 @@ import {
   Share2,
   Trash2,
   X,
-} from "@liveagent/app/components/icons";
-import {
-  DEFAULT_WORKSPACE_PROJECT_ID,
-  type WorkspaceProject,
-  workspaceProjectPathKey,
-} from "@liveagent/app/lib/settings";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
@@ -87,7 +87,7 @@ type PendingWorkspaceProjectAction = {
   mode: "remove" | "deleteWorktree";
 };
 
-type ChatHistorySidebarProps = {
+export type ChatHistorySidebarProps = {
   items: readonly SidebarConversation[];
   currentConversationId: string;
   // Per-row in-flight mutations: only that row's menu/inputs disable.
@@ -183,6 +183,213 @@ type ChatHistorySidebarProps = {
   hideCloseButton?: boolean;
   footerTrailing?: ReactNode;
 };
+
+export type ChatHistorySidebarWorkspaceSource = Pick<
+  ChatHistorySidebarProps,
+  | "showProjects"
+  | "workspaceProjectGroups"
+  | "activeProjectId"
+  | "missingProjectPathKeys"
+  | "projectRenamingId"
+  | "projectRenameDraft"
+  | "projectsCollapsed"
+  | "recentCollapsed"
+  | "onProjectsCollapsedChange"
+  | "onRecentCollapsedChange"
+  | "onCreateProject"
+  | "onCreateWorkspaceGroup"
+  | "onRenameWorkspaceGroup"
+  | "onDeleteWorkspaceGroup"
+  | "onMoveProjectToGroup"
+  | "onToggleWorkspaceGroupCollapsed"
+  | "onSelectProject"
+  | "onNewConversationForProject"
+  | "onBrowseProjectInFileTree"
+  | "onBrowseProjectInSystemFileManager"
+  | "onConfigureProjectResources"
+  | "onStartRenamingProject"
+  | "onProjectRenameDraftChange"
+  | "onCommitProjectRename"
+  | "onCancelProjectRename"
+  | "onSetProjectPinned"
+  | "onRemoveProject"
+  | "onArchiveProject"
+  | "onUnarchiveProject"
+  | "archivedProjectPathKeys"
+>;
+
+type OptionalWorkspaceSourceKey =
+  | "workspaceProjectGroups"
+  | "onCreateWorkspaceGroup"
+  | "onRenameWorkspaceGroup"
+  | "onDeleteWorkspaceGroup"
+  | "onMoveProjectToGroup"
+  | "onToggleWorkspaceGroupCollapsed"
+  | "onBrowseProjectInSystemFileManager"
+  | "archivedProjectPathKeys";
+
+export type ChatHistorySidebarContainerSource = Required<
+  Pick<
+    ChatHistorySidebarWorkspaceSource,
+    Exclude<keyof ChatHistorySidebarWorkspaceSource, OptionalWorkspaceSourceKey>
+  >
+> &
+  Pick<ChatHistorySidebarWorkspaceSource, OptionalWorkspaceSourceKey> &
+  Pick<
+    ChatHistorySidebarProps,
+    | "currentConversationId"
+    | "isOpen"
+    | "fontScale"
+    | "onNewConversation"
+    | "onSelectConversation"
+    | "canShareConversations"
+    | "sharedConversationCount"
+    | "onShareConversation"
+    | "onOpenSharedConversations"
+    | "onCloseSidebar"
+    | "onOpenSettings"
+  > &
+  Required<Pick<ChatHistorySidebarProps, "activeView" | "onOpenSkillsHub" | "onOpenMcpHub">> & {
+    projects: WorkspaceProject[];
+  };
+
+type ChatHistorySidebarConversationSource = Pick<
+  ChatHistorySidebarContainerSource,
+  | "onNewConversation"
+  | "onSelectConversation"
+  | "canShareConversations"
+  | "sharedConversationCount"
+  | "onShareConversation"
+  | "onOpenSharedConversations"
+  | "onCloseSidebar"
+  | "onOpenSettings"
+  | "onOpenSkillsHub"
+  | "onOpenMcpHub"
+>;
+
+type ChatHistorySidebarConversationHandlers = Pick<
+  ChatHistorySidebarProps,
+  | "onStartRenaming"
+  | "onRenameDraftChange"
+  | "onCommitRename"
+  | "onCancelRename"
+  | "onSetPinned"
+  | "onMoveToWorkspace"
+  | "onMoveConversationsToWorkspace"
+  | "onDeleteConversation"
+  | "onDeleteConversations"
+  | "onLoadMore"
+>;
+
+type ChatHistorySidebarBaseState = Pick<
+  ChatHistorySidebarProps,
+  | "items"
+  | "runningConversationIds"
+  | "busyConversationIds"
+  | "scopeKey"
+  | "errorMessage"
+  | "actionErrorMessage"
+  | "onDismissActionError"
+  | "sectionsDisabled"
+  | "renamingId"
+  | "renameDraft"
+> & {
+  listState: {
+    status: ChatHistorySidebarListStatus;
+    totalCount: number;
+    hasMore: boolean;
+    isLoadingMore: boolean;
+  };
+};
+
+export function buildChatHistorySidebarBaseProps(
+  source: Pick<
+    ChatHistorySidebarContainerSource,
+    "currentConversationId" | "isOpen" | "fontScale" | "activeView"
+  >,
+  state: ChatHistorySidebarBaseState,
+) {
+  return {
+    items: state.items,
+    currentConversationId: source.currentConversationId,
+    runningConversationIds: state.runningConversationIds,
+    busyConversationIds: state.busyConversationIds,
+    listStatus: state.listState.status,
+    scopeKey: state.scopeKey,
+    totalItems: state.listState.totalCount,
+    hasMore: state.listState.hasMore,
+    isLoadingMore: state.listState.isLoadingMore,
+    errorMessage: state.errorMessage,
+    actionErrorMessage: state.actionErrorMessage,
+    onDismissActionError: state.onDismissActionError,
+    sectionsDisabled: state.sectionsDisabled,
+    renamingId: state.renamingId,
+    renameDraft: state.renameDraft,
+    isOpen: source.isOpen,
+    fontScale: source.fontScale,
+    activeView: source.activeView,
+  };
+}
+
+export function buildChatHistorySidebarConversationProps(
+  source: ChatHistorySidebarConversationSource,
+  handlers: ChatHistorySidebarConversationHandlers,
+) {
+  return {
+    onNewConversation: source.onNewConversation,
+    onSelectConversation: source.onSelectConversation,
+    ...handlers,
+    canShareConversations: source.canShareConversations,
+    sharedConversationCount: source.sharedConversationCount,
+    onShareConversation: source.onShareConversation,
+    onOpenSharedConversations: source.onOpenSharedConversations,
+    onCloseSidebar: source.onCloseSidebar,
+    onOpenSettings: source.onOpenSettings,
+    onOpenSkillsHub: source.onOpenSkillsHub,
+    onOpenMcpHub: source.onOpenMcpHub,
+  };
+}
+
+export function buildChatHistorySidebarWorkspaceProps(
+  source: ChatHistorySidebarWorkspaceSource,
+  projects: WorkspaceProject[],
+  runningProjectPathKeys: ReadonlySet<string>,
+) {
+  return {
+    showProjects: source.showProjects,
+    projects,
+    workspaceProjectGroups: source.workspaceProjectGroups,
+    activeProjectId: source.activeProjectId,
+    missingProjectPathKeys: source.missingProjectPathKeys,
+    runningProjectPathKeys,
+    projectRenamingId: source.projectRenamingId,
+    projectRenameDraft: source.projectRenameDraft,
+    projectsCollapsed: source.projectsCollapsed,
+    recentCollapsed: source.recentCollapsed,
+    onProjectsCollapsedChange: source.onProjectsCollapsedChange,
+    onRecentCollapsedChange: source.onRecentCollapsedChange,
+    onCreateProject: source.onCreateProject,
+    onCreateWorkspaceGroup: source.onCreateWorkspaceGroup,
+    onRenameWorkspaceGroup: source.onRenameWorkspaceGroup,
+    onDeleteWorkspaceGroup: source.onDeleteWorkspaceGroup,
+    onMoveProjectToGroup: source.onMoveProjectToGroup,
+    onToggleWorkspaceGroupCollapsed: source.onToggleWorkspaceGroupCollapsed,
+    onSelectProject: source.onSelectProject,
+    onNewConversationForProject: source.onNewConversationForProject,
+    onBrowseProjectInFileTree: source.onBrowseProjectInFileTree,
+    onBrowseProjectInSystemFileManager: source.onBrowseProjectInSystemFileManager,
+    onConfigureProjectResources: source.onConfigureProjectResources,
+    onStartRenamingProject: source.onStartRenamingProject,
+    onProjectRenameDraftChange: source.onProjectRenameDraftChange,
+    onCommitProjectRename: source.onCommitProjectRename,
+    onCancelProjectRename: source.onCancelProjectRename,
+    onSetProjectPinned: source.onSetProjectPinned,
+    onRemoveProject: source.onRemoveProject,
+    onArchiveProject: source.onArchiveProject,
+    onUnarchiveProject: source.onUnarchiveProject,
+    archivedProjectPathKeys: source.archivedProjectPathKeys,
+  };
+}
 
 const MOBILE_SIDEBAR_MEDIA_QUERY = "(max-width: 820px)";
 const MOBILE_MENU_LONG_PRESS_MS = 520;
@@ -1281,7 +1488,9 @@ const ProjectRow = memo(function ProjectRow(props: {
       <div className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2.5 text-sm text-destructive shadow-xs shadow-black/5">
         <p className="truncate font-medium leading-5 text-destructive">
           {t(
-            deletingWorktree ? "chat.workspaceDeleteWorktreeConfirm" : "chat.workspaceRemoveConfirm",
+            deletingWorktree
+              ? "chat.workspaceDeleteWorktreeConfirm"
+              : "chat.workspaceRemoveConfirm",
           ).replace("{name}", project.name)}
         </p>
         <p className="mt-0.5 text-[calc(11px*var(--zone-font-scale,1))] leading-4 text-destructive/75">
@@ -3109,10 +3318,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                               isRunning={runningProjectPathKeys.has(pathKey)}
                               isRenaming={projectRenamingId === project.id}
                               pendingAction={
-                                    pendingProjectAction?.projectId === project.id
-                                      ? pendingProjectAction.mode
-                                      : null
-                                  }
+                                pendingProjectAction?.projectId === project.id
+                                  ? pendingProjectAction.mode
+                                  : null
+                              }
                               isInteractionDisabled={sectionsDisabled}
                               renameDraft={projectRenameDraft}
                               onSelectProject={handleSelectProject}
@@ -3194,10 +3403,10 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                 isRunning={runningProjectPathKeys.has(pathKey)}
                                 isRenaming={projectRenamingId === project.id}
                                 pendingAction={
-                                    pendingProjectAction?.projectId === project.id
-                                      ? pendingProjectAction.mode
-                                      : null
-                                  }
+                                  pendingProjectAction?.projectId === project.id
+                                    ? pendingProjectAction.mode
+                                    : null
+                                }
                                 isInteractionDisabled={sectionsDisabled}
                                 renameDraft={projectRenameDraft}
                                 onSelectProject={handleSelectProject}

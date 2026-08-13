@@ -1,3 +1,4 @@
+import { GlassPanel } from "@liveagent/ui/components/hub/HubChrome";
 import {
   AlertTriangle,
   Check,
@@ -5,8 +6,7 @@ import {
   Loader2,
   RefreshCw,
   X,
-} from "@liveagent/app/components/icons";
-import { GlassPanel } from "@liveagent/ui/components/hub/HubChrome";
+} from "@liveagent/ui/components/IconSet";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Checkbox } from "@liveagent/ui/components/ui/checkbox";

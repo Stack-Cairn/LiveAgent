@@ -1,9 +1,10 @@
+import { normalizeUnknownTerminalSession } from "@liveagent/ui/lib/terminal/normalization";
+import { TerminalStreamBuffer } from "@liveagent/ui/lib/terminal/streamBuffer";
 import type {
   TerminalSession,
   TerminalStreamChunk,
   TerminalStreamClient,
   TerminalStreamHandle,
-  TerminalStreamInputState,
   TerminalStreamSnapshot,
 } from "@liveagent/ui/lib/terminal/types";
 import type { TerminalWireHeader } from "@/lib/gatewaySocketV2/adapters";
@@ -14,11 +15,7 @@ import {
   GATEWAY_V2_SUBPROTOCOL,
 } from "@/lib/gatewaySocketV2/adapters";
 
-const INPUT_FLUSH_BYTES = 4 * 1024;
-const INPUT_FLUSH_MS = 8;
 const INPUT_RETRY_MS = 25;
-const INPUT_HIGH_WATER_BYTES = 256 * 1024;
-const INPUT_LOW_WATER_BYTES = 128 * 1024;
 const ATTACH_RETRY_MS = 250;
 
 // 帧头形状沿用旧自定义帧的命名；v2 下由适配层映射到 TerminalStreamFrame。
@@ -87,157 +84,56 @@ function isRetryableAttachError(message: string) {
   );
 }
 
-function normalizeSession(input: unknown): TerminalSession {
-  const raw = (input ?? {}) as Record<string, unknown>;
-  const ssh = (raw.ssh ?? null) as Record<string, unknown> | null;
-  return {
-    id: String(raw.id ?? ""),
-    projectPathKey: String(raw.project_path_key ?? raw.projectPathKey ?? ""),
-    cwd: String(raw.cwd ?? ""),
-    shell: String(raw.shell ?? ""),
-    title: String(raw.title ?? "Terminal"),
-    kind: raw.kind === "ssh" ? "ssh" : "local",
-    ssh: ssh
-      ? {
-          hostId: String(ssh.host_id ?? ssh.hostId ?? ""),
-          hostName: String(ssh.host_name ?? ssh.hostName ?? ""),
-          username: String(ssh.username ?? ""),
-          host: String(ssh.host ?? ""),
-          port: Number(ssh.port ?? 22),
-          authType: String(ssh.auth_type ?? ssh.authType ?? ""),
-          status: String(ssh.status ?? "connected"),
-          reconnectAttempt: Number(ssh.reconnect_attempt ?? ssh.reconnectAttempt ?? 0),
-          reconnectMaxAttempts: Number(ssh.reconnect_max_attempts ?? ssh.reconnectMaxAttempts ?? 3),
-          sftpEnabled: Boolean(ssh.sftp_enabled ?? ssh.sftpEnabled ?? false),
-        }
-      : null,
-    pid: raw.pid === null || raw.pid === undefined ? null : Number(raw.pid),
-    cols: Number(raw.cols ?? 80),
-    rows: Number(raw.rows ?? 24),
-    createdAt: Number(raw.created_at ?? raw.createdAt ?? 0),
-    updatedAt: Number(raw.updated_at ?? raw.updatedAt ?? 0),
-    finishedAt:
-      raw.finished_at === null ? null : Number(raw.finished_at ?? raw.finishedAt ?? 0) || null,
-    exitCode: raw.exit_code === null ? null : Number(raw.exit_code ?? raw.exitCode ?? 0) || null,
-    running: raw.running === true,
-  };
-}
-
-class GatewayTerminalStreamHandle implements TerminalStreamHandle {
-  private disposed = false;
-  private transportReady = false;
-  private readonly listeners = new Set<(chunk: TerminalStreamChunk) => void>();
-  private readonly inputStateListeners = new Set<(state: TerminalStreamInputState) => void>();
-  private readonly queuedChunks: TerminalStreamChunk[] = [];
-  private inputQueue: Uint8Array[] = [];
-  private inputBytes = 0;
-  private inputTimer: ReturnType<typeof setTimeout> | null = null;
-  private resizeTimer: ReturnType<typeof setTimeout> | null = null;
-  private currentResize: { cols: number; rows: number } | null = null;
-  private latestResize: { cols: number; rows: number } | null = null;
-  private inputPausedReason: TerminalStreamInputState["reason"] | null = null;
-
+class GatewayTerminalStreamHandle extends TerminalStreamBuffer {
   constructor(
     private readonly owner: BrowserGatewayTerminalStreamClient,
     readonly streamId: string,
     readonly maxBytes: number | undefined,
-    public snapshot: TerminalStreamSnapshot,
-  ) {}
-
-  accept(chunk: TerminalStreamChunk) {
-    if (this.disposed || chunk.sessionId !== this.snapshot.session.id) return;
-    if (this.listeners.size === 0) {
-      this.queuedChunks.push(chunk);
-      return;
-    }
-    for (const listener of this.listeners) {
-      listener(chunk);
-    }
+    snapshot: TerminalStreamSnapshot,
+  ) {
+    super(snapshot, {
+      initialTransportReady: false,
+      offlineInputRetryMs: INPUT_RETRY_MS,
+      offlineResizeRetryMs: 50,
+      sendInput: (bytes, buffer) =>
+        owner.send(
+          {
+            kind: "input",
+            streamId,
+            sessionId: buffer.snapshot.session.id,
+            projectPathKey: buffer.snapshot.session.projectPathKey,
+          },
+          bytes,
+        ),
+      sendResize: (resize, buffer) =>
+        owner.send({
+          kind: "resize",
+          streamId,
+          sessionId: buffer.snapshot.session.id,
+          projectPathKey: buffer.snapshot.session.projectPathKey,
+          ...resize,
+        }),
+      onInputSendError: (_error, bytes, buffer) => {
+        buffer.markTransportDown();
+        buffer.restoreInput(bytes);
+        owner.scheduleReconnect();
+      },
+      onResizeSendError: (_error, resize, buffer) => {
+        buffer.markTransportDown();
+        buffer.retryResize(resize);
+        owner.scheduleReconnect();
+      },
+    });
   }
 
-  write(data: Uint8Array) {
-    if (this.disposed || data.byteLength === 0) return false;
-    if (this.inputPausedReason) return false;
-    if (this.inputBytes + data.byteLength > INPUT_HIGH_WATER_BYTES) {
-      this.setInputPaused("slow");
-      if (this.inputBytes === 0) {
-        queueMicrotask(() => this.clearInputPaused());
-        return false;
-      }
-      this.flushInput();
-      return false;
-    }
-    this.inputQueue.push(data.slice());
-    this.inputBytes += data.byteLength;
-    this.emitInputState();
-    if (this.inputBytes >= INPUT_FLUSH_BYTES) {
-      this.flushInput();
-      return true;
-    }
-    this.inputTimer ??= setTimeout(() => this.flushInput(), INPUT_FLUSH_MS);
-    return true;
-  }
-
-  resize(cols: number, rows: number) {
-    if (this.disposed) return;
-    const next = {
-      cols: Math.max(20, Math.min(400, Math.round(cols))),
-      rows: Math.max(6, Math.min(200, Math.round(rows))),
-    };
-    this.currentResize = next;
-    this.latestResize = next;
-    this.resizeTimer ??= setTimeout(() => this.flushResize(), 16);
-  }
-
-  subscribeOutput(listener: (chunk: TerminalStreamChunk) => void) {
-    this.listeners.add(listener);
-    const queued = this.queuedChunks.splice(0);
-    for (const chunk of queued) {
-      listener(chunk);
-    }
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  subscribeInputState(listener: (state: TerminalStreamInputState) => void) {
-    this.inputStateListeners.add(listener);
-    listener(this.inputState());
-    return () => {
-      this.inputStateListeners.delete(listener);
-    };
-  }
-
-  dispose() {
-    if (this.disposed) return;
-    this.disposed = true;
-    this.flushInput();
-    if (this.inputTimer) clearTimeout(this.inputTimer);
-    if (this.resizeTimer) clearTimeout(this.resizeTimer);
-    this.listeners.clear();
-    this.inputStateListeners.clear();
-    this.queuedChunks.length = 0;
-    this.inputPausedReason = "closed";
+  override dispose() {
+    if (this.streamDisposed) return;
+    super.dispose();
     this.owner.detach(this.streamId, this.snapshot.session, this);
   }
 
-  markTransportDown() {
-    this.transportReady = false;
-    this.setInputPaused("offline");
-  }
-
-  markTransportReady() {
-    if (this.disposed) return;
-    this.transportReady = true;
-    this.flushResize();
-    this.flushInput();
-    if (this.inputBytes <= INPUT_LOW_WATER_BYTES) {
-      this.clearInputPaused();
-    }
-  }
-
   replaySnapshot(snapshot: TerminalStreamSnapshot) {
-    if (this.disposed) return;
+    if (this.streamDisposed) return;
     const previousSessionId = this.snapshot.session.id;
     this.snapshot = snapshot;
     this.owner.reindexHandle(this, previousSessionId, snapshot.session.id);
@@ -251,137 +147,6 @@ class GatewayTerminalStreamHandle implements TerminalStreamHandle {
         endOffset: snapshot.outputEndOffset,
       });
     }
-  }
-
-  resendCurrentResize() {
-    if (this.disposed || !this.transportReady || !this.currentResize) return;
-    this.latestResize = this.currentResize;
-    this.flushResize();
-  }
-
-  private flushInput() {
-    if (this.inputTimer) {
-      clearTimeout(this.inputTimer);
-      this.inputTimer = null;
-    }
-    if (!this.transportReady) {
-      if (this.inputBytes > 0) {
-        this.setInputPaused("offline");
-        this.inputTimer = setTimeout(() => this.flushInput(), INPUT_RETRY_MS);
-      }
-      return;
-    }
-    if (this.inputBytes === 0) {
-      this.clearInputPaused();
-      return;
-    }
-    const bytes = new Uint8Array(this.inputBytes);
-    let offset = 0;
-    for (const chunk of this.inputQueue) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    this.inputQueue = [];
-    this.inputBytes = 0;
-    this.emitInputState();
-    void this.owner
-      .send(
-        {
-          kind: "input",
-          streamId: this.streamId,
-          sessionId: this.snapshot.session.id,
-          projectPathKey: this.snapshot.session.projectPathKey,
-        },
-        bytes,
-      )
-      .then(() => this.clearInputPaused())
-      .catch(() => {
-        this.markTransportDown();
-        this.prependInput(bytes);
-        this.owner.scheduleReconnect();
-      });
-  }
-
-  private flushResize() {
-    if (this.resizeTimer) {
-      clearTimeout(this.resizeTimer);
-      this.resizeTimer = null;
-    }
-    if (!this.transportReady) {
-      if (this.latestResize) {
-        this.resizeTimer = setTimeout(() => this.flushResize(), 50);
-      }
-      return;
-    }
-    const latest = this.latestResize;
-    this.latestResize = null;
-    if (!latest) return;
-    void this.owner
-      .send({
-        kind: "resize",
-        streamId: this.streamId,
-        sessionId: this.snapshot.session.id,
-        projectPathKey: this.snapshot.session.projectPathKey,
-        cols: latest.cols,
-        rows: latest.rows,
-      })
-      .catch(() => {
-        this.markTransportDown();
-        this.latestResize = latest;
-        this.owner.scheduleReconnect();
-      });
-  }
-
-  private prependInput(bytes: Uint8Array) {
-    if (this.disposed || bytes.byteLength === 0) return;
-    if (this.inputBytes + bytes.byteLength > INPUT_HIGH_WATER_BYTES) {
-      this.inputQueue = [];
-      this.inputBytes = 0;
-      this.setInputPaused("offline");
-      return;
-    }
-    this.inputQueue.unshift(bytes);
-    this.inputBytes += bytes.byteLength;
-    this.setInputPaused("offline");
-    this.inputTimer ??= setTimeout(() => this.flushInput(), INPUT_RETRY_MS);
-  }
-
-  private inputState(): TerminalStreamInputState {
-    return {
-      paused: this.inputPausedReason !== null,
-      queuedBytes: this.inputBytes,
-      highWaterBytes: INPUT_HIGH_WATER_BYTES,
-      reason: this.inputPausedReason ?? undefined,
-    };
-  }
-
-  private emitInputState() {
-    if (this.inputStateListeners.size === 0) return;
-    const state = this.inputState();
-    for (const listener of this.inputStateListeners) {
-      listener(state);
-    }
-  }
-
-  private setInputPaused(reason: NonNullable<TerminalStreamInputState["reason"]>) {
-    if (this.inputPausedReason === reason) {
-      this.emitInputState();
-      return;
-    }
-    this.inputPausedReason = reason;
-    this.emitInputState();
-  }
-
-  private clearInputPaused() {
-    if (
-      this.inputPausedReason === null ||
-      !this.transportReady ||
-      this.inputBytes > INPUT_LOW_WATER_BYTES
-    ) {
-      return;
-    }
-    this.inputPausedReason = null;
-    this.emitInputState();
   }
 }
 
@@ -593,7 +358,7 @@ export class BrowserGatewayTerminalStreamClient implements TerminalStreamClient 
   private resolveAttach(header: TerminalFrameHeader, data: Uint8Array) {
     const streamId = header.streamId ?? "";
     const pending = this.pending.get(streamId);
-    const session = normalizeSession(header.session);
+    const session = normalizeUnknownTerminalSession(header.session);
     const snapshot = {
       session,
       bytes: data,

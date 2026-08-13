@@ -1,8 +1,8 @@
+import { Download, Loader2, RefreshCw } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { type AppUpdateController, getAppUpdateDisplayVersion } from "../lib/appUpdates";
-import { Download, Loader2, RefreshCw } from "./icons";
 
 type AppUpdateButtonProps = {
   appUpdate: AppUpdateController;

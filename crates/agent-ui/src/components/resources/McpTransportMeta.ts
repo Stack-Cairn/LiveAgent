@@ -1,4 +1,4 @@
-import { Globe2, Terminal, Wifi } from "@liveagent/app/components/icons";
+import { Globe2, Terminal, Wifi } from "@liveagent/ui/components/IconSet";
 
 export function getMcpTransportMeta(transport: string) {
   if (transport === "http") return { label: "http", Icon: Globe2 } as const;

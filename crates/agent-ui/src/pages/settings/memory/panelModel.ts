@@ -3,7 +3,7 @@
 // summary text derivation. No React, no platform imports.
 //
 // Shared implementation owned by @liveagent/ui. Platform-specific capabilities
-// are supplied by each host's pages/settings/memory/platform.tsx module.
+// remain in their host adapter modules.
 
 import type {
   MemoryOrganizerFrequency,

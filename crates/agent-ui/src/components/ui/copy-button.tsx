@@ -1,5 +1,5 @@
 import { Tooltip } from "@base-ui/react";
-import { Check, Copy } from "@liveagent/app/components/icons";
+import { Check, Copy } from "@liveagent/ui/components/IconSet";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/shared/utils";
 import { Button } from "./button";

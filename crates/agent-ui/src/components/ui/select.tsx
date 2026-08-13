@@ -1,5 +1,5 @@
 import { Select as SelectPrimitive } from "@base-ui/react";
-import { Check, ChevronDown, ChevronUp } from "@liveagent/app/components/icons";
+import { Check, ChevronDown, ChevronUp } from "@liveagent/ui/components/IconSet";
 import * as React from "react";
 import { cn } from "../../lib/shared/utils";
 

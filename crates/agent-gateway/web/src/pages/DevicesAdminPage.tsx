@@ -1,4 +1,4 @@
-import { ArrowLeft } from "@/components/icons";
+import { ArrowLeft } from "@liveagent/ui/components/IconSet";
 
 import { DevicesSection } from "./settings/DevicesSection";
 

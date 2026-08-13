@@ -3,11 +3,11 @@ import {
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type {
   HistoryMessageRef,
   RenderUserMessage,
 } from "../../../lib/chat/conversation/conversationState";
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
 import { useRowInteraction } from "./rowInteraction";
 import { useCopiedFlag } from "./useCopiedFlag";
 

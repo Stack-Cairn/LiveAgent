@@ -32,6 +32,14 @@ const guiWorkspaceRemoval = readFileSync(
   new URL("../../src/pages/chat/workspace/useWorkspaceProjectRemoval.tsx", import.meta.url),
   "utf8",
 );
+const sharedWorkspaceRemoval = readFileSync(
+  new URL("../../../agent-ui/src/lib/workspaceProjectRemoval.ts", import.meta.url),
+  "utf8",
+);
+const sharedWorkspaceRemovalHook = readFileSync(
+  new URL("../../../agent-ui/src/lib/useWorkspaceProjectRemoval.tsx", import.meta.url),
+  "utf8",
+);
 const webGatewayApp = readFileSync(
   new URL("../../../agent-gateway/web/src/app/GatewayApp.tsx", import.meta.url),
   "utf8",
@@ -84,8 +92,11 @@ test("chat runtime resolves and snapshots workspace resources from the effective
 });
 
 test("workspace and resource deletion paths clear workspace-scoped references", () => {
-  assert.match(guiWorkspaceRemoval, /resetWorkspaceResourceSettings\(nextSettings, pathKey\)/);
-  assert.match(webGatewayApp, /resetWorkspaceResourceSettings\(nextSettings, pathKey\)/);
+  assert.match(guiWorkspaceRemoval, /useSharedWorkspaceProjectRemoval/);
+  assert.match(webGatewayApp, /useWorkspaceProjectSettingsActions/);
+  assert.match(webGatewayApp, /useWorkspaceProjectDeletion/);
+  assert.match(sharedWorkspaceRemovalHook, /useWorkspaceProjectSettingsActions/);
+  assert.match(sharedWorkspaceRemoval, /resetWorkspaceResourceSettings\(nextSettings, pathKey\)/);
   assert.match(sharedSkillsHub, /removeWorkspaceResourceReferences\(/);
   assert.match(sharedSkillsHub, /skillNames: \[skillName\]/);
   assert.match(sharedMcpServerCard, /removeWorkspaceResourceReferences\(/);

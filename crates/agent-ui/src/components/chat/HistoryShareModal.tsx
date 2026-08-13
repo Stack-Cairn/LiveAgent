@@ -8,7 +8,7 @@ import {
   Loader2,
   Share2,
   X,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";
 import { cn } from "@liveagent/ui/lib/shared/utils";

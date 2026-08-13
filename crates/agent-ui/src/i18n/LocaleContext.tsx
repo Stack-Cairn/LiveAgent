@@ -1,5 +1,5 @@
 import { DEFAULT_LOCALE, type Locale, t as translate } from "@liveagent/app/i18n/config";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 type LocaleContextValue = {
   locale: Locale;
@@ -13,4 +13,14 @@ export const LocaleContext = createContext<LocaleContextValue>({
 
 export function useLocale() {
   return useContext(LocaleContext);
+}
+
+export function useLocaleContextValue(locale: Locale) {
+  return useMemo(
+    () => ({
+      locale,
+      t: (key: string) => translate(key, locale),
+    }),
+    [locale],
+  );
 }

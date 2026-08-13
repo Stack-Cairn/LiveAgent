@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, X, XCircle } from "@liveagent/app/components/icons";
+import { AlertTriangle, CheckCircle2, X, XCircle } from "@liveagent/ui/components/IconSet";
 import { memo, useEffect, useRef } from "react";
 
 export type NotifyItem = {

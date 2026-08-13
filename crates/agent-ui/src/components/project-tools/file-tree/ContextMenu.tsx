@@ -16,7 +16,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type MouseEvent as ReactMouseEvent,

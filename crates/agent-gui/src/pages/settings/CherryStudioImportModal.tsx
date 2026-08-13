@@ -1,9 +1,3 @@
-import { Button } from "@liveagent/ui/components/ui/button";
-import { Input } from "@liveagent/ui/components/ui/input";
-import { useAnimatedPresence } from "@liveagent/ui/lib/shared/modalMotion";
-import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Check,
   ClaudeIcon,
@@ -14,7 +8,13 @@ import {
   RefreshCw,
   Settings,
   X,
-} from "../../components/icons";
+} from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
+import { useAnimatedPresence } from "@liveagent/ui/lib/shared/modalMotion";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CodexRequestFormat, ProviderId } from "../../lib/settings";
 
 export type CherryProviderImportItem = {

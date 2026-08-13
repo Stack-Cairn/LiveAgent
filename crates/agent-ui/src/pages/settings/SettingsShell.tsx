@@ -1,4 +1,4 @@
-import { ArrowLeft, Search } from "@liveagent/app/components/icons";
+import { ArrowLeft, Search } from "@liveagent/ui/components/IconSet";
 import { useEffect, useMemo, useState } from "react";
 import type { SettingsSaveState, UiExtensionRegistry } from "../../contracts/registry";
 import { useLocale } from "../../i18n";

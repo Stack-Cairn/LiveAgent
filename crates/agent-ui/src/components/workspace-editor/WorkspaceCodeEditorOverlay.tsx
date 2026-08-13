@@ -1,13 +1,9 @@
 import {
-  type CodeMentionReference,
-  createCodeMentionReference,
-} from "@liveagent/adapters/mentionReferences";
-import {
   readWorkspaceClipboardText,
   WorkspaceOverlayTitleBar,
   workspaceOverlayStackClassName,
 } from "@liveagent/adapters/workspacePreview";
-import type { IconComponent } from "@liveagent/app/components/icons";
+import type { IconComponent } from "@liveagent/ui/components/IconSet";
 import {
   AlertTriangle,
   ClipboardPaste,
@@ -25,9 +21,13 @@ import {
   TextSelect,
   Undo2,
   X,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { isWorkspacePreviewPath } from "@liveagent/ui/components/workspace-editor/workspaceImagePreview";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  type CodeMentionReference,
+  createCodeMentionReference,
+} from "@liveagent/ui/lib/chat/mentionReferences";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs, isFsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
 import * as monaco from "monaco-editor";

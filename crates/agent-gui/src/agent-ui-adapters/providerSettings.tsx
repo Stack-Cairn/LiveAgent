@@ -1,3 +1,12 @@
+import {
+  CheckCircle2,
+  ChevronDown,
+  Download,
+  Key,
+  Loader2,
+  RefreshCw,
+  X,
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -18,15 +27,6 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import ccswitchLogoUrl from "../../src-tauri/icons/custom/ccswitch.png";
 import cherryStudioLogoUrl from "../../src-tauri/icons/custom/cherrystudio.png";
-import {
-  CheckCircle2,
-  ChevronDown,
-  Download,
-  Key,
-  Loader2,
-  RefreshCw,
-  X,
-} from "../components/icons";
 import type { ProviderModelConfig } from "../lib/settings";
 import {
   type AppSettings,

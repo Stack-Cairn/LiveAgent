@@ -4,6 +4,7 @@
 // Shared implementation owned by @liveagent/ui. Host-specific icons, settings
 // and backend capabilities resolve through the current application's contracts.
 
+import type { RightDockFileTreeStatePatch } from "@liveagent/app/lib/settings";
 import {
   Check,
   FolderOpen,
@@ -12,8 +13,7 @@ import {
   Search,
   Trash2,
   X,
-} from "@liveagent/app/components/icons";
-import type { RightDockFileTreeStatePatch } from "@liveagent/app/lib/settings";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {

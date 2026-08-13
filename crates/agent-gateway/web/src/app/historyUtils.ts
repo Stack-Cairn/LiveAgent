@@ -1,18 +1,13 @@
 import { buildGatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
 import { formatConversationTitle } from "@/lib/chatUi";
 import type { ConversationSummary } from "@/lib/gatewayTypes";
-import {
-  type AppSettings,
-  DEFAULT_WORKSPACE_PROJECT_ID,
-  resolveWorkspaceProjects,
-  type WorkspaceProject,
-} from "@/lib/settings";
+import { type AppSettings, resolveWorkspaceProjects } from "@/lib/settings";
 
 function isLocalDraftConversationId(id: string) {
   return id.trim().startsWith("__local_draft__:");
 }
 
-import { fallbackWorkspaceProjectName } from "@liveagent/ui/lib/workspaceProjects";
+import { getDefaultWorkspaceProjectPath } from "@liveagent/ui/lib/workspaceProjects";
 
 import { MOBILE_SIDEBAR_MEDIA_QUERY } from "./constants";
 
@@ -21,25 +16,6 @@ export function formatTranslation(template: string, values: Record<string, strin
     (text, [key, value]) => text.replaceAll(`{${key}}`, String(value)),
     template,
   );
-}
-
-export function getDefaultWorkspaceProjectPath(system: AppSettings["system"]) {
-  return (
-    system.workspaceProjects.find((project) => project.id === DEFAULT_WORKSPACE_PROJECT_ID)?.path ||
-    system.workdir
-  );
-}
-
-export function createWorkspaceProjectFromPath(path: string, kind: WorkspaceProject["kind"]) {
-  const now = Date.now();
-  return {
-    id: `${kind}-${now}-${Math.random().toString(36).slice(2, 8)}`,
-    name: fallbackWorkspaceProjectName(path),
-    path,
-    kind,
-    createdAt: now,
-    updatedAt: now,
-  } satisfies WorkspaceProject;
 }
 
 export function hasSettingsSyncChanged(prev: AppSettings, next: AppSettings) {

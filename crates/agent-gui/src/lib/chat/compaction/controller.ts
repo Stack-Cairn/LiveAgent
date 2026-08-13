@@ -4,12 +4,11 @@ import {
   contextUsageRatio,
   positiveTokenCount,
 } from "@liveagent/ui/lib/chat/contextUsage";
-
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { StreamDebugLogger } from "../../debug/agentDebug";
 import type { ProviderId } from "../../settings";
 import { type ConversationViewState, getActiveSegment } from "../conversation/conversationState";
 import type { TurnCancellation } from "../conversation/turnCancellation";
-import type { PendingUploadedFile } from "../messages/uploadedFiles";
 import { isAbortLikeError } from "../page/chatPageHelpers";
 import { createSyntheticContinueUserMessage, runCompaction } from "./engine";
 import {

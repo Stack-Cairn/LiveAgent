@@ -1,7 +1,7 @@
+import { Check } from "@liveagent/ui/components/IconSet";
 import { DropdownMenuItem, DropdownMenuLabel } from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useEffect, useState } from "react";
-import { Check } from "@/components/icons";
 import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
 import type { AgentStatus } from "@/lib/gatewayTypes";
 

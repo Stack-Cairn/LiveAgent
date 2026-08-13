@@ -1,6 +1,8 @@
 import { ContextCheckpointCard } from "@liveagent/ui/components/chat/ContextCheckpointCard";
 import { normalizeLiveToolStatus } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { useCommitDetailsLoader } from "@liveagent/ui/lib/chat/useCommitDetailsLoader";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
 import { createEntranceRegistry } from "@liveagent/ui/lib/transcript-virtual/entranceOnce";
 import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
@@ -8,6 +10,10 @@ import {
   buildTranscriptLayoutKey,
   createTranscriptMeasurementsLru,
 } from "@liveagent/ui/lib/transcript-virtual/measurementsLru";
+import {
+  type TranscriptNavigationHandle,
+  useTranscriptNavigation,
+} from "@liveagent/ui/lib/transcript-virtual/useTranscriptNavigation";
 import { type Range, useVirtualizer } from "@tanstack/react-virtual";
 import {
   type MutableRefObject,
@@ -27,12 +33,6 @@ import type {
   RenderTimelineItem,
 } from "../../../lib/chat/conversation/conversationState";
 import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTranscriptStore";
-import type { PendingUploadedFile } from "../../../lib/chat/messages/uploadedFiles";
-import {
-  buildGitHubCommitUrl,
-  type CommitDetailsLoader,
-  type CommitDisplayReference,
-} from "../../../lib/chat/messages/userMessageContent";
 import { AssistantActivityRow } from "./AssistantActivityRow";
 import { AssistantRenderUnit } from "./AssistantRenderUnit";
 import { extractRenderUnitRange } from "./renderUnitRangeExtractor";
@@ -66,10 +66,7 @@ const SummaryCard = memo(function SummaryCard(props: { item: RenderSummaryCard }
   );
 });
 
-export type TranscriptNavHandle = {
-  /** 按行 key 跳转到对应消息（动态行高下会连帧重对准确保落位）。 */
-  scrollToRowKey: (rowKey: string) => void;
-};
+export type TranscriptNavHandle = TranscriptNavigationHandle;
 
 export type TranscriptListProps = {
   conversationId: string;
@@ -174,7 +171,6 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   );
 
   const [editingMessageKey, setEditingMessageKey] = useState<string | null>(null);
-  const commitDetailsCacheRef = useRef(new Map<string, CommitDisplayReference>());
 
   useEffect(() => {
     if (!editingMessageKey) {
@@ -188,41 +184,7 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
     }
   }, [editingMessageKey, historyItems]);
 
-  const loadCommitDetails = useCallback<CommitDetailsLoader>(
-    async (commit) => {
-      const workdir = workspaceRoot?.trim() ?? "";
-      const sha = commit.sha.trim();
-      if (!gitClient || !workdir || !sha) return null;
-      const cacheKey = `${workdir}\n${sha}`;
-      const cached = commitDetailsCacheRef.current.get(cacheKey);
-      if (cached) return cached;
-      const response = await gitClient.commitDetails(workdir, sha);
-      const details = response.commit;
-      const resolved: CommitDisplayReference = {
-        sha: details.sha,
-        shortSha: details.shortSha,
-        subject: details.subject,
-        body: details.body,
-        authorName: details.authorName,
-        authorEmail: details.authorEmail,
-        authorDate: details.authorDate,
-        fileCount: details.fileCount,
-        filesChanged: details.filesChanged,
-        insertions: details.insertions,
-        deletions: details.deletions,
-        stat: details.stat,
-        remoteName: details.remoteName,
-        remoteUrl: details.remoteUrl,
-        githubUrl:
-          commit.githubUrl ||
-          buildGitHubCommitUrl(details.remoteUrl || response.state.remoteUrl, details.sha) ||
-          undefined,
-      };
-      commitDetailsCacheRef.current.set(cacheKey, resolved);
-      return resolved;
-    },
-    [gitClient, workspaceRoot],
-  );
+  const loadCommitDetails = useCommitDetailsLoader(workspaceRoot, gitClient);
 
   const handleStartEdit = useCallback((key: string) => {
     setEditingMessageKey(key);
@@ -283,114 +245,20 @@ export const TranscriptList = memo(function TranscriptList(props: TranscriptList
   // 测量会不断修正总高度，连续若干帧重新对准，让滚动收敛在目标行顶部
   // （对准同一 index 是收敛操作，不会震荡）。收敛期间用户的滚轮/触摸/按键
   // 立即取消收敛；新跳转替换旧收敛；卸载时一并清理。
-  const cancelJumpSettleRef = useRef<() => void>(() => {});
-  useLayoutEffect(() => {
-    if (!navRef) return;
-    const handle: TranscriptNavHandle = {
-      scrollToRowKey: (rowKey) => {
-        cancelJumpSettleRef.current();
-        const alignToRow = () => {
-          const index = rowsRef.current.findIndex((row) => row.key === rowKey);
-          if (index < 0) return false;
-          virtualizer.scrollToIndex(index, { align: "start" });
-          return true;
-        };
-        if (!alignToRow()) return;
-        let rafId: number | null = null;
-        const stopSettle = () => {
-          if (rafId !== null) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-          }
-          scrollViewport?.removeEventListener("wheel", stopSettle);
-          scrollViewport?.removeEventListener("touchstart", stopSettle);
-          scrollViewport?.removeEventListener("keydown", stopSettle);
-          if (cancelJumpSettleRef.current === stopSettle) {
-            cancelJumpSettleRef.current = () => {};
-          }
-        };
-        cancelJumpSettleRef.current = stopSettle;
-        scrollViewport?.addEventListener("wheel", stopSettle, { passive: true });
-        scrollViewport?.addEventListener("touchstart", stopSettle, { passive: true });
-        scrollViewport?.addEventListener("keydown", stopSettle);
-        let remainingFrames = 6;
-        const settle = () => {
-          rafId = null;
-          if (!alignToRow()) {
-            stopSettle();
-            return;
-          }
-          remainingFrames -= 1;
-          if (remainingFrames > 0) {
-            rafId = requestAnimationFrame(settle);
-          } else {
-            stopSettle();
-          }
-        };
-        rafId = requestAnimationFrame(settle);
-      },
-    };
-    navRef.current = handle;
-    return () => {
-      cancelJumpSettleRef.current();
-      if (navRef.current === handle) {
-        navRef.current = null;
-      }
-    };
-  }, [navRef, virtualizer, scrollViewport]);
-
   // 楼层导航当前楼层：以「视口顶缘（+8px 容差）」所落在的用户消息为准——与
   // 跳转的 align:"start" 落位一致，跳转后高亮的必然是刚点的楼层；视口贴近
   // 内容底部时直接取最后一层（否则短对话拼满一屏时底部楼层永远无法成为当前
   // 层）。贴底判定用 scrollHeight（与 scrollTop/clientHeight 同一坐标系，
   // 含底部输入框保留区），避免与 getTotalSize 的列表局部坐标错位。
-  const lastAnchorRef = useRef<string | null>(null);
-  const onAnchorUserRowChangeRef = useRef(onAnchorUserRowChange);
-  onAnchorUserRowChangeRef.current = onAnchorUserRowChange;
-  const reportAnchorRef = useRef(() => {});
-  reportAnchorRef.current = () => {
-    const callback = onAnchorUserRowChangeRef.current;
-    if (!callback || !scrollViewport) return;
-    const rowList = rowsRef.current;
-    let anchorKey: string | null = null;
-    if (rowList.length > 0) {
-      const scrollTop = scrollViewport.scrollTop;
-      const viewportHeight = scrollViewport.clientHeight;
-      const nearBottom = scrollTop + viewportHeight >= scrollViewport.scrollHeight - 32;
-      let anchorIndex = -1;
-      if (nearBottom) {
-        anchorIndex = rowList.length - 1;
-      } else {
-        const anchorLine = scrollTop + 8;
-        const items = virtualizer.getVirtualItems();
-        for (const item of items) {
-          if (item.start > anchorLine) break;
-          anchorIndex = item.index;
-        }
-        if (anchorIndex === -1) anchorIndex = items[0]?.index ?? -1;
-      }
-      anchorKey = rowList[Math.min(anchorIndex, rowList.length - 1)]?.anchorUserKey ?? null;
-    }
-    if (anchorKey !== lastAnchorRef.current) {
-      lastAnchorRef.current = anchorKey;
-      callback(anchorKey);
-    }
-  };
-
-  useEffect(() => {
-    if (!scrollViewport) return;
-    const handler = () => reportAnchorRef.current();
-    handler();
-    scrollViewport.addEventListener("scroll", handler, { passive: true });
-    return () => scrollViewport.removeEventListener("scroll", handler);
-  }, [scrollViewport]);
-
-  // 行集合变化（消息追加、流式落定）后兜底重算一次；依赖 rows 而不是每次
-  // 渲染都跑，避免「上报 → 父级重渲染 → 再上报」的空转循环。
-  useEffect(() => {
-    rowsRef.current = rows;
-    reportAnchorRef.current();
-  }, [rows]);
+  useTranscriptNavigation({
+    items: rows,
+    getItemKey: (row) => row.key,
+    getAnchorKey: (rowList, anchorIndex) => rowList[anchorIndex]?.anchorUserKey ?? null,
+    virtualizer,
+    scrollViewport,
+    navRef,
+    onAnchorChange: onAnchorUserRowChange,
+  });
 
   // First paint of a conversation lands at the bottom before the user sees
   // anything: scrollToEnd re-targets as dynamic measurements land, replacing

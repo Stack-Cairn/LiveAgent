@@ -1,4 +1,5 @@
 import type { Tool, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import { asRecord } from "@liveagent/ui/lib/shared/value";
 import {
   composePublicUrl,
   type TunnelHealth,
@@ -68,12 +69,6 @@ const TUNNEL_MANAGER_TOOL: Tool = {
 
 function asErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err);
-}
-
-function asArgs(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 function normalizeAction(value: unknown): TunnelManagerAction {
@@ -234,7 +229,7 @@ async function executeTunnelManager(
     params.onTunnelsChanged?.({ action, projectPathKey });
 
   try {
-    const args = asArgs(toolCall.arguments);
+    const args = asRecord(toolCall.arguments);
     const action = normalizeAction(args.action);
 
     if (action === "list") {
@@ -323,7 +318,7 @@ async function executeTunnelManager(
       ...(id ? { tunnel: checkedTunnels[0] } : { tunnels: checkedTunnels }),
     });
   } catch (err) {
-    const args = asArgs(toolCall.arguments);
+    const args = asRecord(toolCall.arguments);
     const action =
       args.action === "create" ||
       args.action === "close" ||

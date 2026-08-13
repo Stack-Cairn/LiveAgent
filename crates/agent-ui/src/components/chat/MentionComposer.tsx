@@ -3,6 +3,32 @@ import {
   usesCustomComposerContextMenu,
 } from "@liveagent/adapters/composerClipboard";
 import {
+  extractGitHubCommitSha,
+  extractGitHubFileReference,
+  tokenizeUserMessage,
+} from "@liveagent/adapters/userMessageContent";
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import { getFileTypeIcon, getFileTypeIconSvg } from "@liveagent/ui/components/chat/fileTypeIcons";
+import {
+  caretPromptHistoryLine,
+  type PromptHistorySession,
+  type PromptHistoryStash,
+  stepPromptHistory,
+} from "@liveagent/ui/components/chat/promptHistory";
+import {
+  Blend,
+  ClipboardPaste,
+  Copy,
+  ScanText,
+  Scissors,
+  SKILL_ICON_SVG_MARKUP,
+} from "@liveagent/ui/components/IconSet";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import {
+  insertPlainTextWithUndo,
+  normalizeLogicalLineEndings,
+} from "@liveagent/ui/lib/chat/composerText";
+import {
   type CodeMentionReference,
   codeMentionDisplayName,
   codeMentionLineLabel,
@@ -16,33 +42,7 @@ import {
   formatCodeMentionToken,
   formatFileMentionToken,
   formatMarkdownReferenceDestination,
-} from "@liveagent/adapters/mentionReferences";
-import {
-  extractGitHubCommitSha,
-  extractGitHubFileReference,
-  tokenizeUserMessage,
-} from "@liveagent/adapters/userMessageContent";
-import {
-  Blend,
-  ClipboardPaste,
-  Copy,
-  ScanText,
-  Scissors,
-  SKILL_ICON_SVG_MARKUP,
-} from "@liveagent/app/components/icons";
-import { openUrl } from "@liveagent/app/shims/tauriOpener";
-import { getFileTypeIcon, getFileTypeIconSvg } from "@liveagent/ui/components/chat/fileTypeIcons";
-import {
-  caretPromptHistoryLine,
-  type PromptHistorySession,
-  type PromptHistoryStash,
-  stepPromptHistory,
-} from "@liveagent/ui/components/chat/promptHistory";
-import { useLocale } from "@liveagent/ui/i18n/index";
-import {
-  insertPlainTextWithUndo,
-  normalizeLogicalLineEndings,
-} from "@liveagent/ui/lib/chat/composerText";
+} from "@liveagent/ui/lib/chat/mentionReferences";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";

@@ -1,3 +1,4 @@
+import { LogOut, Minimize2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   AgentActivationSwitch,
@@ -6,7 +7,6 @@ import {
   SettingsRow,
 } from "@liveagent/ui/pages/settings/shared";
 import { useMemo } from "react";
-import { LogOut, Minimize2 } from "../components/icons";
 import { inferRuntimePlatform } from "../lib/runtimePlatform";
 import { CLOSE_WINDOW_BEHAVIOR_OPTIONS } from "../lib/settings";
 import { useTrayPrefs, writeTrayPrefs } from "../lib/tray/trayPrefs";
@@ -19,7 +19,7 @@ export {
   fromFontFamilySelectValue,
   listLocalFontFamilies,
   toFontFamilySelectValue,
-} from "../lib/system/fontFamily";
+} from "@liveagent/ui/lib/shared/fontFamily";
 
 export function SystemSettingsExtensions(props: SettingsSectionProps) {
   const { settings, setSettings } = props;

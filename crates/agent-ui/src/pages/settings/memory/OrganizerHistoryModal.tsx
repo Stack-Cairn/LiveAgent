@@ -3,18 +3,16 @@
 // unchanged; pre-v4 runs degrade to a read-only legacy view (summaries and
 // review notes only: no decisions, no manual apply).
 //
-// Shared implementation owned by @liveagent/ui. Platform-specific capabilities
-// are supplied by each host's pages/settings/memory/platform.tsx module.
+// Shared implementation owned by @liveagent/ui.
 
 import {
   AlertTriangle,
   BrushCleaning,
-  Button,
   Check,
-  DrawerSelect,
   RefreshCw,
   X,
-} from "@liveagent/app/pages/settings/memory/platform";
+} from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -37,6 +35,7 @@ import {
   readRunReport,
   successfulDecisionKeys,
 } from "../../../lib/memory/organizer/runRecord";
+import { DrawerSelect } from "./DrawerSelect";
 import {
   deriveManualApplyDisplay,
   displayedFinalSummary,

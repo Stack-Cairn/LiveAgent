@@ -1,5 +1,5 @@
 import { Dialog } from "@base-ui/react/dialog";
-import { Cable, Loader2, X } from "@liveagent/app/components/icons";
+import { Cable, Loader2, X } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { useRef, useState } from "react";
 import type {

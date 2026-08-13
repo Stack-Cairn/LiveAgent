@@ -14,7 +14,7 @@ const { createEntranceRegistry, ENTRANCE_ANIMATION_WINDOW_MS } = loader.loadModu
 const { extractRenderUnitRange } = loader.loadModule(
   "src/pages/chat/transcript/renderUnitRangeExtractor.ts",
 );
-const { collectChangedFiles } = loader.loadModule("src/lib/chat/messages/changedFiles.ts");
+const { collectChangedFiles } = loader.loadModule("@liveagent/ui/lib/chat/changedFiles.ts");
 const transcriptListSource = fs.readFileSync(
   new URL("../../src/pages/chat/transcript/TranscriptList.tsx", import.meta.url),
   "utf8",
@@ -704,4 +704,3 @@ test("a Task-only run's twin (all blocks filtered) is adopted by the live turn (
   assert.equal(settledActivity.replyKey, liveTurnKey);
   assert.ok(settledActivity.units.every((unit) => unit.renderMode === "streaming"));
 });
-

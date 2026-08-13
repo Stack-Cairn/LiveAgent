@@ -1,5 +1,5 @@
-import { Check, Cpu, Terminal, X } from "@liveagent/app/components/icons";
 import type { RightDockTabKind } from "@liveagent/app/lib/settings";
+import { Check, Cpu, Terminal, X } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "../../lib/shared/utils";

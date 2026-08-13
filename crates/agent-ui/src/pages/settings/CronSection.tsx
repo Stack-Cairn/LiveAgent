@@ -1,5 +1,6 @@
-import { buildModelOptions } from "@liveagent/adapters/chatModelOptions";
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
+import { isAgentExecutionMode, workspaceProjectPathKey } from "@liveagent/app/lib/settings";
+import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
   AlertTriangle,
   Clock3,
@@ -10,9 +11,7 @@ import {
   Plus,
   Terminal,
   Trash2,
-} from "@liveagent/app/components/icons";
-import { isAgentExecutionMode, workspaceProjectPathKey } from "@liveagent/app/lib/settings";
-import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
@@ -21,6 +20,7 @@ import {
   type CronTaskType,
   useAutomation,
 } from "@liveagent/ui/lib/automation/index";
+import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { type CronTaskFormData, CronTaskModal } from "@liveagent/ui/pages/settings/CronTaskModal";
 import { CronTaskViewModal } from "@liveagent/ui/pages/settings/CronTaskViewModal";
 import { AgentActivationSwitch, ConfirmDeletePopover } from "@liveagent/ui/pages/settings/shared";

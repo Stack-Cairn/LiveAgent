@@ -6,6 +6,7 @@ import type {
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
 import { ASK_USER_QUESTION_TOOL_NAME } from "@liveagent/ui/lib/chat/askUserQuestion";
+import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
@@ -33,7 +34,6 @@ import type {
   MemoryExtractionStatusText,
   MemoryExtractionVisibleEvents,
 } from "../../../lib/chat/memory/extractionEngine";
-import type { HostedSearchBlock } from "../../../lib/chat/messages/hostedSearch";
 import {
   appendTextDeltaToRound,
   appendThinkingDeltaToRound,

@@ -3,7 +3,7 @@ import test from "node:test";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const fileChangeStats = loader.loadModule("src/lib/chat/messages/fileChangeStats.ts");
+const fileChangeStats = loader.loadModule("@liveagent/ui/lib/chat/fileChangeStats.ts");
 const odometer = loader.loadModule("@liveagent/ui/components/chat/OdometerNumber.tsx");
 const badge = loader.loadModule("@liveagent/ui/components/chat/FileChangeBadge.tsx");
 

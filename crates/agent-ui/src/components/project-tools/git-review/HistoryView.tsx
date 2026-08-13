@@ -4,6 +4,7 @@
 // Shared implementation owned by @liveagent/ui. Host-specific Git operations
 // and optional platform capabilities enter through the shared contracts.
 
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import {
   Cloud,
   Copy,
@@ -17,8 +18,7 @@ import {
   RefreshCw,
   Tag,
   Target,
-} from "@liveagent/app/components/icons";
-import { openUrl } from "@liveagent/app/shims/tauriOpener";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitCommitFile, GitCommitSummary } from "@liveagent/ui/lib/git/types";
 import { useVirtualizer } from "@tanstack/react-virtual";

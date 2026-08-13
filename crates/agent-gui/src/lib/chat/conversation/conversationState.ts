@@ -1,4 +1,11 @@
 import type { AssistantMessage, Context, Message } from "@earendil-works/pi-ai";
+import type { HistoryMessageRef } from "@liveagent/ui/lib/chat/historyMessageRef";
+import {
+  getUserMessageAttachments,
+  getUserMessageDisplayText,
+  type PendingUploadedFile,
+  stripUploadedFilesMessageMetadata,
+} from "@liveagent/ui/lib/chat/uploadedFiles";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
 import { assistantMessageToText } from "../../providers/llm";
 import type { TaskListState } from "../../tools/builtinTypes";
@@ -13,12 +20,6 @@ import {
 } from "../context/requestContextSanitizer";
 import { normalizeConversationSystemPrompt } from "../context/systemPrompt";
 import { buildUiMessages, type UiRound } from "../messages/uiMessages";
-import {
-  getUserMessageAttachments,
-  getUserMessageDisplayText,
-  type PendingUploadedFile,
-  stripUploadedFilesMessageMetadata,
-} from "../messages/uploadedFiles";
 
 export const INTERNAL_RESUME_MESSAGE_TEXT =
   "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.";
@@ -89,14 +90,7 @@ export type StoredContextSegment = {
   updatedAt: number;
 };
 
-export type HistoryMessageRef = {
-  segmentIndex: number;
-  messageIndex: number;
-  segmentId: string;
-  messageId: string;
-  role: string;
-  contentHash: string;
-};
+export type { HistoryMessageRef };
 
 export type RenderSummaryCard = {
   kind: "summary";

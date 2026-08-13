@@ -1,3 +1,4 @@
+import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -11,8 +12,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
-} from "@liveagent/app/components/icons";
-import { getFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
+} from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient, SftpEntry, SftpSide, SftpTransfer } from "@liveagent/ui/lib/sftp/types";

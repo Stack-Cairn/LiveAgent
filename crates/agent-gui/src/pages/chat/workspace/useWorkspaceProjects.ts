@@ -6,9 +6,11 @@ import { useSidebarSelector } from "@liveagent/ui/lib/sidebar/useSidebarSelector
 import { invokeFs } from "@liveagent/ui/lib/tools/fsBackend";
 import {
   assignWorkspaceProjectToGroup,
+  createWorkspaceProjectFromPath,
   ensureWorktreeProjectGroup,
   fallbackWorkspaceProjectName,
   findWorkspaceProject,
+  getDefaultWorkspaceProjectPath,
   mergeWorkspaceProjectsWithHistory,
 } from "@liveagent/ui/lib/workspaceProjects";
 import { invoke } from "@tauri-apps/api/core";
@@ -34,10 +36,6 @@ import {
 } from "../../../lib/settings";
 import { asErrorMessage } from "../chatPageUtils";
 import { startWorkspaceCloneTask } from "./cloneTasks";
-import {
-  createWorkspaceProjectFromPath,
-  getDefaultWorkspaceProjectPath,
-} from "./workspaceProjectsModel";
 
 type UseWorkspaceProjectsParams = {
   settings: AppSettings;

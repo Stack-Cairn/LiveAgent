@@ -2,28 +2,27 @@
 // accept/delete/wipe, plus mounting the settings drawer (which owns the
 // organizer history modal).
 //
-// Shared implementation owned by @liveagent/ui. Platform-specific capabilities
-// are supplied by each host's pages/settings/memory/platform.tsx module.
+// Shared implementation owned by @liveagent/ui.
 
 import type { AppSettings } from "@liveagent/app/lib/settings";
 import {
   AlertTriangle,
   BookOpen,
   Brain,
-  Button,
-  buildModelOptions,
   Check,
   ChevronDown,
   Folder,
   Globe2,
-  Input,
   Plus,
   RefreshCw,
   Search,
   Settings2,
   Trash2,
-} from "@liveagent/app/pages/settings/memory/platform";
+} from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import { buildModelOptions } from "@liveagent/ui/lib/models/modelOptions";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { MemoryMeta } from "../../../lib/memory/api";

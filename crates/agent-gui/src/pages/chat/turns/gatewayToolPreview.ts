@@ -15,7 +15,7 @@ import {
   LIVE_TOOL_PREVIEW_META_KEY,
   type PreviewFieldMetrics,
   type StreamPreviewMeta,
-} from "../../../lib/chat/messages/toolPreview";
+} from "@liveagent/ui/lib/chat/toolPreview";
 import { summarizeToolCall } from "../../../lib/chat/messages/uiMessages";
 import { ensureAskUserQuestionDeadlineAt } from "../../../lib/tools/askUserQuestionTools";
 import { getToolApprovalDeadlineAt, hasPendingToolApproval } from "../../../lib/tools/toolApproval";

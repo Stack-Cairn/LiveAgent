@@ -24,7 +24,7 @@ import {
   Upload,
   X,
   XCircle,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitBranch as GitBranchInfo } from "@liveagent/ui/lib/git/types";
 import {

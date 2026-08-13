@@ -8,7 +8,7 @@ import {
   Square,
   Trash2,
   X,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   memo,

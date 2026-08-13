@@ -2,7 +2,13 @@ import {
   WorkspaceOverlayTitleBar,
   workspaceOverlayStackClassName,
 } from "@liveagent/adapters/workspacePreview";
-import { AlertTriangle, FolderTree, RefreshCw, Terminal, X } from "@liveagent/app/components/icons";
+import {
+  AlertTriangle,
+  FolderTree,
+  RefreshCw,
+  Terminal,
+  X,
+} from "@liveagent/ui/components/IconSet";
 import { XTermViewport } from "@liveagent/ui/components/project-tools/XTermViewport";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";

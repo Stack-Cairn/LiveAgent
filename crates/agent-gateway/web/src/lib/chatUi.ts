@@ -1,14 +1,22 @@
+import type { SharedChatEntry } from "@liveagent/ui/contracts/chatEntry";
 import { positiveTokenCount } from "@liveagent/ui/lib/chat/contextUsage";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
-import type { Message, ToolCall, ToolResultMessage, Usage } from "@/lib/agentTypes";
-import type { HistoryMessageRef } from "@/lib/chat/conversationState";
-import { type HostedSearchBlock, normalizeHostedSearchBlock } from "@/lib/chat/hostedSearch";
-import { summarizeToolCall as summarizeDesktopToolCall, type UiRound } from "@/lib/chat/uiMessages";
+
+export { hashText } from "@liveagent/ui/lib/shared/hash";
+
+import {
+  type HostedSearchBlock,
+  normalizeHostedSearchBlock,
+} from "@liveagent/ui/lib/chat/hostedSearch";
 import {
   getUserMessageAttachments,
   getUserMessageDisplayText,
   type PendingUploadedFile,
-} from "@/lib/chat/uploadedFiles";
+} from "@liveagent/ui/lib/chat/uploadedFiles";
+import { hashText } from "@liveagent/ui/lib/shared/hash";
+import type { Message, ToolCall, ToolResultMessage, Usage } from "@/lib/agentTypes";
+import type { HistoryMessageRef } from "@/lib/chat/conversationState";
+import { summarizeToolCall as summarizeDesktopToolCall, type UiRound } from "@/lib/chat/uiMessages";
 
 import type { ChatCheckpointPayload, ChatEvent, ConversationSummary } from "./gatewayTypes";
 
@@ -20,16 +28,16 @@ export type GatewayTranscriptRound = UiRound & {
   thinkingOpen?: boolean;
 };
 
+type SharedGatewayChatEntry = SharedChatEntry<
+  ToolCall,
+  ToolResultMessage,
+  AssistantMeta,
+  { messageId?: string; messageRef?: HistoryMessageRef; timestamp?: number },
+  { timestamp?: number }
+>;
+
 export type ChatEntry =
-  | {
-      id: string;
-      kind: "user";
-      text: string;
-      attachments: PendingUploadedFile[];
-      messageId?: string;
-      messageRef?: HistoryMessageRef;
-      timestamp?: number;
-    }
+  | SharedGatewayChatEntry
   | {
       id: string;
       kind: "checkpoint";
@@ -43,39 +51,7 @@ export type ChatEntry =
       };
       contextUsageTokens?: number;
       timestamp?: number;
-    }
-  | {
-      id: string;
-      kind: "assistant";
-      text: string;
-      round?: number;
-      meta?: AssistantMeta;
-      timestamp?: number;
-    }
-  | { id: string; kind: "thinking"; text: string; round?: number }
-  | {
-      id: string;
-      kind: "tool_call";
-      round?: number;
-      toolCall: ToolCall;
-      summary?: string;
-      text: string;
-    }
-  | {
-      id: string;
-      kind: "tool_result";
-      round?: number;
-      toolResult: ToolResultMessage;
-      summary?: string;
-      text: string;
-    }
-  | {
-      id: string;
-      kind: "hosted_search";
-      round?: number;
-      hostedSearch: HostedSearchBlock;
-    }
-  | { id: string; kind: "error"; text: string };
+    };
 
 type StoredMessage = {
   role?: unknown;
@@ -138,15 +114,6 @@ const LIVE_UPLOADED_FILE_KINDS = new Set<string>([
 
 function randomId(prefix: string) {
   return `${prefix}-${createUuid()}`;
-}
-
-export function hashText(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
 }
 
 export function hashValue(value: unknown) {

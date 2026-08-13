@@ -1,7 +1,7 @@
 import type { RetryAttemptRecord } from "@liveagent/ui/lib/chat/retryAttempts";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import type { StreamRunActivity } from "@/lib/chat/stream/streamTypes";
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import type { ChatEntry, GatewayTranscriptRound } from "@/lib/chatUi";
 
 export type UserChatEntry = Extract<ChatEntry, { kind: "user" }>;

@@ -1,10 +1,3 @@
-import { Button } from "@liveagent/ui/components/ui/button";
-import { Input } from "@liveagent/ui/components/ui/input";
-import { Label } from "@liveagent/ui/components/ui/label";
-import { useLocale } from "@liveagent/ui/i18n/index";
-import { ConfirmActionPopover } from "@liveagent/ui/pages/settings/shared";
-import { useCallback, useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Check,
@@ -20,7 +13,14 @@ import {
   Wifi,
   WifiOff,
   X,
-} from "../../components/icons";
+} from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Input } from "@liveagent/ui/components/ui/input";
+import { Label } from "@liveagent/ui/components/ui/label";
+import { useLocale } from "@liveagent/ui/i18n/index";
+import { ConfirmActionPopover } from "@liveagent/ui/pages/settings/shared";
+import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   type AdminAgentEntry,
   type AdminAgentStatus,

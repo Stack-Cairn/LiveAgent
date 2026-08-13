@@ -1,10 +1,10 @@
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
 import { t as translate } from "@liveagent/ui/i18n/index";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
+import { mergePendingUploadedFiles } from "@liveagent/ui/lib/chat/uploadedFiles";
 import { registerLocalUploadedImagePreviews } from "@liveagent/ui/lib/chat/uploadedImagePreview";
 import { type DragEvent, type RefObject, useCallback, useEffect, useRef, useState } from "react";
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
-import { mergePendingUploadedFiles } from "@/lib/chat/uploadedFiles";
 import {
   clipboardHasFileSignal,
   extractClipboardFiles,

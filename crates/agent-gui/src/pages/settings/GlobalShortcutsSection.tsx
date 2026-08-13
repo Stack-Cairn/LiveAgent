@@ -1,3 +1,11 @@
+import {
+  Keyboard,
+  MonitorSmartphone,
+  Pin,
+  SquarePen,
+  X,
+  Zap,
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { AgentActivationSwitch } from "@liveagent/ui/pages/settings/shared";
 import {
@@ -9,7 +17,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { Keyboard, MonitorSmartphone, Pin, SquarePen, X, Zap } from "../../components/icons";
 import { inferRuntimePlatform } from "../../lib/runtimePlatform";
 import {
   applyGlobalShortcuts,

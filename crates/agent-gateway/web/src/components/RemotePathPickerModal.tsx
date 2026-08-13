@@ -1,4 +1,14 @@
 import { invoke } from "@liveagent/app/shims/tauriCore";
+import {
+  AlertTriangle,
+  File,
+  FolderOpen,
+  HardDrive,
+  Home,
+  Loader2,
+  Plus,
+  X,
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
@@ -12,7 +22,6 @@ import type {
 } from "react-complex-tree";
 import { ControlledTreeEnvironment, Tree } from "react-complex-tree";
 import { createPortal } from "react-dom";
-import { AlertTriangle, File, FolderOpen, HardDrive, Home, Loader2, Plus, X } from "./icons";
 import type { RemoteFsRoot } from "./remotePathPickerPaths";
 import {
   basenameFromPath,

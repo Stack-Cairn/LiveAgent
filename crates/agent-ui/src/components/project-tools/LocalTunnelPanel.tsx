@@ -1,3 +1,4 @@
+import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
 import {
   AlertTriangle,
   Check,
@@ -14,8 +15,7 @@ import {
   RefreshCw,
   Trash2,
   X,
-} from "@liveagent/app/components/icons";
-import { workspaceProjectPathKey } from "@liveagent/app/lib/settings";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../../lib/shared/utils";

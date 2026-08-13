@@ -233,10 +233,7 @@ export type GitClient = {
   push(workdir: string): Promise<GitOperationResponse>;
   deleteBranch(workdir: string, branch: string, force?: boolean): Promise<GitOperationResponse>;
   renameBranch(workdir: string, branch: string, newBranch: string): Promise<GitOperationResponse>;
-  createWorktree?(
-    workdir: string,
-    options: GitCreateWorktreeOptions,
-  ): Promise<GitWorktreeResponse>;
+  createWorktree?(workdir: string, options: GitCreateWorktreeOptions): Promise<GitWorktreeResponse>;
   removeWorktree?(
     workdir: string,
     worktreePath: string,

@@ -4,15 +4,6 @@ import {
   submitAskUserQuestionAnswers,
   usePendingToolApproval,
 } from "@liveagent/adapters/assistantBubble";
-import {
-  deriveFileChangeStats,
-  FILE_TOOL_TEXT_FIELDS,
-  previewText,
-  summarizeToolCall,
-  type ToolResultMessage,
-  type ToolTraceItem,
-  toolResultMessageToText,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import { AskUserQuestionCard } from "@liveagent/ui/components/chat/AskUserQuestionCard";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { FileChangeBadge } from "@liveagent/ui/components/chat/FileChangeBadge";
@@ -25,6 +16,15 @@ import {
   parseAskUserQuestionResultDetails,
   sanitizeAskUserQuestionItems,
 } from "@liveagent/ui/lib/chat/askUserQuestion";
+import {
+  deriveFileChangeStats,
+  FILE_TOOL_TEXT_FIELDS,
+  previewText,
+  summarizeToolCall,
+  type ToolResultMessage,
+  type ToolTraceItem,
+  toolResultMessageToText,
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "../../IconSet";

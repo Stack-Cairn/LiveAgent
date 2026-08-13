@@ -1,5 +1,5 @@
 import { AlertDialog } from "@base-ui/react/alert-dialog";
-import { AlertTriangle, X } from "@liveagent/app/components/icons";
+import { AlertTriangle, X } from "@liveagent/ui/components/IconSet";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "./button";
 

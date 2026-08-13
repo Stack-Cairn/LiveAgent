@@ -5,6 +5,12 @@ import type {
 } from "@liveagent/ui/components/chat/MentionComposer";
 import { getAutomationState } from "@liveagent/ui/lib/automation/index";
 import { normalizeLogicalLineEndings } from "@liveagent/ui/lib/chat/composerText";
+import {
+  createUserMessageWithUploads,
+  mergePendingUploadedFiles,
+  type PendingUploadedFile,
+} from "@liveagent/ui/lib/chat/uploadedFiles";
+import { appendManagedSkillSelections } from "@liveagent/ui/lib/chat/useComposerActions";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import {
@@ -36,11 +42,6 @@ import {
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
 import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
 import type { MemoryExtractionStatusKey } from "../../../lib/chat/memory/extractionEngine";
-import {
-  createUserMessageWithUploads,
-  mergePendingUploadedFiles,
-  type PendingUploadedFile,
-} from "../../../lib/chat/messages/uploadedFiles";
 import {
   BRANCH_CONVERSATION_DEFAULT_TITLE,
   buildFallbackConversationTitle,
@@ -74,7 +75,7 @@ import {
 } from "../../../lib/subagents";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { TaskStateStore } from "../../../lib/tools/taskTools";
-import { appendManagedSkillSelections, asErrorMessage } from "../chatPageUtils";
+import { asErrorMessage } from "../chatPageUtils";
 import {
   buildTextFromComposerDraft,
   importPastedTextsAsFiles,

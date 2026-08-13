@@ -19,7 +19,7 @@ import {
   Trash2,
   Upload,
   X,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
@@ -79,7 +79,10 @@ function assertGitOperationResult(value: unknown, fallbackMessage: string) {
 }
 
 function worktreeDirectoryNameFromBranch(branch: string) {
-  return branch.trim().replace(/[\\/:]+/g, "-").replace(/\s+/g, "-");
+  return branch
+    .trim()
+    .replace(/[\\/:]+/g, "-")
+    .replace(/\s+/g, "-");
 }
 
 // Legacy fallback for environments where the async clipboard API is missing
@@ -800,17 +803,9 @@ export function GitBranchSelector(props: {
   disabledMessage?: string;
   onStateChange?: (state: GitRepositoryState) => void;
   /** 创建 worktree 成功后，用后端返回的仓库身份与路径把工作区加入侧边栏。 */
-  onOpenWorktree?: (worktree: {
-    path: string;
-    repositoryPath: string;
-    branch: string;
-  }) => void;
+  onOpenWorktree?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
   /** Worktree 删除成功后，让宿主清理对应的工作空间登记。 */
-  onWorktreeRemoved?: (worktree: {
-    path: string;
-    repositoryPath: string;
-    branch: string;
-  }) => void;
+  onWorktreeRemoved?: (worktree: { path: string; repositoryPath: string; branch: string }) => void;
 }) {
   const {
     workdir: workspaceCwd,
@@ -1527,8 +1522,7 @@ export function GitBranchSelector(props: {
 
   // Worktree 起点：默认当前分支，可切换为任意本地/远程分支
   // （后端 validate_start_point 接受任意可 rev-parse 的 ref）。
-  const defaultWorktreeStartPoint =
-    state.head && state.head !== "(detached)" ? state.head : "HEAD";
+  const defaultWorktreeStartPoint = state.head && state.head !== "(detached)" ? state.head : "HEAD";
   const [worktreeStartPoint, setWorktreeStartPoint] = useState("");
   const worktreeStartPointOptions = useMemo(() => {
     const seen = new Set<string>();

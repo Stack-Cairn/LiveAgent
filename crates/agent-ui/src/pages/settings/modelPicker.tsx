@@ -1,3 +1,4 @@
+import type { ProviderId } from "@liveagent/app/lib/settings/index";
 import {
   Check,
   ChevronDown,
@@ -7,8 +8,7 @@ import {
   OpenaiChatgptIcon,
   Search,
   Sparkles,
-} from "@liveagent/app/components/icons";
-import type { ProviderId } from "@liveagent/app/lib/settings/index";
+} from "@liveagent/ui/components/IconSet";
 import {
   DropdownMenu,
   DropdownMenuContent,

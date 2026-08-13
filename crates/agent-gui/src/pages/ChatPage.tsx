@@ -1,9 +1,7 @@
 import type { Context } from "@earendil-works/pi-ai";
 import { ApplicationView } from "@liveagent/ui/application/ApplicationView";
-import {
-  type ChangedFilesActions,
-  ChangedFilesActionsProvider,
-} from "@liveagent/ui/components/chat/ChangedFilesCard";
+import { useApplicationViewState } from "@liveagent/ui/application/useApplicationViewState";
+import { ChangedFilesActionsProvider } from "@liveagent/ui/components/chat/ChangedFilesCard";
 import { FileDropOverlay } from "@liveagent/ui/components/chat/FileDropOverlay";
 import { HistoryShareModal } from "@liveagent/ui/components/chat/HistoryShareModal";
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
@@ -13,27 +11,28 @@ import { TaskProgressBar } from "@liveagent/ui/components/chat/TaskProgressBar";
 import { ToolApprovalBar } from "@liveagent/ui/components/chat/ToolApprovalBar";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
 import { WorkspaceResourceSettingsDrawer } from "@liveagent/ui/components/chat/WorkspaceResourceSettingsDrawer";
-import type {
-  GitCommitContextPayload,
-  GitFileContextPayload,
-} from "@liveagent/ui/components/project-tools/git-review/index";
-import type { GitReviewFocusRequest } from "@liveagent/ui/components/project-tools/RightDockContext";
+import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
-import { expandedPathsForFileTreePath } from "@liveagent/ui/components/project-tools/rightDockModel";
-import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
+import { useWorkspaceOverlays } from "@liveagent/ui/components/workspace-editor/useWorkspaceOverlays";
 import { WorkspaceOverlayHost } from "@liveagent/ui/components/workspace-editor/WorkspaceOverlayHost";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { getAutomationState, useAutomation } from "@liveagent/ui/lib/automation/index";
-import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import {
   buildContextUsageScanItems,
   deriveContextUsageTokens,
 } from "@liveagent/ui/lib/chat/contextUsage";
-import { openChatFileLink } from "@liveagent/ui/lib/chat/openChatFileLink";
 import { selectLatestTaskProgress } from "@liveagent/ui/lib/chat/taskProgress";
+import { useChangedFilesActions } from "@liveagent/ui/lib/chat/useChangedFilesActions";
+import { useChatFileLinkNavigation } from "@liveagent/ui/lib/chat/useChatFileLinkNavigation";
+import {
+  useComposerActions,
+  useComposerSkillSelection,
+  useInsertCodeReviewSkill,
+} from "@liveagent/ui/lib/chat/useComposerActions";
 import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
 import { setPreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
+import { useRightDockSettings } from "@liveagent/ui/lib/projectTools/useRightDockSettings";
 import {
   type ConversationOpenState,
   createConversationOpenController,
@@ -61,7 +60,6 @@ import {
 } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
-import { PanelRightClose, PanelRightOpen } from "../components/icons";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type { AppUpdateController } from "../lib/appUpdates";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
@@ -74,7 +72,6 @@ import {
 import type { LiveTranscriptStore } from "../lib/chat/conversation/liveTranscriptStore";
 import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
-import type { CodeMentionReference } from "../lib/chat/messages/mentionReferences";
 import {
   buildFallbackConversationTitle,
   createConversationIdentity,
@@ -85,27 +82,14 @@ import { tauriGitClient } from "../lib/git/tauriGitClient";
 import { buildMemoryOverviewSection } from "../lib/memory/prompts/injection";
 import {
   type AppSettings,
-  getRightDockFileTreeState,
-  getRightDockProjectState,
-  getSshProjectHostIds,
   isAgentDevMode,
   isAgentExecutionMode,
-  isRightDockSingletonTabOpen,
   normalizeSelectedModelForProviders,
-  openRightDockSingletonTab,
   parseSelectedModelJson,
-  type RightDockFileTreeStatePatch,
-  type RightDockProjectState,
   resolveEffectiveTheme,
   resolveWorkspaceResources,
   type SelectedModel,
-  updateChatTranscriptWidth,
-  updateRightDockFileTreeState,
-  updateRightDockProjectState,
-  updateRightDockWidth,
-  updateSkills,
-  updateSshProjectHostIds,
-  updateSystem,
+  updateExecutionModeFromChatSelection,
   updateWorkspaceResourceSettings,
   type WorkspaceProject,
   workspaceProjectPathKey,
@@ -142,7 +126,6 @@ import {
   useLiveTranscriptController,
   usePendingUploads,
 } from "./chat";
-import { appendManagedSkillSelections } from "./chat/chatPageUtils";
 import { useComposerDraftCache } from "./chat/composer/useComposerDraftCache";
 import { useGatewayBridgeReadiness } from "./chat/gateway/useGatewayBridgeReadiness";
 import { useGatewayRunMirrorCoordinator } from "./chat/gateway/useGatewayRunMirrorCoordinator";
@@ -166,7 +149,6 @@ import {
 import { useSendChatTurn } from "./chat/runtime/useSendChatTurn";
 import { ChatSidebarContainer } from "./chat/sidebar/ChatSidebarContainer";
 import { useProjectTerminals } from "./chat/workspace/useProjectTerminals";
-import { useWorkspaceOverlays } from "./chat/workspace/useWorkspaceOverlays";
 import { useWorkspaceProjectRemoval } from "./chat/workspace/useWorkspaceProjectRemoval";
 import { useWorkspaceProjects } from "./chat/workspace/useWorkspaceProjects";
 import type { SectionId } from "./settings/types";
@@ -287,11 +269,14 @@ export function ChatPage(props: ChatPageProps) {
     () => undefined,
   );
   const prepareComposerForConversationChangeActionRef = useRef<() => void>(() => undefined);
-  const [activeView, setActiveView] = useState<"chat" | "skills-hub" | "mcp-hub">("chat");
-  const [resourceSettingsProject, setResourceSettingsProject] = useState<WorkspaceProject | null>(
-    null,
-  );
-  const [rightDockOpen, setRightDockOpen] = useState(false);
+  const {
+    activeView,
+    setActiveView,
+    resourceSettingsProject,
+    setResourceSettingsProject,
+    rightDockOpen,
+    setRightDockOpen,
+  } = useApplicationViewState<WorkspaceProject>();
   const {
     workspaceProjects,
     setActiveWorkspaceProjectId,
@@ -666,21 +651,10 @@ export function ChatPage(props: ChatPageProps) {
     () => (skillsEnabled ? activeWorkspaceResources.skillNames : []),
     [activeWorkspaceResources.skillNames, skillsEnabled],
   );
-  const enabledComposerSkills = useMemo(() => {
-    if (!skillsEnabled || selectedSkillNames.length === 0 || availableSkills.length === 0) {
-      return [];
-    }
-    const byName = new Map(availableSkills.map((skill) => [skill.name, skill]));
-    return selectedSkillNames
-      .map((name) => byName.get(name))
-      .filter((skill): skill is (typeof availableSkills)[number] => Boolean(skill));
-  }, [availableSkills, selectedSkillNames, skillsEnabled]);
-  const codeReviewSkill = useMemo(
-    () =>
-      availableSkills.find(
-        (skill) => skill.name === "liveagent-code-review" && skill.builtIn === true,
-      ),
-    [availableSkills],
+  const { enabledComposerSkills, codeReviewSkill } = useComposerSkillSelection(
+    availableSkills,
+    selectedSkillNames,
+    skillsEnabled,
   );
   const terminalProjectPath = isAgentMode ? activeWorkspaceProjectPath.trim() : "";
   const terminalProjectPathKey = terminalProjectPath
@@ -706,28 +680,17 @@ export function ChatPage(props: ChatPageProps) {
         : [],
     [terminalProjectPathKey, terminalSessions],
   );
-  // getRightDockProjectState / getRightDockFileTreeState / getSshProjectHostIds
-  // build fresh objects on every call, so memoize on the owning settings slice
-  // + path key: RightDockPanel is memo'd and these references are props.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on settings.customSettings.rightDock (the only slice these getters read) so unrelated settings changes keep the reference stable.
-  const rightDockProjectState = useMemo(
-    () => getRightDockProjectState(settings.customSettings, terminalProjectPathKey),
-    [settings.customSettings.rightDock, terminalProjectPathKey],
-  );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on settings.customSettings.rightDock (the only slice these getters read) so unrelated settings changes keep the reference stable.
-  const rightDockFileTreeState = useMemo(
-    () => getRightDockFileTreeState(settings.customSettings, terminalProjectPathKey),
-    [settings.customSettings.rightDock, terminalProjectPathKey],
-  );
-  const rightDockFileTreeOpen = isRightDockSingletonTabOpen(
-    settings.customSettings,
-    terminalProjectPathKey,
-    "fileTree",
-  );
-  const associatedSshHostIds = useMemo(
-    () => getSshProjectHostIds(settings.ssh, terminalProjectPathKey),
-    [settings.ssh, terminalProjectPathKey],
-  );
+  const {
+    rightDockProjectState,
+    rightDockFileTreeState,
+    rightDockFileTreeOpen,
+    associatedSshHostIds,
+    handleChatTranscriptWidthChange,
+    handleRightDockWidthChange,
+    handleRightDockProjectStateChange,
+    handleRightDockFileTreeStateChange,
+    handleSshProjectHostIdsChange,
+  } = useRightDockSettings({ settings, setSettings, terminalProjectPathKey });
   const terminalDisabledMessage = !isAgentMode
     ? "Project tools require Agent project mode."
     : !terminalProjectPath
@@ -737,84 +700,19 @@ export function ChatPage(props: ChatPageProps) {
   const tunnelDisabledMessage = !settings.remote.enableWebTunnels
     ? t("projectTools.tunnelWebDisabled")
     : undefined;
-  // RightDockPanel is memo'd: every callback handed to it must be stable or
-  // the memo boundary is void (see the panel-side context useMemo).
-  const handleChatTranscriptWidthChange = useCallback(
-    (nextWidth: number) => {
-      setSettings((prev) => updateChatTranscriptWidth(prev, nextWidth));
-    },
-    [setSettings],
-  );
-  const handleRightDockWidthChange = useCallback(
-    (nextWidth: number) => {
-      setSettings((prev) => updateRightDockWidth(prev, nextWidth));
-    },
-    [setSettings],
-  );
-  const handleRightDockProjectStateChange = useCallback(
-    (updater: (current: RightDockProjectState) => RightDockProjectState) => {
-      setSettings((prev) => updateRightDockProjectState(prev, terminalProjectPathKey, updater));
-    },
-    [setSettings, terminalProjectPathKey],
-  );
-  const handleRightDockFileTreeStateChange = useCallback(
-    (patch: RightDockFileTreeStatePatch) => {
-      setSettings((prev) => updateRightDockFileTreeState(prev, terminalProjectPathKey, patch));
-    },
-    [setSettings, terminalProjectPathKey],
-  );
-  const handleSshProjectHostIdsChange = useCallback(
-    (hostIds: string[]) => {
-      setSettings((prev) => updateSshProjectHostIds(prev, terminalProjectPathKey, hostIds));
-    },
-    [setSettings, terminalProjectPathKey],
-  );
-  const handleRightDockInsertFileMention = useCallback((path: string, kind: "file" | "dir") => {
-    composerRef.current?.insertFileMention(path, kind);
-    composerRef.current?.focus();
-  }, []);
-  const handleRightDockInsertCodeReviewSkill = useCallback(() => {
-    const composer = composerRef.current;
-    if (!composer || !codeReviewSkill) return;
-    setSettings((prev) => {
-      const selected = appendManagedSkillSelections(prev.skills.selected, [codeReviewSkill.name]);
-      if (selected.join("\n") === prev.skills.selected.join("\n")) return prev;
-      return updateSkills(prev, { selected });
-    });
-    const alreadyInserted = composer
-      .getDraft()
-      .skillMentions.some((skill) => skill.name === codeReviewSkill.name);
-    if (!alreadyInserted) {
-      composer.insertSkillMention(codeReviewSkill);
-    }
-    composer.focus();
-  }, [codeReviewSkill, setSettings]);
-  const handleRightDockInsertCommitMention = useCallback((commit: GitCommitContextPayload) => {
-    composerRef.current?.insertCommitMention(commit);
-    composerRef.current?.focus();
-  }, []);
-  const handleRightDockInsertGitFileMention = useCallback((file: GitFileContextPayload) => {
-    composerRef.current?.insertGitFileMention(file);
-    composerRef.current?.focus();
-  }, []);
-  const handleInsertCodeMention = useCallback((reference: CodeMentionReference) => {
-    composerRef.current?.insertCodeMention(reference);
-    composerRef.current?.focus();
-  }, []);
-  // Guards re-entry while a suggestion is still typing in: the cards stay
-  // disabled and further clicks are ignored until the composer settles.
-  const [isSuggestionTyping, setIsSuggestionTyping] = useState(false);
-  const suggestionTypingRef = useRef(false);
-  const handleEmptyStateSuggestion = useCallback((text: string) => {
-    const composer = composerRef.current;
-    if (!composer || suggestionTypingRef.current) return;
-    suggestionTypingRef.current = true;
-    setIsSuggestionTyping(true);
-    void composer.typeText(text).finally(() => {
-      suggestionTypingRef.current = false;
-      setIsSuggestionTyping(false);
-    });
-  }, []);
+  const {
+    isSuggestionTyping,
+    handleRightDockInsertFileMention,
+    handleRightDockInsertCommitMention,
+    handleRightDockInsertGitFileMention,
+    handleInsertCodeMention,
+    handleEmptyStateSuggestion,
+  } = useComposerActions(composerRef);
+  const handleRightDockInsertCodeReviewSkill = useInsertCodeReviewSkill({
+    composerRef,
+    codeReviewSkill,
+    setSettings,
+  });
   const workspaceOverlays = useWorkspaceOverlays({
     terminalProjectPath,
     terminalProjectPathKey,
@@ -826,59 +724,17 @@ export function ChatPage(props: ChatPageProps) {
     openWorkspaceEditorFile,
     openWorkspaceFilePreview,
   } = workspaceOverlays;
-  // ── 回复末尾「已编辑文件」卡的三个动作 ────────────────────────────────
-  const gitReviewFocusNonceRef = useRef(0);
-  const [gitReviewFocusRequest, setGitReviewFocusRequest] = useState<GitReviewFocusRequest | null>(
-    null,
-  );
-  const handleGitReviewFocusRequestHandled = useCallback((nonce: number) => {
-    setGitReviewFocusRequest((current) => (current && current.nonce === nonce ? null : current));
-  }, []);
-  const handleChangedFileOpenDiff = useCallback(
-    (path: string | null) => {
-      if (!terminalProjectPathKey) return;
-      setRightDockOpen(true);
-      setSettings((prev) => openRightDockSingletonTab(prev, terminalProjectPathKey, "gitReview"));
-      gitReviewFocusNonceRef.current += 1;
-      setGitReviewFocusRequest({
-        path: (path ?? "").trim(),
-        nonce: gitReviewFocusNonceRef.current,
-      });
-    },
-    [setSettings, terminalProjectPathKey],
-  );
-  const handleChangedFileReveal = useCallback(
-    (path: string) => {
-      if (!terminalProjectPathKey) return;
-      const selectedPath = path
-        .trim()
-        .replace(/\\/g, "/")
-        .replace(/^\/+|\/+$/g, "");
-      if (!selectedPath) return;
-      setRightDockOpen(true);
-      setSettings((prev) => {
-        const opened = openRightDockSingletonTab(prev, terminalProjectPathKey, "fileTree");
-        const current = getRightDockFileTreeState(opened.customSettings, terminalProjectPathKey);
-        return updateRightDockFileTreeState(opened, terminalProjectPathKey, {
-          query: "",
-          selectedPath,
-          expandedPaths: Array.from(
-            new Set([...current.expandedPaths, ...expandedPathsForFileTreePath(selectedPath)]),
-          ),
-          bumpRevision: true,
-        });
-      });
-    },
-    [setSettings, terminalProjectPathKey],
-  );
-  const changedFilesActions = useMemo<ChangedFilesActions>(
-    () => ({
-      onOpenFile: handleOpenWorkspaceFile,
-      onRevealInFileTree: handleChangedFileReveal,
-      onOpenDiff: handleChangedFileOpenDiff,
-    }),
-    [handleChangedFileOpenDiff, handleChangedFileReveal, handleOpenWorkspaceFile],
-  );
+  const {
+    gitReviewFocusRequest,
+    handleGitReviewFocusRequestHandled,
+    handleChangedFileReveal,
+    changedFilesActions,
+  } = useChangedFilesActions({
+    terminalProjectPathKey,
+    setRightDockOpen,
+    setSettings,
+    onOpenFile: handleOpenWorkspaceFile,
+  });
   // Local runner running-state → sidebar store: diff transitions so sidebar
   // dots (and running workdir keys) include local runs immediately; remote
   // runs arrive through the store's own event subscription.
@@ -908,83 +764,19 @@ export function ChatPage(props: ChatPageProps) {
     compactionStatus,
   });
 
-  const handleOpenChatFileLink = useCallback(
-    (link: ChatFileLink) => {
-      const conversationId = currentConversationId;
-      const conversationWorkdir = displayedConversationWorkdir.trim();
-      if (!conversationWorkdir) {
-        addNotify("error", "The conversation working directory is unavailable.");
-        return;
-      }
-      const request = { ...link, conversationId, workdir: conversationWorkdir };
-      void openChatFileLink(request)
-        .then(async (result) => {
-          if (result.action === "opened" || result.action === "revealed") return;
-          const resultWorkdir = result.workdir?.trim() ?? "";
-          const resultPath = result.path?.trim() ?? "";
-          if (!resultWorkdir || !resultPath) {
-            addNotify("error", "The linked file could not be opened.");
-            return;
-          }
-          if (result.action === "directory") {
-            if (workspaceProjectPathKey(resultWorkdir) === terminalProjectPathKey) {
-              handleChangedFileReveal(resultPath);
-              return;
-            }
-            const fallback = await openChatFileLink({ ...request, openInFileManager: true });
-            if (fallback.action !== "opened") {
-              addNotify("error", "The linked directory could not be opened.");
-            }
-            return;
-          }
-          const workspaceRequest = {
-            projectPathKey: workspaceProjectPathKey(resultWorkdir),
-            workdir: resultWorkdir,
-            path: resultPath,
-          };
-          if (
-            !result.outsideWorkspace &&
-            workspaceRequest.projectPathKey === terminalProjectPathKey
-          ) {
-            handleChangedFileReveal(resultPath);
-          }
-          if (result.action === "preview") {
-            openWorkspaceFilePreview(workspaceRequest);
-            return;
-          }
-          openWorkspaceEditorFile({
-            ...workspaceRequest,
-            line: result.line,
-            endLine: result.endLine,
-            column: result.column,
-          });
-        })
-        .catch((error: unknown) => {
-          const message =
-            error && typeof error === "object" && "message" in error
-              ? String((error as { message?: unknown }).message ?? "")
-              : String(error ?? "");
-          const normalized = message.toLowerCase();
-          addNotify(
-            "error",
-            normalized.includes("timed out") ||
-              normalized.includes("offline") ||
-              normalized.includes("not connected")
-              ? "The device that owns this conversation is offline or did not respond."
-              : message || "The linked file could not be opened.",
-          );
-        });
-    },
-    [
-      addNotify,
-      currentConversationId,
-      displayedConversationWorkdir,
-      handleChangedFileReveal,
-      openWorkspaceEditorFile,
-      openWorkspaceFilePreview,
-      terminalProjectPathKey,
-    ],
+  const notifyChatFileLinkError = useCallback(
+    (message: string) => addNotify("error", message),
+    [addNotify],
   );
+  const handleOpenChatFileLink = useChatFileLinkNavigation({
+    conversationId: currentConversationId,
+    conversationWorkdir: displayedConversationWorkdir,
+    terminalProjectPathKey,
+    notifyError: notifyChatFileLinkError,
+    onRevealInFileTree: handleChangedFileReveal,
+    openWorkspaceEditorFile,
+    openWorkspaceFilePreview,
+  });
 
   const {
     isUploadingFiles,
@@ -1209,10 +1001,10 @@ export function ChatPage(props: ChatPageProps) {
   cleanupDeletedConversationActionRef.current = cleanupDeletedConversation;
 
   const {
-    removeWorkspaceProjectFromSettings,
     handleRemoveWorkspaceProject,
     handleArchiveWorkspaceProject,
     handleUnarchiveWorkspaceProject,
+    handleWorktreeRemoved,
   } = useWorkspaceProjectRemoval({
     settings,
     setSettings,
@@ -1233,18 +1025,6 @@ export function ChatPage(props: ChatPageProps) {
     displayedConversationWorkdir,
     startNewConversationActionRef,
   });
-
-  const handleWorktreeRemoved = useCallback(
-    (worktree: { path: string }) => {
-      const pathKey = workspaceProjectPathKey(worktree.path);
-      if (!pathKey) return;
-      const project = workspaceProjects.find(
-        (item) => workspaceProjectPathKey(item.path) === pathKey,
-      );
-      if (project) removeWorkspaceProjectFromSettings(project);
-    },
-    [removeWorkspaceProjectFromSettings, workspaceProjects],
-  );
 
   useEffect(() => {
     const nextWorkdir = activeWorkspaceProjectPath.trim();
@@ -2134,14 +1914,7 @@ export function ChatPage(props: ChatPageProps) {
           }
           chat={{
             onSelectExecutionMode: (mode) =>
-              setSettings((prev) => {
-                const current = prev.system.executionMode;
-                if (mode === "text") {
-                  return current === "text" ? prev : updateSystem(prev, { executionMode: "text" });
-                }
-                // 切回 Agent：仅从 Chat 切换；agent-dev 视为 Agent，保持不降级。
-                return current === "text" ? updateSystem(prev, { executionMode: "tools" }) : prev;
-              }),
+              setSettings((prev) => updateExecutionModeFromChatSelection(prev, mode)),
             hasModels,
             currentModelLabel,
             modelOptions,
@@ -2152,32 +1925,12 @@ export function ChatPage(props: ChatPageProps) {
             onToggleTheme,
             onOpenSidebar: handleOpenSidebar,
             trailingActions: (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setRightDockOpen((open) => !open)}
-                disabled={Boolean(terminalDisabledMessage) && !rightDockOpen}
-                aria-expanded={rightDockOpen}
-                title={
-                  rightDockOpen
-                    ? "Collapse project tools panel"
-                    : (terminalDisabledMessage ?? "Expand project tools panel")
-                }
-                className={`relative h-8 w-8 rounded-lg text-muted-foreground transition-[background-color,color,transform] duration-150 hover:text-foreground active:scale-95 ${
-                  rightDockOpen ? "bg-muted text-foreground" : ""
-                }`}
-              >
-                {rightDockOpen ? (
-                  <PanelRightClose className="h-4 w-4" />
-                ) : (
-                  <PanelRightOpen className="h-4 w-4" />
-                )}
-                {projectTerminalSessions.length > 0 ? (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[calc(10px*var(--zone-font-scale,1))] font-semibold leading-none text-white">
-                    {projectTerminalSessions.length}
-                  </span>
-                ) : null}
-              </Button>
+              <ProjectToolsPanelToggle
+                isOpen={rightDockOpen}
+                sessionCount={projectTerminalSessions.length}
+                disabledMessage={terminalDisabledMessage}
+                onToggle={() => setRightDockOpen((open) => !open)}
+              />
             ),
             headerClassName: "relative z-20",
             headerOverlay: <NotifyToast items={notifyItems} onDismiss={dismissNotify} />,

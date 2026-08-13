@@ -2,4 +2,4 @@ export {
   extractGitHubCommitSha,
   extractGitHubFileReference,
   tokenizeUserMessage,
-} from "../lib/chat/messages/userMessageContent";
+} from "@liveagent/ui/lib/chat/userMessageContent";

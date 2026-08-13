@@ -20,6 +20,7 @@ import type {
   RejectionBuckets,
   RiskLevel,
 } from "@liveagent/ui/lib/memory/schema";
+import { asRecord } from "@liveagent/ui/lib/shared/value";
 import { Type } from "typebox";
 import { ORGANIZER_PLAN_TOOL_NAME, ORGANIZER_TOPIC_TOOL_NAME } from "../prompts/organizer";
 
@@ -71,12 +72,6 @@ function stringValue(value: unknown) {
 
 function stringArrayValue(value: unknown) {
   return Array.isArray(value) ? value.map((item) => stringValue(item)).filter(Boolean) : [];
-}
-
-function recordValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 function numberValue(value: unknown) {
@@ -273,7 +268,7 @@ export function normalizeOrganizerPlanArgs(
   const decisions = Array.isArray(args.decisions) ? args.decisions : [];
   const normalized: OrganizerPlanDecision[] = [];
   for (const item of decisions) {
-    const obj = recordValue(item);
+    const obj = asRecord(item);
     const action = organizerActionValue(obj.action);
     if (!action) continue;
     normalized.push({
@@ -289,7 +284,7 @@ export function normalizeOrganizerPlanArgs(
       rewriteGoal: stringValue(obj.rewrite_goal),
     });
   }
-  const compression = recordValue(args.compression);
+  const compression = asRecord(args.compression);
   return {
     decisions: normalized,
     summary: stringValue(args.summary) || "Cluster analyzed.",

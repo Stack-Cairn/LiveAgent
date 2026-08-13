@@ -1,4 +1,11 @@
 import {
+  type CustomProvider,
+  type ExecutionMode,
+  getChatRuntimeReasoningLevelsForProvider,
+  isAgentExecutionMode,
+  isThinkingAlwaysOnForModel,
+} from "@liveagent/app/lib/settings";
+import {
   AlertTriangle,
   Check,
   CheckCircle2,
@@ -10,15 +17,7 @@ import {
   Plus,
   Terminal,
   X,
-} from "@liveagent/app/components/icons";
-import { parseModelValue, toModelValue } from "@liveagent/app/lib/providers/llm";
-import {
-  type CustomProvider,
-  type ExecutionMode,
-  getChatRuntimeReasoningLevelsForProvider,
-  isAgentExecutionMode,
-  isThinkingAlwaysOnForModel,
-} from "@liveagent/app/lib/settings";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   type CronTask,
@@ -28,6 +27,7 @@ import {
   MIN_CRON_TIMEOUT_SECONDS,
   validateCronExpression,
 } from "@liveagent/ui/lib/automation/index";
+import { parseModelValue, toModelValue } from "@liveagent/ui/lib/models/modelValue";
 import { ModelPicker, type ModelPickerOption } from "@liveagent/ui/pages/settings/modelPicker";
 import { useState } from "react";
 import { createPortal } from "react-dom";

@@ -6,6 +6,7 @@
 import type { HookDef, HookEvent, HookType } from "@liveagent/ui/lib/automation/types";
 
 import { createUuid } from "@liveagent/ui/lib/shared/id";
+import { errorMessageWithFallback } from "@liveagent/ui/lib/shared/value";
 import { invoke } from "@tauri-apps/api/core";
 
 export type HookRunWarning = {
@@ -38,12 +39,6 @@ type HookHttpRunResponse = {
 const MAX_QUEUED_DISPATCHES = 16;
 
 let executionChain: Promise<void> = Promise.resolve();
-
-function asErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.trim()) return error.message.trim();
-  const text = String(error ?? "").trim();
-  return text || fallback;
-}
 
 async function runHook(
   hook: HookDef,
@@ -137,7 +132,7 @@ export function createHookRunScope(params: {
               hookName: hook.name,
               hookType: hook.type,
               event,
-              message: asErrorMessage(error, "Hook 执行失败"),
+              message: errorMessageWithFallback(error, "Hook 执行失败"),
             });
           }
         }

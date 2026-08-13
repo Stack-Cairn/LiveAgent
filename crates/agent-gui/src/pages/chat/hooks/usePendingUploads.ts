@@ -1,12 +1,12 @@
 import type { MentionComposerHandle } from "@liveagent/ui/components/chat/MentionComposer";
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
-import { invalidateUploadedImagePreviewCache } from "@liveagent/ui/lib/chat/uploadedImagePreview";
-import { invoke } from "@tauri-apps/api/core";
-import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   mergePendingUploadedFiles,
   type PendingUploadedFile,
-} from "../../../lib/chat/messages/uploadedFiles";
+} from "@liveagent/ui/lib/chat/uploadedFiles";
+import { invalidateUploadedImagePreviewCache } from "@liveagent/ui/lib/chat/uploadedImagePreview";
+import { invoke } from "@tauri-apps/api/core";
+import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 
 type SystemPickReadableFilesResponse = {
   files: PendingUploadedFile[];

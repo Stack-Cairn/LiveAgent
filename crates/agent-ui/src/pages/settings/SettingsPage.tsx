@@ -1,4 +1,5 @@
 import { createSettingsExtension } from "@liveagent/adapters/settingsExtension";
+import type { SettingsPageProps } from "@liveagent/app/pages/settings/types";
 import {
   BookOpen,
   Brain,
@@ -9,8 +10,7 @@ import {
   Settings2,
   Wrench,
   Zap,
-} from "@liveagent/app/components/icons";
-import type { SettingsPageProps } from "@liveagent/app/pages/settings/types";
+} from "@liveagent/ui/components/IconSet";
 import { useEffect, useMemo, useState } from "react";
 import type { SettingsSectionDefinition, UiExtensionRegistry } from "../../contracts/registry";
 import { AgentsSection } from "./AgentsSection";

@@ -75,13 +75,6 @@ html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-shell {
   justify-content: center;
 }
 
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs {
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  -webkit-overflow-scrolling: touch;
-}
-
 html[data-liveagent-webui="gateway"] .project-file-tree-panel-scroll {
   padding-bottom: 16px;
   padding-bottom: max(16px, env(safe-area-inset-bottom));
@@ -130,12 +123,6 @@ html[data-liveagent-webui="gateway"] .workdir-picker-tree .rct-tree-item-button 
   min-width: 0;
 }
 
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
 html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tabs {
   overscroll-behavior-x: contain;
   scrollbar-width: none;
@@ -154,54 +141,6 @@ html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tab {
   max-width: min(14rem, calc(100vw - 2rem));
 }
 
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-scrollbar {
-  position: relative;
-  height: 4px;
-  flex: 0 0 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: hsl(var(--muted) / 0.42);
-  opacity: 0;
-  pointer-events: none;
-  touch-action: none;
-  transition:
-    background-color 160ms ease,
-    opacity 160ms ease;
-}
-
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-scrollbar-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-scrollbar-thumb {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  min-width: 28px;
-  border-radius: inherit;
-  background: var(--gateway-scrollbar-thumb);
-  box-shadow: inset 0 0 0 1px var(--gateway-scrollbar-thumb-border);
-  transition:
-    background-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-scrollbar:hover,
-html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-scrollbar-dragging {
-  background: var(--gateway-scrollbar-track-hover);
-}
-
-html[data-liveagent-webui="gateway"]
-  .project-tools-panel-tabs-scrollbar:hover
-  .project-tools-panel-tabs-scrollbar-thumb,
-html[data-liveagent-webui="gateway"]
-  .project-tools-panel-tabs-scrollbar-dragging
-  .project-tools-panel-tabs-scrollbar-thumb {
-  background: var(--gateway-scrollbar-thumb-hover);
-}
-
 html[data-liveagent-webui="gateway"] {
   --ring: 220 13% 62%;
   --gateway-scrollbar-size: 10px;
@@ -211,6 +150,11 @@ html[data-liveagent-webui="gateway"] {
   --gateway-scrollbar-thumb-hover: hsl(var(--muted-foreground) / 0.36);
   --gateway-scrollbar-thumb-active: hsl(var(--muted-foreground) / 0.5);
   --gateway-scrollbar-thumb-border: hsl(var(--background) / 0.82);
+  --project-tools-tabs-scrollbar-track: hsl(var(--muted) / 0.42);
+  --project-tools-tabs-scrollbar-track-hover: var(--gateway-scrollbar-track-hover);
+  --project-tools-tabs-scrollbar-thumb: var(--gateway-scrollbar-thumb);
+  --project-tools-tabs-scrollbar-thumb-hover: var(--gateway-scrollbar-thumb-hover);
+  --project-tools-tabs-scrollbar-thumb-border: var(--gateway-scrollbar-thumb-border);
 }
 
 html[data-liveagent-webui="gateway"].dark {
@@ -279,52 +223,15 @@ html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-html[data-liveagent-webui="gateway"] .chat-queue-scroll {
-  overscroll-behavior: contain;
+html[data-liveagent-webui="gateway"] .project-tools-panel-tabs {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-html[data-liveagent-webui="gateway"] .chat-queue-scroll::-webkit-scrollbar {
+html[data-liveagent-webui="gateway"] .project-tools-panel-tabs::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
-}
-
-html[data-liveagent-webui="gateway"] .chat-queue-scrollbar {
-  position: absolute;
-  top: 2px;
-  right: 1px;
-  bottom: 2px;
-  z-index: 2;
-  width: 8px;
-  border-radius: 999px;
-  background: hsl(var(--muted) / 0.36);
-  box-shadow: inset 0 0 0 1px hsl(var(--background) / 0.42);
-  cursor: default;
-  touch-action: none;
-}
-
-html[data-liveagent-webui="gateway"] .chat-queue-scrollbar-thumb {
-  position: absolute;
-  left: 1px;
-  right: 1px;
-  top: 0;
-  min-height: 24px;
-  border-radius: 999px;
-  background: hsl(var(--muted-foreground) / 0.42);
-  box-shadow:
-    inset 0 0 0 1px hsl(var(--background) / 0.55),
-    0 1px 2px hsl(220 22% 10% / 0.08);
-  transition: background-color 0.16s ease;
-}
-
-html[data-liveagent-webui="gateway"] .chat-queue-scrollbar:hover .chat-queue-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.56);
-}
-
-html[data-liveagent-webui="gateway"] .chat-queue-scrollbar-thumb:active {
-  background: hsl(var(--muted-foreground) / 0.7);
 }
 
 html[data-liveagent-webui="gateway"] .git-review-transient-scrollbar {
@@ -1161,110 +1068,6 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   padding: 24px 0 0;
 }
 
-/* Chat empty-state hero: entrance choreography (mirrors the desktop GUI
- * index.css). Logo pops in with a springy overshoot, then the greeting
- * rises, then the suggestion cards cascade. Steady-state motion stays
- * transform/opacity-only: a slow float on the logo plus a halo breathe. */
-.chat-hero-logo-enter {
-  animation: chatHeroLogoIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
-  will-change: transform, opacity;
-}
-
-/* Float and breathe share one 6s clock, delayed past the entrance so the
- * pop settles before the idle motion takes over. */
-.chat-hero-logo-float {
-  animation: chatHeroFloat 6s ease-in-out 1.2s infinite;
-}
-
-.chat-hero-halo-breathe {
-  animation: chatHeroHaloBreathe 6s ease-in-out 1.2s infinite;
-}
-
-.chat-hero-title-enter {
-  animation: chatHeroRiseIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.12s backwards;
-  will-change: transform, opacity;
-}
-
-.chat-hero-line-enter {
-  animation: chatHeroRiseIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.2s backwards;
-}
-
-.chat-hero-cta-enter {
-  animation: chatHeroRiseIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.28s backwards;
-}
-
-/* Suggestion cards: --chat-hero-delay is staggered per card from JSX.
- * `backwards` (not `both`) so hover styles win once the entrance ends. */
-.chat-hero-card-enter {
-  animation: chatHeroCardIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) var(--chat-hero-delay, 0.26s)
-    backwards;
-}
-
-@keyframes chatHeroLogoIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.72);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes chatHeroFloat {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
-
-@keyframes chatHeroHaloBreathe {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-@keyframes chatHeroRiseIn {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes chatHeroCardIn {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-hero-logo-enter,
-  .chat-hero-logo-float,
-  .chat-hero-halo-breathe,
-  .chat-hero-title-enter,
-  .chat-hero-line-enter,
-  .chat-hero-cta-enter,
-  .chat-hero-card-enter {
-    animation: none;
-  }
-}
-
 .gateway-footer-strip {
   display: flex;
   align-items: center;
@@ -1340,7 +1143,6 @@ html[data-liveagent-webui="gateway"] .settings-confirm-popover {
   max-width: calc(100vw - 24px);
 }
 
-html[data-liveagent-webui="gateway"] .settings-modal-overlay,
 html[data-liveagent-webui="gateway"] .history-share-modal-overlay,
 html[data-liveagent-webui="gateway"] .external-link-modal-overlay {
   opacity: 0;
@@ -1348,19 +1150,16 @@ html[data-liveagent-webui="gateway"] .external-link-modal-overlay {
   will-change: opacity;
 }
 
-html[data-liveagent-webui="gateway"] .settings-modal-overlay[data-state="open"],
 html[data-liveagent-webui="gateway"] .history-share-modal-overlay[data-state="open"],
 html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="open"] {
   opacity: 1;
 }
 
-html[data-liveagent-webui="gateway"] .settings-modal-overlay[data-state="closed"],
 html[data-liveagent-webui="gateway"] .history-share-modal-overlay[data-state="closed"],
 html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="closed"] {
   pointer-events: none;
 }
 
-html[data-liveagent-webui="gateway"] .settings-modal-panel,
 html[data-liveagent-webui="gateway"] .history-share-modal-panel,
 html[data-liveagent-webui="gateway"] .external-link-modal-panel {
   opacity: 0;
@@ -1372,9 +1171,6 @@ html[data-liveagent-webui="gateway"] .external-link-modal-panel {
 }
 
 html[data-liveagent-webui="gateway"]
-  .settings-modal-overlay[data-state="open"]
-  .settings-modal-panel,
-html[data-liveagent-webui="gateway"]
   .history-share-modal-overlay[data-state="open"]
   .history-share-modal-panel,
 html[data-liveagent-webui="gateway"]
@@ -1384,9 +1180,6 @@ html[data-liveagent-webui="gateway"]
   transform: translateY(0) scale(1);
 }
 
-html[data-liveagent-webui="gateway"]
-  .settings-modal-overlay[data-state="closed"]
-  .settings-modal-panel,
 html[data-liveagent-webui="gateway"]
   .history-share-modal-overlay[data-state="closed"]
   .history-share-modal-panel,
@@ -1398,35 +1191,9 @@ html[data-liveagent-webui="gateway"]
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html[data-liveagent-webui="gateway"] .settings-modal-overlay,
   html[data-liveagent-webui="gateway"] .external-link-modal-overlay,
-  html[data-liveagent-webui="gateway"] .settings-modal-panel,
   html[data-liveagent-webui="gateway"] .external-link-modal-panel {
     transition-duration: 1ms;
-  }
-}
-
-/* Settings system-tools tab views: soft enter when switching between the
- * built-in and custom tabs (the view wrapper is keyed by tab). */
-html[data-liveagent-webui="gateway"] .settings-tools-view-enter {
-  animation: settingsToolsViewIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform, opacity;
-}
-
-@keyframes settingsToolsViewIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html[data-liveagent-webui="gateway"] .settings-tools-view-enter {
-    animation: none;
   }
 }
 
@@ -2159,14 +1926,6 @@ html[data-liveagent-webui="gateway"] .settings-tools-view-enter {
   }
 }
 
-html[data-liveagent-webui="gateway"] .project-terminal-viewport {
-  --project-terminal-padding-x: 0.75rem;
-  --project-terminal-padding-y: 0.625rem;
-  --project-terminal-scrollbar-size: 8px;
-  --project-terminal-background: hsl(var(--background));
-  background: var(--project-terminal-background);
-}
-
 html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-overlay .project-terminal-viewport {
   --project-terminal-padding-x: 1rem;
 }
@@ -2179,72 +1938,8 @@ html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollabl
   touch-action: none;
 }
 
-html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm {
-  background: var(--project-terminal-background);
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  padding: var(--project-terminal-padding-y) var(--project-terminal-padding-x)
-    var(--project-terminal-padding-y) var(--project-terminal-padding-x);
-}
-
-html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-viewport,
-html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-screen,
-html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollable-element {
-  background: var(--project-terminal-background) !important;
-}
-
 html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-scrollable-element {
   -webkit-overflow-scrolling: touch;
-}
-
-html[data-liveagent-webui="gateway"]
-  .project-terminal-viewport
-  .xterm-scrollable-element
-  > .scrollbar.vertical
-  > .slider {
-  border-radius: 999px;
-}
-
-html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-viewport {
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 0.2s ease;
-}
-
-html[data-liveagent-webui="gateway"] .project-terminal-viewport:hover .xterm-viewport {
-  scrollbar-color: hsl(var(--muted-foreground) / 0.32) transparent;
-}
-
-html[data-liveagent-webui="gateway"] .project-terminal-viewport .xterm-viewport::-webkit-scrollbar {
-  width: var(--project-terminal-scrollbar-size);
-  height: var(--project-terminal-scrollbar-size);
-}
-
-html[data-liveagent-webui="gateway"]
-  .project-terminal-viewport
-  .xterm-viewport::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-html[data-liveagent-webui="gateway"]
-  .project-terminal-viewport
-  .xterm-viewport::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: transparent;
-  transition: background 0.2s ease;
-}
-
-html[data-liveagent-webui="gateway"]
-  .project-terminal-viewport:hover
-  .xterm-viewport::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.28);
-}
-
-html[data-liveagent-webui="gateway"]
-  .project-terminal-viewport
-  .xterm-viewport::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.45);
 }
 
 /* ─── Responsive ─────────────────────────────────────────────────── */
@@ -4892,66 +4587,5 @@ html[data-liveagent-webui="gateway"]
 
   .status-board-metrics-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-/* Confirm-action popover (context usage ring's manual-compact confirm):
- * mirror of the GUI's enter/exit animation — grow out of the anchor, keyed
- * off Base UI's data-starting-style / data-ending-style. */
-.confirm-action-popover-popup {
-  --confirm-popover-slide-y: -6px;
-  transform-origin: var(--transform-origin);
-  transition:
-    opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.confirm-action-popover-popup[data-side="top"] {
-  --confirm-popover-slide-y: 6px;
-}
-
-.confirm-action-popover-popup[data-starting-style],
-.confirm-action-popover-popup[data-ending-style] {
-  opacity: 0;
-  transform: translateY(var(--confirm-popover-slide-y)) scale(0.96);
-}
-
-.confirm-action-popover-popup[data-ending-style] {
-  transition-duration: 0.12s;
-  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
-  transform: translateY(calc(var(--confirm-popover-slide-y) / 2)) scale(0.98);
-}
-
-/* Label tooltip (context usage ring's usage readout): mirror of the GUI's
- * fade + grow enter/exit, keyed off Base UI's data-starting-style /
- * data-ending-style. */
-.label-tooltip-popup {
-  --label-tooltip-slide-y: -4px;
-  transform-origin: var(--transform-origin);
-  transition:
-    opacity 0.15s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.label-tooltip-popup[data-side="top"] {
-  --label-tooltip-slide-y: 4px;
-}
-
-.label-tooltip-popup[data-starting-style],
-.label-tooltip-popup[data-ending-style] {
-  opacity: 0;
-  transform: translateY(var(--label-tooltip-slide-y)) scale(0.96);
-}
-
-.label-tooltip-popup[data-ending-style] {
-  transition-duration: 0.1s;
-  transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
-  transform: translateY(calc(var(--label-tooltip-slide-y) / 2)) scale(0.98);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .confirm-action-popover-popup,
-  .label-tooltip-popup {
-    transition: none;
   }
 }

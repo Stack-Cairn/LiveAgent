@@ -1,5 +1,5 @@
 import type { Model, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import type { HostedSearchBlock } from "../chat/messages/hostedSearch";
+import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { ProviderId } from "../settings";
 import { isRecord } from "./runtime/common";
 import { supportsAdaptiveAnthropicThinking } from "./runtime/thinkingLevels";

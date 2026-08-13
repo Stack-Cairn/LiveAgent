@@ -8,7 +8,7 @@
 import { DiffFile } from "@git-diff-view/file";
 import { DiffModeEnum, DiffView } from "@git-diff-view/react";
 import "@git-diff-view/react/styles/diff-view.css";
-import { Copy, FolderTree, GitBranch, Loader2 } from "@liveagent/app/components/icons";
+import { Copy, FolderTree, GitBranch, Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitDiffResponse } from "@liveagent/ui/lib/git/types";
 import {

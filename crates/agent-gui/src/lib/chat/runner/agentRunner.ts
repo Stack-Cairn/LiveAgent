@@ -7,6 +7,12 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "@earendil-works/pi-ai";
+import {
+  appendHostedSearchBlocksToAssistant,
+  type HostedSearchBlock,
+  type HostedSearchOrderedBlock,
+  mergeHostedSearchBlocks,
+} from "@liveagent/ui/lib/chat/hostedSearch";
 import type { PreparedProxyRequest } from "@liveagent/ui/lib/providers/proxy";
 import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
 import { buildMemoryToolsSuffixSection } from "../../memory/prompts/injection";
@@ -54,12 +60,6 @@ import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
-import {
-  appendHostedSearchBlocksToAssistant,
-  type HostedSearchBlock,
-  type HostedSearchOrderedBlock,
-  mergeHostedSearchBlocks,
-} from "../messages/hostedSearch";
 import { summarizeToolCall } from "../messages/uiMessages";
 import {
   createDeferredProviderNativeWebSearchStatus,

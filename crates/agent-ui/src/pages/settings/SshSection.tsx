@@ -1,4 +1,13 @@
 import {
+  removeSshHostFromProjectAssociations,
+  type SshAuthType,
+  type SshHostConfig,
+  type SshProxyType,
+  updateSsh,
+} from "@liveagent/app/lib/settings";
+import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import {
   Check,
   ChevronDown,
   Eye,
@@ -14,16 +23,7 @@ import {
   Terminal,
   Trash2,
   Upload,
-} from "@liveagent/app/components/icons";
-import {
-  removeSshHostFromProjectAssociations,
-  type SshAuthType,
-  type SshHostConfig,
-  type SshProxyType,
-  updateSsh,
-} from "@liveagent/app/lib/settings";
-import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
-import { invoke } from "@liveagent/app/shims/tauriCore";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

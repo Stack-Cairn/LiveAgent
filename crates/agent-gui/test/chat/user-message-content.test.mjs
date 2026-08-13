@@ -5,8 +5,8 @@ import * as jsxRuntime from "react/jsx-runtime";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
-const userMessageContent = loader.loadModule("src/lib/chat/messages/userMessageContent.tsx");
-const mentionReferences = loader.loadModule("src/lib/chat/messages/mentionReferences.ts");
+const userMessageContent = loader.loadModule("@liveagent/ui/lib/chat/userMessageContent.tsx");
+const mentionReferences = loader.loadModule("@liveagent/ui/lib/chat/mentionReferences.ts");
 const reactRenderLoader = createTsModuleLoader({
   mocks: {
     "react/jsx-runtime": jsxRuntime,
@@ -28,7 +28,7 @@ const reactRenderLoader = createTsModuleLoader({
   },
 });
 const renderedUserMessageContent = reactRenderLoader.loadModule(
-  "src/lib/chat/messages/userMessageContent.tsx",
+  "@liveagent/ui/lib/chat/userMessageContent.tsx",
 );
 
 function compactSegments(segments) {

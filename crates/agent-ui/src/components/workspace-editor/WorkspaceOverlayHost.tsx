@@ -1,4 +1,3 @@
-import type { CodeMentionReference } from "@liveagent/adapters/mentionReferences";
 import {
   WorkspaceOverlayTitleBar,
   workspaceOverlayStackClassName,
@@ -8,6 +7,7 @@ import type { WorkspaceCodeEditorOpenRequest } from "@liveagent/ui/components/wo
 import type { WorkspaceFilePreviewOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceFilePreviewOverlay";
 import type { WorkspaceSshTerminalOpenRequest } from "@liveagent/ui/components/workspace-editor/WorkspaceSshTerminalOverlay";
 import { t as translate } from "@liveagent/ui/i18n/index";
+import type { CodeMentionReference } from "@liveagent/ui/lib/chat/mentionReferences";
 import { lockMonacoNlsLocale, preparePreferredMonacoNlsLocale } from "@liveagent/ui/lib/monacoNls";
 import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";

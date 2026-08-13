@@ -1,4 +1,10 @@
 import {
+  type AppSettings,
+  type McpServerConfig,
+  updateMcp,
+} from "@liveagent/app/lib/settings/index";
+import { openUrl } from "@liveagent/app/shims/tauriOpener";
+import {
   AlertTriangle,
   Check,
   ExternalLink,
@@ -10,13 +16,7 @@ import {
   Shield,
   Terminal,
   X,
-} from "@liveagent/app/components/icons";
-import {
-  type AppSettings,
-  type McpServerConfig,
-  updateMcp,
-} from "@liveagent/app/lib/settings/index";
-import { openUrl } from "@liveagent/app/shims/tauriOpener";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";
 import {

@@ -8,16 +8,6 @@ import {
   toFontFamilySelectValue,
 } from "@liveagent/adapters/systemSettings";
 import {
-  ChevronRight,
-  Cpu,
-  MessageSquare,
-  MonitorSmartphone,
-  Moon,
-  Settings2,
-  Sun,
-  Wrench,
-} from "@liveagent/app/components/icons";
-import {
   type ExecutionMode,
   type FontScaleSettings,
   isValidSystemProxyHost,
@@ -29,6 +19,16 @@ import {
   updateSystem,
 } from "@liveagent/app/lib/settings";
 import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import {
+  ChevronRight,
+  Cpu,
+  MessageSquare,
+  MonitorSmartphone,
+  Moon,
+  Settings2,
+  Sun,
+  Wrench,
+} from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { Label } from "@liveagent/ui/components/ui/label";
 import {

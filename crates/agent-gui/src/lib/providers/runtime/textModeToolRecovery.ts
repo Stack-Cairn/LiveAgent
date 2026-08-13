@@ -1,5 +1,5 @@
 import type { AssistantMessage, Context, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import type { HostedSearchBlock } from "../../chat/messages/hostedSearch";
+import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import {
   buildProviderNativeWebFetchBridgeResult,
   buildProviderNativeWebSearchBridgeResult,

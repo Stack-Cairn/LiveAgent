@@ -1,4 +1,5 @@
 import type { SimpleStreamOptions } from "@earendil-works/pi-ai";
+import type { SharedModelOption } from "@liveagent/ui/lib/models/modelOptions";
 import type {
   CodexRequestFormat,
   CustomProvider,
@@ -9,14 +10,7 @@ import type {
 } from "../../settings";
 import type { StreamRetryConfig } from "./streamRetry";
 
-export type ModelOption = {
-  value: string; // encodes customProviderId::model
-  label: string; // model id
-  providerId: string; // stable custom provider identity (for grouping)
-  providerName: string; // provider display name
-  providerType: ProviderId; // routes Claude Code, Codex, Gemini, etc.
-  model: string;
-};
+export type ModelOption = SharedModelOption<ProviderId>;
 
 declare const PROVIDER_RUNTIME_CONFIG_BRAND: unique symbol;
 

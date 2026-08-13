@@ -5,24 +5,28 @@ import {
 } from "@liveagent/ui/components/chat/AssistantBubble";
 import { ChatEmptyState } from "@liveagent/ui/components/chat/ChatEmptyState";
 import { ContextCheckpointCard } from "@liveagent/ui/components/chat/ContextCheckpointCard";
-import { getUploadedFileTypeIcon } from "@liveagent/ui/components/chat/fileTypeIcons";
-import { ImagePreview, type ImagePreviewSlide } from "@liveagent/ui/components/chat/ImagePreview";
+import { EditableUserMessageBubble } from "@liveagent/ui/components/chat/EditableUserMessageBubble";
 import { RetryDetailsBlock } from "@liveagent/ui/components/chat/RetryDetailsBlock";
 import {
   TranscriptAssistantMessageActions,
   TranscriptUserMessageActions,
 } from "@liveagent/ui/components/chat/TranscriptMessageActions";
+import { UserAttachmentCards } from "@liveagent/ui/components/chat/UserAttachmentCards";
+import { Loader2 } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/LocaleContext";
 import { normalizeLiveToolStatus, VIBING_STATUS } from "@liveagent/ui/lib/chat/assistantStatus";
 import type { ChatFileLink } from "@liveagent/ui/lib/chat/chatFileLinks";
 import {
-  getUploadedImagePreviewCacheKey,
-  loadUploadedImagePreview,
-  readUploadedImagePreviewCache,
-  type UploadedImagePreviewLoader,
-} from "@liveagent/ui/lib/chat/uploadedImagePreview";
+  type PendingUploadedFile,
+  splitUserAttachmentsForDisplay,
+} from "@liveagent/ui/lib/chat/uploadedFiles";
+import type { UploadedImagePreviewLoader } from "@liveagent/ui/lib/chat/uploadedImagePreview";
+import { useCommitDetailsLoader } from "@liveagent/ui/lib/chat/useCommitDetailsLoader";
+import {
+  type CommitDetailsLoader,
+  UserMessageContent,
+} from "@liveagent/ui/lib/chat/userMessageContent";
 import type { GitClient } from "@liveagent/ui/lib/git/types";
-import { cn } from "@liveagent/ui/lib/shared/utils";
 import { createLiveRowScrollAdjustPolicy } from "@liveagent/ui/lib/transcript-virtual/liveScrollAdjustPolicy";
 import {
   buildTranscriptLayoutKey,
@@ -34,6 +38,10 @@ import {
   estimateUserRowHeight,
   measureEstimateText,
 } from "@liveagent/ui/lib/transcript-virtual/rowEstimates";
+import {
+  type TranscriptNavigationHandle,
+  useTranscriptNavigation,
+} from "@liveagent/ui/lib/transcript-virtual/useTranscriptNavigation";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type Dispatch,
@@ -49,22 +57,10 @@ import {
 } from "react";
 import type { HistoryMessageRef } from "@/lib/chat/conversationState";
 import { getRoundText } from "@/lib/chat/uiMessages";
-import {
-  formatUploadedFileSize,
-  type PendingUploadedFile,
-  parsePastedTextDisplayReferences,
-} from "@/lib/chat/uploadedFiles";
-import {
-  buildGitHubCommitUrl,
-  type CommitDetailsLoader,
-  type CommitDisplayReference,
-  UserMessageContent,
-} from "@/lib/chat/userMessageContent";
 import { DEFAULT_CHAT_TRANSCRIPT_WIDTH } from "@/lib/settings";
 import { extractLiveRange } from "@/lib/transcript-virtual/liveRangeExtractor";
 import type { RetryAttemptRecord, TranscriptRow } from "../lib/chat/transcript/types";
 import type { SectionId } from "../pages/settings/types";
-import { Loader2, X } from "./icons";
 
 type GatewayTranscriptProps = {
   conversationId?: string;
@@ -129,12 +125,7 @@ function rowRenderMode(row: Extract<TranscriptRow, { kind: "assistant" }>) {
   return row.origin === "stream" ? ("streaming" as const) : ("static" as const);
 }
 
-export type GatewayTranscriptNavHandle = {
-  // Aligns the row to the viewport top and keeps re-aligning for a few
-  // frames while dynamic measurements land (convergent, cancelled by user
-  // scroll input).
-  scrollToRowKey: (rowKey: string) => void;
-};
+export type GatewayTranscriptNavHandle = TranscriptNavigationHandle;
 
 const TRANSCRIPT_ROW_ESTIMATED_HEIGHT = 260;
 const TRANSCRIPT_ROW_GAP = 18;
@@ -207,355 +198,6 @@ function CheckpointCard(props: {
   );
 }
 
-function useGatewayUploadedImagePreview(
-  file?: PendingUploadedFile,
-  workspaceRoot?: string,
-  loader?: UploadedImagePreviewLoader,
-) {
-  const normalizedWorkspaceRoot = typeof workspaceRoot === "string" ? workspaceRoot.trim() : "";
-  const absolutePath = typeof file?.absolutePath === "string" ? file.absolutePath.trim() : "";
-  const cacheKey = file ? getUploadedImagePreviewCacheKey(normalizedWorkspaceRoot, file) : "";
-  const [imageSrc, setImageSrc] = useState<string | null | undefined>(() => {
-    if (!file || !normalizedWorkspaceRoot) return null;
-    return readUploadedImagePreviewCache(normalizedWorkspaceRoot, file);
-  });
-
-  useEffect(() => {
-    if (!file || !cacheKey || !normalizedWorkspaceRoot) {
-      setImageSrc(null);
-      return;
-    }
-
-    const cached = readUploadedImagePreviewCache(normalizedWorkspaceRoot, file);
-    if (cached !== undefined) {
-      setImageSrc(cached);
-      return;
-    }
-    if (!absolutePath || !loader) {
-      setImageSrc(null);
-      return;
-    }
-
-    let cancelled = false;
-    setImageSrc(undefined);
-    void loadUploadedImagePreview({
-      workspaceRoot: normalizedWorkspaceRoot,
-      file,
-      loader,
-    }).then((value) => {
-      if (!cancelled) {
-        setImageSrc(value);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [absolutePath, cacheKey, file, loader, normalizedWorkspaceRoot]);
-
-  return {
-    imageSrc: imageSrc ?? null,
-    isLoading: Boolean(cacheKey && absolutePath && loader) && imageSrc === undefined,
-  };
-}
-
-function GatewayUserImageAttachmentCard(props: {
-  file: PendingUploadedFile;
-  imageSrc: string | null;
-  isLoading: boolean;
-  compact: boolean;
-  onRemove?: (relativePath: string) => void;
-  removeLabel?: string;
-  previewLabel: string;
-  closePreviewLabel: string;
-}) {
-  const {
-    file,
-    imageSrc,
-    isLoading,
-    compact,
-    onRemove,
-    removeLabel,
-    previewLabel,
-    closePreviewLabel,
-  } = props;
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const labeledPreview = `${previewLabel}: ${file.fileName}`;
-  const FallbackIcon = getUploadedFileTypeIcon(file);
-  const previewSlides = useMemo<ImagePreviewSlide[]>(
-    () =>
-      imageSrc
-        ? [
-            {
-              src: imageSrc,
-              alt: file.fileName,
-              title: file.fileName,
-            },
-          ]
-        : [],
-    [file.fileName, imageSrc],
-  );
-  return (
-    <div
-      title={file.relativePath}
-      className={cn(
-        "group relative overflow-hidden rounded-xl border border-white/60 bg-white/75 shadow-[0_1px_3px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:border-white/[0.12] dark:bg-white/[0.06]",
-        compact ? "min-w-0 basis-[calc(33.333%-5.33px)] grow" : "w-full max-w-[280px]",
-      )}
-    >
-      {onRemove ? (
-        <button
-          type="button"
-          onClick={() => onRemove(file.relativePath)}
-          className="absolute top-1.5 right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/30 text-white/90 opacity-0 backdrop-blur-sm transition-all hover:bg-black/45 group-hover:opacity-100"
-          aria-label={removeLabel ?? file.fileName}
-          title={removeLabel}
-        >
-          <X className="h-3 w-3" />
-        </button>
-      ) : null}
-      {imageSrc ? (
-        <>
-          <button
-            type="button"
-            className="block w-full cursor-zoom-in overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
-            aria-label={labeledPreview}
-            title={labeledPreview}
-            onClick={() => setPreviewOpen(true)}
-          >
-            <img
-              src={imageSrc}
-              alt={file.fileName}
-              className={cn(
-                "w-full bg-black/[0.02] transition-transform hover:scale-[1.01] dark:bg-white/5",
-                compact ? "h-28 object-cover" : "max-h-56 object-contain",
-              )}
-            />
-          </button>
-          {previewOpen ? (
-            <ImagePreview
-              open={previewOpen}
-              slides={previewSlides}
-              closeLabel={closePreviewLabel}
-              onClose={() => setPreviewOpen(false)}
-            />
-          ) : null}
-        </>
-      ) : (
-        <div
-          className={cn(
-            "flex w-full items-center justify-center bg-black/[0.02] dark:bg-white/5",
-            compact ? "h-28" : "h-36",
-          )}
-        >
-          <div
-            className={
-              isLoading
-                ? "h-16 w-16 animate-pulse rounded-xl bg-black/5 dark:bg-white/10"
-                : "flex h-10 w-10 items-center justify-center rounded-xl bg-black/[0.03] dark:bg-white/10"
-            }
-          >
-            {isLoading ? null : <FallbackIcon className="h-5 w-5" />}
-          </div>
-        </div>
-      )}
-      <div className="flex items-center gap-1.5 px-2.5 py-1.5">
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
-            {file.fileName}
-          </div>
-        </div>
-        <span className="shrink-0 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums text-[hsl(var(--chat-user-fg)/0.4)]">
-          {formatUploadedFileSize(file.sizeBytes)}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function GatewayUserFileAttachmentCard(props: {
-  file: PendingUploadedFile;
-  onRemove?: (relativePath: string) => void;
-  removeLabel?: string;
-  compact: boolean;
-}) {
-  const { file, onRemove, removeLabel, compact } = props;
-  const TypeIcon = getUploadedFileTypeIcon(file);
-  return (
-    <div
-      title={file.relativePath}
-      className={cn(
-        "group relative flex items-center gap-2 rounded-xl border border-white/60 bg-white/75 px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)] dark:border-white/[0.12] dark:bg-white/[0.06]",
-        compact ? "min-w-0 basis-[calc(33.333%-5.33px)] grow" : "w-full",
-      )}
-    >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-b from-black/[0.03] to-black/[0.06] dark:from-white/[0.06] dark:to-white/[0.1]">
-        <TypeIcon className="h-4.5 w-4.5" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-[calc(11px*var(--zone-font-scale,1))] font-medium leading-tight text-[hsl(var(--chat-user-fg)/0.85)]">
-          {file.fileName}
-        </div>
-        <div className="mt-0.5 text-[calc(10px*var(--zone-font-scale,1))] tabular-nums leading-tight text-[hsl(var(--chat-user-fg)/0.4)]">
-          {formatUploadedFileSize(file.sizeBytes)}
-        </div>
-      </div>
-      {onRemove ? (
-        <button
-          type="button"
-          onClick={() => onRemove(file.relativePath)}
-          className="absolute top-1/2 right-1.5 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-[hsl(var(--chat-user-fg)/0.3)] opacity-0 transition-all hover:bg-black/5 hover:text-[hsl(var(--chat-user-fg)/0.6)] group-hover:opacity-100 dark:hover:bg-white/10"
-          aria-label={removeLabel ?? file.fileName}
-          title={removeLabel}
-        >
-          <X className="h-3 w-3" />
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function GatewayUserAttachmentCard(props: {
-  file: PendingUploadedFile;
-  workspaceRoot?: string;
-  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
-  compactImageLayout: boolean;
-  compactFileLayout: boolean;
-  onRemove?: (relativePath: string) => void;
-  removeLabel?: string;
-  previewLabel: string;
-  closePreviewLabel: string;
-}) {
-  const {
-    file,
-    workspaceRoot,
-    onLoadUploadedImagePreview,
-    compactImageLayout,
-    compactFileLayout,
-    onRemove,
-    removeLabel,
-    previewLabel,
-    closePreviewLabel,
-  } = props;
-  const shouldPreviewImage =
-    file.kind === "image" && typeof workspaceRoot === "string" && workspaceRoot.trim();
-  const { imageSrc, isLoading } = useGatewayUploadedImagePreview(
-    shouldPreviewImage ? file : undefined,
-    shouldPreviewImage ? workspaceRoot : undefined,
-    onLoadUploadedImagePreview,
-  );
-
-  if (shouldPreviewImage) {
-    return (
-      <GatewayUserImageAttachmentCard
-        file={file}
-        imageSrc={imageSrc}
-        isLoading={isLoading}
-        compact={compactImageLayout}
-        onRemove={onRemove}
-        removeLabel={removeLabel}
-        previewLabel={previewLabel}
-        closePreviewLabel={closePreviewLabel}
-      />
-    );
-  }
-
-  return (
-    <GatewayUserFileAttachmentCard
-      file={file}
-      onRemove={onRemove}
-      removeLabel={removeLabel}
-      compact={compactFileLayout}
-    />
-  );
-}
-
-function GatewayUserAttachmentCards(props: {
-  files: PendingUploadedFile[];
-  workspaceRoot?: string;
-  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
-  onRemove?: (relativePath: string) => void;
-  removeLabel?: string;
-}) {
-  const { files, workspaceRoot, onLoadUploadedImagePreview, onRemove, removeLabel } = props;
-  const { t } = useLocale();
-  if (files.length === 0) return null;
-
-  const imageFiles = files.filter((file) => file.kind === "image");
-  const otherFiles = files.filter((file) => file.kind !== "image");
-  const compactImageLayout = imageFiles.length > 1;
-  const compactFileLayout = otherFiles.length > 1;
-  const previewLabel = t("chat.upload.previewImage");
-  const closePreviewLabel = t("chat.upload.closePreview");
-
-  return (
-    <div className="mb-2 flex flex-col gap-2">
-      {imageFiles.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {imageFiles.map((file) => (
-            <GatewayUserAttachmentCard
-              key={`${file.relativePath}-${file.absolutePath ?? file.fileName}`}
-              file={file}
-              workspaceRoot={workspaceRoot}
-              onLoadUploadedImagePreview={onLoadUploadedImagePreview}
-              compactImageLayout={compactImageLayout}
-              compactFileLayout={false}
-              onRemove={onRemove}
-              removeLabel={removeLabel}
-              previewLabel={previewLabel}
-              closePreviewLabel={closePreviewLabel}
-            />
-          ))}
-        </div>
-      ) : null}
-      {otherFiles.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {otherFiles.map((file) => (
-            <GatewayUserAttachmentCard
-              key={`${file.relativePath}-${file.absolutePath ?? file.fileName}`}
-              file={file}
-              workspaceRoot={workspaceRoot}
-              onLoadUploadedImagePreview={onLoadUploadedImagePreview}
-              compactImageLayout={false}
-              compactFileLayout={compactFileLayout}
-              onRemove={onRemove}
-              removeLabel={removeLabel}
-              previewLabel={previewLabel}
-              closePreviewLabel={closePreviewLabel}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function splitUserAttachmentsForDisplay(files: PendingUploadedFile[], text: string) {
-  const pastedTextReferences = parsePastedTextDisplayReferences(text);
-  if (pastedTextReferences.length === 0 || files.length === 0) {
-    return {
-      visibleFiles: files,
-      pastedTextFiles: [],
-    };
-  }
-
-  const pastedTextPaths = new Set(pastedTextReferences.map((reference) => reference.relativePath));
-  const pastedTextFiles: PendingUploadedFile[] = [];
-  const visibleFiles: PendingUploadedFile[] = [];
-
-  for (const file of files) {
-    if (pastedTextPaths.has(file.relativePath)) {
-      pastedTextFiles.push(file);
-    } else {
-      visibleFiles.push(file);
-    }
-  }
-
-  return {
-    visibleFiles,
-    pastedTextFiles,
-  };
-}
-
 function GatewayUserMessageBubbleBody(props: {
   text: string;
   attachments: PendingUploadedFile[];
@@ -568,186 +210,21 @@ function GatewayUserMessageBubbleBody(props: {
 
   return (
     <div className="chat-user-bubble ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-[hsl(var(--chat-user-bg))] px-4 py-2.5 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))]">
-      <GatewayUserAttachmentCards
+      <UserAttachmentCards
         files={visibleFiles}
         workspaceRoot={workspaceRoot}
         onLoadUploadedImagePreview={onLoadUploadedImagePreview}
+        imagePreviewMode="imageKind"
       />
       {text ? (
         <UserMessageContent
           text={text}
           pastedTextFiles={pastedTextFiles}
           loadCommitDetails={loadCommitDetails}
+          legacyInlineFileMentions
         />
       ) : null}
     </div>
-  );
-}
-
-const MIN_EDIT_BUBBLE_HEIGHT_PX = 72;
-
-function resizeEditableTextarea(textarea: HTMLTextAreaElement | null) {
-  if (!textarea) {
-    return;
-  }
-  textarea.style.height = "0px";
-  textarea.style.height = `${Math.max(textarea.scrollHeight, MIN_EDIT_BUBBLE_HEIGHT_PX)}px`;
-}
-
-const EditableUserMessageBubble = memo(function EditableUserMessageBubble(props: {
-  initialText: string;
-  attachments: PendingUploadedFile[];
-  workspaceRoot?: string;
-  onLoadUploadedImagePreview?: UploadedImagePreviewLoader;
-  onCancel: () => void;
-  onSubmit: (text: string, attachments: PendingUploadedFile[]) => void;
-}) {
-  const {
-    initialText,
-    attachments,
-    workspaceRoot,
-    onLoadUploadedImagePreview,
-    onCancel,
-    onSubmit,
-  } = props;
-  const { t } = useLocale();
-  const [draftText, setDraftText] = useState(initialText);
-  const [draftAttachments, setDraftAttachments] = useState(attachments);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      return;
-    }
-    resizeEditableTextarea(textarea);
-    textarea.focus();
-    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
-  }, []);
-
-  useEffect(() => {
-    setDraftAttachments(attachments);
-  }, [attachments]);
-
-  useLayoutEffect(() => {
-    resizeEditableTextarea(textareaRef.current);
-  }, [draftText]);
-
-  // A large paste is stored as an uploaded text file *plus* a
-  // "[Pasted text N: path]" marker inlined into the message text (rendered
-  // as a chip once sent, see GatewayUserMessageBubbleBody above). Editing
-  // must hide that same file's attachment card while its marker is still
-  // present in the text, otherwise the paste shows up twice: once as a
-  // card, once as raw marker text in the textarea below. The full
-  // (unfiltered) list — including pasted-text files — is still what gets
-  // submitted, so nothing is lost on resend; only the card list is
-  // narrowed for display.
-  const visibleAttachments = useMemo(
-    () => splitUserAttachmentsForDisplay(draftAttachments, draftText).visibleFiles,
-    [draftAttachments, draftText],
-  );
-
-  const canSubmit = draftText.trim().length > 0 || draftAttachments.length > 0;
-
-  return (
-    <div className="chat-user-bubble-editor w-full max-w-[min(85%,calc(50em+2.5rem))] rounded-2xl border border-border bg-[hsl(var(--chat-user-bg))] p-3">
-      <GatewayUserAttachmentCards
-        files={visibleAttachments}
-        workspaceRoot={workspaceRoot}
-        onLoadUploadedImagePreview={onLoadUploadedImagePreview}
-        onRemove={(relativePath) => {
-          setDraftAttachments((current) =>
-            current.filter((file) => file.relativePath !== relativePath),
-          );
-        }}
-        removeLabel={t("settings.delete")}
-      />
-      <textarea
-        ref={textareaRef}
-        className="chat-user-bubble-editor-textarea w-full resize-none overflow-hidden rounded-lg bg-transparent p-2 font-chat text-[calc(14.5px*var(--zone-font-scale,1))] leading-relaxed text-[hsl(var(--chat-user-fg))] outline-none"
-        value={draftText}
-        onChange={(event) => setDraftText(event.target.value)}
-        rows={1}
-        aria-label={t("chat.editMessage")}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            onCancel();
-          }
-        }}
-      />
-      <div className="mt-2 flex justify-end gap-2">
-        <button
-          type="button"
-          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
-          onClick={onCancel}
-        >
-          {t("chat.cancel")}
-        </button>
-        <button
-          type="button"
-          className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={!canSubmit}
-          onClick={() => {
-            if (!canSubmit) {
-              return;
-            }
-            onSubmit(draftText.trim(), draftAttachments);
-          }}
-        >
-          {t("chat.send")}
-        </button>
-      </div>
-    </div>
-  );
-});
-
-function useGatewayCommitDetailsLoader(
-  workspaceRoot?: string,
-  gitClient?: GitClient | null,
-  cacheResetKey?: string,
-) {
-  const commitDetailsCacheRef = useRef(new Map<string, CommitDisplayReference>());
-
-  useEffect(() => {
-    if (cacheResetKey !== undefined) {
-      commitDetailsCacheRef.current.clear();
-    }
-  }, [cacheResetKey]);
-
-  return useCallback<CommitDetailsLoader>(
-    async (commit) => {
-      const workdir = workspaceRoot?.trim() ?? "";
-      const sha = commit.sha.trim();
-      if (!gitClient || !workdir || !sha) return null;
-      const cacheKey = `${workdir}\u0000${sha}`;
-      const cached = commitDetailsCacheRef.current.get(cacheKey);
-      if (cached) return cached;
-      const response = await gitClient.commitDetails(workdir, sha);
-      const details = response.commit;
-      const resolved: CommitDisplayReference = {
-        sha: details.sha,
-        shortSha: details.shortSha,
-        subject: details.subject,
-        body: details.body,
-        authorName: details.authorName,
-        authorEmail: details.authorEmail,
-        authorDate: details.authorDate,
-        fileCount: details.fileCount,
-        filesChanged: details.filesChanged,
-        insertions: details.insertions,
-        deletions: details.deletions,
-        stat: details.stat,
-        remoteName: details.remoteName,
-        remoteUrl: details.remoteUrl,
-        githubUrl:
-          commit.githubUrl ||
-          buildGitHubCommitUrl(details.remoteUrl || response.state.remoteUrl, details.sha) ||
-          undefined,
-      };
-      commitDetailsCacheRef.current.set(cacheKey, resolved);
-      return resolved;
-    },
-    [gitClient, workspaceRoot],
   );
 }
 
@@ -805,6 +282,11 @@ const GatewayUserMessageRowBody = memo(function GatewayUserMessageRowBody(props:
         attachments={row.attachments}
         workspaceRoot={workspaceRoot}
         onLoadUploadedImagePreview={onLoadUploadedImagePreview}
+        imagePreviewMode="imageKind"
+        attachmentRemoveLabel={t("settings.delete")}
+        className="chat-user-bubble-editor"
+        textareaClassName="chat-user-bubble-editor-textarea overflow-hidden"
+        textareaSizing="content"
         onCancel={() => setEditingMessageId(null)}
         onSubmit={(text, attachments) => {
           setEditingMessageId(null);
@@ -1062,11 +544,7 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const historyIdentityKey = `${conversationId ?? ""}\n${rows[0]?.key ?? ""}`;
-  const loadCommitDetails = useGatewayCommitDetailsLoader(
-    workspaceRoot,
-    gitClient,
-    historyIdentityKey,
-  );
+  const loadCommitDetails = useCommitDetailsLoader(workspaceRoot, gitClient, historyIdentityKey);
 
   useEffect(() => {
     setEditingMessageId(null);
@@ -1210,122 +688,28 @@ const GatewayTranscriptListRegion = memo(function GatewayTranscriptListRegion(pr
   // 楼层跳转：scrollToIndex(align:"start") 后连续几帧重对齐——目标行远处的
   // 估高行在滚动后被真实测量，落点会漂移；对准同一 index 是收敛操作，不会
   // 震荡。收敛期间用户的滚轮/触摸/按键立即取消收敛；新跳转替换旧收敛。
-  const virtualItemsRef = useRef(virtualItems);
-  virtualItemsRef.current = virtualItems;
-  const cancelJumpSettleRef = useRef<() => void>(() => {});
-  useLayoutEffect(() => {
-    if (!navRef) return;
-    const handle: GatewayTranscriptNavHandle = {
-      scrollToRowKey: (rowKey) => {
-        cancelJumpSettleRef.current();
-        const alignToRow = () => {
-          const index = virtualItemsRef.current.findIndex((item) => item.key === rowKey);
-          if (index < 0) return false;
-          transcriptVirtualizer.scrollToIndex(index, { align: "start" });
-          return true;
-        };
-        if (!alignToRow()) return;
-        let rafId: number | null = null;
-        const stopSettle = () => {
-          if (rafId !== null) {
-            cancelAnimationFrame(rafId);
-            rafId = null;
-          }
-          scrollViewport?.removeEventListener("wheel", stopSettle);
-          scrollViewport?.removeEventListener("touchstart", stopSettle);
-          scrollViewport?.removeEventListener("keydown", stopSettle);
-          if (cancelJumpSettleRef.current === stopSettle) {
-            cancelJumpSettleRef.current = () => {};
-          }
-        };
-        cancelJumpSettleRef.current = stopSettle;
-        scrollViewport?.addEventListener("wheel", stopSettle, { passive: true });
-        scrollViewport?.addEventListener("touchstart", stopSettle, { passive: true });
-        scrollViewport?.addEventListener("keydown", stopSettle);
-        let remainingFrames = 6;
-        const settle = () => {
-          rafId = null;
-          if (!alignToRow()) {
-            stopSettle();
-            return;
-          }
-          remainingFrames -= 1;
-          if (remainingFrames > 0) {
-            rafId = requestAnimationFrame(settle);
-          } else {
-            stopSettle();
-          }
-        };
-        rafId = requestAnimationFrame(settle);
-      },
-    };
-    navRef.current = handle;
-    return () => {
-      cancelJumpSettleRef.current();
-      if (navRef.current === handle) {
-        navRef.current = null;
-      }
-    };
-  }, [navRef, transcriptVirtualizer, scrollViewport]);
-
   // 楼层导航当前楼层：以「视口顶缘（+8px 容差）」所落在的用户消息为准——与
   // 跳转的 align:"start" 落位一致，跳转后高亮的必然是刚点的楼层；视口贴近
   // 内容底部时直接取最后一层（否则短对话拼满一屏时底部楼层永远无法成为当前
   // 层）。贴底判定用 scrollHeight（与 scrollTop/clientHeight 同一坐标系，
   // 含底部保留区），避免与 getTotalSize 的列表局部坐标错位。
-  const lastAnchorRef = useRef<string | null>(null);
-  const onAnchorUserRowChangeRef = useRef(onAnchorUserRowChange);
-  onAnchorUserRowChangeRef.current = onAnchorUserRowChange;
-  const reportAnchorRef = useRef(() => {});
-  reportAnchorRef.current = () => {
-    const callback = onAnchorUserRowChangeRef.current;
-    if (!callback || !scrollViewport) return;
-    const itemList = virtualItemsRef.current;
-    let anchorKey: string | null = null;
-    if (itemList.length > 0) {
-      const scrollTop = scrollViewport.scrollTop;
-      const viewportHeight = scrollViewport.clientHeight;
-      const nearBottom = scrollTop + viewportHeight >= scrollViewport.scrollHeight - 32;
-      let anchorIndex = -1;
-      if (nearBottom) {
-        anchorIndex = itemList.length - 1;
-      } else {
-        const anchorLine = scrollTop + 8;
-        const items = transcriptVirtualizer.getVirtualItems();
-        for (const item of items) {
-          if (item.start > anchorLine) break;
-          anchorIndex = item.index;
-        }
-        if (anchorIndex === -1) anchorIndex = items[0]?.index ?? -1;
-      }
-      for (let i = Math.min(anchorIndex, itemList.length - 1); i >= 0; i--) {
-        const item = itemList[i];
+  useTranscriptNavigation({
+    items: virtualItems,
+    getItemKey: (item) => item.key,
+    getAnchorKey: (itemList, anchorIndex) => {
+      for (let index = anchorIndex; index >= 0; index -= 1) {
+        const item = itemList[index];
         if (item?.kind === "row" && item.row.kind === "user") {
-          anchorKey = item.row.key;
-          break;
+          return item.row.key;
         }
       }
-    }
-    if (anchorKey !== lastAnchorRef.current) {
-      lastAnchorRef.current = anchorKey;
-      callback(anchorKey);
-    }
-  };
-
-  useEffect(() => {
-    if (!scrollViewport) return;
-    const handler = () => reportAnchorRef.current();
-    handler();
-    scrollViewport.addEventListener("scroll", handler, { passive: true });
-    return () => scrollViewport.removeEventListener("scroll", handler);
-  }, [scrollViewport]);
-
-  // 行集合变化（消息追加、流式落定）后兜底重算一次；依赖 virtualItems 而不是
-  // 每次渲染都跑，避免「上报 → 父级重渲染 → 再上报」的空转循环。
-  useEffect(() => {
-    virtualItemsRef.current = virtualItems;
-    reportAnchorRef.current();
-  }, [virtualItems]);
+      return null;
+    },
+    virtualizer: transcriptVirtualizer,
+    scrollViewport,
+    navRef,
+    onAnchorChange: onAnchorUserRowChange,
+  });
 
   // Infinite upward paging: scrolling within one viewport of the top requests
   // the previous page through the same handler as the "load earlier history"

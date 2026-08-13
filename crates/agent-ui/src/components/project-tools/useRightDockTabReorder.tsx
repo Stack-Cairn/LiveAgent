@@ -1,4 +1,4 @@
-import { GripVertical } from "@liveagent/app/components/icons";
+import { GripVertical } from "@liveagent/ui/components/IconSet";
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,

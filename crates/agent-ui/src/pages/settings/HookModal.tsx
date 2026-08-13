@@ -7,7 +7,7 @@ import {
   Terminal,
   X,
   Zap,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   HOOK_EVENT_TRANSLATION_KEYS,

@@ -1,5 +1,5 @@
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
-import { Check, Minus } from "@liveagent/app/components/icons";
+import { Check, Minus } from "@liveagent/ui/components/IconSet";
 import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";

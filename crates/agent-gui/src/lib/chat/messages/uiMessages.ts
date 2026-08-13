@@ -6,32 +6,24 @@ import type {
   Usage,
 } from "@earendil-works/pi-ai";
 import {
-  buildSubagentCardToolCallId,
-  type SubagentBatchDetails,
-  type SubagentCardDetails,
-} from "@liveagent/ui/lib/subagents/protocol";
-import { assistantMessageToText } from "../../providers/llm";
-import {
-  isProviderNativeWebFetchToolName,
-  isProviderNativeWebSearchToolName,
-} from "../../providers/nativeWebSearch";
-import { isSubagentCardToolCall } from "../../subagents/card";
-import { GLOBAL_BASH_MAX_TIMEOUT_MS, MIN_BASH_TIMEOUT_MS } from "../../tools/bashTimeoutPolicy";
-import { readMessageContextUsage } from "../compaction/contextUsageMetadata";
-import {
   enrichHostedSearchContentWithText,
   type HostedSearchBlock,
   mergeHostedSearchBlocks,
   normalizeHostedSearchBlock,
   resolveHostedSearchTextBoundary,
   splitTextAroundHostedSearch,
-} from "./hostedSearch";
-import { fileToolFieldChars, LIVE_TOOL_PREVIEW_META_KEY } from "./toolPreview";
+} from "@liveagent/ui/lib/chat/hostedSearch";
 import {
   getUserMessageAttachments,
-  getUserMessageDisplayText,
   type PendingUploadedFile,
-} from "./uploadedFiles";
+} from "@liveagent/ui/lib/chat/uploadedFiles";
+import {
+  buildSubagentCardToolCallId,
+  type SubagentBatchDetails,
+  type SubagentCardDetails,
+} from "@liveagent/ui/lib/subagents/protocol";
+import { isSubagentCardToolCall } from "../../subagents/card";
+import { readMessageContextUsage } from "../compaction/contextUsageMetadata";
 
 export type ToolTraceItem = {
   toolCall: ToolCall;
@@ -94,537 +86,55 @@ export type UiMessage = {
   timestamp?: number;
 };
 
-function cloneToolArgumentValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => cloneToolArgumentValue(item));
-  }
-  if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = cloneToolArgumentValue(nestedValue);
-    }
-    return out;
-  }
-  return value;
-}
+import {
+  appendTextDeltaToRound,
+  appendTextLikeBlock,
+  appendThinkingDeltaToRound,
+  assistantMessageToThinkingText,
+  buildSubagentPlaceholderToolCalls,
+  collapseThinking,
+  getMessageText,
+  getRoundHostedSearches,
+  getRoundText,
+  getRoundThinkingText,
+  getRoundToolTrace,
+  hasRoundContent,
+  markToolCallRunningInRound,
+  nextTextLikeBlockId,
+  previewText,
+  safeStringify,
+  shouldDisplayToolTraceItem,
+  snapshotToolCallForTrace,
+  summarizeToolCall,
+  toolCallArgsForDisplay,
+  toolResultMessageToText,
+  updateLiveRound,
+} from "@liveagent/ui/lib/chat/uiMessages";
 
-function snapshotToolCallForTrace(toolCall: ToolCall): ToolCall {
-  const args =
-    toolCall.arguments &&
-    typeof toolCall.arguments === "object" &&
-    !Array.isArray(toolCall.arguments)
-      ? (cloneToolArgumentValue(toolCall.arguments) as Record<string, unknown>)
-      : {};
-  return {
-    ...toolCall,
-    arguments: args,
-  } as ToolCall;
-}
-
-export function getMessageText(message: Message) {
-  if (message.role === "user") {
-    return getUserMessageDisplayText(message as Message & Record<string, unknown>);
-  }
-  if (message.role === "assistant") {
-    return assistantMessageToText(message);
-  }
-  return "";
-}
-
-export function assistantMessageToThinkingText(message: AssistantMessage) {
-  let text = "";
-  for (const block of message.content) {
-    if (block.type === "thinking") text += block.thinking;
-  }
-  return text;
-}
-
-export function toolResultMessageToText(message: ToolResultMessage) {
-  let text = "";
-  for (const block of message.content) {
-    if (block.type === "text") text += block.text;
-  }
-  return text;
-}
-
-export function safeStringify(value: unknown) {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
-function truncateMiddle(input: string, maxLen: number) {
-  const text = input.replace(/\s+/g, " ").trim();
-  if (text.length <= maxLen) return text;
-  const head = Math.max(0, Math.floor((maxLen - 3) / 2));
-  const tail = Math.max(0, maxLen - 3 - head);
-  return `${text.slice(0, head)}...${text.slice(text.length - tail)}`;
-}
-
-function summarizeToolArg(value: unknown, maxLen = 80) {
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (typeof value === "string") return truncateMiddle(value, maxLen);
-  return null;
-}
-
-function summarizeBashTimeout(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
-  }
-  const requested = Math.floor(value);
-  const effective = Math.min(GLOBAL_BASH_MAX_TIMEOUT_MS, Math.max(MIN_BASH_TIMEOUT_MS, requested));
-  return requested === effective
-    ? `timeout_ms=${effective}`
-    : `timeout_ms=${effective} (requested ${requested})`;
-}
-
-export function summarizeToolCall(
-  toolCall: ToolCall,
-  options?: { includeName?: boolean; includeManagerAction?: boolean },
-) {
-  const includeName = options?.includeName ?? true;
-  const includeManagerAction = options?.includeManagerAction ?? true;
-  const args = toolCall.arguments || {};
-  const name = toolCall.name;
-  const path = summarizeToolArg(args.path);
-  const imagePaths = Array.isArray(args.paths)
-    ? args.paths
-        .map((value) => summarizeToolArg(value))
-        .filter((value): value is string => Boolean(value))
-    : [];
-  const imageSources = Array.isArray(args.sources)
-    ? args.sources
-        .map((value) => summarizeImageSourceArg(value))
-        .filter((value): value is string => Boolean(value))
-    : [];
-  const imageUrls = Array.isArray(args.urls)
-    ? args.urls
-        .map((value) => summarizeToolArg(value))
-        .filter((value): value is string => Boolean(value))
-    : [];
-  const imageBase64s = Array.isArray(args.base64s)
-    ? args.base64s.filter((value) => typeof value === "string" && value.trim()).length
-    : 0;
-  const defaultPath = "path=.";
-  const defaultCwd = "cwd=.";
-
-  const parts =
-    name === "Image"
-      ? [
-          imageSources.length > 0
-            ? `sources=${imageSources.length}${imageSources[0] ? ` first=${imageSources[0]}` : ""}`
-            : imagePaths.length > 0
-              ? `paths=${imagePaths.length}${imagePaths[0] ? ` first=${imagePaths[0]}` : ""}`
-              : imageUrls.length > 0
-                ? `urls=${imageUrls.length}${imageUrls[0] ? ` first=${imageUrls[0]}` : ""}`
-                : imageBase64s > 0
-                  ? `base64s=${imageBase64s}`
-                  : typeof args.source === "string" && args.source.trim()
-                    ? `source=${summarizeImageSourceArg(args.source)}`
-                    : typeof args.url === "string" && args.url.trim()
-                      ? `url=${summarizeToolArg(args.url)}`
-                      : typeof args.base64 === "string" && args.base64.trim()
-                        ? `base64Chars=${args.base64.length}`
-                        : path
-                          ? `path=${path}`
-                          : null,
-        ]
-      : name === "Read"
-        ? [
-            path ? `path=${path}` : null,
-            typeof args.start_line === "number" ? `start=${args.start_line}` : null,
-            typeof args.limit === "number" ? `limit=${args.limit}` : null,
-            typeof args.page_start === "number" ? `pageStart=${args.page_start}` : null,
-            typeof args.page_limit === "number" ? `pageLimit=${args.page_limit}` : null,
-            typeof args.cell_start === "number" ? `cellStart=${args.cell_start}` : null,
-            typeof args.cell_limit === "number" ? `cellLimit=${args.cell_limit}` : null,
-          ]
-        : name === "SkillsManager"
-          ? [
-              includeManagerAction && typeof args.action === "string"
-                ? `action=${args.action}`
-                : null,
-              path ? `path=${path}` : null,
-              typeof args.offset === "number" ? `start=${args.offset + 1}` : null,
-              typeof args.length === "number" ? `limit=${args.length}` : null,
-              typeof args.source === "string" ? `source=${summarizeToolArg(args.source)}` : null,
-              typeof args.name === "string" ? `name=${summarizeToolArg(args.name)}` : null,
-              typeof args.conflict === "string"
-                ? `conflict=${summarizeToolArg(args.conflict)}`
-                : null,
-            ]
-          : name === "CronTaskManager"
-            ? [
-                includeManagerAction && typeof args.action === "string"
-                  ? `action=${args.action}`
-                  : null,
-                typeof args.task_id === "string" ? `task=${summarizeToolArg(args.task_id)}` : null,
-                typeof args.name === "string" ? `name=${summarizeToolArg(args.name)}` : null,
-                typeof args.type === "string" ? `type=${summarizeToolArg(args.type)}` : null,
-              ]
-            : name === "MemoryManager"
-              ? [
-                  includeManagerAction && typeof args.action === "string"
-                    ? `action=${args.action}`
-                    : null,
-                  typeof args.slug === "string" ? `slug=${summarizeToolArg(args.slug)}` : null,
-                  typeof args.scope === "string" ? `scope=${summarizeToolArg(args.scope)}` : null,
-                  typeof args.type === "string" ? `type=${summarizeToolArg(args.type)}` : null,
-                  typeof args.query === "string" ? `query=${summarizeToolArg(args.query)}` : null,
-                ]
-              : name === "McpManager"
-                ? [
-                    includeManagerAction && typeof args.action === "string"
-                      ? `action=${args.action}`
-                      : null,
-                    typeof args.server_id === "string"
-                      ? `server=${summarizeToolArg(args.server_id)}`
-                      : null,
-                    Array.isArray(args.server_ids) ? `servers=${args.server_ids.length}` : null,
-                    typeof args.conflict === "string"
-                      ? `conflict=${summarizeToolArg(args.conflict)}`
-                      : null,
-                    args.include_schema === true ? "includeSchema=true" : null,
-                  ]
-                : name === "TunnelManager"
-                  ? [
-                      includeManagerAction && typeof args.action === "string"
-                        ? `action=${args.action}`
-                        : null,
-                      typeof args.targetUrl === "string"
-                        ? `target=${summarizeToolArg(args.targetUrl)}`
-                        : null,
-                      typeof args.id === "string" ? `id=${summarizeToolArg(args.id)}` : null,
-                    ]
-                  : name === "SSHManager" || name === "SshManager"
-                    ? [
-                        includeManagerAction && typeof args.action === "string"
-                          ? `action=${args.action}`
-                          : null,
-                        typeof args.host_id === "string"
-                          ? `host=${summarizeToolArg(args.host_id)}`
-                          : null,
-                        typeof args.session_id === "string"
-                          ? `session=${summarizeToolArg(args.session_id)}`
-                          : null,
-                        typeof args.path === "string" ? `path=${path}` : null,
-                        typeof args.command === "string"
-                          ? `command=${summarizeToolArg(args.command)}`
-                          : null,
-                      ]
-                    : name === "Agent"
-                      ? [
-                          typeof args.id === "string" ? `agent=${summarizeToolArg(args.id)}` : null,
-                          typeof args.name === "string"
-                            ? `name=${summarizeToolArg(args.name)}`
-                            : null,
-                          typeof args.prompt === "string"
-                            ? `prompt=${summarizeToolArg(args.prompt)}`
-                            : null,
-                          Array.isArray(args.agents) ? `agents=${args.agents.length}` : null,
-                          typeof args.mode === "string"
-                            ? `mode=${summarizeToolArg(args.mode)}`
-                            : null,
-                          typeof args.concurrency === "number"
-                            ? `concurrency=${args.concurrency}`
-                            : null,
-                        ]
-                      : name === "SendMessage"
-                        ? [
-                            typeof args.to === "string" ? `to=${summarizeToolArg(args.to)}` : null,
-                            typeof args.channel === "string"
-                              ? `channel=${summarizeToolArg(args.channel)}`
-                              : null,
-                            typeof args.subject === "string"
-                              ? `subject=${summarizeToolArg(args.subject)}`
-                              : null,
-                            typeof args.summary === "string" && typeof args.subject !== "string"
-                              ? `summary=${summarizeToolArg(args.summary)}`
-                              : null,
-                            typeof args.message === "string"
-                              ? `messageChars=${args.message.length}`
-                              : null,
-                          ]
-                        : name === "Write"
-                          ? [path ? `path=${path}` : null, "mode=rewrite"]
-                          : name === "Edit"
-                            ? [
-                                path ? `path=${path}` : null,
-                                typeof args.expected_replacements === "number"
-                                  ? `expected=${args.expected_replacements}`
-                                  : null,
-                                args.replace_all === true ? "replaceAll=true" : null,
-                              ]
-                            : name === "List"
-                              ? [
-                                  path ? `path=${path}` : defaultPath,
-                                  typeof args.depth === "number" ? `depth=${args.depth}` : null,
-                                  typeof args.offset === "number" ? `offset=${args.offset}` : null,
-                                  typeof args.max_results === "number"
-                                    ? `max=${args.max_results}`
-                                    : null,
-                                ]
-                              : name === "Glob"
-                                ? [
-                                    typeof args.pattern === "string"
-                                      ? `pattern=${summarizeToolArg(args.pattern)}`
-                                      : null,
-                                    path ? `path=${path}` : defaultPath,
-                                    typeof args.offset === "number"
-                                      ? `offset=${args.offset}`
-                                      : null,
-                                    typeof args.max_results === "number"
-                                      ? `max=${args.max_results}`
-                                      : null,
-                                  ]
-                                : name === "Grep"
-                                  ? [
-                                      typeof args.pattern === "string"
-                                        ? `pattern=${summarizeToolArg(args.pattern)}`
-                                        : null,
-                                      path ? `path=${path}` : defaultPath,
-                                      typeof args.file_pattern === "string"
-                                        ? `filePattern=${summarizeToolArg(args.file_pattern)}`
-                                        : null,
-                                      typeof args.output_mode === "string"
-                                        ? `mode=${args.output_mode}`
-                                        : null,
-                                      typeof args.ignore_case === "boolean"
-                                        ? `ignoreCase=${args.ignore_case}`
-                                        : null,
-                                      typeof args.context === "number"
-                                        ? `context=${args.context}`
-                                        : null,
-                                      typeof args.head_limit === "number"
-                                        ? `head=${args.head_limit}`
-                                        : null,
-                                      args.multiline === true ? "multiline=true" : null,
-                                      typeof args.offset === "number"
-                                        ? `offset=${args.offset}`
-                                        : null,
-                                    ]
-                                  : name === "Delete"
-                                    ? [path ? `path=${path}` : null]
-                                    : name === "Bash"
-                                      ? [
-                                          typeof args.cwd === "string"
-                                            ? `cwd=${summarizeToolArg(args.cwd)}`
-                                            : defaultCwd,
-                                          summarizeBashTimeout(args.timeout_ms),
-                                          typeof args.command === "string"
-                                            ? `command=${summarizeToolArg(args.command)}`
-                                            : null,
-                                        ]
-                                      : name === "ManagedProcess"
-                                        ? [
-                                            includeManagerAction && typeof args.action === "string"
-                                              ? `action=${args.action}`
-                                              : null,
-                                            typeof args.process_id === "string"
-                                              ? `process=${summarizeToolArg(args.process_id)}`
-                                              : null,
-                                            typeof args.label === "string"
-                                              ? `label=${summarizeToolArg(args.label)}`
-                                              : null,
-                                            typeof args.cwd === "string"
-                                              ? `cwd=${summarizeToolArg(args.cwd)}`
-                                              : null,
-                                            args.isolated === true ? "isolated=true" : null,
-                                            typeof args.max_bytes === "number"
-                                              ? `maxBytes=${args.max_bytes}`
-                                              : null,
-                                          ]
-                                        : [];
-
-  const summary = parts.filter(Boolean).join(" ");
-  if (!summary) return includeName ? name : "";
-  return includeName ? `${name} ${summary}` : summary;
-}
-
-function summarizeImageSourceArg(value: unknown) {
-  const text = summarizeToolArg(value);
-  if (!text) return text;
-  if (/^data:image\//i.test(text)) {
-    return `dataUrlChars=${String(value).length}`;
-  }
-  if (/^[A-Za-z0-9+/=\s_-]{200,}$/.test(String(value))) {
-    return `base64Chars=${String(value).length}`;
-  }
-  return text;
-}
-
-function summarizeImageArgValue(key: string, value: unknown) {
-  if (key === "base64") {
-    return typeof value === "string" ? `base64Chars=${value.length}` : value;
-  }
-  if (key === "base64s" && Array.isArray(value)) {
-    return value.map((item) => (typeof item === "string" ? `base64Chars=${item.length}` : item));
-  }
-  if (key === "source") {
-    return summarizeImageSourceArg(value);
-  }
-  if (key === "sources" && Array.isArray(value)) {
-    return value.map((item) => summarizeImageSourceArg(item));
-  }
-  return value;
-}
-
-export function toolCallArgsForDisplay(toolCall: ToolCall) {
-  const args = toolCall.arguments || {};
-  const name = toolCall.name;
-
-  switch (name) {
-    case "Write":
-      return {
-        path: args.path,
-        mode: "rewrite",
-        contentChars: fileToolFieldChars(args, "content"),
-      };
-    case "Edit":
-      return {
-        path: args.path,
-        expected_replacements: args.expected_replacements,
-        replace_all: args.replace_all,
-        oldChars: fileToolFieldChars(args, "old_string"),
-        newChars: fileToolFieldChars(args, "new_string"),
-      };
-    case "Image": {
-      const out: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(args)) {
-        out[key] = summarizeImageArgValue(key, value);
-      }
-      return out;
-    }
-    case "McpManager":
-      return redactMcpManagerArgsForDisplay(args);
-    case "MemoryManager":
-      return {
-        action: args.action,
-        slug: args.slug,
-        scope: args.scope,
-        type: args.type,
-        mode: args.mode,
-        query: args.query,
-        description: args.description,
-        bodyChars: typeof args.body === "string" ? args.body.length : undefined,
-      };
-    case "Agent":
-      return summarizeAgentArgsForDisplay(args);
-    case "SendMessage":
-      return {
-        to: args.to,
-        channel: args.channel,
-        subject: args.subject ?? args.summary,
-        messageChars: typeof args.message === "string" ? args.message.length : undefined,
-      };
-    default: {
-      const out: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(args)) {
-        if (key === LIVE_TOOL_PREVIEW_META_KEY) continue;
-        // 合成参数(网关同步注入的截止时间/审批标记等,约定以 __ 前缀)不入展示。
-        if (key.startsWith("__")) continue;
-        if (typeof value === "string" && value.length > 800) {
-          out[key] = `${value.slice(0, 800)}...（len=${value.length}）`;
-        } else {
-          out[key] = value;
-        }
-      }
-      return out;
-    }
-  }
-}
-
-function summarizeAgentArgsForDisplay(args: Record<string, unknown>) {
-  const prompt = typeof args.prompt === "string" ? args.prompt : undefined;
-  const summary: Record<string, unknown> = {
-    id: args.id,
-    name: args.name,
-    role: args.role,
-    prompt:
-      typeof prompt === "string" && prompt.length > 800
-        ? `${prompt.slice(0, 800)}...（len=${prompt.length}）`
-        : prompt,
-    mode: args.mode,
-    identityChars: typeof args.identity === "string" ? args.identity.length : undefined,
-    promptChars: typeof prompt === "string" ? prompt.length : undefined,
-    agentCount: Array.isArray(args.agents) ? args.agents.length : undefined,
-    concurrency: args.concurrency,
-  };
-  if (args.template !== undefined) summary.template = args.template;
-  if (args.apply_policy !== undefined) summary.apply_policy = args.apply_policy;
-  if (args.allowed_output_paths !== undefined) {
-    summary.allowed_output_paths = args.allowed_output_paths;
-  }
-  return summary;
-}
-
-function redactMcpManagerArgsForDisplay(args: Record<string, unknown>) {
-  const redactServer = (value: unknown): unknown => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-    const server = { ...(value as Record<string, unknown>) };
-    if (server.env && typeof server.env === "object" && !Array.isArray(server.env)) {
-      server.env = Object.fromEntries(
-        Object.keys(server.env as Record<string, unknown>).map((key) => [key, "<redacted>"]),
-      );
-    }
-    if (server.headers && typeof server.headers === "object" && !Array.isArray(server.headers)) {
-      server.headers = Object.fromEntries(
-        Object.keys(server.headers as Record<string, unknown>).map((key) => [key, "<redacted>"]),
-      );
-    }
-    return server;
-  };
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(args)) {
-    if (key === "server" || key === "patch") {
-      out[key] = redactServer(value);
-    } else {
-      out[key] = value;
-    }
-  }
-  return out;
-}
-
-export function previewText(input: string, maxChars = 1200) {
-  const text = input || "";
-  if (text.length <= maxChars) return text;
-  return `${text.slice(0, maxChars)}\n...（已截断预览，len=${text.length}）...`;
-}
-
-// Deterministic next id for a text-like block: one more than the highest
-// existing ordinal of the same kind. A pure function of the current array, so
-// the live delta path and the history rebuild path assign identical ids for
-// identical block sequences — settled replies reconcile in place.
-function nextTextLikeBlockId(blocks: UiRoundContentBlock[], kind: "thinking" | "text") {
-  let max = 0;
-  for (const block of blocks) {
-    if (block.kind !== kind) continue;
-    const suffix = Number(block.id.slice(kind.length + 1));
-    if (Number.isFinite(suffix) && suffix > max) max = suffix;
-  }
-  return `${kind}-${max + 1}`;
-}
-
-function appendTextLikeBlock(
-  blocks: UiRoundContentBlock[],
-  kind: "thinking" | "text",
-  delta: string,
-) {
-  if (!delta) return blocks;
-  const last = blocks[blocks.length - 1];
-  if (last?.kind === kind) {
-    const next = blocks.slice();
-    next[next.length - 1] = {
-      kind,
-      id: last.id,
-      text: last.text + delta,
-    };
-    return next;
-  }
-  return [...blocks, { kind, id: nextTextLikeBlockId(blocks, kind), text: delta }];
-}
+export {
+  appendTextDeltaToRound,
+  appendTextLikeBlock,
+  appendThinkingDeltaToRound,
+  assistantMessageToThinkingText,
+  buildSubagentPlaceholderToolCalls,
+  collapseThinking,
+  getMessageText,
+  getRoundHostedSearches,
+  getRoundText,
+  getRoundThinkingText,
+  getRoundToolTrace,
+  hasRoundContent,
+  markToolCallRunningInRound,
+  nextTextLikeBlockId,
+  previewText,
+  safeStringify,
+  shouldDisplayToolTraceItem,
+  snapshotToolCallForTrace,
+  summarizeToolCall,
+  toolCallArgsForDisplay,
+  toolResultMessageToText,
+  updateLiveRound,
+};
 
 function rebalanceHostedSearchTextBoundaries(blocks: UiRoundContentBlock[]): UiRoundContentBlock[] {
   // Boundary rebalancing only matters around hostedSearch blocks; the common
@@ -669,60 +179,6 @@ function isParentAgentToolCall(toolCall: ToolCall) {
   return toolCall.name === "Agent" && !isSubagentCardToolCall(toolCall);
 }
 
-function isDsmlRecoveredToolCallId(toolCallId: string | undefined) {
-  return toolCallId?.startsWith("dsml-tool-call-") ?? false;
-}
-
-function isRecoveredProviderNativeWebSearchResult(toolResult: ToolResultMessage | undefined) {
-  const details = toolResult?.details as Record<string, unknown> | undefined;
-  return details?.recoveredProviderNativeWebSearch === true;
-}
-
-function isRecoveredProviderNativeWebFetchResult(toolResult: ToolResultMessage | undefined) {
-  const details = toolResult?.details as Record<string, unknown> | undefined;
-  return details?.recoveredProviderNativeWebFetch === true;
-}
-
-// History written before the web_fetch bridge existed carries error results
-// like "Tool web_fetch not found"; those rounds should render as clean as the
-// bridged ones instead of resurfacing the old failure rows.
-function isLegacyUnexecutedProviderNativeToolResult(toolResult: ToolResultMessage | undefined) {
-  if (!toolResult?.isError) return false;
-  const text = toolResult.content
-    .flatMap((block) => (block.type === "text" ? [block.text] : []))
-    .join("\n")
-    .trim();
-  return /^Tool .+ not found$/.test(text);
-}
-
-export function shouldDisplayToolTraceItem(
-  item: ToolTraceItem,
-  options?: { hasHostedSearch?: boolean },
-) {
-  if (
-    !isProviderNativeWebSearchToolName(item.toolCall.name) &&
-    !isProviderNativeWebFetchToolName(item.toolCall.name)
-  ) {
-    return true;
-  }
-  if (options?.hasHostedSearch) {
-    return false;
-  }
-  if (isDsmlRecoveredToolCallId(item.toolCall.id)) {
-    return false;
-  }
-  if (
-    isRecoveredProviderNativeWebSearchResult(item.toolResult) ||
-    isRecoveredProviderNativeWebFetchResult(item.toolResult)
-  ) {
-    return false;
-  }
-  if (isLegacyUnexecutedProviderNativeToolResult(item.toolResult)) {
-    return false;
-  }
-  return true;
-}
-
 function shouldDisplayToolBlock(
   toolCall: ToolCall,
   toolResult: ToolResultMessage | undefined,
@@ -733,72 +189,6 @@ function shouldDisplayToolBlock(
     hasHostedSearch:
       options?.contentHasHostedSearch || blocks.some((block) => block.kind === "hostedSearch"),
   });
-}
-
-const SUBAGENT_PLACEHOLDER_MAX_AGENTS = 8;
-
-function asPlainObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function optionalText(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-function clampInteger(value: unknown, fallback: number, min: number, max: number) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  return Math.max(min, Math.min(max, Math.floor(value)));
-}
-
-/**
- * Live placeholder cards while the parent Agent call's arguments stream.
- * The streaming JSON parser yields partial `agents` arrays; an element only
- * renders once its `id` and `prompt` fields have started streaming. Indexes
- * follow the raw array so placeholder ids match the authoritative cards
- * emitted when execution starts.
- */
-export function buildSubagentPlaceholderToolCalls(parentToolCall: ToolCall): ToolCall[] {
-  if (!isParentAgentToolCall(parentToolCall)) return [];
-  const args = asPlainObject(parentToolCall.arguments);
-  const rawAgents = Array.isArray(args.agents) ? args.agents : [];
-  if (rawAgents.length === 0 || rawAgents.length > SUBAGENT_PLACEHOLDER_MAX_AGENTS) return [];
-  const concurrency = Math.min(
-    rawAgents.length,
-    clampInteger(
-      args.concurrency,
-      SUBAGENT_PLACEHOLDER_MAX_AGENTS,
-      1,
-      SUBAGENT_PLACEHOLDER_MAX_AGENTS,
-    ),
-  );
-
-  const placeholders: ToolCall[] = [];
-  rawAgents.forEach((rawAgent, index) => {
-    const record = asPlainObject(rawAgent);
-    const id = optionalText(record.id);
-    const prompt = optionalText(record.prompt);
-    if (!id || !prompt) return;
-    placeholders.push({
-      type: "toolCall",
-      id: buildSubagentCardToolCallId(parentToolCall.id, index + 1),
-      name: "Agent",
-      arguments: {
-        subagent_card: true,
-        parent_tool_call_id: parentToolCall.id,
-        index: index + 1,
-        total: rawAgents.length,
-        concurrency,
-        id,
-        name: optionalText(record.name),
-        role: optionalText(record.role),
-        mode: record.mode === "worktree" || record.mode === "readonly" ? record.mode : undefined,
-        prompt,
-      },
-    });
-  });
-  return placeholders;
 }
 
 function isSubagentBatchResult(
@@ -940,64 +330,6 @@ function upsertToolBlock(
   return [...blocks, nextBlock];
 }
 
-export function getRoundText(round: Pick<UiRound, "blocks">) {
-  let text = "";
-  for (const block of round.blocks) {
-    if (block.kind === "text") text += block.text;
-  }
-  return text;
-}
-
-export function getRoundThinkingText(round: Pick<UiRound, "blocks">) {
-  let text = "";
-  for (const block of round.blocks) {
-    if (block.kind === "thinking") text += block.text;
-  }
-  return text;
-}
-
-export function getRoundToolTrace(round: Pick<UiRound, "blocks">): ToolTraceItem[] {
-  const hasHostedSearch = round.blocks.some((block) => block.kind === "hostedSearch");
-  return round.blocks.flatMap((block) =>
-    block.kind === "tool" && shouldDisplayToolTraceItem(block.item, { hasHostedSearch })
-      ? [block.item]
-      : [],
-  );
-}
-
-export function getRoundHostedSearches(round: Pick<UiRound, "blocks">): HostedSearchBlock[] {
-  return round.blocks.flatMap((block) => (block.kind === "hostedSearch" ? [block.item] : []));
-}
-
-export function hasRoundContent(round: Pick<UiRound, "blocks">) {
-  return (
-    getRoundText(round).trim().length > 0 ||
-    getRoundThinkingText(round).trim().length > 0 ||
-    getRoundToolTrace(round).length > 0 ||
-    getRoundHostedSearches(round).length > 0
-  );
-}
-
-export function appendTextDeltaToRound<TRound extends Pick<UiRound, "blocks">>(
-  round: TRound,
-  delta: string,
-): TRound {
-  return {
-    ...round,
-    blocks: rebalanceHostedSearchTextBoundaries(appendTextLikeBlock(round.blocks, "text", delta)),
-  };
-}
-
-export function appendThinkingDeltaToRound<TRound extends Pick<UiRound, "blocks">>(
-  round: TRound,
-  delta: string,
-): TRound {
-  return {
-    ...round,
-    blocks: appendTextLikeBlock(round.blocks, "thinking", delta),
-  };
-}
-
 export function upsertToolCallToRound<TRound extends Pick<UiRound, "blocks">>(
   round: TRound,
   toolCall: ToolCall,
@@ -1006,40 +338,6 @@ export function upsertToolCallToRound<TRound extends Pick<UiRound, "blocks">>(
     ...round,
     blocks: upsertToolBlock(round.blocks, toolCall),
   };
-}
-
-export function markToolCallRunningInRound<
-  TRound extends Pick<UiRound, "blocks"> & { runningToolCallIds: string[] },
->(round: TRound, toolCall: ToolCall): TRound {
-  const visibleToolCalls = buildSubagentPlaceholderToolCalls(toolCall);
-  const runningCandidateIds =
-    visibleToolCalls.length > 0
-      ? visibleToolCalls.map((item) => item.id)
-      : toolCall.id
-        ? [toolCall.id]
-        : [];
-  if (runningCandidateIds.length === 0) return round;
-
-  const visibleToolCallIds = new Set(
-    getRoundToolTrace(round)
-      .map((item) => item.toolCall.id)
-      .filter((id): id is string => Boolean(id)),
-  );
-  let runningToolCallIds = round.runningToolCallIds;
-  for (const id of runningCandidateIds) {
-    if (!visibleToolCallIds.has(id) || runningToolCallIds.includes(id)) continue;
-    if (runningToolCallIds === round.runningToolCallIds) {
-      runningToolCallIds = runningToolCallIds.slice();
-    }
-    runningToolCallIds.push(id);
-  }
-
-  return runningToolCallIds === round.runningToolCallIds
-    ? round
-    : {
-        ...round,
-        runningToolCallIds,
-      };
 }
 
 export function attachToolResultToRound<TRound extends Pick<UiRound, "blocks">>(
@@ -1128,33 +426,6 @@ export function upsertHostedSearchToRound<TRound extends Pick<UiRound, "blocks">
     ...round,
     blocks: upsertHostedSearchBlock(round.blocks, hostedSearch),
   };
-}
-
-export function updateLiveRound(
-  prev: LiveRound[],
-  round: number,
-  updater: (target: LiveRound) => LiveRound,
-) {
-  if (prev.length === 0) return prev;
-
-  const lastIdx = prev.length - 1;
-  if (prev[lastIdx].round === round) {
-    const next = prev.slice();
-    next[lastIdx] = updater(prev[lastIdx]);
-    return next;
-  }
-
-  const idx = prev.findIndex((item) => item.round === round);
-  if (idx < 0) return prev;
-
-  const next = prev.slice();
-  next[idx] = updater(prev[idx]);
-  return next;
-}
-
-export function collapseThinking(target: LiveRound) {
-  if (!target.thinkingOpen || !getRoundThinkingText(target).trim()) return target;
-  return { ...target, thinkingOpen: false };
 }
 
 function buildUiRoundBlocks(

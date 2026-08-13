@@ -1,3 +1,5 @@
+import { type AppSettings, type McpServerConfig, updateMcp } from "@liveagent/app/lib/settings";
+import { invoke } from "@liveagent/app/shims/tauriCore";
 import {
   AlertTriangle,
   Check,
@@ -7,9 +9,7 @@ import {
   Loader2,
   RefreshCw,
   Terminal,
-} from "@liveagent/app/components/icons";
-import { type AppSettings, type McpServerConfig, updateMcp } from "@liveagent/app/lib/settings";
-import { invoke } from "@liveagent/app/shims/tauriCore";
+} from "@liveagent/ui/components/IconSet";
 import { SearchHighlight } from "@liveagent/ui/components/ui/search-highlight";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { rankFuzzySearchResults } from "@liveagent/ui/lib/shared/fuzzySearch";

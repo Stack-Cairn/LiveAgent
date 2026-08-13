@@ -1,3 +1,7 @@
+import type { AppSettings } from "@liveagent/app/lib/settings";
+import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+import { invoke } from "@liveagent/app/shims/tauriCore";
+import { listen } from "@liveagent/app/shims/tauriEvent";
 import {
   Check,
   Clock3,
@@ -19,11 +23,7 @@ import {
   Terminal,
   Wifi,
   WifiOff,
-} from "@liveagent/app/components/icons";
-import type { AppSettings } from "@liveagent/app/lib/settings";
-import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
-import { invoke } from "@liveagent/app/shims/tauriCore";
-import { listen } from "@liveagent/app/shims/tauriEvent";
+} from "@liveagent/ui/components/IconSet";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {

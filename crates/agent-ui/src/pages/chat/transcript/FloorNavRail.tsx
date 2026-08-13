@@ -1,4 +1,4 @@
-import { Pin } from "@liveagent/app/components/icons";
+import { Pin } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   useCallback,

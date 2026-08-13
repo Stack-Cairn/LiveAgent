@@ -1,3 +1,15 @@
+import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
+import { FileToolArgsDisplay } from "@liveagent/ui/components/chat/FileToolArgs";
+import {
+  type MetaTag,
+  MetaTags,
+  PathDisplay,
+  ToolFactGrid,
+  ToolScrollablePre,
+  ToolSurface,
+  ToolSurfaceLabel,
+} from "@liveagent/ui/components/chat/ToolSurfaces";
+import { Markdown } from "@liveagent/ui/components/Markdown";
 import {
   type DeleteResultDetails,
   deriveFileToolPreview,
@@ -19,19 +31,7 @@ import {
   toolCallArgsForDisplay,
   toolResultMessageToText,
   type WriteResultDetails,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
-import { EditDiffView } from "@liveagent/ui/components/chat/EditDiffView";
-import { FileToolArgsDisplay } from "@liveagent/ui/components/chat/FileToolArgs";
-import {
-  type MetaTag,
-  MetaTags,
-  PathDisplay,
-  ToolFactGrid,
-  ToolScrollablePre,
-  ToolSurface,
-  ToolSurfaceLabel,
-} from "@liveagent/ui/components/chat/ToolSurfaces";
-import { Markdown } from "@liveagent/ui/components/Markdown";
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import type {
   SubagentBatchDetails,
   SubagentCardDetails,

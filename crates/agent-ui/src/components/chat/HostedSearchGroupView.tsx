@@ -1,4 +1,4 @@
-import { ChevronRight, Globe } from "@liveagent/app/components/icons";
+import { ChevronRight, Globe } from "@liveagent/ui/components/IconSet";
 import { useMemo, useState } from "react";
 import { useLocale } from "../../i18n/index";
 import { cn } from "../../lib/shared/utils";

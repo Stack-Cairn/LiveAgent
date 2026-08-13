@@ -1,4 +1,4 @@
-import { AlertTriangle, BookOpen, Lock, SkillIcon } from "@liveagent/app/components/icons";
+import { AlertTriangle, BookOpen, Lock, SkillIcon } from "@liveagent/ui/components/IconSet";
 import { DocumentMarkdown } from "@liveagent/ui/components/markdown/DocumentMarkdown";
 import { Badge } from "@liveagent/ui/components/ui/badge";
 import { CopyButton } from "@liveagent/ui/components/ui/copy-button";

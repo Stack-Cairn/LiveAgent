@@ -1,3 +1,4 @@
+import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
 import {
   AlertTriangle,
   Bot,
@@ -14,8 +15,7 @@ import {
   Trash2,
   Wrench,
   Zap,
-} from "@liveagent/app/components/icons";
-import type { SettingsSectionProps } from "@liveagent/app/pages/settings/types";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import {
   applyHookOps,

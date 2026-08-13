@@ -4,6 +4,10 @@ import {
   workspaceOverlayStackClassName,
 } from "@liveagent/adapters/workspacePreview";
 import {
+  type FileTypeIconComponent,
+  getFileTypeIcon,
+} from "@liveagent/ui/components/chat/fileTypeIcons";
+import {
   AlertTriangle,
   ChevronRight,
   ExternalLink,
@@ -15,11 +19,7 @@ import {
   RefreshCw,
   RotateCwSquare,
   X,
-} from "@liveagent/app/components/icons";
-import {
-  type FileTypeIconComponent,
-  getFileTypeIcon,
-} from "@liveagent/ui/components/chat/fileTypeIcons";
+} from "@liveagent/ui/components/IconSet";
 import { WorkspaceMarkdownPreview } from "@liveagent/ui/components/workspace-editor/WorkspaceMarkdownPreview";
 import {
   getWorkspacePreviewKind,

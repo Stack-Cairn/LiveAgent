@@ -4,14 +4,14 @@ import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const assistantStatus = loader.loadModule("@liveagent/ui/lib/chat/assistantStatus.ts");
-const uploadedFiles = loader.loadModule("src/lib/chat/messages/uploadedFiles.ts");
+const uploadedFiles = loader.loadModule("@liveagent/ui/lib/chat/uploadedFiles.ts");
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
 const uiMessages = loader.loadModule("src/lib/chat/messages/uiMessages.ts");
-const hostedSearch = loader.loadModule("src/lib/chat/messages/hostedSearch.ts");
+const hostedSearch = loader.loadModule("@liveagent/ui/lib/chat/hostedSearch.ts");
 const seedToolCalls = loader.loadModule("src/lib/chat/runner/seedToolCalls.ts");
 const chatHelpers = loader.loadModule("src/lib/chat/page/chatPageHelpers.ts");
 const gatewayToolPreview = loader.loadModule("src/pages/chat/turns/gatewayToolPreview.ts");
-const toolPreview = loader.loadModule("src/lib/chat/messages/toolPreview.ts");
+const toolPreview = loader.loadModule("@liveagent/ui/lib/chat/toolPreview.ts");
 
 const fileA = {
   relativePath: "src/App.tsx",

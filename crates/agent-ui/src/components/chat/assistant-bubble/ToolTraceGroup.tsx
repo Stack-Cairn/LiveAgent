@@ -1,8 +1,8 @@
 import { retainRunningToolContent } from "@liveagent/adapters/assistantBubble";
-import type { ToolTraceItem } from "@liveagent/app/lib/chat/assistantBubbleAdapter";
 import { AssistantStatus } from "@liveagent/ui/components/chat/AssistantStatus";
 import { LazyCollapse } from "@liveagent/ui/components/chat/LazyCollapse";
 import { useLocale } from "@liveagent/ui/i18n/index";
+import type { ToolTraceItem } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import { memo, useMemo, useState } from "react";
 import { ChevronRight, Terminal } from "../../IconSet";

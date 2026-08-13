@@ -12,8 +12,8 @@ import {
   type GatewaySettingsSyncPayload,
   redactSettingsForWebStorage,
 } from "@liveagent/ui/lib/settings/sync";
+import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyFontFamilies } from "@/lib/fontFamily";
 import type { GatewayWebSocketClientLike } from "@/lib/gatewaySocket";
 import {
   type AppSettings,

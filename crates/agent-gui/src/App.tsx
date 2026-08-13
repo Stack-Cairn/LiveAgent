@@ -1,19 +1,21 @@
 import type { Context } from "@earendil-works/pi-ai";
 import { AppErrorBoundary } from "@liveagent/ui/components/AppErrorBoundary";
+import { Pin } from "@liveagent/ui/components/IconSet";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
-import { LocaleContext, t as translate } from "@liveagent/ui/i18n/index";
+import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
 import { initAutomation } from "@liveagent/ui/lib/automation/index";
 import {
   applyGatewaySettingsSyncPayload,
   buildGatewaySettingsSyncPayload,
   type GatewaySettingsSyncPayload,
 } from "@liveagent/ui/lib/settings/sync";
+import { useSettingsOverlay } from "@liveagent/ui/lib/settings/useSettingsOverlay";
+import { applyFontFamilies } from "@liveagent/ui/lib/shared/fontFamily";
 import { SettingsPage } from "@liveagent/ui/pages/settings/SettingsPage";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CronPromptRunner } from "./components/cron/CronPromptRunner";
-import { Pin } from "./components/icons";
 import { useNativeInputContextMenu } from "./components/input-context-menu/NativeInputContextMenu";
 import { MemoryOrganizerHost } from "./components/memory/useMemoryOrganizer";
 import { WindowsTitleBar } from "./components/WindowsTitleBar";
@@ -36,7 +38,6 @@ import {
   type SettingsSaveState,
 } from "./lib/settings/storage";
 import { applyStoredGlobalShortcuts } from "./lib/shortcuts/globalShortcuts";
-import { applyFontFamilies } from "./lib/system/fontFamily";
 import { ChatPage } from "./pages/ChatPage";
 import type { SectionId } from "./pages/settings/types";
 
@@ -174,7 +175,13 @@ function applyRuntimeSystemDefaults(settings: AppSettings, defaultWorkdir: strin
 }
 
 export default function App() {
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const {
+    settingsOpen,
+    overlay,
+    openSettingsOverlay,
+    closeSettingsOverlay,
+    handleSettingsOverlayTransitionEnd,
+  } = useSettingsOverlay();
   const [settingsSection, setSettingsSection] = useState<SectionId>("system");
   const [settingsProviderId, setSettingsProviderId] = useState<string>();
   const [settingsReady, setSettingsReady] = useState(false);
@@ -183,7 +190,6 @@ export default function App() {
     status: "idle",
   });
   const [context, setContext] = useState<Context>(() => getDefaultContext());
-  const [overlay, setOverlay] = useState<"closed" | "entering" | "open" | "leaving">("closed");
   const runningConversationCountRef = useRef(0);
   const { confirm: requestRestartConfirm, dialog: restartConfirmDialog } = useConfirmDialog();
 
@@ -418,9 +424,7 @@ export default function App() {
     (section: SectionId = "system", providerId?: string) => {
       setSettingsSection(section);
       setSettingsProviderId(section === "providers" ? providerId : undefined);
-      setSettingsOpen(true);
-      setOverlay("entering");
-      requestAnimationFrame(() => requestAnimationFrame(() => setOverlay("open")));
+      openSettingsOverlay();
       void reloadPersistedSettings().catch((error) => {
         setSettingsSaveState({
           status: "error",
@@ -428,12 +432,10 @@ export default function App() {
         });
       });
     },
-    [reloadPersistedSettings],
+    [openSettingsOverlay, reloadPersistedSettings],
   );
 
-  const closeSettings = useCallback(() => {
-    setOverlay("leaving");
-  }, []);
+  const closeSettings = closeSettingsOverlay;
 
   // 动作总线（Rust `app:action`）中 App 拥有的动作：主题/打开设置/网关开关/
   // 检查更新，以及「新建对话」时先收起设置覆盖层（会话侧由 ChatPage 处理）。
@@ -504,21 +506,9 @@ export default function App() {
     };
   }, [setSettings]);
 
-  const handleTransitionEnd = useCallback(() => {
-    if (overlay === "leaving") {
-      setSettingsOpen(false);
-      setOverlay("closed");
-    }
-  }, [overlay]);
+  const handleTransitionEnd = handleSettingsOverlayTransitionEnd;
 
-  // 构建 locale context value，避免每次渲染重新创建
-  const localeContextValue = useMemo(
-    () => ({
-      locale: settings.locale,
-      t: (key: string) => translate(key, settings.locale),
-    }),
-    [settings.locale],
-  );
+  const localeContextValue = useLocaleContextValue(settings.locale);
 
   const appUpdateMessages = useMemo(
     () => ({

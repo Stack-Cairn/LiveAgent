@@ -16,7 +16,7 @@ import {
   MoreHorizontal,
   RefreshCw,
   Trash2,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { GitStatusEntry } from "@liveagent/ui/lib/git/types";
 import {

@@ -5,7 +5,7 @@
   "scripts": {
     "build:gui": "pnpm --filter liveagent build",
     "build:webui": "pnpm --filter @liveagent/gateway-webui build",
-    "check:ui-boundaries": "node scripts/check-ui-boundaries.mjs",
+    "check:ui-boundaries": "node --test scripts/ui-boundary-declarations.test.mjs && node scripts/check-ui-boundaries.mjs",
     "lint:ui": "pnpm --filter @liveagent/ui lint",
     "lint:gui": "pnpm --filter liveagent lint",
     "lint:webui": "pnpm --filter @liveagent/gateway-webui lint",

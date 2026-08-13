@@ -1,3 +1,4 @@
+import { ChevronDown, LogOut, User } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import {
   DropdownMenu,
@@ -8,7 +9,6 @@ import {
 } from "@liveagent/ui/components/ui/dropdown-menu";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import type { ReactNode } from "react";
-import { ChevronDown, LogOut, User } from "@/components/icons";
 
 type UserMenuProps = {
   open: boolean;

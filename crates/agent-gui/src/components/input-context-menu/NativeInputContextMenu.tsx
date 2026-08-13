@@ -1,3 +1,4 @@
+import { ClipboardPaste, Copy, ScanText, Scissors } from "@liveagent/ui/components/IconSet";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { cn } from "@liveagent/ui/lib/shared/utils";
 import {
@@ -12,7 +13,6 @@ import {
 import { createPortal } from "react-dom";
 import { useMenuExitPresence } from "../../lib/shared/menuMotion";
 import { readClipboardText } from "../../lib/system/clipboardText";
-import { ClipboardPaste, Copy, ScanText, Scissors } from "../icons";
 import {
   clampMenuPosition,
   computeMenuItems,

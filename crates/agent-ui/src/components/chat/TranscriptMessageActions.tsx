@@ -5,7 +5,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { useLocale } from "../../i18n/index";
 import { cn } from "../../lib/shared/utils";
 import { ConfirmActionPopover } from "../ui/confirm-action-popover";

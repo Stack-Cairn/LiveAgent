@@ -6,7 +6,7 @@ import { createWebModuleLoader } from "../../test/helpers/load-web-module.mjs";
 
 const rootDir = fileURLToPath(new URL("../", import.meta.url));
 const loader = createWebModuleLoader({ rootDir });
-const changedFiles = loader.loadModule("src/lib/chat/changedFiles.ts");
+const changedFiles = loader.loadModule("@liveagent/ui/lib/chat/changedFiles.ts");
 
 let toolCallSeq = 0;
 

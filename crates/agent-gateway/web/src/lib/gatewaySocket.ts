@@ -1,17 +1,45 @@
+import { buildHistoryMessageRefPayload } from "@liveagent/ui/lib/chat/historyMessageRef";
+import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type {
   GatewaySettingsSyncPayload,
   GatewaySettingsSyncUpdatePayload,
 } from "@liveagent/ui/lib/settings/sync";
+import {
+  normalizeSftpActionResponse,
+  normalizeSftpListResponse,
+  normalizeSftpStatResponse,
+  normalizeSftpTransferEvent,
+  normalizeSftpTransferResponse,
+  type RawSftpResponse,
+  type RawSftpTransferEvent,
+} from "@liveagent/ui/lib/sftp/normalization";
 import type {
   SftpActionResponse,
-  SftpEntry,
   SftpListResponse,
   SftpStatResponse,
-  SftpTransfer,
   SftpTransferEvent,
   SftpTransferResponse,
 } from "@liveagent/ui/lib/sftp/types";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
+import {
+  buildTerminalCreatePayload,
+  buildTerminalSshCreatePayload,
+  buildTerminalSshPromptAnswerPayload,
+  normalizeSshTerminalTabsSnapshot,
+  normalizeTerminalByteContainer,
+  normalizeTerminalEvent,
+  normalizeTerminalSession,
+  normalizeTerminalShellOptions,
+  normalizeTerminalSnapshot,
+  normalizeTerminalSshCreateResult,
+  normalizeTerminalSshLatency,
+  type RawSshTerminalTabsSnapshot,
+  type RawTerminalSession,
+  type RawTerminalShellOptionsResponse,
+  type RawTerminalSnapshot,
+  type RawTerminalSshLatency,
+  type RawTerminalEvent as SharedRawTerminalEvent,
+} from "@liveagent/ui/lib/terminal/normalization";
 import type {
   RawSshLocalForwardAction,
   RawSshLocalForwardEvent,
@@ -26,7 +54,6 @@ import {
   normalizeSshLocalForwardSnapshot,
 } from "@liveagent/ui/lib/terminal/sshLocalForwardTypes";
 import type {
-  SshTerminalTab,
   SshTerminalTabKind,
   SshTerminalTabsSnapshot,
   TerminalEvent,
@@ -35,8 +62,6 @@ import type {
   TerminalSnapshot,
   TerminalSshCreateResult,
   TerminalSshLatency,
-  TerminalSshMetadata,
-  TerminalSshPrompt,
   TerminalStreamClient,
 } from "@liveagent/ui/lib/terminal/types";
 import type {
@@ -59,7 +84,6 @@ import type {
   ConversationStreamHandlers,
 } from "@/lib/chat/stream/streamTypes";
 import { normalizeActivityEvent, normalizeCommandUpdate } from "@/lib/chat/stream/streamTypes";
-import type { PendingUploadedFile } from "@/lib/chat/uploadedFiles";
 import { BrowserGatewayTerminalStreamClient } from "@/lib/terminal/gatewayTerminalStreamClient";
 import type { DecodedServerFrame } from "./gatewaySocketV2/adapters";
 import {
@@ -362,134 +386,22 @@ type SkillTextResponse = {
 
 type SkillManagePayload = Record<string, unknown>;
 
-type RawTerminalSession = {
-  id?: string;
-  projectPathKey?: string;
-  project_path_key?: string;
-  cwd?: string;
-  shell?: string;
-  title?: string;
-  pid?: number | null;
-  cols?: number;
-  rows?: number;
-  createdAt?: number;
-  created_at?: number;
-  updatedAt?: number;
-  updated_at?: number;
-  finishedAt?: number | null;
-  finished_at?: number | null;
-  exitCode?: number | null;
-  exit_code?: number | null;
-  running?: boolean;
-  kind?: string;
-  ssh?: RawTerminalSshMetadata | null;
-};
+type RawTerminalResponse = RawTerminalSnapshot &
+  RawTerminalShellOptionsResponse &
+  RawTerminalSshLatency & {
+    action?: string;
+    sessions?: RawTerminalSession[];
+    sshTabs?: RawSshTerminalTabsSnapshot | null;
+    ssh_tabs?: RawSshTerminalTabsSnapshot | null;
+    sshLocalForwards?: RawSshLocalForwardSnapshot | null;
+    ssh_local_forwards?: RawSshLocalForwardSnapshot | null;
+    sshLocalForward?: RawSshLocalForwardAction | null;
+    ssh_local_forward?: RawSshLocalForwardAction | null;
+    sshLocalForwardPortAvailable?: boolean;
+    ssh_local_forward_port_available?: boolean;
+  };
 
-type RawTerminalSshMetadata = Partial<TerminalSshMetadata> & {
-  host_id?: string;
-  host_name?: string;
-  auth_type?: string;
-  reconnect_attempt?: number;
-  reconnect_max_attempts?: number;
-  sftp_enabled?: boolean;
-};
-
-type RawTerminalSshPrompt = Partial<TerminalSshPrompt> & {
-  host_id?: string;
-  host_name?: string;
-  fingerprint_sha256?: string;
-  key_type?: string;
-  answer_echo?: boolean;
-};
-
-type RawTerminalResponse = {
-  action?: string;
-  sessions?: RawTerminalSession[];
-  session?: RawTerminalSession;
-  snapshot?: TerminalSnapshot;
-  prompt?: TerminalSshPrompt;
-  output?: string;
-  outputBytes?: unknown;
-  output_bytes?: unknown;
-  truncated?: boolean;
-  outputStartOffset?: number;
-  output_start_offset?: number;
-  outputEndOffset?: number;
-  output_end_offset?: number;
-  options?: Array<{ id?: string; label?: string; command?: string }>;
-  shellOptions?: Array<{ id?: string; label?: string; command?: string }>;
-  shell_options?: Array<{ id?: string; label?: string; command?: string }>;
-  defaultShell?: string;
-  default_shell?: string;
-  sshPrompt?: RawTerminalSshPrompt | null;
-  ssh_prompt?: RawTerminalSshPrompt | null;
-  sshTabs?: RawSshTerminalTabsSnapshot | null;
-  ssh_tabs?: RawSshTerminalTabsSnapshot | null;
-  latencyMs?: number;
-  latency_ms?: number;
-  sshLocalForwards?: RawSshLocalForwardSnapshot | null;
-  ssh_local_forwards?: RawSshLocalForwardSnapshot | null;
-  sshLocalForward?: RawSshLocalForwardAction | null;
-  ssh_local_forward?: RawSshLocalForwardAction | null;
-  sshLocalForwardPortAvailable?: boolean;
-  ssh_local_forward_port_available?: boolean;
-};
-
-type RawTerminalEvent = {
-  kind?: string;
-  sessionId?: string;
-  session_id?: string;
-  projectPathKey?: string;
-  project_path_key?: string;
-  session?: RawTerminalSession;
-  sshTabs?: RawSshTerminalTabsSnapshot | null;
-  ssh_tabs?: RawSshTerminalTabsSnapshot | null;
-  sshLocalForward?: RawSshLocalForwardEvent | null;
-  ssh_local_forward?: RawSshLocalForwardEvent | null;
-  data?: string | null;
-  outputStartOffset?: number;
-  output_start_offset?: number;
-  outputEndOffset?: number;
-  output_end_offset?: number;
-};
-
-type RawSshTerminalTab = Partial<SshTerminalTab> & {
-  session_id?: string;
-  project_path_key?: string;
-  created_at?: number;
-  updated_at?: number;
-};
-
-type RawSshTerminalTabsSnapshot = Partial<SshTerminalTabsSnapshot> & {
-  project_path_key?: string;
-  tabs?: RawSshTerminalTab[];
-};
-
-type RawSftpEntry = Partial<SftpEntry> & {
-  size_bytes?: number;
-};
-
-type RawSftpTransfer = Partial<SftpTransfer> & {
-  session_id?: string;
-  source_path?: string;
-  target_path?: string;
-  current_path?: string;
-  bytes_done?: number;
-  bytes_total?: number;
-  files_done?: number;
-  files_total?: number;
-};
-
-type RawSftpResponse = Partial<SftpListResponse & SftpStatResponse & SftpActionResponse> & {
-  entries?: RawSftpEntry[];
-  entry?: RawSftpEntry | null;
-  transfer?: RawSftpTransfer | null;
-};
-
-type RawSftpEvent = {
-  kind?: string;
-  transfer?: RawSftpTransfer | null;
-};
+type RawTerminalEvent = SharedRawTerminalEvent<RawSshLocalForwardEvent>;
 
 class AsyncEventQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
   private values: T[] = [];
@@ -632,17 +544,6 @@ function buildChatCommandPayload(input: GatewayChatCommandInput) {
         ? buildHistoryMessageRefPayload(input.baseMessageRef)
         : undefined,
     },
-  };
-}
-
-function buildHistoryMessageRefPayload(ref: HistoryMessageRef) {
-  return {
-    segment_index: ref.segmentIndex,
-    message_index: ref.messageIndex,
-    segment_id: ref.segmentId,
-    message_id: ref.messageId,
-    role: ref.role,
-    content_hash: ref.contentHash,
   };
 }
 
@@ -816,127 +717,6 @@ function normalizePositiveInteger(value: number, fallback: number) {
   return normalized > 0 ? normalized : fallback;
 }
 
-function normalizeTerminalSession(input: RawTerminalSession): TerminalSession {
-  const kind = input.kind === "ssh" ? "ssh" : "local";
-  return {
-    id: input.id ?? "",
-    projectPathKey: input.projectPathKey ?? input.project_path_key ?? "",
-    cwd: input.cwd ?? "",
-    shell: input.shell ?? "",
-    title: input.title ?? "Terminal",
-    kind,
-    ssh: input.ssh ? normalizeTerminalSshMetadata(input.ssh) : null,
-    pid: kind === "ssh" ? null : (input.pid ?? null),
-    cols: Number(input.cols ?? 80),
-    rows: Number(input.rows ?? 24),
-    createdAt: Number(input.createdAt ?? input.created_at ?? 0),
-    updatedAt: Number(input.updatedAt ?? input.updated_at ?? 0),
-    finishedAt: input.finishedAt ?? input.finished_at ?? null,
-    exitCode: input.exitCode ?? input.exit_code ?? null,
-    running: input.running === true,
-  };
-}
-
-function normalizeTerminalSshMetadata(input: RawTerminalSshMetadata): TerminalSshMetadata {
-  return {
-    hostId: input.hostId ?? input.host_id ?? "",
-    hostName: input.hostName ?? input.host_name ?? "",
-    username: input.username ?? "",
-    host: input.host ?? "",
-    port: Number(input.port ?? 22),
-    authType: input.authType ?? input.auth_type ?? "",
-    status: input.status ?? "connected",
-    reconnectAttempt: Number(input.reconnectAttempt ?? input.reconnect_attempt ?? 0),
-    reconnectMaxAttempts: Number(input.reconnectMaxAttempts ?? input.reconnect_max_attempts ?? 3),
-    sftpEnabled: input.sftpEnabled ?? input.sftp_enabled ?? false,
-  };
-}
-
-function normalizeTerminalSshPrompt(
-  input: RawTerminalSshPrompt | null | undefined,
-): TerminalSshPrompt | undefined {
-  if (!input) return undefined;
-  const id = input.id?.trim() ?? "";
-  if (!id) return undefined;
-  return {
-    id,
-    kind: input.kind ?? "hostKey",
-    hostId: input.hostId ?? input.host_id ?? "",
-    hostName: input.hostName ?? input.host_name ?? "",
-    host: input.host ?? "",
-    port: Number(input.port ?? 22),
-    message: input.message ?? "",
-    fingerprintSha256: input.fingerprintSha256 ?? input.fingerprint_sha256 ?? undefined,
-    keyType: input.keyType ?? input.key_type ?? undefined,
-    answerEcho: input.answerEcho ?? input.answer_echo ?? false,
-  };
-}
-
-function normalizeSftpEntry(entry: RawSftpEntry): SftpEntry {
-  return {
-    path: entry.path ?? "",
-    name: entry.name ?? "",
-    kind: entry.kind ?? "file",
-    sizeBytes: Number(entry.sizeBytes ?? entry.size_bytes ?? 0),
-    mtime: Number(entry.mtime ?? 0),
-  };
-}
-
-function normalizeSftpTransfer(transfer: RawSftpTransfer): SftpTransfer {
-  return {
-    id: transfer.id ?? "",
-    sessionId: transfer.sessionId ?? transfer.session_id ?? "",
-    direction: transfer.direction ?? "",
-    status: transfer.status ?? "",
-    sourcePath: transfer.sourcePath ?? transfer.source_path ?? "",
-    targetPath: transfer.targetPath ?? transfer.target_path ?? "",
-    currentPath: transfer.currentPath ?? transfer.current_path ?? "",
-    bytesDone: Number(transfer.bytesDone ?? transfer.bytes_done ?? 0),
-    bytesTotal: Number(transfer.bytesTotal ?? transfer.bytes_total ?? 0),
-    filesDone: Number(transfer.filesDone ?? transfer.files_done ?? 0),
-    filesTotal: Number(transfer.filesTotal ?? transfer.files_total ?? 0),
-    error: transfer.error ?? null,
-  };
-}
-
-function normalizeSftpListResponse(response: RawSftpResponse): SftpListResponse {
-  return {
-    path: response.path ?? "",
-    entries: (response.entries ?? []).map(normalizeSftpEntry),
-  };
-}
-
-function normalizeSftpStatResponse(response: RawSftpResponse): SftpStatResponse {
-  return {
-    exists: response.exists === true,
-    entry: response.entry ? normalizeSftpEntry(response.entry) : null,
-  };
-}
-
-function normalizeSftpActionResponse(response: RawSftpResponse): SftpActionResponse {
-  return {
-    action: response.action ?? "",
-    path: response.path ?? "",
-    entry: response.entry ? normalizeSftpEntry(response.entry) : null,
-    transfer: response.transfer ? normalizeSftpTransfer(response.transfer) : null,
-  };
-}
-
-function normalizeSftpTransferResponse(response: RawSftpResponse): SftpTransferResponse {
-  if (!response.transfer) {
-    throw new Error("SFTP transfer response did not include a transfer");
-  }
-  return { transfer: normalizeSftpTransfer(response.transfer) };
-}
-
-function normalizeSftpTransferEvent(event: RawSftpEvent): SftpTransferEvent | null {
-  if (!event.transfer) return null;
-  return {
-    kind: event.kind ?? "",
-    transfer: normalizeSftpTransfer(event.transfer),
-  };
-}
-
 function sftpPathPayload(side: "local" | "remote", path = "") {
   return {
     side,
@@ -946,127 +726,15 @@ function sftpPathPayload(side: "local" | "remote", path = "") {
   };
 }
 
-function normalizeTerminalSnapshot(input: RawTerminalResponse): TerminalSnapshot {
-  if (!input.session) {
-    throw new Error("Terminal response did not include a session");
-  }
-  const outputStartOffset = normalizeOptionalOffset(
-    input.outputStartOffset ?? input.output_start_offset,
-  );
-  const outputEndOffset = normalizeOptionalOffset(input.outputEndOffset ?? input.output_end_offset);
-  return {
-    session: normalizeTerminalSession(input.session),
-    output: input.output ?? "",
-    outputBytes: normalizeTerminalBytes(input.outputBytes ?? input.output_bytes, input.output),
-    truncated: input.truncated === true,
-    outputStartOffset,
-    outputEndOffset,
-  };
-}
-
 function normalizeTerminalBytes(value: unknown, fallbackText?: string): Uint8Array {
-  if (value instanceof Uint8Array) return value;
-  if (ArrayBuffer.isView(value)) {
-    return new Uint8Array(
-      value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
-    );
-  }
-  if (value instanceof ArrayBuffer) return new Uint8Array(value);
-  if (Array.isArray(value)) return Uint8Array.from(value.map((item) => Number(item) & 0xff));
-  if (typeof value === "string" && value.length > 0) {
+  const bytes = normalizeTerminalByteContainer(value, (text) => {
     try {
-      return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+      return Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
     } catch {
-      return new TextEncoder().encode(value);
+      return new TextEncoder().encode(text);
     }
-  }
-  return fallbackText ? new TextEncoder().encode(fallbackText) : new Uint8Array();
-}
-
-function normalizeTerminalSshCreateResult(input: RawTerminalResponse): TerminalSshCreateResult {
-  return {
-    snapshot: input.snapshot ?? (input.session ? normalizeTerminalSnapshot(input) : undefined),
-    prompt: input.prompt ?? normalizeTerminalSshPrompt(input.sshPrompt ?? input.ssh_prompt),
-  };
-}
-
-function normalizeTerminalSshLatency(input: RawTerminalResponse): TerminalSshLatency {
-  const latencyMs = Number(input.latencyMs ?? input.latency_ms ?? 0);
-  if (!Number.isFinite(latencyMs) || latencyMs <= 0) {
-    throw new Error("SSH latency response did not include latency");
-  }
-  return {
-    sessionId: input.session?.id ?? "",
-    latencyMs: Math.round(latencyMs),
-  };
-}
-
-function normalizeTerminalShellOptions(input: RawTerminalResponse): TerminalShellOptions {
-  const options = (input.options ?? input.shellOptions ?? input.shell_options ?? [])
-    .map((option) => ({
-      id: option.id?.trim() ?? "",
-      label: option.label?.trim() ?? "",
-      command: option.command?.trim() ?? "",
-    }))
-    .filter((option) => option.id && option.label);
-  return {
-    options,
-    defaultShell: input.defaultShell ?? input.default_shell ?? options[0]?.id ?? "default",
-  };
-}
-
-function normalizeSshTerminalTab(input: RawSshTerminalTab): SshTerminalTab {
-  const kind: SshTerminalTabKind = input.kind === "sftp" ? "sftp" : "bash";
-  return {
-    id: input.id ?? "",
-    sessionId: input.sessionId ?? input.session_id ?? "",
-    projectPathKey: input.projectPathKey ?? input.project_path_key ?? "",
-    kind,
-    createdAt: Number(input.createdAt ?? input.created_at ?? 0),
-    updatedAt: Number(input.updatedAt ?? input.updated_at ?? 0),
-  };
-}
-
-function normalizeSshTerminalTabsSnapshot(
-  input: RawSshTerminalTabsSnapshot | null | undefined,
-): SshTerminalTabsSnapshot {
-  return {
-    projectPathKey: input?.projectPathKey ?? input?.project_path_key ?? "",
-    tabs: (input?.tabs ?? []).map(normalizeSshTerminalTab).filter((tab) => tab.id && tab.sessionId),
-    revision: Number(input?.revision ?? 0),
-  };
-}
-
-function normalizeTerminalEvent(input: RawTerminalEvent): TerminalEvent | null {
-  const hasSshTabs = Boolean(input.sshTabs || input.ssh_tabs);
-  const rawSshLocalForward = input.sshLocalForward ?? input.ssh_local_forward;
-  if (!input.session && !hasSshTabs && !rawSshLocalForward) return null;
-  const session = input.session ? normalizeTerminalSession(input.session) : undefined;
-  const sshTabs = hasSshTabs
-    ? normalizeSshTerminalTabsSnapshot(input.sshTabs ?? input.ssh_tabs)
-    : undefined;
-  const sshLocalForward = rawSshLocalForward
-    ? normalizeSshLocalForwardEvent(rawSshLocalForward)
-    : undefined;
-  const outputStartOffset = normalizeOptionalOffset(
-    input.outputStartOffset ?? input.output_start_offset,
-  );
-  const outputEndOffset = normalizeOptionalOffset(input.outputEndOffset ?? input.output_end_offset);
-  return {
-    kind: input.kind ?? "",
-    sessionId: input.sessionId ?? input.session_id ?? session?.id,
-    projectPathKey:
-      input.projectPathKey ??
-      input.project_path_key ??
-      session?.projectPathKey ??
-      sshTabs?.projectPathKey ??
-      "",
-    session,
-    outputStartOffset,
-    outputEndOffset,
-    sshTabs,
-    sshLocalForward,
-  };
+  });
+  return bytes.byteLength > 0 || !fallbackText ? bytes : new TextEncoder().encode(fallbackText);
 }
 
 function applyTerminalSnapshotEvent(snapshot: Map<string, TerminalSession>, event: TerminalEvent) {
@@ -1186,12 +854,6 @@ function normalizeWorkspaceActivity(input: RawWorkspaceActivityPayload): Workspa
       : [],
     truncated: input.truncated === true,
   };
-}
-
-function normalizeOptionalOffset(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? Math.floor(value)
-    : undefined;
 }
 
 function normalizeHistoryListPage(page: number) {
@@ -2199,13 +1861,9 @@ export class GatewayWebSocketClient {
   }): Promise<TerminalSnapshot> {
     return normalizeTerminalSnapshot(
       await this.request<RawTerminalResponse>("terminal.create", {
-        cwd: params.cwd,
-        project_path_key: params.projectPathKey,
-        shell: params.shell,
-        title: params.title,
-        cols: params.cols,
-        rows: params.rows,
+        ...buildTerminalCreatePayload(params),
       }),
+      normalizeTerminalBytes,
     );
   }
 
@@ -2220,14 +1878,9 @@ export class GatewayWebSocketClient {
   }): Promise<TerminalSshCreateResult> {
     return normalizeTerminalSshCreateResult(
       await this.request<RawTerminalResponse>("terminal.create_ssh", {
-        cwd: params.cwd,
-        project_path_key: params.projectPathKey,
-        ssh_host_id: params.hostId,
-        title: params.title,
-        cols: params.cols,
-        rows: params.rows,
-        sftp_enabled: params.sftpEnabled ?? false,
+        ...buildTerminalSshCreatePayload(params),
       }),
+      normalizeTerminalBytes,
     );
   }
 
@@ -2238,10 +1891,9 @@ export class GatewayWebSocketClient {
   }): Promise<TerminalSshCreateResult> {
     return normalizeTerminalSshCreateResult(
       await this.request<RawTerminalResponse>("terminal.answer_ssh_prompt", {
-        prompt_id: params.promptId,
-        prompt_answer: params.answer,
-        trust_host_key: params.trustHostKey,
+        ...buildTerminalSshPromptAnswerPayload(params),
       }),
+      normalizeTerminalBytes,
     );
   }
 
@@ -3445,7 +3097,10 @@ export class GatewayWebSocketClient {
     }
 
     if (type === "terminal.event") {
-      const event = normalizeTerminalEvent(payload as RawTerminalEvent);
+      const event = normalizeTerminalEvent(
+        payload as RawTerminalEvent,
+        normalizeSshLocalForwardEvent,
+      );
       if (event) {
         this.emitTerminal(event);
       }
@@ -3453,7 +3108,7 @@ export class GatewayWebSocketClient {
     }
 
     if (type === "sftp.event") {
-      const event = normalizeSftpTransferEvent(payload as RawSftpEvent);
+      const event = normalizeSftpTransferEvent(payload as RawSftpTransferEvent);
       if (event) {
         this.emitSftpTransfer(event);
       }

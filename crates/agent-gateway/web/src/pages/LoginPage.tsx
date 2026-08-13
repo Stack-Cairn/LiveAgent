@@ -1,7 +1,3 @@
-import { Button } from "@liveagent/ui/components/ui/button";
-import { Textarea } from "@liveagent/ui/components/ui/textarea";
-import { cn } from "@liveagent/ui/lib/shared/utils";
-import { useState } from "react";
 import {
   ArrowRight,
   History,
@@ -10,7 +6,11 @@ import {
   MessageSquareText,
   Shield,
   Timer,
-} from "../components/icons";
+} from "@liveagent/ui/components/IconSet";
+import { Button } from "@liveagent/ui/components/ui/button";
+import { Textarea } from "@liveagent/ui/components/ui/textarea";
+import { cn } from "@liveagent/ui/lib/shared/utils";
+import { useState } from "react";
 
 type LoginPageProps = {
   token: string;

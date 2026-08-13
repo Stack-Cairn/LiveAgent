@@ -1,4 +1,3 @@
-import { ExternalLink, Settings, Trash2 } from "@liveagent/app/components/icons";
 import {
   type AppSettings,
   type McpServerConfig,
@@ -8,6 +7,7 @@ import {
 } from "@liveagent/app/lib/settings/index";
 import { openUrl } from "@liveagent/app/shims/tauriOpener";
 import { ToolPolicyToggle } from "@liveagent/ui/components/hub/ToolPolicyToggle";
+import { ExternalLink, Settings, Trash2 } from "@liveagent/ui/components/IconSet";
 import { getMcpTransportMeta } from "@liveagent/ui/components/resources/McpTransportMeta";
 import { ResourceActivationSwitch } from "@liveagent/ui/components/resources/ResourceActivationSwitch";
 import { Badge } from "@liveagent/ui/components/ui/badge";

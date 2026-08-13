@@ -88,7 +88,7 @@
 | Chat 侧边栏、输入栏、公共消息视觉 | 公共 JSX/CSS 只修改 `crates/agent-ui`；GUI/WebUI 各自数据控制器、流式状态和虚拟列表仍分别检查。 |
 | 上传、剪贴板、目录选择 | 公共交互契约位于 `agent-ui`，Tauri/Gateway/browser 实现位于各宿主适配器。 |
 | Provider 设置 | 公共 Settings UI、两端 provider 适配器、Rust settings、Gateway redaction 和模型请求层。 |
-| Memory | Rust MemoryStore、共享 Memory 页面、两端 `pages/settings/memory/platform.tsx`、Gateway memory.manage 和 MemoryManager tool。 |
+| Memory | Rust MemoryStore、共享 Memory 页面、两端 `agent-ui-adapters/memoryOrganizer.ts`、Gateway memory.manage 和 MemoryManager tool。 |
 | 边界检查 | 执行 `pnpm check:ui-boundaries`，防止应用目录重新出现公共页面副本或共享层直接依赖具体宿主。 |
 
 ## 文档任务边界

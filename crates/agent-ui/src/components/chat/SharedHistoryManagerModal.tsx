@@ -11,7 +11,7 @@ import {
   Search,
   Share2,
   X,
-} from "@liveagent/app/components/icons";
+} from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useLocale } from "@liveagent/ui/i18n/index";
 import { buildShareUrl, resolveShareOrigin } from "@liveagent/ui/lib/chat/historyShareOrigin";

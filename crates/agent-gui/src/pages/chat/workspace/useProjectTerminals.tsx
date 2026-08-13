@@ -1,3 +1,4 @@
+import { Terminal } from "@liveagent/ui/components/IconSet";
 import type { ConfirmDialogOptions } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
   applyTerminalEventToSessions,
@@ -7,7 +8,6 @@ import type { TerminalSession } from "@liveagent/ui/lib/terminal/types";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from "react";
-import { Terminal } from "../../../components/icons";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
 import { asErrorMessage } from "../chatPageUtils";
 

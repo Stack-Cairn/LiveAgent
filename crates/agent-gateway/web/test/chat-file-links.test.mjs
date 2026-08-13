@@ -123,8 +123,16 @@ test("Gateway historical and streaming rows keep the explicit file-open prop cha
     fileURLToPath(new URL("../src/app/GatewayApp.tsx", import.meta.url)),
     "utf8",
   );
-  assert.match(gatewayApp, /openInFileManager: true/);
-  assert.match(gatewayApp, /!result\.outsideWorkspace/);
+  assert.match(gatewayApp, /useChatFileLinkNavigation/);
+
+  const navigation = fs.readFileSync(
+    fileURLToPath(
+      new URL("../../../agent-ui/src/lib/chat/useChatFileLinkNavigation.ts", import.meta.url),
+    ),
+    "utf8",
+  );
+  assert.match(navigation, /openInFileManager: true/);
+  assert.match(navigation, /!result\.outsideWorkspace/);
 });
 
 test("escaped Markdown file links stay literal in Gateway Web", () => {

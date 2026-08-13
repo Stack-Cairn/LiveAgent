@@ -1,10 +1,10 @@
-import { Blend, Cable, Search } from "@liveagent/app/components/icons";
 import {
   type AppSettings,
   type WorkspaceProject,
   type WorkspaceResourceSettingsMode,
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
+import { Blend, Cable, Search } from "@liveagent/ui/components/IconSet";
 import { getMcpTransportMeta } from "@liveagent/ui/components/resources/McpTransportMeta";
 import { ResourceSelectionCard } from "@liveagent/ui/components/resources/ResourceSelectionCard";
 import { ResourceTabsList } from "@liveagent/ui/components/resources/ResourceTabsList";

@@ -1,4 +1,5 @@
 import type { AssistantMessage, Context } from "@earendil-works/pi-ai";
+import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
@@ -20,7 +21,6 @@ import type {
   MemoryExtractionModelConfig,
   MemoryExtractionStatusText,
 } from "../../../lib/chat/memory/extractionEngine";
-import type { HostedSearchBlock } from "../../../lib/chat/messages/hostedSearch";
 import {
   appendTextDeltaToRound,
   collapseThinking,

@@ -1,5 +1,5 @@
+import { Info, Keyboard } from "@liveagent/ui/components/IconSet";
 import type { SettingsSectionDefinition, UiExtensionSlots } from "@liveagent/ui/contracts/registry";
-import { Info, Keyboard } from "../components/icons";
 import { isMacOsTauri, MacOsTitleBarSpacer } from "../components/MacOsTitleBarSpacer";
 import { AboutSection } from "../pages/settings/AboutSection";
 import { GlobalShortcutsSection } from "../pages/settings/GlobalShortcutsSection";

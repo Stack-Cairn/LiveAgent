@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
 const loader = createTsModuleLoader();
 const categories = loader.loadModule("@liveagent/ui/lib/skills/clawHubCategories.ts");
-const localeFiles = [
-  new URL("../../src/i18n/config.ts", import.meta.url),
-  new URL("../../../agent-gateway/web/src/i18n/config.ts", import.meta.url),
+const webRoot = fileURLToPath(new URL("../../../agent-gateway/web/", import.meta.url));
+const hostTranslations = [
+  ["GUI", loader.loadModule("src/i18n/config.ts").translations],
+  [
+    "WebUI",
+    createTsModuleLoader({ rootDir: webRoot }).loadModule("src/i18n/config.ts").translations,
+  ],
 ];
 
 function classify(card) {
@@ -28,16 +32,13 @@ test("exposes the ClawHub category taxonomy", () => {
 test("both hosts localize every Skills Hub category", () => {
   const categoryValues = ["all", ...categories.CLAWHUB_CATEGORY_SLUGS];
 
-  for (const localeFile of localeFiles) {
-    const translations = readFileSync(localeFile, "utf8");
+  for (const [host, translations] of hostTranslations) {
     for (const category of categoryValues) {
       const suffix = `${category.charAt(0).toUpperCase()}${category.slice(1)}`;
       const key = `settings.skillsStoreCategory${suffix}`;
-      assert.equal(
-        translations.split(`"${key}":`).length - 1,
-        2,
-        `${localeFile.pathname} must define ${key} in both locales`,
-      );
+      for (const locale of ["zh-CN", "en-US"]) {
+        assert.ok(Object.hasOwn(translations[locale], key), `${host} ${locale} must define ${key}`);
+      }
     }
   }
 });

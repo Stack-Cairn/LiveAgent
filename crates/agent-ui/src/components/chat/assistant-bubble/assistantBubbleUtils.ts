@@ -1,14 +1,14 @@
+import { isTaskToolName } from "@liveagent/ui/contracts/task";
 import type {
   HostedSearchBlock,
   ToolResultMessage,
   ToolTraceItem,
   UiRound,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import {
   safeStringify,
   shouldDisplayToolTraceItem,
-} from "@liveagent/app/lib/chat/assistantBubbleAdapter";
-import { isTaskToolName } from "@liveagent/ui/contracts/task";
+} from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import type {
   SubagentCardDetails,
   SubagentReportDetails,
