@@ -56,6 +56,10 @@ const webDirectoryPickerAdapter = readFileSync(
   new URL("../../../agent-gateway/web/src/agent-ui-adapters/directoryPicker.tsx", import.meta.url),
   "utf8",
 );
+const webRemotePathPicker = readFileSync(
+  new URL("../../../agent-gateway/web/src/components/RemotePathPickerModal.tsx", import.meta.url),
+  "utf8",
+);
 const sharedSkillsHub = readFileSync(
   new URL("../../../agent-ui/src/pages/skills-hub/SkillsHubPage.tsx", import.meta.url),
   "utf8",
@@ -96,12 +100,22 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(webGatewayApp, /api\.listWorkspaceRootGrants\(project\.id, project\.path\)/);
   assert.match(webGatewayApp, /api\.applyWorkspaceRootGrants\(/);
   assert.match(sharedProjectSettings, /@liveagent\/adapters\/directoryPicker/);
-  assert.match(sharedProjectSettings, /const \{ pickDirectory, directoryPickerElement \}/);
+  assert.match(sharedProjectSettings, /suspendsParentModal/);
   assert.match(sharedProjectSettings, /pickDirectory\(project\.path\)/);
   assert.match(sharedProjectSettings, /\{directoryPickerElement\}/);
+  assert.match(sharedProjectSettings, /const suspendSettingsModal = suspendsParentModal/);
+  assert.match(sharedProjectSettings, /open=\{!isClosing && !directoryPickerActive\}/);
   assert.match(sharedWorkspaceCloneModal, /@liveagent\/adapters\/directoryPicker/);
   assert.match(sharedWorkspaceCloneModal, /\{directoryPickerElement\}/);
   assert.match(webDirectoryPickerAdapter, /useRemotePathPicker/);
+  assert.match(webDirectoryPickerAdapter, /suspendsParentModal: true/);
+  assert.match(sharedProjectSettings, /window\.requestAnimationFrame/);
+  assert.match(webRemotePathPicker, /selectedPathRef\.current = path/);
+  assert.match(webRemotePathPicker, /pending\.resolve\(selectedPathRef\.current\)/);
+  assert.ok(
+    webRemotePathPicker.indexOf("selectedPathRef.current = path") <
+      webRemotePathPicker.indexOf("pending.resolve(selectedPathRef.current)"),
+  );
   assert.doesNotMatch(webGatewayApp, /useDirectoryPicker|directoryPickerElement/);
   assert.match(sharedResourceTabs, /<TabsList[\s\S]*<TabsTrigger/);
   assert.match(sharedResourceCard, /ResourceActivationSwitch/);

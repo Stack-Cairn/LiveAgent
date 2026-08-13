@@ -9,6 +9,7 @@ export function useDirectoryPicker() {
     [pickPath],
   );
   return {
+    suspendsParentModal: true as boolean,
     pickDirectory,
     directoryPickerElement: pathPickerElement,
   };

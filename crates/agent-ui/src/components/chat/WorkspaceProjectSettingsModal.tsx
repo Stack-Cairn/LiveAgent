@@ -141,7 +141,7 @@ export function WorkspaceProjectSettingsModal(props: {
     rootClientUnavailableDescription,
   } = props;
   const { t } = useLocale();
-  const { pickDirectory, directoryPickerElement } = useDirectoryPicker();
+  const { suspendsParentModal, pickDirectory, directoryPickerElement } = useDirectoryPicker();
   const { isClosing, modalState, requestClose } = useModalMotion(onClose);
   const pathKey = workspaceProjectPathKey(project.path);
   const saved = settings.system.workspaceResourceSettings[pathKey];
@@ -172,6 +172,7 @@ export function WorkspaceProjectSettingsModal(props: {
   const [rootsDirty, setRootsDirty] = useState(false);
   const [rootError, setRootError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [directoryPickerActive, setDirectoryPickerActive] = useState(false);
 
   const canRenameProject = project.id !== DEFAULT_WORKSPACE_PROJECT_ID && Boolean(onRenameProject);
   const normalizedProjectName = projectName.trim();
@@ -259,7 +260,14 @@ export function WorkspaceProjectSettingsModal(props: {
   const addDirectory = async () => {
     if (!rootClient) return;
     setRootError(null);
+    const suspendSettingsModal = suspendsParentModal;
     try {
+      if (suspendSettingsModal) {
+        setDirectoryPickerActive(true);
+        await new Promise<void>((resolve) => {
+          window.requestAnimationFrame(() => resolve());
+        });
+      }
       const path = await pickDirectory(project.path);
       if (!path) return;
       if (roots.some((root) => root.displayPath === path)) {
@@ -280,6 +288,8 @@ export function WorkspaceProjectSettingsModal(props: {
       setRootsDirty(true);
     } catch (error) {
       setRootError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (suspendSettingsModal) setDirectoryPickerActive(false);
     }
   };
 
@@ -349,9 +359,9 @@ export function WorkspaceProjectSettingsModal(props: {
 
   return (
     <Dialog.Root
-      open={!isClosing}
+      open={!isClosing && !directoryPickerActive}
       onOpenChange={(open) => {
-        if (!open && !saving) requestClose();
+        if (!open && !saving && !directoryPickerActive) requestClose();
       }}
     >
       <Dialog.Portal>

@@ -728,10 +728,12 @@ type PendingPick = PickPathOptions & {
  */
 export function useRemotePathPicker() {
   const [pending, setPending] = useState<PendingPick | null>(null);
+  const selectedPathRef = useRef<string | null>(null);
 
   const pickPath = useCallback(
     (options: PickPathOptions) =>
       new Promise<string | null>((resolve) => {
+        selectedPathRef.current = null;
         setPending({ ...options, resolve });
       }),
     [],
@@ -744,11 +746,13 @@ export function useRemotePathPicker() {
       title={pending.title}
       description={pending.description}
       onSelect={(path) => {
-        pending.resolve(path);
+        selectedPathRef.current = path;
       }}
       onClose={() => {
-        // No-op when a selection already resolved the promise.
-        pending.resolve(null);
+        // Resolve only after the picker finishes its exit transition so a
+        // suspended parent modal cannot reopen underneath the closing picker.
+        pending.resolve(selectedPathRef.current);
+        selectedPathRef.current = null;
         setPending(null);
       }}
     />
