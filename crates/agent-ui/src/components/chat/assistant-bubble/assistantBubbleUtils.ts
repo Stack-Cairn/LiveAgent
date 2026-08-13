@@ -6,6 +6,7 @@ import type {
   UiRound,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
 import {
+  isDynamicMcpToolName,
   safeStringify,
   shouldDisplayToolTraceItem,
 } from "@liveagent/ui/lib/chat/assistantBubbleAdapter";
@@ -329,7 +330,7 @@ export function getBuiltinResultKind(result?: ToolResultMessage) {
 
 export function isBuiltinShareToolName(name: string) {
   const trimmed = name.trim();
-  if (trimmed.startsWith("mcp_")) {
+  if (isDynamicMcpToolName(trimmed)) {
     return true;
   }
   if (isTaskToolName(trimmed)) {

@@ -1164,6 +1164,10 @@ message ProviderModelsRequest {
   bool use_system_proxy = 4;
   // 可选的模型列表完整地址；非空时跳过基于 base_url 的端点推导。
   string models_url = 5;
+  // WebUI 编辑已保存供应商时用于让桌面端复用本地密钥；密钥不返回浏览器。
+  string provider_id = 6;
+  // 当前草稿是否把 base_url 作为完整聊天端点解释；未提供时沿用已保存配置。
+  optional bool is_full_url = 7;
 }
 
 message ProviderModelsResponse {

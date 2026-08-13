@@ -585,6 +585,8 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
           apiKey: trimStr(body.api_key),
           useSystemProxy: bool(body.use_system_proxy),
           modelsUrl: trimStr(body.models_url),
+          providerId: trimStr(body.provider_id),
+          isFullUrl: typeof body.is_full_url === "boolean" ? body.is_full_url : undefined,
         }),
       };
     case "provider.usage.query":

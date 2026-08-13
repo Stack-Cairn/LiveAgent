@@ -456,6 +456,8 @@ async function fetchModelsThroughGateway(
   apiKey: string,
   useSystemProxy: boolean,
   modelsUrl: string,
+  providerId: string,
+  isFullUrl: boolean,
 ): Promise<ProviderModelConfig[]> {
   const token =
     typeof window !== "undefined"
@@ -471,6 +473,8 @@ async function fetchModelsThroughGateway(
     api_key: apiKey,
     use_system_proxy: useSystemProxy,
     models_url: modelsUrl,
+    provider_id: providerId,
+    is_full_url: isFullUrl,
   });
 
   const items = extractModelListItems(data);
@@ -648,21 +652,28 @@ export async function fetchModelsFromApi(
   type: ProviderId,
   baseUrl: string,
   apiKey: string,
-  options?: { useSystemProxy?: boolean; isFullUrl?: boolean; modelsUrl?: string },
+  options?: {
+    useSystemProxy?: boolean;
+    isFullUrl?: boolean;
+    modelsUrl?: string;
+    providerId?: string;
+  },
 ): Promise<ProviderModelConfig[]> {
   const modelsUrlOverride = type === "gemini" ? "" : (options?.modelsUrl?.trim() ?? "");
-  const normalizedUrl = normalizeProviderModelsBaseUrl(type, baseUrl, options?.isFullUrl === true);
   const normalizedApiKey = apiKey.trim();
   if (isGatewayWebuiRuntime()) {
     return fetchModelsThroughGateway(
       type,
-      normalizedUrl,
+      baseUrl.trim(),
       normalizedApiKey,
       options?.useSystemProxy === true,
       modelsUrlOverride,
+      options?.providerId?.trim() ?? "",
+      options?.isFullUrl === true,
     );
   }
 
+  const normalizedUrl = normalizeProviderModelsBaseUrl(type, baseUrl, options?.isFullUrl === true);
   const attempts = buildProviderModelsAttempts(type, normalizedApiKey);
   const failures: ProviderModelsFailure[] = [];
   let emptyResult: ProviderModelConfig[] | null = null;

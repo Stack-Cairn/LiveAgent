@@ -2413,6 +2413,8 @@ export class GatewayWebSocketClient {
     apiKey: string,
     useSystemProxy = false,
     modelsUrl = "",
+    providerId = "",
+    isFullUrl?: boolean,
   ): Promise<unknown> {
     return this.requestWithRecovery("provider.models", {
       type,
@@ -2420,6 +2422,8 @@ export class GatewayWebSocketClient {
       api_key: apiKey,
       use_system_proxy: useSystemProxy,
       models_url: modelsUrl,
+      provider_id: providerId,
+      is_full_url: isFullUrl,
     });
   }
 
@@ -3562,6 +3566,8 @@ export type GatewayWebSocketClientLike = {
     apiKey: string,
     useSystemProxy?: boolean,
     modelsUrl?: string,
+    providerId?: string,
+    isFullUrl?: boolean,
   ): Promise<unknown>;
   providerUsageQuery<T = unknown>(providerId: string, refresh: boolean): Promise<T>;
   providerUsageTest<T = unknown>(providerId: string, configJson: string): Promise<T>;

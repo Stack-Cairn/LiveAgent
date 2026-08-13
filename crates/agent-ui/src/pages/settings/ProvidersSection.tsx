@@ -446,8 +446,14 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   activeModelsRef.current = activeModels;
   const apiKeyIsRedactedDisplay = initialUsesRedactedApiKey && apiKey === REDACTED_API_KEY_DISPLAY;
   const apiKeyForRequest = apiKeyIsRedactedDisplay ? "" : apiKey.trim();
-  const canFetchModels =
-    (modelsUrl.trim().length > 0 || baseUrl.trim().length > 0) && apiKeyForRequest.length > 0;
+  const canReuseStoredApiKey =
+    isGatewayWebui &&
+    apiKeyIsRedactedDisplay &&
+    Boolean(initialData?.id) &&
+    initialData?.apiKeyConfigured === true &&
+    baseUrl.trim() === (initialData.baseUrl ?? "").trim() &&
+    modelsUrl.trim() === (providerType === "gemini" ? "" : (initialData.modelsUrl ?? "").trim()) &&
+    useSystemProxy === (initialData.useSystemProxy ?? false);
   const persistedUsageQueryProviderId = getPersistedUsageQueryProviderId(initialData);
   const { confirm: requestUsageQueryConfirm, dialog: usageQueryConfirmDialog } = useConfirmDialog();
   const [usageQueryTest, setUsageQueryTest] = useState<{
@@ -485,6 +491,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
           useSystemProxy,
           isFullUrl,
           modelsUrl,
+          providerId: initialData?.id,
         });
         const mergedModels = mergeFetchedModels(list, modelsRef.current);
         commitModelsWithNewRowsRef.current(mergedModels);
@@ -494,7 +501,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
         setFetchingModels(false);
       }
     },
-    [isFullUrl, modelsUrl, providerType, useSystemProxy],
+    [initialData?.id, isFullUrl, modelsUrl, providerType, useSystemProxy],
   );
 
   useEffect(() => {
@@ -636,7 +643,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
   function handleRefresh() {
     const trimUrl = baseUrl.trim();
     const trimKey = apiKeyForRequest;
-    if (!trimUrl || !trimKey) {
+    if ((!trimUrl && !modelsUrl.trim()) || (!trimKey && !canReuseStoredApiKey)) {
       setFetchError(t("settings.noBaseUrlApiKey"));
       return;
     }
@@ -1348,7 +1355,7 @@ function ProviderModal({ providerType, initialData, onSave, onClose }: ModalProp
                       size="sm"
                       className="h-9 gap-1.5 max-[720px]:h-10 max-[720px]:min-w-36 max-[720px]:flex-1"
                       onClick={handleRefresh}
-                      disabled={fetchingModels || (isGatewayWebui && !canFetchModels)}
+                      disabled={fetchingModels}
                     >
                       <RefreshCw className={cn("h-3.5 w-3.5", fetchingModels && "animate-spin")} />
                       {fetchingModels ? t("settings.fetching") : t("settings.refreshModels")}
