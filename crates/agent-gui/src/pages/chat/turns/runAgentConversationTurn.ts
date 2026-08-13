@@ -1111,7 +1111,37 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
     });
   };
 
-  if (showSilentMemoryExtraction && shouldRunMemoryExtraction) {
+  const persistCompletedState = (state: ConversationViewState) =>
+    persistConversationWithHistorySync({
+      conversationId,
+      sessionId,
+      providerId,
+      model,
+      cwd: conversationCwd,
+      state,
+      fallbackTitle,
+      createdAt,
+      titlePromise,
+    });
+
+  const pendingTerminalAssistantMeta = pendingTerminalAssistantMetaRef.current;
+  if (pendingTerminalAssistantMeta) {
+    commitAssistantRoundMeta(
+      pendingTerminalAssistantMeta.assistant,
+      pendingTerminalAssistantMeta.round,
+    );
+  }
+  hookLifecycle.endAgent();
+
+  applyConversationState(finalState);
+  freezeGatewayFinalProjection(finalState, true);
+  settleLiveTranscript(transcriptStore);
+  const historyPersisted = await persistCompletedState(finalState);
+
+  // Memory extraction reads the in-memory final state. Only run it after the
+  // durable history write succeeds so we never keep "memory has the answer,
+  // chat history only has the user prompt" after a failed final persist.
+  if (historyPersisted && showSilentMemoryExtraction && shouldRunMemoryExtraction) {
     const extraction = await runPostTurnMemoryExtraction({
       roundOffset: memoryRoundOffset,
       onTurnStart: (round) => {
@@ -1241,31 +1271,12 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       );
     }
   }
-  const pendingTerminalAssistantMeta = pendingTerminalAssistantMetaRef.current;
-  if (pendingTerminalAssistantMeta) {
-    commitAssistantRoundMeta(
-      pendingTerminalAssistantMeta.assistant,
-      pendingTerminalAssistantMeta.round,
-    );
+  if (completedState !== finalState) {
+    applyConversationState(completedState);
+    freezeGatewayFinalProjection(completedState, true);
+    settleLiveTranscript(transcriptStore);
+    await persistCompletedState(completedState);
   }
-  hookLifecycle.endAgent();
-  applyConversationState(completedState);
-  freezeGatewayFinalProjection(completedState, true);
-  settleLiveTranscript(transcriptStore);
-  const historyPersisted = await persistConversationWithHistorySync({
-    conversationId,
-    sessionId,
-    providerId,
-    model,
-    cwd: conversationCwd,
-    state: completedState,
-    fallbackTitle,
-    createdAt,
-    titlePromise,
-  });
-  // Memory extraction reads the in-memory final state. Only run it after the
-  // durable history write succeeds so we never keep "memory has the answer,
-  // chat history only has the user prompt" after a failed final persist.
   if (historyPersisted && !showSilentMemoryExtraction && shouldRunMemoryExtraction) {
     void runPostTurnMemoryExtraction();
   }
