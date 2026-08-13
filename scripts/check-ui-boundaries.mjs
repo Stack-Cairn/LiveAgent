@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { findRetiredSharedDeclarations } from "./ui-boundary-declarations.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
+const toPosixPath = (path) => path.split(sep).join("/");
 
 function listSourceFiles(root, directory = root) {
   const files = [];
@@ -197,10 +198,10 @@ for (const sharedFile of listSourceFiles(sharedRoot)) {
   for (const appRoot of appRoots) {
     const appFile = join(appRoot, sharedRelativePath);
     if (!existsSync(appFile)) continue;
-    if (sharedFacades.has(relative(repoRoot, appFile))) continue;
+    if (sharedFacades.has(toPosixPath(relative(repoRoot, appFile)))) continue;
     failures += 1;
     console.error(
-      `${relative(repoRoot, appRoot)}/${sharedRelativePath}: 共享源码不能在应用目录保留同路径副本`,
+      `${toPosixPath(relative(repoRoot, appFile))}: 共享源码不能在应用目录保留同路径副本`,
     );
   }
 }
