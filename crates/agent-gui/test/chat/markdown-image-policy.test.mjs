@@ -47,15 +47,16 @@ const loader = createTsModuleLoader({
         throw new Error("openUrl mock was not expected to be called");
       },
     },
-    "react-dom": {
-      createPortal(children, container) {
-        return { type: "portal", children, container };
-      },
-    },
     "./ui/button": {
       Button(props) {
         return { type: "Button", props };
       },
+    },
+    "./ui/dialog": {
+      Dialog: "Dialog",
+      DialogContent: "DialogContent",
+      DialogDescription: "DialogDescription",
+      DialogTitle: "DialogTitle",
     },
     "../lib/shared/utils": {
       cn: (...parts) => parts.filter(Boolean).join(" "),
@@ -407,25 +408,23 @@ test("ordinary https links stay on the external-link path", () => {
   assert.equal(routed.type.name, "MarkdownExternalLink");
 });
 
-test("external link safety modal renders through document body portal", () => {
+test("external link safety modal uses the shared dialog primitives", () => {
   const previousDocument = globalThis.document;
-  const body = { nodeType: 1 };
-  globalThis.document = { body };
+  globalThis.document = {};
 
   try {
-    const portal = markdownModule.ExternalLinkModal({
+    const dialog = markdownModule.ExternalLinkModal({
       isOpen: true,
       onClose() {},
       onConfirm() {},
       url: "https://example.com/dashboard",
     });
 
-    assert.ok(portal);
-    assert.equal(portal.type, "portal");
-    assert.equal(portal.container, body);
-    assert.equal(portal.children.type, "div");
-    assert.match(portal.children.props.className, /\bfixed\b/);
-    assert.match(portal.children.props.className, /\binset-0\b/);
+    assert.ok(dialog);
+    assert.equal(dialog.type, "Dialog");
+    assert.equal(dialog.props.open, true);
+    assert.equal(dialog.props.children.type, "DialogContent");
+    assert.match(dialog.props.children.props.className, /external-link-modal-panel/);
   } finally {
     if (typeof previousDocument === "undefined") {
       delete globalThis.document;
