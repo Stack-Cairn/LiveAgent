@@ -1,3 +1,4 @@
+import { Dialog } from "@base-ui/react/dialog";
 import { useDirectoryPicker } from "@liveagent/adapters/directoryPicker";
 import {
   Check,
@@ -325,12 +326,9 @@ function WorktreeCreateModal(props: {
   } = props;
   const { t } = useLocale();
   const { pickDirectory, directoryPickerElement } = useDirectoryPicker();
-  const titleId = useId();
   const branchInputId = useId();
   const directoryInputId = useId();
   const parentInputId = useId();
-
-  if (!open) return directoryPickerElement;
 
   async function chooseParentDirectory() {
     try {
@@ -342,25 +340,28 @@ function WorktreeCreateModal(props: {
     }
   }
 
+  // directoryPickerElement 渲染在 Root 内、Portal 外：WebUI 的远程路径选择器
+  // 由此成为嵌套 Base UI Dialog，天然叠在本弹窗之上（GUI 为原生目录选择器，元素为 null）。
   return (
-    <>
-      {createPortal(
-        <div
-          className="fixed inset-0 z-[110] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
-        >
-          <div
-            className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-            onClick={loading ? undefined : onClose}
-          />
-          <form
-            className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-            onSubmit={(event) => {
-              event.preventDefault();
-              onSubmit();
-            }}
+    <Dialog.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !loading) onClose();
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Backdrop className="modal-dialog-backdrop fixed inset-0 z-[110] bg-black/55 backdrop-blur-sm" />
+        <Dialog.Viewport className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <Dialog.Popup
+            className="modal-dialog-popup relative w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl outline-none"
+            render={
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  onSubmit();
+                }}
+              />
+            }
           >
             <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
               <div className="flex min-w-0 items-start gap-3">
@@ -368,12 +369,15 @@ function WorktreeCreateModal(props: {
                   <FolderTree className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <div id={titleId} className="text-sm font-semibold text-foreground">
+                  <Dialog.Title className="text-sm font-semibold text-foreground" render={<div />}>
                     {t("git.branchSelector.createWorktreeTitle")}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                  </Dialog.Title>
+                  <Dialog.Description
+                    className="mt-1 text-xs leading-5 text-muted-foreground"
+                    render={<div />}
+                  >
                     {t("git.branchSelector.worktreeDescription")}
-                  </div>
+                  </Dialog.Description>
                 </div>
               </div>
               <Button
@@ -525,12 +529,11 @@ function WorktreeCreateModal(props: {
                 {t("git.branchSelector.createWorktree")}
               </Button>
             </div>
-          </form>
-        </div>,
-        document.body,
-      )}
+          </Dialog.Popup>
+        </Dialog.Viewport>
+      </Dialog.Portal>
       {directoryPickerElement}
-    </>
+    </Dialog.Root>
   );
 }
 

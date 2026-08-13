@@ -1,3 +1,4 @@
+import { Dialog } from "@base-ui/react/dialog";
 import { invoke } from "@liveagent/app/shims/tauriCore";
 import {
   AlertTriangle,
@@ -12,7 +13,6 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   IndividualTreeViewState,
@@ -21,7 +21,6 @@ import type {
   TreeViewState,
 } from "react-complex-tree";
 import { ControlledTreeEnvironment, Tree } from "react-complex-tree";
-import { createPortal } from "react-dom";
 import type { RemoteFsRoot } from "./remotePathPickerPaths";
 import {
   basenameFromPath,
@@ -147,7 +146,10 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const didExpandInitialPathRef = useRef(false);
-  const { modalState, requestClose } = useModalMotion(onClose);
+  // Base UI 控制 open：先置 false 播放退场过渡，onOpenChangeComplete 再通知
+  // 调用方卸载（onSelect 已先行 resolve，onClose 的 resolve(null) 为 no-op）。
+  const [open, setOpen] = useState(true);
+  const requestClose = useCallback(() => setOpen(false), []);
 
   const modalTitle =
     title ?? (mode === "file" ? t("settings.filePickerTitle") : t("settings.workdirPickerTitle"));
@@ -282,16 +284,6 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      requestClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [requestClose]);
 
   useEffect(() => {
     if (loadingRoots || didExpandInitialPathRef.current) return;
@@ -520,187 +512,202 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     }
   }
 
-  const overlay = (
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
+  // 挂 z-[120]：需要压过新建 worktree 弹窗（z-[110]）等上层来源；作为嵌套
+  // Base UI Dialog 打开时 DOM 顺序也保证在后。settings-modal-* 类只复用其
+  // 响应式布局规则，动画由 modal-dialog-* 的 Base UI 过渡属性驱动。
+  return (
+    <Dialog.Root
+      open={open}
+      onOpenChange={setOpen}
+      onOpenChangeComplete={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
-      <div className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
-        <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            {mode === "file" ? <File className="h-5 w-5" /> : <FolderOpen className="h-5 w-5" />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">{modalTitle}</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">{modalDescription}</p>
-          </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            title={t("settings.cancel")}
-            aria-label={t("settings.cancel")}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="settings-modal-subheader border-b border-border/30 px-6 py-4">
-          <div className="settings-field-row flex items-center gap-3">
-            <div className="w-24 shrink-0 text-xs font-medium text-muted-foreground">
-              {mode === "file" ? t("settings.pathPickerPathLabel") : t("settings.workdir")}
-            </div>
-            <Input value={headerPath} readOnly className="font-mono text-[13px]" />
-          </div>
-        </div>
-
-        <div className="settings-modal-body flex min-h-0 flex-1 flex-col gap-3 px-6 py-4">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <Home className="h-3.5 w-3.5" />
-              <span>~</span>
-            </div>
-            <span className="text-muted-foreground/40">·</span>
-            <div className="flex items-center gap-1.5">
-              <HardDrive className="h-3.5 w-3.5" />
-              <span>Root</span>
-            </div>
-          </div>
-
-          {mode === "directory" ? (
-            <div className="rounded-xl border border-border/60 bg-background/70 p-2">
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                <Input
-                  value={newFolderName}
-                  onChange={(event) => {
-                    setNewFolderName(event.currentTarget.value);
-                    if (createFolderError) {
-                      setCreateFolderError(null);
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    void createFolderInActivePath();
-                  }}
-                  placeholder={
-                    activePath
-                      ? t("settings.newFolderNamePlaceholder")
-                      : t("settings.newFolderSelectParentFirst")
-                  }
-                  disabled={!activePath || creatingFolder}
-                  className="h-9"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-9 gap-2"
-                  onClick={() => void createFolderInActivePath()}
-                  disabled={!canCreateFolder}
-                >
-                  {creatingFolder ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Plus className="h-3.5 w-3.5" />
-                  )}
-                  {t("settings.createFolder")}
-                </Button>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="modal-dialog-backdrop fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm" />
+        <Dialog.Viewport className="settings-modal-overlay modal-dialog-viewport fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <Dialog.Popup className="settings-modal-panel modal-dialog-popup relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl outline-none">
+            <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                {mode === "file" ? (
+                  <File className="h-5 w-5" />
+                ) : (
+                  <FolderOpen className="h-5 w-5" />
+                )}
               </div>
-              {createFolderError ? (
-                <div className="mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1">{createFolderError}</span>
+              <div className="min-w-0 flex-1">
+                <Dialog.Title className="text-base font-semibold">{modalTitle}</Dialog.Title>
+                <Dialog.Description className="mt-0.5 text-xs text-muted-foreground">
+                  {modalDescription}
+                </Dialog.Description>
+              </div>
+              <button
+                type="button"
+                onClick={requestClose}
+                title={t("settings.cancel")}
+                aria-label={t("settings.cancel")}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="settings-modal-subheader border-b border-border/30 px-6 py-4">
+              <div className="settings-field-row flex items-center gap-3">
+                <div className="w-24 shrink-0 text-xs font-medium text-muted-foreground">
+                  {mode === "file" ? t("settings.pathPickerPathLabel") : t("settings.workdir")}
+                </div>
+                <Input value={headerPath} readOnly className="font-mono text-[13px]" />
+              </div>
+            </div>
+
+            <div className="settings-modal-body flex min-h-0 flex-1 flex-col gap-3 px-6 py-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Home className="h-3.5 w-3.5" />
+                  <span>~</span>
+                </div>
+                <span className="text-muted-foreground/40">·</span>
+                <div className="flex items-center gap-1.5">
+                  <HardDrive className="h-3.5 w-3.5" />
+                  <span>Root</span>
+                </div>
+              </div>
+
+              {mode === "directory" ? (
+                <div className="rounded-xl border border-border/60 bg-background/70 p-2">
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                    <Input
+                      value={newFolderName}
+                      onChange={(event) => {
+                        setNewFolderName(event.currentTarget.value);
+                        if (createFolderError) {
+                          setCreateFolderError(null);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void createFolderInActivePath();
+                      }}
+                      placeholder={
+                        activePath
+                          ? t("settings.newFolderNamePlaceholder")
+                          : t("settings.newFolderSelectParentFirst")
+                      }
+                      disabled={!activePath || creatingFolder}
+                      className="h-9"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-9 gap-2"
+                      onClick={() => void createFolderInActivePath()}
+                      disabled={!canCreateFolder}
+                    >
+                      {creatingFolder ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5" />
+                      )}
+                      {t("settings.createFolder")}
+                    </Button>
+                  </div>
+                  {createFolderError ? (
+                    <div className="mt-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span className="min-w-0 flex-1">{createFolderError}</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="workdir-picker-tree min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-muted/20 p-2">
+                <ControlledTreeEnvironment
+                  items={items}
+                  getItemTitle={(item) => item.data.label}
+                  viewState={viewState}
+                  onExpandItem={(item, treeId) => {
+                    const index = typeof item.index === "string" ? item.index : "";
+                    if (!index || index === ROOT_ID) return;
+                    updateTreeViewState(treeId, (treePrev) => ({
+                      ...treePrev,
+                      expandedItems: treePrev.expandedItems?.includes(index)
+                        ? treePrev.expandedItems
+                        : [...(treePrev.expandedItems ?? []), index],
+                    }));
+                    void loadChildren(index);
+                  }}
+                  onCollapseItem={(item, treeId) => {
+                    const index = typeof item.index === "string" ? item.index : "";
+                    if (!index || index === ROOT_ID) return;
+                    updateTreeViewState(treeId, (treePrev) => ({
+                      ...treePrev,
+                      expandedItems: (treePrev.expandedItems ?? []).filter(
+                        (entry) => entry !== index,
+                      ),
+                    }));
+                  }}
+                  onSelectItems={(selectedItems, treeId) => {
+                    updateTreeViewState(treeId, (treePrev) => ({
+                      ...treePrev,
+                      selectedItems,
+                    }));
+                  }}
+                  onFocusItem={(item, treeId) => {
+                    updateTreeViewState(treeId, (treePrev) => ({
+                      ...treePrev,
+                      focusedItem: item.index,
+                    }));
+                  }}
+                >
+                  <Tree treeId={TREE_ID} rootItem={ROOT_ID} treeLabel="Remote paths" />
+                </ControlledTreeEnvironment>
+              </div>
+
+              {statusLine ? (
+                <div
+                  className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs ${
+                    statusLine.kind === "error"
+                      ? "border-destructive/30 bg-destructive/5 text-destructive"
+                      : statusLine.kind === "warn"
+                        ? "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300"
+                        : "border-border/60 bg-background/70 text-muted-foreground"
+                  }`}
+                >
+                  {statusLine.kind === "loading" ? (
+                    <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+                  ) : statusLine.kind === "error" ? (
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  ) : (
+                    <FolderOpen className="mt-0.5 h-4 w-4 shrink-0" />
+                  )}
+                  <span className="min-w-0 flex-1">{statusLine.text}</span>
                 </div>
               ) : null}
             </div>
-          ) : null}
 
-          <div className="workdir-picker-tree min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-muted/20 p-2">
-            <ControlledTreeEnvironment
-              items={items}
-              getItemTitle={(item) => item.data.label}
-              viewState={viewState}
-              onExpandItem={(item, treeId) => {
-                const index = typeof item.index === "string" ? item.index : "";
-                if (!index || index === ROOT_ID) return;
-                updateTreeViewState(treeId, (treePrev) => ({
-                  ...treePrev,
-                  expandedItems: treePrev.expandedItems?.includes(index)
-                    ? treePrev.expandedItems
-                    : [...(treePrev.expandedItems ?? []), index],
-                }));
-                void loadChildren(index);
-              }}
-              onCollapseItem={(item, treeId) => {
-                const index = typeof item.index === "string" ? item.index : "";
-                if (!index || index === ROOT_ID) return;
-                updateTreeViewState(treeId, (treePrev) => ({
-                  ...treePrev,
-                  expandedItems: (treePrev.expandedItems ?? []).filter((entry) => entry !== index),
-                }));
-              }}
-              onSelectItems={(selectedItems, treeId) => {
-                updateTreeViewState(treeId, (treePrev) => ({
-                  ...treePrev,
-                  selectedItems,
-                }));
-              }}
-              onFocusItem={(item, treeId) => {
-                updateTreeViewState(treeId, (treePrev) => ({
-                  ...treePrev,
-                  focusedItem: item.index,
-                }));
-              }}
-            >
-              <Tree treeId={TREE_ID} rootItem={ROOT_ID} treeLabel="Remote paths" />
-            </ControlledTreeEnvironment>
-          </div>
-
-          {statusLine ? (
-            <div
-              className={`flex items-start gap-2 rounded-lg border px-3 py-2.5 text-xs ${
-                statusLine.kind === "error"
-                  ? "border-destructive/30 bg-destructive/5 text-destructive"
-                  : statusLine.kind === "warn"
-                    ? "border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300"
-                    : "border-border/60 bg-background/70 text-muted-foreground"
-              }`}
-            >
-              {statusLine.kind === "loading" ? (
-                <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
-              ) : statusLine.kind === "error" ? (
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              ) : (
-                <FolderOpen className="mt-0.5 h-4 w-4 shrink-0" />
-              )}
-              <span className="min-w-0 flex-1">{statusLine.text}</span>
+            <div className="settings-modal-footer flex items-center justify-end gap-2 border-t border-border/40 px-6 py-4">
+              <Button variant="outline" onClick={requestClose}>
+                {t("settings.cancel")}
+              </Button>
+              <Button
+                disabled={!canConfirm}
+                onClick={() => {
+                  if (!canConfirm || !selectedPath) return;
+                  onSelect(selectedPath);
+                  requestClose();
+                }}
+              >
+                {t("settings.select")}
+              </Button>
             </div>
-          ) : null}
-        </div>
-
-        <div className="settings-modal-footer flex items-center justify-end gap-2 border-t border-border/40 px-6 py-4">
-          <Button variant="outline" onClick={requestClose}>
-            {t("settings.cancel")}
-          </Button>
-          <Button
-            disabled={!canConfirm}
-            onClick={() => {
-              if (!canConfirm || !selectedPath) return;
-              onSelect(selectedPath);
-              requestClose();
-            }}
-          >
-            {t("settings.select")}
-          </Button>
-        </div>
-      </div>
-    </div>
+          </Dialog.Popup>
+        </Dialog.Viewport>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
-
-  return createPortal(overlay, document.body);
 }
 
 type PickPathOptions = {
