@@ -292,8 +292,8 @@ function GitInitModal(props: {
   );
 }
 
-// 截图中的“新建 Worktree”模态框主体。分支名、目录名与可选父目录分别
-// 传递，避免把 Git 引用命名规则与文件系统目录规则混为一谈。
+// Worktree 创建弹窗：分支名、目录名与可选父目录分别传递，避免把 Git
+// 引用命名规则与文件系统目录规则混为一谈。
 function WorktreeCreateModal(props: {
   open: boolean;
   repoRoot: string;
@@ -336,7 +336,6 @@ function WorktreeCreateModal(props: {
   const directoryInputId = useId();
   const parentInputId = useId();
 
-  // 截图红框中“选择…”按钮的处理函数：唤起系统目录选择器并回填保存位置。
   async function chooseParentDirectory() {
     try {
       const selected = await pickDirectory(parentDirectory || repoRoot);
@@ -459,7 +458,6 @@ function WorktreeCreateModal(props: {
                 />
               </div>
             </div>
-            {/* 截图中的“保存位置”区域。 */}
             <div className="space-y-1.5">
               <Label htmlFor={parentInputId} className="text-xs text-muted-foreground">
                 {t("git.branchSelector.worktreeParentDirectory")}
@@ -487,7 +485,6 @@ function WorktreeCreateModal(props: {
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 ) : null}
-                {/* 截图红框中的“选择…”按钮。 */}
                 <Button
                   type="button"
                   variant="outline"
@@ -1554,7 +1551,6 @@ export function GitBranchSelector(props: {
     [worktreeBranchDraft],
   );
 
-  // 从分支选择菜单点击“新建 Worktree”后打开截图中的模态框。
   const openWorktreeModal = useCallback(() => {
     if (!gitClient?.createWorktree) return;
     setWorktreeBranchDraft("");
@@ -2075,7 +2071,6 @@ export function GitBranchSelector(props: {
         onClose={resetBranchAction}
       />
       {confirmDialog}
-      {/* “新建 Worktree”模态框的挂载位置。 */}
       {gitClient?.createWorktree ? (
         <WorktreeCreateModal
           open={worktreeModalOpen}
