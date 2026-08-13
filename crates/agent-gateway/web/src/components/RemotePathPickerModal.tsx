@@ -10,9 +10,16 @@ import {
   X,
 } from "@liveagent/ui/components/IconSet";
 import { Button } from "@liveagent/ui/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
 import { Input } from "@liveagent/ui/components/ui/input";
 import { useLocale } from "@liveagent/ui/i18n/index";
-import { useModalMotion } from "@liveagent/ui/lib/shared/modalMotion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   IndividualTreeViewState,
@@ -21,7 +28,6 @@ import type {
   TreeViewState,
 } from "react-complex-tree";
 import { ControlledTreeEnvironment, Tree } from "react-complex-tree";
-import { createPortal } from "react-dom";
 import type { RemoteFsRoot } from "./remotePathPickerPaths";
 import {
   basenameFromPath,
@@ -147,7 +153,6 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [createFolderError, setCreateFolderError] = useState<string | null>(null);
   const didExpandInitialPathRef = useRef(false);
-  const { modalState, requestClose } = useModalMotion(onClose);
 
   const modalTitle =
     title ?? (mode === "file" ? t("settings.filePickerTitle") : t("settings.workdirPickerTitle"));
@@ -282,16 +287,6 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      requestClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [requestClose]);
 
   useEffect(() => {
     if (loadingRoots || didExpandInitialPathRef.current) return;
@@ -520,31 +515,40 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     }
   }
 
-  const overlay = (
-    <div
-      className="settings-modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4"
-      data-state={modalState}
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={requestClose} />
-
-      <div className="settings-modal-panel relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl">
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-4xl flex-col border-border/60 p-0 max-sm:max-h-[calc(100dvh-1rem)] max-sm:max-w-[calc(100vw-1rem)]"
+        overlayClassName="bg-black/60"
+        viewportClassName="items-stretch px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(8px,env(safe-area-inset-top))] sm:items-center sm:p-4"
+      >
         <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             {mode === "file" ? <File className="h-5 w-5" /> : <FolderOpen className="h-5 w-5" />}
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold">{modalTitle}</h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">{modalDescription}</p>
+            <DialogTitle>{modalTitle}</DialogTitle>
+            <DialogDescription className="mt-0.5 text-xs">{modalDescription}</DialogDescription>
           </div>
-          <button
-            type="button"
-            onClick={requestClose}
-            title={t("settings.cancel")}
-            aria-label={t("settings.cancel")}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+          <DialogClose
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                title={t("settings.cancel")}
+                aria-label={t("settings.cancel")}
+              />
+            }
           >
             <X className="h-4 w-4" />
-          </button>
+          </DialogClose>
         </div>
 
         <div className="settings-modal-subheader border-b border-border/30 px-6 py-4">
@@ -681,26 +685,25 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
           ) : null}
         </div>
 
-        <div className="settings-modal-footer flex items-center justify-end gap-2 border-t border-border/40 px-6 py-4">
-          <Button variant="outline" onClick={requestClose}>
-            {t("settings.cancel")}
-          </Button>
-          <Button
-            disabled={!canConfirm}
-            onClick={() => {
-              if (!canConfirm || !selectedPath) return;
-              onSelect(selectedPath);
-              requestClose();
-            }}
+        <DialogFooter className="settings-modal-footer border-t border-border/40 px-6 py-4">
+          <DialogClose render={<Button variant="outline" />}>{t("settings.cancel")}</DialogClose>
+          <DialogClose
+            render={
+              <Button
+                disabled={!canConfirm}
+                onClick={() => {
+                  if (!canConfirm || !selectedPath) return;
+                  onSelect(selectedPath);
+                }}
+              />
+            }
           >
             {t("settings.select")}
-          </Button>
-        </div>
-      </div>
-    </div>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
-
-  return createPortal(overlay, document.body);
 }
 
 type PickPathOptions = {

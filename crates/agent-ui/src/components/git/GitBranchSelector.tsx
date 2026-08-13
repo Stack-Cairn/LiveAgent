@@ -23,6 +23,13 @@ import {
 import { Button } from "@liveagent/ui/components/ui/button";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@liveagent/ui/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -285,8 +292,8 @@ function GitInitModal(props: {
   );
 }
 
-// Worktree 创建弹窗：分支名、目录名与可选父目录分别传递，避免把 Git
-// 引用命名规则与文件系统目录规则混为一谈。
+// 截图中的“新建 Worktree”模态框主体。分支名、目录名与可选父目录分别
+// 传递，避免把 Git 引用命名规则与文件系统目录规则混为一谈。
 function WorktreeCreateModal(props: {
   open: boolean;
   repoRoot: string;
@@ -325,13 +332,11 @@ function WorktreeCreateModal(props: {
   } = props;
   const { t } = useLocale();
   const { pickDirectory, directoryPickerElement } = useDirectoryPicker();
-  const titleId = useId();
   const branchInputId = useId();
   const directoryInputId = useId();
   const parentInputId = useId();
 
-  if (!open) return directoryPickerElement;
-
+  // 截图红框中“选择…”按钮的处理函数：唤起系统目录选择器并回填保存位置。
   async function chooseParentDirectory() {
     try {
       const selected = await pickDirectory(parentDirectory || repoRoot);
@@ -343,194 +348,194 @@ function WorktreeCreateModal(props: {
   }
 
   return (
-    <>
-      {createPortal(
-        <div
-          className="fixed inset-0 z-[110] flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={titleId}
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && !loading) onClose();
+      }}
+    >
+      <DialogContent className="max-w-md p-0">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
         >
-          <div
-            className="absolute inset-0 bg-black/55 backdrop-blur-sm"
-            onClick={loading ? undefined : onClose}
-          />
-          <form
-            className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-border/70 bg-background shadow-2xl"
-            onSubmit={(event) => {
-              event.preventDefault();
-              onSubmit();
-            }}
-          >
-            <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
-              <div className="flex min-w-0 items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
-                  <FolderTree className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <div id={titleId} className="text-sm font-semibold text-foreground">
-                    {t("git.branchSelector.createWorktreeTitle")}
-                  </div>
-                  <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {t("git.branchSelector.worktreeDescription")}
-                  </div>
-                </div>
+          <div className="flex items-start justify-between gap-4 border-b border-border/60 px-5 py-4">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300">
+                <FolderTree className="h-5 w-5" />
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                disabled={loading}
-                className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
-                title={t("window.close")}
-                aria-label={t("window.close")}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="min-w-0">
+                <DialogTitle className="text-sm leading-normal">
+                  {t("git.branchSelector.createWorktreeTitle")}
+                </DialogTitle>
+                <DialogDescription className="mt-1 text-xs leading-5">
+                  {t("git.branchSelector.worktreeDescription")}
+                </DialogDescription>
+              </div>
             </div>
-            <div className="space-y-4 px-5 py-4">
+            <DialogClose
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={loading}
+                  className="h-8 w-8 shrink-0 rounded-xl text-muted-foreground hover:text-foreground"
+                  title={t("window.close")}
+                  aria-label={t("window.close")}
+                />
+              }
+            >
+              <X className="h-4 w-4" />
+            </DialogClose>
+          </div>
+          <div className="space-y-4 px-5 py-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                {t("git.branchSelector.repositoryLabel")}
+              </Label>
+              <div
+                className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs text-foreground"
+                title={repoRoot}
+              >
+                {repoRoot}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                {t("git.branchSelector.worktreeStartPoint")}
+              </Label>
+              <Select
+                value={startPoint || null}
+                onValueChange={onStartPointChange}
+                disabled={loading || startPointOptions.length === 0}
+              >
+                <SelectTrigger type="button" className="h-9 text-xs">
+                  <SelectValue placeholder="HEAD" />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {startPointOptions.map((option) => (
+                    <SelectItem key={option} value={option} className="text-xs">
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">
-                  {t("git.branchSelector.repositoryLabel")}
+                <Label htmlFor={branchInputId} className="text-xs text-muted-foreground">
+                  {t("git.branchSelector.worktreeBranch")}
                 </Label>
-                <div
-                  className="truncate rounded-lg border border-border/70 bg-muted/35 px-3 py-2 text-xs text-foreground"
-                  title={repoRoot}
-                >
-                  {repoRoot}
-                </div>
+                <Input
+                  id={branchInputId}
+                  value={branch}
+                  onChange={(event) => onBranchChange(event.target.value)}
+                  className="h-9 text-sm"
+                  placeholder={t("git.branchSelector.worktreeBranchPlaceholder")}
+                  autoFocus
+                  disabled={loading}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">
-                  {t("git.branchSelector.worktreeStartPoint")}
+                <Label htmlFor={directoryInputId} className="text-xs text-muted-foreground">
+                  {t("git.branchSelector.worktreeDirectoryName")}
                 </Label>
-                <Select
-                  value={startPoint || null}
-                  onValueChange={onStartPointChange}
-                  disabled={loading || startPointOptions.length === 0}
-                >
-                  <SelectTrigger type="button" className="h-9 text-xs">
-                    <SelectValue placeholder="HEAD" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {startPointOptions.map((option) => (
-                      <SelectItem key={option} value={option} className="text-xs">
-                        {option}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input
+                  id={directoryInputId}
+                  value={directoryName}
+                  onChange={(event) => onDirectoryNameChange(event.target.value)}
+                  className="h-9 text-sm"
+                  placeholder={t("git.branchSelector.worktreeDirectoryPlaceholder")}
+                  disabled={loading}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor={branchInputId} className="text-xs text-muted-foreground">
-                    {t("git.branchSelector.worktreeBranch")}
-                  </Label>
-                  <Input
-                    id={branchInputId}
-                    value={branch}
-                    onChange={(event) => onBranchChange(event.target.value)}
-                    className="h-9 text-sm"
-                    placeholder={t("git.branchSelector.worktreeBranchPlaceholder")}
-                    autoFocus
-                    disabled={loading}
-                    spellCheck={false}
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={directoryInputId} className="text-xs text-muted-foreground">
-                    {t("git.branchSelector.worktreeDirectoryName")}
-                  </Label>
-                  <Input
-                    id={directoryInputId}
-                    value={directoryName}
-                    onChange={(event) => onDirectoryNameChange(event.target.value)}
-                    className="h-9 text-sm"
-                    placeholder={t("git.branchSelector.worktreeDirectoryPlaceholder")}
-                    disabled={loading}
-                    spellCheck={false}
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={parentInputId} className="text-xs text-muted-foreground">
-                  {t("git.branchSelector.worktreeParentDirectory")}
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    id={parentInputId}
-                    value={parentDirectory}
-                    readOnly
-                    className="h-9 min-w-0 flex-1 text-xs"
-                    placeholder={t("git.branchSelector.worktreeDefaultLocation")}
-                    disabled={loading}
-                    title={parentDirectory}
-                  />
-                  {parentDirectory ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="h-9 w-9 shrink-0"
-                      onClick={() => onParentDirectoryChange("")}
-                      disabled={loading}
-                      title={t("git.branchSelector.worktreeUseDefaultLocation")}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  ) : null}
+            </div>
+            {/* 截图中的“保存位置”区域。 */}
+            <div className="space-y-1.5">
+              <Label htmlFor={parentInputId} className="text-xs text-muted-foreground">
+                {t("git.branchSelector.worktreeParentDirectory")}
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  id={parentInputId}
+                  value={parentDirectory}
+                  readOnly
+                  className="h-9 min-w-0 flex-1 text-xs"
+                  placeholder={t("git.branchSelector.worktreeDefaultLocation")}
+                  disabled={loading}
+                  title={parentDirectory}
+                />
+                {parentDirectory ? (
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
-                    className="h-9 shrink-0"
-                    onClick={() => void chooseParentDirectory()}
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => onParentDirectoryChange("")}
                     disabled={loading}
+                    title={t("git.branchSelector.worktreeUseDefaultLocation")}
                   >
-                    <FolderOpen className="h-3.5 w-3.5" />
-                    {t("git.branchSelector.worktreeChooseParent")}
+                    <X className="h-3.5 w-3.5" />
                   </Button>
-                </div>
+                ) : null}
+                {/* 截图红框中的“选择…”按钮。 */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0"
+                  onClick={() => void chooseParentDirectory()}
+                  disabled={loading}
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  {t("git.branchSelector.worktreeChooseParent")}
+                </Button>
               </div>
-              <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
-                {parentDirectory
-                  ? t("git.branchSelector.worktreeCustomLocationHint")
-                  : t("git.branchSelector.worktreeLocationHint")}
+            </div>
+            <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              {parentDirectory
+                ? t("git.branchSelector.worktreeCustomLocationHint")
+                : t("git.branchSelector.worktreeLocationHint")}
+            </div>
+            {error ? (
+              <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {error}
               </div>
-              {error ? (
-                <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                  {error}
-                </div>
-              ) : null}
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
-              <Button type="button" variant="ghost" size="sm" onClick={onClose} disabled={loading}>
-                {t("chat.cancel")}
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                disabled={loading || !branch.trim() || !directoryName.trim()}
-              >
-                {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <FolderTree className="h-3.5 w-3.5" />
-                )}
-                {t("git.branchSelector.createWorktree")}
-              </Button>
-            </div>
-          </form>
-        </div>,
-        document.body,
-      )}
-      {directoryPickerElement}
-    </>
+            ) : null}
+          </div>
+          <div className="flex items-center justify-end gap-2 border-t border-border/60 px-5 py-4">
+            <DialogClose
+              render={<Button type="button" variant="ghost" size="sm" disabled={loading} />}
+            >
+              {t("chat.cancel")}
+            </DialogClose>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={loading || !branch.trim() || !directoryName.trim()}
+            >
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <FolderTree className="h-3.5 w-3.5" />
+              )}
+              {t("git.branchSelector.createWorktree")}
+            </Button>
+          </div>
+        </form>
+        {/* Web 端目录选择器是嵌套 Dialog；置于父 Popup 内交给 Base UI 管理层级与焦点。 */}
+        {directoryPickerElement}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1549,6 +1554,7 @@ export function GitBranchSelector(props: {
     [worktreeBranchDraft],
   );
 
+  // 从分支选择菜单点击“新建 Worktree”后打开截图中的模态框。
   const openWorktreeModal = useCallback(() => {
     if (!gitClient?.createWorktree) return;
     setWorktreeBranchDraft("");
@@ -2069,6 +2075,7 @@ export function GitBranchSelector(props: {
         onClose={resetBranchAction}
       />
       {confirmDialog}
+      {/* “新建 Worktree”模态框的挂载位置。 */}
       {gitClient?.createWorktree ? (
         <WorktreeCreateModal
           open={worktreeModalOpen}
