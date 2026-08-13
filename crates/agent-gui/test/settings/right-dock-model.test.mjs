@@ -704,3 +704,107 @@ describe("file tree model", () => {
     );
   });
 });
+
+test("background-tasks intent normalizes with caps and defaults", () => {
+  assert.deepEqual(settings.normalizeRightDockBackgroundTasksState(undefined), {
+    opened: false,
+    dismissedIds: [],
+  });
+  const state = settings.normalizeRightDockBackgroundTasksState({
+    opened: true,
+    dismissedIds: ["p-1", "", "p-1", 42, "  p-2  ", "x".repeat(200)],
+  });
+  assert.deepEqual(state, { opened: true, dismissedIds: ["p-1", "p-2"] });
+});
+
+test("background-tasks open/close helpers pin visibility and snapshot dismissals", () => {
+  const base = settings.normalizeRightDockProjectState({});
+
+  const opened = settings.openRightDockBackgroundTasksTabState(base);
+  assert.equal(opened.activeTabId, settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID);
+  assert.ok(opened.tabOrder.includes(settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID));
+  assert.deepEqual(opened.backgroundTasks, { opened: true, dismissedIds: [] });
+
+  const closed = settings.closeRightDockBackgroundTasksTabState(opened, ["p-1", "p-2"]);
+  assert.deepEqual(closed.backgroundTasks, { opened: false, dismissedIds: ["p-1", "p-2"] });
+  // Hide-only: activeTabId and tabOrder stay put; render-time resolution falls back.
+  assert.equal(closed.activeTabId, opened.activeTabId);
+  assert.deepEqual(closed.tabOrder, opened.tabOrder);
+
+  // Re-opening clears the dismissal snapshot so hidden records reappear.
+  const reopened = settings.openRightDockBackgroundTasksTabState(closed);
+  assert.deepEqual(reopened.backgroundTasks, { opened: true, dismissedIds: [] });
+});
+
+test("a background-tasks-only bucket is live state, not a tombstone", () => {
+  const normalized = settings.normalizeRightDockSettings({
+    projects: {
+      "/workspace/app": {
+        tabOrder: [settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID],
+        tools: {},
+        backgroundTasks: { opened: true, dismissedIds: [] },
+        openVersion: 0,
+        stateVersion: 2,
+        writerId: "writer-a",
+        // Old enough that a tombstone would have expired.
+        lastUsedAt: 1,
+      },
+    },
+  });
+  assert.deepEqual(normalized.projects["/workspace/app"].backgroundTasks, {
+    opened: true,
+    dismissedIds: [],
+  });
+});
+
+test("updateRightDockProjectState persists a background-tasks-only change", () => {
+  const base = settings.normalizeSettings({});
+  const opened = settings.updateRightDockProjectState(base, "/workspace/app", (current) =>
+    settings.openRightDockBackgroundTasksTabState(current),
+  );
+  assert.notEqual(opened, base);
+  const state = settings.getRightDockProjectState(opened.customSettings, "/workspace/app");
+  assert.deepEqual(state.backgroundTasks, { opened: true, dismissedIds: [] });
+  assert.equal(state.stateVersion, 1);
+
+  // Closing with a dismissal snapshot is content too: another version bump.
+  const closed = settings.updateRightDockProjectState(opened, "/workspace/app", (current) =>
+    settings.closeRightDockBackgroundTasksTabState(current, ["p-9"]),
+  );
+  const closedState = settings.getRightDockProjectState(closed.customSettings, "/workspace/app");
+  assert.deepEqual(closedState.backgroundTasks, { opened: false, dismissedIds: ["p-9"] });
+  assert.equal(closedState.stateVersion, 2);
+});
+
+test("background-tasks intent rides the (stateVersion, writerId) merge", () => {
+  const current = settingsWithRightDock({
+    "/workspace/app": {
+      tabOrder: [],
+      tools: {},
+      backgroundTasks: { opened: false, dismissedIds: [] },
+      openVersion: 0,
+      stateVersion: 3,
+      writerId: "writer-zzz",
+      lastUsedAt: 1_000,
+    },
+  });
+  const merged = sync.applyGatewaySettingsSyncPayload(
+    current,
+    rightDockSyncPayload({
+      "/workspace/app": {
+        activeTabId: settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
+        tabOrder: [settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID],
+        tools: {},
+        backgroundTasks: { opened: true, dismissedIds: [] },
+        openVersion: 0,
+        stateVersion: 4,
+        writerId: "writer-aaa",
+        lastUsedAt: 2_000,
+      },
+    }),
+  );
+  const project = merged.customSettings.rightDock.projects["/workspace/app"];
+  assert.deepEqual(project.backgroundTasks, { opened: true, dismissedIds: [] });
+  assert.equal(project.activeTabId, settings.RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID);
+  assert.equal(project.stateVersion, 4);
+});

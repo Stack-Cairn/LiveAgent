@@ -23,6 +23,7 @@ import { createPortal } from "react-dom";
 import {
   clearManagedProcesses,
   readManagedProcessLog,
+  refreshManagedProcessState,
   stopManagedProcess,
   useManagedProcesses,
 } from "../../lib/managed-process/store";
@@ -46,6 +47,10 @@ const LOG_MENU_ITEM_CLASS =
 // flash the menu at the wrong spot for one frame.
 const LOG_MENU_WIDTH = 150;
 const LOG_MENU_HEIGHT = 110;
+
+// Visible-panel reconcile cadence: one snapshot request against the desktop
+// registry, cheap on both transports.
+const RECONCILE_INTERVAL_MS = 30_000;
 
 type LogContextMenuState = {
   x: number;
@@ -515,6 +520,24 @@ export const BackgroundTasksPanel = memo(function BackgroundTasksPanel(
     setNow(Date.now());
     return () => window.clearInterval(timer);
   }, [active, hasRunning]);
+
+  // Change pushes can be dropped in transit (congested gateway broadcast,
+  // stalled webview), and a missed one would freeze this mirror forever.
+  // While the panel is the visible tab, reconcile against the authoritative
+  // registry: once on activation, then at a slow cadence.
+  useEffect(() => {
+    if (!active) return;
+    const refresh = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      refreshManagedProcessState().catch(() => {
+        // Offline agent: keep the cached list; the offline banner is already
+        // driven by agentOnline.
+      });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, RECONCILE_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [active]);
 
   const handleCloseLog = useCallback(() => {
     setLogProcess(null);
