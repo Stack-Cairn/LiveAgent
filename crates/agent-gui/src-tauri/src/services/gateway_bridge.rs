@@ -384,15 +384,116 @@ pub async fn handle_provider_list() -> Result<proto::ProviderListResponse, Strin
 pub async fn handle_provider_models(
     request: proto::ProviderModelsRequest,
 ) -> Result<proto::ProviderModelsResponse, String> {
+    let provider_type = request.provider_type.trim().to_string();
+    let request_api_key = request.api_key.trim().to_string();
+    let config = if request_api_key.is_empty() {
+        let provider_id = request.provider_id.trim().to_string();
+        let expected_provider_type = provider_type.clone();
+        let is_full_url = request.is_full_url;
+        tauri::async_runtime::spawn_blocking(move || {
+            let conn = open_db()?;
+            resolve_stored_provider_models_config(
+                &provider_id,
+                &expected_provider_type,
+                is_full_url,
+                load_providers(&conn)?,
+            )
+        })
+        .await
+        .map_err(|error| format!("读取供应商 API Key 任务失败：{error}"))??
+    } else {
+        ProviderModelsRequestConfig {
+            provider_type,
+            base_url: request.base_url.trim().to_string(),
+            api_key: request_api_key,
+            use_system_proxy: request.use_system_proxy,
+            models_url: Some(request.models_url.trim().to_string())
+                .filter(|value| !value.is_empty()),
+            is_full_url: request.is_full_url.unwrap_or(false),
+        }
+    };
     let models_json = crate::services::provider_models::fetch_provider_models(
-        request.provider_type.trim(),
-        request.base_url.trim(),
-        request.api_key.trim(),
-        request.use_system_proxy,
-        Some(request.models_url.trim()).filter(|value| !value.is_empty()),
+        &config.provider_type,
+        &config.base_url,
+        &config.api_key,
+        config.use_system_proxy,
+        config.models_url.as_deref(),
+        config.is_full_url,
     )
     .await?;
     Ok(proto::ProviderModelsResponse { models_json })
+}
+
+#[derive(Debug, PartialEq)]
+struct ProviderModelsRequestConfig {
+    provider_type: String,
+    base_url: String,
+    api_key: String,
+    use_system_proxy: bool,
+    models_url: Option<String>,
+    is_full_url: bool,
+}
+
+fn resolve_stored_provider_models_config(
+    provider_id: &str,
+    expected_provider_type: &str,
+    is_full_url: Option<bool>,
+    providers: Option<Value>,
+) -> Result<ProviderModelsRequestConfig, String> {
+    let provider_id = provider_id.trim();
+    if provider_id.is_empty() {
+        return Err("请先填写 API Key".to_string());
+    }
+    let providers = providers
+        .and_then(|value| value.as_array().cloned())
+        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+    let provider = providers
+        .into_iter()
+        .find(|provider| provider.get("id").and_then(Value::as_str) == Some(provider_id))
+        .ok_or_else(|| "未找到已保存的供应商".to_string())?;
+    let stored_provider_type = provider
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim();
+    if stored_provider_type != expected_provider_type.trim() {
+        return Err("供应商类型与已保存配置不匹配".to_string());
+    }
+    let api_key = provider
+        .get("apiKey")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "已保存的供应商未配置 API Key".to_string())?;
+    let base_url = provider
+        .get("baseUrl")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let models_url = provider
+        .get("modelsUrl")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    Ok(ProviderModelsRequestConfig {
+        provider_type: stored_provider_type.to_string(),
+        base_url,
+        api_key,
+        use_system_proxy: provider
+            .get("useSystemProxy")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        models_url,
+        is_full_url: is_full_url.unwrap_or_else(|| {
+            provider
+                .get("isFullUrl")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        }),
+    })
 }
 
 pub async fn handle_skill_files_list() -> Result<proto::SkillFilesListResponse, String> {
@@ -1419,7 +1520,7 @@ mod tests {
     use super::{
         flatten_history_messages_json, flatten_history_messages_json_window,
         is_builtin_share_tool_name, parse_runs_limit, redact_builtin_tool_content_json,
-        sanitize_provider_summaries,
+        resolve_stored_provider_models_config, sanitize_provider_summaries,
     };
     use crate::commands::chat_history::{
         self, history_message_content_hash, ChatHistoryMessageRef, ChatHistorySegmentRecord,
@@ -1488,6 +1589,67 @@ mod tests {
         assert_eq!(result[0]["nativeWebSearchEnabled"], false);
         assert_eq!(result[0]["apiKey"], Value::Null);
         assert_eq!(result[0]["baseUrl"], Value::Null);
+    }
+
+    #[test]
+    fn provider_models_resolves_redacted_webui_config_from_matching_provider() {
+        let providers = json!([{
+            "id": "provider-a",
+            "type": "codex",
+            "baseUrl": "https://stored.example.com/v1/responses",
+            "apiKey": "stored-secret",
+            "isFullUrl": true,
+            "modelsUrl": "https://stored.example.com/models",
+            "useSystemProxy": true
+        }]);
+        assert_eq!(
+            resolve_stored_provider_models_config("provider-a", "codex", None, Some(providers))
+                .expect("stored provider config"),
+            super::ProviderModelsRequestConfig {
+                provider_type: "codex".to_string(),
+                base_url: "https://stored.example.com/v1/responses".to_string(),
+                api_key: "stored-secret".to_string(),
+                use_system_proxy: true,
+                models_url: Some("https://stored.example.com/models".to_string()),
+                is_full_url: true,
+            }
+        );
+    }
+
+    #[test]
+    fn provider_models_applies_webui_full_url_mode_to_stored_endpoint() {
+        let providers = json!([{
+            "id": "provider-a",
+            "type": "codex",
+            "baseUrl": "https://stored.example.com/v1/responses",
+            "apiKey": "stored-secret",
+            "isFullUrl": false
+        }]);
+        let config = resolve_stored_provider_models_config(
+            "provider-a",
+            "codex",
+            Some(true),
+            Some(providers),
+        )
+        .expect("stored provider config with draft full URL mode");
+
+        assert_eq!(config.base_url, "https://stored.example.com/v1/responses");
+        assert_eq!(config.api_key, "stored-secret");
+        assert!(config.is_full_url);
+    }
+
+    #[test]
+    fn provider_models_rejects_mismatched_stored_provider_type() {
+        let providers = json!([{
+            "id": "provider-a",
+            "type": "claude_code",
+            "apiKey": "stored-secret"
+        }]);
+        assert_eq!(
+            resolve_stored_provider_models_config("provider-a", "codex", None, Some(providers))
+                .expect_err("provider type mismatch"),
+            "供应商类型与已保存配置不匹配"
+        );
     }
 
     #[test]

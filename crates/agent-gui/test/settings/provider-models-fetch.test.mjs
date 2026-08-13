@@ -421,11 +421,13 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
   try {
     const models = await providerUtils.fetchModelsFromApi(
       "codex",
-      "https://relay.example.com/v1",
+      "https://relay.example.com/custom/v1/chat/completions?region=cn",
       "test-key",
       {
         useSystemProxy: true,
+        isFullUrl: true,
         modelsUrl: "https://catalog.example.com/models?api-version=2026-01",
+        providerId: "provider-codex",
       },
     );
     assert.deepEqual(
@@ -435,10 +437,12 @@ test("gateway WebUI forwards proxy and models URL choices to desktop model fetch
     assert.deepEqual(gatewayInvokeCalls, [
       {
         type: "codex",
-        base_url: "https://relay.example.com/v1",
+        base_url: "https://relay.example.com/custom/v1/chat/completions?region=cn",
         api_key: "test-key",
         use_system_proxy: true,
         models_url: "https://catalog.example.com/models?api-version=2026-01",
+        provider_id: "provider-codex",
+        is_full_url: true,
       },
     ]);
   } finally {

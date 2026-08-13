@@ -26,6 +26,46 @@ function decodeClientFrame(bytes) {
   return pb.fromBinary(v2.WebClientFrameSchema, bytes);
 }
 
+test("provider model requests carry the stored provider identity to the desktop", () => {
+  const encoded = encodeRequestFrame(
+    "provider-models-1",
+    "provider.models",
+    {
+      type: "codex",
+      base_url: "https://relay.example.com/v1",
+      api_key: "",
+      use_system_proxy: true,
+      models_url: "https://relay.example.com/models",
+      provider_id: "provider-a",
+      is_full_url: true,
+    },
+    "agent-1",
+  );
+  const frame = decodeClientFrame(encoded);
+  assert.equal(frame.agentId, "agent-1");
+  assert.equal(frame.payload.value.payload.case, "providerModels");
+  assert.deepEqual(
+    {
+      providerType: frame.payload.value.payload.value.providerType,
+      baseUrl: frame.payload.value.payload.value.baseUrl,
+      apiKey: frame.payload.value.payload.value.apiKey,
+      useSystemProxy: frame.payload.value.payload.value.useSystemProxy,
+      modelsUrl: frame.payload.value.payload.value.modelsUrl,
+      providerId: frame.payload.value.payload.value.providerId,
+      isFullUrl: frame.payload.value.payload.value.isFullUrl,
+    },
+    {
+      providerType: "codex",
+      baseUrl: "https://relay.example.com/v1",
+      apiKey: "",
+      useSystemProxy: true,
+      modelsUrl: "https://relay.example.com/models",
+      providerId: "provider-a",
+      isFullUrl: true,
+    },
+  );
+});
+
 test("chat file open requests remain agent-scoped and preserve source locations", () => {
   const encoded = encodeRequestFrame(
     "file-open-1",

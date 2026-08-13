@@ -11516,7 +11516,11 @@ type ProviderModelsRequest struct {
 	ApiKey         string                 `protobuf:"bytes,3,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
 	UseSystemProxy bool                   `protobuf:"varint,4,opt,name=use_system_proxy,json=useSystemProxy,proto3" json:"use_system_proxy,omitempty"`
 	// 可选的模型列表完整地址；非空时跳过基于 base_url 的端点推导。
-	ModelsUrl     string `protobuf:"bytes,5,opt,name=models_url,json=modelsUrl,proto3" json:"models_url,omitempty"`
+	ModelsUrl string `protobuf:"bytes,5,opt,name=models_url,json=modelsUrl,proto3" json:"models_url,omitempty"`
+	// WebUI 编辑已保存供应商时用于让桌面端复用本地密钥；密钥不返回浏览器。
+	ProviderId string `protobuf:"bytes,6,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	// 当前草稿是否把 base_url 作为完整聊天端点解释；未提供时沿用已保存配置。
+	IsFullUrl     *bool `protobuf:"varint,7,opt,name=is_full_url,json=isFullUrl,proto3,oneof" json:"is_full_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -11584,6 +11588,20 @@ func (x *ProviderModelsRequest) GetModelsUrl() string {
 		return x.ModelsUrl
 	}
 	return ""
+}
+
+func (x *ProviderModelsRequest) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *ProviderModelsRequest) GetIsFullUrl() bool {
+	if x != nil && x.IsFullUrl != nil {
+		return *x.IsFullUrl
+	}
+	return false
 }
 
 type ProviderModelsResponse struct {
@@ -13623,14 +13641,18 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"=\n" +
 	"\rErrorResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xb9\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x8f\x02\n" +
 	"\x15ProviderModelsRequest\x12#\n" +
 	"\rprovider_type\x18\x01 \x01(\tR\fproviderType\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12\x17\n" +
 	"\aapi_key\x18\x03 \x01(\tR\x06apiKey\x12(\n" +
 	"\x10use_system_proxy\x18\x04 \x01(\bR\x0euseSystemProxy\x12\x1d\n" +
 	"\n" +
-	"models_url\x18\x05 \x01(\tR\tmodelsUrl\"9\n" +
+	"models_url\x18\x05 \x01(\tR\tmodelsUrl\x12\x1f\n" +
+	"\vprovider_id\x18\x06 \x01(\tR\n" +
+	"providerId\x12#\n" +
+	"\vis_full_url\x18\a \x01(\bH\x00R\tisFullUrl\x88\x01\x01B\x0e\n" +
+	"\f_is_full_url\"9\n" +
 	"\x16ProviderModelsResponse\x12\x1f\n" +
 	"\vmodels_json\x18\x01 \x01(\tR\n" +
 	"modelsJson\"r\n" +
@@ -14238,6 +14260,7 @@ func file_proto_v2_gateway_proto_init() {
 	file_proto_v2_gateway_proto_msgTypes[117].OneofWrappers = []any{}
 	file_proto_v2_gateway_proto_msgTypes[124].OneofWrappers = []any{}
 	file_proto_v2_gateway_proto_msgTypes[125].OneofWrappers = []any{}
+	file_proto_v2_gateway_proto_msgTypes[137].OneofWrappers = []any{}
 	file_proto_v2_gateway_proto_msgTypes[142].OneofWrappers = []any{
 		(*ChatIngressRecord_Delta)(nil),
 		(*ChatIngressRecord_Checkpoint)(nil),
