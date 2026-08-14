@@ -397,8 +397,8 @@ function useGatewayAppController() {
   } = useGatewaySharedHistory({ api, gatewayConnectionLost, sidebarStore, status });
 
   const startNewConversationRef = useRef<
-    (options?: { workdir?: string; preserveCurrentComposerDraft?: boolean }) => void
-  >(() => undefined);
+    (options?: { workdir?: string; preserveCurrentComposerDraft?: boolean }) => string
+  >(() => "");
   const {
     activateWorkspaceProject,
     activeWorkspaceProject,
@@ -490,6 +490,9 @@ function useGatewayAppController() {
       onWorkspaceCreated: handleWorkdirPickerSelect,
     });
 
+  // 无会话兜底：等价于点一次“新对话”，返回新草稿会话 id 供上传立即挂靠。
+  const ensureUploadConversation = useCallback(() => startNewConversationRef.current(), []);
+
   const {
     pendingUploadedFiles,
     isUploadingFiles,
@@ -521,6 +524,7 @@ function useGatewayAppController() {
     composerRef,
     addNotify,
     onDropDirectories: mountDroppedDirectories,
+    ensureUploadConversation,
   });
 
   const applyChatQueueSnapshot = useCallback((snapshot: ChatQueueSnapshot | null | undefined) => {

@@ -42,6 +42,12 @@ type UsePendingUploadsParams = {
   addNotify: (type: NotifyItem["type"], message: string) => void;
   /** 正文区拖入文件夹时的接管回调（挂载为附属目录）；未提供则忽略文件夹。 */
   onDropDirectories?: (directories: DroppedDirectory[]) => void;
+  /**
+   * 无会话兜底：页面刚打开、还没有任何会话 id 时开始上传，由宿主创建一个
+   * 本地草稿会话并返回其 id（等价于点一次“新对话”），附件挂到该草稿上，
+   * 首条消息发出后随现有的 moveConversationUploads 迁移到真实会话。
+   */
+  ensureUploadConversation?: () => string;
 };
 
 export function usePendingUploads(params: UsePendingUploadsParams) {
@@ -60,6 +66,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     composerRef,
     addNotify,
     onDropDirectories,
+    ensureUploadConversation,
   } = params;
 
   const [pendingUploadedFiles, setPendingUploadedFiles] = useState<PendingUploadedFile[]>([]);
@@ -187,7 +194,15 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
         addNotify("warning", translate("chat.upload.requireWorkdir", locale));
         return;
       }
-      const targetConversationId = displayedConversationIdRef.current;
+      let targetConversationId = displayedConversationIdRef.current;
+      if (!targetConversationId && ensureUploadConversation) {
+        targetConversationId = ensureUploadConversation().trim();
+        if (targetConversationId) {
+          // 重渲染前 displayed id 仍是旧值，手动同步 ref 让本次导入及其
+          // isDisplayedConversation 判定立即指向新草稿。
+          displayedConversationIdRef.current = targetConversationId;
+        }
+      }
       if (!targetConversationId) {
         addNotify("warning", "请先选择或创建会话后再上传文件。");
         return;
@@ -264,6 +279,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       addNotify,
       composerRef,
       displayedConversationWorkdirRef,
+      ensureUploadConversation,
       executionMode,
       getPendingUploadsForConversation,
       isDisplayedConversation,
