@@ -284,8 +284,6 @@ export type ChatComposerBarProps = {
   taskProgressBar?: ReactNode;
   /** 输入框上方的集中审批栏(待审批时由上层注入,渲染在队列面板之上)。 */
   approvalBar?: ReactNode;
-  /** 桌面端原生文件拖入反馈；命中范围严格限定在输入器可见区域。 */
-  fileDropOverlay?: ReactNode;
 };
 
 export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposerBarProps) {
@@ -332,7 +330,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
     onHeightChange,
     taskProgressBar,
     approvalBar,
-    fileDropOverlay,
   } = props;
   const { t } = useLocale();
   const [composerIsEmpty, setComposerIsEmpty] = useState(true);
@@ -711,7 +708,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
         />
       ) : null}
       <div
-        data-file-upload-drop-zone={surface === "desktop" ? "" : undefined}
         className={cn(
           surface === "desktop"
             ? "pointer-events-auto relative w-full max-w-[768px]"
@@ -720,7 +716,6 @@ export const ChatComposerBar = memo(function ChatComposerBar(props: ChatComposer
           isComposerExpanded && "flex min-h-0 flex-col justify-end",
         )}
       >
-        {fileDropOverlay}
         {taskProgressBar}
         {approvalBar}
         {queuedTurns.length > 0 ? (

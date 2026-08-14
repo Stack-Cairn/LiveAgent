@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   type NativeFileDropTarget,
   nativeDropPositionScaleFactor,
@@ -8,27 +8,19 @@ import {
 } from "./nativeFileDropRouting";
 
 type UseTauriFileDropParams = {
-  canDropUpload: boolean;
-  fileDropTitle: string;
-  importReadableFilePaths: (paths: string[]) => Promise<void>;
+  importUploadZonePaths: (paths: string[]) => Promise<void>;
   importWorkspaceFolderPaths: (paths: string[]) => Promise<void>;
-  setErrorMessage: Dispatch<SetStateAction<string | null>>;
 };
 
 /**
  * Tauri webview drag-drop listener: routes native paths by their visual drop
- * target. Workspace-zone drops add folders as projects, the explicit chat
- * zone imports attachments, and every other application surface ignores the
- * drop.
+ * target. Workspace-zone drops add folders as projects, the chat-panel zone
+ * hands the mixed payload to the upload-zone dispatcher (files become
+ * attachments, folders become project roots), and every other application
+ * surface ignores the drop.
  */
 export function useTauriFileDrop(params: UseTauriFileDropParams) {
-  const {
-    canDropUpload,
-    fileDropTitle,
-    importReadableFilePaths,
-    importWorkspaceFolderPaths,
-    setErrorMessage,
-  } = params;
+  const { importUploadZonePaths, importWorkspaceFolderPaths } = params;
   const [activeDropTarget, setActiveDropTarget] = useState<NativeFileDropTarget>(null);
   const activeDropTargetRef = useRef<NativeFileDropTarget>(null);
   const hasTrackedDragPositionRef = useRef(false);
@@ -72,11 +64,7 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
             return;
           }
           if (dropTarget !== "upload") return;
-          if (!canDropUpload) {
-            setErrorMessage(fileDropTitle);
-            return;
-          }
-          void importReadableFilePaths(event.payload.paths);
+          void importUploadZonePaths(event.payload.paths);
           return;
         }
 
@@ -101,13 +89,7 @@ export function useTauriFileDrop(params: UseTauriFileDropParams) {
         unlisten();
       }
     };
-  }, [
-    canDropUpload,
-    fileDropTitle,
-    importReadableFilePaths,
-    importWorkspaceFolderPaths,
-    setErrorMessage,
-  ]);
+  }, [importUploadZonePaths, importWorkspaceFolderPaths]);
 
   return {
     isFileDropActive: activeDropTarget === "upload",

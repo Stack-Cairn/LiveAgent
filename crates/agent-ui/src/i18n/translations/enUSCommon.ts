@@ -19,6 +19,22 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.workspaceSection": "Workspaces",
   "chat.workspaceDropFolder": "Drop to add workspaces",
   "chat.workspaceDropFolderDescription": "Drop one or more local folders here",
+  "chat.workspaceDropOnlyFolders": "Only folders can be dropped on the workspace section",
+  "chat.workspaceDropEmptyFolder": "Folder “{name}” is empty and was skipped",
+  "chat.workspaceDropUploading": "Uploading folder “{name}” ({count} files)…",
+  "chat.workspaceDropCreated": "Created workspace “{name}”",
+  "chat.workspaceDropFailed": "Failed to import the dropped folders",
+  "chat.workspaceDropTooManyFiles":
+    "The folder holds too many files (over {max}); trim it and retry",
+  "chat.workspaceMountDropNoProject":
+    "Select a workspace before dropping folders to mount them as project directories",
+  "chat.workspaceMountDropSuccess":
+    "Mounted {count} folder(s) as read-only project directories (adjust in project settings)",
+  "chat.workspaceMountDropSkippedInside":
+    "Skipped {count} folder(s) already inside the current workspace",
+  "chat.workspaceMountDropSkippedOverlap":
+    "Skipped {count} folder(s) overlapping existing project directories",
+  "chat.workspaceMountDropFailed": "Failed to mount project directories",
   "chat.workspaceCreate": "New workspace",
   "chat.workspaceAdd": "Add…",
   "chat.workspaceUngrouped": "Ungrouped",
@@ -335,7 +351,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.upload.closePreview": "Close preview",
   "chat.upload.maxFiles": "Upload up to {max} files",
   "chat.upload.dropReady": "Drop to upload files",
-  "chat.upload.dropHint": "Supports files readable by the current Read tool",
+  "chat.upload.dropHint":
+    "Supports files readable by the current Read tool; folders mount as project directories",
   "chat.upload.dropBusy": "File upload is not available right now",
   "chat.upload.dropLimit": "Up to {max} files",
   "chat.upload.dropDisabledHint": "Resolve the issue above to enable drag-and-drop",

@@ -115,6 +115,7 @@ import { useContextUsageTokensSource } from "./chat/hooks/useContextUsageTokensS
 import { useMirroredNullableState } from "./chat/hooks/useMirroredNullableState";
 import { useNotifyToasts } from "./chat/hooks/useNotifyToasts";
 import { useTauriFileDrop } from "./chat/hooks/useTauriFileDrop";
+import { useUploadZoneDrop } from "./chat/hooks/useUploadZoneDrop";
 import {
   getQueuedConversationIds,
   removeQueuedChatTurnsForConversation,
@@ -1597,12 +1598,18 @@ export function ChatPage(props: ChatPageProps) {
     ? t("chat.upload.dropHint")
     : t("chat.upload.dropDisabledHint");
   const fileDropLimitHint = t("chat.upload.dropLimit").replace("{max}", String(MAX_UPLOAD_FILES));
-  const { isFileDropActive, isWorkspaceFolderDropActive } = useTauriFileDrop({
+  const { importUploadZonePaths } = useUploadZoneDrop({
     canDropUpload,
     fileDropTitle,
+    activeWorkspaceProject,
     importReadableFilePaths,
-    importWorkspaceFolderPaths: handleDropWorkspaceFolders,
+    addNotify,
     setErrorMessage,
+    t,
+  });
+  const { isFileDropActive, isWorkspaceFolderDropActive } = useTauriFileDrop({
+    importUploadZonePaths,
+    importWorkspaceFolderPaths: handleDropWorkspaceFolders,
   });
 
   const { handleResendFromEdit } = useEditResend({
@@ -1790,7 +1797,10 @@ export function ChatPage(props: ChatPageProps) {
             headerClassName: "relative z-20",
             headerOverlay: <NotifyToast items={notifyItems} onDismiss={dismissNotify} />,
             content: (
-              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div
+                data-file-upload-drop-zone=""
+                className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
+              >
                 <ChangedFilesActionsProvider value={changedFilesActions}>
                   <ChatTranscript
                     conversationId={currentConversationId}
@@ -1874,18 +1884,15 @@ export function ChatPage(props: ChatPageProps) {
                     />
                   }
                   approvalBar={approvalBar}
-                  fileDropOverlay={
-                    isFileDropActive ? (
-                      <FileDropOverlay
-                        variant="composer"
-                        canDropUpload={canDropUpload}
-                        title={fileDropTitle}
-                        description={fileDropDescription}
-                        limitHint={fileDropLimitHint}
-                      />
-                    ) : null
-                  }
                 />
+                {isFileDropActive ? (
+                  <FileDropOverlay
+                    canDropUpload={canDropUpload}
+                    title={fileDropTitle}
+                    description={fileDropDescription}
+                    limitHint={fileDropLimitHint}
+                  />
+                ) : null}
               </div>
             ),
           }}

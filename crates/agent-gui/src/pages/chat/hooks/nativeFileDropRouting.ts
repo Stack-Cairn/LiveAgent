@@ -97,7 +97,7 @@ export function resolveNativeFileDropTarget(
   // The business boundary comes entirely from the currently rendered page
   // frames. No sidebar width, composer position, or application pixel range is
   // hard-coded here. Workspace wins only if the live workspace frame contains
-  // the point; uploads use the exact live composer frame with no tolerance.
+  // the point; uploads use the exact live chat-panel frame with no tolerance.
   if (
     pointIntersectsSelector(point, targetDocument, WORKSPACE_FOLDER_DROP_ZONE_SELECTOR, 0, true)
   ) {
