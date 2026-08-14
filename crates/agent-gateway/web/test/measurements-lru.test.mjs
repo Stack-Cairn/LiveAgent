@@ -16,7 +16,10 @@ const { SCROLL_FOLLOW_IGNORE_KEYS_ATTRIBUTE } = loader.loadModule(
   "@liveagent/ui/lib/chat-scroll/scrollFollowCore.ts",
 );
 const width = loader.loadModule("@liveagent/ui/lib/transcript-width/transcriptWidthModel.ts");
-const transcriptStylesSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const transcriptStylesSource = readFileSync(
+  new URL("../src/styles/base-chat.css", import.meta.url),
+  "utf8",
+);
 const transcriptWidthControlsSource = readFileSync(
   new URL("../../../agent-ui/src/pages/chat/transcript/TranscriptWidthControls.tsx", import.meta.url),
   "utf8",

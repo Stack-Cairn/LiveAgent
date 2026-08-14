@@ -100,10 +100,14 @@ test("WebUI hides all task tool blocks while preserving ordinary tools", () => {
 });
 
 test("WebUI app selects a snapshot directly without a sequencing compatibility layer", () => {
-  const source = readFileSync(
-    fileURLToPath(new URL("../src/app/GatewayApp.tsx", import.meta.url)),
-    "utf8",
-  );
+  const source = [
+    "../src/app/hooks/useGatewayChatPresentation.tsx",
+    "../src/app/GatewayAppView.tsx",
+  ]
+    .map((relativePath) =>
+      readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8"),
+    )
+    .join("\n");
   assert.match(source, /selectLatestTaskProgress\(transcriptRows\)/);
   assert.match(source, /key=\{displayedConversationId\}/);
 });

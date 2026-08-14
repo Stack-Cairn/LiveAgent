@@ -91,6 +91,21 @@ test("Agent tool never appears in child tool selections", async () => {
   }
 });
 
+test("delegated agents receive parent roots as read-only prompt capabilities", async () => {
+  const harness = await createSubagentHarness({
+    additionalRoots: [
+      { id: "shared-id", alias: "shared", path: "/references/shared", access: "write" },
+    ],
+  });
+  await harness.bundle.executeToolCall(
+    createAgentToolCall({ agents: [{ id: "reviewer", prompt: "inspect shared references" }] }),
+  );
+
+  assert.deepEqual(harness.runnerCalls[0].additionalRoots, [
+    { id: "shared-id", alias: "shared", path: "/references/shared", access: "read" },
+  ]);
+});
+
 test("SendMessage is not attached and persistence is skipped without a conversation id", async () => {
   const harness = await createSubagentHarness({ conversationId: "" });
   const result = await harness.bundle.executeToolCall(

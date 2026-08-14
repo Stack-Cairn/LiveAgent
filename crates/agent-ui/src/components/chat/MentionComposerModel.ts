@@ -1,0 +1,223 @@
+import type {
+  CodeMentionReference,
+  FileMentionKind,
+  FileMentionReference,
+} from "@liveagent/ui/lib/chat/mentionReferences";
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+export interface MentionFileEntry {
+  path: string;
+  kind: FileMentionKind;
+}
+
+export interface MentionListResponse {
+  entries: MentionFileEntry[];
+  truncated: boolean;
+}
+
+export type MentionSearchEntry = {
+  entry: MentionFileEntry;
+  searchPath: string;
+};
+
+export type MentionComposerSkill = {
+  name: string;
+  description: string;
+  skillFile: string;
+  baseDir: string;
+};
+
+export type MentionComposerSkillMention = MentionComposerSkill;
+
+export type MentionComposerCommitMention = {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  body: string;
+  authorName: string;
+  authorEmail: string;
+  authorDate: string;
+  fileCount: number;
+  filesChanged: number;
+  insertions: number;
+  deletions: number;
+  stat: string;
+  remoteName: string;
+  remoteUrl: string;
+  githubUrl?: string;
+};
+
+export type MentionComposerGitFileMention = {
+  path: string;
+  oldPath?: string;
+  status: string;
+  commitSha: string;
+  shortSha: string;
+  refName: string;
+  remoteName: string;
+  remoteUrl: string;
+  githubUrl?: string;
+};
+
+export type MentionSuggestion =
+  | { type: "file"; entry: MentionFileEntry }
+  | { type: "skill"; skill: MentionComposerSkill };
+
+export type ComposerContextMenuState = {
+  x: number;
+  y: number;
+  selectedText: string;
+  hasContent: boolean;
+};
+
+/** Where the @ or / trigger lives inside a text node */
+export interface MentionContext {
+  trigger: "file" | "skill";
+  query: string;
+  textNode: Text;
+  triggerOffset: number; // char offset of the trigger inside textNode
+}
+
+export interface MentionComposerHandle {
+  getText: () => string;
+  getDraft: () => MentionComposerDraft;
+  hasContent: () => boolean;
+  setText: (text: string) => void;
+  setDraft: (draft: MentionComposerDraft) => void;
+  insertFileMention: (path: string, kind: "file" | "dir") => void;
+  insertSkillMention: (skill: MentionComposerSkillMention) => void;
+  insertCommitMention: (commit: MentionComposerCommitMention) => void;
+  insertGitFileMention: (file: MentionComposerGitFileMention) => void;
+  insertCodeMention: (reference: CodeMentionReference) => void;
+  clear: () => void;
+  focus: () => void;
+  /**
+   * Clear the composer and type `text` in with a typewriter animation.
+   * User input is locked out while it runs; resolves once the full text
+   * has landed in the editor (or the run was cancelled).
+   */
+  typeText: (text: string) => Promise<void>;
+}
+
+export type MentionComposerLargePaste = {
+  id: string;
+  label: string;
+  text: string;
+  charCount: number;
+  lineCount: number;
+  preview: string;
+};
+
+export type MentionComposerDraftSegment =
+  | { type: "text"; text: string }
+  | { type: "fileMention"; reference: FileMentionReference }
+  | { type: "largePaste"; paste: MentionComposerLargePaste }
+  | { type: "skillMention"; skill: MentionComposerSkillMention }
+  | { type: "commitMention"; commit: MentionComposerCommitMention }
+  | { type: "gitFileMention"; file: MentionComposerGitFileMention }
+  | { type: "codeMention"; reference: CodeMentionReference };
+
+export type MentionComposerDraft = {
+  segments: MentionComposerDraftSegment[];
+  text: string;
+  textWithoutLargePastes: string;
+  largePastes: MentionComposerLargePaste[];
+  skillMentions: MentionComposerSkillMention[];
+  commitMentions: MentionComposerCommitMention[];
+  gitFileMentions: MentionComposerGitFileMention[];
+  codeMentions: CodeMentionReference[];
+  isEmpty: boolean;
+};
+
+export type ComposerClipboardSnapshot = {
+  text: string;
+  html: string;
+  payload: string;
+};
+
+export interface MentionComposerProps {
+  /** Called when user presses Enter (without Shift). */
+  onSend: () => void;
+  /** Called only when empty/non-empty state flips. */
+  onEmptyChange?: (isEmpty: boolean) => void;
+  onBusyChange?: (isBusy: boolean) => void;
+  onPasteFiles?: (files: File[]) => void;
+  /**
+   * Returns prompts previously sent in this conversation, oldest → newest.
+   * Enables shell-style ↑/↓ recall while the caret sits on the first/last
+   * line of the editor. Read lazily when recall starts.
+   */
+  loadHistoryPrompts?: () => readonly string[];
+  disabled?: boolean;
+  placeholder?: string;
+  workdir: string;
+  enabledSkills?: MentionComposerSkill[];
+  className?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Constants                                                          */
+/* ------------------------------------------------------------------ */
+
+export const MAX_SUGGESTIONS = 30;
+export const MENTION_INDEX_MAX_RESULTS = 5000;
+export const MENTION_REFETCH_DEBOUNCE_MS = 150;
+export const MENTION_TAG_ATTR = "data-mention-path";
+export const MENTION_KIND_ATTR = "data-mention-kind";
+export const SKILL_MENTION_NAME_ATTR = "data-skill-name";
+export const SKILL_MENTION_FILE_ATTR = "data-skill-file";
+export const SKILL_MENTION_BASE_DIR_ATTR = "data-skill-base-dir";
+export const SKILL_MENTION_DESCRIPTION_ATTR = "data-skill-description";
+export const COMMIT_MENTION_SHA_ATTR = "data-commit-sha";
+export const COMMIT_MENTION_SHORT_SHA_ATTR = "data-commit-short-sha";
+export const COMMIT_MENTION_SUBJECT_ATTR = "data-commit-subject";
+export const COMMIT_MENTION_BODY_ATTR = "data-commit-body";
+export const COMMIT_MENTION_AUTHOR_NAME_ATTR = "data-commit-author-name";
+export const COMMIT_MENTION_AUTHOR_EMAIL_ATTR = "data-commit-author-email";
+export const COMMIT_MENTION_AUTHOR_DATE_ATTR = "data-commit-author-date";
+export const COMMIT_MENTION_FILE_COUNT_ATTR = "data-commit-file-count";
+export const COMMIT_MENTION_FILES_CHANGED_ATTR = "data-commit-files-changed";
+export const COMMIT_MENTION_INSERTIONS_ATTR = "data-commit-insertions";
+export const COMMIT_MENTION_DELETIONS_ATTR = "data-commit-deletions";
+export const COMMIT_MENTION_STAT_ATTR = "data-commit-stat";
+export const COMMIT_MENTION_REMOTE_NAME_ATTR = "data-commit-remote-name";
+export const COMMIT_MENTION_REMOTE_URL_ATTR = "data-commit-remote-url";
+export const COMMIT_MENTION_GITHUB_URL_ATTR = "data-commit-github-url";
+export const GIT_FILE_MENTION_PATH_ATTR = "data-git-file-path";
+export const GIT_FILE_MENTION_OLD_PATH_ATTR = "data-git-file-old-path";
+export const GIT_FILE_MENTION_STATUS_ATTR = "data-git-file-status";
+export const GIT_FILE_MENTION_COMMIT_SHA_ATTR = "data-git-file-commit-sha";
+export const GIT_FILE_MENTION_SHORT_SHA_ATTR = "data-git-file-short-sha";
+export const GIT_FILE_MENTION_REF_NAME_ATTR = "data-git-file-ref-name";
+export const GIT_FILE_MENTION_REMOTE_NAME_ATTR = "data-git-file-remote-name";
+export const GIT_FILE_MENTION_REMOTE_URL_ATTR = "data-git-file-remote-url";
+export const GIT_FILE_MENTION_GITHUB_URL_ATTR = "data-git-file-github-url";
+export const CODE_MENTION_PATH_ATTR = "data-code-mention-path";
+export const CODE_MENTION_START_ATTR = "data-code-mention-start";
+export const CODE_MENTION_END_ATTR = "data-code-mention-end";
+export const LARGE_PASTE_TAG_ATTR = "data-large-paste-id";
+export const COMPOSER_CLIPBOARD_MIME = "application/x-liveagent-composer-draft+json";
+export const COMPOSER_CLIPBOARD_HTML_ATTR = "data-liveagent-composer-clipboard";
+export const COMPOSER_CLIPBOARD_VERSION = 1;
+export const LARGE_PASTE_CHAR_THRESHOLD = 8_000;
+export const LARGE_PASTE_LINE_THRESHOLD = 200;
+export const LARGE_PASTE_PREVIEW_CHARS = 160;
+export const COMPOSER_CONTEXT_MENU_WIDTH = 184;
+export const COMPOSER_CONTEXT_MENU_HEIGHT = 154;
+export const COMPOSER_CONTEXT_MENU_MARGIN = 12;
+export const CARET_ANCHOR_TEXT = "\u200B";
+export const IME_ENTER_SUPPRESS_WINDOW_MS = 300;
+export const IME_COMPOSITION_END_ENTER_TAIL_MS = 20;
+// Must match the .composer-typewriter-char animation duration in index.css.
+export const TYPEWRITER_CHAR_FADE_MS = 220;
+export const GITHUB_ICON_SVG =
+  '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.6 7.6 0 0 1 8 3.86c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>';
+
+export const LARGE_PASTE_COUNT_FORMAT = new Intl.NumberFormat();
+
+export function formatLargePasteCount(value: number) {
+  return LARGE_PASTE_COUNT_FORMAT.format(value);
+}

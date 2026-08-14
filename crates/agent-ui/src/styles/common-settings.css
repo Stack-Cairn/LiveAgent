@@ -1,0 +1,438 @@
+@layer components {
+  .settings-section-enter {
+    animation: settingsSectionIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .settings-section-title-enter {
+    animation: settingsSectionTitleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .provider-panel-enter {
+    animation: providerPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .settings-section-shell {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .ssh-auth-panel {
+    overflow: hidden;
+    transition:
+      max-height 300ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 220ms ease,
+      transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: max-height, opacity, transform;
+  }
+
+  .ssh-collapsible {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 280ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: grid-template-rows;
+  }
+
+  .ssh-collapsible[data-open="true"] {
+    grid-template-rows: 1fr;
+  }
+
+  .ssh-collapsible-inner {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .settings-modal-overlay {
+    opacity: 0;
+    transition: opacity 180ms ease;
+    will-change: opacity;
+  }
+
+  .settings-modal-overlay[data-state="open"] {
+    opacity: 1;
+  }
+
+  .settings-modal-overlay[data-state="closed"] {
+    pointer-events: none;
+  }
+
+  .settings-modal-panel {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+    transition:
+      opacity 180ms ease,
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: opacity, transform;
+  }
+
+  .settings-modal-overlay[data-state="open"] .settings-modal-panel {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .settings-modal-overlay[data-state="closed"] .settings-modal-panel {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+
+  .ssh-forward-dialog-backdrop {
+    opacity: 1;
+    transition: opacity 180ms ease;
+  }
+
+  .ssh-forward-dialog-backdrop[data-starting-style] {
+    opacity: 0;
+  }
+
+  .ssh-forward-dialog-popup {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition:
+      opacity 180ms ease,
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .ssh-forward-dialog-popup[data-starting-style] {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+
+  /* Base UI Dialog 通用进出场（WorktreeCreateModal、RemotePathPickerModal 等）。
+     与 settings-modal-* 的 useModalMotion/data-state 机制不同，Base UI 弹层由
+     data-starting-style / data-ending-style 驱动，退场过渡结束后才卸载。 */
+  .modal-dialog-backdrop {
+    opacity: 1;
+    transition: opacity 180ms ease;
+  }
+
+  .modal-dialog-backdrop[data-starting-style],
+  .modal-dialog-backdrop[data-ending-style] {
+    opacity: 0;
+  }
+
+  .modal-dialog-popup {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition:
+      opacity 180ms ease,
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .modal-dialog-popup[data-starting-style],
+  .modal-dialog-popup[data-ending-style] {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+
+  /* settings-modal-* 基线为 opacity:0 且靠 data-state 显形；Base UI 驱动的
+     同款外观（复用其响应式布局规则）必须中和该基线，否则弹层恒隐藏。 */
+  .settings-modal-overlay.modal-dialog-viewport {
+    opacity: 1;
+    transition: none;
+  }
+
+  .settings-modal-panel.modal-dialog-popup {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .settings-modal-panel.modal-dialog-popup[data-starting-style],
+  .settings-modal-panel.modal-dialog-popup[data-ending-style] {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+
+  .settings-tools-view-enter {
+    animation: settingsToolsViewIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+
+  .chat-history-scope-enter {
+    animation: chatHistoryScopeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+  }
+
+  .sidebar-context-menu {
+    --sidebar-menu-slide-x: -6px;
+    --sidebar-menu-slide-y: 0px;
+    transform-origin: var(--transform-origin);
+  }
+
+  .sidebar-context-menu[data-side="left"] {
+    --sidebar-menu-slide-x: 6px;
+  }
+
+  .sidebar-context-menu[data-side="bottom"] {
+    --sidebar-menu-slide-x: 0px;
+    --sidebar-menu-slide-y: -6px;
+  }
+
+  .sidebar-context-menu[data-side="top"] {
+    --sidebar-menu-slide-x: 0px;
+    --sidebar-menu-slide-y: 6px;
+  }
+
+  .sidebar-context-menu[data-open] [role="menuitem"],
+  .sidebar-context-menu[data-state="open"] [role="menuitem"] {
+    animation: sidebarMenuItemIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .sidebar-context-menu[data-open] [role="menuitem"]:nth-child(2),
+  .sidebar-context-menu[data-state="open"] [role="menuitem"]:nth-child(2) {
+    animation-delay: 0.02s;
+  }
+
+  .sidebar-context-menu[data-open] [role="menuitem"]:nth-child(3),
+  .sidebar-context-menu[data-state="open"] [role="menuitem"]:nth-child(3) {
+    animation-delay: 0.04s;
+  }
+
+  .sidebar-context-menu[data-open] [role="menuitem"]:nth-child(4),
+  .sidebar-context-menu[data-state="open"] [role="menuitem"]:nth-child(4) {
+    animation-delay: 0.06s;
+  }
+
+  .sidebar-context-menu[data-open] [role="menuitem"]:nth-child(n + 5),
+  .sidebar-context-menu[data-state="open"] [role="menuitem"]:nth-child(n + 5) {
+    animation-delay: 0.08s;
+  }
+
+  .mention-composer.is-empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+    position: absolute;
+  }
+
+  .composer-typewriter-char {
+    opacity: 0;
+    animation: composerTypeCharIn 0.22s ease-out forwards;
+  }
+
+  .mention-popup-enter {
+    animation: mentionPopupIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: bottom center;
+    min-width: min(380px, calc(100vw - 24px));
+  }
+
+  .mention-popup-item {
+    animation: mentionItemIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .mention-popup-item:nth-child(1) {
+    animation-delay: 0ms;
+  }
+
+  .mention-popup-item:nth-child(2) {
+    animation-delay: 18ms;
+  }
+
+  .mention-popup-item:nth-child(3) {
+    animation-delay: 36ms;
+  }
+
+  .mention-popup-item:nth-child(4) {
+    animation-delay: 54ms;
+  }
+
+  .mention-popup-item:nth-child(5) {
+    animation-delay: 72ms;
+  }
+
+  .mention-popup-item:nth-child(6) {
+    animation-delay: 90ms;
+  }
+
+  .mention-popup-item:nth-child(7) {
+    animation-delay: 108ms;
+  }
+
+  .mention-popup-item:nth-child(8) {
+    animation-delay: 126ms;
+  }
+
+  .mention-popup-item:nth-child(n + 9) {
+    animation-delay: 140ms;
+  }
+
+  .model-selector-dropdown {
+    --model-menu-slide-y: -6px;
+    transform-origin: var(--transform-origin);
+    transition:
+      opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .model-selector-dropdown[data-side="top"] {
+    --model-menu-slide-y: 6px;
+  }
+
+  .model-selector-dropdown[data-starting-style],
+  .model-selector-dropdown[data-ending-style] {
+    opacity: 0;
+    transform: translateY(var(--model-menu-slide-y)) scale(0.96);
+  }
+
+  .model-selector-dropdown[data-ending-style] {
+    transition-duration: 0.12s;
+    transition-timing-function: cubic-bezier(0.4, 0, 1, 1);
+    transform: translateY(calc(var(--model-menu-slide-y) / 2)) scale(0.98);
+  }
+
+  .model-selector-dropdown[data-open] .model-selector-item {
+    animation: modelSelectorItemIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+
+  @keyframes providerPanelIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes settingsSectionIn {
+    from {
+      opacity: 0;
+      transform: translateY(14px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes settingsSectionTitleIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes settingsToolsViewIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes chatHistoryScopeIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes sidebarMenuItemIn {
+    from {
+      opacity: 0;
+      transform: translate(
+        calc(var(--sidebar-menu-slide-x) / 2),
+        calc(var(--sidebar-menu-slide-y) / 2)
+      );
+    }
+    to {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+  }
+
+  @keyframes composerTypeCharIn {
+    from {
+      opacity: 0;
+      filter: blur(2px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  @keyframes mentionPopupIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes mentionItemIn {
+    from {
+      opacity: 0;
+      transform: translateX(-6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes modelSelectorItemIn {
+    from {
+      opacity: 0;
+      transform: translateY(calc(var(--model-menu-slide-y) / 2));
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .settings-section-enter,
+    .settings-section-title-enter,
+    .settings-tools-view-enter,
+    .provider-panel-enter,
+    .chat-history-scope-enter {
+      animation: none;
+    }
+
+    .ssh-auth-panel,
+    .ssh-collapsible,
+    .settings-modal-overlay,
+    .settings-modal-panel,
+    .ssh-forward-dialog-backdrop,
+    .ssh-forward-dialog-popup,
+    .modal-dialog-backdrop,
+    .modal-dialog-popup {
+      transition-duration: 1ms;
+    }
+
+    .composer-typewriter-char,
+    .mention-popup-enter,
+    .mention-popup-item,
+    .sidebar-context-menu,
+    .sidebar-context-menu [role="menuitem"],
+    .model-selector-dropdown,
+    .model-selector-item {
+      animation: none !important;
+    }
+
+    .sidebar-context-menu {
+      transition: none !important;
+    }
+
+    .model-selector-dropdown,
+    .model-selector-trigger,
+    .model-selector-trigger svg {
+      transition: none !important;
+    }
+  }
+}

@@ -216,10 +216,10 @@ export function SettingsShell<Context>(props: SettingsShellProps<Context>) {
             </div>
             {web && showSaveIndicator ? (
               <div
-                className="settings-save-indicator flex items-center gap-1.5 text-xs text-muted-foreground"
+                className="settings-save-indicator flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"
                 title={saveIndicator.title}
               >
-                <div className={cn("h-1.5 w-1.5 rounded-full", saveIndicator.dotClass)} />
+                <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", saveIndicator.dotClass)} />
                 {saveIndicator.text}
               </div>
             ) : null}

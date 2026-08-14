@@ -526,7 +526,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
       <Dialog.Portal>
         <Dialog.Backdrop className="modal-dialog-backdrop fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm" />
         <Dialog.Viewport className="settings-modal-overlay modal-dialog-viewport fixed inset-0 z-[120] flex items-center justify-center p-4">
-          <Dialog.Popup className="settings-modal-panel modal-dialog-popup relative flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl outline-none">
+          <Dialog.Popup className="settings-modal-panel modal-dialog-popup remote-path-picker-panel relative flex h-[min(650px,92vh)] max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl outline-none">
             <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 {mode === "file" ? (
@@ -728,10 +728,12 @@ type PendingPick = PickPathOptions & {
  */
 export function useRemotePathPicker() {
   const [pending, setPending] = useState<PendingPick | null>(null);
+  const selectedPathRef = useRef<string | null>(null);
 
   const pickPath = useCallback(
     (options: PickPathOptions) =>
       new Promise<string | null>((resolve) => {
+        selectedPathRef.current = null;
         setPending({ ...options, resolve });
       }),
     [],
@@ -744,11 +746,13 @@ export function useRemotePathPicker() {
       title={pending.title}
       description={pending.description}
       onSelect={(path) => {
-        pending.resolve(path);
+        selectedPathRef.current = path;
       }}
       onClose={() => {
-        // No-op when a selection already resolved the promise.
-        pending.resolve(null);
+        // Resolve only after the picker finishes its exit transition so a
+        // suspended parent modal cannot reopen underneath the closing picker.
+        pending.resolve(selectedPathRef.current);
+        selectedPathRef.current = null;
         setPending(null);
       }}
     />

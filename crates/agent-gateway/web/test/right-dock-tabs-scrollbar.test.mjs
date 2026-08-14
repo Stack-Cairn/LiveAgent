@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const stylesSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const stylesSource = readFileSync(new URL("../src/styles/base-chat.css", import.meta.url), "utf8");
 const sharedStylesSource = readFileSync(
   new URL("../../../agent-ui/src/styles/base.css", import.meta.url),
   "utf8",

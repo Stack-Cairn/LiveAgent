@@ -13,6 +13,10 @@ use crate::commands::{
         fs_write_text_sync,
     },
     git::{git_gateway_clone_task_action_sync, GitCloneTaskRegistry},
+    root_grants::{
+        workspace_root_grants_apply, workspace_root_grants_list, workspace_root_grants_revoke,
+        WorkspaceRootAccess, WorkspaceRootGrant, WorkspaceRootGrantDraft,
+    },
     settings::{load_providers, open_db},
     system::{
         system_create_project_folder_sync, system_import_uploaded_readable_files_sync,
@@ -554,6 +558,65 @@ pub async fn handle_fs_roots() -> Result<proto::FsRootsResponse, String> {
                 })
                 .collect(),
         })
+}
+
+fn workspace_root_grant_to_proto(grant: WorkspaceRootGrant) -> proto::WorkspaceRootGrant {
+    proto::WorkspaceRootGrant {
+        id: grant.id,
+        project_id: grant.project_id,
+        project_path_key: grant.project_path_key,
+        alias: grant.alias,
+        display_path: grant.display_path,
+        canonical_path: grant.canonical_path,
+        access: grant.access.as_str().to_string(),
+        state: grant.state.as_str().to_string(),
+        created_at: grant.created_at,
+        updated_at: grant.updated_at,
+    }
+}
+
+pub async fn handle_workspace_root_grants(
+    request: proto::WorkspaceRootGrantsRequest,
+) -> Result<proto::WorkspaceRootGrantsResponse, String> {
+    let action = request.action.trim();
+    let grants = match action {
+        "list" => {
+            if !request.grants.is_empty() {
+                return Err("列出目录授权时不能携带授权草稿".to_string());
+            }
+            workspace_root_grants_list(request.project_id, request.project_path).await?
+        }
+        "apply" => {
+            let drafts = request
+                .grants
+                .into_iter()
+                .map(|grant| {
+                    Ok(WorkspaceRootGrantDraft {
+                        id: grant.id,
+                        alias: grant.alias,
+                        display_path: grant.display_path,
+                        access: WorkspaceRootAccess::parse(grant.access.trim())?,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            workspace_root_grants_apply(request.project_id, request.project_path, drafts).await?
+        }
+        "revoke" => {
+            if !request.project_path.trim().is_empty() || !request.grants.is_empty() {
+                return Err("撤销目录授权时只能提供项目 id".to_string());
+            }
+            workspace_root_grants_revoke(request.project_id).await?;
+            Vec::new()
+        }
+        _ => return Err(format!("不支持的目录授权操作：{action}")),
+    };
+
+    Ok(proto::WorkspaceRootGrantsResponse {
+        grants: grants
+            .into_iter()
+            .map(workspace_root_grant_to_proto)
+            .collect(),
+    })
 }
 
 pub async fn handle_fs_list_dirs(

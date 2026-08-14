@@ -4,10 +4,12 @@ import test from "node:test";
 
 const appSources = [
   readFileSync(new URL("../../src/App.tsx", import.meta.url), "utf8"),
-  readFileSync(
-    new URL("../../../agent-gateway/web/src/app/GatewayApp.tsx", import.meta.url),
-    "utf8",
-  ),
+  [
+    "../../../agent-gateway/web/src/app/hooks/useGatewaySettingsOverlay.ts",
+    "../../../agent-gateway/web/src/app/GatewayAppView.tsx",
+  ]
+    .map((relativePath) => readFileSync(new URL(relativePath, import.meta.url), "utf8"))
+    .join("\n"),
 ];
 
 const settingsPageSource = readFileSync(

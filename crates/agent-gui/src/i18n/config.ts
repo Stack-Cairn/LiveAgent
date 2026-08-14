@@ -3,6 +3,7 @@ import { createHostTranslations, type Locale } from "@liveagent/ui/i18n/hostTran
 export type { Locale } from "@liveagent/ui/i18n/hostTranslations";
 export {
   DEFAULT_LOCALE,
+  detectSystemLocale,
   normalizeLocale,
   SUPPORTED_LOCALES,
 } from "@liveagent/ui/i18n/hostTranslations";

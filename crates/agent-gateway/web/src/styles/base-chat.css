@@ -1,0 +1,1210 @@
+.font-chat {
+  font-family: var(--chat-font-family);
+}
+
+html[data-liveagent-webui="gateway"] .settings-skills-search,
+html[data-liveagent-webui="gateway"] .git-branch-selector-input {
+  font-size: 0.75rem;
+}
+
+html[data-liveagent-webui="gateway"] .chat-history-new-conversation-button {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+}
+
+html[data-liveagent-webui="gateway"] .chat-history-new-conversation-label {
+  font-family: var(--app-font-family);
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+}
+
+html[data-liveagent-webui="gateway"] button {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+html[data-liveagent-webui="gateway"] .model-selector-trigger,
+html[data-liveagent-webui="gateway"] .model-selector-current-label,
+html[data-liveagent-webui="gateway"] .model-selector-dropdown,
+html[data-liveagent-webui="gateway"] .model-selector-menu-title,
+html[data-liveagent-webui="gateway"] .model-selector-group-label,
+html[data-liveagent-webui="gateway"] .model-selector-item {
+  font-family: var(--app-font-family);
+}
+
+html[data-liveagent-webui="gateway"] .model-selector-trigger,
+html[data-liveagent-webui="gateway"] .model-selector-current-label {
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+html[data-liveagent-webui="gateway"] .model-selector-dropdown,
+html[data-liveagent-webui="gateway"] .model-selector-item {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+html[data-liveagent-webui="gateway"] .model-selector-menu-title,
+html[data-liveagent-webui="gateway"] .model-selector-group-label {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+html[data-liveagent-webui="gateway"] .chat-history-sidebar {
+  contain: layout paint style;
+}
+
+html[data-liveagent-webui="gateway"] .chat-history-row {
+  contain: layout paint style;
+}
+
+html[data-liveagent-webui="gateway"] .gateway-project-tools-panel-toggle {
+  margin-right: 6px;
+}
+
+html[data-liveagent-webui="gateway"] .project-tools-panel-handle {
+  display: none;
+}
+
+html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+}
+
+html[data-liveagent-webui="gateway"] .project-file-tree-panel-scroll {
+  padding-bottom: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  scroll-padding-bottom: 16px;
+  scroll-padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+html[data-liveagent-webui="gateway"] .workdir-picker-tree {
+  --rct-color-tree-bg: transparent;
+  --rct-color-tree-focus-outline: transparent;
+  --rct-color-focustree-item-selected-bg: hsl(var(--accent));
+  --rct-color-focustree-item-selected-text: hsl(var(--accent-foreground));
+  --rct-color-focustree-item-hover-bg: hsl(var(--muted) / 0.72);
+  --rct-color-focustree-item-hover-text: hsl(var(--foreground));
+  --rct-color-focustree-item-active-bg: hsl(var(--muted));
+  --rct-color-focustree-item-active-text: hsl(var(--foreground));
+  --rct-color-focustree-item-focused-border: hsl(var(--ring) / 0.58);
+  --rct-color-focustree-item-draggingover-bg: hsl(var(--accent));
+  --rct-color-focustree-item-draggingover-color: hsl(var(--accent-foreground));
+  --rct-color-nonfocustree-item-selected-bg: hsl(var(--accent) / 0.78);
+  --rct-color-nonfocustree-item-selected-text: hsl(var(--accent-foreground));
+  --rct-color-nonfocustree-item-focused-border: hsl(var(--border));
+  --rct-color-search-highlight-bg: hsl(var(--primary) / 0.18);
+  --rct-color-arrow: hsl(var(--muted-foreground));
+  --rct-bar-color: hsl(var(--ring));
+  --rct-focus-outline: hsl(var(--ring));
+}
+
+html[data-liveagent-webui="gateway"] .workdir-picker-tree .rct-tree-root {
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-family: inherit;
+}
+
+html[data-liveagent-webui="gateway"].dark .workdir-picker-tree {
+  --rct-color-focustree-item-selected-bg: hsl(var(--accent) / 0.92);
+  --rct-color-focustree-item-selected-text: hsl(var(--foreground));
+  --rct-color-focustree-item-hover-bg: hsl(var(--muted) / 0.68);
+  --rct-color-focustree-item-active-bg: hsl(var(--muted) / 0.86);
+  --rct-color-nonfocustree-item-selected-bg: hsl(var(--accent) / 0.72);
+  --rct-color-nonfocustree-item-selected-text: hsl(var(--foreground));
+  --rct-color-search-highlight-bg: hsl(var(--primary) / 0.24);
+}
+
+html[data-liveagent-webui="gateway"] .workdir-picker-tree .rct-tree-item-button {
+  min-width: 0;
+}
+
+html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tabs {
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-inline: 0.5rem;
+}
+
+html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tabs::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tab {
+  max-width: min(14rem, calc(100vw - 2rem));
+}
+
+html[data-liveagent-webui="gateway"] {
+  --ring: 220 13% 62%;
+  --gateway-scrollbar-size: 10px;
+  --gateway-scrollbar-track: transparent;
+  --gateway-scrollbar-track-hover: hsl(var(--muted) / 0.34);
+  --gateway-scrollbar-thumb: hsl(var(--muted-foreground) / 0.22);
+  --gateway-scrollbar-thumb-hover: hsl(var(--muted-foreground) / 0.36);
+  --gateway-scrollbar-thumb-active: hsl(var(--muted-foreground) / 0.5);
+  --gateway-scrollbar-thumb-border: hsl(var(--background) / 0.82);
+  --project-tools-tabs-scrollbar-track: hsl(var(--muted) / 0.42);
+  --project-tools-tabs-scrollbar-track-hover: var(--gateway-scrollbar-track-hover);
+  --project-tools-tabs-scrollbar-thumb: var(--gateway-scrollbar-thumb);
+  --project-tools-tabs-scrollbar-thumb-hover: var(--gateway-scrollbar-thumb-hover);
+  --project-tools-tabs-scrollbar-thumb-border: var(--gateway-scrollbar-thumb-border);
+}
+
+html[data-liveagent-webui="gateway"].dark {
+  --ring: 220 18% 68%;
+  --gateway-scrollbar-track-hover: hsl(var(--muted) / 0.46);
+  --gateway-scrollbar-thumb: hsl(var(--muted-foreground) / 0.28);
+  --gateway-scrollbar-thumb-hover: hsl(var(--muted-foreground) / 0.46);
+  --gateway-scrollbar-thumb-active: hsl(var(--muted-foreground) / 0.62);
+  --gateway-scrollbar-thumb-border: hsl(var(--background) / 0.76);
+}
+
+html[data-liveagent-webui="gateway"],
+html[data-liveagent-webui="gateway"] * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gateway-scrollbar-thumb) transparent;
+}
+
+html[data-liveagent-webui="gateway"]:hover,
+html[data-liveagent-webui="gateway"]:focus-within,
+html[data-liveagent-webui="gateway"] *:hover,
+html[data-liveagent-webui="gateway"] *:focus-within {
+  scrollbar-color: var(--gateway-scrollbar-thumb-hover) transparent;
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar {
+  width: var(--gateway-scrollbar-size);
+  height: var(--gateway-scrollbar-size);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-track,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: var(--gateway-scrollbar-track);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-track:hover,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-track:hover {
+  background: var(--gateway-scrollbar-track-hover);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb {
+  min-width: 36px;
+  min-height: 36px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: var(--gateway-scrollbar-thumb);
+  background-clip: content-box;
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb:hover,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb:hover {
+  border-width: 2px;
+  background-color: var(--gateway-scrollbar-thumb-hover);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-thumb:active,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background-color: var(--gateway-scrollbar-thumb-active);
+}
+
+html[data-liveagent-webui="gateway"]::-webkit-scrollbar-corner,
+html[data-liveagent-webui="gateway"] *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* SFTP 双栏 <860px 时靠这条横向滚动条露出被裁切的右栏，但全局
+   scrollbar-width: thin 会让 Chromium 121+/Safari 18.2+ 忽略上面的
+   *::-webkit-scrollbar 自绘样式，macOS 上退化成"滚动中才短暂浮现"的悬浮
+   滚动条——静止时底部看不到任何滚动条。恢复 auto 让自绘样式重新生效，
+   与 GUI 端的常驻滚动条对齐。必须排在全局 *:hover / *:focus-within 的
+   scrollbar-color 规则之后：两者同优先级，靠源码顺序覆盖，否则悬停一瞬间
+   scrollbar-color 变回非 auto，滚动条会当场消失。 */
+html[data-liveagent-webui="gateway"] .sftp-panes-scroll {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+
+html[data-liveagent-webui="gateway"] .project-tools-panel-tabs {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html[data-liveagent-webui="gateway"] .project-tools-panel-tabs::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+html[data-liveagent-webui="gateway"] .git-review-transient-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html[data-liveagent-webui="gateway"] .git-review-transient-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+html[data-liveagent-webui="gateway"] .git-review-floating-scrollbar {
+  background-color: var(--gateway-scrollbar-thumb-hover);
+}
+
+html[data-liveagent-webui="gateway"] .git-review-floating-scrollbar:hover,
+html[data-liveagent-webui="gateway"] .git-review-floating-scrollbar[data-dragging="true"] {
+  background-color: var(--gateway-scrollbar-thumb-active);
+}
+
+html[data-liveagent-webui="gateway"] [data-scroll-viewport] {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html[data-liveagent-webui="gateway"] [data-scroll-viewport]::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+html[data-liveagent-webui="gateway"] .scroll-area-scrollbar {
+  border-color: transparent;
+  background: transparent;
+  transition:
+    background-color 160ms ease,
+    opacity 160ms ease;
+}
+
+html[data-liveagent-webui="gateway"] .scroll-area-scrollbar[data-orientation="vertical"] {
+  width: var(--gateway-scrollbar-size);
+  padding: 2px;
+}
+
+html[data-liveagent-webui="gateway"] .scroll-area-scrollbar[data-orientation="horizontal"] {
+  height: var(--gateway-scrollbar-size);
+  padding: 2px;
+}
+
+html[data-liveagent-webui="gateway"] .scroll-area-scrollbar:hover {
+  background: var(--gateway-scrollbar-track-hover);
+}
+
+html[data-liveagent-webui="gateway"] .scroll-area-thumb {
+  min-height: 36px;
+  min-width: 36px;
+  border-radius: 999px;
+  background: var(--gateway-scrollbar-thumb);
+  box-shadow: inset 0 0 0 1px var(--gateway-scrollbar-thumb-border);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+html[data-liveagent-webui="gateway"] .scroll-area-scrollbar:hover .scroll-area-thumb,
+html[data-liveagent-webui="gateway"] .scroll-area-thumb:hover {
+  background: var(--gateway-scrollbar-thumb-hover);
+}
+
+html[data-liveagent-webui="gateway"] .scroll-area-thumb:active {
+  background: var(--gateway-scrollbar-thumb-active);
+}
+
+html[data-liveagent-webui="gateway"] .tool-text-scroll,
+html[data-liveagent-webui="gateway"] .mention-popup-scroll,
+html[data-liveagent-webui="gateway"] .settings-provider-tabs-wrap {
+  scrollbar-color: var(--gateway-scrollbar-thumb) transparent;
+}
+
+/* Upload file list: scrollable without a visible scrollbar (overrides gateway globals) */
+html[data-liveagent-webui="gateway"] .upload-file-list {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html[data-liveagent-webui="gateway"] .upload-file-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+html[data-liveagent-webui="gateway"] .settings-provider-tabs-wrap::-webkit-scrollbar {
+  height: 8px;
+}
+
+html[data-liveagent-webui="gateway"] .tool-text-scroll::-webkit-scrollbar,
+html[data-liveagent-webui="gateway"] .mention-popup-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/*
+ * The history list already virtualizes once it grows large. Avoid
+ * content-visibility on rows: after pin/unpin reorders the list, WebView
+ * engines can keep the moved row in a skipped paint state and render only the
+ * row background, making the conversation title look blank.
+ */
+
+body {
+  background:
+    radial-gradient(circle at top left, hsl(var(--primary) / 0.08), transparent 24%),
+    radial-gradient(circle at bottom right, hsl(var(--ring) / 0.08), transparent 28%),
+    hsl(var(--background));
+}
+
+html.dark body {
+  background:
+    radial-gradient(circle at top left, hsl(220 60% 60% / 0.08), transparent 24%),
+    radial-gradient(circle at bottom right, hsl(260 50% 55% / 0.08), transparent 28%),
+    hsl(var(--background));
+}
+
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--code-font-family);
+}
+
+.gateway-transcript-list .thinking-block-pre {
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.625;
+}
+
+.gateway-transcript-list .thinking-block-toggle {
+  font-size: 13px;
+  line-height: 1.25rem;
+}
+
+.gateway-chat-frame .composer-toolbar-action {
+  font-size: 11px;
+  line-height: 1rem;
+  font-weight: 500;
+}
+
+html[data-liveagent-webui="gateway"] .composer-dropdown {
+  box-sizing: border-box;
+  display: flex;
+  width: min(420px, calc(100vw - 24px));
+  min-width: min(260px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(420px, var(--available-height, 420px));
+  flex-direction: column;
+}
+
+html[data-liveagent-webui="gateway"] .composer-dropdown-body {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+html[data-liveagent-webui="gateway"] .composer-dropdown-item {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+html[data-liveagent-webui="gateway"] .composer-dropdown-text,
+html[data-liveagent-webui="gateway"] .composer-dropdown-title,
+html[data-liveagent-webui="gateway"] .composer-dropdown-description {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Do NOT add input/textarea/select here: Tailwind preflight already applies
+ * font: inherit in @layer base, and an unlayered copy would override every
+ * text-* utility on form fields (unlayered CSS beats @layer utilities).
+ */
+button {
+  font: inherit;
+}
+
+html[data-liveagent-webui="gateway"]
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+html[data-liveagent-webui="gateway"] textarea:focus,
+html[data-liveagent-webui="gateway"] select:focus,
+html[data-liveagent-webui="gateway"] [contenteditable="true"]:focus,
+html[data-liveagent-webui="gateway"] [role="textbox"]:focus {
+  outline: none;
+}
+
+html[data-liveagent-webui="gateway"]
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus-visible,
+html[data-liveagent-webui="gateway"] textarea:focus-visible,
+html[data-liveagent-webui="gateway"] select:focus-visible,
+html[data-liveagent-webui="gateway"] [contenteditable="true"]:focus-visible,
+html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
+  --tw-ring-offset-shadow: 0 0 #0000;
+  --tw-ring-shadow: 0 0 #0000;
+  border-color: hsl(var(--input));
+  box-shadow: var(--tw-shadow, 0 0 #0000);
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 16px;
+  cursor: pointer;
+  padding: 12px 18px;
+  font-weight: 600;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease,
+    color 180ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  transform: none;
+  opacity: 0.5;
+}
+
+.button-primary {
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--ring)));
+  color: hsl(var(--primary-foreground));
+  box-shadow: 0 16px 36px hsl(var(--primary) / 0.18);
+}
+
+.button-ghost {
+  background: hsl(var(--muted) / 0.8);
+  color: hsl(var(--foreground));
+}
+
+.input {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background) / 0.86);
+  color: hsl(var(--foreground));
+  padding: 12px 14px;
+  outline: none;
+  box-shadow: inset 0 1px 0 hsl(var(--background));
+}
+
+.input:focus {
+  border-color: hsl(var(--primary) / 0.35);
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.08);
+}
+
+.gateway-hidden-file-input {
+  display: none;
+}
+
+.gateway-shell {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.gateway-editor-host {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+.gateway-main-shell {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+  overflow: hidden;
+}
+
+.gateway-main-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background) / 0.88) 100%),
+    radial-gradient(circle at 85% 0%, hsl(var(--primary) / 0.06), transparent 26%);
+}
+
+.gateway-chat-frame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  /* Two deliberately separate columns, both defaulting to 768px: the composer
+     keeps a fixed width while the transcript is user-resizable, so widening
+     the conversation never drags the input box along. Only the composer layer
+     may read --gateway-chat-column-width; the transcript reads
+     --chat-transcript-content-width, which TranscriptWidthControls overwrites
+     inline on .gateway-transcript-stage. */
+  --gateway-chat-column-width: 768px;
+  --chat-transcript-content-width: 768px;
+  --gateway-chat-column-gutter: 16px;
+  --gateway-chat-composer-bottom: 16px;
+  --gateway-chat-composer-overlay-height: 176px;
+}
+
+.history-share-frame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  flex: 1;
+  flex-direction: column;
+}
+
+.history-share-header {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid hsl(var(--border) / 0.55);
+  background: hsl(var(--background) / 0.78);
+  padding: 14px 22px;
+  backdrop-filter: blur(18px);
+}
+
+.history-share-meta {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+}
+
+.history-share-meta > span {
+  border: 1px solid hsl(var(--border) / 0.65);
+  border-radius: 999px;
+  background: hsl(var(--background) / 0.72);
+  padding: 4px 9px;
+}
+
+.history-share-body {
+  min-height: 0;
+  flex: 1;
+}
+
+.history-share-scroll {
+  height: 100%;
+  overflow-anchor: none;
+}
+
+.history-share-state {
+  display: flex;
+  height: 100%;
+  min-height: 320px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.gateway-chat-column {
+  width: 100%;
+  min-width: 0;
+}
+
+.gateway-banner-error {
+  margin: 12px 20px 0;
+  border: 1px solid hsl(var(--destructive) / 0.16);
+  background: hsl(var(--destructive) / 0.08);
+  color: hsl(var(--destructive));
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.gateway-transcript-stage {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.gateway-transcript-scroll-shell {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+
+.gateway-transcript-scroll {
+  height: 100%;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+}
+
+.gateway-history-switch-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--background) / 0.95);
+  backdrop-filter: blur(2px);
+}
+
+.gateway-history-switch-overlay-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid hsl(var(--border) / 0.6);
+  border-radius: 999px;
+  background: hsl(var(--background) / 0.95);
+  color: hsl(var(--muted-foreground));
+  box-shadow: 0 10px 28px hsl(220 22% 10% / 0.12);
+  padding: 0.5rem 0.875rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1rem;
+}
+
+.gateway-transcript-scroll [data-scroll-viewport],
+.gateway-transcript-scroll [data-scroll-viewport] > div {
+  overflow-anchor: none;
+}
+
+.gateway-transcript-shell {
+  display: grid;
+  grid-template-columns:
+    minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
+    minmax(0, min(var(--chat-transcript-content-width, 768px), 100%))
+    minmax(var(--gateway-chat-column-gutter, 16px), 1fr);
+  width: 100%;
+  min-width: 0;
+  overflow-anchor: none;
+  padding-top: 18px;
+}
+
+.gateway-transcript-list {
+  grid-column: 2;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.gateway-composer-layer {
+  display: grid;
+  grid-template-columns:
+    minmax(var(--gateway-chat-column-gutter, 16px), 1fr)
+    minmax(0, min(var(--gateway-chat-column-width, 768px), 100%))
+    minmax(var(--gateway-chat-column-gutter, 16px), 1fr);
+  padding-bottom: var(--gateway-chat-composer-bottom, 16px);
+}
+
+.gateway-composer-layer > .gateway-chat-column {
+  grid-column: 2;
+}
+
+.gateway-transcript-scroll [data-scroll-viewport] > div {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.gateway-transcript-bottom-spacer {
+  grid-column: 2;
+  height: max(12rem, calc(var(--gateway-chat-composer-overlay-height, 176px) + 18px));
+}
+
+.gateway-scroll-to-bottom {
+  position: absolute;
+  right: 18px;
+  bottom: calc(var(--gateway-chat-composer-overlay-height, 176px) + 12px);
+  z-index: 12;
+  display: inline-flex;
+  height: 42px;
+  width: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(var(--border) / 0.72);
+  border-radius: 999px;
+  background: linear-gradient(180deg, hsl(var(--card) / 0.98), hsl(var(--background) / 0.94));
+  color: hsl(var(--foreground));
+  box-shadow:
+    0 14px 34px hsl(220 22% 10% / 0.12),
+    inset 0 1px 0 hsl(var(--background) / 0.9);
+  backdrop-filter: blur(16px);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
+}
+
+.gateway-scroll-to-bottom:hover {
+  transform: translateY(-1px);
+  border-color: hsl(var(--primary) / 0.34);
+  background: linear-gradient(180deg, hsl(var(--card)), hsl(var(--primary) / 0.08));
+  box-shadow:
+    0 18px 42px hsl(220 22% 10% / 0.18),
+    inset 0 1px 0 hsl(var(--background) / 0.94);
+}
+
+.gateway-scroll-to-bottom:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px hsl(var(--primary) / 0.18),
+    0 18px 42px hsl(220 22% 10% / 0.18);
+}
+
+.gateway-transcript-row {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.gateway-transcript-row-user {
+  justify-content: flex-end;
+}
+
+.gateway-transcript-row-checkpoint,
+.checkpoint-row,
+.checkpoint-row-body {
+  width: 100%;
+}
+
+.chat-user-bubble-editor {
+  box-shadow:
+    0 1px 2px hsl(220 22% 10% / 0.04),
+    inset 0 0 0 1px hsl(var(--border) / 0.45);
+}
+
+.chat-user-bubble-editor-textarea {
+  display: block;
+  min-height: 72px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chat-user-bubble-actions,
+.chat-assistant-actions {
+  min-height: 24px;
+}
+
+/* Keep the hover-revealed action row visible while its inline confirm
+   popover is open (the pointer may sit outside the assistant row). */
+.chat-assistant-actions:has(.settings-confirm-popover) {
+  opacity: 1 !important;
+}
+
+/* Confirm-action popover enter/exit: grow out of the anchor toward the
+   placement side. The component keeps the node mounted for the exit
+   animation (data-closing) and unmounts after CONFIRM_POPOVER_CLOSE_MS,
+   which must stay >= the confirmPopoverOut duration here. */
+.settings-confirm-popover {
+  --confirm-popover-slide-y: -6px;
+  animation: confirmPopoverIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.settings-confirm-popover[data-place="up"] {
+  --confirm-popover-slide-y: 6px;
+}
+
+.settings-confirm-popover[data-place="down"][data-align="start"] {
+  transform-origin: top left;
+}
+.settings-confirm-popover[data-place="down"][data-align="end"] {
+  transform-origin: top right;
+}
+.settings-confirm-popover[data-place="up"][data-align="start"] {
+  transform-origin: bottom left;
+}
+.settings-confirm-popover[data-place="up"][data-align="end"] {
+  transform-origin: bottom right;
+}
+
+.settings-confirm-popover[data-closing] {
+  animation: confirmPopoverOut 0.12s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes confirmPopoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(var(--confirm-popover-slide-y, -6px)) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes confirmPopoverOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--confirm-popover-slide-y, -6px) / 2)) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-confirm-popover,
+  .settings-confirm-popover[data-closing] {
+    animation: none;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  html[data-liveagent-webui="gateway"] .changed-file-row-action {
+    display: none;
+  }
+  .chat-user-bubble-actions,
+  .chat-assistant-actions {
+    opacity: 1 !important;
+  }
+
+  .chat-user-bubble-action,
+  .chat-assistant-action {
+    display: inline-flex;
+    min-height: 28px;
+    min-width: 28px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+.gateway-bubble {
+  width: min(100%, 760px);
+  border-radius: 22px;
+  border: 1px solid hsl(var(--border) / 0.55);
+  background: hsl(var(--card) / 0.78);
+  box-shadow: 0 10px 38px hsl(220 15% 12% / 0.04);
+  backdrop-filter: blur(18px);
+}
+
+.gateway-bubble-user {
+  width: fit-content;
+  max-width: min(100%, 460px);
+  border-color: transparent;
+  background: hsl(var(--muted));
+  border-radius: 18px;
+}
+
+.gateway-bubble-user .gateway-bubble-content {
+  padding: 14px 18px;
+}
+
+.gateway-bubble-assistant,
+.gateway-bubble-tool,
+.gateway-bubble-error {
+  padding: 16px 18px;
+}
+
+.gateway-bubble-thinking {
+  overflow: hidden;
+}
+
+.gateway-bubble-thinking summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  cursor: pointer;
+}
+
+.gateway-bubble-thinking summary::-webkit-details-marker {
+  display: none;
+}
+
+.gateway-bubble-thinking .gateway-bubble-content {
+  padding: 0 18px 16px;
+}
+
+.gateway-bubble-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+
+.gateway-bubble-content {
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.72;
+  color: hsl(var(--foreground));
+}
+
+.gateway-transcript-meta {
+  margin-top: 12px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.gateway-disclosure {
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.gateway-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gateway-tool-name {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.gateway-tool-summary {
+  margin-top: 10px;
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 8px;
+  border-radius: 14px;
+  background: hsl(var(--muted) / 0.72);
+  padding: 8px 12px;
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.gateway-transcript-details {
+  margin-top: 12px;
+  border-top: 1px solid hsl(var(--border) / 0.55);
+  padding-top: 10px;
+}
+
+.gateway-transcript-details summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+}
+
+.gateway-transcript-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.gateway-transcript-details pre {
+  margin-top: 10px;
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 14px;
+  background: hsl(var(--muted) / 0.72);
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.gateway-bubble-tool-error {
+  border-color: hsl(var(--destructive) / 0.3);
+  background: hsl(var(--destructive) / 0.04);
+}
+
+.gateway-bubble-error {
+  border-color: hsl(var(--destructive) / 0.3);
+  background: hsl(var(--destructive) / 0.05);
+}
+
+.gateway-inline-error {
+  border-radius: 14px;
+  border: 1px solid hsl(var(--destructive) / 0.16);
+  background: hsl(var(--destructive) / 0.08);
+  padding: 10px 12px;
+  font-size: 13px;
+  color: hsl(var(--destructive));
+}
+
+.gateway-empty-state {
+  grid-column: 2;
+  position: relative;
+  display: flex;
+  min-height: calc(100vh - 220px);
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 24px 0 0;
+}
+
+.gateway-footer-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px 14px;
+  border-top: 1px solid hsl(var(--border) / 0.4);
+  font-size: 12px;
+  color: hsl(var(--muted-foreground));
+}
+
+.gateway-logout-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+
+.gateway-logout-button:hover {
+  color: hsl(var(--foreground));
+}
+
+.gateway-settings-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  min-height: 100%;
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}
+
+.gateway-settings-overlay-open {
+  opacity: 1;
+  /*
+   * `none` (identity) instead of translateY(0): a lingering transform on the
+   * overlay turns it into a permanent containing block + composited layer
+   * around the settings scroller. On Android Chrome that combination skips
+   * rasterizing parts of the scrolled content (cards render as blank gaps
+   * that move with scroll position). Transitions interpolate to/from `none`
+   * as identity, so the open/close motion is unchanged.
+   */
+  transform: none;
+}
+
+.gateway-settings-overlay aside > div:last-child > button {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+html[data-liveagent-webui="gateway"] .settings-page-shell,
+html[data-liveagent-webui="gateway"] .settings-main,
+html[data-liveagent-webui="gateway"] .settings-content,
+html[data-liveagent-webui="gateway"] .settings-section-shell {
+  min-width: 0;
+}
+
+html[data-liveagent-webui="gateway"] .settings-back-bar {
+  display: none;
+}
+
+html[data-liveagent-webui="gateway"] .settings-section-actions,
+html[data-liveagent-webui="gateway"] .settings-card-actions,
+html[data-liveagent-webui="gateway"] .settings-modal-actions {
+  min-width: 0;
+}
+
+html[data-liveagent-webui="gateway"] .settings-confirm-popover {
+  max-width: calc(100vw - 24px);
+}
+
+html[data-liveagent-webui="gateway"] .history-share-modal-overlay,
+html[data-liveagent-webui="gateway"] .external-link-modal-overlay {
+  opacity: 0;
+  transition: opacity 180ms ease;
+  will-change: opacity;
+}
+
+html[data-liveagent-webui="gateway"] .history-share-modal-overlay[data-state="open"],
+html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="open"] {
+  opacity: 1;
+}
+
+html[data-liveagent-webui="gateway"] .history-share-modal-overlay[data-state="closed"],
+html[data-liveagent-webui="gateway"] .external-link-modal-overlay[data-state="closed"] {
+  pointer-events: none;
+}
+
+html[data-liveagent-webui="gateway"] .history-share-modal-panel,
+html[data-liveagent-webui="gateway"] .external-link-modal-panel {
+  opacity: 0;
+  transform: translateY(12px) scale(0.985);
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+html[data-liveagent-webui="gateway"]
+  .history-share-modal-overlay[data-state="open"]
+  .history-share-modal-panel,
+html[data-liveagent-webui="gateway"]
+  .external-link-modal-overlay[data-state="open"]
+  .external-link-modal-panel {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+html[data-liveagent-webui="gateway"]
+  .history-share-modal-overlay[data-state="closed"]
+  .history-share-modal-panel,
+html[data-liveagent-webui="gateway"]
+  .external-link-modal-overlay[data-state="closed"]
+  .external-link-modal-panel {
+  opacity: 0;
+  transform: translateY(8px) scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-liveagent-webui="gateway"] .external-link-modal-overlay,
+  html[data-liveagent-webui="gateway"] .external-link-modal-panel {
+    transition-duration: 1ms;
+  }
+}

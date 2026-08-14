@@ -117,10 +117,14 @@ test("all task tools are standalone transcript-hidden blocks", () => {
 });
 
 test("GUI projects canonical live results without a sequencing compatibility layer", () => {
-  const source = readFileSync(
-    fileURLToPath(new URL("../../src/pages/ChatPage.tsx", import.meta.url)),
-    "utf8",
-  );
+  const source = [
+    "../../src/pages/ChatPage.tsx",
+    "../../src/pages/chat/components/CurrentTaskProgress.tsx",
+  ]
+    .map((relativePath) =>
+      readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8"),
+    )
+    .join("\n");
   assert.match(source, /liveTranscriptStore\.subscribe/);
   assert.match(source, /selectLatestTaskProgress\(historyItems, liveRounds\)/);
   assert.match(source, /key=\{currentConversationId\}/);

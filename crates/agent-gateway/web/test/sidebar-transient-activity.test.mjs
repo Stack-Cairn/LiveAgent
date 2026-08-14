@@ -8,7 +8,13 @@ const loader = createWebModuleLoader();
 const { mergeTransientSidebarRunningActivity } = loader.loadModule(
   "@liveagent/ui/lib/sidebar/transientActivity.ts",
 );
-const gatewayAppSource = readFileSync(new URL("../src/app/GatewayApp.tsx", import.meta.url), "utf8");
+const gatewayAppSource = [
+  "../src/app/GatewayApp.tsx",
+  "../src/app/hooks/useGatewayChatPresentation.tsx",
+  "../src/app/hooks/useGatewayConversationRuntime.ts",
+]
+  .map((relativePath) => readFileSync(new URL(relativePath, import.meta.url), "utf8"))
+  .join("\n");
 
 test("manual compaction keeps its conversation and workspace running until terminal cleanup", () => {
   const runningConversationIds = new Set(["other-conversation"]);
@@ -83,12 +89,12 @@ test("manual compaction pending is keyed per conversation, never a global single
   // handleManualCompact 只在“同会话”已有 pending 时拒绝。
   assert.match(
     gatewayAppSource,
-    /manualCompactPendingRef\.current\.has\(conversationIdValue\)/,
+    /manualCompactPendingRef\.current\.has\(conversationId\)/,
   );
   // 受理拒绝（!accepted）按 (conversationId, operationId) 清 pending。
   assert.match(
     gatewayAppSource,
-    /!response\.accepted &&\s*clearManualCompactPendingRequest\(conversationIdValue, operationId\) &&\s*isDisplayedConversation\(conversationIdValue\)/,
+    /!response\.accepted &&\s*clearManualCompactPendingRequest\(conversationId, operationId\) &&\s*isDisplayedConversation\(conversationId\)/,
   );
 });
 
@@ -97,7 +103,7 @@ test("manual compaction terminal settlement surfaces the result even for backgro
   // 会话压缩失败/跳过也能提示。
   assert.match(
     gatewayAppSource,
-    /if \(!clearManualCompactPendingRequest\(targetConversationId, result\.operationId\)\) return;[\s\S]*?setChatError\(result\.message \|\| translate\(fallbackKey, settings\.locale\)\);/,
+    /if \(!clearManualCompactPendingRequest\(targetConversationId, result\.operationId\)\) return;[\s\S]*?setChatError\(result\.message \|\| translate\(fallbackKey, locale\)\);/,
   );
   assert.doesNotMatch(
     gatewayAppSource,

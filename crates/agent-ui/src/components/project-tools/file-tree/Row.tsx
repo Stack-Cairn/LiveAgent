@@ -46,17 +46,32 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
   } = props;
   const { t } = useLocale();
   const TypeIcon = getFileTypeIcon(path, kind, { expanded });
+  const activateRow = () => {
+    onSelect(path);
+    if (kind === "dir") {
+      onToggle(path, expanded);
+      return;
+    }
+    onOpen(path);
+  };
   return (
     <div
       role="treeitem"
       aria-selected={selected}
       aria-expanded={kind === "dir" ? expanded : undefined}
-      tabIndex={-1}
+      tabIndex={0}
       className={cn(
-        "group flex select-none items-center gap-1 rounded-md pr-2 text-xs leading-5 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+        "group flex w-full cursor-pointer select-none items-center gap-1 rounded-md pr-2 text-xs leading-5 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
         selected && "bg-muted text-foreground",
       )}
       style={{ height: FILE_TREE_ROW_HEIGHT, paddingLeft: 6 + depth * 14 }}
+      title={title}
+      onClick={activateRow}
+      onKeyDown={(event) => {
+        if (event.currentTarget !== event.target || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        activateRow();
+      }}
       onContextMenu={(event) => onContextMenu(event, path)}
     >
       {kind === "dir" ? (
@@ -66,7 +81,10 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
             "flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-background",
             hidden && "opacity-60 group-hover:opacity-80",
           )}
-          onClick={() => onToggle(path, expanded)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle(path, expanded);
+          }}
           title={expanded ? t("projectTools.fileTree.collapse") : t("projectTools.fileTree.expand")}
         >
           {loading ? (
@@ -80,25 +98,15 @@ export const FileTreeRow = memo(function FileTreeRow(props: FileTreeRowProps) {
       ) : (
         <span className="h-5 w-5 shrink-0" />
       )}
-      <button
-        type="button"
+      <div
         className={cn(
           "flex min-w-0 flex-1 items-center gap-1.5 bg-transparent p-0 text-left text-inherit leading-5",
           hidden && "opacity-60 group-hover:opacity-80",
         )}
-        title={title}
-        onClick={() => onSelect(path)}
-        onDoubleClick={() => {
-          if (kind === "dir") {
-            onToggle(path, expanded);
-            return;
-          }
-          onOpen(path);
-        }}
       >
         <TypeIcon className="h-3.5 w-3.5 shrink-0" />
         <span className="min-w-0 truncate">{name}</span>
-      </button>
+      </div>
     </div>
   );
 });

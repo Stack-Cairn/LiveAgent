@@ -39,4 +39,5 @@ pub use runtime_commands::terminal;
 pub use workspace_commands::chat_file_links;
 pub use workspace_commands::fs;
 pub use workspace_commands::git;
+pub use workspace_commands::root_grants;
 pub use workspace_commands::subagent_worktree;
