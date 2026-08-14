@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
-import { findRetiredSharedDeclarations } from "./ui-boundary-declarations.mjs";
+import { basename, join, relative, resolve, sep } from "node:path";
+import {
+  findRetiredSharedDeclarations,
+  rendersImportedComponent,
+} from "./ui-boundary-declarations.mjs";
 
 const repoRoot = resolve(import.meta.dirname, "..");
 const toPosixPath = (path) => path.split(sep).join("/");
@@ -285,15 +288,24 @@ const applicationEntries = [
 for (const [entryFile, viewFile] of applicationEntries) {
   const entrySource = readFileSync(entryFile, "utf8");
   const viewSource = readFileSync(viewFile, "utf8");
-  const viewComponentName = viewFile.split(sep).at(-1)?.replace(/\.tsx$/, "") ?? "";
+  const viewComponentName = basename(viewFile, ".tsx");
   // 断言真实的渲染委托，而非文本巧合：入口必须以 JSX 实际渲染 View 组件
   // （仅 import type 不算数），View 必须 import 共享 ApplicationView 并渲染它
   // （注释里出现路径字符串不算数）。
   const delegatesToView =
-    entryFile === viewFile || new RegExp(`<${viewComponentName}[\\s/>]`).test(entrySource);
-  const rendersSharedApplicationView =
-    /from\s+["']@liveagent\/ui\/application\/ApplicationView["']/.test(viewSource) &&
-    /<ApplicationView[\s/>]/.test(viewSource);
+    entryFile === viewFile ||
+    rendersImportedComponent(
+      entrySource,
+      entryFile,
+      `./${viewComponentName}`,
+      viewComponentName,
+    );
+  const rendersSharedApplicationView = rendersImportedComponent(
+    viewSource,
+    viewFile,
+    "@liveagent/ui/application/ApplicationView",
+    "ApplicationView",
+  );
   if (delegatesToView && rendersSharedApplicationView) continue;
   failures += 1;
   console.error(
