@@ -8,6 +8,7 @@ import {
   CirclePlus,
   Folder,
   FolderClosed,
+  FolderOpen,
   ListChecks,
   Loader2,
   PanelLeftClose,
@@ -188,6 +189,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     projectRenamingId = null,
     projectRenameDraft = "",
     projectsCollapsed = false,
+    workspaceFolderDropActive = false,
     recentCollapsed = false,
     onProjectsCollapsedChange,
     onRecentCollapsedChange,
@@ -1302,7 +1304,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
             <>
               <div
                 ref={projectsHeaderRef}
-                className="flex items-center justify-between px-2 pb-1 pt-2"
+                data-workspace-folder-drop-zone=""
+                className={cn(
+                  "mx-1 flex items-center justify-between rounded-t-xl border-x border-t border-dashed border-transparent px-1 pb-1 pt-2 transition-colors",
+                  workspaceFolderDropActive && "border-primary/40 bg-primary/[0.08]",
+                )}
               >
                 <button
                   type="button"
@@ -1311,7 +1317,11 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   onClick={handleProjectsCollapsedChange}
                   disabled={sectionsDisabled}
                 >
-                  <span>{t("chat.workspaceSection")}</span>
+                  <span>
+                    {workspaceFolderDropActive
+                      ? t("chat.workspaceDropFolder")
+                      : t("chat.workspaceSection")}
+                  </span>
                   <ChevronRight
                     aria-hidden="true"
                     className="h-3.5 w-3.5 shrink-0 opacity-0 transition-[opacity,transform] duration-300 ease-in-out group-hover:opacity-100"
@@ -1365,12 +1375,24 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               <div
                 aria-hidden={projectsCollapsed}
                 inert={projectsCollapsed}
+                data-workspace-folder-drop-zone=""
                 className={cn(
-                  "min-h-0 overflow-y-auto overflow-x-hidden transition-opacity duration-300 ease-out motion-reduce:transition-none",
+                  "mx-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-xl border-x border-b border-dashed border-transparent transition-[opacity,background-color,border-color] duration-300 ease-out motion-reduce:transition-none",
                   projectsCollapsed ? "opacity-0" : "opacity-100",
+                  workspaceFolderDropActive && "border-primary/40 bg-primary/[0.045]",
                 )}
               >
                 <div ref={projectsBodyRef} className="space-y-0.5 px-2 pb-0.5">
+                  {workspaceFolderDropActive ? (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className="mb-1 flex items-center gap-2 rounded-lg border border-dashed border-primary/35 bg-primary/[0.06] px-2.5 py-2 text-[11px] leading-4 text-primary"
+                    >
+                      <FolderOpen className="h-4 w-4 shrink-0" />
+                      <span>{t("chat.workspaceDropFolderDescription")}</span>
+                    </div>
+                  ) : null}
                   {creatingGroup ? (
                     <div className="flex h-[30px] items-center gap-1 rounded-lg pl-2 pr-1">
                       <Folder className="h-4 w-4 shrink-0 text-foreground/65" />

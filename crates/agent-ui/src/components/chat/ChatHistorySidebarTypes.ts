@@ -56,6 +56,7 @@ export type ChatHistorySidebarProps = {
   projectRenamingId?: string | null;
   projectRenameDraft?: string;
   projectsCollapsed?: boolean;
+  workspaceFolderDropActive?: boolean;
   recentCollapsed?: boolean;
   onProjectsCollapsedChange?: (collapsed: boolean) => void;
   onRecentCollapsedChange?: (collapsed: boolean) => void;
@@ -122,6 +123,7 @@ export type ChatHistorySidebarWorkspaceSource = Pick<
   | "projectRenamingId"
   | "projectRenameDraft"
   | "projectsCollapsed"
+  | "workspaceFolderDropActive"
   | "recentCollapsed"
   | "onProjectsCollapsedChange"
   | "onRecentCollapsedChange"
@@ -149,6 +151,7 @@ export type ChatHistorySidebarWorkspaceSource = Pick<
 
 type OptionalWorkspaceSourceKey =
   | "workspaceProjectGroups"
+  | "workspaceFolderDropActive"
   | "onCreateWorkspaceGroup"
   | "onRenameWorkspaceGroup"
   | "onDeleteWorkspaceGroup"
@@ -294,6 +297,7 @@ export function buildChatHistorySidebarWorkspaceProps(
     projectRenamingId: source.projectRenamingId,
     projectRenameDraft: source.projectRenameDraft,
     projectsCollapsed: source.projectsCollapsed,
+    workspaceFolderDropActive: source.workspaceFolderDropActive,
     recentCollapsed: source.recentCollapsed,
     onProjectsCollapsedChange: source.onProjectsCollapsedChange,
     onRecentCollapsedChange: source.onRecentCollapsedChange,

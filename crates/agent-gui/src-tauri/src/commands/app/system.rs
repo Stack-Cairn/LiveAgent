@@ -2,6 +2,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use rfd::FileDialog;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::fs;
 use std::io::{BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -1285,6 +1286,42 @@ fn canonicalize_project_folder(path: &Path) -> String {
     project_folder_display_path(&fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
 }
 
+fn system_resolve_dropped_workspace_folders_sync(
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    if paths.is_empty() {
+        return Err("未检测到拖入的文件夹".to_string());
+    }
+
+    let mut resolved = Vec::with_capacity(paths.len());
+    let mut seen = HashSet::new();
+    for raw_path in paths {
+        let raw_path = raw_path.trim();
+        if raw_path.is_empty() {
+            return Err("拖入路径不能为空".to_string());
+        }
+
+        let path = expand_tilde_path(raw_path);
+        if !path.is_absolute() {
+            return Err(format!("拖入的工作空间路径必须是绝对路径：{raw_path}"));
+        }
+        let metadata = fs::metadata(&path)
+            .map_err(|error| format!("拖入路径不存在或无法访问（{raw_path}）：{error}"))?;
+        if !metadata.is_dir() {
+            return Err(format!("工作空间区域只支持拖入文件夹：{raw_path}"));
+        }
+
+        let canonical = fs::canonicalize(&path)
+            .map_err(|error| format!("无法解析拖入的工作空间目录（{raw_path}）：{error}"))?;
+        let display_path = project_folder_display_path(&canonical);
+        if seen.insert(display_path.clone()) {
+            resolved.push(display_path);
+        }
+    }
+
+    Ok(resolved)
+}
+
 pub(crate) fn system_create_project_folder_sync(
     parent: String,
     name: String,
@@ -1346,6 +1383,17 @@ pub async fn system_pick_folder(initial_workdir: Option<String>) -> Result<Optio
     })
     .await
     .map_err(|e| format!("system_pick_folder join 失败：{e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_resolve_dropped_workspace_folders(
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        system_resolve_dropped_workspace_folders_sync(paths)
+    })
+    .await
+    .map_err(|e| format!("system_resolve_dropped_workspace_folders join 失败：{e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -1812,6 +1860,41 @@ mod tests {
         .expect_err("reject missing parent");
 
         assert!(error.contains("父目录不存在"));
+    }
+
+    #[test]
+    fn resolve_dropped_workspace_folders_canonicalizes_and_deduplicates() {
+        let temp = tempdir().expect("create temp dir");
+        let project = temp.path().join("project");
+        fs::create_dir(&project).expect("create project dir");
+        let raw = project.to_string_lossy().into_owned();
+
+        let resolved =
+            system_resolve_dropped_workspace_folders_sync(vec![raw.clone(), format!("{raw}/./")])
+                .expect("resolve dropped workspace folders");
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0],
+            project_folder_display_path(&project.canonicalize().expect("canonicalize project"))
+        );
+    }
+
+    #[test]
+    fn resolve_dropped_workspace_folders_rejects_mixed_files_atomically() {
+        let temp = tempdir().expect("create temp dir");
+        let project = temp.path().join("project");
+        let file = temp.path().join("notes.txt");
+        fs::create_dir(&project).expect("create project dir");
+        fs::write(&file, b"notes").expect("write file");
+
+        let error = system_resolve_dropped_workspace_folders_sync(vec![
+            project.to_string_lossy().into_owned(),
+            file.to_string_lossy().into_owned(),
+        ])
+        .expect_err("mixed drop must be rejected");
+
+        assert!(error.contains("只支持拖入文件夹"));
     }
 
     #[test]

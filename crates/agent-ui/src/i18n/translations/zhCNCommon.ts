@@ -16,6 +16,8 @@ export const ZH_CN_COMMON_TRANSLATIONS = {
   "chat.pendingTitle": "新会话",
   "chat.recentConversation": "最近会话",
   "chat.workspaceSection": "工作空间",
+  "chat.workspaceDropFolder": "松开以添加工作空间",
+  "chat.workspaceDropFolderDescription": "支持拖入一个或多个本地文件夹",
   "chat.workspaceCreate": "新建工作空间",
   "chat.workspaceAdd": "添加…",
   "chat.workspaceUngrouped": "未分组",

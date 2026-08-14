@@ -242,6 +242,7 @@ macro_rules! app_invoke_handler {
             commands::git::git_stash_push,
             commands::git::git_stash_pop,
             commands::system::system_pick_folder,
+            commands::system::system_resolve_dropped_workspace_folders,
             commands::system::system_pick_file,
             commands::system::system_save_preview_file,
             commands::system::system_create_project_folder,

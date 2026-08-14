@@ -17,6 +17,8 @@ export const EN_US_COMMON_TRANSLATIONS = {
   "chat.pendingTitle": "New Chat",
   "chat.recentConversation": "Conversations",
   "chat.workspaceSection": "Workspaces",
+  "chat.workspaceDropFolder": "Drop to add workspaces",
+  "chat.workspaceDropFolderDescription": "Drop one or more local folders here",
   "chat.workspaceCreate": "New workspace",
   "chat.workspaceAdd": "Add…",
   "chat.workspaceUngrouped": "Ungrouped",

@@ -247,6 +247,7 @@ export function ChatPage(props: ChatPageProps) {
     workspaceCreateModalOpen,
     setWorkspaceCreateModalOpen,
     handleOpenWorkspaceFolder,
+    handleDropWorkspaceFolders,
     handleCloneWorkspaceProject,
     handleOpenClonedWorkspace,
     handleOpenWorktree,
@@ -1602,10 +1603,11 @@ export function ChatPage(props: ChatPageProps) {
     ? t("chat.upload.dropHint")
     : t("chat.upload.dropDisabledHint");
   const fileDropLimitHint = t("chat.upload.dropLimit").replace("{max}", String(MAX_UPLOAD_FILES));
-  const { isFileDropActive } = useTauriFileDrop({
+  const { isFileDropActive, isWorkspaceFolderDropActive } = useTauriFileDrop({
     canDropUpload,
     fileDropTitle,
     importReadableFilePaths,
+    importWorkspaceFolderPaths: handleDropWorkspaceFolders,
     setErrorMessage,
   });
 
@@ -1655,6 +1657,7 @@ export function ChatPage(props: ChatPageProps) {
           projectRenamingId={projectRenamingId}
           projectRenameDraft={projectRenameDraft}
           projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+          workspaceFolderDropActive={isWorkspaceFolderDropActive}
           recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
           onProjectsCollapsedChange={handleSidebarProjectsCollapsedChange}
           onRecentCollapsedChange={handleSidebarRecentCollapsedChange}
@@ -1799,7 +1802,7 @@ export function ChatPage(props: ChatPageProps) {
             headerClassName: "relative z-20",
             headerOverlay: <NotifyToast items={notifyItems} onDismiss={dismissNotify} />,
             content: (
-              <>
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                 <ChangedFilesActionsProvider value={changedFilesActions}>
                   <ChatTranscript
                     conversationId={currentConversationId}
@@ -1883,16 +1886,19 @@ export function ChatPage(props: ChatPageProps) {
                     />
                   }
                   approvalBar={approvalBar}
+                  fileDropOverlay={
+                    isFileDropActive ? (
+                      <FileDropOverlay
+                        variant="composer"
+                        canDropUpload={canDropUpload}
+                        title={fileDropTitle}
+                        description={fileDropDescription}
+                        limitHint={fileDropLimitHint}
+                      />
+                    ) : null
+                  }
                 />
-                {isFileDropActive ? (
-                  <FileDropOverlay
-                    canDropUpload={canDropUpload}
-                    title={fileDropTitle}
-                    description={fileDropDescription}
-                    limitHint={fileDropLimitHint}
-                  />
-                ) : null}
-              </>
+              </div>
             ),
           }}
           workspaceOverlays={
