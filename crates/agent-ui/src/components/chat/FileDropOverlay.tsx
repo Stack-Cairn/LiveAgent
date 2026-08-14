@@ -5,60 +5,10 @@ type FileDropOverlayProps = {
   title: string;
   description: string;
   limitHint: string;
-  variant?: "surface" | "composer";
 };
 
 export function FileDropOverlay(props: FileDropOverlayProps) {
-  const { canDropUpload, title, description, limitHint, variant = "surface" } = props;
-
-  if (variant === "composer") {
-    return (
-      <div
-        className="file-drop-overlay pointer-events-none absolute inset-0 z-50 flex items-center justify-center overflow-hidden rounded-[24px] bg-background/82 p-2 backdrop-blur-xl"
-        aria-hidden="true"
-      >
-        <div
-          className={`file-drop-overlay-zone absolute inset-0 rounded-[24px] border border-dashed ${
-            canDropUpload
-              ? "border-sky-500/45 bg-sky-500/[0.055]"
-              : "border-destructive/45 bg-destructive/[0.055]"
-          }`}
-        />
-        <div
-          className={`file-drop-overlay-card relative flex max-w-[calc(100%-1rem)] items-center gap-3 rounded-2xl border bg-background/92 px-4 py-3 text-left shadow-lg backdrop-blur-2xl sm:max-w-[620px] ${
-            canDropUpload
-              ? "border-sky-500/20 text-foreground"
-              : "border-destructive/25 text-destructive"
-          }`}
-        >
-          <div
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${
-              canDropUpload
-                ? "bg-sky-500/10 text-sky-600 ring-sky-500/20 dark:text-sky-300"
-                : "bg-destructive/10 text-destructive ring-destructive/20"
-            }`}
-          >
-            {canDropUpload ? (
-              <Upload className="h-4.5 w-4.5" strokeWidth={1.8} />
-            ) : (
-              <Ban className="h-4.5 w-4.5" strokeWidth={1.8} />
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold leading-5">{title}</div>
-            <div className="truncate text-[11px] leading-4 text-muted-foreground">
-              {description}
-            </div>
-          </div>
-          <div className="hidden shrink-0 items-center gap-1.5 rounded-full border border-foreground/10 bg-foreground/[0.035] px-2.5 py-1 text-[10px] font-medium text-muted-foreground sm:inline-flex">
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />
-            {limitHint}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  const { canDropUpload, title, description, limitHint } = props;
   return (
     <div
       className="file-drop-overlay pointer-events-none absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6 bg-white/30 backdrop-blur-md dark:bg-black/30"

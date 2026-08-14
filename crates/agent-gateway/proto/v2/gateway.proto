@@ -63,6 +63,7 @@ message GatewayEnvelope {
     ChatFileOpenRequest chat_file_open = 94;
     HistorySetCwdRequest history_set_cwd = 95;
     WorkspaceRootGrantsRequest workspace_root_grants = 96;
+    ImportDirectoryRequest import_directory = 97;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -139,6 +140,7 @@ message AgentEnvelope {
     ErrorResponse error = 99;
     HistorySetCwdResponse history_set_cwd_resp = 100;
     WorkspaceRootGrantsResponse workspace_root_grants_resp = 101;
+    ImportDirectoryResponse import_directory_resp = 102;
   }
 
   // Legacy tunnel control/frame payloads (pre-rewrite protocol) and the
@@ -180,6 +182,26 @@ message UploadReadableFilesRequest {
 message UploadReadableFilesResponse {
   repeated ChatUploadedFile files = 1;
   repeated string skipped = 2;
+}
+
+// 浏览器拖入的整个文件夹经 HTTP 上传后由网关转发到 Agent 宿主机落盘。
+// target 决定落盘基目录："workspace" 创建为新工作空间目录，
+// "project-root" 创建为待挂载的附属目录。
+message ImportDirectoryFile {
+  string relative_path = 1;  // 文件夹内的相对路径，正斜杠分隔
+  bytes content = 2;
+}
+
+message ImportDirectoryRequest {
+  string name = 1;    // 拖入的文件夹名（单个路径组件）
+  string target = 2;  // "workspace" | "project-root"
+  repeated ImportDirectoryFile files = 3;
+}
+
+message ImportDirectoryResponse {
+  string root_path = 1;  // Agent 宿主机上创建的目录绝对路径
+  int32 file_count = 2;
+  repeated string skipped = 3;
 }
 
 message UploadedImagePreviewRequest {
