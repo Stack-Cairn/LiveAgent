@@ -1286,6 +1286,55 @@ fn canonicalize_project_folder(path: &Path) -> String {
     project_folder_display_path(&fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf()))
 }
 
+/// 上传区拖入内容的分类结果：文件走附件导入管线，目录挂载为附属目录。
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemClassifiedDroppedPaths {
+    pub files: Vec<String>,
+    pub dirs: Vec<String>,
+}
+
+/// 与工作空间区的原子拒绝不同：上传区允许文件与目录混拖，各自分流处理，
+/// 因此这里只校验存在性并归类，不因为混入目录而整体失败。
+fn system_classify_dropped_paths_sync(
+    paths: Vec<String>,
+) -> Result<SystemClassifiedDroppedPaths, String> {
+    if paths.is_empty() {
+        return Err("未检测到拖入的内容".to_string());
+    }
+
+    let mut files = Vec::new();
+    let mut dirs = Vec::new();
+    let mut seen = HashSet::new();
+    for raw_path in paths {
+        let raw_path = raw_path.trim();
+        if raw_path.is_empty() {
+            return Err("拖入路径不能为空".to_string());
+        }
+
+        let path = expand_tilde_path(raw_path);
+        if !path.is_absolute() {
+            return Err(format!("拖入路径必须是绝对路径：{raw_path}"));
+        }
+        let metadata = fs::metadata(&path)
+            .map_err(|error| format!("拖入路径不存在或无法访问（{raw_path}）：{error}"))?;
+
+        if metadata.is_dir() {
+            let canonical = fs::canonicalize(&path)
+                .map_err(|error| format!("无法解析拖入的目录（{raw_path}）：{error}"))?;
+            let display_path = project_folder_display_path(&canonical);
+            if seen.insert(display_path.clone()) {
+                dirs.push(display_path);
+            }
+        } else if seen.insert(raw_path.to_string()) {
+            // 文件保留原始路径交给附件导入管线，由它做可读性校验与暂存。
+            files.push(raw_path.to_string());
+        }
+    }
+
+    Ok(SystemClassifiedDroppedPaths { files, dirs })
+}
+
 fn system_resolve_dropped_workspace_folders_sync(
     paths: Vec<String>,
 ) -> Result<Vec<String>, String> {
@@ -1320,6 +1369,130 @@ fn system_resolve_dropped_workspace_folders_sync(
     }
 
     Ok(resolved)
+}
+
+/// Web 端拖入的目录经网关转发后在本机落盘的输入/输出形状。
+pub(crate) struct SystemImportDirectoryInputFile {
+    pub relative_path: String,
+    pub content: Vec<u8>,
+}
+
+pub(crate) struct SystemImportDirectoryOutcome {
+    pub root_path: String,
+    pub file_count: u32,
+    pub skipped: Vec<String>,
+}
+
+const DIRECTORY_IMPORT_MAX_FILES: usize = 2000;
+
+/// 目录导入落在 `~/.liveagent/imports/` 下而非 uploads 暂存区：导入结果会
+/// 成为工作空间或附属目录授权的根路径，必须躲开暂存区的 30 天 GC。
+fn directory_import_base(target: &str) -> Result<PathBuf, String> {
+    let subdir = match target {
+        "workspace" => "workspaces",
+        "project-root" => "mounts",
+        _ => return Err(format!("未知的目录导入目标：{target}")),
+    };
+    Ok(app_storage_dir()?.join("imports").join(subdir))
+}
+
+fn create_unique_import_root(base: &Path, name: &str) -> Result<PathBuf, String> {
+    fs::create_dir_all(base)
+        .map_err(|error| format!("无法创建目录导入基目录（{}）：{error}", base.display()))?;
+    let mut suffix = 1usize;
+    loop {
+        let candidate = if suffix == 1 {
+            base.join(name)
+        } else {
+            base.join(format!("{name}-{suffix}"))
+        };
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                suffix += 1;
+                if suffix > 1000 {
+                    return Err(format!("目录名冲突过多，无法创建导入目录：{name}"));
+                }
+            }
+            Err(error) => {
+                return Err(format!("无法创建导入目录（{}）：{error}", candidate.display()))
+            }
+        }
+    }
+}
+
+/// 相对路径必须逐段清洗：拒绝 `.`/`..` 防穿越，其余组件复用附件文件名的
+/// 清洗规则（Windows 保留名、控制字符等）。
+fn sanitized_relative_components(relative_path: &str) -> Option<Vec<String>> {
+    let normalized = relative_path.replace('\\', "/");
+    let mut components = Vec::new();
+    for part in normalized.split('/') {
+        if part.is_empty() {
+            continue;
+        }
+        if part == "." || part == ".." {
+            return None;
+        }
+        components.push(sanitize_uploaded_file_name(part));
+    }
+    if components.is_empty() {
+        None
+    } else {
+        Some(components)
+    }
+}
+
+pub(crate) fn system_import_directory_sync(
+    name: String,
+    target: String,
+    files: Vec<SystemImportDirectoryInputFile>,
+) -> Result<SystemImportDirectoryOutcome, String> {
+    if files.is_empty() {
+        return Err("未检测到上传的目录内容".to_string());
+    }
+    if files.len() > DIRECTORY_IMPORT_MAX_FILES {
+        return Err(format!(
+            "目录内文件过多（超过 {DIRECTORY_IMPORT_MAX_FILES} 个），请精简后重试"
+        ));
+    }
+    let folder_name = sanitize_uploaded_file_name(name.trim());
+    let base = directory_import_base(target.trim())?;
+    let root = create_unique_import_root(&base, &folder_name)?;
+
+    let mut skipped = Vec::new();
+    let mut file_count = 0u32;
+    for file in files {
+        let Some(components) = sanitized_relative_components(&file.relative_path) else {
+            skipped.push(file.relative_path);
+            continue;
+        };
+        let mut destination = root.clone();
+        for component in &components {
+            destination.push(component);
+        }
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!("无法创建导入子目录（{}）：{error}", parent.display())
+            })?;
+        }
+        // 清洗后的组件可能与同目录下其他文件撞名（如非法字符都归一成 `_`）。
+        let destination = unique_path_for_copy(destination);
+        fs::write(&destination, &file.content).map_err(|error| {
+            format!("写入导入文件失败（{}）：{error}", destination.display())
+        })?;
+        file_count += 1;
+    }
+
+    if file_count == 0 {
+        let _ = fs::remove_dir_all(&root);
+        return Err("上传的目录内容均无法导入".to_string());
+    }
+
+    Ok(SystemImportDirectoryOutcome {
+        root_path: project_folder_display_path(&root),
+        file_count,
+        skipped,
+    })
 }
 
 pub(crate) fn system_create_project_folder_sync(
@@ -1394,6 +1567,15 @@ pub async fn system_resolve_dropped_workspace_folders(
     })
     .await
     .map_err(|e| format!("system_resolve_dropped_workspace_folders join 失败：{e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_classify_dropped_paths(
+    paths: Vec<String>,
+) -> Result<SystemClassifiedDroppedPaths, String> {
+    tauri::async_runtime::spawn_blocking(move || system_classify_dropped_paths_sync(paths))
+        .await
+        .map_err(|e| format!("system_classify_dropped_paths join 失败：{e}"))?
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -1895,6 +2077,122 @@ mod tests {
         .expect_err("mixed drop must be rejected");
 
         assert!(error.contains("只支持拖入文件夹"));
+    }
+
+    #[test]
+    fn classify_dropped_paths_splits_files_and_dirs() {
+        let temp = tempdir().expect("create temp dir");
+        let project = temp.path().join("project");
+        let file = temp.path().join("notes.txt");
+        fs::create_dir(&project).expect("create project dir");
+        fs::write(&file, b"notes").expect("write file");
+
+        let classified = system_classify_dropped_paths_sync(vec![
+            project.to_string_lossy().into_owned(),
+            file.to_string_lossy().into_owned(),
+        ])
+        .expect("classify dropped paths");
+
+        assert_eq!(classified.files, vec![file.to_string_lossy().into_owned()]);
+        assert_eq!(
+            classified.dirs,
+            vec![project_folder_display_path(
+                &project.canonicalize().expect("canonicalize project")
+            )]
+        );
+    }
+
+    #[test]
+    fn classify_dropped_paths_deduplicates_canonical_dirs() {
+        let temp = tempdir().expect("create temp dir");
+        let project = temp.path().join("project");
+        fs::create_dir(&project).expect("create project dir");
+        let raw = project.to_string_lossy().into_owned();
+
+        let classified =
+            system_classify_dropped_paths_sync(vec![raw.clone(), format!("{raw}/./")])
+                .expect("classify dropped paths");
+
+        assert!(classified.files.is_empty());
+        assert_eq!(classified.dirs.len(), 1);
+    }
+
+    #[test]
+    fn classify_dropped_paths_rejects_missing_entries() {
+        let temp = tempdir().expect("create temp dir");
+        let missing = temp.path().join("missing");
+
+        let error =
+            system_classify_dropped_paths_sync(vec![missing.to_string_lossy().into_owned()])
+                .expect_err("missing path must be rejected");
+
+        assert!(error.contains("不存在或无法访问"));
+    }
+
+    #[test]
+    fn import_directory_writes_nested_files_and_skips_traversal() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+        let root = create_unique_import_root(&base, "demo").expect("create root");
+        assert!(root.ends_with("demo"));
+
+        let files = vec![
+            SystemImportDirectoryInputFile {
+                relative_path: "src/main.rs".to_string(),
+                content: b"fn main() {}".to_vec(),
+            },
+            SystemImportDirectoryInputFile {
+                relative_path: "../escape.txt".to_string(),
+                content: b"nope".to_vec(),
+            },
+        ];
+        let mut skipped = Vec::new();
+        let mut count = 0u32;
+        for file in files {
+            match sanitized_relative_components(&file.relative_path) {
+                Some(components) => {
+                    let mut destination = root.clone();
+                    for component in &components {
+                        destination.push(component);
+                    }
+                    fs::create_dir_all(destination.parent().expect("parent"))
+                        .expect("create parent");
+                    fs::write(&destination, &file.content).expect("write file");
+                    count += 1;
+                }
+                None => skipped.push(file.relative_path),
+            }
+        }
+
+        assert_eq!(count, 1);
+        assert_eq!(skipped, vec!["../escape.txt".to_string()]);
+        assert_eq!(
+            fs::read(root.join("src/main.rs")).expect("read nested file"),
+            b"fn main() {}"
+        );
+    }
+
+    #[test]
+    fn import_root_names_get_unique_suffixes() {
+        let temp = tempdir().expect("create temp dir");
+        let base = temp.path().join("imports");
+
+        let first = create_unique_import_root(&base, "demo").expect("first root");
+        let second = create_unique_import_root(&base, "demo").expect("second root");
+
+        assert!(first.ends_with("demo"));
+        assert!(second.ends_with("demo-2"));
+    }
+
+    #[test]
+    fn sanitized_relative_components_rejects_dot_segments_and_keeps_cjk() {
+        assert_eq!(sanitized_relative_components("../secret"), None);
+        assert_eq!(sanitized_relative_components("a/./b"), None);
+        assert_eq!(sanitized_relative_components(""), None);
+        assert_eq!(
+            sanitized_relative_components("docs\\报告.pdf"),
+            Some(vec!["docs".to_string(), "报告.pdf".to_string()])
+        );
     }
 
     #[test]

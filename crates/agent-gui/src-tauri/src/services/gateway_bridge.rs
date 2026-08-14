@@ -19,9 +19,11 @@ use crate::commands::{
     },
     settings::{load_providers, open_db},
     system::{
-        system_create_project_folder_sync, system_import_uploaded_readable_files_sync,
-        system_list_skill_files_sync, system_read_skill_metadata_sync, system_read_skill_text_sync,
-        system_read_uploaded_image_preview_sync, SystemReadableFileUploadInput,
+        system_create_project_folder_sync, system_import_directory_sync,
+        system_import_uploaded_readable_files_sync, system_list_skill_files_sync,
+        system_read_skill_metadata_sync, system_read_skill_text_sync,
+        system_read_uploaded_image_preview_sync, SystemImportDirectoryInputFile,
+        SystemReadableFileUploadInput,
     },
 };
 use crate::services::automation::{
@@ -918,6 +920,30 @@ pub async fn handle_upload_readable_files(
             .collect(),
         skipped: response.skipped,
     })
+}
+
+pub async fn handle_import_directory(
+    request: proto::ImportDirectoryRequest,
+) -> Result<proto::ImportDirectoryResponse, String> {
+    let name = request.name;
+    let target = request.target;
+    let files = request
+        .files
+        .into_iter()
+        .map(|file| SystemImportDirectoryInputFile {
+            relative_path: file.relative_path,
+            content: file.content,
+        })
+        .collect();
+
+    tauri::async_runtime::spawn_blocking(move || system_import_directory_sync(name, target, files))
+        .await
+        .map_err(|e| format!("gateway import directory join failed: {e}"))?
+        .map(|outcome| proto::ImportDirectoryResponse {
+            root_path: outcome.root_path,
+            file_count: i32::try_from(outcome.file_count).unwrap_or(i32::MAX),
+            skipped: outcome.skipped,
+        })
 }
 
 pub async fn handle_uploaded_image_preview(
