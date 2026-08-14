@@ -709,6 +709,14 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
         }),
       };
     }
+    case "workspace_root_grants.revoke":
+      return {
+        case: "workspaceRootGrants",
+        value: create(WorkspaceRootGrantsRequestSchema, {
+          action: "revoke",
+          projectId: trimStr(body.project_id),
+        }),
+      };
     case "fs.list_dirs":
       return {
         case: "fsListDirs",

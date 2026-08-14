@@ -5,6 +5,7 @@ import type {
 import {
   applyWorkspaceRootGrants,
   listWorkspaceRootGrants,
+  revokeWorkspaceRootGrants,
   type WorkspaceRootGrant,
 } from "../lib/workspaceRootGrants";
 
@@ -32,4 +33,5 @@ export const desktopWorkspaceProjectRootClient: WorkspaceProjectRootClient = {
         })),
       )
     ).map(toProjectRootGrant),
+  revoke: revokeWorkspaceRootGrants,
 };

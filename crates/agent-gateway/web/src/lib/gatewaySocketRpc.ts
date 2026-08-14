@@ -1088,6 +1088,12 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     return response.grants;
   }
 
+  async revokeWorkspaceRootGrants(projectId: string): Promise<void> {
+    await this.request<GatewayWorkspaceRootGrantsResponse>("workspace_root_grants.revoke", {
+      project_id: projectId,
+    });
+  }
+
   async listDirs(path: string, maxResults?: number): Promise<FsListDirsResponse> {
     return this.requestWithRecovery<FsListDirsResponse>("fs.list_dirs", {
       path,

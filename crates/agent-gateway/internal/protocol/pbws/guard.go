@@ -118,20 +118,30 @@ func vetWorkspaceRootGrants(req *gatewayv2.WorkspaceRootGrantsRequest) error {
 	if strings.TrimSpace(req.GetProjectId()) == "" || len(req.GetProjectId()) > 256 {
 		return errors.New("workspace root grants project_id is invalid")
 	}
-	if strings.TrimSpace(req.GetProjectPath()) == "" || len(req.GetProjectPath()) > 32768 {
-		return errors.New("workspace root grants project_path is invalid")
-	}
-
 	switch strings.TrimSpace(req.GetAction()) {
 	case "list":
+		if strings.TrimSpace(req.GetProjectPath()) == "" || len(req.GetProjectPath()) > 32768 {
+			return errors.New("workspace root grants project_path is invalid")
+		}
 		if len(req.GetGrants()) != 0 {
 			return errors.New("workspace root grants list cannot include drafts")
 		}
 		return nil
 	case "apply":
+		if strings.TrimSpace(req.GetProjectPath()) == "" || len(req.GetProjectPath()) > 32768 {
+			return errors.New("workspace root grants project_path is invalid")
+		}
 		if len(req.GetGrants()) > maxWorkspaceRootGrants {
 			return errors.New("too many workspace root grants")
 		}
+	case "revoke":
+		if strings.TrimSpace(req.GetProjectPath()) != "" {
+			return errors.New("workspace root grants revoke cannot include project_path")
+		}
+		if len(req.GetGrants()) != 0 {
+			return errors.New("workspace root grants revoke cannot include drafts")
+		}
+		return nil
 	default:
 		return errors.New("workspace root grants action is invalid")
 	}

@@ -346,6 +346,7 @@ export type GatewayWebSocketClientLike = {
     projectPath: string,
     grants: readonly GatewayWorkspaceRootGrantDraft[],
   ): Promise<GatewayWorkspaceRootGrant[]>;
+  revokeWorkspaceRootGrants(projectId: string): Promise<void>;
   listDirs(path: string, maxResults?: number): Promise<FsListDirsResponse>;
   createProjectFolder(parent: string, name: string): Promise<CreateProjectFolderResponse>;
   listFiles(

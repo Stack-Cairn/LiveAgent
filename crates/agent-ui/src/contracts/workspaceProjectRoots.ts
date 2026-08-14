@@ -26,4 +26,5 @@ export type WorkspaceProjectRootClient = {
     project: WorkspaceProject,
     roots: readonly WorkspaceProjectRootDraft[],
   ) => Promise<readonly WorkspaceProjectRootGrant[]>;
+  revoke: (project: Pick<WorkspaceProject, "id">) => Promise<void>;
 };

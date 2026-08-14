@@ -8,6 +8,7 @@ import {
   workspaceProjectPathKey,
 } from "@liveagent/app/lib/settings";
 import { useCallback } from "react";
+import { errorMessageWithFallback } from "./shared/value";
 import {
   getDefaultWorkspaceProjectPath,
   removeWorkspaceProjectFromGroups,
@@ -20,6 +21,9 @@ type WorkspaceProjectSettingsActionsParams = {
   activeWorkspaceProject: WorkspaceProject | undefined;
   activateWorkspaceProject: (project: WorkspaceProject) => void;
   setActiveWorkspaceProjectId: (updater: (current: string) => string) => void;
+  t: (key: string) => string;
+  setErrorMessage: (message: string | null) => void;
+  beforeRemoveWorkspaceProject?: (project: WorkspaceProject) => void | Promise<void>;
 };
 
 export function workspaceProjectsMatch(
@@ -114,6 +118,9 @@ export function useWorkspaceProjectSettingsActions(params: WorkspaceProjectSetti
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
+    t,
+    setErrorMessage,
+    beforeRemoveWorkspaceProject,
   } = params;
 
   const handleRemoveWorkspaceProjectFromSettings = useCallback(
@@ -158,6 +165,20 @@ export function useWorkspaceProjectSettingsActions(params: WorkspaceProjectSetti
     ],
   );
 
+  const removeWorkspaceProject = useCallback(
+    async (project: WorkspaceProject) => {
+      try {
+        await beforeRemoveWorkspaceProject?.(project);
+        handleRemoveWorkspaceProjectFromSettings(project);
+        return true;
+      } catch (error) {
+        setErrorMessage(errorMessageWithFallback(error, t("chat.workspaceRootGrantsRevokeFailed")));
+        return false;
+      }
+    },
+    [beforeRemoveWorkspaceProject, handleRemoveWorkspaceProjectFromSettings, setErrorMessage, t],
+  );
+
   const handleUnarchiveWorkspaceProject = useCallback(
     (project: WorkspaceProject) => {
       setSettings((previousSettings) =>
@@ -168,15 +189,16 @@ export function useWorkspaceProjectSettingsActions(params: WorkspaceProjectSetti
   );
 
   const handleWorktreeRemoved = useCallback(
-    (worktree: { path: string }) => {
+    async (worktree: { path: string }) => {
       const project = findWorkspaceProjectByPath(workspaceProjects, worktree.path);
-      if (project) handleRemoveWorkspaceProjectFromSettings(project);
+      if (project) await removeWorkspaceProject(project);
     },
-    [handleRemoveWorkspaceProjectFromSettings, workspaceProjects],
+    [removeWorkspaceProject, workspaceProjects],
   );
 
   return {
     removeWorkspaceProjectFromSettings: handleRemoveWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     handleArchiveWorkspaceProject,
     handleUnarchiveWorkspaceProject,
     handleWorktreeRemoved,

@@ -1040,8 +1040,22 @@ function useGatewayAppController() {
   const handleResendFromEdit = useStableCallback(handleResendFromEditImpl);
   const handleLoadUploadedImagePreview = useStableCallback(handleLoadUploadedImagePreviewImpl);
 
+  const translateWorkspaceProject = useCallback(
+    (key: string) => translate(key, settings.locale),
+    [settings.locale],
+  );
+  const beforeRemoveWorkspaceProject = useCallback(
+    async (project: WorkspaceProject) => {
+      if (!workspaceProjectRootClient) {
+        throw new Error(translateWorkspaceProject("chat.workspaceRootGrantsRevokeFailed"));
+      }
+      await workspaceProjectRootClient.revoke(project);
+    },
+    [translateWorkspaceProject, workspaceProjectRootClient],
+  );
+
   const {
-    removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     handleArchiveWorkspaceProject,
     handleUnarchiveWorkspaceProject,
     handleWorktreeRemoved,
@@ -1052,6 +1066,9 @@ function useGatewayAppController() {
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
+    t: translateWorkspaceProject,
+    setErrorMessage: setSidebarActionError,
+    beforeRemoveWorkspaceProject,
   });
 
   const isWorkspaceProjectRunning = useCallback(
@@ -1094,16 +1111,12 @@ function useGatewayAppController() {
   const refreshWorkspaceProjectWorkdirs = useCallback(() => {
     void sidebarStore.refreshWorkdirs("delete");
   }, [sidebarStore]);
-  const translateWorkspaceProject = useCallback(
-    (key: string) => translate(key, settings.locale),
-    [settings.locale],
-  );
   const handleRemoveWorkspaceProject = useWorkspaceProjectDeletion({
     settings,
     t: translateWorkspaceProject,
     requestConfirmDialog,
     setErrorMessage: setSidebarActionError,
-    removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     gitClient,
     terminalClient,
     shouldInspectTerminalSessions:

@@ -213,6 +213,31 @@ test("workspace root grants round-trip through the agent-scoped gateway protocol
     createdAt: 1700000000000,
     updatedAt: 1700000001000,
   });
+
+  const revokeFrame = decodeClientFrame(
+    encodeRequestFrame(
+      "workspace-roots-revoke-1",
+      "workspace_root_grants.revoke",
+      { project_id: "history-a1b2c3" },
+      "agent-1",
+    ),
+  );
+  assert.equal(revokeFrame.agentId, "agent-1");
+  assert.equal(revokeFrame.payload.value.payload.case, "workspaceRootGrants");
+  assert.deepEqual(
+    {
+      action: revokeFrame.payload.value.payload.value.action,
+      projectId: revokeFrame.payload.value.payload.value.projectId,
+      projectPath: revokeFrame.payload.value.payload.value.projectPath,
+      grants: revokeFrame.payload.value.payload.value.grants,
+    },
+    {
+      action: "revoke",
+      projectId: "history-a1b2c3",
+      projectPath: "",
+      grants: [],
+    },
+  );
 });
 
 test("adapters convert int64/uint64 fields to Number at realistic maxima", () => {

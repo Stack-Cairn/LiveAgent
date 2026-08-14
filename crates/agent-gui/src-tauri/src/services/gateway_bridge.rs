@@ -14,8 +14,8 @@ use crate::commands::{
     },
     git::{git_gateway_clone_task_action_sync, GitCloneTaskRegistry},
     root_grants::{
-        workspace_root_grants_apply, workspace_root_grants_list, WorkspaceRootAccess,
-        WorkspaceRootGrant, WorkspaceRootGrantDraft,
+        workspace_root_grants_apply, workspace_root_grants_list, workspace_root_grants_revoke,
+        WorkspaceRootAccess, WorkspaceRootGrant, WorkspaceRootGrantDraft,
     },
     settings::{load_providers, open_db},
     system::{
@@ -600,6 +600,13 @@ pub async fn handle_workspace_root_grants(
                 })
                 .collect::<Result<Vec<_>, String>>()?;
             workspace_root_grants_apply(request.project_id, request.project_path, drafts).await?
+        }
+        "revoke" => {
+            if !request.project_path.trim().is_empty() || !request.grants.is_empty() {
+                return Err("撤销目录授权时只能提供项目 id".to_string());
+            }
+            workspace_root_grants_revoke(request.project_id).await?;
+            Vec::new()
         }
         _ => return Err(format!("不支持的目录授权操作：{action}")),
     };

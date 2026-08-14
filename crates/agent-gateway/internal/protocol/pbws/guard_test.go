@@ -61,7 +61,7 @@ func TestVetAgentRequestRejectsMalformedChatFileOpen(t *testing.T) {
 	}
 }
 
-func TestVetAgentRequestAllowsWorkspaceRootGrantListAndApply(t *testing.T) {
+func TestVetAgentRequestAllowsWorkspaceRootGrantListApplyAndRevoke(t *testing.T) {
 	id := "grant-1"
 	requests := []*gatewayv2.WorkspaceRootGrantsRequest{
 		{Action: "list", ProjectId: "project-1", ProjectPath: "/work/project"},
@@ -73,6 +73,7 @@ func TestVetAgentRequestAllowsWorkspaceRootGrantListAndApply(t *testing.T) {
 				{Id: &id, Alias: "shared", DisplayPath: "/work/shared", Access: "read"},
 			},
 		},
+		{Action: "revoke", ProjectId: "project-1"},
 	}
 
 	for _, request := range requests {
@@ -114,6 +115,12 @@ func TestVetAgentRequestRejectsMalformedWorkspaceRootGrants(t *testing.T) {
 			Grants: []*gatewayv2.WorkspaceRootGrantDraft{
 				{Alias: "shared", DisplayPath: "/work/shared", Access: "admin"},
 			},
+		},
+		{Action: "revoke", ProjectId: "project-1", ProjectPath: "/work/project"},
+		{
+			Action:    "revoke",
+			ProjectId: "project-1",
+			Grants:    []*gatewayv2.WorkspaceRootGrantDraft{{Alias: "shared"}},
 		},
 	}
 

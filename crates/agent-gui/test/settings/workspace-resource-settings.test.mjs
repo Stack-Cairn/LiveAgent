@@ -128,8 +128,10 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(webGatewayAppView, /rootClient=\{workspaceProjectRootClient\}/);
   assert.match(guiRootAdapter, /listWorkspaceRootGrants\(project\)/);
   assert.match(guiRootAdapter, /applyWorkspaceRootGrants\(/);
+  assert.match(guiRootAdapter, /revoke: revokeWorkspaceRootGrants/);
   assert.match(webRootAdapter, /api\.listWorkspaceRootGrants\(project\.id, project\.path\)/);
   assert.match(webRootAdapter, /api\.applyWorkspaceRootGrants\(/);
+  assert.match(webRootAdapter, /api\.revokeWorkspaceRootGrants\(project\.id\)/);
   assert.match(sharedProjectSettings, /@liveagent\/adapters\/directoryPicker/);
   assert.match(sharedProjectSettings, /suspendsParentModal/);
   assert.match(sharedProjectSettings, /pickDirectory\(project\.path\)/);
@@ -189,7 +191,10 @@ test("workspace and resource deletion paths clear workspace-scoped references", 
   assert.match(webGatewayApp, /useWorkspaceProjectSettingsActions/);
   assert.match(webGatewayApp, /useWorkspaceProjectDeletion/);
   assert.match(sharedWorkspaceRemovalHook, /useWorkspaceProjectSettingsActions/);
-  assert.match(sharedWorkspaceRemovalHook, /beforeRemoveWorkspaceProject/);
+  assert.match(sharedWorkspaceRemovalHook, /removeWorkspaceProject/);
+  assert.match(sharedWorkspaceRemoval, /await beforeRemoveWorkspaceProject\?\.\(project\)/);
+  assert.match(sharedWorkspaceRemoval, /if \(project\) await removeWorkspaceProject\(project\)/);
+  assert.match(webGatewayApp, /workspaceProjectRootClient\.revoke\(project\)/);
   assert.match(sharedWorkspaceRemoval, /resetWorkspaceResourceSettings\(nextSettings, pathKey\)/);
   assert.match(sharedSkillsHub, /removeWorkspaceResourceReferences\(/);
   assert.match(sharedSkillsHub, /skillNames: \[skillName\]/);

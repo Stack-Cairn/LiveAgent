@@ -15,7 +15,10 @@ function toProjectRootGrant(grant: GatewayWorkspaceRootGrant): WorkspaceProjectR
 }
 
 export function createGatewayWorkspaceProjectRootClient(
-  api: Pick<GatewayWebSocketClientLike, "listWorkspaceRootGrants" | "applyWorkspaceRootGrants">,
+  api: Pick<
+    GatewayWebSocketClientLike,
+    "listWorkspaceRootGrants" | "applyWorkspaceRootGrants" | "revokeWorkspaceRootGrants"
+  >,
 ): WorkspaceProjectRootClient {
   return {
     list: async (project) =>
@@ -33,5 +36,6 @@ export function createGatewayWorkspaceProjectRootClient(
           })),
         )
       ).map(toProjectRootGrant),
+    revoke: (project) => api.revokeWorkspaceRootGrants(project.id),
   };
 }

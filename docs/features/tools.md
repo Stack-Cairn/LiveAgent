@@ -15,7 +15,7 @@
 
 | Bundle | 主要路径 | 工具/能力 |
 |---|---|---|
-| File system | `fsTools.ts`、`fileToolState.ts` | Read/List/Glob/Grep/Write/Edit/Delete/Image 等文件能力，受 workdir 与 skills root 策略约束。 |
+| File system | `fsTools.ts`、`fileToolState.ts` | Read/List/Glob/Grep/Write/Edit/Delete/Image 等文件能力，受项目主目录、skills root 与项目附加目录授权策略约束。 |
 | Edit 容错匹配 | Rust `commands/workspace/edit_match.rs` | Edit 的 `old_string` 定位按严格度递减依次尝试：精确匹配 → CRLF/LF 行尾归一（含 BOM 容错，替换按文件主导行尾风格重渲染）→ 整行行尾空白容错 → 整行统一缩进偏移（替换文本按文件真实缩进重排）。首个命中的 pass 生效，命中非精确 pass 时结果返回 `matchStrategy` 提示模型。注意：行级 pass（行尾空白 / 缩进偏移）用 `new_string` 整体重写命中的整行窗口，窗口内上下文行原有的行尾空白会随之被规范化掉。 |
 | Shell | `shellTools.ts`、`bashTimeoutPolicy.ts` | Bash/Shell 执行，chat scope 可启用 ManagedProcess。 |
 | SkillsManager | `skillTools.ts` | read/list/install/create/validate/package/clawhub_search/clawhub_install。 |
@@ -34,6 +34,16 @@
 | GUI 本地 Chat | 是 | 工具在桌面端运行，直接调用 Tauri invoke 或前端本地逻辑。 |
 | WebUI Chat | 间接执行 | WebUI 发 Chat Command 到 Gateway，实际工具仍在桌面 GUI/Tauri 运行。 |
 | Gateway | 否 | Gateway 不执行业务工具，只转发 request/event 并维护 buffer。 |
+
+## 项目附加目录
+
+| 能力 | 说明 |
+|---|---|
+| 路径格式 | 模型通过 `root://<alias>/...` 访问项目设置中授权的附加目录；普通相对路径仍以项目主目录为根。 |
+| 权限 | 每个附加目录独立配置只读或可写；只读目录拒绝 Write/Edit/Delete。目录失效、路径漂移或符号链接指向变化时采用失败关闭，必须重新授权。 |
+| 子代理 | 子 Agent 只继承父级附加目录的只读能力，即使父级授权为可写也不会向子 Agent 扩权。 |
+| Shell/进程 | Bash、Shell 与 ManagedProcess 不继承附加目录能力，仍只使用项目主目录及其原有策略。 |
+| 生命周期 | 授权保存在 Desktop，项目或 worktree 删除时按项目 ID 撤销；授权不会作为普通 Settings 内容同步或由 Gateway 持久化。 |
 
 ## MCP 动态工具
 
