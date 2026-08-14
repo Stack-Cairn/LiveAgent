@@ -10,6 +10,12 @@ import {
   extractClipboardFiles,
   readClipboardFiles,
 } from "@/lib/clipboardFiles";
+import {
+  collectDroppedPayload,
+  type DroppedDirectory,
+  hasDirectoryEntry,
+  snapshotDroppedEntries,
+} from "@/lib/directoryDrop";
 import type { AppSettings } from "@/lib/settings";
 import { importReadableFiles } from "@/lib/uploadReadableFiles";
 
@@ -34,6 +40,8 @@ type UsePendingUploadsParams = {
   // Upload feedback goes to the top-right toast stack, never into the
   // transcript area — a failed upload is not conversation output.
   addNotify: (type: NotifyItem["type"], message: string) => void;
+  /** 正文区拖入文件夹时的接管回调（挂载为附属目录）；未提供则忽略文件夹。 */
+  onDropDirectories?: (directories: DroppedDirectory[]) => void;
 };
 
 export function usePendingUploads(params: UsePendingUploadsParams) {
@@ -51,6 +59,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     displayedConversationWorkdirRef,
     composerRef,
     addNotify,
+    onDropDirectories,
   } = params;
 
   const [pendingUploadedFiles, setPendingUploadedFiles] = useState<PendingUploadedFile[]>([]);
@@ -318,12 +327,20 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
     token,
   ]);
 
+  // 上传命中区与桌面端对齐：只有落在标记的聊天面板（正文 + 输入器）内的
+  // 拖放才算上传，聊天头部等其他区域忽略。
+  const dropLandsInUploadZone = useCallback((event: DragEvent<HTMLDivElement>) => {
+    return (
+      event.target instanceof Element &&
+      event.target.closest("[data-file-upload-drop-zone]") !== null
+    );
+  }, []);
+
   const handleFileDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!dragEventHasFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     uploadDragDepthRef.current += 1;
-    setIsFileDropActive(true);
   }, []);
 
   const handleFileDragOver = useCallback(
@@ -331,10 +348,11 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       if (!dragEventHasFiles(event)) return;
       event.preventDefault();
       event.stopPropagation();
-      event.dataTransfer.dropEffect = canDropUpload ? "copy" : "none";
-      setIsFileDropActive(true);
+      const overZone = dropLandsInUploadZone(event);
+      event.dataTransfer.dropEffect = overZone && canDropUpload ? "copy" : "none";
+      setIsFileDropActive(overZone);
     },
-    [],
+    [dropLandsInUploadZone],
   );
 
   const handleFileDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
@@ -360,6 +378,28 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       event.stopPropagation();
       uploadDragDepthRef.current = 0;
       setIsFileDropActive(false);
+      if (!dropLandsInUploadZone(event)) return;
+
+      // DataTransferItem 只在同步阶段有效，目录判定必须先于任何 await。
+      const entries = snapshotDroppedEntries(event.dataTransfer);
+      if (hasDirectoryEntry(entries)) {
+        void collectDroppedPayload(entries)
+          .then((payload) => {
+            if (payload.directories.length > 0) {
+              onDropDirectories?.(payload.directories);
+            }
+            if (payload.files.length === 0) return;
+            if (!options.canDropUpload) {
+              addNotify("warning", options.disabledMessage);
+              return;
+            }
+            return handleImportReadableFiles(payload.files);
+          })
+          .catch((error) => {
+            addNotify("error", asErrorMessage(error, "读取拖入的文件夹失败"));
+          });
+        return;
+      }
 
       const files = Array.from(event.dataTransfer.files ?? []);
       if (files.length === 0) return;
@@ -369,7 +409,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       }
       void handleImportReadableFiles(files);
     },
-    [addNotify, handleImportReadableFiles],
+    [addNotify, dropLandsInUploadZone, handleImportReadableFiles, onDropDirectories],
   );
 
   return {

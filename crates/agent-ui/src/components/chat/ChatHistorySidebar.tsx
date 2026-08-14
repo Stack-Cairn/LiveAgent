@@ -188,6 +188,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     runningProjectPathKeys,
     projectsCollapsed = false,
     workspaceFolderDropActive = false,
+    workspaceFolderDropHandlers,
     recentCollapsed = false,
     onProjectsCollapsedChange,
     onRecentCollapsedChange,
@@ -1280,6 +1281,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
               <div
                 ref={projectsHeaderRef}
                 data-workspace-folder-drop-zone=""
+                {...workspaceFolderDropHandlers}
                 className={cn(
                   "mx-1 flex items-center justify-between rounded-t-xl border-x border-t border-dashed border-transparent px-1 pb-1 pt-2 transition-colors",
                   workspaceFolderDropActive && "border-primary/40 bg-primary/[0.08]",
@@ -1351,6 +1353,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                 aria-hidden={projectsCollapsed}
                 inert={projectsCollapsed}
                 data-workspace-folder-drop-zone=""
+                {...workspaceFolderDropHandlers}
                 className={cn(
                   "mx-1 min-h-0 overflow-y-auto overflow-x-hidden rounded-b-xl border-x border-b border-dashed border-transparent transition-[opacity,background-color,border-color] duration-300 ease-out motion-reduce:transition-none",
                   projectsCollapsed ? "opacity-0" : "opacity-100",

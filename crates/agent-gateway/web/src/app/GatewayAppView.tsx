@@ -38,10 +38,12 @@ import { CHAT_RUNTIME_FOREGROUND_PREPARE_TIMEOUT_MS } from "./constants";
 import type { GatewayAppViewModel } from "./GatewayApp";
 import { isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { HistorySwitchLoadingOverlay } from "./HistorySwitchLoadingOverlay";
+import { useWindowFileDropGuard } from "./hooks/useWindowFileDropGuard";
 import { GatewaySidebarContainer } from "./sidebar/GatewaySidebarContainer";
 import { UserMenu } from "./UserMenu";
 
 export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }) {
+  useWindowFileDropGuard();
   const {
     activeFloorKey,
     activeView,
@@ -289,6 +291,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     workspaceFilePreviewMounted,
     workspaceFilePreviewOpen,
     workspaceFilePreviewOpenRequest,
+    workspaceFolderDropActive,
+    workspaceFolderDropHandlers,
     workspaceProjects,
     workspaceProjectRootClient,
     workspaceSshTerminalMounted,
@@ -326,6 +330,8 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
               activeProjectId={activeWorkspaceProject?.id}
               missingProjectPathKeys={missingWorkspaceProjectPathKeys}
               projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
+              workspaceFolderDropActive={workspaceFolderDropActive}
+              workspaceFolderDropHandlers={workspaceFolderDropHandlers}
               recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
               canShareConversations={canShareHistory}
               sharedConversationCount={sharedHistoryItems.length}
@@ -507,6 +513,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
 
                       <section
                         ref={transcriptStageRef}
+                        data-file-upload-drop-zone=""
                         className="gateway-transcript-stage"
                         // Preferred (persisted) width, so a fresh mount paints at
                         // the user's width instead of the default.

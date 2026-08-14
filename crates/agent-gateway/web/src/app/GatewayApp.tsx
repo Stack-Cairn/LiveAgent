@@ -65,6 +65,7 @@ import {
 } from "./gatewayHistoryWindowActions";
 import { createLocalDraftConversationId, isLocalDraftConversationId } from "./gatewayLocalDraft";
 import { resolveVisibleConversationId, shouldOpenSidebarByDefault } from "./historyUtils";
+import { useDirectoryDropActions } from "./hooks/useDirectoryDropActions";
 import { useGatewayChatConfiguration } from "./hooks/useGatewayChatConfiguration";
 import { useGatewayChatPresentation } from "./hooks/useGatewayChatPresentation";
 import { useGatewayClients } from "./hooks/useGatewayClients";
@@ -477,6 +478,18 @@ function useGatewayAppController() {
     return agentID;
   }, []);
 
+  const { workspaceFolderDropActive, workspaceFolderDropHandlers, mountDroppedDirectories } =
+    useDirectoryDropActions({
+      token,
+      historyShareToken,
+      locale: settings.locale,
+      resolveAgentID: resolveActiveAgentID,
+      addNotify,
+      activeWorkspaceProject,
+      workspaceProjectRootClient,
+      onWorkspaceCreated: handleWorkdirPickerSelect,
+    });
+
   const {
     pendingUploadedFiles,
     isUploadingFiles,
@@ -507,6 +520,7 @@ function useGatewayAppController() {
     displayedConversationWorkdirRef,
     composerRef,
     addNotify,
+    onDropDirectories: mountDroppedDirectories,
   });
 
   const applyChatQueueSnapshot = useCallback((snapshot: ChatQueueSnapshot | null | undefined) => {
@@ -1923,6 +1937,8 @@ function useGatewayAppController() {
     workspaceFilePreviewMounted,
     workspaceFilePreviewOpen,
     workspaceFilePreviewOpenRequest,
+    workspaceFolderDropActive,
+    workspaceFolderDropHandlers,
     workspaceProjects,
     workspaceProjectRootClient,
     workspaceSshTerminalMounted,
