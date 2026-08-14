@@ -36,9 +36,10 @@ export function Popup({
   const popupRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const hlRef = useRef<HTMLDivElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: highlightIndex is the trigger — hlRef points at a different row after each keyboard move, and the scroll must follow it.
   useEffect(() => {
     hlRef.current?.scrollIntoView({ block: "nearest" });
-  }, []);
+  }, [highlightIndex]);
 
   useLayoutEffect(() => {
     const anchor = anchorRef.current;
@@ -264,12 +265,13 @@ export function CommitMentionTooltip({
   const subject = commit.subject.trim() || shortSha;
   const authorLabel = commit.authorEmail ? `${author} <${commit.authorEmail}>` : author;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: commit is the trigger — the tooltip is mounted un-keyed, so hovering another chip re-renders this instance with new content that must be re-measured.
   useLayoutEffect(() => {
     const node = tooltipRef.current;
     if (!node) return;
     const measuredWidth = Math.ceil(node.getBoundingClientRect().width);
     setTooltipWidth(Math.min(maxWidth, Math.max(minWidth, measuredWidth)));
-  }, [maxWidth, minWidth]);
+  }, [commit, maxWidth, minWidth]);
 
   return createPortal(
     <div

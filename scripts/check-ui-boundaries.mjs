@@ -285,9 +285,16 @@ const applicationEntries = [
 for (const [entryFile, viewFile] of applicationEntries) {
   const entrySource = readFileSync(entryFile, "utf8");
   const viewSource = readFileSync(viewFile, "utf8");
+  const viewComponentName = viewFile.split(sep).at(-1)?.replace(/\.tsx$/, "") ?? "";
+  // 断言真实的渲染委托，而非文本巧合：入口必须以 JSX 实际渲染 View 组件
+  // （仅 import type 不算数），View 必须 import 共享 ApplicationView 并渲染它
+  // （注释里出现路径字符串不算数）。
   const delegatesToView =
-    entryFile === viewFile || entrySource.includes(`from "./${viewFile.split(sep).at(-1)?.replace(/\.tsx$/, "")}"`);
-  if (delegatesToView && viewSource.includes("@liveagent/ui/application/ApplicationView")) continue;
+    entryFile === viewFile || new RegExp(`<${viewComponentName}[\\s/>]`).test(entrySource);
+  const rendersSharedApplicationView =
+    /from\s+["']@liveagent\/ui\/application\/ApplicationView["']/.test(viewSource) &&
+    /<ApplicationView[\s/>]/.test(viewSource);
+  if (delegatesToView && rendersSharedApplicationView) continue;
   failures += 1;
   console.error(
     `${relative(repoRoot, entryFile)}: 应用必须通过共享 ApplicationView 渲染主视图`,

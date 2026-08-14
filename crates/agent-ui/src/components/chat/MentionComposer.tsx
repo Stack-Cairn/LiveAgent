@@ -364,9 +364,10 @@ export const MentionComposer = memo(
       [mentionSessionEntries],
     );
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: normalizedWorkdir is the trigger — any workdir change must tear down the open mention session so stale entries from the previous project can never satisfy new queries.
     useEffect(() => {
       closeMentionSession();
-    }, [closeMentionSession]);
+    }, [normalizedWorkdir, closeMentionSession]);
 
     useEffect(() => {
       return () => {

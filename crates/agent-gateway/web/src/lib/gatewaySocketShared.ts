@@ -3,6 +3,7 @@ import type { PendingUploadedFile } from "@liveagent/ui/lib/chat/uploadedFiles";
 import type { GatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
 import type { SftpTransferEvent } from "@liveagent/ui/lib/sftp/types";
 import { createUuid } from "@liveagent/ui/lib/shared/id";
+import { errorMessageWithFallback as asErrorMessage } from "@liveagent/ui/lib/shared/value";
 import {
   normalizeTerminalByteContainer,
   type RawSshTerminalTabsSnapshot,
@@ -399,13 +400,9 @@ export class AsyncEventQueue<T> implements AsyncIterable<T>, AsyncIterator<T> {
   }
 }
 
-export function asErrorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.trim();
-  }
-  const text = String(error ?? "").trim();
-  return text || fallback;
-}
+// Single source of truth for error-message coercion lives in the shared UI
+// lib; re-exported here so the transport/rpc layers keep one import path.
+export { asErrorMessage };
 
 export function buildWebSocketUrl() {
   const origin = getRuntimeOrigin();

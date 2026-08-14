@@ -83,7 +83,28 @@ import type {
   RunningConversationSummary,
 } from "./gatewayTypes";
 
-export * from "./gatewaySocketShared";
+export type {
+  LocalTunnelClient,
+  TunnelCreateInput,
+  TunnelHealth,
+  TunnelStateSnapshot,
+  TunnelStatus,
+  TunnelTtlSeconds,
+  TunnelUpdateInput,
+} from "@liveagent/ui/lib/tunnels/constants";
+// Curated public surface, matching the pre-split monolith: everything else in
+// gatewaySocketShared/Transport/Rpc is an internal wiring detail. A symbol
+// dropped from the shared module fails compilation here, at the contract file,
+// instead of at scattered caller import sites.
+export type {
+  ChatFileOpenResponse,
+  GatewayChatCommandInput,
+  ManagedProcessLogPayload,
+  ManagedProcessRecordPayload,
+  ManagedProcessStatePayload,
+  SshKnownHostResetResult,
+  UploadedImagePreviewResponse,
+} from "./gatewaySocketShared";
 
 export class GatewayWebSocketClient extends GatewayWebSocketRpcClient {}
 

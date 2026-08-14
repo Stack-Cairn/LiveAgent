@@ -82,6 +82,7 @@ import { useGatewaySharedHistory } from "./hooks/useGatewaySharedHistory";
 import { useGatewayTransportStatus } from "./hooks/useGatewayTransportStatus";
 import { useGatewayWorkspaceProjects } from "./hooks/useGatewayWorkspaceProjects";
 import { usePendingUploads } from "./hooks/usePendingUploads";
+import { useStableCallback } from "./hooks/useStableCallback";
 import type { SendChatFn } from "./types";
 
 function useGatewayAppController() {
@@ -975,9 +976,9 @@ function useGatewayAppController() {
   const branchInFlightRef = useRef(false);
   const [branchPendingMessageId, setBranchPendingMessageId] = useState<string | null>(null);
   const {
-    handleBranchConversation,
-    handleLoadUploadedImagePreview,
-    handleResendFromEdit,
+    handleBranchConversation: handleBranchConversationImpl,
+    handleLoadUploadedImagePreview: handleLoadUploadedImagePreviewImpl,
+    handleResendFromEdit: handleResendFromEditImpl,
     handleSidebarConversationsRemoved,
     handleSidebarLocalDraftDeleted,
     handleSidebarNewConversation,
@@ -1029,6 +1030,16 @@ function useGatewayAppController() {
     transcriptStoreRegistry,
   });
   startNewConversationRef.current = startNewConversation;
+
+  // The factory above rebuilds every closure per render so handlers always see
+  // fresh state, but these three flow into the memo'd transcript region
+  // (GatewayTranscriptListRegion / row components / ChatComposerBar). Pin their
+  // identities — same pattern as sendChatRef in the pre-split monolith — so
+  // unrelated GatewayApp renders (composer keystrokes, queue ticks, status
+  // polls) cannot defeat that memo boundary.
+  const handleBranchConversation = useStableCallback(handleBranchConversationImpl);
+  const handleResendFromEdit = useStableCallback(handleResendFromEditImpl);
+  const handleLoadUploadedImagePreview = useStableCallback(handleLoadUploadedImagePreviewImpl);
 
   const {
     removeWorkspaceProjectFromSettings,
