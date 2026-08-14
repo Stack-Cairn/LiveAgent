@@ -1906,14 +1906,8 @@ export function ChatPage(props: ChatPageProps) {
               workspaceEditorCleanupPending={workspaceOverlays.workspaceEditorCleanupPending}
               onWorkspaceEditorPreviewFile={workspaceOverlays.openWorkspaceFilePreview}
               onWorkspaceEditorInsertCodeMention={handleInsertCodeMention}
-              onWorkspaceEditorHide={() => workspaceOverlays.setWorkspaceEditorOpen(false)}
-              onWorkspaceEditorClose={() => {
-                workspaceOverlays.setWorkspaceEditorOpen(false);
-                workspaceOverlays.setWorkspaceEditorMounted(false);
-                workspaceOverlays.setWorkspaceEditorCleanupPending(false);
-                workspaceOverlays.setWorkspaceEditorOpenRequest(null);
-                workspaceOverlays.setWorkspaceEditorCloseRequestId(0);
-              }}
+              onWorkspaceEditorHide={workspaceOverlays.handleWorkspaceEditorHide}
+              onWorkspaceEditorClose={workspaceOverlays.handleWorkspaceEditorClosed}
               workspaceFilePreviewMounted={workspaceOverlays.workspaceFilePreviewMounted}
               workspaceFilePreviewOpenRequest={workspaceOverlays.workspaceFilePreviewOpenRequest}
               workspaceFilePreviewOpen={workspaceOverlays.workspaceFilePreviewOpen}
@@ -1932,6 +1926,7 @@ export function ChatPage(props: ChatPageProps) {
               onWorkspaceSshTerminalHide={() =>
                 workspaceOverlays.setWorkspaceSshTerminalOpen(false)
               }
+              onSshTerminalOpenFile={workspaceOverlays.handleOpenSftpFile}
             />
           }
         />

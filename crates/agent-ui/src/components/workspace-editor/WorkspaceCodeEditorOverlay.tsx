@@ -7,6 +7,7 @@ import type { IconComponent } from "@liveagent/ui/components/IconSet";
 import {
   AlertTriangle,
   ClipboardPaste,
+  Cloud,
   Copy,
   Eye,
   FilePenLine,
@@ -28,8 +29,8 @@ import {
   type CodeMentionReference,
   createCodeMentionReference,
 } from "@liveagent/ui/lib/chat/mentionReferences";
+import type { SftpClient } from "@liveagent/ui/lib/sftp/types";
 import { cn } from "@liveagent/ui/lib/shared/utils";
-import { invokeFs, isFsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
 import * as monaco from "monaco-editor";
 import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import CssWorker from "monaco-editor/esm/vs/language/css/css.worker?worker";
@@ -45,6 +46,12 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  createRemoteSftpEditorFileIo,
+  type EditorFileIo,
+  type EditorRemoteSource,
+  localEditorFileIo,
+} from "./workspaceEditorFileIo";
 
 type MonacoEnvironmentGlobal = typeof globalThis & {
   MonacoEnvironment?: {
@@ -76,22 +83,10 @@ export type WorkspaceCodeEditorOpenRequest = {
   line?: number;
   endLine?: number;
   column?: number;
-};
-
-type ReadEditableTextResponse = {
-  path: string;
-  content: string;
-  mtimeMs: number;
-  contentHash: string;
-  sizeBytes: number;
-  totalLines: number;
-};
-
-type WriteTextResponse = {
-  path: string;
-  mtimeMs: number;
-  contentHash: string;
-  totalLines: number;
+  // Present when the file lives on the remote side of an SFTP session; its
+  // content is then read/written through the SSH connection instead of the
+  // workspace fs backend.
+  remote?: EditorRemoteSource;
 };
 
 type EditorTabStatus = "ready" | "saving" | "conflict";
@@ -110,6 +105,7 @@ type EditorTab = {
   language: string;
   status: EditorTabStatus;
   error: string | null;
+  remote?: EditorRemoteSource;
 };
 
 type PendingDialog =
@@ -132,14 +128,18 @@ type WorkspaceCodeEditorOverlayProps = {
   isOpen: boolean;
   finalCloseRequested?: boolean;
   theme: "light" | "dark";
+  sftpClient?: SftpClient;
   onPreviewFile: (request: WorkspaceCodeEditorOpenRequest) => void;
   onInsertCodeMention?: (reference: CodeMentionReference) => void;
   onHide: () => void;
   onClose: () => void;
 };
 
-function editorTabKey(projectPathKey: string, path: string) {
-  return `${projectPathKey}\u0000${path}`;
+function editorTabKey(projectPathKey: string, path: string, remote?: EditorRemoteSource) {
+  // Remote tabs carry the session id so a remote file never collides with a
+  // local file that happens to share the same path string.
+  const sourceTag = remote ? `sftp:${remote.sessionId}` : "";
+  return `${projectPathKey}\u0000${sourceTag}\u0000${path}`;
 }
 
 function basename(path: string) {
@@ -243,12 +243,6 @@ function languageForPath(path: string) {
   }
 }
 
-function isVersionConflict(error: unknown) {
-  if (isFsBackendError(error) && error.code === "stale_file") return true;
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  return message.includes("File changed since the last full Read");
-}
-
 function toMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) return error.message;
   const text = String(error ?? "").trim();
@@ -295,6 +289,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     isOpen,
     finalCloseRequested = false,
     theme,
+    sftpClient,
     onPreviewFile,
     onInsertCodeMention,
     onHide,
@@ -327,7 +322,9 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     () => tabs.find((tab) => tab.key === activeKey) ?? tabs[0] ?? null,
     [activeKey, tabs],
   );
-  const canPreviewActiveTab = Boolean(activeTab && isWorkspacePreviewPath(activeTab.path));
+  const canPreviewActiveTab = Boolean(
+    activeTab && !activeTab.remote && isWorkspacePreviewPath(activeTab.path),
+  );
   const dirtyTabs = useMemo(() => tabs.filter((tab) => tab.content !== tab.savedContent), [tabs]);
   const hasDirtyTabs = dirtyTabs.length > 0;
   const isOpening = openingPaths.length > 0;
@@ -394,6 +391,22 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     viewStatesRef.current.delete(tabKey);
   }, []);
 
+  const ioForSource = useCallback(
+    (projectPathKey: string, remote: EditorRemoteSource | undefined): EditorFileIo => {
+      if (!remote) return localEditorFileIo;
+      if (!sftpClient) {
+        throw new Error(t("workspaceEditor.remoteUnavailable"));
+      }
+      return createRemoteSftpEditorFileIo({
+        sftpClient,
+        sessionId: remote.sessionId,
+        projectPathKey,
+        onTooLarge: () => t("workspaceEditor.remoteTooLarge"),
+      });
+    },
+    [sftpClient, t],
+  );
+
   const saveTab = useCallback(
     async (tabKey: string) => {
       const tab = tabs.find((item) => item.key === tabKey);
@@ -407,46 +420,53 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       const contentToSave = tab.content;
       updateTab(tabKey, (current) => ({ ...current, status: "saving", error: null }));
       try {
-        const response = await invokeFs<WriteTextResponse>("fs_write_text", {
+        const io = ioForSource(tab.projectPathKey, tab.remote);
+        const result = await io.write({
           workdir: tab.workdir,
           path: tab.path,
           content: contentToSave,
-          mode: "rewrite",
-          expected_mtime_ms: tab.mtimeMs,
-          expected_content_hash: tab.contentHash,
+          expectedMtimeMs: tab.mtimeMs,
+          expectedContentHash: tab.contentHash,
+          expectedSizeBytes: tab.sizeBytes,
         });
+        if (result.kind === "conflict") {
+          const message = t("workspaceEditor.conflictMessage");
+          updateTab(tabKey, (current) => ({ ...current, status: "conflict", error: message }));
+          setGlobalError(message);
+          return false;
+        }
         updateTab(tabKey, (current) => ({
           ...current,
           savedContent: contentToSave,
-          mtimeMs: response.mtimeMs,
-          contentHash: response.contentHash,
-          totalLines: current.content === contentToSave ? response.totalLines : current.totalLines,
-          sizeBytes: new TextEncoder().encode(current.content).length,
+          mtimeMs: result.mtimeMs,
+          contentHash: result.contentHash,
+          totalLines:
+            result.totalLines !== null && current.content === contentToSave
+              ? result.totalLines
+              : current.totalLines,
+          sizeBytes: result.sizeBytes,
           status: "ready",
           error: null,
         }));
         setGlobalError(null);
         return true;
       } catch (error) {
-        const conflict = isVersionConflict(error);
-        const message = conflict
-          ? t("workspaceEditor.conflictMessage")
-          : toMessage(error, t("workspaceEditor.saveFailed"));
+        const message = toMessage(error, t("workspaceEditor.saveFailed"));
         updateTab(tabKey, (current) => ({
           ...current,
-          status: conflict ? "conflict" : "ready",
+          status: "ready",
           error: message,
         }));
         setGlobalError(message);
         return false;
       }
     },
-    [t, tabs, updateTab],
+    [ioForSource, t, tabs, updateTab],
   );
 
   const readTab = useCallback(
     async (request: WorkspaceCodeEditorOpenRequest) => {
-      const key = editorTabKey(request.projectPathKey, request.path);
+      const key = editorTabKey(request.projectPathKey, request.path, request.remote);
       const existing = tabs.find((tab) => tab.key === key);
       if (existing) {
         setActiveKey(key);
@@ -460,7 +480,8 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       ]);
       setGlobalError(null);
       try {
-        const response = await invokeFs<ReadEditableTextResponse>("fs_read_editable_text", {
+        const io = ioForSource(request.projectPathKey, request.remote);
+        const response = await io.read({
           workdir: request.workdir,
           path: request.path,
         });
@@ -478,6 +499,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
           language: languageForPath(response.path),
           status: "ready",
           error: null,
+          remote: request.remote,
         };
         setTabs((current) => {
           if (current.some((tab) => tab.key === key)) return current;
@@ -490,7 +512,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         setOpeningPaths((current) => current.filter((item) => item !== request.path));
       }
     },
-    [t, tabs],
+    [ioForSource, t, tabs],
   );
 
   const reloadTab = useCallback(
@@ -500,7 +522,8 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
       setOpeningPaths((current) => [...current.filter((item) => item !== tab.path), tab.path]);
       setGlobalError(null);
       try {
-        const response = await invokeFs<ReadEditableTextResponse>("fs_read_editable_text", {
+        const io = ioForSource(tab.projectPathKey, tab.remote);
+        const response = await io.read({
           workdir: tab.workdir,
           path: tab.path,
         });
@@ -531,7 +554,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         setOpeningPaths((current) => current.filter((item) => item !== tab.path));
       }
     },
-    [t, tabs, updateTab],
+    [ioForSource, t, tabs, updateTab],
   );
 
   const closeTabNow = useCallback(
@@ -674,7 +697,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     setContextMenu(null);
     const editor = editorRef.current;
     const tab = activeTab;
-    if (!editor || !tab || !onInsertCodeMention) return;
+    if (!editor || !tab || tab.remote || !onInsertCodeMention) return;
     const selection = editor.getSelection();
     if (!selection) return;
     const startLine = selection.startLineNumber;
@@ -829,7 +852,12 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor || !activeTabKey || !openRequest?.line) return;
-    if (activeTabKey !== editorTabKey(openRequest.projectPathKey, openRequest.path)) return;
+    if (
+      activeTabKey !==
+      editorTabKey(openRequest.projectPathKey, openRequest.path, openRequest.remote)
+    ) {
+      return;
+    }
     const locationKey = `${openRequest.id}\u0000${activeTabKey}`;
     if (linkedLocationKeyRef.current === locationKey) return;
     const model = editor.getModel();
@@ -851,6 +879,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
     openRequest?.line,
     openRequest?.path,
     openRequest?.projectPathKey,
+    openRequest?.remote,
   ]);
 
   useEffect(() => {
@@ -985,11 +1014,13 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
                   ? "border-border bg-muted text-foreground"
                   : "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
               )}
-              title={tab.path}
+              title={tab.remote ? `${t("workspaceEditor.remoteTabBadge")} · ${tab.path}` : tab.path}
               onClick={() => setActiveKey(tab.key)}
             >
               {tab.status === "conflict" ? (
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+              ) : tab.remote ? (
+                <Cloud className="h-3.5 w-3.5 shrink-0 text-sky-500" />
               ) : (
                 <FilePenLine className="h-3.5 w-3.5 shrink-0" />
               )}
@@ -1100,7 +1131,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
             shortcut={contextMenuShortcuts.selectAll}
             onClick={() => runEditorCommand("editor.action.selectAll")}
           />
-          {onInsertCodeMention ? (
+          {onInsertCodeMention && !activeTab?.remote ? (
             <>
               <ContextMenuSeparator />
               <ContextMenuItem
@@ -1138,7 +1169,7 @@ export function WorkspaceCodeEditorOverlay(props: WorkspaceCodeEditorOverlayProp
         </span>
         <span className="ml-auto shrink-0">
           {activeTab
-            ? `${activeTab.language} · ${activeTab.totalLines} ${t("workspaceEditor.lines")} · ${formatBytes(activeTab.sizeBytes)}`
+            ? `${activeTab.remote ? `${t("workspaceEditor.remoteTabBadge")} · ` : ""}${activeTab.language} · ${activeTab.totalLines} ${t("workspaceEditor.lines")} · ${formatBytes(activeTab.sizeBytes)}`
             : ""}
         </span>
         {activeTab?.content !== activeTab?.savedContent ? (

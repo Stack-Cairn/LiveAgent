@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  SquarePen,
   Trash2,
   Upload,
 } from "@liveagent/ui/components/IconSet";
@@ -29,6 +30,7 @@ import {
 } from "./WorkspaceSftpOverlays";
 import {
   basename,
+  canEditRemoteEntry,
   type DragPayload,
   type DragPayloadItem,
   dragItems,
@@ -36,11 +38,17 @@ import {
   formatBytes,
 } from "./workspaceSftpModel";
 
+export type SftpOpenFileRequest = {
+  side: SftpSide;
+  path: string;
+};
+
 type WorkspaceSftpPanelProps = {
   session: TerminalSession;
   client: SftpClient;
   isActive: boolean;
   onError?: (error: string | null) => void;
+  onOpenFile?: (request: SftpOpenFileRequest) => void;
 };
 
 type PaneState = {
@@ -652,7 +660,7 @@ function isMobileSftpLayout() {
 }
 
 export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
-  const { session, client, isActive, onError } = props;
+  const { session, client, isActive, onError, onOpenFile } = props;
   const { t } = useLocale();
   const { confirm, dialog } = useConfirmDialog();
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -1621,7 +1629,13 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
                                 selectEntry(side, entry.path, event.ctrlKey || event.metaKey);
                               }}
                               onDoubleClick={() => {
-                                if (entry.kind === "directory") void loadPane(side, entry.path);
+                                if (entry.kind === "directory") {
+                                  void loadPane(side, entry.path);
+                                  return;
+                                }
+                                if (!onOpenFile || entry.kind !== "file") return;
+                                if (side === "remote" && !canEditRemoteEntry(entry)) return;
+                                onOpenFile({ side, path: entry.path });
                               }}
                               onDragOver={(event) => {
                                 if (entry.kind === "directory") {
@@ -1777,6 +1791,24 @@ export function WorkspaceSftpPanel(props: WorkspaceSftpPanelProps) {
               );
             }}
           />
+          {onOpenFile &&
+          (contextMenu.side === "local" ||
+            canEditRemoteEntry({ path: contextMenu.path, kind: contextMenu.kind })) ? (
+            <MenuItem
+              icon={<SquarePen className="h-3.5 w-3.5" />}
+              label={t("workspaceSftp.edit")}
+              disabled={
+                !contextMenu.isEntry ||
+                contextMenu.items.length !== 1 ||
+                contextMenu.kind !== "file"
+              }
+              onClick={() => {
+                const request = { side: contextMenu.side, path: contextMenu.path };
+                setContextMenu(null);
+                onOpenFile(request);
+              }}
+            />
+          ) : null}
           <MenuItem
             icon={<Pencil className="h-3.5 w-3.5" />}
             label={t("workspaceSftp.rename")}

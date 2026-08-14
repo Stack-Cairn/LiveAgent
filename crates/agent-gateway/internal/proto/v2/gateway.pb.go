@@ -4562,8 +4562,17 @@ type SftpRequest struct {
 	TargetPath     string                 `protobuf:"bytes,10,opt,name=target_path,json=targetPath,proto3" json:"target_path,omitempty"`
 	Recursive      bool                   `protobuf:"varint,11,opt,name=recursive,proto3" json:"recursive,omitempty"`
 	Overwrite      bool                   `protobuf:"varint,12,opt,name=overwrite,proto3" json:"overwrite,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	Content        string                 `protobuf:"bytes,13,opt,name=content,proto3" json:"content,omitempty"`
+	Offset         uint64                 `protobuf:"varint,14,opt,name=offset,proto3" json:"offset,omitempty"`
+	MaxBytes       uint64                 `protobuf:"varint,15,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
+	StrictUtf8     bool                   `protobuf:"varint,16,opt,name=strict_utf8,json=strictUtf8,proto3" json:"strict_utf8,omitempty"`
+	// write_text conflict guard; 0 means "skip the check" (proto3 has no
+	// presence for scalars, an mtime/size of exactly 0 is accepted as-is).
+	ExpectedMtime     uint64 `protobuf:"varint,17,opt,name=expected_mtime,json=expectedMtime,proto3" json:"expected_mtime,omitempty"`
+	ExpectedSizeBytes uint64 `protobuf:"varint,18,opt,name=expected_size_bytes,json=expectedSizeBytes,proto3" json:"expected_size_bytes,omitempty"`
+	CreateParentDirs  bool   `protobuf:"varint,19,opt,name=create_parent_dirs,json=createParentDirs,proto3" json:"create_parent_dirs,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *SftpRequest) Reset() {
@@ -4676,6 +4685,55 @@ func (x *SftpRequest) GetRecursive() bool {
 func (x *SftpRequest) GetOverwrite() bool {
 	if x != nil {
 		return x.Overwrite
+	}
+	return false
+}
+
+func (x *SftpRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *SftpRequest) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *SftpRequest) GetMaxBytes() uint64 {
+	if x != nil {
+		return x.MaxBytes
+	}
+	return 0
+}
+
+func (x *SftpRequest) GetStrictUtf8() bool {
+	if x != nil {
+		return x.StrictUtf8
+	}
+	return false
+}
+
+func (x *SftpRequest) GetExpectedMtime() uint64 {
+	if x != nil {
+		return x.ExpectedMtime
+	}
+	return 0
+}
+
+func (x *SftpRequest) GetExpectedSizeBytes() uint64 {
+	if x != nil {
+		return x.ExpectedSizeBytes
+	}
+	return 0
+}
+
+func (x *SftpRequest) GetCreateParentDirs() bool {
+	if x != nil {
+		return x.CreateParentDirs
 	}
 	return false
 }
@@ -4896,6 +4954,11 @@ type SftpResponse struct {
 	Entry         *SftpEntry             `protobuf:"bytes,4,opt,name=entry,proto3" json:"entry,omitempty"`
 	Exists        bool                   `protobuf:"varint,5,opt,name=exists,proto3" json:"exists,omitempty"`
 	Transfer      *SftpTransfer          `protobuf:"bytes,6,opt,name=transfer,proto3" json:"transfer,omitempty"`
+	Content       string                 `protobuf:"bytes,7,opt,name=content,proto3" json:"content,omitempty"`
+	Offset        uint64                 `protobuf:"varint,8,opt,name=offset,proto3" json:"offset,omitempty"`
+	BytesRead     uint64                 `protobuf:"varint,9,opt,name=bytes_read,json=bytesRead,proto3" json:"bytes_read,omitempty"`
+	SizeBytes     uint64                 `protobuf:"varint,10,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Truncated     bool                   `protobuf:"varint,11,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4970,6 +5033,41 @@ func (x *SftpResponse) GetTransfer() *SftpTransfer {
 		return x.Transfer
 	}
 	return nil
+}
+
+func (x *SftpResponse) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *SftpResponse) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *SftpResponse) GetBytesRead() uint64 {
+	if x != nil {
+		return x.BytesRead
+	}
+	return 0
+}
+
+func (x *SftpResponse) GetSizeBytes() uint64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *SftpResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 type SftpEvent struct {
@@ -13049,7 +13147,7 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	"\x11reconnect_attempt\x18\b \x01(\rR\x10reconnectAttempt\x124\n" +
 	"\x16reconnect_max_attempts\x18\t \x01(\rR\x14reconnectMaxAttempts\x12!\n" +
 	"\fsftp_enabled\x18\n" +
-	" \x01(\bR\vsftpEnabled\"\xf9\x02\n" +
+	" \x01(\bR\vsftpEnabled\"\xee\x04\n" +
 	"\vSftpRequest\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x1d\n" +
 	"\n" +
@@ -13067,7 +13165,15 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	" \x01(\tR\n" +
 	"targetPath\x12\x1c\n" +
 	"\trecursive\x18\v \x01(\bR\trecursive\x12\x1c\n" +
-	"\toverwrite\x18\f \x01(\bR\toverwrite\"|\n" +
+	"\toverwrite\x18\f \x01(\bR\toverwrite\x12\x18\n" +
+	"\acontent\x18\r \x01(\tR\acontent\x12\x16\n" +
+	"\x06offset\x18\x0e \x01(\x04R\x06offset\x12\x1b\n" +
+	"\tmax_bytes\x18\x0f \x01(\x04R\bmaxBytes\x12\x1f\n" +
+	"\vstrict_utf8\x18\x10 \x01(\bR\n" +
+	"strictUtf8\x12%\n" +
+	"\x0eexpected_mtime\x18\x11 \x01(\x04R\rexpectedMtime\x12.\n" +
+	"\x13expected_size_bytes\x18\x12 \x01(\x04R\x11expectedSizeBytes\x12,\n" +
+	"\x12create_parent_dirs\x18\x13 \x01(\bR\x10createParentDirs\"|\n" +
 	"\tSftpEntry\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -13095,14 +13201,22 @@ const file_proto_v2_gateway_proto_rawDesc = "" +
 	" \x01(\rR\tfilesDone\x12\x1f\n" +
 	"\vfiles_total\x18\v \x01(\rR\n" +
 	"filesTotal\x12\x14\n" +
-	"\x05error\x18\f \x01(\tR\x05error\"\x84\x02\n" +
+	"\x05error\x18\f \x01(\tR\x05error\"\x92\x03\n" +
 	"\fSftpResponse\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x129\n" +
 	"\aentries\x18\x03 \x03(\v2\x1f.liveagent.gateway.v2.SftpEntryR\aentries\x125\n" +
 	"\x05entry\x18\x04 \x01(\v2\x1f.liveagent.gateway.v2.SftpEntryR\x05entry\x12\x16\n" +
 	"\x06exists\x18\x05 \x01(\bR\x06exists\x12>\n" +
-	"\btransfer\x18\x06 \x01(\v2\".liveagent.gateway.v2.SftpTransferR\btransfer\"_\n" +
+	"\btransfer\x18\x06 \x01(\v2\".liveagent.gateway.v2.SftpTransferR\btransfer\x12\x18\n" +
+	"\acontent\x18\a \x01(\tR\acontent\x12\x16\n" +
+	"\x06offset\x18\b \x01(\x04R\x06offset\x12\x1d\n" +
+	"\n" +
+	"bytes_read\x18\t \x01(\x04R\tbytesRead\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\n" +
+	" \x01(\x04R\tsizeBytes\x12\x1c\n" +
+	"\ttruncated\x18\v \x01(\bR\ttruncated\"_\n" +
 	"\tSftpEvent\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12>\n" +
 	"\btransfer\x18\x02 \x01(\v2\".liveagent.gateway.v2.SftpTransferR\btransfer\"\x9a\x02\n" +

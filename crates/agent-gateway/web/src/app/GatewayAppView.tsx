@@ -132,6 +132,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
     handleOpenCreateWorkspaceProject,
     handleOpenShareModal,
     handleOpenSharedHistoryManager,
+    handleOpenSftpFile,
     handleOpenSshTerminal,
     handleOpenWorkspaceFile,
     handleOpenWorkspaceFolder,
@@ -804,6 +805,7 @@ export function GatewayAppView({ viewModel }: { viewModel: GatewayAppViewModel }
                     sftpClient={sftpClient}
                     terminalSessions={terminalSessions}
                     onWorkspaceSshTerminalHide={hideWorkspaceSshTerminalOverlay}
+                    onSshTerminalOpenFile={handleOpenSftpFile}
                   />
                 }
               />

@@ -5,6 +5,7 @@ import type {
 import type {
   SftpActionResponse,
   SftpListResponse,
+  SftpReadTextResponse,
   SftpStatResponse,
   SftpTransferResponse,
 } from "@liveagent/ui/lib/sftp/types";
@@ -208,6 +209,23 @@ export type GatewayWebSocketClientLike = {
     overwrite?: boolean;
   }): Promise<SftpTransferResponse>;
   sftpCancelTransfer(params: { sessionId: string; transferId: string }): Promise<void>;
+  sftpReadText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    maxBytes?: number;
+    strictUtf8?: boolean;
+  }): Promise<SftpReadTextResponse>;
+  sftpWriteText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    content: string;
+    expectedMtime?: number;
+    expectedSizeBytes?: number;
+  }): Promise<SftpActionResponse>;
   terminalShellOptions(): Promise<TerminalShellOptions>;
   listTerminals(projectPathKey?: string): Promise<TerminalSession[]>;
   createTerminal(params: {

@@ -434,6 +434,13 @@ function agentRequestPayload(type: string, body: J): GatewayEnvelope["payload"] 
         targetPath: str(body.target_path),
         recursive: bool(body.recursive),
         overwrite: bool(body.overwrite),
+        content: str(body.content),
+        offset: toI64(body.offset),
+        maxBytes: toI64(body.max_bytes),
+        strictUtf8: bool(body.strict_utf8),
+        expectedMtime: toI64(body.expected_mtime),
+        expectedSizeBytes: toI64(body.expected_size_bytes),
+        createParentDirs: bool(body.create_parent_dirs),
       }),
     };
   }
@@ -1652,6 +1659,13 @@ function sftpResponsePayload(resp: SftpResponse): J {
     path: resp.path,
     exists: resp.exists,
     entries: resp.entries.map(sftpEntryPayload),
+    content: resp.content,
+    offset: num(resp.offset),
+    bytesRead: num(resp.bytesRead),
+    bytes_read: num(resp.bytesRead),
+    sizeBytes: num(resp.sizeBytes),
+    size_bytes: num(resp.sizeBytes),
+    truncated: resp.truncated,
   };
   if (resp.entry) payload.entry = sftpEntryPayload(resp.entry);
   if (resp.transfer) payload.transfer = sftpTransferPayload(resp.transfer);
