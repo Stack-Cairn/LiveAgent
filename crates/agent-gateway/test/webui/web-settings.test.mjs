@@ -10,6 +10,24 @@ const chatHelpers = loader.loadModule("@/lib/chat/chatPageHelpers.ts");
 const adminApi = loader.loadModule("@/lib/adminApi.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
 
+async function withNavigator(value, task) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    enumerable: true,
+    value,
+  });
+  try {
+    return await task();
+  } finally {
+    if (previous) {
+      Object.defineProperty(globalThis, "navigator", previous);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
+}
+
 test("web settings normalize and preserve workspace project groups", () => {
   const normalized = settings.normalizeSettings({
     system: {
@@ -229,6 +247,21 @@ test("getWebDefaultSettings enables remote settings from the gateway token", () 
   assert.equal(settings.remote.enabled, true);
   assert.equal(settings.remote.gatewayUrl, "https://gateway.example");
   assert.equal(settings.remote.token, "token");
+});
+
+test("web settings initialize from browser language and normalize invalid saved locales", async () => {
+  await withNavigator({ languages: [], language: "en-GB" }, () => {
+    const storage = installWindow("https://gateway.example");
+
+    assert.equal(webSettings.getWebDefaultSettings("token").locale, "en-US");
+    assert.equal(webSettings.loadWebSettings("token").locale, "en-US");
+
+    storage.set("liveagent.gateway.webui.settings.v1", JSON.stringify({ locale: null }));
+    assert.equal(webSettings.loadWebSettings("token").locale, "zh-CN");
+
+    storage.set("liveagent.gateway.webui.settings.v1", JSON.stringify({ locale: "fr-FR" }));
+    assert.equal(webSettings.loadWebSettings("token").locale, "zh-CN");
+  });
 });
 
 test("web settings preserve normalized MCP additional information", () => {

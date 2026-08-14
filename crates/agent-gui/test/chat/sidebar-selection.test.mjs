@@ -128,21 +128,23 @@ test("a stop request halts the batch and reports the rest as skipped", async () 
   assert.deepEqual(result.skippedIds, ["two", "three"]);
 });
 
-test("menu rename suppresses the menu's return-focus without changing double-click rename", () => {
+test("conversation rename suppresses the menu's return-focus without changing double-click rename", () => {
   const source = readFileSync(
     new URL("../../../agent-ui/src/components/chat/ChatHistorySidebarRows.tsx", import.meta.url),
     "utf8",
   );
 
-  // Both menu entries (HistoryRow + ProjectRow) arm the one-shot flag.
-  assert.equal((source.match(/suppressMenuReturnFocusRef\.current = true;/g) ?? []).length, 2);
-  assert.equal((source.match(/onSelect=\{handleStartRenamingFromMenu\}/g) ?? []).length, 2);
-  // Both dropdowns consume it declaratively via Base UI's finalFocus, keeping
-  // the default trigger return-focus for every other menu close.
-  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 2);
+  // HistoryRow's rename entry arms the one-shot flag. ProjectRow now opens the
+  // project-settings flow instead of owning a second inline rename path.
+  assert.equal((source.match(/suppressMenuReturnFocusRef\.current = true;/g) ?? []).length, 1);
+  assert.equal((source.match(/onSelect=\{handleStartRenamingFromMenu\}/g) ?? []).length, 1);
+  assert.equal((source.match(/onSelect=\{\(\) => onConfigureProject\(project\)\}/g) ?? []).length, 1);
+  // The conversation dropdown consumes the flag declaratively via Base UI's
+  // finalFocus, keeping the default trigger return-focus for every other close.
+  assert.equal((source.match(/finalFocus=\{\(\) => \{/g) ?? []).length, 1);
   assert.equal(
     (source.match(/suppressMenuReturnFocusRef\.current = false;\s*return false;/g) ?? []).length,
-    2,
+    1,
   );
   // Double-click rename keeps the plain path, and the retired blur-swallowing
   // guard must not come back — blur either skips once (Enter/Escape) or commits.

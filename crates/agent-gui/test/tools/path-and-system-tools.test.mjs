@@ -86,6 +86,285 @@ test("ToolPathResolver accepts broad workspace path inputs", async () => {
   );
 });
 
+test("ToolPathResolver resolves configured project roots and enforces access by intent", async () => {
+  const resolver = new pathUtils.ToolPathResolver({
+    workdir: "/workspace/project",
+    additionalRoots: [
+      { id: "docs-id", alias: "docs", path: "/references/docs", access: "read" },
+      { id: "shared-id", alias: "shared", path: "/references/shared", access: "write" },
+    ],
+  });
+
+  const readOnly = await resolver.resolvePath("root://DOCS/guides/start.md", {
+    label: "Read.path",
+    intent: "read",
+    required: true,
+  });
+  assert.equal(readOnly.scope, "project-root");
+  assert.equal(readOnly.root, "/references/docs");
+  assert.equal(readOnly.relativePath, "guides/start.md");
+  assert.equal(readOnly.absolutePath, "/references/docs/guides/start.md");
+  assert.equal(readOnly.displayPath, "root://docs/guides/start.md");
+  assert.equal(readOnly.projectRootId, "docs-id");
+  assert.equal(readOnly.projectRootAlias, "docs");
+  assert.equal(readOnly.projectRootAccess, "read");
+
+  const rootList = await resolver.resolvePath("root://docs", {
+    label: "List.path",
+    intent: "list",
+    required: false,
+  });
+  assert.equal(rootList.displayPath, "root://docs");
+  assert.equal(rootList.relativePath, undefined);
+
+  const writable = await resolver.resolvePath("root://shared/src/index.ts", {
+    label: "Edit.path",
+    intent: "edit",
+    required: true,
+  });
+  assert.equal(writable.scope, "project-root");
+  assert.equal(writable.root, "/references/shared");
+  assert.equal(writable.relativePath, "src/index.ts");
+  assert.equal(writable.projectRootAccess, "write");
+
+  const absolute = await resolver.resolvePath("/references/shared/src/index.ts", {
+    label: "Read.path",
+    intent: "read",
+    required: true,
+  });
+  assert.equal(absolute.scope, "project-root");
+  assert.equal(absolute.displayPath, "root://shared/src/index.ts");
+
+  const fileUrl = await resolver.resolvePath("file:///references/docs/guide.pdf", {
+    label: "Read.path",
+    intent: "read",
+    required: true,
+  });
+  assert.equal(fileUrl.scope, "project-root");
+  assert.equal(fileUrl.displayPath, "root://docs/guide.pdf");
+
+  const relative = await resolver.resolvePath("src/App.tsx", {
+    label: "Read.path",
+    intent: "read",
+    required: true,
+  });
+  assert.equal(relative.scope, "workspace");
+  assert.equal(relative.root, "/workspace/project");
+
+  await assert.rejects(
+    () =>
+      resolver.resolvePath("root://docs/guides/start.md", {
+        label: "Write.path",
+        intent: "write",
+        required: true,
+      }),
+    /read-only project root root:\/\/docs.*not Write\/Edit\/Delete/,
+  );
+  await assert.rejects(
+    () =>
+      resolver.resolvePath("root://shared", {
+        label: "Bash.cwd",
+        intent: "cwd",
+        required: false,
+      }),
+    /do not grant Bash or ManagedProcess access/,
+  );
+  await assert.rejects(
+    () =>
+      resolver.resolvePath("root://missing/file.ts", {
+        label: "Read.path",
+        intent: "read",
+        required: true,
+      }),
+    /unknown project root root:\/\/missing.*Available roots: docs, shared/,
+  );
+});
+
+test("ToolPathResolver normalizes Windows additional root variants", async () => {
+  const resolver = new pathUtils.ToolPathResolver({
+    workdir: "C:/Users/Alice/Repo",
+    additionalRoots: [
+      {
+        id: "shared-id",
+        alias: "shared",
+        path: "\\\\?\\C:\\Shared\\Core",
+        access: "write",
+      },
+    ],
+  });
+
+  const scoped = await resolver.resolvePath("root://SHARED/src\\index.ts", {
+    label: "Read.path",
+    intent: "read",
+    required: true,
+  });
+  assert.equal(scoped.absolutePath, "C:/Shared/Core/src/index.ts");
+  assert.equal(scoped.displayPath, "root://shared/src/index.ts");
+
+  const absolute = await resolver.resolvePath("c:\\shared\\core\\src\\index.ts", {
+    label: "Edit.path",
+    intent: "edit",
+    required: true,
+  });
+  assert.equal(absolute.scope, "project-root");
+  assert.equal(absolute.projectRootAlias, "shared");
+  assert.equal(absolute.relativePath, "src/index.ts");
+});
+
+test("ToolPathResolver normalizes macOS-style Unicode project roots", async () => {
+  const decomposedCafe = "Cafe\u0301";
+  const resolver = new pathUtils.ToolPathResolver({
+    workdir: `/Users/alice/Projects/${decomposedCafe}`,
+    additionalRoots: [
+      {
+        id: "design-id",
+        alias: "design",
+        path: `/Volumes/Shared/${decomposedCafe}`,
+        access: "read",
+      },
+    ],
+  });
+
+  const absolute = await resolver.resolvePath("/Volumes/Shared/Caf\u00e9/brief.md", {
+    label: "Read.path",
+    intent: "read",
+    required: true,
+  });
+  assert.equal(absolute.scope, "project-root");
+  assert.equal(absolute.absolutePath, "/Volumes/Shared/Caf\u00e9/brief.md");
+  assert.equal(absolute.displayPath, "root://design/brief.md");
+
+  const fileUrl = await resolver.resolvePath("file:///Volumes/Shared/Caf%C3%A9/design%20notes.md", {
+    label: "Read.path",
+    intent: "read",
+    required: true,
+  });
+  assert.equal(fileUrl.relativePath, "design notes.md");
+  assert.equal(fileUrl.displayPath, "root://design/design notes.md");
+});
+
+test("ToolPathResolver uses the most specific root when configured roots overlap", async () => {
+  const resolver = new pathUtils.ToolPathResolver({
+    workdir: "/workspace/project",
+    additionalRoots: [
+      { id: "parent", alias: "all-projects", path: "/workspace", access: "read" },
+      {
+        id: "nested",
+        alias: "vendor",
+        path: "/workspace/project/vendor",
+        access: "read",
+      },
+    ],
+  });
+
+  const workspaceFile = await resolver.resolvePath("/workspace/project/src/App.tsx", {
+    label: "Write.path",
+    intent: "write",
+    required: true,
+  });
+  assert.equal(workspaceFile.scope, "workspace");
+
+  const workspaceFileViaParentAlias = await resolver.resolvePath(
+    "root://all-projects/project/src/App.tsx",
+    {
+      label: "Write.path",
+      intent: "write",
+      required: true,
+    },
+  );
+  assert.equal(workspaceFileViaParentAlias.scope, "workspace");
+  assert.equal(workspaceFileViaParentAlias.displayPath, "src/App.tsx");
+
+  await assert.rejects(
+    () =>
+      resolver.resolvePath("/workspace/project/vendor/library.ts", {
+        label: "Write.path",
+        intent: "write",
+        required: true,
+      }),
+    /read-only project root root:\/\/vendor/,
+  );
+});
+
+test("ToolPathResolver preserves protected path policies inside writable project roots", async () => {
+  const resolver = new pathUtils.ToolPathResolver({
+    workdir: "/workspace/project",
+    skillsRootEnabled: true,
+    skillsRootDir: "/Users/alice/.liveagent/skills",
+    skillAccessPolicy: {
+      allowedSkillNames: ["liveagent-code-review"],
+      allowedSkillBaseDirs: ["liveagent-code-review"],
+      protectedSkillNames: ["liveagent-code-review"],
+      protectedSkillBaseDirs: ["liveagent-code-review"],
+      allowSkillMutation: true,
+    },
+    additionalRoots: [{ id: "home-id", alias: "home", path: "/Users/alice", access: "write" }],
+  });
+
+  for (const path of [
+    "/Users/alice/.liveagent/skills/liveagent-code-review/SKILL.md",
+    "root://home/.liveagent/skills/liveagent-code-review/SKILL.md",
+  ]) {
+    await assert.rejects(
+      () =>
+        resolver.resolvePath(path, {
+          label: "Write.path",
+          intent: "write",
+          required: true,
+        }),
+      /built-in Skill "liveagent-code-review" is protected/,
+    );
+  }
+
+  for (const path of [
+    "/Users/alice/.liveagent/uploads/batch/attachment.txt",
+    "root://home/.liveagent/uploads/batch/attachment.txt",
+  ]) {
+    await assert.rejects(
+      () =>
+        resolver.resolvePath(path, {
+          label: "Delete.path",
+          intent: "delete",
+          required: true,
+        }),
+      /upload staging area.*only supports read access/,
+    );
+  }
+
+  const ordinaryFile = await resolver.resolvePath("root://home/notes/todo.md", {
+    label: "Write.path",
+    intent: "write",
+    required: true,
+  });
+  assert.equal(ordinaryFile.scope, "project-root");
+  assert.equal(ordinaryFile.projectRootAccess, "write");
+});
+
+test("ToolPathResolver rejects ambiguous additional root configuration", () => {
+  assert.throws(
+    () =>
+      new pathUtils.ToolPathResolver({
+        workdir: "/workspace",
+        additionalRoots: [
+          { id: "one", alias: "shared", path: "/references/one", access: "read" },
+          { id: "two", alias: "shared", path: "/references/two", access: "write" },
+        ],
+      }),
+    /Duplicate additional project root alias/,
+  );
+  assert.throws(
+    () =>
+      new pathUtils.ToolPathResolver({
+        workdir: "/workspace",
+        additionalRoots: [
+          { id: "one", alias: "one", path: "/references/shared", access: "read" },
+          { id: "two", alias: "two", path: "/references/shared/", access: "write" },
+        ],
+      }),
+    /Duplicate additional project root path/,
+  );
+});
+
 test("ToolPathResolver normalizes Windows workspace path variants", async () => {
   const resolver = new pathUtils.ToolPathResolver({ workdir: "C:/Users/Alice/Repo" });
 
@@ -549,6 +828,239 @@ test("file tools can read enabled Skill files via skill URLs", async () => {
       },
     },
   ]);
+});
+
+test("structured file tools route configured project roots and preserve root URLs", async () => {
+  const invocations = [];
+  const fsLoader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          invocations.push({ command, args });
+          if (command === "fs_read_text") {
+            return {
+              kind: "text",
+              path: args.path,
+              content: "1\tshared docs\n",
+              truncated: false,
+              startLine: 1,
+              numLines: 1,
+              totalLines: 1,
+              isPartialView: false,
+              mtimeMs: 10,
+              contentHash: "read-hash",
+              fileId: "root:1",
+            };
+          }
+          if (command === "fs_list") {
+            return {
+              path: args.path,
+              targetKind: "dir",
+              depth: args.depth ?? 2,
+              offset: args.offset ?? 0,
+              maxResults: args.max_results ?? 200,
+              total: 2,
+              hasMore: false,
+              entries: [
+                { path: "src", kind: "dir" },
+                { path: "src/index.ts", kind: "file" },
+              ],
+            };
+          }
+          if (command === "fs_glob") {
+            return {
+              path: args.path,
+              targetKind: "dir",
+              pattern: args.pattern,
+              sortBy: "path",
+              offset: 0,
+              maxResults: 200,
+              total: 1,
+              hasMore: false,
+              paths: ["src/index.ts"],
+            };
+          }
+          if (command === "fs_grep") {
+            return {
+              path: args.path,
+              targetKind: "dir",
+              pattern: args.pattern,
+              filePattern: null,
+              ignoreCase: true,
+              outputMode: "content",
+              headLimit: 200,
+              offset: 0,
+              context: 0,
+              multiline: false,
+              matchCount: 1,
+              fileCount: 1,
+              hasMore: false,
+              matches: [
+                { path: "src/index.ts", line: 3, text: "export const shared = true", before: [], after: [] },
+              ],
+              files: [{ path: "src/index.ts", count: 1, firstLine: 3 }],
+            };
+          }
+          throw new Error(`unexpected invoke: ${command}`);
+        },
+      },
+    },
+  });
+  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
+  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const bundle = fsTools.createFsTools({
+    workdir: "/workspace",
+    additionalRoots: [
+      { id: "shared-id", alias: "shared", path: "/references/shared", access: "read" },
+    ],
+    fileState: fileToolState.createFileToolState(),
+  });
+
+  const readResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "read-project-root",
+    name: "Read",
+    arguments: { path: "root://shared/README.md" },
+  });
+  assert.equal(readResult.isError, false);
+  assert.equal(readResult.details.scope, "project-root");
+  assert.equal(readResult.details.path, "root://shared/README.md");
+
+  const listResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "list-project-root",
+    name: "List",
+    arguments: { path: "root://shared" },
+  });
+  assert.equal(listResult.isError, false);
+  assert.deepEqual(listResult.details.entries, [
+    { path: "root://shared/src", kind: "dir" },
+    { path: "root://shared/src/index.ts", kind: "file" },
+  ]);
+  assert.match(listResult.content[0].text, /\[FILE\] root:\/\/shared\/src\/index\.ts/);
+
+  const globResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "glob-project-root",
+    name: "Glob",
+    arguments: { pattern: "**/*.ts", path: "root://shared" },
+  });
+  assert.equal(globResult.isError, false);
+  assert.deepEqual(globResult.details.paths, ["root://shared/src/index.ts"]);
+  assert.match(globResult.content[0].text, /root:\/\/shared\/src\/index\.ts/);
+
+  const grepResult = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "grep-project-root",
+    name: "Grep",
+    arguments: { pattern: "shared", path: "root://shared" },
+  });
+  assert.equal(grepResult.isError, false);
+  assert.equal(grepResult.details.matches[0].path, "root://shared/src/index.ts");
+  assert.equal(grepResult.details.files[0].path, "root://shared/src/index.ts");
+  assert.match(grepResult.content[0].text, /root:\/\/shared\/src\/index\.ts:3/);
+
+  assert.equal(invocations[0].command, "fs_read_text");
+  assert.equal(invocations[0].args.workdir, "/references/shared");
+  assert.equal(invocations[0].args.path, "README.md");
+  for (const invocation of invocations.slice(1)) {
+    assert.equal(invocation.args.workdir, "/references/shared");
+  }
+});
+
+test("structured file tools reject mutations in read-only project roots", async () => {
+  const invocations = [];
+  const fsLoader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          invocations.push({ command, args });
+          throw new Error("unexpected invoke");
+        },
+      },
+    },
+  });
+  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
+  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const bundle = fsTools.createFsTools({
+    workdir: "/workspace",
+    additionalRoots: [
+      { id: "docs-id", alias: "docs", path: "/references/docs", access: "read" },
+    ],
+    fileState: fileToolState.createFileToolState(),
+  });
+
+  for (const [name, arguments_] of [
+    ["Write", { path: "root://docs/new.md", content: "new" }],
+    ["Edit", { path: "root://docs/old.md", old_string: "old", new_string: "new" }],
+    ["Delete", { path: "root://docs/old.md" }],
+  ]) {
+    const result = await bundle.executeToolCall({
+      type: "toolCall",
+      id: `readonly-${name.toLowerCase()}`,
+      name,
+      arguments: arguments_,
+    });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /read-only project root root:\/\/docs/);
+  }
+  assert.deepEqual(invocations, []);
+});
+
+test("structured file tools write through writable project roots", async () => {
+  const invocations = [];
+  const fsLoader = createTsModuleLoader({
+    mocks: {
+      "@tauri-apps/api/core": {
+        async invoke(command, args) {
+          invocations.push({ command, args });
+          if (command === "fs_path_status") {
+            return { path: args.path, exists: false, kind: null, fileId: null };
+          }
+          if (command === "fs_write_text") {
+            return {
+              path: args.path,
+              mode: "rewrite",
+              existedBefore: false,
+              bytesWritten: args.content.length,
+              mtimeMs: 20,
+              contentHash: "write-hash",
+              totalLines: 1,
+              fileId: "root:2",
+            };
+          }
+          throw new Error(`unexpected invoke: ${command}`);
+        },
+      },
+    },
+  });
+  const fsTools = fsLoader.loadModule("src/lib/tools/fsTools.ts");
+  const fileToolState = fsLoader.loadModule("src/lib/tools/fileToolState.ts");
+  const bundle = fsTools.createFsTools({
+    workdir: "/workspace",
+    additionalRoots: [
+      { id: "shared-id", alias: "shared", path: "/references/shared", access: "write" },
+    ],
+    fileState: fileToolState.createFileToolState(),
+  });
+
+  const result = await bundle.executeToolCall({
+    type: "toolCall",
+    id: "write-project-root",
+    name: "Write",
+    arguments: { path: "root://shared/generated/file.txt", content: "hello" },
+  });
+  assert.equal(result.isError, false);
+  assert.equal(result.details.scope, "project-root");
+  assert.equal(result.details.path, "root://shared/generated/file.txt");
+  assert.match(result.content[0].text, /root:\/\/shared\/generated\/file\.txt/);
+  assert.deepEqual(
+    invocations.map(({ command, args }) => ({ command, workdir: args.workdir, path: args.path })),
+    [
+      { command: "fs_path_status", workdir: "/references/shared", path: "generated/file.txt" },
+      { command: "fs_write_text", workdir: "/references/shared", path: "generated/file.txt" },
+    ],
+  );
 });
 
 test("file tool schemas are strict and reject unsupported root arguments", async () => {

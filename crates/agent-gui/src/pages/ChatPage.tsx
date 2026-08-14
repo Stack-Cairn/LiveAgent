@@ -7,7 +7,7 @@ import type { MentionComposerHandle } from "@liveagent/ui/components/chat/Mentio
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
-import { WorkspaceResourceSettingsDrawer } from "@liveagent/ui/components/chat/WorkspaceResourceSettingsDrawer";
+import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
@@ -43,6 +43,7 @@ import { listen } from "@tauri-apps/api/event";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
+import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
@@ -218,8 +219,8 @@ export function ChatPage(props: ChatPageProps) {
   const {
     activeView,
     setActiveView,
-    resourceSettingsProject,
-    setResourceSettingsProject,
+    projectSettingsProject,
+    setProjectSettingsProject,
     rightDockOpen,
     setRightDockOpen,
   } = useApplicationViewState<WorkspaceProject>();
@@ -232,10 +233,6 @@ export function ChatPage(props: ChatPageProps) {
     activeWorkspaceProjectPath,
     sidebarScope,
     historyScopeKey,
-    projectRenamingId,
-    setProjectRenamingId,
-    projectRenameDraft,
-    setProjectRenameDraft,
     activateWorkspaceProject,
     handleSelectWorkspaceProject,
     handleNewConversationForProject,
@@ -258,9 +255,7 @@ export function ChatPage(props: ChatPageProps) {
     handleMoveWorkspaceProjectToGroup,
     handleToggleWorkspaceGroupCollapsed,
     handleLoadWorkspaceRemoteBranches,
-    handleStartRenamingWorkspaceProject,
-    handleCommitWorkspaceProjectRename,
-    handleCancelWorkspaceProjectRename,
+    commitWorkspaceProjectRename,
     handleSetWorkspaceProjectPinned,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
@@ -882,8 +877,6 @@ export function ChatPage(props: ChatPageProps) {
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
-    setProjectRenamingId,
-    setProjectRenameDraft,
     terminalProjectPathKey,
     setTerminalSessions,
     setRightDockOpen,
@@ -1149,6 +1142,7 @@ export function ChatPage(props: ChatPageProps) {
 
   const { send } = useSendChatTurn({
     settings,
+    workspaceProjects,
     setSettings,
     getMcpSettings,
     getToolPolicies,
@@ -1654,8 +1648,6 @@ export function ChatPage(props: ChatPageProps) {
           workspaceProjectGroups={workspaceProjectGroups}
           activeProjectId={activeWorkspaceProject?.id}
           missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-          projectRenamingId={projectRenamingId}
-          projectRenameDraft={projectRenameDraft}
           projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
           workspaceFolderDropActive={isWorkspaceFolderDropActive}
           recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
@@ -1671,11 +1663,7 @@ export function ChatPage(props: ChatPageProps) {
           onNewConversationForProject={handleNewConversationForProject}
           onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
           onBrowseProjectInSystemFileManager={handleBrowseWorkspaceProjectInSystemFileManager}
-          onConfigureProjectResources={setResourceSettingsProject}
-          onStartRenamingProject={handleStartRenamingWorkspaceProject}
-          onProjectRenameDraftChange={setProjectRenameDraft}
-          onCommitProjectRename={handleCommitWorkspaceProjectRename}
-          onCancelProjectRename={handleCancelWorkspaceProjectRename}
+          onConfigureProject={setProjectSettingsProject}
           onSetProjectPinned={handleSetWorkspaceProjectPinned}
           onRemoveProject={handleRemoveWorkspaceProject}
           onArchiveProject={handleArchiveWorkspaceProject}
@@ -1912,14 +1900,8 @@ export function ChatPage(props: ChatPageProps) {
               workspaceEditorCleanupPending={workspaceOverlays.workspaceEditorCleanupPending}
               onWorkspaceEditorPreviewFile={workspaceOverlays.openWorkspaceFilePreview}
               onWorkspaceEditorInsertCodeMention={handleInsertCodeMention}
-              onWorkspaceEditorHide={() => workspaceOverlays.setWorkspaceEditorOpen(false)}
-              onWorkspaceEditorClose={() => {
-                workspaceOverlays.setWorkspaceEditorOpen(false);
-                workspaceOverlays.setWorkspaceEditorMounted(false);
-                workspaceOverlays.setWorkspaceEditorCleanupPending(false);
-                workspaceOverlays.setWorkspaceEditorOpenRequest(null);
-                workspaceOverlays.setWorkspaceEditorCloseRequestId(0);
-              }}
+              onWorkspaceEditorHide={workspaceOverlays.handleWorkspaceEditorHide}
+              onWorkspaceEditorClose={workspaceOverlays.handleWorkspaceEditorClosed}
               workspaceFilePreviewMounted={workspaceOverlays.workspaceFilePreviewMounted}
               workspaceFilePreviewOpenRequest={workspaceOverlays.workspaceFilePreviewOpenRequest}
               workspaceFilePreviewOpen={workspaceOverlays.workspaceFilePreviewOpen}
@@ -1938,6 +1920,7 @@ export function ChatPage(props: ChatPageProps) {
               onWorkspaceSshTerminalHide={() =>
                 workspaceOverlays.setWorkspaceSshTerminalOpen(false)
               }
+              onSshTerminalOpenFile={workspaceOverlays.handleOpenSftpFile}
             />
           }
         />
@@ -1980,17 +1963,20 @@ export function ChatPage(props: ChatPageProps) {
         onInsertCommitMention={handleRightDockInsertCommitMention}
         onInsertGitFileMention={handleRightDockInsertGitFileMention}
       />
-      {resourceSettingsProject ? (
-        <WorkspaceResourceSettingsDrawer
-          project={resourceSettingsProject}
+      {projectSettingsProject ? (
+        <WorkspaceProjectSettingsModal
+          project={projectSettingsProject}
           settings={settings}
           skills={availableSkills}
-          onClose={() => setResourceSettingsProject(null)}
+          rootClient={desktopWorkspaceProjectRootClient}
+          onClose={() => setProjectSettingsProject(null)}
+          onRenameProject={(name) => {
+            commitWorkspaceProjectRename(projectSettingsProject, name);
+          }}
           onSave={(draft) => {
             setSettings((prev) =>
-              updateWorkspaceResourceSettings(prev, resourceSettingsProject.path, draft),
+              updateWorkspaceResourceSettings(prev, projectSettingsProject.path, draft),
             );
-            setResourceSettingsProject(null);
           }}
         />
       ) : null}

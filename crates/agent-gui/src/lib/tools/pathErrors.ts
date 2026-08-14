@@ -1,8 +1,8 @@
 import type { FsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
-import { formatResolvedTarget, type ResolvedPath } from "./pathUtils";
+import { formatPathWithinResolvedRoot, formatResolvedTarget, type ResolvedPath } from "./pathUtils";
 
 function displayCandidate(resolved: ResolvedPath, candidate: string) {
-  return resolved.scope === "skill" ? `skill://${candidate}` : candidate;
+  return formatPathWithinResolvedRoot(resolved, candidate);
 }
 
 function rootNote(resolved: ResolvedPath) {
@@ -54,7 +54,7 @@ export function buildFsErrorText(
       return `${lead} Locate it with Glob pattern="**/${fileName}" or List the parent directory, then retry with the returned path.`;
     }
     case "out_of_bounds":
-      return `${toolName}.path resolves outside the allowed root: ${resolved.absolutePath}. Write, Edit, and Delete only operate inside the workspace root (${resolved.root}) or an enabled skill:// path. Use a path returned by a previous tool.`;
+      return `${toolName}.path resolves outside the allowed root: ${resolved.absolutePath}. Write, Edit, and Delete only operate inside the workspace root (${resolved.root}), a writable configured root:// path, or an enabled writable skill:// path. Use a path returned by a previous tool.`;
     case "not_a_file":
       if (toolName === "Write") return buildWriteDirectoryText(resolved);
       return `${toolName}.path points to a directory, not a file: ${target}. Use List with this path to inspect its contents instead.`;

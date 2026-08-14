@@ -6,6 +6,7 @@ import type {
 import {
   normalizeSftpActionResponse,
   normalizeSftpListResponse,
+  normalizeSftpReadTextResponse,
   normalizeSftpStatResponse,
   normalizeSftpTransferResponse,
   type RawSftpResponse,
@@ -13,6 +14,7 @@ import {
 import type {
   SftpActionResponse,
   SftpListResponse,
+  SftpReadTextResponse,
   SftpStatResponse,
   SftpTransferResponse,
 } from "@liveagent/ui/lib/sftp/types";
@@ -69,6 +71,9 @@ import {
   type FsWriteTextResponse,
   type GatewayChatCommandInput,
   type GatewaySettingsUpdateResponse,
+  type GatewayWorkspaceRootGrant,
+  type GatewayWorkspaceRootGrantDraft,
+  type GatewayWorkspaceRootGrantsResponse,
   type HistoryGetOptions,
   isConnectionSetupTimeoutError,
   isRecoverableGatewayTransportError,
@@ -563,6 +568,50 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
     });
   }
 
+  async sftpReadText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    maxBytes?: number;
+    strictUtf8?: boolean;
+  }): Promise<SftpReadTextResponse> {
+    return normalizeSftpReadTextResponse(
+      await this.request<RawSftpResponse>("sftp.read_text", {
+        session_id: params.sessionId,
+        project_path_key: params.projectPathKey,
+        workdir: params.workdir,
+        remote_path: params.path,
+        max_bytes: params.maxBytes ?? 0,
+        strict_utf8: params.strictUtf8 ?? false,
+      }),
+    );
+  }
+
+  async sftpWriteText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    content: string;
+    expectedMtime?: number;
+    expectedSizeBytes?: number;
+  }): Promise<SftpActionResponse> {
+    return normalizeSftpActionResponse(
+      await this.request<RawSftpResponse>("sftp.write_text", {
+        session_id: params.sessionId,
+        project_path_key: params.projectPathKey,
+        workdir: params.workdir,
+        remote_path: params.path,
+        content: params.content,
+        overwrite: true,
+        create_parent_dirs: false,
+        expected_mtime: params.expectedMtime ?? 0,
+        expected_size_bytes: params.expectedSizeBytes ?? 0,
+      }),
+    );
+  }
+
   async terminalShellOptions(): Promise<TerminalShellOptions> {
     return normalizeTerminalShellOptions(
       await this.requestWithRecovery<RawTerminalResponse>("terminal.shell_options", {}),
@@ -1005,6 +1054,44 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
 
   async listFsRoots(): Promise<FsRootsResponse> {
     return this.requestWithRecovery<FsRootsResponse>("fs.roots", {});
+  }
+
+  async listWorkspaceRootGrants(
+    projectId: string,
+    projectPath: string,
+  ): Promise<GatewayWorkspaceRootGrant[]> {
+    const response = await this.requestWithRecovery<GatewayWorkspaceRootGrantsResponse>(
+      "workspace_root_grants.list",
+      { project_id: projectId, project_path: projectPath },
+    );
+    return response.grants;
+  }
+
+  async applyWorkspaceRootGrants(
+    projectId: string,
+    projectPath: string,
+    grants: readonly GatewayWorkspaceRootGrantDraft[],
+  ): Promise<GatewayWorkspaceRootGrant[]> {
+    const response = await this.request<GatewayWorkspaceRootGrantsResponse>(
+      "workspace_root_grants.apply",
+      {
+        project_id: projectId,
+        project_path: projectPath,
+        grants: grants.map((grant) => ({
+          ...(grant.id ? { id: grant.id } : {}),
+          alias: grant.alias,
+          display_path: grant.displayPath,
+          access: grant.access,
+        })),
+      },
+    );
+    return response.grants;
+  }
+
+  async revokeWorkspaceRootGrants(projectId: string): Promise<void> {
+    await this.request<GatewayWorkspaceRootGrantsResponse>("workspace_root_grants.revoke", {
+      project_id: projectId,
+    });
   }
 
   async listDirs(path: string, maxResults?: number): Promise<FsListDirsResponse> {

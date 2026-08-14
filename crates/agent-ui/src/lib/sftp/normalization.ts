@@ -2,6 +2,7 @@ import type {
   SftpActionResponse,
   SftpEntry,
   SftpListResponse,
+  SftpReadTextResponse,
   SftpStatResponse,
   SftpTransfer,
   SftpTransferEvent,
@@ -45,10 +46,17 @@ export type RawSftpTransferEvent = {
   transfer?: RawSftpTransfer | null;
 };
 
+export type RawSftpReadTextResponse = Partial<SftpReadTextResponse> & {
+  bytes_read?: number;
+  size_bytes?: number;
+  entry?: RawSftpEntry | null;
+};
+
 export type RawSftpResponse = RawSftpListResponse &
   RawSftpStatResponse &
   RawSftpActionResponse &
-  RawSftpTransferResponse;
+  RawSftpTransferResponse &
+  RawSftpReadTextResponse;
 
 export function normalizeSftpEntry(entry: RawSftpEntry): SftpEntry {
   return {
@@ -114,5 +122,19 @@ export function normalizeSftpTransferEvent(event: RawSftpTransferEvent): SftpTra
   return {
     kind: event.kind ?? "",
     transfer: normalizeSftpTransfer(event.transfer),
+  };
+}
+
+export function normalizeSftpReadTextResponse(
+  response: RawSftpReadTextResponse,
+): SftpReadTextResponse {
+  return {
+    path: response.path ?? "",
+    content: response.content ?? "",
+    offset: Number(response.offset ?? 0),
+    bytesRead: Number(response.bytesRead ?? response.bytes_read ?? 0),
+    sizeBytes: Number(response.sizeBytes ?? response.size_bytes ?? 0),
+    truncated: response.truncated === true,
+    entry: response.entry ? normalizeSftpEntry(response.entry) : null,
   };
 }

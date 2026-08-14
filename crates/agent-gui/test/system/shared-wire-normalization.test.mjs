@@ -65,6 +65,40 @@ test("SFTP normalization accepts snake-case wire records", () => {
   assert.equal(sftp.normalizeSftpTransferEvent({ kind: "progress" }), null);
 });
 
+test("SFTP read-text normalization accepts snake and camel wire records", () => {
+  const snake = sftp.normalizeSftpReadTextResponse({
+    path: "/remote/notes.txt",
+    content: "hello",
+    offset: 0,
+    bytes_read: 5,
+    size_bytes: 5,
+    truncated: false,
+    entry: {
+      path: "/remote/notes.txt",
+      name: "notes.txt",
+      kind: "file",
+      size_bytes: 5,
+      mtime: 1700000000000,
+    },
+  });
+  assert.equal(snake.bytesRead, 5);
+  assert.equal(snake.sizeBytes, 5);
+  assert.equal(snake.truncated, false);
+  assert.equal(snake.entry.mtime, 1700000000000);
+
+  const camel = sftp.normalizeSftpReadTextResponse({
+    path: "/remote/notes.txt",
+    content: "hello",
+    offset: 0,
+    bytesRead: 5,
+    sizeBytes: 5,
+    truncated: true,
+  });
+  assert.equal(camel.bytesRead, 5);
+  assert.equal(camel.truncated, true);
+  assert.equal(camel.entry, null);
+});
+
 test("terminal normalization accepts both host wire shapes", () => {
   const session = terminal.normalizeTerminalSession({
     id: "terminal-1",

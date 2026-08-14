@@ -25,8 +25,7 @@ type UseWorkspaceProjectRemovalParams = {
   activeWorkspaceProject: WorkspaceProject | undefined;
   activateWorkspaceProject: (project: WorkspaceProject) => void;
   setActiveWorkspaceProjectId: (updater: (current: string) => string) => void;
-  setProjectRenamingId: (updater: (current: string | null) => string | null) => void;
-  setProjectRenameDraft: (value: string) => void;
+  beforeRemoveWorkspaceProject?: (project: WorkspaceProject) => void | Promise<void>;
   gitClient: Pick<GitClient, "removeWorktree"> | null | undefined;
   terminalClient?: Pick<TerminalClient, "list" | "closeProject"> | null;
   shouldInspectTerminalSessions?: boolean;
@@ -54,7 +53,7 @@ type WorkspaceProjectDeletionParams = Pick<
   | "startNewConversation"
   | "onWorktreeRemoved"
 > & {
-  removeWorkspaceProjectFromSettings: (project: WorkspaceProject) => void;
+  removeWorkspaceProject: (project: WorkspaceProject) => Promise<boolean>;
 };
 
 function RunningTerminalWarning(props: { count: number; t: (key: string) => string }) {
@@ -87,7 +86,7 @@ export function useWorkspaceProjectDeletion(params: WorkspaceProjectDeletionPara
     t,
     requestConfirmDialog,
     setErrorMessage,
-    removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     gitClient,
     terminalClient,
     shouldInspectTerminalSessions = true,
@@ -112,7 +111,7 @@ export function useWorkspaceProjectDeletion(params: WorkspaceProjectDeletionPara
 
       if (options.deleteWorktree !== true) {
         setErrorMessage(null);
-        removeWorkspaceProjectFromSettings(project);
+        void removeWorkspaceProject(project);
         return;
       }
 
@@ -167,7 +166,7 @@ export function useWorkspaceProjectDeletion(params: WorkspaceProjectDeletionPara
 
           const shouldResetVisibleConversation =
             workspaceProjectPathKey(getDisplayedConversationWorkdir()) === pathKey;
-          removeWorkspaceProjectFromSettings(project);
+          if (!(await removeWorkspaceProject(project))) return;
           if (shouldResetVisibleConversation) {
             startNewConversation({
               workdir: getDefaultWorkspaceProjectPath(settings.system) || undefined,
@@ -189,8 +188,9 @@ export function useWorkspaceProjectDeletion(params: WorkspaceProjectDeletionPara
       onCloseRightDockProject,
       onPruneTerminalSessions,
       onWorktreeRemoved,
-      removeWorkspaceProjectFromSettings,
+      removeWorkspaceProject,
       requestConfirmDialog,
+      setErrorMessage,
       settings.system,
       shouldInspectTerminalSessions,
       startNewConversation,
@@ -205,13 +205,14 @@ export function useWorkspaceProjectDeletion(params: WorkspaceProjectDeletionPara
 export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalParams) {
   const {
     removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     handleArchiveWorkspaceProject,
     handleUnarchiveWorkspaceProject,
     handleWorktreeRemoved,
   } = useWorkspaceProjectSettingsActions(params);
   const handleRemoveWorkspaceProject = useWorkspaceProjectDeletion({
     ...params,
-    removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
   });
 
   return {

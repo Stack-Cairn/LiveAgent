@@ -43,9 +43,17 @@ pub async fn sftp_read_text(
     path: String,
     offset: Option<u64>,
     max_bytes: Option<usize>,
+    strict_utf8: Option<bool>,
 ) -> Result<SftpReadTextResponse, String> {
     registry
-        .read_text(session_id, project_path_key, path, offset, max_bytes)
+        .read_text(
+            session_id,
+            project_path_key,
+            path,
+            offset,
+            max_bytes,
+            strict_utf8,
+        )
         .await
 }
 
@@ -58,6 +66,8 @@ pub async fn sftp_write_text(
     content: String,
     overwrite: Option<bool>,
     create_parent_dirs: Option<bool>,
+    expected_mtime: Option<u64>,
+    expected_size_bytes: Option<u64>,
 ) -> Result<SftpActionResponse, String> {
     registry
         .write_text(
@@ -67,6 +77,8 @@ pub async fn sftp_write_text(
             content,
             overwrite.unwrap_or(true),
             create_parent_dirs.unwrap_or(true),
+            expected_mtime,
+            expected_size_bytes,
         )
         .await
 }

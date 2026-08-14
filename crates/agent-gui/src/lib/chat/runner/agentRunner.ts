@@ -53,6 +53,7 @@ import type { RuntimePlatform } from "../../runtimePlatform";
 import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
+import type { AdditionalProjectRoot } from "../../tools/additionalProjectRoots";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
 import { summarizeToolCall } from "../messages/uiMessages";
 import {
@@ -408,6 +409,8 @@ export async function runAssistantWithTools(params: {
   runtimePlatform?: RuntimePlatform;
   context: Context;
   workdir: string;
+  /** Structured file-tool roots, also documented in the generated tool prompt. */
+  additionalRoots?: readonly AdditionalProjectRoot[];
   sessionId?: string;
   nativeWebSearch?: boolean;
   tools: Context["tools"];
@@ -818,6 +821,7 @@ export async function runAssistantWithTools(params: {
       params.workdir,
       llmTools.map((tool) => tool.name),
       params.runtimePlatform,
+      params.additionalRoots,
     );
     let currentSystemPrompt = params.context.systemPrompt;
     let pendingTurnOverridePromise: Promise<TurnContextOverride> | null = null;

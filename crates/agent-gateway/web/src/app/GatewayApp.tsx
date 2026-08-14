@@ -18,6 +18,7 @@ import { useWorkspaceProjectDeletion } from "@liveagent/ui/lib/useWorkspaceProje
 import { useWorkspaceProjectSettingsActions } from "@liveagent/ui/lib/workspaceProjectRemoval";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createGatewayWorkspaceProjectRootClient } from "@/agent-ui-adapters/workspaceProjectRoots";
 import type { GatewayTranscriptNavHandle } from "@/components/GatewayTranscript";
 import { registerAskUserQuestionAnswerHandler } from "@/lib/chat/askUserQuestionBridge";
 import type { HistoryWindowState } from "@/lib/chat/historyWindow";
@@ -178,6 +179,10 @@ function useGatewayAppController() {
   const [pendingCommandRevision, setPendingCommandRevision] = useState(0);
   const { settings, setSettings, settingsSyncReady, settingsSyncError, settingsSaveState } =
     useGatewaySettingsSync({ token, api, activeAgentId: activeAgentScope });
+  const workspaceProjectRootClient = useMemo(
+    () => (api ? createGatewayWorkspaceProjectRootClient(api) : undefined),
+    [api],
+  );
   const effectiveTheme = resolveEffectiveTheme(settings.theme);
   const isAgentMode = settings.system.executionMode !== "text";
   const [sidebarOpen, setSidebarOpen] = useState(shouldOpenSidebarByDefault);
@@ -195,8 +200,8 @@ function useGatewayAppController() {
   const {
     activeView,
     setActiveView,
-    resourceSettingsProject,
-    setResourceSettingsProject,
+    projectSettingsProject,
+    setProjectSettingsProject,
     rightDockOpen,
     setRightDockOpen,
   } = useApplicationViewState<WorkspaceProject>();
@@ -400,7 +405,6 @@ function useGatewayAppController() {
     archivedWorkspaceProjectPathKeys,
     handleBrowseWorkspaceProjectInFileTree,
     handleCancelWorkspaceCloneTask,
-    handleCancelWorkspaceProjectRename,
     handleCloneWorkspaceProject,
     handleCommitWorkspaceProjectRename,
     handleCreateWorkspaceGroup,
@@ -418,17 +422,12 @@ function useGatewayAppController() {
     handleSetWorkspaceProjectPinned,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
-    handleStartRenamingWorkspaceProject,
     handleToggleWorkspaceGroupCollapsed,
     handleWorkdirPickerSelect,
     missingWorkspaceProjectPathKeys,
     projectPickerOpen,
-    projectRenameDraft,
-    projectRenamingId,
     setActiveWorkspaceProjectId,
     setProjectPickerOpen,
-    setProjectRenameDraft,
-    setProjectRenamingId,
     setWorkspaceCreateModalOpen,
     workspaceCloneTasks,
     workspaceCreateModalOpen,
@@ -1041,8 +1040,22 @@ function useGatewayAppController() {
   const handleResendFromEdit = useStableCallback(handleResendFromEditImpl);
   const handleLoadUploadedImagePreview = useStableCallback(handleLoadUploadedImagePreviewImpl);
 
+  const translateWorkspaceProject = useCallback(
+    (key: string) => translate(key, settings.locale),
+    [settings.locale],
+  );
+  const beforeRemoveWorkspaceProject = useCallback(
+    async (project: WorkspaceProject) => {
+      if (!workspaceProjectRootClient) {
+        throw new Error(translateWorkspaceProject("chat.workspaceRootGrantsRevokeFailed"));
+      }
+      await workspaceProjectRootClient.revoke(project);
+    },
+    [translateWorkspaceProject, workspaceProjectRootClient],
+  );
+
   const {
-    removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     handleArchiveWorkspaceProject,
     handleUnarchiveWorkspaceProject,
     handleWorktreeRemoved,
@@ -1053,8 +1066,9 @@ function useGatewayAppController() {
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
-    setProjectRenamingId,
-    setProjectRenameDraft,
+    t: translateWorkspaceProject,
+    setErrorMessage: setSidebarActionError,
+    beforeRemoveWorkspaceProject,
   });
 
   const isWorkspaceProjectRunning = useCallback(
@@ -1097,16 +1111,12 @@ function useGatewayAppController() {
   const refreshWorkspaceProjectWorkdirs = useCallback(() => {
     void sidebarStore.refreshWorkdirs("delete");
   }, [sidebarStore]);
-  const translateWorkspaceProject = useCallback(
-    (key: string) => translate(key, settings.locale),
-    [settings.locale],
-  );
   const handleRemoveWorkspaceProject = useWorkspaceProjectDeletion({
     settings,
     t: translateWorkspaceProject,
     requestConfirmDialog,
     setErrorMessage: setSidebarActionError,
-    removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     gitClient,
     terminalClient,
     shouldInspectTerminalSessions:
@@ -1145,6 +1155,7 @@ function useGatewayAppController() {
     protectedConversationRef.current = "";
     submitInFlightRef.current = false;
     setUserMenuOpen(false);
+    setProjectSettingsProject(null);
     resetSettingsOverlay();
     setStatus(null);
     setStatusError(null);
@@ -1172,6 +1183,7 @@ function useGatewayAppController() {
     resetSharedHistory,
     transcriptStoreRegistry,
     resetSettingsOverlay,
+    setProjectSettingsProject,
   ]);
 
   const userMenuLabel = (status?.name || status?.agent_id || "当前用户").trim() || "当前用户";
@@ -1227,6 +1239,7 @@ function useGatewayAppController() {
       setQueuedChatTurns([]);
       setChatQueueRevision(0);
       setProjectPickerOpen(false);
+      setProjectSettingsProject(null);
       resetSettingsOverlay();
       setActiveView("chat");
       setRightDockOpen(false);
@@ -1245,6 +1258,8 @@ function useGatewayAppController() {
       setRightDockOpen,
       setActiveView,
       resetSettingsOverlay,
+      setProjectSettingsProject,
+      setProjectPickerOpen,
     ],
   );
 
@@ -1269,10 +1284,8 @@ function useGatewayAppController() {
     handleSelectModel,
     isAgentDevExecutionMode,
     modelOptions,
-    selectedSkillNames,
     selectedValue,
     skillsRootDir,
-    workspaceResources,
   } = useGatewayChatConfiguration({
     activeSelectedModel,
     displayedConversationId,
@@ -1427,6 +1440,7 @@ function useGatewayAppController() {
     handleChatTranscriptWidthChange,
     handleInsertCodeMention,
     handleOpenChatFileLink,
+    handleOpenSftpFile,
     handleOpenSshTerminal,
     handleOpenWorkspaceFile,
     handleProjectTerminalSessionsChange,
@@ -1719,7 +1733,6 @@ function useGatewayAppController() {
     handleBranchConversation,
     handleBrowseWorkspaceProjectInFileTree,
     handleCancelWorkspaceCloneTask,
-    handleCancelWorkspaceProjectRename,
     handleChatRuntimeControlsChange,
     handleChatTranscriptWidthChange,
     handleCloneWorkspaceProject,
@@ -1752,6 +1765,7 @@ function useGatewayAppController() {
     handleOpenCreateWorkspaceProject,
     handleOpenShareModal,
     handleOpenSharedHistoryManager,
+    handleOpenSftpFile,
     handleOpenSshTerminal,
     handleOpenWorkspaceFile,
     handleOpenWorkspaceFolder,
@@ -1784,7 +1798,6 @@ function useGatewayAppController() {
     handleSidebarRecentCollapsedChange,
     handleSidebarSelectConversation,
     handleSshProjectHostIdsChange,
-    handleStartRenamingWorkspaceProject,
     handleToggleHistoryShare,
     handleToggleWorkspaceGroupCollapsed,
     handleUnarchiveWorkspaceProject,
@@ -1819,15 +1832,13 @@ function useGatewayAppController() {
     pendingUploadedFiles,
     prepareChatRuntime,
     projectPickerOpen,
-    projectRenameDraft,
-    projectRenamingId,
     projectTerminalSessions,
     projectToolsDisabledMessage,
     queuedChatEditSessionRef,
     queuedChatTurnsForDisplayedConversation,
     removeQueuedTurn,
     requestWorkspaceFilePreviewClose,
-    resourceSettingsProject,
+    projectSettingsProject,
     rightDockFileTreeState,
     rightDockOpen,
     rightDockProjectState,
@@ -1838,8 +1849,7 @@ function useGatewayAppController() {
     setActiveFloorKey,
     setPendingUploadsForConversation,
     setProjectPickerOpen,
-    setProjectRenameDraft,
-    setResourceSettingsProject,
+    setProjectSettingsProject,
     setRightDockOpen,
     setSettings,
     setSharedManagerOpen,
@@ -1914,6 +1924,7 @@ function useGatewayAppController() {
     workspaceFilePreviewOpen,
     workspaceFilePreviewOpenRequest,
     workspaceProjects,
+    workspaceProjectRootClient,
     workspaceSshTerminalMounted,
     workspaceSshTerminalOpen,
     workspaceSshTerminalOpenRequest,

@@ -5,6 +5,7 @@ import type {
 import type {
   SftpActionResponse,
   SftpListResponse,
+  SftpReadTextResponse,
   SftpStatResponse,
   SftpTransferResponse,
 } from "@liveagent/ui/lib/sftp/types";
@@ -50,6 +51,8 @@ import type {
   FsRootsResponse,
   FsWriteTextResponse,
   GatewayChatCommandInput,
+  GatewayWorkspaceRootGrant,
+  GatewayWorkspaceRootGrantDraft,
   HistoryGetOptions,
   HistoryListener,
   ManagedProcessLogPayload,
@@ -99,6 +102,8 @@ export type {
 export type {
   ChatFileOpenResponse,
   GatewayChatCommandInput,
+  GatewayWorkspaceRootGrant,
+  GatewayWorkspaceRootGrantDraft,
   ManagedProcessLogPayload,
   ManagedProcessRecordPayload,
   ManagedProcessStatePayload,
@@ -208,6 +213,23 @@ export type GatewayWebSocketClientLike = {
     overwrite?: boolean;
   }): Promise<SftpTransferResponse>;
   sftpCancelTransfer(params: { sessionId: string; transferId: string }): Promise<void>;
+  sftpReadText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    maxBytes?: number;
+    strictUtf8?: boolean;
+  }): Promise<SftpReadTextResponse>;
+  sftpWriteText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    content: string;
+    expectedMtime?: number;
+    expectedSizeBytes?: number;
+  }): Promise<SftpActionResponse>;
   terminalShellOptions(): Promise<TerminalShellOptions>;
   listTerminals(projectPathKey?: string): Promise<TerminalSession[]>;
   createTerminal(params: {
@@ -315,6 +337,16 @@ export type GatewayWebSocketClientLike = {
     showHidden?: boolean,
   ): Promise<MentionListResponse>;
   listFsRoots(): Promise<FsRootsResponse>;
+  listWorkspaceRootGrants(
+    projectId: string,
+    projectPath: string,
+  ): Promise<GatewayWorkspaceRootGrant[]>;
+  applyWorkspaceRootGrants(
+    projectId: string,
+    projectPath: string,
+    grants: readonly GatewayWorkspaceRootGrantDraft[],
+  ): Promise<GatewayWorkspaceRootGrant[]>;
+  revokeWorkspaceRootGrants(projectId: string): Promise<void>;
   listDirs(path: string, maxResults?: number): Promise<FsListDirsResponse>;
   createProjectFolder(parent: string, name: string): Promise<CreateProjectFolderResponse>;
   listFiles(

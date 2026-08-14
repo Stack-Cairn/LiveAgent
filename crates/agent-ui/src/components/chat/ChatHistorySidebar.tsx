@@ -186,8 +186,6 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     activeProjectId,
     missingProjectPathKeys,
     runningProjectPathKeys,
-    projectRenamingId = null,
-    projectRenameDraft = "",
     projectsCollapsed = false,
     workspaceFolderDropActive = false,
     recentCollapsed = false,
@@ -201,12 +199,8 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     onToggleWorkspaceGroupCollapsed,
     onSelectProject,
     onBrowseProjectInFileTree,
-    onConfigureProjectResources,
+    onConfigureProject,
     onBrowseProjectInSystemFileManager,
-    onStartRenamingProject,
-    onProjectRenameDraftChange,
-    onCommitProjectRename,
-    onCancelProjectRename,
     onSetProjectPinned,
     onRemoveProject,
     onArchiveProject,
@@ -404,33 +398,15 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
       onBrowseProjectInFileTree?.(project);
     }
   });
-  const handleConfigureProjectResources = useStableEvent((project: WorkspaceProject) => {
+  const handleConfigureProject = useStableEvent((project: WorkspaceProject) => {
     if (!sectionsDisabled) {
-      onConfigureProjectResources?.(project);
+      onConfigureProject?.(project);
     }
   });
   const handleBrowseProjectInSystemFileManager = useStableEvent((project: WorkspaceProject) => {
     if (!sectionsDisabled) {
       onBrowseProjectInSystemFileManager?.(project);
     }
-  });
-  const handleStartRenamingProject = useStableEvent((project: WorkspaceProject) => {
-    if (!sectionsDisabled) {
-      onStartRenamingProject?.(project);
-    }
-  });
-  const handleProjectRenameDraftChange = useStableEvent((value: string) => {
-    if (!sectionsDisabled) {
-      onProjectRenameDraftChange?.(value);
-    }
-  });
-  const handleCommitProjectRename = useStableEvent(() => {
-    if (!sectionsDisabled) {
-      onCommitProjectRename?.();
-    }
-  });
-  const handleCancelProjectRename = useStableEvent(() => {
-    onCancelProjectRename?.();
   });
   const handleSetProjectPinned = useStableEvent((project: WorkspaceProject, isPinned: boolean) => {
     if (!sectionsDisabled) {
@@ -820,14 +796,13 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
     setPendingProjectAction(null);
     exitSelectionMode();
     handleCancelRename();
-    handleCancelProjectRename();
     projectSectionResizeCleanupRef.current?.();
     if (projectSectionResizeFrameRef.current !== null) {
       window.cancelAnimationFrame(projectSectionResizeFrameRef.current);
       projectSectionResizeFrameRef.current = null;
     }
     setIsProjectSectionResizing(false);
-  }, [exitSelectionMode, handleCancelProjectRename, handleCancelRename, sectionsDisabled]);
+  }, [exitSelectionMode, handleCancelRename, sectionsDisabled]);
 
   useEffect(() => {
     if (!pendingProjectAction) {
@@ -1468,14 +1443,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                   isActive={activeProjectId === project.id}
                                   isMissing={missingProjectPathKeys.has(pathKey)}
                                   isRunning={runningProjectPathKeys.has(pathKey)}
-                                  isRenaming={projectRenamingId === project.id}
                                   pendingAction={
                                     pendingProjectAction?.projectId === project.id
                                       ? pendingProjectAction.mode
                                       : null
                                   }
                                   isInteractionDisabled={sectionsDisabled}
-                                  renameDraft={projectRenameDraft}
                                   onSelectProject={handleSelectProject}
                                   onBrowseProjectInFileTree={
                                     onBrowseProjectInFileTree
@@ -1487,11 +1460,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                       ? handleBrowseProjectInSystemFileManager
                                       : undefined
                                   }
-                                  onStartRenamingProject={handleStartRenamingProject}
-                                  onConfigureProjectResources={handleConfigureProjectResources}
-                                  onProjectRenameDraftChange={handleProjectRenameDraftChange}
-                                  onCommitProjectRename={handleCommitProjectRename}
-                                  onCancelProjectRename={handleCancelProjectRename}
+                                  onConfigureProject={handleConfigureProject}
                                   onSetProjectPinned={handleSetProjectPinned}
                                   onRemoveProject={handleRemoveProject}
                                   isArchived={false}
@@ -1539,14 +1508,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                               isActive={activeProjectId === project.id}
                               isMissing={missingProjectPathKeys.has(pathKey)}
                               isRunning={runningProjectPathKeys.has(pathKey)}
-                              isRenaming={projectRenamingId === project.id}
                               pendingAction={
                                 pendingProjectAction?.projectId === project.id
                                   ? pendingProjectAction.mode
                                   : null
                               }
                               isInteractionDisabled={sectionsDisabled}
-                              renameDraft={projectRenameDraft}
                               onSelectProject={handleSelectProject}
                               onBrowseProjectInFileTree={
                                 onBrowseProjectInFileTree
@@ -1558,11 +1525,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                   ? handleBrowseProjectInSystemFileManager
                                   : undefined
                               }
-                              onStartRenamingProject={handleStartRenamingProject}
-                              onConfigureProjectResources={handleConfigureProjectResources}
-                              onProjectRenameDraftChange={handleProjectRenameDraftChange}
-                              onCommitProjectRename={handleCommitProjectRename}
-                              onCancelProjectRename={handleCancelProjectRename}
+                              onConfigureProject={handleConfigureProject}
                               onSetProjectPinned={handleSetProjectPinned}
                               onRemoveProject={handleRemoveProject}
                               isArchived={false}
@@ -1624,14 +1587,12 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                 isActive={activeProjectId === project.id}
                                 isMissing={missingProjectPathKeys.has(pathKey)}
                                 isRunning={runningProjectPathKeys.has(pathKey)}
-                                isRenaming={projectRenamingId === project.id}
                                 pendingAction={
                                   pendingProjectAction?.projectId === project.id
                                     ? pendingProjectAction.mode
                                     : null
                                 }
                                 isInteractionDisabled={sectionsDisabled}
-                                renameDraft={projectRenameDraft}
                                 onSelectProject={handleSelectProject}
                                 onBrowseProjectInFileTree={
                                   onBrowseProjectInFileTree
@@ -1643,11 +1604,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                                     ? handleBrowseProjectInSystemFileManager
                                     : undefined
                                 }
-                                onStartRenamingProject={handleStartRenamingProject}
-                                onConfigureProjectResources={handleConfigureProjectResources}
-                                onProjectRenameDraftChange={handleProjectRenameDraftChange}
-                                onCommitProjectRename={handleCommitProjectRename}
-                                onCancelProjectRename={handleCancelProjectRename}
+                                onConfigureProject={handleConfigureProject}
                                 onSetProjectPinned={handleSetProjectPinned}
                                 onRemoveProject={handleRemoveProject}
                                 isArchived

@@ -122,8 +122,6 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     sidebarStore.setScope(sidebarScope);
   }, [sidebarScope, sidebarStore]);
   const historyScopeKey = sidebarScopeKey(sidebarScope);
-  const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
-  const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [workspaceCreateModalOpen, setWorkspaceCreateModalOpen] = useState(false);
 
   const setWorkspaceProjectDirectoryMissing = useCallback(
@@ -590,29 +588,6 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     [setSettings],
   );
 
-  const handleStartRenamingWorkspaceProject = useCallback((project: WorkspaceProject) => {
-    if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
-    setProjectRenamingId(project.id);
-    setProjectRenameDraft(project.name);
-  }, []);
-
-  const handleCommitWorkspaceProjectRename = useCallback(() => {
-    if (!projectRenamingId) {
-      return;
-    }
-    const project = workspaceProjects.find((item) => item.id === projectRenamingId);
-    if (project) {
-      commitWorkspaceProjectRename(project, projectRenameDraft);
-    }
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, [commitWorkspaceProjectRename, projectRenameDraft, projectRenamingId, workspaceProjects]);
-
-  const handleCancelWorkspaceProjectRename = useCallback(() => {
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, []);
-
   const handleSetWorkspaceProjectPinned = useCallback(
     (project: WorkspaceProject, isPinned: boolean) => {
       const pathKey = workspaceProjectPathKey(project.path);
@@ -698,10 +673,6 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     activeWorkspaceProjectPath,
     sidebarScope,
     historyScopeKey,
-    projectRenamingId,
-    setProjectRenamingId,
-    projectRenameDraft,
-    setProjectRenameDraft,
     checkWorkspaceProjectDirectory,
     activateWorkspaceProject,
     handleSelectWorkspaceProject,
@@ -725,9 +696,7 @@ export function useWorkspaceProjects(params: UseWorkspaceProjectsParams) {
     handleMoveWorkspaceProjectToGroup,
     handleToggleWorkspaceGroupCollapsed,
     handleLoadWorkspaceRemoteBranches,
-    handleStartRenamingWorkspaceProject,
-    handleCommitWorkspaceProjectRename,
-    handleCancelWorkspaceProjectRename,
+    commitWorkspaceProjectRename,
     handleSetWorkspaceProjectPinned,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,

@@ -24,6 +24,12 @@ export function createGatewaySftpClient(api: GatewayWebSocketClientLike): SftpCl
     cancelTransfer(params) {
       return api.sftpCancelTransfer(params);
     },
+    readText(params) {
+      return api.sftpReadText(params);
+    },
+    writeText(params) {
+      return api.sftpWriteText(params);
+    },
     subscribeTransfers(listener) {
       return api.subscribeSftpTransfers(listener);
     },

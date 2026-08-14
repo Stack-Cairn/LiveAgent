@@ -109,6 +109,28 @@ export type FsRootsResponse = {
   roots: FsRoot[];
 };
 
+export type GatewayWorkspaceRootGrant = {
+  id: string;
+  projectId: string;
+  projectPathKey: string;
+  alias: string;
+  displayPath: string;
+  canonicalPath: string;
+  access: "read" | "write";
+  state: "active" | "missing" | "changed";
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type GatewayWorkspaceRootGrantDraft = Pick<
+  GatewayWorkspaceRootGrant,
+  "alias" | "displayPath" | "access"
+> & { id?: string };
+
+export type GatewayWorkspaceRootGrantsResponse = {
+  grants: GatewayWorkspaceRootGrant[];
+};
+
 export type FsListDirsResponse = {
   path: string;
   entries: Array<{ path: string; name: string }>;

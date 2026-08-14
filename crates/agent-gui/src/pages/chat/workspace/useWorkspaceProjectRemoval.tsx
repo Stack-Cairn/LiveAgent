@@ -7,6 +7,7 @@ import { type Dispatch, type MutableRefObject, type SetStateAction, useCallback 
 import { tauriGitClient } from "../../../lib/git/tauriGitClient";
 import type { AppSettings, WorkspaceProject } from "../../../lib/settings";
 import { tauriTerminalClient } from "../../../lib/terminal/tauriTerminalClient";
+import { revokeWorkspaceRootGrants } from "../../../lib/workspaceRootGrants";
 
 type UseWorkspaceProjectRemovalParams = {
   settings: AppSettings;
@@ -23,8 +24,6 @@ type UseWorkspaceProjectRemovalParams = {
     options?: { startConversation?: boolean },
   ) => void;
   setActiveWorkspaceProjectId: Dispatch<SetStateAction<string>>;
-  setProjectRenamingId: Dispatch<SetStateAction<string | null>>;
-  setProjectRenameDraft: Dispatch<SetStateAction<string>>;
   terminalProjectPathKey: string;
   setTerminalSessions: Dispatch<SetStateAction<TerminalSession[]>>;
   setRightDockOpen: Dispatch<SetStateAction<boolean>>;
@@ -71,6 +70,10 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
     (options?: { workdir?: string }) => startNewConversationActionRef.current(options),
     [startNewConversationActionRef],
   );
+  const beforeRemoveWorkspaceProject = useCallback(
+    (project: WorkspaceProject) => revokeWorkspaceRootGrants(project),
+    [],
+  );
 
   return useSharedWorkspaceProjectRemoval({
     ...params,
@@ -81,5 +84,6 @@ export function useWorkspaceProjectRemoval(params: UseWorkspaceProjectRemovalPar
     onCloseRightDockProject,
     getDisplayedConversationWorkdir,
     startNewConversation,
+    beforeRemoveWorkspaceProject,
   });
 }

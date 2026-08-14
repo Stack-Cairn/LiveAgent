@@ -7,7 +7,6 @@ import {
 import {
   Archive,
   ArchiveRestore,
-  Blend,
   Check,
   ChevronRight,
   Edit3,
@@ -20,6 +19,7 @@ import {
   MoreHorizontal,
   Pin,
   PinOff,
+  Settings,
   Share2,
   Trash2,
   X,
@@ -924,18 +924,12 @@ export const ProjectRow = memo(function ProjectRow(props: {
   isActive: boolean;
   isMissing: boolean;
   isRunning: boolean;
-  isRenaming: boolean;
   pendingAction: PendingWorkspaceProjectAction["mode"] | null;
   isInteractionDisabled: boolean;
-  renameDraft: string;
   onSelectProject: (project: WorkspaceProject) => void;
   onBrowseProjectInFileTree?: (project: WorkspaceProject) => void;
-  onConfigureProjectResources: (project: WorkspaceProject) => void;
+  onConfigureProject: (project: WorkspaceProject) => void;
   onBrowseProjectInSystemFileManager?: (project: WorkspaceProject) => void;
-  onStartRenamingProject: (project: WorkspaceProject) => void;
-  onProjectRenameDraftChange: (value: string) => void;
-  onCommitProjectRename: () => void;
-  onCancelProjectRename: () => void;
   onSetProjectPinned: (project: WorkspaceProject, isPinned: boolean) => void;
   onRemoveProject: (project: WorkspaceProject, options?: WorkspaceProjectRemoveOptions) => void;
   // Archived rows render disabled: no selection (so no new conversations),
@@ -959,18 +953,12 @@ export const ProjectRow = memo(function ProjectRow(props: {
     isActive,
     isMissing,
     isRunning,
-    isRenaming,
     pendingAction,
     isInteractionDisabled,
-    renameDraft,
     onSelectProject,
     onBrowseProjectInFileTree,
-    onConfigureProjectResources,
+    onConfigureProject,
     onBrowseProjectInSystemFileManager,
-    onStartRenamingProject,
-    onProjectRenameDraftChange,
-    onCommitProjectRename,
-    onCancelProjectRename,
     onSetProjectPinned,
     onRemoveProject,
     isArchived,
@@ -986,11 +974,6 @@ export const ProjectRow = memo(function ProjectRow(props: {
   } = props;
   const { t } = useLocale();
   const rowRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const skipNextBlurCommitRef = useRef(false);
-  // Same menu-unmount return-focus hazard as HistoryRow: the menu's finalFocus
-  // callback consumes this one-shot flag so the rename input keeps focus.
-  const suppressMenuReturnFocusRef = useRef(false);
   const isDefaultProject = project.id === DEFAULT_WORKSPACE_PROJECT_ID;
   const isPinned = project.isPinned === true;
   const [deleteBranchWithWorktree, setDeleteBranchWithWorktree] = useState(false);
@@ -1002,25 +985,10 @@ export const ProjectRow = memo(function ProjectRow(props: {
   const ProjectFolderIcon = isActive ? FolderOpen : FolderClosed;
 
   useEffect(() => {
-    if (!isRenaming) return;
-    skipNextBlurCommitRef.current = false;
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, [isRenaming]);
-
-  useEffect(() => {
     if (pendingAction !== "deleteWorktree") {
       setDeleteBranchWithWorktree(false);
     }
   }, [pendingAction]);
-
-  const handleStartRenamingFromMenu = useCallback(() => {
-    if (isInteractionDisabled) {
-      return;
-    }
-    suppressMenuReturnFocusRef.current = true;
-    onStartRenamingProject(project);
-  }, [isInteractionDisabled, onStartRenamingProject, project]);
 
   const handleRequestRemove = useCallback(() => {
     if (isInteractionDisabled) {
@@ -1190,363 +1158,298 @@ export const ProjectRow = memo(function ProjectRow(props: {
               : "text-foreground/85 hover:bg-foreground/[0.05] hover:text-foreground",
       )}
     >
-      {isRenaming ? (
-        <div className="flex h-[30px] min-w-0 items-center gap-3 rounded-md px-2 text-left">
-          <ProjectFolderIcon
-            className={cn(
-              "h-4 w-4 shrink-0 transition-colors",
-              isMissing
-                ? "text-destructive"
-                : isArchived
-                  ? "text-muted-foreground/40"
-                  : isActive
-                    ? "text-amber-500"
-                    : "text-foreground/65",
-            )}
-          />
-          <Input
-            ref={inputRef}
-            value={renameDraft}
-            onChange={(e) => onProjectRenameDraftChange(e.currentTarget.value)}
-            onBlur={() => {
-              if (skipNextBlurCommitRef.current) {
-                skipNextBlurCommitRef.current = false;
-                return;
-              }
-              onCommitProjectRename();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                skipNextBlurCommitRef.current = true;
-                onCommitProjectRename();
-              }
-              if (e.key === "Escape") {
-                e.preventDefault();
-                skipNextBlurCommitRef.current = true;
-                onCancelProjectRename();
-              }
-            }}
-            onClick={(e) => e.stopPropagation()}
-            className="h-7 min-w-0 flex-1 rounded-none border-0 bg-transparent p-0 text-[calc(14px*var(--zone-font-scale,1))] font-normal shadow-none outline-none focus-visible:border-0 focus-visible:bg-transparent"
-            disabled={isInteractionDisabled}
-          />
-        </div>
-      ) : (
-        <Tooltip.Root disabled={isInteractionDisabled}>
-          <Tooltip.Trigger
-            delay={0}
-            closeOnClick
-            render={
-              <button
-                type="button"
-                aria-disabled={isArchived || undefined}
+      <Tooltip.Root disabled={isInteractionDisabled}>
+        <Tooltip.Trigger
+          delay={0}
+          closeOnClick
+          render={
+            <button
+              type="button"
+              aria-disabled={isArchived || undefined}
+              className={cn(
+                "flex h-[30px] min-w-0 items-center gap-3 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                isMissing
+                  ? "hover:text-destructive focus-visible:bg-destructive/10"
+                  : isArchived
+                    ? "cursor-default"
+                    : "hover:text-foreground focus-visible:bg-foreground/[0.06]",
+              )}
+              onClick={() => {
+                // Archived workspaces cannot be selected, so no new
+                // conversations can start in them.
+                if (!isArchived) {
+                  onSelectProject(project);
+                }
+              }}
+              onDoubleClick={(event) => {
+                event.preventDefault();
+                if (!isInteractionDisabled) {
+                  onConfigureProject(project);
+                }
+              }}
+              disabled={isInteractionDisabled}
+            >
+              <ProjectFolderIcon
                 className={cn(
-                  "flex h-[30px] min-w-0 items-center gap-3 rounded-md px-2 text-left outline-hidden transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                  "h-4 w-4 shrink-0 transition-colors",
                   isMissing
-                    ? "hover:text-destructive focus-visible:bg-destructive/10"
+                    ? "text-destructive"
                     : isArchived
-                      ? "cursor-default"
-                      : "hover:text-foreground focus-visible:bg-foreground/[0.06]",
+                      ? "text-muted-foreground/40"
+                      : isActive
+                        ? "text-amber-500"
+                        : "text-foreground/65",
                 )}
-                onClick={() => {
-                  // Archived workspaces cannot be selected, so no new
-                  // conversations can start in them.
-                  if (!isArchived) {
-                    onSelectProject(project);
-                  }
-                }}
-                onDoubleClick={(event) => {
-                  event.preventDefault();
-                  if (!isDefaultProject && !isInteractionDisabled) {
-                    onStartRenamingProject(project);
-                  }
-                }}
-                disabled={isInteractionDisabled}
+              />
+              <span
+                className={cn(
+                  "sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5",
+                  isMissing ? "text-destructive" : undefined,
+                )}
               >
-                <ProjectFolderIcon
-                  className={cn(
-                    "h-4 w-4 shrink-0 transition-colors",
-                    isMissing
-                      ? "text-destructive"
-                      : isArchived
-                        ? "text-muted-foreground/40"
-                        : isActive
-                          ? "text-amber-500"
-                          : "text-foreground/65",
-                  )}
-                />
-                <span
-                  className={cn(
-                    "sidebar-project-name-fade min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[calc(14px*var(--zone-font-scale,1))] font-normal leading-5",
-                    isMissing ? "text-destructive" : undefined,
-                  )}
-                >
-                  {project.name}
-                </span>
-              </button>
-            }
-          />
-          <Tooltip.Portal>
-            <Tooltip.Positioner
-              anchor={rowRef}
-              side="right"
-              align="center"
-              sideOffset={10}
-              collisionPadding={8}
-              className="z-[9999]"
-            >
-              <Tooltip.Popup className="w-64 rounded-xl border border-border/60 bg-popover px-3 py-2.5 text-popover-foreground shadow-lg outline-hidden data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95">
-                <p className="truncate text-sm font-semibold leading-5">{project.name}</p>
-                <p className="mt-1 break-all text-xs leading-4 text-muted-foreground">
-                  {project.path}
-                </p>
-              </Tooltip.Popup>
-            </Tooltip.Positioner>
-          </Tooltip.Portal>
-        </Tooltip.Root>
-      )}
-      {!isRenaming ? (
-        <div
-          className={cn(
-            "relative flex items-center justify-end overflow-hidden transition-[max-width,opacity] duration-200 ease-out",
-            isMissing
-              ? "max-w-8 opacity-100"
-              : isRunning || (isPinned && !isArchived)
-                ? "max-w-7 opacity-100 group-hover/project:max-w-16 group-focus-within/project:max-w-16"
-                : "max-w-0 opacity-0 group-hover/project:max-w-16 group-hover/project:opacity-100 group-focus-within/project:max-w-16 group-focus-within/project:opacity-100",
-            menuOpen && "max-w-16 opacity-100",
-          )}
-        >
-          {isRunning && !isMissing ? (
-            <span
-              role="img"
-              aria-label={t("chat.statusRunningReply")}
-              title={t("chat.statusRunningReply")}
-              className={cn(
-                "pointer-events-none absolute right-1.5 flex h-4 w-4 items-center justify-center text-muted-foreground transition-opacity duration-200",
-                "opacity-100 group-hover/project:opacity-0 group-focus-within/project:opacity-0",
-                menuOpen && "opacity-0",
-              )}
-            >
-              <Loader2 className="h-4 w-4 animate-spin" />
-            </span>
-          ) : !isMissing && !isArchived && isPinned ? (
-            <span
-              aria-hidden="true"
-              className={cn(
-                "pointer-events-none absolute right-1.5 flex h-4 w-4 items-center justify-center text-amber-500/80 transition-opacity duration-200",
-                "opacity-100 group-hover/project:opacity-0 group-focus-within/project:opacity-0",
-                menuOpen && "opacity-0",
-              )}
-            >
-              <Pin className="h-3 w-3" />
-            </span>
-          ) : null}
-          <div
+                {project.name}
+              </span>
+            </button>
+          }
+        />
+        <Tooltip.Portal>
+          <Tooltip.Positioner
+            anchor={rowRef}
+            side="right"
+            align="center"
+            sideOffset={10}
+            collisionPadding={8}
+            className="z-[9999]"
+          >
+            <Tooltip.Popup className="w-64 rounded-xl border border-border/60 bg-popover px-3 py-2.5 text-popover-foreground shadow-lg outline-hidden data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95">
+              <p className="truncate text-sm font-semibold leading-5">{project.name}</p>
+              <p className="mt-1 break-all text-xs leading-4 text-muted-foreground">
+                {project.path}
+              </p>
+            </Tooltip.Popup>
+          </Tooltip.Positioner>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+      <div
+        className={cn(
+          "relative flex items-center justify-end overflow-hidden transition-[max-width,opacity] duration-200 ease-out",
+          isMissing
+            ? "max-w-8 opacity-100"
+            : isRunning || (isPinned && !isArchived)
+              ? "max-w-7 opacity-100 group-hover/project:max-w-16 group-focus-within/project:max-w-16"
+              : "max-w-0 opacity-0 group-hover/project:max-w-16 group-hover/project:opacity-100 group-focus-within/project:max-w-16 group-focus-within/project:opacity-100",
+          menuOpen && "max-w-16 opacity-100",
+        )}
+      >
+        {isRunning && !isMissing ? (
+          <span
+            role="img"
+            aria-label={t("chat.statusRunningReply")}
+            title={t("chat.statusRunningReply")}
             className={cn(
-              "flex items-center gap-0.5 transition-opacity duration-200",
-              (isRunning || (isPinned && !isArchived)) && !isMissing
-                ? "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100"
-                : "opacity-100",
-              menuOpen && "opacity-100",
+              "pointer-events-none absolute right-1.5 flex h-4 w-4 items-center justify-center text-muted-foreground transition-opacity duration-200",
+              "opacity-100 group-hover/project:opacity-0 group-focus-within/project:opacity-0",
+              menuOpen && "opacity-0",
             )}
           >
-            {isMissing && !isArchived ? (
-              !isDefaultProject ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          </span>
+        ) : !isMissing && !isArchived && isPinned ? (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute right-1.5 flex h-4 w-4 items-center justify-center text-amber-500/80 transition-opacity duration-200",
+              "opacity-100 group-hover/project:opacity-0 group-focus-within/project:opacity-0",
+              menuOpen && "opacity-0",
+            )}
+          >
+            <Pin className="h-3 w-3" />
+          </span>
+        ) : null}
+        <div
+          className={cn(
+            "flex items-center gap-0.5 transition-opacity duration-200",
+            (isRunning || (isPinned && !isArchived)) && !isMissing
+              ? "opacity-0 group-hover/project:opacity-100 group-focus-within/project:opacity-100"
+              : "opacity-100",
+            menuOpen && "opacity-100",
+          )}
+        >
+          {isMissing && !isArchived ? (
+            !isDefaultProject ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  PROJECT_ICON_BUTTON_CLASS,
+                  "text-destructive hover:!bg-transparent hover:text-destructive",
+                )}
+                title={t("chat.workspaceRemove")}
+                aria-label={t("chat.workspaceRemove")}
+                onClick={handleRequestRemove}
+                disabled={isInteractionDisabled}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            ) : null
+          ) : (
+            <>
+              {!isArchived ? (
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className={cn(
-                    PROJECT_ICON_BUTTON_CLASS,
-                    "text-destructive hover:!bg-transparent hover:text-destructive",
-                  )}
-                  title={t("chat.workspaceRemove")}
-                  aria-label={t("chat.workspaceRemove")}
-                  onClick={handleRequestRemove}
+                  className={PROJECT_ICON_BUTTON_CLASS}
+                  title={isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
+                  aria-label={isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
+                  onClick={handleTogglePinned}
                   disabled={isInteractionDisabled}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                 </Button>
-              ) : null
-            ) : (
-              <>
-                {!isArchived ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className={PROJECT_ICON_BUTTON_CLASS}
-                    title={isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
-                    aria-label={isPinned ? t("chat.workspaceUnpin") : t("chat.workspacePin")}
-                    onClick={handleTogglePinned}
-                    disabled={isInteractionDisabled}
-                  >
-                    {isPinned ? (
-                      <PinOff className="h-3.5 w-3.5" />
-                    ) : (
-                      <Pin className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                ) : null}
-                <DropdownMenu
-                  open={!isInteractionDisabled && menuOpen}
-                  onOpenChange={handleMenuOpenChange}
-                  modal={false}
-                >
-                  <DropdownMenuTrigger
-                    render={
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className={PROJECT_ICON_BUTTON_CLASS}
-                        title={t("chat.workspaceMore")}
-                        aria-label={t("chat.workspaceMore")}
-                        disabled={isInteractionDisabled}
-                      />
-                    }
-                  >
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    side="right"
-                    align="start"
-                    sideOffset={6}
-                    finalFocus={() => {
-                      if (suppressMenuReturnFocusRef.current) {
-                        suppressMenuReturnFocusRef.current = false;
-                        return false;
-                      }
-                      return true;
-                    }}
-                    className="sidebar-context-menu"
-                  >
-                    <DropdownMenuItem
+              ) : null}
+              <DropdownMenu
+                open={!isInteractionDisabled && menuOpen}
+                onOpenChange={handleMenuOpenChange}
+                modal={false}
+              >
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={PROJECT_ICON_BUTTON_CLASS}
+                      title={t("chat.workspaceMore")}
+                      aria-label={t("chat.workspaceMore")}
                       disabled={isInteractionDisabled}
-                      onSelect={() => onConfigureProjectResources(project)}
-                      className="gap-2"
-                    >
-                      <Blend className="h-3.5 w-3.5" />
-                      {t("chat.workspaceResources")}
-                    </DropdownMenuItem>
-                    {!isDefaultProject ? (
-                      <>
+                    />
+                  }
+                >
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side="right"
+                  align="start"
+                  sideOffset={6}
+                  className="sidebar-context-menu"
+                >
+                  <DropdownMenuItem
+                    disabled={isInteractionDisabled}
+                    onSelect={() => onConfigureProject(project)}
+                    className="gap-2"
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                    {t("chat.workspaceConfigure")}
+                  </DropdownMenuItem>
+                  {!isDefaultProject ? (
+                    <>
+                      <DropdownMenuItem
+                        disabled={isInteractionDisabled}
+                        onSelect={handleRequestRemove}
+                        className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        {t("chat.workspaceRemoveOnly")}
+                      </DropdownMenuItem>
+                      {project.worktree ? (
                         <DropdownMenuItem
                           disabled={isInteractionDisabled}
-                          onSelect={handleStartRenamingFromMenu}
-                          className="gap-2"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                          {t("chat.workspaceRename")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={isInteractionDisabled}
-                          onSelect={handleRequestRemove}
+                          onSelect={handleRequestDeleteWorktree}
                           className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
                         >
-                          <X className="h-3.5 w-3.5" />
-                          {t("chat.workspaceRemoveOnly")}
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {t("chat.workspaceDeleteWorktree")}
                         </DropdownMenuItem>
-                        {project.worktree ? (
+                      ) : null}
+                    </>
+                  ) : null}
+                  {!isArchived && canArchive ? (
+                    <DropdownMenuItem
+                      disabled={isInteractionDisabled}
+                      onSelect={handleArchive}
+                      className="gap-2"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      {t("chat.workspaceArchive")}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {onMoveProjectToGroup ? (
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger className="gap-2">
+                        <Folder className="h-3.5 w-3.5" />
+                        <span>{t("chat.workspaceGroupMove")}</span>
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent
+                        side="right"
+                        align="start"
+                        sideOffset={6}
+                        className="min-w-40"
+                      >
+                        {workspaceProjectGroups.map((group) => (
                           <DropdownMenuItem
-                            disabled={isInteractionDisabled}
-                            onSelect={handleRequestDeleteWorktree}
-                            className="gap-2 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                            key={group.id}
+                            disabled={group.id === currentGroupId}
+                            onSelect={() => onMoveProjectToGroup(project.path, group.id)}
+                            className="gap-2 text-xs"
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            {t("chat.workspaceDeleteWorktree")}
+                            {group.id === currentGroupId ? (
+                              <Check className="h-3.5 w-3.5" />
+                            ) : (
+                              <Folder className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                            <span className="min-w-0 flex-1 truncate">{group.name}</span>
+                          </DropdownMenuItem>
+                        ))}
+                        {currentGroupId ? (
+                          <DropdownMenuItem
+                            onSelect={() => onMoveProjectToGroup(project.path, null)}
+                            className="gap-2 text-xs"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            <span>{t("chat.workspaceGroupUngroup")}</span>
                           </DropdownMenuItem>
                         ) : null}
-                      </>
-                    ) : null}
-                    {!isArchived && canArchive ? (
-                      <DropdownMenuItem
-                        disabled={isInteractionDisabled}
-                        onSelect={handleArchive}
-                        className="gap-2"
-                      >
-                        <Archive className="h-3.5 w-3.5" />
-                        {t("chat.workspaceArchive")}
-                      </DropdownMenuItem>
-                    ) : null}
-                    {onMoveProjectToGroup ? (
-                      <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="gap-2">
-                          <Folder className="h-3.5 w-3.5" />
-                          <span>{t("chat.workspaceGroupMove")}</span>
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent
-                          side="right"
-                          align="start"
-                          sideOffset={6}
-                          className="min-w-40"
-                        >
-                          {workspaceProjectGroups.map((group) => (
-                            <DropdownMenuItem
-                              key={group.id}
-                              disabled={group.id === currentGroupId}
-                              onSelect={() => onMoveProjectToGroup(project.path, group.id)}
-                              className="gap-2 text-xs"
-                            >
-                              {group.id === currentGroupId ? (
-                                <Check className="h-3.5 w-3.5" />
-                              ) : (
-                                <Folder className="h-3.5 w-3.5 text-muted-foreground" />
-                              )}
-                              <span className="min-w-0 flex-1 truncate">{group.name}</span>
-                            </DropdownMenuItem>
-                          ))}
-                          {currentGroupId ? (
-                            <DropdownMenuItem
-                              onSelect={() => onMoveProjectToGroup(project.path, null)}
-                              className="gap-2 text-xs"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                              <span>{t("chat.workspaceGroupUngroup")}</span>
-                            </DropdownMenuItem>
-                          ) : null}
-                        </DropdownMenuSubContent>
-                      </DropdownMenuSub>
-                    ) : null}
-                    {isArchived ? (
-                      <DropdownMenuItem
-                        disabled={isInteractionDisabled}
-                        onSelect={handleUnarchive}
-                        className="gap-2"
-                      >
-                        <ArchiveRestore className="h-3.5 w-3.5" />
-                        {t("chat.workspaceUnarchive")}
-                      </DropdownMenuItem>
-                    ) : null}
-                    {onBrowseProjectInFileTree ? (
-                      <DropdownMenuItem
-                        disabled={isInteractionDisabled}
-                        onSelect={handleBrowseInFileTree}
-                        className="gap-2"
-                      >
-                        <FolderTree className="h-3.5 w-3.5" />
-                        {t("chat.workspaceBrowseInFileTree")}
-                      </DropdownMenuItem>
-                    ) : null}
-                    {onBrowseProjectInSystemFileManager ? (
-                      <DropdownMenuItem
-                        disabled={isInteractionDisabled}
-                        onSelect={handleBrowseInSystemFileManager}
-                        className="gap-2"
-                      >
-                        <FolderOpen className="h-3.5 w-3.5" />
-                        {t("chat.workspaceBrowseInSystemFileManager")}
-                      </DropdownMenuItem>
-                    ) : null}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            )}
-          </div>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  ) : null}
+                  {isArchived ? (
+                    <DropdownMenuItem
+                      disabled={isInteractionDisabled}
+                      onSelect={handleUnarchive}
+                      className="gap-2"
+                    >
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      {t("chat.workspaceUnarchive")}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {onBrowseProjectInFileTree ? (
+                    <DropdownMenuItem
+                      disabled={isInteractionDisabled}
+                      onSelect={handleBrowseInFileTree}
+                      className="gap-2"
+                    >
+                      <FolderTree className="h-3.5 w-3.5" />
+                      {t("chat.workspaceBrowseInFileTree")}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {onBrowseProjectInSystemFileManager ? (
+                    <DropdownMenuItem
+                      disabled={isInteractionDisabled}
+                      onSelect={handleBrowseInSystemFileManager}
+                      className="gap-2"
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" />
+                      {t("chat.workspaceBrowseInSystemFileManager")}
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          )}
         </div>
-      ) : null}
+      </div>
     </div>
   );
 });

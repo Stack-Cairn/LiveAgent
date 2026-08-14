@@ -66,8 +66,6 @@ export function useGatewayWorkspaceProjects({
   );
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const [workspaceCreateModalOpen, setWorkspaceCreateModalOpen] = useState(false);
-  const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
-  const [projectRenameDraft, setProjectRenameDraft] = useState("");
 
   const missingWorkspaceProjectPathKeys = useMemo(
     () => new Set(settings.system.missingWorkspaceProjectPaths.map(workspaceProjectPathKey)),
@@ -512,22 +510,6 @@ export function useGatewayWorkspaceProjects({
     },
     [setSettings],
   );
-  const handleStartRenamingWorkspaceProject = useCallback((project: WorkspaceProject) => {
-    if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
-    setProjectRenamingId(project.id);
-    setProjectRenameDraft(project.name);
-  }, []);
-  const handleCommitWorkspaceProjectRename = useCallback(() => {
-    if (!projectRenamingId) return;
-    const project = workspaceProjects.find((item) => item.id === projectRenamingId);
-    if (project) commitWorkspaceProjectRename(project, projectRenameDraft);
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, [commitWorkspaceProjectRename, projectRenameDraft, projectRenamingId, workspaceProjects]);
-  const handleCancelWorkspaceProjectRename = useCallback(() => {
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, []);
   const handleSetWorkspaceProjectPinned = useCallback(
     (project: WorkspaceProject, isPinned: boolean) => {
       const pathKey = workspaceProjectPathKey(project.path);
@@ -593,9 +575,8 @@ export function useGatewayWorkspaceProjects({
     archivedWorkspaceProjectPathKeys,
     handleBrowseWorkspaceProjectInFileTree,
     handleCancelWorkspaceCloneTask,
-    handleCancelWorkspaceProjectRename,
     handleCloneWorkspaceProject,
-    handleCommitWorkspaceProjectRename,
+    handleCommitWorkspaceProjectRename: commitWorkspaceProjectRename,
     handleCreateWorkspaceGroup,
     handleDeleteWorkspaceGroup,
     handleDismissWorkspaceCloneTask,
@@ -611,17 +592,12 @@ export function useGatewayWorkspaceProjects({
     handleSetWorkspaceProjectPinned,
     handleSidebarProjectsCollapsedChange,
     handleSidebarRecentCollapsedChange,
-    handleStartRenamingWorkspaceProject,
     handleToggleWorkspaceGroupCollapsed,
     handleWorkdirPickerSelect,
     missingWorkspaceProjectPathKeys,
     projectPickerOpen,
-    projectRenameDraft,
-    projectRenamingId,
     setActiveWorkspaceProjectId,
     setProjectPickerOpen,
-    setProjectRenameDraft,
-    setProjectRenamingId,
     setWorkspaceCreateModalOpen,
     workspaceCloneTasks,
     workspaceCreateModalOpen,

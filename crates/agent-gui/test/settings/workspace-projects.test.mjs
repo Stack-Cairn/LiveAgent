@@ -8,6 +8,15 @@ const workspaceProjects = loader.loadModule("@liveagent/ui/lib/workspaceProjects
 const workspaceProjectRemoval = loader.loadModule(
   "@liveagent/ui/lib/workspaceProjectRemoval.ts",
 );
+const workspaceProjectRemovalHooks = createTsModuleLoader({
+  mocks: {
+    react: {
+      useCallback(callback) {
+        return callback;
+      },
+    },
+  },
+}).loadModule("@liveagent/ui/lib/workspaceProjectRemoval.ts");
 
 function project(id, path, index) {
   return {
@@ -24,6 +33,41 @@ function withLastConversationAt(item, lastConversationAt) {
   return {
     ...item,
     lastConversationAt,
+  };
+}
+
+function createRemovalActions({ visibleProjects, persistedProjects, beforeRemove }) {
+  let currentSettings = settings.normalizeSettings({
+    ...settings.getDefaultSettings(),
+    system: {
+      ...settings.getDefaultSettings().system,
+      workspaceProjects: persistedProjects,
+      activeWorkspaceProjectId: visibleProjects.at(-1)?.id,
+    },
+  });
+  let errorMessage = null;
+  let activeProjectId = currentSettings.system.activeWorkspaceProjectId;
+  const actions = workspaceProjectRemovalHooks.useWorkspaceProjectSettingsActions({
+    setSettings(updater) {
+      currentSettings = updater(currentSettings);
+    },
+    workspaceProjects: visibleProjects,
+    archivedWorkspaceProjectPathKeys: new Set(),
+    activeWorkspaceProject: visibleProjects.find((item) => item.id === activeProjectId),
+    activateWorkspaceProject() {},
+    setActiveWorkspaceProjectId(updater) {
+      activeProjectId = updater(activeProjectId);
+    },
+    t: (key) => key,
+    setErrorMessage(message) {
+      errorMessage = message;
+    },
+    beforeRemoveWorkspaceProject: beforeRemove,
+  });
+  return {
+    actions,
+    getSettings: () => currentSettings,
+    getErrorMessage: () => errorMessage,
   };
 }
 
@@ -364,6 +408,89 @@ test("workspace project removal clears every path-scoped setting", () => {
   assert.deepEqual(next.system.archivedWorkspaceProjectPaths, []);
   assert.equal(next.system.workspaceResourceSettings["/tmp/project-a"].mode, "inherit");
   assert.deepEqual(next.customSettings.rightDock.projects["/tmp/project-a"].tools, {});
+});
+
+test("worktree removal revokes root grants before removing project settings", async () => {
+  const defaultProject = project(
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+    "/tmp/default-project",
+    1,
+  );
+  const worktreeProject = {
+    ...project("project-worktree", "/tmp/project-worktree", 2),
+    kind: "worktree",
+  };
+  const revokedProjectIds = [];
+  const harness = createRemovalActions({
+    visibleProjects: [defaultProject, worktreeProject],
+    persistedProjects: [defaultProject, worktreeProject],
+    beforeRemove: async (removedProject) => {
+      revokedProjectIds.push(removedProject.id);
+    },
+  });
+
+  await harness.actions.handleWorktreeRemoved({ path: worktreeProject.path });
+
+  assert.deepEqual(revokedProjectIds, [worktreeProject.id]);
+  assert.deepEqual(
+    harness.getSettings().system.workspaceProjects.map((item) => item.id),
+    [settings.DEFAULT_WORKSPACE_PROJECT_ID],
+  );
+});
+
+test("history project removal revokes stable project id even when it is not persisted", async () => {
+  const defaultProject = project(
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+    "/tmp/default-project",
+    1,
+  );
+  const historyProject = {
+    ...project("history-a1b2c3", "/tmp/history-project", 2),
+    kind: "history",
+  };
+  const revokedProjectIds = [];
+  const harness = createRemovalActions({
+    visibleProjects: [defaultProject, historyProject],
+    persistedProjects: [defaultProject],
+    beforeRemove: async (removedProject) => {
+      revokedProjectIds.push(removedProject.id);
+    },
+  });
+
+  const removed = await harness.actions.removeWorkspaceProject(historyProject);
+
+  assert.equal(removed, true);
+  assert.deepEqual(revokedProjectIds, [historyProject.id]);
+  assert.deepEqual(
+    harness.getSettings().system.workspaceProjects.map((item) => item.id),
+    [settings.DEFAULT_WORKSPACE_PROJECT_ID],
+  );
+  assert.deepEqual(harness.getSettings().system.hiddenWorkspaceProjectPaths, [historyProject.path]);
+});
+
+test("workspace project settings stay intact when root grant revocation fails", async () => {
+  const defaultProject = project(
+    settings.DEFAULT_WORKSPACE_PROJECT_ID,
+    "/tmp/default-project",
+    1,
+  );
+  const removableProject = project("project-a", "/tmp/project-a", 2);
+  const harness = createRemovalActions({
+    visibleProjects: [defaultProject, removableProject],
+    persistedProjects: [defaultProject, removableProject],
+    beforeRemove: async () => {
+      throw new Error("revoke failed");
+    },
+  });
+
+  const removed = await harness.actions.removeWorkspaceProject(removableProject);
+
+  assert.equal(removed, false);
+  assert.equal(harness.getErrorMessage(), "revoke failed");
+  assert.deepEqual(
+    harness.getSettings().system.workspaceProjects.map((item) => item.id),
+    [settings.DEFAULT_WORKSPACE_PROJECT_ID, removableProject.id],
+  );
 });
 
 test("workspace project removal resets matching active project aliases", () => {

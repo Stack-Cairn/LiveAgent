@@ -86,6 +86,9 @@ macro_rules! app_invoke_handler {
             commands::fs::fs_grep,
             commands::fs::fs_mention_list,
             commands::chat_file_links::open_chat_file_link,
+            commands::root_grants::workspace_root_grants_list,
+            commands::root_grants::workspace_root_grants_apply,
+            commands::root_grants::workspace_root_grants_revoke,
             // Subagent worktrees
             commands::subagent_worktree::subagent_worktree_create,
             commands::subagent_worktree::subagent_worktree_status,

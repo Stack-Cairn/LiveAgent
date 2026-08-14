@@ -50,6 +50,16 @@ export type SftpActionResponse = {
   transfer?: SftpTransfer | null;
 };
 
+export type SftpReadTextResponse = {
+  path: string;
+  content: string;
+  offset: number;
+  bytesRead: number;
+  sizeBytes: number;
+  truncated: boolean;
+  entry?: SftpEntry | null;
+};
+
 export type SftpClient = {
   list(params: {
     sessionId: string;
@@ -100,4 +110,27 @@ export type SftpClient = {
   }): Promise<SftpTransferResponse>;
   cancelTransfer(params: { sessionId: string; transferId: string }): Promise<void>;
   subscribeTransfers(listener: (event: SftpTransferEvent) => void): () => void;
+  // Remote-side text IO for the code editor; no `side` because the local pane
+  // opens files through the workspace fs backend instead.
+  readText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    maxBytes?: number;
+    strictUtf8?: boolean;
+  }): Promise<SftpReadTextResponse>;
+  // Resolves with action "conflict" (entry = current remote state, null when
+  // deleted) when expected mtime/size no longer match; conflicts are a
+  // structured response rather than an error because the gateway websocket
+  // path flattens errors to strings.
+  writeText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    content: string;
+    expectedMtime?: number;
+    expectedSizeBytes?: number;
+  }): Promise<SftpActionResponse>;
 };
