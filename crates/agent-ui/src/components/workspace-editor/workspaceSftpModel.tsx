@@ -63,3 +63,80 @@ export function transferTone(transfer: SftpTransfer | null) {
 export function dragItems(payload: DragPayload): DragPayloadItem[] {
   return payload.items?.length ? payload.items : [{ path: payload.path, kind: payload.kind }];
 }
+
+// Remote editing is text-only in v1: Monaco cannot render these formats and a
+// lossy round-trip would corrupt them, so known binary extensions get no edit
+// entry point at all. Anything else is allowed and the strict UTF-8 read on
+// the Rust side is the final gate.
+const REMOTE_EDIT_BLOCKED_EXTENSIONS = new Set([
+  // images
+  "avif",
+  "bmp",
+  "gif",
+  "heic",
+  "ico",
+  "jpeg",
+  "jpg",
+  "png",
+  "tif",
+  "tiff",
+  "webp",
+  // documents
+  "doc",
+  "docx",
+  "odp",
+  "ods",
+  "odt",
+  "pdf",
+  "ppt",
+  "pptx",
+  "rtf",
+  "xls",
+  "xlsb",
+  "xlsm",
+  "xlsx",
+  // audio / video
+  "aac",
+  "flac",
+  "m4a",
+  "m4v",
+  "mkv",
+  "mov",
+  "mp3",
+  "mp4",
+  "oga",
+  "ogg",
+  "ogv",
+  "wav",
+  "webm",
+  // archives
+  "7z",
+  "bz2",
+  "gz",
+  "jar",
+  "rar",
+  "tar",
+  "tgz",
+  "xz",
+  "zip",
+  "zst",
+  // binaries
+  "a",
+  "bin",
+  "class",
+  "dll",
+  "dylib",
+  "exe",
+  "o",
+  "so",
+  "wasm",
+]);
+
+export function canEditRemoteEntry(entry: DragPayloadItem): boolean {
+  if (entry.kind !== "file") return false;
+  const name = basename(entry.path);
+  const extensionIndex = name.lastIndexOf(".");
+  if (extensionIndex <= 0) return true;
+  const extension = name.slice(extensionIndex + 1).toLowerCase();
+  return !REMOTE_EDIT_BLOCKED_EXTENSIONS.has(extension);
+}

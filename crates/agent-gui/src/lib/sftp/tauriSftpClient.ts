@@ -1,11 +1,13 @@
 import {
   normalizeSftpActionResponse,
   normalizeSftpListResponse,
+  normalizeSftpReadTextResponse,
   normalizeSftpStatResponse,
   normalizeSftpTransferEvent,
   normalizeSftpTransferResponse,
   type RawSftpActionResponse,
   type RawSftpListResponse,
+  type RawSftpReadTextResponse,
   type RawSftpStatResponse,
   type RawSftpTransferEvent,
   type RawSftpTransferResponse,
@@ -91,6 +93,31 @@ export const tauriSftpClient: SftpClient = {
       session_id: params.sessionId,
       transfer_id: params.transferId,
     });
+  },
+  async readText(params) {
+    return normalizeSftpReadTextResponse(
+      await invoke<RawSftpReadTextResponse>("sftp_read_text", {
+        session_id: params.sessionId,
+        project_path_key: params.projectPathKey,
+        path: params.path,
+        max_bytes: params.maxBytes,
+        strict_utf8: params.strictUtf8 ?? false,
+      }),
+    );
+  },
+  async writeText(params) {
+    return normalizeSftpActionResponse(
+      await invoke<RawSftpActionResponse>("sftp_write_text", {
+        session_id: params.sessionId,
+        project_path_key: params.projectPathKey,
+        path: params.path,
+        content: params.content,
+        overwrite: true,
+        create_parent_dirs: false,
+        expected_mtime: params.expectedMtime,
+        expected_size_bytes: params.expectedSizeBytes,
+      }),
+    );
   },
   subscribeTransfers(listener) {
     let active = true;

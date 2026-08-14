@@ -8,6 +8,40 @@ const normalize = loader.loadModule("@liveagent/ui/lib/settings/normalize.ts");
 const sync = loader.loadModule("@liveagent/ui/lib/settings/sync.ts");
 const RIGHT_DOCK_TAB_IDS = settings.RIGHT_DOCK_SINGLETON_TAB_IDS;
 
+async function withNavigator(value, task) {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    enumerable: true,
+    value,
+  });
+  try {
+    return await task();
+  } finally {
+    if (previous) {
+      Object.defineProperty(globalThis, "navigator", previous);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
+}
+
+test("locale defaults to the system language when no saved preference exists", async () => {
+  await withNavigator({ languages: ["en-GB", "zh-CN"], language: "en-GB" }, () => {
+    assert.equal(settings.getDefaultSettings().locale, "en-US");
+    assert.equal(settings.normalizeSettings({}).locale, "en-US");
+    assert.equal(settings.normalizeSettings({ locale: "en-US" }).locale, "en-US");
+    assert.equal(settings.normalizeSettings({ locale: "fr-FR" }).locale, "zh-CN");
+    assert.equal(settings.normalizeSettings({ locale: null }).locale, "zh-CN");
+  });
+});
+
+test("locale detection falls back to navigator.language", async () => {
+  await withNavigator({ languages: [], language: "en-GB" }, () => {
+    assert.equal(settings.getDefaultSettings().locale, "en-US");
+  });
+});
+
 test("basic provider field normalizers trim values and remove duplicate models", () => {
   assert.equal(normalize.normalizeBaseUrl(" https://api.example.com/v1/// "), "https://api.example.com/v1//");
   assert.equal(normalize.normalizeBaseUrl(" https:/api.example.com/v1/ "), "https://api.example.com/v1");

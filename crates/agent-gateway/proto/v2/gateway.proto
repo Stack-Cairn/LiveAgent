@@ -448,6 +448,15 @@ message SftpRequest {
   string target_path = 10;
   bool recursive = 11;
   bool overwrite = 12;
+  string content = 13;
+  uint64 offset = 14;
+  uint64 max_bytes = 15;
+  bool strict_utf8 = 16;
+  // write_text conflict guard; 0 means "skip the check" (proto3 has no
+  // presence for scalars, an mtime/size of exactly 0 is accepted as-is).
+  uint64 expected_mtime = 17;
+  uint64 expected_size_bytes = 18;
+  bool create_parent_dirs = 19;
 }
 
 message SftpEntry {
@@ -480,6 +489,11 @@ message SftpResponse {
   SftpEntry entry = 4;
   bool exists = 5;
   SftpTransfer transfer = 6;
+  string content = 7;
+  uint64 offset = 8;
+  uint64 bytes_read = 9;
+  uint64 size_bytes = 10;
+  bool truncated = 11;
 }
 
 message SftpEvent {

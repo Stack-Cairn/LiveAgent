@@ -6,6 +6,7 @@ import type {
 import {
   normalizeSftpActionResponse,
   normalizeSftpListResponse,
+  normalizeSftpReadTextResponse,
   normalizeSftpStatResponse,
   normalizeSftpTransferResponse,
   type RawSftpResponse,
@@ -13,6 +14,7 @@ import {
 import type {
   SftpActionResponse,
   SftpListResponse,
+  SftpReadTextResponse,
   SftpStatResponse,
   SftpTransferResponse,
 } from "@liveagent/ui/lib/sftp/types";
@@ -564,6 +566,50 @@ export class GatewayWebSocketRpcClient extends GatewayWebSocketTransport {
       session_id: params.sessionId,
       from_path: params.transferId,
     });
+  }
+
+  async sftpReadText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    maxBytes?: number;
+    strictUtf8?: boolean;
+  }): Promise<SftpReadTextResponse> {
+    return normalizeSftpReadTextResponse(
+      await this.request<RawSftpResponse>("sftp.read_text", {
+        session_id: params.sessionId,
+        project_path_key: params.projectPathKey,
+        workdir: params.workdir,
+        remote_path: params.path,
+        max_bytes: params.maxBytes ?? 0,
+        strict_utf8: params.strictUtf8 ?? false,
+      }),
+    );
+  }
+
+  async sftpWriteText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    content: string;
+    expectedMtime?: number;
+    expectedSizeBytes?: number;
+  }): Promise<SftpActionResponse> {
+    return normalizeSftpActionResponse(
+      await this.request<RawSftpResponse>("sftp.write_text", {
+        session_id: params.sessionId,
+        project_path_key: params.projectPathKey,
+        workdir: params.workdir,
+        remote_path: params.path,
+        content: params.content,
+        overwrite: true,
+        create_parent_dirs: false,
+        expected_mtime: params.expectedMtime ?? 0,
+        expected_size_bytes: params.expectedSizeBytes ?? 0,
+      }),
+    );
   }
 
   async terminalShellOptions(): Promise<TerminalShellOptions> {
