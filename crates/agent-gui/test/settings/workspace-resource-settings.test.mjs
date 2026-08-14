@@ -20,7 +20,7 @@ const sharedSheet = readFileSync(
   "utf8",
 );
 const sharedSidebar = readFileSync(
-  new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
+  new URL("../../../agent-ui/src/components/chat/ChatHistorySidebarRows.tsx", import.meta.url),
   "utf8",
 );
 const sendRuntime = readFileSync(

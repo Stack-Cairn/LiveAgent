@@ -273,15 +273,24 @@ for (const retiredPath of retiredSharedCopies) {
 }
 
 const applicationEntries = [
-  join(repoRoot, "crates/agent-gui/src/pages/ChatPage.tsx"),
-  join(repoRoot, "crates/agent-gateway/web/src/app/GatewayApp.tsx"),
+  [
+    join(repoRoot, "crates/agent-gui/src/pages/ChatPage.tsx"),
+    join(repoRoot, "crates/agent-gui/src/pages/ChatPage.tsx"),
+  ],
+  [
+    join(repoRoot, "crates/agent-gateway/web/src/app/GatewayApp.tsx"),
+    join(repoRoot, "crates/agent-gateway/web/src/app/GatewayAppView.tsx"),
+  ],
 ];
-for (const appFile of applicationEntries) {
-  const source = readFileSync(appFile, "utf8");
-  if (source.includes("@liveagent/ui/application/ApplicationView")) continue;
+for (const [entryFile, viewFile] of applicationEntries) {
+  const entrySource = readFileSync(entryFile, "utf8");
+  const viewSource = readFileSync(viewFile, "utf8");
+  const delegatesToView =
+    entryFile === viewFile || entrySource.includes(`from "./${viewFile.split(sep).at(-1)?.replace(/\.tsx$/, "")}"`);
+  if (delegatesToView && viewSource.includes("@liveagent/ui/application/ApplicationView")) continue;
   failures += 1;
   console.error(
-    `${relative(repoRoot, appFile)}: 应用必须通过共享 ApplicationView 渲染主视图`,
+    `${relative(repoRoot, entryFile)}: 应用必须通过共享 ApplicationView 渲染主视图`,
   );
 }
 

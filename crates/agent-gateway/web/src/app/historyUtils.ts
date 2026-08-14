@@ -1,15 +1,11 @@
 import { buildGatewaySettingsSyncPayload } from "@liveagent/ui/lib/settings/sync";
+import { getDefaultWorkspaceProjectPath } from "@liveagent/ui/lib/workspaceProjects";
 import { formatConversationTitle } from "@/lib/chatUi";
 import type { ConversationSummary } from "@/lib/gatewayTypes";
 import { type AppSettings, resolveWorkspaceProjects } from "@/lib/settings";
 
-function isLocalDraftConversationId(id: string) {
-  return id.trim().startsWith("__local_draft__:");
-}
-
-import { getDefaultWorkspaceProjectPath } from "@liveagent/ui/lib/workspaceProjects";
-
 import { MOBILE_SIDEBAR_MEDIA_QUERY } from "./constants";
+import { isLocalDraftConversationId } from "./gatewayLocalDraft";
 
 export function formatTranslation(template: string, values: Record<string, string | number>) {
   return Object.entries(values).reduce(
