@@ -11,6 +11,20 @@ const sharedProjectSettings = readFileSync(
   new URL("../../../agent-ui/src/components/chat/WorkspaceProjectSettingsModal.tsx", import.meta.url),
   "utf8",
 );
+const sharedDirectoryPanel = readFileSync(
+  new URL(
+    "../../../agent-ui/src/components/chat/workspace-project-settings/WorkspaceDirectorySettingsPanel.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const sharedResourcePanel = readFileSync(
+  new URL(
+    "../../../agent-ui/src/components/chat/workspace-project-settings/WorkspaceResourceSettingsPanel.tsx",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const sharedResourceTabs = readFileSync(
   new URL("../../../agent-ui/src/components/resources/ResourceTabsList.tsx", import.meta.url),
   "utf8",
@@ -32,6 +46,10 @@ const sendRuntime = readFileSync(
   "utf8",
 );
 const guiChatPage = readFileSync(new URL("../../src/pages/ChatPage.tsx", import.meta.url), "utf8");
+const guiRootAdapter = readFileSync(
+  new URL("../../src/agent-ui-adapters/workspaceProjectRoots.ts", import.meta.url),
+  "utf8",
+);
 const guiWorkspaceRemoval = readFileSync(
   new URL("../../src/pages/chat/workspace/useWorkspaceProjectRemoval.tsx", import.meta.url),
   "utf8",
@@ -50,6 +68,13 @@ const webGatewayApp = readFileSync(
 );
 const webGatewayAppView = readFileSync(
   new URL("../../../agent-gateway/web/src/app/GatewayAppView.tsx", import.meta.url),
+  "utf8",
+);
+const webRootAdapter = readFileSync(
+  new URL(
+    "../../../agent-gateway/web/src/agent-ui-adapters/workspaceProjectRoots.ts",
+    import.meta.url,
+  ),
   "utf8",
 );
 const sharedWorkspaceCloneModal = readFileSync(
@@ -80,14 +105,14 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.doesNotMatch(sharedSidebar, /chat\.workspaceRename/);
   assert.match(sharedDrawer, /WorkspaceProjectSettingsModal as WorkspaceResourceSettingsDrawer/);
   assert.match(sharedProjectSettings, /"general" \| "directories" \| "resources"/);
-  assert.match(sharedProjectSettings, /\["inherit", "custom", "off"\]/);
-  assert.match(sharedProjectSettings, /value: "skills"/);
-  assert.match(sharedProjectSettings, /value: "mcp"/);
-  assert.match(sharedProjectSettings, /<ResourceTabsList/);
-  assert.match(sharedProjectSettings, /<StoreCategoryChips/);
-  assert.match(sharedProjectSettings, /<Input/);
-  assert.match(sharedProjectSettings, /<ResourceSelectionCard/);
-  assert.match(sharedProjectSettings, /getMcpTransportMeta/);
+  assert.match(sharedResourcePanel, /\["inherit", "custom", "off"\]/);
+  assert.match(sharedResourcePanel, /value: "skills"/);
+  assert.match(sharedResourcePanel, /value: "mcp"/);
+  assert.match(sharedResourcePanel, /<ResourceTabsList/);
+  assert.match(sharedResourcePanel, /<StoreCategoryChips/);
+  assert.match(sharedResourcePanel, /<Input/);
+  assert.match(sharedResourcePanel, /<ResourceSelectionCard/);
+  assert.match(sharedResourcePanel, /getMcpTransportMeta/);
   assert.match(sharedProjectSettings, /<Dialog\.Root/);
   assert.match(sharedProjectSettings, /<Dialog\.Portal>/);
   assert.match(sharedProjectSettings, /<Dialog\.Backdrop/);
@@ -99,10 +124,12 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(sharedProjectSettings, /onRenameProject\?\.\(normalizedProjectName\)/);
   assert.match(guiChatPage, /onRenameProject=\{\(name\)/);
   assert.match(webGatewayAppView, /onRenameProject=\{\(name\)/);
-  assert.match(guiChatPage, /rootClient=\{workspaceProjectRootClient\}/);
+  assert.match(guiChatPage, /rootClient=\{desktopWorkspaceProjectRootClient\}/);
   assert.match(webGatewayAppView, /rootClient=\{workspaceProjectRootClient\}/);
-  assert.match(webGatewayApp, /api\.listWorkspaceRootGrants\(project\.id, project\.path\)/);
-  assert.match(webGatewayApp, /api\.applyWorkspaceRootGrants\(/);
+  assert.match(guiRootAdapter, /listWorkspaceRootGrants\(project\)/);
+  assert.match(guiRootAdapter, /applyWorkspaceRootGrants\(/);
+  assert.match(webRootAdapter, /api\.listWorkspaceRootGrants\(project\.id, project\.path\)/);
+  assert.match(webRootAdapter, /api\.applyWorkspaceRootGrants\(/);
   assert.match(sharedProjectSettings, /@liveagent\/adapters\/directoryPicker/);
   assert.match(sharedProjectSettings, /suspendsParentModal/);
   assert.match(sharedProjectSettings, /pickDirectory\(project\.path\)/);
@@ -138,11 +165,11 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(sharedSheet, /export const SheetPopup/);
   assert.match(sharedSheet, /export const SheetPanel/);
   assert.match(sharedSheet, /SheetPopup as SheetContent/);
-  assert.match(sharedProjectSettings, /maxLength=\{32\}/);
-  assert.match(sharedProjectSettings, /pattern="\[a-z\]\[a-z0-9_-\]\{0,31\}"/);
-  assert.match(sharedProjectSettings, /<option value="read"/);
-  assert.match(sharedProjectSettings, /<option value="write"/);
-  assert.doesNotMatch(sharedProjectSettings, /McpImportView|McpRegistryBrowser|SkillsStoreView/);
+  assert.match(sharedDirectoryPanel, /maxLength=\{32\}/);
+  assert.match(sharedDirectoryPanel, /pattern="\[a-z\]\[a-z0-9_-\]\{0,31\}"/);
+  assert.match(sharedDirectoryPanel, /<option value="read"/);
+  assert.match(sharedDirectoryPanel, /<option value="write"/);
+  assert.doesNotMatch(sharedResourcePanel, /McpImportView|McpRegistryBrowser|SkillsStoreView/);
 });
 
 test("chat runtime resolves and snapshots workspace resources from the effective workdir", () => {

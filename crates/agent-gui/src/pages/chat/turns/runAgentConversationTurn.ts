@@ -70,10 +70,10 @@ import {
   type SubagentConversationStore,
   type SubagentTemplate,
 } from "../../../lib/subagents";
+import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProjectRoots";
 import { buildBuiltinToolRegistry } from "../../../lib/tools/builtinRegistry";
 import type { BuiltinToolExecutionContext } from "../../../lib/tools/builtinTypes";
 import { createFileToolState } from "../../../lib/tools/fileToolState";
-import type { AdditionalProjectRoot } from "../../../lib/tools/pathUtils";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { SshManagerSessionChange } from "../../../lib/tools/sshManagerTools";
 import { formatTaskListRuntimeContext, type TaskStateStore } from "../../../lib/tools/taskTools";

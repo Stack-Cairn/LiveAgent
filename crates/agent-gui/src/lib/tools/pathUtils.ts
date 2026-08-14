@@ -1,4 +1,19 @@
 import {
+  type AdditionalProjectRoot,
+  type AdditionalProjectRootAccess,
+  type NormalizedAdditionalProjectRoot,
+  normalizeAdditionalRoots,
+} from "./additionalProjectRoots";
+import {
+  isAbsolutePath,
+  isUncPath,
+  normalizeComparablePath,
+  normalizeRawPathInput,
+  normalizeRelativePathUnicode,
+  normalizeRootPath,
+  relativePathFromAbsolute,
+} from "./pathNormalization";
+import {
   assertSkillMutationAllowed,
   assertSkillPathAllowedByPolicy,
   buildSkillAccessDeniedMessage,
@@ -6,27 +21,18 @@ import {
   type SkillAccessPolicy,
 } from "./skillAccessPolicy";
 
+export type { AdditionalProjectRoot, AdditionalProjectRootAccess } from "./additionalProjectRoots";
+export {
+  isAbsolutePath,
+  normalizeComparablePath,
+  relativePathFromAbsolute,
+} from "./pathNormalization";
+
 // Encoding contract: `file://` inputs are URLs and are always percent-decoded.
 // `workspace:` / `skill:` / `skill://` / `root://` references are literal tool-produced
 // strings and are never encoded or decoded.
 
 export type PathScope = "workspace" | "project-root" | "skill" | "external" | "uploads";
-
-export type AdditionalProjectRootAccess = "read" | "write";
-
-/**
- * A turn-level capability granted by the native project settings layer.
- *
- * This deliberately contains no command/execute capability: additional roots
- * only extend the structured file tools. Bash and ManagedProcess keep their
- * existing cwd policy and never receive this configuration.
- */
-export type AdditionalProjectRoot = {
-  id: string;
-  alias: string;
-  path: string;
-  access: AdditionalProjectRootAccess;
-};
 
 export type PathIntent = "read" | "write" | "edit" | "delete" | "list" | "search" | "cwd" | "image";
 
@@ -65,77 +71,6 @@ type ResolverOptions = {
   additionalRoots?: readonly AdditionalProjectRoot[];
 };
 
-type NormalizedAdditionalProjectRoot = AdditionalProjectRoot & {
-  normalizedPath: string;
-  aliasLookupKey: string;
-};
-
-function normalizeUnicode(value: string) {
-  return typeof value.normalize === "function" ? value.normalize("NFC") : value;
-}
-
-function normalizeWindowsExtendedPrefix(value: string) {
-  if (/^\/\/[?.]\/UNC\//i.test(value)) {
-    return `//${value.slice("//?/UNC/".length)}`;
-  }
-  if (/^\/\/[?.]\/[a-zA-Z]:\//.test(value)) {
-    return value.slice("//?/".length);
-  }
-  return value;
-}
-
-function collapseDuplicateSeparators(value: string) {
-  if (value.startsWith("//")) {
-    return `//${value.slice(2).replace(/\/{2,}/g, "/")}`;
-  }
-  return value.replace(/\/{2,}/g, "/");
-}
-
-export function normalizeComparablePath(path: string) {
-  const normalized = collapseDuplicateSeparators(
-    normalizeWindowsExtendedPrefix(
-      normalizeUnicode(String(path || ""))
-        .trim()
-        .replace(/\\/g, "/"),
-    ),
-  );
-  if (/^[a-zA-Z]:\/?$/.test(normalized)) return normalized.replace(/\/?$/, "/");
-  if (normalized === "/") return "/";
-  return normalized.replace(/\/+$/g, "");
-}
-
-function isWindowsDrivePath(value: string) {
-  return /^[a-zA-Z]:\//.test(value);
-}
-
-export function isAbsolutePath(value: string) {
-  return value.startsWith("/") || isWindowsDrivePath(value);
-}
-
-function isUncPath(value: string) {
-  return value.startsWith("//");
-}
-
-function normalizeRootPath(rootDir: string) {
-  const normalized = normalizeComparablePath(rootDir);
-  if (!normalized) throw new Error("Workspace root is not configured");
-  if (isUncPath(normalized)) throw new Error(`Workspace root cannot be a UNC path: ${rootDir}`);
-  return normalized;
-}
-
-export function relativePathFromAbsolute(rawPath: string, rootDir: string) {
-  const path = normalizeComparablePath(rawPath);
-  const root = normalizeComparablePath(rootDir);
-  if (!path || !root) return null;
-
-  const windowsCompare = isWindowsDrivePath(path) || isWindowsDrivePath(root);
-  const comparablePath = windowsCompare ? path.toLowerCase() : path;
-  const comparableRoot = windowsCompare ? root.toLowerCase() : root;
-
-  if (comparablePath === comparableRoot) return "";
-  return comparablePath.startsWith(`${comparableRoot}/`) ? path.slice(root.length + 1) : null;
-}
-
 function parseFileUrl(value: string) {
   if (!/^file:\/\//i.test(value)) return null;
   try {
@@ -158,17 +93,8 @@ function parseFileUrl(value: string) {
   }
 }
 
-function normalizeRawPathInput(input: unknown, label: string) {
-  if (typeof input !== "string") return "";
-  const value = normalizeWindowsExtendedPrefix(normalizeUnicode(input.trim()).replace(/\\/g, "/"));
-  if (value.includes("\0")) {
-    throw new Error(`${label} contains a NUL byte and cannot be resolved`);
-  }
-  return value;
-}
-
 export function sanitizeRelativePath(input: string, label: string, required: boolean) {
-  const normalized = normalizeUnicode(input.trim()).replace(/\\/g, "/");
+  const normalized = normalizeRelativePathUnicode(input.trim()).replace(/\\/g, "/");
   if (!normalized) {
     if (required) throw new Error(`${label} is required`);
     return undefined;
@@ -255,57 +181,6 @@ function parseProjectRootUrl(value: string) {
 
 const PROJECT_ROOT_READ_INTENTS = new Set<PathIntent>(["read", "list", "search", "image"]);
 const PROJECT_ROOT_MUTATION_INTENTS = new Set<PathIntent>(["write", "edit", "delete"]);
-
-function normalizeAdditionalRoots(
-  roots: readonly AdditionalProjectRoot[] | undefined,
-): NormalizedAdditionalProjectRoot[] {
-  const normalized: NormalizedAdditionalProjectRoot[] = [];
-  const seenIds = new Set<string>();
-  const seenAliases = new Set<string>();
-  const seenPaths = new Set<string>();
-
-  for (const root of roots ?? []) {
-    const id = String(root?.id || "").trim();
-    const alias = String(root?.alias || "").trim();
-    const aliasLookupKey = alias.toLowerCase();
-    if (!id) throw new Error("Additional project root id cannot be empty");
-    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(alias)) {
-      throw new Error(
-        `Additional project root alias must match [a-z][a-z0-9_-]{0,31}: ${alias || "<empty>"}`,
-      );
-    }
-    if (["workspace", "skill", "uploads", "external"].includes(alias)) {
-      throw new Error(`Additional project root alias is reserved: ${alias}`);
-    }
-    if (root.access !== "read" && root.access !== "write") {
-      throw new Error(`Additional project root ${alias} has an unsupported access mode`);
-    }
-    const normalizedPath = normalizeRootPath(root.path);
-    const pathLookupKey = isWindowsDrivePath(normalizedPath)
-      ? normalizedPath.toLowerCase()
-      : normalizedPath;
-    if (seenIds.has(id)) throw new Error(`Duplicate additional project root id: ${id}`);
-    if (seenAliases.has(aliasLookupKey)) {
-      throw new Error(`Duplicate additional project root alias: ${alias}`);
-    }
-    if (seenPaths.has(pathLookupKey)) {
-      throw new Error(`Duplicate additional project root path: ${normalizedPath}`);
-    }
-    seenIds.add(id);
-    seenAliases.add(aliasLookupKey);
-    seenPaths.add(pathLookupKey);
-    normalized.push({
-      id,
-      alias,
-      path: root.path,
-      access: root.access,
-      normalizedPath,
-      aliasLookupKey,
-    });
-  }
-
-  return normalized;
-}
 
 function fixedSkillsRelativePathFromAbsolute(value: string) {
   const normalized = normalizeComparablePath(value);

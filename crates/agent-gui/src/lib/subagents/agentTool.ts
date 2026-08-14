@@ -7,13 +7,14 @@ import { Type } from "typebox";
 import type { ProviderRuntimeConfig } from "../providers/runtime/types";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
+import type { AdditionalProjectRoot } from "../tools/additionalProjectRoots";
 import {
   type BuiltinToolBundle,
   type BuiltinToolExecutionContext,
   type BuiltinToolMetadata,
   createBuiltinMetadataMap,
 } from "../tools/builtinTypes";
-import { type AdditionalProjectRoot, ToolPathResolver } from "../tools/pathUtils";
+import { ToolPathResolver } from "../tools/pathUtils";
 import { buildSubagentCardResult, buildSubagentCardToolCall, renderBatchResultText } from "./cards";
 import {
   buildRejectedBatchDetails,

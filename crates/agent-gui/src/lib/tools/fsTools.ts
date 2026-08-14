@@ -8,6 +8,7 @@ import type {
 import { invokeFs, isFsBackendError } from "@liveagent/ui/lib/tools/fsBackend";
 import { invoke } from "@tauri-apps/api/core";
 import { Type } from "typebox";
+import type { AdditionalProjectRoot } from "./additionalProjectRoots";
 import {
   type BuiltinToolBundle,
   type BuiltinToolResultDetails,
@@ -30,7 +31,6 @@ import {
 import type { FileToolState } from "./fileToolState";
 import { buildFsErrorText, buildRequiresFullReadText, buildWriteDirectoryText } from "./pathErrors";
 import {
-  type AdditionalProjectRoot,
   formatPathWithinResolvedRoot,
   formatResolvedTarget,
   type ResolvedPath,

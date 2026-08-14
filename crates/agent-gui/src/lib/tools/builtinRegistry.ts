@@ -15,6 +15,7 @@ import {
   SUBAGENT_PARENT_ID,
   type SubagentRuntimeConfig,
 } from "../subagents";
+import type { AdditionalProjectRoot } from "./additionalProjectRoots";
 import { createAskUserQuestionTools } from "./askUserQuestionTools";
 import type {
   BuiltinToolBundle,
@@ -27,7 +28,6 @@ import { createFsTools } from "./fsTools";
 import { createMcpManagerTools } from "./mcpManagerTools";
 import { createMcpTools } from "./mcpTools";
 import { createMemoryTools } from "./memoryTools";
-import type { AdditionalProjectRoot } from "./pathUtils";
 import { createShellTools } from "./shellTools";
 import type { SkillAccessPolicy } from "./skillAccessPolicy";
 import { createSkillTools } from "./skillTools";

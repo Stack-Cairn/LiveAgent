@@ -12,7 +12,7 @@ import { runAssistantWithTools } from "../chat/runner/agentRunner";
 import type { ProviderRuntimeConfig } from "../providers/runtime/types";
 import type { RuntimePlatform } from "../runtimePlatform";
 import type { ProviderId } from "../settings";
-import type { AdditionalProjectRoot } from "../tools/pathUtils";
+import type { AdditionalProjectRoot } from "../tools/additionalProjectRoots";
 import { renderMessageBusSnapshot } from "./bus";
 import { toolErrorResult } from "./errors";
 import type { SubagentWorktreeIpc } from "./ipc/worktree";

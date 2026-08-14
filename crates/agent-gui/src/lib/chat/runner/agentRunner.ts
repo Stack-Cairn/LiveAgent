@@ -53,7 +53,7 @@ import type { RuntimePlatform } from "../../runtimePlatform";
 import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
-import type { AdditionalProjectRoot } from "../../tools/pathUtils";
+import type { AdditionalProjectRoot } from "../../tools/additionalProjectRoots";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
 import { summarizeToolCall } from "../messages/uiMessages";
 import {

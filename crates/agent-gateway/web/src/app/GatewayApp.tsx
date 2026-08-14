@@ -4,7 +4,6 @@ import type {
   MentionComposerHandle,
 } from "@liveagent/ui/components/chat/MentionComposer";
 import type { NotifyItem } from "@liveagent/ui/components/chat/NotifyToast";
-import type { WorkspaceProjectRootClient } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
 import { LocaleContext, t as translate, useLocaleContextValue } from "@liveagent/ui/i18n/index";
 import { useScrollFollow } from "@liveagent/ui/lib/chat-scroll/useScrollFollow";
@@ -19,6 +18,7 @@ import { useWorkspaceProjectDeletion } from "@liveagent/ui/lib/useWorkspaceProje
 import { useWorkspaceProjectSettingsActions } from "@liveagent/ui/lib/workspaceProjectRemoval";
 import type { ChatQueueTurnPreview } from "@liveagent/ui/pages/chat/ChatComposerBar";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createGatewayWorkspaceProjectRootClient } from "@/agent-ui-adapters/workspaceProjectRoots";
 import type { GatewayTranscriptNavHandle } from "@/components/GatewayTranscript";
 import { registerAskUserQuestionAnswerHandler } from "@/lib/chat/askUserQuestionBridge";
 import type { HistoryWindowState } from "@/lib/chat/historyWindow";
@@ -179,39 +179,8 @@ function useGatewayAppController() {
   const [pendingCommandRevision, setPendingCommandRevision] = useState(0);
   const { settings, setSettings, settingsSyncReady, settingsSyncError, settingsSaveState } =
     useGatewaySettingsSync({ token, api, activeAgentId: activeAgentScope });
-  const workspaceProjectRootClient = useMemo<WorkspaceProjectRootClient | undefined>(
-    () =>
-      api
-        ? {
-            list: async (project) =>
-              (await api.listWorkspaceRootGrants(project.id, project.path)).map((grant) => ({
-                id: grant.id,
-                alias: grant.alias,
-                displayPath: grant.displayPath,
-                access: grant.access,
-                state: grant.state,
-              })),
-            save: async (project, roots) =>
-              (
-                await api.applyWorkspaceRootGrants(
-                  project.id,
-                  project.path,
-                  roots.map((root) => ({
-                    ...(root.id.startsWith("draft-") ? {} : { id: root.id }),
-                    alias: root.alias,
-                    displayPath: root.displayPath,
-                    access: root.access,
-                  })),
-                )
-              ).map((grant) => ({
-                id: grant.id,
-                alias: grant.alias,
-                displayPath: grant.displayPath,
-                access: grant.access,
-                state: grant.state,
-              })),
-          }
-        : undefined,
+  const workspaceProjectRootClient = useMemo(
+    () => (api ? createGatewayWorkspaceProjectRootClient(api) : undefined),
     [api],
   );
   const effectiveTheme = resolveEffectiveTheme(settings.theme);

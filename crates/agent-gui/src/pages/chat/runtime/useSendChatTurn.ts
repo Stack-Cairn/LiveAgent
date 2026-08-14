@@ -74,7 +74,7 @@ import {
   pruneSubagentRunsForConversation,
   type SubagentStoreManager,
 } from "../../../lib/subagents";
-import type { AdditionalProjectRoot } from "../../../lib/tools/pathUtils";
+import type { AdditionalProjectRoot } from "../../../lib/tools/additionalProjectRoots";
 import type { SkillAccessPolicy } from "../../../lib/tools/skillAccessPolicy";
 import type { TaskStateStore } from "../../../lib/tools/taskTools";
 import { listWorkspaceRootGrants } from "../../../lib/workspaceRootGrants";

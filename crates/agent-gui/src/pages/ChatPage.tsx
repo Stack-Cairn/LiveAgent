@@ -7,10 +7,7 @@ import type { MentionComposerHandle } from "@liveagent/ui/components/chat/Mentio
 import { NotifyToast } from "@liveagent/ui/components/chat/NotifyToast";
 import { SharedHistoryManagerModal } from "@liveagent/ui/components/chat/SharedHistoryManagerModal";
 import { WorkspaceCloneModal } from "@liveagent/ui/components/chat/WorkspaceCloneModal";
-import {
-  type WorkspaceProjectRootClient,
-  WorkspaceProjectSettingsModal,
-} from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
+import { WorkspaceProjectSettingsModal } from "@liveagent/ui/components/chat/WorkspaceProjectSettingsModal";
 import { ProjectToolsPanelToggle } from "@liveagent/ui/components/project-tools/ProjectToolsPanelToggle";
 import { RightDockPanel } from "@liveagent/ui/components/project-tools/RightDockPanel";
 import { useConfirmDialog } from "@liveagent/ui/components/ui/confirm-dialog";
@@ -46,6 +43,7 @@ import { listen } from "@tauri-apps/api/event";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadComposerUploadedImagePreview } from "../agent-ui-adapters/composerImagePreview";
 import { WorkspaceCloneTaskOverlayAdapter } from "../agent-ui-adapters/workspaceCloneTasks";
+import { desktopWorkspaceProjectRootClient } from "../agent-ui-adapters/workspaceProjectRoots";
 import { MacOsTitleBarToggle } from "../components/MacOsTitleBarSpacer";
 import type { CompactionStatus } from "../lib/chat/compaction/types";
 import {
@@ -87,7 +85,6 @@ import { buildTrayMenuModel, syncTrayMenu } from "../lib/tray/trayMenu";
 import { useTrayPrefs } from "../lib/tray/trayPrefs";
 import { createTauriTunnelClient } from "../lib/tunnels/tauriTunnelClient";
 import { tauriWorkspaceActivityClient } from "../lib/workspace-activity/tauriWorkspaceActivityClient";
-import { applyWorkspaceRootGrants, listWorkspaceRootGrants } from "../lib/workspaceRootGrants";
 import {
   ChatComposerBar,
   ChatTranscript,
@@ -227,37 +224,6 @@ export function ChatPage(props: ChatPageProps) {
     rightDockOpen,
     setRightDockOpen,
   } = useApplicationViewState<WorkspaceProject>();
-  const workspaceProjectRootClient = useMemo<WorkspaceProjectRootClient>(
-    () => ({
-      list: async (project) =>
-        (await listWorkspaceRootGrants(project)).map((grant) => ({
-          id: grant.id,
-          alias: grant.alias,
-          displayPath: grant.displayPath,
-          access: grant.access,
-          state: grant.state,
-        })),
-      save: async (project, roots) =>
-        (
-          await applyWorkspaceRootGrants(
-            project,
-            roots.map((root) => ({
-              id: root.id.startsWith("draft-") ? undefined : root.id,
-              alias: root.alias,
-              displayPath: root.displayPath,
-              access: root.access,
-            })),
-          )
-        ).map((grant) => ({
-          id: grant.id,
-          alias: grant.alias,
-          displayPath: grant.displayPath,
-          access: grant.access,
-          state: grant.state,
-        })),
-    }),
-    [],
-  );
   const {
     workspaceProjects,
     setActiveWorkspaceProjectId,
@@ -2001,7 +1967,7 @@ export function ChatPage(props: ChatPageProps) {
           project={projectSettingsProject}
           settings={settings}
           skills={availableSkills}
-          rootClient={workspaceProjectRootClient}
+          rootClient={desktopWorkspaceProjectRootClient}
           onClose={() => setProjectSettingsProject(null)}
           onRenameProject={(name) => {
             commitWorkspaceProjectRename(projectSettingsProject, name);

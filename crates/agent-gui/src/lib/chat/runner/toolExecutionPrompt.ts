@@ -5,7 +5,7 @@ import {
   type RuntimePlatform,
   runtimePlatformLabel,
 } from "../../runtimePlatform";
-import type { AdditionalProjectRoot } from "../../tools/pathUtils";
+import type { AdditionalProjectRoot } from "../../tools/additionalProjectRoots";
 
 export function buildToolsSuffix(
   workdir: string,
