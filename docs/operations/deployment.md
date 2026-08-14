@@ -1,15 +1,16 @@
 # CI/CD 与发布
 
-本文档描述当前自动化发布链路：CI 检查、Gateway Docker 镜像、用户自部署 Gateway、桌面端 macOS/Windows Release。
+本文档描述当前自动化发布链路：CI 检查、Gateway Docker 镜像、用户自部署 Gateway、桌面端 macOS/Windows Release、移动端 Android Release。
 
 ## 自动化入口
 
 | 入口 | Workflow | 动作 |
 |---|---|---|
-| PR / `main` push | `.github/workflows/ci.yml` | 跑 Gateway、WebUI、GUI、Tauri Rust 测试和 proto 一致性检查。 |
+| PR / `main` push | `.github/workflows/ci.yml` | 跑 Gateway、WebUI、GUI、Mobile、Tauri Rust 测试和 proto 一致性检查。 |
 | 每日定时 | `.github/workflows/update-model-catalog.yml` | 刷新模型能力目录；仅在数据变化时由 GitHub Actions 创建或更新待审核 PR。 |
 | `v*` tag / 手动指定 tag | `.github/workflows/gateway-docker.yml` | 构建并推送 `vX.Y.Z` 与 `latest` Gateway 镜像。 |
-| `v*` tag / 手动指定 tag | `.github/workflows/desktop-release.yml` | 并行构建 macOS Intel、macOS Apple Silicon、Windows x64 和 Linux x64 桌面包，并上传到 GitHub Release。 |
+| `v*` tag / 手动指定 tag | `.github/workflows/desktop-release.yml` | 并行构建 macOS Intel、macOS Apple Silicon、Windows x64、Linux x64 桌面包，并上传到 GitHub Release。 |
+| `v*` tag / 手动指定 tag | `.github/workflows/mobile-release.yml` | 构建并签名 Android APK/AAB，并上传到 GitHub Release（与桌面端 Release 并行、可独立触发）。 |
 
 ## 模型目录同步
 
@@ -106,6 +107,22 @@ macOS signed/notarized release 需要这些 secrets：
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Tauri updater 私钥密码；无密码时可为空。 |
 | `TAURI_UPDATER_PUBLIC_KEY` | Tauri updater 公钥，会编译进桌面端用于校验更新包。 |
 
+Android release（由 `mobile-release.yml` 使用）需要这些 secrets：
+
+| Secret | 说明 |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | 签名 `.jks` 文件的 base64 编码。 |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore（store）密码。 |
+| `ANDROID_KEY_PASSWORD` | key 密码。 |
+| `ANDROID_KEY_ALIAS` | key 别名，推荐 `upload`（须与生成 keystore 时一致）。 |
+
+生成 `ANDROID_KEYSTORE_BASE64`：
+
+```bash
+base64 -w0 liveagent-release.jks
+# 或 macOS：base64 -i liveagent-release.jks | tr -d '\n'
+```
+
 脚本化写入 GitHub 配置：
 
 ```bash
@@ -143,6 +160,16 @@ Keychain 中必须是带私钥的 `Developer ID Application` identity。若 macO
 | Linux x64 | `ubuntu-latest` | `LiveAgent-vX.Y.Z-Linux-x86_64.AppImage`、`.deb`、`.rpm`，以及 updater 使用的 `.tar.gz` / `.sig`。 |
 
 发布 job 会在上传平台产物后生成并上传 `latest.json`。桌面端「设置 -> 关于」会根据用户是否允许预发布，从 GitHub Releases 中筛选带 `latest.json` 的正式 / 预发布版本；未允许预发布时只检查正式 Release。
+
+## 移动端产物
+
+`mobile-release.yml` 产物：
+
+| 平台 | Runner | 产物 |
+|---|---|---|
+| Android | `ubuntu-latest` | `LiveAgent-vX.Y.Z-Android.apk`（universal APK）与 `LiveAgent-vX.Y.Z-Android.aab`（universal AAB）。 |
+
+Android 由 `mobile-release.yml` 的 `android` job 构建：从 tag 解析版本号（`versionName`）、按 `major*1000000 + minor*1000 + patch` 推导 `versionCode`，从 Secrets 解码 keystore 并写入 `crates/agent-mobile/src-tauri/gen/android/local.properties` 后，用 `pnpm tauri android build` 签名并打包。发布 job 以幂等方式（`gh release view`/`create` + `upload --clobber`）把 APK/AAB 上传到与桌面端同一个 GitHub Release；若桌面端 release 已创建该 Release，则只追加 Android 资产，不动标题与说明。
 
 ## 桌面版本号来源
 

@@ -122,6 +122,18 @@
 | 兼容层 | `crates/agent-gateway/web/src/shims/*` |
 | WebUI i18n | `crates/agent-gateway/web/src/i18n/*` |
 
+## Mobile
+
+| 功能 | 路径 |
+|---|---|
+| Mobile entry | `crates/agent-mobile/src/main.tsx` |
+| App shell | `crates/agent-mobile/src/App.tsx`、`src/app/GatewayApp.tsx` |
+| Gateway socket | `crates/agent-mobile/src/lib/gatewaySocket.ts`、`src/lib/gatewaySocketV2/*` |
+| 兼容层 shims | `crates/agent-mobile/src/shims/*` |
+| 共享 UI 适配器 | `crates/agent-mobile/src/agent-ui-adapters/*` |
+| Tauri 外壳 | `crates/agent-mobile/src-tauri/src/lib.rs`、`src-tauri/src/main.rs` |
+| Android 工程 | `crates/agent-mobile/src-tauri/gen/android/` |
+
 ## 资料与设计
 
 | 路径 | 说明 |
