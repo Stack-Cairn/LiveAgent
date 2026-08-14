@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, type Locale, normalizeLocale } from "@liveagent/app/i18n/config";
+import { DEFAULT_LOCALE, normalizeLocale } from "@liveagent/app/i18n/config";
 import {
   ANTHROPIC_LONG_CONTEXT_WINDOW,
   ANTHROPIC_STANDARD_CONTEXT_WINDOW,
@@ -33,10 +33,138 @@ import {
   MAX_CHAT_TRANSCRIPT_WIDTH,
   MIN_CHAT_TRANSCRIPT_WIDTH,
 } from "@liveagent/ui/lib/transcript-width/transcriptWidthModel";
-import type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
+import { normalizeModelFailoverSettings } from "./modelFailover";
+import {
+  normalizeChatTranscriptSettings,
+  normalizeFontScaleSettings,
+  normalizeIntegerInRange,
+  normalizePositiveInteger,
+  normalizeStringArray,
+} from "./normalizers";
+import {
+  DEFAULT_RIGHT_DOCK_FILE_TREE_STATE,
+  normalizeRightDockFileTreeExpandedPaths,
+  normalizeRightDockFileTreeSearchQuery,
+  normalizeRightDockFileTreeState,
+  normalizeRightDockProjectState,
+  normalizeRightDockSettings,
+  RIGHT_DOCK_SINGLETON_TAB_IDS,
+} from "./rightDockNormalization";
+import {
+  computeNextMemoryOrganizerRunAt,
+  normalizeMemoryOrganizerMode,
+  normalizeMemoryOrganizerSchedule,
+  normalizeMemoryOrganizerScope,
+  normalizeOptionalTimestamp,
+  normalizeTheme,
+} from "./themeAndMemory";
+import type {
+  AgentPromptTemplate,
+  AppSettings,
+  ChatRuntimeControls,
+  ChatRuntimeReasoningProviderKey,
+  CloseWindowBehavior,
+  CodexRequestFormat,
+  CustomProvider,
+  CustomSettings,
+  EffectiveWorkspaceResources,
+  ExecutionMode,
+  McpServerConfig,
+  McpSettings,
+  McpTransport,
+  MemorySettings,
+  PromptCacheHintMode,
+  ProviderFailoverSettings,
+  ProviderId,
+  ProviderModelConfig,
+  ReasoningLevel,
+  RemoteSettings,
+  RightDockFileTreeState,
+  RightDockFileTreeStatePatch,
+  RightDockProjectState,
+  RightDockToolKind,
+  RightDockToolTab,
+  SelectedModel,
+  SkillsSettings,
+  SshAuthType,
+  SshHostConfig,
+  SshProxyConfig,
+  SshProxyType,
+  SshSettings,
+  SystemProxyConfig,
+  SystemSettings,
+  ToolPolicy,
+  UpdateSettings,
+  UsageQueryCodingPlanProvider,
+  UsageQueryConfig,
+  UsageQueryMode,
+  UsageQueryScripts,
+  WorkspaceResourceSettings,
+} from "./types";
+import {
+  DEFAULT_CHAT_RUNTIME_CONTROLS,
+  getDefaultUsageQueryConfig,
+  PROMPT_CACHE_HINT_MODES,
+  RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID,
+  RIGHT_DOCK_TOOL_KINDS,
+  USAGE_QUERY_TIMEOUT_DEFAULT_SECS,
+  USAGE_QUERY_TIMEOUT_MAX_SECS,
+  USAGE_QUERY_TIMEOUT_MIN_SECS,
+} from "./types";
+import {
+  assignNormalizedProjectKeyValue,
+  normalizeArchivedWorkspaceProjectPaths,
+  normalizeHiddenWorkspaceProjectPaths,
+  normalizeMissingWorkspaceProjectPaths,
+  normalizeRightDockFileTreePath,
+  normalizeWorkdir,
+  normalizeWorkspaceProjectGroups,
+  normalizeWorkspaceProjects,
+  normalizeWorkspaceResourceSettings,
+  normalizeWorkspaceResourceSettingsEntry,
+  workspaceProjectPathKey,
+} from "./workspaceProjects";
 
 export { normalizeFontFamily } from "@liveagent/ui/lib/shared/fontFamily";
 export type { WorkspaceProjectGroup } from "@liveagent/ui/lib/workspaceProjectTypes";
+export {
+  normalizeModelFailoverSettings,
+  normalizeProviderFailoverSettings,
+} from "./modelFailover";
+export {
+  normalizeChatTranscriptSettings,
+  normalizeFontScale,
+  normalizeFontScaleSettings,
+} from "./normalizers";
+export {
+  DEFAULT_RIGHT_DOCK_FILE_TREE_STATE,
+  normalizeRightDockBackgroundTasksState,
+  normalizeRightDockFileTreeState,
+  normalizeRightDockProjectState,
+  normalizeRightDockSettings,
+  normalizeRightDockTabOrder,
+  RIGHT_DOCK_SINGLETON_TAB_IDS,
+  rightDockToolKindForTabId,
+} from "./rightDockNormalization";
+export {
+  computeNextMemoryOrganizerRunAt,
+  getDefaultMemoryOrganizerSchedule,
+  getNextTheme,
+  normalizeTheme,
+  resolveEffectiveTheme,
+  subscribeToSystemThemePreference,
+} from "./themeAndMemory";
+export * from "./types";
+export {
+  normalizeArchivedWorkspaceProjectPaths,
+  normalizeHiddenWorkspaceProjectPaths,
+  normalizeMissingWorkspaceProjectPaths,
+  normalizeRightDockFileTreePath,
+  normalizeWorkspaceProjectPath,
+  normalizeWorkspaceResourceSettings,
+  resolveWorkspaceProjects,
+  workspaceProjectPathKey,
+} from "./workspaceProjects";
 
 export function isThinkingAlwaysOnForModel(
   providerId: ProviderId,
@@ -45,537 +173,14 @@ export function isThinkingAlwaysOnForModel(
   return resolveModelThinking(providerId, modelId).alwaysOn;
 }
 
-export type ProviderId = "codex" | "claude_code" | "gemini" | "xai";
-
-export type ExecutionMode = "text" | "tools" | "agent-dev";
-
-export type CodexRequestFormat = "openai-completions" | "openai-responses";
-
-export type ReasoningLevel = "off" | ThinkingLevel;
-
-export type McpTransport = "stdio" | "http" | "sse";
-
-export type McpServerConfig = {
-  id: string;
-  description?: string;
-  docsUrl?: string;
-  enabled: boolean;
-  transport: McpTransport;
-  command: string;
-  args: string[];
-  url: string;
-  env?: Record<string, string>;
-  cwd?: string;
-  headers?: Record<string, string>;
-  timeoutMs: number;
-  messageUrl?: string;
-};
-
-export type McpSettings = {
-  servers: McpServerConfig[];
-  selected: string[];
-};
-
-export type SkillsSettings = {
-  enabled: boolean;
-  selected: string[];
-};
-
-export type MemoryOrganizerScope = "all" | "global" | "projects" | "current-project";
-export type MemoryOrganizerMode = "conservative" | "standard" | "aggressive";
-export type MemoryOrganizerFrequency = "none" | "daily" | "weekly";
-
-export type MemoryOrganizerSchedule = {
-  frequency: MemoryOrganizerFrequency;
-  timeLocal: string;
-  weekday?: number;
-  timezone: string;
-};
-
-export type MemorySettings = {
-  organizerModel?: SelectedModel;
-  summaryModel?: SelectedModel;
-  organizerEnabled: boolean;
-  organizerSchedule: MemoryOrganizerSchedule;
-  organizerScope: MemoryOrganizerScope;
-  organizerMode: MemoryOrganizerMode;
-  organizerLastRunAt?: number;
-  organizerNextRunAt?: number;
-};
-
-export type ChatSidebarSettings = {
-  projectsCollapsed: boolean;
-  recentCollapsed: boolean;
-};
-
-export const RIGHT_DOCK_TOOL_KINDS = ["fileTree", "gitReview", "tunnel", "sshTunnel"] as const;
-
-export type RightDockToolKind = (typeof RIGHT_DOCK_TOOL_KINDS)[number];
-
-export type RightDockTabKind = RightDockToolKind | "terminal" | "backgroundTasks";
-
-export type RightDockToolTab = {
-  openedAt: number;
-  uiState?: Record<string, unknown>;
-};
-
-// Stable id of the derived background-tasks tab (not a RightDockToolKind:
-// its existence also derives from the managed-process store at render time).
-export const RIGHT_DOCK_BACKGROUND_TASKS_TAB_ID = "background-tasks";
-
-// Cross-client visibility intent for the background-tasks tab. `opened`
-// keeps the tab visible with no processes; `dismissedIds` snapshots the
-// process ids visible at close time — a process id outside the snapshot
-// re-derives the tab on every client.
-export type RightDockBackgroundTasksState = {
-  opened: boolean;
-  dismissedIds: string[];
-};
-
-// Persisted dock state is user intent only: terminal tab existence is derived
-// from live sessions at render time, so tabOrder may contain session ids that
-// are dead or not yet loaded — they are preserved here and lazily collected on
-// user gestures once the session list is known.
-export type RightDockProjectState = {
-  activeTabId?: string;
-  tabOrder: string[];
-  tools: Partial<Record<RightDockToolKind, RightDockToolTab>>;
-  backgroundTasks: RightDockBackgroundTasksState;
-  openVersion: number;
-  stateVersion: number;
-  writerId: string;
-  lastUsedAt: number;
-};
-
-export type RightDockSettings = {
-  width: number;
-  projects: Record<string, RightDockProjectState>;
-};
-
-export type RightDockFileTreeState = {
-  query: string;
-  selectedPath: string;
-  expandedPaths: string[];
-  showHidden: boolean;
-  // Reveal nonce: bumped (via bumpRevision) when another surface asks the
-  // file tree to reveal selectedPath (expand ancestors + scroll into view).
-  // Content refreshes are driven by workspace-activity invalidation, and
-  // merge ordering is covered by the project-level stateVersion.
-  revision: number;
-};
-
-export type RightDockFileTreeStatePatch = Partial<RightDockFileTreeState> & {
-  bumpRevision?: boolean;
-};
-
-export type FontScaleSettings = {
-  sidebar: number;
-  chat: number;
-  rightDock: number;
-};
-
 // Bounds live with the geometry that enforces them; re-exported here so
 // settings consumers keep a single import site.
 export { DEFAULT_CHAT_TRANSCRIPT_WIDTH, MAX_CHAT_TRANSCRIPT_WIDTH, MIN_CHAT_TRANSCRIPT_WIDTH };
-
-export type ChatTranscriptSettings = {
-  width: number;
-};
-
-export type CustomSettings = {
-  conversationTitleModel?: SelectedModel;
-  // AI commit-message generation in the Git review dock. Unset means "follow
-  // the current conversation model"; a stored selection whose provider/model
-  // is no longer active normalizes back to unset, restoring that fallback.
-  commitMessageModel?: SelectedModel;
-  chatSidebar: ChatSidebarSettings;
-  chatTranscript: ChatTranscriptSettings;
-  rightDock: RightDockSettings;
-  // Empty strings select the built-in stacks for each typography role.
-  interfaceFontFamily: string;
-  chatFontFamily: string;
-  codeFontFamily: string;
-  fontScale: FontScaleSettings;
-};
-
-export type UpdateSettings = {
-  includePrereleases: boolean;
-};
-
-/**
- * cc-switch style automatic provider failover: an ordered fallback queue of
- * same-vendor *providers* tried when the active model's request fails with a
- * provider-fault-class error, plus circuit breaker knobs mirroring cc-switch's
- * 失败阈值/冷却时间 settings.
- *
- * Failover switches providers, never models (matching cc-switch): the failed
- * request is re-sent to the next provider in the queue with the *same model
- * id* the conversation was using. Providers that don't have that model active
- * are skipped at plan time.
- *
- * Failover is scoped per vendor type (mirroring cc-switch's Claude/Codex/
- * Gemini app tabs): a Claude request only fails over to Claude providers, a
- * Codex request only to Codex providers, never across vendors.
- */
-export type ProviderFailoverSettings = {
-  enabled: boolean;
-  /** Ordered fallback provider ids (P1 → P2 → …), same vendor type only. */
-  queue: string[];
-  /** Max provider switches per request (attempts = switches + 1). */
-  maxSwitches: number;
-  /** Consecutive failures before a target's circuit breaker opens. */
-  failureThreshold: number;
-  /** Seconds an open breaker skips its target before a half-open probe. */
-  cooldownSeconds: number;
-};
-
-/** Per-vendor failover settings, keyed by the provider tab type. */
-export type ModelFailoverSettings = Record<ProviderId, ProviderFailoverSettings>;
-
-export const MODEL_FAILOVER_QUEUE_LIMIT = 8;
-
-export const PROVIDER_FAILOVER_TYPES: readonly ProviderId[] = [
-  "claude_code",
-  "codex",
-  "gemini",
-  "xai",
-];
-
-export const DEFAULT_PROVIDER_FAILOVER_SETTINGS: ProviderFailoverSettings = {
-  enabled: false,
-  queue: [],
-  maxSwitches: 3,
-  failureThreshold: 4,
-  cooldownSeconds: 60,
-};
-
-export function getDefaultModelFailoverSettings(): ModelFailoverSettings {
-  return {
-    claude_code: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
-    codex: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
-    gemini: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
-    xai: { ...DEFAULT_PROVIDER_FAILOVER_SETTINGS },
-  };
-}
-
-export type SystemProxyType = "socks5" | "http";
-
-// 系统级出站代理：注入本地 shell 命令 env，并供勾选了 useSystemProxy 的
-// 供应商模型请求走代理（代理连接由桌面 Rust 侧完成，凭据不进前端请求）。
-export type SystemProxyConfig = {
-  enabled: boolean;
-  type: SystemProxyType;
-  host: string;
-  port: number;
-  username: string;
-  password: string;
-  passwordConfigured?: boolean;
-};
-
-/** 工具审批策略:allow 直接执行、ask 执行前请求用户批准、deny 直接拒绝。 */
-export type ToolPolicy = "allow" | "ask" | "deny";
-
-export type SystemSettings = {
-  executionMode: ExecutionMode;
-  workdir: string;
-  /**
-   * 按规范工具名(内置名 / `mcp_*`)覆盖审批策略;缺省由
-   * resolveToolPolicy 按来源推断(内置/mcp=allow、只读工具恒 allow)。
-   * 可选:旧快照缺失该字段时视为空表(全部走默认),保证零回归。
-   */
-  toolPolicies?: Record<string, ToolPolicy>;
-  workspaceProjects: WorkspaceProject[];
-  workspaceProjectGroups: WorkspaceProjectGroup[];
-  activeWorkspaceProjectId?: string;
-  hiddenWorkspaceProjectPaths: string[];
-  missingWorkspaceProjectPaths: string[];
-  // Archived workspaces (path-keyed, like hidden/missing). Archived rows stay
-  // in the merged list but render disabled and can never be active.
-  archivedWorkspaceProjectPaths: string[];
-  workspaceResourceSettings: Record<string, WorkspaceResourceSettings>;
-  systemProxy: SystemProxyConfig;
-};
-
-export type WorkspaceResourceSettingsMode = "inherit" | "custom" | "off";
-
-export type WorkspaceResourceSettings = {
-  mode: WorkspaceResourceSettingsMode;
-  skillNames: string[];
-  mcpServerIds: string[];
-  stateVersion: number;
-  writerId: string;
-  updatedAt: number;
-};
-
-export type EffectiveWorkspaceResources = {
-  mode: WorkspaceResourceSettingsMode;
-  skillsEnabled: boolean;
-  skillNames: string[];
-  mcpServerIds: string[];
-  mcpServers: McpServerConfig[];
-};
-
-export type WorkspaceProjectKind = "managed" | "folder" | "history";
-
-export type WorkspaceProject = {
-  id: string;
-  name: string;
-  path: string;
-  kind: WorkspaceProjectKind;
-  worktree?: {
-    repositoryPath: string;
-    branch?: string;
-  };
-  createdAt: number;
-  updatedAt: number;
-  lastConversationAt?: number;
-  isPinned?: boolean;
-  pinnedAt?: number | null;
-};
-
-export type SelectedModel = {
-  customProviderId: string;
-  model: string;
-};
-
-export type PromptCacheHintMode = "auto" | "openai-key" | "openrouter-session" | "none";
-
-export type ProviderModelConfig = {
-  id: string;
-  /** /models 元数据；缺失时保持旧设置格式兼容。 */
-  ownedBy?: string;
-  contextWindow: number;
-  maxOutputToken: number;
-  /** OpenAI 兼容端点的缓存提示协议；缺失时继承供应商设置。 */
-  promptCacheHintMode?: PromptCacheHintMode;
-};
-
-export type ChatRuntimeControls = {
-  thinkingEnabled: boolean;
-  nativeWebSearchEnabled: boolean;
-  reasoning: ReasoningLevel;
-  reasoningByProvider: Partial<Record<ChatRuntimeReasoningProviderKey, ReasoningLevel>>;
-};
-
-export type ChatRuntimeReasoningProviderKey =
-  | "claude_code"
-  | "codex_openai_responses"
-  | "codex_openai_completions"
-  | "gemini"
-  | "xai";
-
-export type AgentPromptTemplate = {
-  id: string;
-  name: string;
-  description: string;
-  prompt: string;
-  enabled: boolean;
-};
-
-export type SshAuthType = "password" | "privateKey" | "keyboardInteractive";
-export type SshProxyType = "socks5" | "http";
-
-export type SshProxyConfig = {
-  type: SshProxyType;
-  url: string;
-  port: number;
-  username: string;
-  password: string;
-  passwordConfigured?: boolean;
-};
-
-export type SshHostConfig = {
-  id: string;
-  name: string;
-  description: string;
-  host: string;
-  port: number;
-  username: string;
-  authType: SshAuthType;
-  password: string;
-  passwordConfigured?: boolean;
-  privateKey: string;
-  privateKeyPath: string;
-  privateKeyConfigured?: boolean;
-  privateKeyPassphrase: string;
-  privateKeyPassphraseConfigured?: boolean;
-  proxy: SshProxyConfig;
-};
-
-export type SshSettings = {
-  hosts: SshHostConfig[];
-  projectHostAssociations: Record<string, string[]>;
-};
-
-export type UsageQueryMode = "coding-plan" | "balance" | "general" | "newapi" | "custom";
-
-export type UsageQueryScripts = Partial<Record<"custom" | "general" | "newapi", string>>;
-
-export type UsageQueryCodingPlanProvider =
-  | ""
-  | "kimi"
-  | "zhipu"
-  | "zhipu_team"
-  | "minimax"
-  | "zenmux"
-  | "volcengine";
-
-export type UsageQueryConfig = {
-  enabled: boolean;
-  mode: UsageQueryMode;
-  /** 当前模式的生效脚本(Rust 执行层只读这一个字段)。 */
-  script: string;
-  /** 每种脚本模式各自的脚本:切换查询方式互不串扰,未填写过的显示模板预设。 */
-  scripts: UsageQueryScripts;
-  baseUrl: string;
-  /** 查询专用 API Key 覆盖(空则回退供应商自身的 apiKey)。 */
-  apiKey: string;
-  apiKeyConfigured?: boolean;
-  accessToken: string;
-  accessTokenConfigured?: boolean;
-  userId: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  secretAccessKeyConfigured?: boolean;
-  /** Token Plan 供应商(空=按 Base URL 自动检测;智谱团队必须显式选择)。 */
-  codingPlanProvider: UsageQueryCodingPlanProvider;
-  /** 智谱团队套餐:组织/项目 ID(作为 bigmodel-organization / bigmodel-project 请求头)。 */
-  teamOrganizationId: string;
-  teamProjectId: string;
-  /** 请求超时(秒,2-30)。 */
-  timeoutSecs: number;
-};
-
-export const USAGE_QUERY_TIMEOUT_MIN_SECS = 2;
-export const USAGE_QUERY_TIMEOUT_MAX_SECS = 30;
-export const USAGE_QUERY_TIMEOUT_DEFAULT_SECS = 10;
-
-export function getDefaultUsageQueryConfig(): UsageQueryConfig {
-  return {
-    enabled: false,
-    mode: "newapi",
-    script: "",
-    scripts: {},
-    baseUrl: "",
-    apiKey: "",
-    apiKeyConfigured: false,
-    accessToken: "",
-    accessTokenConfigured: false,
-    userId: "",
-    accessKeyId: "",
-    secretAccessKey: "",
-    secretAccessKeyConfigured: false,
-    codingPlanProvider: "",
-    teamOrganizationId: "",
-    teamProjectId: "",
-    timeoutSecs: USAGE_QUERY_TIMEOUT_DEFAULT_SECS,
-  };
-}
-
-export type CustomProvider = {
-  id: string;
-  name: string;
-  type: ProviderId;
-  baseUrl: string;
-  /** 将 baseUrl 作为最终请求地址，本地反代不再追加协议端点路径。 */
-  isFullUrl: boolean;
-  /** 可选的模型列表完整地址；留空时从 baseUrl 自动推导。 */
-  modelsUrl?: string;
-  apiKey: string;
-  apiKeyConfigured?: boolean;
-  customHeaders?: { key: string; value: string }[];
-  models: ProviderModelConfig[];
-  modelOrder?: string[];
-  activeModels: string[];
-  requestFormat?: CodexRequestFormat;
-  reasoning: ReasoningLevel;
-  promptCachingEnabled: boolean;
-  /** OpenAI 兼容端点的缓存提示协议；旧配置由 promptCachingEnabled 迁移。 */
-  promptCacheHintMode?: PromptCacheHintMode;
-  /** 仅 Anthropic：ephemeral 缓存保留档位；long 在官方 API 上映射为 1h TTL。 */
-  promptCacheRetention?: "short" | "long";
-  nativeWebSearchEnabled: boolean;
-  useSystemProxy: boolean;
-  usageQuery: UsageQueryConfig;
-};
-
-export type EffectiveTheme = "light" | "dark";
-export type Theme = EffectiveTheme | "system";
-export type CloseWindowBehavior = "minimize" | "exit";
-
-export const THEME_OPTIONS = ["light", "dark", "system"] as const satisfies readonly Theme[];
-export const CLOSE_WINDOW_BEHAVIOR_OPTIONS = [
-  "minimize",
-  "exit",
-] as const satisfies readonly CloseWindowBehavior[];
-
-const SYSTEM_THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
-
-export type RemoteSettings = {
-  enabled: boolean;
-  gatewayUrl: string;
-  gatewayPort: number;
-  token: string;
-  agentId: string;
-  autoReconnect: boolean;
-  heartbeatInterval: number;
-  enableWebTerminal: boolean;
-  enableWebSshTerminal: boolean;
-  enableWebGit: boolean;
-  enableWebTunnels: boolean;
-};
-
-export type AppSettings = {
-  system: SystemSettings;
-  customProviders: CustomProvider[];
-  mcp: McpSettings;
-  agents: AgentPromptTemplate[];
-  ssh: SshSettings;
-  remote: RemoteSettings;
-  memory: MemorySettings;
-  customSettings: CustomSettings;
-  modelFailover: ModelFailoverSettings;
-  updates: UpdateSettings;
-  skills: SkillsSettings;
-  chatRuntimeControls: ChatRuntimeControls;
-  selectedModel?: SelectedModel;
-  theme: Theme;
-  locale: Locale;
-  /** Desktop-only: close title-bar X to hide to tray or exit the application. */
-  closeWindowBehavior: CloseWindowBehavior;
-};
-
-export const CODEX_REQUEST_FORMAT_LABELS: Record<CodexRequestFormat, string> = {
-  "openai-completions": "OpenAI-Completions",
-  "openai-responses": "Responses API",
-};
-
-export const PROMPT_CACHE_HINT_MODES = [
-  "auto",
-  "openai-key",
-  "openrouter-session",
-  "none",
-] as const satisfies readonly PromptCacheHintMode[];
 
 const CODEX_RESPONSES_SUFFIX = "/responses";
 const CODEX_RESPONSE_SUFFIX = "/response";
 const CODEX_CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const DEFAULT_MCP_TIMEOUT_MS = 60_000;
-export const DEFAULT_CHAT_RUNTIME_CONTROLS: ChatRuntimeControls = {
-  thinkingEnabled: true,
-  nativeWebSearchEnabled: true,
-  reasoning: "high",
-  reasoningByProvider: {
-    claude_code: "high",
-    codex_openai_responses: "high",
-    codex_openai_completions: "high",
-    gemini: "high",
-    xai: "high",
-  },
-};
-
-export const DEFAULT_WORKSPACE_PROJECT_ID = "default-project";
-export const DEFAULT_WORKSPACE_PROJECT_NAME = "Default Project";
 
 function normalizeCodexRequestFormat(input: unknown): CodexRequestFormat | undefined {
   switch (input) {
@@ -717,447 +322,6 @@ export function isAgentExecutionMode(mode: ExecutionMode): boolean {
 
 export function isAgentDevMode(mode: ExecutionMode): boolean {
   return mode === "agent-dev";
-}
-
-function normalizeWorkdir(input: unknown): string {
-  return typeof input === "string" ? input.trim() : "";
-}
-
-export function normalizeWorkspaceProjectPath(path: unknown): string {
-  return typeof path === "string" ? path.trim() : "";
-}
-
-function isWindowsProjectPathLike(path: string): boolean {
-  if (/^[\\/]{2}\?[\\/]/.test(path)) return true;
-  if (/^[A-Za-z]:(?:[\\/]|$)/.test(path)) return true;
-  return /^[\\/]{2}[^\\/]+[\\/]+[^\\/]+/.test(path);
-}
-
-function trimTrailingWindowsProjectSlashes(path: string): string {
-  let minLength = 1;
-  if (/^[A-Za-z]:\//.test(path)) {
-    minLength = 3;
-  } else if (path.startsWith("//")) {
-    const uncRoot = /^\/\/[^/]+\/[^/]+/.exec(path);
-    minLength = uncRoot?.[0].length ?? 2;
-  }
-  let next = path;
-  while (next.length > minLength && next.endsWith("/")) {
-    next = next.slice(0, -1);
-  }
-  return next;
-}
-
-function normalizeWindowsProjectPathKey(path: string): string {
-  const stripped = path.replace(/^[\\/]{2}\?[\\/]UNC[\\/]/i, "//").replace(/^[\\/]{2}\?[\\/]/, "");
-  return trimTrailingWindowsProjectSlashes(stripped.replace(/\\/g, "/")).toLowerCase();
-}
-
-function normalizePosixProjectPathKey(path: string): string {
-  let next = path;
-  while (next.length > 1 && next.endsWith("/")) {
-    next = next.slice(0, -1);
-  }
-  return next;
-}
-
-export function workspaceProjectPathKey(path: unknown): string {
-  const normalizedPath = normalizeWorkspaceProjectPath(path);
-  if (!normalizedPath) return "";
-  return isWindowsProjectPathLike(normalizedPath)
-    ? normalizeWindowsProjectPathKey(normalizedPath)
-    : normalizePosixProjectPathKey(normalizedPath);
-}
-
-function normalizeWorkspaceResourceSettingsMode(input: unknown): WorkspaceResourceSettingsMode {
-  return input === "custom" || input === "off" ? input : "inherit";
-}
-
-function normalizeWorkspaceResourceSettingsEntry(input: unknown): WorkspaceResourceSettings {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const mode = normalizeWorkspaceResourceSettingsMode(obj.mode);
-  const stateVersion = Number(obj.stateVersion);
-  const updatedAt = Number(obj.updatedAt);
-  return {
-    mode,
-    skillNames: mode === "custom" ? normalizeStringArray(obj.skillNames) : [],
-    mcpServerIds: mode === "custom" ? normalizeStringArray(obj.mcpServerIds) : [],
-    stateVersion: Number.isSafeInteger(stateVersion) && stateVersion > 0 ? stateVersion : 1,
-    writerId: typeof obj.writerId === "string" ? obj.writerId.trim().slice(0, 64) : "",
-    updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : 0,
-  };
-}
-
-const WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
-const MAX_WORKSPACE_RESOURCE_SETTINGS = 256;
-
-export function normalizeWorkspaceResourceSettings(
-  input: unknown,
-): Record<string, WorkspaceResourceSettings> {
-  const source = (
-    input && typeof input === "object" && !Array.isArray(input) ? input : {}
-  ) as Record<string, unknown>;
-  const entries: Record<string, WorkspaceResourceSettings> = {};
-  const canonicalKeys = new Set<string>();
-  for (const [rawPathKey, rawEntry] of Object.entries(source)) {
-    const pathKey = workspaceProjectPathKey(rawPathKey);
-    if (!pathKey) continue;
-    assignNormalizedProjectKeyValue(
-      entries,
-      canonicalKeys,
-      rawPathKey,
-      normalizeWorkspaceResourceSettingsEntry(rawEntry),
-    );
-  }
-  const now = Date.now();
-  for (const [pathKey, entry] of Object.entries(entries)) {
-    if (
-      entry.mode === "inherit" &&
-      entry.updatedAt > 0 &&
-      now - entry.updatedAt > WORKSPACE_RESOURCE_TOMBSTONE_TTL_MS
-    ) {
-      delete entries[pathKey];
-    }
-  }
-  const pathKeys = Object.keys(entries);
-  if (pathKeys.length > MAX_WORKSPACE_RESOURCE_SETTINGS) {
-    pathKeys.sort((a, b) => {
-      const aEntry = entries[a];
-      const bEntry = entries[b];
-      const byActiveMode = Number(bEntry.mode !== "inherit") - Number(aEntry.mode !== "inherit");
-      if (byActiveMode !== 0) return byActiveMode;
-      const byUpdatedAt = bEntry.updatedAt - aEntry.updatedAt;
-      if (byUpdatedAt !== 0) return byUpdatedAt;
-      const byVersion = bEntry.stateVersion - aEntry.stateVersion;
-      return byVersion !== 0 ? byVersion : compareWorkspaceResourcePathKeys(a, b);
-    });
-    for (const pathKey of pathKeys.slice(MAX_WORKSPACE_RESOURCE_SETTINGS)) {
-      delete entries[pathKey];
-    }
-  }
-  return entries;
-}
-
-function compareWorkspaceResourcePathKeys(a: string, b: string): number {
-  const aCodePoints = Array.from(a, (value) => value.codePointAt(0) ?? 0);
-  const bCodePoints = Array.from(b, (value) => value.codePointAt(0) ?? 0);
-  const length = Math.min(aCodePoints.length, bCodePoints.length);
-  for (let index = 0; index < length; index += 1) {
-    const difference = aCodePoints[index] - bCodePoints[index];
-    if (difference !== 0) return difference;
-  }
-  return aCodePoints.length - bCodePoints.length;
-}
-
-function assignNormalizedProjectKeyValue<T>(
-  target: Record<string, T>,
-  canonicalKeys: Set<string>,
-  rawPathKey: string,
-  value: T,
-): void {
-  const normalizedPathKey = workspaceProjectPathKey(rawPathKey);
-  if (!normalizedPathKey) return;
-  const isCanonicalKey = rawPathKey.trim() === normalizedPathKey;
-  const existingIsCanonical = canonicalKeys.has(normalizedPathKey);
-  if (isCanonicalKey || !existingIsCanonical) {
-    target[normalizedPathKey] = value;
-  }
-  if (isCanonicalKey) {
-    canonicalKeys.add(normalizedPathKey);
-  }
-}
-
-export function normalizeRightDockFileTreePath(path: unknown): string {
-  if (typeof path !== "string") return "";
-  return path
-    .trim()
-    .replace(/\\/g, "/")
-    .split("/")
-    .filter((part) => part && part !== "." && part !== "..")
-    .join("/");
-}
-
-function normalizeWorkspaceProjectKind(input: unknown): WorkspaceProjectKind {
-  switch (input) {
-    case "managed":
-    case "folder":
-    case "history":
-      return input;
-    default:
-      return "folder";
-  }
-}
-
-function normalizeWorkspaceProjectWorktree(
-  input: unknown,
-): WorkspaceProject["worktree"] | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
-  const obj = input as Record<string, unknown>;
-  const repositoryPath = normalizeWorkspaceProjectPath(obj.repositoryPath);
-  if (!repositoryPath) return undefined;
-  const branch = typeof obj.branch === "string" ? obj.branch.trim() : "";
-  return {
-    repositoryPath,
-    ...(branch ? { branch } : {}),
-  };
-}
-
-function normalizeWorkspaceProject(input: unknown): WorkspaceProject | null {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const path = normalizeWorkspaceProjectPath(obj.path);
-  if (!path) return null;
-  const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : createUuid();
-  const name =
-    typeof obj.name === "string" && obj.name.trim()
-      ? obj.name.trim()
-      : path
-          .split(/[\\/]+/)
-          .filter(Boolean)
-          .pop() || "Project";
-  const createdAt =
-    typeof obj.createdAt === "number" && Number.isFinite(obj.createdAt) && obj.createdAt > 0
-      ? obj.createdAt
-      : Date.now();
-  const updatedAt =
-    typeof obj.updatedAt === "number" && Number.isFinite(obj.updatedAt) && obj.updatedAt > 0
-      ? obj.updatedAt
-      : createdAt;
-  const lastConversationAt =
-    typeof obj.lastConversationAt === "number" &&
-    Number.isFinite(obj.lastConversationAt) &&
-    obj.lastConversationAt > 0
-      ? obj.lastConversationAt
-      : undefined;
-  const isPinned = obj.isPinned === true;
-  const pinnedAt =
-    typeof obj.pinnedAt === "number" && Number.isFinite(obj.pinnedAt) && obj.pinnedAt > 0
-      ? obj.pinnedAt
-      : undefined;
-  const worktree = normalizeWorkspaceProjectWorktree(obj.worktree);
-  return {
-    id,
-    name,
-    path,
-    kind: normalizeWorkspaceProjectKind(obj.kind),
-    ...(worktree ? { worktree } : {}),
-    createdAt,
-    updatedAt,
-    ...(lastConversationAt ? { lastConversationAt } : {}),
-    ...(isPinned ? { isPinned: true, pinnedAt: pinnedAt ?? updatedAt } : {}),
-  };
-}
-
-function normalizeWorkspaceProjectGroups(input: unknown): WorkspaceProjectGroup[] {
-  if (!Array.isArray(input)) return [];
-  const out: WorkspaceProjectGroup[] = [];
-  const seenIds = new Set<string>();
-  for (const raw of input) {
-    const group = normalizeWorkspaceProjectGroup(raw);
-    if (!group) continue;
-    if (seenIds.has(group.id)) continue;
-    seenIds.add(group.id);
-    out.push(group);
-  }
-  return out;
-}
-
-function normalizeWorkspaceProjectGroup(input: unknown): WorkspaceProjectGroup | null {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const id = typeof obj.id === "string" && obj.id.trim() ? obj.id.trim() : createUuid();
-  const name = typeof obj.name === "string" && obj.name.trim() ? obj.name.trim() : "未命名分组";
-  const projectPaths: string[] = [];
-  const seenPaths = new Set<string>();
-  for (const raw of normalizeStringArray(obj.projectPaths)) {
-    const path = normalizeWorkspaceProjectPath(raw);
-    if (!path) continue;
-    const key = workspaceProjectPathKey(path);
-    if (seenPaths.has(key)) continue;
-    seenPaths.add(key);
-    projectPaths.push(path);
-  }
-  const sourceProjectPath = normalizeWorkspaceProjectPath(obj.sourceProjectPath);
-  const createdAt =
-    typeof obj.createdAt === "number" && Number.isFinite(obj.createdAt) && obj.createdAt > 0
-      ? obj.createdAt
-      : Date.now();
-  const updatedAt =
-    typeof obj.updatedAt === "number" && Number.isFinite(obj.updatedAt) && obj.updatedAt > 0
-      ? obj.updatedAt
-      : createdAt;
-  return {
-    id,
-    name,
-    projectPaths,
-    ...(sourceProjectPath ? { sourceProjectPath } : {}),
-    ...(obj.collapsed === true ? { collapsed: true } : {}),
-    createdAt,
-    updatedAt,
-  };
-}
-
-function normalizeWorkspaceProjects(input: unknown): WorkspaceProject[] {
-  if (!Array.isArray(input)) return [];
-  const out: WorkspaceProject[] = [];
-  const seenPaths = new Set<string>();
-  const seenIds = new Set<string>();
-  for (const raw of input) {
-    const project = normalizeWorkspaceProject(raw);
-    if (!project) continue;
-    const pathKey = workspaceProjectPathKey(project.path);
-    if (!pathKey || seenPaths.has(pathKey)) continue;
-    seenPaths.add(pathKey);
-    let id = project.id;
-    if (seenIds.has(id)) {
-      id = createUuid();
-    }
-    seenIds.add(id);
-    out.push({ ...project, id });
-  }
-  return out;
-}
-
-export function normalizeHiddenWorkspaceProjectPaths(input: unknown): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const path of normalizeStringArray(input)) {
-    const key = workspaceProjectPathKey(path);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(path);
-  }
-  return out;
-}
-
-export function normalizeMissingWorkspaceProjectPaths(input: unknown): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const path of normalizeStringArray(input)) {
-    const key = workspaceProjectPathKey(path);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(path);
-  }
-  return out;
-}
-
-export function normalizeArchivedWorkspaceProjectPaths(input: unknown): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const path of normalizeStringArray(input)) {
-    const key = workspaceProjectPathKey(path);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    out.push(path);
-  }
-  return out;
-}
-
-export function resolveWorkspaceProjects(
-  system: SystemSettings,
-  defaultWorkdir: string,
-): SystemSettings {
-  const defaultPath = normalizeWorkspaceProjectPath(defaultWorkdir || system.workdir);
-  if (!defaultPath) return system;
-
-  const now = Date.now();
-  const defaultKey = workspaceProjectPathKey(defaultPath);
-  const configured = normalizeWorkspaceProjects(system.workspaceProjects);
-  const defaultExisting = configured.find(
-    (project) =>
-      project.id === DEFAULT_WORKSPACE_PROJECT_ID ||
-      workspaceProjectPathKey(project.path) === defaultKey,
-  );
-  const defaultProject: WorkspaceProject = {
-    id: DEFAULT_WORKSPACE_PROJECT_ID,
-    name: DEFAULT_WORKSPACE_PROJECT_NAME,
-    path: defaultPath,
-    kind: "managed",
-    createdAt: defaultExisting?.createdAt ?? now,
-    updatedAt: defaultExisting?.updatedAt ?? now,
-    ...(defaultExisting?.worktree ? { worktree: defaultExisting.worktree } : {}),
-    ...(defaultExisting?.lastConversationAt
-      ? { lastConversationAt: defaultExisting.lastConversationAt }
-      : {}),
-    ...(defaultExisting?.isPinned
-      ? { isPinned: true, pinnedAt: defaultExisting.pinnedAt ?? defaultExisting.updatedAt }
-      : {}),
-  };
-
-  const projects: WorkspaceProject[] = [defaultProject];
-  const seenPaths = new Set<string>([defaultKey]);
-  const seenIds = new Set<string>([DEFAULT_WORKSPACE_PROJECT_ID]);
-  for (const project of configured) {
-    const pathKey = workspaceProjectPathKey(project.path);
-    if (!pathKey || seenPaths.has(pathKey)) continue;
-    seenPaths.add(pathKey);
-    let id = project.id;
-    if (!id || id === DEFAULT_WORKSPACE_PROJECT_ID || seenIds.has(id)) {
-      id = createUuid();
-    }
-    seenIds.add(id);
-    projects.push({
-      ...project,
-      id,
-      name:
-        project.name.trim() ||
-        project.path
-          .split(/[\\/]+/)
-          .filter(Boolean)
-          .pop() ||
-        "Project",
-      kind: project.kind,
-    });
-  }
-
-  const hiddenWorkspaceProjectPaths = normalizeHiddenWorkspaceProjectPaths(
-    system.hiddenWorkspaceProjectPaths,
-  ).filter((path) => workspaceProjectPathKey(path) !== defaultKey);
-  const hiddenWorkspaceProjectPathKeys = new Set(
-    hiddenWorkspaceProjectPaths.map(workspaceProjectPathKey),
-  );
-  const missingWorkspaceProjectPaths = normalizeMissingWorkspaceProjectPaths(
-    system.missingWorkspaceProjectPaths,
-  ).filter((path) => !hiddenWorkspaceProjectPathKeys.has(workspaceProjectPathKey(path)));
-  // Hidden means removed — a removed workspace has nothing left to archive.
-  const normalizedArchivedWorkspaceProjectPaths = normalizeArchivedWorkspaceProjectPaths(
-    system.archivedWorkspaceProjectPaths,
-  ).filter((path) => !hiddenWorkspaceProjectPathKeys.has(workspaceProjectPathKey(path)));
-  const normalizedArchivedWorkspaceProjectPathKeys = new Set(
-    normalizedArchivedWorkspaceProjectPaths.map(workspaceProjectPathKey),
-  );
-  const archivedWorkspaceProjectPaths = projects.every((project) =>
-    normalizedArchivedWorkspaceProjectPathKeys.has(workspaceProjectPathKey(project.path)),
-  )
-    ? normalizedArchivedWorkspaceProjectPaths.filter(
-        (path) => workspaceProjectPathKey(path) !== defaultKey,
-      )
-    : normalizedArchivedWorkspaceProjectPaths;
-  const archivedWorkspaceProjectPathKeys = new Set(
-    archivedWorkspaceProjectPaths.map(workspaceProjectPathKey),
-  );
-  const selectableProjects = projects.filter(
-    (project) => !archivedWorkspaceProjectPathKeys.has(workspaceProjectPathKey(project.path)),
-  );
-  const activeProjectId = selectableProjects.some(
-    (project) => project.id === system.activeWorkspaceProjectId,
-  )
-    ? system.activeWorkspaceProjectId
-    : (selectableProjects.find((project) => project.id === DEFAULT_WORKSPACE_PROJECT_ID)?.id ??
-      selectableProjects[0]?.id ??
-      DEFAULT_WORKSPACE_PROJECT_ID);
-  const activeProject =
-    selectableProjects.find((project) => project.id === activeProjectId) ?? defaultProject;
-  const workdir = normalizeWorkdir(system.workdir) || defaultPath;
-
-  return {
-    ...system,
-    workdir,
-    workspaceProjects: projects,
-    activeWorkspaceProjectId: activeProject.id,
-    hiddenWorkspaceProjectPaths,
-    missingWorkspaceProjectPaths,
-    archivedWorkspaceProjectPaths,
-  };
 }
 
 const REASONING_LEVELS: ReasoningLevel[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
@@ -1323,14 +487,6 @@ export function updateChatRuntimeControlsForProvider(
   );
 }
 
-function normalizeStringArray(input: unknown): string[] {
-  if (!Array.isArray(input)) return [];
-  return input
-    .filter((value) => typeof value === "string")
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
 function normalizeOptionalText(input: unknown): string {
   return typeof input === "string" ? input.trim() : "";
 }
@@ -1386,23 +542,6 @@ function normalizeTimeoutMs(input: unknown): number {
     typeof input === "number" ? input : typeof input === "string" ? Number(input) : NaN;
   const timeoutMs = Number.isFinite(numeric) ? Math.floor(numeric) : DEFAULT_MCP_TIMEOUT_MS;
   return timeoutMs > 0 ? timeoutMs : DEFAULT_MCP_TIMEOUT_MS;
-}
-
-function normalizePositiveInteger(input: unknown, fallback: number): number {
-  const numeric =
-    typeof input === "number" ? input : typeof input === "string" ? Number(input) : NaN;
-  const value = Number.isFinite(numeric) ? Math.floor(numeric) : fallback;
-  return value > 0 ? value : fallback;
-}
-
-function normalizeIntegerInRange(
-  input: unknown,
-  min: number,
-  max: number,
-  fallback: number,
-): number {
-  const value = normalizePositiveInteger(input, fallback);
-  return Math.min(max, Math.max(min, value));
 }
 
 export function normalizeRemoteSettings(input: unknown): RemoteSettings {
@@ -2060,155 +1199,8 @@ export function serializeSelectedModelJson(
   return normalized ? JSON.stringify(normalized) : undefined;
 }
 
-export function normalizeTheme(input: unknown): Theme {
-  if (input === "dark") return "dark";
-  if (input === "system" || input === "auto") return "system";
-  return "light";
-}
-
 export function normalizeCloseWindowBehavior(input: unknown): CloseWindowBehavior {
   return input === "exit" ? "exit" : "minimize";
-}
-
-export function resolveEffectiveTheme(theme: Theme): EffectiveTheme {
-  if (theme !== "system") return theme;
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
-  return window.matchMedia(SYSTEM_THEME_MEDIA_QUERY).matches ? "dark" : "light";
-}
-
-export function getNextTheme(theme: Theme): Theme {
-  if (theme === "light") return "dark";
-  if (theme === "dark") return "system";
-  return "light";
-}
-
-export function subscribeToSystemThemePreference(listener: () => void): () => void {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return () => undefined;
-  }
-
-  const query = window.matchMedia(SYSTEM_THEME_MEDIA_QUERY);
-  if (typeof query.addEventListener === "function") {
-    query.addEventListener("change", listener);
-    return () => query.removeEventListener("change", listener);
-  }
-
-  query.addListener(listener);
-  return () => query.removeListener(listener);
-}
-
-function localTimezone() {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "local";
-  } catch {
-    return "local";
-  }
-}
-
-export function getDefaultMemoryOrganizerSchedule(): MemoryOrganizerSchedule {
-  return {
-    frequency: "none",
-    timeLocal: "03:00",
-    weekday: 1,
-    timezone: localTimezone(),
-  };
-}
-
-function normalizeMemoryOrganizerFrequency(input: unknown): MemoryOrganizerFrequency {
-  if (input === "daily" || input === "weekly") return input;
-  return "none";
-}
-
-function normalizeMemoryOrganizerTime(input: unknown) {
-  const value = typeof input === "string" ? input.trim() : "";
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return "03:00";
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 ? value : "03:00";
-}
-
-function normalizeMemoryOrganizerWeekday(input: unknown) {
-  const value = typeof input === "number" ? input : Number(input);
-  return Number.isInteger(value) && value >= 0 && value <= 6 ? value : 1;
-}
-
-function normalizeMemoryOrganizerSchedule(input: unknown): MemoryOrganizerSchedule {
-  const defaults = getDefaultMemoryOrganizerSchedule();
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  return {
-    frequency: normalizeMemoryOrganizerFrequency(obj.frequency),
-    timeLocal: normalizeMemoryOrganizerTime(obj.timeLocal),
-    weekday: normalizeMemoryOrganizerWeekday(obj.weekday),
-    timezone:
-      typeof obj.timezone === "string" && obj.timezone.trim()
-        ? obj.timezone.trim()
-        : defaults.timezone,
-  };
-}
-
-function normalizeMemoryOrganizerScope(input: unknown): MemoryOrganizerScope {
-  switch (input) {
-    case "global":
-    case "projects":
-    case "current-project":
-      return input;
-    default:
-      return "all";
-  }
-}
-
-function normalizeMemoryOrganizerMode(input: unknown): MemoryOrganizerMode {
-  switch (input) {
-    case "conservative":
-    case "aggressive":
-      return input;
-    default:
-      return "standard";
-  }
-}
-
-function normalizeOptionalTimestamp(input: unknown): number | undefined {
-  const value = typeof input === "number" ? input : Number(input);
-  return Number.isFinite(value) && value > 0 ? value : undefined;
-}
-
-export function computeNextMemoryOrganizerRunAt(
-  schedule: MemoryOrganizerSchedule,
-  from = Date.now(),
-): number | undefined {
-  if (schedule.frequency === "none") {
-    return undefined;
-  }
-
-  const [hourRaw, minuteRaw] = schedule.timeLocal.split(":");
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-  const base = new Date(from);
-  const candidate = new Date(base);
-  candidate.setSeconds(0, 0);
-  candidate.setHours(
-    Number.isInteger(hour) ? hour : 3,
-    Number.isInteger(minute) ? minute : 0,
-    0,
-    0,
-  );
-
-  if (schedule.frequency === "weekly") {
-    const targetWeekday = normalizeMemoryOrganizerWeekday(schedule.weekday);
-    const currentWeekday = candidate.getDay();
-    let days = (targetWeekday - currentWeekday + 7) % 7;
-    if (days === 0 && candidate.getTime() <= from) {
-      days = 7;
-    }
-    candidate.setDate(candidate.getDate() + days);
-    return candidate.getTime();
-  }
-
-  if (candidate.getTime() <= from) {
-    candidate.setDate(candidate.getDate() + 1);
-  }
-  return candidate.getTime();
 }
 
 export function normalizeSelectedModelForProviders(
@@ -2261,250 +1253,6 @@ export function normalizeMemorySettings(
   };
 }
 
-export const RIGHT_DOCK_SINGLETON_TAB_IDS = {
-  fileTree: "tool:fileTree",
-  gitReview: "tool:gitReview",
-  tunnel: "tool:tunnel",
-  sshTunnel: "tool:sshTunnel",
-} as const satisfies Record<RightDockToolKind, string>;
-
-const RIGHT_DOCK_TOOL_KIND_BY_TAB_ID = new Map<string, RightDockToolKind>(
-  RIGHT_DOCK_TOOL_KINDS.map((kind) => [RIGHT_DOCK_SINGLETON_TAB_IDS[kind], kind]),
-);
-
-export function rightDockToolKindForTabId(tabId: string): RightDockToolKind | undefined {
-  return RIGHT_DOCK_TOOL_KIND_BY_TAB_ID.get(tabId);
-}
-
-// Empty buckets whose tools were closed act as tombstones so a stale snapshot
-// cannot resurrect them through merge; they expire after this window.
-const RIGHT_DOCK_TOMBSTONE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
-const MAX_RIGHT_DOCK_PROJECTS = 100;
-
-export const DEFAULT_RIGHT_DOCK_FILE_TREE_STATE: RightDockFileTreeState = {
-  query: "",
-  selectedPath: "",
-  expandedPaths: [""],
-  showHidden: false,
-  revision: 0,
-};
-
-function normalizeRightDockFileTreeSearchQuery(query: unknown): string {
-  return typeof query === "string" ? query.slice(0, 200) : "";
-}
-
-function normalizeRightDockFileTreeExpandedPaths(paths: unknown): string[] {
-  if (!Array.isArray(paths)) return [""];
-  const normalized = Array.from(
-    new Set(
-      paths
-        .map((path) => normalizeRightDockFileTreePath(path))
-        .filter((path) => path.length <= 1024),
-    ),
-  );
-  return normalized.slice(0, 512);
-}
-
-export function normalizeRightDockFileTreeState(input: unknown): RightDockFileTreeState {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  return {
-    query: normalizeRightDockFileTreeSearchQuery(obj.query),
-    selectedPath: normalizeRightDockFileTreePath(obj.selectedPath),
-    expandedPaths: normalizeRightDockFileTreeExpandedPaths(obj.expandedPaths),
-    showHidden: obj.showHidden === true,
-    revision: normalizeIntegerInRange(obj.revision, 0, Number.MAX_SAFE_INTEGER, 0),
-  };
-}
-
-export function normalizeRightDockTabOrder(input: unknown): string[] {
-  if (!Array.isArray(input)) return [];
-  const order: string[] = [];
-  const seen = new Set<string>();
-  for (const item of input) {
-    if (typeof item !== "string") continue;
-    const id = item.trim();
-    if (!id || id.length > 160 || seen.has(id)) continue;
-    seen.add(id);
-    order.push(id);
-    if (order.length >= 128) break;
-  }
-  return order;
-}
-
-function normalizeRightDockRecord(input: unknown): Record<string, unknown> | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
-  const output: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-    if (!key.trim() || key.length > 80) continue;
-    if (
-      value === null ||
-      typeof value === "string" ||
-      typeof value === "number" ||
-      typeof value === "boolean" ||
-      Array.isArray(value) ||
-      (value && typeof value === "object")
-    ) {
-      output[key] = value;
-    }
-    if (Object.keys(output).length >= 64) break;
-  }
-  return Object.keys(output).length > 0 ? output : undefined;
-}
-
-function normalizeRightDockToolUiState(
-  kind: RightDockToolKind,
-  input: unknown,
-): Record<string, unknown> | undefined {
-  if (kind === "fileTree") {
-    return normalizeRightDockFileTreeState(input);
-  }
-  return normalizeRightDockRecord(input);
-}
-
-function normalizeRightDockToolTab(kind: RightDockToolKind, input: unknown): RightDockToolTab {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const uiState = normalizeRightDockToolUiState(kind, obj.uiState);
-  return {
-    openedAt: normalizeIntegerInRange(obj.openedAt, 0, Number.MAX_SAFE_INTEGER, Date.now()),
-    ...(uiState ? { uiState } : {}),
-  };
-}
-
-// Accepts both the current shape ({ tools }) and the legacy persisted shape
-// ({ tabs } keyed by tab id, including now-derived terminal entries which are
-// dropped). tabOrder keeps unknown ids: they are terminal session ids.
-export function normalizeRightDockProjectState(input: unknown): RightDockProjectState {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const rawTools = (
-    obj.tools && typeof obj.tools === "object" && !Array.isArray(obj.tools) ? obj.tools : {}
-  ) as Record<string, unknown>;
-  const legacyTabs = (
-    obj.tabs && typeof obj.tabs === "object" && !Array.isArray(obj.tabs) ? obj.tabs : {}
-  ) as Record<string, unknown>;
-  const tools: Partial<Record<RightDockToolKind, RightDockToolTab>> = {};
-  for (const kind of RIGHT_DOCK_TOOL_KINDS) {
-    const raw = rawTools[kind] ?? legacyTabs[RIGHT_DOCK_SINGLETON_TAB_IDS[kind]];
-    if (!raw || typeof raw !== "object") continue;
-    const legacy = raw as Record<string, unknown>;
-    tools[kind] = normalizeRightDockToolTab(
-      kind,
-      "openedAt" in legacy ? legacy : { ...legacy, openedAt: legacy.createdAt },
-    );
-  }
-  const tabOrder = normalizeRightDockTabOrder(obj.tabOrder);
-  for (const kind of RIGHT_DOCK_TOOL_KINDS) {
-    const tabId = RIGHT_DOCK_SINGLETON_TAB_IDS[kind];
-    if (tools[kind] && !tabOrder.includes(tabId)) tabOrder.push(tabId);
-  }
-  const rawActiveTabId = typeof obj.activeTabId === "string" ? obj.activeTabId.trim() : "";
-  const activeTabId = rawActiveTabId && rawActiveTabId.length <= 160 ? rawActiveTabId : undefined;
-  return {
-    ...(activeTabId ? { activeTabId } : {}),
-    tabOrder,
-    tools,
-    backgroundTasks: normalizeRightDockBackgroundTasksState(obj.backgroundTasks),
-    openVersion: normalizeIntegerInRange(obj.openVersion, 0, Number.MAX_SAFE_INTEGER, 0),
-    stateVersion: normalizeIntegerInRange(obj.stateVersion, 0, Number.MAX_SAFE_INTEGER, 0),
-    writerId: typeof obj.writerId === "string" ? obj.writerId.trim().slice(0, 32) : "",
-    lastUsedAt: normalizeIntegerInRange(obj.lastUsedAt, 0, Number.MAX_SAFE_INTEGER, 0),
-  };
-}
-
-export function normalizeRightDockBackgroundTasksState(
-  input: unknown,
-): RightDockBackgroundTasksState {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const dismissedIds: string[] = [];
-  if (Array.isArray(obj.dismissedIds)) {
-    const seen = new Set<string>();
-    for (const item of obj.dismissedIds) {
-      if (typeof item !== "string") continue;
-      const id = item.trim();
-      if (!id || id.length > 160 || seen.has(id)) continue;
-      seen.add(id);
-      dismissedIds.push(id);
-      if (dismissedIds.length >= 200) break;
-    }
-  }
-  return {
-    opened: obj.opened === true,
-    dismissedIds,
-  };
-}
-
-export function normalizeRightDockSettings(input: unknown): RightDockSettings {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const rawProjects = (
-    obj.projects && typeof obj.projects === "object" && !Array.isArray(obj.projects)
-      ? obj.projects
-      : {}
-  ) as Record<string, unknown>;
-  const now = Date.now();
-  const projects: Record<string, RightDockProjectState> = {};
-  for (const [pathKey, projectState] of Object.entries(rawProjects)) {
-    const normalizedPathKey = workspaceProjectPathKey(pathKey);
-    if (!normalizedPathKey || projects[normalizedPathKey]) continue;
-    const project = normalizeRightDockProjectState(projectState);
-    // A bucket holding only background-tasks intent (manually opened tab, or
-    // dismissal snapshot that must keep suppressing derived tabs) is live
-    // state, not a tombstone.
-    const isEmpty =
-      Object.keys(project.tools).length === 0 &&
-      !project.backgroundTasks.opened &&
-      project.backgroundTasks.dismissedIds.length === 0;
-    if (isEmpty && project.openVersion === 0 && project.stateVersion === 0) continue;
-    if (isEmpty) {
-      // Tombstone: start (or continue) the expiry clock, drop once elapsed.
-      const tombstonedAt = project.lastUsedAt > 0 ? project.lastUsedAt : now;
-      if (now - tombstonedAt > RIGHT_DOCK_TOMBSTONE_TTL_MS) continue;
-      projects[normalizedPathKey] = { ...project, lastUsedAt: tombstonedAt };
-      continue;
-    }
-    projects[normalizedPathKey] = project;
-  }
-  const keys = Object.keys(projects);
-  if (keys.length > MAX_RIGHT_DOCK_PROJECTS) {
-    // Keep the most recently used buckets instead of the first-inserted ones.
-    keys.sort((a, b) => {
-      const byRecency = (projects[b]?.lastUsedAt ?? 0) - (projects[a]?.lastUsedAt ?? 0);
-      return byRecency !== 0 ? byRecency : a.localeCompare(b);
-    });
-    for (const key of keys.slice(MAX_RIGHT_DOCK_PROJECTS)) {
-      delete projects[key];
-    }
-  }
-  return {
-    width: normalizeIntegerInRange(obj.width, 320, 1280, 420),
-    projects,
-  };
-}
-
-export function normalizeFontScale(value: unknown): number {
-  const num = typeof value === "number" && Number.isFinite(value) ? value : 1;
-  return Math.min(1.4, Math.max(0.8, Math.round(num * 100) / 100));
-}
-
-export function normalizeFontScaleSettings(input: unknown): FontScaleSettings {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  return {
-    sidebar: normalizeFontScale(obj.sidebar),
-    chat: normalizeFontScale(obj.chat),
-    rightDock: normalizeFontScale(obj.rightDock),
-  };
-}
-
-export function normalizeChatTranscriptSettings(input: unknown): ChatTranscriptSettings {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  return {
-    width: normalizeIntegerInRange(
-      obj.width,
-      MIN_CHAT_TRANSCRIPT_WIDTH,
-      MAX_CHAT_TRANSCRIPT_WIDTH,
-      DEFAULT_CHAT_TRANSCRIPT_WIDTH,
-    ),
-  };
-}
-
 export function normalizeCustomSettings(
   input: unknown,
   customProviders: CustomProvider[],
@@ -2542,107 +1290,6 @@ export function normalizeUpdateSettings(input: unknown): UpdateSettings {
   return {
     includePrereleases: obj.includePrereleases === true,
   };
-}
-
-function clampFailoverInteger(input: unknown, min: number, max: number, fallback: number): number {
-  const value =
-    typeof input === "number" && Number.isFinite(input)
-      ? Math.round(input)
-      : typeof input === "string" && input.trim() !== ""
-        ? Math.round(Number(input))
-        : Number.NaN;
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, value));
-}
-
-/**
- * Normalizes one vendor's failover config. Queue entries must reference an
- * existing provider of `providerType` — cross-vendor entries (e.g. a Codex
- * provider inside the Claude queue) are dropped so failover can never mix
- * vendors.
- *
- * Legacy entry migration: the queue used to hold {customProviderId, model}
- * objects. Those collapse to their provider id (deduped), because failover now
- * always re-sends the conversation's own model to the fallback provider.
- */
-export function normalizeProviderFailoverSettings(
-  input: unknown,
-  customProviders: CustomProvider[],
-  providerType: ProviderId,
-): ProviderFailoverSettings {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const defaults = DEFAULT_PROVIDER_FAILOVER_SETTINGS;
-
-  const queue: string[] = [];
-  const seen = new Set<string>();
-  if (Array.isArray(obj.queue)) {
-    for (const raw of obj.queue) {
-      const providerId =
-        typeof raw === "string"
-          ? raw
-          : raw &&
-              typeof raw === "object" &&
-              typeof (raw as SelectedModel).customProviderId === "string"
-            ? (raw as SelectedModel).customProviderId
-            : "";
-      if (!providerId) continue;
-      const provider = customProviders.find((item) => item.id === providerId);
-      if (!provider || provider.type !== providerType) continue;
-      if (seen.has(providerId)) continue;
-      seen.add(providerId);
-      queue.push(providerId);
-      if (queue.length >= MODEL_FAILOVER_QUEUE_LIMIT) break;
-    }
-  }
-
-  return {
-    // An enabled toggle with an empty queue is a harmless no-op at runtime;
-    // keep the user's toggle state instead of silently flipping it off.
-    enabled: obj.enabled === true,
-    queue,
-    maxSwitches: clampFailoverInteger(obj.maxSwitches, 1, 10, defaults.maxSwitches),
-    failureThreshold: clampFailoverInteger(obj.failureThreshold, 1, 10, defaults.failureThreshold),
-    cooldownSeconds: clampFailoverInteger(obj.cooldownSeconds, 5, 3600, defaults.cooldownSeconds),
-  };
-}
-
-/** True for the pre-per-vendor persisted shape ({enabled, queue, ...}). */
-function isLegacyFlatModelFailoverShape(obj: Record<string, unknown>): boolean {
-  return (
-    !PROVIDER_FAILOVER_TYPES.some((type) => type in obj) &&
-    ("enabled" in obj || "queue" in obj || "maxSwitches" in obj)
-  );
-}
-
-export function normalizeModelFailoverSettings(
-  input: unknown,
-  customProviders: CustomProvider[],
-): ModelFailoverSettings {
-  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-
-  // Legacy migration: the old single global config becomes each vendor's
-  // config. Cross-vendor queue entries are filtered per tab by the per-vendor
-  // normalizer, so a mixed legacy queue splits cleanly into its vendors.
-  if (isLegacyFlatModelFailoverShape(obj)) {
-    const result = getDefaultModelFailoverSettings();
-    for (const type of PROVIDER_FAILOVER_TYPES) {
-      const migrated = normalizeProviderFailoverSettings(obj, customProviders, type);
-      // Only vendors that actually kept queue entries stay enabled; an empty
-      // migrated queue with enabled=true would surface confusing "on but
-      // empty" warnings on tabs the user never configured.
-      result[type] = {
-        ...migrated,
-        enabled: migrated.enabled && migrated.queue.length > 0,
-      };
-    }
-    return result;
-  }
-
-  const result = getDefaultModelFailoverSettings();
-  for (const type of PROVIDER_FAILOVER_TYPES) {
-    result[type] = normalizeProviderFailoverSettings(obj[type], customProviders, type);
-  }
-  return result;
 }
 
 export function getDefaultSettings(): AppSettings {

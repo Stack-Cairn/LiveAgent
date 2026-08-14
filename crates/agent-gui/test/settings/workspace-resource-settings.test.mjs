@@ -24,7 +24,7 @@ const sharedSheet = readFileSync(
   "utf8",
 );
 const sharedSidebar = readFileSync(
-  new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
+  new URL("../../../agent-ui/src/components/chat/ChatHistorySidebarRows.tsx", import.meta.url),
   "utf8",
 );
 const sendRuntime = readFileSync(
@@ -46,6 +46,10 @@ const sharedWorkspaceRemovalHook = readFileSync(
 );
 const webGatewayApp = readFileSync(
   new URL("../../../agent-gateway/web/src/app/GatewayApp.tsx", import.meta.url),
+  "utf8",
+);
+const webGatewayAppView = readFileSync(
+  new URL("../../../agent-gateway/web/src/app/GatewayAppView.tsx", import.meta.url),
   "utf8",
 );
 const sharedWorkspaceCloneModal = readFileSync(
@@ -94,9 +98,9 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.doesNotMatch(sharedProjectSettings, /createPortal|role="dialog"/);
   assert.match(sharedProjectSettings, /onRenameProject\?\.\(normalizedProjectName\)/);
   assert.match(guiChatPage, /onRenameProject=\{\(name\)/);
-  assert.match(webGatewayApp, /onRenameProject=\{\(name\)/);
+  assert.match(webGatewayAppView, /onRenameProject=\{\(name\)/);
   assert.match(guiChatPage, /rootClient=\{workspaceProjectRootClient\}/);
-  assert.match(webGatewayApp, /rootClient=\{workspaceProjectRootClient\}/);
+  assert.match(webGatewayAppView, /rootClient=\{workspaceProjectRootClient\}/);
   assert.match(webGatewayApp, /api\.listWorkspaceRootGrants\(project\.id, project\.path\)/);
   assert.match(webGatewayApp, /api\.applyWorkspaceRootGrants\(/);
   assert.match(sharedProjectSettings, /@liveagent\/adapters\/directoryPicker/);

@@ -2,10 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const providersSectionSource = readFileSync(
-  new URL("../../../agent-ui/src/pages/settings/ProvidersSection.tsx", import.meta.url),
-  "utf8",
-);
+const providersSectionSource = ["ProviderModal.tsx", "ProviderModalView.tsx"]
+  .map((file) =>
+    readFileSync(
+      new URL(`../../../agent-ui/src/pages/settings/${file}`, import.meta.url),
+      "utf8",
+    ),
+  )
+  .join("\n");
 
 test("WebUI provider model refresh only disables while a request is running", () => {
   const clickHandlerIndex = providersSectionSource.indexOf("onClick={handleRefresh}");

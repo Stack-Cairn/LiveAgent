@@ -1373,6 +1373,61 @@ pub async fn system_pick_file(
 }
 
 #[tauri::command(rename_all = "snake_case")]
+pub async fn system_save_preview_file(
+    file_name: String,
+    mime_type: Option<String>,
+    data_base64: String,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = BASE64_STANDARD
+            .decode(data_base64)
+            .map_err(|error| format!("Invalid preview file data: {error}"))?;
+        // Preserve the source extension in the suggested name. A MIME type is
+        // not a usable native dialog extension filter by itself.
+        let _ = mime_type;
+        let Some(path) = FileDialog::new().set_file_name(&file_name).save_file() else {
+            return Ok(false);
+        };
+        fs::write(path, bytes).map_err(|error| format!("Failed to save preview file: {error}"))?;
+        Ok(true)
+    })
+    .await
+    .map_err(|e| format!("system_save_preview_file join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn system_clipboard_write_image(
+    mime_type: Option<String>,
+    data_base64: String,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mime_type = mime_type.unwrap_or_default();
+        if !mime_type.to_ascii_lowercase().starts_with("image/") {
+            return Err("The selected workspace preview is not an image".to_string());
+        }
+        let encoded = BASE64_STANDARD
+            .decode(data_base64)
+            .map_err(|error| format!("Invalid image clipboard data: {error}"))?;
+        let image = image::load_from_memory(&encoded)
+            .map_err(|error| format!("Failed to decode image for clipboard: {error}"))?
+            .to_rgba8();
+        let width = usize::try_from(image.width()).map_err(|_| "Image width is too large")?;
+        let height = usize::try_from(image.height()).map_err(|_| "Image height is too large")?;
+        let mut clipboard =
+            arboard::Clipboard::new().map_err(|error| format!("Clipboard unavailable: {error}"))?;
+        clipboard
+            .set_image(arboard::ImageData {
+                width,
+                height,
+                bytes: std::borrow::Cow::Owned(image.into_raw()),
+            })
+            .map_err(|error| format!("Failed to write image clipboard: {error}"))
+    })
+    .await
+    .map_err(|e| format!("system_clipboard_write_image join failed: {e}"))?
+}
+
+#[tauri::command(rename_all = "snake_case")]
 pub async fn system_create_project_folder(
     parent: String,
     name: String,

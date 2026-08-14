@@ -130,7 +130,7 @@ test("a stop request halts the batch and reports the rest as skipped", async () 
 
 test("conversation rename suppresses the menu's return-focus without changing double-click rename", () => {
   const source = readFileSync(
-    new URL("../../../agent-ui/src/components/chat/ChatHistorySidebar.tsx", import.meta.url),
+    new URL("../../../agent-ui/src/components/chat/ChatHistorySidebarRows.tsx", import.meta.url),
     "utf8",
   );
 

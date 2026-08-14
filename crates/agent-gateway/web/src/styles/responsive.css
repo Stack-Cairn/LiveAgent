@@ -1,0 +1,1464 @@
+/* ─── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .gateway-footer-strip {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .login-container {
+    grid-template-columns: 1fr;
+    width: min(100%, 540px);
+  }
+
+  .login-hero {
+    border-right: none;
+    border-bottom: 1px solid hsl(0 0% 0% / 0.04);
+    padding: 36px 32px 28px;
+  }
+
+  .dark .login-hero {
+    border-bottom-color: hsl(0 0% 100% / 0.05);
+  }
+
+  .login-form-panel {
+    padding: 28px 32px 36px;
+  }
+
+  .login-form-card {
+    max-width: 100%;
+  }
+}
+
+/*
+ * Transcript width handles are a pointer affordance. This query must stay in
+ * sync with TRANSCRIPT_WIDTH_CONTROLS_HIDDEN_MEDIA_QUERY in
+ * lib/transcript-width/transcriptWidthModel.ts, which gates the mount itself —
+ * this rule only covers the frame before that gate is read.
+ */
+@media (max-width: 820px), (pointer: coarse) {
+  .transcript-width-controls {
+    display: none !important;
+  }
+}
+
+@media (max-width: 820px) {
+  .gateway-shell {
+    display: flex;
+    min-height: 100svh;
+    min-height: 100dvh;
+    height: 100svh;
+    height: 100dvh;
+  }
+
+  .gateway-main-shell {
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+  }
+
+  .gateway-chat-frame {
+    height: 100%;
+    --gateway-chat-column-gutter: 12px;
+    --gateway-chat-composer-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .history-share-header {
+    min-height: auto;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 12px 14px;
+  }
+
+  .history-share-meta {
+    justify-content: flex-start;
+  }
+
+  .gateway-transcript-shell {
+    padding-top: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .assistant-bubble-shell {
+    gap: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .assistant-bubble-avatar {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .assistant-bubble-content {
+    padding-top: 0;
+  }
+
+  .gateway-live-status-footer {
+    margin-left: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .chat-history-row-menu-button {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .chat-history-row-title-button {
+    -webkit-touch-callout: none;
+    user-select: none;
+    touch-action: pan-y;
+  }
+
+  .gateway-scroll-to-bottom {
+    right: 12px;
+    bottom: calc(var(--gateway-chat-composer-overlay-height, 176px) + 10px);
+    height: 38px;
+    width: 38px;
+  }
+
+  .gateway-editor-host > .chat-history-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 45;
+    height: 100svh;
+    height: 100dvh;
+    width: min(86vw, 272px) !important;
+    max-width: min(86vw, 272px);
+    box-shadow: 18px 0 48px hsl(220 22% 10% / 0.16);
+    /* The drawer is ~86vw wide — almost the full screen on mobile. Fading the
+       opaque panel in from opacity:0 lets the chat content show through it for
+       the duration of the transition, then it snaps solid, which reads as the
+       whole page flashing. Slide only; hide the closed panel (and its shadow)
+       with `visibility` so there is no translucent blend frame. */
+    opacity: 1;
+    visibility: hidden;
+    transform: translate3d(-100%, 0, 0);
+    transition:
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 180ms !important;
+    will-change: transform;
+    /* As a fixed, layer-promoted drawer, `contain: paint` (inherited from the
+       base rule) makes the compositor intermittently re-raster the covered
+       region during the slide — a one-frame whole-screen flash. Drop paint
+       containment here and pin a stable backing layer so the transform plays
+       on its own compositor layer without re-painting the page behind it. */
+    contain: layout style;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .gateway-editor-host > .chat-history-sidebar[data-state="open"] {
+    visibility: visible;
+    transform: translate3d(0, 0, 0);
+    transition:
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 0s !important;
+  }
+
+  .gateway-editor-host > .chat-history-sidebar[data-state="closed"] {
+    pointer-events: none;
+  }
+
+  .gateway-editor-host > .chat-history-sidebar > .chat-history-sidebar-inner {
+    width: 100%;
+    min-width: 0;
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  .gateway-footer-strip {
+    padding-bottom: 100px;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel {
+    inset: 0;
+    z-index: 50;
+    width: 100%;
+    height: 100svh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    /* This panel is a full-screen (inset:0) mobile surface. A translucent
+       background plus `backdrop-filter: blur()` means the whole viewport behind
+       it is re-sampled and blurred every frame - and because the React open
+       animation also fades opacity 0->1 and moves the panel, the panel is
+       see-through *and* blurring mid-transition, before its content paints.
+       That translucent, blurred, content-less frame is the flash. An opaque
+       surface with no backdrop blur covers everything it covers anyway, so
+       keep the mobile transition to the same simple fade used by settings. */
+    background: hsl(var(--background));
+    box-shadow: none;
+    opacity: 0 !important;
+    visibility: hidden;
+    transition:
+      opacity 220ms ease,
+      visibility 0s linear 220ms !important;
+    will-change: opacity;
+    contain: layout style;
+    translate: 0 0 !important;
+    transform: none !important;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel[data-state="open"] {
+    opacity: 1 !important;
+    visibility: visible;
+    transition:
+      opacity 220ms ease,
+      visibility 0s linear 0s !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .workspace-code-editor-overlay,
+  html[data-liveagent-webui="gateway"] .workspace-file-preview-overlay,
+  html[data-liveagent-webui="gateway"] .workspace-image-preview-overlay,
+  html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-overlay {
+    z-index: 60;
+  }
+
+  html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tabs {
+    height: 44px;
+    padding-inline: 8px;
+    scroll-padding-inline: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tab {
+    max-width: min(13.5rem, calc(100vw - 1rem));
+  }
+
+  html[data-liveagent-webui="gateway"] .workspace-ssh-terminal-tab > button:last-child {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-inner {
+    min-width: 0;
+    opacity: 1 !important;
+    translate: 0 0 !important;
+    transform: translate3d(0, 0, 0) !important;
+    transition: none !important;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-handle {
+    display: block;
+    width: 36px;
+    height: 4px;
+    flex: 0 0 auto;
+    align-self: center;
+    margin-top: 8px;
+    border-radius: 999px;
+    background: hsl(var(--muted-foreground) / 0.24);
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-header {
+    height: auto;
+    min-height: 44px;
+    gap: 6px;
+    padding: 6px 8px 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-shell {
+    gap: 4px;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-tabs-scrollbar {
+    height: 5px;
+    flex-basis: 5px;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-tab {
+    max-width: min(12rem, calc(100vw - 10rem));
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-shell-select {
+    max-width: 6.75rem;
+  }
+
+  html[data-liveagent-webui="gateway"] .gateway-settings-overlay {
+    height: 100svh;
+    height: 100dvh;
+    min-height: 100svh;
+    min-height: 100dvh;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-page-shell {
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-sidebar {
+    width: 100% !important;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--background) / 0.96);
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-sidebar-header {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav {
+    order: 2;
+    display: flex;
+    flex-wrap: nowrap;
+    flex: 0 0 auto;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 8px 10px 10px;
+    scrollbar-width: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav > * + * {
+    margin-top: 0 !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-group {
+    display: contents;
+    margin-top: 0 !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-group-label {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-group > div:last-child {
+    display: contents;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-group > div:last-child > * + * {
+    margin-top: 0 !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-item {
+    width: auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    border: 1px solid hsl(var(--border) / 0.5);
+    padding: 8px 10px;
+    border-radius: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-item-active {
+    border-color: hsl(var(--primary) / 0.35);
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-item > div {
+    gap: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-label {
+    font-size: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-back-bar {
+    display: flex;
+    align-items: center;
+    order: 1;
+    border-top: 0;
+    border-bottom: 1px solid hsl(var(--border) / 0.72);
+    padding: max(8px, env(safe-area-inset-top)) 10px 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-back-button {
+    width: auto;
+    min-height: 34px;
+    padding: 8px 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-main {
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-main-header {
+    gap: 12px;
+    padding: 10px 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-save-indicator {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-content {
+    min-height: 0;
+    padding: 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-content-hooks {
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-section-shell-hooks {
+    display: block;
+    min-height: auto;
+    flex: 0 0 auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-content-memory {
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-section-shell-memory {
+    display: block;
+    min-height: auto;
+    flex: 0 0 auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-memory-panel {
+    min-height: auto;
+    flex: 0 0 auto;
+    gap: 12px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-memory-summary-card {
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-memory-summary-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-memory-summary-actions > button {
+    min-height: 34px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-memory-layout {
+    display: flex;
+    min-height: auto;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-memory-list-section,
+  html[data-liveagent-webui="gateway"] .settings-memory-detail-section {
+    min-height: auto;
+    overflow: visible;
+    border-radius: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-memory-entry-list {
+    max-height: min(42svh, 320px);
+    flex: 0 1 auto;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-memory-detail-body {
+    min-height: auto;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-section-heading-row,
+  html[data-liveagent-webui="gateway"] .settings-model-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-section-title-group {
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-section-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-card-actions,
+  html[data-liveagent-webui="gateway"] .settings-hover-actions {
+    opacity: 1 !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hover-action {
+    display: flex !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-provider-tabs-wrap {
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-provider-tabs {
+    min-width: max-content;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-form-grid,
+  html[data-liveagent-webui="gateway"] .settings-cron-type-grid,
+  html[data-liveagent-webui="gateway"] .settings-choice-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-language-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-field-row {
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-remote-gateway-row {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-remote-gateway-row > input:first-of-type {
+    flex: 1 1 100%;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-remote-gateway-row > span {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-remote-gateway-row > input:last-of-type {
+    width: 100%;
+    flex: 1 1 8rem;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-overlay {
+    align-items: stretch;
+    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-panel {
+    display: flex;
+    width: min(100%, calc(100vw - 16px)) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 16px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-header,
+  html[data-liveagent-webui="gateway"] .settings-modal-subheader {
+    flex: 0 0 auto;
+    padding: 12px 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-body {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-body.px-6 {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-body.py-5,
+  html[data-liveagent-webui="gateway"] .settings-modal-body.py-4 {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-body > .px-6 {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-body > .py-5,
+  html[data-liveagent-webui="gateway"] .settings-modal-body > .py-4 {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-footer {
+    align-items: stretch;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-footer.settings-modal-footer-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-tabs {
+    width: 100%;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-tab {
+    flex: 1 1 0;
+    justify-content: center;
+    min-height: 36px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-category-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-category-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-category-chip {
+    min-height: 36px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-row {
+    padding: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-row-actions {
+    gap: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tools-row-action {
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-step-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-http-row {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-http-row > input {
+    order: 5;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-http-row > div:last-child {
+    margin-left: auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-section {
+    height: auto;
+    min-height: 0;
+    gap: 12px;
+    overflow: visible;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-section-hero {
+    padding: 14px;
+    gap: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-stats {
+    gap: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-stat {
+    padding: 5px 9px;
+    gap: 6px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-stat-label {
+    font-size: 11px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-stat-value {
+    font-size: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-grid {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px;
+    overflow: visible;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-lifecycle {
+    flex: 0 0 auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-lifecycle-header {
+    padding: 8px 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-lifecycle-body {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding: 6px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-phase-button {
+    padding: 6px 8px;
+    border-radius: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-event-tree {
+    margin-left: 16px;
+    padding-bottom: 2px;
+    padding-top: 2px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-event-button {
+    min-height: 32px;
+    padding: 7px 10px 7px 30px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-event-label {
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-phase-spacer {
+    margin-left: 16px;
+    height: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail {
+    flex: 0 0 auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-header {
+    padding: 12px 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-body {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-title {
+    font-size: 15px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-desc {
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card {
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-name {
+    font-size: 13.5px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-desc {
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-cron-view-panel {
+    height: calc(100dvh - 16px) !important;
+    flex-direction: column;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-cron-view-left {
+    width: 100% !important;
+    max-height: 42%;
+    border-right: 0;
+    border-bottom: 1px solid hsl(var(--border) / 0.4);
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-cron-view-right {
+    min-height: 0;
+  }
+
+  /* Stacked layout: the logs header (desktop close location) sits mid-modal,
+     so surface the hero copy of the close button at the modal's top-right,
+     right of run-now, and hide the logs-header one. */
+  html[data-liveagent-webui="gateway"] .settings-cron-view-hero-close {
+    display: flex;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-cron-logs-close {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-log-row {
+    flex-wrap: wrap;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-log-row > span {
+    width: auto !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-log-row > span:first-of-type {
+    flex: 1 1 100%;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-log-row > span:nth-of-type(3) {
+    margin-left: 0 !important;
+  }
+
+  .login-shell {
+    /* Center the card vertically on phones so it isn't pinned to the very top
+       with a large empty gap below. `safe center` falls back to top-alignment
+       only if the card ever grows taller than the viewport, avoiding clipping. */
+    padding: 24px 16px;
+    align-content: safe center;
+    padding-top: max(env(safe-area-inset-top, 0px), 24px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 24px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .login-container {
+    border-radius: 22px;
+  }
+
+  .login-hero {
+    padding: 28px 24px 20px;
+  }
+
+  .login-hero-title {
+    font-size: 26px;
+  }
+
+  .login-logo-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .login-feat {
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .login-feat-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+
+  .login-feat-text span {
+    font-size: 11px;
+  }
+
+  .login-form-panel {
+    padding: 20px 24px 28px;
+  }
+
+  .login-form-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  .login-form-title {
+    font-size: 20px;
+  }
+
+  .login-input-wrap {
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+
+  .login-btn {
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .login-backdrop-orb--1 {
+    width: 300px;
+    height: 300px;
+  }
+
+  .login-backdrop-orb--2 {
+    width: 250px;
+    height: 250px;
+  }
+}
+
+/* Tailwind v4 gates every hover:/group-hover: utility behind
+ * @media (hover: hover), so on devices whose primary pointer cannot hover
+ * (tablets, touch-primary 2-in-1s) the reveal rule never exists.
+ * Hover-revealed settings action clusters must stay visible there. */
+@media (hover: none), (pointer: coarse) {
+  html[data-liveagent-webui="gateway"] .settings-card-actions,
+  html[data-liveagent-webui="gateway"] .settings-hover-actions {
+    opacity: 1 !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .login-shell {
+    padding: 10px;
+    padding-top: max(env(safe-area-inset-top, 0px), 16px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 16px);
+  }
+
+  .login-container {
+    border-radius: 20px;
+    width: 100%;
+  }
+
+  .login-hero {
+    padding: 24px 20px 18px;
+  }
+
+  .login-hero-title {
+    font-size: 24px;
+  }
+
+  .login-hero-desc {
+    font-size: 13px;
+    margin-top: 10px;
+  }
+
+  .login-feat-list {
+    margin-top: 20px;
+    gap: 8px;
+  }
+
+  .login-feat-text span {
+    display: none;
+  }
+
+  .login-feat-text strong {
+    font-size: 12.5px;
+    margin-bottom: 0;
+  }
+
+  .login-feat {
+    padding: 9px 12px;
+    align-items: center;
+  }
+
+  .login-form-panel {
+    padding: 18px 20px 24px;
+  }
+
+  .login-form-header {
+    margin-bottom: 20px;
+  }
+
+  .login-form-sub {
+    font-size: 12.5px;
+  }
+
+  .login-input {
+    min-height: 60px;
+    font-size: 12px;
+  }
+
+  .login-form-footer {
+    font-size: 11px;
+  }
+
+  .gateway-chat-frame {
+    --gateway-chat-column-gutter: 10px;
+    --gateway-chat-composer-overlay-height: 168px;
+  }
+
+  .gateway-chat-frame > header {
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .gateway-banner-error {
+    margin: 8px 10px 0;
+  }
+
+  .gateway-transcript-list {
+    gap: 14px;
+  }
+
+  .gateway-empty-state {
+    min-height: calc(100dvh - var(--gateway-chat-composer-overlay-height, 176px) - 96px);
+    padding-top: 8px;
+  }
+
+  .gateway-composer-layer {
+    padding-bottom: var(--gateway-chat-composer-bottom, 12px);
+  }
+
+  .gateway-composer-layer > .gateway-chat-column {
+    min-width: 0;
+  }
+
+  .gateway-chat-frame .mention-composer {
+    min-height: 58px;
+    max-height: min(34dvh, 132px);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  html[data-liveagent-webui="gateway"] .composer-dropdown {
+    width: min(92vw, 420px);
+    min-width: min(92vw, 260px);
+    max-width: calc(100vw - 20px);
+    max-height: min(74dvh, var(--available-height, 420px));
+  }
+
+  .chat-user-bubble-wrap,
+  .chat-user-bubble-editor {
+    max-width: min(92%, calc(100vw - 56px)) !important;
+  }
+
+  .chat-user-bubble {
+    padding: 10px 13px;
+    font-size: 14px;
+    line-height: 1.62;
+  }
+
+  .chat-user-bubble-actions,
+  .chat-assistant-actions {
+    opacity: 1 !important;
+  }
+
+  .chat-user-bubble-action,
+  .chat-assistant-action {
+    display: inline-flex;
+    min-height: 28px;
+    min-width: 28px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .checkpoint-card button {
+    padding: 10px 12px;
+  }
+
+  .checkpoint-row {
+    display: block;
+  }
+
+  .checkpoint-row-spacer {
+    display: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-content {
+    padding: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-main-header {
+    padding: 9px 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-card-row {
+    padding: 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-card-actions {
+    margin-left: auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-inline-form {
+    flex-direction: column;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-inline-form > button,
+  html[data-liveagent-webui="gateway"] .settings-modal-actions > button {
+    width: 100%;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-footer > .text-xs,
+  html[data-liveagent-webui="gateway"] .settings-modal-footer > .min-w-0 {
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-footer .truncate {
+    white-space: normal;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-subheader .settings-field-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"]
+    .settings-modal-subheader
+    .settings-field-row
+    > div:first-child {
+    width: auto;
+  }
+
+  /* Tool detail modal becomes a bottom sheet on small screens. */
+  html[data-liveagent-webui="gateway"] .settings-tool-detail-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tool-detail-overlay .settings-tool-detail-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: min(86dvh, 640px) !important;
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    transition:
+      opacity 200ms ease,
+      transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  html[data-liveagent-webui="gateway"]
+    .settings-tool-detail-overlay[data-state="open"]
+    .settings-tool-detail-panel {
+    transform: translateY(0);
+  }
+
+  html[data-liveagent-webui="gateway"]
+    .settings-tool-detail-overlay[data-state="closed"]
+    .settings-tool-detail-panel {
+    opacity: 1;
+    transform: translateY(100%);
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-tool-drawer-handle {
+    display: flex;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-confirm-popover {
+    width: min(16rem, calc(100vw - 24px));
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-lifecycle {
+    max-height: none;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-header {
+    padding: 11px 12px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-detail-body {
+    padding: 10px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card {
+    padding: 11px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-icon svg {
+    height: 16px;
+    width: 16px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-actions {
+    min-height: 32px;
+    align-items: center;
+    gap: 4px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-actions [role="switch"] {
+    width: 36px;
+    height: 20px;
+    align-self: center;
+    border: 1px solid hsl(var(--border) / 0.58);
+    background-color: hsl(var(--muted-foreground) / 0.18);
+  }
+
+  html[data-liveagent-webui="gateway"]
+    .settings-hooks-card-actions
+    [role="switch"][aria-checked="true"] {
+    border-color: hsl(var(--primary) / 0.4);
+    background-color: hsl(var(--primary));
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-actions > button:not([role="switch"]) {
+    height: 30px;
+    width: 30px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-cron-logs-header {
+    flex-wrap: wrap;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-cron-logs-header > div {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 640px) and (prefers-reduced-motion: reduce) {
+  html[data-liveagent-webui="gateway"] .settings-tool-detail-overlay .settings-tool-detail-panel {
+    transition-duration: 1ms;
+  }
+}
+
+@media (max-width: 520px) {
+  html[data-liveagent-webui="gateway"] .settings-language-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-section-actions > button:not([role="switch"]),
+  html[data-liveagent-webui="gateway"] .settings-section-actions > .settings-section-action {
+    flex: 1 1 auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-card-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-main {
+    min-width: 0;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-card-actions {
+    margin-left: auto;
+    margin-top: 0;
+    width: auto;
+    justify-content: flex-end;
+    border-top: 0;
+    padding-top: 0;
+    flex-basis: auto;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-stat {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    justify-content: center;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-hooks-stats {
+    width: 100%;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-nav-item {
+    padding: 7px 9px;
+  }
+
+  html[data-liveagent-webui="gateway"] .settings-modal-panel {
+    border-radius: 14px;
+  }
+
+  html[data-liveagent-webui="gateway"] .model-selector-trigger {
+    width: clamp(7rem, calc(100vw - 13rem), 15rem);
+    max-width: clamp(7rem, calc(100vw - 13rem), 15rem) !important;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .model-selector-trigger,
+  html[data-liveagent-webui="gateway"] .model-selector-current-label {
+    font-size: 13px;
+  }
+
+  html[data-liveagent-webui="gateway"] .gateway-project-tools-panel-toggle {
+    margin-right: 8px;
+  }
+}
+
+@media (max-width: 380px) {
+  .gateway-chat-frame {
+    --gateway-chat-column-gutter: 8px;
+  }
+
+  .gateway-chat-frame > header {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  html[data-liveagent-webui="gateway"] .model-selector-trigger {
+    width: clamp(6.25rem, calc(100vw - 12.5rem), 13rem);
+    max-width: clamp(6.25rem, calc(100vw - 12.5rem), 13rem) !important;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-tab {
+    max-width: min(10rem, calc(100vw - 8.5rem));
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  html[data-liveagent-webui="gateway"] .project-tools-panel-shell-select {
+    max-width: 5.8rem;
+  }
+
+  .gateway-chat-frame .composer-toolbar-action {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .login-shell {
+    padding: 6px;
+  }
+
+  .login-container {
+    border-radius: 18px;
+  }
+
+  .login-hero {
+    padding: 20px 16px 14px;
+  }
+
+  .login-hero-title {
+    font-size: 22px;
+  }
+
+  .login-hero-desc {
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+
+  .login-hero-title-row {
+    gap: 8px;
+  }
+
+  .login-logo-mark {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  .login-logo-mark svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .login-feat-list {
+    margin-top: 16px;
+    gap: 6px;
+  }
+
+  .login-feat {
+    padding: 8px 10px;
+    gap: 10px;
+    border-radius: 10px;
+  }
+
+  .login-feat-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+  }
+
+  .login-form-panel {
+    padding: 14px 16px 20px;
+  }
+
+  .login-form-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+
+  .login-form-title {
+    font-size: 18px;
+  }
+
+  .login-form-sub {
+    font-size: 12px;
+  }
+
+  .login-form-header {
+    margin-bottom: 16px;
+  }
+
+  .login-input-wrap {
+    padding: 10px 12px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+
+  .login-input {
+    min-height: 54px;
+  }
+
+  .login-input-label {
+    margin-bottom: 8px;
+    font-size: 10px;
+  }
+
+  .login-input-hint {
+    font-size: 10.5px;
+    margin-top: 8px;
+  }
+
+  .login-btn {
+    height: 42px;
+    font-size: 13px;
+    border-radius: 11px;
+  }
+
+  .login-form-footer {
+    margin-top: 12px;
+  }
+}

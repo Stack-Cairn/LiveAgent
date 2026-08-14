@@ -5,6 +5,16 @@ const requireFromAgentUi = createRequire(
 );
 const ts = requireFromAgentUi("typescript");
 
+function parseSourceFile(source, fileName) {
+  return ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+}
+
 function staticPropertyName(name) {
   if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return name.text;
   if (!ts.isComputedPropertyName(name)) return null;
@@ -26,13 +36,7 @@ function isFunctionImplementation(node) {
 
 export function findRetiredSharedDeclarations(source, fileName, retiredNames) {
   const retired = retiredNames instanceof Set ? retiredNames : new Set(retiredNames);
-  const sourceFile = ts.createSourceFile(
-    fileName,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const sourceFile = parseSourceFile(source, fileName);
   const declarations = [];
 
   function add(name, node, kind) {
@@ -73,4 +77,49 @@ export function findRetiredSharedDeclarations(source, fileName, retiredNames) {
 
   visit(sourceFile);
   return declarations;
+}
+
+export function rendersImportedComponent(
+  source,
+  fileName,
+  moduleSpecifier,
+  importedComponentName,
+) {
+  const sourceFile = parseSourceFile(source, fileName);
+  const localComponentNames = new Set();
+
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteralLike(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== moduleSpecifier
+    ) {
+      continue;
+    }
+    const importClause = statement.importClause;
+    if (!importClause || importClause.isTypeOnly || !importClause.namedBindings) continue;
+    if (!ts.isNamedImports(importClause.namedBindings)) continue;
+    for (const specifier of importClause.namedBindings.elements) {
+      const importedName = specifier.propertyName?.text ?? specifier.name.text;
+      if (specifier.isTypeOnly || importedName !== importedComponentName) continue;
+      localComponentNames.add(specifier.name.text);
+    }
+  }
+
+  if (localComponentNames.size === 0) return false;
+  let rendersComponent = false;
+  function visit(node) {
+    if (rendersComponent) return;
+    if (
+      (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      ts.isIdentifier(node.tagName) &&
+      localComponentNames.has(node.tagName.text)
+    ) {
+      rendersComponent = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return rendersComponent;
 }
