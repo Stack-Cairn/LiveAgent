@@ -2,6 +2,7 @@ packages:
   - "crates/agent-ui"
   - "crates/agent-gui"
   - "crates/agent-gateway/web"
+  - "crates/agent-mobile"
 
 allowBuilds:
   "@google/genai": true

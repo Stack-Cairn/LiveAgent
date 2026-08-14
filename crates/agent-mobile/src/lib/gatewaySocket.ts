@@ -7,6 +7,7 @@ import type {
 import {
   normalizeSftpActionResponse,
   normalizeSftpListResponse,
+  normalizeSftpReadTextResponse,
   normalizeSftpStatResponse,
   normalizeSftpTransferEvent,
   normalizeSftpTransferResponse,
@@ -16,6 +17,7 @@ import {
 import type {
   SftpActionResponse,
   SftpListResponse,
+  SftpReadTextResponse,
   SftpStatResponse,
   SftpTransferEvent,
   SftpTransferResponse,
@@ -1828,6 +1830,50 @@ export class GatewayWebSocketClient {
     });
   }
 
+  async sftpReadText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    maxBytes?: number;
+    strictUtf8?: boolean;
+  }): Promise<SftpReadTextResponse> {
+    return normalizeSftpReadTextResponse(
+      await this.request<RawSftpResponse>("sftp.read_text", {
+        session_id: params.sessionId,
+        project_path_key: params.projectPathKey,
+        workdir: params.workdir,
+        remote_path: params.path,
+        max_bytes: params.maxBytes ?? 0,
+        strict_utf8: params.strictUtf8 ?? false,
+      }),
+    );
+  }
+
+  async sftpWriteText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    content: string;
+    expectedMtime?: number;
+    expectedSizeBytes?: number;
+  }): Promise<SftpActionResponse> {
+    return normalizeSftpActionResponse(
+      await this.request<RawSftpResponse>("sftp.write_text", {
+        session_id: params.sessionId,
+        project_path_key: params.projectPathKey,
+        workdir: params.workdir,
+        remote_path: params.path,
+        content: params.content,
+        overwrite: true,
+        create_parent_dirs: false,
+        expected_mtime: params.expectedMtime ?? 0,
+        expected_size_bytes: params.expectedSizeBytes ?? 0,
+      }),
+    );
+  }
+
   async terminalShellOptions(): Promise<TerminalShellOptions> {
     return normalizeTerminalShellOptions(
       await this.requestWithRecovery<RawTerminalResponse>("terminal.shell_options", {}),
@@ -3402,6 +3448,23 @@ export type GatewayWebSocketClientLike = {
     overwrite?: boolean;
   }): Promise<SftpTransferResponse>;
   sftpCancelTransfer(params: { sessionId: string; transferId: string }): Promise<void>;
+  sftpReadText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    maxBytes?: number;
+    strictUtf8?: boolean;
+  }): Promise<SftpReadTextResponse>;
+  sftpWriteText(params: {
+    sessionId: string;
+    projectPathKey: string;
+    workdir: string;
+    path: string;
+    content: string;
+    expectedMtime?: number;
+    expectedSizeBytes?: number;
+  }): Promise<SftpActionResponse>;
   terminalShellOptions(): Promise<TerminalShellOptions>;
   listTerminals(projectPathKey?: string): Promise<TerminalSession[]>;
   createTerminal(params: {

@@ -371,8 +371,6 @@ export default function GatewayApp() {
     [settings.system.missingWorkspaceProjectPaths],
   );
   const [sidebarOpen, setSidebarOpen] = useState(shouldOpenSidebarByDefault);
-  const [projectRenamingId, setProjectRenamingId] = useState<string | null>(null);
-  const [projectRenameDraft, setProjectRenameDraft] = useState("");
   const [shareConversation, setShareConversation] = useState<ChatHistorySummary | null>(null);
   const [shareStatus, setShareStatus] = useState<HistoryShareStatus | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
@@ -397,8 +395,8 @@ export default function GatewayApp() {
   const {
     activeView,
     setActiveView,
-    resourceSettingsProject,
-    setResourceSettingsProject,
+    projectSettingsProject,
+    setProjectSettingsProject,
     rightDockOpen,
     setRightDockOpen,
   } = useApplicationViewState<WorkspaceProject>();
@@ -1600,69 +1598,6 @@ export default function GatewayApp() {
     },
     [updateWorkspaceProjectGroups],
   );
-
-  const commitWorkspaceProjectRename = useCallback(
-    (project: WorkspaceProject, nextNameInput: string) => {
-      if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
-      const nextName = nextNameInput.trim();
-      if (!nextName || nextName === project.name) return;
-      setSettings((prev) => {
-        const pathKey = workspaceProjectPathKey(project.path);
-        const existing = prev.system.workspaceProjects.find(
-          (item) => item.id === project.id || workspaceProjectPathKey(item.path) === pathKey,
-        );
-        const updatedProject: WorkspaceProject = {
-          ...(existing ?? project),
-          id: existing?.id ?? project.id,
-          name: nextName,
-          kind: (existing ?? project).kind === "history" ? "folder" : (existing ?? project).kind,
-          updatedAt: Date.now(),
-        };
-        const workspaceProjects = existing
-          ? prev.system.workspaceProjects.map((item) =>
-              item.id === existing.id || workspaceProjectPathKey(item.path) === pathKey
-                ? updatedProject
-                : item,
-            )
-          : [...prev.system.workspaceProjects, updatedProject];
-
-        return {
-          ...prev,
-          system: resolveWorkspaceProjects(
-            {
-              ...prev.system,
-              workspaceProjects,
-            },
-            getDefaultWorkspaceProjectPath(prev.system),
-          ),
-        };
-      });
-    },
-    [setSettings],
-  );
-
-  const handleStartRenamingWorkspaceProject = useCallback((project: WorkspaceProject) => {
-    if (project.id === DEFAULT_WORKSPACE_PROJECT_ID) return;
-    setProjectRenamingId(project.id);
-    setProjectRenameDraft(project.name);
-  }, []);
-
-  const handleCommitWorkspaceProjectRename = useCallback(() => {
-    if (!projectRenamingId) {
-      return;
-    }
-    const project = workspaceProjects.find((item) => item.id === projectRenamingId);
-    if (project) {
-      commitWorkspaceProjectRename(project, projectRenameDraft);
-    }
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, [commitWorkspaceProjectRename, projectRenameDraft, projectRenamingId, workspaceProjects]);
-
-  const handleCancelWorkspaceProjectRename = useCallback(() => {
-    setProjectRenamingId(null);
-    setProjectRenameDraft("");
-  }, []);
 
   const handleSetWorkspaceProjectPinned = useCallback(
     (project: WorkspaceProject, isPinned: boolean) => {
@@ -3008,8 +2943,13 @@ export default function GatewayApp() {
     setPendingUploadsForConversation(nextConversationId, []);
   }
 
+  const translateWorkspaceProject = useCallback(
+    (key: string) => translate(key, settings.locale),
+    [settings.locale],
+  );
+
   const {
-    removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     handleArchiveWorkspaceProject,
     handleUnarchiveWorkspaceProject,
     handleWorktreeRemoved,
@@ -3020,8 +2960,8 @@ export default function GatewayApp() {
     activeWorkspaceProject,
     activateWorkspaceProject,
     setActiveWorkspaceProjectId,
-    setProjectRenamingId,
-    setProjectRenameDraft,
+    t: translateWorkspaceProject,
+    setErrorMessage: setSidebarActionError,
   });
 
   const isWorkspaceProjectRunning = useCallback(
@@ -3064,16 +3004,12 @@ export default function GatewayApp() {
   const refreshWorkspaceProjectWorkdirs = useCallback(() => {
     void sidebarStore.refreshWorkdirs("delete");
   }, [sidebarStore]);
-  const translateWorkspaceProject = useCallback(
-    (key: string) => translate(key, settings.locale),
-    [settings.locale],
-  );
   const handleRemoveWorkspaceProject = useWorkspaceProjectDeletion({
     settings,
     t: translateWorkspaceProject,
     requestConfirmDialog,
     setErrorMessage: setSidebarActionError,
-    removeWorkspaceProjectFromSettings,
+    removeWorkspaceProject,
     gitClient,
     terminalClient,
     shouldInspectTerminalSessions:
@@ -4574,8 +4510,6 @@ export default function GatewayApp() {
               workspaceProjectGroups={settings.system.workspaceProjectGroups}
               activeProjectId={activeWorkspaceProject?.id}
               missingProjectPathKeys={missingWorkspaceProjectPathKeys}
-              projectRenamingId={projectRenamingId}
-              projectRenameDraft={projectRenameDraft}
               projectsCollapsed={settings.customSettings.chatSidebar.projectsCollapsed}
               recentCollapsed={settings.customSettings.chatSidebar.recentCollapsed}
               canShareConversations={canShareHistory}
@@ -4595,11 +4529,7 @@ export default function GatewayApp() {
               onSelectProject={handleSelectWorkspaceProject}
               onNewConversationForProject={handleNewConversationForProject}
               onBrowseProjectInFileTree={handleBrowseWorkspaceProjectInFileTree}
-              onConfigureProjectResources={setResourceSettingsProject}
-              onStartRenamingProject={handleStartRenamingWorkspaceProject}
-              onProjectRenameDraftChange={setProjectRenameDraft}
-              onCommitProjectRename={handleCommitWorkspaceProjectRename}
-              onCancelProjectRename={handleCancelWorkspaceProjectRename}
+              onConfigureProject={setProjectSettingsProject}
               onSetProjectPinned={handleSetWorkspaceProjectPinned}
               onRemoveProject={handleRemoveWorkspaceProject}
               onArchiveProject={handleArchiveWorkspaceProject}
@@ -5101,17 +5031,17 @@ export default function GatewayApp() {
             />
           ) : null}
 
-          {resourceSettingsProject ? (
+          {projectSettingsProject ? (
             <WorkspaceResourceSettingsDrawer
-              project={resourceSettingsProject}
+              project={projectSettingsProject}
               settings={settings}
               skills={availableSkills}
-              onClose={() => setResourceSettingsProject(null)}
+              onClose={() => setProjectSettingsProject(null)}
               onSave={(draft) => {
                 setSettings((prev) =>
-                  updateWorkspaceResourceSettings(prev, resourceSettingsProject.path, draft),
+                  updateWorkspaceResourceSettings(prev, projectSettingsProject.path, draft),
                 );
-                setResourceSettingsProject(null);
+                setProjectSettingsProject(null);
               }}
             />
           ) : null}
