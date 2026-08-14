@@ -412,7 +412,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
             return handleImportReadableFiles(payload.files);
           })
           .catch((error) => {
-            addNotify("error", asErrorMessage(error, "读取拖入的文件夹失败"));
+            addNotify("error", asErrorMessage(error, translate("chat.workspaceDropFailed", locale)));
           });
         return;
       }
@@ -425,7 +425,7 @@ export function usePendingUploads(params: UsePendingUploadsParams) {
       }
       void handleImportReadableFiles(files);
     },
-    [addNotify, dropLandsInUploadZone, handleImportReadableFiles, onDropDirectories],
+    [addNotify, dropLandsInUploadZone, handleImportReadableFiles, locale, onDropDirectories],
   );
 
   return {
