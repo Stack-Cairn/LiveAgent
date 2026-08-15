@@ -10,7 +10,7 @@ import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
-import { appendToolResultTailBlock } from "../../../lib/chat/context/contextTailBlock";
+import { resolveTailBlockAnchorId } from "../../../lib/chat/context/contextTailBlock";
 import {
   isAbortedAssistantMessage,
   type SuppressedToolTraceSnapshot,
@@ -1064,11 +1064,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           const busDelta = await buildParentMessageBusDelta();
           const rosterRunStatusDelta = buildRosterRunStatusDelta();
           const tailBlockText = [busDelta.text, rosterRunStatusDelta].filter(Boolean).join("\n\n");
-          // 探锚：只判断尾部块此刻能否安全挂上（返回新数组 = 有锚点），不改写
-          // tempContext.messages 本身。
+          // 探锚：只判断尾部块此刻能否安全挂上（解析得到锚点 = 可挂），不改写
+          // tempContext.messages 本身。真正的挂载与锚点钉死发生在 runner 侧。
           const tailBlockAttachable =
-            Boolean(tailBlockText) &&
-            appendToolResultTailBlock(tempContext.messages, tailBlockText) !== tempContext.messages;
+            Boolean(tailBlockText) && resolveTailBlockAnchorId(tempContext.messages) !== null;
           const { context: compactedContext } = await compaction.compactDuringRun({
             trigger: "post-tool",
             state: tempState,

@@ -154,7 +154,7 @@ function assistant(overrides = {}) {
   };
 }
 
-test("tail block attaches to the last tool result without mutating the input", () => {
+test("resolveTailBlockAnchorId picks the last safe tool result and attach pins to it", () => {
   const messages = [
     { role: "user", content: "hi", timestamp: 1 },
     assistant(),
@@ -164,7 +164,12 @@ test("tail block attaches to the last tool result without mutating the input", (
   ];
   const snapshot = JSON.parse(JSON.stringify(messages));
 
-  const next = tailBlock.appendToolResultTailBlock(messages, "BUS DELTA");
+  const anchorToolCallId = tailBlock.resolveTailBlockAnchorId(messages);
+  assert.equal(anchorToolCallId, "call-2");
+
+  const next = tailBlock.attachPinnedTailBlocks(messages, [
+    { anchorToolCallId, text: "BUS DELTA" },
+  ]);
   assert.notEqual(next, messages);
   assert.deepEqual(messages, snapshot, "入参消息不得被原地修改");
   assert.equal(next[2], messages[2], "未命中的消息保持同一引用");
@@ -175,23 +180,80 @@ test("tail block attaches to the last tool result without mutating the input", (
   assert.equal(next[4].toolCallId, "call-2", "toolCallId 原样保留");
 });
 
-test("tail block returns the same reference when there is nothing to attach", () => {
+// 关键回退防线：锚点一旦钉死，后续轮次工具循环推进也不得让块搬家——搬家会让
+// 上一轮挂过块的那条消息字节变回去，前缀从它开始整段作废。
+test("pinned tail block stays on its original anchor as the tool loop grows", () => {
+  const roundTwo = [
+    { role: "user", content: "hi", timestamp: 1 },
+    assistant(),
+    toolResult("call-1", "first result"),
+  ];
+  const anchorToolCallId = tailBlock.resolveTailBlockAnchorId(roundTwo);
+  assert.equal(anchorToolCallId, "call-1");
+  const pinned = [{ anchorToolCallId, text: "BUS DELTA" }];
+
+  const outboundTwo = tailBlock.attachPinnedTailBlocks(roundTwo, pinned);
+
+  // 第 3 轮：工具循环又推进了一轮，"最后一条工具结果"已经变成 call-2。
+  const roundThree = [...roundTwo, assistant(), toolResult("call-2", "second result")];
+  const outboundThree = tailBlock.attachPinnedTailBlocks(roundThree, pinned);
+
+  assert.deepEqual(
+    outboundThree[2],
+    outboundTwo[2],
+    "钉住的锚点消息必须逐字节稳定，块不得随工具循环搬到新消息上",
+  );
+  assert.deepEqual(
+    outboundThree[4].content,
+    [{ type: "text", text: "second result" }],
+    "新的工具结果不得被搬过来的块污染",
+  );
+});
+
+test("attachPinnedTailBlocks returns the same reference when there is nothing to attach", () => {
   const messages = [
     { role: "user", content: "hi", timestamp: 1 },
     assistant(),
     toolResult("call-1", "result"),
   ];
-  assert.equal(tailBlock.appendToolResultTailBlock(messages, ""), messages);
+  assert.equal(tailBlock.attachPinnedTailBlocks(messages, []), messages);
+  assert.equal(
+    tailBlock.attachPinnedTailBlocks(messages, [{ anchorToolCallId: "call-1", text: "" }]),
+    messages,
+    "空文本不产生任何内容",
+  );
+  assert.equal(
+    tailBlock.attachPinnedTailBlocks(messages, [{ anchorToolCallId: "gone", text: "BUS DELTA" }]),
+    messages,
+    "锚点已不在消息列表里时本轮不挂，不搬家",
+  );
 });
 
-test("tail block refuses unsafe anchors and never crosses the last user message", () => {
+test("multiple blocks on one anchor replay in delivery order", () => {
+  const messages = [
+    { role: "user", content: "hi", timestamp: 1 },
+    assistant(),
+    toolResult("call-1", "result"),
+  ];
+  const next = tailBlock.attachPinnedTailBlocks(messages, [
+    { anchorToolCallId: "call-1", text: "FIRST" },
+    { anchorToolCallId: "call-1", text: "SECOND" },
+  ]);
+  assert.deepEqual(next[2].content, [
+    { type: "text", text: "result" },
+    { type: "text", text: "FIRST" },
+    { type: "text", text: "SECOND" },
+  ]);
+});
+
+test("anchor resolution refuses unsafe anchors and never crosses the last user message", () => {
   const displayImage = [
     assistant(),
     toolResult("call-1", "image", { toolName: "Image", details: { kind: "display_image" } }),
   ];
   assert.equal(
-    tailBlock.appendToolResultTailBlock(displayImage, "BUS DELTA"),
-    displayImage,
+    tailBlock.resolveTailBlockAnchorId(displayImage),
+    null,
     "display-image 工具结果的 content 会被净化整体替换，不能当锚点",
   );
 
@@ -200,8 +262,8 @@ test("tail block refuses unsafe anchors and never crosses the last user message"
     toolResult("call-1", "card", { toolName: "Agent", details: { kind: "subagent_card" } }),
   ];
   assert.equal(
-    tailBlock.appendToolResultTailBlock(subagentCard, "BUS DELTA"),
-    subagentCard,
+    tailBlock.resolveTailBlockAnchorId(subagentCard),
+    null,
     "subagent 卡片工具结果会被整条过滤，不能当锚点",
   );
 
@@ -211,8 +273,8 @@ test("tail block refuses unsafe anchors and never crosses the last user message"
     toolResult("call-2", "orphan too"),
   ];
   assert.equal(
-    tailBlock.appendToolResultTailBlock(aborted, "BUS DELTA"),
-    aborted,
+    tailBlock.resolveTailBlockAnchorId(aborted),
+    null,
     "aborted assistant 之后的工具结果会被丢弃，不能当锚点",
   );
 
@@ -223,20 +285,32 @@ test("tail block refuses unsafe anchors and never crosses the last user message"
     { role: "user", content: "latest", timestamp: 2 },
   ];
   assert.equal(
-    tailBlock.appendToolResultTailBlock(onlyUser, "BUS DELTA"),
-    onlyUser,
+    tailBlock.resolveTailBlockAnchorId(onlyUser),
+    null,
     "不得越过最后一条 user 消息去改写已缓存前缀",
+  );
+
+  const noToolCallId = [assistant(), toolResult("", "anonymous")];
+  assert.equal(
+    tailBlock.resolveTailBlockAnchorId(noToolCallId),
+    null,
+    "钉不住的锚点等于没有锚点，否则后续轮次会退化成重新搜索",
   );
 });
 
-test("tail block skips unsafe tail anchors and falls back to an earlier safe tool result", () => {
+test("anchor resolution skips unsafe tail anchors and falls back to an earlier safe tool result", () => {
   const messages = [
     { role: "user", content: "hi", timestamp: 1 },
     assistant(),
     toolResult("call-1", "safe result"),
     toolResult("call-2", "image", { toolName: "Image", details: { kind: "display_image" } }),
   ];
-  const next = tailBlock.appendToolResultTailBlock(messages, "BUS DELTA");
+  const anchorToolCallId = tailBlock.resolveTailBlockAnchorId(messages);
+  assert.equal(anchorToolCallId, "call-1");
+
+  const next = tailBlock.attachPinnedTailBlocks(messages, [
+    { anchorToolCallId, text: "BUS DELTA" },
+  ]);
   assert.notEqual(next, messages);
   assert.equal(next[3], messages[3], "不安全的尾部锚点保持原样");
   assert.deepEqual(next[2].content, [

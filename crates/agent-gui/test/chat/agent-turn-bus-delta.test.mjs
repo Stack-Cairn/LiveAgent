@@ -87,7 +87,7 @@ const { runAgentConversationTurn } = loader.loadModule(
 );
 const conversationState = loader.loadModule("src/lib/chat/conversation/conversationState.ts");
 // 出站挂载模拟需要与 runner 完全同一份锚点判定逻辑，直接加载真实实现。
-const { appendToolResultTailBlock } = loader.loadModule(
+const { attachPinnedTailBlocks, resolveTailBlockAnchorId } = loader.loadModule(
   "src/lib/chat/context/contextTailBlock.ts",
 );
 
@@ -294,20 +294,21 @@ function createHarness({ busMessages, compactDuringRun } = {}) {
  *
  * 严格模拟 agentRunner 的运行时状态与尾部投递累积器，这是本组用例的关键保真点：
  * - stateMessages 对应 agent.state.messages，永不包含尾部块；
- * - accumulated 对应 accumulatedWireTailText：带 wireTailText 的 override 追加
- *   （\n\n 连接），不带的（压缩/重冻结分支）清空；
- * - 每轮出站请求 = stateMessages 加上（若有累积）经 appendToolResultTailBlock
- *   挂到安全锚点的尾部块，记录进 harness.outboundRequests 供断言。
+ * - accumulated 对应 accumulatedWireTailBlocks：带 wireTailText 的 override 追加
+ *   （连同首次解析到的锚点 toolCallId 一起钉死），不带的（压缩/重冻结分支）清空；
+ * - 每轮出站请求 = stateMessages 加上（若有累积）经 attachPinnedTailBlocks
+ *   重挂到各自钉死锚点的尾部块，记录进 harness.outboundRequests 供断言。
  */
 function toolRounds(harness, { rounds = 2, beforeRound = {}, anchorOverrides = {} } = {}) {
   return async (params) => {
     let stateMessages = [];
     let emitted = [];
-    let accumulated = "";
+    let accumulated = [];
     const recordOutbound = (round) => {
-      const outbound = accumulated
-        ? appendToolResultTailBlock(stateMessages.slice(), accumulated)
-        : stateMessages;
+      const outbound =
+        accumulated.length > 0
+          ? attachPinnedTailBlocks(stateMessages.slice(), accumulated)
+          : stateMessages;
       harness.outboundRequests.push({ round, messages: outbound });
     };
     for (let round = 1; round <= rounds; round += 1) {
@@ -333,14 +334,15 @@ function toolRounds(harness, { rounds = 2, beforeRound = {}, anchorOverrides = {
       });
       harness.overrides.push(override ?? null);
       if (override) {
-        // applyTurnContextOverride：wireTailText 只进累积器；运行时消息列表换成
-        // override 的消息列表（不含尾部块）。
+        // applyTurnContextOverride：wireTailText 只进累积器，并在此刻把锚点钉死；
+        // 运行时消息列表换成 override 的消息列表（不含尾部块）。
         if (override.wireTailText) {
-          accumulated = accumulated
-            ? `${accumulated}\n\n${override.wireTailText}`
-            : override.wireTailText;
+          const anchorToolCallId = resolveTailBlockAnchorId(override.context.messages);
+          if (anchorToolCallId) {
+            accumulated = [...accumulated, { anchorToolCallId, text: override.wireTailText }];
+          }
         } else {
-          accumulated = "";
+          accumulated = [];
         }
         stateMessages = override.context.messages.slice();
         emitted = override.emittedMessages.slice();
@@ -478,6 +480,40 @@ test("已投递的增量块在后续轮原样重放且不重复投递", async ()
     const replayed = tailTexts(entry.messages).filter((text) => text.includes("arrived mid run"));
     assert.equal(replayed.length, 1, `第 ${entry.round} 轮增量块必须原样重放且不得重复挂载`);
     assert.equal(replayed[0], block, "重放的字节必须与首次投递完全一致");
+  }
+
+  // 只断言"内容一致"不够：块搬到另一条消息上时内容照样一致，但上一轮挂过它的
+  // 那条消息字节变回去了，前缀从它开始整段作废。锚点必须钉死在同一条消息上。
+  const anchorOf = (entry) =>
+    entry.messages.find(
+      (message) =>
+        message.role === "toolResult" &&
+        Array.isArray(message.content) &&
+        message.content.some((item) => item.type === "text" && item.text === block),
+    )?.toolCallId;
+  const anchors = laterOutbound.map(anchorOf);
+  assert.ok(anchors[0], "第 2 轮必须能定位到承载增量块的消息");
+  for (const [index, anchor] of anchors.entries()) {
+    assert.equal(
+      anchor,
+      anchors[0],
+      `第 ${laterOutbound[index].round} 轮的增量块搬家了：锚点从 ${anchors[0]} 变成 ${anchor}，` +
+        "上一轮挂过块的消息字节随之变回去，前缀从它开始整段作废",
+    );
+  }
+
+  // 同一条锚点消息在各轮之间必须逐字节稳定。
+  const anchorMessage = (entry) =>
+    entry.messages.find(
+      (message) => message.role === "toolResult" && message.toolCallId === anchors[0],
+    );
+  const baseline = JSON.stringify(anchorMessage(laterOutbound[0]));
+  for (const entry of laterOutbound.slice(1)) {
+    assert.equal(
+      JSON.stringify(anchorMessage(entry)),
+      baseline,
+      `第 ${entry.round} 轮的锚点消息字节与首次投递时不一致`,
+    );
   }
 });
 

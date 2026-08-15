@@ -1155,13 +1155,35 @@ test("runAssistantWithTools delivers wireTailText only on the wire, never into a
     ["result:Read", "BUS DELTA ROUND 1"],
   );
 
-  // 第 3 次请求：累积重挂——两轮尾部文本按到达顺序拼在同一个块里。
+  // 第 3 次请求：累积重挂——每轮的块留在它首次挂上的那条消息上，不随工具循环
+  // 推进搬到新消息上。搬家会让上一轮挂过块的消息字节变回去，前缀从它开始整段作废。
   const thirdWire = observedStreamContexts[2].messages;
   const thirdTail = thirdWire[thirdWire.length - 1];
   assert.equal(thirdTail.role, "toolResult");
+  assert.equal(thirdTail.toolCallId, "call-read-2");
   assert.deepEqual(
     thirdTail.content.map((block) => block.text),
-    ["result:Read", "BUS DELTA ROUND 1\n\nBUS DELTA ROUND 2"],
+    ["result:Read", "BUS DELTA ROUND 2"],
+    "第 2 轮的块钉在第 2 轮的工具结果上",
+  );
+
+  const thirdFirstAnchor = thirdWire.find(
+    (message) => message.role === "toolResult" && message.toolCallId === "call-read-1",
+  );
+  assert.deepEqual(
+    thirdFirstAnchor.content.map((block) => block.text),
+    ["result:Read", "BUS DELTA ROUND 1"],
+    "第 1 轮的块必须留在原锚点上",
+  );
+
+  // 该锚点消息在第 2、3 次请求之间必须逐字节稳定——这正是钉死锚点要保住的东西。
+  const secondFirstAnchor = secondWire.find(
+    (message) => message.role === "toolResult" && message.toolCallId === "call-read-1",
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(thirdFirstAnchor)),
+    JSON.parse(JSON.stringify(secondFirstAnchor)),
+    "已挂过块的锚点消息不得在后续轮次变化",
   );
 
   // agent 状态与产出（持久化 / UI / 记忆抽取的输入）不得含尾部文本。

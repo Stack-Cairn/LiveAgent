@@ -36,34 +36,80 @@ function followsAbortedAssistant(messages: Message[], index: number) {
 }
 
 /**
- * 把一段文本追加到最后一条“安全”工具结果消息的内容尾部，用于把 run 内产生的
- * 动态内容后置投递，而不去改写 systemPrompt。
+ * 找出可以承载尾部块的那条工具结果消息，返回它的 toolCallId。
  *
  * 锚点只在最后一条 user 消息之后寻找：缓存断点最多写到最后一条 user 消息，
  * 其后的工具循环消息每轮本就重读，追加不额外损失命中率；越过 user 消息则会
  * 改写已缓存前缀，比不改还糟。
  *
- * 不做原地修改——消息对象与运行时状态、会话状态共享引用。
- * 找不到安全锚点时原样返回入参数组（引用相等），调用方据此判定“本轮没挂上”，
- * 不推进游标、下一轮重试。
+ * toolCallId 为空的消息不能当锚点：钉不住的锚点等于没有锚点，后续轮次会退化成
+ * 重新搜索，正是本模块要消灭的漂移。返回 null 表示本轮没有安全锚点，调用方据此
+ * 判定“挂不上”，不推进游标、下一轮重试。
  */
-export function appendToolResultTailBlock(messages: Message[], text: string): Message[] {
-  if (!text) return messages;
-
+export function resolveTailBlockAnchorId(messages: Message[]): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message.role === "user") break;
     if (message.role !== "toolResult") continue;
     if (!Array.isArray(message.content)) continue;
+    if (typeof message.toolCallId !== "string" || !message.toolCallId) continue;
     if (isDisplayImageToolResult(message)) continue;
     if (isSubagentCardToolResult(message)) continue;
     if (followsAbortedAssistant(messages, index)) continue;
+    return message.toolCallId;
+  }
+  return null;
+}
 
-    const block: TextContent = { type: "text", text };
-    const next = messages.slice();
-    next[index] = { ...message, content: [...message.content, block] };
-    return next;
+/** 一段已经投递过的尾部内容，连同它首次挂上的那条消息的 toolCallId。 */
+export type PinnedTailBlock = {
+  /** 首次挂上时解析到的锚点；后续轮次原样重挂到同一条消息。 */
+  anchorToolCallId: string;
+  text: string;
+};
+
+/**
+ * 把已钉住的尾部块重挂到各自的锚点消息上。
+ *
+ * **锚点必须钉死，不能每轮重新搜索**：工具循环推进后“最后一条工具结果”会变，
+ * 重新搜索会让块从上一轮的消息搬到新消息上——那条旧消息的字节随之变回去，
+ * 前缀从它开始整段作废。这正是把内容移出 systemPrompt 想躲的问题，换个位置
+ * 再犯一遍没有意义（实测：3 轮工具循环里第 2 轮起每轮都在旧消息处分叉）。
+ *
+ * 同一锚点上的多个块按投递顺序拼成独立 text 块，顺序固定即字节固定。
+ * 锚点已不在消息列表里（压缩截断等）时，该块本轮不挂——调用方在压缩边界本就
+ * 会清空累积并重新冻结，不需要在这里兜底搬家。
+ *
+ * 不做原地修改——消息对象与运行时状态、会话状态共享引用。
+ * 一个块都没挂上时原样返回入参数组（引用相等）。
+ */
+export function attachPinnedTailBlocks(
+  messages: Message[],
+  blocks: readonly PinnedTailBlock[],
+): Message[] {
+  if (blocks.length === 0) return messages;
+
+  const byAnchor = new Map<string, string[]>();
+  for (const block of blocks) {
+    if (!block.text) continue;
+    const existing = byAnchor.get(block.anchorToolCallId);
+    if (existing) existing.push(block.text);
+    else byAnchor.set(block.anchorToolCallId, [block.text]);
+  }
+  if (byAnchor.size === 0) return messages;
+
+  let next: Message[] | null = null;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "toolResult") continue;
+    if (!Array.isArray(message.content)) continue;
+    const texts = byAnchor.get(message.toolCallId);
+    if (!texts) continue;
+
+    const appended: TextContent[] = texts.map((text) => ({ type: "text", text }));
+    if (!next) next = messages.slice();
+    next[index] = { ...message, content: [...message.content, ...appended] };
   }
 
-  return messages;
+  return next ?? messages;
 }

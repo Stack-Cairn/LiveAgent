@@ -370,7 +370,13 @@ test("unchanged run state renders identical bytes so the turn attaches nothing",
       timestamp: 1,
     },
   ];
-  assert.equal(tailBlock.appendToolResultTailBlock(messages, delta), messages);
+  assert.equal(
+    tailBlock.attachPinnedTailBlocks(
+      messages,
+      delta ? [{ anchorToolCallId: "call-1", text: delta }] : [],
+    ),
+    messages,
+  );
 });
 
 test("titleizeStableId and createSubagentIdentity derive names mechanically", () => {

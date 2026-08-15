@@ -57,7 +57,11 @@ import type { ProviderId, ReasoningLevel, SelectedModel } from "../../settings";
 import { createSubagentScheduler, type SubagentScheduler } from "../../subagents/scheduler";
 import { withPowerActivity } from "../../system/powerActivity";
 import type { AdditionalProjectRoot } from "../../tools/additionalProjectRoots";
-import { appendToolResultTailBlock } from "../context/contextTailBlock";
+import {
+  attachPinnedTailBlocks,
+  type PinnedTailBlock,
+  resolveTailBlockAnchorId,
+} from "../context/contextTailBlock";
 import { sanitizeContextForModelRequest } from "../context/requestContextSanitizer";
 import { summarizeToolCall } from "../messages/uiMessages";
 import {
@@ -837,11 +841,13 @@ export async function runAssistantWithTools(params: {
     let currentSystemPrompt = params.context.systemPrompt;
     let emittedBaselineIndex = params.context.messages.length;
     let latestAgentEndMessages: Message[] = [];
-    // 尾部投递文本的累积器：只进出站请求，永不进 agent.state.messages。
-    // 语义：带 wireTailText 的 override 追加（按到达顺序、\n\n 连接）；不带
-    // wireTailText 的 override 清空——不带的只有压缩/重冻结分支，此时快照已
-    // 重算进 systemPrompt，旧尾部内容已被快照覆盖，继续挂只会重复投递。
-    let accumulatedWireTailText = "";
+    // 尾部投递内容的累积器：只进出站请求，永不进 agent.state.messages。
+    // 每个块连同它首次挂上的锚点 toolCallId 一起记住——锚点必须钉死，重新搜索
+    // 会让块随工具循环推进从旧消息搬到新消息，旧消息字节变回去、前缀就断了。
+    // 语义：带 wireTailText 的 override 追加（按到达顺序）；不带 wireTailText 的
+    // override 清空——不带的只有压缩/重冻结分支，此时快照已重算进 systemPrompt，
+    // 旧尾部内容已被快照覆盖，继续挂只会重复投递。
+    let accumulatedWireTailBlocks: PinnedTailBlock[] = [];
     let agentTools: AgentTool<any>[] = [];
     const pendingRecoveredSeedTurnRef: {
       current: {
@@ -1037,13 +1043,21 @@ export async function runAssistantWithTools(params: {
     ): AgentContext | undefined {
       if (!agent) return undefined;
       if (override.wireTailText) {
-        accumulatedWireTailText = accumulatedWireTailText
-          ? `${accumulatedWireTailText}\n\n${override.wireTailText}`
-          : override.wireTailText;
+        // 锚点在这里解析一次就钉死：override.context.messages 是本轮出站请求
+        // 的消息列表，此刻的“最后一条安全工具结果”就是这个块该长期附着的位置。
+        // 解析不出锚点时丢弃本块——调用方在探锚阶段已确认过可挂，走到这里为空
+        // 只可能是压缩改写了消息列表，此时游标也不会推进，下一轮重投。
+        const anchorToolCallId = resolveTailBlockAnchorId(override.context.messages);
+        if (anchorToolCallId) {
+          accumulatedWireTailBlocks = [
+            ...accumulatedWireTailBlocks,
+            { anchorToolCallId, text: override.wireTailText },
+          ];
+        }
       } else {
-        // 见 accumulatedWireTailText 声明处的语义说明：压缩/重冻结分支不带
+        // 见 accumulatedWireTailBlocks 声明处的语义说明：压缩/重冻结分支不带
         // wireTailText，旧尾部内容已并入重算后的快照，累积必须清空。
-        accumulatedWireTailText = "";
+        accumulatedWireTailBlocks = [];
       }
       currentSystemPrompt = override.context.systemPrompt;
       agent.state.systemPrompt = buildSystemPrompt(currentSystemPrompt, toolsSuffix);
@@ -1155,12 +1169,14 @@ export async function runAssistantWithTools(params: {
       params.onRetryAttempts?.(round, retryAttemptsForRound);
       const streamTools =
         streamContext.tools ?? (agent?.state.tools as Context["tools"] | undefined) ?? llmTools;
-      // 尾部投递内容只存在于出站请求：每次请求在此重挂（与记忆增量的逐请求
-      // 重建同口径），agent.state.messages 始终不含它。挂在 sanitize 之前、
-      // capturePrefixShape 之后读取 effectiveContext，归因看到的就是真实出站字节。
-      const outboundMessages = accumulatedWireTailText
-        ? appendToolResultTailBlock(streamContext.messages.slice(), accumulatedWireTailText)
-        : streamContext.messages.slice();
+      // 尾部投递内容只存在于出站请求：每次请求在此重挂到各自钉死的锚点（与记忆
+      // 增量的逐请求重建同口径），agent.state.messages 始终不含它。挂在 sanitize
+      // 之前、capturePrefixShape 之后读取 effectiveContext，归因看到的就是真实
+      // 出站字节。
+      const outboundMessages =
+        accumulatedWireTailBlocks.length > 0
+          ? attachPinnedTailBlocks(streamContext.messages.slice(), accumulatedWireTailBlocks)
+          : streamContext.messages.slice();
       const effectiveContext = sanitizeContextForModelRequest({
         ...streamContext,
         // Keep the runtime-only tool rules out of compaction and persistence,
