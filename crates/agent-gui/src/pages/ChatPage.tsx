@@ -54,6 +54,7 @@ import {
 } from "../lib/chat/conversation/conversationState";
 import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
+import { memoryTurnInjection } from "../lib/chat/memory/injectionController";
 import {
   buildFallbackConversationTitle,
   createConversationIdentity,
@@ -752,6 +753,7 @@ export function ChatPage(props: ChatPageProps) {
       gatewayBridgeHistorySummaryRef.current.delete(key);
       setPendingUploadsForConversation(key, []);
       memoryExtraction.dispose(key);
+      memoryTurnInjection.dispose(key);
       deleteConversationArtifacts(key);
       setQueuedChatTurnsState((current) => removeQueuedChatTurnsForConversation(current, key));
     },

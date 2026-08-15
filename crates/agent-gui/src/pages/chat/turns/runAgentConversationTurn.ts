@@ -257,7 +257,11 @@ export type RunAgentConversationTurnParams = {
   buildPreparedContext: (
     state: ConversationViewState,
     tools?: Context["tools"],
-    options?: { includeAbortedMessages?: boolean; includeUploadedFilesMetadata?: boolean },
+    options?: {
+      includeAbortedMessages?: boolean;
+      includeUploadedFilesMetadata?: boolean;
+      includeMemoryTurnUpdates?: boolean;
+    },
   ) => Context;
   compaction: CompactionController;
   cancellation: TurnCancellation;
@@ -1108,7 +1112,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       sessionId,
       conversationId,
       workdir: conversationCwd ?? effectiveWorkdir,
-      messages: buildPreparedContext(finalState).messages,
+      // 抽取子模型看到的必须是用户真正说的话:memory 增量块只服务主模型的缓存,
+      // 混进来会把索引行当成用户发言,既撑破短消息门控又诱发重复写入。
+      messages: buildPreparedContext(finalState, undefined, { includeMemoryTurnUpdates: false })
+        .messages,
       statusText: memoryExtractionStatusText,
       signal: cancellation.userStop.signal,
       debugLogger: conversationDebugLogger,

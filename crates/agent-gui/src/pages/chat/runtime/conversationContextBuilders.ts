@@ -4,6 +4,10 @@ import {
   buildRequestContext,
   type ConversationViewState,
 } from "../../../lib/chat/conversation/conversationState";
+import {
+  attachMemoryTurnUpdates,
+  type MemoryTurnUpdateMap,
+} from "../../../lib/memory/prompts/turnInjection";
 import { appendSystemPrompt } from "./chatPageRuntime";
 
 export type ConversationContextBuildOptions = {
@@ -31,6 +35,7 @@ export function buildPreparedContext(params: {
   activeAgentPrompt: string;
   skillsPrompt: string;
   memoryPrompt?: string;
+  memoryTurnUpdates?: MemoryTurnUpdateMap | null;
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
 }): Context {
@@ -52,12 +57,17 @@ export function buildPreparedContext(params: {
     systemPrompt = appendSystemPrompt(systemPrompt, params.memoryPrompt);
   }
 
+  // memory 的动态部分挂在对应 user 消息尾部,而不是继续往 system 段里塞:
+  // system 段一变,整条缓存前缀连同全部历史一起作废。
+  const messages = attachMemoryTurnUpdates(withTools.messages, params.memoryTurnUpdates);
+  const withMessages = messages === withTools.messages ? withTools : { ...withTools, messages };
+
   return typeof systemPrompt === "string"
     ? {
-        ...withTools,
+        ...withMessages,
         systemPrompt,
       }
-    : withTools;
+    : withMessages;
 }
 
 export function buildResumeContext(params: {
@@ -67,6 +77,7 @@ export function buildResumeContext(params: {
   activeAgentPrompt: string;
   skillsPrompt: string;
   memoryPrompt?: string;
+  memoryTurnUpdates?: MemoryTurnUpdateMap | null;
   includeAbortedMessages?: boolean;
   includeUploadedFilesMetadata?: boolean;
 }): Context {
