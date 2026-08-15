@@ -17,7 +17,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func newDirectoryImportServer(t *testing.T) (*session.Manager, *session.AgentSession, http.Handler) {
+func newDirectoryImportServer(t *testing.T, requestTimeout time.Duration) (*session.Manager, *session.AgentSession, http.Handler) {
 	t.Helper()
 	sm := session.NewManager()
 	sm.RecordAuthentication("desktop-agent", "0.9.0", "session-1")
@@ -26,7 +26,7 @@ func newDirectoryImportServer(t *testing.T) (*session.Manager, *session.AgentSes
 
 	handler := server.NewHTTPServer(&config.Config{
 		Token:          "upload-token",
-		RequestTimeout: time.Second,
+		RequestTimeout: requestTimeout,
 	}, sm, nil)
 	return sm, agentSession, handler
 }
@@ -34,7 +34,7 @@ func newDirectoryImportServer(t *testing.T) (*session.Manager, *session.AgentSes
 func TestImportDirectoryForwardsRelativePathsToAgent(t *testing.T) {
 	t.Parallel()
 
-	sm, agentSession, handler := newDirectoryImportServer(t)
+	sm, agentSession, handler := newDirectoryImportServer(t, time.Second)
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -181,7 +181,7 @@ func TestImportDirectoryForwardsRelativePathsToAgent(t *testing.T) {
 func TestImportDirectoryRejectsUnknownTarget(t *testing.T) {
 	t.Parallel()
 
-	_, _, handler := newDirectoryImportServer(t)
+	_, _, handler := newDirectoryImportServer(t, time.Second)
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
@@ -213,10 +213,176 @@ func TestImportDirectoryRejectsUnknownTarget(t *testing.T) {
 	}
 }
 
+// 目录总量越过网关/桌面端默认的 64 MiB WebSocket 消息上限时，必须仍以小块
+// envelope 流式送达；回归保护：整包发送会在 Agent 侧超限断连（PR #484 评审）。
+func TestImportDirectoryStreamsPayloadBeyondMessageLimit(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("skipping 64 MiB+ end-to-end import in short mode")
+	}
+
+	// 几十次 chunk 往返共用同一个整体超时；放宽以免慢 CI 抖动。
+	sm, agentSession, handler := newDirectoryImportServer(t, 30*time.Second)
+
+	const totalSize = (65 << 20) + 17
+	if totalSize <= config.DefaultMaxMessageBytes {
+		t.Fatalf("fixture size %d must exceed the %d-byte message limit", totalSize, config.DefaultMaxMessageBytes)
+	}
+	content := make([]byte, totalSize)
+	for i := range content {
+		content[i] = byte(i % 251)
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("name", "bigdir"); err != nil {
+		t.Fatalf("write name field: %v", err)
+	}
+	if err := writer.WriteField("target", "workspace"); err != nil {
+		t.Fatalf("write target field: %v", err)
+	}
+	part, err := writer.CreateFormFile("files", "blob.bin")
+	if err != nil {
+		t.Fatalf("create file part: %v", err)
+	}
+	if _, err := part.Write(content); err != nil {
+		t.Fatalf("write file part: %v", err)
+	}
+	if err := writer.WriteField("paths", "assets/blob.bin"); err != nil {
+		t.Fatalf("write path field: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "http://gateway.test/api/files/import-directory?agent_id=desktop-agent", &body)
+	req.Header.Set("Authorization", "Bearer upload-token")
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	rec := httptest.NewRecorder()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.ServeHTTP(rec, req)
+	}()
+
+	var transferID string
+	var receivedBytes uint64
+	chunkCount := 0
+	fileCompleted := false
+	for {
+		var outbound *gatewayv2.GatewayEnvelope
+		select {
+		case delivered := <-agentSession.Outbound():
+			delivered.Ack(nil)
+			outbound = delivered.GatewayEnvelope
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for directory import to reach agent (chunks so far: %d)", chunkCount)
+		}
+
+		importReq := outbound.GetImportDirectory()
+		if importReq == nil {
+			t.Fatalf("outbound payload = %T, want ImportDirectoryRequest", outbound.GetPayload())
+		}
+		if encodedSize := proto.Size(outbound); encodedSize > 2<<20 {
+			t.Fatalf("encoded gateway envelope = %d bytes, want <= 2 MiB", encodedSize)
+		}
+		response := &gatewayv2.ImportDirectoryResponse{TransferId: importReq.GetTransferId()}
+		switch importReq.GetOperation() {
+		case gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_START:
+			if importReq.GetTotalFiles() != 1 {
+				t.Fatalf("total files = %d, want 1", importReq.GetTotalFiles())
+			}
+			if importReq.GetTotalBytes() != uint64(totalSize) {
+				t.Fatalf("total bytes = %d, want %d", importReq.GetTotalBytes(), totalSize)
+			}
+			transferID = importReq.GetTransferId()
+			if transferID == "" {
+				t.Fatal("transfer id is empty")
+			}
+		case gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_WRITE_CHUNK:
+			if importReq.GetTransferId() != transferID {
+				t.Fatalf("chunk transfer id = %q, want %q", importReq.GetTransferId(), transferID)
+			}
+			if importReq.GetRelativePath() != "assets/blob.bin" {
+				t.Fatalf("chunk path = %q", importReq.GetRelativePath())
+			}
+			chunk := importReq.GetChunk()
+			if len(chunk) == 0 || len(chunk) > 1<<20 {
+				t.Fatalf("chunk size = %d, want 1..1 MiB", len(chunk))
+			}
+			if importReq.GetOffset() != receivedBytes {
+				t.Fatalf("chunk offset = %d, want %d", importReq.GetOffset(), receivedBytes)
+			}
+			end := receivedBytes + uint64(len(chunk))
+			if end > totalSize {
+				t.Fatalf("chunk end = %d overruns total size %d", end, totalSize)
+			}
+			if !bytes.Equal(chunk, content[receivedBytes:end]) {
+				t.Fatalf("chunk content mismatch at offset %d", receivedBytes)
+			}
+			receivedBytes = end
+			chunkCount++
+			if importReq.GetFileComplete() {
+				fileCompleted = true
+				if receivedBytes != totalSize {
+					t.Fatalf("file completed at %d bytes, want %d", receivedBytes, totalSize)
+				}
+			}
+		case gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_COMMIT:
+			response.RootPath = "/home/user/.liveagent/imports/workspaces/bigdir"
+			response.FileCount = 1
+		default:
+			t.Fatalf("unexpected import operation: %v", importReq.GetOperation())
+		}
+
+		sm.DispatchFromAgentForSession(agentSession, &gatewayv2.AgentEnvelope{
+			RequestId: outbound.GetRequestId(),
+			Timestamp: time.Now().Unix(),
+			Payload: &gatewayv2.AgentEnvelope_ImportDirectoryResp{
+				ImportDirectoryResp: response,
+			},
+		})
+		if importReq.GetOperation() == gatewayv2.ImportDirectoryOperation_IMPORT_DIRECTORY_OPERATION_COMMIT {
+			break
+		}
+	}
+
+	wantChunks := (totalSize + (1 << 20) - 1) / (1 << 20)
+	if chunkCount != wantChunks {
+		t.Fatalf("chunk count = %d, want %d", chunkCount, wantChunks)
+	}
+	if receivedBytes != totalSize {
+		t.Fatalf("received bytes = %d, want %d", receivedBytes, totalSize)
+	}
+	if !fileCompleted {
+		t.Fatal("final chunk did not mark the file complete")
+	}
+
+	<-done
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var payload struct {
+		RootPath  string `json:"rootPath"`
+		FileCount int32  `json:"fileCount"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.RootPath != "/home/user/.liveagent/imports/workspaces/bigdir" {
+		t.Fatalf("rootPath = %q", payload.RootPath)
+	}
+	if payload.FileCount != 1 {
+		t.Fatalf("fileCount = %d, want 1", payload.FileCount)
+	}
+}
+
 func TestImportDirectoryRequiresName(t *testing.T) {
 	t.Parallel()
 
-	_, _, handler := newDirectoryImportServer(t)
+	_, _, handler := newDirectoryImportServer(t, time.Second)
 
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
