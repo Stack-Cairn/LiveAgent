@@ -10,11 +10,11 @@ export {
   isSubagentCardArguments,
 } from "@liveagent/ui/lib/subagents/protocol";
 export { createSubagentTools, type SubagentRuntimeConfig } from "./agentTool";
-export { renderMessageBusSnapshot } from "./bus";
+export { latestVisibleBusSeq, renderMessageBusDelta, renderMessageBusSnapshot } from "./bus";
 export { isSubagentCardToolCall } from "./card";
 export type { SubagentStoreIpc } from "./ipc/store";
 export type { SubagentWorktreeIpc } from "./ipc/worktree";
-export { buildRosterReminder } from "./roster";
+export { buildRosterIdentitySection, buildRosterRunStatusSection } from "./roster";
 export {
   createSubagentScheduler,
   DEFAULT_SUBAGENT_MAX_PARALLEL_RUNS,

@@ -10,6 +10,7 @@ import type { HostedSearchBlock } from "@liveagent/ui/lib/chat/hostedSearch";
 import type { CompactionController } from "../../../lib/chat/compaction/controller";
 import { estimateTextTokenUnits } from "../../../lib/chat/compaction/tokenLedger";
 import type { ProviderRuntimeConfig } from "../../../lib/chat/compaction/types";
+import { appendToolResultTailBlock } from "../../../lib/chat/context/contextTailBlock";
 import {
   isAbortedAssistantMessage,
   type SuppressedToolTraceSnapshot,
@@ -62,9 +63,12 @@ import {
 } from "../../../lib/settings";
 import {
   AGENT_TOOL_NAME,
-  buildRosterReminder,
+  buildRosterIdentitySection,
+  buildRosterRunStatusSection,
   createSubagentScheduler,
   isSubagentCardToolCall,
+  latestVisibleBusSeq,
+  renderMessageBusDelta,
   renderMessageBusSnapshot,
   SUBAGENT_PARENT_ID,
   type SubagentConversationStore,
@@ -106,6 +110,7 @@ export type PersistConversationParams = {
 
 const AGENT_PERF_LOG_THRESHOLD_MS = 250;
 const TOOL_CALL_DELTA_RAF_FALLBACK_DELAY_MS = 64;
+const PARENT_MESSAGE_BUS_AGENT_NAME = "Parent Agent";
 
 function perfNowMs() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -349,33 +354,57 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
   // this turn. In-flight extraction from the previous turn keeps running.
   memoryExtraction.noteTurnBoundary(conversationId);
 
-  const loadParentBusSnapshot = async () => {
-    if (!subagentStore) return "";
+  const loadParentBusMessages = async () => {
+    if (!subagentStore) return null;
     try {
-      return renderMessageBusSnapshot({
-        messages: await subagentStore.listBusMessages(SUBAGENT_PARENT_ID),
-        currentAgentId: SUBAGENT_PARENT_ID,
-        currentAgentName: "Parent Agent",
-      });
+      return await subagentStore.listBusMessages(SUBAGENT_PARENT_ID);
     } catch (error) {
       console.warn("Failed to load parent message bus snapshot", error);
-      return "";
+      return null;
     }
   };
   const subagentStoreReadyStartedAt = perfNowMs();
-  let subagentReminder = "";
+  // roster 拆两段：身份字段（id / name / role / mode）稳定，留在 systemPrompt；
+  // 运行状态（status / last_task / last_summary）随子代理 run 推进而变，后置到消息尾部，
+  // 否则每推进一次状态就改写 systemPrompt，system 块连同其后的全部历史一并作废。
+  let rosterIdentitySection = "";
+  // 消息总线快照同样按“压缩纪元”冻结：只在 run 起始与各压缩边界重算。
+  // run 内新到的子 agent 消息不回头改写 systemPrompt（那会作废 system 块及其后
+  // 的全部历史），改由 renderMessageBusDelta 渲染成增量块挂到消息尾部投递——
+  // 尾部本就在缓存断点之后、每轮重读，追加不额外损失命中率。
   let parentMessageBusSnapshot = "";
+  // 已渲染进上下文的 bus 游标（seq）：run 内只投递其后的增量。
+  let renderedBusSeq = 0;
+  // 当前冻结快照实际覆盖到的 seq。必须与 renderedBusSeq 分开记：后者会被尾部增量
+  // 推进，快照却只在压缩边界重算，两者在 run 内本就不成对。
+  let frozenBusSeq = 0;
+  const refreezeParentMessageBus = async () => {
+    const messages = await loadParentBusMessages();
+    // 读失败时保持上一份快照，并把游标退回该快照覆盖的位置：调用点都在压缩之后，
+    // 挂着增量的尾部块可能已被截断，游标停在原处会让那段消息既不在快照里也不在
+    // 历史里，永久丢失。退回后下一轮重投——重投只多花 token，丢消息不可逆。
+    if (!messages) {
+      renderedBusSeq = frozenBusSeq;
+      return;
+    }
+    parentMessageBusSnapshot = renderMessageBusSnapshot({
+      messages,
+      currentAgentId: SUBAGENT_PARENT_ID,
+      currentAgentName: PARENT_MESSAGE_BUS_AGENT_NAME,
+    });
+    frozenBusSeq = latestVisibleBusSeq(messages, SUBAGENT_PARENT_ID);
+    renderedBusSeq = frozenBusSeq;
+  };
   if (subagentStore) {
     try {
       await subagentStore.ready();
-      subagentReminder = buildRosterReminder({
+      rosterIdentitySection = buildRosterIdentitySection({
         identities: subagentStore.listIdentities(),
-        latestRunsByAgent: subagentStore.latestRunsByAgent(),
       });
     } catch (error) {
       console.warn("Failed to load the subagent roster", error);
     }
-    parentMessageBusSnapshot = await loadParentBusSnapshot();
+    await refreezeParentMessageBus();
   }
   finishAgentPerfSpan(
     conversationDebugLogger,
@@ -386,26 +415,65 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       identityCount: subagentStore?.listIdentities().length ?? 0,
     },
   );
-  const refreshParentMessageBusSnapshot = async () => {
-    parentMessageBusSnapshot = await loadParentBusSnapshot();
-    return parentMessageBusSnapshot;
+  const buildParentMessageBusDelta = async () => {
+    const messages = await loadParentBusMessages();
+    if (!messages) return { text: "", lastSeq: renderedBusSeq };
+    return renderMessageBusDelta({
+      messages,
+      sinceSeq: renderedBusSeq,
+      currentAgentId: SUBAGENT_PARENT_ID,
+      currentAgentName: PARENT_MESSAGE_BUS_AGENT_NAME,
+    });
   };
+  // 已投递进上下文的 roster 易变段：与 bus 的 seq 游标同理，只有真正挂上才推进。
+  // run 起始不投递——此时消息尾部还没有安全锚点（末条是 user 消息），首次投递发生在
+  // 第一轮工具结果之后；在那之前 Agent 工具描述里的 roster 已带有 status / summary，
+  // 模型真要委派时看得到。
+  let renderedRosterRunStatus = "";
+  const buildRosterRunStatusDelta = () => {
+    if (!subagentStore) return "";
+    let section = "";
+    try {
+      section = buildRosterRunStatusSection({
+        identities: subagentStore.listIdentities(),
+        latestRunsByAgent: subagentStore.latestRunsByAgent(),
+      });
+    } catch (error) {
+      console.warn("Failed to render the subagent run status", error);
+      return "";
+    }
+    // 内容没变就不投递：每轮无条件追加等于亲手打穿缓存。
+    return section === renderedRosterRunStatus ? "" : section;
+  };
+  // 任务状态快照按“压缩纪元”冻结：只在 run 起始与各压缩边界重算，run 内不再重读。
+  // 缓存前缀按字节匹配，systemPrompt 排在全部消息之前——每轮重读 meta.taskList
+  // 等于每次 TaskUpdate 都改写前缀，system 块连同其后的全部历史一并作废。
+  // 模型感知任务状态的主通道是 TaskCreate / TaskUpdate / TaskList 的工具结果，
+  // 这份 JSON 只在历史被压缩截断、工具结果被摘要掉之后才不可替代（见
+  // formatTaskListRuntimeContext 的文案），而那一刻前缀本来就要重建，重新冻结是
+  // 免费的。代价是 run 内新建的任务不出现在 system 段，由工具结果覆盖。
+  let frozenTaskListContext = "";
+  const refreezeTaskListContext = () => {
+    // 只注入本 Run 的权威任务状态：edit-resend 等路径可能把上一 Run 持久化的
+    // taskList 带回 meta，工具层按 runId 视其为不存在，注入必须同口径。
+    const taskList = getNextConversationState().meta.taskList;
+    frozenTaskListContext =
+      taskList && taskList.runId === taskStateStore.runId
+        ? formatTaskListRuntimeContext(taskList)
+        : "";
+    return frozenTaskListContext;
+  };
+  refreezeTaskListContext();
   const withAgentRuntimeContext = (context: Context): Context => {
     let systemPrompt = context.systemPrompt;
-    if (subagentReminder) {
-      systemPrompt = appendSystemPrompt(systemPrompt, subagentReminder);
+    if (rosterIdentitySection) {
+      systemPrompt = appendSystemPrompt(systemPrompt, rosterIdentitySection);
     }
     if (parentMessageBusSnapshot) {
       systemPrompt = appendSystemPrompt(systemPrompt, parentMessageBusSnapshot);
     }
-    // 只注入本 Run 的权威任务状态：edit-resend 等路径可能把上一 Run 持久化的
-    // taskList 带回 meta，工具层按 runId 视其为不存在，注入必须同口径。
-    const taskList = getNextConversationState().meta.taskList;
-    if (taskList && taskList.runId === taskStateStore.runId) {
-      const taskListContext = formatTaskListRuntimeContext(taskList);
-      if (taskListContext) {
-        systemPrompt = appendSystemPrompt(systemPrompt, taskListContext);
-      }
+    if (frozenTaskListContext) {
+      systemPrompt = appendSystemPrompt(systemPrompt, frozenTaskListContext);
     }
     return systemPrompt !== context.systemPrompt
       ? {
@@ -493,6 +561,10 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       toolCount: combinedTools.length,
     },
   );
+  // 压缩边界①：发送前压缩已重建前缀，此处重新冻结不额外损失命中率。
+  // bus 快照不在这里重冻：它几毫秒前刚在本函数起始冻结过，发送前压缩只重写历史与
+  // systemPrompt，不可能产生新的 bus 消息，重读一次纯属多余的 IPC。
+  refreezeTaskListContext();
 
   const combinedExecutor: (
     toolCall: ToolCall,
@@ -973,16 +1045,35 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
         onBeforeNextTurn: async ({ round, assistant, toolResults, emittedMessages }) => {
           publishPersistableAgentProgress(round, assistant, toolResults);
           latestAgentEmittedMessages = emittedMessages.slice();
-          await refreshParentMessageBusSnapshot();
           const tempState = appendMessagesToConversation(
             getNextConversationState(),
             emittedMessages,
           );
-          const tempContext = withAgentRuntimeContext(
+          let tempContext = withAgentRuntimeContext(
             buildPreparedContext(tempState, combinedTools, {
               includeUploadedFilesMetadata: true,
             }),
           );
+          // 尾部投递：systemPrompt 里的 bus 快照与 roster 身份段都已冻结，run 内新到的
+          // bus 消息与推进后的 roster 运行状态合并成**同一个**块挂到消息尾部——每多挂
+          // 一个独立块就多一次前缀扰动。已挂上的块随 override 进入运行时状态，下一轮由
+          // emittedMessages 原样带回，无需额外重放结构。
+          const busDelta = await buildParentMessageBusDelta();
+          const rosterRunStatusDelta = buildRosterRunStatusDelta();
+          const tailBlockText = [busDelta.text, rosterRunStatusDelta].filter(Boolean).join("\n\n");
+          let tailBlockAttached = false;
+          if (tailBlockText) {
+            const messages = appendToolResultTailBlock(tempContext.messages, tailBlockText);
+            if (messages !== tempContext.messages) {
+              tempContext = { ...tempContext, messages };
+              // 只有真正挂上才推进游标与基线；没有安全锚点时下一轮重试，避免丢内容。
+              renderedBusSeq = busDelta.lastSeq;
+              if (rosterRunStatusDelta) {
+                renderedRosterRunStatus = rosterRunStatusDelta;
+              }
+              tailBlockAttached = true;
+            }
+          }
           const { context: compactedContext } = await compaction.compactDuringRun({
             trigger: "post-tool",
             state: tempState,
@@ -991,7 +1082,8 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             includeUploadedFilesMetadata: true,
           });
           if (!compactedContext) {
-            return parentMessageBusSnapshot
+            // 没有增量时返回 null：不产生任何额外内容，运行时状态原样续跑。
+            return tailBlockAttached
               ? {
                   context: tempContext,
                   emittedMessages,
@@ -1000,6 +1092,13 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           }
           latestAgentEmittedMessages = [];
           clearPersistableAgentProgress();
+          // 压缩边界②：run 内压缩后重新冻结，必须赶在下面组装续跑上下文之前。
+          refreezeTaskListContext();
+          // 压缩会截断历史，已挂在消息尾部的增量块随之消失，必须连同游标一起
+          // 重新冻结，否则那些消息既不在快照里也不在历史里。
+          await refreezeParentMessageBus();
+          // 同理：roster 易变段的投递基线也随之作废，重置后下一轮重新投递。
+          renderedRosterRunStatus = "";
           return {
             context: withAgentRuntimeContext(compactedContext),
             emittedMessages: [],
@@ -1058,6 +1157,11 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       if (!compactionResult.context) {
         throw new Error("Mid-stream compaction did not provide a continuation context.");
       }
+      // 压缩边界③：中途流式压缩后重新冻结，续跑上下文在下一轮循环由
+      // withAgentRuntimeContext 包装 pendingAgentContext 时才读取冻结值。
+      refreezeTaskListContext();
+      await refreezeParentMessageBus();
+      renderedRosterRunStatus = "";
       pendingAgentContext = compactionResult.context;
       if (compactionResult.shouldDisableProtection) {
         midStreamProtectionDisabled = true;

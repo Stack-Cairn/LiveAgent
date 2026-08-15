@@ -74,6 +74,21 @@ function takeLatest(messages: SubagentMessageRecord[], limit: number) {
   return messages.slice(messages.length - limit);
 }
 
+/**
+ * 快照与增量共用的可见性口径：按 seq 升序，过滤掉空消息，只保留发给本 agent、
+ * 广播给全体、或由本 agent 发出的消息。两处必须同口径，否则增量会漏投或重投。
+ */
+function visibleBusMessages(messages: SubagentMessageRecord[], currentAgentId: string) {
+  return sortBySeq(messages).filter(
+    (message) =>
+      message.parentConversationId.trim() &&
+      message.bodyMarkdown.trim() &&
+      (isForAgent(message, currentAgentId) ||
+        isSharedMessage(message) ||
+        message.senderId === currentAgentId),
+  );
+}
+
 export function displayRecipientLabel(recipientId: string) {
   if (recipientId === SUBAGENT_PARENT_ID) return "parent";
   if (recipientId === SUBAGENT_BROADCAST_RECIPIENT) return "all agents";
@@ -97,14 +112,7 @@ export function renderMessageBusSnapshot(params: {
 
   const maxMessages = params.maxMessages ?? DEFAULT_MAX_MESSAGES;
   const maxBodyChars = params.maxBodyChars ?? DEFAULT_MAX_BODY_CHARS;
-  const messages = sortBySeq(params.messages).filter(
-    (message) =>
-      message.parentConversationId.trim() &&
-      message.bodyMarkdown.trim() &&
-      (isForAgent(message, currentAgentId) ||
-        isSharedMessage(message) ||
-        message.senderId === currentAgentId),
-  );
+  const messages = visibleBusMessages(params.messages, currentAgentId);
   if (messages.length === 0) return "";
 
   const usedSeqs = new Set<number>();
@@ -157,4 +165,59 @@ export function renderMessageBusSnapshot(params: {
   appendSection("Recent Messages", recentMessages);
 
   return sections.join("\n").trim();
+}
+
+/**
+ * 取当前可见消息里最大的 seq，作为“已渲染进上下文”的游标起点。
+ * 无可见消息时返回 0（bus 的 seq 从 1 开始分配）。
+ */
+export function latestVisibleBusSeq(
+  messages: SubagentMessageRecord[],
+  currentAgentId: string,
+): number {
+  const normalized = normalizeAgentId(currentAgentId);
+  if (!normalized) return 0;
+  const visible = visibleBusMessages(messages, normalized);
+  return visible.length === 0 ? 0 : visible[visible.length - 1].seq;
+}
+
+/**
+ * 渲染 seq 大于 sinceSeq 的增量消息。
+ *
+ * systemPrompt 里的快照按压缩纪元冻结，run 内新到的消息不回头改写 systemPrompt，
+ * 而是由本函数渲染成一段增量文本挂到消息尾部投递——尾部本就在缓存断点之后、
+ * 每轮重读，追加不额外损失命中率。
+ *
+ * 纯函数：不含时间量、不含随机量，同样输入恒等输出。无新增时返回
+ * `{ text: "", lastSeq: sinceSeq }`，调用方据此完全不产生额外内容。
+ */
+export function renderMessageBusDelta(params: {
+  messages: SubagentMessageRecord[];
+  sinceSeq: number;
+  currentAgentId: string;
+  currentAgentName?: string;
+  maxBodyChars?: number;
+}): { text: string; lastSeq: number } {
+  const sinceSeq = Number.isFinite(params.sinceSeq) ? params.sinceSeq : 0;
+  const currentAgentId = normalizeAgentId(params.currentAgentId);
+  if (!currentAgentId) return { text: "", lastSeq: sinceSeq };
+
+  const maxBodyChars = params.maxBodyChars ?? DEFAULT_MAX_BODY_CHARS;
+  const fresh = visibleBusMessages(params.messages, currentAgentId).filter(
+    (message) => message.seq > sinceSeq,
+  );
+  if (fresh.length === 0) return { text: "", lastSeq: sinceSeq };
+
+  const text = [
+    "## LiveAgent Message Bus (new messages)",
+    "",
+    `Current agent: ${displayAgentLabel(currentAgentId, params.currentAgentName)}`,
+    "Messages below arrived after the snapshot in the system prompt. Use the SendMessage tool for new cross-agent messages; do not write temporary files for communication.",
+    "",
+    ...fresh.map((message) => renderMessage(message, maxBodyChars)).flatMap((body) => [body, ""]),
+  ]
+    .join("\n")
+    .trim();
+
+  return { text, lastSeq: fresh[fresh.length - 1].seq };
 }
