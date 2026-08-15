@@ -18,24 +18,56 @@ export type PrefixShapeTool = {
   name: string;
   description?: string;
   parameters?: unknown;
+  /**
+   * 约束采样配置(constrained sampling)。与 parameters 一样随请求体上线:配置
+   * 一变前缀字节就真的变了,不入账就会在真出事时报 unchanged。当前工具链未必
+   * 携带该字段,缺省与空值等价,不影响既有哈希的稳定性语义。
+   */
+  constrainedSampling?: unknown;
+};
+
+/**
+ * 影响断点位置与 TTL 的缓存参数。文本字节可以一模一样,但 TTL 从 5m 翻到 1h、或
+ * 供应商路径从「顶层自动断点」切到「显式断点」,缓存同样会作废 —— 这类变更 system
+ * 与 tools 的哈希都看不见,必须单独入账,否则归因会在真出事时报 unchanged。
+ */
+export type PrefixShapeCacheControl = {
+  cacheRetention?: string;
+  ttl?: string;
+  breakpointStrategy?: string;
+  /**
+   * codex 的缓存分片路由键(prompt_cache_key / x-session-id)。sessionId 一变,
+   * 服务端换分片,前缀字节再稳命中也会归零 —— 必须单独入账。空串表示「本应
+   * 注入但没注入成」:注入失败是静默的,归因里 cacheKey 从有值变空串是它唯一
+   * 可见的地方。
+   */
+  cacheKey?: string;
 };
 
 export type PrefixShape = {
   systemHash: string;
   toolsHash: string;
+  cacheControlHash: string;
   prefixHash: string;
   toolCount: number;
 };
 
-export type PrefixChangeReason = "system" | "tools";
+export type PrefixChangeReason = "system" | "tools" | "cacheControl";
 
-/** 四种归因外加首轮基线:首轮没有前一份快照可比,不能算作「变了」。 */
-export type PrefixChangeSummary = "initial" | "unchanged" | "system" | "tools" | "both";
+/** 归因取值外加首轮基线:首轮没有前一份快照可比,不能算作「变了」。 */
+export type PrefixChangeSummary =
+  | "initial"
+  | "unchanged"
+  | "system"
+  | "tools"
+  | "cacheControl"
+  | "multiple";
 
 export type PrefixCacheDiagnostics = {
   prefixHash: string;
   systemHash: string;
   toolsHash: string;
+  cacheControlHash: string;
   toolCount: number;
   prefixChanged: boolean;
   prefixChangeReasons: PrefixChangeReason[];
@@ -75,35 +107,51 @@ function stringifyParameters(parameters: unknown) {
 }
 
 /**
- * 按确定性顺序归一工具列表:name → description → parameters 三级比较,一律用
- * code-unit 字典序(默认 `<`)而非 localeCompare —— 后者受 locale 影响,会让同一份
- * 工具集在不同环境下排出不同顺序。
+ * 按上线顺序序列化工具列表 —— 刻意**不排序**。
  *
- * 归一之后再哈希,registry 的迭代顺序变化就不会被误报成前缀变更(假阳性)。
+ * 工具数组在请求体里是有序的(`filterRequestTools` 只过滤不重排),registry 迭代
+ * 顺序一变,provider 侧前缀就真的作废了。早期这里排过序,理由是「避免 registry
+ * 顺序变化造成假阳性」,但那个前提本身就错:顺序变化不是假阳性,是真失效。排序
+ * 只会让诊断在 MCP server 重连打乱顺序时报 unchanged —— 观测器恰好在它本该抓到
+ * 的场景里说谎。宁可报出一次需要人工判读的 tools 变更,也不能漏报。
  */
 function normalizeTools(tools: readonly PrefixShapeTool[]) {
-  return tools
-    .map((tool) => [tool.name, tool.description ?? "", stringifyParameters(tool.parameters)])
-    .sort((a, b) => {
-      for (let index = 0; index < a.length; index += 1) {
-        if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
-      }
-      return 0;
-    });
+  return tools.map((tool) => [
+    tool.name,
+    tool.description ?? "",
+    stringifyParameters(tool.parameters),
+    stringifyParameters(tool.constrainedSampling),
+  ]);
+}
+
+/**
+ * 缓存参数归一:字段顺序固定,缺省值统一落成空串,避免 undefined 与缺字段在
+ * JSON 序列化后产生两种不同的哈希。
+ */
+function normalizeCacheControl(cacheControl: PrefixShapeCacheControl | undefined) {
+  return [
+    cacheControl?.cacheRetention ?? "",
+    cacheControl?.ttl ?? "",
+    cacheControl?.breakpointStrategy ?? "",
+    cacheControl?.cacheKey ?? "",
+  ];
 }
 
 /** 对当前请求前缀取一份快照。只在请求边界调用一次。 */
 export function capturePrefixShape(params: {
   systemPrompt?: string;
   tools?: readonly PrefixShapeTool[];
+  cacheControl?: PrefixShapeCacheControl;
 }): PrefixShape {
   const tools = params.tools ?? [];
   const systemHash = stableHash(params.systemPrompt ?? "");
   const toolsHash = stableHash(JSON.stringify(normalizeTools(tools)));
+  const cacheControlHash = stableHash(JSON.stringify(normalizeCacheControl(params.cacheControl)));
   return {
     systemHash,
     toolsHash,
-    prefixHash: stableHash(`${systemHash}:${toolsHash}`),
+    cacheControlHash,
+    prefixHash: stableHash(`${systemHash}:${toolsHash}:${cacheControlHash}`),
     toolCount: tools.length,
   };
 }
@@ -120,6 +168,7 @@ export function comparePrefixShape(
   if (previous) {
     if (previous.systemHash !== current.systemHash) reasons.push("system");
     if (previous.toolsHash !== current.toolsHash) reasons.push("tools");
+    if (previous.cacheControlHash !== current.cacheControlHash) reasons.push("cacheControl");
   }
 
   let summary: PrefixChangeSummary;
@@ -128,7 +177,7 @@ export function comparePrefixShape(
   } else if (reasons.length === 0) {
     summary = "unchanged";
   } else if (reasons.length > 1) {
-    summary = "both";
+    summary = "multiple";
   } else {
     summary = reasons[0];
   }
@@ -137,6 +186,7 @@ export function comparePrefixShape(
     prefixHash: current.prefixHash,
     systemHash: current.systemHash,
     toolsHash: current.toolsHash,
+    cacheControlHash: current.cacheControlHash,
     toolCount: current.toolCount,
     prefixChanged: reasons.length > 0,
     prefixChangeReasons: reasons,

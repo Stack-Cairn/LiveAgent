@@ -78,7 +78,10 @@ function markLastCacheableAnthropicBlock(
     const block = blocks[index];
     if (!isRecord(block)) continue;
 
-    if (block.type === "thinking") continue;
+    // thinking / redacted_thinking 在 Anthropic 的请求类型里都不带 cache_control
+    // 字段(ThinkingBlockParam 只有 signature/thinking,RedactedThinkingBlockParam
+    // 只有 data),给它们塞断点会被服务端拒绝而不是少省 token。
+    if (block.type === "thinking" || block.type === "redacted_thinking") continue;
     if (block.type === "text" && typeof block.text === "string" && !block.text.trim()) continue;
 
     const next = blocks.slice();
@@ -146,6 +149,31 @@ function applyAnthropicExplicitCacheBreakpoint(
 function supportsAnthropicTopLevelAutomaticCaching(baseUrl: string) {
   const normalized = baseUrl.trim().toLowerCase();
   return normalized.includes("api.anthropic.com");
+}
+
+/**
+ * 把「本轮实际会应用的缓存参数」描述出来,供前缀归因入账。
+ *
+ * 刻意复用本模块内部的同一批判定函数,而不是在诊断侧照抄一遍条件 —— 一旦两处
+ * 抄写发生漂移,归因就会开始描述一个并不存在的请求。
+ */
+export function describeAnthropicCacheShape(
+  providerId: ProviderId,
+  baseUrl: string,
+  cacheRetention?: CacheRetention,
+): { cacheRetention?: string; ttl?: string; breakpointStrategy?: string } {
+  const cacheControl = buildAnthropicAutomaticCacheControl(baseUrl, cacheRetention);
+  if (providerId !== "claude_code" || !cacheControl) {
+    return { cacheRetention: cacheRetention ?? "", breakpointStrategy: "none" };
+  }
+
+  return {
+    cacheRetention: cacheRetention ?? "",
+    ttl: typeof cacheControl.ttl === "string" ? cacheControl.ttl : "",
+    breakpointStrategy: supportsAnthropicTopLevelAutomaticCaching(baseUrl)
+      ? "anthropic-top-level"
+      : "anthropic-explicit",
+  };
 }
 
 function normalizeAnthropicPayloadMessages(
