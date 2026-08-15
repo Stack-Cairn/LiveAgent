@@ -80,11 +80,7 @@ export function GitInitModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <DialogContent
-        className="max-w-md p-0"
-        overlayClassName="z-[110]"
-        viewportClassName="z-[110]"
-      >
+      <DialogContent className="max-w-md p-0">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -256,11 +252,7 @@ export function WorktreeCreateModal(props: {
         if (!nextOpen && !loading) onClose();
       }}
     >
-      <DialogContent
-        className="max-w-md p-0"
-        overlayClassName="z-[110]"
-        viewportClassName="z-[110]"
-      >
+      <DialogContent className="max-w-md p-0">
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -444,7 +436,7 @@ export function WorktreeCreateModal(props: {
 }
 
 // Per-branch action sheet opened from a branch row's "⋯" button. Lives below
-// the shared ConfirmDialog (z-[120]) so delete confirmations stack above it.
+// the shared ConfirmDialog so delete confirmations portal after it and stack above it.
 export function BranchActionsModal(props: {
   action: GitBranchActionState | null;
   canWrite: boolean;

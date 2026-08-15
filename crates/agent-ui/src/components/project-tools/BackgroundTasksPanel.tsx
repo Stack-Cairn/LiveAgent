@@ -169,10 +169,7 @@ function BackgroundTaskLogDialog(props: {
         else onClose();
       }}
     >
-      <DialogContent
-        className="flex h-[85dvh] max-w-none flex-col rounded-t-2xl rounded-b-none p-0 sm:h-[min(80dvh,36rem)] sm:max-w-2xl sm:rounded-2xl"
-        viewportClassName="items-end p-0 sm:items-center sm:p-4"
-      >
+      <DialogContent className="bottom-0 top-auto flex h-[85dvh] w-full max-w-none -translate-y-0 flex-col rounded-b-none rounded-t-2xl p-0 sm:bottom-auto sm:top-1/2 sm:h-[min(80dvh,36rem)] sm:w-[calc(100%-2rem)] sm:max-w-2xl sm:-translate-y-1/2 sm:rounded-2xl">
         <div className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-3">
           <div className="min-w-0 flex-1">
             <DialogTitle className="truncate text-sm">{processDisplayName(process)}</DialogTitle>
@@ -249,7 +246,7 @@ function BackgroundTaskLogDialog(props: {
           )}
         </div>
         {contextMenu ? (
-          <div className="fixed inset-0 z-[130]">
+          <div className="layer-popover fixed inset-0">
             <button
               type="button"
               tabIndex={-1}

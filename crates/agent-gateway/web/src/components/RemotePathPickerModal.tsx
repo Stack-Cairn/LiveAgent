@@ -518,8 +518,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
     }
   }
 
-  // 挂 z-[120]：需要压过新建 worktree 弹窗（z-[110]）等上层来源；作为嵌套
-  // Base UI Dialog 打开时 DOM 顺序也保证在后。
+  // Nested dialogs share the portal layer; the later portal wins by DOM order.
   return (
     <Dialog
       open={open}
@@ -528,11 +527,7 @@ export function RemotePathPickerModal(props: RemotePathPickerModalProps) {
         if (!nextOpen) onClose();
       }}
     >
-      <DialogContent
-        className="remote-path-picker-panel flex h-[min(650px,92vh)] max-h-[92vh] max-w-4xl flex-col border-border/60 p-0 max-sm:max-h-[calc(100dvh-1rem)] max-sm:max-w-[calc(100vw-1rem)]"
-        overlayClassName="z-[120] bg-black/60"
-        viewportClassName="z-[120] items-stretch px-2 pb-[max(8px,env(safe-area-inset-bottom))] pt-[max(8px,env(safe-area-inset-top))] sm:items-center sm:p-4"
-      >
+      <DialogContent className="remote-path-picker-panel flex h-[min(650px,calc(100dvh-1rem))] max-w-4xl flex-col border-border/60 p-0">
         <div className="settings-modal-header flex items-center gap-3 border-b border-border/40 px-6 py-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             {mode === "file" ? <File className="h-5 w-5" /> : <FolderOpen className="h-5 w-5" />}

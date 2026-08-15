@@ -144,7 +144,7 @@ export function CopyPathDialog(props: {
 
 export function CopyPathToast(props: { message: string }) {
   return (
-    <div className="pointer-events-none absolute bottom-14 right-4 z-[90]">
+    <div className="layer-raised pointer-events-none absolute bottom-14 right-4">
       <div className="notify-toast-enter flex min-w-56 items-center gap-2 rounded-lg border border-emerald-500/25 bg-background/95 px-3 py-2 text-sm font-medium text-foreground shadow-2xl backdrop-blur-xl">
         <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
         <span>{props.message}</span>
@@ -336,7 +336,7 @@ export function DragPreview(props: {
 
   return (
     <div
-      className="pointer-events-none fixed z-[120] flex w-[260px] max-w-[calc(100vw-32px)] items-center gap-2 rounded-md bg-sky-500/90 px-2.5 py-2 text-xs text-white shadow-xl ring-1 ring-sky-200/50 backdrop-blur-sm"
+      className="layer-toast pointer-events-none fixed flex w-[260px] max-w-[calc(100vw-32px)] items-center gap-2 rounded-md bg-sky-500/90 px-2.5 py-2 text-xs text-white shadow-xl ring-1 ring-sky-200/50 backdrop-blur-sm"
       style={{
         left: x + 18,
         top: y + 14,

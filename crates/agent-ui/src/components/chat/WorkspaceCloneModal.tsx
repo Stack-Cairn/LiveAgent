@@ -151,7 +151,7 @@ export function WorkspaceCloneModal({
         if (!open && !cloning) onClose();
       }}
     >
-      <DialogContent className="max-w-xl rounded-[28px] border-black/[0.07] bg-white/[0.93] p-0 backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-background/[0.93]">
+      <DialogContent className="max-w-xl p-0">
         <div className="settings-modal-header flex items-center gap-3 border-b border-black/[0.06] px-6 py-5 dark:border-white/[0.08]">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/80 text-foreground/70 shadow-sm dark:border-white/10 dark:bg-white/[0.07] dark:text-foreground/80">
             <GitBranch className="h-5 w-5" />

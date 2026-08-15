@@ -130,11 +130,6 @@ for (const check of checks) {
   }
 }
 
-const dialogPrimitiveFiles = new Set([
-  "crates/agent-ui/src/components/ui/alert-dialog.tsx",
-  "crates/agent-ui/src/components/ui/dialog.tsx",
-  "crates/agent-ui/src/components/ui/sheet.tsx",
-]);
 const retiredDialogPatterns = [
   {
     pattern:
@@ -149,6 +144,18 @@ const retiredDialogPatterns = [
     pattern: /\brole=["']dialog["']/,
     reason: "业务组件不能手写 dialog 语义，必须使用共享 Dialog/AlertDialog",
   },
+  {
+    pattern: /\b(?:overlayClassName|viewportClassName|backdropClassName|portalProps)\b/,
+    reason: "业务组件不能覆盖弹层基础设施；布局应落在 Content/Sheet 的语义 API 内",
+  },
+  {
+    pattern: /\bz-\[\d+\]/,
+    reason: "层级必须使用 layer-popover/layer-modal/layer-toast 等语义 token",
+  },
+  {
+    pattern: /\brounded-\[(?:\d|\.\d)[^\]]*\]/,
+    reason: "圆角必须使用由 --radius 派生的标准 rounded-* token",
+  },
 ];
 for (const root of [
   join(repoRoot, "crates/agent-ui/src"),
@@ -159,11 +166,11 @@ for (const root of [
     const source = readFileSync(file, "utf8");
     const filePath = toPosixPath(relative(repoRoot, file));
     if (
-      /from\s+["']@base-ui\/react\/(?:alert-dialog|dialog)["']/.test(source) &&
-      !dialogPrimitiveFiles.has(filePath)
+      /from\s+["']@base-ui\/react(?:\/[^"']+)?["']/.test(source) &&
+      !filePath.startsWith("crates/agent-ui/src/components/ui/")
     ) {
       failures += 1;
-      console.error(`${filePath}: Base UI Dialog 只能由 agent-ui 共享原语直接导入`);
+      console.error(`${filePath}: Base UI 只能由 agent-ui 共享 UI 原语直接导入`);
     }
     for (const rule of retiredDialogPatterns) {
       if (!rule.pattern.test(source)) continue;

@@ -63,7 +63,7 @@ function SettingsSelectTrigger({ className = "", ...props }: SettingsSelectTrigg
   return (
     <SelectTrigger
       className={cn(
-        "h-8 w-fit max-w-[260px] gap-1.5 whitespace-nowrap rounded-[10px] border-border/65 bg-background px-2.5 py-0 text-[13px] font-normal leading-none shadow-[0_1px_2px_hsl(var(--foreground)/0.035)] transition-colors hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:opacity-40",
+        "h-8 w-fit max-w-[260px] gap-1.5 whitespace-nowrap rounded-lg border-border/65 bg-background px-2.5 py-0 text-[13px] font-normal leading-none shadow-[0_1px_2px_hsl(var(--foreground)/0.035)] transition-colors hover:bg-muted/25 focus-visible:ring-2 focus-visible:ring-foreground/10 [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:opacity-40",
         className,
       )}
       {...props}

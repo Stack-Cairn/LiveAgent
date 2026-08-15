@@ -611,7 +611,7 @@ export function ToolResultDisplay({
           />
         </ToolSurface>
         {!details.reusedExisting && images.length > 0 ? (
-          <div className="overflow-hidden rounded-[10px] border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
+          <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
             {images.map((image, index) => (
               <ToolResultImagePreview
                 key={`${details.path}-${index}`}
@@ -770,7 +770,7 @@ export function ToolResultDisplay({
             {details.entries.map((entry) => (
               <div
                 key={`${entry.kind}-${entry.path}`}
-                className="flex items-start gap-2 rounded-[8px] px-1.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className="flex items-start gap-2 rounded-md px-1.5 py-1 text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
               >
                 <span className="mt-[1px] shrink-0 text-[calc(10px*var(--zone-font-scale,1))] font-semibold uppercase text-muted-foreground/35">
                   {entry.kind}
@@ -808,7 +808,7 @@ export function ToolResultDisplay({
               <PathDisplay
                 key={entry}
                 path={entry}
-                className="block rounded-[8px] px-1.5 py-1 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                className="block rounded-md px-1.5 py-1 break-all font-mono text-[calc(11px*var(--zone-font-scale,1))] leading-[1.5] even:bg-black/[0.02] dark:even:bg-white/[0.03]"
               />
             ))}
           </div>
@@ -839,7 +839,7 @@ export function ToolResultDisplay({
               {details.files.map((file) => (
                 <div
                   key={file.path}
-                  className="space-y-1 rounded-[8px] px-1.5 py-1 even:bg-black/[0.02] dark:even:bg-white/[0.03]"
+                  className="space-y-1 rounded-md px-1.5 py-1 even:bg-black/[0.02] dark:even:bg-white/[0.03]"
                 >
                   <PathDisplay
                     path={file.path}
@@ -862,7 +862,7 @@ export function ToolResultDisplay({
             {details.matches.map((match, index) => (
               <div
                 key={`${match.path}:${match.line}:${index}`}
-                className="rounded-[8px] border border-black/[0.05] bg-white/[0.55] p-2 dark:border-white/[0.06] dark:bg-white/[0.03]"
+                className="rounded-md border border-black/[0.05] bg-white/[0.55] p-2 dark:border-white/[0.06] dark:bg-white/[0.03]"
               >
                 <div className="flex items-start gap-2">
                   <PathDisplay
@@ -1068,7 +1068,7 @@ export function ToolResultDisplay({
           </div>
         ) : null}
         {details.bodyPreview ? (
-          <div className="rounded-[8px] border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] dark:border-white/[0.07] dark:bg-white/[0.03]">
+          <div className="rounded-md border border-black/[0.05] bg-white/[0.45] px-2.5 py-2 text-[calc(11.5px*var(--zone-font-scale,1))] leading-[1.6] dark:border-white/[0.07] dark:bg-white/[0.03]">
             <Markdown content={details.bodyPreview} />
           </div>
         ) : null}
@@ -1079,7 +1079,7 @@ export function ToolResultDisplay({
   if (images.length > 0) {
     return (
       <div className="space-y-2">
-        <div className="overflow-hidden rounded-[10px] border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
+        <div className="overflow-hidden rounded-lg border border-black/[0.06] bg-white/[0.55] p-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
           {images.map((image, index) => (
             <ToolResultImagePreview
               key={`${item.toolCall.id}-${index}`}

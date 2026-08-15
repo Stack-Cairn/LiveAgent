@@ -369,7 +369,6 @@ function CustomSettingsDrawer(
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         className="max-w-none border-white/50 bg-white/70 shadow-[-32px_0_80px_-28px_rgba(15,23,42,0.22)] backdrop-blur-[28px] backdrop-saturate-150 sm:max-w-[440px] dark:border-foreground/[0.08] dark:bg-background/60"
-        backdropClassName="bg-foreground/[0.06] backdrop-blur-md dark:bg-background/40"
         closeLabel={t("settings.closeCustomSettings")}
         showCloseButton={false}
       >

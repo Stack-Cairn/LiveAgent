@@ -3,9 +3,23 @@ import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
 
-export const AlertDialog = AlertDialogPrimitive.Root;
-export const AlertDialogPortal = AlertDialogPrimitive.Portal;
-export const AlertDialogClose = AlertDialogPrimitive.Close;
+export function AlertDialog(
+  props: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Root>,
+) {
+  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
+}
+
+export function AlertDialogPortal(
+  props: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Portal>,
+) {
+  return <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />;
+}
+
+export function AlertDialogClose(
+  props: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Close>,
+) {
+  return <AlertDialogPrimitive.Close data-slot="alert-dialog-close" {...props} />;
+}
 
 export const AlertDialogOverlay = React.forwardRef<
   HTMLDivElement,
@@ -15,7 +29,7 @@ export const AlertDialogOverlay = React.forwardRef<
     ref={ref}
     data-slot="alert-dialog-overlay"
     className={cn(
-      "fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}
     {...props}
@@ -23,35 +37,23 @@ export const AlertDialogOverlay = React.forwardRef<
 ));
 AlertDialogOverlay.displayName = "AlertDialogOverlay";
 
-type AlertDialogContentProps = React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Popup> & {
-  overlayClassName?: string;
-  portalProps?: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Portal>;
-  viewportClassName?: string;
-};
+type AlertDialogContentProps = React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Popup>;
 
 export const AlertDialogContent = React.forwardRef<HTMLDivElement, AlertDialogContentProps>(
-  ({ className, children, overlayClassName, portalProps, viewportClassName, ...props }, ref) => (
-    <AlertDialogPortal {...portalProps}>
-      <AlertDialogOverlay className={overlayClassName} />
-      <AlertDialogPrimitive.Viewport
-        data-slot="alert-dialog-viewport"
+  ({ className, children, ...props }, ref) => (
+    <AlertDialogPortal>
+      <AlertDialogOverlay />
+      <AlertDialogPrimitive.Popup
+        ref={ref}
+        data-slot="alert-dialog-content"
         className={cn(
-          "fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4",
-          viewportClassName,
+          "layer-modal fixed left-1/2 top-1/2 w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+          className,
         )}
+        {...props}
       >
-        <AlertDialogPrimitive.Popup
-          ref={ref}
-          data-slot="alert-dialog-content"
-          className={cn(
-            "relative w-full max-w-lg overflow-hidden rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-200 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
-            className,
-          )}
-          {...props}
-        >
-          {children}
-        </AlertDialogPrimitive.Popup>
-      </AlertDialogPrimitive.Viewport>
+        {children}
+      </AlertDialogPrimitive.Popup>
     </AlertDialogPortal>
   ),
 );
@@ -82,5 +84,3 @@ export const AlertDialogDescription = React.forwardRef<
   />
 ));
 AlertDialogDescription.displayName = "AlertDialogDescription";
-
-export { AlertDialogPrimitive };

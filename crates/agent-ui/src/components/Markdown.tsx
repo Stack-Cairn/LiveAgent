@@ -562,7 +562,6 @@ export function ExternalLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafet
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         className="external-link-modal-panel max-w-[28rem] border-border/60 p-0 shadow-[0_20px_60px_-28px_rgba(0,0,0,0.45)]"
-        overlayClassName="bg-black/25 backdrop-blur-[2px]"
       >
         <div className="flex items-start justify-between gap-4 px-5 pb-3 pt-5">
           <div className="min-w-0 space-y-1.5">

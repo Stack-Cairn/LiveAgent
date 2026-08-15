@@ -562,7 +562,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 
 .gateway-chat-frame {
   position: relative;
-  z-index: 1;
+  z-index: var(--layer-content);
   display: flex;
   height: 100%;
   min-height: 0;
@@ -584,7 +584,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 
 .history-share-frame {
   position: relative;
-  z-index: 1;
+  z-index: var(--layer-content);
   display: flex;
   height: 100%;
   min-height: 0;
@@ -682,7 +682,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 .gateway-history-switch-overlay {
   position: absolute;
   inset: 0;
-  z-index: 18;
+  z-index: var(--layer-panel);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -758,7 +758,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   position: absolute;
   right: 18px;
   bottom: calc(var(--gateway-chat-composer-overlay-height, 176px) + 12px);
-  z-index: 12;
+  z-index: var(--layer-raised);
   display: inline-flex;
   height: 42px;
   width: 42px;
@@ -1107,7 +1107,7 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
 .gateway-settings-overlay {
   position: absolute;
   inset: 0;
-  z-index: 40;
+  z-index: var(--layer-panel);
   min-height: 100%;
   opacity: 0;
   transform: translateY(24px);

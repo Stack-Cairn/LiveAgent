@@ -168,7 +168,7 @@ export function ModelPicker({
         align="start"
         sideOffset={4}
         collisionPadding={8}
-        className="z-[80] w-(--anchor-width) overflow-hidden rounded-xl p-0 text-xs"
+        className="w-(--anchor-width) overflow-hidden rounded-xl p-0 text-xs"
       >
         <div className="px-2 py-1.5">
           <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/40 px-2 py-1">

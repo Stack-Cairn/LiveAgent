@@ -142,7 +142,7 @@ function CloneTaskCard({
 export function WorkspaceCloneTaskOverlay(props: WorkspaceCloneTaskOverlayProps) {
   if (props.tasks.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[70] flex max-h-[calc(100vh-2rem)] flex-col-reverse gap-2 overflow-y-auto">
+    <div className="layer-toast pointer-events-none fixed bottom-4 right-4 flex max-h-[calc(100vh-2rem)] flex-col-reverse gap-2 overflow-y-auto">
       {props.tasks.map((task) => (
         <CloneTaskCard key={task.id} task={task} {...props} />
       ))}

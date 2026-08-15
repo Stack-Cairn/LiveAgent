@@ -281,7 +281,7 @@ function RegistryCard(props: {
                   placeholder={t("mcpHub.storeVersionLatest")}
                 />
               </SelectTrigger>
-              <SelectContent className="z-[70] min-w-[5.75rem]">
+              <SelectContent className="min-w-[5.75rem]">
                 {versionOptions.map((option) => (
                   <SelectItem key={option.id} value={option.id} className="text-xs">
                     {option.label}

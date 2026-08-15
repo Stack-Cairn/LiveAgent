@@ -1410,7 +1410,7 @@ function WorkspaceImagePreviewBody(props: {
               <div
                 ref={contextMenuRef}
                 role="menu"
-                className="fixed z-[90] min-w-48 rounded-lg border border-border bg-popover p-1 text-xs text-popover-foreground shadow-2xl"
+                className="layer-popover fixed min-w-48 rounded-lg border border-border bg-popover p-1 text-xs text-popover-foreground shadow-2xl"
                 style={{
                   left: (contextMenuPosition ?? contextMenu).x,
                   top: (contextMenuPosition ?? contextMenu).y,

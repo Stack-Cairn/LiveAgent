@@ -22,7 +22,7 @@ export function ContextCheckpointCard(props: {
   return (
     <div
       className={cn(
-        "checkpoint-card w-full overflow-hidden rounded-[14px] border border-black/[0.06] bg-white/[0.85] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] dark:border-white/[0.1] dark:bg-white/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_4px_12px_rgba(0,0,0,0.15)]",
+        "checkpoint-card w-full overflow-hidden rounded-xl border border-black/[0.06] bg-white/[0.85] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_rgba(0,0,0,0.03)] dark:border-white/[0.1] dark:bg-white/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2),0_4px_12px_rgba(0,0,0,0.15)]",
         className,
       )}
     >
@@ -32,7 +32,7 @@ export function ContextCheckpointCard(props: {
         onClick={() => setExpanded((previous) => !previous)}
         className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors duration-150 hover:bg-black/[0.02] dark:hover:bg-white/[0.03]"
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-black/[0.04] dark:bg-white/[0.08]">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-black/[0.04] dark:bg-white/[0.08]">
           <CheckCircle2 size={16} strokeWidth={1.8} className="text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">

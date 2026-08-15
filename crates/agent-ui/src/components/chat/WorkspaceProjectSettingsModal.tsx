@@ -294,11 +294,7 @@ export function WorkspaceProjectSettingsModal(props: {
         if (!open) onClose();
       }}
     >
-      <DialogContent
-        className="flex h-[650px] max-h-[calc(100dvh-2rem)] max-w-[940px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0"
-        overlayClassName="z-[120] bg-black/60"
-        viewportClassName="z-[120] max-[720px]:p-0"
-      >
+      <DialogContent className="flex h-[650px] max-w-[940px] flex-col p-0 max-[720px]:h-[100dvh] max-[720px]:max-h-[100dvh] max-[720px]:w-full max-[720px]:max-w-none max-[720px]:rounded-none max-[720px]:border-0">
         <header className="settings-modal-header flex shrink-0 items-center justify-between gap-4 border-b px-5 py-4 max-[720px]:px-3.5 max-[720px]:py-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/35 text-foreground">

@@ -156,7 +156,7 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.match(webRemotePathPicker, /max-h-\[92vh\]/);
   assert.match(webRemotePathPicker, /max-w-4xl/);
   assert.doesNotMatch(webRemotePathPicker, /forceRender/);
-  assert.match(webRemotePathPicker, /overlayClassName="z-\[120\] bg-black\/60"/);
+  assert.doesNotMatch(webRemotePathPicker, /overlayClassName|viewportClassName|z-\[\d+\]/);
   assert.ok(
     webRemotePathPicker.indexOf("selectedPathRef.current = path") <
       webRemotePathPicker.indexOf("pending.resolve(selectedPathRef.current)"),
@@ -164,7 +164,7 @@ test("workspace configuration uses one entry and one shared two-column modal", (
   assert.doesNotMatch(webGatewayApp, /useDirectoryPicker|directoryPickerElement/);
   assert.match(sharedResourceTabs, /<TabsList[\s\S]*<TabsTrigger/);
   assert.match(sharedResourceCard, /ResourceActivationSwitch/);
-  assert.match(sharedSheet, /export const SheetViewport/);
+  assert.doesNotMatch(sharedSheet, /SheetPrimitive\.Viewport|backdropClassName|portalProps/);
   assert.match(sharedSheet, /export const SheetPopup/);
   assert.match(sharedSheet, /export const SheetPanel/);
   assert.match(sharedSheet, /SheetPopup as SheetContent/);

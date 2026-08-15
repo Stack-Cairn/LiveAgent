@@ -285,7 +285,6 @@ export function MemorySettingsDrawer(props: {
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
         className="max-w-none border-foreground/[0.06] bg-background/65 shadow-[-30px_0_70px_-32px_rgba(15,23,42,0.28)] backdrop-blur-2xl sm:max-w-[420px] dark:border-foreground/[0.08] dark:bg-background/55"
-        backdropClassName="bg-foreground/[0.04] backdrop-blur-md dark:bg-background/30"
         closeLabel={t("settings.memorySettingsClose")}
         showCloseButton={false}
       >

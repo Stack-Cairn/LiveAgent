@@ -3,8 +3,13 @@ import * as React from "react";
 
 import { cn } from "../../lib/shared/utils";
 
-export const Dialog = DialogPrimitive.Root;
-export const DialogPortal = DialogPrimitive.Portal;
+export function Dialog(props: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>) {
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />;
+}
+
+export function DialogPortal(props: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>) {
+  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
+}
 
 export function DialogTrigger(
   props: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Trigger>,
@@ -24,7 +29,7 @@ export const DialogOverlay = React.forwardRef<
     ref={ref}
     data-slot="dialog-overlay"
     className={cn(
-      "fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm transition-opacity duration-200 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+      "layer-modal fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 motion-reduce:transition-none",
       className,
     )}
     {...props}
@@ -32,35 +37,23 @@ export const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = "DialogOverlay";
 
-type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Popup> & {
-  overlayClassName?: string;
-  portalProps?: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>;
-  viewportClassName?: string;
-};
+type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Popup>;
 
 export const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
-  ({ className, children, overlayClassName, portalProps, viewportClassName, ...props }, ref) => (
-    <DialogPortal {...portalProps}>
-      <DialogOverlay className={overlayClassName} />
-      <DialogPrimitive.Viewport
-        data-slot="dialog-viewport"
+  ({ className, children, ...props }, ref) => (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Popup
+        ref={ref}
+        data-slot="dialog-content"
         className={cn(
-          "fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4",
-          viewportClassName,
+          "layer-modal fixed left-1/2 top-1/2 w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-150 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
+          className,
         )}
+        {...props}
       >
-        <DialogPrimitive.Popup
-          ref={ref}
-          data-slot="dialog-content"
-          className={cn(
-            "relative w-full max-w-lg overflow-hidden rounded-2xl border border-border/70 bg-background text-foreground shadow-2xl outline-none transition-[transform,opacity] duration-200 ease-out data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 motion-reduce:transition-none",
-            className,
-          )}
-          {...props}
-        >
-          {children}
-        </DialogPrimitive.Popup>
-      </DialogPrimitive.Viewport>
+        {children}
+      </DialogPrimitive.Popup>
     </DialogPortal>
   ),
 );
@@ -115,5 +108,3 @@ export const DialogDescription = React.forwardRef<
   />
 ));
 DialogDescription.displayName = "DialogDescription";
-
-export { DialogPrimitive };
