@@ -581,6 +581,15 @@ html[data-liveagent-webui="gateway"] [role="textbox"]:focus-visible {
   --gateway-chat-composer-bottom: 16px;
   --gateway-chat-composer-overlay-height: 176px;
 }
+/*
+ * 聊天顶部栏避开系统状态栏（刘海/挖孔屏安全区）。移动端 WebView 采用
+ * edge-to-edge 布局，ChatHeader 只有 py-2.5 的固定内边距，未叠加安全区时
+ * 标题栏内容会与时间/电量重叠。底值 0.625rem 对应 ChatHeader 的 py-2.5，
+ * 桌面窗口安全区为 0 时行为不变。
+ */
+.gateway-chat-frame header[data-tauri-drag-region] {
+  padding-top: max(env(safe-area-inset-top, 0px), 0.625rem);
+}
 
 .history-share-frame {
   position: relative;
