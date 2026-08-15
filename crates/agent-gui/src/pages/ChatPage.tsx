@@ -55,6 +55,7 @@ import {
 import type { ChatHistorySummary } from "../lib/chat/history/chatHistory";
 import { memoryExtraction } from "../lib/chat/memory/extractionController";
 import { memoryTurnInjection } from "../lib/chat/memory/injectionController";
+import { skillMentionInjection } from "../lib/chat/skills/mentionInjection";
 import {
   buildFallbackConversationTitle,
   createConversationIdentity,
@@ -754,6 +755,7 @@ export function ChatPage(props: ChatPageProps) {
       setPendingUploadsForConversation(key, []);
       memoryExtraction.dispose(key);
       memoryTurnInjection.dispose(key);
+      skillMentionInjection.dispose(key);
       deleteConversationArtifacts(key);
       setQueuedChatTurnsState((current) => removeQueuedChatTurnsForConversation(current, key));
     },

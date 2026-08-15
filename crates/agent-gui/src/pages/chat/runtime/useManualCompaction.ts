@@ -15,6 +15,7 @@ import type { LiveTranscriptStore } from "../../../lib/chat/conversation/liveTra
 import { createGatewayBridgeEventController } from "../../../lib/chat/conversation/run/gatewayBridgeEvents";
 import { createTurnCancellation } from "../../../lib/chat/conversation/turnCancellation";
 import { memoryTurnInjection } from "../../../lib/chat/memory/injectionController";
+import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import { createProviderRuntimeConfig } from "../../../lib/providers/llm";
 import type { AppSettings } from "../../../lib/settings";
 import { createLocalGatewayChatRunId } from "../gateway/gatewayRuntimeStatusModel";
@@ -309,6 +310,9 @@ export function useManualCompaction(params: {
         // 退回原来现读的结果。
         const memoryPrompt = memoryTurnInjection.getSystemText(conversationId) ?? freshMemoryPrompt;
         const memoryTurnUpdates = memoryTurnInjection.getMessageUpdates(conversationId);
+        // 压缩后保留下来的 user 消息必须连同已挂上的显式提及块一起重放,否则那几条
+        // 消息的字节与发出去时对不上,压缩省下的前缀又被自己废掉。
+        const skillMentionUpdates = skillMentionInjection.getMessageUpdates(conversationId);
 
         let compactionFailureMessage = "";
         const sinks: CompactionSinks = {
@@ -362,6 +366,7 @@ export function useManualCompaction(params: {
                 skillsPrompt,
                 memoryPrompt,
                 memoryTurnUpdates,
+                skillMentionUpdates,
                 includeAbortedMessages: options?.includeAbortedMessages,
                 includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
               }),
@@ -374,6 +379,7 @@ export function useManualCompaction(params: {
                 skillsPrompt,
                 memoryPrompt,
                 memoryTurnUpdates,
+                skillMentionUpdates,
                 includeAbortedMessages: options?.includeAbortedMessages,
                 includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
               }),

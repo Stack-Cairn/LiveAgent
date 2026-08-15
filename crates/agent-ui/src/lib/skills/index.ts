@@ -611,18 +611,9 @@ export async function cancelSkillInstallJob(jobId: string): Promise<SkillInstall
 export function buildSkillsSystemPrompt(params: {
   rootDir: string;
   selected: SkillSummary[];
-  explicit?: SkillSummary[];
 }): string {
   const { selected } = params;
   if (selected.length === 0) return "";
-  const explicit = resolveExplicitSkillMentions({
-    structured: params.explicit?.map((skill) => ({
-      name: skill.name,
-      skillFile: skill.skillFile,
-      baseDir: skill.baseDir,
-    })),
-    enabledSkills: selected,
-  });
 
   return [
     "The following Skills are enabled by the user. Skill files are exposed to file tools through skill://<baseDir>/... paths.",
@@ -640,18 +631,6 @@ export function buildSkillsSystemPrompt(params: {
     "- Do not guess a Skill's exact instructions or script paths before reading the Skill file.",
     "- Relative paths inside a Skill (scripts/, references/, assets/, and so on) are resolved relative to baseDir.",
     "- If a Skill contains the {baseDir} placeholder, interpret it as the baseDir value in the metadata below (relative to the Skills root directory).",
-    explicit.length > 0
-      ? [
-          "",
-          "Explicitly mentioned this turn:",
-          "- The user explicitly mentioned the following enabled Skills with `/skill-name` in this turn.",
-          "- Treat these mentions as user intent to prioritize those Skills. Read and follow the mentioned Skill instructions before acting when they are relevant.",
-          "- `/` mentions never grant access to disabled Skills; only the enabled Skills listed in this prompt are available.",
-          ...explicit.map(
-            (skill) => `- ${skill.name} (skillFile: ${skill.skillFile}, baseDir: ${skill.baseDir})`,
-          ),
-        ].join("\n")
-      : "",
     "",
     "Skills:",
     ...selected.map((s) =>
@@ -672,5 +651,38 @@ export function buildSkillsSystemPrompt(params: {
           : "",
       ].join("\n"),
     ),
+  ].join("\n");
+}
+
+const EXPLICIT_SKILL_MENTIONS_OPEN = "<skill-mentions>";
+const EXPLICIT_SKILL_MENTIONS_CLOSE = "</skill-mentions>";
+
+/**
+ * 渲染「用户显式提及的 Skills」块。
+ *
+ * 这段内容原先直接拼在 skills system prompt 里,但它只对当轮有效:用户打一次
+ * `/skill-name`,system 段这轮多出一段、下轮又撤回去 —— 一次输入连废两次缓存
+ * 前缀。system prompt 排在所有消息之前,它变一个字节,system 块连同其后全部
+ * 历史一起作废,代价远大于这段文字本身。
+ *
+ * 因此改由 host 把它挂到当轮 user 消息尾部:那里复用 pi-ai 已经打在最后一条
+ * user 消息上的 cache_control 断点,不额外占用 Anthropic 的 4 个名额。
+ *
+ * 纯函数:不含时间量与随机量,同一输入永远得到同一输出,也不 import 任何 host。
+ * 入参应当是 resolveExplicitSkillMentions 的结果(已按 enabled Skills 过滤过);
+ * explicit 为空时返回空串 —— 调用方据此保证「没有提及就不产生任何额外内容」。
+ */
+export function formatExplicitSkillMentions(explicit: SkillSummary[]): string {
+  if (explicit.length === 0) return "";
+
+  return [
+    EXPLICIT_SKILL_MENTIONS_OPEN,
+    "The user explicitly mentioned the following enabled Skills with `/skill-name` in this message.",
+    "Treat these mentions as user intent to prioritize those Skills. Read and follow the mentioned Skill instructions before acting when they are relevant.",
+    "`/` mentions never grant access to disabled Skills; only the enabled Skills listed in the system prompt are available.",
+    ...explicit.map(
+      (skill) => `- ${skill.name} (skillFile: ${skill.skillFile}, baseDir: ${skill.baseDir})`,
+    ),
+    EXPLICIT_SKILL_MENTIONS_CLOSE,
   ].join("\n");
 }

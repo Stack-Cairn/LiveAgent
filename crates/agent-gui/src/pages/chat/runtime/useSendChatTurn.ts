@@ -15,6 +15,7 @@ import type { ScrollFollowHandle } from "@liveagent/ui/lib/chat-scroll/useScroll
 import type { SidebarStore } from "@liveagent/ui/lib/sidebar/store";
 import {
   buildSkillsSystemPrompt,
+  formatExplicitSkillMentions,
   resolveExplicitSkillMentions,
   type SkillSummary,
 } from "@liveagent/ui/lib/skills/index";
@@ -43,6 +44,7 @@ import { createTurnCancellation } from "../../../lib/chat/conversation/turnCance
 import type { ChatHistorySummary } from "../../../lib/chat/history/chatHistory";
 import type { MemoryExtractionStatusKey } from "../../../lib/chat/memory/extractionEngine";
 import { memoryTurnInjection } from "../../../lib/chat/memory/injectionController";
+import { skillMentionInjection } from "../../../lib/chat/skills/mentionInjection";
 import {
   BRANCH_CONVERSATION_DEFAULT_TITLE,
   buildFallbackConversationTitle,
@@ -1163,6 +1165,8 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
     acknowledgeGatewayRunStarted();
     let skillsPrompt = "";
     let memoryPrompt = "";
+    /** 本轮 `/skill-name` 显式提及块;没有提及时恒为空串,不会挂出任何内容。 */
+    let explicitSkillMentionBlock = "";
     let skillsRootDirForTools = skillsRootDir;
     let skillAccessPolicyForTools: SkillAccessPolicy | undefined = effectiveSkillsEnabled
       ? {
@@ -1197,6 +1201,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
           options?.includeMemoryTurnUpdates === false
             ? null
             : memoryTurnInjection.getMessageUpdates(conversationId),
+        // 显式提及块与 memory 增量同一个口径:同样是合成出来的上下文,不能被
+        // 记忆抽取这类旁路当成用户说的话再抽一遍。
+        skillMentionUpdates:
+          options?.includeMemoryTurnUpdates === false
+            ? null
+            : skillMentionInjection.getMessageUpdates(conversationId),
         includeAbortedMessages: options?.includeAbortedMessages,
         includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
       });
@@ -1216,6 +1226,7 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         skillsPrompt,
         memoryPrompt,
         memoryTurnUpdates: memoryTurnInjection.getMessageUpdates(conversationId),
+        skillMentionUpdates: skillMentionInjection.getMessageUpdates(conversationId),
         includeAbortedMessages: options?.includeAbortedMessages,
         includeUploadedFilesMetadata: options?.includeUploadedFilesMetadata,
       });
@@ -1348,10 +1359,12 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
         structured: composerDraft?.skillMentions ?? [],
         enabledSkills: selectedSkills,
       });
+      // 显式提及只对当轮有效:留在 system prompt 里会让它这轮多一段、下轮撤回去,
+      // 一次 `/skill-name` 连废两次缓存前缀。这里只算出块,挂载推迟到停止检查之后。
+      explicitSkillMentionBlock = formatExplicitSkillMentions(explicitSkills);
       skillsPrompt = buildSkillsSystemPrompt({
         rootDir,
         selected: selectedSkills,
-        explicit: explicitSkills,
       });
     }
 
@@ -1378,6 +1391,13 @@ export function useSendChatTurn(params: UseSendChatTurnParams) {
       messageId: pendingUserMessage.id,
       overview: memoryOverview,
     }).systemText;
+    // 同样放在停止检查之后:这一轮被停掉时消息根本没发出去,提前记账只会给一个
+    // 永远对不上的消息 id 留下垃圾块。空块不会创建任何状态。
+    skillMentionInjection.record({
+      conversationId,
+      messageId: pendingUserMessage.id,
+      block: explicitSkillMentionBlock,
+    });
 
     const hookScope = createHookRunScope({
       hooks: getAutomationState().hooks.hooks,
