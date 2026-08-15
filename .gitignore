@@ -41,3 +41,9 @@ chatroom
 *.sw?
 .pnpm-store
 workspace.zip
+
+# Local workflow artifacts
+/.gitattributes
+/.trellis
+/AGENTS.md
+/CLAUDE.md

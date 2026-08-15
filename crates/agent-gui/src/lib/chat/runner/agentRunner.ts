@@ -16,6 +16,11 @@ import {
 import type { PreparedProxyRequest } from "@liveagent/ui/lib/providers/proxy";
 import { buildStreamRequestDebugPayload, type StreamDebugLogger } from "../../debug/agentDebug";
 import {
+  capturePrefixShape,
+  comparePrefixShape,
+  type PrefixShape,
+} from "../../debug/prefixCacheShape";
+import {
   createHostedSearchEventAggregator,
   createHostedSearchProbeId,
   startHostedSearchFetchProbe,
@@ -1125,6 +1130,8 @@ export async function runAssistantWithTools(params: {
     ];
 
     let streamRound = 0;
+    // 上一轮请求的前缀快照。逐轮比对产出 miss 归因,首轮为空即基线。
+    let previousPrefixShape: PrefixShape | null = null;
     const streamFn = (streamModel: typeof model, streamContext: Context, options?: any) => {
       const round = ++streamRound;
       const retryAttemptsForRound: RetryAttemptRecord[] = [];
@@ -1139,6 +1146,15 @@ export async function runAssistantWithTools(params: {
         messages: streamContext.messages.slice(),
         tools: filterRequestTools(streamTools),
       });
+
+      // 哈希只在请求边界算一次:同一轮内的 failover / 重试复用同一份归因,
+      // 更不能进流式回调 —— 那会让开销随 token 数放大。
+      const prefixShape = capturePrefixShape({
+        systemPrompt: effectiveContext.systemPrompt,
+        tools: effectiveContext.tools,
+      });
+      const prefixCacheDiagnostics = comparePrefixShape(previousPrefixShape, prefixShape);
+      previousPrefixShape = prefixShape;
 
       // pi-agent-core passes the agent-state model; honor it for the primary
       // target so external model swaps keep working through the failover path.
@@ -1268,6 +1284,7 @@ export async function runAssistantWithTools(params: {
             context: effectiveContext,
             options: streamOptions,
             round,
+            prefixCache: prefixCacheDiagnostics,
           }),
         );
 
