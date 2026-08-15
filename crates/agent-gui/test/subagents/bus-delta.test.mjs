@@ -76,7 +76,7 @@ test("delta reuses the snapshot visibility filter", () => {
     { ...makeMessage({ seq: 23, bodyMarkdown: "orphan" }), parentConversationId: "  " },
   ];
   assert.deepEqual(delta(invisible, 20), { text: "", lastSeq: 20 });
-  assert.equal(bus.renderMessageBusSnapshot({ messages: invisible, currentAgentId: "parent" }), "");
+  assert.equal(bus.renderMessageBusSnapshot({ messages: invisible, currentAgentId: "parent" }).text, "");
 
   const visible = [
     makeMessage({ seq: 24, recipientId: "parent", bodyMarkdown: "direct to parent" }),
@@ -100,19 +100,32 @@ test("delta is pure: same input renders byte-identical output", () => {
   assert.equal(delta([first, second], 30).text, delta([second, first], 30).text);
 });
 
-test("latestVisibleBusSeq returns the newest visible seq and ignores hidden messages", () => {
-  assert.equal(bus.latestVisibleBusSeq([], "parent"), 0);
-  assert.equal(
-    bus.latestVisibleBusSeq(
-      [
-        makeMessage({ seq: 41, recipientId: "parent" }),
-        makeMessage({ seq: 42, recipientId: "agent-b" }),
-      ],
-      "parent",
-    ),
-    41,
+test("overflow snapshot exposes renderedSeq so unrendered messages get re-delivered by delta", () => {
+  // 超过快照渲染上限（recent 桶 24 条）的可见消息：低 seq 的会被配额挤掉。
+  const messages = [];
+  for (let i = 1; i <= 30; i += 1) {
+    messages.push(
+      makeMessage({ seq: i, recipientId: "*", bodyMarkdown: `overflow message ${i}` }),
+    );
+  }
+
+  const snapshot = bus.renderMessageBusSnapshot({ messages, currentAgentId: "parent" });
+  assert.ok(snapshot.omittedCount > 0, "30 条可见消息必须超出快照容量");
+  // 游标不得跳过未渲染的消息：连续已渲染前缀在第一条被挤掉的消息前停下。
+  assert.ok(
+    snapshot.renderedSeq < 30,
+    `renderedSeq(${snapshot.renderedSeq}) 不能用全体可见消息的最大 seq`,
   );
-  assert.equal(bus.latestVisibleBusSeq([makeMessage({ seq: 43 })], "  "), 0);
+  assert.match(snapshot.text, new RegExp(`\\(${snapshot.omittedCount} messages omitted;`));
+
+  // 未进快照的消息必须能被 delta 按 renderedSeq 补投，不得静默丢失。
+  const followUp = delta(messages, snapshot.renderedSeq);
+  assert.equal(followUp.lastSeq, 30);
+  for (const message of messages) {
+    const inSnapshot = snapshot.text.includes(message.bodyMarkdown);
+    const inDelta = followUp.text.includes(message.bodyMarkdown);
+    assert.ok(inSnapshot || inDelta, `seq=${message.seq} 既不在快照也不在 delta 里`);
+  }
 });
 
 function toolResult(toolCallId, text, overrides = {}) {

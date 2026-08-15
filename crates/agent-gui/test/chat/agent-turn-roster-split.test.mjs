@@ -4,15 +4,17 @@ import test from "node:test";
 
 import { createTsModuleLoader } from "../helpers/load-ts-module.mjs";
 
-// subagent roster 原本把身份字段（id/name/role/mode）与运行状态
-// （status/last_task/last_summary）拼在同一行塞进 systemPrompt。子代理 run 状态一推进，
+// subagent roster 原本把身份字段（id/name/role）与运行状态
+// （status/mode/last_task/last_summary）拼在同一行塞进 systemPrompt。子代理 run 状态一推进，
 // 整个 reminder 就变，systemPrompt 随之失稳，system 块连同其后的全部历史一并作废。
-// 拆开之后：稳定段留在 systemPrompt，易变段并入 bus 增量所在的**同一个**尾部块。
+// 拆开之后：稳定段留在 systemPrompt；易变段与 bus 增量合并成同一段 wireTailText，
+// 只随出站请求投递，绝不写进 agent 状态消息（否则会经 emittedMessages 泄漏到
+// 持久化 / UI / 记忆抽取）。
 // 这组用例盯住接线层：
-//   ① 易变段不得出现在 systemPrompt，run 内 systemPrompt 字节恒定
+//   ① 易变段（含 mode）不得出现在 systemPrompt，run 内 systemPrompt 字节恒定
 //   ② 状态未变的轮次不产生任何额外内容（onBeforeNextTurn 交回 null）
-//   ③ 状态推进当轮送达
-//   ④ 与 bus 增量合并成一个块，不是各挂各的
+//   ③ 状态推进当轮以 wireTailText 送达，override.context.messages 不含尾部文本
+//   ④ 与 bus 增量合并成一段 wireTailText，不是各投各的
 
 const agentRunnerPath = fileURLToPath(
   new URL("../../src/lib/chat/runner/agentRunner.ts", import.meta.url),
@@ -388,14 +390,20 @@ test("身份段进 systemPrompt，运行状态不进；状态未变的轮次不�
   assert.doesNotMatch(systemPrompt, /status=/);
   assert.doesNotMatch(systemPrompt, /last_task=/);
   assert.doesNotMatch(systemPrompt, /audit the parser/);
+  // mode 随每次 Agent 调用变化，属易变字段，不得进稳定段。
+  assert.doesNotMatch(systemPrompt, /mode=/);
 
   // 第 1 轮首投运行状态（run 起始时尾部还没有锚点，此前无处可挂）。
   const first = harness.overrides[0];
-  assert.ok(first?.context, "第 1 轮必须把运行状态投到消息尾部");
-  const blocks = appendedBlocks(first.context.messages);
-  assert.equal(blocks.length, 1);
-  assert.match(blocks[0], /^Latest run state of the delegated agents/);
-  assert.match(blocks[0], /- id=agent-a status=running last_task=audit the parser/);
+  assert.ok(first?.wireTailText, "第 1 轮必须把运行状态作为 wireTailText 交给 runner");
+  assert.match(first.wireTailText, /^Latest run state of the delegated agents/);
+  assert.match(
+    first.wireTailText,
+    /- id=agent-a status=running mode=readonly last_task=audit the parser/,
+  );
+  // 尾部文本只随出站请求投递：不得写进 override.context.messages，
+  // 否则会经 emittedMessages 泄漏到持久化 / UI / 记忆抽取。
+  assert.deepEqual(appendedBlocks(first.context.messages), []);
 
   // 第 2、3 轮状态未变 → 一个字节都不许再加。
   assert.deepEqual(
@@ -433,15 +441,14 @@ test("run 状态推进当轮送达，systemPrompt 字节不变", async () => {
     "run 内推进的状态不得被塞回 systemPrompt",
   );
 
-  assert.match(appendedBlocks(harness.overrides[0].context.messages)[0], /status=running/);
+  assert.match(harness.overrides[0].wireTailText, /status=running/);
 
   const second = harness.overrides[1];
-  assert.ok(second?.context, "状态推进的那一轮必须当轮送达");
-  const blocks = appendedBlocks(second.context.messages);
-  // 第 1 轮的块随历史原样重放，第 2 轮再挂一块新的。
-  assert.equal(blocks.length, 2);
-  assert.match(blocks[0], /status=running/);
-  assert.match(blocks[1], /status=completed .*last_summary=found three issues/);
+  assert.ok(second?.wireTailText, "状态推进的那一轮必须当轮送达");
+  assert.match(second.wireTailText, /status=completed .*last_summary=found three issues/);
+  // 每个 override 只携带本轮增量；跨请求的累积重挂由 runner 负责，
+  // agent 状态消息里始终不含尾部文本。
+  assert.deepEqual(appendedBlocks(second.context.messages), []);
 
   assert.equal(harness.overrides[2], null, "推进后又没变的轮次不得再投");
 });
@@ -464,11 +471,11 @@ test("同一轮内 bus 增量与运行状态合并成一个尾部块", async () 
   );
 
   const first = harness.overrides[0];
-  assert.ok(first?.context);
-  const blocks = appendedBlocks(first.context.messages);
-  assert.equal(blocks.length, 1, "每多挂一个独立块就多一次前缀扰动，两者必须合并");
-  assert.match(blocks[0], /^## LiveAgent Message Bus \(new messages\)/);
-  assert.match(blocks[0], /report is ready/);
-  assert.match(blocks[0], /Latest run state of the delegated agents/);
-  assert.match(blocks[0], /- id=agent-a status=running/);
+  assert.ok(first?.wireTailText);
+  assert.match(first.wireTailText, /^## LiveAgent Message Bus \(new messages\)/);
+  assert.match(first.wireTailText, /report is ready/);
+  assert.match(first.wireTailText, /Latest run state of the delegated agents/);
+  assert.match(first.wireTailText, /- id=agent-a status=running/);
+  // 两者合并成同一段 wireTailText（一段一个尾部块），且不落入 agent 状态消息。
+  assert.deepEqual(appendedBlocks(first.context.messages), []);
 });

@@ -99,6 +99,11 @@ export function displayRecipientLabel(recipientId: string) {
  * Render a bounded Markdown snapshot of the conversation-level message bus
  * for one agent. Delivery is pull-based: this snapshot is injected into the
  * agent's context at turn boundaries.
+ *
+ * 快照最多渲染 maxMessages 条，可见消息超限时会有消息未被渲染。返回值里的
+ * `renderedSeq` 是「可见消息按 seq 升序的连续已渲染前缀」的最大 seq——冻结
+ * 游标必须用它而不是全体可见消息的最大 seq，否则被配额挤掉的消息会被游标
+ * 跳过、静默丢失。未渲染的消息留给后续 `renderMessageBusDelta` 增量补投。
  */
 export function renderMessageBusSnapshot(params: {
   messages: SubagentMessageRecord[];
@@ -106,14 +111,14 @@ export function renderMessageBusSnapshot(params: {
   currentAgentName?: string;
   maxMessages?: number;
   maxBodyChars?: number;
-}) {
+}): { text: string; renderedSeq: number; omittedCount: number } {
   const currentAgentId = normalizeAgentId(params.currentAgentId);
-  if (!currentAgentId) return "";
+  if (!currentAgentId) return { text: "", renderedSeq: 0, omittedCount: 0 };
 
   const maxMessages = params.maxMessages ?? DEFAULT_MAX_MESSAGES;
   const maxBodyChars = params.maxBodyChars ?? DEFAULT_MAX_BODY_CHARS;
   const messages = visibleBusMessages(params.messages, currentAgentId);
-  if (messages.length === 0) return "";
+  if (messages.length === 0) return { text: "", renderedSeq: 0, omittedCount: 0 };
 
   const usedSeqs = new Set<number>();
   let remainingMessages = maxMessages;
@@ -138,6 +143,20 @@ export function renderMessageBusSnapshot(params: {
     ),
   );
   const recentMessages = consume(takeLatest(messages, maxMessages));
+
+  // 真正渲染进快照的集合是四个 selected 的并集；usedSeqs 会被 consume 标记
+  // 到未入选的 fresh 消息上，不能当渲染集用。
+  const renderedSeqs = new Set<number>();
+  for (const bucket of [directInbox, sharedDecisions, openQuestions, recentMessages]) {
+    for (const message of bucket) renderedSeqs.add(message.seq);
+  }
+  // 连续已渲染前缀：从最小 seq 起逐条推进，遇到第一条未渲染的可见消息即停。
+  let renderedSeq = 0;
+  for (const message of messages) {
+    if (!renderedSeqs.has(message.seq)) break;
+    renderedSeq = message.seq;
+  }
+  const omittedCount = messages.length - renderedSeqs.size;
 
   const sections: string[] = [
     "## LiveAgent Message Bus",
@@ -164,21 +183,15 @@ export function renderMessageBusSnapshot(params: {
   appendSection("Open Questions", openQuestions);
   appendSection("Recent Messages", recentMessages);
 
-  return sections.join("\n").trim();
-}
+  if (omittedCount > 0) {
+    // 诚实标注省略，避免读者把快照误当全量；未渲染的消息由 delta 按 renderedSeq 补投。
+    sections.push(
+      "",
+      `(${omittedCount} messages omitted; unrendered messages will be re-delivered via delta)`,
+    );
+  }
 
-/**
- * 取当前可见消息里最大的 seq，作为“已渲染进上下文”的游标起点。
- * 无可见消息时返回 0（bus 的 seq 从 1 开始分配）。
- */
-export function latestVisibleBusSeq(
-  messages: SubagentMessageRecord[],
-  currentAgentId: string,
-): number {
-  const normalized = normalizeAgentId(currentAgentId);
-  if (!normalized) return 0;
-  const visible = visibleBusMessages(messages, normalized);
-  return visible.length === 0 ? 0 : visible[visible.length - 1].seq;
+  return { text: sections.join("\n").trim(), renderedSeq, omittedCount };
 }
 
 /**

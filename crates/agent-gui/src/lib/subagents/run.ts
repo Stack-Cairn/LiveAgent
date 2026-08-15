@@ -289,7 +289,7 @@ export async function executeSubagentRun(
         messages,
         currentAgentId: spec.id,
         currentAgentName: identity.name,
-      });
+      }).text;
     } catch (error) {
       console.warn("Failed to load subagent message bus snapshot", error);
       return "";

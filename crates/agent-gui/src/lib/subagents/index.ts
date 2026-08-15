@@ -10,7 +10,7 @@ export {
   isSubagentCardArguments,
 } from "@liveagent/ui/lib/subagents/protocol";
 export { createSubagentTools, type SubagentRuntimeConfig } from "./agentTool";
-export { latestVisibleBusSeq, renderMessageBusDelta, renderMessageBusSnapshot } from "./bus";
+export { renderMessageBusDelta, renderMessageBusSnapshot } from "./bus";
 export { isSubagentCardToolCall } from "./card";
 export type { SubagentStoreIpc } from "./ipc/store";
 export type { SubagentWorktreeIpc } from "./ipc/worktree";

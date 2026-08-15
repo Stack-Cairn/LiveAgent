@@ -136,9 +136,10 @@ function selectListedIdentities(identities: SubagentIdentity[]) {
  * so follow-up user requests are routed to the stable ids instead of the
  * parent impersonating them.
  *
- * 只含身份字段（id / name / role / mode）：身份集合不变则字节不变，可以安全地待在
- * systemPrompt 里。运行状态（status / last_task / last_summary）随子代理 run 推进而变，
- * 由 buildRosterRunStatusSection 单独渲染并后置到消息尾部。
+ * 只含身份字段（id / name / role）：身份集合不变则字节不变，可以安全地待在
+ * systemPrompt 里。mode 不属于身份——它随每次 Agent 调用变化（lastMode），
+ * 放这里会破坏稳定段的字节稳定性，因此与运行状态（status / last_task /
+ * last_summary）一样由 buildRosterRunStatusSection 单独渲染并后置到消息尾部。
  */
 export function buildRosterIdentitySection(params: { identities: SubagentIdentity[] }) {
   const { listed, omittedCount } = selectListedIdentities(params.identities);
@@ -149,7 +150,6 @@ export function buildRosterIdentitySection(params: { identities: SubagentIdentit
       `id=${identity.agentId}`,
       `name=${truncateReminderField(identity.name, 120)}`,
       `role=${truncateReminderField(identity.role, 160)}`,
-      `mode=${identity.lastMode}`,
     ];
     return `- ${fields.join(" ")}`;
   });
@@ -190,6 +190,8 @@ export function buildRosterRunStatusSection(params: {
     const fields = [
       `id=${identity.agentId}`,
       `status=${latestRun.status}`,
+      // mode 随每次 Agent 调用变化，从身份段移到这里；仍是确定性字段，不破坏纯函数约定。
+      `mode=${identity.lastMode}`,
       `last_task=${truncateReminderField(latestRun.prompt)}`,
     ];
     if (latestRun.summary) {

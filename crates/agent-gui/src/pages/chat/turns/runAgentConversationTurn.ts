@@ -67,7 +67,6 @@ import {
   buildRosterRunStatusSection,
   createSubagentScheduler,
   isSubagentCardToolCall,
-  latestVisibleBusSeq,
   renderMessageBusDelta,
   renderMessageBusSnapshot,
   SUBAGENT_PARENT_ID,
@@ -387,12 +386,16 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
       renderedBusSeq = frozenBusSeq;
       return;
     }
-    parentMessageBusSnapshot = renderMessageBusSnapshot({
+    const snapshot = renderMessageBusSnapshot({
       messages,
       currentAgentId: SUBAGENT_PARENT_ID,
       currentAgentName: PARENT_MESSAGE_BUS_AGENT_NAME,
     });
-    frozenBusSeq = latestVisibleBusSeq(messages, SUBAGENT_PARENT_ID);
+    parentMessageBusSnapshot = snapshot.text;
+    // 游标必须用快照实际覆盖到的 seq（连续已渲染前缀），不能用全体可见消息的
+    // 最大 seq：快照有条数上限，被配额挤掉的消息若被游标跳过，就既不在快照里
+    // 也不会再被 delta 投递，静默丢失。
+    frozenBusSeq = snapshot.renderedSeq;
     renderedBusSeq = frozenBusSeq;
   };
   if (subagentStore) {
@@ -1049,31 +1052,24 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
             getNextConversationState(),
             emittedMessages,
           );
-          let tempContext = withAgentRuntimeContext(
+          const tempContext = withAgentRuntimeContext(
             buildPreparedContext(tempState, combinedTools, {
               includeUploadedFilesMetadata: true,
             }),
           );
           // 尾部投递：systemPrompt 里的 bus 快照与 roster 身份段都已冻结，run 内新到的
-          // bus 消息与推进后的 roster 运行状态合并成**同一个**块挂到消息尾部——每多挂
-          // 一个独立块就多一次前缀扰动。已挂上的块随 override 进入运行时状态，下一轮由
-          // emittedMessages 原样带回，无需额外重放结构。
+          // bus 消息与推进后的 roster 运行状态合并成**同一个**块作为 wireTailText 交给
+          // runner——runner 累积后只挂到每次出站请求上，agent 运行时状态与
+          // emittedMessages 始终不含它，不会泄漏进持久化、UI 与记忆抽取。
           const busDelta = await buildParentMessageBusDelta();
           const rosterRunStatusDelta = buildRosterRunStatusDelta();
           const tailBlockText = [busDelta.text, rosterRunStatusDelta].filter(Boolean).join("\n\n");
-          let tailBlockAttached = false;
-          if (tailBlockText) {
-            const messages = appendToolResultTailBlock(tempContext.messages, tailBlockText);
-            if (messages !== tempContext.messages) {
-              tempContext = { ...tempContext, messages };
-              // 只有真正挂上才推进游标与基线；没有安全锚点时下一轮重试，避免丢内容。
-              renderedBusSeq = busDelta.lastSeq;
-              if (rosterRunStatusDelta) {
-                renderedRosterRunStatus = rosterRunStatusDelta;
-              }
-              tailBlockAttached = true;
-            }
-          }
+          // 探锚：只判断尾部块此刻能否安全挂上（返回新数组 = 有锚点），不改写
+          // tempContext.messages 本身。
+          const tailBlockAttachable =
+            Boolean(tailBlockText) &&
+            appendToolResultTailBlock(tempContext.messages, tailBlockText) !==
+              tempContext.messages;
           const { context: compactedContext } = await compaction.compactDuringRun({
             trigger: "post-tool",
             state: tempState,
@@ -1083,19 +1079,27 @@ export async function runAgentConversationTurn(params: RunAgentConversationTurnP
           });
           if (!compactedContext) {
             // 没有增量时返回 null：不产生任何额外内容，运行时状态原样续跑。
-            return tailBlockAttached
-              ? {
-                  context: tempContext,
-                  emittedMessages,
-                }
-              : null;
+            if (!tailBlockAttachable) {
+              return null;
+            }
+            // 只有确认能挂上才推进游标与基线；没有安全锚点时下一轮重试，避免丢内容。
+            renderedBusSeq = busDelta.lastSeq;
+            if (rosterRunStatusDelta) {
+              renderedRosterRunStatus = rosterRunStatusDelta;
+            }
+            return {
+              context: tempContext,
+              emittedMessages,
+              wireTailText: tailBlockText,
+            };
           }
           latestAgentEmittedMessages = [];
           clearPersistableAgentProgress();
           // 压缩边界②：run 内压缩后重新冻结，必须赶在下面组装续跑上下文之前。
           refreezeTaskListContext();
-          // 压缩会截断历史，已挂在消息尾部的增量块随之消失，必须连同游标一起
-          // 重新冻结，否则那些消息既不在快照里也不在历史里。
+          // 压缩会截断历史，runner 里累积的尾部投递内容也随本 override 不带
+          // wireTailText 而被清空，必须连同游标一起重新冻结，否则那些消息既
+          // 不在快照里也不会再被投递。
           await refreezeParentMessageBus();
           // 同理：roster 易变段的投递基线也随之作废，重置后下一轮重新投递。
           renderedRosterRunStatus = "";

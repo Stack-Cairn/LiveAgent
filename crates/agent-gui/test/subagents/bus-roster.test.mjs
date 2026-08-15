@@ -32,7 +32,7 @@ function render(messages, overrides = {}) {
     currentAgentName: overrides.currentAgentName,
     maxMessages: overrides.maxMessages,
     maxBodyChars: overrides.maxBodyChars,
-  });
+  }).text;
 }
 
 test("snapshot buckets messages into direct inbox, shared decisions, open questions, and recent", () => {
@@ -209,6 +209,8 @@ test("identity section carries only stable fields and truncates long values", ()
   assert.doesNotMatch(section, /status=/);
   assert.doesNotMatch(section, /last_task=/);
   assert.doesNotMatch(section, /last_summary=/);
+  // mode 随每次 Agent 调用变化（lastMode），属于易变字段，同样不得进稳定段。
+  assert.doesNotMatch(section, /mode=/);
 });
 
 test("identity section bytes survive listIdentities() reordering", () => {
@@ -257,7 +259,8 @@ test("run-status advancing leaves the identity section byte-identical", () => {
     latestRunsByAgent: after,
   });
   assert.match(statusBefore, /Latest run state of the delegated agents/);
-  assert.match(statusBefore, /- id=agent-a status=running last_task=task for agent-a/);
+  // mode 从身份段移到易变段，随每条 run 状态一起投递。
+  assert.match(statusBefore, /- id=agent-a status=running mode=readonly last_task=task for agent-a/);
   // 没有历史 run 的身份不出现在易变段里。
   assert.doesNotMatch(statusBefore, /id=agent-b/);
   assert.notEqual(statusAfter, statusBefore);

@@ -282,6 +282,58 @@ const llmMock = {
   resolveProviderCacheRetention(_providerId, _enabled, override) {
     return override ?? "none";
   },
+  describeAnthropicCacheShape(providerId, baseUrl, cacheRetention) {
+    // 与真实实现同构的最小桩:只有 claude_code + 非 none 才谈得上断点策略,
+    // 官方域名走顶层自动断点,其余(代理)退回显式断点。
+    if (providerId !== "claude_code" || !cacheRetention || cacheRetention === "none") {
+      return { cacheRetention: cacheRetention ?? "", breakpointStrategy: "none" };
+    }
+    const official = baseUrl.trim().toLowerCase().includes("api.anthropic.com");
+    return {
+      cacheRetention,
+      ttl: cacheRetention === "long" && official ? "1h" : "",
+      breakpointStrategy: official ? "anthropic-top-level" : "anthropic-explicit",
+    };
+  },
+  describeCodexCacheShape(providerId, baseUrl, configuredMode, modelApi, sessionId, cacheRetention) {
+    // 与真实实现同构的最小桩:codex 之外恒 none;codex 按「显式配置 → responses
+    // API → 官方域名」解析 hint 模式,sessionId 截断到 64 字符作 cacheKey。
+    if (providerId !== "codex" || cacheRetention === "none") {
+      return { cacheRetention: cacheRetention ?? "", breakpointStrategy: "none" };
+    }
+    const mode =
+      configuredMode && configuredMode !== "auto"
+        ? configuredMode
+        : modelApi === "openai-responses" || baseUrl.toLowerCase().includes("api.openai.com")
+          ? "openai-key"
+          : "none";
+    return {
+      cacheRetention: cacheRetention ?? "",
+      breakpointStrategy: mode === "none" ? "none" : `codex-${mode}`,
+      cacheKey: mode === "openai-key" && sessionId ? String(sessionId).slice(0, 64) : "",
+    };
+  },
+  describeProviderCacheShape(params) {
+    // 与真实实现同构的最小桩:providers 层统一分发,codex 走 codex 描述,
+    // 其余走 anthropic 描述。runner 侧只面对这一个入口。
+    if (params.providerId === "codex") {
+      return llmMock.describeCodexCacheShape(
+        params.providerId,
+        params.baseUrl,
+        params.promptCacheHintMode,
+        params.modelApi === "openai-responses" || params.modelApi === "openai-completions"
+          ? params.modelApi
+          : undefined,
+        params.sessionId,
+        params.cacheRetention,
+      );
+    }
+    return llmMock.describeAnthropicCacheShape(
+      params.providerId,
+      params.baseUrl,
+      params.cacheRetention,
+    );
+  },
   toSimpleStreamReasoning(value) {
     return value && value !== "off" ? value : undefined;
   },
@@ -1064,6 +1116,95 @@ test("runAssistantWithTools applies turn context overrides without duplicating c
   assert.deepEqual(
     result.messages.map((message) => message.role),
     ["user", "assistant"],
+  );
+});
+
+test("runAssistantWithTools delivers wireTailText only on the wire, never into agent state", async () => {
+  const firstToolCall = createToolCall("call-read-1", "Read", { path: "a.ts" });
+  const secondToolCall = createToolCall("call-read-2", "Read", { path: "b.ts" });
+  resetFakeStreams(
+    createToolUseAssistant(firstToolCall),
+    createToolUseAssistant(secondToolCall),
+    createTextAssistant("all done"),
+  );
+  const tailTexts = ["BUS DELTA ROUND 1", "BUS DELTA ROUND 2"];
+  let round = 0;
+  const { params } = createBaseParams({
+    onBeforeNextTurn: async (snapshot) => {
+      round += 1;
+      return {
+        context: snapshot.runtimeContext,
+        emittedMessages: snapshot.emittedMessages,
+        wireTailText: tailTexts[round - 1],
+      };
+    },
+  });
+
+  const result = await runAssistantWithTools(params);
+
+  assert.equal(observedStreamContexts.length, 3);
+  // 第 1 次请求在任何 override 之前，不含尾部文本。
+  assert.equal(JSON.stringify(observedStreamContexts[0].messages).includes("BUS DELTA"), false);
+
+  // 第 2 次请求：尾部文本挂在最后一个工具结果上，且只存在于出站请求。
+  const secondWire = observedStreamContexts[1].messages;
+  const secondTail = secondWire[secondWire.length - 1];
+  assert.equal(secondTail.role, "toolResult");
+  assert.deepEqual(
+    secondTail.content.map((block) => block.text),
+    ["result:Read", "BUS DELTA ROUND 1"],
+  );
+
+  // 第 3 次请求：累积重挂——两轮尾部文本按到达顺序拼在同一个块里。
+  const thirdWire = observedStreamContexts[2].messages;
+  const thirdTail = thirdWire[thirdWire.length - 1];
+  assert.equal(thirdTail.role, "toolResult");
+  assert.deepEqual(
+    thirdTail.content.map((block) => block.text),
+    ["result:Read", "BUS DELTA ROUND 1\n\nBUS DELTA ROUND 2"],
+  );
+
+  // agent 状态与产出（持久化 / UI / 记忆抽取的输入）不得含尾部文本。
+  assert.equal(JSON.stringify(result.messages).includes("BUS DELTA"), false);
+  assert.equal(JSON.stringify(result.emittedMessages).includes("BUS DELTA"), false);
+});
+
+test("runAssistantWithTools clears accumulated wireTailText when an override omits it", async () => {
+  const firstToolCall = createToolCall("call-read-1", "Read", { path: "a.ts" });
+  const secondToolCall = createToolCall("call-read-2", "Read", { path: "b.ts" });
+  resetFakeStreams(
+    createToolUseAssistant(firstToolCall),
+    createToolUseAssistant(secondToolCall),
+    createTextAssistant("all done"),
+  );
+  let round = 0;
+  const { params } = createBaseParams({
+    onBeforeNextTurn: async (snapshot) => {
+      round += 1;
+      if (round === 1) {
+        return {
+          context: snapshot.runtimeContext,
+          emittedMessages: snapshot.emittedMessages,
+          wireTailText: "STALE TAIL",
+        };
+      }
+      // 压缩/重冻结分支不带 wireTailText：旧尾部内容已并入重算后的快照，
+      // runner 必须清空累积，否则会重复投递。
+      return {
+        context: snapshot.runtimeContext,
+        emittedMessages: snapshot.emittedMessages,
+      };
+    },
+  });
+
+  await runAssistantWithTools(params);
+
+  assert.equal(observedStreamContexts.length, 3);
+  assert.equal(JSON.stringify(observedStreamContexts[1].messages).includes("STALE TAIL"), true);
+  assert.equal(
+    JSON.stringify(observedStreamContexts[2].messages).includes("STALE TAIL"),
+    false,
+    "不带 wireTailText 的 override 之后，累积的尾部文本不得再出现在出站请求里",
   );
 });
 
@@ -2334,4 +2475,55 @@ test("runAssistantWithTools ignores malformed toolUse turns that have no tool re
 
   assert.equal(beforeNextTurnCalls, 0);
   assert.equal(result.assistant.stopReason, "toolUse");
+});
+
+test("runAssistantWithTools 的前缀归因按 sessionId 隔离,多会话交错不污染基线", async () => {
+  // 三次 runner 调用模拟主会话与子代理交错:A → B(system 不同)→ A(与首轮
+  // 完全一致)。旧实现的 runner 局部变量在第二次 A 调用时只能报 initial(跨
+  // 调用不存续);若改成全局单槽则会拿 B 的快照比出 system 变更。按 sessionId
+  // 键控后,A 的第二轮必须是 unchanged。
+  const prefixCaptures = [];
+  const createCapturingLogger = () => ({
+    enabled: true,
+    logRequest(payload) {
+      prefixCaptures.push(payload.prefixCache);
+    },
+    logResponse() {},
+    logResult() {},
+    logError() {},
+    async flush() {},
+  });
+
+  const runTurn = async (sessionId, systemPrompt) => {
+    resetFakeStreams(createTextAssistant("done"));
+    const { params } = createBaseParams({
+      sessionId,
+      debugLogger: createCapturingLogger(),
+      context: {
+        systemPrompt,
+        messages: [{ role: "user", content: "Start", timestamp: 1 }],
+        tools: [
+          {
+            name: "Read",
+            description: "Read a file",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+      },
+    });
+    await runAssistantWithTools(params);
+  };
+
+  await runTurn("interleave-session-a", "Prompt for session A");
+  await runTurn("interleave-session-b", "Prompt for session B");
+  await runTurn("interleave-session-a", "Prompt for session A");
+
+  assert.equal(prefixCaptures.length, 3);
+  assert.equal(prefixCaptures[0].prefixChangeSummary, "initial");
+  // B 是自己的首轮,不得拿 A 的快照比出 system 变更。
+  assert.equal(prefixCaptures[1].prefixChangeSummary, "initial");
+  // A 的第二轮与首轮字节一致:基线跨 runner 调用存续,且未被 B 污染。
+  assert.equal(prefixCaptures[2].prefixChangeSummary, "unchanged");
+  assert.equal(prefixCaptures[2].prefixChanged, false);
+  assert.equal(prefixCaptures[2].prefixHash, prefixCaptures[0].prefixHash);
 });
