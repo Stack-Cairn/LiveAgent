@@ -1204,7 +1204,9 @@ function useGatewayAppController() {
     setProjectSettingsProject,
   ]);
 
-  const userMenuLabel = (status?.name || status?.agent_id || "当前用户").trim() || "当前用户";
+  const currentUserLabel = translate("common.currentUser", settings.locale);
+  const userMenuLabel =
+    (status?.name || status?.agent_id || currentUserLabel).trim() || currentUserLabel;
   const userAvatarLabel = userMenuLabel.slice(0, 1).toUpperCase();
   const handleActiveAgentChange = useCallback(
     (agentId: string) => {

@@ -1294,7 +1294,7 @@ export const ChatHistorySidebar = memo(function ChatHistorySidebar(props: ChatHi
                   onClick={handleProjectsCollapsedChange}
                   disabled={sectionsDisabled}
                 >
-                  <span>
+                  <span className="truncate">
                     {workspaceFolderDropActive
                       ? t("chat.workspaceDropFolder")
                       : t("chat.workspaceSection")}
